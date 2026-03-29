@@ -1,0 +1,9 @@
+# Downloaded reference material (not source code)
+*.mhtml
+*.webp
+
+# macOS
+.DS_Store
+
+# Runtime state (lives at ~/.config/borg/, not in repo)
+registry.json
