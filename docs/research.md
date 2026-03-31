@@ -1,6 +1,8 @@
 # Research Foundation
 
-Every design decision in The Borg Collective is backed by published research. This document provides the complete citation index organized by domain, with URLs and a brief description of what each source contributes to the design rationale.
+Every design decision in The Borg Collective is backed by published research. This document provides the complete
+citation index organized by domain, with URLs and a brief description of what each source contributes to the design
+rationale.
 
 ---
 
@@ -11,12 +13,14 @@ These sources establish the neurological basis for borg's boundary enforcement a
 **Context switching costs 23+ minutes to rebuild mental models.**
 Wake Forest University (2024). "The Switch Cost of Multitasking."
 https://news.wfu.edu/2024/04/16/the-switch-cost-of-multitasking/
-*Basis for: tmux window integration, `borg switch` reducing search time, session summaries as instant context restoration.*
+*Basis for: tmux window integration, `borg switch` reducing search time, session summaries as instant context
+restoration.*
 
 **89% of children with ADHD have specific executive function impairments.**
 NIH/PMC (2015). "Executive Function in Children with ADHD."
 https://pmc.ncbi.nlm.nih.gov/articles/PMC4425416/
-*Basis for: external scaffolding over willpower tenet. Working memory, inhibition, and cognitive flexibility are impaired.*
+*Basis for: external scaffolding over willpower tenet. Working memory, inhibition, and cognitive flexibility are
+impaired.*
 
 **fMRI shows ADHD brains work harder during decision tasks; all information weighed equally.**
 Relational Psychology Group. "ADHD and Decision Paralysis."
