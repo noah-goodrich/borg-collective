@@ -32,8 +32,8 @@ The installer:
 1. Checks and installs missing dependencies via Homebrew
 2. Creates `~/.config/borg/` (registry, config, debriefs)
 3. Symlinks `borg` and `drone` to `~/.local/bin/`
-4. Registers hooks in `~/.claude/settings.json` (and CoCo settings if installed)
-5. Installs skills to `~/.claude/skills/` (and registers with CoCo if installed)
+4. Registers hooks in `~/.claude/settings.json`
+5. Installs skills to `~/.claude/skills/`
 6. Adds tmux keybinding (`Ctrl+Space >`)
 7. Runs `borg scan` to discover existing projects
 

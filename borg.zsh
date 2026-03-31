@@ -8,6 +8,8 @@
 #   borg scan                 # auto-discover projects from session history
 #   borg add [path]           # manually register a project
 #   borg rm <name>            # unregister a project
+#   borg refresh [project]    # regenerate summary from latest transcript
+#   borg focus [project]      # alias for: borg switch <project>
 
 # Set a known-good PATH from scratch. Non-interactive zsh scripts invoked via shebang
 # do not source /etc/zprofile or ~/.zshrc, so PATH can be empty or incomplete.
@@ -191,7 +193,6 @@ cmd_ls() {
 
         case "$source" in
             desktop) src_badge="[D]" ;;
-            coco)    src_badge="[X]" ;;
             *)       src_badge="[C]" ;;
         esac
 
@@ -234,7 +235,7 @@ cmd_status() {
     ppath=$(echo "$entry"      | jq -r '.path // "null"')
     proj_status=$(echo "$entry"     | jq -r '.status // "unknown"')
     last=$(echo "$entry"       | jq -r '.last_activity // "(never)"')
-    summary=$(echo "$entry"    | jq -r '.summary // "(no summary)"')
+    summary=$(echo "$entry"    | jq -r '.summary // "(no summary — run: borg refresh)"')
     session_id=$(echo "$entry" | jq -r '.claude_session_id // "(unknown)"')
     tmux_window=$(echo "$entry"| jq -r '.tmux_window // "(none)"')
 
@@ -401,49 +402,6 @@ cmd_scan() {
         new_projects+=("$name")
     done < <(borg_claude_scan_session_log)
 
-    # Scan CoCo (Cortex Code CLI) sessions
-    if type borg_coco_scan_session_log &>/dev/null; then
-        info "Scanning Cortex Code session history..."
-        while IFS= read -r ppath; do
-            [[ -z "$ppath" ]] && continue
-            name="${ppath##*/}"
-
-            if borg_registry_has "$name"; then
-                dbg "already registered: $name"
-                continue
-            fi
-
-            tmux_window=""
-            borg_tmux_window_exists "$name" && tmux_window="$name" || true
-            session_id=$(borg_coco_latest_session_id "$ppath") || session_id=""
-
-            local tw_json sid_json
-            [[ -n "$tmux_window" ]] && tw_json="\"$tmux_window\"" || tw_json="null"
-            [[ -n "$session_id" ]] && sid_json="\"$session_id\"" || sid_json="null"
-
-            json=$(jq -n \
-                --arg path "$ppath" \
-                --arg source "coco" \
-                --arg tmux_session "$BORG_TMUX_SESSION" \
-                --argjson tmux_window "$tw_json" \
-                --argjson session_id "$sid_json" \
-                '{
-                    path: $path,
-                    source: $source,
-                    tmux_session: $tmux_session,
-                    tmux_window: $tmux_window,
-                    claude_session_id: $session_id,
-                    last_activity: null,
-                    status: "idle",
-                    summary: null
-                }')
-
-            borg_registry_merge "$name" "$json"
-            info "Registered: $name ($ppath) [CoCo]"
-            new_projects+=("$name")
-        done < <(borg_coco_scan_session_log)
-    fi
-
     # Also scan Desktop session reports
     borg_desktop_scan 2>/dev/null || true
 
@@ -493,6 +451,74 @@ cmd_rm() {
     borg_registry_has "$project" || die "project '$project' not in registry"
     borg_registry_remove "$project"
     info "Removed: $project"
+}
+
+cmd_refresh() {
+    local target="" use_llm=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --all) target="--all"; shift ;;
+            --llm) use_llm=1; shift ;;
+            *) target="$1"; shift ;;
+        esac
+    done
+
+    local projects
+    if [[ "$target" == "--all" || -z "$target" ]]; then
+        projects=$(borg_registry_list)
+    else
+        projects="$target"
+    fi
+
+    local llm_flag=""
+    (( use_llm )) && llm_flag="--llm"
+
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        local entry ppath session_id jsonl
+        entry=$(borg_registry_get "$name")
+        ppath=$(echo "$entry" | jq -r '.path // ""')
+        session_id=$(echo "$entry" | jq -r '.claude_session_id // ""')
+
+        if [[ -z "$ppath" || "$ppath" == "null" ]]; then
+            warn "$name: no path (Desktop session?), skipping"
+            continue
+        fi
+
+        # Use recorded session ID, or discover latest
+        if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+            session_id=$(borg_claude_latest_session_id "$ppath")
+        fi
+
+        if [[ -z "$session_id" ]]; then
+            warn "$name: no transcript found at $ppath"
+            continue
+        fi
+
+        jsonl=$(borg_claude_session_jsonl "$ppath" "$session_id")
+        if [[ ! -f "$jsonl" ]]; then
+            warn "$name: transcript not found: $jsonl"
+            continue
+        fi
+
+        local summary
+        summary=$(python3 "$BORG_ROOT/summarize.py" $llm_flag "$jsonl" 2>/dev/null) || summary="(summarizer error)"
+
+        if [[ -n "$summary" ]]; then
+            borg_registry_read | jq \
+                --arg p "$name" \
+                --arg s "$summary" \
+                --arg sid "$session_id" \
+                '.projects[$p].summary = $s | .projects[$p].claude_session_id = $sid' \
+                | _borg_registry_write
+            info "$name: summary updated"
+        fi
+    done < <(echo "$projects")
+}
+
+cmd_focus() {
+    # Merged into cmd_switch — focus is just switch with a direct argument
+    cmd_switch "${@:-}"
 }
 
 cmd_next() {
@@ -807,7 +833,9 @@ cmd_help() {
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
+    refresh [--all]     Regenerate summaries (--llm for AI-powered)
     tidy                Archive stale projects (idle >48h)
+    focus [project]     Alias for: switch <project>
     help                Show this message
 
   HOTKEY
@@ -856,7 +884,9 @@ case "${1:-help}" in
     rm)       cmd_rm "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
+    refresh)  cmd_refresh "${@:2}" ;;
     tidy)     cmd_tidy ;;
+    focus)    cmd_focus "${@:2}" ;;
     help|--help|-h) cmd_help ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac

@@ -3,9 +3,8 @@
 ## What This Is
 
 AI development orchestration framework. Two CLIs — `borg` (orchestration) and `drone` (project
-lifecycle) — that coordinate parallel Claude Code and Cortex Code (CoCo) sessions across projects
-and containers. Uses cairn (PostgreSQL + pgvector knowledge graph) as an optional persistence layer
-for cross-session knowledge.
+lifecycle) — that coordinate parallel Claude Code sessions across projects and containers. Uses cairn
+(PostgreSQL + pgvector knowledge graph) as an optional persistence layer for cross-session knowledge.
 
 ## Architecture
 
@@ -76,7 +75,6 @@ lib/
     registry.zsh            Registry CRUD for ~/.config/borg/registry.json
     tmux.zsh                tmux window listing + switching
     claude.zsh              Session discovery from ~/.claude/projects/
-    coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
     desktop.zsh             Claude Desktop session reader
 hooks/
     borg-start.sh           SessionStart → status=active
@@ -111,7 +109,6 @@ docs/
 | jq | `jq` | Registry JSON CRUD |
 | fzf | `fzf` | Fuzzy picker for `borg switch` |
 | claude | `claude` | LLM debriefs (Sonnet), orchestrator session |
-| cortex | `cortex` | Cortex Code CLI — Snowflake AI coding (optional) |
 | cairn | `cairn` | Knowledge persistence (optional) |
 
 ## Style Rules
