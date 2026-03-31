@@ -59,10 +59,3 @@ borg_claude_scan_session_log() {
         "$CLAUDE_SESSION_LOG" | /usr/bin/sort -u
 }
 
-# Check if a project path has any Claude sessions
-borg_claude_has_sessions() {
-    local path="$1"
-    local dir
-    dir=$(borg_claude_project_dir "$path")
-    [[ -d "$dir" ]] && ls "$dir"/*.jsonl &>/dev/null
-}

@@ -40,6 +40,29 @@ fi
 # Build context from debrief + cairn knowledge
 CONTEXT_PARTS=()
 
+# Plan-mode nudge: fire when no PROJECT_PLAN.md exists
+if [[ -n "$CWD" && ! -f "$CWD/PROJECT_PLAN.md" ]]; then
+    CONTEXT_PARTS+=("WORKFLOW REQUIREMENT — NO PROJECT_PLAN.md FOUND
+
+Before writing any code this session:
+1. Run /borg-plan to establish objectives and acceptance criteria
+2. Confirm the plan (creates PROJECT_PLAN.md in the project root)
+3. Only then begin implementation
+
+If this is exploratory/investigative work with no deliverable, state that explicitly
+and you may proceed without /borg-plan.")
+fi
+
+# Uncommitted-changes reminder from previous session
+if [[ -f "$BORG_REGISTRY" ]]; then
+    UNCOMMITTED_FLAG=$(jq -r --arg p "$PROJECT" \
+        '.projects[$p].has_uncommitted_changes // false' "$BORG_REGISTRY" 2>/dev/null || echo "false")
+    if [[ "$UNCOMMITTED_FLAG" == "true" ]]; then
+        CONTEXT_PARTS+=("REMINDER: Last session ended with uncommitted changes in $PROJECT.
+Run 'git status' to see what's pending. Consider /simplify and committing before new work.")
+    fi
+fi
+
 DEBRIEF_FILE="$BORG_DIR/debriefs/${PROJECT}.md"
 if [[ -f "$DEBRIEF_FILE" ]]; then
     DEBRIEF=$(head -c 4000 "$DEBRIEF_FILE" 2>/dev/null || true)

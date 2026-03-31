@@ -43,6 +43,28 @@ jq \
     end
     ' "$BORG_REGISTRY" > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
 
+# Check for uncommitted changes: warn in terminal + store flag for next session
+UNCOMMITTED=""
+if command -v git >/dev/null 2>&1; then
+    if git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        UNCOMMITTED=$(git -C "$CWD" status --porcelain 2>/dev/null | grep -v "^??" || true)
+    fi
+fi
+
+if [[ -n "$UNCOMMITTED" && -f "$BORG_REGISTRY" ]]; then
+    printf '\n\033[1;33m▸ WARNING: %s has uncommitted changes\033[0m\n' "$PROJECT" >&2
+    printf '\033[1;33m  Run /simplify then commit before your next session.\033[0m\n\n' >&2
+    TMP2="$BORG_REGISTRY.tmp2.$$"
+    jq --arg p "$PROJECT" \
+        'if .projects | has($p) then .projects[$p].has_uncommitted_changes = true else . end' \
+        "$BORG_REGISTRY" > "$TMP2" && mv "$TMP2" "$BORG_REGISTRY"
+elif [[ -f "$BORG_REGISTRY" ]]; then
+    TMP2="$BORG_REGISTRY.tmp2.$$"
+    jq --arg p "$PROJECT" \
+        'if .projects | has($p) then .projects[$p].has_uncommitted_changes = false else . end' \
+        "$BORG_REGISTRY" > "$TMP2" && mv "$TMP2" "$BORG_REGISTRY"
+fi
+
 # Async LLM debrief — does not block hook exit
 DEBRIEF_DIR="$BORG_DIR/debriefs"
 mkdir -p "$DEBRIEF_DIR"

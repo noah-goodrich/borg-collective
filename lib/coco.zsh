@@ -61,11 +61,3 @@ borg_coco_scan_session_log() {
     /usr/bin/awk -F'|' '/^\-/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 ~ /^\//) print $2 }' \
         "$COCO_SESSION_LOG" | /usr/bin/sort -u
 }
-
-# Check if a project path has any CoCo sessions
-borg_coco_has_sessions() {
-    local path="$1"
-    local dir
-    dir=$(borg_coco_project_dir "$path")
-    [[ -d "$dir" ]] && ls "$dir"/*.jsonl &>/dev/null
-}
