@@ -444,9 +444,11 @@ cmd_claude() {
         cmd_up "${1:-}"
     fi
 
-    # Send 'claude' to the main pane (pane index 0) of the project window
+    # Send 'claude' to the first pane of the project window
+    local main_pane
+    main_pane=$(tmux list-panes -t "$SESSION:$project_name" -F '#{pane_id}' | head -1)
     info "Launching Claude in $project_name..."
-    tmux send-keys -t "$SESSION:$project_name.0" "claude" Enter
+    tmux send-keys -t "$main_pane" "claude" Enter
 
     # Switch to the project window
     attach_or_switch "$project_name"
@@ -508,7 +510,7 @@ cmd_fix() {
 
         info "$wname: restoring layout (${W}x${H} → top_h=$top_h main_w=$main_w)"
         tmux select-layout -t "$SESSION:$wname" "$layout"
-        tmux select-pane -t "$SESSION:$wname.0"
+        tmux select-pane -t "$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_id}' | head -1)"
     done
 }
 

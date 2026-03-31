@@ -807,15 +807,28 @@ Start with a concise morning briefing:
 Then ask if they want to switch to it. Keep the briefing under 10 lines."
 
     info "Launching orchestrator — resume any time with: borg claude"
-    cd "$BORG_ROOT"
-    exec claude --name "borg-orchestrator" --append-system-prompt "$prompt"
+    _borg_launch_in_tmux claude --name "borg-orchestrator" --append-system-prompt "$prompt"
 }
 
 cmd_claude() {
     # Resume the most recent orchestrator session from BORG_ROOT
     info "Resuming orchestrator..."
-    cd "$BORG_ROOT"
-    exec claude --continue
+    _borg_launch_in_tmux claude --continue
+}
+
+# Launch a command inside the borg tmux session.
+# If already in tmux, exec directly. Otherwise, send to pane 0 of the first
+# window and attach.
+_borg_launch_in_tmux() {
+    if [[ -n "${TMUX:-}" ]]; then
+        cd "$BORG_ROOT"
+        exec "$@"
+    fi
+
+    local target_pane
+    target_pane=$(tmux list-panes -t "$BORG_TMUX_SESSION:{start}" -F '#{pane_id}' | head -1)
+    tmux send-keys -t "$target_pane" "cd $BORG_ROOT && $*" Enter
+    exec tmux attach-session -t "$BORG_TMUX_SESSION"
 }
 
 cmd_help() {
