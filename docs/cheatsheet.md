@@ -53,6 +53,14 @@ drone status                 Show all drones
 Ctrl+Space >                 Jump to most pressing project (borg next --switch)
 ```
 
+## Source Badges
+
+```
+[C]       Claude Code CLI session
+[X]       Cortex Code CLI (CoCo) session
+[D]       Claude Desktop conversation
+```
+
 ## Status Indicators
 
 ```
@@ -124,5 +132,9 @@ BORG_DEBUG=1                         Enable debug output
 ~/.claude/
     hooks/                   Symlinked hook scripts
     skills/                  Symlinked skill directories
+    settings.json            Hook registrations
+
+~/.snowflake/cortex/         (if CoCo installed)
+    hooks/                   Symlinked hook scripts
     settings.json            Hook registrations
 ```
