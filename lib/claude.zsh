@@ -1,8 +1,7 @@
 #!/usr/bin/env zsh
 # lib/claude.zsh — session discovery from ~/.claude/projects/
 
-# Ensure PATH is available when sourced in non-interactive contexts
-export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:${PATH}"
+# PATH is set by borg.zsh before sourcing this file
 
 CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
 CLAUDE_SESSION_LOG="$HOME/.claude/session-log.md"

@@ -1,6 +1,7 @@
 # Devcontainer and Cortex Code CLI (CoCo) Compatibility Guide
 
-This guide covers how The Borg Collective works with Docker Compose devcontainers and Snowflake's Cortex Code CLI. No prior context about either technology is assumed.
+This guide covers how Borg works with Docker Compose devcontainers and Snowflake's Cortex Code CLI.
+No prior context about either technology is assumed.
 
 ---
 
@@ -8,13 +9,18 @@ This guide covers how The Borg Collective works with Docker Compose devcontainer
 
 ### What Are Devcontainers?
 
-Devcontainers are Docker containers configured as development environments. Instead of installing dependencies on your host machine, you define them in a `devcontainer.json` and `docker-compose.yml`, and your editor (VS Code, Neovim, etc.) connects to the running container. Each project gets its own isolated environment with its own language runtimes, packages, and system tools.
+Devcontainers are Docker containers configured as development environments. Instead of installing dependencies on
+your host machine, you define them in a `devcontainer.json` and `docker-compose.yml`, and your editor (VS Code,
+Neovim, etc.) connects to the running container. Each project gets its own isolated environment with its own
+language runtimes, packages, and system tools.
 
 ### How Claude Code Runs in Devcontainers
 
-Claude Code can run inside a devcontainer just like any other CLI tool. The key question is: where does Claude Code's configuration live?
+Claude Code can run inside a devcontainer just like any other CLI tool. The key question is: where does Claude
+Code's configuration live?
 
-**Bind-mount approach (recommended):** Mount `~/.claude/` from the host into the container. This shares credentials, settings, hooks, skills, and session history across all containers and the host.
+**Bind-mount approach (recommended):** Mount `~/.claude/` from the host into the container. This shares
+credentials, settings, hooks, skills, and session history across all containers and the host.
 
 ```yaml
 # In docker-compose.yml:
@@ -22,11 +28,13 @@ volumes:
   - ~/.claude:/home/vscode/.claude:cached
 ```
 
-This is the approach used across all of Noah's projects (cairn, wallpaper-kit, snowflake-projects).
+This is the recommended approach for all devcontainer-based projects.
 
 ### What Borg Needs
 
-Borg's hooks fire inside containers (because hooks live in `~/.claude/hooks/`, which is bind-mounted). The hooks update the registry at `~/.config/borg/registry.json`. For this to work, the registry directory must also be bind-mounted.
+Borg's hooks fire inside containers (because hooks live in `~/.claude/hooks/`, which is bind-mounted). The hooks
+update the registry at `~/.config/borg/registry.json`. For this to work, the registry directory must also be
+bind-mounted.
 
 **Required addition to every devcontainer `docker-compose.yml`:**
 
@@ -58,14 +66,17 @@ Both cases result in silent failures because hooks exit 0 regardless of registry
 
 ### Path Resolution
 
-Inside a container, the working directory is typically `/workspace` or `/development`, not `/Users/noah/dev/cairn`. Borg's hooks use `basename($CWD)` to derive the project name:
+Inside a container, the working directory is typically `/workspace` or `/development`, not
+`/home/user/dev/my-project`. Borg's hooks use `basename($CWD)` to derive the project name:
 
-- Host: `basename("/Users/noah/dev/cairn")` = `cairn`
+- Host: `basename("/home/user/dev/my-project")` = `my-project`
 - Container: `basename("/workspace")` = `workspace`
 
-When the container workspace is the project root, `basename` returns the mount point name, not the project name. The wallpaper-kit devcontainer uses `/workspace`, and cairn uses `/workspace`.
+When the container workspace is the project root, `basename` returns the mount point name, not the project name.
+Most devcontainers mount the project at `/workspace`.
 
-**Impact:** If the container mount point is generic (like `/workspace`), the hook will register the project as "workspace" instead of "cairn". This requires one of:
+**Impact:** If the container mount point is generic (like `/workspace`), the hook will register the project as
+"workspace" instead of the project name. This requires one of:
 - Setting `BORG_PROJECT_NAME` as a container environment variable
 - Using the container's git remote or directory name to infer the project name
 - Accepting that container sessions are tracked by mount point name
@@ -74,9 +85,11 @@ This is a known limitation that will be addressed during Phase 0 testing.
 
 ### Worktrees and Devcontainers
 
-Git worktrees (`claude --worktree <name>`) create isolated code directories within a single container. They provide **code isolation** but share the container's environment (Node.js version, system tools, etc.).
+Git worktrees (`claude --worktree <name>`) create isolated code directories within a single container. They
+provide **code isolation** but share the container's environment (Node.js version, system tools, etc.).
 
-For **environment isolation** across projects, use separate containers. For **code isolation** within a project, use worktrees inside a container. Both work with borg:
+For **environment isolation** across projects, use separate containers. For **code isolation** within a project,
+use worktrees inside a container. Both work with borg:
 
 - Multiple containers with borg registry mount: each container's hooks update the shared registry
 - Worktrees inside one container: each worktree is a separate git branch, but they share the same registry project entry
@@ -127,7 +140,10 @@ volumes:
 
 ### What Is CoCo?
 
-Cortex Code CLI is Snowflake's AI coding agent. It is a separate product from Claude Code, not a fork or wrapper. While it uses Claude models (Opus 4.6, Sonnet 4.6) under the hood, it has its own architecture specialized for data engineering: native SQL execution, dbt integration, Snowflake catalog awareness, and role-based access control.
+Cortex Code CLI is Snowflake's AI coding agent. It is a separate product from Claude Code, not a fork or wrapper.
+While it uses Claude models (Opus 4.6, Sonnet 4.6) under the hood, it has its own architecture specialized for
+data engineering: native SQL execution, dbt integration, Snowflake catalog awareness, and role-based access
+control.
 
 **Key command:** `cortex`
 **Informal name:** CoCo
@@ -152,7 +168,9 @@ Cortex Code CLI is Snowflake's AI coding agent. It is a separate product from Cl
 
 ### Skill Portability
 
-This is the most important finding: **skills are 100% portable between Claude Code and CoCo.** They use the identical SKILL.md format with the same YAML frontmatter. A skill created for Claude Code works in CoCo without modification, and vice versa.
+This is the most important finding: **skills are 100% portable between Claude Code and CoCo.** They use the
+identical SKILL.md format with the same YAML frontmatter. A skill created for Claude Code works in CoCo without
+modification, and vice versa.
 
 This means:
 - The `adhd-guardrails` skill works in CoCo sessions
@@ -166,15 +184,19 @@ To make skills available in CoCo, either:
 
 ### How CoCo Affects Borg
 
-**Current state (Phase 0-2):** Borg does not track CoCo sessions. This is intentional — the tool focuses on Claude Code first.
+**Current state (Phase 0-2):** Borg does not track CoCo sessions. This is intentional — the tool focuses on
+Claude Code first.
 
 **Future state:** When CoCo integration is needed, the changes are minimal:
 
-1. **Add `lib/coco.zsh`** — Follows the same pattern as `lib/claude.zsh` but reads from `~/.snowflake/cortex/conversations/` instead of `~/.claude/projects/`
+1. **Add `lib/coco.zsh`** — Follows the same pattern as `lib/claude.zsh` but reads from
+   `~/.snowflake/cortex/conversations/` instead of `~/.claude/projects/`
 
-2. **Add `hooks/borg-stop-coco.sh`** — Same logic as `borg-stop.sh` but adapted for CoCo's hook stdin format (different field names for the same data)
+2. **Add `hooks/borg-stop-coco.sh`** — Same logic as `borg-stop.sh` but adapted for CoCo's hook stdin format
+   (different field names for the same data)
 
-3. **Registry `source` field** — Already a free-form string. Adding `"coco"` as a value requires no schema change. Projects would appear in `borg ls` with a new badge (e.g., `[S]` for Snowflake).
+3. **Registry `source` field** — Already a free-form string. Adding `"coco"` as a value requires no schema
+   change. Projects would appear in `borg ls` with a new badge (e.g., `[S]` for Snowflake).
 
 4. **Session IDs** — CoCo uses the same UUID format as Claude Code. No format changes needed.
 
@@ -182,14 +204,18 @@ To make skills available in CoCo, either:
 
 ### Podman vs Docker
 
-CoCo requires Podman for its sandbox. Devcontainers use Docker. These are different container runtimes, but they coexist on macOS without conflict:
+CoCo requires Podman for its sandbox. Devcontainers use Docker. These are different container runtimes, but they
+coexist on macOS without conflict:
 
 - **Docker** runs via Docker Desktop (or colima/orbstack), with a daemon that manages containers
-- **Podman** runs daemonless, with each container as a direct process. On macOS, Podman runs inside a Linux VM managed by `podman machine`
+- **Podman** runs daemonless, with each container as a direct process. On macOS, Podman runs inside a Linux VM
+  managed by `podman machine`
 
-They use different sockets and connection mechanisms. You do not need to alias one to the other. Both can run simultaneously.
+They use different sockets and connection mechanisms. You do not need to alias one to the other. Both can run
+simultaneously.
 
-**One consideration:** If VS Code's Dev Containers extension detects Podman, it may try to use it instead of Docker. To prevent this, explicitly configure VS Code to use Docker:
+**One consideration:** If VS Code's Dev Containers extension detects Podman, it may try to use it instead of
+Docker. To prevent this, explicitly configure VS Code to use Docker:
 
 ```json
 // .vscode/settings.json
@@ -248,7 +274,7 @@ cortex -c dev -w ~/src/analytics
 Morning:
   borg ls                          # See all Claude Code projects
   borg next                        # Get recommendation
-  borg switch cairn                # Jump to work project (Claude Code)
+  borg switch api-service          # Jump to work project (Claude Code)
 
 Data engineering task:
   cortex -c dev -w ~/src/analytics # Start CoCo for Snowflake work
@@ -256,7 +282,7 @@ Data engineering task:
   # Work on dbt models, SQL, pipelines
 
 General development:
-  borg switch wallpaper-kit        # Jump to personal project (Claude Code)
+  borg switch side-project         # Jump to personal project (Claude Code)
   /adhd-guardrails                 # Same skill, different tool
 
 End of day:
@@ -285,9 +311,9 @@ When CoCo tracking is added to borg, the `borg ls` output will show all sessions
 
 ```
 PROJECT        SRC  STATUS    LAST ACTIVE  SUMMARY
-cairn          [C]  waiting   14:30 (2h)   Goal: Fix deployment | Last: error handling
+api-service    [C]  waiting   14:30 (2h)   Goal: Fix deployment | Last: error handling
 analytics      [S]  idle      11:00 (5h)   Goal: dbt revenue model | Last: add tests
-wallpaper-kit  [C]  active    16:45 (now)  Goal: Ship v1.0 | Last: API endpoint
+side-project   [C]  active    16:45 (now)  Goal: Ship v1.0 | Last: API endpoint
 ```
 
 Where `[C]` = Claude Code, `[S]` = Snowflake/CoCo, and `[D]` = Claude Desktop.

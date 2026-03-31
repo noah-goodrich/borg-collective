@@ -6,7 +6,7 @@ BORG_REGISTRY="$BORG_DIR/registry.json"
 BORG_LOCK="$BORG_DIR/.registry.lock"
 
 borg_registry_init() {
-    mkdir -p "$BORG_DIR"
+    /bin/mkdir -p "$BORG_DIR"
     if [[ ! -f "$BORG_REGISTRY" ]]; then
         echo '{"projects":{}}' > "$BORG_REGISTRY"
     fi
@@ -15,13 +15,13 @@ borg_registry_init() {
 # Atomic write with lockfile to prevent concurrent corruption
 _borg_registry_write() {
     local tmp="$BORG_REGISTRY.tmp.$$"
-    cat > "$tmp"
-    mv "$tmp" "$BORG_REGISTRY"
+    /bin/cat > "$tmp"
+    /bin/mv "$tmp" "$BORG_REGISTRY"
 }
 
 borg_registry_read() {
     borg_registry_init
-    cat "$BORG_REGISTRY"
+    /bin/cat "$BORG_REGISTRY"
 }
 
 borg_registry_list() {
@@ -60,14 +60,14 @@ borg_registry_merge() {
 
 borg_registry_add() {
     local project="$1"
-    local path="${2:-null}"
+    local ppath="${2:-null}"
     local source="${3:-cli}"
     local tmux_session="${4:-null}"
     local tmux_window="${5:-null}"
 
     local json
     json=$(jq -n \
-        --arg path "$path" \
+        --arg path "$ppath" \
         --arg source "$source" \
         --argjson tmux_session "$([ "$tmux_session" = "null" ] && echo 'null' || echo "\"$tmux_session\"")" \
         --argjson tmux_window "$([ "$tmux_window" = "null" ] && echo 'null' || echo "\"$tmux_window\"")" \
@@ -92,12 +92,12 @@ borg_registry_remove() {
 
 # Update status + last_activity timestamp
 borg_registry_set_status() {
-    local project="$1" status="$2"
+    local project="$1" proj_status="$2"
     local now
     now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     borg_registry_read | jq \
         --arg p "$project" \
-        --arg s "$status" \
+        --arg s "$proj_status" \
         --arg t "$now" \
         '.projects[$p].status = $s | .projects[$p].last_activity = $t' | _borg_registry_write
 }
