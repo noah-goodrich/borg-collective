@@ -62,6 +62,7 @@ This prevents corruption from concurrent hook executions.
         registry.zsh            Registry CRUD
         tmux.zsh                tmux window listing + switching
         claude.zsh              Session discovery from ~/.claude/projects/
+        coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
         desktop.zsh             Claude Desktop session reader
     hooks/
         borg-start.sh           SessionStart → status=active
@@ -133,7 +134,7 @@ This prevents corruption from concurrent hook executions.
 
 **Status values**: `active`, `waiting`, `idle`, `archived`, `unknown`
 
-**Source values**: `cli` (Claude Code), `desktop` (Claude Desktop), `coco` (Cortex Code, future)
+**Source values**: `cli` (Claude Code), `coco` (Cortex Code CLI), `desktop` (Claude Desktop)
 
 ---
 
@@ -196,17 +197,21 @@ TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // ""')
 
 ### Hook Registration
 
-Hooks are registered in `~/.claude/settings.json`:
+Hooks are registered in `~/.claude/settings.json` (Claude Code) and
+`~/.snowflake/cortex/settings.json` (CoCo). Same scripts, different paths:
 
 ```json
 {
   "hooks": {
-    "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-start.sh"}]}],
-    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-stop.sh"}]}],
-    "Notification": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-notify.sh"}]}]
+    "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "...", "timeout": 10}]}],
+    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "...", "timeout": 10}]}],
+    "Notification": [{"matcher": "", "hooks": [{"type": "command", "command": "...", "timeout": 10}]}]
   }
 }
 ```
+
+The stop hook detects tool type from transcript path (`*.snowflake/cortex*` → CoCo) for cairn
+records.
 
 ---
 
@@ -278,5 +283,6 @@ directory names.
 | fzf | Yes | Fuzzy picker for `borg switch` |
 | tmux | Yes | Session multiplexing |
 | claude | Optional | LLM debriefs (Sonnet), orchestrator session |
+| cortex | Optional | Cortex Code CLI (CoCo) — Snowflake AI coding |
 | cairn | Optional | Knowledge persistence |
 | Docker | Optional | Devcontainer support |
