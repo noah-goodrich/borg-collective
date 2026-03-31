@@ -779,6 +779,12 @@ _borg_orchestrator_context() {
 }
 
 cmd_init() {
+    # Ensure tmux session exists — borg init should just work
+    if ! borg_tmux_alive; then
+        info "Starting tmux session: $BORG_TMUX_SESSION"
+        tmux new-session -d -s "$BORG_TMUX_SESSION"
+    fi
+
     # Merge Desktop sessions before building briefing
     borg_desktop_scan 2>/dev/null || true
 
