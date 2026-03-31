@@ -18,7 +18,9 @@ What was the original objective of this session? One sentence.
 What was completed? List concrete deliverables (files created, bugs fixed, features shipped). Be specific.
 
 ## 3. Ready to Commit
-Which files are changed and ready to commit right now? If nothing, say so.
+Which files are changed and ready to commit right now? If nothing, say so. If you have
+not run /simplify on the changed files this session, recommend doing so now before
+committing and list the specific files to review.
 
 ## 4. Blockers
 What prevented completion? List specific issues, missing information, or dependencies. If none, say "No blockers."

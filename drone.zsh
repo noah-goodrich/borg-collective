@@ -5,6 +5,7 @@
 # Forked from dev.sh and integrated with borg orchestration.
 #
 # Usage:
+#   drone start <project> <feature>  Create worktree + branch, launch Claude (Boris workflow)
 #   drone up [project]           Start container + create tmux window
 #   drone down [project]         Stop container + remove tmux window
 #   drone claude [project]       Launch Claude Code in project window
@@ -432,6 +433,51 @@ cmd_claude() {
     attach_or_switch "$project_name"
 }
 
+# ── drone start ───────────────────────────────────────────────────────────────
+
+cmd_start() {
+    local feature="${2:-}"
+    [[ -z "$feature" ]] && die "Usage: drone start <project> <feature>"
+    _drone_resolve "${1:-}"
+    local project_name="$_proj_name"
+    local project_dir="$_proj_dir"
+    local window_name="${project_name}-${feature}"
+    local work_dir="${project_dir%/*}/${project_name}-${feature}"
+
+    if has_window "$window_name"; then
+        info "Already open: $window_name"
+        attach_or_switch "$window_name"
+        return
+    fi
+
+    if [[ ! -d "$work_dir" ]]; then
+        if git -C "$project_dir" show-ref --verify --quiet "refs/heads/$feature" 2>/dev/null; then
+            git -C "$project_dir" worktree add "$work_dir" "$feature"
+        else
+            git -C "$project_dir" worktree add -b "$feature" "$work_dir"
+        fi
+        info "Worktree created: $work_dir (branch: $feature)"
+    else
+        info "Worktree exists: $work_dir"
+    fi
+
+    local compose="$work_dir/$COMPOSE_FILE"
+    if [[ -f "$compose" ]]; then
+        cmd_up "$work_dir"
+    else
+        create_3pane_window "$window_name" "cd $work_dir"
+        tmux set-option -t "$SESSION:$window_name" @project_dir "$work_dir"
+        tmux set-option -t "$SESSION:$window_name" @project_name "$project_name"
+        borg add "$work_dir" 2>/dev/null || true
+        local bottom_pane
+        bottom_pane=$(tmux list-panes -t "$SESSION:$window_name" -F '#{pane_top} #{pane_id}' \
+            | sort -rn | head -1 | awk '{print $2}')
+        tmux send-keys -t "$bottom_pane" "claude" Enter
+        attach_or_switch "$window_name"
+    fi
+    info "Started: $window_name"
+}
+
 # ── drone sh ──────────────────────────────────────────────────────────────────
 
 cmd_sh() {
@@ -601,6 +647,7 @@ cmd_help() {
   Your containers will be assimilated.
 
   COMMANDS
+    start <project> <feature>  Create worktree + branch, start window, launch Claude
     up [project]         Start container + create tmux window (uses $PWD if no arg)
     down [project]       Stop container + remove tmux window
     claude [project]     Launch Claude Code in project window (runs drone up if needed)
@@ -636,6 +683,7 @@ dbg "dispatch: args='${*}'"
 dbg "dispatch: SESSION=$SESSION"
 
 case "${1:-}" in
+    start)      cmd_start "${2:-}" "${3:-}" ;;
     up)         cmd_up "${2:-}" ;;
     down)       cmd_down "${2:-}" ;;
     claude)     cmd_claude "${2:-}" ;;

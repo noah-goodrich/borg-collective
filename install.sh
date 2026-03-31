@@ -172,9 +172,10 @@ register_hook() {
 # 5a. Claude Code hooks
 if [[ -f "$CLAUDE_SETTINGS" ]]; then
     info "Registering hooks in Claude Code settings.json..."
-    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh"  "SessionStart" "borg-start.sh"
-    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"   "Stop"         "borg-stop.sh"
-    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh" "Notification"  "borg-notify.sh"
+    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
+    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
+    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
+    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
 else
     warn "No settings.json at $CLAUDE_SETTINGS"
     warn "Claude Code hooks installed but not registered. See README.md for manual registration."
@@ -198,9 +199,10 @@ if command -v cortex &>/dev/null; then
     done
 
     info "Registering hooks in CoCo settings.json..."
-    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh"  "SessionStart" "borg-start.sh"
-    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh"   "Stop"         "borg-stop.sh"
-    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh" "Notification"  "borg-notify.sh"
+    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
+    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
+    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
+    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
 
     # Register skills with CoCo
     info "Registering skills with CoCo..."
@@ -263,12 +265,12 @@ echo ""
 info "Installation complete."
 echo ""
 echo "  The Borg workflow:"
-echo "    1. drone up <project>              spin up a project (container + tmux window)"
-echo "    2. drone claude <project>          launch Claude in that window"
-echo "    3. borg next                       what needs your attention?"
-echo "    4. Ctrl+Space >                    jump there instantly"
-echo "    5. /borg-plan                      lock acceptance criteria"
-echo "    6. /borg-ship                      evaluate shipping readiness"
+echo "    1. drone start <project> <feature> create worktree + branch, launch Claude"
+echo "    2. /borg-plan                      lock objectives + acceptance criteria"
+echo "    3. (implement)"
+echo "    4. /simplify                       review changed code before committing"
+echo "    5. /checkpoint + git commit        document session milestone"
+echo "    6. borg next / Ctrl+Space >        what needs attention? jump there."
 echo ""
 echo "  borg commands:"
 echo "    borg next [--switch]   Single recommendation + jump there"

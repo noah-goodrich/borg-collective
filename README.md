@@ -22,7 +22,7 @@ borg init
 The installer handles everything:
 1. Checks dependencies (jq, fzf, tmux) — installs via Homebrew if missing
 2. Symlinks `borg` and `drone` to `~/.local/bin/`
-3. Installs and registers Claude Code hooks (SessionStart, Stop, Notification)
+3. Installs and registers Claude Code hooks (SessionStart, Stop, Notification, PreToolUse)
 4. Installs skills (cognitive load guardrails, planning, shipping, review, debrief, checkpoint)
 5. Configures tmux keybinding (`Ctrl+Space >` → jump to most pressing project)
 6. Runs `borg scan` to discover projects
@@ -66,12 +66,14 @@ This installs Boris Cherny's 57-tip framework, Scope Guard, and 205+ community s
 
 | Command | Description |
 |---------|-------------|
-| `drone up [project]` | Start container + create tmux window + enter container |
+| `drone start <project> <feature>` | Create git worktree + branch, start window, launch Claude |
+| `drone up [project]` | Start container + create tmux window (resume existing work) |
 | `drone down [project]` | Stop container + remove tmux window |
 | `drone claude [project]` | Launch Claude Code session in project context |
 | `drone sh [project]` | Shell into project container |
 | `drone restart [project]` | Restart container + re-exec all panes |
 | `drone fix [project]` | Restore standard 3-pane layout |
+| `drone toggle [project]` | Show/hide the top-right side pane |
 | `drone status` | Show all drones (container + session state) |
 
 ### Hotkey
@@ -86,9 +88,10 @@ Three hooks update the registry automatically:
 
 | Hook | Event | What happens |
 |------|-------|-------------|
-| `borg-start.sh` | SessionStart | Status → active |
+| `borg-start.sh` | SessionStart | Status → active; injects last debrief + plan nudge if no PROJECT_PLAN.md |
 | `borg-notify.sh` | Notification | Status → waiting, captures what Claude needs |
-| `borg-stop.sh` | Stop | Status → idle, runs deep session debrief via Sonnet |
+| `borg-stop.sh` | Stop | Status → idle; runs deep session debrief; warns on uncommitted changes |
+| `pre-commit-remind.sh` | PreToolUse | Reminds Claude to run /simplify before git commit |
 
 ### Session Debriefs
 
