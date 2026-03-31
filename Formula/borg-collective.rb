@@ -2,7 +2,7 @@ class BorgCollective < Formula
   desc "AI development orchestration for parallel Claude Code sessions"
   homepage "https://github.com/noah-goodrich/borg-collective"
   url "https://github.com/noah-goodrich/borg-collective/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "FILL_IN_AFTER_TAGGING"
+  sha256 "7095df0a6130e67df80170446c2d8391d4847762982e0aa34c420674ff5460ac"
   license "MIT"
 
   depends_on "fzf"
@@ -32,12 +32,6 @@ class BorgCollective < Formula
         borg setup
 
       This is required once per machine. Safe to re-run.
-
-      To create a git tag for a new release:
-        git tag v0.1.0 && git push origin v0.1.0
-
-      Then update the sha256 in this formula:
-        curl -sL https://github.com/noah-goodrich/borg-collective/archive/refs/tags/v0.1.0.tar.gz | sha256sum
     EOS
   end
 
