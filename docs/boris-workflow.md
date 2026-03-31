@@ -1,6 +1,6 @@
 # How to Ship Like Boris (and Not Lose Your Mind)
 
-*An ELI5 guide to parallel AI-assisted development, adapted for developers with ADHD.*
+*An ELI5 guide to parallel AI-assisted development.*
 
 ---
 
@@ -91,14 +91,13 @@ five potential twenty-three-minute penalties per day, even if you're organized a
 Working memory — the number of things you can hold in your head simultaneously — is limited to roughly
 seven items for most people (Miller's Law). If four of those slots are consumed by "where was I in cairn,
 what's the borg PR status, did I respond to the wallpaper-kit question, is the snowflake migration
-safe" — you have three slots left for the actual problem you're trying to solve. That's not an ADHD
-problem. That's a math problem.
+safe" — you have three slots left for the actual problem you're trying to solve. That's a math problem.
 
 ### The specific risks
 
 **Decision fatigue.** Five sessions are waiting for input. Which one do you attend to first? Research on
-decision fatigue (Baumeister) shows that decision quality degrades after sustained cognitive effort —
-for everyone, not just neurodivergent individuals. Each pending decision consumes a finite resource.
+decision fatigue (Baumeister) shows that decision quality degrades after sustained cognitive effort.
+Each pending decision consumes a finite resource.
 By afternoon, you're making worse choices about code architecture because you spent the morning making
 triage decisions about which session to attend to.
 
@@ -114,11 +113,10 @@ in the Maslach Burnout Inventory: emotional exhaustion, then cynicism, then redu
 The insidious part is that this happens gradually — you don't crash one day, you slowly get worse over
 weeks.
 
-**The slow bleed.** This is the version of the problem that's hardest to detect. Developers with ADHD
-experience these issues acutely and obviously — the hyperfocus crash, the decision paralysis, the
-addiction pattern. Neurotypical developers experience the same underlying problems but as a slow erosion:
-slightly worse decisions each week, slightly less enjoyment, slightly more dread about the backlog of
-sessions waiting for attention. By the time it's noticeable, it's been going on for months.
+**The slow bleed.** This is the version of the problem that's hardest to detect. It shows up as
+gradual erosion: slightly worse decisions each week, slightly less enjoyment, slightly more dread about
+the backlog of sessions waiting for attention. By the time it's noticeable, it's been going on for
+months.
 
 Clinical researchers have developed the AI Addiction Scale (AIAS-21), measuring compulsive use, craving,
 tolerance, and withdrawal from generative AI tools. While the most acute patterns correlate with
@@ -143,9 +141,9 @@ Specifically:
 - **One recommendation means no decision required.** "What should I work on?" gets one answer, not
   a list of five options ranked by six criteria.
 
-These aren't accommodations for a specific condition. They're cognitive infrastructure for sustainable
-AI-assisted development. Developers with ADHD or other neurodivergent conditions will feel the benefit
-immediately. Everyone else will feel it after a few weeks of carrying the baseline without scaffolding.
+These are cognitive infrastructure for sustainable AI-assisted development. Every developer benefits
+from the reduced baseline — some immediately, others after a few weeks of carrying the overhead without
+scaffolding.
 
 ---
 
@@ -194,7 +192,8 @@ You're ready to work.
 ### Working on a project
 
 You switch to the api-service window. You type `drone claude api-service` to start a Claude session
-inside the project's container.
+inside the project's container. (For new feature work, `drone start <project> <feature>` creates a
+git worktree and isolated container in one step, so each feature gets its own window and branch.)
 
 Claude starts with context from your last session — the debrief that was automatically generated when
 you stopped yesterday. It knows you were adding rate limiting. It knows the tests pass. It knows the
@@ -353,8 +352,9 @@ the plumbing — borg handles it.
 | `/borg-plan` | Skill — Claude proposes, you validate | Establishes locked acceptance criteria |
 | `/borg-ship` | Skill — evaluates criteria with evidence | "Am I done? Can I ship?" |
 | `borg search` | Queries cairn knowledge graph | "Have I solved this before?" |
-| `drone up/down` | Start/stop project containers | Container lifecycle |
-| `drone claude` | Launch Claude in project container | "Start working on this project" |
+| `drone start <project> <feature>` | Worktree + branch + Claude in one command | "Start new feature work" |
+| `drone up/down` | Start/stop project containers | Container lifecycle (resuming existing work) |
+| `drone claude` | Launch Claude in project window | "Resume work on this project" |
 | `/adhd-guardrails` | Always-on skill | Scope discipline, break reminders, shame-free language |
 | `/checkpoint-enhanced` | Manual skill | Structured session summary with next-session entry point |
 | `/borg-debrief` | Automatic (stop hook) | Deep session analysis persisted for future sessions |
@@ -366,7 +366,8 @@ the plumbing — borg handles it.
 │  You (developer)                                                │
 │                                                                 │
 │  "What should I work on?"  →  borg init / borg next             │
-│  "Start this project"      →  drone up + drone claude           │
+│  "New feature"             →  drone start (worktree + branch)   │
+│  "Resume project"          →  drone up + drone claude           │
 │  "What am I building?"     →  /borg-plan (sets criteria)        │
 │  "Am I done?"              →  /borg-ship (checks criteria)      │
 │  "Have I done this before?" → borg search (queries cairn)       │
@@ -411,7 +412,7 @@ If you're reading this and want to try the workflow:
 5. Run `/simplify` before shipping
 
 That's it. You're already using the Boris workflow. Everything else — borg, drone, cairn, the hooks —
-is scaffolding that makes the workflow sustainable for people who need external structure.
+is scaffolding that makes the workflow sustainable at scale.
 
 **Full setup (with borg):**
 ```

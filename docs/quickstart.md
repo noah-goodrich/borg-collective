@@ -9,7 +9,7 @@ Borg is two command-line tools:
 - **`borg`** — Orchestrates your AI development sessions (recommendations, boundaries, planning)
 - **`drone`** — Manages project containers and tmux windows (start/stop, shell access, Claude launch)
 
-Plus six Claude Code skills, three hooks, and a tmux keybinding.
+Plus six Claude Code skills, four hooks, and a tmux keybinding.
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ The installer:
 1. Checks and installs missing dependencies via Homebrew
 2. Creates `~/.config/borg/` (registry, config, debriefs)
 3. Symlinks `borg` and `drone` to `~/.local/bin/`
-4. Registers hooks in `~/.claude/settings.json`
+4. Registers hooks in `~/.claude/settings.json` (SessionStart, Stop, Notification, PreToolUse)
 5. Installs skills to `~/.claude/skills/`
 6. Adds tmux keybinding (`Ctrl+Space >`)
 7. Runs `borg scan` to discover existing projects
@@ -66,12 +66,18 @@ borg next
 # Dashboard
 borg ls
 
-# Start a project
+# Start new feature work (creates git worktree + branch, launches Claude)
+drone start my-project my-feature
+
+# Or resume existing work
 drone up my-project
 drone claude my-project
 
-# Inside a Claude session — plan your work
-/borg-plan
+# Inside a Claude session — the Boris workflow
+/borg-plan          # Lock objectives + acceptance criteria
+# ... implement ...
+/simplify           # Review changed code
+/checkpoint         # Document session milestone before committing
 
 # Check if you're done
 /borg-ship

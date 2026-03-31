@@ -26,12 +26,14 @@ borg help                    Show help
 ## Drone Commands (Project Lifecycle)
 
 ```
-drone up [project]           Start container + create tmux window
+drone start <project> <feature>  Create worktree + branch, launch Claude (Boris workflow)
+drone up [project]           Start container + create tmux window (resume existing work)
 drone down [project]         Stop container + remove window
 drone claude [project]       Launch Claude Code in project context
 drone sh [project]           Shell into container
 drone restart [project]      Restart container + re-exec panes
 drone fix [project]          Restore 3-pane layout
+drone toggle [project]       Show/hide top-right side pane
 drone status                 Show all drones
 ```
 
@@ -72,16 +74,18 @@ Over capacity                 "4 sessions need attention (limit: 3)"
 ## Typical Daily Workflow
 
 ```
-borg init                    Morning: orchestrator presents briefing
-"spin up api-service"        Orchestrator runs drone up
-Ctrl+Space >                 Switch to recommended project
-drone claude api-service     Start Claude in that project
-/borg-plan                   Define goals (if new project)
-[work]                       Claude has last session's debrief as context
-/borg-review                 Mid-session check: am I on track?
-/borg-ship                   Am I done? Ship it.
-/exit                        Stop hook runs debrief automatically
-Ctrl+Space >                 Next project
+borg init                         Morning: orchestrator presents briefing
+Ctrl+Space >                      Switch to recommended project
+drone start my-project my-feature Create worktree + branch, launch Claude
+/borg-plan                        Lock objectives + acceptance criteria
+[work]                            Claude has last session's debrief as context
+/simplify                         Review changed code before committing
+/checkpoint                       Document session milestone
+git commit                        Commit (pre-commit hook reminds /simplify if skipped)
+/borg-review                      Mid-session check: am I on track?
+/borg-ship                        Am I done? Ship it.
+/exit                             Stop hook runs debrief automatically
+Ctrl+Space >                      Next project
 ```
 
 ## Configuration
