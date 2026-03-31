@@ -354,11 +354,12 @@ _borg_do_switch() {
     fi
 }
 
-cmd_scan() {
-    info "Scanning Claude session history..."
-
-    local new_projects=()
-    local ppath name tmux_window session_id json
+# Register all projects from a session log into the registry.
+# Args: source label, session-id fn name, scan-log fn name, display label (optional)
+# Appends to new_projects array in calling scope (zsh dynamic scoping).
+_borg_scan_source() {
+    local source="$1" get_session_id="$2" scan_log="$3" label="${4:-}"
+    local ppath name tmux_window session_id tw_json sid_json json
 
     while IFS= read -r ppath; do
         [[ -z "$ppath" ]] && continue
@@ -369,19 +370,16 @@ cmd_scan() {
             continue
         fi
 
-        # Detect matching tmux window
         tmux_window=""
         borg_tmux_window_exists "$name" && tmux_window="$name" || true
+        session_id=$("$get_session_id" "$ppath") || session_id=""
 
-        session_id=$(borg_claude_latest_session_id "$ppath") || session_id=""
-
-        local tw_json sid_json
         [[ -n "$tmux_window" ]] && tw_json="\"$tmux_window\"" || tw_json="null"
         [[ -n "$session_id" ]] && sid_json="\"$session_id\"" || sid_json="null"
 
         json=$(jq -n \
             --arg path "$ppath" \
-            --arg source "cli" \
+            --arg source "$source" \
             --arg tmux_session "$BORG_TMUX_SESSION" \
             --argjson tmux_window "$tw_json" \
             --argjson session_id "$sid_json" \
@@ -397,54 +395,22 @@ cmd_scan() {
             }')
 
         borg_registry_merge "$name" "$json"
-        info "Registered: $name ($ppath)"
+        info "Registered: $name ($ppath)${label:+ $label}"
         new_projects+=("$name")
-    done < <(borg_claude_scan_session_log)
+    done < <("$scan_log")
+}
 
-    # Scan CoCo (Cortex Code CLI) sessions
+cmd_scan() {
+    local new_projects=()
+
+    info "Scanning Claude session history..."
+    _borg_scan_source "cli" borg_claude_latest_session_id borg_claude_scan_session_log
+
     if type borg_coco_scan_session_log &>/dev/null; then
         info "Scanning Cortex Code session history..."
-        while IFS= read -r ppath; do
-            [[ -z "$ppath" ]] && continue
-            name="${ppath##*/}"
-
-            if borg_registry_has "$name"; then
-                dbg "already registered: $name"
-                continue
-            fi
-
-            tmux_window=""
-            borg_tmux_window_exists "$name" && tmux_window="$name" || true
-            session_id=$(borg_coco_latest_session_id "$ppath") || session_id=""
-
-            local tw_json sid_json
-            [[ -n "$tmux_window" ]] && tw_json="\"$tmux_window\"" || tw_json="null"
-            [[ -n "$session_id" ]] && sid_json="\"$session_id\"" || sid_json="null"
-
-            json=$(jq -n \
-                --arg path "$ppath" \
-                --arg source "coco" \
-                --arg tmux_session "$BORG_TMUX_SESSION" \
-                --argjson tmux_window "$tw_json" \
-                --argjson session_id "$sid_json" \
-                '{
-                    path: $path,
-                    source: $source,
-                    tmux_session: $tmux_session,
-                    tmux_window: $tmux_window,
-                    claude_session_id: $session_id,
-                    last_activity: null,
-                    status: "idle",
-                    summary: null
-                }')
-
-            borg_registry_merge "$name" "$json"
-            info "Registered: $name ($ppath) [CoCo]"
-            new_projects+=("$name")
-        done < <(borg_coco_scan_session_log)
+        _borg_scan_source "coco" borg_coco_latest_session_id borg_coco_scan_session_log "[CoCo]"
     fi
 
-    # Also scan Desktop session reports
     borg_desktop_scan 2>/dev/null || true
 
     if (( ${#new_projects[@]} == 0 )); then

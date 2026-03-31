@@ -519,14 +519,12 @@ cmd_toggle() {
             info "$wname: side pane closed (2 panes)"
         fi
     elif [[ "$pane_count" == "2" ]]; then
-        # Recreate side pane: split the top-left pane horizontally
         local main_pane
         main_pane=$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_top} #{pane_id}' \
             | awk '$1 == 0' | head -1 | awk '{print $2}')
         if [[ -n "$main_pane" ]]; then
             local side
             side=$(tmux split-window -h -p 30 -t "$main_pane" -PF '#{pane_id}')
-            # If this is a devcontainer project, exec into the container
             local pdir
             pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
             if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
