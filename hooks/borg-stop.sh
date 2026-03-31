@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# borg-stop.sh — Claude Code Stop hook
+# borg-stop.sh — Claude Code / Cortex Code Stop hook
 # Fires when a Claude Code or Cortex Code session ends.
 #
 # Updates registry: status=idle, claude_session_id=<id>

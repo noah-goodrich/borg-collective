@@ -495,6 +495,74 @@ cmd_rm() {
     info "Removed: $project"
 }
 
+cmd_refresh() {
+    local target="" use_llm=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --all) target="--all"; shift ;;
+            --llm) use_llm=1; shift ;;
+            *) target="$1"; shift ;;
+        esac
+    done
+
+    local projects
+    if [[ "$target" == "--all" || -z "$target" ]]; then
+        projects=$(borg_registry_list)
+    else
+        projects="$target"
+    fi
+
+    local llm_flag=""
+    (( use_llm )) && llm_flag="--llm"
+
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        local entry ppath session_id jsonl
+        entry=$(borg_registry_get "$name")
+        ppath=$(echo "$entry" | jq -r '.path // ""')
+        session_id=$(echo "$entry" | jq -r '.claude_session_id // ""')
+
+        if [[ -z "$ppath" || "$ppath" == "null" ]]; then
+            warn "$name: no path (Desktop session?), skipping"
+            continue
+        fi
+
+        # Use recorded session ID, or discover latest
+        if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+            session_id=$(borg_claude_latest_session_id "$ppath")
+        fi
+
+        if [[ -z "$session_id" ]]; then
+            warn "$name: no transcript found at $ppath"
+            continue
+        fi
+
+        jsonl=$(borg_claude_session_jsonl "$ppath" "$session_id")
+        if [[ ! -f "$jsonl" ]]; then
+            warn "$name: transcript not found: $jsonl"
+            continue
+        fi
+
+        local summary
+        summary=$(python3 "$BORG_ROOT/summarize.py" $llm_flag "$jsonl" 2>/dev/null) || summary="(summarizer error)"
+
+        if [[ -n "$summary" ]]; then
+            borg_registry_read | jq \
+                --arg p "$name" \
+                --arg s "$summary" \
+                --arg sid "$session_id" \
+                '.projects[$p].summary = $s | .projects[$p].claude_session_id = $sid' \
+                | _borg_registry_write
+            info "$name: summary updated"
+        fi
+    done < <(echo "$projects")
+}
+
+cmd_focus() {
+    # Merged into cmd_switch — focus is just switch with a direct argument
+    cmd_switch "${@:-}"
+}
+
 cmd_next() {
     local do_switch=0
     [[ "${1:-}" == "--switch" ]] && do_switch=1
@@ -753,6 +821,12 @@ _borg_orchestrator_context() {
 }
 
 cmd_init() {
+    # Ensure tmux session exists — borg init should just work
+    if ! borg_tmux_alive; then
+        info "Starting tmux session: $BORG_TMUX_SESSION"
+        tmux new-session -d -s "$BORG_TMUX_SESSION"
+    fi
+
     # Merge Desktop sessions before building briefing
     borg_desktop_scan 2>/dev/null || true
 
@@ -775,15 +849,28 @@ Start with a concise morning briefing:
 Then ask if they want to switch to it. Keep the briefing under 10 lines."
 
     info "Launching orchestrator — resume any time with: borg claude"
-    cd "$BORG_ROOT"
-    exec claude --name "borg-orchestrator" --append-system-prompt "$prompt"
+    _borg_launch_in_tmux claude --name "borg-orchestrator" --append-system-prompt "$prompt"
 }
 
 cmd_claude() {
     # Resume the most recent orchestrator session from BORG_ROOT
     info "Resuming orchestrator..."
-    cd "$BORG_ROOT"
-    exec claude --continue
+    _borg_launch_in_tmux claude --continue
+}
+
+# Launch a command inside the borg tmux session.
+# If already in tmux, exec directly. Otherwise, send to pane 0 of the first
+# window and attach.
+_borg_launch_in_tmux() {
+    if [[ -n "${TMUX:-}" ]]; then
+        cd "$BORG_ROOT"
+        exec "$@"
+    fi
+
+    local target_pane
+    target_pane=$(tmux list-panes -t "$BORG_TMUX_SESSION:{start}" -F '#{pane_id}' | head -1)
+    tmux send-keys -t "$target_pane" "cd $BORG_ROOT && $*" Enter
+    exec tmux attach-session -t "$BORG_TMUX_SESSION"
 }
 
 cmd_help() {
@@ -807,7 +894,9 @@ cmd_help() {
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
+    refresh [--all]     Regenerate summaries (--llm for AI-powered)
     tidy                Archive stale projects (idle >48h)
+    focus [project]     Alias for: switch <project>
     help                Show this message
 
   HOTKEY
@@ -856,7 +945,9 @@ case "${1:-help}" in
     rm)       cmd_rm "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
+    refresh)  cmd_refresh "${@:2}" ;;
     tidy)     cmd_tidy ;;
+    focus)    cmd_focus "${@:2}" ;;
     help|--help|-h) cmd_help ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac
