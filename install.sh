@@ -48,8 +48,6 @@ info "Checking dependencies..."
 MISSING=()
 command -v jq      &>/dev/null || MISSING+=(jq)
 command -v fzf     &>/dev/null || MISSING+=(fzf)
-command -v python3 &>/dev/null || MISSING+=(python3)
-command -v node    &>/dev/null || MISSING+=(node)
 command -v tmux    &>/dev/null || MISSING+=(tmux)
 
 if (( ${#MISSING[@]} > 0 )); then
@@ -147,38 +145,72 @@ done
 
 # ── 5. Register hooks in settings.json ────────────────────────────────────────
 
-# Register each hook with its Claude Code event type
-# (bash 3.2 compatible — no associative arrays)
+# Register a hook in a settings.json file
+# Usage: register_hook <settings_file> <hook_cmd> <event> <label>
 register_hook() {
-    local hook_file="$1" event="$2"
-    local hook_cmd="\$HOME/.claude/hooks/$hook_file"
+    local settings="$1" hook_cmd="$2" event="$3" label="$4"
+    local timeout_val=10
 
     # Check if already registered (avoid duplicates)
     if jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
         '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
-        "$CLAUDE_SETTINGS" &>/dev/null; then
-        info "  $event: $hook_file (already registered)"
+        "$settings" &>/dev/null; then
+        info "  $event: $label (already registered)"
         return
     fi
 
-    # Add hook entry
-    local tmp="$CLAUDE_SETTINGS.tmp.$$"
-    jq --arg evt "$event" --arg cmd "$hook_cmd" '
+    # Add hook entry with timeout
+    local tmp="$settings.tmp.$$"
+    jq --arg evt "$event" --arg cmd "$hook_cmd" --argjson timeout "$timeout_val" '
         if .hooks == null then .hooks = {} else . end |
         if .hooks[$evt] == null then .hooks[$evt] = [] else . end |
-        .hooks[$evt] += [{"matcher": "", "hooks": [{"type": "command", "command": $cmd}]}]
-    ' "$CLAUDE_SETTINGS" > "$tmp" && mv "$tmp" "$CLAUDE_SETTINGS"
-    info "  $event: $hook_file (registered)"
+        .hooks[$evt] += [{"matcher": "", "hooks": [{"type": "command", "command": $cmd, "timeout": $timeout}]}]
+    ' "$settings" > "$tmp" && mv "$tmp" "$settings"
+    info "  $event: $label (registered)"
 }
 
+# 5a. Claude Code hooks
 if [[ -f "$CLAUDE_SETTINGS" ]]; then
-    info "Registering hooks in settings.json..."
-    register_hook "borg-start.sh"  "SessionStart"
-    register_hook "borg-stop.sh"   "Stop"
-    register_hook "borg-notify.sh" "Notification"
+    info "Registering hooks in Claude Code settings.json..."
+    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh"  "SessionStart" "borg-start.sh"
+    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"   "Stop"         "borg-stop.sh"
+    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh" "Notification"  "borg-notify.sh"
 else
     warn "No settings.json at $CLAUDE_SETTINGS"
-    warn "Hooks installed but not registered. See README.md for manual registration."
+    warn "Claude Code hooks installed but not registered. See README.md for manual registration."
+fi
+
+# 5b. Cortex Code CLI (CoCo) hooks
+COCO_DIR="$HOME/.snowflake/cortex"
+COCO_SETTINGS="$COCO_DIR/settings.json"
+
+if command -v cortex &>/dev/null; then
+    info "Cortex Code CLI detected — configuring CoCo integration..."
+    mkdir -p "$COCO_DIR/hooks"
+
+    # Create settings.json if it doesn't exist
+    [[ -f "$COCO_SETTINGS" ]] || echo '{}' > "$COCO_SETTINGS"
+
+    # Symlink hooks into CoCo hooks dir (same scripts, different location)
+    for hook in "$BORG_ROOT/hooks/"*.sh; do
+        name="$(basename "$hook")"
+        ln -sf "$hook" "$COCO_DIR/hooks/$name"
+    done
+
+    info "Registering hooks in CoCo settings.json..."
+    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh"  "SessionStart" "borg-start.sh"
+    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh"   "Stop"         "borg-stop.sh"
+    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh" "Notification"  "borg-notify.sh"
+
+    # Register skills with CoCo
+    info "Registering skills with CoCo..."
+    for skill_dir in "$BORG_ROOT/skills/"*/; do
+        [[ -d "$skill_dir" ]] || continue
+        name="$(basename "$skill_dir")"
+        cortex skill add "$skill_dir" 2>/dev/null && info "  $name (cortex)" || warn "  $name: cortex skill add failed"
+    done
+else
+    info "Cortex Code CLI not found — skipping CoCo integration"
 fi
 
 # ── 6. Install skills ─────────────────────────────────────────────────────────
@@ -258,6 +290,13 @@ for skill_dir in "$BORG_ROOT/skills/"*/; do
     [[ -d "$skill_dir" ]] && echo "    /$(basename "$skill_dir")"
 done
 echo ""
+if command -v cortex &>/dev/null; then
+    echo "  CoCo integration: active"
+    echo "    borg ls shows [X] badge for Cortex Code projects"
+    echo "    borg scan discovers CoCo sessions from session-log.md"
+    echo "    Stop hook fires on CoCo sessions → debrief + cairn record"
+    echo ""
+fi
 echo "  Community skills (run in Claude Code):"
 echo "    /plugin marketplace add alirezarezvani/claude-skills"
 echo "    Adds: Boris Cherny's 57-tip framework, Scope Guard, 205+ engineering skills"

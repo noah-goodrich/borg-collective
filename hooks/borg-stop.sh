@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# borg-stop.sh — Claude Code Stop hook
-# Fires when a Claude Code session ends (user exits or session closes).
+# borg-stop.sh — Claude Code / Cortex Code Stop hook
+# Fires when a Claude Code or Cortex Code session ends.
 #
 # Updates registry: status=idle, claude_session_id=<id>
 # Spawns async LLM debrief via claude -p → ~/.config/borg/debriefs/<project>.md
-# Registered as a Stop hook in ~/.claude/settings.json alongside session-log.sh
+# Registered as a Stop hook in settings.json for both Claude Code and CoCo
 
 set -euo pipefail
 
@@ -20,6 +20,10 @@ TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null || echo 
 
 PROJECT=$(basename "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Detect tool from transcript path
+TOOL="claude-code"
+[[ "$TRANSCRIPT" == *".snowflake/cortex"* ]] && TOOL="coco"
 
 # Require registry to exist
 [[ -f "$BORG_REGISTRY" ]] || exit 0
@@ -53,7 +57,7 @@ if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]] && command -v claude >/dev/null 2>
     (
         _date=$(date '+%Y-%m-%d %H:%M')
         _tail=$(tail -200 "$_transcript")
-        _prompt="Analyze this Claude Code session transcript (JSONL format) and produce a structured debrief.
+        _prompt="Analyze this coding session transcript (JSONL format) and produce a structured debrief.
 
 # Session Debrief: ${_project}
 *Date: ${_date}*
@@ -107,7 +111,7 @@ ${_tail}"
                 cairn record session \
                     --id "$_cairn_id" \
                     --project "$_project" \
-                    --tool "claude-code" \
+                    --tool "$TOOL" \
                     --objective "$_obj" \
                     --notes "$_notes" \
                     2>/dev/null || true
@@ -115,7 +119,7 @@ ${_tail}"
                 cairn record session \
                     --id "$_cairn_id" \
                     --project "$_project" \
-                    --tool "claude-code" \
+                    --tool "$TOOL" \
                     --notes "$_notes" \
                     2>/dev/null || true
             fi

@@ -168,28 +168,6 @@ create_3pane_window() {
     dbg "create_3pane_window: done (main=$main side=$side bottom=$bottom)"
 }
 
-ensure_session() {
-    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-        dbg "ensure_session: creating session with host window"
-        create_3pane_window "host"
-        return
-    fi
-
-    if ! has_window "host"; then
-        dbg "ensure_session: host window missing, recreating"
-        create_3pane_window "host"
-        return
-    fi
-
-    local panes
-    panes=$(window_pane_count "host")
-    if [[ "$panes" != "3" ]]; then
-        dbg "ensure_session: host has $panes panes (expected 3), recreating"
-        tmux kill-window -t "$SESSION:host"
-        create_3pane_window "host"
-    fi
-}
-
 attach_or_switch() {
     local wname="$1"
     if [[ -n "$TMUX" ]]; then
@@ -248,7 +226,6 @@ cmd_up() {
     if (( ! has_devcontainer )); then
         # ── No devcontainer: plain local window ──────────────────────────────
         dbg "cmd_up: no .devcontainer, creating local window"
-        ensure_session
 
         if has_window "$project_name"; then
             info "Project '$project_name' already open."
@@ -267,7 +244,6 @@ cmd_up() {
     # ── Devcontainer path ─────────────────────────────────────────────────────
 
     ensure_postgres
-    ensure_session
 
     # Window already exists — check health
     if has_window "$project_name"; then

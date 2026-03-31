@@ -8,8 +8,6 @@
 #   borg scan                 # auto-discover projects from session history
 #   borg add [path]           # manually register a project
 #   borg rm <name>            # unregister a project
-#   borg refresh [project]    # regenerate summary from latest transcript
-#   borg focus [project]      # alias for: borg switch <project>
 
 # Set a known-good PATH from scratch. Non-interactive zsh scripts invoked via shebang
 # do not source /etc/zprofile or ~/.zshrc, so PATH can be empty or incomplete.
@@ -193,6 +191,7 @@ cmd_ls() {
 
         case "$source" in
             desktop) src_badge="[D]" ;;
+            coco)    src_badge="[X]" ;;
             *)       src_badge="[C]" ;;
         esac
 
@@ -235,7 +234,7 @@ cmd_status() {
     ppath=$(echo "$entry"      | jq -r '.path // "null"')
     proj_status=$(echo "$entry"     | jq -r '.status // "unknown"')
     last=$(echo "$entry"       | jq -r '.last_activity // "(never)"')
-    summary=$(echo "$entry"    | jq -r '.summary // "(no summary — run: borg refresh)"')
+    summary=$(echo "$entry"    | jq -r '.summary // "(no summary)"')
     session_id=$(echo "$entry" | jq -r '.claude_session_id // "(unknown)"')
     tmux_window=$(echo "$entry"| jq -r '.tmux_window // "(none)"')
 
@@ -401,6 +400,49 @@ cmd_scan() {
         info "Registered: $name ($ppath)"
         new_projects+=("$name")
     done < <(borg_claude_scan_session_log)
+
+    # Scan CoCo (Cortex Code CLI) sessions
+    if type borg_coco_scan_session_log &>/dev/null; then
+        info "Scanning Cortex Code session history..."
+        while IFS= read -r ppath; do
+            [[ -z "$ppath" ]] && continue
+            name="${ppath##*/}"
+
+            if borg_registry_has "$name"; then
+                dbg "already registered: $name"
+                continue
+            fi
+
+            tmux_window=""
+            borg_tmux_window_exists "$name" && tmux_window="$name" || true
+            session_id=$(borg_coco_latest_session_id "$ppath") || session_id=""
+
+            local tw_json sid_json
+            [[ -n "$tmux_window" ]] && tw_json="\"$tmux_window\"" || tw_json="null"
+            [[ -n "$session_id" ]] && sid_json="\"$session_id\"" || sid_json="null"
+
+            json=$(jq -n \
+                --arg path "$ppath" \
+                --arg source "coco" \
+                --arg tmux_session "$BORG_TMUX_SESSION" \
+                --argjson tmux_window "$tw_json" \
+                --argjson session_id "$sid_json" \
+                '{
+                    path: $path,
+                    source: $source,
+                    tmux_session: $tmux_session,
+                    tmux_window: $tmux_window,
+                    claude_session_id: $session_id,
+                    last_activity: null,
+                    status: "idle",
+                    summary: null
+                }')
+
+            borg_registry_merge "$name" "$json"
+            info "Registered: $name ($ppath) [CoCo]"
+            new_projects+=("$name")
+        done < <(borg_coco_scan_session_log)
+    fi
 
     # Also scan Desktop session reports
     borg_desktop_scan 2>/dev/null || true

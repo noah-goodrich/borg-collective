@@ -25,6 +25,7 @@ Three independent tools that compose:
 
 ### Implemented
 - Core borg CLI: init, claude, next, ls, switch, status, brief, search, scan, add, rm, help
+- CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg ls`, cairn records
 - `drone` CLI: up, down, claude, sh, restart, fix, status
 - Hooks: borg-start.sh (status=active + debrief/cairn context injection),
   borg-stop.sh (status=idle + async Sonnet debrief + cairn commit), borg-notify.sh
@@ -75,6 +76,7 @@ lib/
     registry.zsh            Registry CRUD for ~/.config/borg/registry.json
     tmux.zsh                tmux window listing + switching
     claude.zsh              Session discovery from ~/.claude/projects/
+    coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
     desktop.zsh             Claude Desktop session reader
 hooks/
     borg-start.sh           SessionStart → status=active
@@ -109,6 +111,7 @@ docs/
 | jq | `jq` | Registry JSON CRUD |
 | fzf | `fzf` | Fuzzy picker for `borg switch` |
 | claude | `claude` | LLM debriefs (Sonnet), orchestrator session |
+| cortex | `cortex` | Cortex Code CLI (CoCo) — optional, detected at install |
 | cairn | `cairn` | Knowledge persistence (optional) |
 
 ## Style Rules
