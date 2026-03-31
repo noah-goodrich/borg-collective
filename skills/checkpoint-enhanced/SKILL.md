@@ -24,4 +24,5 @@ Which files are changed and ready to commit right now? If nothing, say so.
 What prevented completion? List specific issues, missing information, or dependencies. If none, say "No blockers."
 
 ## 5. Next Session
-What should the next session focus on first? Be specific enough that someone returning after 2 days knows exactly where to start. Include the exact file and function if applicable.
+What should the next session focus on first? Be specific enough that someone returning after 2 days
+knows exactly where to start. Include the exact file and function if applicable.

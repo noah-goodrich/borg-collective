@@ -1,32 +1,31 @@
 # The Borg Collective
 
-> Your Claude sessions will be assimilated.
+> Your sessions will be assimilated.
 
-A CLI for managing multiple Claude Code sessions across projects. When you're juggling five tmux windows, three devcontainers, and can't remember which session was doing what — `borg` is the command center.
+An AI development orchestration framework. Two commands — `borg` for orchestration, `drone` for project
+lifecycle — that coordinate parallel Claude Code sessions across projects and containers.
 
-Built for developers with ADHD who need external scaffolding, not willpower. Tracks sessions, enforces work/life boundaries, manages cognitive load, and answers the question that causes decision paralysis: **"What should I work on next?"**
+Built for sustainable AI-assisted development. Tracks sessions, enforces work/life boundaries, manages
+cognitive load, persists context across sessions, and answers the question that causes decision paralysis:
+**"What should I work on next?"**
+
+**New here?** Read [How to Ship Like Boris (and Not Lose Your Mind)](docs/boris-workflow.md) first.
 
 ## Quick Start
 
 ```bash
 git clone https://github.com/your-username/borg-collective ~/dev/borg-collective
-cd ~/dev/borg-collective
-./install.sh
+cd ~/dev/borg-collective && ./install.sh
+borg init
 ```
 
 The installer handles everything:
-1. Checks dependencies (jq, fzf, python3, node, tmux) — installs via Homebrew if missing
-2. Installs npm packages (`claude-code-monitor`, `@tradchenko/claude-sessions`)
-3. Symlinks `borg` to `~/.local/bin/borg`
-4. Installs and registers Claude Code hooks (SessionStart, Stop, Notification)
-5. Installs custom skills (`adhd-guardrails`, `checkpoint-enhanced`)
-6. Runs `borg scan` to discover projects from `~/.claude/session-log.md`
-
-After install, generate summaries and install the community skills marketplace:
-
-```bash
-borg refresh --all
-```
+1. Checks dependencies (jq, fzf, tmux) — installs via Homebrew if missing
+2. Symlinks `borg` and `drone` to `~/.local/bin/`
+3. Installs and registers Claude Code hooks (SessionStart, Stop, Notification)
+4. Installs skills (cognitive load guardrails, planning, shipping, review, debrief, checkpoint)
+5. Configures tmux keybinding (`Ctrl+Space >` → jump to most pressing project)
+6. Runs `borg scan` to discover projects
 
 Then in any Claude Code session:
 
@@ -34,56 +33,71 @@ Then in any Claude Code session:
 /plugin marketplace add alirezarezvani/claude-skills
 ```
 
-### Dotfiles Integration
-
-If you manage your environment with a dotfiles repo, add one line to your installer:
-
-```bash
-[[ -x "$HOME/dev/borg-collective/install.sh" ]] && bash "$HOME/dev/borg-collective/install.sh" --quiet
-```
-
-The `--quiet` flag skips the ASCII art for clean integration with parent installers.
+This installs Boris Cherny's 57-tip framework, Scope Guard, and 205+ community skills.
 
 ## Requirements
 
-- macOS (AppleScript for notifications, `sandbox-exec` for Claude Code)
-- zsh, tmux, jq, fzf, python3, node >= 18
+- macOS (Apple Silicon or Intel)
+- zsh, tmux, jq, fzf
 - Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)
-- A running tmux session (default name: `dev`, configurable via `BORG_TMUX_SESSION`)
+- Docker (optional, for devcontainer-based projects)
+- [Cairn](https://github.com/your-username/cairn) (optional, for cross-session knowledge persistence)
 
 ## Commands
 
+### `borg` — Orchestration
+
 | Command | Description |
 |---------|-------------|
-| `borg ls` | Dashboard: all projects with status, last active, summary |
-| `borg ls --all` | Include archived projects |
-| `borg switch` | fzf fuzzy picker to jump between tmux windows |
-| `borg switch <name>` | Jump directly to a named project (skips fzf) |
-| `borg next` | Single recommendation: what to work on now |
-| `borg status [project]` | Detailed view (defaults to current directory) |
+| `borg init` | Morning briefing + launch orchestrator Claude session |
+| `borg` / `borg next` | What needs attention? Switch to it. |
+| `borg claude` | Resume orchestrator Claude session |
+| `borg ls [--all]` | Dashboard: all projects sorted by urgency |
+| `borg switch [query]` | fzf picker → jump to project tmux window |
+| `borg status [project]` | Detailed status for one project |
+| `borg brief [project]` | Project briefing from cairn |
+| `borg search "query"` | Search knowledge graph (requires cairn) |
 | `borg scan` | Auto-discover projects from session history |
 | `borg add [path]` | Register a project (defaults to `$PWD`) |
 | `borg rm <name>` | Unregister a project |
-| `borg refresh [--all]` | Regenerate summary from latest transcript |
-| `borg pin <project>` | Mark as priority (sorts first, preferred by `next`) |
-| `borg unpin <project>` | Remove priority flag |
-| `borg tidy` | Archive stale projects (idle > 48h) |
-| `borg focus <project>` | Alias for `borg switch <project>` |
-| `borg help` | Show help |
+| `borg help` | Full command reference |
+
+### `drone` — Project Lifecycle
+
+| Command | Description |
+|---------|-------------|
+| `drone up [project]` | Start container + create tmux window + enter container |
+| `drone down [project]` | Stop container + remove tmux window |
+| `drone claude [project]` | Launch Claude Code session in project context |
+| `drone sh [project]` | Shell into project container |
+| `drone restart [project]` | Restart container + re-exec all panes |
+| `drone fix [project]` | Restore standard 3-pane layout |
+| `drone status` | Show all drones (container + session state) |
+
+### Hotkey
+
+`Ctrl+Space >` — Jump to the most pressing project (runs `borg next --switch`).
 
 ## How It Works
 
 ### Hooks Track Session Lifecycle
 
-Three Claude Code hooks update the registry automatically as you work:
+Three hooks update the registry automatically:
 
-| Hook | Event | Registry Update |
-|------|-------|-----------------|
-| `borg-start.sh` | SessionStart | `status=active` |
-| `borg-notify.sh` | Notification | `status=waiting` (Claude needs input) |
-| `borg-stop.sh` | Stop | `status=idle`, extract summary from transcript |
+| Hook | Event | What happens |
+|------|-------|-------------|
+| `borg-start.sh` | SessionStart | Status → active |
+| `borg-notify.sh` | Notification | Status → waiting, captures what Claude needs |
+| `borg-stop.sh` | Stop | Status → idle, runs deep session debrief via Sonnet |
 
-These run alongside your existing hooks — they augment, not replace.
+### Session Debriefs
+
+When a Claude session ends, the stop hook runs a structured analysis of the full transcript using
+Claude Sonnet (~$0.10/session). The debrief captures: objective, outcome, decisions made with
+reasoning, patterns discovered, and specific next steps. This debrief is stored and automatically
+loaded as context when you start your next session in that project.
+
+No more "where was I?" — Claude already knows.
 
 ### Status Indicators
 
@@ -92,113 +106,107 @@ These run alongside your existing hooks — they augment, not replace.
 | `active` | Claude is processing | Green |
 | `waiting` | Claude finished, needs your input | Yellow |
 | `idle` | Session ended | Dim |
-| `stale` | Idle > 48 hours | Dim + `[stale]` tag |
 | `archived` | Hidden from default `ls` | Shown with `--all` |
-
-### Summaries Without LLM Calls
-
-`summarize.py` extracts 2-3 sentences from JSONL transcripts using pure text extraction (no LLM, no API calls, runs in < 1 second):
-
-```
-Goal: Fix Snowflake UDF deployment | Modified: deploy.py, config.yml | Last request: Add error handling
-```
 
 ## Skills
 
-Borg installs two custom skills to `~/.claude/skills/`:
+Borg installs six skills to `~/.claude/skills/`:
 
-### /adhd-guardrails
+### Always Active
 
-Always-active skill based on [Zack Proser's compassionate constraints framework](https://zackproser.com/blog/claude-external-brain-adhd-autistic). Pushes back on perfectionism, flags scope expansion, suggests breaks after 2 hours, uses shame-free language, and includes "done when" criteria in every plan.
+**`/adhd-guardrails`** — Cognitive load guardrails. Pushes back on perfectionism, flags scope expansion,
+suggests breaks after sustained work, uses shame-free language. Based on
+[Zack Proser's framework](https://zackproser.com/blog/claude-external-brain-adhd-autistic).
 
-### /checkpoint-enhanced
+### Planning and Shipping
 
-Invoke with `/checkpoint-enhanced` at the end of a session. Produces a structured summary: goal, accomplishments, files ready to commit, blockers, and a concrete next-session entry point. Eliminates the 23-minute context-rebuild cost when you return to a project.
+**`/borg-plan`** — Project planning that does the thinking for you. Reads the codebase, proposes
+objectives, acceptance criteria, verification strategy, scope boundaries, and ship definition. You
+validate and confirm. Criteria are locked once established — scope changes require explicit confirmation.
+
+**`/borg-ship`** — Shipping checklist. Evaluates every acceptance criterion with evidence from code,
+tests, and git. Tells you what's done, what's left, and provides the exact commands to ship.
+
+**`/borg-review`** — Mid-session diagnostic. Checks progress against the plan, detects scope creep and
+bad loops (same error 3+ times, yak shaving, perfectionism spirals), and gives ONE recommendation for
+what to do next.
+
+### Session Management
+
+**`/borg-debrief`** — Deep session analysis. Runs automatically via stop hook. Captures objective,
+outcome, decisions, patterns, and next steps in structured format for future sessions.
+
+**`/checkpoint-enhanced`** — Manual session checkpoint. Structured summary with next-session entry point.
+Use before breaks or when switching projects.
 
 ### Community Skills
 
-After installing the [alirezarezvani/claude-skills](https://github.com/alirezarezvani/claude-skills) marketplace, you get access to 205+ skills including Boris Cherny's complete 57-tip Claude Code framework and Scope Guard for preventing scope creep.
+Install via `/plugin marketplace add alirezarezvani/claude-skills`:
+- Boris Cherny's complete 57-tip Claude Code framework
+- Scope Guard (prevents scope creep)
+- 205+ engineering, architecture, and DevOps skills
 
 ## Work/Life Boundaries
 
-Create `~/.config/borg/config.zsh` to enable time-aware behavior:
+Create `~/.config/borg/config.zsh`:
 
 ```zsh
 BORG_WORK_HOURS="09:00-18:00"
 BORG_WORK_DAYS="Mon,Tue,Wed,Thu,Fri"
-BORG_WORK_PROJECTS="cairn,wayfinderai-waypoint"
-BORG_PERSONAL_PROJECTS="wallpaper-kit,borg-collective"
+BORG_WORK_PROJECTS="api-service,data-pipeline"
 BORG_MAX_ACTIVE=3
-BORG_SESSION_WARN_HOURS=2
 ```
 
 With boundaries enabled:
-- Work projects are dimmed in `borg ls` after hours (and vice versa)
-- `borg switch cairn` at 10 PM asks: `"It's 10:00 PM. cairn is work. Switch? [y/N]"`
+- Switching to a work project after hours: `"It's 10:30 PM. api-service is work. Switch? [y/N]"`
 - Capacity warning when more than 3 sessions need attention
-- Break suggestion after 2 hours in one project
+- These are speed bumps (one keystroke), not walls
 
-These are speed bumps (one extra keystroke), not walls. Research: "External systems, not willpower, solve executive function challenges" ([NIH/PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC4425416/)).
+## Knowledge Persistence (Cairn)
+
+[Cairn](https://github.com/your-username/cairn) is an optional knowledge graph (PostgreSQL + pgvector)
+that persists decisions, patterns, and session context across sessions and projects. When available:
+
+- Session debriefs are stored as structured records with vector embeddings
+- `borg search "query"` finds relevant past decisions and patterns
+- Orchestrator briefings include cairn knowledge
+
+Borg works without cairn — debriefs are stored as markdown files and loaded on next session start.
+Cairn adds cross-project search and long-term knowledge persistence.
 
 ## Devcontainer Setup
 
-If you run Claude Code inside Docker Compose devcontainers, add this volume mount so hooks can update the registry from inside containers:
+If you run projects in Docker Compose devcontainers, add this volume mount:
 
 ```yaml
-# docker-compose.yml
 volumes:
   - ~/.claude:/home/vscode/.claude:cached           # hooks, skills, settings
-  - ~/.config/borg:/home/vscode/.config/borg:cached  # borg registry
+  - ~/.config/borg:/home/vscode/.config/borg:cached  # borg registry + debriefs
 ```
-
-Skills and hooks propagate automatically via the `~/.claude` bind mount. The `~/.config/borg` mount is the only addition borg requires.
-
-## Cortex Code CLI (CoCo) Compatibility
-
-Skills are [100% portable](https://medium.com/@kelly.kohlleffel/one-skill-two-ai-coding-assistants-snowflake-cortex-code-and-claude-code-92e0de8dfef2) between Claude Code and CoCo (same SKILL.md format). Symlink to make borg skills available in CoCo:
-
-```bash
-ln -s ~/.claude/skills/adhd-guardrails ~/.snowflake/cortex/skills/adhd-guardrails
-ln -s ~/.claude/skills/checkpoint-enhanced ~/.snowflake/cortex/skills/checkpoint-enhanced
-```
-
-CoCo session tracking is not yet implemented but the architecture is forward-compatible — the registry uses string fields for `source` (`"cli"`, `"coco"`, `"desktop"`) and session discovery is modular by design. Docker (devcontainers) and Podman (CoCo) coexist without conflict.
-
-## Composing Existing Tools
-
-Borg is a thin coordination layer (~500 lines of zsh) on top of tools that already do the hard work:
-
-- **[claude-code-monitor](https://github.com/onikan27/claude-code-monitor)** — Real-time status detection + Ghostty terminal focus. Run `ccm` for a live web dashboard.
-- **[@tradchenko/claude-sessions](https://github.com/tradchenko/claude-sessions)** — AI-powered session picker with summaries. Run `cs` for a standalone TUI.
-
-Borg adds: project registry, tmux window coordination, work/life boundaries, cognitive load management, and the "what next?" recommendation engine.
 
 ## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BORG_TMUX_SESSION` | `dev` | tmux session name |
-| `BORG_DEBUG` | (unset) | Enable debug output |
+| `BORG_TMUX_SESSION` | `borg` | tmux session name |
+| `BORG_ROOT` | `~/dev` | Root directory for project discovery |
+| `BORG_MAX_ACTIVE` | `3` | Capacity warning threshold |
 | `BORG_WORK_HOURS` | (unset) | e.g. `09:00-18:00` |
 | `BORG_WORK_DAYS` | (unset) | e.g. `Mon,Tue,Wed,Thu,Fri` |
 | `BORG_WORK_PROJECTS` | (unset) | Comma-separated project names |
-| `BORG_PERSONAL_PROJECTS` | (unset) | Comma-separated project names |
-| `BORG_MAX_ACTIVE` | `3` | Soft limit on active+waiting sessions |
-| `BORG_SESSION_WARN_HOURS` | `2` | Hyperfocus duration warning |
+| `BORG_DEBUG` | (unset) | Enable debug output |
 
 ## Documentation
 
-Full documentation lives in [`docs/`](docs/README.md):
-
 | Document | Description |
 |----------|-------------|
-| [Six-Pager Narrative](docs/six-pager.md) | Formal proposal with full rationale and research citations |
-| [Quickstart Guide](docs/quickstart.md) | Step-by-step installation and first run |
+| [Boris Workflow (ELI5)](docs/boris-workflow.md) | Start here. How parallel AI dev works and why borg exists. |
+| [Quickstart](docs/quickstart.md) | Step-by-step installation and first run |
 | [Cheatsheet](docs/cheatsheet.md) | Single-page command reference |
-| [Architecture Guide](docs/architecture.md) | System design, data flow, registry schema |
-| [Skills Guide](docs/skills-guide.md) | Every installed skill explained |
-| [Research Foundation](docs/research.md) | 50+ citations backing every design decision |
-| [Devcontainer & CoCo Guide](docs/devcontainer-coco.md) | Container and Cortex Code compatibility |
+| [Architecture](docs/architecture.md) | System design, data flow, registry schema |
+| [Skills Guide](docs/skills-guide.md) | Every skill explained |
+| [Research](docs/research.md) | 50+ citations backing design decisions |
+| [Devcontainer & CoCo](docs/devcontainer-coco.md) | Container and Cortex Code compatibility |
 
 ## License
 

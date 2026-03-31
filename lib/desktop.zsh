@@ -8,7 +8,7 @@
 BORG_DESKTOP_DIR="$BORG_DIR/desktop"
 
 borg_desktop_init() {
-    mkdir -p "$BORG_DESKTOP_DIR"
+    /bin/mkdir -p "$BORG_DESKTOP_DIR"
 }
 
 # Read all Desktop session reports and merge into registry
@@ -21,9 +21,9 @@ borg_desktop_scan() {
         name=$(basename "$f" .json)
         data=$(cat "$f" 2>/dev/null) || continue
 
-        local topic status summary next_steps last_activity
+        local topic proj_status summary next_steps last_activity
         topic=$(echo "$data" | jq -r '.topic // ""')
-        status=$(echo "$data" | jq -r '.status // "idle"')
+        proj_status=$(echo "$data" | jq -r '.status // "idle"')
         summary=$(echo "$data" | jq -r '.summary // ""')
         next_steps=$(echo "$data" | jq -r '.next_steps // ""')
         last_activity=$(echo "$data" | jq -r '.last_activity // ""')
@@ -37,7 +37,7 @@ borg_desktop_scan() {
         json=$(jq -n \
             --arg path "null" \
             --arg source "desktop" \
-            --arg status "$status" \
+            --arg status "$proj_status" \
             --arg summary "$([ -n "$next_steps" ] && echo "$summary Next: $next_steps" || echo "$summary")" \
             --arg last_activity "$last_activity" \
             --arg display_name "$project" \

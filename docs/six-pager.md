@@ -1,137 +1,236 @@
-# The Borg Collective: An ADHD-Optimized Multi-Session Claude Code Command Center
+# The Borg Collective: AI Development Orchestration Framework
 
-*A narrative proposal for building a productivity tool that enforces mental health boundaries while maximizing output across parallel AI coding sessions.*
+*A narrative proposal for building a sustainable parallel AI development workflow that manages
+cognitive load, enforces shipping discipline, and persists context across sessions.*
+
+**Status: v2 complete** — This document reflects the final v2 architecture as of 2026-03-31.
+See [Appendix E](#appendix-e-change-log) for revision history.
 
 ---
 
 ## 1. Introduction
 
-Software development in 2026 has been transformed by AI coding agents. Tools like Claude Code, Cortex Code CLI, and their peers allow individual developers to run three, five, or even ten parallel coding sessions across projects. Boris Cherny, the creator of Claude Code, ships twenty to thirty pull requests per day by running five simultaneous git worktrees. Teams at incident.io reduced a two-hour JavaScript editor upgrade to ten minutes using four parallel Claude agents. The productivity ceiling has never been higher.
+Software development in 2026 has been transformed by AI coding agents. Tools like Claude Code, Cortex
+Code CLI, and their peers allow individual developers to run three, five, or even ten parallel coding
+sessions across projects. Boris Cherny, the creator of Claude Code, ships twenty to thirty pull requests
+per day by running five simultaneous git worktrees. Teams at incident.io reduced a two-hour JavaScript
+editor upgrade to ten minutes using four parallel Claude agents. The productivity ceiling has never been
+higher.
 
-For developers with ADHD, this new paradigm presents a cruel paradox. The same executive function deficits that make organizing work across multiple streams nearly impossible also make parallel AI agents extraordinarily appealing. The dopamine hit of shipping code rapidly, the novelty of spinning up a new session for each idea, the hyperfocus potential of deep AI-assisted work sessions that stretch past midnight: these are not just productivity patterns. They are behavioral addiction vectors that clinical researchers have already begun documenting through the AI Addiction Scale (AIAS-21), a twenty-one-item instrument that measures compulsive use, craving, tolerance, and withdrawal from generative AI tools.
+The problem is sustainability. Managing parallel AI sessions creates a cognitive baseline — the mental
+overhead of tracking where each session left off, what each one needs, and which one to attend to
+next — that consumes working memory before any productive work begins. Research on context-switching
+(Gloria Mark, UC Irvine) shows a twenty-three-minute recovery cost per interruption, measured on the
+general population. Working memory is limited to roughly seven items (Miller's Law); four active sessions
+consume four of those slots, leaving three for actual engineering.
 
-This document proposes The Borg Collective, a thin command-line coordination layer that sits on top of Claude Code's native capabilities and the existing skills ecosystem to solve a specific problem: how does a developer with ADHD manage a dozen parallel work streams across projects, tools, and contexts without losing their mind, their relationships, or their ability to actually ship anything?
+For developers with ADHD or other neurodivergent conditions, these effects are amplified: the switching
+cost is higher, the recovery less complete, and the novelty-seeking draw of new sessions creates
+addiction patterns documented in the AI Addiction Scale (AIAS-21). But the underlying problem —
+cognitive overload from parallel session management — affects every developer. ADHD makes it acute and
+visible; for neurotypical developers, it manifests as gradual burnout over weeks and months.
 
-The answer, supported by research from neuroscience, UX design for neurodivergent users, and the lived experience of ADHD developers in the Claude Code community, is that productivity tools must enforce boundaries as aggressively as they remove friction. Borg does both.
+This document proposes The Borg Collective, an AI development orchestration framework that solves a
+specific problem: how does a developer manage parallel work streams across projects, tools, and contexts
+without burning out, losing track of progress, or failing to ship? The answer is that tools must enforce
+boundaries and persist context as aggressively as they remove friction.
 
 ---
 
 ## 2. Goals
 
-The Borg Collective will be measured against five objectives, each tied to a specific research-backed ADHD need:
+Borg is measured against five objectives:
 
-- **Decision paralysis elimination.** The `borg next` command answers "what should I do?" with a single recommendation. Target: reduce context-switching decision time from minutes to seconds. Research basis: accountability check-ins increase goal achievement from twenty-five percent to ninety-five percent (Edge Foundation).
+- **Decision paralysis elimination.** `borg next` answers "what should I do?" with a single
+  recommendation and switches to that project. Target: context-switching decision time drops from
+  minutes to zero (one hotkey). Research basis: accountability check-ins increase goal achievement from
+  twenty-five to ninety-five percent (Edge Foundation).
 
-- **Cognitive load management.** No more than three to five active sessions visible at any time. Target: `borg ls` never shows more than five un-archived projects. Research basis: fMRI studies show ADHD brains work significantly harder during decision tasks and cannot filter irrelevant information (Relational Psychology Group).
+- **Cognitive load management.** Capacity warnings, automatic archiving, and persistent session context
+  reduce the mental overhead of tracking parallel sessions. Target: the developer's working memory is
+  available for engineering, not bookkeeping. Research basis: working memory limits (Miller's Law),
+  decision fatigue (Baumeister).
 
-- **Work/life boundary enforcement.** Work projects are dimmed and gated after hours. Target: switching to a work project at 10 PM requires explicit confirmation. Research basis: hyperfocus recovery is as important as breaking hyperfocus; without structured breaks, ADHD burnout cycles are inevitable (Dr. Sharon Saline, PMC).
+- **Work/life boundary enforcement.** Work projects gated after hours. Target: switching to a work
+  project at 10 PM requires one explicit keystroke. Research basis: sustained overwork without recovery
+  leads to burnout (Maslach Burnout Inventory); structured breaks prevent cognitive degradation.
 
-- **Shipping discipline.** Every project in the registry can define acceptance criteria. Target: `borg status` shows "done when" for every pinned project. Research basis: without explicit exit criteria, Claude burns tokens refactoring perfectly functional code and adding unasked-for features (LogRocket/Ralph analysis).
+- **Shipping discipline.** Every project can define locked acceptance criteria via `/borg-plan`. Claude
+  proposes criteria; the developer validates. Once locked, scope changes require explicit confirmation.
+  `/borg-ship` evaluates readiness with evidence. Target: every active project has a clear stopping
+  point. Research basis: without explicit exit criteria, work expands to fill available time
+  (Parkinson's Law applied to AI-assisted development).
 
-- **Zero adoption friction.** The tool matches existing muscle memory. Target: the entire CLI follows the same `dev.sh` patterns Noah already uses daily. Research basis: ADHD research consistently shows that adoption friction kills tools; new habits require external scaffolding, not willpower (NIH/PMC).
+- **Zero adoption friction.** Two commands (`borg`, `drone`), familiar CLI conventions, one installer.
+  Target: working setup in under ten minutes. Research basis: adoption friction kills tools; external
+  scaffolding must be easier to use than to skip.
 
 ---
 
 ## 3. Tenets
 
-These principles are non-negotiable. They override any feature request, architectural decision, or scope expansion:
+These principles are non-negotiable:
 
-**External scaffolding, not willpower.** Every boundary must be enforced by the system, not remembered by the developer. If it requires a human to "just remember to" do something, it will fail for ADHD users. This is not a preference; it is a neurological constraint documented across hundreds of studies of executive function in ADHD.
+**External scaffolding, not willpower.** Every boundary must be enforced by the system, not remembered
+by the developer. If it requires a human to "just remember to" do something, it will fail under
+cognitive load. This is not an ADHD-specific constraint — it is a consequence of finite working memory
+documented across cognitive psychology.
 
-**Compose, do not rebuild.** Claude Code already provides worktrees, task tracking, agent teams, channels, skills, hooks, context management, and a desktop app. Borg builds only what these native features do not provide: tmux window coordination, work/life time boundaries, cognitive load guardrails, and a "what should I do next?" recommendation engine. Anything Claude Code does natively, borg delegates to it.
+**Compose, do not rebuild.** Claude Code already provides worktrees, task tracking, skills, hooks,
+context management, and agent teams. Borg builds only what these native features do not provide: session
+orchestration, project lifecycle management, work/life boundaries, and cross-session knowledge
+persistence. Anything Claude Code does natively, borg delegates to it.
 
-**Skills are the portable unit of discipline.** CLAUDE.md is tool-specific. Skills are portable across Claude Code and Cortex Code CLI. Any workflow pattern worth encoding goes into a skill, not a config file. This is a direct application of Boris Cherny's insight that "if you do something more than once a day, make it a skill."
+**Skills are the portable unit of discipline.** CLAUDE.md is tool-specific. Skills are portable across
+Claude Code and Cortex Code CLI, and propagate into devcontainers via bind mount. Any workflow pattern
+worth encoding goes into a skill. This is Boris Cherny's insight: "If you do something more than once
+a day, make it a skill."
 
-**Speed bumps, not walls.** Boundaries are implemented as one-extra-keystroke confirmations, not hard blocks. A developer who wants to work on a work project at midnight can do so by pressing "y" instead of just Enter. The friction is intentional but surmountable. Hard blocks get disabled; speed bumps get internalized.
+**Claude does the thinking, developer validates.** Skills don't ask open-ended questions. They read the
+codebase, form proposals, and present them for confirmation. The developer's cognitive load is reviewing
+and adjusting, not generating from scratch.
 
-**Ship, then improve.** Phase 0 is the only mandatory phase. If borg never advances past "scan, list, switch," that is a success. The irony of spending months perfecting a shipping-discipline tool that never ships is the single most likely failure mode of this project.
+**Speed bumps, not walls.** Boundaries are one-keystroke confirmations, not hard blocks. A developer who
+wants to work at midnight presses "y." Hard blocks get disabled; speed bumps get internalized.
+
+**Ship, then improve.** The irony of spending months perfecting a shipping-discipline tool that never
+ships is the single most likely failure mode of this project.
 
 ---
 
-## 4. State of the Business
+## 4. Current State
 
-The Borg Collective exists today as approximately four hundred lines of zsh source code across eight files, with three known bugs that prevent any command from running successfully. All code has been written; nothing has been tested. The project was created during a single intensive session and has not yet produced a working `borg ls` command.
+Borg exists today as a working orchestration framework: approximately 765 lines of zsh, six custom
+skills, three hooks, an installer, and comprehensive documentation. The v1 CLI (`borg next`, `borg ls`,
+`borg switch`, etc.) is functional. Session lifecycle tracking via hooks works. Work/life boundaries are
+implemented. The tmux hotkey (`Ctrl+Space >`) switches to the most pressing project.
 
-The codebase follows a compose-first architecture that remains sound. Two existing npm packages, `claude-code-monitor` for real-time status detection and `@tradchenko/claude-sessions` for AI-powered session summaries, provide the session intelligence layer. Borg adds the coordination layer: a JSON registry at `~/.config/borg/registry.json` that tracks project metadata, tmux window mappings, session status, and extractive summaries generated by a Python script that parses JSONL transcripts without LLM calls.
+### What works
 
-Three Claude Code hooks have been written: a Stop hook that marks sessions idle and extracts summaries, a Notification hook that marks sessions as waiting for input, and a SessionStart hook (not yet created) that would mark sessions as active. The hooks are designed to fire inside devcontainers where Claude Code runs, but the registry directory (`~/.config/borg/`) is not currently volume-mounted into any container, meaning hooks fire but their registry updates are written into the container's ephemeral filesystem and lost on rebuild.
+- **Session tracking**: Hooks automatically update project status (active/waiting/idle) as Claude
+  sessions start, wait, and stop.
+- **Priority scoring**: `borg next` uses a weighted scoring system (pinned +200, waiting +100, active
+  +50) to recommend what to work on.
+- **Boundary enforcement**: Work projects gated after configured hours with one-keystroke confirmation.
+- **Capacity warnings**: Alert when active sessions exceed the configured limit.
+- **Skills**: Six custom skills installed — cognitive load guardrails, project planning, shipping
+  checklist, mid-session review, session debrief, and enhanced checkpoint.
 
-The project's development context is complex. Noah runs Claude Code inside Docker Compose devcontainers across five projects, with `~/.claude/` bind-mounted from the macOS host into each container. He also uses Snowflake's Cortex Code CLI (CoCo) for data engineering work, which stores its configuration in `~/.snowflake/cortex/` and uses Podman rather than Docker for sandboxing. Skills are fully portable between Claude Code and CoCo, sharing the identical SKILL.md format, but hooks and session tracking use different directory structures.
+### What's in v2 (complete)
 
-The Claude Code ecosystem has matured significantly since borg's initial design. The plugin marketplace now hosts over twenty-three hundred skills. Boris Cherny's complete fifty-seven-tip framework has been encoded as an installable skill. Scope Guard, a community skill that prevents scope creep by cross-referencing requests against current feature boundaries, is available on MCPMarket. Claude Code itself now provides native features for task management (TaskCreate/TaskUpdate), agent teams for multi-session coordination, channels for push notifications via Telegram and Discord, and git worktrees for automatic session isolation. The original borg plan was written before many of these features existed, and it duplicates several of them.
+- **`drone` CLI**: Forked from `dev.sh` into the borg-collective repo. `drone up/down/claude/sh/restart/fix/status`
+  manages the full project lifecycle.
+- **`borg init` orchestrator**: Launches a Claude session with a morning briefing built from the
+  registry, recent session debriefs, and cairn knowledge. `borg claude` re-enters the session.
+- **LLM-powered debriefs**: Stop hook runs a Sonnet-powered analysis of the full session transcript
+  (~$0.10/session). Produces structured records: objective, outcome, decisions, blockers, next steps.
+  Stored at `~/.config/borg/debriefs/<project>.md` and auto-loaded as context on next session start.
+- **Cairn integration**: Optional knowledge graph (PostgreSQL + pgvector). Session records committed on
+  stop. Knowledge searched at session start and via `borg search`. Borg degrades gracefully without it.
+- **tmux session**: Default renamed from `dev` → `borg`.
 
-The gap analysis identified seven areas where the current plan gets things wrong, the most critical being the complete absence of work/life boundary enforcement, session capacity limits, or any mechanism to prevent the tool from becoming an enabler of the very overwhelm it was designed to address.
+### What's been cut
+
+- `summarize.py` (regex-based extraction) — replaced by LLM debriefs (deprecated, pending deletion)
 
 ---
 
 ## 5. Lessons Learned
 
-The first lesson came from the gap analysis itself. The original borg plan contained a Phase 3 that listed five features: a live dashboard, a resume command, a cost tracker, a log timeline, and LLM-refined summaries. Every single item either duplicates an existing tool (`borg cost` is what `cs` already provides, `borg log` is `cat ~/.claude/session-log.md`, `borg watch` is `watch -n5 borg ls`) or contradicts a design decision (LLM summaries versus the deliberate choice to use fast extractive summaries in hooks). Phase 3 was scope creep disguised as a roadmap. It has been deleted.
+**Lesson 1: Parsed summaries are useless.** The original `summarize.py` extracted goals from JSONL
+transcripts using regex patterns. It produced output like "Goal: /exit exit." The last 200 lines of a
+transcript are often tool results, not human-readable text. LLM-powered analysis of the full transcript
+is worth the cost (~$0.10/session via Sonnet) because it replaces all future context re-derivation.
 
-The second lesson came from the ADHD research. The initial assumption was that borg's value lay in making it easier to find and switch between sessions. The research revealed the opposite: making session-switching frictionless without adding boundaries is dangerous for ADHD users. Adam Drake's article on Claude Code Channels articulated this precisely: "The friction we had before to start a project was actually good. It filtered trash ideas." Every removed friction point must be paired with an added boundary, or the tool becomes an addiction enabler. The AI Addiction Scale (AIAS-21), published in 2025, measures exactly the behavioral patterns that an unguarded multi-session manager could encourage.
+**Lesson 2: The tool must think for the developer, not ask them to think.** The first version of
+`/borg-plan` asked open-ended questions: "What is the objective?" "What are the acceptance criteria?"
+This puts the cognitive load on the developer — exactly the wrong direction. The revised version reads
+the codebase, proposes criteria, and asks the developer to validate. Same outcome, fraction of the
+mental effort.
 
-The third lesson came from the skills ecosystem research. The original plan treated Boris Cherny's framework and the community skills library as background reading. Noah's feedback was direct: "Nothing in your plan mentions installing the skills and tools that have been specifically released in response to Boris's writing." This was a fundamental error. Skills are not reference material; they are tools to install. The Scope Guard skill prevents scope creep. The `/simplify` command runs three parallel review agents. The `/checkpoint` command creates session summaries. Building custom versions of these capabilities when production-ready implementations exist is the definition of building against the grain of Claude Code rather than with it.
+**Lesson 3: Cognitive load is the universal problem, not ADHD.** The original framing was
+ADHD-specific. In practice, every developer managing parallel AI sessions faces the same issues: working
+memory consumed by context tracking, decision fatigue from pending sessions, and no natural stopping
+points. ADHD amplifies these effects and makes them visible sooner, but the underlying mechanisms
+(Miller's Law, Baumeister's decision fatigue, Maslach's burnout dimensions) are universal. Reframing
+around cognitive load makes the tool relevant to every developer, not just those with clinical
+diagnoses.
 
-The fourth lesson emerged from the devcontainer analysis. Noah's workflow involves running Claude Code inside Docker Compose containers with `~/.claude/` bind-mounted from the host. This means skills and hooks propagate automatically from host to container, but the borg registry directory (`~/.config/borg/`) was not mounted, creating a silent failure: hooks fire inside containers, attempt to update the registry, and write to a path that does not exist on the host filesystem. The fix is a single line in each devcontainer's `docker-compose.yml`, but the failure was invisible because the hooks exit 0 regardless of whether the registry update succeeds.
+**Lesson 4: Multiple CLIs multiply cognitive load.** Having separate tools (`borg`, `dev.sh`, `claude`)
+with different conventions forces the developer to maintain a mental model of which tool does what. The
+unified `borg` + `drone` model reduces this to two commands with consistent patterns.
 
-The fifth lesson is about the Cortex Code CLI. CoCo is not a fork of Claude Code; it is a separate Snowflake-native product with its own configuration directory, session tracking, and hook system. However, skills are one hundred percent portable between the two tools. This means the portable unit of discipline is the skill, not the CLAUDE.md file, because CLAUDE.md is tool-specific while skills transcend tools. Any workflow pattern worth encoding should be a skill first, a CLAUDE.md directive second.
+**Lesson 5: Cairn solves the persistence problem.** Session context is ephemeral — it's lost on
+compaction, context overflow, or session end. A knowledge graph that persists decisions, patterns, and
+session debriefs across sessions and projects means the developer (and Claude) never starts from zero.
+The cost of running LLM analysis at session stop is justified by eliminating re-derivation costs in all
+future sessions.
 
 ---
 
 ## 6. Strategic Priorities
 
-The revised plan organizes work into three phases with explicit exit criteria, a list of explicitly deferred work, and forward-compatibility constraints for devcontainers and CoCo.
+### Phase 1: Skills ✓
 
-**Phase 0: Make it work and install skills.** This is the only mandatory phase. It has a single exit criterion: `borg scan && borg ls` produces correct output, `borg switch` lands in the right tmux window, and the skills ecosystem is installed. The estimated effort is one session of approximately sixty minutes.
+Six skills installed and working:
+- `/borg-plan` — Project planning (Claude proposes, developer validates)
+- `/borg-ship` — Shipping checklist with evidence
+- `/borg-review` — Mid-session diagnostic with loop detection
+- `/borg-debrief` — Structured session analysis
+- `/checkpoint-enhanced` — Manual checkpoint
+- Cognitive load guardrails (always-on)
 
-The work begins with fixing the PATH bug in `lib/claude.zsh`. The function `borg_claude_scan_session_log()` calls `awk` and `sort` by name, which resolve correctly in interactive zsh but fail in non-interactive subshells because the PATH does not include `/usr/bin/`. The fix is to use absolute paths (`/usr/bin/awk`, `/usr/bin/sort`) or rewrite the function using zsh builtins. This bug was confirmed via `zsh -x borg.zsh scan` tracing and is the sole blocker for the first successful run.
+### Phase 2: drone CLI ✓
 
-The second fix addresses the fragile fzf preview in `cmd_switch`. The current implementation sources three library files inline within the preview command string, which is error-prone and listed as a known bug. The replacement is straightforward: `--preview "borg status {1}"`. The borg command is already in PATH, and `cmd_status` already produces formatted output suitable for a preview pane.
+Forked `dev.sh` into `drone.zsh`. Commands: `drone up`, `drone down`, `drone claude`, `drone sh`,
+`drone restart`, `drone fix`, `drone status`. tmux session default renamed from `dev` to `borg`.
 
-The third change merges `borg focus` into `borg switch`. Both commands switch to a project's tmux window. The distinction is that `switch` opens an fzf picker while `focus` takes a direct argument. When `borg switch` receives an argument that matches exactly one project, it should skip fzf and switch directly. This is approximately five lines of conditional logic.
+### Phase 3: Hook integration ✓
 
-The fourth addition is a SessionStart hook (`hooks/borg-start.sh`) that sets `status=active` when a Claude Code session begins. Without this hook, the status lifecycle is incomplete: projects go from `unknown` or `idle` directly to `waiting` (when Claude finishes a turn), skipping `active`. The `active` status is documented in the README but never actually set by any existing hook.
+Stop hook runs Sonnet debrief async against full transcript. Start hook injects debrief as
+`additionalContext` via `hookSpecificOutput`. `summarize.py` deprecated.
 
-The fifth task installs the skills ecosystem. This includes adding the `alirezarezvani/claude-skills` marketplace plugin (which provides Boris Cherny's framework, engineering skills, and Scope Guard), creating a custom `adhd-guardrails` skill at `~/.claude/skills/adhd-guardrails/SKILL.md` based on Zack Proser's compassionate constraints framework, and creating a `checkpoint-enhanced` skill that produces session summaries with explicit next-session entry points.
+### Phase 4: Orchestrator ✓
 
-Finally, `install.sh` is updated to include skill installation and to document the devcontainer volume mount requirement for `~/.config/borg/`.
+`borg init` generates context from registry + debriefs + cairn via `_borg_orchestrator_context` and
+launches `claude --append-system-prompt`. `borg claude` re-enters with `--continue`.
 
-**Phase 1: Boundaries and guidance.** This phase adds the ADHD-specific features that distinguish borg from a generic session manager. The exit criteria are: `borg next` returns a single recommendation, work projects are dimmed after 6 PM, switching to a work project at 11 PM requires confirmation, and a capacity warning appears when more than three sessions are active or waiting.
+### Phase 5: Cairn integration ✓
 
-The implementation begins with a configuration file at `~/.config/borg/config.zsh` that defines work hours, work days, work project patterns, personal project patterns, maximum active sessions, and session duration warning thresholds. This file is sourced by `borg.zsh` after the library files.
+Stop hook commits session record to cairn after debrief is written. Start hook merges cairn knowledge
+into session context alongside debrief. `borg search` wraps `cairn search`. `borg brief` uses
+`cairn search --project`. All cairn calls degrade silently if cairn is unavailable.
 
-The `cmd_next` function implements the "what should I do?" recommendation engine. Its logic is intentionally simple: return the single project with the most recent `waiting` status. If nothing is waiting, return the most recently active project. If the user has set pin flags, prefer pinned projects. The output includes the project name, how long it has been waiting, the most recent summary, and a `borg switch` command the user can copy-paste. This command is the "body doubling" principle in software form: the tool tells Noah what to do instead of presenting him with a list that triggers decision paralysis.
+### Phase 6: Documentation ✓
 
-Work/life dimming modifies `cmd_ls` to use existing ANSI `$DIM` escape codes on projects that are out of context. During work hours, personal projects are dimmed. After work hours, work projects are dimmed. The dimming is visual only; dimmed projects are still shown and can be switched to. The time-boundary prompt in `cmd_switch` goes further: switching to a work project outside work hours shows "It's 10:30 PM. cairn is a work project. Switch anyway? [y/N]" with a default of No. Pressing Enter without typing does not switch. This is the external scaffolding principle: one keystroke of friction that willpower alone cannot provide.
-
-The capacity warning in `cmd_ls` counts projects with status `active` or `waiting` and displays a warning line when the count exceeds `BORG_MAX_ACTIVE` (default three). The `cmd_add` command requires `--force` when adding a project that would exceed the limit. These are soft guardrails, not hard blocks.
-
-Project pinning (`borg pin`, `borg unpin`) adds a boolean `pinned` field to registry entries. Pinned projects sort first in `borg ls` output and are preferred by `borg next`. This is the simplest possible prioritization structure: a binary flag, not a priority number.
-
-The optional `goal` and `done_when` fields in the registry support shipping discipline. When set, `borg status` displays them, and `borg next` can incorporate them into recommendations. These fields are the "acceptance criteria as completion gates" pattern from the Prompt Contracts framework: without explicit "done" criteria, ADHD perfectionism drives infinite refinement.
-
-**Phase 2: Cognitive load management.** This phase prevents the project list from growing indefinitely. The exit criteria are: after one week of daily use, `borg ls` shows only the three to five projects Noah is actively working on.
-
-Staleness detection tags projects that have been idle for more than forty-eight hours with a `[stale]` indicator in `borg ls` output. The `borg tidy` command interactively prompts to archive stale projects, setting their status to `archived`. Archived projects are hidden from default `borg ls` output but shown with `--all`. No data is deleted; archiving is a display filter, not a destructive operation.
-
-**Explicitly deferred work.** The following will not be built unless two or more weeks of daily use reveals a repeated, specific need: `borg watch` (use `watch -n5 borg ls`), `borg resume` (use `borg switch` followed by `claude --resume`), `borg cost` (use `cs`), `borg log` (use `cat ~/.claude/session-log.md`), LLM-refined summaries, Claude Desktop integration in `cmd_ls`/`cmd_scan`, Oura Ring or wearable integration, voice capture integration, and Obsidian vault integration.
-
-**Forward compatibility.** Two constraints ensure the architecture does not box in future work. First, devcontainers: the installer documents the requirement to add `~/.config/borg:/home/vscode/.config/borg:cached` to devcontainer volume mounts, and hooks are tested to verify correct project name resolution from inside containers. Second, Cortex Code CLI: the registry uses a string field for source (not an enum), session discovery uses a variable for the Claude projects directory (not a hardcoded path), and a future `lib/coco.zsh` can follow the identical pattern of `lib/claude.zsh` with a different root directory.
+Six-pager, architecture, CLAUDE.md, cheatsheet, quickstart, and README updated to reflect v2 final
+state. All references to in-progress work removed.
 
 ---
 
 ## Appendix A: Research Citations
 
-See `docs/research.md` for the complete citation index with URLs, organized by domain: ADHD and executive function (eleven sources), UX for neurodivergent users (three sources), shipping discipline (seven sources), Claude Code best practices (five sources), AI addiction risk (four sources), ADHD-specific Claude Code frameworks (five sources), skills ecosystem (four sources), devcontainers (six sources), and Cortex Code CLI (six sources).
+See `docs/research.md` for the complete citation index organized by domain: cognitive load and working
+memory, context-switching costs, decision fatigue, burnout, AI addiction risk, shipping discipline,
+Claude Code best practices, skills ecosystem, and devcontainer workflows.
 
-## Appendix B: Architecture Diagrams
+## Appendix B: Architecture
 
-See `docs/architecture.md` for the complete system architecture, data flow diagrams, hook lifecycle, and skills integration map.
+See `docs/architecture.md` for system design, data flow, registry schema, hook lifecycle, and skills
+integration.
 
 ## Appendix C: Quick Reference
 
-See `docs/cheatsheet.md` for the single-page command reference card.
+See `docs/cheatsheet.md` for the single-page command reference.
 
 ## Appendix D: Getting Started
 
-See `docs/quickstart.md` for the step-by-step installation and first-run guide.
+See `docs/quickstart.md` for installation and first-run guide.
+
+## Appendix E: Change Log
+
+| Date | Change |
+|------|--------|
+| 2026-03-29 | Original proposal: ADHD-specific framing, three phases (make it work, boundaries, cognitive load management). v1 shell CLI with regex-based summarizer. |
+| 2026-03-30 | Major revision: reframed from ADHD-specific to universal cognitive load. Added v2 architecture (borg + drone + cairn). Added six skills (borg-plan, borg-ship, borg-review, borg-debrief, checkpoint-enhanced, cognitive guardrails). Added orchestrator concept (borg init). Added LLM debriefs replacing regex extraction. Cairn integration as optional knowledge persistence. Scope still WIP. |
+| 2026-03-31 | v2 complete: Implemented all six phases. Hook integration (Phase 3): async Sonnet debrief on stop, debrief + cairn context injection on start. Orchestrator (Phase 4): borg init + borg claude with --append-system-prompt. Cairn integration (Phase 5): session commits on stop, knowledge search on start, borg search command. Docs cleanup (Phase 6): all references updated to final state. |

@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 # install.sh — The Borg Collective installer
 #
 # Safe to re-run. Installs borg CLI, hooks, skills, and bootstraps registry.
@@ -10,7 +10,9 @@
 
 set -e
 
-BORG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+BORG_ROOT="${0:A:h}"
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 CLAUDE_DIR="$HOME/.claude"
 CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
@@ -60,16 +62,6 @@ if (( ${#MISSING[@]} > 0 )); then
     fi
 fi
 
-# npm packages (optional — borg works without them)
-if ! command -v ccm &>/dev/null; then
-    info "Installing claude-code-monitor..."
-    npm install -g claude-code-monitor 2>/dev/null || warn "claude-code-monitor install failed (optional)"
-fi
-if ! command -v cs &>/dev/null; then
-    info "Installing @tradchenko/claude-sessions..."
-    npm install -g @tradchenko/claude-sessions 2>/dev/null || warn "claude-sessions install failed (optional)"
-fi
-
 info "Dependencies satisfied."
 
 # ── 2. Create runtime directories ─────────────────────────────────────────────
@@ -83,18 +75,22 @@ mkdir -p "$BIN_DIR"
 
 [[ -f "$BORG_DIR/registry.json" ]] || echo '{"projects":{}}' > "$BORG_DIR/registry.json"
 
-# ── 3. Install borg CLI ───────────────────────────────────────────────────────
+# ── 3. Install borg and drone CLIs ───────────────────────────────────────────
 
 info "Installing borg CLI..."
 chmod +x "$BORG_ROOT/borg.zsh"
 ln -sf "$BORG_ROOT/borg.zsh" "$BIN_DIR/borg"
+info "  borg -> $BORG_ROOT/borg.zsh"
+
+info "Installing drone CLI..."
+chmod +x "$BORG_ROOT/drone.zsh"
+ln -sf "$BORG_ROOT/drone.zsh" "$BIN_DIR/drone"
+info "  drone -> $BORG_ROOT/drone.zsh"
 
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
     warn "$BIN_DIR is not in PATH. Add to ~/.zshrc:"
     warn '  export PATH="$HOME/.local/bin:$PATH"'
 fi
-
-info "Installed: $BIN_DIR/borg -> $BORG_ROOT/borg.zsh"
 
 # ── 4. Install hooks ─────────────────────────────────────────────────────────
 
@@ -109,37 +105,35 @@ done
 
 # ── 5. Register hooks in settings.json ────────────────────────────────────────
 
-# Map hook filenames to Claude Code event types
-declare -A HOOK_EVENTS=(
-    [borg-start.sh]="SessionStart"
-    [borg-stop.sh]="Stop"
-    [borg-notify.sh]="Notification"
-)
+# Register each hook with its Claude Code event type
+# (bash 3.2 compatible — no associative arrays)
+register_hook() {
+    local hook_file="$1" event="$2"
+    local hook_cmd="\$HOME/.claude/hooks/$hook_file"
+
+    # Check if already registered (avoid duplicates)
+    if jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
+        '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
+        "$CLAUDE_SETTINGS" &>/dev/null; then
+        info "  $event: $hook_file (already registered)"
+        return
+    fi
+
+    # Add hook entry
+    local tmp="$CLAUDE_SETTINGS.tmp.$$"
+    jq --arg evt "$event" --arg cmd "$hook_cmd" '
+        if .hooks == null then .hooks = {} else . end |
+        if .hooks[$evt] == null then .hooks[$evt] = [] else . end |
+        .hooks[$evt] += [{"matcher": "", "hooks": [{"type": "command", "command": $cmd}]}]
+    ' "$CLAUDE_SETTINGS" > "$tmp" && mv "$tmp" "$CLAUDE_SETTINGS"
+    info "  $event: $hook_file (registered)"
+}
 
 if [[ -f "$CLAUDE_SETTINGS" ]]; then
     info "Registering hooks in settings.json..."
-
-    for hook_file in "${!HOOK_EVENTS[@]}"; do
-        event="${HOOK_EVENTS[$hook_file]}"
-        hook_cmd="\$HOME/.claude/hooks/$hook_file"
-
-        # Check if already registered (avoid duplicates)
-        if jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
-            '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
-            "$CLAUDE_SETTINGS" &>/dev/null; then
-            info "  $event: $hook_file (already registered)"
-            continue
-        fi
-
-        # Add hook entry
-        TMP="$CLAUDE_SETTINGS.tmp.$$"
-        jq --arg evt "$event" --arg cmd "$hook_cmd" '
-            if .hooks == null then .hooks = {} else . end |
-            if .hooks[$evt] == null then .hooks[$evt] = [] else . end |
-            .hooks[$evt] += [{"matcher": "", "hooks": [{"type": "command", "command": $cmd}]}]
-        ' "$CLAUDE_SETTINGS" > "$TMP" && mv "$TMP" "$CLAUDE_SETTINGS"
-        info "  $event: $hook_file (registered)"
-    done
+    register_hook "borg-start.sh"  "SessionStart"
+    register_hook "borg-stop.sh"   "Stop"
+    register_hook "borg-notify.sh" "Notification"
 else
     warn "No settings.json at $CLAUDE_SETTINGS"
     warn "Hooks installed but not registered. See README.md for manual registration."
@@ -165,32 +159,71 @@ for skill_dir in "$BORG_ROOT/skills/"*/; do
     info "  $name"
 done
 
-# ── 7. Bootstrap registry ─────────────────────────────────────────────────────
+# ── 7. Install tmux keybinding ────────────────────────────────────────────────
+
+TMUX_CONF="$HOME/.config/tmux/tmux.conf"
+if [[ -f "$TMUX_CONF" ]]; then
+    if ! grep -q "borg next" "$TMUX_CONF" 2>/dev/null; then
+        info "Adding tmux keybinding: Ctrl+Space > (borg next --switch)"
+        echo "" >> "$TMUX_CONF"
+        echo '# Borg: jump to most pressing project (borg next --switch)' >> "$TMUX_CONF"
+        echo 'bind > run-shell "$HOME/.local/bin/borg next --switch 2>/dev/null || tmux display-message '"'"'All clear — take a break'"'"'"' >> "$TMUX_CONF"
+    else
+        info "tmux keybinding already configured"
+    fi
+    # Reload tmux config if tmux is running
+    tmux source-file "$TMUX_CONF" 2>/dev/null && info "tmux config reloaded" || true
+else
+    warn "tmux.conf not found at $TMUX_CONF — add keybinding manually:"
+    warn '  bind > run-shell "$HOME/.local/bin/borg next --switch"'
+fi
+
+# ── 8. Bootstrap registry ─────────────────────────────────────────────────────
 
 info "Bootstrapping registry from session history..."
-"$BIN_DIR/borg" scan 2>&1 || warn "borg scan had issues (registry may still be empty)"
+"$BORG_ROOT/borg.zsh" scan 2>&1 || warn "borg scan had issues (registry may still be empty)"
 
-# ── 8. Summary ────────────────────────────────────────────────────────────────
+# ── 9. Summary ────────────────────────────────────────────────────────────────
 
 echo ""
 info "Installation complete."
 echo ""
-echo "  Quick start:"
-echo "    borg ls              View all tracked projects"
-echo "    borg next            What should I work on?"
-echo "    borg switch          Jump to a project"
-echo "    borg help            All commands"
+echo "  The Borg workflow:"
+echo "    1. drone up <project>              spin up a project (container + tmux window)"
+echo "    2. drone claude <project>          launch Claude in that window"
+echo "    3. borg next                       what needs your attention?"
+echo "    4. Ctrl+Space >                    jump there instantly"
+echo "    5. /borg-plan                      lock acceptance criteria"
+echo "    6. /borg-ship                      evaluate shipping readiness"
+echo ""
+echo "  borg commands:"
+echo "    borg next [--switch]   Single recommendation + jump there"
+echo "    borg ls                Full project dashboard"
+echo "    borg switch <project>  fzf picker → tmux window"
+echo "    borg scan              Auto-discover projects from session history"
+echo "    borg help              All borg commands"
+echo ""
+echo "  drone commands:"
+echo "    drone up [project]     Start container + tmux window"
+echo "    drone down [project]   Stop container + remove window"
+echo "    drone claude [project] Launch Claude Code in project window"
+echo "    drone restart [all]    Restart containers"
+echo "    drone status           Show all active drones"
+echo "    drone help             All drone commands"
 echo ""
 echo "  Skills installed:"
 for skill_dir in "$BORG_ROOT/skills/"*/; do
     [[ -d "$skill_dir" ]] && echo "    /$(basename "$skill_dir")"
 done
 echo ""
-echo "  Next steps:"
-echo "    1. Run: borg refresh --all        (generate summaries)"
-echo "    2. In Claude Code: /plugin marketplace add alirezarezvani/claude-skills"
-echo "    3. Create ~/.config/borg/config.zsh for work/life boundaries"
+echo "  Community skills (run in Claude Code):"
+echo "    /plugin marketplace add alirezarezvani/claude-skills"
+echo "    Adds: Boris Cherny's 57-tip framework, Scope Guard, 205+ engineering skills"
 echo ""
-echo "  Devcontainer users: add this volume mount to docker-compose.yml:"
-echo "    - ~/.config/borg:/home/vscode/.config/borg:cached"
+echo "  Optional: ~/.config/borg/config.zsh for work/life boundaries"
+echo "    BORG_WORK_HOURS=\"09:00-18:00\""
+echo "    BORG_WORK_PROJECTS=\"api-service,internal-tools\""
+echo "    BORG_MAX_ACTIVE=3"
+echo ""
+echo "  tmux session: 'borg' (rename your existing 'dev' session with: tmux rename-session borg)"
 echo ""

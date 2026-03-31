@@ -14,22 +14,25 @@ BORG_REGISTRY="$BORG_DIR/registry.json"
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
+MESSAGE=$(echo "$INPUT" | jq -r '.message // ""' 2>/dev/null || echo "")
 
 [[ -z "$CWD" ]] && exit 0
 
 PROJECT=$(basename "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Update registry status=waiting if project is tracked
+# Update registry: status=waiting + capture notification message as waiting_reason
 if [[ -f "$BORG_REGISTRY" ]]; then
     TMP="$BORG_REGISTRY.tmp.$$"
     jq \
         --arg p "$PROJECT" \
         --arg now "$NOW" \
+        --arg msg "$MESSAGE" \
         '
         if .projects | has($p) then
             .projects[$p].status = "waiting" |
-            .projects[$p].last_activity = $now
+            .projects[$p].last_activity = $now |
+            (if $msg != "" then .projects[$p].waiting_reason = $msg else . end)
         else .
         end
         ' "$BORG_REGISTRY" > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
