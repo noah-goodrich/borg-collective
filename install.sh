@@ -62,16 +62,58 @@ fi
 
 info "Dependencies satisfied."
 
+# ── 1b. Check optional dependencies ──────────────────────────────────────────
+
+DOTFILES_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles"
+POSTGRES_COMPOSE="$DOTFILES_DIR/devcontainer/docker-compose.postgres.yml"
+
+if [[ ! -d "$DOTFILES_DIR" ]]; then
+    warn "Dotfiles not found at $DOTFILES_DIR"
+    warn "drone up requires dotfiles for shared postgres compose and base image."
+    warn "Install dotfiles first, or drone will only work without containers."
+fi
+
+if [[ -d "$DOTFILES_DIR" && ! -f "$POSTGRES_COMPOSE" ]]; then
+    warn "Missing: $POSTGRES_COMPOSE"
+    warn "drone up needs this for shared postgres. Run dotfiles install.sh to set it up."
+fi
+
 # ── 2. Create runtime directories ─────────────────────────────────────────────
 
 info "Creating runtime directories..."
 mkdir -p "$BORG_DIR/desktop"
+mkdir -p "$BORG_DIR/debriefs"
 mkdir -p "$CLAUDE_DIR"
 mkdir -p "$CLAUDE_HOOKS_DIR"
 mkdir -p "$CLAUDE_SKILLS_DIR"
 mkdir -p "$BIN_DIR"
 
 [[ -f "$BORG_DIR/registry.json" ]] || echo '{"projects":{}}' > "$BORG_DIR/registry.json"
+
+# Generate config.zsh with documented defaults if it doesn't exist
+if [[ ! -f "$BORG_DIR/config.zsh" ]]; then
+    info "Generating config.zsh with defaults..."
+    cat > "$BORG_DIR/config.zsh" <<'CONF'
+# ~/.config/borg/config.zsh — Machine-local borg configuration
+# Sourced by borg.zsh at startup. Edit to match this machine's needs.
+
+# Work/life boundaries (empty to disable)
+# BORG_WORK_HOURS="09:00-18:00"
+
+# Projects that count as "work" (comma-separated, for boundary checks)
+# BORG_WORK_PROJECTS=""
+
+# Max concurrent active sessions before capacity warning
+BORG_MAX_ACTIVE=3
+
+# tmux session name (default: borg)
+# BORG_TMUX_SESSION="borg"
+
+# Enable debug output (uncomment to enable)
+# BORG_DEBUG=1
+CONF
+    info "  Edit ~/.config/borg/config.zsh to set work hours, limits, etc."
+fi
 
 # ── 3. Install borg and drone CLIs ───────────────────────────────────────────
 
@@ -144,13 +186,12 @@ COCO_SETTINGS="$COCO_DIR/settings.json"
 
 if command -v cortex &>/dev/null; then
     info "Cortex Code CLI detected — configuring CoCo integration..."
-    mkdir -p "$COCO_DIR"
+    mkdir -p "$COCO_DIR/hooks"
 
     # Create settings.json if it doesn't exist
     [[ -f "$COCO_SETTINGS" ]] || echo '{}' > "$COCO_SETTINGS"
 
     # Symlink hooks into CoCo hooks dir (same scripts, different location)
-    mkdir -p "$COCO_DIR/hooks"
     for hook in "$BORG_ROOT/hooks/"*.sh; do
         name="$(basename "$hook")"
         ln -sf "$hook" "$COCO_DIR/hooks/$name"
@@ -250,9 +291,10 @@ for skill_dir in "$BORG_ROOT/skills/"*/; do
 done
 echo ""
 if command -v cortex &>/dev/null; then
-    echo "  CoCo integration:"
-    echo "    Hooks registered in ~/.snowflake/cortex/settings.json"
-    echo "    Skills registered via cortex skill add"
+    echo "  CoCo integration: active"
+    echo "    borg ls shows [X] badge for Cortex Code projects"
+    echo "    borg scan discovers CoCo sessions from session-log.md"
+    echo "    Stop hook fires on CoCo sessions → debrief + cairn record"
     echo ""
 fi
 echo "  Community skills (run in Claude Code):"

@@ -11,6 +11,7 @@
 #   drone sh [project]           Shell into project container
 #   drone restart [project]      Restart containers + re-exec panes
 #   drone fix [project|--all]    Restore standard 3-pane layout
+#   drone toggle [project]       Show/hide top-right side pane
 #   drone status                 Show all active drones
 #   drone help                   Command reference
 
@@ -144,7 +145,7 @@ create_3pane_window() {
     if ! tmux has-session -t "$SESSION" 2>/dev/null; then
         main=$(tmux new-session -d -s "$SESSION" -n "$wname" -PF '#{pane_id}')
     else
-        main=$(tmux new-window -t "$SESSION" -n "$wname" -PF '#{pane_id}')
+        main=$(tmux new-window -t "$SESSION:" -n "$wname" -PF '#{pane_id}')
     fi
 
     local bottom side
@@ -165,28 +166,6 @@ create_3pane_window() {
     fi
 
     dbg "create_3pane_window: done (main=$main side=$side bottom=$bottom)"
-}
-
-ensure_session() {
-    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-        dbg "ensure_session: creating session with host window"
-        create_3pane_window "host"
-        return
-    fi
-
-    if ! has_window "host"; then
-        dbg "ensure_session: host window missing, recreating"
-        create_3pane_window "host"
-        return
-    fi
-
-    local panes
-    panes=$(window_pane_count "host")
-    if [[ "$panes" != "3" ]]; then
-        dbg "ensure_session: host has $panes panes (expected 3), recreating"
-        tmux kill-window -t "$SESSION:host"
-        create_3pane_window "host"
-    fi
 }
 
 attach_or_switch() {
@@ -247,7 +226,6 @@ cmd_up() {
     if (( ! has_devcontainer )); then
         # ── No devcontainer: plain local window ──────────────────────────────
         dbg "cmd_up: no .devcontainer, creating local window"
-        ensure_session
 
         if has_window "$project_name"; then
             info "Project '$project_name' already open."
@@ -266,7 +244,6 @@ cmd_up() {
     # ── Devcontainer path ─────────────────────────────────────────────────────
 
     ensure_postgres
-    ensure_session
 
     # Window already exists — check health
     if has_window "$project_name"; then
@@ -444,9 +421,12 @@ cmd_claude() {
         cmd_up "${1:-}"
     fi
 
-    # Send 'claude' to the main pane (pane index 0) of the project window
-    info "Launching Claude in $project_name..."
-    tmux send-keys -t "$SESSION:$project_name.0" "claude" Enter
+    # Send 'claude' to the bottom pane (highest pane_top value)
+    local bottom_pane
+    bottom_pane=$(tmux list-panes -t "$SESSION:$project_name" -F '#{pane_top} #{pane_id}' \
+        | sort -rn | head -1 | awk '{print $2}')
+    info "Launching Claude in $project_name (bottom pane)..."
+    tmux send-keys -t "$bottom_pane" "claude" Enter
 
     # Switch to the project window
     attach_or_switch "$project_name"
@@ -508,8 +488,64 @@ cmd_fix() {
 
         info "$wname: restoring layout (${W}x${H} → top_h=$top_h main_w=$main_w)"
         tmux select-layout -t "$SESSION:$wname" "$layout"
-        tmux select-pane -t "$SESSION:$wname.0"
+        tmux select-pane -t "$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_id}' | head -1)"
     done
+}
+
+# ── drone toggle ──────────────────────────────────────────────────────────────
+
+cmd_toggle() {
+    local wname
+    if [[ -n "${1:-}" ]]; then
+        wname="$1"
+    elif [[ -n "$TMUX" ]]; then
+        wname=$(tmux display-message -p '#W')
+    else
+        die "Specify a project name or run from inside tmux."
+    fi
+
+    has_window "$wname" || die "No window '$wname' found."
+
+    local pane_count
+    pane_count=$(window_pane_count "$wname")
+
+    if [[ "$pane_count" == "3" ]]; then
+        # Kill the side pane (top row, rightmost = highest pane_left where pane_top=0)
+        local side_pane
+        side_pane=$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_top} #{pane_left} #{pane_id}' \
+            | awk '$1 == 0' | sort -k2 -rn | head -1 | awk '{print $3}')
+        if [[ -n "$side_pane" ]]; then
+            tmux kill-pane -t "$side_pane"
+            info "$wname: side pane closed (2 panes)"
+        fi
+    elif [[ "$pane_count" == "2" ]]; then
+        # Recreate side pane: split the top-left pane horizontally
+        local main_pane
+        main_pane=$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_top} #{pane_id}' \
+            | awk '$1 == 0' | head -1 | awk '{print $2}')
+        if [[ -n "$main_pane" ]]; then
+            local side
+            side=$(tmux split-window -h -p 30 -t "$main_pane" -PF '#{pane_id}')
+            # If this is a devcontainer project, exec into the container
+            local pdir
+            pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
+            if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
+                local container shell service exec_cmd
+                container=$(get_project_container "$pdir") || true
+                if [[ -n "$container" ]]; then
+                    shell=$(get_shell "$container")
+                    service=$(get_service_name "$pdir")
+                    exec_cmd="docker compose -p $wname -f $pdir/$COMPOSE_FILE exec $service $shell"
+                    tmux send-keys -t "$side" "$exec_cmd" Enter
+                fi
+            elif [[ -n "$pdir" ]]; then
+                tmux send-keys -t "$side" "cd $pdir" Enter
+            fi
+            info "$wname: side pane opened (3 panes)"
+        fi
+    else
+        warn "$wname: unexpected pane count ($pane_count), skipping"
+    fi
 }
 
 # ── drone status ──────────────────────────────────────────────────────────────
@@ -573,6 +609,7 @@ cmd_help() {
     restart --all        Restart all project containers
     fix [project]        Restore standard 3-pane layout for project window
     fix --all            Restore layout for all windows
+    toggle [project]     Show/hide the top-right side pane
     status               Show all active drones (containers + Claude status)
     help                 Show this message
 
@@ -605,6 +642,7 @@ case "${1:-}" in
     sh)         cmd_sh "${2:-}" ;;
     restart)    cmd_restart "${2:-}" ;;
     fix)        cmd_fix "${2:-}" ;;
+    toggle)     cmd_toggle "${2:-}" ;;
     status)     cmd_status ;;
     help|-h)    cmd_help ;;
     *)          cmd_help ;;

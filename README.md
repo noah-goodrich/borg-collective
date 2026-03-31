@@ -3,8 +3,7 @@
 > Your sessions will be assimilated.
 
 An AI development orchestration framework. Two commands — `borg` for orchestration, `drone` for project
-lifecycle — that coordinate parallel Claude Code and Cortex Code (CoCo) sessions across projects and
-containers.
+lifecycle — that coordinate parallel Claude Code sessions across projects and containers.
 
 Built for sustainable AI-assisted development. Tracks sessions, enforces work/life boundaries, manages
 cognitive load, persists context across sessions, and answers the question that causes decision paralysis:
@@ -23,10 +22,10 @@ borg init
 The installer handles everything:
 1. Checks dependencies (jq, fzf, tmux) — installs via Homebrew if missing
 2. Symlinks `borg` and `drone` to `~/.local/bin/`
-3. Installs and registers hooks for Claude Code (and CoCo if installed)
+3. Installs and registers Claude Code hooks (SessionStart, Stop, Notification)
 4. Installs skills (cognitive load guardrails, planning, shipping, review, debrief, checkpoint)
 5. Configures tmux keybinding (`Ctrl+Space >` → jump to most pressing project)
-6. Runs `borg scan` to discover projects from Claude Code and CoCo sessions
+6. Runs `borg scan` to discover projects
 
 Then in any Claude Code session:
 
@@ -41,7 +40,6 @@ This installs Boris Cherny's 57-tip framework, Scope Guard, and 205+ community s
 - macOS (Apple Silicon or Intel)
 - zsh, tmux, jq, fzf
 - Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)
-- Cortex Code CLI (optional, for Snowflake data engineering — `cortex`)
 - Docker (optional, for devcontainer-based projects)
 - [Cairn](https://github.com/your-username/cairn) (optional, for cross-session knowledge persistence)
 
