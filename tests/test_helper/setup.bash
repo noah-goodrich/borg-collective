@@ -2,7 +2,7 @@
 # Common test setup for bats tests.
 # Sources zsh lib files and provides isolated temp directories.
 
-BORG_ROOT="${BATS_TEST_DIRNAME}/.."
+BORG_HOME="${BATS_TEST_DIRNAME}/.."
 
 # Create isolated temp dirs so tests don't touch real config
 setup_temp_dirs() {
@@ -19,7 +19,7 @@ setup_temp_dirs() {
 # This creates bash wrapper functions that invoke the zsh functions via zsh.
 load_zsh_lib() {
     local lib_name="$1"
-    local lib_path="$BORG_ROOT/lib/${lib_name}.zsh"
+    local lib_path="$BORG_HOME/lib/${lib_name}.zsh"
     [[ -f "$lib_path" ]] || { echo "lib not found: $lib_path" >&2; return 1; }
 
     # Store the lib path for use by the wrapper caller
@@ -32,7 +32,7 @@ run_zsh_fn() {
     local lib="$1" fn="$2"
     shift 2
     zsh -c "
-        source '$BORG_ROOT/lib/${lib}.zsh'
+        source '$BORG_HOME/lib/${lib}.zsh'
         BORG_DIR='$BORG_DIR'
         BORG_REGISTRY='$BORG_REGISTRY'
         $fn \"\$@\"
