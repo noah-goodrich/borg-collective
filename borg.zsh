@@ -18,7 +18,8 @@ hash -r 2>/dev/null || true
 
 set -e
 
-BORG_ROOT="${BORG_ROOT:-${0:A:h}}"  # directory containing this script (overridable for Homebrew)
+BORG_HOME="${BORG_HOME:-${0:A:h}}"  # directory containing this script (for lib/, hooks/, skills/)
+BORG_ROOT="${BORG_ROOT:-$HOME/dev}"  # workspace root where projects live
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 
 # Colors (same as dev.sh)
@@ -30,7 +31,7 @@ die()   { echo -e "${RED}▸ ERROR:${NC} $*" >&2; exit 1; }
 dbg()   { [[ -n "${BORG_DEBUG:-}" ]] && echo -e "${CYAN}  [dbg]${NC} $*" >&2 || true; }
 
 # Source library modules
-for _lib in "$BORG_ROOT/lib"/*.zsh; do
+for _lib in "$BORG_HOME/lib"/*.zsh; do
     source "$_lib"
 done
 
@@ -510,7 +511,7 @@ cmd_refresh() {
         fi
 
         local summary
-        summary=$(python3 "$BORG_ROOT/summarize.py" $llm_flag "$jsonl" 2>/dev/null) || summary="(summarizer error)"
+        summary=$(python3 "$BORG_HOME/summarize.py" $llm_flag "$jsonl" 2>/dev/null) || summary="(summarizer error)"
 
         if [[ -n "$summary" ]]; then
             borg_registry_read | jq \
@@ -790,7 +791,8 @@ cmd_init() {
     # Ensure tmux session exists — borg init should just work
     if ! borg_tmux_alive; then
         info "Starting tmux session: $BORG_TMUX_SESSION"
-        tmux new-session -d -s "$BORG_TMUX_SESSION"
+        tmux new-session -d -s "$BORG_TMUX_SESSION" -n orchestrator
+        tmux set-option -t "$BORG_TMUX_SESSION:orchestrator" automatic-rename off
     fi
 
     # Merge Desktop sessions before building briefing
@@ -819,7 +821,7 @@ Then ask if they want to switch to it. Keep the briefing under 10 lines."
 }
 
 cmd_claude() {
-    # Resume the most recent orchestrator session from BORG_ROOT
+    # Resume the most recent orchestrator session
     info "Resuming orchestrator..."
     _borg_launch_in_tmux claude --continue
 }
@@ -931,9 +933,9 @@ CONF
 
     # ── 2. Install hooks ──────────────────────────────────────────────────────
     info "Installing hooks..."
-    chmod +x "$BORG_ROOT/hooks/"*.sh
+    chmod +x "$BORG_HOME/hooks/"*.sh
 
-    for hook in "$BORG_ROOT/hooks/"*.sh; do
+    for hook in "$BORG_HOME/hooks/"*.sh; do
         local name="${hook:t}"
         ln -sf "$hook" "$CLAUDE_HOOKS_DIR/$name"
         info "  $name"
@@ -944,6 +946,7 @@ CONF
         info "Registering hooks in Claude Code settings.json..."
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/notify.sh"             "Notification"  "notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/tool-count-nudge.sh" "PostToolUse"  "tool-count-nudge.sh"
@@ -966,7 +969,7 @@ CONF
         mkdir -p "$COCO_DIR/hooks"
         [[ -f "$COCO_SETTINGS" ]] || echo '{}' > "$COCO_SETTINGS"
 
-        for hook in "$BORG_ROOT/hooks/"*.sh; do
+        for hook in "$BORG_HOME/hooks/"*.sh; do
             local name="${hook:t}"
             ln -sf "$hook" "$COCO_DIR/hooks/$name"
         done
@@ -974,11 +977,12 @@ CONF
         info "Registering hooks in CoCo settings.json..."
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/notify.sh"             "Notification"  "notify.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
 
         info "Registering skills with CoCo..."
-        for skill_dir in "$BORG_ROOT/skills/"*/; do
+        for skill_dir in "$BORG_HOME/skills/"*/; do
             [[ -d "$skill_dir" ]] || continue
             local name="${skill_dir:t}"
             cortex skill add "$skill_dir" 2>/dev/null && info "  $name (cortex)" || warn "  $name: cortex skill add failed"
@@ -990,7 +994,7 @@ CONF
     # ── 4. Install skills ─────────────────────────────────────────────────────
     info "Installing skills..."
 
-    for skill_dir in "$BORG_ROOT/skills/"*/; do
+    for skill_dir in "$BORG_HOME/skills/"*/; do
         [[ -d "$skill_dir" ]] || continue
         local name="${skill_dir:t}"
         local target="$CLAUDE_SKILLS_DIR/$name"
