@@ -18,6 +18,14 @@ gradual burnout that comes from sustained multi-session AI-assisted development:
 - When planning, always include a "Done when" section with objective, verifiable criteria
 - Prefer shipping something small over planning something large
 
+## Plan Cross-Reference
+When PROJECT_PLAN.md exists in the project root, compare incoming requests against its acceptance
+criteria. If a request doesn't map to any criterion:
+- Name it: "This isn't in the current plan."
+- Offer the choice: "Add it (adjusts timeline) or note it for later?"
+- If they add it: "That changes scope. Update PROJECT_PLAN.md with the new criterion."
+- If they defer: note it and stay focused on the current criteria.
+
 ## Perfectionism Prevention
 - "Good enough to ship" beats "perfect but never released"
 - After completing the requested work, do NOT suggest additional improvements, refactors,

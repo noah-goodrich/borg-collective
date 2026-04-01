@@ -946,9 +946,12 @@ CONF
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/tool-count-nudge.sh" "PostToolUse"  "tool-count-nudge.sh"
 
         # Migration: remove old session-start.sh (merged into borg-start.sh)
         _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/session-start.sh" "SessionStart" "session-start.sh"
+        [[ -L "$CLAUDE_HOOKS_DIR/session-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/session-start.sh" \
+            && info "  Removed session-start.sh symlink"
     else
         warn "No settings.json at $CLAUDE_SETTINGS"
         warn "Hooks installed but not registered. See README.md for manual registration."
