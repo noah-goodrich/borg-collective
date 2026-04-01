@@ -79,9 +79,13 @@ if [[ -n "$CWD" && ! -f "$CWD/PROJECT_PLAN.md" ]]; then
     CONTEXT_PARTS+=("WORKFLOW REQUIREMENT — NO PROJECT_PLAN.md FOUND
 
 Before writing any code this session:
-1. Run /borg-plan to establish objectives and acceptance criteria
-2. Confirm the plan (creates PROJECT_PLAN.md in the project root)
-3. Only then begin implementation
+1. Switch to Opus: /model opus
+2. Enter Plan Mode: Shift+Tab
+3. Run /borg-plan to establish objectives and acceptance criteria
+4. Confirm the plan (creates PROJECT_PLAN.md in the project root)
+5. Exit Plan Mode: Shift+Tab
+6. Switch to Sonnet: /model sonnet
+7. Only then begin implementation
 
 If this is exploratory/investigative work with no deliverable, state that explicitly
 and you may proceed without /borg-plan.")
