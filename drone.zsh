@@ -149,6 +149,8 @@ create_3pane_window() {
         main=$(tmux new-window -t "$SESSION:" -n "$wname" -PF '#{pane_id}')
     fi
 
+    tmux set-option -t "$SESSION:$wname" automatic-rename off
+
     local bottom side
     bottom=$(tmux split-window -v -p 25 -t "$main" -PF '#{pane_id}')
     side=$(tmux split-window -h -p 30 -t "$main" -PF '#{pane_id}')
@@ -693,5 +695,5 @@ case "${1:-}" in
     toggle)     cmd_toggle "${2:-}" ;;
     status)     cmd_status ;;
     help|-h)    cmd_help ;;
-    *)          cmd_help ;;
+    *)          die "unknown command '${1}'. Run: drone help" ;;
 esac

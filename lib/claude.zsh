@@ -27,8 +27,8 @@ borg_claude_latest_session_id() {
     local dir
     dir=$(borg_claude_project_dir "$path")
     [[ -d "$dir" ]] || return 0
-    # Use zsh glob qualifiers: (N) nullglob, (Om) sort by mod time desc, ([1]) first only
-    local files=("$dir"/*.jsonl(NOm[1]))
+    # Use zsh glob qualifiers: (N) nullglob, (om) sort by mod time newest-first, ([1]) first only
+    local files=("$dir"/*.jsonl(Nom[1]))
     [[ ${#files[@]} -eq 0 ]] && return 0
     local fname="${files[1]:t}"   # :t = tail (basename)
     echo "${fname%.jsonl}"        # strip extension
