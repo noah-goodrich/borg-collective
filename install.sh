@@ -1,23 +1,27 @@
 #!/usr/bin/env zsh
 # install.sh — The Borg Collective installer
 #
-# Safe to re-run. Installs borg CLI, hooks, skills, and bootstraps registry.
-# Works standalone or called from a parent installer (e.g., dotfiles/install.sh).
+# Handles: dependency checks, binary symlinks, PATH warning.
+# Delegates: hooks, skills, config, registry → `borg setup`
+#
+# Safe to re-run. Works standalone or called from a parent installer (e.g., dotfiles/install.sh).
 #
 # Usage:
 #   ./install.sh              Full install (interactive, checks deps)
 #   ./install.sh --quiet      Skip ASCII art and prompts
+#
+# NOTE: For non-dev install, use Homebrew:
+#   brew tap noah-goodrich/borg-collective https://github.com/noah-goodrich/borg-collective.git
+#   brew install borg-collective
+#   borg setup
+#
+# Use install.sh only for dev (editing source directly from this clone).
 
 set -e
 
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 BORG_ROOT="${0:A:h}"
-BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
-CLAUDE_DIR="$HOME/.claude"
-CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
-CLAUDE_SKILLS_DIR="$CLAUDE_DIR/skills"
-CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
 BIN_DIR="$HOME/.local/bin"
 QUIET=0
 
@@ -78,44 +82,9 @@ if [[ -d "$DOTFILES_DIR" && ! -f "$POSTGRES_COMPOSE" ]]; then
     warn "drone up needs this for shared postgres. Run dotfiles install.sh to set it up."
 fi
 
-# ── 2. Create runtime directories ─────────────────────────────────────────────
+# ── 2. Install borg and drone CLIs ───────────────────────────────────────────
 
-info "Creating runtime directories..."
-mkdir -p "$BORG_DIR/desktop"
-mkdir -p "$BORG_DIR/debriefs"
-mkdir -p "$CLAUDE_DIR"
-mkdir -p "$CLAUDE_HOOKS_DIR"
-mkdir -p "$CLAUDE_SKILLS_DIR"
 mkdir -p "$BIN_DIR"
-
-[[ -f "$BORG_DIR/registry.json" ]] || echo '{"projects":{}}' > "$BORG_DIR/registry.json"
-
-# Generate config.zsh with documented defaults if it doesn't exist
-if [[ ! -f "$BORG_DIR/config.zsh" ]]; then
-    info "Generating config.zsh with defaults..."
-    cat > "$BORG_DIR/config.zsh" <<'CONF'
-# ~/.config/borg/config.zsh — Machine-local borg configuration
-# Sourced by borg.zsh at startup. Edit to match this machine's needs.
-
-# Work/life boundaries (empty to disable)
-# BORG_WORK_HOURS="09:00-18:00"
-
-# Projects that count as "work" (comma-separated, for boundary checks)
-# BORG_WORK_PROJECTS=""
-
-# Max concurrent active sessions before capacity warning
-BORG_MAX_ACTIVE=3
-
-# tmux session name (default: borg)
-# BORG_TMUX_SESSION="borg"
-
-# Enable debug output (uncomment to enable)
-# BORG_DEBUG=1
-CONF
-    info "  Edit ~/.config/borg/config.zsh to set work hours, limits, etc."
-fi
-
-# ── 3. Install borg and drone CLIs ───────────────────────────────────────────
 
 info "Installing borg CLI..."
 chmod +x "$BORG_ROOT/borg.zsh"
@@ -132,134 +101,12 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
     warn '  export PATH="$HOME/.local/bin:$PATH"'
 fi
 
-# ── 4. Install hooks ─────────────────────────────────────────────────────────
+# ── 3. Hooks, skills, config, registry → borg setup ──────────────────────────
 
-info "Installing hooks..."
-chmod +x "$BORG_ROOT/hooks/"*.sh
+info "Running borg setup..."
+"$BORG_ROOT/borg.zsh" setup
 
-for hook in "$BORG_ROOT/hooks/"*.sh; do
-    name="$(basename "$hook")"
-    ln -sf "$hook" "$CLAUDE_HOOKS_DIR/$name"
-    info "  $name"
-done
-
-# ── 5. Register hooks in settings.json ────────────────────────────────────────
-
-# Register a hook in a settings.json file
-# Usage: register_hook <settings_file> <hook_cmd> <event> <label>
-register_hook() {
-    local settings="$1" hook_cmd="$2" event="$3" label="$4"
-    local timeout_val=10
-
-    # Check if already registered (avoid duplicates)
-    if jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
-        '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
-        "$settings" &>/dev/null; then
-        info "  $event: $label (already registered)"
-        return
-    fi
-
-    # Add hook entry with timeout
-    local tmp="$settings.tmp.$$"
-    jq --arg evt "$event" --arg cmd "$hook_cmd" --argjson timeout "$timeout_val" '
-        if .hooks == null then .hooks = {} else . end |
-        if .hooks[$evt] == null then .hooks[$evt] = [] else . end |
-        .hooks[$evt] += [{"matcher": "", "hooks": [{"type": "command", "command": $cmd, "timeout": $timeout}]}]
-    ' "$settings" > "$tmp" && mv "$tmp" "$settings"
-    info "  $event: $label (registered)"
-}
-
-# 5a. Claude Code hooks
-if [[ -f "$CLAUDE_SETTINGS" ]]; then
-    info "Registering hooks in Claude Code settings.json..."
-    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
-    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
-    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
-    register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
-else
-    warn "No settings.json at $CLAUDE_SETTINGS"
-    warn "Claude Code hooks installed but not registered. See README.md for manual registration."
-fi
-
-# 5b. Cortex Code CLI (CoCo) hooks
-COCO_DIR="$HOME/.snowflake/cortex"
-COCO_SETTINGS="$COCO_DIR/settings.json"
-
-if command -v cortex &>/dev/null; then
-    info "Cortex Code CLI detected — configuring CoCo integration..."
-    mkdir -p "$COCO_DIR/hooks"
-
-    # Create settings.json if it doesn't exist
-    [[ -f "$COCO_SETTINGS" ]] || echo '{}' > "$COCO_SETTINGS"
-
-    # Symlink hooks into CoCo hooks dir (same scripts, different location)
-    for hook in "$BORG_ROOT/hooks/"*.sh; do
-        name="$(basename "$hook")"
-        ln -sf "$hook" "$COCO_DIR/hooks/$name"
-    done
-
-    info "Registering hooks in CoCo settings.json..."
-    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
-    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
-    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
-    register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
-
-    # Register skills with CoCo
-    info "Registering skills with CoCo..."
-    for skill_dir in "$BORG_ROOT/skills/"*/; do
-        [[ -d "$skill_dir" ]] || continue
-        name="$(basename "$skill_dir")"
-        cortex skill add "$skill_dir" 2>/dev/null && info "  $name (cortex)" || warn "  $name: cortex skill add failed"
-    done
-else
-    info "Cortex Code CLI not found — skipping CoCo integration"
-fi
-
-# ── 6. Install skills ─────────────────────────────────────────────────────────
-
-info "Installing skills..."
-
-for skill_dir in "$BORG_ROOT/skills/"*/; do
-    [[ -d "$skill_dir" ]] || continue
-    name="$(basename "$skill_dir")"
-    target="$CLAUDE_SKILLS_DIR/$name"
-
-    if [[ -L "$target" ]]; then
-        rm "$target"
-    elif [[ -d "$target" ]]; then
-        warn "  $name: directory exists (not a symlink), skipping"
-        continue
-    fi
-
-    ln -sf "$skill_dir" "$target"
-    info "  $name"
-done
-
-# ── 7. Install tmux keybinding ────────────────────────────────────────────────
-
-TMUX_CONF="$HOME/.config/tmux/tmux.conf"
-if [[ -f "$TMUX_CONF" ]]; then
-    if ! grep -q "borg next" "$TMUX_CONF" 2>/dev/null; then
-        info "Adding tmux keybinding: Ctrl+Space > (borg next --switch)"
-        echo "" >> "$TMUX_CONF"
-        echo '# Borg: jump to most pressing project (borg next --switch)' >> "$TMUX_CONF"
-        echo 'bind > run-shell "$HOME/.local/bin/borg next --switch 2>/dev/null || tmux display-message '"'"'All clear — take a break'"'"'"' >> "$TMUX_CONF"
-    else
-        info "tmux keybinding already configured"
-    fi
-    # Reload tmux config if tmux is running
-    tmux source-file "$TMUX_CONF" 2>/dev/null && info "tmux config reloaded" || true
-else
-    warn "tmux.conf not found at $TMUX_CONF — add keybinding manually:"
-    warn '  bind > run-shell "$HOME/.local/bin/borg next --switch"'
-fi
-
-# ── 8. Bootstrap registry ─────────────────────────────────────────────────────
-
-info "Bootstrapping registry from session history..."
-"$BORG_ROOT/borg.zsh" scan 2>&1 || warn "borg scan had issues (registry may still be empty)"
-
-# ── 9. Summary ────────────────────────────────────────────────────────────────
+# ── 4. Summary ────────────────────────────────────────────────────────────────
 
 echo ""
 info "Installation complete."
