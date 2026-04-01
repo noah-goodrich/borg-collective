@@ -71,7 +71,7 @@ parallelism means he's never blocked.
 
 ---
 
-## Part 2: The Cognitive Load Problem
+## Part 2: Where Your Attention Matters Most
 
 You read Part 1 and thought: "That sounds amazing." Now imagine maintaining a mental model of five
 parallel sessions — what each one was doing, where it left off, what it needs from you, whether the
@@ -81,25 +81,24 @@ decisions, and shipping features.
 That mental model is your cognitive baseline. It's the overhead you carry before you do anything
 productive. And it grows with every session you add.
 
-### The universal tax
+### The context-switching tax
 
 Research on context-switching (Gloria Mark, UC Irvine) shows it costs developers twenty-three minutes to
 fully re-engage after an interruption. That number was measured on the general population, not a clinical
 sample. Every developer managing parallel AI sessions pays this tax on every switch. Five sessions means
 five potential twenty-three-minute penalties per day, even if you're organized about it.
 
-Working memory — the number of things you can hold in your head simultaneously — is limited to roughly
-seven items for most people (Miller's Law). If four of those slots are consumed by "where was I in cairn,
+Working memory — roughly seven items at a time (Miller's Law) — is best spent on design decisions
+and code review, not session triage. If four of those slots are consumed by "where was I in cairn,
 what's the borg PR status, did I respond to the wallpaper-kit question, is the snowflake migration
-safe" — you have three slots left for the actual problem you're trying to solve. That's a math problem.
+safe" — only three remain for the architectural thinking where you actually add value.
 
-### The specific risks
+### What consumes your focus budget
 
 **Decision fatigue.** Five sessions are waiting for input. Which one do you attend to first? Research on
 decision fatigue (Baumeister) shows that decision quality degrades after sustained cognitive effort.
-Each pending decision consumes a finite resource.
-By afternoon, you're making worse choices about code architecture because you spent the morning making
-triage decisions about which session to attend to.
+Each pending decision consumes a finite resource. By afternoon, your best architectural judgment goes
+to triage decisions instead of the code problems where it actually matters.
 
 **No exit criteria.** You start refactoring one module. An hour later, you're deep in a rewrite. Claude
 never tells you to stop. It never says "this is good enough, ship it." It will keep refactoring forever
@@ -118,10 +117,10 @@ gradual erosion: slightly worse decisions each week, slightly less enjoyment, sl
 the backlog of sessions waiting for attention. By the time it's noticeable, it's been going on for
 months.
 
-Clinical researchers have developed the AI Addiction Scale (AIAS-21), measuring compulsive use, craving,
-tolerance, and withdrawal from generative AI tools. While the most acute patterns correlate with
-impulsivity traits, the "I use AI longer than I intend" and "I feel anxious about unfinished AI sessions"
-items apply broadly to anyone managing persistent parallel sessions.
+Clinical researchers developed the AI Addiction Scale (AIAS-21), measuring compulsive use, craving,
+tolerance, and withdrawal from generative AI tools. The useful signal here is recognizing when the tool
+consumes more attention than it returns — the "I use AI longer than I intend" and "I feel anxious about
+unfinished AI sessions" items flag that the tool is working against you, not for you.
 
 ### What this means for tooling
 
@@ -130,16 +129,18 @@ the day. The fix is external scaffolding: systems that reduce the cognitive base
 working memory is available for actual work.
 
 Specifically:
-- **Fewer active sessions means fewer decisions.** A capacity limit isn't a constraint — it's a
-  cognitive relief valve.
+- **Fewer active sessions means fewer decisions** — so your decisions go to code, not triage.
+  A capacity limit isn't a constraint — it's a cognitive relief valve.
 - **Persistent context means less re-derivation.** If the tool remembers where you were, you don't
-  have to. That frees working memory slots.
-- **Explicit acceptance criteria mean clear stopping points.** "Done" is defined before you start, not
-  negotiated while you're deep in implementation.
+  have to — so your working memory stays on the problem, not the process.
+- **Explicit acceptance criteria mean clear stopping points.** "Done" is defined before you start,
+  not negotiated while you're deep in implementation — so your judgment goes to design, not scope
+  negotiation.
 - **Automatic debriefs mean zero-cost session handoff.** When you come back tomorrow, context is
-  waiting for you. No twenty-three-minute ramp-up.
-- **One recommendation means no decision required.** "What should I work on?" gets one answer, not
-  a list of five options ranked by six criteria.
+  waiting for you — so your energy goes to building, not reconstructing state.
+- **One recommendation means no decision required** — not because you can't choose, but because
+  that choice isn't where you add value. "What should I work on?" gets one answer, not a list of
+  five options ranked by six criteria.
 
 These are cognitive infrastructure for sustainable AI-assisted development. Every developer benefits
 from the reduced baseline — some immediately, others after a few weeks of carrying the overhead without

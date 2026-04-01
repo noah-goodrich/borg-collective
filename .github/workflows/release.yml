@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Skip if this is a formula update commit (prevent infinite loop)
+    if: "!startsWith(github.event.head_commit.message, 'chore:')"
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Check if tag exists
+        id: check
+        run: |
+          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        if: steps.check.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          generate_release_notes: true
+
+      - name: Update Homebrew formula
+        if: steps.check.outputs.exists == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/v${VERSION}.tar.gz"
+          curl -sL "$TARBALL_URL" -o /tmp/release.tar.gz
+          SHA256=$(sha256sum /tmp/release.tar.gz | cut -d' ' -f1)
+          sed -i "s|url \"https://github.com/.*/archive/refs/tags/v.*\.tar\.gz\"|url \"${TARBALL_URL}\"|" Formula/borg-collective.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA256}\"|" Formula/borg-collective.rb
+
+      - name: Commit formula update
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/borg-collective.rb
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: update formula to v${{ steps.version.outputs.version }}"
+          git push
