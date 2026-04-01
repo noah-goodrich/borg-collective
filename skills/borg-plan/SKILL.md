@@ -1,9 +1,9 @@
 ---
 name: borg-plan
 description: >
-  Project planning that does the thinking for you. Reads the codebase, proposes objectives and
-  acceptance criteria, and asks you to validate. Locks criteria once confirmed. Use at the start
-  of a project or when objectives are unclear.
+  Project planning that does the thinking so you can focus on validating and deciding. Reads the
+  codebase, proposes objectives and acceptance criteria, and asks you to validate. Locks criteria
+  once confirmed. Use at the start of a project or when objectives are unclear.
 user-invocable: true
 ---
 
@@ -14,6 +14,18 @@ to validate, adjust, and confirm. Do not ask open-ended questions that require t
 answers from scratch. Instead: read the code, form an opinion, propose it, and let them react.
 
 The developer should feel like they're reviewing your suggestions, not filling out a form.
+
+## Model and Mode Setup
+
+Before starting the planning conversation, remind the user:
+
+"For best results with planning, ensure you're on Opus and in Plan Mode:
+  1. Run `/model opus` (if not already on Opus)
+  2. Press Shift+Tab to enter Plan Mode
+
+After the plan is confirmed, switch back for implementation:
+  1. Press Shift+Tab to exit Plan Mode
+  2. Run `/model sonnet`"
 
 ## Before You Start
 
