@@ -13,13 +13,13 @@ class BorgCollective < Formula
 
     (bin/"borg").write <<~EOS
       #!/usr/bin/env zsh
-      export BORG_ROOT="#{libexec}"
+      export BORG_HOME="#{libexec}"
       exec "#{libexec}/borg.zsh" "$@"
     EOS
 
     (bin/"drone").write <<~EOS
       #!/usr/bin/env zsh
-      export BORG_ROOT="#{libexec}"
+      export BORG_HOME="#{libexec}"
       exec "#{libexec}/drone.zsh" "$@"
     EOS
   end
