@@ -2,8 +2,15 @@
 # borg-start.sh — Claude Code SessionStart hook
 # Fires when a Claude Code session begins.
 #
-# Updates registry: status=active, last_activity=now, claude_session_id=<id>
-# Injects last session debrief as additionalContext if available.
+# Consolidates all SessionStart context injection:
+# - Registry update: status=active, session_id
+# - Git context: branch, uncommitted changes, recent commits
+# - Docker container status
+# - Plan-mode nudge (if no PROJECT_PLAN.md)
+# - Uncommitted-changes reminder from previous session
+# - Last session debrief
+# - Cairn knowledge (if available)
+#
 # Registered as a SessionStart hook in ~/.claude/settings.json
 
 set -euo pipefail
@@ -20,7 +27,8 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 PROJECT=$(basename "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Atomic registry update
+# ── 1. Registry update ───────────────────────────────────────────────────────
+
 if [[ -f "$BORG_REGISTRY" ]]; then
     TMP="$BORG_REGISTRY.tmp.$$"
     jq \
@@ -34,11 +42,37 @@ if [[ -f "$BORG_REGISTRY" ]]; then
             (if $sid != "" then .projects[$p].claude_session_id = $sid else . end)
         else .
         end
-        ' "$BORG_REGISTRY" > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
+        ' "$BORG_REGISTRY" > "$TMP" && mv "$TMP" "$BORG_REGISTRY" || true
 fi
 
-# Build context from debrief + cairn knowledge
+# ── 2. Build context ─────────────────────────────────────────────────────────
+
 CONTEXT_PARTS=()
+
+# Git context (branch, status, recent commits)
+if git -C "$CWD" rev-parse --is-inside-work-tree &>/dev/null; then
+    git_ctx=""
+    branch=$(git -C "$CWD" branch --show-current 2>/dev/null || echo "detached")
+    git_ctx+="Git branch: $branch"$'\n'
+
+    status=$(git -C "$CWD" status --short 2>/dev/null | head -20 || true)
+    if [[ -n "$status" ]]; then
+        git_ctx+="Uncommitted changes:"$'\n'"$status"$'\n'
+    fi
+
+    recent=$(git -C "$CWD" log --oneline -5 2>/dev/null || true)
+    if [[ -n "$recent" ]]; then
+        git_ctx+="Recent commits:"$'\n'"$recent"$'\n'
+    fi
+
+    CONTEXT_PARTS+=("$git_ctx")
+fi
+
+# Docker container status
+container=$(docker ps --filter "label=dev.role=app" --format '{{.Names}}' 2>/dev/null | head -1 || true)
+if [[ -n "$container" ]]; then
+    CONTEXT_PARTS+=("Devcontainer running: $container")
+fi
 
 # Plan-mode nudge: fire when no PROJECT_PLAN.md exists
 if [[ -n "$CWD" && ! -f "$CWD/PROJECT_PLAN.md" ]]; then
@@ -63,6 +97,7 @@ Run 'git status' to see what's pending. Consider /simplify and committing before
     fi
 fi
 
+# Last session debrief
 DEBRIEF_FILE="$BORG_DIR/debriefs/${PROJECT}.md"
 if [[ -f "$DEBRIEF_FILE" ]]; then
     DEBRIEF=$(head -c 4000 "$DEBRIEF_FILE" 2>/dev/null || true)
@@ -73,6 +108,7 @@ $DEBRIEF")
     fi
 fi
 
+# Cairn knowledge (optional)
 if command -v cairn >/dev/null 2>&1; then
     CAIRN_OUT=$(timeout 5 cairn search "$PROJECT" --project "$PROJECT" --max 5 2>/dev/null || true)
     if [[ -n "$CAIRN_OUT" ]]; then
@@ -81,6 +117,8 @@ if command -v cairn >/dev/null 2>&1; then
 $CAIRN_OUT")
     fi
 fi
+
+# ── 3. Output ─────────────────────────────────────────────────────────────────
 
 if (( ${#CONTEXT_PARTS[@]} > 0 )); then
     FULL_CTX="${CONTEXT_PARTS[0]}"

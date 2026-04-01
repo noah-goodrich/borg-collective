@@ -840,6 +840,7 @@ _borg_launch_in_tmux() {
 }
 
 # Register a hook in a settings.json file. Skips if already registered.
+# If registered but missing timeout, updates the entry.
 # Usage: _borg_register_hook <settings_file> <hook_cmd> <event> <label>
 _borg_register_hook() {
     local settings="$1" hook_cmd="$2" event="$3" label="$4"
@@ -848,7 +849,20 @@ _borg_register_hook() {
     if jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
         '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
         "$settings" &>/dev/null; then
-        info "  $event: $label (already registered)"
+        # Check if existing entry is missing timeout and fix it
+        if jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
+            '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd and (.timeout == null))) | length > 0' \
+            "$settings" &>/dev/null; then
+            local tmp="$settings.tmp.$$"
+            jq --arg evt "$event" --arg cmd "$hook_cmd" --argjson timeout "$timeout_val" '
+                .hooks[$evt] |= map(
+                    .hooks |= map(if .command == $cmd then .timeout = $timeout else . end)
+                )
+            ' "$settings" > "$tmp" && mv "$tmp" "$settings"
+            info "  $event: $label (updated — added timeout)"
+        else
+            info "  $event: $label (already registered)"
+        fi
         return
     fi
 
@@ -859,6 +873,24 @@ _borg_register_hook() {
         .hooks[$evt] += [{"matcher": "", "hooks": [{"type": "command", "command": $cmd, "timeout": $timeout}]}]
     ' "$settings" > "$tmp" && mv "$tmp" "$settings"
     info "  $event: $label (registered)"
+}
+
+# Remove a hook from a settings.json file by command string.
+# Usage: _borg_unregister_hook <settings_file> <hook_cmd> <event> <label>
+_borg_unregister_hook() {
+    local settings="$1" hook_cmd="$2" event="$3" label="$4"
+
+    if ! jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
+        '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
+        "$settings" &>/dev/null; then
+        return
+    fi
+
+    local tmp="$settings.tmp.$$"
+    jq --arg evt "$event" --arg cmd "$hook_cmd" '
+        .hooks[$evt] |= map(select(.hooks | all(.command != $cmd)))
+    ' "$settings" > "$tmp" && mv "$tmp" "$settings"
+    info "  $event: $label (removed)"
 }
 
 cmd_setup() {
@@ -914,6 +946,9 @@ CONF
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
+
+        # Migration: remove old session-start.sh (merged into borg-start.sh)
+        _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/session-start.sh" "SessionStart" "session-start.sh"
     else
         warn "No settings.json at $CLAUDE_SETTINGS"
         warn "Hooks installed but not registered. See README.md for manual registration."
