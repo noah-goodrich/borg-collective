@@ -18,7 +18,7 @@ hash -r 2>/dev/null || true
 
 set -e
 
-BORG_ROOT="${0:A:h}"  # directory containing this script
+BORG_ROOT="${BORG_ROOT:-${0:A:h}}"  # directory containing this script (overridable for Homebrew)
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 
 # Colors (same as dev.sh)
@@ -839,6 +839,161 @@ _borg_launch_in_tmux() {
     exec tmux attach-session -t "$BORG_TMUX_SESSION"
 }
 
+# Register a hook in a settings.json file. Skips if already registered.
+# Usage: _borg_register_hook <settings_file> <hook_cmd> <event> <label>
+_borg_register_hook() {
+    local settings="$1" hook_cmd="$2" event="$3" label="$4"
+    local timeout_val=10
+
+    if jq -e --arg evt "$event" --arg cmd "$hook_cmd" \
+        '.hooks[$evt] // [] | map(.hooks[]? | select(.command == $cmd)) | length > 0' \
+        "$settings" &>/dev/null; then
+        info "  $event: $label (already registered)"
+        return
+    fi
+
+    local tmp="$settings.tmp.$$"
+    jq --arg evt "$event" --arg cmd "$hook_cmd" --argjson timeout "$timeout_val" '
+        if .hooks == null then .hooks = {} else . end |
+        if .hooks[$evt] == null then .hooks[$evt] = [] else . end |
+        .hooks[$evt] += [{"matcher": "", "hooks": [{"type": "command", "command": $cmd, "timeout": $timeout}]}]
+    ' "$settings" > "$tmp" && mv "$tmp" "$settings"
+    info "  $event: $label (registered)"
+}
+
+cmd_setup() {
+    local CLAUDE_DIR="$HOME/.claude"
+    local CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
+    local CLAUDE_SKILLS_DIR="$CLAUDE_DIR/skills"
+    local CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
+
+    # ── 1. Runtime directories ────────────────────────────────────────────────
+    info "Creating runtime directories..."
+    mkdir -p "$BORG_DIR/desktop" "$BORG_DIR/debriefs"
+    mkdir -p "$CLAUDE_DIR" "$CLAUDE_HOOKS_DIR" "$CLAUDE_SKILLS_DIR"
+    borg_registry_init
+
+    if [[ ! -f "$BORG_DIR/config.zsh" ]]; then
+        info "Generating config.zsh with defaults..."
+        cat > "$BORG_DIR/config.zsh" <<'CONF'
+# ~/.config/borg/config.zsh — Machine-local borg configuration
+# Sourced by borg.zsh at startup. Edit to match this machine's needs.
+
+# Work/life boundaries (empty to disable)
+# BORG_WORK_HOURS="09:00-18:00"
+
+# Projects that count as "work" (comma-separated, for boundary checks)
+# BORG_WORK_PROJECTS=""
+
+# Max concurrent active sessions before capacity warning
+BORG_MAX_ACTIVE=3
+
+# tmux session name (default: borg)
+# BORG_TMUX_SESSION="borg"
+
+# Enable debug output (uncomment to enable)
+# BORG_DEBUG=1
+CONF
+        info "  Edit ~/.config/borg/config.zsh to set work hours, limits, etc."
+    fi
+
+    # ── 2. Install hooks ──────────────────────────────────────────────────────
+    info "Installing hooks..."
+    chmod +x "$BORG_ROOT/hooks/"*.sh
+
+    for hook in "$BORG_ROOT/hooks/"*.sh; do
+        local name="${hook:t}"
+        ln -sf "$hook" "$CLAUDE_HOOKS_DIR/$name"
+        info "  $name"
+    done
+
+    # ── 3. Register hooks in settings.json ────────────────────────────────────
+    if [[ -f "$CLAUDE_SETTINGS" ]]; then
+        info "Registering hooks in Claude Code settings.json..."
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
+    else
+        warn "No settings.json at $CLAUDE_SETTINGS"
+        warn "Hooks installed but not registered. See README.md for manual registration."
+    fi
+
+    # ── 3b. CoCo (Cortex Code) integration ───────────────────────────────────
+    local COCO_DIR="$HOME/.snowflake/cortex"
+    local COCO_SETTINGS="$COCO_DIR/settings.json"
+
+    if command -v cortex &>/dev/null; then
+        info "Cortex Code CLI detected — configuring CoCo integration..."
+        mkdir -p "$COCO_DIR/hooks"
+        [[ -f "$COCO_SETTINGS" ]] || echo '{}' > "$COCO_SETTINGS"
+
+        for hook in "$BORG_ROOT/hooks/"*.sh; do
+            local name="${hook:t}"
+            ln -sf "$hook" "$COCO_DIR/hooks/$name"
+        done
+
+        info "Registering hooks in CoCo settings.json..."
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
+
+        info "Registering skills with CoCo..."
+        for skill_dir in "$BORG_ROOT/skills/"*/; do
+            [[ -d "$skill_dir" ]] || continue
+            local name="${skill_dir:t}"
+            cortex skill add "$skill_dir" 2>/dev/null && info "  $name (cortex)" || warn "  $name: cortex skill add failed"
+        done
+    else
+        info "Cortex Code CLI not found — skipping CoCo integration"
+    fi
+
+    # ── 4. Install skills ─────────────────────────────────────────────────────
+    info "Installing skills..."
+
+    for skill_dir in "$BORG_ROOT/skills/"*/; do
+        [[ -d "$skill_dir" ]] || continue
+        local name="${skill_dir:t}"
+        local target="$CLAUDE_SKILLS_DIR/$name"
+
+        if [[ -L "$target" ]]; then
+            rm "$target"
+        elif [[ -d "$target" ]]; then
+            warn "  $name: directory exists (not a symlink), skipping"
+            continue
+        fi
+
+        ln -sf "$skill_dir" "$target"
+        info "  $name"
+    done
+
+    # ── 5. tmux keybinding ────────────────────────────────────────────────────
+    local TMUX_CONF="$HOME/.config/tmux/tmux.conf"
+    if [[ -f "$TMUX_CONF" ]]; then
+        if ! grep -q "borg next" "$TMUX_CONF" 2>/dev/null; then
+            info "Adding tmux keybinding: Ctrl+Space > (borg next --switch)"
+            local borg_bin
+            borg_bin=$(command -v borg 2>/dev/null || echo "$HOME/.local/bin/borg")
+            printf '\n# Borg: jump to most pressing project (borg next --switch)\n' >> "$TMUX_CONF"
+            printf "bind > run-shell \"%s next --switch 2>/dev/null || tmux display-message 'All clear — take a break'\"\n" \
+                "$borg_bin" >> "$TMUX_CONF"
+            tmux source-file "$TMUX_CONF" 2>/dev/null && info "tmux config reloaded" || true
+        else
+            info "tmux keybinding already configured"
+        fi
+    else
+        warn "tmux.conf not found at $TMUX_CONF — add keybinding manually:"
+        warn '  bind > run-shell "borg next --switch"'
+    fi
+
+    # ── 6. Bootstrap registry ─────────────────────────────────────────────────
+    info "Bootstrapping registry from session history..."
+    cmd_scan 2>&1 || warn "borg scan had issues (registry may still be empty)"
+
+    info "Setup complete. Run: borg init"
+}
+
 cmd_help() {
     cat <<'EOF'
 
@@ -861,6 +1016,7 @@ cmd_help() {
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
     refresh [--all]     Regenerate summaries (--llm for AI-powered)
+    setup               Register Claude Code hooks, skills, and config (run after brew install)
     tidy                Archive stale projects (idle >48h)
     focus [project]     Alias for: switch <project>
     help                Show this message
@@ -912,6 +1068,7 @@ case "${1:-help}" in
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
     refresh)  cmd_refresh "${@:2}" ;;
+    setup)    cmd_setup ;;
     tidy)     cmd_tidy ;;
     focus)    cmd_focus "${@:2}" ;;
     help|--help|-h) cmd_help ;;
