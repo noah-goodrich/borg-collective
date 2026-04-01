@@ -21,7 +21,7 @@ set -e
 
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
-BORG_ROOT="${0:A:h}"
+BORG_HOME="${0:A:h}"
 BIN_DIR="$HOME/.local/bin"
 QUIET=0
 
@@ -87,14 +87,14 @@ fi
 mkdir -p "$BIN_DIR"
 
 info "Installing borg CLI..."
-chmod +x "$BORG_ROOT/borg.zsh"
-ln -sf "$BORG_ROOT/borg.zsh" "$BIN_DIR/borg"
-info "  borg -> $BORG_ROOT/borg.zsh"
+chmod +x "$BORG_HOME/borg.zsh"
+ln -sf "$BORG_HOME/borg.zsh" "$BIN_DIR/borg"
+info "  borg -> $BORG_HOME/borg.zsh"
 
 info "Installing drone CLI..."
-chmod +x "$BORG_ROOT/drone.zsh"
-ln -sf "$BORG_ROOT/drone.zsh" "$BIN_DIR/drone"
-info "  drone -> $BORG_ROOT/drone.zsh"
+chmod +x "$BORG_HOME/drone.zsh"
+ln -sf "$BORG_HOME/drone.zsh" "$BIN_DIR/drone"
+info "  drone -> $BORG_HOME/drone.zsh"
 
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
     warn "$BIN_DIR is not in PATH. Add to ~/.zshrc:"
@@ -104,7 +104,7 @@ fi
 # ── 3. Hooks, skills, config, registry → borg setup ──────────────────────────
 
 info "Running borg setup..."
-"$BORG_ROOT/borg.zsh" setup
+"$BORG_HOME/borg.zsh" setup
 
 # ── 4. Summary ────────────────────────────────────────────────────────────────
 
@@ -135,7 +135,7 @@ echo "    drone status           Show all active drones"
 echo "    drone help             All drone commands"
 echo ""
 echo "  Skills installed:"
-for skill_dir in "$BORG_ROOT/skills/"*/; do
+for skill_dir in "$BORG_HOME/skills/"*/; do
     [[ -d "$skill_dir" ]] && echo "    /$(basename "$skill_dir")"
 done
 echo ""
