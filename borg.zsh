@@ -137,6 +137,10 @@ cmd_ls() {
         return 0
     fi
 
+    if (( project_count <= 1 && ! porcelain )); then
+        echo -e "  ${DIM}Tip: run 'borg scan' to discover projects from session history${NC}"
+    fi
+
     # Sort by: pinned DESC, status priority (waiting>active>idle>archived), last_activity
     local sorted_names
     sorted_names=$(echo "$registry" | jq -r '
@@ -321,6 +325,13 @@ _borg_do_switch() {
             # Update registry so future calls are faster
             borg_registry_set "$project" "tmux_window" "\"$project\"" 2>/dev/null || true
         fi
+    fi
+
+    # Guard: tmux_window must not equal the session name (stale registry entry)
+    if [[ "$tmux_window" == "$BORG_TMUX_SESSION" ]]; then
+        warn "tmux_window for '$project' is '$tmux_window' (same as session name) — clearing stale entry"
+        borg_registry_set "$project" "tmux_window" "null" 2>/dev/null || true
+        tmux_window=""
     fi
 
     if [[ -n "$tmux_window" && "$tmux_window" != "null" ]]; then
@@ -734,6 +745,144 @@ cmd_search() {
 
 # Build orchestrator context string from registry + debriefs + cairn.
 # Output goes to stdout; caller captures it.
+_borg_print_briefing() {
+    local registry
+    registry=$(borg_registry_read)
+
+    # cutoff: 30 days ago (macOS date)
+    local cutoff
+    cutoff=$(date -u -v-30d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "30 days ago" +"%Y-%m-%dT%H:%M:%SZ")
+
+    # Active: status=waiting (any age) OR last_activity within 30 days AND not archived
+    # Sort: waiting first (oldest first = longest neglected), then by last_activity descending
+    local active_names
+    active_names=$(echo "$registry" | jq -r --arg cutoff "$cutoff" '
+        (
+            [.projects | to_entries[] |
+             select(.value.status == "waiting" and .value.status != "archived")] |
+            sort_by(.value.last_activity // "0000")
+        ) + (
+            [.projects | to_entries[] |
+             select(.value.status != "waiting" and .value.status != "archived" and
+                    (.value.last_activity != null and .value.last_activity >= $cutoff))] |
+            sort_by(.value.last_activity // "0000") | reverse
+        ) | .[].key
+    ' 2>/dev/null || true)
+
+    # Inactive: not archived, last_activity older than 30 days (or null), not waiting
+    local inactive_names
+    inactive_names=$(echo "$registry" | jq -r --arg cutoff "$cutoff" '
+        .projects | to_entries |
+        map(select(
+            .value.status != "archived" and
+            .value.status != "waiting" and
+            (.value.last_activity == null or .value.last_activity < $cutoff)
+        )) |
+        sort_by(.value.last_activity // "0000") | reverse |
+        .[].key
+    ' 2>/dev/null || true)
+
+    if [[ -z "$active_names" && -z "$inactive_names" ]]; then
+        info "No projects in registry. Run: borg scan"
+        return 0
+    fi
+
+    # Build data payload for Haiku
+    local payload=""
+    local name
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        local entry status last_activity summary waiting_reason
+        entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
+        status=$(echo "$entry" | jq -r '.status // "unknown"')
+        last_activity=$(echo "$entry" | jq -r '.last_activity // ""')
+        summary=$(echo "$entry" | jq -r '.summary // ""')
+        waiting_reason=$(echo "$entry" | jq -r '.waiting_reason // ""')
+
+        local rel_time
+        rel_time=$(_borg_relative_time "$last_activity")
+
+        payload+="PROJECT: $name
+status: $status
+last_active: $rel_time
+summary: $summary"
+        [[ -n "$waiting_reason" && "$waiting_reason" != "null" ]] && \
+            payload+="
+waiting_reason: $waiting_reason"
+
+        local debrief_file="$BORG_DIR/debriefs/${name}.md"
+        if [[ -f "$debrief_file" ]]; then
+            payload+="
+--- debrief ---
+$(head -c 1500 "$debrief_file")
+--- end debrief ---"
+        fi
+        payload+="
+
+"
+    done <<< "$active_names"
+
+    local briefing_prompt
+    briefing_prompt="Generate a morning briefing for a developer. Output plain text for a terminal — no markdown, no headers, no bullet symbols.
+
+For each project write exactly these lines (omit Blocked line if not waiting):
+  <name>  [<status>, <relative_time>]
+    Last: <one sentence — what was accomplished. Use debrief Outcome if available, else summary>
+    Next: <one sentence — most important next action. Use debrief Next Steps #1 if available>
+    Blocked: <waiting_reason>  ← only if status is waiting
+
+After all projects, add one blank line then:
+  Focus: <project_name> — <one sentence why it needs attention first>
+
+Sort: waiting projects first, then by most recent activity. Keep each line under 80 chars.
+
+PROJECTS:
+$payload"
+
+    echo ""
+    info "Building morning briefing..."
+
+    local briefing
+    briefing=$(_borg_timeout 20 claude -p "$briefing_prompt" \
+        --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>/dev/null) || true
+
+    if [[ -n "$briefing" ]]; then
+        echo ""
+        echo "$briefing"
+    else
+        # Fallback: plain registry listing if Haiku call fails
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            local entry status last_activity summary
+            entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
+            status=$(echo "$entry" | jq -r '.status // "unknown"')
+            last_activity=$(echo "$entry" | jq -r '.last_activity // ""')
+            summary=$(echo "$entry" | jq -r '.summary // "(no summary)"')
+            local rel_time
+            rel_time=$(_borg_relative_time "$last_activity")
+            printf "  %-22s [%s, %s]\n" "$name" "$status" "$rel_time"
+            [[ -n "$summary" && "$summary" != "null" ]] && \
+                echo "    $summary" | fold -s -w 76 | sed '1!s/^/    /'
+        done <<< "$active_names"
+    fi
+
+    # Inactive list (compact)
+    if [[ -n "$inactive_names" ]]; then
+        echo ""
+        echo -e "  ${DIM}Inactive (>30 days):${NC}"
+        while IFS= read -r name; do
+            [[ -z "$name" ]] && continue
+            local last
+            last=$(echo "$registry" | jq -r --arg p "$name" '.projects[$p].last_activity // ""')
+            local rel_time
+            rel_time=$(_borg_relative_time "$last")
+            echo -e "    ${DIM}$name  ($rel_time)${NC}"
+        done <<< "$inactive_names"
+        echo -e "  ${DIM}Run 'borg brief <name>' for details.${NC}"
+    fi
+    echo ""
+}
+
 _borg_orchestrator_context() {
     local registry
     registry=$(borg_registry_read)
@@ -809,7 +958,9 @@ cmd_init() {
     # Merge Desktop sessions before building briefing
     borg_desktop_scan 2>/dev/null || true
 
-    info "Building morning briefing..."
+    # Print formatted briefing to terminal before launching orchestrator
+    _borg_print_briefing
+
     local context
     context=$(_borg_orchestrator_context)
 
@@ -820,12 +971,9 @@ cmd_init() {
 $context
 == END STATE ==
 
-Start with a concise morning briefing:
-1. Flag anything waiting for input first — these are urgent
-2. Summarize what's in progress
-3. Give ONE recommendation: what to work on first and why
-
-Then ask if they want to switch to it. Keep the briefing under 10 lines."
+The developer has already seen a morning briefing in their terminal.
+Be ready to answer questions about any project, help them switch focus, or dive into work.
+If they say 'go' or 'start', switch to the top-priority project."
 
     info "Launching orchestrator — resume any time with: borg claude"
     _borg_launch_in_tmux claude --name "borg-orchestrator" --append-system-prompt "$prompt"
