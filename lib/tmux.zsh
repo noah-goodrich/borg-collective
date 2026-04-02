@@ -13,6 +13,12 @@ borg_tmux_windows() {
     tmux list-windows -t "$BORG_TMUX_SESSION" -F '#W' 2>/dev/null
 }
 
+borg_tmux_bottom_pane() {
+    local session="${1:-$BORG_TMUX_SESSION}" wname="$2"
+    tmux list-panes -t "$session:$wname" -F '#{pane_top} #{pane_id}' 2>/dev/null \
+        | sort -rn | head -1 | awk '{print $2}'
+}
+
 borg_tmux_switch() {
     local name="$1"
     if ! borg_tmux_alive; then
@@ -23,6 +29,10 @@ borg_tmux_switch() {
         warn "no tmux window named '$name'"
         return 1
     }
+    # Focus the Claude pane (bottom = highest pane_top)
+    local bottom_pane
+    bottom_pane=$(borg_tmux_bottom_pane "$BORG_TMUX_SESSION" "$name") || true
+    [[ -n "$bottom_pane" ]] && tmux select-pane -t "$bottom_pane" 2>/dev/null || true
     # Also switch the client to this session if we're in a different one
     tmux switch-client -t "$BORG_TMUX_SESSION" 2>/dev/null || true
 }

@@ -14,9 +14,15 @@ if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]]; then
 fi
 SUBTITLE="${WINDOW:+$WINDOW — }$PROJECT"
 
-# macOS notification + sound (backgrounded to avoid blocking Claude's turn transition)
-osascript -e "display notification \"Ready for input\" with title \"Claude Code\" subtitle \"$SUBTITLE\"" 2>/dev/null || true
-afplay /System/Library/Sounds/Glass.aiff 2>/dev/null &
+# macOS notification — clicking activates Ghostty and switches to the right tmux window/pane
+terminal-notifier \
+    -title "Claude Code" \
+    -subtitle "$SUBTITLE" \
+    -message "Ready for input" \
+    -sound Glass \
+    -activate com.mitchellh.ghostty \
+    -execute "$HOME/.claude/hooks/notify-focus.sh '$WINDOW'" \
+    2>/dev/null || true
 
 # tmux visual bell — write directly to the pane's TTY so tmux sees it
 [[ -n "$PANE_TTY" ]] && printf '\a' > "$PANE_TTY"
