@@ -357,7 +357,7 @@ the plumbing — borg handles it.
 | `drone up/down` | Start/stop project containers | Container lifecycle (resuming existing work) |
 | `drone claude` | Launch Claude in project window | "Resume work on this project" |
 | `/adhd-guardrails` | Always-on skill | Scope discipline, break reminders, shame-free language |
-| `/checkpoint-enhanced` | Manual skill | Structured session summary with next-session entry point |
+| `/borg-checkpoint` | Manual skill | Structured session summary with next-session entry point |
 | `/borg-debrief` | Automatic (stop hook) | Deep session analysis persisted for future sessions |
 
 ### How they compose

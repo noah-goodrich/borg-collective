@@ -44,7 +44,7 @@ drone status                 Show all drones
 /borg-ship                   Shipping checklist against acceptance criteria
 /borg-review                 Mid-session diagnostic + loop detection
 /borg-debrief                Deep session analysis (auto-runs on stop hook)
-/checkpoint-enhanced         Manual session checkpoint with next-session entry point
+/borg-checkpoint         Manual session checkpoint with next-session entry point
 /adhd-guardrails             Cognitive load guardrails (always active, auto)
 /simplify                    Three parallel code review agents (built-in)
 ```
