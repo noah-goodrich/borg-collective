@@ -1,5 +1,5 @@
 ---
-name: borg-ship
+name: borg-assimilate
 description: >
   Shipping checklist + execution. Evaluates current state against PROJECT_PLAN.md acceptance
   criteria, then executes shipping (merge PR, archive plan) with confirmation. Use when you
@@ -7,7 +7,7 @@ description: >
 user-invocable: true
 ---
 
-# Borg Ship — Are We Done?
+# Borg Assimilate — You Will Be Assimilated
 
 You are evaluating whether this project is ready to ship. Be rigorous. Do not rubber-stamp.
 Do not add new requirements. Check exactly what the plan says, nothing more.

@@ -177,7 +177,16 @@ cmd_ls() {
     fi
 
     # Human-readable table
-    echo -e "\n${BOLD}The Borg Collective${NC} — ${DIM}resistance is futile${NC}\n"
+    echo ""
+    echo -e "  ${DIM}_______________${NC}"
+    echo -e "  ${DIM}/|             /|${NC}      ${BOLD}THE BORG COLLECTIVE${NC}"
+    echo -e "  ${DIM}/ |            / |${NC}      ${DIM}resistance is futile${NC}"
+    echo -e "  ${DIM}  |___________|  |${NC}"
+    echo -e "  ${DIM}  |  |        |  |${NC}"
+    echo -e "  ${DIM}  |  |________|__|${NC}"
+    echo -e "  ${DIM}  | /         | /${NC}"
+    echo -e "  ${DIM}  |/          |/${NC}"
+    echo ""
     printf "${BOLD} %-20s %-4s %-12s %-12s %s${NC}\n" "PROJECT" "SRC" "STATUS" "LAST ACTIVE" "SUMMARY"
     printf '%0.s─' {1..90}; echo
 
@@ -684,7 +693,7 @@ cmd_unpin() {
 }
 
 cmd_down() {
-    info "Tearing down the Borg Collective..."
+    info "Severing link to the Collective..."
 
     if ! borg_tmux_alive; then
         info "No borg tmux session running."
@@ -712,7 +721,7 @@ cmd_down() {
 
     # Kill the tmux session
     tmux kill-session -t "$BORG_TMUX_SESSION" 2>/dev/null || true
-    info "All clear. Resistance was futile."
+    info "Disconnected from the Collective. You are Hugh now."
 }
 
 cmd_tidy() {
@@ -1028,17 +1037,17 @@ cmd_init() {
     context=$(_borg_orchestrator_context)
 
     local prompt
-    prompt="You are the Borg orchestrator for this developer's work session.
+    prompt="We are the Borg. You are the orchestrator for this developer's work session.
 
 == CURRENT STATE ==
 $context
 == END STATE ==
 
-The developer has already seen a morning briefing in their terminal.
+The developer has already seen the morning hail in their terminal.
 Be ready to answer questions about any project, help them switch focus, or dive into work.
-If they say 'go' or 'start', switch to the top-priority project."
+If they say 'go' or 'start' or 'engage', switch to the top-priority project."
 
-    info "Launching orchestrator — resume any time with: borg claude"
+    info "Hailing frequencies open — resume any time with: borg claude"
     _borg_launch_in_tmux claude --name "borg-orchestrator" --append-system-prompt "$prompt"
 }
 
@@ -1262,9 +1271,14 @@ CONF
 cmd_help() {
     cat <<'EOF'
 
-  borg — The Borg Collective
-
-  Your sessions will be assimilated.
+    _______________
+   /|             /|      THE BORG COLLECTIVE
+  / |            / |      resistance is futile
+    |___________|  |
+    |  |        |  |
+    |  |________|__|
+    | /         | /
+    |/          |/
 
   COMMANDS
     init                Launch orchestrator: morning briefing + Claude session
@@ -1276,23 +1290,28 @@ cmd_help() {
     brief [project]     Project briefing from cairn (defaults to current dir)
     search <query>      Search cairn knowledge graph (--project to filter)
     scan                Discover projects + refresh summaries
-    briefing            Print morning briefing (without launching orchestrator)
+    hail                Print morning briefing (without launching orchestrator)
     add [path]          Register a project (defaults to $PWD)
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
-    down                Tear down everything: containers, windows, session
-    setup               Register Claude Code hooks, skills, and config (run after brew install)
-    tidy                Archive stale projects (idle >48h)
-    focus [project]     Alias for: switch <project>
+    sever               Tear down everything: containers, windows, session
+    regenerate          Archive stale projects (idle >48h)
+    setup               Register Claude Code hooks, skills, and config
     help                Show this message
 
   HOTKEY
     Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
 
+  SKILLS
+    /borg-assimilate    Shipping checklist + execution (merge PR, archive plan)
+    /borg-plan          Project planning (Claude proposes, you validate)
+    /borg-review        Mid-session diagnostic + loop detection
+    /adhd-guardrails    Compassionate constraints (always active)
+
   STATUS
-    active              Claude is processing (green)
-    waiting <<<         Claude finished, needs your input (yellow)
+    active              Drone is processing (green)
+    waiting <<<         Drone needs your input (yellow)
     idle                Session ended (dim)
     archived            Hidden from default ls (shown with --all)
 
@@ -1308,9 +1327,7 @@ cmd_help() {
     BORG_WORK_PROJECTS      Comma-separated work project names
     BORG_DEBUG              Set to any value for debug output
 
-  SKILLS
-    /adhd-guardrails        Compassionate constraints (always active)
-    /checkpoint-enhanced    Session summary + next-session entry point
+  "We are the Borg. Your projects will be assimilated."
 
 EOF
 }
@@ -1334,11 +1351,11 @@ case "${1:-help}" in
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
     refresh)  cmd_refresh "${@:2}" ;;
-    down)     cmd_down ;;
+    sever|down)  cmd_down ;;
+    regenerate|tidy)  cmd_tidy ;;
     setup)    cmd_setup ;;
-    tidy)     cmd_tidy ;;
     focus)    cmd_focus "${@:2}" ;;
-    briefing) _borg_print_briefing ;;
+    hail|briefing) _borg_print_briefing ;;
     help|--help|-h) cmd_help ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac

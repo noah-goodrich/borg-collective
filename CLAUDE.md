@@ -29,7 +29,7 @@ Three independent tools that compose:
 - `drone` CLI: up, down, claude, sh, restart, fix, status
 - Hooks: borg-start.sh (status=active + debrief/cairn context injection),
   borg-stop.sh (status=idle + async Sonnet debrief + cairn commit), borg-notify.sh
-- Skills: adhd-guardrails, checkpoint-enhanced, borg-plan, borg-review, borg-ship, borg-debrief
+- Skills: adhd-guardrails, checkpoint-enhanced, borg-plan, borg-review, borg-assimilate, borg-debrief
 - Work/life boundary checks on switch
 - Capacity warnings
 - tmux hotkey (Ctrl+Space >)
@@ -85,7 +85,7 @@ hooks/
 skills/
     adhd-guardrails/        Cognitive load guardrails (always active)
     borg-plan/              Project planning Q/A (Claude proposes, you validate)
-    borg-ship/              Shipping checklist against criteria
+    borg-assimilate/        Shipping checklist + execution (merge PR, archive plan)
     borg-review/            Mid-session diagnostic + loop detection
     borg-debrief/           Structured session analysis
     checkpoint-enhanced/    Manual session checkpoint
