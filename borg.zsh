@@ -391,6 +391,7 @@ _borg_do_switch() {
 _borg_scan_source() {
     local source="$1" get_session_id="$2" scan_log="$3" label="${4:-}"
     local ppath name tmux_window session_id tw_json sid_json json
+    local la_json jsonl_path mtime
 
     while IFS= read -r ppath; do
         [[ -z "$ppath" ]] && continue
@@ -414,19 +415,30 @@ _borg_scan_source() {
         [[ -n "$tmux_window" ]] && tw_json="\"$tmux_window\"" || tw_json="null"
         [[ -n "$session_id" ]] && sid_json="\"$session_id\"" || sid_json="null"
 
+        # Seed last_activity from transcript mtime
+        la_json="null"
+        if [[ -n "$session_id" ]]; then
+            jsonl_path=$(borg_claude_session_jsonl "$ppath" "$session_id" 2>/dev/null) || jsonl_path=""
+            if [[ -n "$jsonl_path" && -f "$jsonl_path" ]]; then
+                mtime=$(stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%SZ" "$jsonl_path" 2>/dev/null) || mtime=""
+                [[ -n "$mtime" ]] && la_json="\"$mtime\""
+            fi
+        fi
+
         json=$(jq -n \
             --arg path "$ppath" \
             --arg source "$source" \
             --arg tmux_session "$BORG_TMUX_SESSION" \
             --argjson tmux_window "$tw_json" \
             --argjson session_id "$sid_json" \
+            --argjson last_activity "$la_json" \
             '{
                 path: $path,
                 source: $source,
                 tmux_session: $tmux_session,
                 tmux_window: $tmux_window,
                 claude_session_id: $session_id,
-                last_activity: null,
+                last_activity: $last_activity,
                 status: "idle",
                 summary: null
             }')
@@ -438,11 +450,11 @@ _borg_scan_source() {
 }
 
 cmd_scan() {
-    local use_llm=0
+    local use_llm=0 llm_explicit=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --llm) use_llm=1; shift ;;
-            --no-llm) use_llm=0; shift ;;
+            --llm) use_llm=1; llm_explicit=1; shift ;;
+            --no-llm) use_llm=0; llm_explicit=1; shift ;;
             *) shift ;;
         esac
     done
@@ -465,8 +477,8 @@ cmd_scan() {
     fi
 
     # ── Phase 2: Refresh summaries for all registered projects ────────────────
-    # Auto-enable LLM summaries when cairn is unavailable or empty
-    if (( ! use_llm )); then
+    # Auto-enable LLM summaries when cairn is unavailable, unless user said --no-llm
+    if (( ! llm_explicit && ! use_llm )); then
         if ! command -v cairn &>/dev/null || \
            [[ -z "$(_borg_timeout 3 cairn search "any" --max 1 2>/dev/null)" ]]; then
             dbg "cairn unavailable or empty — auto-enabling LLM summaries"
@@ -483,12 +495,11 @@ cmd_scan() {
     registry_json=$(borg_registry_read)
     local updated=0
 
-    local projects
+    local projects name ppath session_id jsonl cur_activity file_mtime summary new_json
     projects=$(echo "$registry_json" | jq -r '.projects | keys[]')
 
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        local ppath session_id jsonl
         ppath=$(echo "$registry_json" | jq -r --arg p "$name" '.projects[$p].path // ""')
         session_id=$(echo "$registry_json" | jq -r --arg p "$name" '.projects[$p].claude_session_id // ""')
 
@@ -512,17 +523,35 @@ cmd_scan() {
             continue
         fi
 
-        local summary
+        # Seed last_activity from transcript mtime if not already set
+        cur_activity=$(echo "$registry_json" | jq -r --arg p "$name" \
+            '.projects[$p].last_activity // ""')
+        if [[ -z "$cur_activity" || "$cur_activity" == "null" ]]; then
+            file_mtime=$(stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%SZ" "$jsonl" 2>/dev/null) || file_mtime=""
+            if [[ -n "$file_mtime" ]]; then
+                registry_json=$(echo "$registry_json" | jq \
+                    --arg p "$name" \
+                    --arg t "$file_mtime" \
+                    '.projects[$p].last_activity = $t') || true
+                updated=1
+            fi
+        fi
+
         summary=$(python3 "$BORG_HOME/summarize.py" $llm_flag "$jsonl" 2>/dev/null) || summary=""
 
         if [[ -n "$summary" ]]; then
-            registry_json=$(echo "$registry_json" | jq \
+            new_json=$(echo "$registry_json" | jq \
                 --arg p "$name" \
                 --arg s "$summary" \
                 --arg sid "$session_id" \
                 '.projects[$p].summary = $s | .projects[$p].claude_session_id = $sid')
-            updated=1
-            info "$name: summary updated"
+            if [[ -n "$new_json" ]]; then
+                registry_json="$new_json"
+                updated=1
+                info "$name: summary updated"
+            else
+                warn "$name: jq failed updating summary, skipping"
+            fi
         fi
     done < <(echo "$projects")
 
@@ -543,6 +572,18 @@ cmd_add() {
     local session_id
     session_id=$(borg_claude_latest_session_id "$ppath")
 
+    # Seed last_activity from transcript mtime if a session exists
+    local last_activity="null"
+    if [[ -n "$session_id" ]]; then
+        local jsonl
+        jsonl=$(borg_claude_session_jsonl "$ppath" "$session_id")
+        if [[ -f "$jsonl" ]]; then
+            local mtime
+            mtime=$(stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%SZ" "$jsonl" 2>/dev/null) || mtime=""
+            [[ -n "$mtime" ]] && last_activity="\"$mtime\""
+        fi
+    fi
+
     local json
     json=$(jq -n \
         --arg path "$ppath" \
@@ -550,13 +591,14 @@ cmd_add() {
         --arg tmux_session "$BORG_TMUX_SESSION" \
         --argjson tmux_window "$([ -n "$tmux_window" ] && echo "\"$tmux_window\"" || echo 'null')" \
         --argjson session_id "$([ -n "$session_id" ] && echo "\"$session_id\"" || echo 'null')" \
+        --argjson last_activity "$last_activity" \
         '{
             path: $path,
             source: $source,
             tmux_session: $tmux_session,
             tmux_window: $tmux_window,
             claude_session_id: $session_id,
-            last_activity: null,
+            last_activity: $last_activity,
             status: "idle",
             summary: null
         }')
