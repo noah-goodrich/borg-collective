@@ -5,14 +5,14 @@
 # Forked from dev.sh and integrated with borg orchestration.
 #
 # Usage:
-#   drone start <project> <feature>  Create worktree + branch, launch Claude (Boris workflow)
+#   drone feature <project> <branch>  Create worktree + branch, launch Claude (Boris workflow)
 #   drone up [project]           Start container + create tmux window
 #   drone down [project]         Stop container + remove tmux window
 #   drone claude [project]       Launch Claude Code in project window
 #   drone sh [project]           Shell into project container
 #   drone restart [project]      Restart containers + re-exec panes
-#   drone fix [project|--all]    Restore standard 3-pane layout
-#   drone toggle [project]       Show/hide top-right side pane
+#   drone fix [project|--all]    Restore standard 2-pane layout
+#   drone toggle [project]       Add/remove side pane (2-pane ↔ 3-pane)
 #   drone status                 Show all active drones
 #   drone help                   Command reference
 
@@ -118,6 +118,11 @@ window_pane_count() {
     tmux list-panes -t "$SESSION:$1" 2>/dev/null | wc -l | tr -d ' '
 }
 
+get_bottom_pane() {
+    tmux list-panes -t "$SESSION:$1" -F '#{pane_top} #{pane_id}' 2>/dev/null \
+        | sort -rn | head -1 | awk '{print $2}'
+}
+
 # Count project windows (all except 'host')
 project_window_count() {
     tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -vcx 'host' | tr -d ' '
@@ -138,9 +143,9 @@ ensure_postgres() {
 
 # ── Window management ─────────────────────────────────────────────────────────
 
-create_3pane_window() {
+create_2pane_window() {
     local wname="$1" cmd="${2:-}"
-    dbg "create_3pane_window: '$wname'"
+    dbg "create_2pane_window: '$wname'"
 
     local main
     if ! tmux has-session -t "$SESSION" 2>/dev/null; then
@@ -151,24 +156,18 @@ create_3pane_window() {
 
     tmux set-option -t "$SESSION:$wname" automatic-rename off
 
-    local bottom side
+    local bottom
     bottom=$(tmux split-window -v -p 25 -t "$main" -PF '#{pane_id}')
-    side=$(tmux split-window -h -p 30 -t "$main" -PF '#{pane_id}')
 
-    # Force 70/30 horizontal split on top panes
-    local win_width
-    win_width=$(tmux display -t "$main" -p '#{window_width}')
-    tmux resize-pane -t "$main" -x $(( win_width * 70 / 100 ))
-
-    tmux select-pane -t "$main"
+    # Default focus to bottom pane (Claude pane)
+    tmux select-pane -t "$bottom"
 
     if [[ -n "$cmd" ]]; then
         tmux send-keys -t "$main"   "$cmd" Enter
-        tmux send-keys -t "$side"   "$cmd" Enter
         tmux send-keys -t "$bottom" "$cmd" Enter
     fi
 
-    dbg "create_3pane_window: done (main=$main side=$side bottom=$bottom)"
+    dbg "create_2pane_window: done (main=$main bottom=$bottom)"
 }
 
 attach_or_switch() {
@@ -236,7 +235,7 @@ cmd_up() {
             return
         fi
 
-        create_3pane_window "$project_name" "cd $project_dir"
+        create_2pane_window "$project_name" "cd $project_dir"
         tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
         borg add "$project_dir" 2>/dev/null || true
         info "Project '$project_name' ready (local)."
@@ -254,7 +253,7 @@ cmd_up() {
         panes=$(window_pane_count "$project_name")
         dbg "cmd_up: window '$project_name' exists with $panes panes"
 
-        if [[ "$panes" != "3" ]]; then
+        if [[ "$panes" != "2" ]]; then
             dbg "cmd_up: wrong pane count, killing window"
             tmux kill-window -t "$SESSION:$project_name"
             # Fall through to create new window
@@ -292,7 +291,7 @@ cmd_up() {
     exec_cmd="docker compose -p $project_name -f $compose exec $service $shell"
     info "Container: $container  Service: $service  Shell: $shell"
 
-    create_3pane_window "$project_name" "$exec_cmd"
+    create_2pane_window "$project_name" "$exec_cmd"
     tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
     borg add "$project_dir" 2>/dev/null || true
 
@@ -426,20 +425,21 @@ cmd_claude() {
 
     # Send 'claude' to the bottom pane (highest pane_top value)
     local bottom_pane
-    bottom_pane=$(tmux list-panes -t "$SESSION:$project_name" -F '#{pane_top} #{pane_id}' \
-        | sort -rn | head -1 | awk '{print $2}')
+    bottom_pane=$(get_bottom_pane "$project_name")
     info "Launching Claude in $project_name (bottom pane)..."
     tmux send-keys -t "$bottom_pane" "claude" Enter
 
-    # Switch to the project window
+    # Switch to the project window, focus + zoom Claude pane
     attach_or_switch "$project_name"
+    tmux select-pane -t "$bottom_pane"
+    tmux resize-pane -Z -t "$bottom_pane"
 }
 
 # ── drone start ───────────────────────────────────────────────────────────────
 
-cmd_start() {
+cmd_feature() {
     local feature="${2:-}"
-    [[ -z "$feature" ]] && die "Usage: drone start <project> <feature>"
+    [[ -z "$feature" ]] && die "Usage: drone feature <project> <branch>"
     _drone_resolve "${1:-}"
     local project_name="$_proj_name"
     local project_dir="$_proj_dir"
@@ -467,15 +467,16 @@ cmd_start() {
     if [[ -f "$compose" ]]; then
         cmd_up "$work_dir"
     else
-        create_3pane_window "$window_name" "cd $work_dir"
+        create_2pane_window "$window_name" "cd $work_dir"
         tmux set-option -t "$SESSION:$window_name" @project_dir "$work_dir"
         tmux set-option -t "$SESSION:$window_name" @project_name "$project_name"
         borg add "$work_dir" 2>/dev/null || true
         local bottom_pane
-        bottom_pane=$(tmux list-panes -t "$SESSION:$window_name" -F '#{pane_top} #{pane_id}' \
-            | sort -rn | head -1 | awk '{print $2}')
+        bottom_pane=$(get_bottom_pane "$window_name")
         tmux send-keys -t "$bottom_pane" "claude" Enter
         attach_or_switch "$window_name"
+        tmux select-pane -t "$bottom_pane"
+        tmux resize-pane -Z -t "$bottom_pane"
     fi
     info "Started: $window_name"
 }
@@ -516,27 +517,25 @@ cmd_fix() {
     for wname in $targets; do
         local pane_count
         pane_count=$(window_pane_count "$wname")
-        if [[ "$pane_count" != "3" ]]; then
-            warn "$wname: has $pane_count panes (expected 3), skipping"
+        if [[ "$pane_count" != "2" ]]; then
+            warn "$wname: has $pane_count panes (expected 2), skipping"
             continue
         fi
 
-        local W H
-        W=$(tmux display -t "$SESSION:$wname" -p '#{window_width}')
+        local H
         H=$(tmux display -t "$SESSION:$wname" -p '#{window_height}')
 
-        local top_h bottom_h main_w side_w
-        top_h=$(( H * 75 / 100 ))
-        bottom_h=$(( H - top_h - 1 ))
-        main_w=$(( W * 70 / 100 ))
-        side_w=$(( W - main_w - 1 ))
+        # Restore top/bottom split: top ~75%, bottom ~25%
+        local bottom_pane
+        bottom_pane=$(get_bottom_pane "$wname")
 
-        local layout
-        layout="${W}x${H},0,0[${W}x${top_h},0,0{${main_w}x${top_h},0,0,0,${side_w}x${top_h},$(( main_w + 1 )),0,2},${W}x${bottom_h},0,$(( top_h + 1 )),1]"
-
-        info "$wname: restoring layout (${W}x${H} → top_h=$top_h main_w=$main_w)"
-        tmux select-layout -t "$SESSION:$wname" "$layout"
-        tmux select-pane -t "$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_id}' | head -1)"
+        info "$wname: restoring layout (top 75% / bottom 25%)"
+        tmux select-layout -t "$SESSION:$wname" even-vertical
+        tmux resize-pane -t "$bottom_pane" -y $(( H * 25 / 100 ))
+        local top_pane
+        top_pane=$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_top} #{pane_id}' 2>/dev/null \
+            | sort -n | head -1 | awk '{print $2}')
+        tmux select-pane -t "$top_pane"
     done
 }
 
@@ -649,16 +648,16 @@ cmd_help() {
   Your containers will be assimilated.
 
   COMMANDS
-    start <project> <feature>  Create worktree + branch, start window, launch Claude
+    feature <project> <branch>  Create worktree + branch, start window, launch Claude
     up [project]         Start container + create tmux window (uses $PWD if no arg)
     down [project]       Stop container + remove tmux window
     claude [project]     Launch Claude Code in project window (runs drone up if needed)
     sh [project]         Shell into project container (exec docker compose exec)
     restart [project]    Restart containers + re-exec all panes
     restart --all        Restart all project containers
-    fix [project]        Restore standard 3-pane layout for project window
+    fix [project]        Restore standard 2-pane layout for project window
     fix --all            Restore layout for all windows
-    toggle [project]     Show/hide the top-right side pane
+    toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
     status               Show all active drones (containers + Claude status)
     help                 Show this message
 
@@ -667,9 +666,9 @@ cmd_help() {
     drone up cairn       Looks up 'cairn' in borg registry, then $BORG_ROOT/cairn
 
   WINDOW LAYOUT
-    Top-left  (70%): main editor / Claude session
-    Top-right (30%): side terminal
-    Bottom    (25%): logs / output
+    Top    (75%): main editor / Claude session
+    Bottom (25%): logs / output
+    Toggle adds a top-right side terminal (30% split)
 
   ENVIRONMENT
     BORG_TMUX_SESSION    tmux session name (default: borg)
@@ -685,7 +684,7 @@ dbg "dispatch: args='${*}'"
 dbg "dispatch: SESSION=$SESSION"
 
 case "${1:-}" in
-    start)      cmd_start "${2:-}" "${3:-}" ;;
+    feature)    cmd_feature "${2:-}" "${3:-}" ;;
     up)         cmd_up "${2:-}" ;;
     down)       cmd_down "${2:-}" ;;
     claude)     cmd_claude "${2:-}" ;;

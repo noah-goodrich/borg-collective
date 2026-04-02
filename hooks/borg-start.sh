@@ -112,13 +112,35 @@ $DEBRIEF")
     fi
 fi
 
-# Cairn knowledge (optional)
-if command -v cairn >/dev/null 2>&1; then
-    CAIRN_OUT=$(timeout 5 cairn search "$PROJECT" --project "$PROJECT" --max 5 2>/dev/null || true)
+# Cairn knowledge (optional) — with health check and failure surfacing
+CAIRN_FAILED_FLAG="${BORG_DIR}/.cairn-write-failed"
+
+if ! command -v cairn >/dev/null 2>&1; then
+    CONTEXT_PARTS+=("⚠ CAIRN UNAVAILABLE: cairn not found in PATH.
+Sessions are not being persisted to the knowledge graph. Debriefs are saving locally only.
+To fix: ensure cairn is installed and in your PATH, then run 'borg setup'.")
+else
+    # Surface any write failure from the previous session stop
+    if [[ -f "$CAIRN_FAILED_FLAG" ]]; then
+        _fail_msg=$(cat "$CAIRN_FAILED_FLAG" 2>/dev/null || true)
+        CONTEXT_PARTS+=("⚠ CAIRN WRITE FAILED (last session): ${_fail_msg}
+The session debrief was NOT committed to the knowledge graph.
+Check cairn service health: cairn status")
+        rm -f "$CAIRN_FAILED_FLAG"
+    fi
+
+    if command -v timeout >/dev/null 2>&1; then
+        CAIRN_OUT=$(timeout 5 cairn search "$PROJECT" --project "$PROJECT" --max 5 2>/dev/null || true)
+    else
+        CAIRN_OUT=$(cairn search "$PROJECT" --project "$PROJECT" --max 5 2>/dev/null || true)
+    fi
     if [[ -n "$CAIRN_OUT" ]]; then
         CONTEXT_PARTS+=("Cairn knowledge for $PROJECT:
 
 $CAIRN_OUT")
+    else
+        CONTEXT_PARTS+=("ℹ Cairn has no data for $PROJECT yet.
+Sessions will be committed to cairn after this session ends.")
     fi
 fi
 
