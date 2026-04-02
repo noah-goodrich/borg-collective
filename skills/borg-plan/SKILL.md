@@ -14,6 +14,18 @@ to validate, adjust, and confirm. Do not ask open-ended questions. Read the code
 propose it, and let them react. The developer should feel like they're reviewing suggestions, not
 filling out a form.
 
+## Model and Mode Setup
+
+Before starting the planning conversation, remind the user:
+
+"For best results with planning, ensure you're on Opus and in Plan Mode:
+  1. Run `/model opus` (if not already on Opus)
+  2. Press Shift+Tab to enter Plan Mode
+
+After the plan is confirmed, switch back for implementation:
+  1. Press Shift+Tab to exit Plan Mode
+  2. Run `/model sonnet`"
+
 ## Before You Start
 
 Read silently: README, CLAUDE.md, recent `git log --oneline -20`, open PRs, uncommitted changes,
