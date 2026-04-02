@@ -125,26 +125,39 @@ ${_tail}"
         fi
 
         # Commit session record to cairn (optional — degrades gracefully if unavailable)
+        _cairn_failed_flag="${BORG_DIR}/.cairn-write-failed"
         if [[ -f "$_debrief_file" ]] && command -v cairn >/dev/null 2>&1; then
             _obj=$(grep -A1 "^## Objective" "$_debrief_file" | grep -v "^## Objective" | head -1 | head -c 200 || true)
             _notes=$(head -c 2000 "$_debrief_file")
             _cairn_id="cc-${_project}-$(date +%Y%m%d-%H%M%S)"
+            _cairn_err=""
             if [[ -n "$_obj" ]]; then
-                cairn record session \
+                _cairn_err=$(cairn record session \
                     --id "$_cairn_id" \
                     --project "$_project" \
                     --tool "$TOOL" \
                     --objective "$_obj" \
                     --notes "$_notes" \
-                    2>/dev/null || true
+                    2>&1) || {
+                    printf '%s: cairn write failed: %s\n' "$_project" "$_cairn_err" \
+                        > "$_cairn_failed_flag"
+                }
             else
-                cairn record session \
+                _cairn_err=$(cairn record session \
                     --id "$_cairn_id" \
                     --project "$_project" \
                     --tool "$TOOL" \
                     --notes "$_notes" \
-                    2>/dev/null || true
+                    2>&1) || {
+                    printf '%s: cairn write failed: %s\n' "$_project" "$_cairn_err" \
+                        > "$_cairn_failed_flag"
+                }
             fi
+            # Clear any previous failure flag on success
+            [[ -f "$_cairn_failed_flag" ]] && [[ -z "$_cairn_err" ]] && rm -f "$_cairn_failed_flag" || true
+        elif [[ -f "$_debrief_file" ]]; then
+            printf '%s: cairn not in PATH — debrief not committed to knowledge graph\n' \
+                "$_project" > "$_cairn_failed_flag"
         fi
     ) >/dev/null 2>&1 &
     disown "$!" 2>/dev/null || true
