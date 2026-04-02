@@ -12,7 +12,7 @@
 # Set a known-good PATH from scratch. Non-interactive zsh scripts invoked via shebang
 # do not source /etc/zprofile or ~/.zshrc, so PATH can be empty or incomplete.
 # We set it explicitly rather than appending to an unknown base.
-PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+PATH="${BORG_PATH_PREFIX:+$BORG_PATH_PREFIX:}$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 export PATH
 hash -r 2>/dev/null || true
 
@@ -387,6 +387,12 @@ _borg_scan_source() {
         [[ -z "$ppath" ]] && continue
         name="${ppath##*/}"
 
+        # Skip the workspace root itself (e.g. ~/dev) — not a real project
+        if [[ "$ppath" == "$BORG_ROOT" ]]; then
+            dbg "skipping workspace root: $ppath"
+            continue
+        fi
+
         if borg_registry_has "$name"; then
             dbg "already registered: $name"
             continue
@@ -423,6 +429,16 @@ _borg_scan_source() {
 }
 
 cmd_scan() {
+    local use_llm=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --llm) use_llm=1; shift ;;
+            --no-llm) use_llm=0; shift ;;
+            *) shift ;;
+        esac
+    done
+
+    # ── Phase 1: Discover new projects ────────────────────────────────────────
     local new_projects=()
 
     info "Scanning Claude session history..."
@@ -437,6 +453,72 @@ cmd_scan() {
 
     if (( ${#new_projects[@]} == 0 )); then
         info "No new projects found (already up to date)"
+    fi
+
+    # ── Phase 2: Refresh summaries for all registered projects ────────────────
+    # Auto-enable LLM summaries when cairn is unavailable or empty
+    if (( ! use_llm )); then
+        if ! command -v cairn &>/dev/null || \
+           [[ -z "$(_borg_timeout 3 cairn search "any" --max 1 2>/dev/null)" ]]; then
+            dbg "cairn unavailable or empty — auto-enabling LLM summaries"
+            use_llm=1
+        fi
+    fi
+
+    info "Refreshing project summaries..."
+    local llm_flag=""
+    (( use_llm )) && llm_flag="--llm"
+
+    # Read registry once, collect updates, write once
+    local registry_json
+    registry_json=$(borg_registry_read)
+    local updated=0
+
+    local projects
+    projects=$(echo "$registry_json" | jq -r '.projects | keys[]')
+
+    while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        local ppath session_id jsonl
+        ppath=$(echo "$registry_json" | jq -r --arg p "$name" '.projects[$p].path // ""')
+        session_id=$(echo "$registry_json" | jq -r --arg p "$name" '.projects[$p].claude_session_id // ""')
+
+        if [[ -z "$ppath" || "$ppath" == "null" ]]; then
+            dbg "$name: no path, skipping refresh"
+            continue
+        fi
+
+        if [[ -z "$session_id" || "$session_id" == "null" ]]; then
+            session_id=$(borg_claude_latest_session_id "$ppath")
+        fi
+
+        if [[ -z "$session_id" ]]; then
+            dbg "$name: no transcript found"
+            continue
+        fi
+
+        jsonl=$(borg_claude_session_jsonl "$ppath" "$session_id")
+        if [[ ! -f "$jsonl" ]]; then
+            dbg "$name: transcript file not found"
+            continue
+        fi
+
+        local summary
+        summary=$(python3 "$BORG_HOME/summarize.py" $llm_flag "$jsonl" 2>/dev/null) || summary=""
+
+        if [[ -n "$summary" ]]; then
+            registry_json=$(echo "$registry_json" | jq \
+                --arg p "$name" \
+                --arg s "$summary" \
+                --arg sid "$session_id" \
+                '.projects[$p].summary = $s | .projects[$p].claude_session_id = $sid')
+            updated=1
+            info "$name: summary updated"
+        fi
+    done < <(echo "$projects")
+
+    if (( updated )); then
+        echo "$registry_json" | _borg_registry_write
     fi
 }
 
@@ -484,67 +566,8 @@ cmd_rm() {
 }
 
 cmd_refresh() {
-    local target="" use_llm=1
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --all) target="--all"; shift ;;
-            --llm) use_llm=1; shift ;;
-            --no-llm) use_llm=0; shift ;;
-            *) target="$1"; shift ;;
-        esac
-    done
-
-    local projects
-    if [[ "$target" == "--all" || -z "$target" ]]; then
-        projects=$(borg_registry_list)
-    else
-        projects="$target"
-    fi
-
-    local llm_flag=""
-    (( use_llm )) && llm_flag="--llm"
-
-    while IFS= read -r name; do
-        [[ -z "$name" ]] && continue
-        local entry ppath session_id jsonl
-        entry=$(borg_registry_get "$name")
-        ppath=$(echo "$entry" | jq -r '.path // ""')
-        session_id=$(echo "$entry" | jq -r '.claude_session_id // ""')
-
-        if [[ -z "$ppath" || "$ppath" == "null" ]]; then
-            warn "$name: no path (Desktop session?), skipping"
-            continue
-        fi
-
-        # Use recorded session ID, or discover latest
-        if [[ -z "$session_id" || "$session_id" == "null" ]]; then
-            session_id=$(borg_claude_latest_session_id "$ppath")
-        fi
-
-        if [[ -z "$session_id" ]]; then
-            warn "$name: no transcript found at $ppath"
-            continue
-        fi
-
-        jsonl=$(borg_claude_session_jsonl "$ppath" "$session_id")
-        if [[ ! -f "$jsonl" ]]; then
-            warn "$name: transcript not found: $jsonl"
-            continue
-        fi
-
-        local summary
-        summary=$(python3 "$BORG_HOME/summarize.py" $llm_flag "$jsonl" 2>/dev/null) || summary="(summarizer error)"
-
-        if [[ -n "$summary" ]]; then
-            borg_registry_read | jq \
-                --arg p "$name" \
-                --arg s "$summary" \
-                --arg sid "$session_id" \
-                '.projects[$p].summary = $s | .projects[$p].claude_session_id = $sid' \
-                | _borg_registry_write
-            info "$name: summary updated"
-        fi
-    done < <(echo "$projects")
+    # Deprecated: use 'borg scan' instead. Kept for backwards compatibility.
+    cmd_scan --llm
 }
 
 cmd_focus() {
@@ -590,7 +613,11 @@ cmd_next() {
     ')
 
     if [[ -z "$top" || "$top" == "null" ]]; then
-        echo -e "\n${GREEN}▸${NC} All clear. Take a break.\n"
+        if (( do_switch )); then
+            tmux display-message "All clear — take a break" 2>/dev/null || true
+        else
+            echo -e "\n${GREEN}▸${NC} All clear. Take a break.\n"
+        fi
         return 0
     fi
 
@@ -601,6 +628,12 @@ cmd_next() {
     waiting_reason=$(echo "$top" | jq -r '.waiting_reason')
     last=$(echo "$top" | jq -r '.last_activity')
     pinned=$(echo "$top" | jq -r '.pinned')
+
+    # --switch mode: skip all output, switch immediately
+    if (( do_switch )); then
+        _borg_do_switch "$name" --silent
+        return $?
+    fi
 
     local rel_time
     rel_time=$(_borg_relative_time "$last")
@@ -632,10 +665,6 @@ cmd_next() {
     fi
 
     echo -e "\n  ${DIM}Ctrl+Space > to jump there${NC}\n"
-
-    if (( do_switch )); then
-        _borg_do_switch "$name" --silent
-    fi
 }
 
 cmd_pin() {
@@ -652,6 +681,38 @@ cmd_unpin() {
     borg_registry_has "$project" || die "project '$project' not in registry"
     borg_registry_set "$project" "pinned" "false"
     info "Unpinned: $project"
+}
+
+cmd_down() {
+    info "Tearing down the Borg Collective..."
+
+    if ! borg_tmux_alive; then
+        info "No borg tmux session running."
+        return 0
+    fi
+
+    local windows
+    windows=(${(f)"$(tmux list-windows -t "$BORG_TMUX_SESSION" -F '#W' 2>/dev/null)"})
+
+    for wname in $windows; do
+        [[ "$wname" == "orchestrator" || "$wname" == "host" ]] && continue
+        local pdir
+        pdir=$(tmux show-option -t "$BORG_TMUX_SESSION:$wname" -v @project_dir 2>/dev/null) || true
+        if [[ -n "$pdir" ]]; then
+            info "Stopping $wname..."
+            drone down "$wname" 2>/dev/null || tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
+        else
+            tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
+        fi
+    done
+
+    # Stop shared postgres
+    local postgres_compose="$HOME/.config/dotfiles/devcontainer/docker-compose.postgres.yml"
+    [[ -f "$postgres_compose" ]] && docker compose -f "$postgres_compose" down 2>/dev/null || true
+
+    # Kill the tmux session
+    tmux kill-session -t "$BORG_TMUX_SESSION" 2>/dev/null || true
+    info "All clear. Resistance was futile."
 }
 
 cmd_tidy() {
@@ -746,16 +807,20 @@ cmd_search() {
 # Build orchestrator context string from registry + debriefs + cairn.
 # Output goes to stdout; caller captures it.
 _borg_print_briefing() {
-    local registry
+    # Suppress xtrace — trace output pollutes the briefing when PS4 is empty.
+    setopt LOCAL_OPTIONS
+    set +x
+
+    local registry cutoff active_names inactive_names payload name
+    local proj_status last_activity summary waiting_reason rel_time
+    local debrief_file briefing_prompt briefing fallback_text fields
+
     registry=$(borg_registry_read)
 
-    # cutoff: 30 days ago (macOS date)
-    local cutoff
     cutoff=$(date -u -v-30d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "30 days ago" +"%Y-%m-%dT%H:%M:%SZ")
 
     # Active: status=waiting (any age) OR last_activity within 30 days AND not archived
     # Sort: waiting first (oldest first = longest neglected), then by last_activity descending
-    local active_names
     active_names=$(echo "$registry" | jq -r --arg cutoff "$cutoff" '
         (
             [.projects | to_entries[] |
@@ -770,7 +835,6 @@ _borg_print_briefing() {
     ' 2>/dev/null || true)
 
     # Inactive: not archived, last_activity older than 30 days (or null), not waiting
-    local inactive_names
     inactive_names=$(echo "$registry" | jq -r --arg cutoff "$cutoff" '
         .projects | to_entries |
         map(select(
@@ -787,30 +851,25 @@ _borg_print_briefing() {
         return 0
     fi
 
-    # Build data payload for Haiku
-    local payload=""
-    local name
+    # Build LLM payload + fallback text in one pass (1 jq call per project)
+    payload=""
+    fallback_text=""
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        local entry status last_activity summary waiting_reason
-        entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
-        status=$(echo "$entry" | jq -r '.status // "unknown"')
-        last_activity=$(echo "$entry" | jq -r '.last_activity // ""')
-        summary=$(echo "$entry" | jq -r '.summary // ""')
-        waiting_reason=$(echo "$entry" | jq -r '.waiting_reason // ""')
-
-        local rel_time
+        IFS=$'\t' read -r proj_status last_activity summary waiting_reason <<< \
+            "$(echo "$registry" | jq -r --arg p "$name" \
+                '.projects[$p] | [.status // "unknown", .last_activity // "", .summary // "", .waiting_reason // ""] | join("\t")')"
         rel_time=$(_borg_relative_time "$last_activity")
 
         payload+="PROJECT: $name
-status: $status
+status: $proj_status
 last_active: $rel_time
 summary: $summary"
         [[ -n "$waiting_reason" && "$waiting_reason" != "null" ]] && \
             payload+="
 waiting_reason: $waiting_reason"
 
-        local debrief_file="$BORG_DIR/debriefs/${name}.md"
+        debrief_file="$BORG_DIR/debriefs/${name}.md"
         if [[ -f "$debrief_file" ]]; then
             payload+="
 --- debrief ---
@@ -820,9 +879,15 @@ $(head -c 1500 "$debrief_file")
         payload+="
 
 "
+
+        # Pre-build fallback so we don't re-parse on failure
+        fallback_text+="$(printf "  %-22s [%s, %s]\n" "$name" "$proj_status" "$rel_time")"
+        if [[ -n "$summary" && "$summary" != "null" && "$summary" != "(no summary)" ]]; then
+            fallback_text+=$'\n'"$(echo "    $summary" | fold -s -w 76 | sed '1!s/^/    /')"
+        fi
+        fallback_text+=$'\n'
     done <<< "$active_names"
 
-    local briefing_prompt
     briefing_prompt="Generate a morning briefing for a developer. Output plain text for a terminal — no markdown, no headers, no bullet symbols.
 
 For each project write exactly these lines (omit Blocked line if not waiting):
@@ -842,42 +907,40 @@ $payload"
     echo ""
     info "Building morning briefing..."
 
-    local briefing
+    local claude_rc=0
     briefing=$(_borg_timeout 20 claude -p "$briefing_prompt" \
-        --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>/dev/null) || true
+        --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>/dev/null) || claude_rc=$?
+
+    # Gate on exit code; also catch the edge case where claude exits 0 with an auth error
+    if [[ $claude_rc -ne 0 || "$briefing" == *"Not logged in"* ]]; then
+        briefing=""
+    fi
 
     if [[ -n "$briefing" ]]; then
         echo ""
         echo "$briefing"
     else
-        # Fallback: plain registry listing if Haiku call fails
-        while IFS= read -r name; do
-            [[ -z "$name" ]] && continue
-            local entry status last_activity summary
-            entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
-            status=$(echo "$entry" | jq -r '.status // "unknown"')
-            last_activity=$(echo "$entry" | jq -r '.last_activity // ""')
-            summary=$(echo "$entry" | jq -r '.summary // "(no summary)"')
-            local rel_time
-            rel_time=$(_borg_relative_time "$last_activity")
-            printf "  %-22s [%s, %s]\n" "$name" "$status" "$rel_time"
-            [[ -n "$summary" && "$summary" != "null" ]] && \
-                echo "    $summary" | fold -s -w 76 | sed '1!s/^/    /'
-        done <<< "$active_names"
+        echo ""
+        printf "%s" "$fallback_text"
     fi
 
-    # Inactive list (compact)
+    # Inactive list (compact, single jq call)
     if [[ -n "$inactive_names" ]]; then
         echo ""
         echo -e "  ${DIM}Inactive (>30 days):${NC}"
-        while IFS= read -r name; do
-            [[ -z "$name" ]] && continue
-            local last
-            last=$(echo "$registry" | jq -r --arg p "$name" '.projects[$p].last_activity // ""')
-            local rel_time
-            rel_time=$(_borg_relative_time "$last")
+        echo "$registry" | jq -r --arg cutoff "$cutoff" '
+            .projects | to_entries |
+            map(select(
+                .value.status != "archived" and
+                .value.status != "waiting" and
+                (.value.last_activity == null or .value.last_activity < $cutoff)
+            )) |
+            sort_by(.value.last_activity // "0000") | reverse |
+            .[] | [.key, .value.last_activity // ""] | join("\t")
+        ' 2>/dev/null | while IFS=$'\t' read -r name last_activity; do
+            rel_time=$(_borg_relative_time "$last_activity")
             echo -e "    ${DIM}$name  ($rel_time)${NC}"
-        done <<< "$inactive_names"
+        done
         echo -e "  ${DIM}Run 'borg brief <name>' for details.${NC}"
     fi
     echo ""
@@ -990,13 +1053,14 @@ cmd_claude() {
 # window and attach.
 _borg_launch_in_tmux() {
     if [[ -n "${TMUX:-}" ]]; then
-        cd "$BORG_ROOT"
+        cd "$BORG_HOME"
         exec "$@"
     fi
 
-    local target_pane
+    local target_pane quoted_args
     target_pane=$(tmux list-panes -t "$BORG_TMUX_SESSION:{start}" -F '#{pane_id}' | head -1)
-    tmux send-keys -t "$target_pane" "cd $BORG_ROOT && $*" Enter
+    quoted_args=$(printf '%q ' "$@")
+    tmux send-keys -t "$target_pane" "cd $BORG_HOME && $quoted_args" Enter
     exec tmux attach-session -t "$BORG_TMUX_SESSION"
 }
 
@@ -1211,12 +1275,13 @@ cmd_help() {
     status [project]    Detailed status (defaults to current directory)
     brief [project]     Project briefing from cairn (defaults to current dir)
     search <query>      Search cairn knowledge graph (--project to filter)
-    scan                Auto-discover projects from session history
+    scan                Discover projects + refresh summaries
+    briefing            Print morning briefing (without launching orchestrator)
     add [path]          Register a project (defaults to $PWD)
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
-    refresh [--all]     Regenerate summaries (LLM by default; --no-llm for fast extraction)
+    down                Tear down everything: containers, windows, session
     setup               Register Claude Code hooks, skills, and config (run after brew install)
     tidy                Archive stale projects (idle >48h)
     focus [project]     Alias for: switch <project>
@@ -1263,15 +1328,17 @@ case "${1:-help}" in
     status)   cmd_status "${@:2}" ;;
     brief)    cmd_brief "${@:2}" ;;
     search)   cmd_search "${@:2}" ;;
-    scan)     cmd_scan ;;
+    scan)     cmd_scan "${@:2}" ;;
     add)      cmd_add "${@:2}" ;;
     rm)       cmd_rm "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
     refresh)  cmd_refresh "${@:2}" ;;
+    down)     cmd_down ;;
     setup)    cmd_setup ;;
     tidy)     cmd_tidy ;;
     focus)    cmd_focus "${@:2}" ;;
+    briefing) _borg_print_briefing ;;
     help|--help|-h) cmd_help ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac

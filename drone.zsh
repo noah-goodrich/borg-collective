@@ -118,6 +118,11 @@ window_pane_count() {
     tmux list-panes -t "$SESSION:$1" 2>/dev/null | wc -l | tr -d ' '
 }
 
+get_bottom_pane() {
+    tmux list-panes -t "$SESSION:$1" -F '#{pane_top} #{pane_id}' 2>/dev/null \
+        | sort -rn | head -1 | awk '{print $2}'
+}
+
 # Count project windows (all except 'host')
 project_window_count() {
     tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -vcx 'host' | tr -d ' '
@@ -154,7 +159,8 @@ create_2pane_window() {
     local bottom
     bottom=$(tmux split-window -v -p 25 -t "$main" -PF '#{pane_id}')
 
-    tmux select-pane -t "$main"
+    # Default focus to bottom pane (Claude pane)
+    tmux select-pane -t "$bottom"
 
     if [[ -n "$cmd" ]]; then
         tmux send-keys -t "$main"   "$cmd" Enter
@@ -419,13 +425,14 @@ cmd_claude() {
 
     # Send 'claude' to the bottom pane (highest pane_top value)
     local bottom_pane
-    bottom_pane=$(tmux list-panes -t "$SESSION:$project_name" -F '#{pane_top} #{pane_id}' \
-        | sort -rn | head -1 | awk '{print $2}')
+    bottom_pane=$(get_bottom_pane "$project_name")
     info "Launching Claude in $project_name (bottom pane)..."
     tmux send-keys -t "$bottom_pane" "claude" Enter
 
-    # Switch to the project window
+    # Switch to the project window, focus + zoom Claude pane
     attach_or_switch "$project_name"
+    tmux select-pane -t "$bottom_pane"
+    tmux resize-pane -Z -t "$bottom_pane"
 }
 
 # ── drone start ───────────────────────────────────────────────────────────────
@@ -465,10 +472,11 @@ cmd_feature() {
         tmux set-option -t "$SESSION:$window_name" @project_name "$project_name"
         borg add "$work_dir" 2>/dev/null || true
         local bottom_pane
-        bottom_pane=$(tmux list-panes -t "$SESSION:$window_name" -F '#{pane_top} #{pane_id}' \
-            | sort -rn | head -1 | awk '{print $2}')
+        bottom_pane=$(get_bottom_pane "$window_name")
         tmux send-keys -t "$bottom_pane" "claude" Enter
         attach_or_switch "$window_name"
+        tmux select-pane -t "$bottom_pane"
+        tmux resize-pane -Z -t "$bottom_pane"
     fi
     info "Started: $window_name"
 }
@@ -519,14 +527,15 @@ cmd_fix() {
 
         # Restore top/bottom split: top ~75%, bottom ~25%
         local bottom_pane
-        bottom_pane=$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_top} #{pane_id}' \
-            | sort -rn | head -1 | awk '{print $2}')
+        bottom_pane=$(get_bottom_pane "$wname")
 
         info "$wname: restoring layout (top 75% / bottom 25%)"
         tmux select-layout -t "$SESSION:$wname" even-vertical
         tmux resize-pane -t "$bottom_pane" -y $(( H * 25 / 100 ))
-        tmux select-pane -t "$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_top} #{pane_id}' \
-            | sort -n | head -1 | awk '{print $2}')"
+        local top_pane
+        top_pane=$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_top} #{pane_id}' 2>/dev/null \
+            | sort -n | head -1 | awk '{print $2}')
+        tmux select-pane -t "$top_pane"
     done
 }
 

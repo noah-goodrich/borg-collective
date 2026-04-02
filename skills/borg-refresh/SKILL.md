@@ -5,8 +5,7 @@ description: >
   "refresh summaries", "update context", or wants current summaries regenerated.
 ---
 
-If the user wants all projects refreshed: run `borg refresh --all` with the Bash tool.
-If a specific project named: run `borg refresh <name>`.
-Default is LLM-powered (Haiku). If the user wants fast extraction instead, add `--no-llm`.
+Run `borg scan` with the Bash tool. This discovers new projects AND refreshes all summaries.
+Add `--llm` for LLM-powered summaries (Haiku). Default is fast extraction.
 
 Show which projects were updated. If any failed (no transcript found), note them.

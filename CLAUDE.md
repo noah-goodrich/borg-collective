@@ -122,3 +122,12 @@ docs/
 - No `$()` substitution in Bash tool calls
 - No inline `#` comments in one-liner bash commands
 - No temp scripts
+
+## Learned
+
+- **tmux zoom is a toggle**: `resize-pane -Z` toggles zoom on/off. If a helper zooms a pane and
+  the caller also zooms it, the second call unzooms. Apply zoom in exactly one place — the final
+  caller, not intermediate helpers.
+- **Notifications must not steal focus**: macOS notifications should only activate the target app
+  on click (`-activate`), never on fire. Unsolicited focus changes interrupt whatever the user is
+  doing.
