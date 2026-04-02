@@ -1,21 +1,19 @@
-# Project Plan: Ship Skill + Cairn Triage
+# Project Plan: Cairn Triage
 *Established: 2026-04-02*
 
 ## Objective
-Make `/borg-assimilate` execute shipping (not just evaluate), and triage cairn to decide whether to fix
-or drop it.
+Triage cairn to decide whether to fix or drop it. Cairn is the optional PostgreSQL + pgvector
+knowledge graph that borg hooks attempt to use for cross-session knowledge persistence.
+
+## Context
+- Repo exists at `~/dev/cairn` with a `pyproject.toml` defining `cairn = "cairn.cli:app"`
+- Install method: `pip install -e '.[dev]'` (documented in devcontainer.json postCreateCommand)
+- `cairn` is not currently in PATH on the host — never been installed outside the devcontainer
+- Borg hooks have graceful degradation (warn + skip when cairn unavailable)
+- Split from prior plan (2026-04-02-ship-skill-and-cairn-triage.md)
 
 ## Acceptance Criteria
 
-### borg-assimilate executes shipping
-- [ ] When all criteria met, borg-assimilate presents shipping commands and asks for confirmation
-- [ ] On confirmation: merges PR, marks plan checkboxes, archives PROJECT_PLAN.md to docs/plans/
-- [ ] Plan-specific ship definitions (beyond PR merge) are presented and executed with confirmation
-- [ ] After archival, PROJECT_PLAN.md is removed (no plan = no active work)
-- [ ] Verify: run /borg-assimilate on a test branch with all criteria met → confirm → PR merged, plan
-  archived
-
-### Cairn triage
 - [ ] Diagnose why `cairn` is not in PATH (repo exists at ~/dev/cairn, postgres is running)
 - [ ] Document: is cairn a pip install? A built binary? What's the install path?
 - [ ] Either fix cairn installation so `cairn` CLI works, or document decision to drop it
@@ -23,16 +21,14 @@ or drop it.
 - [ ] If dropped: remove cairn references from borg hooks/skills, simplify to debriefs-only
 
 ## Scope Boundaries
-- borg-assimilate changes are to the skill only, not the CLI
-- Cairn triage is diagnosis + decision, not a rewrite. If cairn needs significant work, that's a
-  separate plan.
+- This is diagnosis + decision, not a rewrite
+- If cairn needs significant work beyond install/config, that's a separate plan
 
 ## Ship Definition
-- Changes committed and PR merged to main
-- All bats tests pass
-- borg-assimilate manually tested with confirmation flow
-- Cairn either works or is explicitly deferred with rationale documented
+- Decision documented (fix or drop) with rationale
+- If fixed: cairn CLI works, borg hooks use it successfully
+- If dropped: cairn refs cleaned from hooks/skills, committed and merged
 
 ## Risks
-- Cairn may require Python environment setup (venv, pip install) that isn't documented
-- borg-assimilate executing `gh pr merge` needs the right permissions and branch protections
+- Cairn may require Python venv setup that isn't documented
+- Postgres may need schema migrations or config that's only in the devcontainer
