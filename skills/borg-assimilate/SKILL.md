@@ -1,13 +1,13 @@
 ---
-name: borg-ship
+name: borg-assimilate
 description: >
-  Shipping checklist. Evaluates current state against PROJECT_PLAN.md acceptance criteria with
-  evidence from code, tests, and git. Tells you what's done, what's left, and whether to ship.
-  Use when you think you might be done, or when you're tempted to add "one more thing."
+  Shipping checklist + execution. Evaluates current state against PROJECT_PLAN.md acceptance
+  criteria, then executes shipping (merge PR, archive plan) with confirmation. Use when you
+  think you might be done, or when you're tempted to add "one more thing."
 user-invocable: true
 ---
 
-# Borg Ship — Are We Done?
+# Borg Assimilate — You Will Be Assimilated
 
 You are evaluating whether this project is ready to ship. Be rigorous. Do not rubber-stamp.
 Do not add new requirements. Check exactly what the plan says, nothing more.
@@ -51,16 +51,34 @@ Shipping checklist for [project]:
 Check each part of the plan's ship definition: committed? PR open/merged? Tests passing? Docs
 reflect current state?
 
-## Step 4: Verdict
-
-**All criteria met:** "Ready to ship. Run: [exact git/gh commands to ship it]."
+## Step 4: Verdict and Execution
 
 **Criteria unmet:** "Not ready. [N] of [M] criteria met. Remaining: [list with effort estimates].
-Focus on these. Do not add new scope."
+Focus on these. Do not add new scope." Stop here.
 
 **All met but still working:** "This meets all acceptance criteria. Ship it. You're still working,
 which means: (a) real problem not in criteria → name it, (b) polishing → stop, (c) new idea →
-note for next session. Which is it?"
+note for next session. Which is it?" Wait for answer before proceeding.
+
+**All criteria met — execute shipping:**
+
+1. Present the shipping actions as a numbered list:
+   - Merge PR (show exact `gh pr merge` command)
+   - Any plan-specific ship definition steps
+   - Archive PROJECT_PLAN.md → `docs/plans/<date>-<slug>.md` with checkboxes marked + ship date
+   - Remove PROJECT_PLAN.md from project root
+2. **Ask for confirmation**: "Ready to ship. These are the actions I'll take: [list]. Confirm?"
+3. Only execute after explicit confirmation. Execute each step, reporting results.
+4. After shipping, verify: PR merged, plan archived, working tree clean.
+
+### Plan Archival Format
+
+When archiving PROJECT_PLAN.md:
+- Copy to `docs/plans/<established-date>-<slugified-objective>.md`
+- Add `*Shipped: <today's date> — PR #<number> merged to main*` below the established date
+- Mark all acceptance criteria checkboxes as `[x]`
+- Append an "Additional Work Shipped" section if significant work happened beyond the criteria
+- Delete PROJECT_PLAN.md from project root
 
 ## Rules
 
@@ -68,3 +86,4 @@ note for next session. Which is it?"
 - Do NOT say "you should also..." unless something is genuinely broken.
 - "That's not in the acceptance criteria. Want to add it? That's a scope change."
 - Show the exact commands. Don't make them look anything up.
+- NEVER merge or archive without explicit confirmation from the developer.

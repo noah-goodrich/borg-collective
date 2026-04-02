@@ -1,54 +1,38 @@
-# Project Plan: Orchestrator-First Borg
-*Established: 2026-04-01*
+# Project Plan: Ship Skill + Cairn Triage
+*Established: 2026-04-02*
 
 ## Objective
-Make the borg orchestrator session self-contained by exposing navigation/dashboard/search commands as
-skills, fix silent cairn failures with health checks and warnings, default to LLM summaries when cairn
-is empty, streamline existing skills for lower token overhead, and add automated tests for the full
-context lifecycle.
+Make `/borg-assimilate` execute shipping (not just evaluate), and triage cairn to decide whether to fix
+or drop it.
 
 ## Acceptance Criteria
-- [ ] Orchestrator skills exist for: next, ls, switch, brief, search, refresh, status
-  - Verify: Each `/borg-*` skill is invocable from inside a Claude session and produces correct output
-  - Verify: `borg setup` registers all new skills
-- [ ] `borg refresh` defaults to LLM summaries when cairn has no data for a project
-  - Verify: `borg refresh project-name` without `--llm` generates LLM summary when cairn returns empty
-- [ ] Cairn health check at session start warns visibly when cairn is unreachable or has no data
-  - Verify: Stop cairn → start session → see clear warning in session context
-- [ ] Cairn write failures are surfaced, not silently swallowed
-  - Verify: Stop cairn → stop session → see warning that debrief was NOT committed to cairn
-- [ ] Existing skills reviewed and streamlined for token efficiency
-  - Verify: Total skill SKILL.md bytes reduced or held steady despite adding 7 new skills
-  - Verify: No functional regressions in existing skills
-- [ ] Automated bats tests cover context lifecycle: start hook → context injection → stop hook →
-  debrief → cairn commit → next session reads debrief
-  - Verify: `bats tests/lifecycle.bats` passes
-- [ ] Automated bats tests cover cairn integration: health check, search, record, failure modes
-  - Verify: `bats tests/cairn.bats` passes
-- [ ] All pre-existing tests still pass
-  - Verify: `bats tests/` — all green
+
+### borg-assimilate executes shipping
+- [ ] When all criteria met, borg-assimilate presents shipping commands and asks for confirmation
+- [ ] On confirmation: merges PR, marks plan checkboxes, archives PROJECT_PLAN.md to docs/plans/
+- [ ] Plan-specific ship definitions (beyond PR merge) are presented and executed with confirmation
+- [ ] After archival, PROJECT_PLAN.md is removed (no plan = no active work)
+- [ ] Verify: run /borg-assimilate on a test branch with all criteria met → confirm → PR merged, plan
+  archived
+
+### Cairn triage
+- [ ] Diagnose why `cairn` is not in PATH (repo exists at ~/dev/cairn, postgres is running)
+- [ ] Document: is cairn a pip install? A built binary? What's the install path?
+- [ ] Either fix cairn installation so `cairn` CLI works, or document decision to drop it
+- [ ] If fixed: verify `cairn search`, `cairn record`, and `cairn health` work end-to-end
+- [ ] If dropped: remove cairn references from borg hooks/skills, simplify to debriefs-only
 
 ## Scope Boundaries
-- Skills layer ON TOP of CLI commands, not replacing them. Whether CLI commands should eventually be
-  deprecated in favor of skills-only is a design question for a future session.
-- If done early: ship what we have, don't expand scope.
+- borg-assimilate changes are to the skill only, not the CLI
+- Cairn triage is diagnosis + decision, not a rewrite. If cairn needs significant work, that's a
+  separate plan.
 
 ## Ship Definition
-- Changes committed to `borg-v3-workflow-automation` branch
-- All bats tests pass (new + existing)
-- Skills manually smoke-tested in orchestrator session
-- PR opened against main
-
-## Timeline
-Target: 2-3 sessions (~2 hours each)
-- Session 1: Cairn health checks + `refresh --llm` default + cairn bats tests
-- Session 2: Orchestrator skills (7 skill wrappers) + skill streamlining
-- Session 3: Lifecycle integration tests + regression sweep + PR
+- Changes committed and PR merged to main
+- All bats tests pass
+- borg-assimilate manually tested with confirmation flow
+- Cairn either works or is explicitly deferred with rationale documented
 
 ## Risks
-- Cairn may be fundamentally broken, not just missing health checks. Need to diagnose actual failure
-  mode before assuming the fix is just "add warnings."
-- Skills sourcing borg library functions — zsh sourcing in a Claude Bash tool context may behave
-  differently than interactive shell. Need to test the execution path.
-- Hook testing requires mocking Claude Code's hook input JSON format, which isn't formally documented.
-  Will need to reverse-engineer from existing hooks.
+- Cairn may require Python environment setup (venv, pip install) that isn't documented
+- borg-assimilate executing `gh pr merge` needs the right permissions and branch protections
