@@ -177,7 +177,7 @@ Six skills installed and working:
 - `/borg-ship` — Shipping checklist with evidence
 - `/borg-review` — Mid-session diagnostic with loop detection
 - `/borg-debrief` — Structured session analysis
-- `/checkpoint-enhanced` — Manual checkpoint
+- `/borg-checkpoint` — Manual checkpoint
 - Cognitive load guardrails (always-on)
 
 ### Phase 2: drone CLI ✓
@@ -198,7 +198,7 @@ launches `claude --append-system-prompt`. `borg claude` re-enters with `--contin
 ### Phase 5: Cairn integration ✓
 
 Stop hook commits session record to cairn after debrief is written. Start hook merges cairn knowledge
-into session context alongside debrief. `borg search` wraps `cairn search`. `borg brief` uses
+into session context alongside debrief. `borg search` wraps `cairn search`. `borg hail` uses
 `cairn search --project`. All cairn calls degrade silently if cairn is unavailable.
 
 ### Phase 6: Documentation ✓
@@ -232,5 +232,5 @@ See `docs/quickstart.md` for installation and first-run guide.
 | Date | Change |
 |------|--------|
 | 2026-03-29 | Original proposal: ADHD-specific framing, three phases (make it work, boundaries, cognitive load management). v1 shell CLI with regex-based summarizer. |
-| 2026-03-30 | Major revision: reframed from ADHD-specific to universal cognitive load. Added v2 architecture (borg + drone + cairn). Added six skills (borg-plan, borg-ship, borg-review, borg-debrief, checkpoint-enhanced, cognitive guardrails). Added orchestrator concept (borg init). Added LLM debriefs replacing regex extraction. Cairn integration as optional knowledge persistence. Scope still WIP. |
+| 2026-03-30 | Major revision: reframed from ADHD-specific to universal cognitive load. Added v2 architecture (borg + drone + cairn). Added six skills (borg-plan, borg-ship, borg-review, borg-debrief, borg-checkpoint, cognitive guardrails). Added orchestrator concept (borg init). Added LLM debriefs replacing regex extraction. Cairn integration as optional knowledge persistence. Scope still WIP. |
 | 2026-03-31 | v2 complete: Implemented all six phases. Hook integration (Phase 3): async Sonnet debrief on stop, debrief + cairn context injection on start. Orchestrator (Phase 4): borg init + borg claude with --append-system-prompt. Cairn integration (Phase 5): session commits on stop, knowledge search on start, borg search command. Docs cleanup (Phase 6): all references updated to final state. |

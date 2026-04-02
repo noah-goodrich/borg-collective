@@ -12,7 +12,7 @@ setup() {
 @test "borg help exits 0" {
     run "$BORG_CMD" help
     [ "$status" -eq 0 ]
-    [[ "$output" == *"borg — The Borg Collective"* ]]
+    [[ "$output" == *"THE BORG COLLECTIVE"* ]]
 }
 
 @test "borg --help exits 0" {

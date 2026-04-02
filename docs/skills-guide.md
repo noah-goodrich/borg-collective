@@ -107,9 +107,9 @@ automatically loaded as context in the next session. This eliminates the context
 **Why it exists**: Session context is ephemeral. Without a debrief, you spend 20+ minutes figuring out
 where you left off. With one, you pick up immediately.
 
-### /checkpoint-enhanced — Manual Checkpoint
+### /borg-checkpoint — Manual Checkpoint
 
-**Activation**: Manual (`/checkpoint-enhanced`)
+**Activation**: Manual (`/borg-checkpoint`)
 
 Five-section summary: goal, accomplishments, ready to commit, blockers, next session entry point.
 Lighter than a full debrief. Use before breaks, before context gets long, or when switching projects.
