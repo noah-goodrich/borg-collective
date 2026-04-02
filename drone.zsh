@@ -643,9 +643,14 @@ cmd_status() {
 cmd_help() {
     cat <<'EOF'
 
-  drone — The Borg Collective: project lifecycle manager
-
-  Your containers will be assimilated.
+    _______________
+   /|             /|
+  / |            / |      drone — designation: project lifecycle
+    |___________|  |
+    |  |        |  |      "You will be assimilated."
+    |  |________|__|
+    | /         | /
+    |/          |/
 
   COMMANDS
     feature <project> <branch>  Create worktree + branch, start window, launch Claude
