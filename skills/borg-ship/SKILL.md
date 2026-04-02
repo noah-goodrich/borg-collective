@@ -14,14 +14,22 @@ Do not add new requirements. Check exactly what the plan says, nothing more.
 
 ## Step 0: Run Tests and Linting
 
-Auto-detect what's available: check `.github/workflows/*.yml`, then look for `bats tests/*.bats`,
-`pytest`, `npm test`, `make test`, `shellcheck`, `eslint`, `ruff`. Run everything you find.
-If tests or linting fail: the project is not ready to ship. Report results first regardless.
+Before evaluating criteria, run the project's test suite and linters. Auto-detect what's available:
+
+1. Check `.github/workflows/*.yml` for test/lint commands (bats, shellcheck, pytest, npm test, etc.)
+2. Check for common test runners: `bats tests/*.bats`, `pytest`, `npm test`, `make test`
+3. Check for linters: `shellcheck hooks/*.sh`, `eslint`, `ruff`, etc.
+
+Run whatever you find. Report results as part of the checklist regardless of whether a plan exists.
+If tests or linting fail, that's a blocker — the project is not ready to ship.
 
 ## Step 1: Load the Plan
 
-Read `PROJECT_PLAN.md`. If missing: skip criteria evaluation, still report test/lint results and
-diff summary so the developer can decide. If present: proceed.
+Read `PROJECT_PLAN.md` from the project root.
+
+- If it doesn't exist: skip criteria evaluation. Still report test/lint results and present the
+  diff summary so the developer can decide whether to ship the changes as-is.
+- If it exists: proceed with criteria evaluation.
 
 ## Step 2: Evaluate Each Criterion
 
