@@ -46,6 +46,16 @@ BORG_WORK_PROJECTS="${BORG_WORK_PROJECTS:-}"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+# Run a command with a timeout, falling back gracefully if `timeout` is unavailable.
+_borg_timeout() {
+    local secs=$1; shift
+    if command -v timeout &>/dev/null; then
+        timeout "$secs" "$@"
+    else
+        "$@"
+    fi
+}
+
 # Convert ISO 8601 timestamp to relative time string ("2h ago", "yesterday", "3d ago")
 _borg_relative_time() {
     local ts="$1"
@@ -330,7 +340,7 @@ _borg_do_switch() {
                 echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
                 if command -v cairn &>/dev/null; then
                     local cairn_brief
-                    cairn_brief=$(timeout 3 cairn search "$project" --project "$project" --max 1 2>/dev/null) || true
+                    cairn_brief=$(_borg_timeout 3 cairn search "$project" --project "$project" --max 1 2>/dev/null) || true
                     [[ -n "$cairn_brief" ]] && echo -e "  ${CYAN}cairn:${NC} $cairn_brief"
                 fi
                 echo
@@ -463,11 +473,12 @@ cmd_rm() {
 }
 
 cmd_refresh() {
-    local target="" use_llm=0
+    local target="" use_llm=1
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --all) target="--all"; shift ;;
             --llm) use_llm=1; shift ;;
+            --no-llm) use_llm=0; shift ;;
             *) target="$1"; shift ;;
         esac
     done
@@ -693,7 +704,7 @@ cmd_brief() {
 
     if command -v cairn &>/dev/null; then
         info "Querying cairn for $project..."
-        timeout 5 cairn search "$project" --project "$project" --max 5 2>/dev/null || {
+        _borg_timeout 5 cairn search "$project" --project "$project" --max 5 2>/dev/null || {
             warn "cairn search timed out or failed"
             cmd_status "$project"
         }
@@ -778,7 +789,7 @@ _borg_orchestrator_context() {
     # Cairn cross-project knowledge (optional)
     if command -v cairn &>/dev/null; then
         local cairn_out
-        cairn_out=$(timeout 5 cairn search "current work priorities" --max 3 2>/dev/null || true)
+        cairn_out=$(_borg_timeout 5 cairn search "current work priorities" --max 3 2>/dev/null || true)
         if [[ -n "$cairn_out" ]]; then
             echo ""
             echo "Cairn knowledge:"
@@ -1057,7 +1068,7 @@ cmd_help() {
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
-    refresh [--all]     Regenerate summaries (--llm for AI-powered)
+    refresh [--all]     Regenerate summaries (LLM by default; --no-llm for fast extraction)
     setup               Register Claude Code hooks, skills, and config (run after brew install)
     tidy                Archive stale projects (idle >48h)
     focus [project]     Alias for: switch <project>
