@@ -174,7 +174,7 @@ modification, and vice versa.
 
 This means:
 - The `adhd-guardrails` skill works in CoCo sessions
-- The `checkpoint-enhanced` skill works in CoCo sessions
+- The `borg-checkpoint` skill works in CoCo sessions
 - Boris Cherny's framework tips (from `alirezarezvani/claude-skills`) work in CoCo sessions
 - Scope Guard works in CoCo sessions
 
@@ -278,7 +278,7 @@ Morning:
 
 Data engineering task:
   cortex -c dev -w ~/src/analytics # Start CoCo for Snowflake work
-  /checkpoint-enhanced             # CoCo reads the same skill
+  /borg-checkpoint             # CoCo reads the same skill
   # Work on dbt models, SQL, pipelines
 
 General development:
@@ -296,13 +296,13 @@ To ensure all skills work in both tools:
 ```bash
 # One-time setup: symlink skill directories
 ln -s ~/.claude/skills/adhd-guardrails ~/.snowflake/cortex/skills/adhd-guardrails
-ln -s ~/.claude/skills/checkpoint-enhanced ~/.snowflake/cortex/skills/checkpoint-enhanced
+ln -s ~/.claude/skills/borg-checkpoint ~/.snowflake/cortex/skills/borg-checkpoint
 ```
 
 Or, if you prefer to keep them separate, install skills in both locations:
 ```bash
 cp -r ~/.claude/skills/adhd-guardrails ~/.snowflake/cortex/skills/
-cp -r ~/.claude/skills/checkpoint-enhanced ~/.snowflake/cortex/skills/
+cp -r ~/.claude/skills/borg-checkpoint ~/.snowflake/cortex/skills/
 ```
 
 ### Future Borg Integration

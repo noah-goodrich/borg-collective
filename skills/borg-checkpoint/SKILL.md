@@ -1,5 +1,5 @@
 ---
-name: checkpoint-enhanced
+name: borg-checkpoint
 description: >
   Summarize session work and define a concrete next-session entry point.
   Use when ending a session, before a break, or when switching projects.

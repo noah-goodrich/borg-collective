@@ -73,7 +73,7 @@ This prevents corruption from concurrent hook executions.
         borg-ship/              Shipping checklist
         borg-review/            Mid-session diagnostic
         borg-debrief/           Session analysis
-        checkpoint-enhanced/    Manual checkpoint
+        borg-checkpoint/    Manual checkpoint
     install.sh                  Installer
     docs/                       Documentation
 ```
@@ -99,7 +99,7 @@ This prevents corruption from concurrent hook executions.
         borg-ship/              Symlink → repo
         borg-review/            Symlink → repo
         borg-debrief/           Symlink → repo
-        checkpoint-enhanced/    Symlink → repo
+        borg-checkpoint/    Symlink → repo
 
 ~/.local/bin/
     borg                        Symlink → borg.zsh
@@ -158,7 +158,7 @@ borg.zsh
   │   ├── cmd_ls          Dashboard with sorting, markers, capacity warning
   │   ├── cmd_switch      fzf picker or direct switch
   │   ├── cmd_status      Detailed single-project view
-  │   ├── cmd_brief       cairn search for project (falls back to cmd_status)
+  │   ├── cmd_hail        cairn search for project (falls back to cmd_status)
   │   ├── cmd_search      cairn search with optional --project filter
   │   ├── cmd_scan        Auto-discover from session history
   │   ├── cmd_add/rm      Manual registration
@@ -228,7 +228,7 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | borg-ship | Manual | Evaluate shipping readiness with evidence |
 | borg-review | Manual | Mid-session diagnostic, loop detection, one recommendation |
 | borg-debrief | Auto (stop hook) | Structured session analysis for persistence |
-| checkpoint-enhanced | Manual | Quick save point with next-session entry |
+| borg-checkpoint | Manual | Quick save point with next-session entry |
 
 ---
 

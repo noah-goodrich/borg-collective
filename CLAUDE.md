@@ -24,12 +24,12 @@ Three independent tools that compose:
 ## Current State (v2)
 
 ### Implemented
-- Core borg CLI: init, claude, next, ls, switch, status, brief, search, scan, add, rm, help
+- Core borg CLI: init, claude, next, ls, switch, status, hail, search, scan, add, rm, help
 - CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg ls`, cairn records
 - `drone` CLI: up, down, claude, sh, restart, fix, status
 - Hooks: borg-start.sh (status=active + debrief/cairn context injection),
   borg-stop.sh (status=idle + async Sonnet debrief + cairn commit), borg-notify.sh
-- Skills: adhd-guardrails, checkpoint-enhanced, borg-plan, borg-review, borg-assimilate, borg-debrief
+- Skills: adhd-guardrails, borg-checkpoint, borg-plan, borg-review, borg-assimilate, borg-debrief
 - Work/life boundary checks on switch
 - Capacity warnings
 - tmux hotkey (Ctrl+Space >)
@@ -48,7 +48,7 @@ borg claude              Launch/resume orchestrator Claude session
 borg ls [--all]          Dashboard sorted by urgency
 borg switch [query]      fzf picker → tmux window switch
 borg status [project]    Detailed project status
-borg brief [project]     Project briefing from cairn
+borg hail [project]      Morning briefing (no arg) or project detail
 borg search "query"      Search cairn knowledge graph
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
@@ -88,7 +88,7 @@ skills/
     borg-assimilate/        Shipping checklist + execution (merge PR, archive plan)
     borg-review/            Mid-session diagnostic + loop detection
     borg-debrief/           Structured session analysis
-    checkpoint-enhanced/    Manual session checkpoint
+    borg-checkpoint/    Manual session checkpoint
 install.sh                  Installer: deps, symlinks, hooks, skills, tmux keybinding
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)

@@ -55,7 +55,7 @@ This installs Boris Cherny's 57-tip framework, Scope Guard, and 205+ community s
 | `borg ls [--all]` | Dashboard: all projects sorted by urgency |
 | `borg switch [query]` | fzf picker → jump to project tmux window |
 | `borg status [project]` | Detailed status for one project |
-| `borg brief [project]` | Project briefing from cairn |
+| `borg hail [project]` | Morning briefing (no arg) or project detail |
 | `borg search "query"` | Search knowledge graph (requires cairn) |
 | `borg scan` | Auto-discover projects from session history |
 | `borg add [path]` | Register a project (defaults to `$PWD`) |
@@ -139,7 +139,7 @@ what to do next.
 **`/borg-debrief`** — Deep session analysis. Runs automatically via stop hook. Captures objective,
 outcome, decisions, patterns, and next steps in structured format for future sessions.
 
-**`/checkpoint-enhanced`** — Manual session checkpoint. Structured summary with next-session entry point.
+**`/borg-checkpoint`** — Manual session checkpoint. Structured summary with next-session entry point.
 Use before breaks or when switching projects.
 
 ### Community Skills

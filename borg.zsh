@@ -779,18 +779,23 @@ cmd_tidy() {
     fi
 }
 
-cmd_brief() {
+cmd_hail() {
     local project="${1:-}"
-    [[ -z "$project" ]] && project="${PWD##*/}"
 
+    # No arg → full briefing across all projects (same as borg init shows)
+    if [[ -z "$project" ]]; then
+        _borg_print_briefing
+        return
+    fi
+
+    # Specific project → detailed status + cairn knowledge
+    cmd_status "$project"
     if command -v cairn &>/dev/null; then
-        info "Querying cairn for $project..."
+        echo ""
+        info "Cairn knowledge for $project:"
         _borg_timeout 5 cairn search "$project" --project "$project" --max 5 2>/dev/null || {
             warn "cairn search timed out or failed"
-            cmd_status "$project"
         }
-    else
-        cmd_status "$project"
     fi
 }
 
@@ -950,7 +955,7 @@ $payload"
             rel_time=$(_borg_relative_time "$last_activity")
             echo -e "    ${DIM}$name  ($rel_time)${NC}"
         done
-        echo -e "  ${DIM}Run 'borg brief <name>' for details.${NC}"
+        echo -e "  ${DIM}Run 'borg hail <name>' for details.${NC}"
     fi
     echo ""
 }
@@ -1047,8 +1052,12 @@ The developer has already seen the morning hail in their terminal.
 Be ready to answer questions about any project, help them switch focus, or dive into work.
 If they say 'go' or 'start' or 'engage', switch to the top-priority project."
 
+    # Write prompt to file — avoids shell-escaping hell when passing through tmux send-keys
+    local prompt_file="${TMPDIR:-/tmp}/borg-orchestrator-prompt.$$"
+    printf '%s' "$prompt" > "$prompt_file"
+
     info "Hailing frequencies open — resume any time with: borg claude"
-    _borg_launch_in_tmux claude --name "borg-orchestrator" --append-system-prompt "$prompt"
+    _borg_launch_in_tmux "$prompt_file" claude --name "borg-orchestrator" --append-system-prompt-file "$prompt_file"
 }
 
 cmd_claude() {
@@ -1058,18 +1067,41 @@ cmd_claude() {
 }
 
 # Launch a command inside the borg tmux session.
-# If already in tmux, exec directly. Otherwise, send to pane 0 of the first
-# window and attach.
+# If already in tmux, exec directly. Otherwise, write a launcher script
+# and send it to the target pane (avoids shell-escaping multiline args).
+# If the first arg is a temp file path (from cmd_init), it is cleaned up
+# after claude exits.
 _borg_launch_in_tmux() {
-    if [[ -n "${TMUX:-}" ]]; then
-        cd "$BORG_HOME"
-        exec "$@"
+    local cleanup_file=""
+    # If first arg looks like a temp prompt file, pull it out for cleanup
+    if [[ "$1" == "${TMPDIR:-/tmp}"/borg-orchestrator-prompt.* ]]; then
+        cleanup_file="$1"
+        shift
     fi
 
-    local target_pane quoted_args
+    if [[ -n "${TMUX:-}" ]]; then
+        cd "$BORG_HOME"
+        "$@"
+        [[ -n "$cleanup_file" ]] && rm -f "$cleanup_file"
+        return
+    fi
+
+    # Write a launcher script so tmux send-keys only types one short command
+    local launcher="${TMPDIR:-/tmp}/borg-launch.$$.zsh"
+    {
+        echo '#!/usr/bin/env zsh'
+        echo "cd ${(q)BORG_HOME}"
+        # Quote each arg properly for the launcher script
+        printf '%q ' "$@"
+        echo ""
+        [[ -n "$cleanup_file" ]] && echo "rm -f ${(q)cleanup_file}"
+        echo "rm -f ${(q)launcher}"
+    } > "$launcher"
+    chmod +x "$launcher"
+
+    local target_pane
     target_pane=$(tmux list-panes -t "$BORG_TMUX_SESSION:{start}" -F '#{pane_id}' | head -1)
-    quoted_args=$(printf '%q ' "$@")
-    tmux send-keys -t "$target_pane" "cd $BORG_HOME && $quoted_args" Enter
+    tmux send-keys -t "$target_pane" "$launcher" Enter
     exec tmux attach-session -t "$BORG_TMUX_SESSION"
 }
 
@@ -1226,6 +1258,11 @@ CONF
     # ── 4. Install skills ─────────────────────────────────────────────────────
     info "Installing skills..."
 
+    # Clean up stale symlinks (e.g. renamed skills)
+    for existing in "$CLAUDE_SKILLS_DIR/"*; do
+        [[ -L "$existing" && ! -e "$existing" ]] && rm -f "$existing"
+    done
+
     for skill_dir in "$BORG_HOME/skills/"*/; do
         [[ -d "$skill_dir" ]] || continue
         local name="${skill_dir:t}"
@@ -1287,10 +1324,9 @@ cmd_help() {
     ls [--all]          Dashboard: all projects sorted by urgency
     switch [query]      fzf picker → jump to project tmux window
     status [project]    Detailed status (defaults to current directory)
-    brief [project]     Project briefing from cairn (defaults to current dir)
+    hail [project]      Morning briefing (no arg) or project detail (with arg)
     search <query>      Search cairn knowledge graph (--project to filter)
     scan                Discover projects + refresh summaries
-    hail                Print morning briefing (without launching orchestrator)
     add [path]          Register a project (defaults to $PWD)
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
@@ -1303,10 +1339,18 @@ cmd_help() {
   HOTKEY
     Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
 
-  SKILLS
-    /borg-assimilate    Shipping checklist + execution (merge PR, archive plan)
+  SKILLS (use in Claude Code sessions)
     /borg-plan          Project planning (Claude proposes, you validate)
     /borg-review        Mid-session diagnostic + loop detection
+    /borg-assimilate    Shipping checklist + execution (merge PR, archive plan)
+    /borg-checkpoint    Manual session checkpoint with next-session entry point
+    /borg-hail          Same as 'borg hail' — morning briefing or project detail
+    /borg-ls            Same as 'borg ls' — project dashboard
+    /borg-next          Same as 'borg next' — what needs attention
+    /borg-status        Same as 'borg status' — single project detail
+    /borg-switch        Same as 'borg switch' — jump to project
+    /borg-search        Same as 'borg search' — search cairn knowledge
+    /borg-refresh       Same as 'borg refresh' — regenerate summaries
     /adhd-guardrails    Compassionate constraints (always active)
 
   STATUS
@@ -1343,7 +1387,7 @@ case "${1:-help}" in
     ls)       cmd_ls "${@:2}" ;;
     switch)   cmd_switch "${@:2}" ;;
     status)   cmd_status "${@:2}" ;;
-    brief)    cmd_brief "${@:2}" ;;
+    hail|brief) cmd_hail "${@:2}" ;;
     search)   cmd_search "${@:2}" ;;
     scan)     cmd_scan "${@:2}" ;;
     add)      cmd_add "${@:2}" ;;
@@ -1355,7 +1399,7 @@ case "${1:-help}" in
     regenerate|tidy)  cmd_tidy ;;
     setup)    cmd_setup ;;
     focus)    cmd_focus "${@:2}" ;;
-    hail|briefing) _borg_print_briefing ;;
+    briefing) _borg_print_briefing ;;
     help|--help|-h) cmd_help ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac
