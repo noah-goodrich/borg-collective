@@ -116,7 +116,7 @@ echo "    1. drone start <project> <feature> create worktree + branch, launch Cl
 echo "    2. /borg-plan                      lock objectives + acceptance criteria"
 echo "    3. (implement)"
 echo "    4. /simplify                       review changed code before committing"
-echo "    5. /checkpoint + git commit        document session milestone"
+echo "    5. /borg-checkpoint + git commit    document session milestone"
 echo "    6. borg next / Ctrl+Space >        what needs attention? jump there."
 echo ""
 echo "  borg commands:"
