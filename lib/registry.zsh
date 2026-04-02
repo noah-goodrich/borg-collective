@@ -12,10 +12,15 @@ borg_registry_init() {
     fi
 }
 
-# Atomic write with lockfile to prevent concurrent corruption
+# Atomic write — reject empty data to prevent registry wipeouts
 _borg_registry_write() {
     local tmp="$BORG_REGISTRY.tmp.$$"
     /bin/cat > "$tmp"
+    if [[ ! -s "$tmp" ]]; then
+        warn "registry write blocked: refusing to write empty file"
+        /bin/rm -f "$tmp"
+        return 1
+    fi
     /bin/mv "$tmp" "$BORG_REGISTRY"
 }
 
