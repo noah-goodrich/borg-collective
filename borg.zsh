@@ -1238,12 +1238,16 @@ CONF
     fi
 
     # ── 2. Install hooks ──────────────────────────────────────────────────────
+    # Copy (not symlink) so hooks work inside devcontainers where the bind-
+    # mounted ~/.claude can't follow host-absolute symlink targets.
     info "Installing hooks..."
     chmod +x "$BORG_HOME/hooks/"*.sh
 
     for hook in "$BORG_HOME/hooks/"*.sh; do
         local name="${hook:t}"
-        ln -sf "$hook" "$CLAUDE_HOOKS_DIR/$name"
+        rm -f "$CLAUDE_HOOKS_DIR/$name"
+        cp "$hook" "$CLAUDE_HOOKS_DIR/$name"
+        chmod +x "$CLAUDE_HOOKS_DIR/$name"
         info "  $name"
     done
 
@@ -1259,8 +1263,8 @@ CONF
 
         # Migration: remove old session-start.sh (merged into borg-start.sh)
         _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/session-start.sh" "SessionStart" "session-start.sh"
-        [[ -L "$CLAUDE_HOOKS_DIR/session-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/session-start.sh" \
-            && info "  Removed session-start.sh symlink"
+        [[ -e "$CLAUDE_HOOKS_DIR/session-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/session-start.sh" \
+            && info "  Removed old session-start.sh"
     else
         warn "No settings.json at $CLAUDE_SETTINGS"
         warn "Hooks installed but not registered. See README.md for manual registration."
@@ -1277,7 +1281,9 @@ CONF
 
         for hook in "$BORG_HOME/hooks/"*.sh; do
             local name="${hook:t}"
-            ln -sf "$hook" "$COCO_DIR/hooks/$name"
+            rm -f "$COCO_DIR/hooks/$name"
+            cp "$hook" "$COCO_DIR/hooks/$name"
+            chmod +x "$COCO_DIR/hooks/$name"
         done
 
         info "Registering hooks in CoCo settings.json..."
@@ -1300,9 +1306,11 @@ CONF
     # ── 4. Install skills ─────────────────────────────────────────────────────
     info "Installing skills..."
 
-    # Clean up stale symlinks (e.g. renamed skills)
-    for existing in "$CLAUDE_SKILLS_DIR/"*; do
-        [[ -L "$existing" && ! -e "$existing" ]] && rm -f "$existing"
+    # Clean up stale skills (removed from source)
+    for existing in "$CLAUDE_SKILLS_DIR/"*/; do
+        [[ -d "$existing" ]] || continue
+        local ename="${existing:t}"
+        [[ ! -d "$BORG_HOME/skills/$ename" ]] && rm -rf "$existing" && info "  Removed stale skill: $ename"
     done
 
     for skill_dir in "$BORG_HOME/skills/"*/; do
@@ -1310,14 +1318,9 @@ CONF
         local name="${skill_dir:t}"
         local target="$CLAUDE_SKILLS_DIR/$name"
 
-        if [[ -L "$target" ]]; then
-            rm "$target"
-        elif [[ -d "$target" ]]; then
-            warn "  $name: directory exists (not a symlink), skipping"
-            continue
-        fi
-
-        ln -sf "$skill_dir" "$target"
+        # Copy (not symlink) so skills work inside devcontainers
+        rm -rf "$target"
+        cp -R "$skill_dir" "$target"
         info "  $name"
     done
 
