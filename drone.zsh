@@ -141,6 +141,18 @@ ensure_postgres() {
     docker compose -f "$POSTGRES_COMPOSE" up -d
 }
 
+run_initialize_command() {
+    local project_dir="$1"
+    local dc_json="$project_dir/.devcontainer/devcontainer.json"
+    [[ -f "$dc_json" ]] || return 0
+    local init_cmd
+    init_cmd=$(sed 's|^\s*//.*||' "$dc_json" | jq -r '.initializeCommand // empty') || return 0
+    [[ -n "$init_cmd" ]] || return 0
+    dbg "run_initialize_command: $init_cmd"
+    local expanded="${init_cmd//\$\{localWorkspaceFolder\}/$project_dir}"
+    eval "$expanded"
+}
+
 # ── Window management ─────────────────────────────────────────────────────────
 
 create_2pane_window() {
@@ -262,6 +274,7 @@ cmd_up() {
             container=$(get_project_container "$project_dir")
             if [[ -z "$container" ]]; then
                 info "Container stopped. Restarting..."
+                run_initialize_command "$project_dir"
                 docker compose -p "$project_name" -f "$compose" up -d
                 container=$(wait_for_container "$project_dir")
                 local shell service exec_cmd
@@ -281,6 +294,7 @@ cmd_up() {
     container=$(get_project_container "$project_dir")
     if [[ -z "$container" ]]; then
         info "Starting containers for $project_name..."
+        run_initialize_command "$project_dir"
         docker compose -p "$project_name" -f "$compose" up -d
         container=$(wait_for_container "$project_dir")
     fi
@@ -638,6 +652,142 @@ cmd_status() {
     echo
 }
 
+# ── drone scaffold ────────────────────────────────────────────────────────────
+
+cmd_scaffold() {
+    local project_dir="" lang="none" workspace="/workspace"
+
+    # Parse args
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --lang)     lang="${2:-none}"; shift 2 ;;
+            --workspace) workspace="${2:-/workspace}"; shift 2 ;;
+            *)          project_dir="$1"; shift ;;
+        esac
+    done
+
+    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--lang python|node|none] [--workspace /workspace]"
+
+    # Resolve to absolute path
+    [[ "$project_dir" != /* ]] && project_dir="$PWD/$project_dir"
+    [[ -d "$project_dir" ]] || die "Directory does not exist: $project_dir"
+
+    local dc_dir="$project_dir/.devcontainer"
+    if [[ -d "$dc_dir" ]]; then
+        die ".devcontainer/ already exists in $project_dir"
+    fi
+
+    local project_name="${project_dir##*/}"
+    mkdir -p "$dc_dir"
+
+    # ── Dockerfile ────────────────────────────────────────────────────────
+    local dockerfile_extra=""
+    case "$lang" in
+        python)
+            dockerfile_extra='RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip python3-venv \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* \
+    && pip install --break-system-packages uv'
+            ;;
+        node)
+            dockerfile_extra='# Node.js already included in base image'
+            ;;
+        none|*)
+            dockerfile_extra='# Add project-specific deps here if needed'
+            ;;
+    esac
+
+    cat > "$dc_dir/Dockerfile" <<DOCKERFILE
+# Extends the shared base devcontainer image.
+# Base provides: zsh, neovim, tmux, git, ssh, node.js, claude-code CLI.
+#
+# To rebuild the base locally:
+#   docker build -f ~/.config/dotfiles/devcontainer/Dockerfile.base -t devcontainer-base:local .
+FROM devcontainer-base:local
+
+$dockerfile_extra
+
+WORKDIR $workspace
+DOCKERFILE
+
+    # ── docker-compose.yml ────────────────────────────────────────────────
+    cat > "$dc_dir/docker-compose.yml" <<COMPOSE
+services:
+  ${project_name}-app:
+    labels:
+      - dev.role=app
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      # --- project files ---
+      - ..:${workspace}:cached
+
+      # ---------------------------------------------------------------
+      # STANDARD DOTFILES BLOCK — copy this verbatim to new projects.
+      # Brings your shell, editor, and git config into the container
+      # so the environment feels identical to your host.
+      # ---------------------------------------------------------------
+      - ~/.zshrc:/home/dev/.zshrc:cached
+      - ~/.p10k.zsh:/home/dev/.p10k.zsh:cached
+      - ~/.config/zsh:/home/dev/.config/zsh:cached
+      - ~/.config/nvim:/home/dev/.config/nvim:cached
+      - ~/.ssh:/home/dev/.ssh:cached
+      - ~/.gitconfig:/home/dev/.gitconfig:cached
+      - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+      - ~/.claude:/home/dev/.claude:cached
+      - ~/.config/borg:/home/dev/.config/borg:cached
+      # host home read-only — postStartCommand copies .claude.json fresh each start
+      # (avoids stale inode from Claude Code's atomic file replacement)
+      - ~/:/host-home:ro
+      # ---------------------------------------------------------------
+
+    working_dir: ${workspace}
+    user: dev
+    command: sleep infinity
+    environment:
+      SSH_AUTH_SOCK: /run/host-services/ssh-auth.sock
+    networks:
+      - devnet
+
+networks:
+  devnet:
+    external: true
+COMPOSE
+
+    # ── devcontainer.json ─────────────────────────────────────────────────
+    local post_create="chmod 700 /home/dev/.ssh && chmod 600 /home/dev/.ssh/* && chmod 644 /home/dev/.ssh/*.pub 2>/dev/null || true"
+    case "$lang" in
+        python) post_create="$post_create; pip install -e '.[dev]'" ;;
+        node)   post_create="$post_create; npm install" ;;
+    esac
+
+    cat > "$dc_dir/devcontainer.json" <<DEVCONTAINER
+{
+  "name": "${project_name}",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "${project_name}-app",
+  "workspaceFolder": "${workspace}",
+  "features": {},
+  "postCreateCommand": "${post_create}",
+  "postStartCommand": "cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "dev",
+  "updateRemoteUserUID": true
+}
+DEVCONTAINER
+
+    info "Scaffolded .devcontainer/ in $project_dir"
+    info "  Language: $lang"
+    info "  Workspace: $workspace"
+    echo
+    info "Next steps:"
+    info "  1. Verify base image exists: docker images devcontainer-base:local"
+    info "  2. If missing, build it:"
+    info "     docker build -f ~/.config/dotfiles/devcontainer/Dockerfile.base -t devcontainer-base:local ~/.config/dotfiles/devcontainer"
+    info "  3. drone up $project_name"
+}
+
 # ── drone help ────────────────────────────────────────────────────────────────
 
 cmd_help() {
@@ -663,6 +813,7 @@ cmd_help() {
     fix [project]        Restore standard 2-pane layout for project window
     fix --all            Restore layout for all windows
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
+    scaffold <dir>       Generate .devcontainer/ from templates (--lang python|node|none)
     status               Show all active drones (containers + Claude status)
     help                 Show this message
 
@@ -697,6 +848,7 @@ case "${1:-}" in
     restart)    cmd_restart "${2:-}" ;;
     fix)        cmd_fix "${2:-}" ;;
     toggle)     cmd_toggle "${2:-}" ;;
+    scaffold)   shift; cmd_scaffold "$@" ;;
     status)     cmd_status ;;
     help|-h)    cmd_help ;;
     *)          die "unknown command '${1}'. Run: drone help" ;;
