@@ -1122,8 +1122,7 @@ _borg_launch_in_tmux() {
     fi
 
     if [[ -n "${TMUX:-}" ]]; then
-        cd "$BORG_HOME"
-        "$@"
+        ( cd "$BORG_HOME" && "$@" )
         [[ -n "$cleanup_file" ]] && rm -f "$cleanup_file"
         return
     fi
@@ -1324,7 +1323,28 @@ CONF
         info "  $name"
     done
 
-    # ── 5. tmux keybinding ────────────────────────────────────────────────────
+    # ── 5. Install bin/ utilities ────────────────────────────────────────────
+    local CLAUDE_BIN_DIR="$CLAUDE_DIR/bin"
+    if [[ -d "$BORG_HOME/bin" ]]; then
+        info "Installing bin/ utilities..."
+        mkdir -p "$CLAUDE_BIN_DIR"
+        for util in "$BORG_HOME/bin/"*; do
+            [[ -f "$util" ]] || continue
+            local uname="${util:t}"
+            cp "$util" "$CLAUDE_BIN_DIR/$uname"
+            chmod +x "$CLAUDE_BIN_DIR/$uname"
+            info "  $uname"
+        done
+
+        # Ensure ~/.claude/bin is in PATH for this session and future shells
+        if [[ ":$PATH:" != *":$CLAUDE_BIN_DIR:"* ]]; then
+            export PATH="$CLAUDE_BIN_DIR:$PATH"
+            warn "$CLAUDE_BIN_DIR not in PATH. Add to ~/.zshrc:"
+            warn "  export PATH=\"\$HOME/.claude/bin:\$PATH\""
+        fi
+    fi
+
+    # ── 6. tmux keybinding ────────────────────────────────────────────────────
     local TMUX_CONF="$HOME/.config/tmux/tmux.conf"
     if [[ -f "$TMUX_CONF" ]]; then
         if ! grep -q "borg next" "$TMUX_CONF" 2>/dev/null; then
@@ -1343,7 +1363,7 @@ CONF
         warn '  bind > run-shell "borg next --switch"'
     fi
 
-    # ── 6. Bootstrap registry ─────────────────────────────────────────────────
+    # ── 7. Bootstrap registry ─────────────────────────────────────────────────
     info "Bootstrapping registry from session history..."
     cmd_scan 2>&1 || warn "borg scan had issues (registry may still be empty)"
 
