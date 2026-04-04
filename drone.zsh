@@ -28,6 +28,12 @@ POSTGRES_COMPOSE="$HOME/.config/dotfiles/devcontainer/docker-compose.postgres.ym
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_ROOT="${BORG_ROOT:-$HOME/dev}"
 
+# Build a docker compose exec command for a project's app service.
+# Usage: build_exec_cmd <project_name> <compose_file> <service> <shell>
+build_exec_cmd() {
+    echo "docker compose -p $1 -f $2 exec -w /workspace $3 $4"
+}
+
 # Colors (same as borg.zsh)
 GREEN='\033[0;32m'  YELLOW='\033[1;33m'  RED='\033[0;31m'  CYAN='\033[0;36m'
 BOLD='\033[1m'  DIM='\033[2m'  NC='\033[0m'
@@ -280,7 +286,7 @@ cmd_up() {
                 local shell service exec_cmd
                 shell=$(get_shell "$container")
                 service=$(get_service_name "$project_dir")
-                exec_cmd="docker compose -p $project_name -f $compose exec $service $shell"
+                exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
                 resend_exec_to_panes "$project_name" "$exec_cmd"
             fi
             info "Project '$project_name' already running."
@@ -302,7 +308,7 @@ cmd_up() {
     local shell service exec_cmd
     shell=$(get_shell "$container")
     service=$(get_service_name "$project_dir")
-    exec_cmd="docker compose -p $project_name -f $compose exec $service $shell"
+    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
     info "Container: $container  Service: $service  Shell: $shell"
 
     create_2pane_window "$project_name" "$exec_cmd"
@@ -365,7 +371,7 @@ _restart_project() {
     container=$(wait_for_container "$project_dir")
     shell=$(get_shell "$container")
     service=$(get_service_name "$project_dir")
-    exec_cmd="docker compose -p $project_name -f $compose exec $service $shell"
+    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
 
     if has_window "$project_name"; then
         resend_exec_to_panes "$project_name" "$exec_cmd"
@@ -511,7 +517,7 @@ cmd_sh() {
                         --format '{{.Label "com.docker.compose.service"}}' 2>/dev/null | head -1)
     [[ -n "$service" ]] || die "No running app container found for $project_name. Run: drone up $project_name"
 
-    exec docker compose -p "$project_name" -f "$compose" exec "$service" /bin/zsh
+    exec docker compose -p "$project_name" -f "$compose" exec -w /workspace "$service" "${shell:-/bin/zsh}"
 }
 
 # ── drone fix ─────────────────────────────────────────────────────────────────
@@ -596,7 +602,7 @@ cmd_toggle() {
                 if [[ -n "$container" ]]; then
                     shell=$(get_shell "$container")
                     service=$(get_service_name "$pdir")
-                    exec_cmd="docker compose -p $wname -f $pdir/$COMPOSE_FILE exec $service $shell"
+                    exec_cmd=$(build_exec_cmd "$wname" "$pdir/$COMPOSE_FILE" "$service" "$shell")
                     tmux send-keys -t "$side" "$exec_cmd" Enter
                 fi
             elif [[ -n "$pdir" ]]; then
@@ -724,21 +730,25 @@ services:
       - ..:${workspace}:cached
 
       # ---------------------------------------------------------------
-      # STANDARD DOTFILES BLOCK — copy this verbatim to new projects.
-      # Brings your shell, editor, and git config into the container
-      # so the environment feels identical to your host.
+      # STANDARD DOTFILES BLOCK — keep in sync with
+      # dotfiles/devcontainer/docker-compose.base.yml
       # ---------------------------------------------------------------
-      - ~/.zshrc:/home/dev/.zshrc:cached
-      - ~/.p10k.zsh:/home/dev/.p10k.zsh:cached
+      # shell — directory mount (not individual files) to avoid stale
+      # inodes when editors atomically replace files. Symlinks created
+      # in postCreateCommand.
+      - ~/.config/dotfiles/zsh:/home/dev/.config/dotfiles/zsh:cached
       - ~/.config/zsh:/home/dev/.config/zsh:cached
+      # editor
       - ~/.config/nvim:/home/dev/.config/nvim:cached
+      # git + ssh
       - ~/.ssh:/home/dev/.ssh:cached
       - ~/.gitconfig:/home/dev/.gitconfig:cached
       - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+      # claude code + borg
       - ~/.claude:/home/dev/.claude:cached
       - ~/.config/borg:/home/dev/.config/borg:cached
-      # host home read-only — postStartCommand copies .claude.json fresh each start
-      # (avoids stale inode from Claude Code's atomic file replacement)
+      # host home read-only — postStartCommand copies .claude.json fresh
+      # each start (avoids stale inode from atomic file replacement)
       - ~/:/host-home:ro
       # ---------------------------------------------------------------
 
@@ -756,7 +766,7 @@ networks:
 COMPOSE
 
     # ── devcontainer.json ─────────────────────────────────────────────────
-    local post_create="chmod 700 /home/dev/.ssh && chmod 600 /home/dev/.ssh/* && chmod 644 /home/dev/.ssh/*.pub 2>/dev/null || true"
+    local post_create="ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; chmod 700 /home/dev/.ssh && chmod 600 /home/dev/.ssh/* && chmod 644 /home/dev/.ssh/*.pub 2>/dev/null || true"
     case "$lang" in
         python) post_create="$post_create; pip install -e '.[dev]'" ;;
         node)   post_create="$post_create; npm install" ;;

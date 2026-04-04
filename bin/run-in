@@ -1,0 +1,18 @@
+#!/usr/bin/env zsh
+# run-in — execute a command in a different directory without persisting the cd
+#
+# Usage: run-in /path/to/dir command [args...]
+#
+# Replaces the pattern: cd /path && command args
+# which triggers Claude Code permission prompts because the wildcard in
+# Bash(command:*) does not match across shell operators (&&, |, ;).
+#
+# Allowlist entry: Bash(run-in:*)
+
+if [[ $# -lt 2 ]]; then
+    echo "Usage: run-in <directory> <command> [args...]" >&2
+    exit 1
+fi
+
+dir="$1"; shift
+cd "$dir" && exec "$@"
