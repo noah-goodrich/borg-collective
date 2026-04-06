@@ -149,12 +149,17 @@ ensure_postgres() {
     docker compose -f "$POSTGRES_COMPOSE" up -d
 }
 
-run_initialize_command() {
-    local project_dir="$1"
+_read_devcontainer_field() {
+    local project_dir="$1" field="$2"
     local dc_json="$project_dir/.devcontainer/devcontainer.json"
     [[ -f "$dc_json" ]] || return 0
+    sed 's|^\s*//.*||' "$dc_json" | jq -r ".$field // empty"
+}
+
+run_initialize_command() {
+    local project_dir="$1"
     local init_cmd
-    init_cmd=$(sed 's|^\s*//.*||' "$dc_json" | jq -r '.initializeCommand // empty') || return 0
+    init_cmd=$(_read_devcontainer_field "$project_dir" "initializeCommand") || return 0
     [[ -n "$init_cmd" ]] || return 0
     dbg "run_initialize_command: $init_cmd"
     local expanded="${init_cmd//\$\{localWorkspaceFolder\}/$project_dir}"
@@ -162,13 +167,14 @@ run_initialize_command() {
 }
 
 run_post_start_command() {
-    local project_name="$1" project_dir="$2" compose="$3" service="$4"
-    local dc_json="$project_dir/.devcontainer/devcontainer.json"
-    [[ -f "$dc_json" ]] || return 0
+    local project_name="$1" project_dir="$2"
     local post_cmd
-    post_cmd=$(sed 's|^\s*//.*||' "$dc_json" | jq -r '.postStartCommand // empty') || return 0
+    post_cmd=$(_read_devcontainer_field "$project_dir" "postStartCommand") || return 0
     [[ -n "$post_cmd" ]] || return 0
     dbg "run_post_start_command: $post_cmd"
+    local compose="$project_dir/$COMPOSE_FILE"
+    local service
+    service=$(get_service_name "$project_dir")
     docker compose -p "$project_name" -f "$compose" exec -T -w /workspace "$service" sh -c "$post_cmd"
 }
 
@@ -300,7 +306,7 @@ cmd_up() {
                 shell=$(get_shell "$container")
                 service=$(get_service_name "$project_dir")
                 exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
-                run_post_start_command "$project_name" "$project_dir" "$compose" "$service"
+                run_post_start_command "$project_name" "$project_dir"
                 resend_exec_to_panes "$project_name" "$exec_cmd"
             fi
             info "Project '$project_name' already running."
@@ -324,7 +330,7 @@ cmd_up() {
     service=$(get_service_name "$project_dir")
     exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
     info "Container: $container  Service: $service  Shell: $shell"
-    run_post_start_command "$project_name" "$project_dir" "$compose" "$service"
+    run_post_start_command "$project_name" "$project_dir"
 
     create_2pane_window "$project_name" "$exec_cmd" "$project_dir"
     tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
@@ -370,16 +376,25 @@ cmd_down() {
     fi
 }
 
-# ── drone restart ─────────────────────────────────────────────────────────────
+# ── drone restart / rebuild ───────────────────────────────────────────────────
 
-_restart_project() {
-    local project_name="$1" project_dir="$2"
+# Shared container cycle: down → [build] → up → post-start → re-exec panes.
+# mode=restart  skips the build step
+# mode=rebuild  adds docker compose build --no-cache
+_cycle_project() {
+    local project_name="$1" project_dir="$2" mode="${3:-restart}"
     local compose="$project_dir/$COMPOSE_FILE"
 
     [[ -f "$compose" ]] || { warn "$project_name: no $COMPOSE_FILE, skipping"; return 0; }
 
-    info "Restarting $project_name..."
-    docker compose -p "$project_name" -f "$compose" down
+    if [[ "$mode" == "rebuild" ]]; then
+        info "Rebuilding $project_name (no cache)..."
+        docker compose -p "$project_name" -f "$compose" down
+        docker compose -p "$project_name" -f "$compose" build --no-cache
+    else
+        info "Restarting $project_name..."
+        docker compose -p "$project_name" -f "$compose" down
+    fi
     docker compose -p "$project_name" -f "$compose" up -d
 
     local container shell service exec_cmd
@@ -387,43 +402,22 @@ _restart_project() {
     shell=$(get_shell "$container")
     service=$(get_service_name "$project_dir")
     exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
-    run_post_start_command "$project_name" "$project_dir" "$compose" "$service"
+    run_post_start_command "$project_name" "$project_dir"
 
     if has_window "$project_name"; then
         resend_exec_to_panes "$project_name" "$exec_cmd"
-        info "$project_name: restarted, panes re-exec'd."
+        info "$project_name: ${mode}ed, panes re-exec'd."
     else
-        info "$project_name: container up, no window to refresh."
+        info "$project_name: ${mode}ed, no window to refresh."
     fi
 }
 
-cmd_restart() {
-    if [[ "${1:-}" == "--all" ]]; then
-        _cmd_restart_all
-        return
-    fi
+_restart_project() { _cycle_project "$1" "$2" "restart"; }
+_rebuild_project()  { _cycle_project "$1" "$2" "rebuild"; }
 
-    local project_name project_dir
-
-    # If no arg and we're in tmux, prefer @project_dir from current window
-    if [[ -z "${1:-}" && -n "$TMUX" ]]; then
-        local current_window
-        current_window=$(tmux display-message -p '#W')
-        local pdir
-        pdir=$(tmux show-option -t "$SESSION:$current_window" -v @project_dir 2>/dev/null) || true
-        if [[ -n "$pdir" && -d "$pdir" ]]; then
-            _proj_dir="$pdir"
-            _proj_name="${pdir##*/}"
-            _restart_project "$_proj_name" "$_proj_dir"
-            return
-        fi
-    fi
-
-    _drone_resolve "${1:-}"
-    _restart_project "$_proj_name" "$_proj_dir"
-}
-
-_cmd_restart_all() {
+# Shared --all iterator: walks every non-host project window and calls op_func.
+_foreach_project_window() {
+    local op_func="$1" past_tense="$2"
     tmux has-session -t "$SESSION" 2>/dev/null || die "No $SESSION tmux session running."
 
     local windows
@@ -438,84 +432,39 @@ _cmd_restart_all() {
             warn "$wname: no @project_dir set, skipping"
             continue
         fi
-        _restart_project "$wname" "$pdir"
+        "$op_func" "$wname" "$pdir"
         count=$(( count + 1 ))
     done
-    info "Restarted $count project(s)."
+    info "${past_tense} $count project(s)."
 }
 
-# ── drone rebuild ─────────────────────────────────────────────────────────────
+# Shared dispatch: handles --all, tmux current-window fallback, and named arg.
+_cmd_cycle() {
+    local mode="$1" arg="${2:-}"
 
-_rebuild_project() {
-    local project_name="$1" project_dir="$2"
-    local compose="$project_dir/$COMPOSE_FILE"
-    [[ -f "$compose" ]] || { warn "$project_name: no $COMPOSE_FILE, skipping"; return 0; }
-
-    info "Rebuilding $project_name (no cache)..."
-    docker compose -p "$project_name" -f "$compose" down
-    docker compose -p "$project_name" -f "$compose" build --no-cache
-    docker compose -p "$project_name" -f "$compose" up -d
-
-    local container shell service exec_cmd
-    container=$(wait_for_container "$project_dir")
-    shell=$(get_shell "$container")
-    service=$(get_service_name "$project_dir")
-    run_post_start_command "$project_name" "$project_dir" "$compose" "$service"
-    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
-
-    if has_window "$project_name"; then
-        resend_exec_to_panes "$project_name" "$exec_cmd"
-        info "$project_name: rebuilt, panes re-exec'd."
-    else
-        info "$project_name: rebuilt, no window to refresh."
-    fi
-}
-
-cmd_rebuild() {
-    if [[ "${1:-}" == "--all" ]]; then
-        _cmd_rebuild_all
+    if [[ "$arg" == "--all" ]]; then
+        local past_tense
+        [[ "$mode" == "rebuild" ]] && past_tense="Rebuilt" || past_tense="Restarted"
+        _foreach_project_window "_${mode}_project" "$past_tense"
         return
     fi
 
-    local project_name project_dir
-
-    if [[ -z "${1:-}" && -n "$TMUX" ]]; then
-        local current_window
+    if [[ -z "$arg" && -n "$TMUX" ]]; then
+        local current_window pdir
         current_window=$(tmux display-message -p '#W')
-        local pdir
         pdir=$(tmux show-option -t "$SESSION:$current_window" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" && -d "$pdir" ]]; then
-            _proj_dir="$pdir"
-            _proj_name="${pdir##*/}"
-            _rebuild_project "$_proj_name" "$_proj_dir"
+            _cycle_project "${pdir##*/}" "$pdir" "$mode"
             return
         fi
     fi
 
-    _drone_resolve "${1:-}"
-    _rebuild_project "$_proj_name" "$_proj_dir"
+    _drone_resolve "$arg"
+    _cycle_project "$_proj_name" "$_proj_dir" "$mode"
 }
 
-_cmd_rebuild_all() {
-    tmux has-session -t "$SESSION" 2>/dev/null || die "No $SESSION tmux session running."
-
-    local windows
-    windows=(${(f)"$(tmux list-windows -t "$SESSION" -F '#W')"})
-
-    local count=0
-    for wname in $windows; do
-        [[ "$wname" == "host" ]] && continue
-        local pdir
-        pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
-        if [[ -z "$pdir" ]]; then
-            warn "$wname: no @project_dir set, skipping"
-            continue
-        fi
-        _rebuild_project "$wname" "$pdir"
-        count=$(( count + 1 ))
-    done
-    info "Rebuilt $count project(s)."
-}
+cmd_restart() { _cmd_cycle "restart" "${1:-}"; }
+cmd_rebuild()  { _cmd_cycle "rebuild" "${1:-}"; }
 
 # ── drone claude ──────────────────────────────────────────────────────────────
 
