@@ -11,6 +11,7 @@
 #   drone claude [project]       Launch Claude Code in project window
 #   drone sh [project]           Shell into project container
 #   drone restart [project]      Restart containers + re-exec panes
+#   drone rebuild [project]      Rebuild images (no cache) + restart
 #   drone fix [project|--all]    Restore standard 2-pane layout
 #   drone toggle [project]       Add/remove side pane (2-pane ↔ 3-pane)
 #   drone status                 Show all active drones
@@ -59,14 +60,8 @@ _drone_resolve() {
         return 0
     fi
 
-    # Argument is an existing path
-    if [[ -d "$arg" ]]; then
-        _proj_dir="$(cd "$arg" && pwd)"
-        _proj_name="${_proj_dir##*/}"
-        return 0
-    fi
-
-    # Look up in borg registry
+    # Look up in borg registry first (takes priority over relative paths
+    # to avoid e.g. "snowfort" matching a subdirectory snowfort/snowfort/)
     local registry="$BORG_DIR/registry.json"
     if [[ -f "$registry" ]]; then
         local reg_path
@@ -76,6 +71,13 @@ _drone_resolve() {
             _proj_name="$arg"
             return 0
         fi
+    fi
+
+    # Argument is an existing path
+    if [[ -d "$arg" ]]; then
+        _proj_dir="$(cd "$arg" && pwd)"
+        _proj_name="${_proj_dir##*/}"
+        return 0
     fi
 
     # Try BORG_ROOT/<arg>
@@ -159,23 +161,34 @@ run_initialize_command() {
     eval "$expanded"
 }
 
+run_post_start_command() {
+    local project_name="$1" project_dir="$2" compose="$3" service="$4"
+    local dc_json="$project_dir/.devcontainer/devcontainer.json"
+    [[ -f "$dc_json" ]] || return 0
+    local post_cmd
+    post_cmd=$(sed 's|^\s*//.*||' "$dc_json" | jq -r '.postStartCommand // empty') || return 0
+    [[ -n "$post_cmd" ]] || return 0
+    dbg "run_post_start_command: $post_cmd"
+    docker compose -p "$project_name" -f "$compose" exec -T -w /workspace "$service" sh -c "$post_cmd"
+}
+
 # ── Window management ─────────────────────────────────────────────────────────
 
 create_2pane_window() {
-    local wname="$1" cmd="${2:-}"
-    dbg "create_2pane_window: '$wname'"
+    local wname="$1" cmd="${2:-}" start_dir="${3:-$HOME}"
+    dbg "create_2pane_window: '$wname' start_dir=$start_dir"
 
     local main
     if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-        main=$(tmux new-session -d -s "$SESSION" -n "$wname" -PF '#{pane_id}')
+        main=$(tmux new-session -d -s "$SESSION" -n "$wname" -c "$start_dir" -PF '#{pane_id}')
     else
-        main=$(tmux new-window -t "$SESSION:" -n "$wname" -PF '#{pane_id}')
+        main=$(tmux new-window -t "$SESSION:" -n "$wname" -c "$start_dir" -PF '#{pane_id}')
     fi
 
     tmux set-option -t "$SESSION:$wname" automatic-rename off
 
     local bottom
-    bottom=$(tmux split-window -v -p 25 -t "$main" -PF '#{pane_id}')
+    bottom=$(tmux split-window -v -p 25 -t "$main" -c "$start_dir" -PF '#{pane_id}')
 
     # Default focus to bottom pane (Claude pane)
     tmux select-pane -t "$bottom"
@@ -253,7 +266,7 @@ cmd_up() {
             return
         fi
 
-        create_2pane_window "$project_name" "cd $project_dir"
+        create_2pane_window "$project_name" "cd $project_dir" "$project_dir"
         tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
         borg add "$project_dir" 2>/dev/null || true
         info "Project '$project_name' ready (local)."
@@ -287,6 +300,7 @@ cmd_up() {
                 shell=$(get_shell "$container")
                 service=$(get_service_name "$project_dir")
                 exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
+                run_post_start_command "$project_name" "$project_dir" "$compose" "$service"
                 resend_exec_to_panes "$project_name" "$exec_cmd"
             fi
             info "Project '$project_name' already running."
@@ -310,8 +324,9 @@ cmd_up() {
     service=$(get_service_name "$project_dir")
     exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
     info "Container: $container  Service: $service  Shell: $shell"
+    run_post_start_command "$project_name" "$project_dir" "$compose" "$service"
 
-    create_2pane_window "$project_name" "$exec_cmd"
+    create_2pane_window "$project_name" "$exec_cmd" "$project_dir"
     tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
     borg add "$project_dir" 2>/dev/null || true
 
@@ -372,6 +387,7 @@ _restart_project() {
     shell=$(get_shell "$container")
     service=$(get_service_name "$project_dir")
     exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
+    run_post_start_command "$project_name" "$project_dir" "$compose" "$service"
 
     if has_window "$project_name"; then
         resend_exec_to_panes "$project_name" "$exec_cmd"
@@ -426,6 +442,79 @@ _cmd_restart_all() {
         count=$(( count + 1 ))
     done
     info "Restarted $count project(s)."
+}
+
+# ── drone rebuild ─────────────────────────────────────────────────────────────
+
+_rebuild_project() {
+    local project_name="$1" project_dir="$2"
+    local compose="$project_dir/$COMPOSE_FILE"
+    [[ -f "$compose" ]] || { warn "$project_name: no $COMPOSE_FILE, skipping"; return 0; }
+
+    info "Rebuilding $project_name (no cache)..."
+    docker compose -p "$project_name" -f "$compose" down
+    docker compose -p "$project_name" -f "$compose" build --no-cache
+    docker compose -p "$project_name" -f "$compose" up -d
+
+    local container shell service exec_cmd
+    container=$(wait_for_container "$project_dir")
+    shell=$(get_shell "$container")
+    service=$(get_service_name "$project_dir")
+    run_post_start_command "$project_name" "$project_dir" "$compose" "$service"
+    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
+
+    if has_window "$project_name"; then
+        resend_exec_to_panes "$project_name" "$exec_cmd"
+        info "$project_name: rebuilt, panes re-exec'd."
+    else
+        info "$project_name: rebuilt, no window to refresh."
+    fi
+}
+
+cmd_rebuild() {
+    if [[ "${1:-}" == "--all" ]]; then
+        _cmd_rebuild_all
+        return
+    fi
+
+    local project_name project_dir
+
+    if [[ -z "${1:-}" && -n "$TMUX" ]]; then
+        local current_window
+        current_window=$(tmux display-message -p '#W')
+        local pdir
+        pdir=$(tmux show-option -t "$SESSION:$current_window" -v @project_dir 2>/dev/null) || true
+        if [[ -n "$pdir" && -d "$pdir" ]]; then
+            _proj_dir="$pdir"
+            _proj_name="${pdir##*/}"
+            _rebuild_project "$_proj_name" "$_proj_dir"
+            return
+        fi
+    fi
+
+    _drone_resolve "${1:-}"
+    _rebuild_project "$_proj_name" "$_proj_dir"
+}
+
+_cmd_rebuild_all() {
+    tmux has-session -t "$SESSION" 2>/dev/null || die "No $SESSION tmux session running."
+
+    local windows
+    windows=(${(f)"$(tmux list-windows -t "$SESSION" -F '#W')"})
+
+    local count=0
+    for wname in $windows; do
+        [[ "$wname" == "host" ]] && continue
+        local pdir
+        pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
+        if [[ -z "$pdir" ]]; then
+            warn "$wname: no @project_dir set, skipping"
+            continue
+        fi
+        _rebuild_project "$wname" "$pdir"
+        count=$(( count + 1 ))
+    done
+    info "Rebuilt $count project(s)."
 }
 
 # ── drone claude ──────────────────────────────────────────────────────────────
@@ -487,7 +576,7 @@ cmd_feature() {
     if [[ -f "$compose" ]]; then
         cmd_up "$work_dir"
     else
-        create_2pane_window "$window_name" "cd $work_dir"
+        create_2pane_window "$window_name" "cd $work_dir" "$work_dir"
         tmux set-option -t "$SESSION:$window_name" @project_dir "$work_dir"
         tmux set-option -t "$SESSION:$window_name" @project_name "$project_name"
         borg add "$work_dir" 2>/dev/null || true
@@ -780,7 +869,7 @@ COMPOSE
   "workspaceFolder": "${workspace}",
   "features": {},
   "postCreateCommand": "${post_create}",
-  "postStartCommand": "cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
+  "postStartCommand": "ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; ln -sf /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
   "shutdownAction": "stopCompose",
   "remoteUser": "dev",
   "updateRemoteUserUID": true
@@ -820,6 +909,8 @@ cmd_help() {
     sh [project]         Shell into project container (exec docker compose exec)
     restart [project]    Restart containers + re-exec all panes
     restart --all        Restart all project containers
+    rebuild [project]    Rebuild images (--no-cache) + restart + re-exec panes
+    rebuild --all        Rebuild all project containers
     fix [project]        Restore standard 2-pane layout for project window
     fix --all            Restore layout for all windows
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
@@ -856,6 +947,7 @@ case "${1:-}" in
     claude)     cmd_claude "${2:-}" ;;
     sh)         cmd_sh "${2:-}" ;;
     restart)    cmd_restart "${2:-}" ;;
+    rebuild)    cmd_rebuild "${2:-}" ;;
     fix)        cmd_fix "${2:-}" ;;
     toggle)     cmd_toggle "${2:-}" ;;
     scaffold)   shift; cmd_scaffold "$@" ;;
