@@ -131,3 +131,9 @@ docs/
 - **Notifications must not steal focus**: macOS notifications should only activate the target app
   on click (`-activate`), never on fire. Unsolicited focus changes interrupt whatever the user is
   doing.
+- **devcontainer postStartCommand vs postCreateCommand**: `drone` only runs `postStartCommand`.
+  Symlinks and per-start setup (zshrc, CLAUDE.md, .claude.json) must live in `postStartCommand`.
+  `postCreateCommand` is for one-time setup (pip install, chmod) and is never run by `drone`.
+- **`claude plugin install` takes a marketplace name, not a file path**: the correct syntax is
+  `claude plugin install <name>@<marketplace>`, not `claude plugin install <file>.plugin`. The
+  local marketplace (`noah-local`) resolves from the plugins source directory, not `dist/`.
