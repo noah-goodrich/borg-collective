@@ -1293,7 +1293,7 @@ CONF
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
 
         info "Registering skills with CoCo..."
-        for skill_dir in "$BORG_HOME/skills/"*/; do
+        for skill_dir in "$BORG_HOME/skills/"*/(N); do
             [[ -d "$skill_dir" ]] || continue
             local name="${skill_dir:t}"
             cortex skill add "$skill_dir" 2>/dev/null && info "  $name (cortex)" || warn "  $name: cortex skill add failed"
@@ -1306,13 +1306,13 @@ CONF
     info "Installing skills..."
 
     # Clean up stale skills (removed from source)
-    for existing in "$CLAUDE_SKILLS_DIR/"*/; do
+    for existing in "$CLAUDE_SKILLS_DIR/"*/(N); do
         [[ -d "$existing" ]] || continue
         local ename="${existing:t}"
         [[ ! -d "$BORG_HOME/skills/$ename" ]] && rm -rf "$existing" && info "  Removed stale skill: $ename"
     done
 
-    for skill_dir in "$BORG_HOME/skills/"*/; do
+    for skill_dir in "$BORG_HOME/skills/"*/(N); do
         [[ -d "$skill_dir" ]] || continue
         local name="${skill_dir:t}"
         local target="$CLAUDE_SKILLS_DIR/$name"
