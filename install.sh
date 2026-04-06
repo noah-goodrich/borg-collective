@@ -135,7 +135,7 @@ echo "    drone status           Show all active drones"
 echo "    drone help             All drone commands"
 echo ""
 echo "  Skills installed:"
-for skill_dir in "$BORG_HOME/skills/"*/; do
+for skill_dir in "$BORG_HOME/skills/"*/(N); do
     [[ -d "$skill_dir" ]] && echo "    /$(basename "$skill_dir")"
 done
 echo ""
