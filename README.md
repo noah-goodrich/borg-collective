@@ -11,29 +11,33 @@ cognitive load, persists context across sessions, and answers the question that 
 
 **New here?** Read [How to Ship Like Boris (and Not Lose Your Mind)](docs/boris-workflow.md) first.
 
-## Quick Start
+## Installation
+
+### Homebrew (recommended)
 
 ```bash
-git clone https://github.com/your-username/borg-collective ~/dev/borg-collective
+brew tap noah-goodrich/borg-collective https://github.com/noah-goodrich/borg-collective.git
+brew install borg-collective
+borg setup
+```
+
+`borg setup` registers Claude Code hooks, installs skills, and configures the tmux keybinding.
+Safe to re-run.
+
+### From source (dev install)
+
+```bash
+git clone https://github.com/noah-goodrich/borg-collective ~/dev/borg-collective
 cd ~/dev/borg-collective && ./install.sh
 borg init
 ```
 
-The installer handles everything:
-1. Checks dependencies (jq, fzf, tmux) — installs via Homebrew if missing
-2. Symlinks `borg` and `drone` to `~/.local/bin/`
-3. Installs and registers Claude Code hooks (SessionStart, Stop, Notification, PreToolUse)
-4. Installs skills (cognitive load guardrails, planning, shipping, review, debrief, checkpoint)
-5. Configures tmux keybinding (`Ctrl+Space >` → jump to most pressing project)
-6. Runs `borg scan` to discover projects
+### First run
 
-Then in any Claude Code session:
-
+```bash
+borg scan   # auto-discover projects from Claude session history
+borg init   # morning briefing + launch orchestrator session
 ```
-/plugin marketplace add alirezarezvani/claude-skills
-```
-
-This installs Boris Cherny's 57-tip framework, Scope Guard, and 205+ community skills.
 
 ## Requirements
 
@@ -66,14 +70,16 @@ This installs Boris Cherny's 57-tip framework, Scope Guard, and 205+ community s
 
 | Command | Description |
 |---------|-------------|
-| `drone start <project> <feature>` | Create git worktree + branch, start window, launch Claude |
+| `drone feature <project> <branch>` | Create git worktree + branch, start window, launch Claude |
 | `drone up [project]` | Start container + create tmux window (resume existing work) |
 | `drone down [project]` | Stop container + remove tmux window |
 | `drone claude [project]` | Launch Claude Code session in project context |
 | `drone sh [project]` | Shell into project container |
-| `drone restart [project]` | Restart container + re-exec all panes |
-| `drone fix [project]` | Restore standard 3-pane layout |
-| `drone toggle [project]` | Show/hide the top-right side pane |
+| `drone restart [project\|--all]` | Restart container(s) + re-exec all panes |
+| `drone rebuild [project\|--all]` | Rebuild image (no cache) + restart + re-exec panes |
+| `drone fix [project\|--all]` | Restore standard 2-pane layout |
+| `drone toggle [project]` | Add/remove top-right side pane (2-pane ↔ 3-pane) |
+| `drone scaffold <dir>` | Generate `.devcontainer/` from templates |
 | `drone status` | Show all drones (container + session state) |
 
 ### Hotkey
@@ -179,13 +185,25 @@ Cairn adds cross-project search and long-term knowledge persistence.
 
 ## Devcontainer Setup
 
-If you run projects in Docker Compose devcontainers, add this volume mount:
+If you run projects in Docker Compose devcontainers, add these volume mounts so Claude Code skills,
+hooks, and settings are available inside the container:
 
 ```yaml
 volumes:
-  - ~/.claude:/home/vscode/.claude:cached           # hooks, skills, settings
-  - ~/.config/borg:/home/vscode/.config/borg:cached  # borg registry + debriefs
+  - ~/.claude:/home/dev/.claude:cached
+  - ~/.config/borg:/home/dev/.config/borg:cached
+  - ~/.config/dotfiles/claude:/home/dev/.config/dotfiles/claude:cached
+  - ~/:/host-home:ro   # postStartCommand copies .claude.json fresh on each start
 ```
+
+And in `devcontainer.json`:
+
+```json
+"postStartCommand": "ln -sf /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true"
+```
+
+The CLAUDE.md symlink must be recreated on each start because the host-absolute symlink path does not
+resolve inside the container. See `drone scaffold` to generate this automatically for new projects.
 
 ## Configuration
 
