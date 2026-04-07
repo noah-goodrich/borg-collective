@@ -1,0 +1,55 @@
+# =============================================================================
+# Standard dotfile volume mounts — TEMPLATE for new projects.
+#
+# Copy this block into your project's .devcontainer/docker-compose.yml and
+# adjust the project-specific sections (services, env_file, depends_on, etc).
+#
+# These mounts bring your shell, editor, git, ssh, and AI tool configs into the
+# container so the dev environment feels identical to your host.
+# =============================================================================
+
+# --- x-dotfile-volumes is a YAML anchor, not a real compose key. ---
+# Projects reference it with *dotfile-volumes inside their service volumes.
+x-dotfile-volumes: &dotfile-volumes
+  # --- shell ---
+  # Mount dotfiles as a directory (not individual symlinked files) to avoid stale
+  # inodes when editors atomically replace files (write-then-rename). Symlinks
+  # ~/.zshrc and ~/.p10k.zsh must be created in postCreateCommand:
+  #   ln -sf ~/.config/dotfiles/zsh/.zshrc ~/.zshrc
+  #   ln -sf ~/.config/dotfiles/zsh/.p10k.zsh ~/.p10k.zsh
+  - ~/.config/dotfiles/zsh:/home/dev/.config/dotfiles/zsh:cached
+  - ~/.config/dotfiles/claude:/home/dev/.config/dotfiles/claude:cached
+  - ~/.config/zsh:/home/dev/.config/zsh:cached
+
+  # --- editor ---
+  - ~/.config/nvim:/home/dev/.config/nvim:cached
+
+  # --- git + ssh ---
+  - ~/.ssh:/home/dev/.ssh:cached
+  - ~/.gitconfig:/home/dev/.gitconfig:cached
+  - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+
+  # --- claude code ---
+  - ~/.claude:/home/dev/.claude:cached
+  - ~/.config/borg:/home/dev/.config/borg:cached
+  # ~/.claude.json is NOT bind-mounted as a file — Claude Code atomically replaces it
+  # (write-then-rename), which orphans Docker single-file bind mounts. Instead, mount
+  # the host home dir read-only and copy it fresh in postStartCommand:
+  #   cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true
+  - ~/:/host-home:ro
+
+# =============================================================================
+# EXAMPLE — a minimal project docker-compose.yml would look like:
+#
+#   services:
+#     devcontainer:
+#       build:
+#         context: ..
+#         dockerfile: .devcontainer/Dockerfile
+#       volumes:
+#         - ..:/workspace:cached
+#         *dotfile-volumes
+#       environment:
+#         SSH_AUTH_SOCK: /run/host-services/ssh-auth.sock
+#       command: sleep infinity
+# =============================================================================

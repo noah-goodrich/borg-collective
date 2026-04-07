@@ -1,0 +1,40 @@
+[user]
+    name = __GIT_NAME__
+    email = __GIT_EMAIL__
+
+[core]
+    editor = nvim
+    autocrlf = input
+    excludesfile = ~/.config/git/ignore
+
+[init]
+    defaultBranch = main
+
+[push]
+    default = current
+    autoSetupRemote = true
+
+[pull]
+    rebase = false
+
+[fetch]
+    prune = true
+
+[diff]
+    tool = nvim
+
+[merge]
+    tool = nvim
+    conflictstyle = diff3
+
+[alias]
+    st = status
+    co = checkout
+    br = branch
+    lg = log --oneline --graph --decorate --all
+    undo = reset HEAD~1 --mixed
+    amend = commit --amend --no-edit
+    aliases = config --get-regexp alias
+
+[color]
+    ui = auto

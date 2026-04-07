@@ -30,9 +30,16 @@ BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_ROOT="${BORG_ROOT:-$HOME/dev}"
 
 # Build a docker compose exec command for a project's app service.
-# Usage: build_exec_cmd <project_name> <compose_file> <service> <shell>
+# Usage: build_exec_cmd <project_name> <compose_file> <service> <shell> <project_dir>
 build_exec_cmd() {
-    echo "docker compose -p $1 -f $2 exec -w /workspace $3 $4"
+    local ws user
+    ws=$(_get_workspace_folder "$5")
+    user=$(_get_remote_user "$5")
+    if [[ -n "$user" ]]; then
+        echo "docker compose -p $1 -f $2 exec -u $user -w $ws $3 $4"
+    else
+        echo "docker compose -p $1 -f $2 exec -w $ws $3 $4"
+    fi
 }
 
 # Colors (same as borg.zsh)
@@ -156,6 +163,22 @@ _read_devcontainer_field() {
     sed 's|^\s*//.*||' "$dc_json" | jq -r ".$field // empty"
 }
 
+# Read workspaceFolder from devcontainer.json, default to /workspace.
+_get_workspace_folder() {
+    local project_dir="$1"
+    local ws
+    ws=$(_read_devcontainer_field "$project_dir" "workspaceFolder") || true
+    echo "${ws:-/workspace}"
+}
+
+# Read remoteUser from devcontainer.json, default to empty (root).
+_get_remote_user() {
+    local project_dir="$1"
+    local user
+    user=$(_read_devcontainer_field "$project_dir" "remoteUser") || true
+    echo "${user:-}"
+}
+
 run_initialize_command() {
     local project_dir="$1"
     local init_cmd
@@ -175,7 +198,12 @@ run_post_start_command() {
     local compose="$project_dir/$COMPOSE_FILE"
     local service
     service=$(get_service_name "$project_dir")
-    docker compose -p "$project_name" -f "$compose" exec -T -w /workspace "$service" sh -c "$post_cmd"
+    local ws user
+    ws=$(_get_workspace_folder "$project_dir")
+    user=$(_get_remote_user "$project_dir")
+    local -a user_args=()
+    [[ -n "$user" ]] && user_args=(-u "$user")
+    docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" -w "$ws" "$service" sh -c "$post_cmd"
 }
 
 # ── Window management ─────────────────────────────────────────────────────────
@@ -305,7 +333,7 @@ cmd_up() {
                 local shell service exec_cmd
                 shell=$(get_shell "$container")
                 service=$(get_service_name "$project_dir")
-                exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
+                exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
                 run_post_start_command "$project_name" "$project_dir"
                 resend_exec_to_panes "$project_name" "$exec_cmd"
             fi
@@ -328,7 +356,7 @@ cmd_up() {
     local shell service exec_cmd
     shell=$(get_shell "$container")
     service=$(get_service_name "$project_dir")
-    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
+    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
     info "Container: $container  Service: $service  Shell: $shell"
     run_post_start_command "$project_name" "$project_dir"
 
@@ -401,7 +429,7 @@ _cycle_project() {
     container=$(wait_for_container "$project_dir")
     shell=$(get_shell "$container")
     service=$(get_service_name "$project_dir")
-    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell")
+    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
     run_post_start_command "$project_name" "$project_dir"
 
     if has_window "$project_name"; then
@@ -555,7 +583,12 @@ cmd_sh() {
                         --format '{{.Label "com.docker.compose.service"}}' 2>/dev/null | head -1)
     [[ -n "$service" ]] || die "No running app container found for $project_name. Run: drone up $project_name"
 
-    exec docker compose -p "$project_name" -f "$compose" exec -w /workspace "$service" "${shell:-/bin/zsh}"
+    local ws user
+    ws=$(_get_workspace_folder "$project_dir")
+    user=$(_get_remote_user "$project_dir")
+    local -a user_args=()
+    [[ -n "$user" ]] && user_args=(-u "$user")
+    exec docker compose -p "$project_name" -f "$compose" exec "${user_args[@]}" -w "$ws" "$service" "${shell:-/bin/zsh}"
 }
 
 # ── drone fix ─────────────────────────────────────────────────────────────────
@@ -640,7 +673,7 @@ cmd_toggle() {
                 if [[ -n "$container" ]]; then
                     shell=$(get_shell "$container")
                     service=$(get_service_name "$pdir")
-                    exec_cmd=$(build_exec_cmd "$wname" "$pdir/$COMPOSE_FILE" "$service" "$shell")
+                    exec_cmd=$(build_exec_cmd "$wname" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
                     tmux send-keys -t "$side" "$exec_cmd" Enter
                 fi
             elif [[ -n "$pdir" ]]; then
