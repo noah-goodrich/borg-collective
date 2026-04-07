@@ -1,0 +1,77 @@
+# =============================================================================
+# Base devcontainer image — shared across all projects.
+# Provides: zsh, neovim (latest), tmux, git, ssh, claude-code CLI.
+#
+# Projects extend this with their own deps:
+#   FROM devcontainer-base:local
+#
+# NOTE: Detects architecture automatically (arm64 or amd64).
+# =============================================================================
+FROM python:3.12-bookworm
+
+# ── Create dev user ──────────────────────────────────────────────────────────
+RUN groupadd --gid 1000 dev \
+    && useradd --uid 1000 --gid 1000 -m -s /bin/zsh dev
+
+# ── System tools ─────────────────────────────────────────────────────────────
+RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+    && apt-get -y install --no-install-recommends \
+    curl \
+    fd-find \
+    fzf \
+    git \
+    iputils-ping \
+    jq \
+    less \
+    man-db \
+    openssl \
+    ripgrep \
+    sudo \
+    tmux \
+    tree \
+    unzip \
+    vim \
+    wget \
+    zsh \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/fdfind /usr/local/bin/fd
+
+# ── Give dev passwordless sudo (matches devcontainer convention) ──────────
+RUN echo "dev ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/dev
+
+# ── Neovim (latest stable — apt version is too old for modern plugins) ───────
+RUN ARCH=$(dpkg --print-architecture) \
+    && if [ "$ARCH" = "arm64" ]; then NVIM_PKG="nvim-linux-arm64"; \
+       else NVIM_PKG="nvim-linux64"; fi \
+    && curl -fsSL "https://github.com/neovim/neovim/releases/latest/download/${NVIM_PKG}.tar.gz" \
+       -o /tmp/nvim.tar.gz \
+    && tar xzf /tmp/nvim.tar.gz -C /opt \
+    && ln -sf "/opt/${NVIM_PKG}/bin/nvim" /usr/local/bin/nvim \
+    && rm /tmp/nvim.tar.gz
+
+# ── Node.js + Claude Code CLI ────────────────────────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g @anthropic-ai/claude-code
+
+# ── Default shell ────────────────────────────────────────────────────────────
+RUN chsh -s /bin/zsh dev
+
+# ── Zsh plugins (fallback — host bind-mount overlays when present) ───────────
+USER dev
+RUN mkdir -p /home/dev/.config/zsh \
+    && git clone --depth=1 https://github.com/romkatv/powerlevel10k.git \
+         /home/dev/.config/zsh/powerlevel10k \
+    && git clone --depth=1 https://github.com/zsh-users/zsh-autosuggestions \
+         /home/dev/.config/zsh/zsh-autosuggestions \
+    && git clone --depth=1 https://github.com/zsh-users/zsh-syntax-highlighting \
+         /home/dev/.config/zsh/zsh-syntax-highlighting
+USER root
+
+# ── Claude Code — initialize config so first launch doesn't error ─────────────
+RUN mkdir -p /home/dev \
+    && echo '{}' > /home/dev/.claude.json \
+    && chown dev:dev /home/dev/.claude.json

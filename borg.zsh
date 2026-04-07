@@ -1205,6 +1205,97 @@ cmd_setup() {
     local CLAUDE_HOOKS_DIR="$CLAUDE_DIR/hooks"
     local CLAUDE_SKILLS_DIR="$CLAUDE_DIR/skills"
     local CLAUDE_SETTINGS="$CLAUDE_DIR/settings.json"
+    local DOTFILES_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles"
+
+    # ── 0. First-time setup wizard ────────────────────────────────────────────
+    # Detect first-time vs returning user. Only prompt when things are missing.
+
+    # 0a. Dotfiles
+    if [[ ! -d "$DOTFILES_DIR" ]]; then
+        echo ""
+        warn "No dotfiles found at $DOTFILES_DIR"
+        echo ""
+        echo "  Borg works best with a dotfiles repo that configures your shell,"
+        echo "  editor, git, and Claude Code. We can set up starter dotfiles for you."
+        echo ""
+        printf "  Set up starter dotfiles? [Y/n] "
+        read -r _reply
+        if [[ "${_reply:-Y}" =~ ^[Yy]$ ]]; then
+            info "Installing starter dotfiles..."
+            local starter_dotfiles="$BORG_HOME/dotfiles"
+            if [[ ! -d "$starter_dotfiles" ]]; then
+                die "Starter dotfiles not found at $starter_dotfiles"
+            fi
+            mkdir -p "$DOTFILES_DIR"
+            cp -R "$starter_dotfiles"/* "$DOTFILES_DIR/"
+            chmod +x "$DOTFILES_DIR/install.sh"
+            info "Starter dotfiles copied to $DOTFILES_DIR"
+
+            # Run dotfiles installer
+            info "Running dotfiles installer..."
+            bash "$DOTFILES_DIR/install.sh"
+        else
+            warn "Skipping dotfiles setup."
+            warn "You can set up dotfiles later by copying $BORG_HOME/dotfiles to $DOTFILES_DIR"
+        fi
+    fi
+
+    # 0b. Git identity
+    local git_name git_email
+    git_name="$(git config --global user.name 2>/dev/null || true)"
+    git_email="$(git config --global user.email 2>/dev/null || true)"
+
+    if [[ -z "$git_name" || -z "$git_email" ]]; then
+        echo ""
+        info "Git identity not configured yet."
+        if [[ -z "$git_name" ]]; then
+            printf "  Your name (for git commits): "
+            read -r git_name
+            [[ -n "$git_name" ]] && git config --global user.name "$git_name"
+        fi
+        if [[ -z "$git_email" ]]; then
+            printf "  Your email (for git commits): "
+            read -r git_email
+            [[ -n "$git_email" ]] && git config --global user.email "$git_email"
+        fi
+        [[ -n "$git_name" && -n "$git_email" ]] && info "Git identity set: $git_name <$git_email>"
+    fi
+
+    # 0c. Claude Code CLI
+    if ! command -v claude &>/dev/null; then
+        echo ""
+        warn "Claude Code CLI not found."
+        echo "  Install it with: npm install -g @anthropic-ai/claude-code"
+        echo "  Then run 'borg setup' again to register hooks."
+        echo ""
+    fi
+
+    # 0d. Tool checks
+    local missing_tools=()
+    command -v tmux    &>/dev/null || missing_tools+=(tmux)
+    command -v jq      &>/dev/null || missing_tools+=(jq)
+    command -v fzf     &>/dev/null || missing_tools+=(fzf)
+    command -v nvim    &>/dev/null || missing_tools+=(neovim)
+
+    if (( ${#missing_tools[@]} > 0 )); then
+        echo ""
+        warn "Recommended tools not found: ${missing_tools[*]}"
+        if command -v brew &>/dev/null; then
+            printf "  Install them via Homebrew? [Y/n] "
+            read -r _reply
+            if [[ "${_reply:-Y}" =~ ^[Yy]$ ]]; then
+                info "Installing: ${missing_tools[*]}..."
+                brew install "${missing_tools[@]}" 2>&1 | grep -E '(Installing|Already|Error)' || true
+            fi
+        else
+            echo "  Install manually:"
+            for tool in "${missing_tools[@]}"; do
+                echo "    - $tool"
+            done
+        fi
+    fi
+
+    echo ""
 
     # ── 1. Runtime directories ────────────────────────────────────────────────
     info "Creating runtime directories..."
@@ -1367,7 +1458,24 @@ CONF
     info "Bootstrapping registry from session history..."
     cmd_scan 2>&1 || warn "borg scan had issues (registry may still be empty)"
 
-    info "Setup complete. Run: borg init"
+    # ── 8. Summary ─────────────────────────────────────────────────────────────
+    echo ""
+    info "Setup complete!"
+    echo ""
+    echo "  Status:"
+    [[ -d "$DOTFILES_DIR" ]] && echo "    ✓ Dotfiles: $DOTFILES_DIR" \
+                              || echo "    ✗ Dotfiles: not found"
+    git config --global user.name &>/dev/null && echo "    ✓ Git: $(git config --global user.name) <$(git config --global user.email)>" \
+                                              || echo "    ✗ Git: identity not set"
+    command -v claude &>/dev/null && echo "    ✓ Claude Code: installed" \
+                                  || echo "    ✗ Claude Code: not found"
+    command -v tmux &>/dev/null && echo "    ✓ tmux: installed" \
+                                || echo "    ✗ tmux: not found"
+    command -v docker &>/dev/null && echo "    ✓ Docker: installed" \
+                                  || echo "    ✗ Docker: not found"
+    echo ""
+    echo "  Next: borg init"
+    echo ""
 }
 
 cmd_help() {

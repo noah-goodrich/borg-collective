@@ -1,0 +1,52 @@
+# =============================================================================
+# Global gitignore — things that should never be committed anywhere
+# =============================================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Editor artifacts
+.vim/
+*.swp
+*.swo
+*~
+.netrwhist
+
+# Neovim
+.nvim.lua
+.nvimrc
+
+# tmux
+.tmux/resurrect/
+
+# Secrets — belt AND suspenders
+.env
+.env.*
+*.env
+.secrets*
+*_secret*
+*_secrets*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+.npm/
+
+# Logs
+*.log
+logs/
+
+**/.claude/settings.local.json
