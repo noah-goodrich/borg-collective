@@ -100,7 +100,7 @@ if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]] && command -v claude >/dev/null 2>
     _api_key="$BORG_DEBRIEF_KEY"
     (
         _date=$(date '+%Y-%m-%d %H:%M')
-        _tail=$(tail -200 "$_transcript")
+        _tail=$(tail -30 "$_transcript")
         _prompt="Analyze this coding session transcript (JSONL format) and produce a structured debrief.
 
 # Session Debrief: ${_project}
@@ -128,7 +128,7 @@ What should the next session do FIRST? Be specific with file paths and commands.
 
 Be concise and specific. No vague summaries.
 ---
-TRANSCRIPT (JSONL, last 200 lines):
+TRANSCRIPT (JSONL, last 30 lines):
 ${_tail}"
 
         ANTHROPIC_API_KEY="$_api_key" claude -p "$_prompt" --model claude-sonnet-4-6 --no-session-persistence --bare \
