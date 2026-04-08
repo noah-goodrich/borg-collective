@@ -11,7 +11,8 @@ setup_temp_dirs() {
     export BORG_REGISTRY="$BORG_DIR/registry.json"
     export HOME="$BORG_TEST_HOME"
     export XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/config"
-    mkdir -p "$BORG_DIR" "$BORG_TEST_HOME"
+    mkdir -p "$BORG_DIR" "$BORG_TEST_HOME/.claude/lib"
+    cp "$BORG_HOME/lib/borg-hooks.sh" "$BORG_TEST_HOME/.claude/lib/borg-hooks.sh"
 }
 
 # Source a zsh library file in a way that bats (bash) can call its functions.
