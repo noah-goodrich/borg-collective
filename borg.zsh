@@ -1341,6 +1341,12 @@ CONF
         info "  $name"
     done
 
+    # Copy shared hook lib so hooks can source it at runtime
+    mkdir -p "$HOME/.claude/lib"
+    for lib in "$BORG_HOME/lib/"*.sh; do
+        cp "$lib" "$HOME/.claude/lib/${lib:t}"
+    done
+
     # ── 3. Register hooks in settings.json ────────────────────────────────────
     if [[ -f "$CLAUDE_SETTINGS" ]]; then
         info "Registering hooks in Claude Code settings.json..."

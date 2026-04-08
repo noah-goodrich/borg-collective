@@ -25,19 +25,8 @@ TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null || echo 
 
 [[ -z "$CWD" ]] && exit 0
 
-# Resolve project name: walk up from CWD looking for .borg-project marker (written by drone up).
-# Falls back to basename, which works for host sessions where CWD matches the registry path.
-_borg_find_project() {
-    local dir="$1"
-    while [[ "$dir" != "/" && -n "$dir" ]]; do
-        if [[ -f "$dir/.borg-project" ]]; then
-            cat "$dir/.borg-project"
-            return 0
-        fi
-        dir="${dir%/*}"
-    done
-    basename "$1"
-}
+# shellcheck source=../lib/borg-hooks.sh
+source "${HOME}/.claude/lib/borg-hooks.sh"
 
 PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -100,7 +89,7 @@ if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]] && command -v claude >/dev/null 2>
     _api_key="$BORG_DEBRIEF_KEY"
     (
         _date=$(date '+%Y-%m-%d %H:%M')
-        _tail=$(tail -30 "$_transcript")
+        _tail=$(tail -c 8000 "$_transcript")
         _prompt="Analyze this coding session transcript (JSONL format) and produce a structured debrief.
 
 # Session Debrief: ${_project}
@@ -128,7 +117,7 @@ What should the next session do FIRST? Be specific with file paths and commands.
 
 Be concise and specific. No vague summaries.
 ---
-TRANSCRIPT (JSONL, last 30 lines):
+TRANSCRIPT (JSONL, last 8KB):
 ${_tail}"
 
         ANTHROPIC_API_KEY="$_api_key" claude -p "$_prompt" --model claude-sonnet-4-6 --no-session-persistence --bare \
@@ -181,7 +170,7 @@ ${_tail}"
             printf '%s: cairn not in PATH — debrief not committed to knowledge graph\n' \
                 "$_project" > "$_cairn_failed_flag"
         fi
-    ) >/tmp/borg-debrief-debug.log 2>&1 &
+    ) >/dev/null 2>&1 &
     disown "$!" 2>/dev/null || true
 fi
 
