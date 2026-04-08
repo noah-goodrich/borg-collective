@@ -18,13 +18,28 @@ set -euo pipefail
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_REGISTRY="$BORG_DIR/registry.json"
 
+
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 
 [[ -z "$CWD" ]] && exit 0
 
-PROJECT=$(basename "$CWD")
+# Resolve project name: walk up from CWD looking for .borg-project marker (written by drone up).
+# Falls back to basename, which works for host sessions where CWD matches the registry path.
+_borg_find_project() {
+    local dir="$1"
+    while [[ "$dir" != "/" && -n "$dir" ]]; do
+        if [[ -f "$dir/.borg-project" ]]; then
+            cat "$dir/.borg-project"
+            return 0
+        fi
+        dir="${dir%/*}"
+    done
+    basename "$1"
+}
+
+PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # ── 1. Registry update ───────────────────────────────────────────────────────

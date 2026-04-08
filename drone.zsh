@@ -303,6 +303,7 @@ cmd_up() {
         create_2pane_window "$project_name" "cd $project_dir" "$project_dir"
         tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
         borg add "$project_dir" 2>/dev/null || true
+        echo "$project_name" > "$project_dir/.borg-project"
         info "Project '$project_name' ready (local)."
         attach_or_switch "$project_name"
         return
@@ -363,6 +364,7 @@ cmd_up() {
     create_2pane_window "$project_name" "$exec_cmd" "$project_dir"
     tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
     borg add "$project_dir" 2>/dev/null || true
+    echo "$project_name" > "$project_dir/.borg-project"
 
     dbg "cmd_up: windows: $(tmux list-windows -t "$SESSION" -F '  #I: #W (#{window_panes} panes)' 2>/dev/null)"
 
@@ -384,6 +386,8 @@ cmd_down() {
         info "Removing window '$project_name'."
         tmux kill-window -t "$SESSION:$project_name"
     fi
+
+    rm -f "$project_dir/.borg-project"
 
     if [[ -f "$compose" ]]; then
         info "Stopping containers for $project_name..."

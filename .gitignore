@@ -7,3 +7,4 @@
 
 # Runtime state (lives at ~/.config/borg/, not in repo)
 registry.json
+.borg-project

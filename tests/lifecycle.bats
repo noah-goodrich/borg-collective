@@ -239,3 +239,80 @@ EOF
     summary=$(jq -r '.projects.myproject.summary // ""' "$BORG_REGISTRY")
     [ -n "$summary" ]
 }
+
+# ─── .borg-project marker resolution ─────────────────────────────────────────
+
+@test "start hook resolves project from .borg-project marker in CWD" {
+    # Simulate a container path whose basename != registry key
+    local container_dir="${BATS_TEST_TMPDIR}/snowfort-audit"
+    mkdir -p "$container_dir"
+    echo "snowfort" > "$container_dir/.borg-project"
+
+    # Registry uses the canonical name "snowfort"
+    cat > "$BORG_REGISTRY" <<'EOF'
+{"projects":{"snowfort":{"path":"/dev/snowfort","status":"idle","source":"cli"}}}
+EOF
+
+    bash "$BORG_START" <<< "$(_start_input "$container_dir")" >/dev/null
+
+    status=$(jq -r '.projects.snowfort.status' "$BORG_REGISTRY")
+    [ "$status" = "active" ]
+}
+
+@test "start hook resolves project from .borg-project marker in ancestor dir" {
+    # Simulate Claude CWD being a subdirectory (e.g. src/api) inside the mount
+    local container_dir="${BATS_TEST_TMPDIR}/snowfort-audit"
+    local sub_dir="$container_dir/src/api"
+    mkdir -p "$sub_dir"
+    echo "snowfort" > "$container_dir/.borg-project"
+
+    cat > "$BORG_REGISTRY" <<'EOF'
+{"projects":{"snowfort":{"path":"/dev/snowfort","status":"idle","source":"cli"}}}
+EOF
+
+    bash "$BORG_START" <<< "$(_start_input "$sub_dir")" >/dev/null
+
+    status=$(jq -r '.projects.snowfort.status' "$BORG_REGISTRY")
+    [ "$status" = "active" ]
+}
+
+@test "stop hook resolves project from .borg-project marker in ancestor dir" {
+    local container_dir="${BATS_TEST_TMPDIR}/snowfort-audit"
+    local sub_dir="$container_dir/src/api"
+    mkdir -p "$sub_dir"
+    echo "snowfort" > "$container_dir/.borg-project"
+
+    cat > "$BORG_REGISTRY" <<'EOF'
+{"projects":{"snowfort":{"path":"/dev/snowfort","status":"active","source":"cli"}}}
+EOF
+
+    bash "$BORG_STOP" <<< "$(_stop_input "$sub_dir")" 2>/dev/null
+
+    status=$(jq -r '.projects.snowfort.status' "$BORG_REGISTRY")
+    [ "$status" = "idle" ]
+}
+
+@test "start hook falls back to basename when no .borg-project marker exists" {
+    # Standard host session: no marker, basename matches registry key
+    bash "$BORG_START" <<< "$(_start_input)" >/dev/null
+
+    status=$(jq -r '.projects.myproject.status' "$BORG_REGISTRY")
+    [ "$status" = "active" ]
+}
+
+@test "stop hook uses ANTHROPIC_SDK_KEY when ANTHROPIC_API_KEY is unset" {
+    # Verify the key alias forwarding: debrief should still run
+    unset ANTHROPIC_API_KEY 2>/dev/null || true
+    export ANTHROPIC_SDK_KEY="sk-ant-test-key"
+
+    bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
+
+    # Debrief should generate (mock claude ignores auth)
+    debrief_file="$BORG_DIR/debriefs/myproject.md"
+    for i in $(seq 1 10); do
+        [ -f "$debrief_file" ] && break
+        sleep 0.5
+    done
+
+    [ -f "$debrief_file" ]
+}
