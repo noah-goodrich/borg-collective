@@ -11,6 +11,13 @@ set -euo pipefail
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_REGISTRY="$BORG_DIR/registry.json"
 
+# Resolve API key for claude -p debrief calls. Stored in BORG_DEBRIEF_KEY (not exported
+# as ANTHROPIC_API_KEY to avoid interfering with existing Max subscription sessions).
+BORG_DEBRIEF_KEY="${ANTHROPIC_API_KEY:-${ANTHROPIC_SDK_KEY:-}}"
+if [[ -z "$BORG_DEBRIEF_KEY" ]]; then
+    BORG_DEBRIEF_KEY=$(security find-generic-password -a "$USER" -s "ANTHROPIC_SDK_KEY" -w 2>/dev/null || true)
+fi
+
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
@@ -18,7 +25,21 @@ TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null || echo 
 
 [[ -z "$CWD" ]] && exit 0
 
-PROJECT=$(basename "$CWD")
+# Resolve project name: walk up from CWD looking for .borg-project marker (written by drone up).
+# Falls back to basename, which works for host sessions where CWD matches the registry path.
+_borg_find_project() {
+    local dir="$1"
+    while [[ "$dir" != "/" && -n "$dir" ]]; do
+        if [[ -f "$dir/.borg-project" ]]; then
+            cat "$dir/.borg-project"
+            return 0
+        fi
+        dir="${dir%/*}"
+    done
+    basename "$1"
+}
+
+PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Detect tool from transcript path
@@ -70,12 +91,13 @@ DEBRIEF_DIR="$BORG_DIR/debriefs"
 mkdir -p "$DEBRIEF_DIR"
 DEBRIEF_FILE="$DEBRIEF_DIR/${PROJECT}.md"
 
-if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]] && command -v claude >/dev/null 2>&1; then
+if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]] && command -v claude >/dev/null 2>&1 && [[ -n "$BORG_DEBRIEF_KEY" ]]; then
     _transcript="$TRANSCRIPT"
     _debrief_file="$DEBRIEF_FILE"
     _registry="$BORG_REGISTRY"
     _project="$PROJECT"
     _session_id="$SESSION_ID"
+    _api_key="$BORG_DEBRIEF_KEY"
     (
         _date=$(date '+%Y-%m-%d %H:%M')
         _tail=$(tail -200 "$_transcript")
@@ -109,7 +131,7 @@ Be concise and specific. No vague summaries.
 TRANSCRIPT (JSONL, last 200 lines):
 ${_tail}"
 
-        claude -p "$_prompt" --model claude-sonnet-4-6 --no-session-persistence --bare \
+        ANTHROPIC_API_KEY="$_api_key" claude -p "$_prompt" --model claude-sonnet-4-6 --no-session-persistence --bare \
             > "${_debrief_file}.tmp" 2>/dev/null \
             && mv "${_debrief_file}.tmp" "$_debrief_file"
 
@@ -159,7 +181,7 @@ ${_tail}"
             printf '%s: cairn not in PATH — debrief not committed to knowledge graph\n' \
                 "$_project" > "$_cairn_failed_flag"
         fi
-    ) >/dev/null 2>&1 &
+    ) >/tmp/borg-debrief-debug.log 2>&1 &
     disown "$!" 2>/dev/null || true
 fi
 
