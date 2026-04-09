@@ -14,8 +14,8 @@ BORG_REGISTRY="$BORG_DIR/registry.json"
 # Resolve API key for claude -p debrief calls. Stored in BORG_DEBRIEF_KEY (not exported
 # as ANTHROPIC_API_KEY to avoid interfering with existing Max subscription sessions).
 BORG_DEBRIEF_KEY="${ANTHROPIC_API_KEY:-${ANTHROPIC_SDK_KEY:-}}"
-if [[ -z "$BORG_DEBRIEF_KEY" ]]; then
-    BORG_DEBRIEF_KEY=$(security find-generic-password -a "$USER" -s "ANTHROPIC_SDK_KEY" -w 2>/dev/null || true)
+if [[ -z "$BORG_DEBRIEF_KEY" ]] && command -v security >/dev/null 2>&1; then
+    BORG_DEBRIEF_KEY=$(security find-generic-password -a "${USER:-unknown}" -s "ANTHROPIC_SDK_KEY" -w 2>/dev/null || true)
 fi
 
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
