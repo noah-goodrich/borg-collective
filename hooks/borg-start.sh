@@ -45,7 +45,7 @@ if [[ -f "$BORG_REGISTRY" ]]; then
             (if $sid != "" then .projects[$p].claude_session_id = $sid else . end)
         else .
         end
-        ' "$BORG_REGISTRY" > "$TMP" && mv "$TMP" "$BORG_REGISTRY" || true
+        ' "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP" && mv "$TMP" "$BORG_REGISTRY" || true
 fi
 
 # ── 2. Build context ─────────────────────────────────────────────────────────
