@@ -16,3 +16,10 @@ _borg_find_project() {
     done
     basename "$1"
 }
+
+# Strip raw ASCII control characters that break jq parsing.
+# Tab (0x09), LF (0x0A), CR (0x0D) are kept; jq escapes them in string values.
+# Use as a pipe filter: `... | _borg_strip_ctl` or wrap a value: `_borg_strip_ctl <<<"$x"`
+_borg_strip_ctl() {
+    tr -d '\000-\010\013\014\016-\037'
+}

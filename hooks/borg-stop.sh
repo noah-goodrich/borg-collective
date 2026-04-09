@@ -51,7 +51,7 @@ jq \
         (if $sid != "" then .projects[$p].claude_session_id = $sid else . end)
     else .
     end
-    ' "$BORG_REGISTRY" > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
+    ' "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
 
 # Check for uncommitted changes: warn in terminal + store flag for next session
 UNCOMMITTED=""
@@ -67,12 +67,12 @@ if [[ -n "$UNCOMMITTED" && -f "$BORG_REGISTRY" ]]; then
     TMP2="$BORG_REGISTRY.tmp2.$$"
     jq --arg p "$PROJECT" \
         'if .projects | has($p) then .projects[$p].has_uncommitted_changes = true else . end' \
-        "$BORG_REGISTRY" > "$TMP2" && mv "$TMP2" "$BORG_REGISTRY"
+        "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP2" && mv "$TMP2" "$BORG_REGISTRY"
 elif [[ -f "$BORG_REGISTRY" ]]; then
     TMP2="$BORG_REGISTRY.tmp2.$$"
     jq --arg p "$PROJECT" \
         'if .projects | has($p) then .projects[$p].has_uncommitted_changes = false else . end' \
-        "$BORG_REGISTRY" > "$TMP2" && mv "$TMP2" "$BORG_REGISTRY"
+        "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP2" && mv "$TMP2" "$BORG_REGISTRY"
 fi
 
 # Async LLM debrief — does not block hook exit
@@ -126,12 +126,12 @@ ${_tail}"
 
         # Update registry summary with Objective line
         if [[ -f "$_debrief_file" && -f "$_registry" ]]; then
-            _summary=$(grep -A1 "^## Objective" "$_debrief_file" | grep -v "^## Objective" | head -1 | head -c 200 || true)
+            _summary=$(grep -A1 "^## Objective" "$_debrief_file" | grep -v "^## Objective" | head -1 | head -c 200 | _borg_strip_ctl || true)
             if [[ -n "$_summary" ]]; then
                 _tmp="${_registry}.dtmp.$$"
                 jq --arg p "$_project" --arg s "$_summary" \
                     'if .projects | has($p) then .projects[$p].summary = $s else . end' \
-                    "$_registry" > "$_tmp" && mv "$_tmp" "$_registry"
+                    "$_registry" | _borg_strip_ctl > "$_tmp" && mv "$_tmp" "$_registry"
             fi
         fi
 
