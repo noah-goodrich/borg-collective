@@ -18,6 +18,9 @@ MESSAGE=$(echo "$INPUT" | jq -r '.message // ""' 2>/dev/null || echo "")
 
 [[ -z "$CWD" ]] && exit 0
 
+# shellcheck source=../lib/borg-hooks.sh
+source "${HOME}/.claude/lib/borg-hooks.sh"
+
 PROJECT=$(basename "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -35,7 +38,7 @@ if [[ -f "$BORG_REGISTRY" ]]; then
             (if $msg != "" then .projects[$p].waiting_reason = $msg else . end)
         else .
         end
-        ' "$BORG_REGISTRY" > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
+        ' "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
 fi
 
 exit 0
