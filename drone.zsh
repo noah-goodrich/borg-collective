@@ -715,7 +715,7 @@ cmd_status() {
         borg_status=""
         if command -v borg &>/dev/null; then
             local raw
-            raw=$(borg status "$wname" 2>/dev/null) || true
+            raw=$(borg link "$wname" 2>/dev/null) || true
             borg_status=$(echo "$raw" | grep -m1 'Status:' | sed 's/.*Status:[[:space:]]*//' | tr -d '\n') || true
             [[ -n "$borg_status" ]] && borg_status="claude:$borg_status"
         fi
@@ -930,6 +930,7 @@ case "${1:-}" in
     toggle)     cmd_toggle "${2:-}" ;;
     scaffold)   shift; cmd_scaffold "$@" ;;
     status)     cmd_status ;;
+    link)       exec borg link "${2:-${PWD##*/}}" "${@:3}" ;;
     help|-h)    cmd_help ;;
     *)          die "unknown command '${1}'. Run: drone help" ;;
 esac
