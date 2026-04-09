@@ -12,10 +12,11 @@ borg_registry_init() {
     fi
 }
 
-# Atomic write — reject empty data to prevent registry wipeouts
+# Atomic write — reject empty data, strip raw control chars that break jq parsing.
+# Tab (0x09), LF (0x0A), CR (0x0D) are kept; jq escapes them in string values anyway.
 _borg_registry_write() {
     local tmp="$BORG_REGISTRY.tmp.$$"
-    /bin/cat > "$tmp"
+    /bin/cat | tr -d '\000-\010\013\014\016-\037' > "$tmp"
     if [[ ! -s "$tmp" ]]; then
         warn "registry write blocked: refusing to write empty file"
         /bin/rm -f "$tmp"
