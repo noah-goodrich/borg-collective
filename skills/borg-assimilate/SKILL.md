@@ -60,12 +60,28 @@ Focus on these. Do not add new scope." Stop here.
 which means: (a) real problem not in criteria → name it, (b) polishing → stop, (c) new idea →
 note for next session. Which is it?" Wait for answer before proceeding.
 
-**All criteria met — execute shipping:**
+**All criteria met — run The Collective Review before shipping:**
+
+### Step 4a: The Collective Review
+
+Before making the ship/no-ship call, run The Collective adversarial review. Follow the process
+defined in the `borg-collective-review` skill:
+
+1. Feed the personas: the completed checklist, git diff, test results, and any open concerns
+2. Present The Collective Review (all six core personas + one rotating specialist evaluating
+   the deliverable)
+3. The Adult's verdict feeds into the next step — if The Adult says "not ready", that's a blocker
+
+Include The Collective Review output in your shipping checklist presentation so the developer sees
+all perspectives before confirming.
+
+### Step 4b: Execute Shipping
 
 1. Present the shipping actions as a numbered list:
    - Merge PR (show exact `gh pr merge` command)
    - Any plan-specific ship definition steps
-   - Archive PROJECT_PLAN.md → `docs/plans/<date>-<slug>.md` with checkboxes marked + ship date
+   - Archive PROJECT_PLAN.md → `docs/plans/assimilated/<date>-<slug>.md` with checkboxes marked
+     + ship date
    - Remove PROJECT_PLAN.md from project root
 2. **Ask for confirmation**: "Ready to ship. These are the actions I'll take: [list]. Confirm?"
 3. Only execute after explicit confirmation. Execute each step, reporting results.
@@ -74,7 +90,7 @@ note for next session. Which is it?" Wait for answer before proceeding.
 ### Plan Archival Format
 
 When archiving PROJECT_PLAN.md:
-- Copy to `docs/plans/<established-date>-<slugified-objective>.md`
+- Copy to `docs/plans/assimilated/<established-date>-<slugified-objective>.md`
 - Add `*Shipped: <today's date> — PR #<number> merged to main*` below the established date
 - Mark all acceptance criteria checkboxes as `[x]`
 - Append an "Additional Work Shipped" section if significant work happened beyond the criteria

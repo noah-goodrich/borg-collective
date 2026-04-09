@@ -65,3 +65,10 @@ End with exactly ONE action. Not options. One thing.
 - Fading → "Good stopping point. Run `/borg-checkpoint`, then break."
 
 Can't pick one? Pick the one that ships something soonest.
+
+## Optional: The Collective Review
+
+If the diagnostic reveals significant concerns (multiple criteria unmet, scope creep detected, or
+stuck in a loop), run The Collective Review from `borg-collective-review` to get structured
+multi-perspective analysis before making your recommendation. This adds depth when the simple
+diagnostic isn't enough.
