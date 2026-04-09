@@ -112,7 +112,334 @@ _borg_active_count() {
     borg_registry_read | jq '[.projects[] | select(.status == "waiting" or .status == "active")] | length'
 }
 
+# Read directives from docs/plans/directives/ — optionally filtered by project name.
+# Output: first line = count, subsequent lines = slug\ttitle
+_borg_read_directives() {
+    local project="${1:-}" dir="$BORG_HOME/docs/plans/directives" title f
+    [[ -d "$dir" ]] || { echo "0"; return 0; }
+    local files=("$dir"/*.md(N))
+    (( ${#files[@]} == 0 )) && { echo "0"; return 0; }
+    if [[ -n "$project" ]]; then
+        local matches=()
+        for f in "${files[@]}"; do
+            grep -ql "$project" "$f" 2>/dev/null && matches+=("$f")
+        done
+        files=("${matches[@]}")
+    fi
+    echo "${#files[@]}"
+    for f in "${files[@]}"; do
+        title=$(head -1 "$f" | sed 's/^#* *//')
+        printf '%s\t%s\n' "${${f:t}%.md}" "$title"
+    done
+}
+
+# Read recent assimilated plans from docs/plans/assimilated/ — optionally filtered by project.
+# Output: slug\ttitle\tship-date lines (max N, newest first by filename)
+_borg_read_assimilated() {
+    local project="${1:-}" max="${2:-3}" count=0 title ship_date f
+    local dir="$BORG_HOME/docs/plans/assimilated"
+    [[ -d "$dir" ]] || return 0
+    local files=("$dir"/*.md(NOm))  # newest first by mtime
+    (( ${#files[@]} == 0 )) && return 0
+    if [[ -n "$project" ]]; then
+        local matches=()
+        for f in "${files[@]}"; do
+            grep -ql "$project" "$f" 2>/dev/null && matches+=("$f")
+        done
+        files=("${matches[@]}")
+    fi
+    for f in "${files[@]}"; do
+        (( count >= max )) && break
+        title=$(head -1 "$f" | sed 's/^#* *//')
+        ship_date=$(grep -m1 'Shipped:' "$f" | sed 's/.*Shipped: *//' | sed 's/ .*//')
+        printf '%s\t%s\t%s\n' "${${f:t}%.md}" "$title" "$ship_date"
+        count=$((count + 1))
+    done
+}
+
 # ── Commands ──────────────────────────────────────────────────────────────────
+
+cmd_link() {
+    local project="" do_refresh=0 do_brief=0 porcelain=0 show_all=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --refresh)    do_refresh=1; shift ;;
+            --brief|--llm) do_brief=1; shift ;;
+            --porcelain)  porcelain=1; shift ;;
+            --all)        show_all=1; shift ;;
+            -*)           shift ;;
+            *)            project="$1"; shift ;;
+        esac
+    done
+
+    (( do_refresh )) && cmd_scan --llm
+
+    if (( porcelain )); then
+        _borg_link_porcelain "$show_all"
+    elif [[ -n "$project" ]]; then
+        _borg_link_deep "$project" "$do_brief"
+    else
+        _borg_link_overview "$do_brief" "$show_all"
+    fi
+}
+
+_borg_link_porcelain() {
+    local show_all="${1:-0}"
+    borg_desktop_scan 2>/dev/null || true
+    local registry
+    registry=$(borg_registry_read)
+    local sorted_names
+    sorted_names=$(echo "$registry" | jq -r '
+        .projects | to_entries |
+        map(.value.name = .key) |
+        map(select(if .value.status == "archived" then '$show_all' == 1 else true end)) |
+        sort_by(
+            (if .value.pinned == true then 0 else 1 end),
+            (if .value.status == "waiting" then 0
+             elif .value.status == "active" then 1
+             elif .value.status == "idle" then 2
+             else 3 end),
+            (if .value.last_activity then .value.last_activity else "0" end)
+        ) | .[].key
+    ')
+    [[ -z "$sorted_names" ]] && return 0
+    local name entry source proj_status last summary
+    while IFS= read -r name; do
+        entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
+        source=$(echo "$entry" | jq -r '.source // "cli"')
+        proj_status=$(echo "$entry" | jq -r '.status // "unknown"')
+        last=$(echo "$entry"   | jq -r '.last_activity // ""')
+        summary=$(echo "$entry"| jq -r '.summary // ""')
+        summary="${summary:0:80}"
+        printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$source" "$proj_status" "$last" "$summary"
+    done <<< "$sorted_names"
+}
+
+_borg_link_overview() {
+    local do_brief="${1:-0}" show_all="${2:-0}"
+
+    # Merge Desktop sessions into registry before listing
+    borg_desktop_scan 2>/dev/null || true
+
+    local registry
+    registry=$(borg_registry_read)
+    local project_count
+    project_count=$(echo "$registry" | jq '.projects | length')
+
+    if (( project_count == 0 )); then
+        info "No projects registered. Run: borg scan"
+        return 0
+    fi
+
+    if (( project_count <= 1 )); then
+        echo -e "  ${DIM}Tip: run 'borg scan' to discover projects from session history${NC}"
+    fi
+
+    # Sort by: pinned DESC, status priority (waiting>active>idle>archived), last_activity
+    local sorted_names
+    sorted_names=$(echo "$registry" | jq -r '
+        .projects | to_entries |
+        map(.value.name = .key) |
+        map(select(if .value.status == "archived" then '$show_all' == 1 else true end)) |
+        sort_by(
+            (if .value.pinned == true then 0 else 1 end),
+            (if .value.status == "waiting" then 0
+             elif .value.status == "active" then 1
+             elif .value.status == "idle" then 2
+             else 3 end),
+            (if .value.last_activity then .value.last_activity else "0" end)
+        ) | .[].key
+    ')
+
+    if [[ -z "$sorted_names" ]]; then
+        info "No projects to show. Run: borg link --all"
+        return 0
+    fi
+
+    # Human-readable table
+    echo ""
+    echo -e "  ${DIM}_______________${NC}"
+    echo -e "  ${DIM}/|             /|${NC}      ${BOLD}THE BORG COLLECTIVE${NC}"
+    echo -e "  ${DIM}/ |            / |${NC}      ${DIM}resistance is futile${NC}"
+    echo -e "  ${DIM}  |___________|  |${NC}"
+    echo -e "  ${DIM}  |  |        |  |${NC}"
+    echo -e "  ${DIM}  |  |________|__|${NC}"
+    echo -e "  ${DIM}  | /         | /${NC}"
+    echo -e "  ${DIM}  |/          |/${NC}"
+    echo ""
+    printf "${BOLD} %-20s %-4s %-12s %-12s %s${NC}\n" "PROJECT" "SRC" "STATUS" "LAST ACTIVE" "SUMMARY"
+    printf '%0.s─' {1..90}; echo
+
+    local name entry source proj_status last summary display status_color src_badge summary_short
+    local last_display pinned pin_mark status_display
+    while IFS= read -r name; do
+        entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
+        source=$(echo "$entry"  | jq -r '.source // "cli"')
+        proj_status=$(echo "$entry"  | jq -r '.status // "unknown"')
+        last=$(echo "$entry"    | jq -r '.last_activity // ""')
+        summary=$(echo "$entry" | jq -r '.summary // "(no summary)"')
+        pinned=$(echo "$entry"  | jq -r '.pinned // false')
+        display=$(echo "$entry" | jq -r 'if .display_name and .display_name != "" then .display_name else "" end')
+        [[ -z "$display" ]] && display="$name"
+
+        [[ "$pinned" == "true" ]] && pin_mark="*" || pin_mark=" "
+
+        case "$proj_status" in
+            active)  status_color="$GREEN" ;;
+            waiting) status_color="$YELLOW" ;;
+            idle)    status_color="$DIM" ;;
+            *)       status_color="$NC" ;;
+        esac
+
+        status_display="$proj_status"
+        [[ "$proj_status" == "waiting" ]] && status_display="waiting <<<"
+
+        case "$source" in
+            desktop) src_badge="[D]" ;;
+            coco)    src_badge="[X]" ;;
+            *)       src_badge="[C]" ;;
+        esac
+
+        summary_short="${summary:0:50}"
+        [[ ${#summary} -gt 50 ]] && summary_short="${summary_short}..."
+
+        last_display=$(_borg_relative_time "$last")
+
+        printf "%s%-20s %-4s ${status_color}%-12s${NC} %-12s %s\n" \
+            "$pin_mark" "$display" "$src_badge" "$status_display" "$last_display" "$summary_short"
+    done <<< "$sorted_names"
+
+    # Directives
+    local directive_output directive_count
+    directive_output=$(_borg_read_directives)
+    directive_count=$(echo "$directive_output" | head -1)
+    if (( directive_count > 0 )); then
+        echo ""
+        echo -e "  ${CYAN}Directives:${NC} $directive_count pending"
+        echo "$directive_output" | tail -n +2 | while IFS=$'\t' read -r slug title; do
+            [[ -z "$slug" ]] && continue
+            echo -e "    ${DIM}- $title${NC}"
+        done
+    fi
+
+    # Recent assimilations
+    local assim_output
+    assim_output=$(_borg_read_assimilated "" 3)
+    if [[ -n "$assim_output" ]]; then
+        echo ""
+        echo -e "  ${GREEN}Recently assimilated:${NC}"
+        echo "$assim_output" | while IFS=$'\t' read -r slug title ship_date; do
+            [[ -z "$slug" ]] && continue
+            echo -e "    ${DIM}- $title ($ship_date)${NC}"
+        done
+    fi
+
+    # Capacity warning
+    local active_count
+    active_count=$(_borg_active_count)
+    if (( active_count > BORG_MAX_ACTIVE )); then
+        echo
+        warn "${BOLD}$active_count sessions need attention${NC} (limit: $BORG_MAX_ACTIVE)"
+    fi
+    echo
+
+    # LLM narrative briefing if requested
+    if (( do_brief )); then
+        _borg_print_briefing
+    fi
+}
+
+_borg_link_deep() {
+    local project="$1" do_brief="${2:-0}"
+
+    if [[ -z "$project" ]]; then
+        project="${PWD##*/}"
+    fi
+
+    if ! borg_registry_has "$project"; then
+        die "project '$project' not in registry. Run: borg add [path]"
+    fi
+
+    local entry
+    entry=$(borg_registry_get "$project")
+
+    local source ppath proj_status last summary session_id tmux_window
+    source=$(echo "$entry"     | jq -r '.source // "cli"')
+    ppath=$(echo "$entry"      | jq -r '.path // "null"')
+    proj_status=$(echo "$entry"     | jq -r '.status // "unknown"')
+    last=$(echo "$entry"       | jq -r '.last_activity // "(never)"')
+    summary=$(echo "$entry"    | jq -r '.summary // "(no summary)"')
+    session_id=$(echo "$entry" | jq -r '.claude_session_id // "(unknown)"')
+    tmux_window=$(echo "$entry"| jq -r '.tmux_window // "(none)"')
+
+    echo -e "\n${BOLD}${project}${NC}"
+    printf '%0.s─' {1..40}; echo
+    echo -e "  ${DIM}Source:${NC}       $source"
+    [[ "$ppath" != "null" ]] && echo -e "  ${DIM}Path:${NC}         $ppath"
+    echo -e "  ${DIM}Status:${NC}       $proj_status"
+    echo -e "  ${DIM}Last active:${NC}  $last"
+    echo -e "  ${DIM}tmux window:${NC}  $tmux_window"
+    echo -e "  ${DIM}Session ID:${NC}   $session_id"
+    echo
+    echo -e "  ${BOLD}Summary${NC}"
+    echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
+
+    # PROJECT_PLAN.md
+    if [[ "$ppath" != "null" && -f "$ppath/PROJECT_PLAN.md" ]]; then
+        echo
+        echo -e "  ${BOLD}Active Plan${NC}"
+        local obj
+        obj=$(grep -A2 "^## Objective" "$ppath/PROJECT_PLAN.md" | grep -v "^## Objective" | grep -v "^$" | head -1)
+        [[ -n "$obj" ]] && echo -e "  ${CYAN}Objective:${NC} $obj"
+        local criteria_total criteria_done
+        criteria_total=$(grep -c '^\- \[' "$ppath/PROJECT_PLAN.md" 2>/dev/null || echo 0)
+        criteria_done=$(grep -c '^\- \[x\]' "$ppath/PROJECT_PLAN.md" 2>/dev/null || echo 0)
+        echo -e "  ${CYAN}Progress:${NC} $criteria_done/$criteria_total criteria met"
+    fi
+
+    # Last debrief
+    local debrief_file="$BORG_DIR/debriefs/${project}.md"
+    if [[ -f "$debrief_file" ]]; then
+        echo
+        echo -e "  ${BOLD}Last Debrief${NC}"
+        head -20 "$debrief_file" | sed 's/^/  /'
+    fi
+
+    # Directives for this project
+    local directive_output directive_count
+    directive_output=$(_borg_read_directives "$project")
+    directive_count=$(echo "$directive_output" | head -1)
+    if (( directive_count > 0 )); then
+        echo
+        echo -e "  ${CYAN}Directives:${NC} $directive_count relevant"
+        echo "$directive_output" | tail -n +2 | while IFS=$'\t' read -r slug title; do
+            [[ -z "$slug" ]] && continue
+            echo -e "    ${DIM}- $title${NC}"
+        done
+    fi
+
+    # Recent assimilations for this project
+    local assim_output
+    assim_output=$(_borg_read_assimilated "$project" 3)
+    if [[ -n "$assim_output" ]]; then
+        echo
+        echo -e "  ${GREEN}Recently assimilated:${NC}"
+        echo "$assim_output" | while IFS=$'\t' read -r slug title ship_date; do
+            [[ -z "$slug" ]] && continue
+            echo -e "    ${DIM}- $title ($ship_date)${NC}"
+        done
+    fi
+
+    # Cairn knowledge
+    if command -v cairn &>/dev/null; then
+        echo
+        info "Cairn knowledge for $project:"
+        _borg_timeout 5 cairn search "$project" --project "$project" --max 5 2>/dev/null || {
+            warn "cairn search timed out or failed"
+        }
+    fi
+    echo
+}
 
 cmd_ls() {
     local porcelain=0 show_all=0
@@ -708,6 +1035,18 @@ cmd_next() {
         echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
     fi
 
+    # Directives for recommended project
+    local directive_output directive_count
+    directive_output=$(_borg_read_directives "$name")
+    directive_count=$(echo "$directive_output" | head -1)
+    if (( directive_count > 0 )); then
+        echo -e "\n  ${CYAN}Directives:${NC} $directive_count pending for $name"
+        echo "$directive_output" | tail -n +2 | head -3 | while IFS=$'\t' read -r slug title; do
+            [[ -z "$slug" ]] && continue
+            echo -e "    ${DIM}- $title${NC}"
+        done
+    fi
+
     # Capacity warning
     local active_count
     active_count=$(_borg_active_count)
@@ -997,7 +1336,7 @@ $payload"
             rel_time=$(_borg_relative_time "$last_activity")
             echo -e "    ${DIM}$name  ($rel_time)${NC}"
         done
-        echo -e "  ${DIM}Run 'borg hail <name>' for details.${NC}"
+        echo -e "  ${DIM}Run 'borg link <name>' for details.${NC}"
     fi
     echo ""
 }
@@ -1499,13 +1838,14 @@ cmd_help() {
   COMMANDS
     init                Launch orchestrator: morning briefing + Claude session
     claude              Resume orchestrator session (continue most recent)
+    link [project]      Overview (no arg) or deep dive (with project)
+                          --brief   LLM narrative briefing
+                          --refresh Regenerate summaries
+                          --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
-    ls [--all]          Dashboard: all projects sorted by urgency
     switch [query]      fzf picker → jump to project tmux window
-    status [project]    Detailed status (defaults to current directory)
-    hail [project]      Morning briefing (no arg) or project detail (with arg)
     search <query>      Search cairn knowledge graph (--project to filter)
-    scan                Discover projects + refresh summaries
+    scan                Discover projects from session history
     add [path]          Register a project (defaults to $PWD)
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
@@ -1515,22 +1855,26 @@ cmd_help() {
     setup               Register Claude Code hooks, skills, and config
     help                Show this message
 
+  ALIASES (backward compat)
+    ls                  → link
+    status              → link
+    hail                → link
+    refresh             → link --refresh
+
   HOTKEY
     Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
 
   SKILLS (use in Claude Code sessions)
-    /borg-plan          Project planning (Claude proposes, you validate)
-    /borg-review        Mid-session diagnostic + loop detection
-    /borg-assimilate    Shipping checklist + execution (merge PR, archive plan)
-    /borg-checkpoint    Manual session checkpoint with next-session entry point
-    /borg-hail          Same as 'borg hail' — morning briefing or project detail
-    /borg-ls            Same as 'borg ls' — project dashboard
-    /borg-next          Same as 'borg next' — what needs attention
-    /borg-status        Same as 'borg status' — single project detail
-    /borg-switch        Same as 'borg switch' — jump to project
-    /borg-search        Same as 'borg search' — search cairn knowledge
-    /borg-refresh       Same as 'borg refresh' — regenerate summaries
-    /adhd-guardrails    Compassionate constraints (always active)
+    /borg-plan              Project planning + Collective review
+    /borg-review            Mid-session diagnostic + loop detection
+    /borg-assimilate        Shipping checklist + Collective review + execution
+    /borg-collective-review Adversarial multi-persona review
+    /borg-checkpoint        Manual session checkpoint
+    /borg-link              Same as 'borg link' — overview or deep dive
+    /borg-next              Same as 'borg next' — what needs attention
+    /borg-switch            Same as 'borg switch' — jump to project
+    /borg-search            Same as 'borg search' — search cairn knowledge
+    /adhd-guardrails        Compassionate constraints (always active)
 
   STATUS
     active              Drone is processing (green)
@@ -1563,22 +1907,24 @@ case "${1:-help}" in
     init)     cmd_init ;;
     claude)   cmd_claude ;;
     next)     cmd_next "${@:2}" ;;
-    ls)       cmd_ls "${@:2}" ;;
+    link)     cmd_link "${@:2}" ;;
     switch)   cmd_switch "${@:2}" ;;
-    status)   cmd_status "${@:2}" ;;
-    hail|brief) cmd_hail "${@:2}" ;;
     search)   cmd_search "${@:2}" ;;
     scan)     cmd_scan "${@:2}" ;;
     add)      cmd_add "${@:2}" ;;
     rm)       cmd_rm "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
-    refresh)  cmd_refresh "${@:2}" ;;
     sever|down)  cmd_down ;;
     regenerate|tidy)  cmd_tidy ;;
     setup)    cmd_setup ;;
     focus)    cmd_focus "${@:2}" ;;
-    briefing) _borg_print_briefing ;;
+    # Legacy aliases → consolidated command
+    ls)       cmd_link "${@:2}" ;;
+    status)   cmd_link "${@:2}" ;;
+    hail|brief) cmd_link "${@:2}" ;;
+    briefing) cmd_link --brief ;;
+    refresh)  cmd_link --refresh ;;
     help|--help|-h) cmd_help ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac

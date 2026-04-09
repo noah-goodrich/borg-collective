@@ -31,6 +31,20 @@ After the plan is confirmed, switch back for implementation:
 Read silently: README, CLAUDE.md, recent `git log --oneline -20`, open PRs, uncommitted changes,
 TODO comments, test suite, CI/CD config. Use what you learn to inform every proposal below.
 
+## Run The Collective Review
+
+After reading the codebase and before proposing objectives, run The Collective adversarial review.
+Follow the process defined in the `borg-collective-review` skill:
+
+1. Read the codebase context you just gathered
+2. Present The Collective Review (all six core personas + one rotating specialist analyzing the
+   codebase, the user's request, and the work ahead)
+3. Use The Adult's synthesis to inform your objective and criteria proposals
+
+Do not skip this step. The review ensures the plan accounts for scope, quality, performance,
+readability, and user experience from the start. Present the review to the developer before
+proposing objectives so they can react to the perspectives.
+
 ## The Conversation
 
 ### 1. Propose the Objective
