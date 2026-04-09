@@ -45,10 +45,11 @@ Three independent tools that compose:
 borg init                Launch orchestrator: morning briefing + Claude session
 borg / borg next         What needs attention? Switch to it.
 borg claude              Launch/resume orchestrator Claude session
-borg ls [--all]          Dashboard sorted by urgency
+borg link [project]      Overview (no arg) or deep dive (with project)
+                           --brief   LLM narrative briefing
+                           --refresh Regenerate summaries
+                           --all     Include archived projects
 borg switch [query]      fzf picker → tmux window switch
-borg status [project]    Detailed project status
-borg hail [project]      Morning briefing (no arg) or project detail
 borg search "query"      Search cairn knowledge graph
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
@@ -60,6 +61,7 @@ drone down [project]     Stop container + remove window
 drone claude [project]   Launch Claude in project context
 drone sh [project]       Shell into container
 drone restart [project]  Restart container
+drone link               Deep dive on current project (alias for borg link)
 drone status             Show all drones
 ```
 
@@ -84,14 +86,18 @@ hooks/
     borg-notify.sh          Notification → status=waiting + waiting_reason
 skills/
     adhd-guardrails/        Cognitive load guardrails (always active)
-    borg-plan/              Project planning Q/A (Claude proposes, you validate)
-    borg-assimilate/        Shipping checklist + execution (merge PR, archive plan)
+    borg-plan/              Project planning + Collective review
+    borg-assimilate/        Shipping checklist + Collective review + execution
+    borg-collective-review/ Adversarial multi-persona review (The Collective)
     borg-review/            Mid-session diagnostic + loop detection
+    borg-link/              Consolidated project intelligence (overview + deep dive)
     borg-debrief/           Structured session analysis
-    borg-checkpoint/    Manual session checkpoint
+    borg-checkpoint/        Manual session checkpoint
 install.sh                  Installer: deps, symlinks, hooks, skills, tmux keybinding
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)
+    plans/assimilated/      Shipped project plans (archived)
+    plans/directives/       Backlog / future project ideas
     ...
 ```
 
