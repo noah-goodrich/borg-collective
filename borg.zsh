@@ -1642,6 +1642,37 @@ cmd_setup() {
     mkdir -p "$CLAUDE_DIR" "$CLAUDE_HOOKS_DIR" "$CLAUDE_SKILLS_DIR"
     borg_registry_init
 
+    # ── 1a. Heal CLAUDE.md symlink ────────────────────────────────────────────
+    # The dotfiles installer creates ~/.claude/CLAUDE.md → ~/.config/dotfiles/...
+    # but only on first-time setup. If the symlink drifts (broken target, points
+    # to a stale path, or was removed), re-link it idempotently here.
+    local claude_md_src="$DOTFILES_DIR/claude/code/CLAUDE.md"
+    local claude_md_dst="$CLAUDE_DIR/CLAUDE.md"
+    if [[ -f "$claude_md_src" ]]; then
+        local needs_relink=0 src_real dst_real
+        src_real=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$claude_md_src" 2>/dev/null)
+        if [[ ! -e "$claude_md_dst" ]]; then
+            needs_relink=1  # missing or broken symlink
+        else
+            dst_real=$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$claude_md_dst" 2>/dev/null)
+            [[ "$dst_real" != "$src_real" ]] && needs_relink=1
+        fi
+        if (( needs_relink )); then
+            # Back up non-symlink targets so we don't clobber edits
+            if [[ -e "$claude_md_dst" && ! -L "$claude_md_dst" ]]; then
+                local backup="$claude_md_dst.backup.$(date +%Y%m%d_%H%M%S)"
+                mv "$claude_md_dst" "$backup"
+                warn "Backed up existing CLAUDE.md → $backup"
+            fi
+            local rel_src
+            rel_src=$(python3 -c "import os,sys; print(os.path.relpath(sys.argv[1], os.path.dirname(sys.argv[2])))" \
+                "$claude_md_src" "$claude_md_dst" 2>/dev/null) || rel_src="$claude_md_src"
+            rm -f "$claude_md_dst"
+            ln -sf "$rel_src" "$claude_md_dst"
+            info "Re-linked CLAUDE.md → $rel_src"
+        fi
+    fi
+
     if [[ ! -f "$BORG_DIR/config.zsh" ]]; then
         info "Generating config.zsh with defaults..."
         cat > "$BORG_DIR/config.zsh" <<'CONF'
