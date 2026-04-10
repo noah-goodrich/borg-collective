@@ -175,6 +175,22 @@ _read_devcontainer_exec_config() {
     _dc_user="${out##*	}"
 }
 
+_devcontainer_hash() {
+    local project_dir="$1"
+    [[ -d "$project_dir/.devcontainer" ]] || { echo ""; return 0; }
+    local base_id
+    base_id=$(docker inspect devcontainer-base:local --format '{{.Id}}' 2>/dev/null || true)
+    { find "$project_dir/.devcontainer" -type f | sort | xargs shasum 2>/dev/null
+      printf '%s\n' "$base_id"
+    } | shasum | awk '{print $1}'
+}
+
+_save_devcontainer_hash() {
+    [[ -n "$_dc_hash" ]] || return 0
+    mkdir -p "$_dc_hash_dir"
+    echo "$_dc_hash" > "$_dc_hash_file"
+}
+
 run_initialize_command() {
     local project_dir="$1"
     local init_cmd
@@ -307,6 +323,16 @@ cmd_up() {
 
     ensure_postgres
 
+    # Detect if devcontainer definition changed since last build
+    local _dc_hash _dc_hash_dir _dc_hash_file _build_flag=""
+    _dc_hash_dir="$BORG_DIR/devcontainer-hashes"
+    _dc_hash_file="$_dc_hash_dir/${project_name}.hash"
+    _dc_hash=$(_devcontainer_hash "$project_dir")
+    if [[ -n "$_dc_hash" && "$(cat "$_dc_hash_file" 2>/dev/null)" != "$_dc_hash" ]]; then
+        info "Devcontainer definition changed — rebuilding image."
+        _build_flag="--build"
+    fi
+
     # Window already exists — check health
     if has_window "$project_name"; then
         local panes
@@ -320,11 +346,16 @@ cmd_up() {
         else
             local container
             container=$(get_project_container "$project_dir")
-            if [[ -z "$container" ]]; then
-                info "Container stopped. Restarting..."
+            if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
+                if [[ -n "$_build_flag" ]]; then
+                    info "Rebuilding container for $project_name..."
+                else
+                    info "Container stopped. Restarting..."
+                fi
                 run_initialize_command "$project_dir"
-                docker compose -p "$project_name" -f "$compose" up -d
+                docker compose -p "$project_name" -f "$compose" up -d $_build_flag
                 container=$(wait_for_container "$project_dir")
+                _save_devcontainer_hash
                 local shell service exec_cmd
                 shell=$(get_shell "$container")
                 service=$(get_service_name "$project_dir")
@@ -341,11 +372,12 @@ cmd_up() {
     # Create new project window
     local container
     container=$(get_project_container "$project_dir")
-    if [[ -z "$container" ]]; then
+    if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
         info "Starting containers for $project_name..."
         run_initialize_command "$project_dir"
-        docker compose -p "$project_name" -f "$compose" up -d
+        docker compose -p "$project_name" -f "$compose" up -d $_build_flag
         container=$(wait_for_container "$project_dir")
+        mkdir -p "$_dc_hash_dir" && [[ -n "$_dc_hash" ]] && echo "$_dc_hash" > "$_dc_hash_file" || true
     fi
 
     local shell service exec_cmd
@@ -425,6 +457,14 @@ _cycle_project() {
 
     local container shell service exec_cmd
     container=$(wait_for_container "$project_dir")
+
+    if [[ "$mode" == "rebuild" ]]; then
+        local _dc_hash _dc_hash_dir _dc_hash_file
+        _dc_hash_dir="$BORG_DIR/devcontainer-hashes"
+        _dc_hash_file="$_dc_hash_dir/${project_name}.hash"
+        _dc_hash=$(_devcontainer_hash "$project_dir")
+        _save_devcontainer_hash
+    fi
     shell=$(get_shell "$container")
     service=$(get_service_name "$project_dir")
     exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
