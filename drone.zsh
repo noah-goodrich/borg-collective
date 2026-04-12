@@ -201,6 +201,29 @@ run_initialize_command() {
     eval "$expanded"
 }
 
+run_post_create_command() {
+    local project_name="$1" project_dir="$2"
+    local post_cmd
+    post_cmd=$(_read_devcontainer_field "$project_dir" "postCreateCommand") || return 0
+    [[ -n "$post_cmd" ]] || return 0
+    local compose="$project_dir/$COMPOSE_FILE"
+    local service
+    service=$(get_service_name "$project_dir")
+    _read_devcontainer_exec_config "$project_dir"
+    local -a user_args=()
+    [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
+    local sentinel="/tmp/.drone-created"
+    local exists
+    exists=$(docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" "$service" sh -c "test -f $sentinel && echo yes || echo no" 2>/dev/null) || exists="no"
+    if [[ "$exists" == "no" ]]; then
+        dbg "run_post_create_command: $post_cmd"
+        docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" sh -c "$post_cmd"
+        docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" "$service" sh -c "touch $sentinel"
+    else
+        dbg "run_post_create_command: sentinel exists, skipping"
+    fi
+}
+
 run_post_start_command() {
     local project_name="$1" project_dir="$2"
     local post_cmd
@@ -360,6 +383,7 @@ cmd_up() {
                 shell=$(get_shell "$container")
                 service=$(get_service_name "$project_dir")
                 exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
+                run_post_create_command "$project_name" "$project_dir"
                 run_post_start_command "$project_name" "$project_dir"
                 resend_exec_to_panes "$project_name" "$exec_cmd"
             fi
@@ -385,6 +409,7 @@ cmd_up() {
     service=$(get_service_name "$project_dir")
     exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
     info "Container: $container  Service: $service  Shell: $shell"
+    run_post_create_command "$project_name" "$project_dir"
     run_post_start_command "$project_name" "$project_dir"
 
     create_2pane_window "$project_name" "$exec_cmd" "$project_dir"
@@ -468,6 +493,7 @@ _cycle_project() {
     shell=$(get_shell "$container")
     service=$(get_service_name "$project_dir")
     exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
+    run_post_create_command "$project_name" "$project_dir"
     run_post_start_command "$project_name" "$project_dir"
 
     if has_window "$project_name"; then
