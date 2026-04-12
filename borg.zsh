@@ -115,6 +115,10 @@ _borg_active_count() {
 # Read directives from a project's own docs/plans/directives/ directory.
 # Argument: absolute path to the project root.
 # Output: first line = count, subsequent lines = slug\ttitle
+#
+# NOTE: parameter is `ppath`, not `path`. zsh ties `path` to $PATH, so
+# `local path=...` nukes command lookup inside the function (head/sed
+# become "not found"). Same rule for all readers/collectors below.
 _borg_read_directives() {
     local ppath="${1:-}" dir title f
     [[ -z "$ppath" || "$ppath" == "null" ]] && { echo "0"; return 0; }
@@ -162,6 +166,9 @@ _borg_collect_all_directives() {
         for f in "$ppath"/docs/plans/directives/*.md(N); do
             title=$(head -1 "$f" | sed 's/^#* *//')
             entries+=("${${f:t}%.md}"$'\t'"$title"$'\t'"$name")
+            # Explicit arithmetic assignment, not (( count++ )). Post-increment
+            # evaluates to the pre-value (0 on first iter) → exit status 1 →
+            # `set -e` kills the function silently.
             count=$((count + 1))
         done
     done <<< "$names_paths"
@@ -1033,7 +1040,7 @@ cmd_next() {
             waiting_reason: (.value.waiting_reason // ""),
             last_activity: (.value.last_activity // ""),
             pinned: (.value.pinned // false),
-            path: (.value.path // "")
+            path: (.value.path // "null")
         }) |
         sort_by(-.score, .last_activity) |
         first // empty
@@ -1055,7 +1062,7 @@ cmd_next() {
     waiting_reason=$(echo "$top" | jq -r '.waiting_reason')
     last=$(echo "$top" | jq -r '.last_activity')
     pinned=$(echo "$top" | jq -r '.pinned')
-    ppath=$(echo "$top" | jq -r '.path // ""')
+    ppath=$(echo "$top" | jq -r '.path // "null"')
 
     # --switch mode: skip all output, switch immediately
     if (( do_switch )); then
@@ -1086,7 +1093,7 @@ cmd_next() {
     fi
 
     # Directives for recommended project (from its own docs/plans/directives/)
-    if [[ -n "$ppath" ]]; then
+    if [[ "$ppath" != "null" ]]; then
         local directive_output directive_count
         directive_output=$(_borg_read_directives "$ppath")
         directive_count=$(echo "$directive_output" | head -1)
