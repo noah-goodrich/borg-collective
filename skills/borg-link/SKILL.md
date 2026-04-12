@@ -58,6 +58,12 @@ errors for workspace files that a drone can't see.
 
 ## Step 1 — Resolve the current project (marker walk)
 
+The canonical marker-walk implementation is `_borg_find_project` in
+`lib/borg-hooks.sh` — it returns the project *name* from the nearest `.borg-project`
+marker. This skill extends it to also emit the workspace *directory* (the dir containing
+the marker), which is what the file reads below need. If you change the marker convention,
+update both places in lockstep.
+
 ```
 Bash: dir="$PWD"; while [[ "$dir" != "/" ]]; do
         [[ -f "$dir/.borg-project" ]] && { echo "WORKSPACE=$dir"; echo "PROJECT=$(cat "$dir/.borg-project")"; break; }
