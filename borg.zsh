@@ -112,20 +112,16 @@ _borg_active_count() {
     borg_registry_read | jq '[.projects[] | select(.status == "waiting" or .status == "active")] | length'
 }
 
-# Read directives from docs/plans/directives/ — optionally filtered by project name.
+# Read directives from a project's own docs/plans/directives/ directory.
+# Argument: absolute path to the project root.
 # Output: first line = count, subsequent lines = slug\ttitle
 _borg_read_directives() {
-    local project="${1:-}" dir="$BORG_HOME/docs/plans/directives" title f
+    local ppath="${1:-}" dir title f
+    [[ -z "$ppath" || "$ppath" == "null" ]] && { echo "0"; return 0; }
+    dir="$ppath/docs/plans/directives"
     [[ -d "$dir" ]] || { echo "0"; return 0; }
     local files=("$dir"/*.md(N))
     (( ${#files[@]} == 0 )) && { echo "0"; return 0; }
-    if [[ -n "$project" ]]; then
-        local matches=()
-        for f in "${files[@]}"; do
-            grep -ql "$project" "$f" 2>/dev/null && matches+=("$f")
-        done
-        files=("${matches[@]}")
-    fi
     echo "${#files[@]}"
     for f in "${files[@]}"; do
         title=$(head -1 "$f" | sed 's/^#* *//')
@@ -133,21 +129,16 @@ _borg_read_directives() {
     done
 }
 
-# Read recent assimilated plans from docs/plans/assimilated/ — optionally filtered by project.
-# Output: slug\ttitle\tship-date lines (max N, newest first by filename)
+# Read recent assimilated plans from a project's own docs/plans/assimilated/ directory.
+# Arguments: absolute path to the project root, optional max count (default 3).
+# Output: slug\ttitle\tship-date lines (max N, newest first by mtime)
 _borg_read_assimilated() {
-    local project="${1:-}" max="${2:-3}" count=0 title ship_date f
-    local dir="$BORG_HOME/docs/plans/assimilated"
+    local ppath="${1:-}" max="${2:-3}" count=0 title ship_date f dir
+    [[ -z "$ppath" || "$ppath" == "null" ]] && return 0
+    dir="$ppath/docs/plans/assimilated"
     [[ -d "$dir" ]] || return 0
     local files=("$dir"/*.md(NOm))  # newest first by mtime
     (( ${#files[@]} == 0 )) && return 0
-    if [[ -n "$project" ]]; then
-        local matches=()
-        for f in "${files[@]}"; do
-            grep -ql "$project" "$f" 2>/dev/null && matches+=("$f")
-        done
-        files=("${matches[@]}")
-    fi
     for f in "${files[@]}"; do
         (( count >= max )) && break
         title=$(head -1 "$f" | sed 's/^#* *//')
@@ -155,6 +146,61 @@ _borg_read_assimilated() {
         printf '%s\t%s\t%s\n' "${${f:t}%.md}" "$title" "$ship_date"
         count=$((count + 1))
     done
+}
+
+# Iterate every registered project and collect directives from each project's
+# docs/plans/directives/ directory. Skips projects whose path is unreachable.
+# Output: first line = total count, subsequent lines = slug\ttitle\tproject
+_borg_collect_all_directives() {
+    local registry names_paths name ppath f title
+    registry=$(borg_registry_read)
+    names_paths=$(echo "$registry" | jq -r '.projects | to_entries[] | .key + "\t" + (.value.path // "")')
+
+    local entries=() count=0
+    while IFS=$'\t' read -r name ppath; do
+        [[ -z "$name" || -z "$ppath" || ! -d "$ppath/docs/plans/directives" ]] && continue
+        for f in "$ppath"/docs/plans/directives/*.md(N); do
+            title=$(head -1 "$f" | sed 's/^#* *//')
+            entries+=("${${f:t}%.md}"$'\t'"$title"$'\t'"$name")
+            count=$((count + 1))
+        done
+    done <<< "$names_paths"
+
+    echo "$count"
+    if (( count > 0 )); then
+        printf '%s\n' "${entries[@]}"
+    fi
+    return 0
+}
+
+# Iterate every registered project and collect the newest assimilated plans
+# across all projects. Skips projects whose path is unreachable. Sort is by
+# filename DESC (shipped filenames are ISO-dated so this matches ship order).
+# Output: slug\ttitle\tship-date\tproject lines (max N)
+_borg_collect_all_assimilated() {
+    local max="${1:-3}"
+    local registry names_paths name ppath f
+    registry=$(borg_registry_read)
+    names_paths=$(echo "$registry" | jq -r '.projects | to_entries[] | .key + "\t" + (.value.path // "")')
+
+    local entries=()
+    while IFS=$'\t' read -r name ppath; do
+        [[ -z "$name" || -z "$ppath" || ! -d "$ppath/docs/plans/assimilated" ]] && continue
+        for f in "$ppath"/docs/plans/assimilated/*.md(N); do
+            entries+=("${f:t}"$'\t'"$f"$'\t'"$name")
+        done
+    done <<< "$names_paths"
+
+    (( ${#entries[@]} == 0 )) && return 0
+
+    local sorted basename fullpath title ship_date
+    sorted=$(printf '%s\n' "${entries[@]}" | sort -r -k1,1 | head -n "$max")
+    while IFS=$'\t' read -r basename fullpath name; do
+        [[ -z "$fullpath" ]] && continue
+        title=$(head -1 "$fullpath" | sed 's/^#* *//')
+        ship_date=$(grep -m1 'Shipped:' "$fullpath" | sed 's/.*Shipped: *//' | sed 's/ .*//')
+        printf '%s\t%s\t%s\t%s\n' "${basename%.md}" "$title" "$ship_date" "$name"
+    done <<< "$sorted"
 }
 
 # ── Commands ──────────────────────────────────────────────────────────────────
@@ -309,28 +355,28 @@ _borg_link_overview() {
             "$pin_mark" "$display" "$src_badge" "$status_display" "$last_display" "$summary_short"
     done <<< "$sorted_names"
 
-    # Directives
+    # Directives (across all reachable projects)
     local directive_output directive_count
-    directive_output=$(_borg_read_directives)
+    directive_output=$(_borg_collect_all_directives)
     directive_count=$(echo "$directive_output" | head -1)
     if (( directive_count > 0 )); then
         echo ""
         echo -e "  ${CYAN}Directives:${NC} $directive_count pending"
-        echo "$directive_output" | tail -n +2 | while IFS=$'\t' read -r slug title; do
+        echo "$directive_output" | tail -n +2 | while IFS=$'\t' read -r slug title dproject; do
             [[ -z "$slug" ]] && continue
-            echo -e "    ${DIM}- $title${NC}"
+            echo -e "    ${DIM}- [$dproject] $title${NC}"
         done
     fi
 
-    # Recent assimilations
+    # Recent assimilations (across all reachable projects)
     local assim_output
-    assim_output=$(_borg_read_assimilated "" 3)
+    assim_output=$(_borg_collect_all_assimilated 3)
     if [[ -n "$assim_output" ]]; then
         echo ""
         echo -e "  ${GREEN}Recently assimilated:${NC}"
-        echo "$assim_output" | while IFS=$'\t' read -r slug title ship_date; do
+        echo "$assim_output" | while IFS=$'\t' read -r slug title ship_date aproject; do
             [[ -z "$slug" ]] && continue
-            echo -e "    ${DIM}- $title ($ship_date)${NC}"
+            echo -e "    ${DIM}- [$aproject] $title ($ship_date)${NC}"
         done
     fi
 
@@ -405,29 +451,31 @@ _borg_link_deep() {
         head -20 "$debrief_file" | sed 's/^/  /'
     fi
 
-    # Directives for this project
-    local directive_output directive_count
-    directive_output=$(_borg_read_directives "$project")
-    directive_count=$(echo "$directive_output" | head -1)
-    if (( directive_count > 0 )); then
-        echo
-        echo -e "  ${CYAN}Directives:${NC} $directive_count relevant"
-        echo "$directive_output" | tail -n +2 | while IFS=$'\t' read -r slug title; do
-            [[ -z "$slug" ]] && continue
-            echo -e "    ${DIM}- $title${NC}"
-        done
-    fi
+    # Directives for this project (read from its own docs/plans/directives/)
+    if [[ "$ppath" != "null" ]]; then
+        local directive_output directive_count
+        directive_output=$(_borg_read_directives "$ppath")
+        directive_count=$(echo "$directive_output" | head -1)
+        if (( directive_count > 0 )); then
+            echo
+            echo -e "  ${CYAN}Directives:${NC} $directive_count pending"
+            echo "$directive_output" | tail -n +2 | while IFS=$'\t' read -r slug title; do
+                [[ -z "$slug" ]] && continue
+                echo -e "    ${DIM}- $title${NC}"
+            done
+        fi
 
-    # Recent assimilations for this project
-    local assim_output
-    assim_output=$(_borg_read_assimilated "$project" 3)
-    if [[ -n "$assim_output" ]]; then
-        echo
-        echo -e "  ${GREEN}Recently assimilated:${NC}"
-        echo "$assim_output" | while IFS=$'\t' read -r slug title ship_date; do
-            [[ -z "$slug" ]] && continue
-            echo -e "    ${DIM}- $title ($ship_date)${NC}"
-        done
+        # Recent assimilations for this project
+        local assim_output
+        assim_output=$(_borg_read_assimilated "$ppath" 3)
+        if [[ -n "$assim_output" ]]; then
+            echo
+            echo -e "  ${GREEN}Recently assimilated:${NC}"
+            echo "$assim_output" | while IFS=$'\t' read -r slug title ship_date; do
+                [[ -z "$slug" ]] && continue
+                echo -e "    ${DIM}- $title ($ship_date)${NC}"
+            done
+        fi
     fi
 
     # Cairn knowledge
@@ -984,7 +1032,8 @@ cmd_next() {
             summary: (.value.summary // ""),
             waiting_reason: (.value.waiting_reason // ""),
             last_activity: (.value.last_activity // ""),
-            pinned: (.value.pinned // false)
+            pinned: (.value.pinned // false),
+            path: (.value.path // "")
         }) |
         sort_by(-.score, .last_activity) |
         first // empty
@@ -999,13 +1048,14 @@ cmd_next() {
         return 0
     fi
 
-    local name proj_status summary waiting_reason last pinned
+    local name proj_status summary waiting_reason last pinned ppath
     name=$(echo "$top" | jq -r '.name')
     proj_status=$(echo "$top" | jq -r '.status')
     summary=$(echo "$top" | jq -r '.summary')
     waiting_reason=$(echo "$top" | jq -r '.waiting_reason')
     last=$(echo "$top" | jq -r '.last_activity')
     pinned=$(echo "$top" | jq -r '.pinned')
+    ppath=$(echo "$top" | jq -r '.path // ""')
 
     # --switch mode: skip all output, switch immediately
     if (( do_switch )); then
@@ -1035,16 +1085,18 @@ cmd_next() {
         echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
     fi
 
-    # Directives for recommended project
-    local directive_output directive_count
-    directive_output=$(_borg_read_directives "$name")
-    directive_count=$(echo "$directive_output" | head -1)
-    if (( directive_count > 0 )); then
-        echo -e "\n  ${CYAN}Directives:${NC} $directive_count pending for $name"
-        echo "$directive_output" | tail -n +2 | head -3 | while IFS=$'\t' read -r slug title; do
-            [[ -z "$slug" ]] && continue
-            echo -e "    ${DIM}- $title${NC}"
-        done
+    # Directives for recommended project (from its own docs/plans/directives/)
+    if [[ -n "$ppath" ]]; then
+        local directive_output directive_count
+        directive_output=$(_borg_read_directives "$ppath")
+        directive_count=$(echo "$directive_output" | head -1)
+        if (( directive_count > 0 )); then
+            echo -e "\n  ${CYAN}Directives:${NC} $directive_count pending for $name"
+            echo "$directive_output" | tail -n +2 | head -3 | while IFS=$'\t' read -r slug title; do
+                [[ -z "$slug" ]] && continue
+                echo -e "    ${DIM}- $title${NC}"
+            done
+        fi
     fi
 
     # Capacity warning

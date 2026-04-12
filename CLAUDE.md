@@ -96,8 +96,8 @@ skills/
 install.sh                  Installer: deps, symlinks, hooks, skills, tmux keybinding
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)
-    plans/assimilated/      Shipped project plans (archived)
-    plans/directives/       Backlog / future project ideas
+    plans/assimilated/      Shipped plans for borg-collective itself (per-project convention)
+    plans/directives/       Backlog for borg-collective itself; every project owns its own
     ...
 ```
 
