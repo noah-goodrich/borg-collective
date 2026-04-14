@@ -76,24 +76,24 @@ and (h) fixes for the plugin marketplace path bug and the neovim pathing issues.
 
 ### Session 5 — Team portability, part 1
 
-- [ ] **Compose profile split** — default profile is team-portable (borg mounts under
+- [x] **Compose profile split** — default profile is team-portable (borg mounts under
   `profiles: [borg]`). `drone up` sets `COMPOSE_PROFILES=borg` automatically. Cursor/Antigravity
   users get a working container without borg mounts.
   - Verify: `COMPOSE_PROFILES= docker compose -f docker-compose.base.yml config` shows no borg
     mounts; `COMPOSE_PROFILES=borg` shows them.
 
-- [ ] **Claude + Cortex installed upgradeably** — removed from Dockerfile bake; installed via
+- [x] **Claude + Cortex installed upgradeably** — removed from Dockerfile bake; installed via
   named npm volume in postCreateCommand. Upgrades work inside container without rebuild.
   - Verify: `drone rebuild`, `claude --version` and `cortex --version` both work; version
     persists after rebuild.
 
 ### Session 6 — Team portability, part 2
 
-- [ ] **`borg image build|push|pull`** — new `cmd_image` in `borg.zsh`. Config-driven registry
+- [x] **`borg image build|push|pull`** — new `cmd_image` in `borg.zsh`. Config-driven registry
   (`BORG_IMAGE_REGISTRY`). Push requires `yes` confirmation showing resolved registry URL.
   - Verify: `borg image build` produces local image; push shows confirm prompt.
 
-- [ ] **Regression** — `bats tests/*.bats` green; `shellcheck` green; end-to-end smoke test
+- [x] **Regression** — `bats tests/*.bats` green; `shellcheck` green; end-to-end smoke test
   passes.
   - Verify: run the smoke test in `docs/v0.7-upgrade.md`.
 

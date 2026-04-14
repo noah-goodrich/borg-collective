@@ -25,6 +25,9 @@ hash -r 2>/dev/null || true
 
 SESSION="${BORG_TMUX_SESSION:-borg}"
 COMPOSE_FILE=".devcontainer/docker-compose.yml"
+# drone always runs with the borg profile so borg-specific mounts are active.
+# Override with COMPOSE_PROFILES= to test the team-portable (no borg) surface.
+export COMPOSE_PROFILES="${COMPOSE_PROFILES:-borg}"
 POSTGRES_COMPOSE="$HOME/.config/dotfiles/devcontainer/docker-compose.postgres.yml"
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_ROOT="${BORG_ROOT:-$HOME/dev}"
@@ -894,11 +897,18 @@ cmd_scaffold() {
 
     cat > "$dc_dir/Dockerfile" <<DOCKERFILE
 # Extends the shared base devcontainer image.
-# Base provides: zsh, neovim, tmux, git, ssh, node.js, claude-code CLI.
+# Base provides: zsh, neovim, tmux, git, ssh, node.js.
+# claude-code (and cortex, if used) are installed via the claude_npm named
+# volume in postCreateCommand so they upgrade without a full image rebuild.
 #
 # To rebuild the base locally:
 #   docker build -f ~/.config/dotfiles/devcontainer/Dockerfile.base -t devcontainer-base:local .
 FROM devcontainer-base:local
+
+# npm global prefix — persisted in the claude_npm named volume so packages
+# survive image rebuilds. Matches the volume mount point in docker-compose.yml.
+ENV NPM_CONFIG_PREFIX=/home/dev/.npm-global
+ENV PATH=/home/dev/.npm-global/bin:\$PATH
 
 $dockerfile_extra
 
@@ -906,25 +916,22 @@ WORKDIR $workspace
 DOCKERFILE
 
     # ── docker-compose.yml ────────────────────────────────────────────────
+    # Profile split: ${project_name}-app (base, always starts, no borg mounts)
+    # and ${project_name}-borg (extends base, adds borg mounts, profiles: [borg]).
+    # drone sets COMPOSE_PROFILES=borg automatically; Cursor/team users start
+    # ${project_name}-app by default and get a fully working container without
+    # requiring host borg/claude config to be present.
     cat > "$dc_dir/docker-compose.yml" <<COMPOSE
 services:
+  # ── Base service — team-portable, no borg mounts ──────────────────────────
   ${project_name}-app:
-    labels:
-      - dev.role=app
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
     volumes:
-      # --- project files ---
+      # project files
       - ..:${workspace}:cached
-
-      # ---------------------------------------------------------------
-      # STANDARD DOTFILES BLOCK — keep in sync with
-      # dotfiles/devcontainer/docker-compose.base.yml
-      # ---------------------------------------------------------------
-      # shell — directory mount (not individual files) to avoid stale
-      # inodes when editors atomically replace files. Symlinks created
-      # in postCreateCommand.
+      # shell
       - ~/.config/dotfiles/zsh:/home/dev/.config/dotfiles/zsh:cached
       - ~/.config/zsh:/home/dev/.config/zsh:cached
       # editor
@@ -933,14 +940,8 @@ services:
       - ~/.ssh:/home/dev/.ssh:cached
       - ~/.gitconfig:/home/dev/.gitconfig:cached
       - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
-      # claude code + borg
-      - ~/.claude:/home/dev/.claude:cached
-      - ~/.config/borg:/home/dev/.config/borg:cached
-      # host home read-only — postStartCommand copies .claude.json fresh
-      # each start (avoids stale inode from atomic file replacement)
-      - ~/:/host-home:ro
-      # ---------------------------------------------------------------
-
+      # npm global packages (claude-code, cortex) — persists across rebuilds
+      - claude_npm:/home/dev/.npm-global
     working_dir: ${workspace}
     user: dev
     command: sleep infinity
@@ -949,13 +950,32 @@ services:
     networks:
       - devnet
 
+  # ── Borg-enabled service — extends base, adds borg mounts ─────────────────
+  # Only starts when COMPOSE_PROFILES=borg (set automatically by drone up).
+  ${project_name}-borg:
+    extends:
+      service: ${project_name}-app
+    labels:
+      - dev.role=app
+    volumes:
+      - ~/.claude:/home/dev/.claude:cached
+      - ~/.config/borg:/home/dev/.config/borg:cached
+      # host home read-only — postStartCommand copies .claude.json fresh each start
+      - ~/:/host-home:ro
+    profiles:
+      - borg
+
+volumes:
+  claude_npm:  # persists npm globals (claude-code, cortex) across image rebuilds
+
 networks:
   devnet:
     external: true
 COMPOSE
 
     # ── devcontainer.json ─────────────────────────────────────────────────
-    local post_create="ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; chmod 700 /home/dev/.ssh && chmod 600 /home/dev/.ssh/* && chmod 644 /home/dev/.ssh/*.pub 2>/dev/null || true"
+    # npm install runs once (sentinel-guarded) and lands in the claude_npm volume.
+    local post_create="ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; chmod 700 /home/dev/.ssh && chmod 600 /home/dev/.ssh/* && chmod 644 /home/dev/.ssh/*.pub 2>/dev/null || true; npm install -g @anthropic-ai/claude-code 2>/dev/null || true"
     case "$lang" in
         python) post_create="$post_create; pip install -e '.[dev]'" ;;
         node)   post_create="$post_create; npm install" ;;
@@ -965,7 +985,7 @@ COMPOSE
 {
   "name": "${project_name}",
   "dockerComposeFile": "docker-compose.yml",
-  "service": "${project_name}-app",
+  "service": "${project_name}-borg",
   "workspaceFolder": "${workspace}",
   "features": {},
   "postCreateCommand": "${post_create}",
