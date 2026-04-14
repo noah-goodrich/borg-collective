@@ -38,6 +38,7 @@ done
 # Load optional config (work/life boundaries, limits)
 BORG_CONFIG="$BORG_DIR/config.zsh"
 [[ -f "$BORG_CONFIG" ]] && source "$BORG_CONFIG"
+[[ -f "$BORG_DIR/extensions/config.zsh" ]] && source "$BORG_DIR/extensions/config.zsh"
 BORG_MAX_ACTIVE="${BORG_MAX_ACTIVE:-3}"
 BORG_SESSION_WARN_HOURS="${BORG_SESSION_WARN_HOURS:-2}"
 BORG_WORK_HOURS="${BORG_WORK_HOURS:-}"
@@ -1724,6 +1725,18 @@ cmd_setup() {
         info "CLAUDE.md synced"
     fi
 
+    # Apply per-environment extension CLAUDE.md (appended after base)
+    local _ext_dir="$BORG_DIR/extensions"
+    if [[ -f "$_ext_dir/CLAUDE.md" && -f "$claude_md_dst" ]]; then
+        local _marker="<!-- borg-extensions -->"
+        local _tmp="$claude_md_dst.ext.$$"
+        # Strip existing block, re-append fresh
+        awk -v m="$_marker" '$0 == m {exit} {print}' "$claude_md_dst" > "$_tmp" \
+            && mv "$_tmp" "$claude_md_dst"
+        { printf '\n%s\n' "$_marker"; cat "$_ext_dir/CLAUDE.md"; } >> "$claude_md_dst"
+        info "CLAUDE.md extension appended"
+    fi
+
     if [[ ! -f "$BORG_DIR/config.zsh" ]]; then
         info "Generating config.zsh with defaults..."
         cat > "$BORG_DIR/config.zsh" <<'CONF'
@@ -1840,6 +1853,45 @@ CONF
         cp -R "$skill_dir" "$target"
         info "  $name"
     done
+
+    # ── 4b. Per-environment extensions ───────────────────────────────────────
+    if [[ -d "$_ext_dir/skills" ]]; then
+        info "Installing extension skills..."
+        for skill_dir in "$_ext_dir/skills/"*/(N); do
+            [[ -d "$skill_dir" ]] || continue
+            local name="${skill_dir:t}"
+            ln -sfn "$skill_dir" "$CLAUDE_SKILLS_DIR/$name"
+            info "  $name (extension)"
+            command -v cortex &>/dev/null \
+                && cortex skill add "$skill_dir" 2>/dev/null || true
+        done
+    fi
+
+    if [[ -d "$_ext_dir/hooks" ]]; then
+        info "Installing extension hooks..."
+        for hook in "$_ext_dir/hooks/"*.sh(N); do
+            local name="${hook:t}"
+            local event
+            event=$(grep -m1 '^# borg-event:' "$hook" 2>/dev/null | awk '{print $NF}')
+            cp "$hook" "$CLAUDE_HOOKS_DIR/$name"
+            chmod +x "$CLAUDE_HOOKS_DIR/$name"
+            if [[ -n "$event" && -f "$CLAUDE_SETTINGS" ]]; then
+                _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/$name" "$event" "$name"
+            fi
+            info "  $name${event:+ ($event)}"
+        done
+    fi
+
+    # ── 4c. Ensure .borg/ is gitignored in registered projects ───────────────
+    info "Ensuring .borg/ is gitignored in registered projects..."
+    while IFS= read -r _proj_path; do
+        [[ -n "$_proj_path" && -d "$_proj_path" ]] || continue
+        local _gi="$_proj_path/.gitignore"
+        if ! grep -qE '^\.borg/?$' "$_gi" 2>/dev/null; then
+            echo '.borg/' >> "$_gi"
+            info "  Added .borg/ to ${_proj_path##*/}/.gitignore"
+        fi
+    done < <(borg_registry_read | jq -r '.projects[].path // empty')
 
     # ── 5. Install bin/ utilities ────────────────────────────────────────────
     local CLAUDE_BIN_DIR="$CLAUDE_DIR/bin"

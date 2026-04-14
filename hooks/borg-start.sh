@@ -35,6 +35,7 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 _borg_sync_file \
     "${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/claude/code/CLAUDE.md" \
     "$HOME/.claude/CLAUDE.md"
+_borg_apply_claude_extensions
 
 # ── 1. Registry update ───────────────────────────────────────────────────────
 
@@ -52,6 +53,19 @@ if [[ -f "$BORG_REGISTRY" ]]; then
         else .
         end
         ' "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP" && mv "$TMP" "$BORG_REGISTRY" || true
+fi
+
+# ── 1b. Per-project skill overlay ────────────────────────────────────────────
+CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+PROJECT_SKILLS_DIR="$CWD/.borg/skills"
+if [[ -d "$PROJECT_SKILLS_DIR" ]]; then
+    mkdir -p "$CLAUDE_SKILLS_DIR"
+    for _skill_dir in "$PROJECT_SKILLS_DIR"/*/; do
+        [[ -d "$_skill_dir" ]] || continue
+        _skill_name="${_skill_dir%/}"
+        _skill_name="${_skill_name##*/}"
+        ln -sfn "$_skill_dir" "$CLAUDE_SKILLS_DIR/$_skill_name" 2>/dev/null || true
+    done
 fi
 
 # ── 2. Build context ─────────────────────────────────────────────────────────
@@ -110,8 +124,12 @@ Run 'git status' to see what's pending. Consider /simplify and committing before
     fi
 fi
 
-# Last session debrief
-DEBRIEF_FILE="$BORG_DIR/debriefs/${PROJECT}.md"
+# Last session debrief — project-local (.borg/debriefs/) first, global fallback
+DEBRIEF_FILE=""
+if [[ -d "$CWD/.borg/debriefs" ]]; then
+    DEBRIEF_FILE=$(find "$CWD/.borg/debriefs" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
+fi
+[[ -z "$DEBRIEF_FILE" ]] && DEBRIEF_FILE="$BORG_DIR/debriefs/${PROJECT}.md"
 if [[ -f "$DEBRIEF_FILE" ]]; then
     DEBRIEF=$(head -c 4000 "$DEBRIEF_FILE" 2>/dev/null || true)
     if [[ -n "$DEBRIEF" ]]; then

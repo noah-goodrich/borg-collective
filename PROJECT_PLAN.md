@@ -59,16 +59,16 @@ and (h) fixes for the plugin marketplace path bug and the neovim pathing issues.
 
 ### Session 4 — Extensibility + output namespacing
 
-- [ ] **Per-environment extension overlay** — `~/.config/borg/extensions/skills/*/` symlinked
+- [x] **Per-environment extension overlay** — `~/.config/borg/extensions/skills/*/` symlinked
   into Claude + Cortex skills dirs by `borg setup`. Extension hooks registered. Extension
   `config.zsh` sourced. Extension `CLAUDE.md` appended.
   - Verify: drop test skill in extensions dir, run `borg setup`, confirm skill resolves.
 
-- [ ] **Per-project extension overlay** — `<project>/.borg/skills/*/` symlinked on session start
+- [x] **Per-project extension overlay** — `<project>/.borg/skills/*/` symlinked on session start
   by `borg-start.sh`; cleaned up on stop by `borg-stop.sh`.
   - Verify: skill in `.borg/skills/` appears in session; removed on exit.
 
-- [ ] **Hybrid output location** — all per-project runtime state writes to `<project>/.borg/`
+- [x] **Hybrid output location** — all per-project runtime state writes to `<project>/.borg/`
   (gitignored). Debriefs at `.borg/debriefs/`, checkpoints at `.borg/checkpoints/`, handovers
   at `.borg/handovers/`. `borg setup` appends `.borg/` to registered project `.gitignore`.
   - Verify: session debrief lands in `wayfinderai-waypoint/.borg/debriefs/<id>.md`; `.borg/` in
