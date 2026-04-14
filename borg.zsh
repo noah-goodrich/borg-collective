@@ -1011,6 +1011,57 @@ cmd_color() {
     fi
 }
 
+cmd_image() {
+    local subcmd="${1:-help}"
+    local registry="${BORG_IMAGE_REGISTRY:-}"
+    local dotfiles_dir="${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles"
+    local dockerfile="$dotfiles_dir/devcontainer/Dockerfile.base"
+    local context="$dotfiles_dir/devcontainer"
+    local local_tag="devcontainer-base:local"
+
+    case "$subcmd" in
+        build)
+            info "Building $local_tag..."
+            if [[ -n "$registry" ]]; then
+                docker build -f "$dockerfile" -t "$local_tag" -t "$registry/devcontainer-base:latest" "$context"
+                info "Tagged: $local_tag  $registry/devcontainer-base:latest"
+            else
+                docker build -f "$dockerfile" -t "$local_tag" "$context"
+                info "Built: $local_tag (set BORG_IMAGE_REGISTRY in config.zsh to also tag for push)"
+            fi
+            ;;
+        push)
+            [[ -z "$registry" ]] && die "BORG_IMAGE_REGISTRY not set — add it to ~/.config/borg/config.zsh"
+            local remote_tag="$registry/devcontainer-base:latest"
+            echo ""
+            warn "About to push to: $remote_tag"
+            printf "  Type 'yes' to confirm: "
+            read -r _confirm
+            [[ "$_confirm" == "yes" ]] || die "Cancelled."
+            docker push "$remote_tag"
+            info "Pushed: $remote_tag"
+            ;;
+        pull)
+            [[ -z "$registry" ]] && die "BORG_IMAGE_REGISTRY not set — add it to ~/.config/borg/config.zsh"
+            local remote_tag="$registry/devcontainer-base:latest"
+            info "Pulling $remote_tag..."
+            docker pull "$remote_tag"
+            docker tag "$remote_tag" "$local_tag"
+            info "Pulled and tagged as $local_tag"
+            ;;
+        *)
+            echo "Usage: borg image <build|push|pull>"
+            echo ""
+            echo "  build   Build $local_tag from dotfiles Dockerfile.base"
+            echo "          If BORG_IMAGE_REGISTRY is set, also tags for push"
+            echo "  push    Push to BORG_IMAGE_REGISTRY (requires confirmation)"
+            echo "  pull    Pull from BORG_IMAGE_REGISTRY, tag as $local_tag"
+            echo ""
+            echo "  Set BORG_IMAGE_REGISTRY in ~/.config/borg/config.zsh"
+            ;;
+    esac
+}
+
 cmd_refresh() {
     # Deprecated: use 'borg scan' instead. Kept for backwards compatibility.
     cmd_scan --llm
@@ -2048,6 +2099,7 @@ case "${1:-help}" in
     add)      cmd_add "${@:2}" ;;
     rm)       cmd_rm "${@:2}" ;;
     color)    cmd_color "${@:2}" ;;
+    image)    cmd_image "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
     sever|down)  cmd_down ;;
