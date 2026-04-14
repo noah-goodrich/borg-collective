@@ -4,6 +4,7 @@ description: >
   Summarize session work and define a concrete next-session entry point.
   Use when ending a session, before a break, or when switching projects.
   Produces a structured checkpoint that eliminates context-rebuild time.
+  Saves the checkpoint to disk at <project>/.borg/checkpoints/<timestamp>.md.
 disable-model-invocation: true
 ---
 
@@ -28,3 +29,14 @@ What prevented completion? List specific issues, missing information, or depende
 ## 5. Next Session
 What should the next session focus on first? Be specific enough that someone returning after 2 days
 knows exactly where to start. Include the exact file and function if applicable.
+
+## Save to disk
+
+After displaying the checkpoint, save it to `<project-root>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`.
+
+To determine `<project-root>`: use the directory that contains `PROJECT_PLAN.md`, or the git root
+(run `git rev-parse --show-toplevel`), or the current working directory if neither applies.
+
+Create the directory if it does not exist. Use the Write tool. The file content should be the full
+five-section checkpoint exactly as displayed above (no additional wrapper or header). Echo the saved
+path at the end of your response so the developer can `cat` it later.

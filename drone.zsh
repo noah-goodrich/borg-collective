@@ -913,7 +913,7 @@ COMPOSE
   "workspaceFolder": "${workspace}",
   "features": {},
   "postCreateCommand": "${post_create}",
-  "postStartCommand": "ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; ln -sf /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
+  "postStartCommand": "ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; if [ -f /home/dev/.config/dotfiles/claude/code/CLAUDE.md ]; then cp /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; else echo 'borg: dotfiles/claude not mounted — CLAUDE.md not synced' >&2; fi; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
   "shutdownAction": "stopCompose",
   "remoteUser": "dev",
   "updateRemoteUserUID": true

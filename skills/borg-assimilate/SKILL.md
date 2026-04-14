@@ -12,9 +12,19 @@ user-invocable: true
 You are evaluating whether this project is ready to ship. Be rigorous. Do not rubber-stamp.
 Do not add new requirements. Check exactly what the plan says, nothing more.
 
-## Step 0: Run Tests and Linting
+## Step 0: Run /simplify First
 
-Before evaluating criteria, run the project's test suite and linters. Auto-detect what's available:
+Before anything else, run `/simplify` on the files changed this session. Do not skip this step.
+The goal is to catch reuse opportunities, dead code, and unnecessary complexity before they ship.
+
+If `/simplify` is not available or cannot be auto-invoked, say:
+"**Run `/simplify` on the changed files before we ship. List the files here, then continue
+shipping once you've confirmed simplify has run.**" Do not proceed past this step until the
+developer confirms `/simplify` has run.
+
+## Step 0.5: Run Tests and Linting
+
+After `/simplify`, run the project's test suite and linters. Auto-detect what's available:
 
 1. Check `.github/workflows/*.yml` for test/lint commands (bats, shellcheck, pytest, npm test, etc.)
 2. Check for common test runners: `bats tests/*.bats`, `pytest`, `npm test`, `make test`
