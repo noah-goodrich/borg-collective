@@ -1608,6 +1608,22 @@ _borg_launch_in_tmux() {
     exec tmux attach-session -t "$BORG_TMUX_SESSION"
 }
 
+# Union-merge permissions.allow from a base settings file into a target settings file.
+# Substitutes __DOTFILES_DIR__ in base before merging. Additive only — never removes entries.
+# Usage: _borg_merge_settings_permissions <base> <target> <dotfiles_dir>
+_borg_merge_settings_permissions() {
+    local base="$1" target="$2" dotfiles_dir="${3:-}"
+    [[ -f "$base" && -f "$target" ]] || return 0
+    local base_json tmp
+    base_json=$(sed "s|__DOTFILES_DIR__|${dotfiles_dir}|g" "$base")
+    tmp="$target.tmp.$$"
+    jq --argjson base "$base_json" \
+        '(.permissions.allow // []) as $live |
+         ($base.permissions.allow // []) as $new |
+         .permissions.allow = ($live + $new | unique)' \
+        "$target" > "$tmp" && mv "$tmp" "$target"
+}
+
 # Register a hook in a settings.json file. Skips if already registered.
 # If registered but missing timeout, updates the entry.
 # Usage: _borg_register_hook <settings_file> <hook_cmd> <event> <label>
@@ -1845,6 +1861,21 @@ CONF
         _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/session-start.sh" "SessionStart" "session-start.sh"
         [[ -e "$CLAUDE_HOOKS_DIR/session-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/session-start.sh" \
             && info "  Removed old session-start.sh"
+
+        # Merge base permissions from dotfiles
+        local _settings_base="$DOTFILES_DIR/claude/code/settings.json"
+        if [[ -f "$_settings_base" ]]; then
+            _borg_merge_settings_permissions "$_settings_base" "$CLAUDE_SETTINGS" "$DOTFILES_DIR"
+            info "Permissions synced from dotfiles base"
+        fi
+
+        # Generate machine-local overlay template if missing
+        local _claude_local="$BORG_DIR/claude-settings.local.json"
+        if [[ ! -f "$_claude_local" ]]; then
+            jq '{model: .model, enabledPlugins: (.enabledPlugins // {}), extraKnownMarketplaces: (.extraKnownMarketplaces // {})}' \
+                "$CLAUDE_SETTINGS" > "$_claude_local"
+            info "Generated $_claude_local (add machine-local overrides here)"
+        fi
     else
         warn "No settings.json at $CLAUDE_SETTINGS"
         warn "Hooks installed but not registered. See README.md for manual registration."
@@ -1879,6 +1910,21 @@ CONF
             local name="${skill_dir:t}"
             cortex skill add "$skill_dir" 2>/dev/null && info "  $name (cortex)" || warn "  $name: cortex skill add failed"
         done
+
+        # Merge base permissions from dotfiles
+        local _coco_base="$DOTFILES_DIR/cortex/settings.base.json"
+        if [[ -f "$_coco_base" ]]; then
+            _borg_merge_settings_permissions "$_coco_base" "$COCO_SETTINGS" "$DOTFILES_DIR"
+            info "Cortex permissions synced from dotfiles base"
+        fi
+
+        # Generate Cortex machine-local overlay template if missing
+        local _cortex_local="$BORG_DIR/cortex-settings.local.json"
+        if [[ ! -f "$_cortex_local" ]]; then
+            jq '{cortexAgentConnectionName: .cortexAgentConnectionName, theme: (.theme // "dark")}' \
+                "$COCO_SETTINGS" > "$_cortex_local"
+            info "Generated $_cortex_local (add Cortex machine-local overrides here)"
+        fi
     else
         info "Cortex Code CLI not found — skipping CoCo integration"
     fi
