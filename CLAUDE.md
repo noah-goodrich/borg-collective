@@ -143,3 +143,11 @@ docs/
 - **`claude plugin install` takes a marketplace name, not a file path**: the correct syntax is
   `claude plugin install <name>@<marketplace>`, not `claude plugin install <file>.plugin`. The
   local marketplace (`noah-local`) resolves from the plugins source directory, not `dist/`.
+- **`borg.zsh` sources only `lib/*.zsh`, not `lib/*.sh`**: helpers intended for both the CLI and
+  bash hook scripts must be defined in two places — `lib/borg-hooks.sh` (bash, sourced by hooks)
+  and `lib/<name>.zsh` (zsh, picked up by the CLI glob). Check the source path before writing a
+  shared helper.
+- **Don't track copy success via mtime deltas**: if a helper function copies a file and you need
+  to know whether it acted, return a status code or accept a callback — don't read before/after
+  mtime from outside the helper. That's leaky and adds syscalls. Simplest: just log
+  unconditionally or restructure so the caller does the condition check itself.
