@@ -30,6 +30,12 @@ source "${HOME}/.claude/lib/borg-hooks.sh"
 PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# ── 0. CLAUDE.md integrity check ─────────────────────────────────────────────
+# Re-sync the copy if something clobbered it between sessions.
+_borg_sync_file \
+    "${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/claude/code/CLAUDE.md" \
+    "$HOME/.claude/CLAUDE.md"
+
 # ── 1. Registry update ───────────────────────────────────────────────────────
 
 if [[ -f "$BORG_REGISTRY" ]]; then
