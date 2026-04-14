@@ -193,8 +193,8 @@ Debug the auth system." > "$BORG_DIR/debriefs/myproject.md"
 
     # The async subshell background process may not have finished yet
     # Poll briefly for debrief file (max 5 seconds)
-    debrief_file="$BORG_DIR/debriefs/myproject.md"
     for i in $(seq 1 10); do
+        debrief_file=$(find "$TEST_CWD/.borg/debriefs" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
         [ -f "$debrief_file" ] && break
         sleep 0.5
     done
@@ -204,9 +204,9 @@ Debug the auth system." > "$BORG_DIR/debriefs/myproject.md"
 }
 
 @test "next session start injects debrief from previous stop" {
-    # Simulate previous session having written a debrief
-    mkdir -p "$BORG_DIR/debriefs"
-    cat > "$BORG_DIR/debriefs/myproject.md" <<'EOF'
+    # Simulate previous session having written a project-local debrief
+    mkdir -p "$TEST_CWD/.borg/debriefs"
+    cat > "$TEST_CWD/.borg/debriefs/sess-prev.md" <<'EOF'
 ## Objective
 Implement the new payment flow.
 
@@ -222,9 +222,9 @@ EOF
 @test "registry summary is updated from debrief objective after stop" {
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    # Poll for async debrief
-    debrief_file="$BORG_DIR/debriefs/myproject.md"
+    # Poll for async debrief in project-local dir
     for i in $(seq 1 10); do
+        debrief_file=$(find "$TEST_CWD/.borg/debriefs" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
         [ -f "$debrief_file" ] && break
         sleep 0.5
     done
@@ -308,8 +308,8 @@ EOF
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
     # Debrief should generate (mock claude ignores auth)
-    debrief_file="$BORG_DIR/debriefs/myproject.md"
     for i in $(seq 1 10); do
+        debrief_file=$(find "$TEST_CWD/.borg/debriefs" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
         [ -f "$debrief_file" ] && break
         sleep 0.5
     done

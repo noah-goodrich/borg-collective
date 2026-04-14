@@ -75,10 +75,26 @@ elif [[ -f "$BORG_REGISTRY" ]]; then
         "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP2" && mv "$TMP2" "$BORG_REGISTRY"
 fi
 
+# Per-project skill overlay cleanup
+CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+PROJECT_SKILLS_DIR="$CWD/.borg/skills"
+if [[ -d "$PROJECT_SKILLS_DIR" ]]; then
+    for _skill_dir in "$PROJECT_SKILLS_DIR"/*/; do
+        [[ -d "$_skill_dir" ]] || continue
+        _skill_name="${_skill_dir%/}"
+        _skill_name="${_skill_name##*/}"
+        _target="$CLAUDE_SKILLS_DIR/$_skill_name"
+        if [[ -L "$_target" ]]; then
+            _link=$(readlink "$_target" 2>/dev/null || true)
+            [[ "$_link" == "${_skill_dir%/}" ]] && rm -f "$_target" || true
+        fi
+    done
+fi
+
 # Async LLM debrief — does not block hook exit
-DEBRIEF_DIR="$BORG_DIR/debriefs"
+DEBRIEF_DIR="$CWD/.borg/debriefs"
 mkdir -p "$DEBRIEF_DIR"
-DEBRIEF_FILE="$DEBRIEF_DIR/${PROJECT}.md"
+DEBRIEF_FILE="$DEBRIEF_DIR/${SESSION_ID:-$(date +%Y%m%d-%H%M%S)}.md"
 
 if [[ -n "$TRANSCRIPT" && -f "$TRANSCRIPT" ]] && command -v claude >/dev/null 2>&1 && [[ -n "$BORG_DEBRIEF_KEY" ]]; then
     _transcript="$TRANSCRIPT"

@@ -30,6 +30,26 @@ _borg_find_project() {
     basename "$1"
 }
 
+# Append per-environment extension CLAUDE.md to ~/.claude/CLAUDE.md.
+# Idempotent: strips and re-appends the extension block on each call so
+# borg-start.sh can call it after every CLAUDE.md re-sync without duplicating.
+_borg_apply_claude_extensions() {
+    local dst="$HOME/.claude/CLAUDE.md"
+    local ext_claude="${XDG_CONFIG_HOME:-$HOME/.config}/borg/extensions/CLAUDE.md"
+    local marker="<!-- borg-extensions -->"
+
+    [[ -f "$ext_claude" && -f "$dst" ]] || return 0
+
+    # Strip any existing extension block (marker to EOF)
+    if grep -q "$marker" "$dst" 2>/dev/null; then
+        local tmp="$dst.ext.$$"
+        awk -v m="$marker" '$0 == m {exit} {print}' "$dst" > "$tmp" && mv "$tmp" "$dst"
+    fi
+
+    # Append fresh extension block
+    { printf '\n%s\n' "$marker"; cat "$ext_claude"; } >> "$dst"
+}
+
 # Strip raw ASCII control characters that break jq parsing.
 # Tab (0x09), LF (0x0A), CR (0x0D) are kept; jq escapes them in string values.
 # Use as a pipe filter: `... | _borg_strip_ctl` or wrap a value: `_borg_strip_ctl <<<"$x"`
