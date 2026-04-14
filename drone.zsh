@@ -104,7 +104,7 @@ _drone_project_color() {
     if [[ -z "$color" ]]; then
         local -a palette=(cyan green yellow magenta blue red white)
         local hash=0 c
-        for c in ${(s::)project}; do hash=$(( (hash * 31 + #c) % 7 )); done
+        for c in ${(s::)project}; do hash=$(( (hash * 31 + #c) % ${#palette} )); done
         color="${palette[$((hash + 1))]}"
     fi
     echo "$color"
