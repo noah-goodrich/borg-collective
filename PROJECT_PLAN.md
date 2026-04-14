@@ -34,11 +34,11 @@ and (h) fixes for the plugin marketplace path bug and the neovim pathing issues.
 
 ### Session 2 — Pathing bugs
 
-- [ ] **Plugin marketplace path fix** — host-absolute path in `~/.claude/settings.json` for
+- [x] **Plugin marketplace path fix** — host-absolute path in `~/.claude/settings.json` for
   local plugin marketplace resolves inside containers via compatibility symlink in postStart.
   - Verify: `claude /doctor` in fresh container reports marketplace resolved.
 
-- [ ] **Neovim pathing fix** — nvim opens without path errors in fresh container; lazy.nvim
+- [x] **Neovim pathing fix** — nvim opens without path errors in fresh container; lazy.nvim
   sync succeeds; LSP and treesitter resolve. (May require dotfiles-repo changes.)
   - Verify: `nvim --headless "+Lazy sync" "+q"` completes in container without errors.
 

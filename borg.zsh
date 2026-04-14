@@ -998,6 +998,20 @@ cmd_rm() {
     info "Removed: $project"
 }
 
+cmd_color() {
+    local project="${1:-}" color="${2:-}"
+    [[ -z "$project" || -z "$color" ]] && die "Usage: borg color <project> <color>"
+    borg_registry_has "$project" || die "Unknown project: $project"
+    borg_registry_set "$project" "color" "\"$color\""
+    info "Color for $project → $color"
+    if tmux has-session -t "$BORG_TMUX_SESSION" 2>/dev/null; then
+        if tmux list-windows -t "$BORG_TMUX_SESSION" -F '#W' 2>/dev/null | grep -qx "$project"; then
+            _borg_apply_window_color "$project" "$color"
+            info "Applied to live tmux window."
+        fi
+    fi
+}
+
 cmd_refresh() {
     # Deprecated: use 'borg scan' instead. Kept for backwards compatibility.
     cmd_scan --llm
@@ -1983,6 +1997,7 @@ case "${1:-help}" in
     scan)     cmd_scan "${@:2}" ;;
     add)      cmd_add "${@:2}" ;;
     rm)       cmd_rm "${@:2}" ;;
+    color)    cmd_color "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
     sever|down)  cmd_down ;;
