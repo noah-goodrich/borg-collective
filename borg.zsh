@@ -1781,7 +1781,6 @@ cmd_setup() {
     if [[ -f "$_ext_dir/CLAUDE.md" && -f "$claude_md_dst" ]]; then
         local _marker="<!-- borg-extensions -->"
         local _tmp="$claude_md_dst.ext.$$"
-        # Strip existing block, re-append fresh
         awk -v m="$_marker" '$0 == m {exit} {print}' "$claude_md_dst" > "$_tmp" \
             && mv "$_tmp" "$claude_md_dst"
         { printf '\n%s\n' "$_marker"; cat "$_ext_dir/CLAUDE.md"; } >> "$claude_md_dst"
