@@ -95,6 +95,28 @@ _drone_resolve() {
     die "Cannot find project '$arg'. cd to the project dir, or register it with: borg add <path>"
 }
 
+# ── Color helpers ─────────────────────────────────────────────────────────────
+
+# Return the tmux color for a project (registry → hash fallback).
+_drone_project_color() {
+    local project="$1" color
+    color=$(jq -r --arg p "$project" '.projects[$p].color // empty' "$BORG_DIR/registry.json" 2>/dev/null)
+    if [[ -z "$color" ]]; then
+        local -a palette=(cyan green yellow magenta blue red white)
+        local hash=0 c
+        for c in ${(s::)project}; do hash=$(( (hash * 31 + #c) % 7 )); done
+        color="${palette[$((hash + 1))]}"
+    fi
+    echo "$color"
+}
+
+# Apply a color to a named window in the drone tmux session.
+_drone_apply_window_color() {
+    local window="$1" color="$2"
+    tmux set-option -t "$SESSION:$window" window-status-style "fg=$color" 2>/dev/null || true
+    tmux set-option -t "$SESSION:$window" window-status-current-style "fg=$color,bold" 2>/dev/null || true
+}
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 get_project_container() {
@@ -335,6 +357,7 @@ cmd_up() {
 
         create_2pane_window "$project_name" "cd $project_dir" "$project_dir"
         tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
+        _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
         borg add "$project_dir" 2>/dev/null || true
         echo "$project_name" > "$project_dir/.borg-project"
         info "Project '$project_name' ready (local)."
@@ -388,6 +411,7 @@ cmd_up() {
                 resend_exec_to_panes "$project_name" "$exec_cmd"
             fi
             info "Project '$project_name' already running."
+            _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
             attach_or_switch "$project_name"
             return
         fi
@@ -414,6 +438,7 @@ cmd_up() {
 
     create_2pane_window "$project_name" "$exec_cmd" "$project_dir"
     tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
+    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
     borg add "$project_dir" 2>/dev/null || true
     echo "$project_name" > "$project_dir/.borg-project"
 
@@ -581,6 +606,33 @@ cmd_claude() {
 
     # Switch to the project window, focus + zoom Claude pane
     attach_or_switch "$project_name"
+    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
+    tmux select-pane -t "$bottom_pane"
+    tmux resize-pane -Z -t "$bottom_pane"
+}
+
+# ── drone cortex ──────────────────────────────────────────────────────────────
+
+cmd_cortex() {
+    _drone_resolve "${1:-}"
+    local project_name="$_proj_name"
+    local project_dir="$_proj_dir"
+
+    dbg "cmd_cortex: project=$project_name dir=$project_dir"
+
+    if ! has_window "$project_name"; then
+        info "$project_name: no window found, running drone up first..."
+        cmd_up "${1:-}"
+    fi
+
+    local bottom_pane
+    bottom_pane=$(get_bottom_pane "$project_name")
+    info "Launching Cortex in $project_name (bottom pane)..."
+    tmux send-keys -t "$bottom_pane" "cortex" Enter
+    tmux set-option -t "$SESSION:$project_name" @cortex_launched 1
+
+    attach_or_switch "$project_name"
+    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
     tmux select-pane -t "$bottom_pane"
     tmux resize-pane -Z -t "$bottom_pane"
 }
@@ -786,6 +838,10 @@ cmd_status() {
             [[ -n "$borg_status" ]] && borg_status="claude:$borg_status"
         fi
 
+        local cortex_launched
+        cortex_launched=$(tmux show-option -t "$SESSION:$wname" -v @cortex_launched 2>/dev/null) || cortex_launched=""
+        [[ "$cortex_launched" == "1" ]] && borg_status+=" cortex:launched"
+
         printf "  %-20s %-30s %-20s %s\n" "$wname" "$pdir" "$container_status" "$borg_status"
     done
     echo
@@ -913,7 +969,7 @@ COMPOSE
   "workspaceFolder": "${workspace}",
   "features": {},
   "postCreateCommand": "${post_create}",
-  "postStartCommand": "ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; if [ -f /home/dev/.config/dotfiles/claude/code/CLAUDE.md ]; then cp /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; else echo 'borg: dotfiles/claude not mounted — CLAUDE.md not synced' >&2; fi; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
+  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; if [ -f /home/dev/.config/dotfiles/claude/code/CLAUDE.md ]; then cp /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; else echo 'borg: dotfiles/claude not mounted — CLAUDE.md not synced' >&2; fi; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
   "shutdownAction": "stopCompose",
   "remoteUser": "dev",
   "updateRemoteUserUID": true
@@ -950,6 +1006,7 @@ cmd_help() {
     up [project]         Start container + create tmux window (uses $PWD if no arg)
     down [project]       Stop container + remove tmux window
     claude [project]     Launch Claude Code in project window (runs drone up if needed)
+    cortex [project]     Launch Cortex Code in project window (runs drone up if needed)
     sh [project]         Shell into project container (exec docker compose exec)
     restart [project]    Restart containers + re-exec all panes
     restart --all        Restart all project containers
@@ -989,6 +1046,7 @@ case "${1:-}" in
     up)         cmd_up "${2:-}" ;;
     down)       cmd_down "${2:-}" ;;
     claude)     cmd_claude "${2:-}" ;;
+    cortex)     cmd_cortex "${2:-}" ;;
     sh)         cmd_sh "${2:-}" ;;
     restart)    cmd_restart "${2:-}" ;;
     rebuild)    cmd_rebuild "${2:-}" ;;
