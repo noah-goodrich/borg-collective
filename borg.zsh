@@ -1004,11 +1004,9 @@ cmd_color() {
     borg_registry_has "$project" || die "Unknown project: $project"
     borg_registry_set "$project" "color" "\"$color\""
     info "Color for $project → $color"
-    if tmux has-session -t "$BORG_TMUX_SESSION" 2>/dev/null; then
-        if tmux list-windows -t "$BORG_TMUX_SESSION" -F '#W' 2>/dev/null | grep -qx "$project"; then
-            _borg_apply_window_color "$project" "$color"
-            info "Applied to live tmux window."
-        fi
+    if borg_tmux_window_exists "$project" 2>/dev/null; then
+        _borg_apply_window_color "$project" "$color"
+        info "Applied to live tmux window."
     fi
 }
 
