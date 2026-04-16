@@ -1855,6 +1855,7 @@ CONF
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/notify.sh"             "Notification"  "notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/bash-guard.sh"        "PreToolUse"   "bash-guard.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/tool-count-nudge.sh" "PostToolUse"  "tool-count-nudge.sh"
 
         # Migration: remove old session-start.sh (merged into borg-start.sh)
@@ -1901,6 +1902,7 @@ CONF
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/notify.sh"             "Notification"  "notify.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/bash-guard.sh"        "PreToolUse"   "bash-guard.sh"
 
         info "Registering skills with CoCo..."
         for skill_dir in "$BORG_HOME/skills/"*/(N); do
