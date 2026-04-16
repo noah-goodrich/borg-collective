@@ -1,0 +1,43 @@
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    labels:
+      - dev.role=app
+    volumes:
+      # --- project files ---
+      - ..:__WORKSPACE__:cached
+
+      # --- standard dotfile mounts (keep in sync with borg scaffold output) ---
+      - ~/.zshrc:/home/dev/.zshrc:cached
+      - ~/.p10k.zsh:/home/dev/.p10k.zsh:cached
+      - ~/.config/zsh:/home/dev/.config/zsh:cached
+      - ~/.config/nvim:/home/dev/.config/nvim:cached
+      - ~/.ssh:/home/dev/.ssh:cached
+      - ~/.gitconfig:/home/dev/.gitconfig:cached
+      - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+      - ~/.claude:/home/dev/.claude:cached
+      - ~/.config/borg:/home/dev/.config/borg:cached
+      - ~/:/host-home:ro
+
+    working_dir: __WORKSPACE__
+    user: dev
+    command: sleep infinity
+    environment:
+      SSH_AUTH_SOCK: /run/host-services/ssh-auth.sock
+
+      # Supabase Postgres, reachable via the joined external network.
+      # Default creds: postgres/postgres (Supabase CLI local-dev convention).
+      # See .devcontainer/borg-hooks/pre-up.sh for the lifecycle that brings
+      # the supabase_network___PROJECT_NAME__ network into existence before compose up.
+      __PROJECT_NAME_UPPER___DB_URL: postgresql://postgres:postgres@supabase_db___PROJECT_NAME__:5432/postgres
+
+    networks:
+      - default
+      - supabase
+
+networks:
+  supabase:
+    name: supabase_network___PROJECT_NAME__
+    external: true

@@ -109,6 +109,16 @@ docs/
 - **Debriefs replace summaries**: LLM analysis at session stop, not regex extraction
 - **Boundaries are speed bumps**: one-keystroke confirmations, not hard blocks
 - **Cairn is optional**: borg works without it (registry + file debriefs), cairn adds persistence
+- **borg-hooks (host-side lifecycle)**: projects can ship executable `.devcontainer/borg-hooks/pre-up.sh`
+  and `.devcontainer/borg-hooks/post-down.sh` scripts. `pre-up.sh` runs on the host before
+  `docker compose up -d` (strict: non-zero aborts `drone up`); `post-down.sh` runs after
+  `docker compose down` in `drone down` only (lenient: non-zero warns, drone exits 0). Hooks
+  run with `cwd=$project_dir` and `BORG_PROJECT_NAME` exported. Transient downs during
+  `drone restart`/`rebuild` do NOT fire `post-down.sh` — external stacks (e.g. Supabase)
+  must persist across cycles. New Supabase projects scaffold via `drone scaffold --supabase <dir>`.
+- **`drone scaffold --supabase <dir>`**: generate a devcontainer joined to the external
+  `supabase_network_<project>` network plus standard borg-hooks that call `supabase start`
+  on up and `supabase stop` on down.
 
 ## External Dependencies
 
