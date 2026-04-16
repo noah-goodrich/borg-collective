@@ -780,9 +780,8 @@ _borg_scan_source() {
         [[ -z "$ppath" ]] && continue
         name="${ppath##*/}"
 
-        # Skip the workspace root itself (e.g. ~/dev) — not a real project
-        if [[ "$ppath" == "$BORG_ROOT" ]]; then
-            dbg "skipping workspace root: $ppath"
+        if borg_scan_path_should_skip "$ppath"; then
+            dbg "scan: skipping $ppath"
             continue
         fi
 
