@@ -34,8 +34,23 @@ POSTGRES_COMPOSE="$HOME/.config/dotfiles/devcontainer/docker-compose.postgres.ym
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_ROOT="${BORG_ROOT:-$HOME/dev}"
 
+DRONE_SCRIPT_DIR="${0:A:h}"
+
 # Host-side lifecycle hooks (.devcontainer/borg-hooks/{pre-up,post-down}.sh).
-source "${0:A:h}/lib/drone-hooks.zsh"
+source "$DRONE_SCRIPT_DIR/lib/drone-hooks.zsh"
+
+_run_pre_up()    { run_borg_hook "$1" "$2" pre-up.sh strict || die "pre-up.sh failed for $2"; }
+_run_post_down() { run_borg_hook "$1" "$2" post-down.sh lenient; }
+
+# Shared scaffolder preflight: absolutize project_dir, confirm it exists,
+# refuse if .devcontainer/ is already populated. Sets _sp_dir to the absolute path.
+_scaffold_preflight() {
+    _sp_dir="$1"
+    [[ "$_sp_dir" != /* ]] && _sp_dir="$PWD/$_sp_dir"
+    [[ -d "$_sp_dir" ]] || die "Directory does not exist: $_sp_dir"
+    [[ -d "$_sp_dir/.devcontainer" ]] && die ".devcontainer/ already exists in $_sp_dir"
+    return 0
+}
 
 # Build a docker compose exec command for a project's app service.
 # Usage: build_exec_cmd <project_name> <compose_file> <service> <shell> <project_dir>
@@ -407,7 +422,7 @@ cmd_up() {
                     info "Container stopped. Restarting..."
                 fi
                 run_initialize_command "$project_dir"
-                run_borg_hook "$project_dir" "$project_name" pre-up.sh strict || die "pre-up.sh failed for $project_name"
+                _run_pre_up "$project_dir" "$project_name"
                 docker compose -p "$project_name" -f "$compose" up -d $_build_flag
                 container=$(wait_for_container "$project_dir")
                 _save_devcontainer_hash
@@ -432,7 +447,7 @@ cmd_up() {
     if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
         info "Starting containers for $project_name..."
         run_initialize_command "$project_dir"
-        run_borg_hook "$project_dir" "$project_name" pre-up.sh strict || die "pre-up.sh failed for $project_name"
+        _run_pre_up "$project_dir" "$project_name"
         docker compose -p "$project_name" -f "$compose" up -d $_build_flag
         container=$(wait_for_container "$project_dir")
         mkdir -p "$_dc_hash_dir" && [[ -n "$_dc_hash" ]] && echo "$_dc_hash" > "$_dc_hash_file" || true
@@ -478,7 +493,7 @@ cmd_down() {
     if [[ -f "$compose" ]]; then
         info "Stopping containers for $project_name..."
         docker compose -p "$project_name" -f "$compose" down
-        run_borg_hook "$project_dir" "$project_name" post-down.sh lenient
+        _run_post_down "$project_dir" "$project_name"
     fi
 
     if tmux has-session -t "$SESSION" 2>/dev/null; then
@@ -516,7 +531,7 @@ _cycle_project() {
         info "Restarting $project_name..."
         docker compose -p "$project_name" -f "$compose" down
     fi
-    run_borg_hook "$project_dir" "$project_name" pre-up.sh strict || die "pre-up.sh failed for $project_name"
+    _run_pre_up "$project_dir" "$project_name"
     docker compose -p "$project_name" -f "$compose" up -d
 
     local container shell service exec_cmd
@@ -869,16 +884,12 @@ cmd_status() {
 # .devcontainer/ or supabase/ already exists (no --force in v1).
 _cmd_scaffold_supabase() {
     local project_dir="$1" workspace="$2"
-
-    [[ "$project_dir" != /* ]] && project_dir="$PWD/$project_dir"
-    [[ -d "$project_dir" ]] || die "Directory does not exist: $project_dir"
-
+    _scaffold_preflight "$project_dir"
+    project_dir="$_sp_dir"
     local dc_dir="$project_dir/.devcontainer"
-    [[ -d "$dc_dir" ]] && die ".devcontainer/ already exists in $project_dir"
 
-    local supabase_dir="$project_dir/supabase"
-    [[ -d "$supabase_dir" ]] && die "supabase/ already exists in $project_dir — refusing to overwrite"
-
+    [[ -d "$project_dir/supabase" ]] \
+        && die "supabase/ already exists in $project_dir — refusing to overwrite"
     command -v supabase >/dev/null 2>&1 \
         || die "supabase CLI not found on PATH. Install: brew install supabase/tap/supabase"
 
@@ -887,7 +898,7 @@ _cmd_scaffold_supabase() {
     project_name_upper="${project_name:u}"
     project_name_upper="${project_name_upper//-/_}"
 
-    local tmpl_dir="${0:A:h}/templates/supabase"
+    local tmpl_dir="$DRONE_SCRIPT_DIR/templates/supabase"
     [[ -d "$tmpl_dir" ]] || die "Template directory missing: $tmpl_dir"
 
     info "Scaffolding Supabase devcontainer for '$project_name'..."
@@ -954,15 +965,9 @@ cmd_scaffold() {
         return
     fi
 
-    # Resolve to absolute path
-    [[ "$project_dir" != /* ]] && project_dir="$PWD/$project_dir"
-    [[ -d "$project_dir" ]] || die "Directory does not exist: $project_dir"
-
+    _scaffold_preflight "$project_dir"
+    project_dir="$_sp_dir"
     local dc_dir="$project_dir/.devcontainer"
-    if [[ -d "$dc_dir" ]]; then
-        die ".devcontainer/ already exists in $project_dir"
-    fi
-
     local project_name="${project_dir##*/}"
     mkdir -p "$dc_dir"
 
@@ -1123,8 +1128,7 @@ cmd_help() {
     fix [project]        Restore standard 2-pane layout for project window
     fix --all            Restore layout for all windows
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
-    scaffold <dir>       Generate .devcontainer/ from templates (--lang python|node|none)
-                         Use --supabase to scaffold a Supabase-ready devcontainer + supabase init
+    scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase)
     status               Show all active drones (containers + Claude status)
     help                 Show this message
 

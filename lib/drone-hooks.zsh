@@ -11,7 +11,6 @@
 # exported. Hooks run via plain bash so their own `set -euo pipefail` stays
 # scoped to the hook.
 
-# Run a project's borg-hook by name.
 # Usage: run_borg_hook <project_dir> <project_name> <hook_name> <strict|lenient>
 # Returns: 0 on success or when hook is absent; non-zero only when mode=strict
 #          and the hook returned non-zero. In lenient mode always returns 0.

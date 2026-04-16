@@ -13,10 +13,7 @@ setup() {
     export TEST_PROJECT="${BATS_TEST_TMPDIR}/myapp"
     mkdir -p "$TEST_PROJECT"
 
-    export MOCK_BIN="${BATS_TEST_TMPDIR}/bin"
-    mkdir -p "$MOCK_BIN"
-    export PATH="$MOCK_BIN:$PATH"
-    export BORG_DRONE_EXTRA_PATH="$MOCK_BIN"
+    setup_mock_bin
 
     # Fake `supabase` CLI: `supabase init` creates supabase/config.toml with
     # project_id = directory name (mimics real CLI behavior).

@@ -27,6 +27,16 @@ load_zsh_lib() {
     export BORG_ZSH_LIB_PATH="$lib_path"
 }
 
+# Set up a mock bin dir on PATH. Tests write fake CLIs into $MOCK_BIN.
+# Also exports BORG_DRONE_EXTRA_PATH so drone.zsh picks up the mocks
+# despite its hardcoded PATH reset.
+setup_mock_bin() {
+    export MOCK_BIN="${BATS_TEST_TMPDIR}/bin"
+    mkdir -p "$MOCK_BIN"
+    export PATH="$MOCK_BIN:$PATH"
+    export BORG_DRONE_EXTRA_PATH="$MOCK_BIN"
+}
+
 # Run a zsh function from a loaded lib with proper environment.
 # Usage: run_zsh_fn <lib> <function> [args...]
 run_zsh_fn() {
