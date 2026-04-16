@@ -20,6 +20,8 @@
 set -e
 
 PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# Tests and advanced users can prepend to PATH via BORG_DRONE_EXTRA_PATH.
+[[ -n "${BORG_DRONE_EXTRA_PATH:-}" ]] && PATH="$BORG_DRONE_EXTRA_PATH:$PATH"
 export PATH
 hash -r 2>/dev/null || true
 
@@ -31,6 +33,9 @@ export COMPOSE_PROFILES="${COMPOSE_PROFILES:-borg}"
 POSTGRES_COMPOSE="$HOME/.config/dotfiles/devcontainer/docker-compose.postgres.yml"
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_ROOT="${BORG_ROOT:-$HOME/dev}"
+
+# Host-side lifecycle hooks (.devcontainer/borg-hooks/{pre-up,post-down}.sh).
+source "${0:A:h}/lib/drone-hooks.zsh"
 
 # Build a docker compose exec command for a project's app service.
 # Usage: build_exec_cmd <project_name> <compose_file> <service> <shell> <project_dir>
@@ -402,6 +407,7 @@ cmd_up() {
                     info "Container stopped. Restarting..."
                 fi
                 run_initialize_command "$project_dir"
+                run_borg_hook "$project_dir" "$project_name" pre-up.sh strict || die "pre-up.sh failed for $project_name"
                 docker compose -p "$project_name" -f "$compose" up -d $_build_flag
                 container=$(wait_for_container "$project_dir")
                 _save_devcontainer_hash
@@ -426,6 +432,7 @@ cmd_up() {
     if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
         info "Starting containers for $project_name..."
         run_initialize_command "$project_dir"
+        run_borg_hook "$project_dir" "$project_name" pre-up.sh strict || die "pre-up.sh failed for $project_name"
         docker compose -p "$project_name" -f "$compose" up -d $_build_flag
         container=$(wait_for_container "$project_dir")
         mkdir -p "$_dc_hash_dir" && [[ -n "$_dc_hash" ]] && echo "$_dc_hash" > "$_dc_hash_file" || true
@@ -471,6 +478,7 @@ cmd_down() {
     if [[ -f "$compose" ]]; then
         info "Stopping containers for $project_name..."
         docker compose -p "$project_name" -f "$compose" down
+        run_borg_hook "$project_dir" "$project_name" post-down.sh lenient
     fi
 
     if tmux has-session -t "$SESSION" 2>/dev/null; then
@@ -498,6 +506,8 @@ _cycle_project() {
 
     [[ -f "$compose" ]] || { warn "$project_name: no $COMPOSE_FILE, skipping"; return 0; }
 
+    # Transient down during restart/rebuild intentionally does NOT fire
+    # post-down.sh — external stacks (e.g. Supabase) should persist across cycles.
     if [[ "$mode" == "rebuild" ]]; then
         info "Rebuilding $project_name (no cache)..."
         docker compose -p "$project_name" -f "$compose" down
@@ -506,6 +516,7 @@ _cycle_project() {
         info "Restarting $project_name..."
         docker compose -p "$project_name" -f "$compose" down
     fi
+    run_borg_hook "$project_dir" "$project_name" pre-up.sh strict || die "pre-up.sh failed for $project_name"
     docker compose -p "$project_name" -f "$compose" up -d
 
     local container shell service exec_cmd
@@ -850,21 +861,98 @@ cmd_status() {
     echo
 }
 
+# ── drone scaffold --supabase ─────────────────────────────────────────────────
+
+# Generate a Supabase-ready devcontainer from templates/supabase/, substituting
+# __PROJECT_NAME__ / __PROJECT_NAME_UPPER__ / __WORKSPACE__. Runs `supabase init`
+# in the project dir when supabase/ doesn't already exist. Refuses if
+# .devcontainer/ or supabase/ already exists (no --force in v1).
+_cmd_scaffold_supabase() {
+    local project_dir="$1" workspace="$2"
+
+    [[ "$project_dir" != /* ]] && project_dir="$PWD/$project_dir"
+    [[ -d "$project_dir" ]] || die "Directory does not exist: $project_dir"
+
+    local dc_dir="$project_dir/.devcontainer"
+    [[ -d "$dc_dir" ]] && die ".devcontainer/ already exists in $project_dir"
+
+    local supabase_dir="$project_dir/supabase"
+    [[ -d "$supabase_dir" ]] && die "supabase/ already exists in $project_dir — refusing to overwrite"
+
+    command -v supabase >/dev/null 2>&1 \
+        || die "supabase CLI not found on PATH. Install: brew install supabase/tap/supabase"
+
+    local project_name="${project_dir##*/}"
+    local project_name_upper
+    project_name_upper="${project_name:u}"
+    project_name_upper="${project_name_upper//-/_}"
+
+    local tmpl_dir="${0:A:h}/templates/supabase"
+    [[ -d "$tmpl_dir" ]] || die "Template directory missing: $tmpl_dir"
+
+    info "Scaffolding Supabase devcontainer for '$project_name'..."
+    mkdir -p "$dc_dir/borg-hooks"
+
+    _subst_template() {
+        sed -e "s|__PROJECT_NAME__|$project_name|g" \
+            -e "s|__PROJECT_NAME_UPPER__|$project_name_upper|g" \
+            -e "s|__WORKSPACE__|$workspace|g" \
+            "$1" > "$2"
+    }
+
+    _subst_template "$tmpl_dir/Dockerfile"          "$dc_dir/Dockerfile"
+    _subst_template "$tmpl_dir/docker-compose.yml"  "$dc_dir/docker-compose.yml"
+    _subst_template "$tmpl_dir/devcontainer.json"   "$dc_dir/devcontainer.json"
+    cp "$tmpl_dir/borg-hooks/pre-up.sh"   "$dc_dir/borg-hooks/pre-up.sh"
+    cp "$tmpl_dir/borg-hooks/post-down.sh" "$dc_dir/borg-hooks/post-down.sh"
+    chmod +x "$dc_dir/borg-hooks/pre-up.sh" "$dc_dir/borg-hooks/post-down.sh"
+
+    info "Running 'supabase init' in $project_dir..."
+    (cd "$project_dir" && supabase init) || die "supabase init failed"
+
+    # Confirm project_id in supabase/config.toml matches project_name. Supabase's
+    # default is the directory name, which already matches, but sed-confirm to
+    # be safe against future CLI changes.
+    local config="$supabase_dir/config.toml"
+    if [[ -f "$config" ]]; then
+        local current_id
+        current_id=$(grep -E '^project_id = ' "$config" | head -1 | sed -E 's/project_id = "([^"]+)"/\1/')
+        if [[ -n "$current_id" && "$current_id" != "$project_name" ]]; then
+            info "Aligning supabase project_id ($current_id → $project_name)..."
+            sed -i.bak -E "s/^project_id = \"[^\"]+\"/project_id = \"$project_name\"/" "$config"
+            rm -f "$config.bak"
+        fi
+    fi
+
+    info "Scaffolded Supabase project in $project_dir"
+    echo
+    info "Next steps:"
+    info "  1. drone up $project_name"
+    info "  2. Create remote project: supabase login && supabase projects create $project_name"
+    info "  3. Link: supabase link --project-ref <ref>"
+}
+
 # ── drone scaffold ────────────────────────────────────────────────────────────
 
 cmd_scaffold() {
-    local project_dir="" lang="none" workspace="/workspace"
+    local project_dir="" lang="none" workspace="/workspace" preset=""
 
     # Parse args
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --lang)     lang="${2:-none}"; shift 2 ;;
             --workspace) workspace="${2:-/workspace}"; shift 2 ;;
+            --supabase) preset="supabase"; shift ;;
             *)          project_dir="$1"; shift ;;
         esac
     done
 
-    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--lang python|node|none] [--workspace /workspace]"
+    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--supabase] [--lang python|node|none] [--workspace /workspace]"
+
+    if [[ "$preset" == "supabase" ]]; then
+        _cmd_scaffold_supabase "$project_dir" "$workspace"
+        return
+    fi
 
     # Resolve to absolute path
     [[ "$project_dir" != /* ]] && project_dir="$PWD/$project_dir"
@@ -1036,6 +1124,7 @@ cmd_help() {
     fix --all            Restore layout for all windows
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
     scaffold <dir>       Generate .devcontainer/ from templates (--lang python|node|none)
+                         Use --supabase to scaffold a Supabase-ready devcontainer + supabase init
     status               Show all active drones (containers + Claude status)
     help                 Show this message
 

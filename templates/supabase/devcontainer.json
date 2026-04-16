@@ -1,0 +1,21 @@
+{
+  "name": "__PROJECT_NAME__",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "__WORKSPACE__",
+  "features": {},
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {}
+    }
+  },
+  "postCreateCommand": "chmod 700 /home/dev/.ssh && chmod 600 /home/dev/.ssh/* && chmod 644 /home/dev/.ssh/*.pub 2>/dev/null; true",
+  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "dev",
+  "updateRemoteUserUID": true
+}
