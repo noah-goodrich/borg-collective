@@ -107,3 +107,24 @@ borg_registry_set_status() {
         --arg t "$now" \
         '.projects[$p].status = $s | .projects[$p].last_activity = $t' | _borg_registry_write
 }
+
+# Should this scanned path be skipped instead of registered as a new project?
+# Skip when:
+#   - empty path
+#   - path is the workspace root itself (e.g. ~/dev)
+#   - path no longer exists on disk (renamed / deleted folders)
+#   - path is a subpath of an already-registered project (e.g. nested template dirs
+#     that show up in session history because Claude was invoked from inside them)
+# Returns 0 = skip, 1 = register.
+borg_scan_path_should_skip() {
+    local ppath="$1"
+    [[ -n "$ppath" ]] || return 0
+    [[ "$ppath" == "${BORG_ROOT:-$HOME/dev}" ]] && return 0
+    [[ -d "$ppath" ]] || return 0
+    local rp
+    while IFS= read -r rp; do
+        [[ -z "$rp" ]] && continue
+        [[ "$ppath" == "$rp"/* ]] && return 0
+    done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY" 2>/dev/null)
+    return 1
+}

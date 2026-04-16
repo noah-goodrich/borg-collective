@@ -113,3 +113,47 @@ setup() {
     run jq -r '.projects.myproj.last_activity' "$BORG_REGISTRY"
     [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]
 }
+
+# ─── borg_scan_path_should_skip ───────────────────────────────────────────────
+
+@test "borg_scan_path_should_skip: skips empty path" {
+    run_zsh_fn registry borg_registry_init
+    run run_zsh_fn registry borg_scan_path_should_skip ""
+    [ "$status" -eq 0 ]
+}
+
+@test "borg_scan_path_should_skip: skips nonexistent path (renamed/deleted folder)" {
+    run_zsh_fn registry borg_registry_init
+    run run_zsh_fn registry borg_scan_path_should_skip "${BATS_TEST_TMPDIR}/does-not-exist"
+    [ "$status" -eq 0 ]
+}
+
+@test "borg_scan_path_should_skip: skips workspace root" {
+    run_zsh_fn registry borg_registry_init
+    mkdir -p "${BATS_TEST_TMPDIR}/workspace"
+    BORG_ROOT="${BATS_TEST_TMPDIR}/workspace" run run_zsh_fn registry borg_scan_path_should_skip "${BATS_TEST_TMPDIR}/workspace"
+    [ "$status" -eq 0 ]
+}
+
+@test "borg_scan_path_should_skip: skips subpath of registered project" {
+    run_zsh_fn registry borg_registry_init
+    mkdir -p "${BATS_TEST_TMPDIR}/proj/nested"
+    echo "{\"projects\":{\"proj\":{\"path\":\"${BATS_TEST_TMPDIR}/proj\"}}}" > "$BORG_REGISTRY"
+    run run_zsh_fn registry borg_scan_path_should_skip "${BATS_TEST_TMPDIR}/proj/nested"
+    [ "$status" -eq 0 ]
+}
+
+@test "borg_scan_path_should_skip: registers genuine new project" {
+    run_zsh_fn registry borg_registry_init
+    mkdir -p "${BATS_TEST_TMPDIR}/newproj"
+    run run_zsh_fn registry borg_scan_path_should_skip "${BATS_TEST_TMPDIR}/newproj"
+    [ "$status" -eq 1 ]
+}
+
+@test "borg_scan_path_should_skip: does NOT skip sibling of a registered project" {
+    run_zsh_fn registry borg_registry_init
+    mkdir -p "${BATS_TEST_TMPDIR}/proj-a" "${BATS_TEST_TMPDIR}/proj-b"
+    echo "{\"projects\":{\"proj-a\":{\"path\":\"${BATS_TEST_TMPDIR}/proj-a\"}}}" > "$BORG_REGISTRY"
+    run run_zsh_fn registry borg_scan_path_should_skip "${BATS_TEST_TMPDIR}/proj-b"
+    [ "$status" -eq 1 ]
+}
