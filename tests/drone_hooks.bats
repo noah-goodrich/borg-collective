@@ -21,12 +21,7 @@ setup() {
     export TRACE="${BATS_TEST_TMPDIR}/trace.log"
     : > "$TRACE"
 
-    # Mock bin dir on PATH so drone sees our fake docker/tmux.
-    # drone resets PATH on startup; use BORG_DRONE_EXTRA_PATH to inject mocks.
-    export MOCK_BIN="${BATS_TEST_TMPDIR}/bin"
-    mkdir -p "$MOCK_BIN"
-    export PATH="$MOCK_BIN:$PATH"
-    export BORG_DRONE_EXTRA_PATH="$MOCK_BIN"
+    setup_mock_bin
 
     # Fake docker: log all subcommands; 'ps' returns a fake container name so
     # wait_for_container succeeds; 'network inspect' returns 0.

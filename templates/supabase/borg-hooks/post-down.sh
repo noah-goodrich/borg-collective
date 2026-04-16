@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-# Stop the Supabase local stack after the drone has come down.
-#
-# Runs on the HOST via drone.zsh's post-down hook mechanism.
-#
 # Volumes persist by default — your database state survives a full
 # `drone down`/`drone up` cycle. Use `supabase stop --no-backup` from the
 # host manually if you want a clean slate.
