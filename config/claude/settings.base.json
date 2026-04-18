@@ -1,0 +1,229 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "Edit",
+      "Write",
+      "WebFetch",
+      "WebSearch",
+      "Bash(cd:*)",
+      "Bash(for:*)",
+      "Bash(while:*)",
+      "Bash(bash -c:*)",
+      "Bash(zsh -c:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(which:*)",
+      "Bash(file:*)",
+      "Bash(du:*)",
+      "Bash(df:*)",
+      "Bash(tree:*)",
+      "Bash(stat:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(diff:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(awk:*)",
+      "Bash(sed:*)",
+      "Bash(cut:*)",
+      "Bash(tr:*)",
+      "Bash(tee:*)",
+      "Bash(xargs:*)",
+      "Bash(basename:*)",
+      "Bash(dirname:*)",
+      "Bash(realpath:*)",
+      "Bash(jq:*)",
+      "Bash(yq:*)",
+      "Bash(echo:*)",
+      "Bash(pwd:*)",
+      "Bash(env:*)",
+      "Bash(printenv:*)",
+      "Bash(date:*)",
+      "Bash(hostname:*)",
+      "Bash(uname:*)",
+      "Bash(whoami:*)",
+      "Bash(test:*)",
+      "Bash(true:*)",
+      "Bash(false:*)",
+      "Bash(sleep:*)",
+      "Bash(type:*)",
+      "Bash(command:*)",
+      "Bash(source:*)",
+      "Bash(open:*)",
+      "Bash(pbcopy:*)",
+      "Bash(pbpaste:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(chmod:*)",
+      "Bash(touch:*)",
+      "Bash(ln:*)",
+      "Bash(rm:*)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(node:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(pip:*)",
+      "Bash(pipx:*)",
+      "Bash(brew:*)",
+      "Bash(tmux:*)",
+      "Bash(docker:*)",
+      "Bash(docker-compose:*)",
+      "Bash(borg:*)",
+      "Bash(drone:*)",
+      "Bash(cortex:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(poetry:*)",
+      "Bash(dbt:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(black:*)",
+      "Bash(mypy:*)",
+      "Bash(uv:*)",
+      "Bash(bats:*)",
+      "Bash(shellcheck:*)",
+      "Bash(shasum:*)",
+      "Bash(run-in:*)"
+    ]
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/borg-notify.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/notify.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/post-tool-format.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/tool-count-nudge.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$HOME/.claude/hooks/pre-compact.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/bash-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/pre-commit-remind.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/borg-start.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/session-log.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/notify.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/borg-stop.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    },
+    "noah-local": {
+      "source": {
+        "source": "directory",
+        "path": "__DOTFILES_DIR__/claude/plugins"
+      }
+    }
+  },
+  "skipDangerousModePermissionPrompt": true
+}

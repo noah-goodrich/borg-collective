@@ -1607,6 +1607,43 @@ _borg_launch_in_tmux() {
     exec tmux attach-session -t "$BORG_TMUX_SESSION"
 }
 
+# Merge a borg-managed CLAUDE.md block into a target CLAUDE.md, preserving user content
+# above and below. Delimited by HTML comment markers so the block is replaceable on re-run.
+# If target doesn't exist and a personal seed is provided, seed from it first.
+# Usage: _borg_merge_claude_md <borg_src> <target> [personal_seed]
+_borg_merge_claude_md() {
+    local borg_src="$1" target="$2" personal_seed="${3:-}"
+    [[ -f "$borg_src" ]] || return 0
+
+    local begin='<!-- BEGIN borg-managed -->'
+    local end='<!-- END borg-managed -->'
+
+    if [[ ! -f "$target" && -n "$personal_seed" && -f "$personal_seed" ]]; then
+        cp "$personal_seed" "$target"
+    fi
+    [[ -f "$target" ]] || : > "$target"
+
+    local tmp="$target.borg.$$"
+    # Strip existing borg-managed block AND trailing blank lines in one pass —
+    # blank lines are buffered and only emitted when a non-blank follows, so
+    # trailing blanks get dropped. Keeps the merge idempotent.
+    awk -v b="$begin" -v e="$end" '
+        $0 == b { skip=1; next }
+        $0 == e { skip=0; next }
+        skip    { next }
+        /^$/    { pending++; next }
+                { for (i=0; i<pending; i++) print ""; pending=0; print }
+    ' "$target" > "$tmp"
+
+    {
+        cat "$tmp"
+        printf '\n%s\n' "$begin"
+        cat "$borg_src"
+        printf '%s\n' "$end"
+    } > "$target"
+    rm -f "$tmp"
+}
+
 # Union-merge permissions.allow from a base settings file into a target settings file.
 # Substitutes __DOTFILES_DIR__ in base before merging. Additive only — never removes entries.
 # Usage: _borg_merge_settings_permissions <base> <target> <dotfiles_dir>
@@ -1780,15 +1817,19 @@ cmd_setup() {
     mkdir -p "$CLAUDE_DIR" "$CLAUDE_HOOKS_DIR" "$CLAUDE_SKILLS_DIR"
     borg_registry_init
 
-    # ── 1a. Sync CLAUDE.md (copy, not symlink) ───────────────────────────────
-    # Symlinks to dotfiles are fragile — any tool that atomically rewrites the
-    # target breaks the link. A copy-on-setup strategy makes borg setup the sync
-    # point. Trade-off: edits to dotfiles source require `borg setup`.
-    local claude_md_src="$DOTFILES_DIR/claude/code/CLAUDE.md"
+    # ── 1a. Merge borg-managed CLAUDE.md block ───────────────────────────────
+    # Borg owns its rules (permissions, bash patterns, subagent rules) at
+    # $BORG_HOME/config/claude/CLAUDE.md and merges them into ~/.claude/CLAUDE.md
+    # inside a delimited block. User content above/below the markers is preserved,
+    # so personal dotfiles don't need to carry borg-specific content anymore.
+    # On a fresh setup with no ~/.claude/CLAUDE.md, we seed from the dotfiles copy
+    # if present (personal content) before appending the borg block.
+    local claude_md_borg="$BORG_HOME/config/claude/CLAUDE.md"
+    local claude_md_seed="$DOTFILES_DIR/claude/code/CLAUDE.md"
     local claude_md_dst="$CLAUDE_DIR/CLAUDE.md"
-    if [[ -f "$claude_md_src" ]]; then
-        _borg_sync_file "$claude_md_src" "$claude_md_dst"
-        info "CLAUDE.md synced"
+    if [[ -f "$claude_md_borg" ]]; then
+        _borg_merge_claude_md "$claude_md_borg" "$claude_md_dst" "$claude_md_seed"
+        info "CLAUDE.md borg-managed block updated"
     fi
 
     # Apply per-environment extension CLAUDE.md (appended after base)
@@ -1862,10 +1903,10 @@ CONF
         [[ -e "$CLAUDE_HOOKS_DIR/session-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/session-start.sh" \
             && info "  Removed old session-start.sh"
 
-        local _settings_base="$DOTFILES_DIR/claude/code/settings.json"
+        local _settings_base="$BORG_HOME/config/claude/settings.base.json"
         if [[ -f "$_settings_base" ]]; then
             _borg_merge_settings_permissions "$_settings_base" "$CLAUDE_SETTINGS" "$DOTFILES_DIR"
-            info "Permissions synced from dotfiles base"
+            info "Permissions synced from borg base"
         fi
 
         local _claude_local="$BORG_DIR/claude-settings.local.json"
@@ -1910,10 +1951,10 @@ CONF
             cortex skill add "$skill_dir" 2>/dev/null && info "  $name (cortex)" || warn "  $name: cortex skill add failed"
         done
 
-        local _coco_base="$DOTFILES_DIR/cortex/settings.base.json"
+        local _coco_base="$BORG_HOME/config/cortex/settings.base.json"
         if [[ -f "$_coco_base" ]]; then
             _borg_merge_settings_permissions "$_coco_base" "$COCO_SETTINGS" "$DOTFILES_DIR"
-            info "Cortex permissions synced from dotfiles base"
+            info "Cortex permissions synced from borg base"
         fi
 
         local _cortex_local="$BORG_DIR/cortex-settings.local.json"
