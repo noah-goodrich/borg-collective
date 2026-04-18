@@ -5,6 +5,11 @@
 # macOS
 .DS_Store
 
-# Runtime state (lives at ~/.config/borg/, not in repo)
+# Runtime state (lives at ~/.config/borg/, not in repo) — but the parent
+# .borg/ dir itself must stay traversable so the checkpoints/ carve-out works.
+# Gitignore won't re-include files under an excluded directory, so we ignore
+# /.borg/* (children, not the dir) and then exempt checkpoints/ below.
 registry.json
 .borg-project
+.borg/*
+!.borg/checkpoints/
