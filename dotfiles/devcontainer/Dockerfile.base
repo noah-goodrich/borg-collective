@@ -83,3 +83,9 @@ USER root
 RUN mkdir -p /home/dev \
     && echo '{}' > /home/dev/.claude.json \
     && chown dev:dev /home/dev/.claude.json
+
+# ── SSH dir — pre-create so the selective file mounts in docker-compose.base.yml
+#    (~/.ssh/config and ~/.ssh/known_hosts, read-only) land into an existing
+#    dev-owned directory with correct perms. We deliberately do NOT bind-mount
+#    ~/.ssh as a whole dir (see docker-compose.base.yml for why).
+RUN install -d -o dev -g dev -m 700 /home/dev/.ssh

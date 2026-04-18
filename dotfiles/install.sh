@@ -245,6 +245,35 @@ reload_all_panes() {
 }
 
 # -----------------------------------------------------------------------------
+# Self-heal: ~/.ssh/agent permissions + grpcfuse xattr
+#
+# Docker Desktop's grpcfuse file-sharing can record a
+# `com.docker.grpcfuse.ownership` xattr on host paths that were bind-mounted
+# into containers. On ~/.ssh/agent/ this sometimes reapplies mode 0600 (no
+# execute bit), which makes ssh-agent's agent_cleanup_stale() fail with EACCES
+# and exit 255. launchd then throttles ssh-agent and the host loses SSH.
+#
+# The docker-compose templates no longer bind-mount ~/.ssh as a dir, so new
+# containers won't recreate the xattr. This block fixes any lingering damage
+# from older containers and is safe to re-run.
+# -----------------------------------------------------------------------------
+heal_ssh_agent_dir() {
+    [ -d "$HOME/.ssh/agent" ] || return 0
+
+    local mode
+    mode=$(stat -f '%Lp' "$HOME/.ssh/agent" 2>/dev/null || stat -c '%a' "$HOME/.ssh/agent" 2>/dev/null)
+    if [ "$mode" != "700" ]; then
+        warn "Fixing ~/.ssh/agent perms ($mode → 700)"
+        chmod 700 "$HOME/.ssh/agent"
+    fi
+
+    if command -v xattr &>/dev/null && xattr -l "$HOME/.ssh/agent" 2>/dev/null | grep -q 'com.docker.grpcfuse.ownership'; then
+        warn "Stripping Docker grpcfuse xattr from ~/.ssh/agent"
+        xattr -d com.docker.grpcfuse.ownership "$HOME/.ssh/agent" 2>/dev/null || true
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 main() {
@@ -253,6 +282,7 @@ main() {
     install_deps
     link_dotfiles
     build_base_devcontainer
+    heal_ssh_agent_dir
     reload_all_panes
 
     info "Done!"
