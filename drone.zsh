@@ -1069,7 +1069,7 @@ COMPOSE
 
     # ── devcontainer.json ─────────────────────────────────────────────────
     # npm install runs once (sentinel-guarded) and lands in the claude_npm volume.
-    local post_create="ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; chmod 700 /home/dev/.ssh && chmod 600 /home/dev/.ssh/* && chmod 644 /home/dev/.ssh/*.pub 2>/dev/null || true; npm install -g @anthropic-ai/claude-code 2>/dev/null || true"
+    local post_create="ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; npm install -g @anthropic-ai/claude-code 2>/dev/null || true"
     case "$lang" in
         python) post_create="$post_create; pip install -e '.[dev]'" ;;
         node)   post_create="$post_create; npm install" ;;
@@ -1083,7 +1083,7 @@ COMPOSE
   "workspaceFolder": "${workspace}",
   "features": {},
   "postCreateCommand": "${post_create}",
-  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; if [ -f /home/dev/.config/dotfiles/claude/code/CLAUDE.md ]; then cp /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; else echo 'borg: dotfiles/claude not mounted — CLAUDE.md not synced' >&2; fi; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
+  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; sudo chmod a+rw /run/host-services/ssh-auth.sock 2>/dev/null || true; ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; if [ -f /home/dev/.config/dotfiles/claude/code/CLAUDE.md ]; then cp /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; else echo 'borg: dotfiles/claude not mounted — CLAUDE.md not synced' >&2; fi; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
   "shutdownAction": "stopCompose",
   "remoteUser": "dev",
   "updateRemoteUserUID": true
