@@ -14,7 +14,10 @@ services:
       - ~/.p10k.zsh:/home/dev/.p10k.zsh:cached
       - ~/.config/zsh:/home/dev/.config/zsh:cached
       - ~/.config/nvim:/home/dev/.config/nvim:cached
-      - ~/.ssh:/home/dev/.ssh:cached
+      # Don't bind-mount ~/.ssh as a dir — Docker Desktop's grpcfuse xattr
+      # writeback can strip the x-bit off ~/.ssh/agent/ and kill ssh-agent.
+      - ~/.ssh/config:/home/dev/.ssh/config:ro
+      - ~/.ssh/known_hosts:/home/dev/.ssh/known_hosts:ro
       - ~/.gitconfig:/home/dev/.gitconfig:cached
       - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
       - ~/.claude:/home/dev/.claude:cached

@@ -137,7 +137,7 @@ _drone_project_color() {
 _drone_apply_window_color() {
     local window="$1" color="$2"
     tmux set-option -t "$SESSION:$window" window-status-style "fg=$color" 2>/dev/null || true
-    tmux set-option -t "$SESSION:$window" window-status-current-style "fg=$color,bold" 2>/dev/null || true
+    tmux set-option -t "$SESSION:$window" window-status-current-style "fg=colour0,bg=colour255,bold" 2>/dev/null || true
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1029,8 +1029,9 @@ services:
       - ~/.config/zsh:/home/dev/.config/zsh:cached
       # editor
       - ~/.config/nvim:/home/dev/.config/nvim:cached
-      # git + ssh
-      - ~/.ssh:/home/dev/.ssh:cached
+      # git + ssh — selective mounts only (see dotfiles/devcontainer/docker-compose.base.yml)
+      - ~/.ssh/config:/home/dev/.ssh/config:ro
+      - ~/.ssh/known_hosts:/home/dev/.ssh/known_hosts:ro
       - ~/.gitconfig:/home/dev/.gitconfig:cached
       - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
       # npm global packages (claude-code, cortex) — persists across rebuilds

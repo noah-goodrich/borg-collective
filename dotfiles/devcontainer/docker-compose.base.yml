@@ -25,7 +25,16 @@ x-dotfile-volumes: &dotfile-volumes
   - ~/.config/nvim:/home/dev/.config/nvim:cached
 
   # --- git + ssh ---
-  - ~/.ssh:/home/dev/.ssh:cached
+  # Do NOT bind-mount ~/.ssh as a directory. Docker Desktop's grpcfuse records
+  # the container-perceived mode as a `com.docker.grpcfuse.ownership` xattr on
+  # host paths, and on subsequent container starts can stamp that mode onto the
+  # real host dir. That stripped the execute bit from ~/.ssh/agent/, which in
+  # turn broke ssh-agent's startup cleanup (agent_cleanup_stale -> EACCES ->
+  # exit 255 -> launchd throttles -> host agent stays dead). Mount only the
+  # files the container actually reads, read-only. Signing happens via the
+  # forwarded agent socket; the private key never enters the container.
+  - ~/.ssh/config:/home/dev/.ssh/config:ro
+  - ~/.ssh/known_hosts:/home/dev/.ssh/known_hosts:ro
   - ~/.gitconfig:/home/dev/.gitconfig:cached
   - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
 
