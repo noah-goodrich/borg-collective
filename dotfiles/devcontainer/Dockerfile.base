@@ -89,3 +89,14 @@ RUN mkdir -p /home/dev \
 #    dev-owned directory with correct perms. We deliberately do NOT bind-mount
 #    ~/.ssh as a whole dir (see docker-compose.base.yml for why).
 RUN install -d -o dev -g dev -m 700 /home/dev/.ssh
+
+# ── Supabase CLI — pulled from GitHub releases because the npm package was
+#    deprecated and there's no apt repo on Debian. The /releases/latest/ alias
+#    tracks the most recent stable version, so base-image rebuilds pick up
+#    updates without a Dockerfile edit.
+RUN ARCH=$(dpkg --print-architecture) \
+    && curl -fsSL "https://github.com/supabase/cli/releases/latest/download/supabase_linux_${ARCH}.tar.gz" \
+       -o /tmp/supabase.tar.gz \
+    && tar xzf /tmp/supabase.tar.gz -C /usr/local/bin supabase \
+    && chmod +x /usr/local/bin/supabase \
+    && rm /tmp/supabase.tar.gz
