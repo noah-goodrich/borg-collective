@@ -40,27 +40,24 @@ fire() {
 }
 
 check() {
+    local silent="${1:-}"
     local lines
     lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\t\(.value.status // "idle")\t\(.value.tmux_window // "")"' \
         "$REGISTRY" 2>/dev/null) || return 0
+    local -A seen
     while IFS=$'\t' read -r project proj_status window; do
+        seen[$project]=1
         local prev="${last_status[$project]:-}"
         last_status[$project]="$proj_status"
-        [[ "$proj_status" == "waiting" && "$prev" != "waiting" ]] && fire "$project" "$window"
+        [[ -z "$silent" && "$proj_status" == "waiting" && "$prev" != "waiting" ]] && fire "$project" "$window"
     done <<< "$lines"
+    for key in "${(@k)last_status}"; do
+        [[ -z "${seen[$key]:-}" ]] && unset "last_status[$key]"
+    done
 }
 
-# Snapshot current state silently so startup doesn't flood notifications for already-waiting projects
-snapshot() {
-    local lines
-    lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\t\(.value.status // "idle")"' \
-        "$REGISTRY" 2>/dev/null) || return 0
-    while IFS=$'\t' read -r project proj_status; do
-        last_status[$project]="$proj_status"
-    done <<< "$lines"
-}
-
-snapshot
+# Silent initial snapshot — record current state without firing to avoid startup floods
+check silent
 
 fswatch -o "$REGISTRY" | while read -r; do
     check
