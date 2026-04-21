@@ -31,11 +31,14 @@ PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # ── 0. CLAUDE.md integrity check ─────────────────────────────────────────────
-# Re-sync the copy if something clobbered it between sessions.
-_borg_sync_file \
-    "${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/claude/code/CLAUDE.md" \
-    "$HOME/.claude/CLAUDE.md"
-_borg_apply_claude_extensions
+# Skip inside containers — ~/.claude is bind-mounted from the host, and applying
+# container-path extensions would pollute the host's CLAUDE.md with /home/dev/... paths.
+if [[ ! -f /.dockerenv ]]; then
+    _borg_sync_file \
+        "${XDG_CONFIG_HOME:-$HOME/.config}/dotfiles/claude/code/CLAUDE.md" \
+        "$HOME/.claude/CLAUDE.md"
+    _borg_apply_claude_extensions
+fi
 
 # ── 1. Registry update ───────────────────────────────────────────────────────
 
