@@ -1,0 +1,67 @@
+#!/usr/bin/env zsh
+# borg-notifyd — host daemon: fires macOS notifications when any project transitions to waiting
+# Managed by launchd (com.stillpoint-labs.borg.notifyd). Not for direct invocation.
+
+set -euo pipefail
+
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+REGISTRY="${BORG_REGISTRY:-$HOME/.config/borg/registry.json}"
+LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
+LOG="$LOG_DIR/notifyd.log"
+HOOKS_DIR="$HOME/.claude/hooks"
+
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" >> "$LOG" }
+
+mkdir -p "$LOG_DIR"
+
+for dep in fswatch jq terminal-notifier; do
+    command -v "$dep" &>/dev/null || { log "ERROR: $dep not found in PATH"; exit 1 }
+done
+
+[[ -f "$REGISTRY" ]] || { log "ERROR: registry not found: $REGISTRY"; exit 1 }
+
+log "started. watching $REGISTRY"
+
+typeset -A last_status
+
+fire() {
+    local project="$1" window="$2"
+    local subtitle="${window:+$window — }$project"
+    log "notify $project (window=${window:-none})"
+    terminal-notifier \
+        -title "Claude Code" \
+        -subtitle "$subtitle" \
+        -message "Ready for input" \
+        -sound Glass \
+        -activate com.mitchellh.ghostty \
+        -execute "$HOOKS_DIR/notify-focus.sh '$window'" \
+        2>/dev/null || true
+}
+
+check() {
+    local lines
+    lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\t\(.value.status // "idle")\t\(.value.tmux_window // "")"' \
+        "$REGISTRY" 2>/dev/null) || return 0
+    while IFS=$'\t' read -r project proj_status window; do
+        local prev="${last_status[$project]:-}"
+        last_status[$project]="$proj_status"
+        [[ "$proj_status" == "waiting" && "$prev" != "waiting" ]] && fire "$project" "$window"
+    done <<< "$lines"
+}
+
+# Snapshot current state silently so startup doesn't flood notifications for already-waiting projects
+snapshot() {
+    local lines
+    lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\t\(.value.status // "idle")"' \
+        "$REGISTRY" 2>/dev/null) || return 0
+    while IFS=$'\t' read -r project proj_status; do
+        last_status[$project]="$proj_status"
+    done <<< "$lines"
+}
+
+snapshot
+
+fswatch -o "$REGISTRY" | while read -r; do
+    check
+done

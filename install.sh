@@ -101,12 +101,45 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
     warn '  export PATH="$HOME/.local/bin:$PATH"'
 fi
 
-# ── 3. Hooks, skills, config, registry → borg setup ──────────────────────────
+# ── 3. Install borg-notifyd daemon + LaunchAgent ─────────────────────────────
+
+info "Installing borg-notifyd..."
+chmod +x "$BORG_HOME/bin/borg-notifyd"
+ln -sf "$BORG_HOME/bin/borg-notifyd" "$BIN_DIR/borg-notifyd"
+info "  borg-notifyd -> $BORG_HOME/bin/borg-notifyd"
+
+if ! command -v fswatch &>/dev/null; then
+    warn "fswatch not found — installing via Homebrew (required by borg-notifyd)..."
+    brew install fswatch 2>&1 | grep -E '(Installing|Already|Error)' || true
+fi
+
+PLIST_NAME="com.stillpoint-labs.borg.notifyd.plist"
+PLIST_SRC="$BORG_HOME/launchd/$PLIST_NAME"
+PLIST_DEST="$HOME/Library/LaunchAgents/$PLIST_NAME"
+NOTIFYD_BIN="$BIN_DIR/borg-notifyd"
+LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
+
+mkdir -p "$(dirname "$PLIST_DEST")" "$LOG_DIR"
+
+sed \
+    -e "s|{{NOTIFYD_BIN}}|$NOTIFYD_BIN|g" \
+    -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+    "$PLIST_SRC" > "$PLIST_DEST"
+info "  plist -> $PLIST_DEST"
+
+if launchctl list "com.stillpoint-labs.borg.notifyd" &>/dev/null 2>&1; then
+    info "  reloading launchd agent..."
+    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.notifyd" 2>/dev/null || true
+fi
+launchctl bootstrap "gui/$UID" "$PLIST_DEST"
+info "  launchd agent bootstrapped."
+
+# ── 4. Hooks, skills, config, registry → borg setup ──────────────────────────
 
 info "Running borg setup..."
 "$BORG_HOME/borg.zsh" setup
 
-# ── 4. Summary ────────────────────────────────────────────────────────────────
+# ── 5. Summary ────────────────────────────────────────────────────────────────
 
 echo ""
 info "Installation complete."

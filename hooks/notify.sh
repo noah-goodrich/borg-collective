@@ -2,6 +2,10 @@
 # notify.sh — alert when Claude finishes a turn and needs input
 set -euo pipefail
 
+# Inside a container terminal-notifier is unavailable; registry write in borg-notify.sh
+# handles the host-side notification via borg-notifyd. Exit cleanly so the hook doesn't error.
+[[ -f /.dockerenv ]] && exit 0
+
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 PROJECT=$(basename "${CWD:-$(pwd)}")
