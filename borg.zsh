@@ -1618,6 +1618,7 @@ _borg_merge_claude_md() {
     local begin='<!-- BEGIN borg-managed -->'
     local end='<!-- END borg-managed -->'
 
+    mkdir -p "$(dirname "$target")"
     if [[ ! -f "$target" && -n "$personal_seed" && -f "$personal_seed" ]]; then
         cp "$personal_seed" "$target"
     fi
