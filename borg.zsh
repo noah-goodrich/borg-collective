@@ -1635,13 +1635,14 @@ _borg_merge_claude_md() {
                 { for (i=0; i<pending; i++) print ""; pending=0; print }
     ' "$target" > "$tmp"
 
+    local out="$target.new.$$"
     {
         cat "$tmp"
         printf '\n%s\n' "$begin"
         cat "$borg_src"
         printf '%s\n' "$end"
-    } > "$target"
-    rm -f "$tmp"
+    } > "$out" && mv "$out" "$target"
+    rm -f "$tmp" "$out"
 }
 
 # Union-merge permissions.allow from a base settings file into a target settings file.
