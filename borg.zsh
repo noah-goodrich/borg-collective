@@ -2091,6 +2091,28 @@ CONF
     echo ""
 }
 
+cmd_start() {
+    local slug="${1:-}"
+    [[ -z "$slug" ]] && die "usage: borg start <directive-slug>"
+
+    local root
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || root="$PWD"
+
+    local plan="$root/PROJECT_PLAN.md"
+    [[ -f "$plan" ]] && die "already in-flight: $plan — assimilate or sever first"
+
+    slug="${slug%.md}"
+    local rel="docs/plans/directives/$slug.md"
+    [[ -f "$root/$rel" ]] || die "no such directive: $root/$rel"
+
+    if git -C "$root" ls-files --error-unmatch "$rel" &>/dev/null; then
+        (cd "$root" && git mv "$rel" PROJECT_PLAN.md)
+    else
+        mv "$root/$rel" "$plan"
+    fi
+    info "in-flight: PROJECT_PLAN.md (was $rel)"
+}
+
 cmd_help() {
     cat <<'EOF'
 
@@ -2120,6 +2142,7 @@ cmd_help() {
     unpin [project]     Remove priority flag
     sever               Tear down everything: containers, windows, session
     regenerate          Archive stale projects (idle >48h)
+    start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
     setup               Register Claude Code hooks, skills, and config
     help                Show this message
 
@@ -2188,6 +2211,7 @@ case "${1:-help}" in
     sever|down)  cmd_down ;;
     regenerate|tidy)  cmd_tidy ;;
     setup)    cmd_setup ;;
+    start)    cmd_start "${@:2}" ;;
     focus)    cmd_focus "${@:2}" ;;
     # Legacy aliases → consolidated command
     ls)       cmd_link "${@:2}" ;;
