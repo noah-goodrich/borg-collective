@@ -40,7 +40,7 @@ fire() {
 }
 
 check() {
-    local silent="${1:-}"
+    local silent="${1:-}"  # pass any non-empty string to record state without firing
     local lines
     lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\t\(.value.status // "idle")\t\(.value.tmux_window // "")"' \
         "$REGISTRY" 2>/dev/null) || return 0
