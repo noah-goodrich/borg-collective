@@ -52,6 +52,14 @@ _scaffold_preflight() {
     return 0
 }
 
+# postStartCommand suffix that recreates /workspace as a symlink to the real workspace
+# so scripts hardcoding the old path still resolve. Empty when workspace is already /workspace.
+_ws_symlink_snippet() {
+    local workspace="$1"
+    [[ "$workspace" == "/workspace" ]] && return 0
+    printf '; sudo rm -rf /workspace 2>/dev/null; sudo ln -sfn %s /workspace' "$workspace"
+}
+
 # Build a docker compose exec command for a project's app service.
 # Usage: build_exec_cmd <project_name> <compose_file> <service> <shell> <project_dir>
 build_exec_cmd() {
@@ -299,18 +307,19 @@ create_2pane_window() {
 
     tmux set-option -t "$SESSION:$wname" automatic-rename off
 
-    local bottom
-    bottom=$(tmux split-window -v -p 25 -t "$main" -c "$start_dir" -PF '#{pane_id}')
+    # Side-by-side 50/50 — left pane is the shell, right pane is the Claude pane.
+    local right
+    right=$(tmux split-window -h -p 50 -t "$main" -c "$start_dir" -PF '#{pane_id}')
 
-    # Default focus to bottom pane (Claude pane)
-    tmux select-pane -t "$bottom"
+    # Default focus to right pane (Claude pane)
+    tmux select-pane -t "$right"
 
     if [[ -n "$cmd" ]]; then
-        tmux send-keys -t "$main"   "$cmd" Enter
-        tmux send-keys -t "$bottom" "$cmd" Enter
+        tmux send-keys -t "$main"  "$cmd" Enter
+        tmux send-keys -t "$right" "$cmd" Enter
     fi
 
-    dbg "create_2pane_window: done (main=$main bottom=$bottom)"
+    dbg "create_2pane_window: done (main=$main right=$right)"
 }
 
 attach_or_switch() {
@@ -904,10 +913,14 @@ _cmd_scaffold_supabase() {
     info "Scaffolding Supabase devcontainer for '$project_name'..."
     mkdir -p "$dc_dir/borg-hooks"
 
+    local ws_symlink
+    ws_symlink=$(_ws_symlink_snippet "$workspace")
+
     _subst_template() {
         sed -e "s|__PROJECT_NAME__|$project_name|g" \
             -e "s|__PROJECT_NAME_UPPER__|$project_name_upper|g" \
             -e "s|__WORKSPACE__|$workspace|g" \
+            -e "s|__WS_SYMLINK__|$ws_symlink|g" \
             "$1" > "$2"
     }
 
@@ -946,19 +959,27 @@ _cmd_scaffold_supabase() {
 # ── drone scaffold ────────────────────────────────────────────────────────────
 
 cmd_scaffold() {
-    local project_dir="" lang="none" workspace="/workspace" preset=""
+    local project_dir="" lang="none" workspace="" preset=""
+    local workspace_explicit=0
 
     # Parse args
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --lang)     lang="${2:-none}"; shift 2 ;;
-            --workspace) workspace="${2:-/workspace}"; shift 2 ;;
+            --workspace) workspace="${2:-}"; workspace_explicit=1; shift 2 ;;
             --supabase) preset="supabase"; shift ;;
             *)          project_dir="$1"; shift ;;
         esac
     done
 
-    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--supabase] [--lang python|node|none] [--workspace /workspace]"
+    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--supabase] [--lang python|node|none] [--workspace /workspaces/<project>]"
+
+    # Default workspace from raw basename; the supabase branch runs its own preflight.
+    if (( ! workspace_explicit )); then
+        local _raw_basename="${project_dir%/}"
+        _raw_basename="${_raw_basename##*/}"
+        workspace="/workspaces/$_raw_basename"
+    fi
 
     if [[ "$preset" == "supabase" ]]; then
         _cmd_scaffold_supabase "$project_dir" "$workspace"
@@ -1075,6 +1096,9 @@ COMPOSE
         node)   post_create="$post_create; npm install" ;;
     esac
 
+    local ws_symlink
+    ws_symlink=$(_ws_symlink_snippet "$workspace")
+
     cat > "$dc_dir/devcontainer.json" <<DEVCONTAINER
 {
   "name": "${project_name}",
@@ -1083,7 +1107,7 @@ COMPOSE
   "workspaceFolder": "${workspace}",
   "features": {},
   "postCreateCommand": "${post_create}",
-  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; sudo chmod a+rw /run/host-services/ssh-auth.sock 2>/dev/null || true; ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; if [ -f /home/dev/.config/dotfiles/claude/code/CLAUDE.md ]; then cp /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; else echo 'borg: dotfiles/claude not mounted — CLAUDE.md not synced' >&2; fi; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true",
+  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; sudo chmod a+rw /run/host-services/ssh-auth.sock 2>/dev/null || true; ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; if [ -f /home/dev/.config/dotfiles/claude/code/CLAUDE.md ]; then cp /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; else echo 'borg: dotfiles/claude not mounted — CLAUDE.md not synced' >&2; fi; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true${ws_symlink}",
   "shutdownAction": "stopCompose",
   "remoteUser": "dev",
   "updateRemoteUserUID": true
