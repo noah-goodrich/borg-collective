@@ -41,10 +41,11 @@ drone status                 Show all drones
 
 ```
 /borg-plan                   Project planning (Claude proposes, you validate)
-/borg-ship                   Shipping checklist against acceptance criteria
+/borg-assimilate             Shipping checklist + Collective review + execution
 /borg-review                 Mid-session diagnostic + loop detection
-/borg-debrief                Deep session analysis (auto-runs on stop hook)
-/borg-checkpoint         Manual session checkpoint with next-session entry point
+/borg-collective-review      Adversarial multi-persona review (The Collective)
+/borg-link                   Project intelligence (overview or per-project deep dive)
+/borg-link-up                Flush session state to <project>/.borg/checkpoints/<ts>.md
 /adhd-guardrails             Cognitive load guardrails (always active, auto)
 /simplify                    Three parallel code review agents (built-in)
 ```
@@ -78,13 +79,14 @@ borg init                         Morning: orchestrator presents briefing
 Ctrl+Space >                      Switch to recommended project
 drone start my-project my-feature Create worktree + branch, launch Claude
 /borg-plan                        Lock objectives + acceptance criteria
-[work]                            Claude has last session's debrief as context
+[work]                            Claude has last session's checkpoint as context
 /simplify                         Review changed code before committing
 /checkpoint                       Document session milestone
 git commit                        Commit (pre-commit hook reminds /simplify if skipped)
 /borg-review                      Mid-session check: am I on track?
-/borg-ship                        Am I done? Ship it.
-/exit                             Stop hook runs debrief automatically
+/borg-assimilate                  Am I done? Ship it.
+/borg-link-up                     Flush session state to a checkpoint before stopping
+/exit                             Stop hook sets status=idle + nudges if no checkpoint
 Ctrl+Space >                      Next project
 ```
 
@@ -93,7 +95,7 @@ Ctrl+Space >                      Next project
 ```
 ~/.config/borg/config.zsh            Work/life boundaries, limits
 ~/.config/borg/registry.json         Session registry (auto-managed)
-~/.config/borg/debriefs/             Session debriefs (auto-generated)
+<project>/.borg/checkpoints/         User-authored checkpoints (via /borg-link-up)
 ```
 
 ### Config Variables
@@ -123,7 +125,9 @@ BORG_DEBUG=1                         Enable debug output
 ~/.config/borg/
     config.zsh               User configuration
     registry.json            Project registry
-    debriefs/                Session debriefs
+
+<project>/.borg/
+    checkpoints/             User-authored session checkpoints
 
 ~/.claude/
     hooks/                   Symlinked hook scripts

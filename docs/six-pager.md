@@ -57,7 +57,7 @@ Borg is measured against five objectives:
 
 - **Shipping discipline.** Every project can define locked acceptance criteria via `/borg-plan`. Claude
   proposes criteria; the developer validates. Once locked, scope changes require explicit confirmation.
-  `/borg-ship` evaluates readiness with evidence. Target: every active project has a clear stopping
+  `/borg-assimilate` evaluates readiness with evidence. Target: every active project has a clear stopping
   point. Research basis: without explicit exit criteria, work expands to fill available time
   (Parkinson's Law applied to AI-assisted development).
 
@@ -113,25 +113,30 @@ implemented. The tmux hotkey (`Ctrl+Space >`) switches to the most pressing proj
   +50) to recommend what to work on.
 - **Boundary enforcement**: Work projects gated after configured hours with one-keystroke confirmation.
 - **Capacity warnings**: Alert when active sessions exceed the configured limit.
-- **Skills**: Six custom skills installed — cognitive load guardrails, project planning, shipping
-  checklist, mid-session review, session debrief, and enhanced checkpoint.
+- **Skills**: Seven custom skills installed — cognitive load guardrails, project planning, shipping
+  (assimilate), Collective review, mid-session review, project intelligence (link), and session
+  checkpointing (link-up).
 
 ### What's in v2 (complete)
 
 - **`drone` CLI**: Forked from `dev.sh` into the borg-collective repo. `drone up/down/claude/sh/restart/fix/status`
   manages the full project lifecycle.
 - **`borg init` orchestrator**: Launches a Claude session with a morning briefing built from the
-  registry, recent session debriefs, and cairn knowledge. `borg claude` re-enters the session.
-- **LLM-powered debriefs**: Stop hook runs a Sonnet-powered analysis of the full session transcript
-  (~$0.10/session). Produces structured records: objective, outcome, decisions, blockers, next steps.
-  Stored at `~/.config/borg/debriefs/<project>.md` and auto-loaded as context on next session start.
-- **Cairn integration**: Optional knowledge graph (PostgreSQL + pgvector). Session records committed on
-  stop. Knowledge searched at session start and via `borg search`. Borg degrades gracefully without it.
+  registry, recent session checkpoints, and cairn knowledge. `borg claude` re-enters the session.
+- **User-authored checkpoints**: `/borg-link-up` writes a structured checkpoint from the live
+  session to `<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. The SessionStart hook
+  (`borg-link-down.sh`) reads the newest checkpoint on the next start and injects it as
+  `additionalContext`. No per-session LLM spend, no hidden global summaries — the prose is yours
+  and lives in-repo.
+- **Cairn integration**: Optional knowledge graph (PostgreSQL + pgvector). Session records can be
+  committed when cairn is reachable. Knowledge searched at session start and via `borg search`.
+  Borg degrades gracefully without it.
 - **tmux session**: Default renamed from `dev` → `borg`.
 
 ### What's been cut
 
-- `summarize.py` (regex-based extraction) — replaced by LLM debriefs (deprecated, pending deletion)
+- `summarize.py` (regex-based extraction) — no longer needed; checkpoints are authored by the user
+  via `/borg-link-up` (deprecated, pending deletion)
 
 ---
 
@@ -139,8 +144,12 @@ implemented. The tmux hotkey (`Ctrl+Space >`) switches to the most pressing proj
 
 **Lesson 1: Parsed summaries are useless.** The original `summarize.py` extracted goals from JSONL
 transcripts using regex patterns. It produced output like "Goal: /exit exit." The last 200 lines of a
-transcript are often tool results, not human-readable text. LLM-powered analysis of the full transcript
-is worth the cost (~$0.10/session via Sonnet) because it replaces all future context re-derivation.
+transcript are often tool results, not human-readable text. The v2 answer was an automatic Sonnet
+pass over the transcript at session stop — but that produced summaries the developer rarely read and
+quietly burned ~$0.10/session. The current answer is `/borg-link-up`: a user-invoked skill that uses
+the live session context to author a short, deliberate checkpoint. Zero extra LLM calls, the prose
+lives in the repo, and because the developer writes it (with Claude's help), they actually read it
+the next morning.
 
 **Lesson 2: The tool must think for the developer, not ask them to think.** The first version of
 `/borg-plan` asked open-ended questions: "What is the objective?" "What are the acceptance criteria?"
@@ -161,10 +170,11 @@ with different conventions forces the developer to maintain a mental model of wh
 unified `borg` + `drone` model reduces this to two commands with consistent patterns.
 
 **Lesson 5: Cairn solves the persistence problem.** Session context is ephemeral — it's lost on
-compaction, context overflow, or session end. A knowledge graph that persists decisions, patterns, and
-session debriefs across sessions and projects means the developer (and Claude) never starts from zero.
-The cost of running LLM analysis at session stop is justified by eliminating re-derivation costs in all
-future sessions.
+compaction, context overflow, or session end. Per-project checkpoints at
+`<project>/.borg/checkpoints/` handle the common case (pick up where you left off). Cairn — an
+optional knowledge graph — extends that across projects: decisions, patterns, and cross-session
+knowledge the developer (and Claude) never has to re-derive. Borg works without cairn; cairn adds
+vector search across the whole history when available.
 
 ---
 
@@ -172,12 +182,13 @@ future sessions.
 
 ### Phase 1: Skills ✓
 
-Six skills installed and working:
+Seven skills installed and working:
 - `/borg-plan` — Project planning (Claude proposes, developer validates)
-- `/borg-ship` — Shipping checklist with evidence
+- `/borg-assimilate` — Shipping checklist + Collective review + execution
+- `/borg-collective-review` — Adversarial multi-persona review
 - `/borg-review` — Mid-session diagnostic with loop detection
-- `/borg-debrief` — Structured session analysis
-- `/borg-checkpoint` — Manual checkpoint
+- `/borg-link` — Project intelligence (overview or per-project deep dive)
+- `/borg-link-up` — Flush session state to a per-project checkpoint
 - Cognitive load guardrails (always-on)
 
 ### Phase 2: drone CLI ✓
@@ -187,19 +198,23 @@ Forked `dev.sh` into `drone.zsh`. Commands: `drone up`, `drone down`, `drone cla
 
 ### Phase 3: Hook integration ✓
 
-Stop hook runs Sonnet debrief async against full transcript. Start hook injects debrief as
-`additionalContext` via `hookSpecificOutput`. `summarize.py` deprecated.
+SessionStart hook (`borg-link-down.sh`) reads the newest checkpoint from
+`<project>/.borg/checkpoints/` and injects it as `additionalContext` via `hookSpecificOutput`. Stop
+hook (`borg-link-up.sh`) sets status=idle, warns on uncommitted changes, and nudges the developer
+to run `/borg-link-up` if no recent checkpoint exists. `summarize.py` deprecated.
 
 ### Phase 4: Orchestrator ✓
 
-`borg init` generates context from registry + debriefs + cairn via `_borg_orchestrator_context` and
-launches `claude --append-system-prompt`. `borg claude` re-enters with `--continue`.
+`borg init` generates context from registry + latest checkpoints + cairn via
+`_borg_orchestrator_context` and launches `claude --append-system-prompt`. `borg claude` re-enters
+with `--continue`.
 
 ### Phase 5: Cairn integration ✓
 
-Stop hook commits session record to cairn after debrief is written. Start hook merges cairn knowledge
-into session context alongside debrief. `borg search` wraps `cairn search`. `borg hail` uses
-`cairn search --project`. All cairn calls degrade silently if cairn is unavailable.
+`borg-link-down.sh` merges cairn knowledge into session context alongside the latest checkpoint.
+`borg search` wraps `cairn search`. `borg hail` uses `cairn search --project`. All cairn calls
+degrade silently if cairn is unavailable — the per-project checkpoint is always the primary
+persistence.
 
 ### Phase 6: Documentation ✓
 
@@ -234,3 +249,4 @@ See `docs/quickstart.md` for installation and first-run guide.
 | 2026-03-29 | Original proposal: ADHD-specific framing, three phases (make it work, boundaries, cognitive load management). v1 shell CLI with regex-based summarizer. |
 | 2026-03-30 | Major revision: reframed from ADHD-specific to universal cognitive load. Added v2 architecture (borg + drone + cairn). Added six skills (borg-plan, borg-ship, borg-review, borg-debrief, borg-checkpoint, cognitive guardrails). Added orchestrator concept (borg init). Added LLM debriefs replacing regex extraction. Cairn integration as optional knowledge persistence. Scope still WIP. |
 | 2026-03-31 | v2 complete: Implemented all six phases. Hook integration (Phase 3): async Sonnet debrief on stop, debrief + cairn context injection on start. Orchestrator (Phase 4): borg init + borg claude with --append-system-prompt. Cairn integration (Phase 5): session commits on stop, knowledge search on start, borg search command. Docs cleanup (Phase 6): all references updated to final state. |
+| 2026-04-23 | Lifecycle pivot: killed the automatic Sonnet session debrief. Replaced with user-invoked `/borg-link-up` skill that writes checkpoints to `<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. Folded `/borg-checkpoint` into `/borg-link-up`. Inverted hook names to match the drone metaphor: SessionStart is `borg-link-down.sh` (drone pulls state from host), Stop is `borg-link-up.sh` (drone flushes state back). Stop hook no longer calls an LLM — it sets status=idle, warns on uncommitted changes, and nudges if no recent checkpoint exists. Renamed `/borg-ship` → `/borg-assimilate` and added `/borg-collective-review` and `/borg-link`. |

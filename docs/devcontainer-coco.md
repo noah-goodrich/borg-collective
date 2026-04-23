@@ -174,7 +174,7 @@ modification, and vice versa.
 
 This means:
 - The `adhd-guardrails` skill works in CoCo sessions
-- The `borg-checkpoint` skill works in CoCo sessions
+- The `borg-link-up` skill works in CoCo sessions
 - Boris Cherny's framework tips (from `alirezarezvani/claude-skills`) work in CoCo sessions
 - Scope Guard works in CoCo sessions
 
@@ -192,8 +192,9 @@ Claude Code first.
 1. **Add `lib/coco.zsh`** — Follows the same pattern as `lib/claude.zsh` but reads from
    `~/.snowflake/cortex/conversations/` instead of `~/.claude/projects/`
 
-2. **Add `hooks/borg-stop-coco.sh`** — Same logic as `borg-stop.sh` but adapted for CoCo's hook stdin format
-   (different field names for the same data)
+2. **Extend hook installation to CoCo** — `borg setup` already registers `borg-link-down.sh` / `borg-link-up.sh`
+   / `borg-notify.sh` in `~/.snowflake/cortex/settings.json` alongside `~/.claude/settings.json`. No CoCo-specific
+   fork is needed — the same hook scripts read CoCo's stdin via `lib/borg-hooks.sh`.
 
 3. **Registry `source` field** — Already a free-form string. Adding `"coco"` as a value requires no schema
    change. Projects would appear in `borg ls` with a new badge (e.g., `[S]` for Snowflake).
@@ -278,7 +279,7 @@ Morning:
 
 Data engineering task:
   cortex -c dev -w ~/src/analytics # Start CoCo for Snowflake work
-  /borg-checkpoint             # CoCo reads the same skill
+  /borg-link-up                # CoCo reads the same skill
   # Work on dbt models, SQL, pipelines
 
 General development:
@@ -296,13 +297,13 @@ To ensure all skills work in both tools:
 ```bash
 # One-time setup: symlink skill directories
 ln -s ~/.claude/skills/adhd-guardrails ~/.snowflake/cortex/skills/adhd-guardrails
-ln -s ~/.claude/skills/borg-checkpoint ~/.snowflake/cortex/skills/borg-checkpoint
+ln -s ~/.claude/skills/borg-link-up ~/.snowflake/cortex/skills/borg-link-up
 ```
 
 Or, if you prefer to keep them separate, install skills in both locations:
 ```bash
 cp -r ~/.claude/skills/adhd-guardrails ~/.snowflake/cortex/skills/
-cp -r ~/.claude/skills/borg-checkpoint ~/.snowflake/cortex/skills/
+cp -r ~/.claude/skills/borg-link-up ~/.snowflake/cortex/skills/
 ```
 
 ### Future Borg Integration
