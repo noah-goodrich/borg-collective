@@ -232,8 +232,11 @@ cmd_link() {
         _borg_link_porcelain "$show_all"
     elif [[ -n "$project" ]]; then
         _borg_link_deep "$project" "$do_brief"
+    elif (( do_brief )); then
+        borg_desktop_scan 2>/dev/null || true
+        _borg_print_briefing
     else
-        _borg_link_overview "$do_brief" "$show_all"
+        _borg_link_overview "$show_all"
     fi
 }
 
@@ -270,7 +273,7 @@ _borg_link_porcelain() {
 }
 
 _borg_link_overview() {
-    local do_brief="${1:-0}" show_all="${2:-0}"
+    local show_all="${1:-0}"
 
     # Merge Desktop sessions into registry before listing
     borg_desktop_scan 2>/dev/null || true
@@ -396,11 +399,6 @@ _borg_link_overview() {
         warn "${BOLD}$active_count sessions need attention${NC} (limit: $BORG_MAX_ACTIVE)"
     fi
     echo
-
-    # LLM narrative briefing if requested
-    if (( do_brief )); then
-        _borg_print_briefing
-    fi
 }
 
 _borg_link_deep() {
@@ -1422,7 +1420,7 @@ $(head -c 1500 "$checkpoint_file")
 For each project write exactly these lines (omit Blocked line if not waiting):
   <name>  [<status>, <relative_time>]
     Last: <one sentence — what was accomplished. Use latest checkpoint Accomplished if available, else summary>
-    Next: <one sentence — most important next action. Use latest checkpoint "Next Session" if available>
+    Next: <one sentence — most important next action. Use latest checkpoint \"Next Session\" if available>
     Blocked: <waiting_reason>  ← only if status is waiting
 
 After all projects, add one blank line then:
