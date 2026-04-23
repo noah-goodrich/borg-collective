@@ -27,17 +27,17 @@ Three independent tools that compose:
 - Core borg CLI: init, claude, next, ls, switch, status, hail, search, scan, add, rm, help
 - CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg ls`, cairn records
 - `drone` CLI: up, down, claude, sh, restart, fix, status
-- Hooks: borg-start.sh (status=active + debrief/cairn context injection),
-  borg-stop.sh (status=idle + async Sonnet debrief + cairn commit), borg-notify.sh
-- Skills: adhd-guardrails, borg-checkpoint, borg-plan, borg-review, borg-assimilate, borg-debrief
+- Hooks: borg-link-down.sh (status=active + latest-checkpoint injection + cairn context),
+  borg-link-up.sh (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh
+- Skills: adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate
 - Work/life boundary checks on switch
 - Capacity warnings
 - tmux hotkey (Ctrl+Space >)
 - Registry-based project tracking with atomic writes
-- LLM-powered session debriefs (claude-sonnet-4-6, async, ~$0.10/session)
-- Session context loaded at start from debrief + cairn (if available)
-- `borg init` orchestrator: morning briefing from registry + debriefs + cairn
-- Cairn integration: session commits on stop, knowledge search on start and via `borg search`
+- User-authored session checkpoints at <project>/.borg/checkpoints/<ts>.md (via /borg-link-up)
+- Session context loaded at start from latest checkpoint + cairn (if available)
+- `borg init` orchestrator: morning briefing from registry + checkpoints + cairn
+- Cairn integration: optional knowledge-graph persistence; knowledge search via `borg search`
 
 ### Commands
 
@@ -81,8 +81,8 @@ lib/
     coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
     desktop.zsh             Claude Desktop session reader
 hooks/
-    borg-start.sh           SessionStart → status=active
-    borg-stop.sh            Stop → status=idle + debrief
+    borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
+    borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
     borg-notify.sh          Notification → status=waiting + waiting_reason
 skills/
     adhd-guardrails/        Cognitive load guardrails (always active)
@@ -91,8 +91,7 @@ skills/
     borg-collective-review/ Adversarial multi-persona review (The Collective)
     borg-review/            Mid-session diagnostic + loop detection
     borg-link/              Consolidated project intelligence (overview + deep dive)
-    borg-debrief/           Structured session analysis
-    borg-checkpoint/        Manual session checkpoint
+    borg-link-up/           Flush session state to <project>/.borg/checkpoints/<ts>.md
 install.sh                  Installer: deps, symlinks, hooks, skills, tmux keybinding
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)

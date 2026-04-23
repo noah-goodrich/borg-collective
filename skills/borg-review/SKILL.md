@@ -62,7 +62,7 @@ End with exactly ONE action. Not options. One thing.
 - Stuck in loop → "Stop. Try [specific alternative] instead."
 - Blocked → "Switch projects. Come back when [blocker] resolves."
 - Done → "All criteria met. Run `/borg-assimilate`."
-- Fading → "Good stopping point. Run `/borg-checkpoint`, then break."
+- Fading → "Good stopping point. Run `/borg-link-up`, then break."
 
 Can't pick one? Pick the one that ships something soonest.
 

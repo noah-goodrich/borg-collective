@@ -451,12 +451,21 @@ _borg_link_deep() {
         echo -e "  ${CYAN}Progress:${NC} $criteria_done/$criteria_total criteria met"
     fi
 
-    # Last debrief
-    local debrief_file="$BORG_DIR/debriefs/${project}.md"
-    if [[ -f "$debrief_file" ]]; then
-        echo
-        echo -e "  ${BOLD}Last Debrief${NC}"
-        head -20 "$debrief_file" | sed 's/^/  /'
+    # Recent checkpoints (newest first)
+    if [[ "$ppath" != "null" && -d "$ppath/.borg/checkpoints" ]]; then
+        local -a cp_files
+        cp_files=(${(f)"$(find "$ppath/.borg/checkpoints" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r | head -3)"})
+        if (( ${#cp_files[@]} > 0 )); then
+            echo
+            echo -e "  ${BOLD}Recent Checkpoints${NC}"
+            for _cp in "${cp_files[@]}"; do
+                [[ -z "$_cp" ]] && continue
+                echo -e "    ${CYAN}${_cp##*/}${NC}"
+            done
+            echo
+            echo -e "  ${BOLD}Latest Checkpoint${NC}"
+            head -20 "${cp_files[1]}" | sed 's/^/  /'
+        fi
     fi
 
     # Directives for this project (read from its own docs/plans/directives/)
@@ -1321,7 +1330,7 @@ cmd_search() {
     fi
 }
 
-# Build orchestrator context string from registry + debriefs + cairn.
+# Build orchestrator context string from registry + checkpoints + cairn.
 # Output goes to stdout; caller captures it.
 _borg_print_briefing() {
     # Suppress xtrace — trace output pollutes the briefing when PS4 is empty.
@@ -1329,8 +1338,8 @@ _borg_print_briefing() {
     set +x
 
     local registry cutoff active_names inactive_names payload name
-    local proj_status last_activity summary waiting_reason rel_time
-    local debrief_file briefing_prompt briefing fallback_text fields
+    local proj_status last_activity summary waiting_reason rel_time project_path
+    local checkpoint_file briefing_prompt briefing fallback_text fields
 
     registry=$(borg_registry_read)
 
@@ -1373,9 +1382,9 @@ _borg_print_briefing() {
     fallback_text=""
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        IFS=$'\t' read -r proj_status last_activity summary waiting_reason <<< \
+        IFS=$'\t' read -r proj_status last_activity summary waiting_reason project_path <<< \
             "$(echo "$registry" | jq -r --arg p "$name" \
-                '.projects[$p] | [.status // "unknown", .last_activity // "", .summary // "", .waiting_reason // ""] | join("\t")')"
+                '.projects[$p] | [.status // "unknown", .last_activity // "", .summary // "", .waiting_reason // "", .path // ""] | join("\t")')"
         rel_time=$(_borg_relative_time "$last_activity")
 
         payload+="PROJECT: $name
@@ -1386,12 +1395,15 @@ summary: $summary"
             payload+="
 waiting_reason: $waiting_reason"
 
-        debrief_file="$BORG_DIR/debriefs/${name}.md"
-        if [[ -f "$debrief_file" ]]; then
+        checkpoint_file=""
+        if [[ -n "$project_path" && -d "$project_path/.borg/checkpoints" ]]; then
+            checkpoint_file=$(find "$project_path/.borg/checkpoints" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r | head -1 || true)
+        fi
+        if [[ -n "$checkpoint_file" && -f "$checkpoint_file" ]]; then
             payload+="
---- debrief ---
-$(head -c 1500 "$debrief_file")
---- end debrief ---"
+--- latest_checkpoint (${checkpoint_file##*/}) ---
+$(head -c 1500 "$checkpoint_file")
+--- end checkpoint ---"
         fi
         payload+="
 
@@ -1409,8 +1421,8 @@ $(head -c 1500 "$debrief_file")
 
 For each project write exactly these lines (omit Blocked line if not waiting):
   <name>  [<status>, <relative_time>]
-    Last: <one sentence — what was accomplished. Use debrief Outcome if available, else summary>
-    Next: <one sentence — most important next action. Use debrief Next Steps #1 if available>
+    Last: <one sentence — what was accomplished. Use latest checkpoint Accomplished if available, else summary>
+    Next: <one sentence — most important next action. Use latest checkpoint "Next Session" if available>
     Blocked: <waiting_reason>  ← only if status is waiting
 
 After all projects, add one blank line then:
@@ -1487,7 +1499,7 @@ _borg_orchestrator_context() {
     '
     echo ""
 
-    # Most recent debriefs for top 3 priority projects
+    # Latest checkpoint for top 3 priority projects
     local top3
     top3=$(echo "$registry" | jq -r '
         .projects | to_entries |
@@ -1500,18 +1512,21 @@ _borg_orchestrator_context() {
         ) | .[0:3] | .[].key
     ')
 
-    local any_debrief=0
+    local any_checkpoint=0
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        local df="$BORG_DIR/debriefs/${name}.md"
-        [[ -f "$df" ]] || continue
-        if (( ! any_debrief )); then
-            echo "Recent session debriefs:"
-            any_debrief=1
+        local ppath cp
+        ppath=$(echo "$registry" | jq -r --arg p "$name" '.projects[$p].path // ""')
+        [[ -n "$ppath" && -d "$ppath/.borg/checkpoints" ]] || continue
+        cp=$(find "$ppath/.borg/checkpoints" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r | head -1 || true)
+        [[ -n "$cp" && -f "$cp" ]] || continue
+        if (( ! any_checkpoint )); then
+            echo "Latest checkpoints:"
+            any_checkpoint=1
         fi
         echo ""
-        echo "=== $name ==="
-        head -c 1500 "$df"
+        echo "=== $name (${cp##*/}) ==="
+        head -c 1500 "$cp"
         echo ""
     done <<< "$top3"
 
@@ -1816,7 +1831,7 @@ cmd_setup() {
 
     # ── 1. Runtime directories ────────────────────────────────────────────────
     info "Creating runtime directories..."
-    mkdir -p "$BORG_DIR/desktop" "$BORG_DIR/debriefs"
+    mkdir -p "$BORG_DIR/desktop"
     mkdir -p "$CLAUDE_DIR" "$CLAUDE_HOOKS_DIR" "$CLAUDE_SKILLS_DIR"
     borg_registry_init
 
@@ -1893,18 +1908,30 @@ CONF
     # ── 3. Register hooks in settings.json ────────────────────────────────────
     if [[ -f "$CLAUDE_SETTINGS" ]]; then
         info "Registering hooks in Claude Code settings.json..."
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-link-down.sh"   "SessionStart" "borg-link-down.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-link-up.sh"     "Stop"         "borg-link-up.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/notify.sh"             "Notification"  "notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/bash-guard.sh"        "PreToolUse"   "bash-guard.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/tool-count-nudge.sh" "PostToolUse"  "tool-count-nudge.sh"
 
-        # Migration: remove old session-start.sh (merged into borg-start.sh)
+        # Migration: remove old session-start.sh (merged into borg-link-down.sh)
         _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/session-start.sh" "SessionStart" "session-start.sh"
         [[ -e "$CLAUDE_HOOKS_DIR/session-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/session-start.sh" \
             && info "  Removed old session-start.sh"
+
+        # Migration: rename borg-start.sh/borg-stop.sh → borg-link-down.sh/borg-link-up.sh
+        _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh" "SessionStart" "borg-start.sh"
+        _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh" "Stop" "borg-stop.sh"
+        [[ -e "$CLAUDE_HOOKS_DIR/borg-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/borg-start.sh" \
+            && info "  Removed old borg-start.sh (→ borg-link-down.sh)"
+        [[ -e "$CLAUDE_HOOKS_DIR/borg-stop.sh" ]] && rm "$CLAUDE_HOOKS_DIR/borg-stop.sh" \
+            && info "  Removed old borg-stop.sh (→ borg-link-up.sh)"
+
+        # Migration: rename borg-checkpoint skill → borg-link-up skill
+        [[ -d "$HOME/.claude/skills/borg-checkpoint" ]] && rm -rf "$HOME/.claude/skills/borg-checkpoint" \
+            && info "  Removed old borg-checkpoint skill (→ borg-link-up)"
 
         local _settings_base="$BORG_HOME/config/claude/settings.base.json"
         if [[ -f "$_settings_base" ]]; then
@@ -1940,12 +1967,18 @@ CONF
         done
 
         info "Registering hooks in CoCo settings.json..."
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh"        "SessionStart" "borg-start.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh"         "Stop"         "borg-stop.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-link-down.sh"   "SessionStart" "borg-link-down.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-link-up.sh"     "Stop"         "borg-link-up.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/notify.sh"             "Notification"  "notify.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/bash-guard.sh"        "PreToolUse"   "bash-guard.sh"
+
+        # Migration: rename CoCo borg-start.sh/borg-stop.sh → borg-link-down.sh/borg-link-up.sh
+        _borg_unregister_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh" "SessionStart" "borg-start.sh"
+        _borg_unregister_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-stop.sh" "Stop" "borg-stop.sh"
+        [[ -e "$COCO_DIR/hooks/borg-start.sh" ]] && rm "$COCO_DIR/hooks/borg-start.sh" || true
+        [[ -e "$COCO_DIR/hooks/borg-stop.sh" ]] && rm "$COCO_DIR/hooks/borg-stop.sh" || true
 
         info "Registering skills with CoCo..."
         for skill_dir in "$BORG_HOME/skills/"*/(N); do
@@ -2163,7 +2196,7 @@ cmd_help() {
     /borg-review            Mid-session diagnostic + loop detection
     /borg-assimilate        Shipping checklist + Collective review + execution
     /borg-collective-review Adversarial multi-persona review
-    /borg-checkpoint        Manual session checkpoint
+    /borg-link-up           Flush session state to checkpoint (run before stopping)
     /borg-link              Same as 'borg link' — overview or deep dive
     /borg-next              Same as 'borg next' — what needs attention
     /borg-switch            Same as 'borg switch' — jump to project
@@ -2179,7 +2212,7 @@ cmd_help() {
   CONFIG
     ~/.config/borg/config.zsh       Work/life boundaries, limits
     ~/.config/borg/registry.json    Session registry
-    ~/.config/borg/debriefs/        Session debriefs (auto-generated)
+    <project>/.borg/checkpoints/    Per-project session checkpoints (via /borg-link-up)
 
   ENVIRONMENT
     BORG_TMUX_SESSION       tmux session name (default: borg)

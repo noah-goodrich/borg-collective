@@ -32,7 +32,7 @@ _borg_find_project() {
 
 # Append per-environment extension CLAUDE.md to ~/.claude/CLAUDE.md.
 # Idempotent: strips and re-appends the extension block on each call so
-# borg-start.sh can call it after every CLAUDE.md re-sync without duplicating.
+# borg-link-down.sh can call it after every CLAUDE.md re-sync without duplicating.
 _borg_apply_claude_extensions() {
     local dst="$HOME/.claude/CLAUDE.md"
     local ext_claude="${XDG_CONFIG_HOME:-$HOME/.config}/borg/extensions/CLAUDE.md"
