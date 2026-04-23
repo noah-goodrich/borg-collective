@@ -18,7 +18,7 @@ for dep in fswatch jq osascript; do
     command -v "$dep" &>/dev/null || { log "ERROR: $dep not found in PATH"; exit 1 }
 done
 
-[[ -f "$HOME/.claude/lib/borg-hooks.sh" ]] || { log "ERROR: lib/borg-hooks.sh not installed — run borg setup"; exit 1 }
+[[ -f "$HOME/.claude/lib/borg-hooks.sh" ]] || { log "ERROR: lib/borg-hooks.sh not found (run borg setup)"; exit 1 }
 source "$HOME/.claude/lib/borg-hooks.sh"
 
 [[ -f "$REGISTRY" ]] || { log "ERROR: registry not found: $REGISTRY"; exit 1 }
