@@ -24,6 +24,11 @@ source "${HOME}/.claude/lib/borg-hooks.sh"
 PROJECT=$(basename "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# Origin tag lets borg-notifyd suppress its own popup when notify.sh already fired on the host.
+# Container sessions have no local terminal-notifier, so they rely on the daemon to pop on the host.
+ORIGIN=host
+_borg_is_container && ORIGIN=container
+
 # Update registry: status=waiting + capture notification message as waiting_reason
 if [[ -f "$BORG_REGISTRY" ]]; then
     TMP="$BORG_REGISTRY.tmp.$$"
@@ -31,10 +36,12 @@ if [[ -f "$BORG_REGISTRY" ]]; then
         --arg p "$PROJECT" \
         --arg now "$NOW" \
         --arg msg "$MESSAGE" \
+        --arg origin "$ORIGIN" \
         '
         if .projects | has($p) then
             .projects[$p].status = "waiting" |
             .projects[$p].last_activity = $now |
+            .projects[$p].notify_origin = $origin |
             (if $msg != "" then .projects[$p].waiting_reason = $msg else . end)
         else .
         end

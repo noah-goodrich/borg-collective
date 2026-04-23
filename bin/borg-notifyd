@@ -42,14 +42,15 @@ fire() {
 check() {
     local silent="${1:-}"  # pass any non-empty string to record state without firing
     local lines
-    lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\t\(.value.status // "idle")\t\(.value.tmux_window // "")"' \
+    lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\t\(.value.status // "idle")\t\(.value.tmux_window // "")\t\(.value.notify_origin // "")"' \
         "$REGISTRY" 2>/dev/null) || return 0
     local -A seen
-    while IFS=$'\t' read -r project proj_status window; do
+    while IFS=$'\t' read -r project proj_status window origin; do
         seen[$project]=1
         local prev="${last_status[$project]:-}"
         last_status[$project]="$proj_status"
-        [[ -z "$silent" && "$proj_status" == "waiting" && "$prev" != "waiting" ]] && fire "$project" "$window"
+        # Only fire for container-origin transitions — host-origin is already handled by notify.sh
+        [[ -z "$silent" && "$proj_status" == "waiting" && "$prev" != "waiting" && "$origin" == "container" ]] && fire "$project" "$window"
     done <<< "$lines"
     for key in "${(@k)last_status}"; do
         [[ -z "${seen[$key]:-}" ]] && unset "last_status[$key]"
