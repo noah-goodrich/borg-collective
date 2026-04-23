@@ -50,6 +50,13 @@ _borg_apply_claude_extensions() {
     { printf '\n%s\n' "$marker"; cat "$ext_claude"; } >> "$dst"
 }
 
+# True when the current process is inside a container. Matches bash-guard's detection
+# (Docker marker plus podman/buildah's /run/.containerenv) so all hooks classify origin
+# consistently across runtimes.
+_borg_is_container() {
+    [[ -f /.dockerenv || -f /run/.containerenv ]]
+}
+
 # Strip raw ASCII control characters that break jq parsing.
 # Tab (0x09), LF (0x0A), CR (0x0D) are kept; jq escapes them in string values.
 # Use as a pipe filter: `... | _borg_strip_ctl` or wrap a value: `_borg_strip_ctl <<<"$x"`
