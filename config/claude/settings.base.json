@@ -182,7 +182,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/borg-start.sh",
+            "command": "$HOME/.claude/hooks/borg-link-down.sh",
             "timeout": 10
           }
         ]
@@ -204,7 +204,7 @@
           },
           {
             "type": "command",
-            "command": "$HOME/.claude/hooks/borg-stop.sh",
+            "command": "$HOME/.claude/hooks/borg-link-up.sh",
             "timeout": 30
           }
         ]

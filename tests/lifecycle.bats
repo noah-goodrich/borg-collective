@@ -1,12 +1,15 @@
 #!/usr/bin/env bats
 # Integration tests for the full session context lifecycle:
-#   borg-start.sh → context injection → borg-stop.sh → debrief → cairn commit
-#   → next session start picks up debrief
+#   borg-link-down.sh → context injection (including latest checkpoint) → borg-link-up.sh
+#   → registry update + nudge if no recent checkpoint
+#
+# Note: debrief LLM generation and cairn auto-commit were removed 2026-04-23; these tests
+# may have scenarios that no longer apply. Tests referencing those paths should be culled.
 
 load test_helper/setup
 
-BORG_START="${BATS_TEST_DIRNAME}/../hooks/borg-start.sh"
-BORG_STOP="${BATS_TEST_DIRNAME}/../hooks/borg-stop.sh"
+BORG_START="${BATS_TEST_DIRNAME}/../hooks/borg-link-down.sh"
+BORG_STOP="${BATS_TEST_DIRNAME}/../hooks/borg-link-up.sh"
 
 _start_input() {
     local cwd="${1:-$TEST_CWD}"
@@ -103,22 +106,6 @@ EOF
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null
 }
 
-@test "start hook injects debrief when debrief file exists" {
-    mkdir -p "$BORG_DIR/debriefs"
-    echo "## Objective
-Debug the auth system." > "$BORG_DIR/debriefs/myproject.md"
-
-    run bash "$BORG_START" <<< "$(_start_input)"
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "Debug the auth system"
-}
-
-@test "start hook does not include debrief section when no debrief file" {
-    run bash "$BORG_START" <<< "$(_start_input)"
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -qv "Last session debrief"
-}
-
 @test "start hook includes uncommitted-changes reminder when flag set" {
     # Set the flag in registry
     jq '.projects.myproject.has_uncommitted_changes = true' "$BORG_REGISTRY" > "${BORG_REGISTRY}.tmp" \
@@ -185,61 +172,6 @@ Debug the auth system." > "$BORG_DIR/debriefs/myproject.md"
     [ "$flag" = "true" ]
 }
 
-# ─── full lifecycle: stop → debrief → start picks it up ──────────────────────
-
-@test "debrief file is created after stop hook when claude is available" {
-    # Run stop hook (async debrief — we need to wait for it)
-    bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
-
-    # The async subshell background process may not have finished yet
-    # Poll briefly for debrief file (max 5 seconds)
-    for i in $(seq 1 10); do
-        debrief_file=$(find "$TEST_CWD/.borg/debriefs" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
-        [ -f "$debrief_file" ] && break
-        sleep 0.5
-    done
-
-    [ -f "$debrief_file" ]
-    grep -q "Objective" "$debrief_file"
-}
-
-@test "next session start injects debrief from previous stop" {
-    # Simulate previous session having written a project-local debrief
-    mkdir -p "$TEST_CWD/.borg/debriefs"
-    cat > "$TEST_CWD/.borg/debriefs/sess-prev.md" <<'EOF'
-## Objective
-Implement the new payment flow.
-
-## Next Steps
-1. Write integration tests for checkout.
-EOF
-
-    run bash "$BORG_START" <<< "$(_start_input)"
-    [ "$status" -eq 0 ]
-    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "payment flow"
-}
-
-@test "registry summary is updated from debrief objective after stop" {
-    bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
-
-    # Poll for async debrief in project-local dir
-    for i in $(seq 1 10); do
-        debrief_file=$(find "$TEST_CWD/.borg/debriefs" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
-        [ -f "$debrief_file" ] && break
-        sleep 0.5
-    done
-
-    # Poll for registry summary update
-    for i in $(seq 1 10); do
-        summary=$(jq -r '.projects.myproject.summary // ""' "$BORG_REGISTRY")
-        [ -n "$summary" ] && break
-        sleep 0.5
-    done
-
-    summary=$(jq -r '.projects.myproject.summary // ""' "$BORG_REGISTRY")
-    [ -n "$summary" ]
-}
-
 # ─── .borg-project marker resolution ─────────────────────────────────────────
 
 @test "start hook resolves project from .borg-project marker in CWD" {
@@ -300,19 +232,3 @@ EOF
     [ "$status" = "active" ]
 }
 
-@test "stop hook uses ANTHROPIC_SDK_KEY when ANTHROPIC_API_KEY is unset" {
-    # Verify the key alias forwarding: debrief should still run
-    unset ANTHROPIC_API_KEY 2>/dev/null || true
-    export ANTHROPIC_SDK_KEY="sk-ant-test-key"
-
-    bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
-
-    # Debrief should generate (mock claude ignores auth)
-    for i in $(seq 1 10); do
-        debrief_file=$(find "$TEST_CWD/.borg/debriefs" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
-        [ -f "$debrief_file" ] && break
-        sleep 0.5
-    done
-
-    [ -f "$debrief_file" ]
-}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# borg-start.sh — Claude Code SessionStart hook
-# Fires when a Claude Code session begins.
+# borg-link-down.sh — Claude Code / Cortex Code SessionStart hook
+# "Link down" from the collective: download state INTO the session when it begins.
 #
 # Consolidates all SessionStart context injection:
 # - Registry update: status=active, session_id
@@ -8,7 +8,7 @@
 # - Docker container status
 # - Plan-mode nudge (if no PROJECT_PLAN.md)
 # - Uncommitted-changes reminder from previous session
-# - Last session debrief
+# - Latest checkpoint from .borg/checkpoints/ (written by /borg-link-up)
 # - Cairn knowledge (if available)
 #
 # Registered as a SessionStart hook in ~/.claude/settings.json
@@ -127,18 +127,18 @@ Run 'git status' to see what's pending. Consider /simplify and committing before
     fi
 fi
 
-# Last session debrief — project-local (.borg/debriefs/) first, global fallback
-DEBRIEF_FILE=""
-if [[ -d "$CWD/.borg/debriefs" ]]; then
-    DEBRIEF_FILE=$(find "$CWD/.borg/debriefs" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
+# Latest checkpoint for this project — written by /borg-link-up
+CHECKPOINT_FILE=""
+if [[ -d "$CWD/.borg/checkpoints" ]]; then
+    CHECKPOINT_FILE=$(find "$CWD/.borg/checkpoints" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
 fi
-[[ -z "$DEBRIEF_FILE" ]] && DEBRIEF_FILE="$BORG_DIR/debriefs/${PROJECT}.md"
-if [[ -f "$DEBRIEF_FILE" ]]; then
-    DEBRIEF=$(head -c 4000 "$DEBRIEF_FILE" 2>/dev/null || true)
-    if [[ -n "$DEBRIEF" ]]; then
-        CONTEXT_PARTS+=("Last session debrief for $PROJECT:
+if [[ -n "$CHECKPOINT_FILE" && -f "$CHECKPOINT_FILE" ]]; then
+    CHECKPOINT=$(head -c 4000 "$CHECKPOINT_FILE" 2>/dev/null || true)
+    if [[ -n "$CHECKPOINT" ]]; then
+        CP_BASENAME="${CHECKPOINT_FILE##*/}"
+        CONTEXT_PARTS+=("Latest checkpoint for $PROJECT ($CP_BASENAME):
 
-$DEBRIEF")
+$CHECKPOINT")
     fi
 fi
 
@@ -147,14 +147,14 @@ CAIRN_FAILED_FLAG="${BORG_DIR}/.cairn-write-failed"
 
 if ! command -v cairn >/dev/null 2>&1; then
     CONTEXT_PARTS+=("⚠ CAIRN UNAVAILABLE: cairn not found in PATH.
-Sessions are not being persisted to the knowledge graph. Debriefs are saving locally only.
+Cross-session knowledge is not being persisted to the graph. Checkpoints still save locally.
 To fix: ensure cairn is installed and in your PATH, then run 'borg setup'.")
 else
     # Surface any write failure from the previous session stop
     if [[ -f "$CAIRN_FAILED_FLAG" ]]; then
         _fail_msg=$(cat "$CAIRN_FAILED_FLAG" 2>/dev/null || true)
         CONTEXT_PARTS+=("⚠ CAIRN WRITE FAILED (last session): ${_fail_msg}
-The session debrief was NOT committed to the knowledge graph.
+The session was NOT committed to the knowledge graph.
 Check cairn service health: cairn status")
         rm -f "$CAIRN_FAILED_FLAG"
     fi

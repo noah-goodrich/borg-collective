@@ -149,7 +149,7 @@ echo "    1. drone start <project> <feature> create worktree + branch, launch Cl
 echo "    2. /borg-plan                      lock objectives + acceptance criteria"
 echo "    3. (implement)"
 echo "    4. /simplify                       review changed code before committing"
-echo "    5. /borg-checkpoint + git commit    document session milestone"
+echo "    5. /borg-link-up + git commit     flush session state, document milestone"
 echo "    6. borg next / Ctrl+Space >        what needs attention? jump there."
 echo ""
 echo "  borg commands:"
@@ -176,7 +176,7 @@ if command -v cortex &>/dev/null; then
     echo "  CoCo integration: active"
     echo "    borg ls shows [X] badge for Cortex Code projects"
     echo "    borg scan discovers CoCo sessions from session-log.md"
-    echo "    Stop hook fires on CoCo sessions → debrief + cairn record"
+    echo "    Stop hook fires on CoCo sessions → registry update + checkpoint nudge"
     echo ""
 fi
 echo "  Community skills (run in Claude Code):"

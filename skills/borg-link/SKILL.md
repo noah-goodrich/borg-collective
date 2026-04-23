@@ -2,10 +2,10 @@
 name: borg-link
 description: >
   Project intelligence — the neural link to the collective. No args = overview of all projects
-  with directives and recent ships. With a project name = deep dive with registry, debrief,
-  plan, directives, assimilated history, and cairn knowledge. Works on the host and inside a
-  drone container by reading the bind-mounted files directly. Use when the user asks for
-  status, overview, briefing, "what's going on", or project details.
+  with directives and recent ships. With a project name = deep dive with registry, latest
+  checkpoint, plan, directives, assimilated history, and cairn knowledge. Works on the host
+  and inside a drone container by reading the bind-mounted files directly. Use when the user
+  asks for status, overview, briefing, "what's going on", or project details.
 user-invocable: true
 ---
 
@@ -21,9 +21,10 @@ For every project `P` in the registry:
 | Source                   | Path                                                   |
 | ------------------------ | ------------------------------------------------------ |
 | Registry                 | `~/.config/borg/registry.json` (key = `P`)             |
-| Debrief                  | `~/.config/borg/debriefs/P.md`                         |
+| Checkpoints              | `<P.workspace>/.borg/checkpoints/*.md` (newest = latest)|
 | Project plan             | `<P.workspace>/PROJECT_PLAN.md`                        |
 | Directives (backlog)     | `<P.workspace>/docs/plans/directives/*.md`             |
+| Severed (cancelled)      | `<P.workspace>/docs/plans/severed/*.md`                |
 | Assimilated (shipped)    | `<P.workspace>/docs/plans/assimilated/*.md`            |
 | Cairn knowledge          | `cairn search P` (skip silently if `cairn` not in PATH)|
 
@@ -39,14 +40,16 @@ inside a drone container where the same workspace is bind-mounted to a different
 2. For the **current project**, always use the resolved workspace from step 1 — never the
    registry's `path` field, which may be a host path.
 3. For **other projects**, use the registry's `path` field. On the host it resolves; inside
-   a drone it usually doesn't, and that's fine — skip workspace-dependent reads (directives,
-   assimilated, PROJECT_PLAN.md) and show only registry + debrief for those projects.
+   a drone it usually doesn't, and that's fine — skip workspace-dependent reads (checkpoints,
+   directives, severed, assimilated, PROJECT_PLAN.md) and show only the registry row for
+   those projects.
 4. If no `.borg-project` marker is found (e.g. orchestrator session at `~`), there is no
    current project — fall back to registry paths for everyone.
 
-Registry and debriefs are always reachable because `~/.config/borg/` is bind-mounted into
-every drone. Cairn is host-only for now. Degrade silently — do not print "file not found"
-errors for workspace files that a drone can't see.
+The registry is always reachable because `~/.config/borg/` is bind-mounted into every drone.
+Checkpoints live in the project workspace, so they're visible to the current drone but not
+to other projects' drones. Cairn is host-only for now. Degrade silently — do not print
+"file not found" errors for workspace files that a drone can't see.
 
 ## Modes
 
@@ -96,15 +99,18 @@ First decide the workspace path for `P`:
 Then:
 
 1. Print the header: name, resolved workspace path, status, last active, summary.
-2. Read `~/.config/borg/debriefs/P.md` if it exists. Show the first ~20 lines as "Last
-   Debrief." (Always reachable — `~/.config/borg/` is mounted in drones.)
+2. Glob `<workspace>/.borg/checkpoints/*.md`, newest first. Show the newest filename under
+   "Latest Checkpoint" and the first ~20 lines of its content. If 2-3 more exist, list their
+   timestamps under "Recent Checkpoints" without bodies.
 3. Read `<workspace>/PROJECT_PLAN.md` if it exists. Extract the Objective line and the count
    of `- [ ]` / `- [x]` checklist items for a Progress line.
 4. Glob `<workspace>/docs/plans/directives/*.md`. For each file, the H1 is the title. Print
    as "Directives: N pending" with a bullet list.
 5. Glob `<workspace>/docs/plans/assimilated/*.md`, newest first. Take the top 3. The H1 is
    the title; `Shipped:` field has the date. Print as "Recently assimilated."
-6. If `cairn` is in PATH, run `cairn search P --project P --max 5`. Otherwise skip silently.
+6. Glob `<workspace>/docs/plans/severed/*.md`. For each file, the H1 is the title. Print as
+   "Cancelled (N)" with a bullet list — titles only, no bodies. Skip the section if empty.
+7. If `cairn` is in PATH, run `cairn search P --project P --max 5`. Otherwise skip silently.
 
 Inside a drone, for a project that isn't the current one, steps 3–5 will usually be skipped
 because `<workspace>` (the host path from the registry) isn't reachable. That's expected

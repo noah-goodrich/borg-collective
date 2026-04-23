@@ -94,19 +94,24 @@ Three hooks update the registry automatically:
 
 | Hook | Event | What happens |
 |------|-------|-------------|
-| `borg-start.sh` | SessionStart | Status → active; injects last debrief + plan nudge if no PROJECT_PLAN.md |
+| `borg-link-down.sh` | SessionStart | Status → active; injects latest checkpoint + plan nudge if no PROJECT_PLAN.md |
 | `borg-notify.sh` | Notification | Status → waiting, captures what Claude needs |
-| `borg-stop.sh` | Stop | Status → idle; runs deep session debrief; warns on uncommitted changes |
+| `borg-link-up.sh` | Stop | Status → idle; warns on uncommitted changes; nudges if no recent checkpoint |
 | `pre-commit-remind.sh` | PreToolUse | Reminds Claude to run /simplify before git commit |
 
-### Session Debriefs
+### Session Checkpoints
 
-When a Claude session ends, the stop hook runs a structured analysis of the full transcript using
-Claude Sonnet (~$0.10/session). The debrief captures: objective, outcome, decisions made with
-reasoning, patterns discovered, and specific next steps. This debrief is stored and automatically
-loaded as context when you start your next session in that project.
+The session lifecycle uses a "link up / link down" metaphor — Claude links down from the collective
+when a session starts (SessionStart hook downloads the latest checkpoint), and you run
+`/borg-link-up` before stopping to flush the session state to a timestamped checkpoint at
+`<project>/.borg/checkpoints/<ts>.md`. The next session's SessionStart hook automatically loads it
+back as context.
 
-No more "where was I?" — Claude already knows.
+Checkpoints are user-authored (you own the prose) and stored in-repo — no LLM spend, no hidden
+summaries, portable across machines via git if you want. If you stop without checkpointing, the
+stop hook prints a one-line nudge.
+
+No more "where was I?" — your last checkpoint tells you.
 
 ### Status Indicators
 
@@ -142,11 +147,10 @@ what to do next.
 
 ### Session Management
 
-**`/borg-debrief`** — Deep session analysis. Runs automatically via stop hook. Captures objective,
-outcome, decisions, patterns, and next steps in structured format for future sessions.
-
-**`/borg-checkpoint`** — Manual session checkpoint. Structured summary with next-session entry point.
-Use before breaks or when switching projects.
+**`/borg-link-up`** — Flush session state to a checkpoint before stopping. Five-section structured
+summary (Goal, Accomplished, Ready to Commit, Blockers, Next Session). Writes to
+`<project>/.borg/checkpoints/<timestamp>.md`. The next SessionStart hook (`borg-link-down.sh`) loads
+the newest checkpoint as context.
 
 ### Community Skills
 
@@ -176,12 +180,12 @@ With boundaries enabled:
 [Cairn](https://github.com/your-username/cairn) is an optional knowledge graph (PostgreSQL + pgvector)
 that persists decisions, patterns, and session context across sessions and projects. When available:
 
-- Session debriefs are stored as structured records with vector embeddings
+- Cross-session patterns and decisions can be committed to the graph for vector search
 - `borg search "query"` finds relevant past decisions and patterns
 - Orchestrator briefings include cairn knowledge
 
-Borg works without cairn — debriefs are stored as markdown files and loaded on next session start.
-Cairn adds cross-project search and long-term knowledge persistence.
+Borg works without cairn — checkpoints live in each project's `.borg/checkpoints/` and are loaded
+on session start. Cairn adds cross-project search and long-term knowledge persistence.
 
 ## Devcontainer Setup
 

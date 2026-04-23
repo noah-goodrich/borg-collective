@@ -1,11 +1,11 @@
 #!/usr/bin/env bats
-# Tests for cairn health check (borg-start.sh) and write failure signaling (borg-stop.sh).
+# Tests for cairn health check (borg-link-down.sh) and write failure signaling (borg-link-up.sh).
 # Both hooks are driven by piping JSON input and checking stdout/stderr.
 
 load test_helper/setup
 
-BORG_START="${BATS_TEST_DIRNAME}/../hooks/borg-start.sh"
-BORG_STOP="${BATS_TEST_DIRNAME}/../hooks/borg-stop.sh"
+BORG_START="${BATS_TEST_DIRNAME}/../hooks/borg-link-down.sh"
+BORG_STOP="${BATS_TEST_DIRNAME}/../hooks/borg-link-up.sh"
 
 # Minimal hook input for a registered project
 _hook_input() {

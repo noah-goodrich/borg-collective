@@ -1,16 +1,17 @@
 ---
-name: borg-checkpoint
+name: borg-link-up
 description: >
-  Summarize session work and define a concrete next-session entry point.
+  "Link up" to the collective — flush session state to a checkpoint.
   Use when ending a session, before a break, or when switching projects.
-  Produces a structured checkpoint that eliminates context-rebuild time.
-  Saves the checkpoint to disk at <project>/.borg/checkpoints/<timestamp>.md.
+  Produces a structured checkpoint that eliminates context-rebuild time on
+  the next /borg-link-down. Saves to <project>/.borg/checkpoints/<timestamp>.md,
+  which is what the SessionStart hook (borg-link-down.sh) reads to restore context.
 disable-model-invocation: true
 ---
 
-# Enhanced Checkpoint
+# Link Up — Session Checkpoint
 
-Summarize this session with exactly these five sections:
+Flush the session state into a structured checkpoint. Use exactly these five sections:
 
 ## 1. Goal
 What was the original objective of this session? One sentence.
