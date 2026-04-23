@@ -1415,12 +1415,13 @@ $(head -c 1500 "$checkpoint_file")
         fallback_text+=$'\n'
     done <<< "$active_names"
 
-    briefing_prompt="Generate a morning briefing for a developer. Output plain text for a terminal — no markdown, no headers, no bullet symbols.
+    IFS= read -r -d '' briefing_prompt <<EOF || true
+Generate a morning briefing for a developer. Output plain text for a terminal — no markdown, no headers, no bullet symbols.
 
 For each project write exactly these lines (omit Blocked line if not waiting):
   <name>  [<status>, <relative_time>]
     Last: <one sentence — what was accomplished. Use latest checkpoint Accomplished if available, else summary>
-    Next: <one sentence — most important next action. Use latest checkpoint \"Next Session\" if available>
+    Next: <one sentence — most important next action. Use latest checkpoint "Next Session" if available>
     Blocked: <waiting_reason>  ← only if status is waiting
 
 After all projects, add one blank line then:
@@ -1429,7 +1430,8 @@ After all projects, add one blank line then:
 Sort: waiting projects first, then by most recent activity. Keep each line under 80 chars.
 
 PROJECTS:
-$payload"
+$payload
+EOF
 
     echo ""
     info "Building morning briefing..."
