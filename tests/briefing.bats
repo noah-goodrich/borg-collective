@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for _borg_print_briefing and the `borg briefing` subcommand.
+# Tests for _borg_print_briefing via the `borg link --brief` subcommand.
 
 load test_helper/setup
 
@@ -49,26 +49,26 @@ EOF
 # ── Fallback (claude unavailable) ─────────────────────────────────────────────
 
 @test "briefing: fallback shows active project when claude fails" {
-    run "$BORG_CMD" briefing
+    run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"my-active-project"* ]]
 }
 
 @test "briefing: fallback shows project status" {
-    run "$BORG_CMD" briefing
+    run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"waiting"* ]]
 }
 
 @test "briefing: inactive projects appear under inactive header" {
-    run "$BORG_CMD" briefing
+    run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"Inactive"* ]]
     [[ "$output" == *"old-project"* ]]
 }
 
 @test "briefing: no debug variable lines in output" {
-    run "$BORG_CMD" briefing
+    run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     # Should not contain shell variable assignment traces
     [[ "$output" != *"entry='"* ]]
@@ -85,7 +85,7 @@ EOF
 echo "Not logged in · Please run /login"
 exit 0
 EOF
-    run "$BORG_CMD" briefing
+    run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     # Error message must NOT appear in output
     [[ "$output" != *"Not logged in"* ]]
@@ -99,7 +99,7 @@ EOF
 echo "Error: API error 401 Unauthorized"
 exit 1
 EOF
-    run "$BORG_CMD" briefing
+    run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" != *"Error:"* ]]
     [[ "$output" == *"my-active-project"* ]]
@@ -117,7 +117,7 @@ echo "  Blocked: Blocked on design review"
 echo ""
 echo "Focus: my-active-project — waiting on design review"
 EOF
-    run "$BORG_CMD" briefing
+    run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"my-active-project"* ]]
     [[ "$output" == *"Focus:"* ]]
@@ -127,7 +127,7 @@ EOF
 
 @test "briefing: empty registry shows scan hint" {
     echo '{"projects":{}}' > "$BORG_REGISTRY"
-    run "$BORG_CMD" briefing
+    run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"borg scan"* ]]
 }
