@@ -120,7 +120,7 @@ is_segment_ro() {
         shasum|sha256sum|sha1sum|md5|md5sum|cksum) return 0 ;;
         which|command|type|whence|whereis|locate) return 0 ;;
         echo|printf) return 0 ;;
-        sort|uniq|cut|paste|tr|rev|column|expand|unexpand|fold|fmt|head|tail) return 0 ;;
+        sort|uniq|cut|paste|tr|rev|column|expand|unexpand|fold|fmt) return 0 ;;
         date|cal) return 0 ;;
         uname|hostname|whoami|id|tty|env|printenv|locale|arch) return 0 ;;
         ps|uptime|w|last|free|sysctl|vm_stat) return 0 ;;
@@ -276,9 +276,11 @@ is_command_ro() {
     # non-RO, the whole command is non-RO. Replace resolved spans with a
     # placeholder so they don't interfere with later parsing.
     local sub_count=0
+    # shellcheck disable=SC2016  # grep regex literal — single quotes intentional
     while echo "$stripped" | grep -q '\$('; do
         # Extract the first innermost $(...) — one that contains no further $( within.
         local inner
+        # shellcheck disable=SC2016  # grep regex literal — single quotes intentional
         inner=$(echo "$stripped" | grep -oE '\$\([^$()]*\)' | head -1)
         [[ -z "$inner" ]] && break
         local inner_cmd="${inner#\$\(}"
