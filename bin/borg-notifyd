@@ -9,15 +9,17 @@ export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/
 REGISTRY="${BORG_REGISTRY:-$HOME/.config/borg/registry.json}"
 LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
 LOG="$LOG_DIR/notifyd.log"
-HOOKS_DIR="$HOME/.claude/hooks"
 
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" >> "$LOG" }
 
 mkdir -p "$LOG_DIR"
 
-for dep in fswatch jq terminal-notifier; do
+for dep in fswatch jq osascript; do
     command -v "$dep" &>/dev/null || { log "ERROR: $dep not found in PATH"; exit 1 }
 done
+
+[[ -f "$HOME/.claude/lib/borg-hooks.sh" ]] || { log "ERROR: lib/borg-hooks.sh not installed — run borg setup"; exit 1 }
+source "$HOME/.claude/lib/borg-hooks.sh"
 
 [[ -f "$REGISTRY" ]] || { log "ERROR: registry not found: $REGISTRY"; exit 1 }
 
@@ -29,14 +31,7 @@ fire() {
     local project="$1" window="$2"
     local subtitle="${window:+$window — }$project"
     log "notify $project (window=${window:-none})"
-    terminal-notifier \
-        -title "Claude Code" \
-        -subtitle "$subtitle" \
-        -message "Ready for input" \
-        -sound Glass \
-        -activate com.mitchellh.ghostty \
-        -execute "$HOOKS_DIR/notify-focus.sh '$window'" \
-        2>/dev/null || true
+    _borg_osa_notify "Claude Code" "$subtitle" "Ready for input"
 }
 
 check() {
