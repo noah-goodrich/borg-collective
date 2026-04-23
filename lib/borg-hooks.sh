@@ -63,13 +63,13 @@ _borg_is_container() {
 # Click-to-focus is not available here — tmux bell + `Ctrl+Space >` covers switching.
 # Usage: _borg_osa_notify <title> <subtitle> <message>
 _borg_osa_notify() {
-    local title="${1:-Claude Code}" subtitle="${2:-}" message="${3:-}"
-    local t s m
-    t=$(printf '%s' "$title"    | sed 's/\\/\\\\/g; s/"/\\"/g')
-    s=$(printf '%s' "$subtitle" | sed 's/\\/\\\\/g; s/"/\\"/g')
-    m=$(printf '%s' "$message"  | sed 's/\\/\\\\/g; s/"/\\"/g')
-    local script="display notification \"$m\" with title \"$t\""
-    [[ -n "$subtitle" ]] && script+=" subtitle \"$s\""
+    local title="$1" subtitle="$2" message="$3"
+    # Escape backslash first, then double quote, for AppleScript string literal context.
+    title="${title//\\/\\\\}";       title="${title//\"/\\\"}"
+    subtitle="${subtitle//\\/\\\\}"; subtitle="${subtitle//\"/\\\"}"
+    message="${message//\\/\\\\}";   message="${message//\"/\\\"}"
+    local script="display notification \"$message\" with title \"$title\""
+    [[ -n "$subtitle" ]] && script+=" subtitle \"$subtitle\""
     script+=" sound name \"Glass\""
     osascript -e "$script" 2>/dev/null || true
 }
