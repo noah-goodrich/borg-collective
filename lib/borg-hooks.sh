@@ -57,6 +57,23 @@ _borg_is_container() {
     [[ -f /.dockerenv || -f /run/.containerenv ]]
 }
 
+# Fire a macOS user notification. Uses osascript, which posts via Apple-signed
+# System Events and renders reliably on macOS 26. Replaced terminal-notifier 2.0.0,
+# which was ad-hoc signed and silently dropped by Notification Center.
+# Click-to-focus is not available here — tmux bell + `Ctrl+Space >` covers switching.
+# Usage: _borg_osa_notify <title> <subtitle> <message>
+_borg_osa_notify() {
+    local title="${1:-Claude Code}" subtitle="${2:-}" message="${3:-}"
+    local t s m
+    t=$(printf '%s' "$title"    | sed 's/\\/\\\\/g; s/"/\\"/g')
+    s=$(printf '%s' "$subtitle" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    m=$(printf '%s' "$message"  | sed 's/\\/\\\\/g; s/"/\\"/g')
+    local script="display notification \"$m\" with title \"$t\""
+    [[ -n "$subtitle" ]] && script+=" subtitle \"$s\""
+    script+=" sound name \"Glass\""
+    osascript -e "$script" 2>/dev/null || true
+}
+
 # Strip raw ASCII control characters that break jq parsing.
 # Tab (0x09), LF (0x0A), CR (0x0D) are kept; jq escapes them in string values.
 # Use as a pipe filter: `... | _borg_strip_ctl` or wrap a value: `_borg_strip_ctl <<<"$x"`
