@@ -11,8 +11,9 @@ when to pivot.
 
 1. **Philosophy** (longest-lived): Boundaries, shipping discipline, cognitive load awareness,
    "automated beats discipline." Survives regardless of platform changes.
-2. **Skills + hooks** (medium-lived): borg-plan, borg-ship, adhd-guardrails, debrief hooks.
-   The automation that replaces discipline. Cheap to adapt if APIs change.
+2. **Skills + hooks** (medium-lived): borg-plan, borg-assimilate, adhd-guardrails, session-lifecycle
+   hooks (link-down / link-up). The automation that replaces discipline. Cheap to adapt if APIs
+   change.
 3. **CLI plumbing** (shortest-lived): borg/drone CLIs, registry JSON, tmux automation. Useful
    now but may be absorbed by Claude Code's native features.
 
@@ -25,10 +26,10 @@ when to pivot.
 | Feature | Borg | gstack | Citadel | Claude Code Native |
 |---------|------|--------|---------|-------------------|
 | Multi-session orchestration | Yes | Conductor (10 sessions) | Yes | Agent Teams (experimental) |
-| Session debriefs (LLM) | Yes (~$0.10/session) | No | No | No |
+| Session checkpoints | Yes (user-authored, per-project) | No | No | No |
 | Work/life boundaries | Yes | No | No | No |
 | Shipping discipline | Yes (locked criteria) | Think→Ship phases | No | No |
-| Cross-session persistence | Yes (debriefs + cairn) | No | Campaign persistence | No (wiped on restart) |
+| Cross-session persistence | Yes (checkpoints + cairn) | No | Campaign persistence | No (wiped on restart) |
 | Container-first design | Yes | No | No | No |
 | Role-based skills | No | Yes (23 specialists) | No | No |
 | Knowledge graph | Yes (cairn, optional) | No | No | No |
@@ -46,14 +47,15 @@ session" vs borg's "manage multiple sessions sustainably." Complementary, not co
 agents in worktrees, discovery relay, and lifecycle hooks. Closest architectural competitor to
 borg's CLI plumbing layer.
 
-**Claude-Mem** — Automatic session capture + context injection. Similar to borg's debrief system
-but uses compression rather than LLM analysis.
+**Claude-Mem** — Automatic session capture + context injection. Similar goal to borg's checkpoint
+system but fully automatic (uses compression) rather than user-authored. Borg deliberately keeps
+the checkpoint prose in the developer's hands so it actually gets read the next morning.
 
 **CCPM** (Automazeio) — Project management using GitHub Issues + git worktrees for parallel
 agent execution.
 
 **Claude Code Agent Teams** (native, experimental) — Multi-session coordination with shared task
-lists and inter-agent messaging. Key gap: state wiped on restart (issue #33764). No debriefs,
+lists and inter-agent messaging. Key gap: state wiped on restart (issue #33764). No checkpoints,
 no boundaries, no cross-session persistence.
 
 ---
@@ -64,8 +66,8 @@ When to re-evaluate borg's components:
 
 - **If Claude Code Agent Teams solve persistence** → evaluate deprecating borg/drone CLIs.
   Keep skills and hooks (they're the philosophy layer).
-- **If gstack adds sustainability features** (boundaries, debriefs) → evaluate adopting gstack
-  + borg hooks as a lighter combination.
+- **If gstack adds sustainability features** (boundaries, persistent checkpoints) → evaluate
+  adopting gstack + borg hooks as a lighter combination.
 - **If a tool solves the complete stack better** → migrate philosophy into that tool's skill
   format. The ideas matter more than the implementation.
 - **If borg's CLI plumbing becomes maintenance burden** → extract skills/hooks into a standalone

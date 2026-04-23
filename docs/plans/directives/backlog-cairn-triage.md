@@ -18,7 +18,7 @@ knowledge graph that borg hooks attempt to use for cross-session knowledge persi
 - [ ] Document: is cairn a pip install? A built binary? What's the install path?
 - [ ] Either fix cairn installation so `cairn` CLI works, or document decision to drop it
 - [ ] If fixed: verify `cairn search`, `cairn record`, and `cairn health` work end-to-end
-- [ ] If dropped: remove cairn references from borg hooks/skills, simplify to debriefs-only
+- [ ] If dropped: remove cairn references from borg hooks/skills, simplify to checkpoints-only
 
 ## Scope Boundaries
 - This is diagnosis + decision, not a rewrite

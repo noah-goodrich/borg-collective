@@ -49,23 +49,37 @@ require explicit confirmation. This prevents infinite refinement and scope creep
 **Why it exists**: Without explicit acceptance criteria, work expands to fill available time. The plan
 gives both you and Claude a clear stopping point.
 
-### /borg-ship — Shipping Checklist
+### /borg-assimilate — Shipping Checklist + Execution
 
-**Activation**: Manual (`/borg-ship`)
+**Activation**: Manual (`/borg-assimilate`)
 
-Evaluates current state against PROJECT_PLAN.md with evidence:
+Evaluates current state against PROJECT_PLAN.md with evidence, runs a Collective review, then
+executes shipping:
 
 - For each criterion: met / not met / partially met, with proof (file exists, test passes, command
   output)
 - Runs verification commands itself — doesn't ask you to
+- Invokes `/borg-collective-review` to stress-test the decision to ship
 - Three verdicts:
-  - **Ready to ship** — with exact commands (git add, commit, PR)
+  - **Ready to ship** — walks you through the shipping steps (merge PR, archive plan) with
+    confirmation
   - **Not ready** — specific remaining items and estimated effort
   - **Done but still working** — "This meets all criteria. Ship it. Are you polishing or is there a
     real problem?"
 
 **Why it exists**: The hardest part of shipping is knowing when to stop. This skill enforces the
-contract from `/borg-plan`.
+contract from `/borg-plan` and closes the loop by actually shipping.
+
+### /borg-collective-review — Adversarial Multi-Persona Review
+
+**Activation**: Manual (`/borg-collective-review`) or invoked by `/borg-plan` and
+`/borg-assimilate`
+
+Runs an adversarial design review: six core personas plus one rotating specialist debate a plan or
+shipping decision. Surfaces risks, trade-offs, and counter-arguments before you commit.
+
+**Why it exists**: A single-LLM "looks fine" is not a review. The Collective forces multiple
+viewpoints into the conversation.
 
 ### /borg-review — Mid-Session Diagnostic
 
@@ -87,34 +101,42 @@ paralysis.
 **Why it exists**: When you're deep in a session, you can't see the forest for the trees. This skill
 is the outside perspective.
 
-### /borg-debrief — Session Analysis
+### /borg-link-up — Flush Session State to a Checkpoint
 
-**Activation**: Manual (`/borg-debrief`) or automatic (stop hook)
+**Activation**: Manual (`/borg-link-up`)
 
-Analyzes the current session and produces structured output:
+Writes a structured checkpoint from the live session to
+`<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. Five sections:
 
-- **Objective**: What was the goal (noting pivots if the goal changed)
-- **Outcome**: Specific deliverables (files, features, tests — with paths)
-- **Decisions**: Significant choices with reasoning and alternatives considered
-- **Patterns**: Reusable approaches (only if genuinely reusable)
-- **Blockers**: Gotchas, errors, unexpected behavior (with resolutions)
-- **Progress**: Updated checklist against PROJECT_PLAN.md
-- **Next steps**: Specific first action for the next session (file + function level)
+- **Goal**: What this session was trying to accomplish
+- **Accomplished**: Concrete outcomes (files, commits, decisions)
+- **Ready to commit**: Staged or unstaged changes that should be committed
+- **Blockers**: Anything unresolved (errors, open questions, waiting-on)
+- **Next session**: Specific first action for when you pick this back up
 
-When run via the stop hook, the debrief is stored at `~/.config/borg/debriefs/<project>.md` and
-automatically loaded as context in the next session. This eliminates the context-rebuild cost.
+The Stop hook (`borg-link-up.sh`) does NOT auto-run this skill — there's no automatic LLM call at
+session end. If you stop without checkpointing, the Stop hook prints a one-line nudge reminding
+you. The next session's SessionStart hook (`borg-link-down.sh`) reads the newest checkpoint from
+that directory and injects it as `additionalContext`.
 
-**Why it exists**: Session context is ephemeral. Without a debrief, you spend 20+ minutes figuring out
-where you left off. With one, you pick up immediately.
+Checkpoints are user-authored (you own the prose), stored in-repo, and portable across machines
+via git if you want. No hidden global summaries, no per-session LLM spend.
 
-### /borg-checkpoint — Manual Checkpoint
+**Why it exists**: Session context is ephemeral. A short, deliberate checkpoint at the end of a
+session is worth more than an auto-generated summary you don't read.
 
-**Activation**: Manual (`/borg-checkpoint`)
+### /borg-link — Project Intelligence
 
-Five-section summary: goal, accomplishments, ready to commit, blockers, next session entry point.
-Lighter than a full debrief. Use before breaks, before context gets long, or when switching projects.
+**Activation**: Manual (`/borg-link`, or invoked from `borg link` / `drone link` on the CLI)
 
-**Why it exists**: Sometimes you need a save point mid-session, not just at the end.
+Consolidated project intelligence. No arguments gives an overview across all registered projects
+(directives, recent ships, last checkpoint). With a project name, gives a deep dive: registry
+entry, latest checkpoint, active plan, directive backlog, assimilated history, and cairn knowledge
+if available. Works on the host and inside a drone container by reading the bind-mounted files
+directly.
+
+**Why it exists**: You forget what every project is doing. This skill rebuilds the picture without
+round-tripping through multiple commands.
 
 ### /adhd-guardrails — Cognitive Load Guardrails
 

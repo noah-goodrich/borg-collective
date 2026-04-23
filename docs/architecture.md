@@ -17,30 +17,33 @@ Borg is an AI development orchestration framework with three layers:
    from `dev.sh`.
 
 3. **cairn (knowledge persistence, optional)** — Runs in a container with PostgreSQL + pgvector.
-   Stores session debriefs, decisions, patterns, and observations with vector embeddings. Enables
-   `borg search` for cross-project knowledge retrieval. Borg works without it — debriefs are
-   stored as files.
+   Stores decisions, patterns, and observations with vector embeddings. Enables `borg search` for
+   cross-project knowledge retrieval. Borg works without it — user-authored session checkpoints
+   are stored per-project as files.
 
 ### Data Flow
 
 ```
 Session lifecycle:
 
-  drone up project        → Container starts, tmux window created
-  drone claude project    → Claude Code session begins
-  borg-start.sh fires     → Registry: status=active
-                          → Injects additionalContext: last debrief + cairn knowledge
-                          ↓
-  [developer works]       → Claude uses skills, reads debrief from last session
-                          ↓
-  Claude needs input      → borg-notify.sh fires → Registry: status=waiting + reason
-                          ↓
-  Session ends            → borg-stop.sh fires:
-                             1. Registry: status=idle (fast, <1s)
-                             2. Async: claude -p --model sonnet → debrief (~$0.10)
-                             3. Store debrief in ~/.config/borg/debriefs/<project>.md
-                             4. Update registry summary from debrief Objective line
-                             5. If cairn reachable: cairn record session with debrief
+  drone up project          → Container starts, tmux window created
+  drone claude project      → Claude Code session begins
+  borg-link-down.sh fires   → Registry: status=active
+                            → Injects additionalContext: latest checkpoint + cairn knowledge
+                            ↓
+  [developer works]         → Claude uses skills, reads checkpoint from last session
+                            ↓
+  Claude needs input        → borg-notify.sh fires → Registry: status=waiting + reason
+                            ↓
+  Developer runs /borg-link-up before stopping:
+                            → Skill writes structured checkpoint to
+                              <project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md
+                            ↓
+  Session ends              → borg-link-up.sh fires:
+                               1. Registry: status=idle
+                               2. Warn if uncommitted changes remain
+                               3. Nudge if no recent checkpoint exists
+                               4. If cairn reachable: optional session record
 ```
 
 ### Registry Writes
@@ -57,23 +60,25 @@ This prevents corruption from concurrent hook executions.
 ```
 ~/dev/borg-collective/
     borg.zsh                    Main orchestration CLI
-    drone.zsh                   Project lifecycle CLI (WIP)
+    drone.zsh                   Project lifecycle CLI
     lib/
         registry.zsh            Registry CRUD
         tmux.zsh                tmux window listing + switching
         claude.zsh              Session discovery from ~/.claude/projects/
+        coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
         desktop.zsh             Claude Desktop session reader
     hooks/
-        borg-start.sh           SessionStart → status=active
-        borg-stop.sh            Stop → status=idle + debrief
+        borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
+        borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
         borg-notify.sh          Notification → status=waiting + reason
     skills/
         adhd-guardrails/        Cognitive load guardrails (always active)
-        borg-plan/              Project planning Q/A
-        borg-ship/              Shipping checklist
-        borg-review/            Mid-session diagnostic
-        borg-debrief/           Session analysis
-        borg-checkpoint/    Manual checkpoint
+        borg-plan/              Project planning + Collective review
+        borg-assimilate/        Shipping checklist + Collective review + execution
+        borg-collective-review/ Adversarial multi-persona review (The Collective)
+        borg-review/            Mid-session diagnostic + loop detection
+        borg-link/              Consolidated project intelligence (overview + deep dive)
+        borg-link-up/           Flush session state to a per-project checkpoint file
     install.sh                  Installer
     docs/                       Documentation
 ```
@@ -84,22 +89,25 @@ This prevents corruption from concurrent hook executions.
 ~/.config/borg/
     config.zsh                  User configuration (work hours, limits)
     registry.json               Project registry (auto-managed by hooks)
-    debriefs/                   Session debriefs (auto-generated by stop hook)
-        project-a.md
-        project-b.md
+
+<project>/.borg/
+    checkpoints/                User-authored session checkpoints (written by /borg-link-up)
+        2026-04-23-1114.md
+        2026-04-22-1730.md
 
 ~/.claude/
     hooks/
-        borg-start.sh           Symlink → repo
-        borg-stop.sh            Symlink → repo
+        borg-link-down.sh       Symlink → repo
+        borg-link-up.sh         Symlink → repo
         borg-notify.sh          Symlink → repo
     skills/
         adhd-guardrails/        Symlink → repo
         borg-plan/              Symlink → repo
-        borg-ship/              Symlink → repo
+        borg-assimilate/        Symlink → repo
+        borg-collective-review/ Symlink → repo
         borg-review/            Symlink → repo
-        borg-debrief/           Symlink → repo
-        borg-checkpoint/    Symlink → repo
+        borg-link/              Symlink → repo
+        borg-link-up/           Symlink → repo
 
 ~/.local/bin/
     borg                        Symlink → borg.zsh
@@ -121,7 +129,7 @@ This prevents corruption from concurrent hook executions.
       "claude_session_id": "uuid",
       "last_activity": "2026-03-30T14:30:00Z",
       "status": "active",
-      "summary": "LLM-generated debrief summary",
+      "summary": "Short description from latest checkpoint or plan",
       "pinned": false,
       "waiting_reason": "Claude needs permission to use Bash",
       "goal": "Optional: project objective from /borg-plan",
@@ -133,7 +141,7 @@ This prevents corruption from concurrent hook executions.
 
 **Status values**: `active`, `waiting`, `idle`, `archived`, `unknown`
 
-**Source values**: `cli` (Claude Code), `desktop` (Claude Desktop), `coco` (Cortex Code, future)
+**Source values**: `cli` (Claude Code), `desktop` (Claude Desktop), `coco` (Cortex Code CLI)
 
 ---
 
@@ -166,11 +174,11 @@ borg.zsh
   └── Dispatch (case statement)
 ```
 
-### drone.zsh (WIP)
+### drone.zsh
 
 Forked from `~/dev/dev.sh`. Same conventions. Manages:
 - Docker Compose container lifecycle
-- tmux window creation (3-pane layout)
+- tmux window creation (side-by-side 2-pane layout by default)
 - Container shell access
 - Claude Code session launching inside containers
 
@@ -192,7 +200,15 @@ TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // ""')
 - Always exit 0 (failures must not block Claude)
 - Registry writes are atomic (tmp + mv)
 - Graceful degradation (if cairn is unreachable, skip; if registry is missing, skip)
-- Fast path first (registry update in <1s), expensive operations async
+- Fast path only — no LLM calls in hooks; the expensive work (authoring checkpoints) is user-driven
+
+### Link-up / Link-down Semantics
+
+The hook names reflect a collective metaphor: at session start, the drone **links down** from the
+host — it pulls state (the latest checkpoint, cairn context) into the session. At session end, the
+drone **links up** — it flushes state back (status update, uncommitted-changes warning, checkpoint
+nudge). The user-invoked `/borg-link-up` skill is the explicit flush: it writes the checkpoint that
+the next session's `borg-link-down.sh` will read.
 
 ### Hook Registration
 
@@ -201,8 +217,8 @@ Hooks are registered in `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-start.sh"}]}],
-    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-stop.sh"}]}],
+    "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-down.sh"}]}],
+    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-up.sh"}]}],
     "Notification": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-notify.sh"}]}]
   }
 }
@@ -225,10 +241,11 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 |-------|---------|------|
 | adhd-guardrails | Auto (always) | Prevent scope creep, suggest breaks, shame-free language |
 | borg-plan | Manual | Propose + lock project objectives and acceptance criteria |
-| borg-ship | Manual | Evaluate shipping readiness with evidence |
+| borg-assimilate | Manual | Shipping checklist + Collective review + execution |
+| borg-collective-review | Manual / invoked | Adversarial multi-persona review (The Collective) |
 | borg-review | Manual | Mid-session diagnostic, loop detection, one recommendation |
-| borg-debrief | Auto (stop hook) | Structured session analysis for persistence |
-| borg-checkpoint | Manual | Quick save point with next-session entry |
+| borg-link | Manual | Consolidated project intelligence (overview or per-project deep dive) |
+| borg-link-up | Manual | Flush session state to `<project>/.borg/checkpoints/<ts>.md` |
 
 ---
 
@@ -239,13 +256,13 @@ with it when available:
 
 | Borg Action | Cairn Integration |
 |-------------|-------------------|
-| `borg-stop.sh` | Commits debrief as session/decision/observation records |
-| `borg-start.sh` | Fetches cairn briefing for project context |
+| `borg-link-up.sh` | Optionally commits session record if cairn is reachable |
+| `borg-link-down.sh` | Fetches cairn briefing for project context |
 | `borg search` | Wraps `cairn search` for cross-project knowledge |
 | `borg init` | Includes cairn knowledge in orchestrator briefing |
 
-When cairn is unavailable, borg degrades gracefully: debriefs are stored as markdown files in
-`~/.config/borg/debriefs/`, and `borg search` is unavailable.
+When cairn is unavailable, borg degrades gracefully: checkpoints live in each project's
+`.borg/checkpoints/` directory and are loaded on session start. `borg search` is unavailable.
 
 ---
 
@@ -264,7 +281,7 @@ volumes:
 
 ### Path Resolution
 
-Inside containers, CWD is typically `/workspace` or `/development`, not the host path. Hooks use
+Inside containers, CWD is typically `/workspaces/<project>`, not the host path. Hooks use
 `basename($CWD)` to identify the project, which works when docker-compose project names match
 directory names.
 
@@ -277,6 +294,6 @@ directory names.
 | jq | Yes | Registry JSON CRUD |
 | fzf | Yes | Fuzzy picker for `borg switch` |
 | tmux | Yes | Session multiplexing |
-| claude | Optional | LLM debriefs (Sonnet), orchestrator session |
+| claude | Optional | Orchestrator session, `borg link --brief` narrative briefing |
 | cairn | Optional | Knowledge persistence |
 | Docker | Optional | Devcontainer support |

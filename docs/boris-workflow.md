@@ -136,8 +136,9 @@ Specifically:
 - **Explicit acceptance criteria mean clear stopping points.** "Done" is defined before you start,
   not negotiated while you're deep in implementation — so your judgment goes to design, not scope
   negotiation.
-- **Automatic debriefs mean zero-cost session handoff.** When you come back tomorrow, context is
-  waiting for you — so your energy goes to building, not reconstructing state.
+- **Persistent checkpoints mean zero-cost session handoff.** You flush a short, user-authored
+  checkpoint before stopping; the next session loads it as context automatically — so your energy
+  goes to building, not reconstructing state.
 - **One recommendation means no decision required** — not because you can't choose, but because
   that choice isn't where you add value. "What should I work on?" gets one answer, not a list of
   five options ranked by six criteria.
@@ -158,8 +159,9 @@ and persistent context that survives across sessions.
 
 You open Ghostty. You type `borg init`.
 
-Borg starts an orchestrator — a Claude session that knows about all your projects. It reads the debriefs
-from your last sessions (stored automatically when each session ended) and presents a morning briefing:
+Borg starts an orchestrator — a Claude session that knows about all your projects. It reads the
+checkpoints you wrote at the end of your last sessions (stored per-project at
+`<project>/.borg/checkpoints/`) and presents a morning briefing:
 
 ```
 Good morning. Here's where things stand:
@@ -196,9 +198,10 @@ You switch to the api-service window. You type `drone claude api-service` to sta
 inside the project's container. (For new feature work, `drone start <project> <feature>` creates a
 git worktree and isolated container in one step, so each feature gets its own window and branch.)
 
-Claude starts with context from your last session — the debrief that was automatically generated when
-you stopped yesterday. It knows you were adding rate limiting. It knows the tests pass. It knows the
-next step is to open a PR.
+Claude starts with context from your last session — the checkpoint you wrote with `/borg-link-up`
+before you stopped yesterday. The SessionStart hook (`borg-link-down.sh`) loaded the newest
+checkpoint from `<project>/.borg/checkpoints/` as `additionalContext`. Claude knows you were adding
+rate limiting. It knows the tests pass. It knows the next step is to open a PR.
 
 You say: "Open the PR for rate limiting." Claude does it. You review. You merge. Done.
 
@@ -258,7 +261,7 @@ and you know when to stop.
 
 ### Checking shipping progress
 
-Later, you run `/borg-ship`:
+Later, you run `/borg-assimilate`:
 
 ```
 Checking acceptance criteria for web-dashboard...
@@ -279,32 +282,38 @@ No scope creep. No "while we're here, let's also..." The criteria are locked.
 
 ### Session end
 
-When you're done working on a project, the session ends (you type `/exit` or close the terminal). Borg's
-stop hook fires automatically. It runs a deep analysis of your session transcript using Claude Sonnet and
-produces a structured debrief:
+When you're ready to stop working on a project, you run `/borg-link-up` inside the Claude session.
+It uses the live conversation context to produce a structured checkpoint and writes it to
+`<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`:
 
 ```
-Session debrief: web-dashboard (2026-03-30, 2:15 PM)
+Checkpoint: web-dashboard (2026-03-30-1415.md)
 
-Objective: Migrate chart components from D3 to Recharts
-Outcome: All 5 components migrated. 3 of 5 acceptance criteria verified.
+Goal: Migrate chart components from D3 to Recharts
 
-Decisions made:
-  - Used Recharts ResponsiveContainer instead of D3 resize observer
-    Reasoning: Simpler API, handles window resize natively, fewer lines of code
-  - Kept D3 color scales as a standalone utility (no Recharts equivalent)
-    Reasoning: D3-scale is 4KB and already depended on by non-chart code
+Accomplished:
+  - All 5 chart components migrated
+  - 3 of 5 acceptance criteria verified
 
-Next steps:
-  - Verify bundle size (run npm run build && du -sh dist/)
-  - Check PipelineChart tooltips in staging
-  - Open PR once checks pass
+Ready to commit:
+  - src/charts/*.tsx (5 files)
+  - package.json (recharts added, d3 removed except d3-scale)
 
 Blockers: None
+
+Next session:
+  - Verify bundle size (npm run build && du -sh dist/)
+  - Check PipelineChart tooltips in staging
+  - Open PR once checks pass
 ```
 
-This debrief is stored automatically. Tomorrow's orchestrator will read it. The next Claude session in
-this project will have it as context. You don't have to remember anything.
+Then you `/exit`. The Stop hook (`borg-link-up.sh`) fires, sets status to `idle`, and — if you
+forgot to run the skill — prints a one-line nudge telling you no recent checkpoint exists. It also
+warns if you have uncommitted changes.
+
+The checkpoint file lives in your project (portable via git if you want it). Tomorrow's
+orchestrator will read it. The next Claude session in this project will have it as context. You
+don't have to remember anything.
 
 ### End of day
 
@@ -351,14 +360,14 @@ the plumbing — borg handles it.
 | `borg next` / `Ctrl+Space >` | Switches to most pressing project | Decision paralysis elimination |
 | `borg ls` | Dashboard of all projects | "What's the state of everything?" |
 | `/borg-plan` | Skill — Claude proposes, you validate | Establishes locked acceptance criteria |
-| `/borg-ship` | Skill — evaluates criteria with evidence | "Am I done? Can I ship?" |
+| `/borg-assimilate` | Skill — evaluates criteria with evidence + ships | "Am I done? Ship it." |
 | `borg search` | Queries cairn knowledge graph | "Have I solved this before?" |
 | `drone start <project> <feature>` | Worktree + branch + Claude in one command | "Start new feature work" |
 | `drone up/down` | Start/stop project containers | Container lifecycle (resuming existing work) |
 | `drone claude` | Launch Claude in project window | "Resume work on this project" |
 | `/adhd-guardrails` | Always-on skill | Scope discipline, break reminders, shame-free language |
-| `/borg-checkpoint` | Manual skill | Structured session summary with next-session entry point |
-| `/borg-debrief` | Automatic (stop hook) | Deep session analysis persisted for future sessions |
+| `/borg-link` | Skill — overview or per-project deep dive | "What's the state of this project?" |
+| `/borg-link-up` | Skill — flush session state to a checkpoint | Persist context before stopping |
 
 ### How they compose
 
@@ -370,9 +379,9 @@ the plumbing — borg handles it.
 │  "New feature"             →  drone start (worktree + branch)   │
 │  "Resume project"          →  drone up + drone claude           │
 │  "What am I building?"     →  /borg-plan (sets criteria)        │
-│  "Am I done?"              →  /borg-ship (checks criteria)      │
+│  "Am I done?"              →  /borg-assimilate (checks + ships) │
 │  "Have I done this before?" → borg search (queries cairn)       │
-│  "I'm done for now"        →  /exit (debrief runs automatically)│
+│  "I'm done for now"        →  /borg-link-up + /exit             │
 │  "What's next?"            →  Ctrl+Space > (switches window)    │
 │                                                                 │
 ├─────────────────────────────────────────────────────────────────┤
@@ -386,7 +395,7 @@ the plumbing — borg handles it.
 │  Claude Code (the AI)       Cairn (knowledge graph)             │
 │  - Plan Mode                - Decisions + reasoning             │
 │  - Code generation          - Patterns + gotchas                │
-│  - Verification loops       - Session debriefs                  │
+│  - Verification loops       - Session checkpoints               │
 │  - Skills + hooks           - Vector search across history      │
 │  - /simplify review         - Cross-project knowledge           │
 │                                                                 │
