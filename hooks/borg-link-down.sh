@@ -15,6 +15,11 @@
 
 set -euo pipefail
 
+# Ensure dotfiles bin (cairn client) and common system paths are available
+# when this hook runs in Claude Code's stripped PATH environment.
+PATH="${HOME}/.config/dotfiles/zsh/bin:/usr/local/bin:/usr/bin:/bin${PATH:+:$PATH}"
+export PATH
+
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_REGISTRY="$BORG_DIR/registry.json"
 
@@ -164,6 +169,11 @@ Check cairn service health: cairn status")
     else
         CAIRN_OUT=$(cairn search "$PROJECT" --project "$PROJECT" --max 5 2>/dev/null || true)
     fi
+    # Log hit metrics for the 4-week validation window
+    CAIRN_BYTES=$(printf '%s' "$CAIRN_OUT" | wc -c | tr -d ' ')
+    printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PROJECT" "$CAIRN_BYTES" \
+        >> "${BORG_DIR}/cairn-hits.log" 2>/dev/null || true
+
     if [[ -n "$CAIRN_OUT" ]]; then
         CONTEXT_PARTS+=("Cairn knowledge for $PROJECT:
 

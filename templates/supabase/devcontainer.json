@@ -14,7 +14,7 @@
     }
   },
   "postCreateCommand": "true",
-  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; sudo chmod a+rw /run/host-services/ssh-auth.sock 2>/dev/null || true__WS_SYMLINK__",
+  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; sudo chmod a+rw /run/host-services/ssh-auth.sock 2>/dev/null || true; sudo npm install -g @anthropic-ai/claude-code >/tmp/claude-update.log 2>&1 &__WS_SYMLINK__",
   "shutdownAction": "stopCompose",
   "remoteUser": "dev",
   "updateRemoteUserUID": true

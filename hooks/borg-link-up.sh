@@ -12,6 +12,11 @@
 
 set -euo pipefail
 
+# Ensure dotfiles bin (cairn client) and common system paths are available
+# when this hook runs in Claude Code's stripped PATH environment.
+PATH="${HOME}/.config/dotfiles/zsh/bin:/usr/local/bin:/usr/bin:/bin${PATH:+:$PATH}"
+export PATH
+
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_REGISTRY="$BORG_DIR/registry.json"
 
@@ -89,6 +94,19 @@ if [[ -d "$CHECKPOINT_DIR" ]]; then
     if [[ -z "$_recent_cp" ]]; then
         printf '\n\033[1;33m▸ No checkpoint in the last hour for %s\033[0m\n' "$PROJECT" >&2
         printf '\033[1;33m  Run /borg-link-up next session to save state for future resumption.\033[0m\n\n' >&2
+    fi
+fi
+
+# Record session to cairn knowledge graph (best-effort)
+if command -v cairn >/dev/null 2>&1; then
+    _cairn_id="$(date -u +%Y%m%d-%H%M)-${PROJECT}"
+    _cairn_cmd=(cairn record session --id "$_cairn_id" --project "$PROJECT" --tool claude-code)
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 5 "${_cairn_cmd[@]}" 2>/dev/null || printf '%s\n' \
+            "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${BORG_DIR}/.cairn-write-failed"
+    else
+        "${_cairn_cmd[@]}" 2>/dev/null || printf '%s\n' \
+            "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${BORG_DIR}/.cairn-write-failed"
     fi
 fi
 

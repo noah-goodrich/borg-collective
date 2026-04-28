@@ -36,19 +36,18 @@ EOF
 # ─── cairn not in PATH ────────────────────────────────────────────────────────
 
 @test "start hook warns when cairn not in PATH" {
-    # Ensure cairn is not findable
+    # Pass an isolated PATH so the hook's PATH fix cannot find cairn via the host's dotfiles bin
     rm -f "$MOCK_BIN/cairn"
 
-    run bash "$BORG_START" <<< "$(_hook_input)"
+    run env PATH="$MOCK_BIN:/usr/local/bin:/usr/bin:/bin" bash "$BORG_START" <<< "$(_hook_input)"
     [ "$status" -eq 0 ]
-    # Output is JSON; check additionalContext contains the warning
     echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "CAIRN UNAVAILABLE"
 }
 
 @test "start hook mentions PATH fix when cairn missing" {
     rm -f "$MOCK_BIN/cairn"
 
-    run bash "$BORG_START" <<< "$(_hook_input)"
+    run env PATH="$MOCK_BIN:/usr/local/bin:/usr/bin:/bin" bash "$BORG_START" <<< "$(_hook_input)"
     echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "not found in PATH"
 }
 
@@ -164,27 +163,13 @@ SCRIPT
     grep -q "cairn write failed" "$BORG_DIR/.cairn-write-failed"
 }
 
-@test "stop hook writes flag when cairn not in PATH" {
-    # Remove cairn from mock bin — it won't be in PATH
+@test "stop hook does not write flag when cairn not in PATH" {
+    # Hook silently skips cairn record when cairn is absent — no flag written
     rm -f "$MOCK_BIN/cairn"
 
-    mkdir -p "$BORG_DIR/debriefs"
-    echo "## Objective\nTest." > "$BORG_DIR/debriefs/myproject.md"
-
-    BORG_DIR="$BORG_DIR" bash -c '
-        source /dev/stdin <<'"'"'SCRIPT'"'"'
-        CAIRN_FAILED_FLAG="${BORG_DIR}/.cairn-write-failed"
-        _project="myproject"
-        _debrief_file="${BORG_DIR}/debriefs/myproject.md"
-        if [[ -f "$_debrief_file" ]] && ! command -v cairn >/dev/null 2>&1; then
-            printf "%s: cairn not in PATH — debrief not committed to knowledge graph\n" \
-                "$_project" > "$CAIRN_FAILED_FLAG"
-        fi
-SCRIPT
-    '
-
-    [ -f "$BORG_DIR/.cairn-write-failed" ]
-    grep -q "not in PATH" "$BORG_DIR/.cairn-write-failed"
+    run env PATH="$MOCK_BIN:/usr/local/bin:/usr/bin:/bin" bash "$BORG_STOP" <<< "$(_hook_input myproject "$TEST_PROJECT_DIR")"
+    [ "$status" -eq 0 ]
+    [ ! -f "$BORG_DIR/.cairn-write-failed" ]
 }
 
 @test "stop hook does not write failure flag when cairn succeeds" {
