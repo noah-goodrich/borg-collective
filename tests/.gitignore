@@ -1,0 +1,2 @@
+# Re-allow test files that match the global *_secret* pattern
+!*.bats
