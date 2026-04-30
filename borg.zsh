@@ -2149,6 +2149,60 @@ cmd_start() {
     info "in-flight: PROJECT_PLAN.md (was $rel)"
 }
 
+# cmd_store_secret: store a secret in macOS Keychain and wire it to secrets.zsh.
+# Edits ~/.config/dotfiles/zsh/secrets.zsh (a separate repo) — see
+# _borg_patch_secrets_file in lib/secrets.zsh for the expected file structure.
+cmd_store_secret() {
+    local name="${1:-}"
+    [[ -n "$name" ]] || die "usage: borg store-secret <NAME>"
+
+    # Must be run interactively — can't prompt for a hidden secret over a pipe
+    [[ -t 0 ]] || die "borg store-secret must be run from an interactive terminal"
+
+    command -v security &>/dev/null || die "security(1) not found — are you on macOS?"
+
+    local secrets_file="${BORG_SECRETS_FILE:-$HOME/.config/dotfiles/zsh/secrets.zsh}"
+    [[ -f "$secrets_file" ]] \
+        || die "expected file at $secrets_file; set BORG_SECRETS_FILE to override"
+
+    # ── 1. Prompt and store ──────────────────────────────────────────────────
+    local _BORG_SECRET
+    printf "Paste secret for %s (input hidden): " "$name"
+    read -rs _BORG_SECRET
+    echo ""
+    if [[ -z "$_BORG_SECRET" ]]; then
+        unset _BORG_SECRET
+        die "empty secret — aborting"
+    fi
+
+    if ! security add-generic-password -s "$name" -a "$USER" -w "$_BORG_SECRET" -U; then
+        unset _BORG_SECRET
+        die "keychain write failed"
+    fi
+    unset _BORG_SECRET
+    info "stored $name in keychain"
+
+    # ── 2. Verify ────────────────────────────────────────────────────────────
+    local _BORG_VERIFY
+    if ! _BORG_VERIFY=$(security find-generic-password -s "$name" -a "$USER" -w 2>/dev/null); then
+        die "verification failed — could not read back from keychain"
+    fi
+    echo "  ${_BORG_VERIFY:0:10}..."
+    unset _BORG_VERIFY
+
+    # ── 3. Patch secrets.zsh ─────────────────────────────────────────────────
+    _borg_patch_secrets_file "$name" "$secrets_file" \
+        || die "failed to patch $secrets_file"
+    info "wired $name in $secrets_file"
+
+    # ── 4. Reload instructions (script context; caller must source manually) ─
+    echo ""
+    echo "  Run this to load the new var in your current shell:"
+    echo "    source ~/.zshrc"
+    echo ""
+    info "done"
+}
+
 cmd_help() {
     cat <<'EOF'
 
@@ -2180,6 +2234,7 @@ cmd_help() {
     regenerate          Archive stale projects (idle >48h)
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
     setup               Register Claude Code hooks, skills, and config
+    store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
     help                Show this message
 
   ALIASES (backward compat)
@@ -2220,6 +2275,7 @@ cmd_help() {
     BORG_WORK_HOURS         e.g. "09:00-18:00" (empty to disable)
     BORG_WORK_PROJECTS      Comma-separated work project names
     BORG_DEBUG              Set to any value for debug output
+    BORG_SECRETS_FILE       Override path to secrets.zsh (default: ~/.config/dotfiles/zsh/secrets.zsh)
 
   "We are the Borg. Your projects will be assimilated."
 
@@ -2247,6 +2303,7 @@ case "${1:-help}" in
     sever|down)  cmd_down ;;
     regenerate|tidy)  cmd_tidy ;;
     setup)    cmd_setup ;;
+    store-secret) cmd_store_secret "${@:2}" ;;
     start)    cmd_start "${@:2}" ;;
     focus)    cmd_focus "${@:2}" ;;
     # Legacy aliases → consolidated command
