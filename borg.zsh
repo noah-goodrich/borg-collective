@@ -327,8 +327,12 @@ _borg_link_overview() {
     printf "${BOLD} %-20s %-4s %-12s %-12s %s${NC}\n" "PROJECT" "SRC" "STATUS" "LAST ACTIVE" "SUMMARY"
     printf '%0.s─' {1..90}; echo
 
+    # Index pending cortex wakes by project for the pause indicator.
+    local cortex_pending
+    cortex_pending=$(_borg_cortex_pending 2>/dev/null || true)
+
     local name entry source proj_status last summary display status_color src_badge summary_short
-    local last_display pinned pin_mark status_display
+    local last_display pinned pin_mark status_display pause_cd
     while IFS= read -r name; do
         entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
         source=$(echo "$entry"  | jq -r '.source // "cli"')
@@ -364,6 +368,11 @@ _borg_link_overview() {
 
         printf "%s%-20s %-4s ${status_color}%-12s${NC} %-12s %s\n" \
             "$pin_mark" "$display" "$src_badge" "$status_display" "$last_display" "$summary_short"
+
+        pause_cd=$(echo "$cortex_pending" | awk -F'\t' -v p="$name" '$1 == p { print $3; exit }')
+        if [[ -n "$pause_cd" ]]; then
+            echo -e "                       ${CYAN}⏸ resumes in ${pause_cd}${NC}"
+        fi
     done <<< "$sorted_names"
 
     # Directives (across all reachable projects)
@@ -2203,6 +2212,82 @@ cmd_store_secret() {
     info "done"
 }
 
+BORG_CORTEX_WAKES="${BORG_CORTEX_STATE:-$BORG_DIR/cortex-wakes.json}"
+
+# Format remaining time as "Xh Ym" / "Ym Zs" / "now".
+_borg_cortex_countdown() {
+    local reset_at="$1"
+    local reset_epoch now_epoch diff h m s
+    reset_epoch=$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$reset_at" +%s 2>/dev/null) || { echo "?"; return; }
+    now_epoch=$(date +%s)
+    diff=$(( reset_epoch - now_epoch ))
+    if (( diff <= 0 )); then echo "now"; return; fi
+    h=$(( diff / 3600 ))
+    m=$(( (diff % 3600) / 60 ))
+    s=$(( diff % 60 ))
+    if (( h > 0 )); then echo "${h}h ${m}m"
+    elif (( m > 0 )); then echo "${m}m ${s}s"
+    else echo "${s}s"
+    fi
+}
+
+# Stdout: tab-separated `project<TAB>reset_at<TAB>countdown` for each pending wake.
+_borg_cortex_pending() {
+    [[ -f "$BORG_CORTEX_WAKES" ]] || return 0
+    jq -r '.wakes[]? | "\(.project)\t\(.reset_at)"' "$BORG_CORTEX_WAKES" 2>/dev/null \
+        | while IFS=$'\t' read -r project reset_at; do
+            [[ -z "$project" ]] && continue
+            local cd; cd=$(_borg_cortex_countdown "$reset_at")
+            printf '%s\t%s\t%s\n' "$project" "$reset_at" "$cd"
+        done
+}
+
+cmd_cortex_resume() {
+    local target="${1:-}"
+    [[ -f "$BORG_CORTEX_WAKES" ]] || die "no pending cortex wakes (state file missing)"
+
+    local entries
+    entries=$(jq -c '.wakes // []' "$BORG_CORTEX_WAKES")
+    [[ "$entries" == "[]" || -z "$entries" ]] && die "no pending cortex wakes"
+
+    local entry
+    if [[ -z "$target" ]]; then
+        entry=$(echo "$entries" | jq -c '.[0]')
+    elif [[ "$target" == %* ]]; then
+        entry=$(echo "$entries" | jq -c --arg p "$target" '[.[] | select(.pane_id == $p)][0]')
+    else
+        entry=$(echo "$entries" | jq -c --arg p "$target" '[.[] | select(.project == $p)][0]')
+    fi
+    [[ -n "$entry" && "$entry" != "null" ]] || die "no pending wake matching '$target'"
+
+    local pane_id project session window pane_index
+    pane_id=$(echo "$entry"   | jq -r '.pane_id')
+    project=$(echo "$entry"   | jq -r '.project')
+    session=$(echo "$entry"   | jq -r '.session')
+    window=$(echo "$entry"    | jq -r '.window')
+    pane_index=$(echo "$entry"| jq -r '.pane_index')
+
+    # Re-resolve pane_id if the recorded one is gone (tmux server restart).
+    if ! tmux list-panes -t "$pane_id" &>/dev/null; then
+        local fresh
+        fresh=$(tmux list-panes -t "$session:$window" -F '#{pane_id} #{pane_index}' 2>/dev/null \
+            | awk -v idx="$pane_index" '$2 == idx { print $1; exit }')
+        [[ -n "$fresh" ]] || die "pane $pane_id ($project) is gone and could not be re-resolved"
+        pane_id="$fresh"
+    fi
+
+    tmux send-keys -t "$pane_id" "wake up!" Enter \
+        || die "tmux send-keys failed for $pane_id ($project)"
+
+    info "sent 'wake up!' to $project (pane $pane_id)"
+
+    # Drop entry atomically.
+    local tmp="$BORG_CORTEX_WAKES.tmp.$$"
+    jq --arg p "$pane_id" --arg pr "$project" \
+        '.wakes |= map(select(.pane_id != $p and .project != $pr))' \
+        "$BORG_CORTEX_WAKES" > "$tmp" && mv "$tmp" "$BORG_CORTEX_WAKES"
+}
+
 cmd_help() {
     cat <<'EOF'
 
@@ -2235,6 +2320,7 @@ cmd_help() {
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
     setup               Register Claude Code hooks, skills, and config
     store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
+    cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
     help                Show this message
 
   ALIASES (backward compat)
@@ -2306,6 +2392,7 @@ case "${1:-help}" in
     store-secret) cmd_store_secret "${@:2}" ;;
     start)    cmd_start "${@:2}" ;;
     focus)    cmd_focus "${@:2}" ;;
+    cortex-resume) cmd_cortex_resume "${@:2}" ;;
     # Legacy aliases → consolidated command
     ls)       cmd_link "${@:2}" ;;
     status)   cmd_link "${@:2}" ;;

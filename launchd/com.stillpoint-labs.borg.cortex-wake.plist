@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stillpoint-labs.borg.cortex-wake</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{CORTEX_WATCH_BIN}}</string>
+        <string>--once</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>30</integer>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/cortex-wake.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/cortex-wake.stderr.log</string>
+</dict>
+</plist>
