@@ -10,6 +10,7 @@
 #   drone down [project]         Stop container + remove tmux window
 #   drone claude [project]       Launch Claude Code in project window
 #   drone sh [project]           Shell into project container
+#   drone exec [project] -- ...  Run non-interactive command inside container
 #   drone restart [project]      Restart containers + re-exec panes
 #   drone rebuild [project]      Rebuild images (no cache) + restart
 #   drone fix [project|--all]    Restore standard 2-pane layout
@@ -295,7 +296,9 @@ run_post_start_command() {
 # ── Window management ─────────────────────────────────────────────────────────
 
 create_2pane_window() {
-    local wname="$1" cmd="${2:-}" start_dir="${3:-$HOME}"
+    local wname="$1" main_cmd="${2:-}" start_dir="${3:-$HOME}" right_cmd="${4-__SAME__}"
+    # If $4 is unset (legacy callers), default right pane to the same command as the main pane.
+    [[ "$right_cmd" == "__SAME__" ]] && right_cmd="$main_cmd"
     dbg "create_2pane_window: '$wname' start_dir=$start_dir"
 
     local main
@@ -314,10 +317,8 @@ create_2pane_window() {
     # Default focus to right pane (Claude pane)
     tmux select-pane -t "$right"
 
-    if [[ -n "$cmd" ]]; then
-        tmux send-keys -t "$main"  "$cmd" Enter
-        tmux send-keys -t "$right" "$cmd" Enter
-    fi
+    [[ -n "$main_cmd"  ]] && tmux send-keys -t "$main"  "$main_cmd"  Enter
+    [[ -n "$right_cmd" ]] && tmux send-keys -t "$right" "$right_cmd" Enter
 
     dbg "create_2pane_window: done (main=$main right=$right)"
 }
@@ -353,17 +354,6 @@ wait_for_container() {
     die "Timed out waiting for container to start after ${max}s."
 }
 
-resend_exec_to_panes() {
-    local wname="$1" exec_cmd="$2"
-    dbg "resend_exec_to_panes: sending exec to all panes in '$wname'"
-    local pane_ids
-    pane_ids=(${(f)"$(tmux list-panes -t "$SESSION:$wname" -F '#{pane_id}')"})
-    for pid in $pane_ids; do
-        tmux send-keys -t "$pid" C-c
-        tmux send-keys -t "$pid" "$exec_cmd" Enter
-    done
-}
-
 # ── drone up ─────────────────────────────────────────────────────────────────
 
 cmd_up() {
@@ -387,7 +377,8 @@ cmd_up() {
             return
         fi
 
-        create_2pane_window "$project_name" "cd $project_dir" "$project_dir"
+        # Host-first: left pane is a shell at project_dir, right pane runs claude.
+        create_2pane_window "$project_name" "" "$project_dir" "claude"
         tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
         _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
         borg add "$project_dir" 2>/dev/null || true
@@ -435,13 +426,9 @@ cmd_up() {
                 docker compose -p "$project_name" -f "$compose" up -d $_build_flag
                 container=$(wait_for_container "$project_dir")
                 _save_devcontainer_hash
-                local shell service exec_cmd
-                shell=$(get_shell "$container")
-                service=$(get_service_name "$project_dir")
-                exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
                 run_post_create_command "$project_name" "$project_dir"
                 run_post_start_command "$project_name" "$project_dir"
-                resend_exec_to_panes "$project_name" "$exec_cmd"
+                # Host-side panes are immune to container restart — no re-exec needed.
             fi
             info "Project '$project_name' already running."
             _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
@@ -462,15 +449,15 @@ cmd_up() {
         mkdir -p "$_dc_hash_dir" && [[ -n "$_dc_hash" ]] && echo "$_dc_hash" > "$_dc_hash_file" || true
     fi
 
-    local shell service exec_cmd
-    shell=$(get_shell "$container")
+    local service
     service=$(get_service_name "$project_dir")
-    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
-    info "Container: $container  Service: $service  Shell: $shell"
+    info "Container: $container  Service: $service"
     run_post_create_command "$project_name" "$project_dir"
     run_post_start_command "$project_name" "$project_dir"
 
-    create_2pane_window "$project_name" "$exec_cmd" "$project_dir"
+    # Host-first: both panes are host shells at $project_dir.
+    # Right (Claude) pane auto-launches `claude`; left pane stays as a shell prompt.
+    create_2pane_window "$project_name" "" "$project_dir" "claude"
     tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
     _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
     borg add "$project_dir" 2>/dev/null || true
@@ -543,7 +530,7 @@ _cycle_project() {
     _run_pre_up "$project_dir" "$project_name"
     docker compose -p "$project_name" -f "$compose" up -d
 
-    local container shell service exec_cmd
+    local container
     container=$(wait_for_container "$project_dir")
 
     if [[ "$mode" == "rebuild" ]]; then
@@ -553,18 +540,11 @@ _cycle_project() {
         _dc_hash=$(_devcontainer_hash "$project_dir")
         _save_devcontainer_hash
     fi
-    shell=$(get_shell "$container")
-    service=$(get_service_name "$project_dir")
-    exec_cmd=$(build_exec_cmd "$project_name" "$compose" "$service" "$shell" "$project_dir")
     run_post_create_command "$project_name" "$project_dir"
     run_post_start_command "$project_name" "$project_dir"
 
-    if has_window "$project_name"; then
-        resend_exec_to_panes "$project_name" "$exec_cmd"
-        info "$project_name: ${mode}ed, panes re-exec'd."
-    else
-        info "$project_name: ${mode}ed, no window to refresh."
-    fi
+    # Host-side panes are immune to container restart — no pane refresh needed.
+    info "$project_name: ${mode}ed."
 }
 
 _restart_project() { _cycle_project "$1" "$2" "restart"; }
@@ -630,17 +610,26 @@ cmd_claude() {
 
     dbg "cmd_claude: project=$project_name dir=$project_dir"
 
-    # Ensure the project window is up; if not, bring it up first
+    # If no window exists, drone up creates it AND auto-launches claude in the right pane.
     if ! has_window "$project_name"; then
         info "$project_name: no window found, running drone up first..."
         cmd_up "${1:-}"
     fi
 
-    # Send 'claude' to the bottom pane (highest pane_top value)
-    local bottom_pane
+    # Reattach: only send `claude` if the pane is at a shell prompt — avoids
+    # typing "claude" into a running Claude REPL.
+    local bottom_pane current_cmd
     bottom_pane=$(get_bottom_pane "$project_name")
-    info "Launching Claude in $project_name (bottom pane)..."
-    tmux send-keys -t "$bottom_pane" "claude" Enter
+    current_cmd=$(tmux display-message -p -t "$bottom_pane" '#{pane_current_command}' 2>/dev/null)
+    case "$current_cmd" in
+        zsh|bash|sh|fish|dash|"")
+            info "Launching Claude in $project_name..."
+            tmux send-keys -t "$bottom_pane" "claude" Enter
+            ;;
+        *)
+            info "Claude pane already busy ($current_cmd) — focusing without relaunch."
+            ;;
+    esac
 
     # Switch to the project window, focus + zoom Claude pane
     attach_or_switch "$project_name"
@@ -741,6 +730,55 @@ cmd_sh() {
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
     exec docker compose -p "$project_name" -f "$compose" exec "${user_args[@]}" -w "$_dc_workspace" "$service" "${shell:-/bin/zsh}"
+}
+
+# ── drone exec ────────────────────────────────────────────────────────────────
+
+# Run a non-interactive command inside the project's devcontainer.
+# Usage: drone exec [project] -- <cmd> [args...]
+#
+# Container-down behavior is fail-loud-and-self-heal: if the container is not
+# running, prints a clear message, brings the container up (no tmux work), and
+# retries the command exactly once. Exit code passes through.
+cmd_exec() {
+    local project_arg=""
+    if [[ "${1:-}" == "--" ]]; then
+        :
+    elif [[ -n "${1:-}" ]]; then
+        project_arg="$1"
+        shift
+    fi
+    [[ "${1:-}" == "--" ]] || die "Usage: drone exec [project] -- <cmd> [args...]"
+    shift
+    [[ $# -gt 0 ]] || die "Usage: drone exec [project] -- <cmd> [args...]"
+
+    _drone_resolve "$project_arg"
+    local project_name="$_proj_name"
+    local project_dir="$_proj_dir"
+    local compose="$project_dir/$COMPOSE_FILE"
+
+    [[ -f "$compose" ]] || die "No $COMPOSE_FILE found in $project_dir"
+
+    _read_devcontainer_exec_config "$project_dir"
+    local -a user_args=()
+    [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
+
+    local container service
+    container=$(get_project_container "$project_dir")
+    if [[ -z "$container" ]]; then
+        warn "$project_name: container down — running drone up"
+        ensure_postgres
+        run_initialize_command "$project_dir"
+        _run_pre_up "$project_dir" "$project_name"
+        docker compose -p "$project_name" -f "$compose" up -d
+        container=$(wait_for_container "$project_dir")
+        run_post_create_command "$project_name" "$project_dir"
+        run_post_start_command "$project_name" "$project_dir"
+    fi
+    service=$(get_service_name "$project_dir")
+    [[ -n "$service" ]] || die "$project_name: no app service found"
+
+    docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" "$@"
 }
 
 # ── drone fix ─────────────────────────────────────────────────────────────────
@@ -1067,16 +1105,15 @@ services:
 
   # ── Borg-enabled service — extends base, adds borg mounts ─────────────────
   # Only starts when COMPOSE_PROFILES=borg (set automatically by drone up).
+  # Host-first Claude: ~/.claude is no longer mounted; Claude runs on the host
+  # and dispatches into this container via \`drone exec\`.
   ${project_name}-borg:
     extends:
       service: ${project_name}-app
     labels:
       - dev.role=app
     volumes:
-      - ~/.claude:/home/dev/.claude:cached
       - ~/.config/borg:/home/dev/.config/borg:cached
-      # host home read-only — postStartCommand copies .claude.json fresh each start
-      - ~/:/host-home:ro
     profiles:
       - borg
 
@@ -1089,8 +1126,9 @@ networks:
 COMPOSE
 
     # ── devcontainer.json ─────────────────────────────────────────────────
-    # npm install runs once (sentinel-guarded) and lands in the claude_npm volume.
-    local post_create="ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; npm install -g @anthropic-ai/claude-code 2>/dev/null || true"
+    # Host-first Claude: container is a `drone exec` target; claude itself runs
+    # on the host. postCreateCommand only sets up dev shell + language deps.
+    local post_create="ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh"
     case "$lang" in
         python) post_create="$post_create; pip install -e '.[dev]'" ;;
         node)   post_create="$post_create; npm install" ;;
@@ -1107,7 +1145,7 @@ COMPOSE
   "workspaceFolder": "${workspace}",
   "features": {},
   "postCreateCommand": "${post_create}",
-  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; sudo chmod a+rw /run/host-services/ssh-auth.sock 2>/dev/null || true; ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh; if [ -f /home/dev/.config/dotfiles/claude/code/CLAUDE.md ]; then cp /home/dev/.config/dotfiles/claude/code/CLAUDE.md /home/dev/.claude/CLAUDE.md; else echo 'borg: dotfiles/claude not mounted — CLAUDE.md not synced' >&2; fi; cp /host-home/.claude.json /home/dev/.claude.json 2>/dev/null || true${ws_symlink}",
+  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; sudo chmod a+rw /run/host-services/ssh-auth.sock 2>/dev/null || true; ln -sf /home/dev/.config/dotfiles/zsh/.zshrc /home/dev/.zshrc; ln -sf /home/dev/.config/dotfiles/zsh/.p10k.zsh /home/dev/.p10k.zsh${ws_symlink}",
   "shutdownAction": "stopCompose",
   "remoteUser": "dev",
   "updateRemoteUserUID": true
@@ -1145,7 +1183,10 @@ cmd_help() {
     down [project]       Stop container + remove tmux window
     claude [project]     Launch Claude Code in project window (runs drone up if needed)
     cortex [project]     Launch Cortex Code in project window (runs drone up if needed)
-    sh [project]         Shell into project container (exec docker compose exec)
+    sh [project]         Shell into project container (interactive)
+    exec [project] -- <cmd>
+                         Run a non-interactive command inside the devcontainer
+                         (fail-loud-and-self-heal if container is down)
     restart [project]    Restart containers + re-exec all panes
     restart --all        Restart all project containers
     rebuild [project]    Rebuild images (--no-cache) + restart + re-exec panes
@@ -1186,6 +1227,7 @@ case "${1:-}" in
     claude)     cmd_claude "${2:-}" ;;
     cortex)     cmd_cortex "${2:-}" ;;
     sh)         cmd_sh "${2:-}" ;;
+    exec)       shift; cmd_exec "$@" ;;
     restart)    cmd_restart "${2:-}" ;;
     rebuild)    cmd_rebuild "${2:-}" ;;
     fix)        cmd_fix "${2:-}" ;;

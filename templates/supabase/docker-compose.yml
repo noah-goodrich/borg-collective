@@ -20,9 +20,9 @@ services:
       - ~/.ssh/known_hosts:/home/dev/.ssh/known_hosts:ro
       - ~/.gitconfig:/home/dev/.gitconfig:cached
       - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
-      - ~/.claude:/home/dev/.claude:cached
+      # Host-first Claude: ~/.claude is no longer mounted into the container
+      # (Claude runs on host; container is a `drone exec` dispatch target).
       - ~/.config/borg:/home/dev/.config/borg:cached
-      - ~/:/host-home:ro
 
     working_dir: __WORKSPACE__
     user: dev
