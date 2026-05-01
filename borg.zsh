@@ -44,6 +44,7 @@ BORG_SESSION_WARN_HOURS="${BORG_SESSION_WARN_HOURS:-2}"
 BORG_WORK_HOURS="${BORG_WORK_HOURS:-}"
 BORG_WORK_DAYS="${BORG_WORK_DAYS:-}"
 BORG_WORK_PROJECTS="${BORG_WORK_PROJECTS:-}"
+BORG_CORTEX_WAKES="${BORG_CORTEX_STATE:-$BORG_DIR/cortex-wakes.json}"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2212,8 +2213,6 @@ cmd_store_secret() {
     info "done"
 }
 
-BORG_CORTEX_WAKES="${BORG_CORTEX_STATE:-$BORG_DIR/cortex-wakes.json}"
-
 # Format remaining time as "Xh Ym" / "Ym Zs" / "now".
 _borg_cortex_countdown() {
     local reset_at="$1"
@@ -2261,11 +2260,9 @@ cmd_cortex_resume() {
     [[ -n "$entry" && "$entry" != "null" ]] || die "no pending wake matching '$target'"
 
     local pane_id project session window pane_index
-    pane_id=$(echo "$entry"   | jq -r '.pane_id')
-    project=$(echo "$entry"   | jq -r '.project')
-    session=$(echo "$entry"   | jq -r '.session')
-    window=$(echo "$entry"    | jq -r '.window')
-    pane_index=$(echo "$entry"| jq -r '.pane_index')
+    IFS=$'\t' read -r pane_id project session window pane_index < <(
+        echo "$entry" | jq -r '[.pane_id,.project,.session,.window,.pane_index] | @tsv'
+    )
 
     # Re-resolve pane_id if the recorded one is gone (tmux server restart).
     if ! tmux list-panes -t "$pane_id" &>/dev/null; then
