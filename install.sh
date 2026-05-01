@@ -134,6 +134,31 @@ fi
 launchctl bootstrap "gui/$UID" "$PLIST_DEST"
 info "  launchd agent bootstrapped."
 
+# ── 3b. Install borg-cortex-watch daemon + LaunchAgent ───────────────────────
+
+info "Installing borg-cortex-watch..."
+chmod +x "$BORG_HOME/bin/borg-cortex-watch"
+ln -sf "$BORG_HOME/bin/borg-cortex-watch" "$BIN_DIR/borg-cortex-watch"
+info "  borg-cortex-watch -> $BORG_HOME/bin/borg-cortex-watch"
+
+CORTEX_PLIST_NAME="com.stillpoint-labs.borg.cortex-wake.plist"
+CORTEX_PLIST_SRC="$BORG_HOME/launchd/$CORTEX_PLIST_NAME"
+CORTEX_PLIST_DEST="$HOME/Library/LaunchAgents/$CORTEX_PLIST_NAME"
+CORTEX_WATCH_BIN="$BIN_DIR/borg-cortex-watch"
+
+sed \
+    -e "s|{{CORTEX_WATCH_BIN}}|$CORTEX_WATCH_BIN|g" \
+    -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+    "$CORTEX_PLIST_SRC" > "$CORTEX_PLIST_DEST"
+info "  plist -> $CORTEX_PLIST_DEST"
+
+if launchctl list "com.stillpoint-labs.borg.cortex-wake" &>/dev/null 2>&1; then
+    info "  reloading launchd agent..."
+    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.cortex-wake" 2>/dev/null || true
+fi
+launchctl bootstrap "gui/$UID" "$CORTEX_PLIST_DEST"
+info "  launchd agent bootstrapped."
+
 # ── 4. Hooks, skills, config, registry → borg setup ──────────────────────────
 
 info "Running borg setup..."

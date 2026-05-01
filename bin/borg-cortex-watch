@@ -1,0 +1,246 @@
+#!/usr/bin/env zsh
+# borg-cortex-watch — host daemon: detect Cortex rate-limit pauses, schedule auto-wake.
+#
+# Managed by launchd (com.stillpoint-labs.borg.cortex-wake) with StartInterval=30.
+# Each invocation does ONE sweep: detect new caps, fire any due wakes, prune orphans, exit.
+#
+#   --once    Single sweep then exit (default; same as no flag — explicit for clarity).
+#   --debug   Log to stderr in addition to file.
+#
+# State lives at $BORG_DIR/cortex-wakes.json.
+
+set -euo pipefail
+
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
+STATE_FILE="${BORG_CORTEX_STATE:-$BORG_DIR/cortex-wakes.json}"
+LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
+LOG="$LOG_DIR/cortex-wake.log"
+WAKE_GRACE_SEC=60                    # fire wakes whose reset_at is within this many seconds
+CAPTURE_LINES=120                    # how many recent pane lines to inspect per sweep
+
+DEBUG=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --once)  shift ;;
+        --debug) DEBUG=1; shift ;;
+        *) echo "usage: borg-cortex-watch [--once] [--debug]" >&2; exit 2 ;;
+    esac
+done
+
+mkdir -p "$LOG_DIR" "$BORG_DIR"
+
+log() {
+    local line="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
+    echo "$line" >> "$LOG"
+    (( DEBUG )) && echo "$line" >&2
+}
+
+# Dependency check — exit 0 (not crash) on missing deps so launchd does not throttle-respawn.
+for dep in tmux jq osascript; do
+    command -v "$dep" &>/dev/null || { log "skip: $dep not in PATH"; exit 0; }
+done
+
+# Initialise state file if absent.
+[[ -f "$STATE_FILE" ]] || echo '{"wakes":[]}' > "$STATE_FILE"
+
+# Atomic write: tmp + rename. Stdin → state file.
+_write_state() {
+    local tmp="$STATE_FILE.tmp.$$"
+    cat > "$tmp"
+    if [[ ! -s "$tmp" ]]; then
+        log "ERROR: refusing to write empty state file"
+        rm -f "$tmp"
+        return 1
+    fi
+    mv "$tmp" "$STATE_FILE"
+}
+
+_read_state() { cat "$STATE_FILE"; }
+
+# tmux must be running for there to be any cortex panes — bail quietly otherwise.
+tmux list-sessions &>/dev/null || { log "skip: no tmux server"; exit 0; }
+
+# All panes whose foreground command is `cortex`.
+# Format: pane_id<TAB>session<TAB>window<TAB>pane_index
+_cortex_panes() {
+    tmux list-panes -a -F '#{pane_id}	#{pane_current_command}	#{session_name}	#{window_name}	#{pane_index}' 2>/dev/null \
+        | awk -F'\t' '$2 == "cortex" { print $1"\t"$3"\t"$4"\t"$5 }'
+}
+
+# Compute reset_at given duration value + unit, anchored to now.
+# Args: <number> <unit-noun: hour|hours|minute|minutes>
+# Stdout: ISO-8601 UTC timestamp.
+_compute_reset_at() {
+    local n="$1" unit="$2" secs
+    case "$unit" in
+        hour|hours)     secs=$(( n * 3600 )) ;;
+        minute|minutes) secs=$(( n * 60 )) ;;
+        *) return 1 ;;
+    esac
+    date -u -v"+${secs}S" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+        || date -u -d "+${secs} seconds" +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+# Convert ISO-8601 UTC → epoch seconds.
+_iso_to_epoch() {
+    local ts="$1"
+    TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
+        || date -d "$ts" +%s 2>/dev/null \
+        || echo 0
+}
+
+# Return 0 if the cap message in $1 is the *current* state (i.e. user has not typed past it).
+# Heuristic: take the substring after the LAST cap-message line; if any line beginning with
+# "✓ " appears after it, the user already typed `wake up!` and Cortex resumed. Otherwise the
+# cap is still the active state.
+_cap_still_active() {
+    local capture="$1"
+    local tail
+    tail=$(awk '
+        /Your limit will reset in/ { found=NR; buf=""; next }
+        found { buf = buf "\n" $0 }
+        END { print buf }
+    ' <<<"$capture")
+    # If the tail (lines after the last cap message) contains a "✓ " entry, user has resumed.
+    if echo "$tail" | grep -q '^✓ '; then
+        return 1
+    fi
+    return 0
+}
+
+# Detect new caps in cortex panes; merge into state file.
+_detect() {
+    local panes
+    panes=$(_cortex_panes)
+    [[ -z "$panes" ]] && return 0
+
+    local pane_id session window pane_index capture match n unit reset_at now
+    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+    while IFS=$'\t' read -r pane_id session window pane_index; do
+        [[ -z "$pane_id" ]] && continue
+
+        # Skip if we already have a pending wake for this pane.
+        if jq -e --arg p "$pane_id" '.wakes | any(.pane_id == $p)' "$STATE_FILE" &>/dev/null; then
+            continue
+        fi
+
+        capture=$(tmux capture-pane -p -t "$pane_id" -S "-${CAPTURE_LINES}" 2>/dev/null) || continue
+
+        # Last match wins (most recent cap hit).
+        match=$(echo "$capture" | grep -oE 'Your limit will reset in [0-9]+ (hours?|minutes?)' | tail -1)
+        [[ -z "$match" ]] && continue
+
+        n=$(echo "$match" | awk '{print $6}')
+        unit=$(echo "$match" | awk '{print $7}')
+
+        if ! _cap_still_active "$capture"; then
+            log "skip detect $pane_id: cap present but user has resumed past it"
+            continue
+        fi
+
+        reset_at=$(_compute_reset_at "$n" "$unit") || continue
+
+        log "detect: pane=$pane_id session=$session window=$window n=$n unit=$unit reset_at=$reset_at"
+
+        # Append entry atomically.
+        jq \
+            --arg pane_id "$pane_id" \
+            --arg session "$session" \
+            --arg window "$window" \
+            --arg pane_index "$pane_index" \
+            --arg project "$window" \
+            --arg reset_at "$reset_at" \
+            --arg detected_at "$now" \
+            '.wakes += [{
+                pane_id: $pane_id,
+                session: $session,
+                window: $window,
+                pane_index: $pane_index,
+                project: $project,
+                reset_at: $reset_at,
+                detected_at: $detected_at
+            }]' "$STATE_FILE" | _write_state
+    done <<<"$panes"
+}
+
+# Re-resolve a pane that has the same (session, window, pane_index) but a fresh pane_id
+# (happens after tmux server restart). Stdout: new pane_id, or empty if not found.
+_resolve_pane() {
+    local session="$1" window="$2" pane_index="$3"
+    tmux list-panes -t "$session:$window" -F '#{pane_id} #{pane_index}' 2>/dev/null \
+        | awk -v idx="$pane_index" '$2 == idx { print $1; exit }'
+}
+
+# Fire a single wake: send `wake up!` to the pane, post a notification.
+_fire_wake() {
+    local pane_id="$1" project="$2" reset_at="$3"
+    tmux send-keys -t "$pane_id" "wake up!" Enter 2>/dev/null || {
+        log "ERROR: tmux send-keys failed for $pane_id ($project)"
+        return 1
+    }
+    local hhmm
+    hhmm=$(date +"%H:%M")
+    osascript -e "display notification \"$project cortex resumed at $hhmm\" with title \"Cortex auto-wake\" sound name \"Glass\"" 2>/dev/null || true
+    log "fired wake: pane=$pane_id project=$project reset_at=$reset_at"
+}
+
+# Sweep due/orphaned entries: fire those whose reset_at <= now+grace, drop those whose pane
+# has vanished (and cannot be re-resolved by session/window/pane_index).
+_sweep() {
+    local entries count
+    entries=$(_read_state)
+    count=$(echo "$entries" | jq '.wakes | length')
+    (( count == 0 )) && return 0
+
+    local now_epoch
+    now_epoch=$(date +%s)
+
+    local i pane_id session window pane_index project reset_at reset_epoch fresh_pane
+    local -a keep_indices=()
+    local fired=0 orphaned=0
+
+    for (( i = 0; i < count; i++ )); do
+        pane_id=$(echo "$entries" | jq -r ".wakes[$i].pane_id")
+        session=$(echo "$entries" | jq -r ".wakes[$i].session")
+        window=$(echo "$entries" | jq -r ".wakes[$i].window")
+        pane_index=$(echo "$entries" | jq -r ".wakes[$i].pane_index")
+        project=$(echo "$entries" | jq -r ".wakes[$i].project")
+        reset_at=$(echo "$entries" | jq -r ".wakes[$i].reset_at")
+
+        # Re-resolve pane_id if the recorded one is gone.
+        if ! tmux list-panes -t "$pane_id" &>/dev/null; then
+            fresh_pane=$(_resolve_pane "$session" "$window" "$pane_index" || true)
+            if [[ -z "$fresh_pane" ]]; then
+                log "orphan: pane=$pane_id session=$session window=$window vanished — dropping"
+                orphaned=$(( orphaned + 1 ))
+                continue
+            fi
+            log "re-resolved pane: $pane_id → $fresh_pane (session=$session window=$window)"
+            pane_id="$fresh_pane"
+        fi
+
+        reset_epoch=$(_iso_to_epoch "$reset_at")
+        if (( reset_epoch <= now_epoch + WAKE_GRACE_SEC )); then
+            _fire_wake "$pane_id" "$project" "$reset_at" && fired=$(( fired + 1 ))
+            continue
+        fi
+
+        keep_indices+=("$i")
+    done
+
+    if (( fired > 0 || orphaned > 0 )); then
+        local keep_json="[]"
+        for i in "${keep_indices[@]}"; do
+            keep_json=$(echo "$entries" | jq --argjson keep "$keep_json" --argjson i "$i" '$keep + [.wakes[$i]]')
+        done
+        echo "$entries" | jq --argjson keep "$keep_json" '.wakes = $keep' | _write_state
+        log "sweep: fired=$fired orphaned=$orphaned remaining=$(jq '.wakes | length' "$STATE_FILE")"
+    fi
+}
+
+_detect
+_sweep
+exit 0
