@@ -13,6 +13,8 @@ set -euo pipefail
 
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
+[[ -f "$HOME/.claude/lib/borg-hooks.sh" ]] && source "$HOME/.claude/lib/borg-hooks.sh"
+
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 STATE_FILE="${BORG_CORTEX_STATE:-$BORG_DIR/cortex-wakes.json}"
 LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
@@ -91,10 +93,6 @@ _iso_to_epoch() {
         || echo 0
 }
 
-# Return 0 if the cap message in $1 is the *current* state (i.e. user has not typed past it).
-# Heuristic: take the substring after the LAST cap-message line; if any line beginning with
-# "✓ " appears after it, the user already typed `wake up!` and Cortex resumed. Otherwise the
-# cap is still the active state.
 _cap_still_active() {
     local capture="$1"
     local tail
@@ -103,11 +101,7 @@ _cap_still_active() {
         found { buf = buf "\n" $0 }
         END { print buf }
     ' <<<"$capture")
-    # If the tail (lines after the last cap message) contains a "✓ " entry, user has resumed.
-    if echo "$tail" | grep -q '^✓ '; then
-        return 1
-    fi
-    return 0
+    echo "$tail" | grep -q '^✓ ' && return 1 || return 0
 }
 
 # Detect new caps in cortex panes; merge into state file.
@@ -174,16 +168,18 @@ _resolve_pane() {
         | awk -v idx="$pane_index" '$2 == idx { print $1; exit }'
 }
 
-# Fire a single wake: send `wake up!` to the pane, post a notification.
 _fire_wake() {
     local pane_id="$1" project="$2" reset_at="$3"
     tmux send-keys -t "$pane_id" "wake up!" Enter 2>/dev/null || {
         log "ERROR: tmux send-keys failed for $pane_id ($project)"
         return 1
     }
-    local hhmm
-    hhmm=$(date +"%H:%M")
-    osascript -e "display notification \"$project cortex resumed at $hhmm\" with title \"Cortex auto-wake\" sound name \"Glass\"" 2>/dev/null || true
+    local hhmm; hhmm=$(date +"%H:%M")
+    if command -v _borg_osa_notify &>/dev/null; then
+        _borg_osa_notify "Cortex auto-wake" "$project" "cortex resumed at $hhmm"
+    else
+        osascript -e "display notification \"$project cortex resumed at $hhmm\" with title \"Cortex auto-wake\" sound name \"Glass\"" 2>/dev/null || true
+    fi
     log "fired wake: pane=$pane_id project=$project reset_at=$reset_at"
 }
 
@@ -203,12 +199,9 @@ _sweep() {
     local fired=0 orphaned=0
 
     for (( i = 0; i < count; i++ )); do
-        pane_id=$(echo "$entries" | jq -r ".wakes[$i].pane_id")
-        session=$(echo "$entries" | jq -r ".wakes[$i].session")
-        window=$(echo "$entries" | jq -r ".wakes[$i].window")
-        pane_index=$(echo "$entries" | jq -r ".wakes[$i].pane_index")
-        project=$(echo "$entries" | jq -r ".wakes[$i].project")
-        reset_at=$(echo "$entries" | jq -r ".wakes[$i].reset_at")
+        IFS=$'\t' read -r pane_id session window pane_index project reset_at < <(
+            echo "$entries" | jq -r ".wakes[$i] | [.pane_id,.session,.window,.pane_index,.project,.reset_at] | @tsv"
+        )
 
         # Re-resolve pane_id if the recorded one is gone.
         if ! tmux list-panes -t "$pane_id" &>/dev/null; then
@@ -232,11 +225,13 @@ _sweep() {
     done
 
     if (( fired > 0 || orphaned > 0 )); then
-        local keep_json="[]"
-        for i in "${keep_indices[@]}"; do
-            keep_json=$(echo "$entries" | jq --argjson keep "$keep_json" --argjson i "$i" '$keep + [.wakes[$i]]')
-        done
-        echo "$entries" | jq --argjson keep "$keep_json" '.wakes = $keep' | _write_state
+        local idx_json
+        if (( ${#keep_indices[@]} > 0 )); then
+            idx_json=$(printf '%s\n' "${keep_indices[@]}" | jq -Rs '[split("\n")[] | select(length>0) | tonumber]')
+        else
+            idx_json='[]'
+        fi
+        echo "$entries" | jq --argjson idx "$idx_json" '.wakes = [$idx[] as $i | .wakes[$i]]' | _write_state
         log "sweep: fired=$fired orphaned=$orphaned remaining=$(jq '.wakes | length' "$STATE_FILE")"
     fi
 }
