@@ -94,7 +94,8 @@
       "Bash(bats:*)",
       "Bash(shellcheck:*)",
       "Bash(shasum:*)",
-      "Bash(run-in:*)"
+      "Bash(run-in:*)",
+      "mcp__claude_ai_Supabase__*"
     ]
   },
   "hooks": {
