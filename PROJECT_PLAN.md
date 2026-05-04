@@ -1,61 +1,104 @@
-# Project Plan: borg store-secret command
-*Established: 2026-04-30*
+# Project Plan: Skill Extension Protocol
+*Established: 2026-05-04*
 
 ## Objective
-Add `borg store-secret <NAME>` to borg.zsh — prompt for the secret with `read -s`, store in the
-macOS Keychain via `security add-generic-password`, idempotently patch
-`~/.config/dotfiles/zsh/secrets.zsh` (registry comment row + `_keychain_export` line), reload the
-shell config, and print a truncated verification. Replaces the manual `/dev-tools:store-secret`
-skill workflow with a single CLI invocation.
+
+Add a lightweight prompt-level protocol that lets `borg-plan` and `borg-assimilate` absorb
+context-specific behavior (e.g. JIRA on the work machine, Linear in some repos) by reading
+markdown files dropped at well-known per-machine and per-project paths. Same canonical entry
+points everywhere; behavior bends to local context via dropped files. Validate the protocol
+by writing one real JIRA extension as proof the load points are usable.
 
 ## Acceptance Criteria
-- [ ] `borg store-secret FOO_BAR` prompts hidden, stores via `security add-generic-password`,
-      prints success.
-  - Verify: run interactively, then `security find-generic-password -s FOO_BAR -a $USER -w` returns
-    the value.
-- [ ] Re-running the same command updates the keychain entry but does NOT duplicate the entries in
-      `secrets.zsh`.
-  - Verify: run twice with different values; `grep -c "_keychain_export FOO_BAR"
-    ~/.config/dotfiles/zsh/secrets.zsh` returns `1`.
-- [ ] Refuses cleanly without a TTY using `[[ -t 0 ]]` guard, with an actionable error message.
-  - Verify: `echo '' | borg store-secret X` exits 1 and prints "must be run from an interactive
-    terminal" (or similar).
-- [ ] New bats test file exercises the `secrets.zsh` patcher against fixture files only — no live
-      keychain access.
-  - Verify: `bats tests/store_secret.bats` passes.
-- [ ] Existing bats suite still green; `cmd_help` lists the new command.
-  - Verify: `bats tests/` all pass; `borg help` output includes `store-secret`.
-- [ ] Failure modes print next-action messages.
-  - Verify: spoof `security` missing → "are you on macOS?"; remove `secrets.zsh` →
-    "expected file at ~/.config/dotfiles/zsh/secrets.zsh; set BORG_SECRETS_FILE to override".
+
+- [ ] **`borg-plan` reads extensions at three load points.** Three injection blocks added to
+      `skills/borg-plan/SKILL.md`: at the start (after preamble, before Collective Review),
+      before writing `PROJECT_PLAN.md`, and after writing it. Each reads
+      `~/.config/borg/extensions/skill-extensions/borg-plan/<hook>.md` then
+      `<project>/.borg/skill-extensions/borg-plan/<hook>.md` and silently skips if absent.
+  - Verify: drop a test file at
+    `~/.config/borg/extensions/skill-extensions/borg-plan/01-context.md` saying "Open with:
+    'extension fired'", run `/borg-plan` in a scratch project, confirm the string appears before
+    the Collective Review.
+
+- [ ] **`borg-assimilate` reads extensions at three load points.** Same three-block pattern,
+      mapped to assimilate's phases: before Step 0 (`/simplify`), at the start of Step 4b before
+      the merge, and after the merge succeeds before plan archival.
+  - Verify: drop a test file at
+    `~/.config/borg/extensions/skill-extensions/borg-assimilate/01-context.md`, run
+    `/borg-assimilate` on a project with an existing `PROJECT_PLAN.md`, confirm the file is read
+    before Step 0.
+
+- [ ] **Layering works: project file is read after machine file.** With both files present, both
+      contents are injected, project content appears second so it can extend or override.
+  - Verify: drop machine and project files for `borg-plan/01-context.md`, run `/borg-plan` in
+    `borg-collective` itself, confirm both messages appear in the right order.
+
+- [ ] **One real JIRA extension exists as proof of fitness.** A working
+      `borg-plan/01-context.md` extension file (lives in Noah's private dotfiles or work-machine
+      path, NOT in this repo) that pulls a JIRA ticket and uses its description as the plan
+      source. Treat as the validation target, not a doc example.
+  - Verify: Noah confirms the extension is written and sits on the work machine; running
+    `/borg-plan JIRA-1234` (or similar) in a real work repo opens the conversation with the
+    ticket description loaded.
+
+- [ ] **Regression: no-extension behavior is identical to today.** `/borg-plan` and
+      `/borg-assimilate` in a clean project with no extension files installed produce the same
+      output, ask the same questions, and write the same artifacts as before this change.
+  - Verify: run `/borg-plan` in a clean scratch project with
+    `~/.config/borg/extensions/skill-extensions/` absent. Confirm no mention of
+    skill-extensions paths, no error about missing files, identical PROJECT_PLAN.md shape to a
+    pre-change baseline. Repeat for `/borg-assimilate`.
+
+- [ ] **CLAUDE.md documents the protocol.** New "Skill extensions" subsection under Key Patterns:
+      the two paths, three hook points, layering rule, markdown-only constraint, terse-files
+      note, and one short JIRA worked example. ≤30 lines.
+  - Verify: read the new section. A fresh reader can write a working extension from it without
+    asking questions.
 
 ## Scope Boundaries
-- NOT building: `--force`, `--file`, `--batch`, or any other flags. Single happy path only.
-- NOT building: Linux / `secret-tool` / KDE wallet / any non-Darwin backend.
-- NOT building: companion `list-secrets` or `rm-secret` commands.
-- If done early: Ship. Don't expand.
+
+- **NOT building:** executable script extensions (only markdown in v1). Pattern to copy when
+  needed: `.devcontainer/borg-hooks/`.
+- **NOT building:** a `borg extend` CLI scaffolder. Add when creating extensions becomes a
+  frequent ritual.
+- **NOT building:** multi-file composition per hook (`*.md` glob). One file per hook in v1; merge
+  manually if multiple integrations land on one machine.
+- **NOT building:** hooks for `borg-review`, `borg-link`, `borg-next`, etc. Add per skill when a
+  real use case appears, using these two as templates.
+- **NOT building:** a standalone `docs/skill-extensions.md` reference page. Fold the worked
+  example into the CLAUDE.md subsection; promote to its own doc when there are 2+ extensions to
+  document.
+- **If done early:** ship, don't expand. The deferred items above are well-understood; resist the
+  urge to grab one.
 
 ## Ship Definition
-1. Commit to `main` on `borg-collective` (single commit covering borg.zsh + tests + help text).
-2. Manual smoke test storing one real secret end-to-end.
-3. `bats tests/` all green locally.
-4. `borg help` output verified.
-5. Dotfiles-side change (anchor markers added to `secrets.zsh` on first run) committed separately
-   in `~/.config/dotfiles`.
+
+CI/CD project pattern:
+1. Branch with all edits committed
+2. PR opened to main, CI passes
+3. PR merged
+4. Tag a release: `release: v0.7.12 — skill extension protocol`
+5. `brew upgrade borg-collective` on the work machine, drop the JIRA extension file in place,
+   confirm acceptance criterion #4
 
 ## Timeline
+
 Target: this session.
-Estimated effort: 1–1.5 hours (one session). Most of the time is in the secrets.zsh patcher and
-its tests; the keychain calls and CLI dispatch are short.
+Estimated effort: ~1 hour. Five edits, no code, mostly prompt threading. The longest task is the
+regression check (running both skills clean and comparing output).
 
 ## Risks
-- **secrets.zsh format drift.** The patcher parses a specific structure (registry comment table at
-  top + `_keychain_export` block). Mitigation: add anchor markers (`# BEGIN/END _keychain_export
-  block`) on first run, and bail with a clear error if the expected structure isn't present.
-  Don't silently append at EOF.
-- **Cross-repo edit confusion.** borg.zsh edits a file in `~/.config/dotfiles`, a separate repo.
-  Mitigation: a block comment at the top of `cmd_store_secret` explaining the contract and pointing
-  at the expected secrets.zsh structure.
-- **TTY-only requirement easy to miss in tests.** bats can't easily simulate an interactive TTY.
-  Mitigation: factor the patcher into its own helper and test it in isolation against fixture
-  files; smoke-test the full command interactively.
+
+- **Threading new instructions through SKILL.md without breaking the Collective Review flow.**
+  Both skills have a specific call sequence (preamble → Collective Review → conversation →
+  output). Inserting load-point blocks in the wrong place could re-order the Collective Review
+  or cause Claude to skip phases. Mitigation: keep insertions tightly scoped, run the regression
+  check before merging.
+- **Vocabulary collision risk with Claude Code's existing `hooks` (SessionStart, etc.) and
+  `~/.config/borg/extensions/hooks/`.** Picking `skill-extensions/` (vs. the original draft's
+  `skill-hooks/`) avoids both. Mitigation: locked in now while there are zero extensions in the
+  wild.
+- **Premature taxonomy.** Three hook names with one real use case is a small sample. Names may
+  churn in v2 once a second integration shows what's actually needed. Mitigation: don't promise
+  stability in CLAUDE.md; mark the protocol "v1, may evolve."
