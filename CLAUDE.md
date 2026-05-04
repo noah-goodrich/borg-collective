@@ -118,6 +118,17 @@ docs/
 - **`drone scaffold --supabase <dir>`**: generate a devcontainer joined to the external
   `supabase_network_<project>` network plus standard borg-hooks that call `supabase start`
   on up and `supabase stop` on down.
+- **Skill extensions (v1, may evolve)**: `borg-plan` and `borg-assimilate` read markdown extension
+  files at three load points — `01-context` (start), `02-output` (before artifact), `03-followup`
+  (after artifact). At each point both paths are read in order:
+    1. `~/.config/borg/extensions/skill-extensions/<skill>/<hook>.md` (per machine)
+    2. `<project>/.borg/skill-extensions/<skill>/<hook>.md` (per project, layered after machine)
+  Missing files are skipped silently. Markdown only — no executable scripts. One file per hook;
+  if multiple integrations land on one machine, merge manually. Keep extension files terse — they
+  load on every invocation. Example: drop a `01-context.md` for `borg-plan` on the work machine
+  that says "Ask which JIRA ticket this work targets, then read it via `acli jira workitem view`
+  and use its description as the plan source." On a personal machine, the file doesn't exist and
+  `/borg-plan` behaves exactly as it always did.
 
 ## External Dependencies
 
