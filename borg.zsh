@@ -1212,6 +1212,21 @@ cmd_unpin() {
     info "Unpinned: $project"
 }
 
+# Return 0 if a checkpoint was written within the last THRESHOLD hours, 1 otherwise.
+_borg_has_recent_checkpoint() {
+    local pdir="$1" threshold_hours="${2:-8}"
+    local cp_dir="$pdir/.borg/checkpoints"
+    [[ -d "$cp_dir" ]] || return 1
+    local latest
+    latest=$(ls -t "$cp_dir"/*.md 2>/dev/null | head -1)
+    [[ -n "$latest" ]] || return 1
+    local mtime now age
+    mtime=$(stat -f %m "$latest" 2>/dev/null) || return 1
+    now=$(date +%s)
+    age=$(( (now - mtime) / 3600 ))
+    (( age < threshold_hours ))
+}
+
 cmd_down() {
     info "Severing link to the Collective..."
 
@@ -1228,6 +1243,14 @@ cmd_down() {
         local pdir
         pdir=$(tmux show-option -t "$BORG_TMUX_SESSION:$wname" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" ]]; then
+            if ! _borg_has_recent_checkpoint "$pdir"; then
+                warn "$wname has no checkpoint from the last 8 hours."
+                warn "Run /borg-link-up in that session before severing."
+                printf "  Sever $wname anyway? [y/N] "
+                local reply
+                read -r reply
+                [[ "$reply" =~ ^[Yy]$ ]] || { info "Skipping $wname — go write that checkpoint."; continue; }
+            fi
             info "Stopping $wname..."
             drone down "$wname" 2>/dev/null || tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
         else
