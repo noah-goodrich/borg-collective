@@ -1,8 +1,8 @@
 class BorgCollective < Formula
   desc "AI development orchestration for parallel Claude Code sessions"
   homepage "https://github.com/noah-goodrich/borg-collective"
-  url "https://github.com/noah-goodrich/borg-collective/archive/refs/tags/v0.7.7.tar.gz"
-  sha256 "e3f1d6a9f7bcd5e2b501c1a6e7353e60a96867683230268475a318ab407d2300"
+  url "https://github.com/noah-goodrich/borg-collective/archive/refs/tags/v0.7.8.tar.gz"
+  sha256 "61dbc570f164799052a406f3e7bdd1056d9edba768a8e14cbc6801012180bd9b"
   license "MIT"
 
   depends_on "fzf"
