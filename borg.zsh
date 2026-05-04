@@ -1227,6 +1227,51 @@ _borg_has_recent_checkpoint() {
     (( age < threshold_hours ))
 }
 
+# Offer to run /borg-link-up in the Claude pane of a window, then wait for the
+# checkpoint file to appear (up to TIMEOUT seconds) before returning.
+_borg_offer_checkpoint() {
+    local wname="$1" pdir="$2" timeout="${3:-120}"
+
+    warn "$wname has no checkpoint from the last 8 hours."
+    printf "  Run /borg-link-up in that session now? [Y/n] "
+    local reply
+    read -r reply
+    [[ "$reply" =~ ^[Nn]$ ]] && return 0  # user declined — proceed with sever
+
+    # Identify the Claude (rightmost) pane in the window.
+    local claude_pane
+    claude_pane=$(tmux list-panes -t "$BORG_TMUX_SESSION:$wname" \
+        -F '#{pane_left} #{pane_id}' 2>/dev/null \
+        | sort -rn | head -1 | awk '{print $2}')
+
+    if [[ -z "$claude_pane" ]]; then
+        warn "Could not find a pane in $wname — severing without checkpoint."
+        return 0
+    fi
+
+    # Record the newest checkpoint before we trigger the skill.
+    local cp_dir="$pdir/.borg/checkpoints"
+    local before_newest
+    before_newest=$(ls -t "$cp_dir"/*.md 2>/dev/null | head -1)
+
+    info "Sending /borg-link-up to $wname (waiting up to ${timeout}s)..."
+    tmux send-keys -t "$claude_pane" "/borg-link-up" Enter
+
+    # Poll until a new checkpoint file appears or we time out.
+    local deadline=$(( $(date +%s) + timeout ))
+    while (( $(date +%s) < deadline )); do
+        local newest
+        newest=$(ls -t "$cp_dir"/*.md 2>/dev/null | head -1)
+        if [[ -n "$newest" && "$newest" != "$before_newest" ]]; then
+            info "Checkpoint saved. Proceeding with sever."
+            return 0
+        fi
+        sleep 3
+    done
+
+    warn "Timed out waiting for checkpoint. Severing $wname anyway."
+}
+
 cmd_down() {
     info "Severing link to the Collective..."
 
@@ -1243,14 +1288,7 @@ cmd_down() {
         local pdir
         pdir=$(tmux show-option -t "$BORG_TMUX_SESSION:$wname" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" ]]; then
-            if ! _borg_has_recent_checkpoint "$pdir"; then
-                warn "$wname has no checkpoint from the last 8 hours."
-                warn "Run /borg-link-up in that session before severing."
-                printf "  Sever $wname anyway? [y/N] "
-                local reply
-                read -r reply
-                [[ "$reply" =~ ^[Yy]$ ]] || { info "Skipping $wname — go write that checkpoint."; continue; }
-            fi
+            _borg_has_recent_checkpoint "$pdir" || _borg_offer_checkpoint "$wname" "$pdir"
             info "Stopping $wname..."
             drone down "$wname" 2>/dev/null || tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
         else
