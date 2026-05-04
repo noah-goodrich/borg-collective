@@ -31,6 +31,17 @@ After the plan is confirmed, switch back for implementation:
 Read silently: README, CLAUDE.md, recent `git log --oneline -20`, open PRs, uncommitted changes,
 TODO comments, test suite, CI/CD config. Use what you learn to inform every proposal below.
 
+## Local Extensions: 01-context
+
+Before the Collective Review, check for local extension files. Read each file below that exists
+and treat its contents as additional instructions for this phase. Read in order; later files
+extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-plan/01-context.md`
+2. `<project root>/.borg/skill-extensions/borg-plan/01-context.md`
+
+If neither exists, skip silently â€” do not mention extensions, do not warn, do not change behavior.
+
 ## Run The Collective Review
 
 After reading the codebase and before proposing objectives, run The Collective adversarial review.
@@ -100,6 +111,17 @@ Name 2-3 specific risks you see in the code. Don't ask "what could go wrong?" â€
 
 ## Output
 
+### Local Extensions: 02-output
+
+Before writing `PROJECT_PLAN.md`, check for local extension files. Read each file below that exists
+and treat its contents as additional instructions for shaping the plan being written. Read in
+order; later files extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-plan/02-output.md`
+2. `<project root>/.borg/skill-extensions/borg-plan/02-output.md`
+
+If neither exists, skip silently.
+
 After the conversation, write `PROJECT_PLAN.md` in the project root:
 
 ```markdown
@@ -131,6 +153,17 @@ Estimated effort: [sessions/hours]
 - [Risk 1]
 - [Risk 2]
 ```
+
+## Local Extensions: 03-followup
+
+After `PROJECT_PLAN.md` is written, check for local extension files. Read each file below that
+exists and treat its contents as additional instructions for follow-up actions (e.g. linking the
+plan to an external ticket). Read in order; later files extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-plan/03-followup.md`
+2. `<project root>/.borg/skill-extensions/borg-plan/03-followup.md`
+
+If neither exists, skip silently.
 
 ## The Lock Rule
 

@@ -12,6 +12,17 @@ user-invocable: true
 You are evaluating whether this project is ready to ship. Be rigorous. Do not rubber-stamp.
 Do not add new requirements. Check exactly what the plan says, nothing more.
 
+## Local Extensions: 01-context
+
+Before Step 0, check for local extension files. Read each file below that exists and treat its
+contents as additional instructions for this phase (e.g. fetching ticket state, running
+project-specific pre-ship checks). Read in order; later files extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-assimilate/01-context.md`
+2. `<project root>/.borg/skill-extensions/borg-assimilate/01-context.md`
+
+If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
+
 ## Step 0: Run /simplify First
 
 Before anything else, run `/simplify` on the files changed this session. Do not skip this step.
@@ -87,15 +98,45 @@ all perspectives before confirming.
 
 ### Step 4b: Execute Shipping
 
+#### Local Extensions: 02-output
+
+Before executing shipping actions, check for local extension files. Read each file below that
+exists and treat its contents as additional instructions for shaping the ship (e.g. content to
+include in the PR body, tickets to reference). Read in order; later files extend or override
+earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-assimilate/02-output.md`
+2. `<project root>/.borg/skill-extensions/borg-assimilate/02-output.md`
+
+If neither exists, skip silently. Fold any extension instructions into the shipping action list
+below before presenting it for confirmation.
+
+#### Shipping Actions
+
 1. Present the shipping actions as a numbered list:
    - Merge PR (show exact `gh pr merge` command)
    - Any plan-specific ship definition steps
+   - Run 03-followup extensions (see below) — only after the merge has been confirmed
    - Archive PROJECT_PLAN.md → `docs/plans/assimilated/<date>-<slug>.md` with checkboxes marked
      + ship date
    - Remove PROJECT_PLAN.md from project root
 2. **Ask for confirmation**: "Ready to ship. These are the actions I'll take: [list]. Confirm?"
 3. Only execute after explicit confirmation. Execute each step, reporting results.
 4. After shipping, verify: PR merged, plan archived, working tree clean.
+
+#### Local Extensions: 03-followup
+
+After the merge has succeeded but before plan archival, check for local extension files. Read
+each file below that exists and treat its contents as additional instructions for follow-up
+actions (e.g. closing a ticket, posting to a channel). Read in order; later files extend or
+override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-assimilate/03-followup.md`
+2. `<project root>/.borg/skill-extensions/borg-assimilate/03-followup.md`
+
+If neither exists, skip silently. If a follow-up action fails (e.g. JIRA API down), report the
+failure but do not roll back the merge — proceed with archival and surface the failure to the
+developer to resolve manually.
 
 ### Plan Archival Format
 

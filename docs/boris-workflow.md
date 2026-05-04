@@ -361,6 +361,11 @@ the plumbing — borg handles it.
 | `borg ls` | Dashboard of all projects | "What's the state of everything?" |
 | `/borg-plan` | Skill — Claude proposes, you validate | Establishes locked acceptance criteria |
 | `/borg-assimilate` | Skill — evaluates criteria with evidence + ships | "Am I done? Ship it." |
+
+> **Local extensions:** Both skills read per-machine and per-project markdown files at three load
+> points to absorb context-specific behavior (e.g. JIRA on the work machine). See the "Skill
+> extensions" entry under Key Patterns in [CLAUDE.md](../CLAUDE.md) for the protocol.
+
 | `borg search` | Queries cairn knowledge graph | "Have I solved this before?" |
 | `drone start <project> <feature>` | Worktree + branch + Claude in one command | "Start new feature work" |
 | `drone up/down` | Start/stop project containers | Container lifecycle (resuming existing work) |
