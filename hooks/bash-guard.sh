@@ -51,6 +51,16 @@ if [[ -n "${BORG_BASH_GUARD_DISABLE:-}" ]]; then
     exit 0
 fi
 
+# ── Layer 1.5: known-safe borg skill patterns ─────────────────────────────────
+# These commands use shell constructs (while loops, variable assignments) that
+# the RO classifier can't parse, but are known read-only by inspection.
+case "$COMMAND" in
+    *".borg-project"*)
+        # Marker walk — reads up the directory tree looking for a .borg-project
+        # marker file; emits WORKSPACE= and PROJECT= via echo. No writes.
+        _preapprove "borg marker walk — read-only directory scan" ;;
+esac
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 _preapprove() {
