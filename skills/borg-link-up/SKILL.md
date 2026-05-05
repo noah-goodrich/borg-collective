@@ -6,7 +6,6 @@ description: >
   Produces a structured checkpoint that eliminates context-rebuild time on
   the next /borg-link-down. Saves to <project>/.borg/checkpoints/<timestamp>.md,
   which is what the SessionStart hook (borg-link-down.sh) reads to restore context.
-disable-model-invocation: true
 ---
 
 # Link Up — Session Checkpoint
