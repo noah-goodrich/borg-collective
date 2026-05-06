@@ -13,3 +13,4 @@ registry.json
 .borg-project
 .borg/*
 !.borg/checkpoints/
+!.borg/skill-extensions/
