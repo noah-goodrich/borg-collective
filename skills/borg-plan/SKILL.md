@@ -48,8 +48,8 @@ After reading the codebase and before proposing objectives, run The Collective a
 Follow the process defined in the `borg-collective-review` skill:
 
 1. Read the codebase context you just gathered
-2. Present The Collective Review (all six core personas + one rotating specialist analyzing the
-   codebase, the user's request, and the work ahead)
+2. Present The Collective Review (core cast + any summoned code owners + rotating specialist
+   analyzing the codebase, the user's request, and the work ahead)
 3. Use The Adult's synthesis to inform your objective and criteria proposals
 
 Do not skip this step. The review ensures the plan accounts for scope, quality, performance,

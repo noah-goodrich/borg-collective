@@ -89,8 +89,8 @@ Before making the ship/no-ship call, run The Collective adversarial review. Foll
 defined in the `borg-collective-review` skill:
 
 1. Feed the personas: the completed checklist, git diff, test results, and any open concerns
-2. Present The Collective Review (all six core personas + one rotating specialist evaluating
-   the deliverable)
+2. Present The Collective Review (core cast + any summoned code owners + rotating specialist
+   evaluating the deliverable)
 3. The Adult's verdict feeds into the next step — if The Adult says "not ready", that's a blocker
 
 Include The Collective Review output in your shipping checklist presentation so the developer sees

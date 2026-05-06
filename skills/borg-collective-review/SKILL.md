@@ -1,19 +1,28 @@
 ---
 name: borg-collective-review
 description: >
-  Adversarial review by The Collective — six core personas plus one rotating specialist debate a
-  plan or shipping decision. Called by borg-plan (before proposing objectives) and borg-assimilate
-  (before shipping). Can also be invoked directly for ad-hoc design reviews.
+  Adversarial review by The Collective — six always-present core personas plus domain code owners
+  and one rotating specialist debate a plan or shipping decision. Called by borg-plan (before
+  proposing objectives) and borg-assimilate (before shipping). Can also be invoked directly for
+  ad-hoc design reviews.
 user-invocable: true
 ---
 
 # The Collective — Adversarial Review
 
-You are facilitating a structured review where six engineering personas plus one rotating specialist
-each evaluate the current situation from their angle. This is not roleplay — it is a structured
-thinking framework that ensures no critical perspective is missed.
+You are facilitating a structured review where engineering personas each evaluate the current
+situation from their angle. This is not roleplay — it is a structured thinking framework that
+ensures no critical perspective is missed.
 
-## The Core Cast (Always Present)
+Three tiers:
+1. **Core Cast** — always present; meta-level concerns that apply to every decision
+2. **Code Owners** — summoned conditionally; domain experts who speak only when their domain is
+   both present and non-trivially at stake
+3. **Rotating Specialist** — one per session; meta-perspective shifter
+
+---
+
+## Tier 1 — Core Cast (Always Present)
 
 ### The Scope Hawk (80/20 Enforcer)
 **Priority:** Maximum value for minimum effort. Cuts anything that doesn't directly serve the
@@ -29,7 +38,7 @@ objective.
 ### The Performance Engineer
 **Priority:** Efficiency — runtime, token cost, unnecessary work.
 **Voice:** Quantitative. "How many times does this call jq per project?"
-**Asks:** What's O(n^2) that should be O(n)? What's making network calls that could be cached?
+**Asks:** What's O(n²) that should be O(n)? What's making network calls that could be cached?
 What work is being done that nobody asked for?
 
 ### The Readability Advocate
@@ -48,71 +57,139 @@ tell me what to do next? Would I reach for this tool or work around it?
 **Priority:** Applies 80/20 to the review itself. Resolves disagreements. Makes the call.
 **Voice:** Decisive, calm. "The 80/20 here is clear."
 **Role:** Weighs all perspectives, picks the 2-3 things that actually matter, produces the final
-recommendation. The Adult speaks last and their synthesis is the actionable output.
+recommendation. The Adult speaks last and their synthesis is the actionable output. If multiple
+code owners fired on the same review, The Adult should flag whether the scope warrants splitting
+or sequencing.
 
-## The Rotating Specialist (One Per Session)
+---
 
-Before starting the review, select ONE specialist from the pool based on what's being reviewed.
-If no specialist fits strongly, default to The Devil's Advocate.
+## Tier 2 — Code Owners (Summoned Conditionally)
+
+A code owner speaks only when **both** conditions are true:
+1. Their domain appears in the work being reviewed
+2. The decision is **non-trivial** — architectural choices, schema changes, new API contracts, new
+   UI patterns, deployment config. Routine work (new CRUD following an established pattern, adding
+   a config value, minor copy change) does not summon them even if the domain is technically
+   present.
+
+### The Database Architect
+**Domain:** Schema design, migrations, indexes, query patterns, ORM models, vector search,
+data modeling tradeoffs.
+**Voice:** Exacting, long-horizon. "That index won't be used. Here's why."
+**Asks:** Is the schema normalized to the right level? Will this query hit an index or do a seq
+scan? Is the migration reversible? Are you storing what you'll actually query?
+**Summon when:** Non-trivial schema changes, new query patterns, migration strategy, data modeling
+decisions.
+**Not for:** Adding rows to a seed file, a new column with an obvious type, routine CRUD.
+
+### The Back-End Architect
+**Domain:** API design, service boundaries, auth flows, layer contracts, background workers,
+clean architecture enforcement.
+**Voice:** Boundary-obsessed. "What does the caller need to know about this?"
+**Asks:** Are layers leaking? Is this endpoint doing too much? What's the failure mode when the
+downstream is unavailable? Is the auth boundary explicit or implicit?
+**Summon when:** New API surface, service contract changes, worker design, auth flow changes.
+**Not for:** A new route following an established pattern, adding a field to an existing response.
+
+### The Front-End Architect
+**Domain:** Component boundaries, state ownership, rendering strategy (SSR/SSG/CSR), bundle
+composition, design system contracts.
+**Voice:** Visual-systems-minded. "Does this component own its state, or is it borrowing it?"
+**Asks:** Is state lifted to the right level? Are we SSR where we should be static? What lands
+in the bundle unnecessarily? Is this accessible without JS?
+**Summon when:** New component patterns, state architecture decisions, rendering strategy changes,
+build config changes.
+**Not for:** A new page following an established template, minor styling within existing patterns.
+
+### The Designer
+**Domain:** UX flows, information architecture, visual hierarchy, interaction patterns, design
+system adherence, accessibility.
+**Voice:** User-journey-focused. "What does the user think just happened?"
+**Asks:** Does this flow match the user's mental model? Does this deviate from the design system
+in a way that creates inconsistency? Is this accessible by default?
+**Summon when:** New user flows, new UI patterns, design system additions, significant layout or
+navigation changes.
+**Not for:** Trivial copy changes, minor spacing adjustments within existing patterns.
 
 ### The Security Auditor
-**Select when:** Touching auth, APIs, secrets, user data, environment variables, file permissions.
-**Asks:** What's exposed? What's the trust boundary? Could this leak credentials? What happens if
-the input is malicious?
+**Domain:** Auth, secrets, user data, trust boundaries, input validation, file permissions.
+**Voice:** Paranoid by default. "What's the trust boundary here?"
+**Asks:** What's exposed? Could this leak credentials? What happens with malicious input? Is the
+surface area growing?
+**Summon when:** Auth changes, secret handling, user data exposure, API keys, env vars, new
+external integrations.
+**Not for:** Internal tooling with no external surface, read-only operations on non-sensitive data.
 
 ### The Ops Engineer
-**Select when:** Touching CI/CD, deployment, infrastructure, monitoring, error handling.
-**Asks:** What happens when this fails in production? How do we know it broke? Can we roll back?
-What's the blast radius?
+**Domain:** CI/CD, deployment, infrastructure, monitoring, rollback strategy, blast radius.
+**Voice:** Production-first. "How do we know it broke? Can we roll back?"
+**Asks:** What's the blast radius? How do we detect failure? Is this deploy reversible? What
+happens when this fails at 3am?
+**Summon when:** Deploy pipeline changes, infra changes, new background services, monitoring gaps,
+anything that changes how the system runs in production.
+**Not for:** Code changes with no deployment implications.
+
+---
+
+## Tier 3 — Rotating Specialist (One Per Session)
+
+These are perspective-shifters, not domain experts. Pick one when the team seems too aligned or
+the work has significant history. If neither fits, omit entirely.
 
 ### The Devil's Advocate (Default)
-**Select when:** No other specialist fits, or when the team seems too aligned.
-**Asks:** Why are we building this at all? What if our assumptions are wrong? What's the
-argument against this entire approach? Is there a simpler way nobody mentioned?
+**Select when:** No code owners fired, the team seems too aligned, or the proposal feels
+suspiciously smooth.
+**Asks:** Why are we building this at all? What if the assumption is wrong? What's the argument
+against this entire approach? Is there a simpler way nobody mentioned?
 
 ### The Historian
 **Select when:** Refactors, rewrites, "v2" work, or touching code with a long history.
 **Asks:** Why was it built this way originally? What failed last time we tried this? What context
 are we missing from the original decision?
 
+---
+
 ## How to Run the Review
 
-### Input Context
-Read whatever is relevant before starting: codebase, PROJECT_PLAN.md, git diff, test results,
-the proposed plan, the shipping checklist. Each persona needs context to give specific feedback,
-not generic advice.
+### Step 1 — Read the context
+Read whatever is relevant: codebase, PROJECT_PLAN.md, git diff, test results, the proposed plan,
+the shipping checklist. Personas need specific context to give specific feedback.
 
-### Discussion Format
+### Step 2 — Decide who speaks
+1. Core cast always speaks (6 voices).
+2. For each code owner: is their domain present AND is the decision non-trivial? Summon only those
+   that pass both gates. Zero code owners is a valid outcome for small, routine changes.
+3. Pick one rotating specialist if perspective-shifting adds value; omit if not.
 
-Present each persona's analysis in first person, 2-4 sentences each. Be specific — reference
-actual code, actual files, actual numbers. No generic advice. No hand-waving.
+### Step 3 — Present the review
 
 ```
 ## The Collective Review
 
-**Rotating specialist this session:** [Name] — [why selected]
+**Code owners summoned:** [list, or "none — routine change"]
+**Rotating specialist:** [Name — why selected, or "none"]
 
-**The Scope Hawk:** "[specific analysis of scope and effort]"
+**The Scope Hawk:** "[specific analysis]"
+**The Craftsperson:** "[specific analysis]"
+**The Performance Engineer:** "[specific analysis]"
+**The Readability Advocate:** "[specific analysis]"
+**The User Advocate:** "[specific analysis]"
 
-**The Craftsperson:** "[specific analysis of quality and testing gaps]"
+[Each summoned code owner:]
+**The [Name]:** "[specific analysis from their domain]"
 
-**The Performance Engineer:** "[specific analysis of efficiency concerns]"
+[Rotating specialist if selected:]
+**The [Name]:** "[specific analysis]"
 
-**The Readability Advocate:** "[specific analysis of code clarity]"
-
-**The User Advocate:** "[specific analysis of usability and developer experience]"
-
-**[Rotating Specialist]:** "[specific analysis from their angle]"
-
-**The Adult:** "[synthesis — the 2-3 things that actually matter, and the decision]"
+**The Adult:** "[synthesis — the 2-3 things that actually matter, and the decision.
+  If multiple code owners fired: note whether the scope warrants splitting or sequencing.]"
 ```
 
 ### Rules
-- Each persona MUST reference specific code, files, or numbers. No hand-waving.
-- The Adult's synthesis is the actionable output. The other voices are inputs.
-- If all personas agree, say so briefly and move on. Disagreement is where the value is.
-- The rotating specialist brings the outsider perspective — they should challenge groupthink.
-- Total review should be 20-30 lines. This is a focused exercise, not an essay.
-- When invoked by borg-plan: personas analyze the codebase and situation before objectives.
-- When invoked by borg-assimilate: personas evaluate the deliverable before shipping.
-- When invoked directly: personas analyze whatever context the developer provides.
+- Each voice MUST reference specific code, files, or numbers. No hand-waving.
+- The Adult's synthesis is the actionable output. Other voices are inputs.
+- If all voices agree, say so briefly and move on. Disagreement is where the value is.
+- Total review: 20-40 lines depending on how many code owners fire. Stay focused.
+- When invoked by borg-plan: voices analyze the codebase and situation before objectives.
+- When invoked by borg-assimilate: voices evaluate the deliverable before shipping.
+- When invoked directly: voices analyze whatever context the developer provides.
