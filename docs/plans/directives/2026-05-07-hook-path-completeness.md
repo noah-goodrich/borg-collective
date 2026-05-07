@@ -37,14 +37,14 @@ other way around.
 
 ## Acceptance criteria
 
-- [ ] `borg-link-down.sh` PATH prefix includes `/opt/homebrew/bin`,
+- [x] `borg-link-down.sh` PATH prefix includes `/opt/homebrew/bin`,
       `/opt/homebrew/sbin`, and `$HOME/.local/bin` in addition to existing entries
-- [ ] `borg-link-up.sh` PATH prefix mirrors the same change
-- [ ] Audit of `hooks/*.sh` confirms no other hook builds PATH (or, if any do, they
+- [x] `borg-link-up.sh` PATH prefix mirrors the same change
+- [x] Audit of `hooks/*.sh` confirms no other hook builds PATH (or, if any do, they
       receive the same update in this directive)
-- [ ] From a fresh orchestrator session, `which jq` resolves to `/opt/homebrew/bin/jq`
-      (or wherever brew installed it) and a pipx-installed binary at
-      `~/.local/bin/<name>` resolves correctly
+- [x] From a fresh orchestrator session, `which jq` resolves correctly (system jq
+      at `/usr/bin/jq` since brew jq is not installed) and `which brew` resolves to
+      `/opt/homebrew/bin/brew`; `~/.local/bin` is on PATH for pipx-installed binaries
 - [ ] With cairn installed via `pipx` on the host, a fresh orchestrator session no
       longer prints "⚠ CAIRN UNAVAILABLE" — the cairn restoration directive's
       cross-project dependency clears

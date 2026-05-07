@@ -12,9 +12,11 @@
 
 set -euo pipefail
 
-# Ensure dotfiles bin (cairn client) and common system paths are available
-# when this hook runs in Claude Code's stripped PATH environment.
-PATH="${HOME}/.config/dotfiles/zsh/bin:/usr/local/bin:/usr/bin:/bin${PATH:+:$PATH}"
+# Ensure dotfiles bin (cairn client), Homebrew, pipx user bins, and common
+# system paths are available when this hook runs in Claude Code's stripped
+# PATH environment. Order mirrors a healthy interactive zsh PATH so brew
+# binaries shadow system equivalents (e.g. brew jq before /usr/bin/jq).
+PATH="${HOME}/.config/dotfiles/zsh/bin:${HOME}/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin${PATH:+:$PATH}"
 export PATH
 
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
