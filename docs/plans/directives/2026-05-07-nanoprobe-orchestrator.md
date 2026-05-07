@@ -124,17 +124,20 @@ appended-prompt block lives around line 1635 — confirm the actual line when ed
 
 ## Acceptance criteria
 
-- [ ] `agents/borg-nanoprobe.md` exists in the repo with the frontmatter and system prompt
-      above; `install.sh` copies or symlinks it into `~/.claude/agents/borg-nanoprobe.md`
-- [ ] `hooks/borg-nanoprobe-log.sh` exists, is registered as a `SubagentStop` hook in
-      `config/claude/settings.base.json`, and appends one JSONL line per completion
-- [ ] Verified by spawning a test nanoprobe end-to-end and observing the JSONL line in
-      `~/.config/borg/agents.jsonl`
-- [ ] `borg nanoprobes` lists recent entries; `borg np` works as alias
-- [ ] `borg nanoprobe-log <id>` prints the transcript when present, the JSONL entry otherwise
-- [ ] Orchestrator system prompt addendum landed in `borg.zsh cmd_init`
-- [ ] `README.md` includes a drone-vs-nanoprobe vocabulary table
-- [ ] `CLAUDE.md` (project handoff) gains a Nanoprobe Orchestrator architecture note alongside
+- [x] `agents/borg-nanoprobe.md` exists in the repo with the frontmatter and system prompt
+      above; `borg setup` (called by `install.sh`) copies it into `~/.claude/agents/borg-nanoprobe.md`
+- [x] `hooks/borg-nanoprobe-log.sh` exists, is registered as a `SubagentStop` hook in
+      `config/claude/settings.base.json`, and appends one JSONL line per completion (verified
+      with synthetic stdin payload — JSONL line landed in `~/.config/borg/agents.jsonl`)
+- [~] Verified by spawning a test nanoprobe end-to-end and observing the JSONL line in
+      `~/.config/borg/agents.jsonl` — partial: hook + payload contract verified via synthetic
+      stdin; full Agent-tool spawn must run from an orchestrator session (the implementing
+      subagent has no Agent tool itself)
+- [x] `borg nanoprobes` lists recent entries; `borg np` works as alias
+- [x] `borg nanoprobe-log <id>` prints the transcript when present, the JSONL entry otherwise
+- [x] Orchestrator system prompt addendum landed in `borg.zsh cmd_init`
+- [x] `README.md` includes a drone-vs-nanoprobe vocabulary table
+- [x] `CLAUDE.md` (project handoff) gains a Nanoprobe Orchestrator architecture note alongside
       the existing `drone scaffold` / borg-hooks sections
 - [ ] Borg version bump and release
 

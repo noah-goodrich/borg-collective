@@ -61,6 +61,8 @@ borg init   # morning briefing + launch orchestrator session
 | `borg status [project]` | Detailed status for one project |
 | `borg hail [project]` | Morning briefing (no arg) or project detail |
 | `borg search "query"` | Search knowledge graph (requires cairn) |
+| `borg nanoprobes` (`np`) | List recent nanoprobe runs (subagents) |
+| `borg nanoprobe-log <id>` | Show transcript for a nanoprobe run |
 | `borg scan` | Auto-discover projects from session history |
 | `borg add [path]` | Register a project (defaults to `$PWD`) |
 | `borg rm <name>` | Unregister a project |
@@ -86,6 +88,20 @@ borg init   # morning briefing + launch orchestrator session
 
 `Ctrl+Space >` — Jump to the most pressing project (runs `borg next --switch`).
 
+## Drones vs Nanoprobes
+
+Two assimilation units, two lifetimes. Don't blur them.
+
+| Unit | What it is | Lifetime | Scope | Spawned by |
+|------|------------|----------|-------|------------|
+| **Drone** | Persistent devcontainer (Docker Compose) | Long-lived; one per project | Whole project — toolchain, dependencies, runtime | `drone up <project>` |
+| **Nanoprobe** | Ephemeral Claude Code subagent (`borg-nanoprobe`) | Single task; exits on completion | One discrete unit of work in a git worktree | Orchestrator via the Agent tool |
+
+The orchestrator session never edits project files inline. It spawns nanoprobes (background, worktree-isolated)
+that perform the work, commit, and exit. The `SubagentStop` hook (`borg-nanoprobe-log.sh`) appends a JSONL
+record to `~/.config/borg/agents.jsonl` so you can list recent runs with `borg nanoprobes` and pull
+transcripts with `borg nanoprobe-log <id>`.
+
 ## How It Works
 
 ### Hooks Track Session Lifecycle
@@ -97,6 +113,7 @@ Three hooks update the registry automatically:
 | `borg-link-down.sh` | SessionStart | Status → active; injects latest checkpoint + plan nudge if no PROJECT_PLAN.md |
 | `borg-notify.sh` | Notification | Status → waiting, captures what Claude needs |
 | `borg-link-up.sh` | Stop | Status → idle; warns on uncommitted changes; nudges if no recent checkpoint |
+| `borg-nanoprobe-log.sh` | SubagentStop | Appends one JSONL line per nanoprobe completion to `~/.config/borg/agents.jsonl` |
 | `pre-commit-remind.sh` | PreToolUse | Reminds Claude to run /simplify before git commit |
 
 ### Session Checkpoints
