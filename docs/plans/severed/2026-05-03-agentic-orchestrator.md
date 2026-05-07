@@ -1,3 +1,11 @@
+---
+Severed: 2026-05-07
+Reason: Replaced by 2026-05-07-nanoprobe-orchestrator.md after architectural review
+        found Claude Code's native subagent infrastructure subsumes 60-70% of the
+        proposed custom code.
+Review: docs/plans/reviews/2026-05-07-agentic-orchestrator-review.md
+---
+
 # Directive: Agentic Orchestrator — Spawn-Monitor-Synthesize Pattern
 
 *Created: 2026-05-03*
