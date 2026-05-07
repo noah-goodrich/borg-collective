@@ -118,6 +118,16 @@ docs/
 - **`drone scaffold --supabase <dir>`**: generate a devcontainer joined to the external
   `supabase_network_<project>` network plus standard borg-hooks that call `supabase start`
   on up and `supabase stop` on down.
+- **Nanoprobe orchestrator (drones vs nanoprobes)**: drones are persistent devcontainers (long-lived,
+  one per project); nanoprobes are ephemeral Claude Code subagents (`agents/borg-nanoprobe.md`)
+  spawned by the orchestrator via the Agent tool with `isolation: worktree` and `background: true`.
+  The orchestrator session never edits project files — it briefs, spawns, monitors, and synthesizes.
+  Lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (a `SubagentStop` hook) which appends one
+  JSONL line per completion to `~/.config/borg/agents.jsonl` (`id`, `agent_type`, `transcript_path`,
+  `summary` from `last_assistant_message`, hard-coded `status: "completed"`, `finished_at`, `cwd`).
+  Inspect runs with `borg nanoprobes` (alias `np`) and pull transcripts with
+  `borg nanoprobe-log <id-prefix>`. The agent file installs to `~/.claude/agents/borg-nanoprobe.md`
+  via `borg setup`, where both Claude Code and Cortex Code discover it.
 - **Skill extensions (v1, may evolve)**: `borg-plan` and `borg-assimilate` read markdown extension
   files at three load points — `01-context` (start), `02-output` (before artifact), `03-followup`
   (after artifact). At each point both paths are read in order:

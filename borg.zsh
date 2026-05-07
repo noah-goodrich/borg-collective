@@ -1640,7 +1640,15 @@ $context
 
 The developer has already seen the morning hail in their terminal.
 Be ready to answer questions about any project, help them switch focus, or dive into work.
-If they say 'go' or 'start' or 'engage', switch to the top-priority project."
+If they say 'go' or 'start' or 'engage', switch to the top-priority project.
+
+== ORCHESTRATION MODEL ==
+When the developer asks for project work, spawn the \`borg-nanoprobe\` agent via the Agent tool
+with \`isolation: worktree\` and \`background: true\`. Pass the project name, repo path, working
+branch, and task in the invocation prompt. Never edit project files from this orchestrator
+session — your role is to spawn / monitor / synthesize. The standard flow is: brief the nanoprobe
+→ spawn → wait for SubagentStop → report results. Use \`borg nanoprobes\` to see recent runs and
+\`borg nanoprobe-log <id>\` to read a transcript."
 
     # Write prompt to file — avoids shell-escaping hell when passing through tmux send-keys
     local prompt_file="${TMPDIR:-/tmp}/borg-orchestrator-prompt.$$"
@@ -1987,6 +1995,7 @@ CONF
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/bash-guard.sh"        "PreToolUse"   "bash-guard.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/tool-count-nudge.sh" "PostToolUse"  "tool-count-nudge.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-nanoprobe-log.sh" "SubagentStop" "borg-nanoprobe-log.sh"
 
         # Migration: remove old session-start.sh (merged into borg-link-down.sh)
         _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/session-start.sh" "SessionStart" "session-start.sh"
@@ -2045,6 +2054,7 @@ CONF
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/bash-guard.sh"        "PreToolUse"   "bash-guard.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-nanoprobe-log.sh" "SubagentStop" "borg-nanoprobe-log.sh"
 
         # Migration: rename CoCo borg-start.sh/borg-stop.sh → borg-link-down.sh/borg-link-up.sh
         _borg_unregister_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-start.sh" "SessionStart" "borg-start.sh"
@@ -2095,6 +2105,22 @@ CONF
         cp -R "$skill_dir" "$target"
         info "  $name"
     done
+
+    # ── 4a. Install agents ───────────────────────────────────────────────────
+    # Subagent definitions live at ~/.claude/agents/ and are read by both Claude
+    # Code and Cortex Code. Copy (don't symlink) so devcontainers can resolve them
+    # via the bind-mounted ~/.claude.
+    local CLAUDE_AGENTS_DIR="$CLAUDE_DIR/agents"
+    if [[ -d "$BORG_HOME/agents" ]]; then
+        info "Installing agents..."
+        mkdir -p "$CLAUDE_AGENTS_DIR"
+        for agent_file in "$BORG_HOME/agents/"*.md(N); do
+            [[ -f "$agent_file" ]] || continue
+            local aname="${agent_file:t}"
+            cp -f "$agent_file" "$CLAUDE_AGENTS_DIR/$aname"
+            info "  $aname"
+        done
+    fi
 
     # ── 4b. Per-environment extensions ───────────────────────────────────────
     if [[ -d "$_ext_dir/skills" ]]; then
@@ -2347,6 +2373,51 @@ cmd_cortex_resume() {
         "$BORG_CORTEX_WAKES" > "$tmp" && mv "$tmp" "$BORG_CORTEX_WAKES"
 }
 
+cmd_nanoprobes() {
+    local log="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
+    if [[ ! -s "$log" ]]; then
+        info "No nanoprobes recorded yet."
+        info "Spawn one via the Agent tool with agent_type=borg-nanoprobe; SubagentStop logs here."
+        return 0
+    fi
+
+    # Newest first; format: short_id  agent_type  summary  finished_at
+    tail -r "$log" 2>/dev/null | head -50 | jq -r '
+        [
+            (.id // "")[0:8],
+            (.agent_type // "?"),
+            ((.summary // "") | gsub("\n"; " ") | .[0:80]),
+            (.finished_at // "")
+        ] | @tsv
+    ' 2>/dev/null | while IFS=$'\t' read -r sid atype summary finished; do
+        printf "  %-10s %-18s %-80s %s\n" "$sid" "$atype" "$summary" "$finished"
+    done
+}
+
+cmd_nanoprobe_log() {
+    local query="${1:-}"
+    [[ -n "$query" ]] || die "usage: borg nanoprobe-log <id-or-prefix>"
+
+    local log="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
+    [[ -s "$log" ]] || die "no nanoprobes recorded yet ($log)"
+
+    # Find the newest matching JSONL entry by id prefix
+    local entry
+    entry=$(tail -r "$log" 2>/dev/null | jq -c --arg q "$query" \
+        'select((.id // "") | startswith($q))' 2>/dev/null | head -1)
+
+    [[ -n "$entry" ]] || die "no nanoprobe matching '$query'"
+
+    local tpath
+    tpath=$(printf '%s' "$entry" | jq -r '.transcript_path // ""' 2>/dev/null)
+
+    if [[ -n "$tpath" && -f "$tpath" ]]; then
+        cat "$tpath"
+    else
+        printf '%s\n' "$entry" | jq .
+    fi
+}
+
 cmd_help() {
     cat <<'EOF'
 
@@ -2380,6 +2451,8 @@ cmd_help() {
     setup               Register Claude Code hooks, skills, and config
     store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
+    nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
+    nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     help                Show this message
 
   ALIASES (backward compat)
@@ -2452,6 +2525,8 @@ case "${1:-help}" in
     start)    cmd_start "${@:2}" ;;
     focus)    cmd_focus "${@:2}" ;;
     cortex-resume) cmd_cortex_resume "${@:2}" ;;
+    nanoprobes|np)  cmd_nanoprobes "${@:2}" ;;
+    nanoprobe-log)  cmd_nanoprobe_log "${@:2}" ;;
     # Legacy aliases → consolidated command
     ls)       cmd_link "${@:2}" ;;
     status)   cmd_link "${@:2}" ;;

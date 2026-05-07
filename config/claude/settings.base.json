@@ -210,6 +210,18 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.claude/hooks/borg-nanoprobe-log.sh",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "extraKnownMarketplaces": {
