@@ -62,19 +62,37 @@ trimmed to what subagent frontmatter doesn't already cover:
 - **Devcontainer clause:** "If the project has `.devcontainer/`, run all commands via
   `drone exec <project> -- <cmd>`. Your worktree path is not the registry path; `cd` to the
   registry path before invoking `drone exec`."
+- **`drone exec` project-name clause:** "Always pass the project name explicitly to
+  `drone exec` — never rely on the worktree cwd. The registry-by-name resolution in
+  `drone.zsh` is cwd-independent, so `drone exec <project> -- <cmd>` is the only correct
+  invocation form from a nanoprobe context."
 
 ### 2. `hooks/borg-nanoprobe-log.sh`
 
 Registered as a `SubagentStop` hook in `config/claude/settings.base.json` (so `install.sh`
 propagates it to `~/.claude/settings.json` like every other borg hook). Reads stdin JSON,
-extracts `subagent_type`, `session_id`, `agent_id`, `started_at`, `finished_at`, `exit reason`,
-and a one-line result summary. Appends a single JSONL record to `~/.config/borg/agents.jsonl`:
+extracts `agent_id`, `agent_type`, `agent_transcript_path`, and `last_assistant_message`
+from the payload. Appends a single JSONL record to `~/.config/borg/agents.jsonl`:
 
 ```json
 {"id": "...", "project": "...", "agent_type": "borg-nanoprobe", "task": "...",
- "started_at": "...", "finished_at": "...", "status": "completed|stopped|error",
+ "started_at": "...", "finished_at": "...", "status": "completed",
  "summary": "...", "transcript_path": "~/.claude/projects/.../subagents/agent-<id>.jsonl"}
 ```
+
+**Payload semantics (verified):**
+
+- The `SubagentStop` event fires only when a subagent has run to completion. Hard-code
+  `"status": "completed"` for every fire — there is no explicit status field on the event,
+  and the fact that the hook fires *is* the completion signal.
+- `summary` is `last_assistant_message` from the payload, taken verbatim. No transcript
+  parsing is required (or supported) — the field is already a single string.
+- `transcript_path` is `agent_transcript_path` from the payload.
+- `id` and `agent_type` come straight from `agent_id` and `agent_type`.
+
+Available payload fields confirmed by verification: `agent_id`, `agent_type`,
+`agent_transcript_path`, `last_assistant_message`. No other fields are documented or
+relied upon; if the contract grows, treat additions as opt-in.
 
 Strict-mode bash, atomic append, exit 0 on any failure (don't break sessions on log writes).
 
@@ -143,11 +161,11 @@ appended-prompt block lives around line 1635 — confirm the actual line when ed
 
 ## Risks
 
-- **`SubagentStop` payload shape needs verification.** The review cites it as the right hook,
-  but the JSON contract has not been directly tested in this codebase. If the payload doesn't
-  carry enough metadata (especially `task` text and a result summary), the log line may need
-  to be assembled from a `Stop` hook running inside the nanoprobe itself. Confirm this in the
-  first hour of implementation before writing the rest of the hook.
+- **`SubagentStop` payload shape (verified).** Payload carries `agent_id`, `agent_type`,
+  `agent_transcript_path`, and `last_assistant_message`. Status is implicit — the hook only
+  fires on completion, so log records hard-code `"status": "completed"`. Summary is
+  `last_assistant_message` verbatim, no transcript parsing needed. If a future Claude Code
+  release expands the payload, treat new fields as opt-in.
 - **Worktree path vs. registry path.** `isolation: worktree` puts the nanoprobe in a Git
   worktree at a path that is not the registry's project directory. Any `drone exec <project>`
   invocation resolves the project by name from the registry, but the nanoprobe's `cwd` won't
