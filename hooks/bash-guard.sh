@@ -59,6 +59,9 @@ case "$COMMAND" in
         # Marker walk — reads up the directory tree looking for a .borg-project
         # marker file; emits WORKSPACE= and PROJECT= via echo. No writes.
         _preapprove "borg marker walk — read-only directory scan" ;;
+    "for f in "*.borg/checkpoints/*|"for f in "*/docs/plans/*)
+        # borg-link plan/checkpoint scan — read-only for loop over markdown files
+        _preapprove "borg-link read-only markdown scan (for loop)" ;;
 esac
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
