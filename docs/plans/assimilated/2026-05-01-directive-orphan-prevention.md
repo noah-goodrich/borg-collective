@@ -1,5 +1,6 @@
 # Directive: Directive Orphan Prevention
 *Established: 2026-05-01*
+*Shipped: 2026-05-07 — implementation committed in `5a28733`; included in next borg release (release ceremony pending).*
 
 ## Objective
 
@@ -30,7 +31,7 @@ problem.
 
 ## Acceptance Criteria
 
-- [ ] **Directives carry a `Parent plan:` italic-metadata line.** Matches existing reveal
+- [x] **Directives carry a `Parent plan:` italic-metadata line.** Matches existing reveal
       directive convention (italic lines just under the H1, not YAML frontmatter). Format:
       `*Parent plan: <plan-slug>*` where `<plan-slug>` is the assimilated plan's filename
       without the `.md` extension (e.g. `2026-04-14-reveal-mvp-supabase-flyio`). Slug, not
@@ -41,33 +42,33 @@ problem.
     `2026-05-01-user-submission-context-pipeline.md` (already back-linked manually on
     2026-05-01) carry the line; greppable via `grep -l '^\*Parent plan:' docs/plans/`.
 
-- [ ] **`/borg-plan` records `parent_plan` when spawning directives mid-plan.** When the active
+- [x] **`/borg-plan` records `parent_plan` when spawning directives mid-plan.** When the active
       `PROJECT_PLAN.md` exists and the user requests a follow-up directive, the new directive
       file is written with `parent_plan` pointing at it.
   - Verify: with a plan in `docs/plans/directives/PROJECT_PLAN.md`, ask `/borg-plan` to spawn a
     follow-up; confirm new file's frontmatter contains `parent_plan`.
 
-- [ ] **`/borg-assimilate` blocks on un-resolved children.** Before archiving the plan,
+- [x] **`/borg-assimilate` blocks on un-resolved children.** Before archiving the plan,
       enumerate directives with `parent_plan` matching the plan path. If any are still in
       `docs/plans/directives/` (not yet shipped or severed), refuse to ship and list them.
   - Verify: with a fake child directive present, `/borg-assimilate` exits with a clear
     "un-resolved child directives:" message and does not move the plan.
 
-- [ ] **`borg-link-down` injects active directives at session start.** If
+- [x] **`borg-link-down` injects active directives at session start.** If
       `<project>/docs/plans/directives/` is non-empty, the hook injects each filename plus its
       `## Objective` line (or first non-frontmatter heading) into session-start context,
       alongside the latest checkpoint.
   - Verify: in reveal with two directives present, session start context includes both
     filenames and objective summaries.
 
-- [ ] **`borg-link-up` directive nudge at session end.** When the session is ending and
+- [x] **`borg-link-up` directive nudge at session end.** When the session is ending and
       commits were made, the hook surfaces a "Directive reconciliation?" prompt for any
       directive whose scope or key-files section mentions a path touched by those commits.
       Surface only — does not auto-update the directive.
   - Verify: in a project with a directive listing `worker/main.py`, a session that commits
     `worker/main.py` produces a checkpoint nudge naming the directive.
 
-- [ ] **No regression on plan-less projects.** Projects with no `docs/plans/directives/`
+- [x] **No regression on plan-less projects.** Projects with no `docs/plans/directives/`
       directory continue to work without nudges or errors.
   - Verify: a fresh project with no plans dir has no checkpoint nudges fire.
 
