@@ -134,6 +134,36 @@ Run 'git status' to see what's pending. Consider /simplify and committing before
     fi
 fi
 
+# Active directives for this project — inject filename + objective line only (no full bodies)
+DIRECTIVES_DIR="$CWD/docs/plans/directives"
+if [[ -d "$DIRECTIVES_DIR" ]]; then
+    _directive_lines=""
+    while IFS= read -r -d '' _dfile; do
+        _dname="${_dfile##*/}"
+        # Extract the first non-blank line that is a heading or italic text after the H1;
+        # prefer the ## Objective section's first content line as the summary.
+        _obj=$(awk '
+            /^## Objective/ { found=1; next }
+            found && /^[^#[:space:]]/ { print; exit }
+            found && /^[[:space:]]*$/ { next }
+        ' "$_dfile" 2>/dev/null | head -c 200 || true)
+        if [[ -z "$_obj" ]]; then
+            # Fallback: first non-blank non-heading non-italic-meta line
+            _obj=$(grep -m1 '^[^#*[:space:]]' "$_dfile" 2>/dev/null | head -c 200 || true)
+        fi
+        if [[ -n "$_obj" ]]; then
+            _directive_lines+="  - ${_dname}: ${_obj}"$'\n'
+        else
+            _directive_lines+="  - ${_dname}"$'\n'
+        fi
+    done < <(find "$DIRECTIVES_DIR" -maxdepth 1 -name "*.md" -print0 2>/dev/null | sort -z)
+    if [[ -n "$_directive_lines" ]]; then
+        CONTEXT_PARTS+=("Active directives for $PROJECT (check these before starting new work):
+
+${_directive_lines%$'\n'}")
+    fi
+fi
+
 # Latest checkpoint for this project — written by /borg-link-up
 CHECKPOINT_FILE=""
 if [[ -d "$CWD/.borg/checkpoints" ]]; then

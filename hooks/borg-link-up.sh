@@ -99,6 +99,44 @@ if [[ -d "$CHECKPOINT_DIR" ]]; then
     fi
 fi
 
+# Directive reconciliation nudge: if commits were made this session, check whether any
+# open directive's ## Key Files section mentions a path touched by those commits.
+# Match against ## Key Files only to avoid false positives from freeform body text.
+DIRECTIVES_DIR="$CWD/docs/plans/directives"
+if [[ -d "$DIRECTIVES_DIR" ]] && command -v git >/dev/null 2>&1; then
+    if git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        # Collect files changed by the most recent commit (if any)
+        _changed_files=$(git -C "$CWD" diff --name-only HEAD~1 HEAD 2>/dev/null || true)
+        if [[ -n "$_changed_files" ]]; then
+            _matched_directives=""
+            while IFS= read -r -d '' _dfile; do
+                _dname="${_dfile##*/}"
+                # Extract only the ## Key Files section lines
+                _key_files=$(awk '
+                    /^## Key Files/ { found=1; next }
+                    found && /^## / { exit }
+                    found { print }
+                ' "$_dfile" 2>/dev/null || true)
+                [[ -z "$_key_files" ]] && continue
+                # Check if any changed file appears in the Key Files section
+                while IFS= read -r _cf; do
+                    [[ -z "$_cf" ]] && continue
+                    _cf_base="${_cf##*/}"
+                    if echo "$_key_files" | grep -qF "$_cf_base" 2>/dev/null; then
+                        _matched_directives+="  - ${_dname}"$'\n'
+                        break
+                    fi
+                done <<< "$_changed_files"
+            done < <(find "$DIRECTIVES_DIR" -maxdepth 1 -name "*.md" -print0 2>/dev/null | sort -z)
+            if [[ -n "$_matched_directives" ]]; then
+                printf '\n\033[1;36m▸ Directive reconciliation? Committed files overlap with:\033[0m\n' >&2
+                printf '%s' "$_matched_directives" >&2
+                printf '\033[1;36m  Review open directives and update checkboxes if this work advances them.\033[0m\n\n' >&2
+            fi
+        fi
+    fi
+fi
+
 # Record session to cairn knowledge graph (best-effort)
 if command -v cairn >/dev/null 2>&1; then
     _cairn_id="$(date -u +%Y%m%d-%H%M)-${PROJECT}"

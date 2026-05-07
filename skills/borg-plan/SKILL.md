@@ -109,6 +109,28 @@ reasoning.] If there's a deadline, tell me and I'll flag if scope doesn't fit."
 
 Name 2-3 specific risks you see in the code. Don't ask "what could go wrong?" — tell them.
 
+## Follow-Up Directives During an Active Plan
+
+When the developer requests a new directive *while a `PROJECT_PLAN.md` already exists* in the
+project root (i.e. we are mid-plan, not starting from scratch), write the directive file to
+`docs/plans/directives/<date>-<slug>.md` with a `*Parent plan: <plan-slug>*` italic metadata line
+immediately below the H1 heading.
+
+`<plan-slug>` is the filename of `PROJECT_PLAN.md`'s eventual archived copy — the basename
+*without* the `.md` extension and without a leading path. If the plan does not yet have a final
+slug, derive it from the plan's `## Objective` line: lowercase, spaces → hyphens, strip special
+chars, prepend today's date in `YYYY-MM-DD` format. Example:
+
+```
+# Directive: <title>
+*Parent plan: 2026-04-14-reveal-mvp-supabase-flyio*
+*Filed: <date>*
+```
+
+The slug must survive the plan moving from `directives/` → `assimilated/`. Store only the slug
+(filename without extension), not a filesystem path. If there is no active `PROJECT_PLAN.md`,
+omit the `*Parent plan:*` line — independent directives carry no lineage.
+
 ## Output
 
 ### Local Extensions: 02-output
