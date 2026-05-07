@@ -44,6 +44,31 @@ After `/simplify`, run the project's test suite and linters. Auto-detect what's 
 Run whatever you find. Report results as part of the checklist regardless of whether a plan exists.
 If tests or linting fail, that's a blocker — the project is not ready to ship.
 
+## Step 0.75: Check for Un-Resolved Child Directives
+
+Before evaluating acceptance criteria, check whether any directives in `docs/plans/directives/`
+carry a `*Parent plan:*` line whose slug matches this plan.
+
+1. Derive the plan's slug: the intended archived filename without `.md`. If the slug is not yet
+   known, compute it as `<established-date>-<slugified-objective>` using the `*Established:*` date
+   and `## Objective` text from `PROJECT_PLAN.md`.
+2. Search `docs/plans/directives/*.md` for files containing `^\*Parent plan: <slug>\*` (the slug
+   only, not a path). Ignore `docs/plans/assimilated/` and `docs/plans/severed/` — those are
+   already resolved.
+3. **If any matches are found**, stop immediately and report:
+
+```
+✗ Blocked: un-resolved child directives (move to severed/ or ship them first):
+  - docs/plans/directives/<filename>.md
+  - docs/plans/directives/<filename>.md
+```
+
+Do NOT proceed to criteria evaluation or shipping. The developer must either ship the child
+directive or `git mv` it to `docs/plans/severed/` with a one-line "why severed" comment before
+assimilation can continue.
+
+4. **If no matches are found**, proceed to Step 1 without comment — do not mention the check.
+
 ## Step 1: Load the Plan
 
 Read `PROJECT_PLAN.md` from the project root.
