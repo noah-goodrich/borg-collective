@@ -65,3 +65,5 @@ audit-plugin <github-repo>
 - Should it verify against a community allowlist of trusted plugins?
 - How to handle plugins that legitimately need hooks (e.g., formatting hooks)?
 - Should it integrate with private package manager repositories?
+
+**Severed 2026-05-07** — flagged out-of-scope; reconsider as standalone repo if it resurfaces.
