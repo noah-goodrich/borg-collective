@@ -87,6 +87,28 @@ Bash: jq '.projects | to_entries | map({name: .key, path: .value.path,
           summary: .value.summary})' ~/.config/borg/registry.json
 ```
 
+## Command Patterns
+
+Use these patterns — they avoid `for` loops and `$()` inside `echo`, which trigger permission
+prompts. All are pre-approved by bash-guard.
+
+**Extract H1 title from each directive/severed/assimilated file (one title per file):**
+```bash
+grep -h -m1 '^# ' /path/to/directives/*.md 2>/dev/null | sed 's/^# /- /'
+```
+
+**Extract H1 title + Shipped date from each assimilated file:**
+```bash
+awk 'FNR==1{if(NR>1 && t) print "- " t " (" s ")"; t=""; s=""} /^# / && !t{t=substr($0,3)} \
+/^Shipped:/{s=$0; sub(/.*Shipped:[[:space:]]*/,"",s)} END{if(t) print "- " t " (" s ")"}' \
+/path/*.md
+```
+
+**Count files:**
+```bash
+ls /path/*.md 2>/dev/null | wc -l
+```
+
 ## Step 3 — Deep dive on project `P`
 
 First decide the workspace path for `P`:
