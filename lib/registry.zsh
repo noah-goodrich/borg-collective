@@ -119,7 +119,7 @@ borg_registry_set_status() {
 borg_scan_path_should_skip() {
     local ppath="$1"
     [[ -n "$ppath" ]] || return 0
-    [[ "$ppath" == "${BORG_ROOT:-$HOME/dev}" ]] && return 0
+    [[ "$ppath" == "${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}" ]] && return 0
     [[ -d "$ppath" ]] || return 0
     local rp
     while IFS= read -r rp; do

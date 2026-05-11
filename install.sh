@@ -22,6 +22,12 @@ set -e
 export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 BORG_HOME="${0:A:h}"
+# BORG_ROOT is the install path of the borg-collective source tree itself.
+# Exposed so downstream tools (hooks resolving skill paths, setup re-runs)
+# don't have to derive it from ${0:A:h} each time. BORG_HOME is kept as an
+# internal alias for one release.
+BORG_ROOT="$BORG_HOME"
+export BORG_ROOT
 BIN_DIR="$HOME/.local/bin"
 QUIET=0
 
@@ -207,6 +213,10 @@ fi
 echo "  Community skills (run in Claude Code):"
 echo "    /plugin marketplace add alirezarezvani/claude-skills"
 echo "    Adds: Boris Cherny's 57-tip framework, Scope Guard, 205+ engineering skills"
+echo ""
+echo "  Environment variables:"
+echo "    BORG_ORCHESTRATOR_ROOT=\$HOME/dev   workspace root (where orchestrator runs)"
+echo "    BORG_ROOT=$BORG_HOME    install path of the borg source tree"
 echo ""
 echo "  Optional: ~/.config/borg/config.zsh for work/life boundaries"
 echo "    BORG_WORK_HOURS=\"09:00-18:00\""
