@@ -33,7 +33,7 @@ COMPOSE_FILE=".devcontainer/docker-compose.yml"
 export COMPOSE_PROFILES="${COMPOSE_PROFILES:-borg}"
 POSTGRES_COMPOSE="$HOME/.config/dotfiles/devcontainer/docker-compose.postgres.yml"
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
-BORG_ROOT="${BORG_ROOT:-$HOME/dev}"
+BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"
 
 DRONE_SCRIPT_DIR="${0:A:h}"
 
@@ -117,9 +117,9 @@ _drone_resolve() {
         return 0
     fi
 
-    # Try BORG_ROOT/<arg>
-    if [[ -d "$BORG_ROOT/$arg" ]]; then
-        _proj_dir="$BORG_ROOT/$arg"
+    # Try BORG_ORCHESTRATOR_ROOT/<arg>
+    if [[ -d "$BORG_ORCHESTRATOR_ROOT/$arg" ]]; then
+        _proj_dir="$BORG_ORCHESTRATOR_ROOT/$arg"
         _proj_name="$arg"
         return 0
     fi
@@ -1207,7 +1207,7 @@ cmd_help() {
 
   PROJECT RESOLUTION
     drone up             Uses current directory (backwards-compatible with dev.sh)
-    drone up cairn       Looks up 'cairn' in borg registry, then $BORG_ROOT/cairn
+    drone up cairn       Looks up 'cairn' in borg registry, then $BORG_ORCHESTRATOR_ROOT/cairn
 
   WINDOW LAYOUT
     Top    (75%): main editor / Claude session
@@ -1216,7 +1216,7 @@ cmd_help() {
 
   ENVIRONMENT
     BORG_TMUX_SESSION    tmux session name (default: borg)
-    BORG_ROOT            root directory for project lookup (default: ~/dev)
+    BORG_ORCHESTRATOR_ROOT  workspace root for project lookup (default: ~/dev)
     BORG_DEBUG           set to any value for debug output
 
 EOF
