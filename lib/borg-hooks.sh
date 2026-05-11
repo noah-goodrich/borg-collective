@@ -80,3 +80,23 @@ _borg_osa_notify() {
 _borg_strip_ctl() {
     tr -d '\000-\010\013\014\016-\037'
 }
+
+# Classify the session by its working directory.
+# Returns the literal string "orchestrator" when $1 exactly matches
+# $BORG_ORCHESTRATOR_ROOT (default $HOME/dev), "project" otherwise. Exact
+# match only — descendant directories of the workspace root are project
+# sessions. Trailing slashes on both sides are trimmed before comparison.
+# Side-effect free; safe to call from any hook.
+# Usage: _borg_session_mode <cwd>
+_borg_session_mode() {
+    local cwd="$1"
+    local root="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"
+    # Trim any trailing slashes so "/Users/noah/dev/" matches "/Users/noah/dev"
+    while [[ "$cwd" == */ && "$cwd" != "/" ]]; do cwd="${cwd%/}"; done
+    while [[ "$root" == */ && "$root" != "/" ]]; do root="${root%/}"; done
+    if [[ "$cwd" == "$root" ]]; then
+        printf 'orchestrator\n'
+    else
+        printf 'project\n'
+    fi
+}

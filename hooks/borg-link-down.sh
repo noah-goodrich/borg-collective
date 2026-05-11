@@ -34,6 +34,96 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 # shellcheck source=../lib/borg-hooks.sh
 source "${HOME}/.claude/lib/borg-hooks.sh"
 
+MODE=$(_borg_session_mode "$CWD")
+
+# ── Orchestrator-mode branch ─────────────────────────────────────────────────
+# When CWD is the workspace root (default $HOME/dev), render a scannable
+# cross-project overview AS additionalContext. Write nothing to the registry —
+# the orchestrator session is not a project session.
+_orch_humanize_age() {
+    local ts="$1"
+    [[ -z "$ts" ]] && { printf 'never'; return; }
+    local epoch_now epoch_ts delta
+    epoch_now=$(date -u +%s)
+    # macOS BSD date and GNU date both accept ISO-8601 with -j -f / -d respectively.
+    epoch_ts=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null \
+        || date -u -d "$ts" +%s 2>/dev/null || echo "$epoch_now")
+    delta=$(( epoch_now - epoch_ts ))
+    (( delta < 60 ))    && { printf '%ds ago' "$delta"; return; }
+    (( delta < 3600 ))  && { printf '%dm ago' $(( delta / 60 )); return; }
+    (( delta < 86400 )) && { printf '%dh ago' $(( delta / 3600 )); return; }
+    printf '%dd ago' $(( delta / 86400 ))
+}
+
+_orch_next_hint() {
+    local proj_path="$1"
+    [[ -z "$proj_path" || ! -d "$proj_path" ]] && { printf '(idle)'; return; }
+    local cp next_line dir_file dname
+    cp=$(find "$proj_path/.borg/checkpoints" -maxdepth 1 -name "*.md" 2>/dev/null \
+        | sort -r | head -1 || true)
+    if [[ -n "$cp" && -f "$cp" ]]; then
+        next_line=$(awk '
+            /^## .*[Nn]ext [Ss]ession/ { found=1; next }
+            found && /^## / { exit }
+            found && /^[^[:space:]#]/ { print; exit }
+        ' "$cp" 2>/dev/null | head -c 160 || true)
+        if [[ -n "$next_line" ]]; then
+            printf 'next: %s' "$next_line"
+            return
+        fi
+    fi
+    dir_file=$(find "$proj_path/docs/plans/directives" -maxdepth 1 -name "*.md" 2>/dev/null \
+        | sort -r | head -1 || true)
+    if [[ -n "$dir_file" ]]; then
+        dname="${dir_file##*/}"
+        printf 'directive: %s' "${dname%.md}"
+        return
+    fi
+    printf '(idle)'
+}
+
+if [[ "$MODE" == "orchestrator" ]]; then
+    OVERVIEW=""
+    if [[ -f "$BORG_REGISTRY" ]]; then
+        # Build a sorted list (last_activity desc), skipping archived projects.
+        # For each project: status, humanized last-active, and a single next-step hint.
+        _projects_tsv=$(jq -r '
+            .projects // {} | to_entries
+            | map(select(.value.archived // false | not))
+            | sort_by(.value.last_activity // "")
+            | reverse
+            | .[]
+            | [.key, (.value.status // "idle"), (.value.last_activity // ""), (.value.path // "")]
+            | @tsv
+        ' "$BORG_REGISTRY" 2>/dev/null || true)
+
+        _proj_count=$(printf '%s\n' "$_projects_tsv" | grep -c . 2>/dev/null || echo 0)
+        OVERVIEW+="Orchestrator session — workspace overview (${_proj_count} projects)"$'\n\n'
+        if [[ -n "$_projects_tsv" ]]; then
+            while IFS=$'\t' read -r _name _status _last _path; do
+                [[ -z "$_name" ]] && continue
+                _age=$(_orch_humanize_age "$_last")
+                _hint=$(_orch_next_hint "$_path")
+                OVERVIEW+="  • ${_name} [${_status}] — ${_age} — ${_hint}"$'\n'
+            done <<< "$_projects_tsv"
+        else
+            OVERVIEW+="  (no projects registered — run 'borg add <path>' or 'borg scan')"$'\n'
+        fi
+    else
+        OVERVIEW="Orchestrator session — registry not initialized. Run 'borg setup'."
+    fi
+
+    jq -n --arg ctx "$OVERVIEW" '{
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": $ctx
+        }
+    }'
+    exit 0
+fi
+
+# ── Project-mode (existing behavior) ─────────────────────────────────────────
+
 PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
