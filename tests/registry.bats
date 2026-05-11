@@ -131,7 +131,7 @@ setup() {
 @test "borg_scan_path_should_skip: skips workspace root" {
     run_zsh_fn registry borg_registry_init
     mkdir -p "${BATS_TEST_TMPDIR}/workspace"
-    BORG_ROOT="${BATS_TEST_TMPDIR}/workspace" run run_zsh_fn registry borg_scan_path_should_skip "${BATS_TEST_TMPDIR}/workspace"
+    BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/workspace" run run_zsh_fn registry borg_scan_path_should_skip "${BATS_TEST_TMPDIR}/workspace"
     [ "$status" -eq 0 ]
 }
 

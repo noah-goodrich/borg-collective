@@ -18,7 +18,8 @@ implementation lands.
 1. **Registry lookup by name** (`$BORG_DIR/registry.json` → `.projects[name].path`) — wins
    when the arg matches a registered project, regardless of cwd.
 2. **Existing path** (`-d "$arg"`) — only consulted if registry lookup misses.
-3. **`$BORG_ROOT/<arg>`** — last-resort fallback.
+3. **`$BORG_ROOT/<arg>`** — last-resort fallback. *(Note: renamed to `$BORG_ORCHESTRATOR_ROOT`
+   by the 2026-05-11 orchestrator-mode-separation directive.)*
 
 Cwd is only consulted when the arg is empty (`drone exec` with no project). When a name is
 passed, the registry path wins unconditionally — the calling shell's cwd is irrelevant.
