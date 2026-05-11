@@ -20,7 +20,7 @@ set -e
 
 BORG_VERSION="v0.7.16"
 BORG_HOME="${BORG_HOME:-${0:A:h}}"  # directory containing this script (for lib/, hooks/, skills/)
-BORG_ROOT="${BORG_ROOT:-$HOME/dev}"  # workspace root where projects live
+BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"  # workspace root where projects live; orchestrator session runs here
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 
 # Colors (same as dev.sh)

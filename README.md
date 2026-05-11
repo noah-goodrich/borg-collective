@@ -231,7 +231,7 @@ resolve inside the container. See `drone scaffold` to generate this automaticall
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BORG_TMUX_SESSION` | `borg` | tmux session name |
-| `BORG_ROOT` | `~/dev` | Root directory for project discovery |
+| `BORG_ORCHESTRATOR_ROOT` | `~/dev` | Workspace root where projects live; orchestrator-mode session runs here |
 | `BORG_MAX_ACTIVE` | `3` | Capacity warning threshold |
 | `BORG_WORK_HOURS` | (unset) | e.g. `09:00-18:00` |
 | `BORG_WORK_DAYS` | (unset) | e.g. `Mon,Tue,Wed,Thu,Fri` |
