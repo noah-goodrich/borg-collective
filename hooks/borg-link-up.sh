@@ -31,6 +31,12 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 # shellcheck source=../lib/borg-hooks.sh
 source "${HOME}/.claude/lib/borg-hooks.sh"
 
+# Orchestrator-mode sessions touch no project state. Exit before any registry
+# writes, uncommitted-changes scans, or checkpoint nudges fire.
+if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then
+    exit 0
+fi
+
 PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
