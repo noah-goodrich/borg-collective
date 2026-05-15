@@ -71,6 +71,7 @@ This prevents corruption from concurrent hook executions.
         borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
         borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
         borg-notify.sh          Notification → status=waiting + reason
+        borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
     skills/
         adhd-guardrails/        Cognitive load guardrails (always active)
         borg-plan/              Project planning + Collective review
@@ -100,6 +101,7 @@ This prevents corruption from concurrent hook executions.
         borg-link-down.sh       Symlink → repo
         borg-link-up.sh         Symlink → repo
         borg-notify.sh          Symlink → repo
+        borg-plan-promote.sh    Symlink → repo
     skills/
         adhd-guardrails/        Symlink → repo
         borg-plan/              Symlink → repo
@@ -219,10 +221,21 @@ Hooks are registered in `~/.claude/settings.json`:
   "hooks": {
     "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-down.sh"}]}],
     "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-up.sh"}]}],
-    "Notification": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-notify.sh"}]}]
+    "Notification": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-notify.sh"}]}],
+    "PreToolUse": [
+      {"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-plan-promote.sh"}]},
+      {"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/bash-guard.sh"}]}
+    ]
   }
 }
 ```
+
+`borg-plan-promote.sh` fires on `Edit`, `Write`, and `NotebookEdit` tool calls. It scans the
+session JSONL for an `ExitPlanMode` tool call since the most recent real user message. If found,
+and no `PROJECT_PLAN.md` already exists in the repo, it writes the plan to
+`docs/plans/PROJECT_PLAN.md` (creating the directory if needed) and emits a one-line note to
+stderr. Always exits 0 — it never blocks the edit. Project-mode only; orchestrator sessions are
+excluded via `_borg_session_mode`.
 
 ---
 
