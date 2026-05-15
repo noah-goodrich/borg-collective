@@ -84,6 +84,7 @@ hooks/
     borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
     borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
     borg-notify.sh          Notification → status=waiting + waiting_reason
+    borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
 skills/
     adhd-guardrails/        Cognitive load guardrails (always active)
     borg-plan/              Project planning + Collective review
@@ -117,6 +118,14 @@ docs/
 - **Debriefs replace summaries**: LLM analysis at session stop, not regex extraction
 - **Boundaries are speed bumps**: one-keystroke confirmations, not hard blocks
 - **Cairn is optional**: borg works without it (registry + file debriefs), cairn adds persistence
+- **Auto-plan promotion (`borg-plan-promote.sh`)**: a `PreToolUse` hook that fires on `Edit`,
+  `Write`, and `NotebookEdit`. When Claude exits plan mode (`ExitPlanMode`) and the user
+  proceeds to the first file edit, the hook scans the session JSONL for the most recent
+  `ExitPlanMode` call since the current user turn, extracts the plan, and writes it to
+  `<repo-root>/docs/plans/PROJECT_PLAN.md` — silently, without blocking. Gates: project-mode
+  only, edit target inside repo, no existing `PROJECT_PLAN.md` at either canonical location,
+  cwd is a git repo. Always exits 0 (never blocks on any failure). Idempotent: if
+  `PROJECT_PLAN.md` already exists, the hook is a no-op.
 - **borg-hooks (host-side lifecycle)**: projects can ship executable `.devcontainer/borg-hooks/pre-up.sh`
   and `.devcontainer/borg-hooks/post-down.sh` scripts. `pre-up.sh` runs on the host before
   `docker compose up -d` (strict: non-zero aborts `drone up`); `post-down.sh` runs after
