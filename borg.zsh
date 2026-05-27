@@ -1992,9 +1992,10 @@ CONF
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-link-up.sh"     "Stop"         "borg-link-up.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/notify.sh"             "Notification"  "notify.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/bash-guard.sh"        "PreToolUse"   "bash-guard.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/tool-count-nudge.sh" "PostToolUse"  "tool-count-nudge.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh"  "PreToolUse"   "pre-commit-remind.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/bash-guard.sh"         "PreToolUse"   "bash-guard.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-plan-promote.sh"  "PreToolUse"   "borg-plan-promote.sh"
+        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/tool-count-nudge.sh"  "PostToolUse"  "tool-count-nudge.sh"
         _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-nanoprobe-log.sh" "SubagentStop" "borg-nanoprobe-log.sh"
 
         # Migration: remove old session-start.sh (merged into borg-link-down.sh)
@@ -2052,8 +2053,9 @@ CONF
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-link-up.sh"     "Stop"         "borg-link-up.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/notify.sh"             "Notification"  "notify.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh" "PreToolUse"   "pre-commit-remind.sh"
-        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/bash-guard.sh"        "PreToolUse"   "bash-guard.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/pre-commit-remind.sh"  "PreToolUse"   "pre-commit-remind.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/bash-guard.sh"         "PreToolUse"   "bash-guard.sh"
+        _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-plan-promote.sh"  "PreToolUse"   "borg-plan-promote.sh"
         _borg_register_hook "$COCO_SETTINGS" "\$HOME/.snowflake/cortex/hooks/borg-nanoprobe-log.sh" "SubagentStop" "borg-nanoprobe-log.sh"
 
         # Migration: rename CoCo borg-start.sh/borg-stop.sh → borg-link-down.sh/borg-link-up.sh
