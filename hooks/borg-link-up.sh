@@ -2,7 +2,7 @@
 # borg-link-up.sh — Claude Code / Cortex Code Stop hook
 # "Link up" to the collective: flush state from the session when it ends.
 #
-# - Registry update: status=idle, claude_session_id, last_activity
+# - State update (state.json): status=idle, claude_session_id, last_activity
 # - Tracks has_uncommitted_changes for next session's reminder
 # - Cleans up per-project skill overlays symlinked during link-down
 # - Nudges on exit if no checkpoint was recorded this session ("run /borg-link-up next time")
@@ -40,25 +40,9 @@ fi
 PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-# Require registry to exist
-[[ -f "$BORG_REGISTRY" ]] || exit 0
+PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
 
-# Fast registry update: status=idle
-TMP="$BORG_REGISTRY.tmp.$$"
-jq \
-    --arg p "$PROJECT" \
-    --arg sid "$SESSION_ID" \
-    --arg now "$NOW" \
-    '
-    if .projects | has($p) then
-        .projects[$p].status = "idle" |
-        .projects[$p].last_activity = $now |
-        (if $sid != "" then .projects[$p].claude_session_id = $sid else . end)
-    else .
-    end
-    ' "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
-
-# Check for uncommitted changes: warn in terminal + store flag for next session
+# Check for uncommitted changes (warn in terminal; store flag in state.json)
 UNCOMMITTED=""
 if command -v git >/dev/null 2>&1; then
     if git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -74,10 +58,16 @@ else
     DIRTY_FLAG=false
 fi
 
-TMP2="$BORG_REGISTRY.tmp2.$$"
-jq --arg p "$PROJECT" --argjson f "$DIRTY_FLAG" \
-    'if .projects | has($p) then .projects[$p].has_uncommitted_changes = $f else . end' \
-    "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP2" && mv "$TMP2" "$BORG_REGISTRY"
+# Write status=idle + session fields + has_uncommitted_changes to state.json.
+_cur_state=$(_borg_state_read "$PROJ_DIR")
+_new_state=$(printf '%s' "$_cur_state" | jq \
+    --arg sid "$SESSION_ID" \
+    --arg now "$NOW" \
+    --argjson dirty "$DIRTY_FLAG" \
+    '.status = "idle" | .last_activity = $now |
+     .has_uncommitted_changes = $dirty |
+     (if $sid != "" then .claude_session_id = $sid else . end)')
+_borg_state_write "$PROJ_DIR" "$_new_state" || true
 
 # Per-project skill overlay cleanup
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
