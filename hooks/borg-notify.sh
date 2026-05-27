@@ -21,6 +21,11 @@ MESSAGE=$(echo "$INPUT" | jq -r '.message // ""' 2>/dev/null || echo "")
 # shellcheck source=../lib/borg-hooks.sh
 source "${HOME}/.claude/lib/borg-hooks.sh"
 
+# Orchestrator-mode sessions do not flip status=waiting on any project.
+if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then
+    exit 0
+fi
+
 PROJECT=$(basename "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 

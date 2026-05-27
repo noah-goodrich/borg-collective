@@ -103,6 +103,15 @@ docs/
 
 ## Key Patterns
 
+- **Orchestrator-mode vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
+  Stop, and Notification hook now classifies the session via `_borg_session_mode` (in
+  `lib/borg-hooks.sh`). A session whose `$CWD` *exactly* equals `$BORG_ORCHESTRATOR_ROOT`
+  (default `$HOME/dev`) is the **orchestrator** session — it renders a cross-project overview
+  on start and writes **nothing** to `~/.config/borg/registry.json`. Every other CWD is a
+  **project** session and uses the existing per-project flow (status flips, checkpoint
+  injection, uncommitted-change tracking). Two-variable vocabulary: `BORG_ORCHESTRATOR_ROOT`
+  is the workspace root; `BORG_ROOT` (exposed by `install.sh`) is the install path of the
+  borg source tree.
 - **CLI structure mirrors dev.sh**: `set -e`, case dispatch, colored output, `cmd_*` naming
 - **Registry writes are atomic**: write to tmp file, `mv` to final path
 - **Skills do the thinking**: Claude proposes, developer validates. Minimum cognitive load.
