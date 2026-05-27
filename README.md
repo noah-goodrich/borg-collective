@@ -115,6 +115,7 @@ Three hooks update the registry automatically:
 | `borg-link-up.sh` | Stop | Status → idle; warns on uncommitted changes; nudges if no recent checkpoint |
 | `borg-nanoprobe-log.sh` | SubagentStop | Appends one JSONL line per nanoprobe completion to `~/.config/borg/agents.jsonl` |
 | `pre-commit-remind.sh` | PreToolUse | Reminds Claude to run /simplify before git commit |
+| `borg-plan-promote.sh` | PreToolUse | Auto-promotes ExitPlanMode plan to `docs/plans/PROJECT_PLAN.md` |
 
 ### Session Checkpoints
 

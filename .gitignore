@@ -14,3 +14,9 @@ registry.json
 .borg/*
 !.borg/checkpoints/
 !.borg/skill-extensions/
+
+# Claude Code project-level settings and session state — local only
+.claude/
+
+# Runtime session state inside template scaffolds (same convention as root .borg/)
+templates/supabase/.borg/
