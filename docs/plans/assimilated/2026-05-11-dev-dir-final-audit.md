@@ -1,4 +1,5 @@
 # Directive: Final ~/dev Audit — Unaudited Non-Project Directories
+Shipped: 2026-05-27
 
 *Filed: 2026-05-11*
 *Spawned from the Track F cleanup arc — the major cleanup is complete
