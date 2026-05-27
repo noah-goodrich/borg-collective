@@ -2,7 +2,7 @@
 # borg-notify.sh — Claude Code Notification hook
 # Fires when Claude Code needs user input (session is waiting).
 #
-# Updates registry: status=waiting
+# Updates state.json: status=waiting
 # Fires macOS notification (augments notify.sh, does NOT replace it)
 # Registered as a Notification hook in ~/.claude/settings.json alongside notify.sh
 
@@ -26,7 +26,7 @@ if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then
     exit 0
 fi
 
-PROJECT=$(basename "$CWD")
+PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Origin tag lets borg-notifyd suppress its own popup when notify.sh already fired on the host.
@@ -34,23 +34,16 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 ORIGIN=host
 _borg_is_container && ORIGIN=container
 
-# Update registry: status=waiting + capture notification message as waiting_reason
-if [[ -f "$BORG_REGISTRY" ]]; then
-    TMP="$BORG_REGISTRY.tmp.$$"
-    jq \
-        --arg p "$PROJECT" \
-        --arg now "$NOW" \
-        --arg msg "$MESSAGE" \
-        --arg origin "$ORIGIN" \
-        '
-        if .projects | has($p) then
-            .projects[$p].status = "waiting" |
-            .projects[$p].last_activity = $now |
-            .projects[$p].notify_origin = $origin |
-            (if $msg != "" then .projects[$p].waiting_reason = $msg else . end)
-        else .
-        end
-        ' "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP" && mv "$TMP" "$BORG_REGISTRY"
-fi
+PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
+
+# Write status=waiting + notification context to state.json.
+_cur_state=$(_borg_state_read "$PROJ_DIR")
+_new_state=$(printf '%s' "$_cur_state" | jq \
+    --arg now "$NOW" \
+    --arg msg "$MESSAGE" \
+    --arg origin "$ORIGIN" \
+    '.status = "waiting" | .last_activity = $now | .notify_origin = $origin |
+     (if $msg != "" then .waiting_reason = $msg else . end)')
+_borg_state_write "$PROJ_DIR" "$_new_state" || true
 
 exit 0

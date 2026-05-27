@@ -104,13 +104,15 @@ setup() {
     [ "$output" = "true" ]
 }
 
-@test "borg_registry_set_status updates status and timestamp" {
+@test "borg_registry_set_status writes status and timestamp to state.json" {
+    local proj_dir="${BATS_TEST_TMPDIR}/myproj"
+    mkdir -p "$proj_dir"
     run_zsh_fn registry borg_registry_init
-    echo '{"projects":{"myproj":{"status":"idle"}}}' > "$BORG_REGISTRY"
+    printf '{"projects":{"myproj":{"path":"%s","source":"cli"}}}' "$proj_dir" > "$BORG_REGISTRY"
     run_zsh_fn registry borg_registry_set_status myproj active
-    run jq -r '.projects.myproj.status' "$BORG_REGISTRY"
+    run jq -r '.status' "${proj_dir}/.borg/state.json"
     [ "$output" = "active" ]
-    run jq -r '.projects.myproj.last_activity' "$BORG_REGISTRY"
+    run jq -r '.last_activity' "${proj_dir}/.borg/state.json"
     [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]
 }
 

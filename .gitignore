@@ -20,3 +20,4 @@ registry.json
 
 # Runtime session state inside template scaffolds (same convention as root .borg/)
 templates/supabase/.borg/
+.borg/state.json

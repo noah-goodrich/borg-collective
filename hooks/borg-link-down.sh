@@ -85,19 +85,32 @@ _orch_next_hint() {
 if [[ "$MODE" == "orchestrator" ]]; then
     OVERVIEW=""
     if [[ -f "$BORG_REGISTRY" ]]; then
-        # Build a sorted list (last_activity desc), skipping archived projects.
-        # For each project: status, humanized last-active, and a single next-step hint.
-        _projects_tsv=$(jq -r '
+        # Read registry for identity fields, then overlay state.json for each project.
+        # Build TSV: name, status, last_activity, path — sorted by last_activity desc.
+        _raw_tsv=$(jq -r '
             .projects // {} | to_entries
             | map(select(.value.archived // false | not))
-            | sort_by(.value.last_activity // "")
-            | reverse
             | .[]
-            | [.key, (.value.status // "idle"), (.value.last_activity // ""), (.value.path // "")]
+            | [.key, (.value.path // "")]
             | @tsv
         ' "$BORG_REGISTRY" 2>/dev/null || true)
 
-        _proj_count=$(printf '%s\n' "$_projects_tsv" | grep -c . 2>/dev/null || echo 0)
+        _projects_tsv=""
+        while IFS=$'\t' read -r _name _path; do
+            [[ -z "$_name" ]] && continue
+            _status="idle"
+            _last=""
+            if [[ -n "$_path" && -f "$_path/.borg/state.json" ]]; then
+                _status=$(jq -r '.status // "idle"' "$_path/.borg/state.json" 2>/dev/null || echo "idle")
+                _last=$(jq -r '.last_activity // ""' "$_path/.borg/state.json" 2>/dev/null || echo "")
+            fi
+            _projects_tsv+=$(printf '%s\t%s\t%s\t%s' "$_name" "$_status" "$_last" "$_path")$'\n'
+        done <<< "$_raw_tsv"
+
+        # Sort by last_activity desc (ISO timestamps sort lexicographically)
+        _projects_tsv=$(printf '%s' "$_projects_tsv" | sort -t$'\t' -k3 -r 2>/dev/null || printf '%s' "$_projects_tsv")
+
+        _proj_count=$(printf '%s' "$_projects_tsv" | grep -c . 2>/dev/null || echo 0)
         OVERVIEW+="Orchestrator session — workspace overview (${_proj_count} projects)"$'\n\n'
         if [[ -n "$_projects_tsv" ]]; then
             while IFS=$'\t' read -r _name _status _last _path; do
@@ -127,6 +140,8 @@ fi
 PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
+
 # ── 0. CLAUDE.md integrity check ─────────────────────────────────────────────
 # Skip inside containers — ~/.claude is bind-mounted from the host, and applying
 # container-path extensions would pollute the host's CLAUDE.md with /home/dev/... paths.
@@ -137,23 +152,17 @@ if [[ ! -f /.dockerenv ]]; then
     _borg_apply_claude_extensions
 fi
 
-# ── 1. Registry update ───────────────────────────────────────────────────────
+# ── 1. State update ──────────────────────────────────────────────────────────
+# Write status=active, last_activity, and claude_session_id to the per-project
+# state.json (not the shared registry).
 
-if [[ -f "$BORG_REGISTRY" ]]; then
-    TMP="$BORG_REGISTRY.tmp.$$"
-    jq \
-        --arg p "$PROJECT" \
-        --arg sid "$SESSION_ID" \
-        --arg now "$NOW" \
-        '
-        if .projects | has($p) then
-            .projects[$p].status = "active" |
-            .projects[$p].last_activity = $now |
-            (if $sid != "" then .projects[$p].claude_session_id = $sid else . end)
-        else .
-        end
-        ' "$BORG_REGISTRY" | _borg_strip_ctl > "$TMP" && mv "$TMP" "$BORG_REGISTRY" || true
-fi
+_cur_state=$(_borg_state_read "$PROJ_DIR")
+_new_state=$(printf '%s' "$_cur_state" | jq \
+    --arg sid "$SESSION_ID" \
+    --arg now "$NOW" \
+    '.status = "active" | .last_activity = $now |
+     (if $sid != "" then .claude_session_id = $sid else . end)')
+_borg_state_write "$PROJ_DIR" "$_new_state" || true
 
 # ── 1b. Per-project skill overlay ────────────────────────────────────────────
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
@@ -214,13 +223,19 @@ If this is exploratory/investigative work with no deliverable, state that explic
 and you may proceed without /borg-plan.")
 fi
 
-# Capacity warning — too many active/waiting projects
+# Capacity warning — count active/waiting by scanning per-project state.json files
 if [[ -f "$BORG_REGISTRY" ]]; then
     _max_active=$(grep -m1 '^BORG_MAX_ACTIVE=' "$BORG_DIR/config.zsh" 2>/dev/null \
         | sed 's/BORG_MAX_ACTIVE=//' | tr -d '"' || echo "3")
     [[ "$_max_active" =~ ^[0-9]+$ ]] || _max_active=3
-    _active_count=$(jq '[.projects[] | select(.status == "active" or .status == "waiting")] | length' \
-        "$BORG_REGISTRY" 2>/dev/null || echo "0")
+    _active_count=0
+    while IFS= read -r _rpath; do
+        [[ -z "$_rpath" || "$_rpath" == "null" ]] && continue
+        _sf="$_rpath/.borg/state.json"
+        [[ -f "$_sf" ]] || continue
+        _s=$(jq -r '.status // "idle"' "$_sf" 2>/dev/null || true)
+        [[ "$_s" == "active" || "$_s" == "waiting" ]] && _active_count=$(( _active_count + 1 )) || true
+    done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY" 2>/dev/null || true)
     if (( _active_count > _max_active )); then
         CONTEXT_PARTS+=("⚠ CAPACITY WARNING: $_active_count projects active/waiting (limit: $_max_active).
 Too many concurrent threads degrades quality and increases context-switching overhead.
@@ -228,14 +243,12 @@ Complete or pause a project before starting new work.")
     fi
 fi
 
-# Uncommitted-changes reminder from previous session
-if [[ -f "$BORG_REGISTRY" ]]; then
-    UNCOMMITTED_FLAG=$(jq -r --arg p "$PROJECT" \
-        '.projects[$p].has_uncommitted_changes // false' "$BORG_REGISTRY" 2>/dev/null || echo "false")
-    if [[ "$UNCOMMITTED_FLAG" == "true" ]]; then
-        CONTEXT_PARTS+=("REMINDER: Last session ended with uncommitted changes in $PROJECT.
+# Uncommitted-changes reminder from previous session (read from state.json)
+UNCOMMITTED_FLAG=$(jq -r '.has_uncommitted_changes // false' \
+    "$(_borg_state_file "$PROJ_DIR")" 2>/dev/null || echo "false")
+if [[ "$UNCOMMITTED_FLAG" == "true" ]]; then
+    CONTEXT_PARTS+=("REMINDER: Last session ended with uncommitted changes in $PROJECT.
 Run 'git status' to see what's pending. Consider /simplify and committing before new work.")
-    fi
 fi
 
 # Active directives for this project — inject filename + objective line only (no full bodies)

@@ -18,7 +18,7 @@ hash -r 2>/dev/null || true
 
 set -e
 
-BORG_VERSION="v0.7.16"
+BORG_VERSION="v0.8.0"
 BORG_HOME="${BORG_HOME:-${0:A:h}}"  # directory containing this script (for lib/, hooks/, skills/)
 BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"  # workspace root where projects live; orchestrator session runs here
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
@@ -110,9 +110,9 @@ _borg_boundary_check() {
     return 0
 }
 
-# Count projects with status=waiting or status=active
+# Count projects with status=waiting or status=active (reads per-project state.json)
 _borg_active_count() {
-    borg_registry_read | jq '[.projects[] | select(.status == "waiting" or .status == "active")] | length'
+    borg_registry_with_state | jq '[.projects[] | select(.status == "waiting" or .status == "active")] | length'
 }
 
 # Read directives from a project's own docs/plans/directives/ directory.
@@ -246,7 +246,7 @@ _borg_link_porcelain() {
     local show_all="${1:-0}"
     borg_desktop_scan 2>/dev/null || true
     local registry
-    registry=$(borg_registry_read)
+    registry=$(borg_registry_with_state)
     local sorted_names
     sorted_names=$(echo "$registry" | jq -r '
         .projects | to_entries |
@@ -281,7 +281,7 @@ _borg_link_overview() {
     borg_desktop_scan 2>/dev/null || true
 
     local registry
-    registry=$(borg_registry_read)
+    registry=$(borg_registry_with_state)
     local project_count
     project_count=$(echo "$registry" | jq '.projects | length')
 
@@ -424,7 +424,7 @@ _borg_link_deep() {
     fi
 
     local entry
-    entry=$(borg_registry_get "$project")
+    entry=$(borg_registry_get_with_state "$project")
 
     local source ppath proj_status last summary session_id tmux_window
     source=$(echo "$entry"     | jq -r '.source // "cli"')
@@ -529,7 +529,7 @@ cmd_ls() {
     borg_desktop_scan 2>/dev/null || true
 
     local registry
-    registry=$(borg_registry_read)
+    registry=$(borg_registry_with_state)
     local project_count
     project_count=$(echo "$registry" | jq '.projects | length')
 
@@ -652,7 +652,7 @@ cmd_status() {
     fi
 
     local entry
-    entry=$(borg_registry_get "$project")
+    entry=$(borg_registry_get_with_state "$project")
 
     local source ppath proj_status last summary session_id tmux_window
     source=$(echo "$entry"     | jq -r '.source // "cli"')
@@ -721,7 +721,7 @@ _borg_do_switch() {
     fi
 
     local entry
-    entry=$(borg_registry_get "$project")
+    entry=$(borg_registry_get_with_state "$project")
     local tmux_window source summary last
     tmux_window=$(echo "$entry" | jq -r '.tmux_window // ""')
     source=$(echo "$entry" | jq -r '.source // "cli"')
@@ -2152,14 +2152,24 @@ CONF
         done
     fi
 
-    # ── 4c. Ensure .borg/ is gitignored in registered projects ───────────────
-    info "Ensuring .borg/ is gitignored in registered projects..."
+    # ── 4c. Ensure .borg/state.json is gitignored + initialise state files ────
+    info "Ensuring .borg/state.json is gitignored in registered projects..."
     while IFS= read -r _proj_path; do
         [[ -n "$_proj_path" && -d "$_proj_path" ]] || continue
         local _gi="$_proj_path/.gitignore"
-        if ! grep -qE '^\.borg/?$' "$_gi" 2>/dev/null; then
-            echo '.borg/' >> "$_gi"
-            info "  Added .borg/ to ${_proj_path##*/}/.gitignore"
+        # Add .borg/state.json to .gitignore (NOT the entire .borg/ dir —
+        # that would break the !.borg/checkpoints/ negation carve-out).
+        if ! grep -qF '.borg/state.json' "$_gi" 2>/dev/null; then
+            echo '.borg/state.json' >> "$_gi"
+            info "  Added .borg/state.json to ${_proj_path##*/}/.gitignore"
+        fi
+        # Initialise an empty state.json if one doesn't exist yet.
+        local _sf="$_proj_path/.borg/state.json"
+        if [[ ! -f "$_sf" ]]; then
+            mkdir -p "$_proj_path/.borg"
+            echo '{"status":"idle","last_activity":null,"claude_session_id":null,"has_uncommitted_changes":false,"waiting_reason":null,"notify_origin":"host"}' \
+                > "$_sf"
+            info "  Initialised state.json for ${_proj_path##*/}"
         fi
     done < <(borg_registry_read | jq -r '.projects[].path // empty')
 
