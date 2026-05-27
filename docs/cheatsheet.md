@@ -102,7 +102,7 @@ Ctrl+Space >                      Next project
 
 ```
 BORG_TMUX_SESSION=borg               tmux session name
-BORG_ROOT=~/dev                      Root directory for project discovery
+BORG_ORCHESTRATOR_ROOT=~/dev         Workspace root; orchestrator-mode session runs here
 BORG_MAX_ACTIVE=3                    Capacity warning threshold
 BORG_WORK_HOURS=09:00-18:00          Work hours (empty to disable)
 BORG_WORK_DAYS=Mon,Tue,Wed,Thu,Fri   Work days

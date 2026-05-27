@@ -163,7 +163,7 @@ borg.zsh
   │           _borg_orchestrator_context)
   ├── Commands
   │   ├── cmd_init        Build briefing context → claude --append-system-prompt
-  │   ├── cmd_claude      claude --continue from BORG_ROOT (resume orchestrator)
+  │   ├── cmd_claude      claude --continue from BORG_ORCHESTRATOR_ROOT (resume orchestrator)
   │   ├── cmd_next        Priority scoring → recommendation → switch
   │   ├── cmd_ls          Dashboard with sorting, markers, capacity warning
   │   ├── cmd_switch      fzf picker or direct switch
