@@ -1,5 +1,7 @@
 # Directive: Orchestrator-Mode Session Separation
 
+Shipped: 2026-05-27
+
 *Filed: 2026-05-11*
 *Predecessor to: `2026-05-XX-per-project-state-migration.md` (Directive B,
 stub filed alongside).*
