@@ -1,4 +1,6 @@
-# Directive: Per-Project State Migration (STUB)
+# Directive: Per-Project State Migration
+
+Shipped: 2026-05-27
 
 *Filed: 2026-05-11*
 *Blocked on: `2026-05-11-orchestrator-mode-separation.md` (Directive A).*
