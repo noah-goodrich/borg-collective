@@ -124,6 +124,20 @@ If this is exploratory/investigative work with no deliverable, state that explic
 and you may proceed without /borg-plan.")
 fi
 
+# Capacity warning — too many active/waiting projects
+if [[ -f "$BORG_REGISTRY" ]]; then
+    _max_active=$(grep -m1 '^BORG_MAX_ACTIVE=' "$BORG_DIR/config.zsh" 2>/dev/null \
+        | sed 's/BORG_MAX_ACTIVE=//' | tr -d '"' || echo "3")
+    [[ "$_max_active" =~ ^[0-9]+$ ]] || _max_active=3
+    _active_count=$(jq '[.projects[] | select(.status == "active" or .status == "waiting")] | length' \
+        "$BORG_REGISTRY" 2>/dev/null || echo "0")
+    if (( _active_count > _max_active )); then
+        CONTEXT_PARTS+=("⚠ CAPACITY WARNING: $_active_count projects active/waiting (limit: $_max_active).
+Too many concurrent threads degrades quality and increases context-switching overhead.
+Complete or pause a project before starting new work.")
+    fi
+fi
+
 # Uncommitted-changes reminder from previous session
 if [[ -f "$BORG_REGISTRY" ]]; then
     UNCOMMITTED_FLAG=$(jq -r --arg p "$PROJECT" \
