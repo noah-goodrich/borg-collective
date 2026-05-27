@@ -1,4 +1,5 @@
 # Project Plan: Skill Extension Protocol
+Shipped: 2026-05-27
 *Established: 2026-05-04*
 
 ## Objective
