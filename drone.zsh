@@ -190,6 +190,13 @@ get_bottom_pane() {
         | sort -rn | head -1 | awk '{print $2}'
 }
 
+get_left_pane() {
+    # Returns the leftmost pane — in the host-first side-by-side layout this is
+    # always the Claude/AI pane.
+    tmux list-panes -t "$SESSION:$1" -F '#{pane_left} #{pane_id}' 2>/dev/null \
+        | sort -n | head -1 | awk '{print $2}'
+}
+
 # Count project windows (all except 'host')
 project_window_count() {
     tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -vcx 'host' | tr -d ' '
@@ -310,12 +317,12 @@ create_2pane_window() {
 
     tmux set-option -t "$SESSION:$wname" automatic-rename off
 
-    # Side-by-side 50/50 — left pane is the shell, right pane is the Claude pane.
+    # Side-by-side 50/50 — left pane is the Claude pane, right pane is the shell.
     local right
     right=$(tmux split-window -h -p 50 -t "$main" -c "$start_dir" -PF '#{pane_id}')
 
-    # Default focus to right pane (Claude pane)
-    tmux select-pane -t "$right"
+    # Default focus to left pane (Claude pane)
+    tmux select-pane -t "$main"
 
     [[ -n "$main_cmd"  ]] && tmux send-keys -t "$main"  "$main_cmd"  Enter
     [[ -n "$right_cmd" ]] && tmux send-keys -t "$right" "$right_cmd" Enter
@@ -377,8 +384,8 @@ cmd_up() {
             return
         fi
 
-        # Host-first: left pane is a shell at project_dir, right pane runs claude.
-        create_2pane_window "$project_name" "" "$project_dir" "claude"
+        # Host-first: left pane runs claude, right pane is a shell at project_dir.
+        create_2pane_window "$project_name" "claude" "$project_dir" ""
         tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
         _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
         borg add "$project_dir" 2>/dev/null || true
@@ -456,8 +463,8 @@ cmd_up() {
     run_post_start_command "$project_name" "$project_dir"
 
     # Host-first: both panes are host shells at $project_dir.
-    # Right (Claude) pane auto-launches `claude`; left pane stays as a shell prompt.
-    create_2pane_window "$project_name" "" "$project_dir" "claude"
+    # Left (Claude) pane auto-launches `claude`; right pane stays as a shell prompt.
+    create_2pane_window "$project_name" "claude" "$project_dir" ""
     tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
     _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
     borg add "$project_dir" 2>/dev/null || true
@@ -618,13 +625,13 @@ cmd_claude() {
 
     # Reattach: only send `claude` if the pane is at a shell prompt — avoids
     # typing "claude" into a running Claude REPL.
-    local bottom_pane current_cmd
-    bottom_pane=$(get_bottom_pane "$project_name")
-    current_cmd=$(tmux display-message -p -t "$bottom_pane" '#{pane_current_command}' 2>/dev/null)
+    local claude_pane current_cmd
+    claude_pane=$(get_left_pane "$project_name")
+    current_cmd=$(tmux display-message -p -t "$claude_pane" '#{pane_current_command}' 2>/dev/null)
     case "$current_cmd" in
         zsh|bash|sh|fish|dash|"")
             info "Launching Claude in $project_name..."
-            tmux send-keys -t "$bottom_pane" "claude" Enter
+            tmux send-keys -t "$claude_pane" "claude" Enter
             ;;
         *)
             info "Claude pane already busy ($current_cmd) — focusing without relaunch."
@@ -634,8 +641,8 @@ cmd_claude() {
     # Switch to the project window, focus + zoom Claude pane
     attach_or_switch "$project_name"
     _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
-    tmux select-pane -t "$bottom_pane"
-    tmux resize-pane -Z -t "$bottom_pane"
+    tmux select-pane -t "$claude_pane"
+    tmux resize-pane -Z -t "$claude_pane"
 }
 
 # ── drone cortex ──────────────────────────────────────────────────────────────
@@ -652,16 +659,16 @@ cmd_cortex() {
         cmd_up "${1:-}"
     fi
 
-    local bottom_pane
-    bottom_pane=$(get_bottom_pane "$project_name")
-    info "Launching Cortex in $project_name (bottom pane)..."
-    tmux send-keys -t "$bottom_pane" "cortex" Enter
+    local claude_pane
+    claude_pane=$(get_left_pane "$project_name")
+    info "Launching Cortex in $project_name (left pane)..."
+    tmux send-keys -t "$claude_pane" "cortex" Enter
     tmux set-option -t "$SESSION:$project_name" @cortex_launched 1
 
     attach_or_switch "$project_name"
     _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
-    tmux select-pane -t "$bottom_pane"
-    tmux resize-pane -Z -t "$bottom_pane"
+    tmux select-pane -t "$claude_pane"
+    tmux resize-pane -Z -t "$claude_pane"
 }
 
 # ── drone start ───────────────────────────────────────────────────────────────
@@ -700,12 +707,12 @@ cmd_feature() {
         tmux set-option -t "$SESSION:$window_name" @project_dir "$work_dir"
         tmux set-option -t "$SESSION:$window_name" @project_name "$project_name"
         borg add "$work_dir" 2>/dev/null || true
-        local bottom_pane
-        bottom_pane=$(get_bottom_pane "$window_name")
-        tmux send-keys -t "$bottom_pane" "claude" Enter
+        local claude_pane
+        claude_pane=$(get_left_pane "$window_name")
+        tmux send-keys -t "$claude_pane" "claude" Enter
         attach_or_switch "$window_name"
-        tmux select-pane -t "$bottom_pane"
-        tmux resize-pane -Z -t "$bottom_pane"
+        tmux select-pane -t "$claude_pane"
+        tmux resize-pane -Z -t "$claude_pane"
     fi
     info "Started: $window_name"
 }

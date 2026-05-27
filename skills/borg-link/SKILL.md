@@ -53,8 +53,11 @@ to other projects' drones. Cairn is host-only for now. Degrade silently — do n
 
 ## Modes
 
-- **No argument → overview** of all projects
-- **Project name → deep dive** on one project
+- **No argument + inside a project path** → deep dive on the current project (marker walk
+  found a `.borg-project` file). No explicit project name needed.
+- **No argument + not in a project path** → overview of all projects (orchestrator/host
+  session; marker walk found nothing).
+- **Project name → deep dive** on the named project regardless of CWD.
 - **`--brief` / `--refresh`** → host-only (they need the CLI's LLM pipeline). If asked for
   these inside a container, tell the user to run `borg link --brief` / `borg link --refresh`
   from the host.
@@ -157,8 +160,9 @@ behavior, not an error.
 
 ## When to use
 
-- User asks "what's going on?" / "show me everything" → overview
-- User asks about a specific project → deep dive
+- User asks "what's going on?" / "show me everything" from the orchestrator → overview
+- User asks "what's going on?" from inside a project → deep dive on that project
+- User asks about a specific project (by name) → deep dive
 - User asks for a briefing or morning summary → overview (or suggest `borg link --brief` on
   the host for the LLM narrative)
 - User says summaries look stale → suggest `borg link --refresh` on the host
