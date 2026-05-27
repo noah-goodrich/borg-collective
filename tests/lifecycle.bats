@@ -232,3 +232,59 @@ EOF
     [ "$status" = "active" ]
 }
 
+# ─── orchestrator-mode behaviour ──────────────────────────────────────────────
+
+@test "start hook in orchestrator mode emits overview context" {
+    local orch_cwd="$HOME/dev"
+    mkdir -p "$orch_cwd"
+
+    run bash "$BORG_START" <<< "$(printf '{"session_id":"orch-abc","cwd":"%s"}' "$orch_cwd")"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null
+    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -qi "orchestrator"
+}
+
+@test "start hook in orchestrator mode does NOT write to registry" {
+    local orch_cwd="$HOME/dev"
+    mkdir -p "$orch_cwd"
+
+    # Capture mtime before
+    _before=$(jq -c '.' "$BORG_REGISTRY")
+
+    bash "$BORG_START" <<< "$(printf '{"session_id":"orch-abc","cwd":"%s"}' "$orch_cwd")" >/dev/null
+
+    _after=$(jq -c '.' "$BORG_REGISTRY")
+    [ "$_before" = "$_after" ]
+}
+
+@test "stop hook in orchestrator mode does NOT write to registry" {
+    local orch_cwd="$HOME/dev"
+    mkdir -p "$orch_cwd"
+
+    # Set a known status first
+    jq '.projects.myproject.status = "active"' "$BORG_REGISTRY" > "${BORG_REGISTRY}.tmp" \
+        && mv "${BORG_REGISTRY}.tmp" "$BORG_REGISTRY"
+
+    bash "$BORG_STOP" \
+        <<< "$(printf '{"session_id":"orch-abc","cwd":"%s"}' "$orch_cwd")" 2>/dev/null
+
+    # Status must remain active — stop hook must not flip it to idle
+    status=$(jq -r '.projects.myproject.status' "$BORG_REGISTRY")
+    [ "$status" = "active" ]
+}
+
+@test "notify hook in orchestrator mode does NOT write to registry" {
+    local borg_notify="${BATS_TEST_DIRNAME}/../hooks/borg-notify.sh"
+    local orch_cwd="$HOME/dev"
+    mkdir -p "$orch_cwd"
+
+    jq '.projects.myproject.status = "active"' "$BORG_REGISTRY" > "${BORG_REGISTRY}.tmp" \
+        && mv "${BORG_REGISTRY}.tmp" "$BORG_REGISTRY"
+
+    bash "$borg_notify" \
+        <<< "$(printf '{"session_id":"orch-abc","cwd":"%s","message":"waiting"}' "$orch_cwd")" 2>/dev/null || true
+
+    status=$(jq -r '.projects.myproject.status' "$BORG_REGISTRY")
+    [ "$status" = "active" ]
+}
+
