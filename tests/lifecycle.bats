@@ -39,10 +39,10 @@ setup() {
     printf '{"message":{"role":"user","content":"Fix the login bug"}}\n' > "$FAKE_TRANSCRIPT"
     printf '{"message":{"role":"assistant","content":"I fixed it. Run the tests next."}}\n' >> "$FAKE_TRANSCRIPT"
 
-    # Seed registry
+    # Seed registry with the real test CWD path so hooks can resolve state.json
     mkdir -p "$BORG_DIR"
-    cat > "$BORG_REGISTRY" <<'EOF'
-{"projects":{"myproject":{"path":"/tmp/myproject","status":"idle","source":"cli"}}}
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{"myproject":{"path":"${TEST_CWD}","status":"idle","source":"cli"}}}
 EOF
 
     # Mock cairn: always succeeds, returns empty search results
@@ -80,14 +80,14 @@ EOF
 @test "start hook sets project status to active" {
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    status=$(jq -r '.projects.myproject.status' "$BORG_REGISTRY")
+    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
     [ "$status" = "active" ]
 }
 
-@test "start hook records session_id in registry" {
+@test "start hook records session_id in state.json" {
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    sid=$(jq -r '.projects.myproject.claude_session_id' "$BORG_REGISTRY")
+    sid=$(jq -r '.claude_session_id' "${TEST_CWD}/.borg/state.json")
     [ "$sid" = "sess-abc" ]
 }
 
@@ -107,9 +107,9 @@ EOF
 }
 
 @test "start hook includes uncommitted-changes reminder when flag set" {
-    # Set the flag in registry
-    jq '.projects.myproject.has_uncommitted_changes = true' "$BORG_REGISTRY" > "${BORG_REGISTRY}.tmp" \
-        && mv "${BORG_REGISTRY}.tmp" "$BORG_REGISTRY"
+    # Set the flag in state.json
+    mkdir -p "${TEST_CWD}/.borg"
+    echo '{"has_uncommitted_changes":true}' > "${TEST_CWD}/.borg/state.json"
 
     run bash "$BORG_START" <<< "$(_start_input)"
     [ "$status" -eq 0 ]
@@ -119,20 +119,20 @@ EOF
 # ─── stop hook registry update ────────────────────────────────────────────────
 
 @test "stop hook sets project status to idle" {
-    # First mark project as active
-    jq '.projects.myproject.status = "active"' "$BORG_REGISTRY" > "${BORG_REGISTRY}.tmp" \
-        && mv "${BORG_REGISTRY}.tmp" "$BORG_REGISTRY"
+    # Pre-seed state.json as active
+    mkdir -p "${TEST_CWD}/.borg"
+    echo '{"status":"active"}' > "${TEST_CWD}/.borg/state.json"
 
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    status=$(jq -r '.projects.myproject.status' "$BORG_REGISTRY")
+    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
     [ "$status" = "idle" ]
 }
 
-@test "stop hook records session_id in registry" {
+@test "stop hook records session_id in state.json" {
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    sid=$(jq -r '.projects.myproject.claude_session_id' "$BORG_REGISTRY")
+    sid=$(jq -r '.claude_session_id' "${TEST_CWD}/.borg/state.json")
     [ "$sid" = "sess-abc" ]
 }
 
@@ -152,7 +152,7 @@ EOF
 @test "stop hook sets has_uncommitted_changes false for non-git directory" {
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    flag=$(jq -r '.projects.myproject.has_uncommitted_changes' "$BORG_REGISTRY")
+    flag=$(jq -r '.has_uncommitted_changes' "${TEST_CWD}/.borg/state.json")
     [ "$flag" = "false" ]
 }
 
@@ -168,7 +168,7 @@ EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input "$TEST_CWD")" 2>/dev/null
 
-    flag=$(jq -r '.projects.myproject.has_uncommitted_changes' "$BORG_REGISTRY")
+    flag=$(jq -r '.has_uncommitted_changes' "${TEST_CWD}/.borg/state.json")
     [ "$flag" = "true" ]
 }
 
@@ -180,14 +180,14 @@ EOF
     mkdir -p "$container_dir"
     echo "snowfort" > "$container_dir/.borg-project"
 
-    # Registry uses the canonical name "snowfort"
-    cat > "$BORG_REGISTRY" <<'EOF'
-{"projects":{"snowfort":{"path":"/dev/snowfort","status":"idle","source":"cli"}}}
+    # Registry uses the canonical name "snowfort" with real path so hooks can resolve state.json
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{"snowfort":{"path":"${container_dir}","status":"idle","source":"cli"}}}
 EOF
 
     bash "$BORG_START" <<< "$(_start_input "$container_dir")" >/dev/null
 
-    status=$(jq -r '.projects.snowfort.status' "$BORG_REGISTRY")
+    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
     [ "$status" = "active" ]
 }
 
@@ -198,13 +198,13 @@ EOF
     mkdir -p "$sub_dir"
     echo "snowfort" > "$container_dir/.borg-project"
 
-    cat > "$BORG_REGISTRY" <<'EOF'
-{"projects":{"snowfort":{"path":"/dev/snowfort","status":"idle","source":"cli"}}}
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{"snowfort":{"path":"${container_dir}","status":"idle","source":"cli"}}}
 EOF
 
     bash "$BORG_START" <<< "$(_start_input "$sub_dir")" >/dev/null
 
-    status=$(jq -r '.projects.snowfort.status' "$BORG_REGISTRY")
+    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
     [ "$status" = "active" ]
 }
 
@@ -214,13 +214,13 @@ EOF
     mkdir -p "$sub_dir"
     echo "snowfort" > "$container_dir/.borg-project"
 
-    cat > "$BORG_REGISTRY" <<'EOF'
-{"projects":{"snowfort":{"path":"/dev/snowfort","status":"active","source":"cli"}}}
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{"snowfort":{"path":"${container_dir}","status":"active","source":"cli"}}}
 EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input "$sub_dir")" 2>/dev/null
 
-    status=$(jq -r '.projects.snowfort.status' "$BORG_REGISTRY")
+    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
     [ "$status" = "idle" ]
 }
 
@@ -228,7 +228,7 @@ EOF
     # Standard host session: no marker, basename matches registry key
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    status=$(jq -r '.projects.myproject.status' "$BORG_REGISTRY")
+    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
     [ "$status" = "active" ]
 }
 
@@ -257,34 +257,26 @@ EOF
     [ "$_before" = "$_after" ]
 }
 
-@test "stop hook in orchestrator mode does NOT write to registry" {
+@test "stop hook in orchestrator mode does NOT write state.json" {
     local orch_cwd="$HOME/dev"
     mkdir -p "$orch_cwd"
-
-    # Set a known status first
-    jq '.projects.myproject.status = "active"' "$BORG_REGISTRY" > "${BORG_REGISTRY}.tmp" \
-        && mv "${BORG_REGISTRY}.tmp" "$BORG_REGISTRY"
 
     bash "$BORG_STOP" \
         <<< "$(printf '{"session_id":"orch-abc","cwd":"%s"}' "$orch_cwd")" 2>/dev/null
 
-    # Status must remain active — stop hook must not flip it to idle
-    status=$(jq -r '.projects.myproject.status' "$BORG_REGISTRY")
-    [ "$status" = "active" ]
+    # No state.json should have been created for myproject — orch hook exits early
+    [ ! -f "${TEST_CWD}/.borg/state.json" ]
 }
 
-@test "notify hook in orchestrator mode does NOT write to registry" {
+@test "notify hook in orchestrator mode does NOT write state.json" {
     local borg_notify="${BATS_TEST_DIRNAME}/../hooks/borg-notify.sh"
     local orch_cwd="$HOME/dev"
     mkdir -p "$orch_cwd"
 
-    jq '.projects.myproject.status = "active"' "$BORG_REGISTRY" > "${BORG_REGISTRY}.tmp" \
-        && mv "${BORG_REGISTRY}.tmp" "$BORG_REGISTRY"
-
     bash "$borg_notify" \
         <<< "$(printf '{"session_id":"orch-abc","cwd":"%s","message":"waiting"}' "$orch_cwd")" 2>/dev/null || true
 
-    status=$(jq -r '.projects.myproject.status' "$BORG_REGISTRY")
-    [ "$status" = "active" ]
+    # No state.json should have been created for myproject — orch hook exits early
+    [ ! -f "${TEST_CWD}/.borg/state.json" ]
 }
 

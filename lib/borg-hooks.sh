@@ -100,3 +100,56 @@ _borg_session_mode() {
         printf 'project\n'
     fi
 }
+
+# ─── Per-project state helpers ───────────────────────────────────────────────
+# Volatile session state (status, last_activity, claude_session_id,
+# has_uncommitted_changes, waiting_reason, notify_origin) lives in
+# <project_dir>/.borg/state.json. This keeps the shared registry as a pure
+# discovery index — only stable identity fields (path, source, tmux_window,
+# summary, pinned, archived) remain there.
+
+# Canonical path to a project's state file.
+# Usage: _borg_state_file <project_dir>
+_borg_state_file() {
+    printf '%s/.borg/state.json\n' "${1:?_borg_state_file: dir required}"
+}
+
+# Read state.json; emit '{}' when the file does not exist yet.
+# Usage: _borg_state_read <project_dir>
+_borg_state_read() {
+    local sf
+    sf=$(_borg_state_file "$1")
+    if [[ -f "$sf" ]]; then
+        cat "$sf"
+    else
+        printf '{}\n'
+    fi
+}
+
+# Return the canonical project directory for state.json. Prefers the registry's
+# registered path for the project (so host-path state.json is used even from a
+# container session). Falls back to CWD when the registry path is absent or the
+# directory doesn't exist on disk.
+# Reads $BORG_REGISTRY from the calling hook's environment.
+# Usage: PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
+_borg_resolve_proj_dir() {
+    local project="$1" cwd="$2" rp
+    if [[ -f "$BORG_REGISTRY" ]]; then
+        rp=$(jq -r --arg p "$project" '.projects[$p].path // ""' "$BORG_REGISTRY" 2>/dev/null || true)
+        [[ -n "$rp" && "$rp" != "null" && -d "$rp" ]] && { printf '%s\n' "$rp"; return; }
+    fi
+    printf '%s\n' "$cwd"
+}
+
+# Atomic write — strip control chars, reject empty result, tmp+mv.
+# Usage: _borg_state_write <project_dir> <json>
+_borg_state_write() {
+    local dir="$1" json="$2"
+    local sf
+    sf=$(_borg_state_file "$dir")
+    mkdir -p "${sf%/*}"
+    local tmp="${sf}.tmp.$$"
+    printf '%s' "$json" | tr -d '\000-\010\013\014\016-\037' > "$tmp"
+    [[ -s "$tmp" ]] || { rm -f "$tmp"; return 1; }
+    mv "$tmp" "$sf"
+}
