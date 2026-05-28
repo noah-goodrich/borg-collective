@@ -165,10 +165,14 @@ borg_registry_with_state() {
         result=$(printf '%s' "$result" | jq \
             --arg p "$name" \
             --argjson s "$state" \
-            '.projects[$p] += $s' 2>/dev/null) || result="$result"
+            '(.projects[$p].status == "archived") as $arch |
+             .projects[$p] += $s |
+             if $arch then .projects[$p].status = "archived" else . end' \
+            2>/dev/null) || result="$result"
     done < <(printf '%s' "$raw" \
         | jq -r '.projects | to_entries[] | [.key, (.value.path // "")] | @tsv' 2>/dev/null)
-    printf '%s\n' "$result"
+    # Default status to "idle" for any project that has neither a state.json nor a registry status
+    printf '%s\n' "$result" | jq '.projects |= with_entries(.value.status //= "idle")'
 }
 
 # Like borg_registry_get but overlays state.json for the named project.
