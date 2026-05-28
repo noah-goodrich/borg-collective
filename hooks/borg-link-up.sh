@@ -23,8 +23,9 @@ BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_REGISTRY="$BORG_DIR/registry.json"
 
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' 2>/dev/null || echo "")
-CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null || true)
+CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
+TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null || true)
 
 [[ -z "$CWD" ]] && exit 0
 
@@ -134,9 +135,32 @@ if [[ -d "$DIRECTIVES_DIR" ]] && command -v git >/dev/null 2>&1; then
 fi
 
 # Record session to cairn knowledge graph (best-effort)
+# Notes are built from: recent git commits + last assistant message from transcript.
 if command -v cairn >/dev/null 2>&1; then
     _cairn_id="$(date -u +%Y%m%d-%H%M)-${PROJECT}"
+
+    # Build structured notes: recent commits + last assistant message.
+    _cairn_notes=""
+
+    # Recent commits (best-effort; empty string if not a git repo or no commits).
+    if command -v git >/dev/null 2>&1; then
+        _git_log=$(git -C "$CWD" log --oneline -3 2>/dev/null || true)
+        [[ -n "$_git_log" ]] && _cairn_notes="## Recent commits"$'\n'"$_git_log"$'\n'
+    fi
+
+    # Last assistant message from transcript (cap at 20KB to keep the hook fast).
+    if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
+        _last_msg=$(tail -c 20000 "$TRANSCRIPT_PATH" 2>/dev/null \
+            | jq -rs '[.[] | select(.message.role == "assistant")] | last | .message.content // ""' \
+            2>/dev/null | head -c 1000 || true)
+        if [[ -n "$_last_msg" ]]; then
+            _cairn_notes+=$'\n'"## Last assistant message"$'\n'"${_last_msg:0:800}"
+        fi
+    fi
+
     _cairn_cmd=(cairn record session --id "$_cairn_id" --project "$PROJECT" --tool claude-code)
+    [[ -n "$_cairn_notes" ]] && _cairn_cmd+=(--notes "$_cairn_notes")
+
     if command -v timeout >/dev/null 2>&1; then
         timeout 5 "${_cairn_cmd[@]}" 2>/dev/null || printf '%s\n' \
             "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${BORG_DIR}/.cairn-write-failed"
