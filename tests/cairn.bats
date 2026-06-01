@@ -192,3 +192,65 @@ SCRIPT
 
     [ ! -f "$BORG_DIR/.cairn-write-failed" ]
 }
+
+# ─── stop hook cairn notes enrichment ────────────────────────────────────────
+
+@test "stop hook passes --notes to cairn when transcript_path is present" {
+    # cairn mock that records the args it received
+    cat > "$MOCK_BIN/cairn" <<EOF
+#!/usr/bin/env bash
+echo "\$@" >> "${BATS_TEST_TMPDIR}/cairn-calls.txt"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    FAKE_TRANSCRIPT="${BATS_TEST_TMPDIR}/transcript.jsonl"
+    printf '{"message":{"role":"user","content":"Fix the bug"}}\n' > "$FAKE_TRANSCRIPT"
+    printf '{"message":{"role":"assistant","content":"I fixed the login bug by updating jwt.py"}}\n' \
+        >> "$FAKE_TRANSCRIPT"
+
+    bash "$BORG_STOP" <<< \
+        "$(printf '{"session_id":"sess-abc","cwd":"%s","transcript_path":"%s"}' \
+            "$TEST_PROJECT_DIR" "$FAKE_TRANSCRIPT")" 2>/dev/null
+
+    [ -f "${BATS_TEST_TMPDIR}/cairn-calls.txt" ]
+    grep -q "\-\-notes" "${BATS_TEST_TMPDIR}/cairn-calls.txt"
+}
+
+@test "stop hook exits 0 when transcript_path is empty" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    run bash "$BORG_STOP" <<< \
+        "$(printf '{"session_id":"sess-abc","cwd":"%s","transcript_path":""}' \
+            "$TEST_PROJECT_DIR")" 2>/dev/null
+    [ "$status" -eq 0 ]
+}
+
+@test "stop hook exits 0 when transcript_path is missing from input" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    run bash "$BORG_STOP" <<< \
+        "$(printf '{"session_id":"sess-abc","cwd":"%s"}' "$TEST_PROJECT_DIR")" 2>/dev/null
+    [ "$status" -eq 0 ]
+}
+
+@test "stop hook exits 0 when transcript_path points to nonexistent file" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    run bash "$BORG_STOP" <<< \
+        "$(printf '{"session_id":"sess-abc","cwd":"%s","transcript_path":"/nonexistent/path.jsonl"}' \
+            "$TEST_PROJECT_DIR")" 2>/dev/null
+    [ "$status" -eq 0 ]
+}
