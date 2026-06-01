@@ -51,6 +51,14 @@ if [[ -n "${BORG_BASH_GUARD_DISABLE:-}" ]]; then
     exit 0
 fi
 
+# Defined before Layer 1.5 (below) so the case branches can call it. Layers 2 and
+# 3 use it too.
+_preapprove() {
+    jq -cn --arg r "$1" \
+        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",permissionDecisionReason:$r}}'
+    exit 0
+}
+
 # ── Layer 1.5: known-safe borg skill patterns ─────────────────────────────────
 # These commands use shell constructs (while loops, variable assignments) that
 # the RO classifier can't parse, but are known read-only by inspection.
@@ -65,12 +73,6 @@ case "$COMMAND" in
 esac
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
-_preapprove() {
-    jq -cn --arg r "$1" \
-        '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"allow",permissionDecisionReason:$r}}'
-    exit 0
-}
 
 # Strip single- and double-quoted spans for pattern matching. Heuristic; fine
 # for the Bash shapes Claude actually emits.
