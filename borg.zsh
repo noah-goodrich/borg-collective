@@ -839,7 +839,6 @@ _borg_scan_source() {
                 tmux_window: $tmux_window,
                 claude_session_id: $session_id,
                 last_activity: $last_activity,
-                status: "idle",
                 summary: null
             }')
 
@@ -999,7 +998,6 @@ cmd_add() {
             tmux_window: $tmux_window,
             claude_session_id: $session_id,
             last_activity: $last_activity,
-            status: "idle",
             summary: null
         }')
 
@@ -1549,7 +1547,7 @@ EOF
 
 _borg_orchestrator_context() {
     local registry
-    registry=$(borg_registry_read)
+    registry=$(borg_registry_with_state)
     local now
     now=$(date '+%Y-%m-%d %H:%M %Z')
 
@@ -1678,7 +1676,7 @@ _borg_launch_in_tmux() {
     fi
 
     if [[ -n "${TMUX:-}" ]]; then
-        ( cd "$BORG_HOME" && "$@" )
+        ( cd "$BORG_ORCHESTRATOR_ROOT" && "$@" )
         [[ -n "$cleanup_file" ]] && rm -f "$cleanup_file"
         return
     fi
@@ -1687,7 +1685,7 @@ _borg_launch_in_tmux() {
     local launcher="${TMPDIR:-/tmp}/borg-launch.$$.zsh"
     {
         echo '#!/usr/bin/env zsh'
-        echo "cd ${(q)BORG_HOME}"
+        echo "cd ${(q)BORG_ORCHESTRATOR_ROOT}"
         # Quote each arg properly for the launcher script
         printf '%q ' "$@"
         echo ""
@@ -2430,6 +2428,46 @@ cmd_nanoprobe_log() {
     fi
 }
 
+cmd_watch() {
+    local interval=5
+    if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
+        interval="$1"
+    fi
+
+    local _log="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
+
+    while true; do
+        tput clear 2>/dev/null || printf '\033[2J\033[H'
+
+        printf '  \033[1m⬛ BORG WATCH\033[0m  (refreshing every %ss)  %s\n' \
+            "$interval" "$(date '+%H:%M:%S')"
+        printf '%0.s─' {1..70}; printf '\n'
+
+        cmd_link 2>/dev/null || true
+
+        printf '\n'
+        printf '  \033[1mRECENT NANOPROBES\033[0m\n'
+        if [[ -s "$_log" ]]; then
+            tail -r "$_log" 2>/dev/null | head -5 | jq -r '
+                [
+                    (.id // "")[0:8],
+                    (.agent_type // "?"),
+                    (if .evidence_found == false then "⚠ " else "✓ " end) +
+                        ((.summary // "") | gsub("\n"; " ") | .[0:60]),
+                    (.finished_at // "")
+                ] | @tsv
+            ' 2>/dev/null | while IFS=$'\t' read -r sid atype summary finished; do
+                printf "  %-10s %-18s %-62s %s\n" "$sid" "$atype" "$summary" "$finished"
+            done
+        else
+            printf '  \033[2mNo nanoprobes recorded yet.\033[0m\n'
+        fi
+
+        printf '\n\033[2m  Ctrl-C to exit\033[0m\n'
+        sleep "$interval"
+    done
+}
+
 cmd_help() {
     cat <<'EOF'
 
@@ -2465,6 +2503,7 @@ cmd_help() {
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
     nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
+    watch [interval]    Live-refresh project status + recent nanoprobes (default: 5s)
     help                Show this message
 
   ALIASES (backward compat)
@@ -2539,6 +2578,7 @@ case "${1:-help}" in
     cortex-resume) cmd_cortex_resume "${@:2}" ;;
     nanoprobes|np)  cmd_nanoprobes "${@:2}" ;;
     nanoprobe-log)  cmd_nanoprobe_log "${@:2}" ;;
+    watch)          cmd_watch "${@:2}" ;;
     # Legacy aliases → consolidated command
     ls)       cmd_link "${@:2}" ;;
     status)   cmd_link "${@:2}" ;;

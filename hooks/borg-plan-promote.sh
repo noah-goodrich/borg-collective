@@ -32,10 +32,6 @@ _debug() {
     printf '%s [borg-plan-promote] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$DEBUG_LOG" 2>/dev/null || true
 }
 
-_safe_exit() {
-    exit 0
-}
-
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 [[ -z "$INPUT" ]] && exit 0
 
