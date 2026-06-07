@@ -105,7 +105,11 @@ EOF
 
 @test "borg_registry_with_state overlays state.json fields" {
     mkdir -p "${TEST_PROJ}/.borg"
-    echo '{"status":"active","last_activity":"2026-05-27T12:00:00Z","claude_session_id":"sess-xyz"}' \
+    # Fresh last_activity keeps the reaper overlay from downgrading active -> idle;
+    # this test asserts field overlay, not staleness (see reap.bats for that).
+    local now
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    echo "{\"status\":\"active\",\"last_activity\":\"${now}\",\"claude_session_id\":\"sess-xyz\"}" \
         > "${TEST_PROJ}/.borg/state.json"
 
     result=$(run_zsh_fn registry borg_registry_with_state)
@@ -128,7 +132,10 @@ EOF
 
 @test "borg_registry_get_with_state returns merged project entry" {
     mkdir -p "${TEST_PROJ}/.borg"
-    echo '{"status":"waiting","waiting_reason":"Needs review"}' \
+    # Fresh last_activity keeps the reaper overlay from downgrading waiting -> idle.
+    local now
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    echo "{\"status\":\"waiting\",\"last_activity\":\"${now}\",\"waiting_reason\":\"Needs review\"}" \
         > "${TEST_PROJ}/.borg/state.json"
 
     result=$(run_zsh_fn registry borg_registry_get_with_state myproject)
