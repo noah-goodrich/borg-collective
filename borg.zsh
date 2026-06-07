@@ -1095,7 +1095,7 @@ cmd_next() {
     borg_desktop_scan 2>/dev/null || true
 
     local registry
-    registry=$(borg_registry_read)
+    registry=$(borg_registry_with_state)
 
     # Score and sort projects: pinned +200, waiting +100, active +50, idle +10, no activity -50
     # Tiebreaker: waiting → oldest first (neglected longest); active/idle → newest first
@@ -1185,6 +1185,13 @@ cmd_next() {
         fi
     fi
 
+    # Reaper notice — stale active/waiting sessions auto-downgraded to idle for this view
+    local reaped_count
+    reaped_count=$(echo "$registry" | jq '[.projects[] | select(._reaped_from != null)] | length')
+    if (( reaped_count > 0 )); then
+        echo -e "\n  ${DIM}($reaped_count stale session(s) auto-downgraded to idle — run 'borg reap' to persist)${NC}"
+    fi
+
     # Capacity warning
     local active_count
     active_count=$(_borg_active_count)
@@ -1209,6 +1216,27 @@ cmd_unpin() {
     borg_registry_has "$project" || die "project '$project' not in registry"
     borg_registry_set "$project" "pinned" "false"
     info "Unpinned: $project"
+}
+
+# Durably reap stale active/waiting sessions to idle. A session is stale when it
+# is active/waiting with no live tmux window AND no activity within
+# BORG_REAP_STALE_HOURS (default 12). The read path (next/ls/capacity) already
+# treats these as idle non-destructively; this command persists status=idle to
+# the corresponding state.json files (atomic write).
+cmd_reap() {
+    local reaped name from count=0
+    reaped=$(borg_reap_persist)
+    if [[ -z "$reaped" ]]; then
+        info "Nothing to reap — all active/waiting sessions are live or recent."
+        return 0
+    fi
+    while IFS=$'\t' read -r name from; do
+        [[ -z "$name" ]] && continue
+        info "Reaped ${BOLD}$name${NC} ($from → idle) — no live session"
+        count=$((count + 1))
+    done <<< "$reaped"
+    echo
+    info "$count stale session(s) downgraded to idle (threshold: ${BORG_REAP_STALE_HOURS:-12}h)"
 }
 
 # Return 0 if a checkpoint was written within the last THRESHOLD hours, 1 otherwise.
@@ -1409,7 +1437,7 @@ _borg_print_briefing() {
     local proj_status last_activity summary waiting_reason rel_time project_path
     local checkpoint_file briefing_prompt briefing fallback_text fields
 
-    registry=$(borg_registry_read)
+    registry=$(borg_registry_with_state)
 
     cutoff=$(date -u -v-30d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "30 days ago" +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -2504,6 +2532,7 @@ cmd_help() {
     nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     watch [interval]    Live-refresh project status + recent nanoprobes (default: 5s)
+    reap                Persist idle to stale active/waiting sessions (no live window)
     help                Show this message
 
   ALIASES (backward compat)
@@ -2541,6 +2570,7 @@ cmd_help() {
   ENVIRONMENT
     BORG_TMUX_SESSION       tmux session name (default: borg)
     BORG_MAX_ACTIVE         Capacity warning threshold (default: 3)
+    BORG_REAP_STALE_HOURS   Reap active/waiting after N idle hours (default: 12)
     BORG_WORK_HOURS         e.g. "09:00-18:00" (empty to disable)
     BORG_WORK_PROJECTS      Comma-separated work project names
     BORG_DEBUG              Set to any value for debug output
@@ -2579,6 +2609,7 @@ case "${1:-help}" in
     nanoprobes|np)  cmd_nanoprobes "${@:2}" ;;
     nanoprobe-log)  cmd_nanoprobe_log "${@:2}" ;;
     watch)          cmd_watch "${@:2}" ;;
+    reap)           cmd_reap "${@:2}" ;;
     # Legacy aliases → consolidated command
     ls)       cmd_link "${@:2}" ;;
     status)   cmd_link "${@:2}" ;;

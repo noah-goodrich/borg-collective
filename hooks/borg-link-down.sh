@@ -223,19 +223,37 @@ If this is exploratory/investigative work with no deliverable, state that explic
 and you may proceed without /borg-plan.")
 fi
 
-# Capacity warning — count active/waiting by scanning per-project state.json files
+# Capacity warning — count active/waiting by scanning per-project state.json files.
+# Reaper-aware: a stale active/waiting session (no live tmux window AND no recent
+# activity) is treated as idle and excluded, matching the CLI capacity count.
 if [[ -f "$BORG_REGISTRY" ]]; then
     _max_active=$(grep -m1 '^BORG_MAX_ACTIVE=' "$BORG_DIR/config.zsh" 2>/dev/null \
         | sed 's/BORG_MAX_ACTIVE=//' | tr -d '"' || echo "3")
     [[ "$_max_active" =~ ^[0-9]+$ ]] || _max_active=3
+    _live_windows=$(_borg_live_windows)
     _active_count=0
-    while IFS= read -r _rpath; do
-        [[ -z "$_rpath" || "$_rpath" == "null" ]] && continue
+    # Sentinel ("-") for empty columns — bash `read` with a whitespace IFS (tab is
+    # whitespace) collapses consecutive separators, shifting fields. Keep every
+    # column populated, then map sentinels back below.
+    while IFS=$'\t' read -r _rname _rpath _rwin; do
+        [[ -z "$_rpath" || "$_rpath" == "-" || "$_rpath" == "null" ]] && continue
         _sf="$_rpath/.borg/state.json"
         [[ -f "$_sf" ]] || continue
         _s=$(jq -r '.status // "idle"' "$_sf" 2>/dev/null || true)
-        [[ "$_s" == "active" || "$_s" == "waiting" ]] && _active_count=$(( _active_count + 1 )) || true
-    done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY" 2>/dev/null || true)
+        [[ "$_s" == "active" || "$_s" == "waiting" ]] || continue
+        _last=$(jq -r '.last_activity // ""' "$_sf" 2>/dev/null || true)
+        [[ "$_rwin" == "-" || -z "$_rwin" || "$_rwin" == "null" ]] && _rwin="$_rname"
+        _live=0
+        if [[ -n "$_live_windows" ]] && printf '%s\n' "$_live_windows" | grep -qx "$_rwin"; then
+            _live=1
+        fi
+        _borg_should_reap "$_s" "$_last" "$_live" && continue
+        _active_count=$(( _active_count + 1 ))
+    done < <(jq -r '.projects | to_entries[]
+        | [.key,
+           (if (.value.path // "") == "" then "-" else .value.path end),
+           (if (.value.tmux_window // "") == "" then "-" else .value.tmux_window end)]
+        | @tsv' "$BORG_REGISTRY" 2>/dev/null || true)
     if (( _active_count > _max_active )); then
         CONTEXT_PARTS+=("⚠ CAPACITY WARNING: $_active_count projects active/waiting (limit: $_max_active).
 Too many concurrent threads degrades quality and increases context-switching overhead.

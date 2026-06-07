@@ -153,6 +153,12 @@ borg_state_write() {
 # waiting_reason, notify_origin) populated from state.json where it exists.
 # Projects without a state.json retain whatever the registry holds for those
 # fields (typically from legacy data or borg scan seeding).
+#
+# The reaper overlay runs last (display-path, non-destructive): any project that
+# is active/waiting with no live-session evidence is downgraded to "idle" in the
+# returned JSON only — state.json on disk is untouched. `borg reap` does the
+# durable persist. Pass a non-empty BORG_NO_REAP to skip the overlay (used by
+# `borg reap` itself, which needs the un-downgraded view to decide what to write).
 borg_registry_with_state() {
     local raw result name ppath state
     raw=$(borg_registry_read)
@@ -172,13 +178,119 @@ borg_registry_with_state() {
     done < <(printf '%s' "$raw" \
         | jq -r '.projects | to_entries[] | [.key, (.value.path // "")] | @tsv' 2>/dev/null)
     # Default status to "idle" for any project that has neither a state.json nor a registry status
-    printf '%s\n' "$result" | jq '.projects |= with_entries(.value.status //= "idle")'
+    result=$(printf '%s\n' "$result" | jq '.projects |= with_entries(.value.status //= "idle")')
+    if [[ -z "${BORG_NO_REAP:-}" ]]; then
+        result=$(printf '%s' "$result" | borg_reap_overlay)
+    fi
+    printf '%s\n' "$result"
 }
 
 # Like borg_registry_get but overlays state.json for the named project.
 borg_registry_get_with_state() {
     local project="$1"
     borg_registry_with_state | jq -c --arg p "$project" '.projects[$p] // empty'
+}
+
+# ─── Reaper: downgrade stale active/waiting sessions to idle ──────────────────
+# A project whose status is active/waiting is only honest while a session is
+# actually alive. When a session ends without a clean Stop hook (tmux window
+# closed, container down, crash), its state.json freezes at active/waiting
+# forever — inflating `borg next` and the capacity counter. The reaper treats
+# such a project as effectively idle.
+#
+# Staleness threshold (hours). A waiting/active project with no live tmux window
+# AND last_activity older than this is reaped. Tune via BORG_REAP_STALE_HOURS.
+BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}"
+
+# Predicate: should this project's active/waiting status be reaped to idle?
+# Args: <status> <last_activity_iso> <has_live_window: 1|0>
+# Returns 0 (reap) when status is active/waiting AND there is no live window AND
+# last_activity is missing or older than BORG_REAP_STALE_HOURS. Returns 1 (keep)
+# otherwise — a live window OR recent activity always preserves the session.
+# Mirrors the bash twin _borg_should_reap in lib/borg-hooks.sh; keep in sync.
+_borg_should_reap() {
+    local st="$1" last="$2" live="${3:-0}"
+    [[ "$st" == "active" || "$st" == "waiting" ]] || return 1
+    [[ "$live" == "1" ]] && return 1
+    local threshold="${BORG_REAP_STALE_HOURS:-12}"
+    [[ -z "$last" || "$last" == "null" ]] && return 0
+    local epoch_ts epoch_now age_h
+    epoch_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s 2>/dev/null) || return 0
+    epoch_now=$(date +%s)
+    age_h=$(( (epoch_now - epoch_ts) / 3600 ))
+    (( age_h >= threshold ))
+}
+
+# Snapshot of live tmux window names (one per line). Empty when tmux is down or
+# the helper isn't loaded (registry.zsh may be sourced standalone by tests).
+_borg_live_windows() {
+    whence -w borg_tmux_windows &>/dev/null || return 0
+    borg_tmux_windows 2>/dev/null || true
+}
+
+# Filter: read registry-with-state JSON on stdin, emit the same JSON with every
+# reapable project's status downgraded to "idle". Non-destructive — operates on
+# the JSON stream only. The original status is preserved under ._reaped_from so
+# callers can report what was auto-downgraded.
+borg_reap_overlay() {
+    local json live_windows name tw st last live
+    json=$(/bin/cat)
+    live_windows=$(_borg_live_windows)
+    # Emit a sentinel ("-") for any empty trailing field. zsh `read` with a
+    # whitespace IFS (tab is whitespace) collapses consecutive separators, so an
+    # empty tmux_window/last_activity column would shift all following fields
+    # left. The jq default-then-sentinel keeps every column populated; the loop
+    # maps the sentinels back to empty/derived values.
+    while IFS=$'\t' read -r name tw st last; do
+        [[ -z "$name" ]] && continue
+        # tmux window defaults to the project name when the registry leaves it null
+        [[ "$tw" == "-" || -z "$tw" || "$tw" == "null" ]] && tw="$name"
+        [[ "$last" == "-" ]] && last=""
+        live=0
+        if [[ -n "$live_windows" ]] && printf '%s\n' "$live_windows" | /usr/bin/grep -qx "$tw"; then
+            live=1
+        fi
+        if _borg_should_reap "$st" "$last" "$live"; then
+            json=$(printf '%s' "$json" | jq \
+                --arg p "$name" \
+                --arg from "$st" \
+                '.projects[$p]._reaped_from = $from | .projects[$p].status = "idle"' \
+                2>/dev/null) || true
+        fi
+    done < <(printf '%s' "$json" | jq -r '
+        .projects | to_entries[]
+        | select(.value.status == "active" or .value.status == "waiting")
+        | [.key,
+           (if (.value.tmux_window // "") == "" then "-" else .value.tmux_window end),
+           .value.status,
+           (if (.value.last_activity // "") == "" then "-" else .value.last_activity end)]
+        | @tsv' 2>/dev/null)
+    printf '%s' "$json"
+}
+
+# Persist reaping to disk: for every project the reaper would downgrade, write
+# status=idle into its state.json (atomic tmp+mv via borg_state_write). Emits one
+# line per reaped project: "<name>\t<old-status>". Idempotent — a no-op on a
+# project with no live window but already idle, and on live/recent sessions.
+borg_reap_persist() {
+    local overlaid name ppath from cur new count=0
+    # Build the overlay against the *un-reaped* view so _reaped_from is populated.
+    overlaid=$(BORG_NO_REAP=1 borg_registry_with_state | borg_reap_overlay)
+    while IFS=$'\t' read -r name from; do
+        [[ -z "$name" ]] && continue
+        ppath=$(printf '%s' "$overlaid" | jq -r --arg p "$name" '.projects[$p].path // ""')
+        [[ -z "$ppath" || "$ppath" == "null" ]] && continue
+        [[ -f "$ppath/.borg/state.json" ]] || continue
+        cur=$(borg_state_read "$ppath")
+        new=$(printf '%s' "$cur" | jq '.status = "idle"')
+        borg_state_write "$ppath" "$new" || continue
+        printf '%s\t%s\n' "$name" "$from"
+        count=$((count + 1))
+    done < <(printf '%s' "$overlaid" | jq -r '
+        .projects | to_entries[]
+        | select(.value._reaped_from != null)
+        | [.key, .value._reaped_from] | @tsv' 2>/dev/null)
+    return 0
 }
 
 # Should this scanned path be skipped instead of registered as a new project?
