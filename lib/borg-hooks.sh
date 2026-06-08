@@ -154,10 +154,8 @@ _borg_state_write() {
     mv "$tmp" "$sf"
 }
 
-# ─── Reaper (bash twin) ──────────────────────────────────────────────────────
-# Mirror of _borg_should_reap / live-window detection in lib/registry.zsh. Hook
-# scripts (borg-link-down.sh capacity scan) must agree with the CLI on which
-# stale active/waiting sessions count toward capacity. Keep both in sync.
+# Reaper predicate: sourced from lib/reaper.sh (single home shared with registry.zsh).
+source "$(dirname "${BASH_SOURCE[0]}")/reaper.sh"
 
 # Snapshot of live tmux window names (one per line). Empty when tmux is down.
 # Honors BORG_TMUX_SESSION (default "borg"), matching lib/tmux.zsh.
@@ -166,23 +164,4 @@ _borg_live_windows() {
     command -v tmux >/dev/null 2>&1 || return 0
     tmux has-session -t "$session" 2>/dev/null || return 0
     tmux list-windows -t "$session" -F '#W' 2>/dev/null || true
-}
-
-# Predicate: should this project's active/waiting status be reaped to idle?
-# Args: <status> <last_activity_iso> <has_live_window: 1|0>
-# Returns 0 (reap) when status is active/waiting AND no live window AND
-# last_activity is missing or older than BORG_REAP_STALE_HOURS (default 12).
-# Returns 1 (keep) otherwise. Mirrors the zsh twin in lib/registry.zsh.
-_borg_should_reap() {
-    local st="$1" last="$2" live="${3:-0}"
-    [[ "$st" == "active" || "$st" == "waiting" ]] || return 1
-    [[ "$live" == "1" ]] && return 1
-    local threshold="${BORG_REAP_STALE_HOURS:-12}"
-    [[ -z "$last" || "$last" == "null" ]] && return 0
-    local epoch_ts epoch_now age_h
-    epoch_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s 2>/dev/null \
-        || date -d "$last" +%s 2>/dev/null) || return 0
-    epoch_now=$(date +%s)
-    age_h=$(( (epoch_now - epoch_ts) / 3600 ))
-    (( age_h >= threshold ))
 }

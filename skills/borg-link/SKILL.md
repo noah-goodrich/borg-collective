@@ -95,19 +95,14 @@ Volatile status lives in each project's `<workspace>/.borg/state.json`, not the 
 
 ## Reaper-aware status (match the CLI)
 
-`borg next` / `borg ls` / the capacity count auto-downgrade a stale session to **idle**: a project whose
-`state.json` says `active` or `waiting` but which has **no live tmux window** AND **no activity within
-`BORG_REAP_STALE_HOURS` (default 12h)** is effectively idle. When this skill reports status, apply the same
-rule so it never shows a project as "waiting" that the CLI shows as "idle":
+Apply the same staleness rule as `borg next`/`borg ls`: a project whose `state.json` says
+`active`/`waiting` but has no live tmux window AND a `last_activity` older than
+`BORG_REAP_STALE_HOURS` (default 12h) should be reported as **idle (stale)**. The authoritative
+implementation is `lib/reaper.sh:_borg_should_reap` — do not re-specify the predicate here.
 
-1. Read the project's `status` and `last_activity` from `state.json`.
-2. If `status` is `active`/`waiting`, check for a live tmux window named after the project:
-   `tmux list-windows -t borg -F '#W' 2>/dev/null | grep -qx <project>`.
-3. If there is **no** live window AND `last_activity` is missing or older than 12h, report the project as
-   **idle (stale — no live session)** rather than active/waiting. Otherwise report the raw status.
-
-Do not rewrite `state.json` — that is what `borg reap` is for. This skill only displays. If you find stale
-sessions, mention the user can run `borg reap` to persist the downgrade.
+Check for a live window: `tmux list-windows -t borg -F '#W' 2>/dev/null | grep -qx <project>`.
+Do not rewrite `state.json` — that is what `borg reap` is for. If you find stale sessions,
+mention the user can run `borg reap` to persist the downgrade.
 
 ## Command Patterns
 

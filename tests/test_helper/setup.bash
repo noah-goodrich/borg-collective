@@ -13,6 +13,7 @@ setup_temp_dirs() {
     export XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/config"
     mkdir -p "$BORG_DIR" "$BORG_TEST_HOME/.claude/lib"
     cp "$BORG_HOME/lib/borg-hooks.sh" "$BORG_TEST_HOME/.claude/lib/borg-hooks.sh"
+    cp "$BORG_HOME/lib/reaper.sh" "$BORG_TEST_HOME/.claude/lib/reaper.sh"
 }
 
 # Source a zsh library file in a way that bats (bash) can call its functions.
