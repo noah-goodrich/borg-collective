@@ -161,12 +161,19 @@ if command -v cairn >/dev/null 2>&1; then
     _cairn_cmd=(cairn record session --id "$_cairn_id" --project "$PROJECT" --tool claude-code)
     [[ -n "$_cairn_notes" ]] && _cairn_cmd+=(--notes "$_cairn_notes")
 
+    # Capture cairn's stderr so a real failure tells us *what* broke (auth, schema,
+    # service down). Without this the failure log is just timestamps and a transient
+    # outage looks identical to a malformed payload.
+    _cairn_failed=""
     if command -v timeout >/dev/null 2>&1; then
-        timeout 5 "${_cairn_cmd[@]}" 2>/dev/null || printf '%s\n' \
-            "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${BORG_DIR}/.cairn-write-failed"
+        _cairn_err=$(timeout 5 "${_cairn_cmd[@]}" 2>&1 >/dev/null) || _cairn_failed=1
     else
-        "${_cairn_cmd[@]}" 2>/dev/null || printf '%s\n' \
-            "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${BORG_DIR}/.cairn-write-failed"
+        _cairn_err=$("${_cairn_cmd[@]}" 2>&1 >/dev/null) || _cairn_failed=1
+    fi
+    if [[ -n "$_cairn_failed" ]]; then
+        printf '%s\t%s\n' \
+            "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "${_cairn_err:-no stderr captured}" >> "${BORG_DIR}/.cairn-write-failed"
     fi
 fi
 

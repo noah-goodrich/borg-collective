@@ -327,7 +327,7 @@ else
         _fail_msg=$(cat "$CAIRN_FAILED_FLAG" 2>/dev/null || true)
         CONTEXT_PARTS+=("⚠ CAIRN WRITE FAILED (last session): ${_fail_msg}
 The session was NOT committed to the knowledge graph.
-Check cairn service health: cairn status")
+Check cairn service health: cairn health")
         rm -f "$CAIRN_FAILED_FLAG"
     fi
 
