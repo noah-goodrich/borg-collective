@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# shellcheck shell=bash
+# shellcheck shell=bash  # lint as bash: both bash (hooks) and zsh source this file
 # lib/reaper.sh — shared reaper predicate for borg hooks and the zsh CLI.
 #
 # Sourceable from both bash (hooks) and zsh (lib/registry.zsh). Provides:
