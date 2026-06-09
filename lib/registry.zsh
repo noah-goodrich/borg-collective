@@ -8,6 +8,9 @@
 # Use borg_registry_with_state / borg_registry_get_with_state for reads that
 # need volatile fields (borg ls, borg status, borg next, etc.).
 
+# Source shared reaper predicate (single home; also sourced by lib/borg-hooks.sh).
+source "${${(%):-%x}:A:h}/reaper.sh"
+
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_REGISTRY="$BORG_DIR/registry.json"
 BORG_LOCK="$BORG_DIR/.registry.lock"
@@ -192,35 +195,6 @@ borg_registry_get_with_state() {
 }
 
 # ─── Reaper: downgrade stale active/waiting sessions to idle ──────────────────
-# A project whose status is active/waiting is only honest while a session is
-# actually alive. When a session ends without a clean Stop hook (tmux window
-# closed, container down, crash), its state.json freezes at active/waiting
-# forever — inflating `borg next` and the capacity counter. The reaper treats
-# such a project as effectively idle.
-#
-# Staleness threshold (hours). A waiting/active project with no live tmux window
-# AND last_activity older than this is reaped. Tune via BORG_REAP_STALE_HOURS.
-BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}"
-
-# Predicate: should this project's active/waiting status be reaped to idle?
-# Args: <status> <last_activity_iso> <has_live_window: 1|0>
-# Returns 0 (reap) when status is active/waiting AND there is no live window AND
-# last_activity is missing or older than BORG_REAP_STALE_HOURS. Returns 1 (keep)
-# otherwise — a live window OR recent activity always preserves the session.
-# Mirrors the bash twin _borg_should_reap in lib/borg-hooks.sh; keep in sync.
-_borg_should_reap() {
-    local st="$1" last="$2" live="${3:-0}"
-    [[ "$st" == "active" || "$st" == "waiting" ]] || return 1
-    [[ "$live" == "1" ]] && return 1
-    local threshold="${BORG_REAP_STALE_HOURS:-12}"
-    [[ -z "$last" || "$last" == "null" ]] && return 0
-    local epoch_ts epoch_now age_h
-    epoch_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s 2>/dev/null) || return 0
-    epoch_now=$(date +%s)
-    age_h=$(( (epoch_now - epoch_ts) / 3600 ))
-    (( age_h >= threshold ))
-}
-
 # Snapshot of live tmux window names (one per line). Empty when tmux is down or
 # the helper isn't loaded (registry.zsh may be sourced standalone by tests).
 _borg_live_windows() {
