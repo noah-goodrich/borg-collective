@@ -140,6 +140,39 @@ EOF
     [ "$stop_count" -eq 0 ]
 }
 
+@test "B2: _borg_unregister_hook preserves co-located non-borg hooks in a shared matcher block" {
+    setup_temp_dirs
+    local settings="$BORG_TEST_HOME/.claude/settings.json"
+    mkdir -p "$(dirname "$settings")"
+    cat > "$settings" <<'EOF'
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "$HOME/.claude/hooks/session-log.sh", "timeout": 5 },
+          { "type": "command", "command": "$HOME/.claude/hooks/borg-link-up.sh", "timeout": 30 }
+        ]
+      }
+    ]
+  },
+  "model": "claude-sonnet-4-5"
+}
+EOF
+
+    zsh -c "
+        source '$BORG_ZSH' 2>/dev/null || true
+        _borg_unregister_hook '$settings' '\$HOME/.claude/hooks/borg-link-up.sh' 'Stop' 'borg-link-up.sh'
+    "
+
+    # The co-located non-borg hook must survive; only the borg hook is removed.
+    session_log=$(jq '[.hooks.Stop[]?.hooks[]? | select(.command == "$HOME/.claude/hooks/session-log.sh")] | length' "$settings")
+    borg_hook=$(jq '[.hooks.Stop[]?.hooks[]? | select(.command == "$HOME/.claude/hooks/borg-link-up.sh")] | length' "$settings")
+    [ "$session_log" -eq 1 ]
+    [ "$borg_hook" -eq 0 ]
+}
+
 # ─── B1: build-plugin.sh tests ───────────────────────────────────────────────
 
 @test "B1: build-plugin.sh exits 0 when plugin dir does not exist" {
