@@ -138,7 +138,14 @@ docs/
   on up and `supabase stop` on down.
 - **Nanoprobe orchestrator (drones vs nanoprobes)**: drones are persistent devcontainers (long-lived,
   one per project); nanoprobes are ephemeral Claude Code subagents (`agents/borg-nanoprobe.md`)
-  spawned by the orchestrator via the Agent tool with `isolation: worktree` and `background: true`.
+  spawned by the orchestrator via the Agent tool with `background: true` (no harness worktree
+  isolation — `isolation: worktree` caused hard failures when the orchestrator CWD is not a git
+  repo). **Nanoprobes manage their own git worktrees** when the orchestrator supplies a branch name:
+  `git -C <repo_path> worktree add /Users/noah/.local/state/borg/worktrees/<repo>/<slug> -b <branch>`.
+  All work and commits happen inside the worktree; on completion the nanoprobe removes it so the
+  repo stays clean. `borg reap-worktrees` auto-cleans stale borg worktrees (merged branch or older
+  than `BORG_REAP_STALE_HOURS`). Worktrees live under `~/.local/state/borg/worktrees/` (NOT inside
+  `.borg/`, which is reserved for user checkpoints).
   The orchestrator session never edits project files — it briefs, spawns, monitors, and synthesizes.
   Lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (a `SubagentStop` hook) which appends one
   JSONL line per completion to `~/.config/borg/agents.jsonl` (`id`, `agent_type`, `transcript_path`,

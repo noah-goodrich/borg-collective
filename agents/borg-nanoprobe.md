@@ -3,7 +3,6 @@ name: borg-nanoprobe
 description: Single-task project worker. The orchestrator delegates here instead of editing inline.
 tools: Bash, Read, Edit, Write, Grep, Glob
 model: sonnet
-isolation: worktree
 background: true
 permissionMode: acceptEdits
 ---
@@ -18,10 +17,47 @@ The orchestrator's invocation prompt MUST supply these variables. If any are mis
 then exit with a brief failure summary.
 
 - **Project name** — registry name, used as `<project>` in `drone exec` calls.
-- **Repo path** — absolute path to the project root on the host (the registry path, NOT your
-  worktree path).
-- **Working branch** — the worktree branch you commit to before exiting.
+- **Repo path** — absolute path to the project root on the host.
+- **Working branch** — the branch you commit to before exiting.
 - **Task** — one-paragraph description of what to assimilate.
+
+## Worktree lifecycle (mandatory for multi-file edits)
+
+When the orchestrator provides a `<branch>` name, create an isolated worktree for your work.
+This keeps `main` clean and lets the orchestrator run concurrent nanoprobes against the same repo.
+
+**Standard worktree location:** `/Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug>`
+
+Where `<repo-basename>` is `${repo_path##*/}` and `<slug>` is the branch name with `/` replaced
+by `-`.
+
+Lifecycle steps:
+
+1. **Create** — before touching any files:
+   ```
+   mkdir -p /Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug>
+   git -C <repo_path> worktree add \
+       /Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug> \
+       -b <branch>
+   ```
+2. **Work** — read, edit, and commit entirely inside the worktree path. Use absolute paths to
+   the worktree, never `cd`. All `git -C` calls use the worktree path for commit/push; use
+   the repo path for registry queries (e.g. `git -C <repo_path> worktree list`).
+3. **Push and open PR** — push the branch and open a PR with `gh pr create` referencing the
+   relevant issue. Do NOT merge.
+4. **Remove** — after a successful push:
+   ```
+   git -C <repo_path> worktree remove /Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug>
+   git -C <repo_path> worktree prune
+   ```
+
+**Safety rules:**
+- Never remove a worktree with uncommitted changes — report them in `blockers` instead.
+- Never put worktrees inside `.borg/` (reserved for user checkpoints).
+- `borg reap-worktrees` will auto-clean any borg worktree whose branch has merged or that is
+  older than `BORG_REAP_STALE_HOURS` (default 12h). This is your safety net.
+- If the orchestrator does NOT provide a `<branch>` name, work directly in `<repo_path>` on
+  whatever branch is checked out (no worktree needed).
 
 ## Read first
 
@@ -38,7 +74,7 @@ Before editing anything, read in order:
   explicitly a dependency update.
 - Generated artifacts (`dist/`, `build/`, `target/`, `node_modules/`).
 - Files under `.borg/` (checkpoints are user-authored).
-- Files outside `<repo_path>` — your worktree is your sandbox.
+- Files outside `<repo_path>` — stay inside the target repo.
 
 ## Devcontainer rule
 
@@ -49,11 +85,10 @@ container via:
 drone exec <project> -- <cmd>
 ```
 
-**Always pass the project name explicitly to `drone exec` — never rely on the worktree cwd.**
+**Always pass the project name explicitly to `drone exec` — never rely on cwd.**
 The registry-by-name resolution in `drone.zsh` is cwd-independent; `drone exec <project> -- <cmd>`
-is the only correct invocation form from a nanoprobe context. Your worktree path is not the
-registry path. If you need to run a command in the registry path on the host (rare — prefer
-`drone exec`), `cd` there first.
+is the only correct invocation form from a nanoprobe context. If you need to run a host command
+inside `<repo_path>` (rare — prefer `drone exec`), use an absolute path or `cd` there explicitly.
 
 ## Verify before completion
 

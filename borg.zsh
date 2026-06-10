@@ -1239,6 +1239,54 @@ cmd_reap() {
     info "$count stale session(s) downgraded to idle (threshold: ${BORG_REAP_STALE_HOURS:-12}h)"
 }
 
+# Remove stale borg-managed nanoprobe worktrees for one or all registered repos.
+# A worktree is stale when its branch is merged into the default branch OR when it
+# is older than BORG_REAP_STALE_HOURS (default 12h). Only worktrees under
+# ~/.local/state/borg/worktrees/ are ever touched. Uncommitted-change worktrees are
+# always skipped.
+#
+# Usage:
+#   borg reap-worktrees            # reap across all registered repos
+#   borg reap-worktrees <project>  # reap for one registered project
+cmd_reap_worktrees() {
+    local target_project="${1:-}"
+    local repo_paths=()
+
+    if [[ -n "$target_project" ]]; then
+        local ppath
+        ppath=$(borg_registry_get "$target_project" | jq -r '.path // empty' 2>/dev/null)
+        [[ -n "$ppath" ]] || die "unknown project '$target_project'"
+        repo_paths=("$ppath")
+    else
+        while IFS= read -r ppath; do
+            [[ -n "$ppath" ]] && repo_paths+=("$ppath")
+        done < <(borg_registry_read | jq -r '.projects[].path // empty' 2>/dev/null)
+    fi
+
+    if (( ${#repo_paths[@]} == 0 )); then
+        info "No registered projects found."
+        return 0
+    fi
+
+    local total=0
+    local repo wt reason
+    for repo in "${repo_paths[@]}"; do
+        [[ -d "$repo" ]] || continue
+        while IFS=$'\t' read -r wt reason; do
+            [[ -z "$wt" ]] && continue
+            info "Reaped worktree ${BOLD}${wt##*/}${NC} in ${repo##*/} (${reason})"
+            total=$((total + 1))
+        done < <(_borg_reap_worktrees "$repo")
+    done
+
+    if (( total == 0 )); then
+        info "No stale borg worktrees found."
+    else
+        echo
+        info "$total stale worktree(s) removed (threshold: ${BORG_REAP_STALE_HOURS:-12}h)"
+    fi
+}
+
 # Return 0 if a checkpoint was written within the last THRESHOLD hours, 1 otherwise.
 _borg_has_recent_checkpoint() {
     local pdir="$1" threshold_hours="${2:-8}"
@@ -1670,11 +1718,12 @@ If they say 'go' or 'start' or 'engage', switch to the top-priority project.
 
 == ORCHESTRATION MODEL ==
 When the developer asks for project work, spawn the \`borg-nanoprobe\` agent via the Agent tool
-with \`isolation: worktree\` and \`background: true\`. Pass the project name, repo path, working
-branch, and task in the invocation prompt. Never edit project files from this orchestrator
-session — your role is to spawn / monitor / synthesize. The standard flow is: brief the nanoprobe
-→ spawn → wait for SubagentStop → report results. Use \`borg nanoprobes\` to see recent runs and
-\`borg nanoprobe-log <id>\` to read a transcript."
+with \`background: true\`. Pass the project name, repo path, working branch, and task in the
+invocation prompt. Do NOT use \`isolation: worktree\` — nanoprobes manage their own git worktrees
+inside the target repo at \`~/.local/state/borg/worktrees/<repo>/<slug>\`. Never edit project
+files from this orchestrator session — your role is to spawn / monitor / synthesize. The standard
+flow is: brief the nanoprobe → spawn → wait for SubagentStop → report results. Use
+\`borg nanoprobes\` to see recent runs and \`borg nanoprobe-log <id>\` to read a transcript."
 
     # Write prompt to file — avoids shell-escaping hell when passing through tmux send-keys
     local prompt_file="${TMPDIR:-/tmp}/borg-orchestrator-prompt.$$"
@@ -2533,6 +2582,7 @@ cmd_help() {
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     watch [interval]    Live-refresh project status + recent nanoprobes (default: 5s)
     reap                Persist idle to stale active/waiting sessions (no live window)
+    reap-worktrees [p]  Remove stale borg-managed nanoprobe worktrees (all repos or one)
     help                Show this message
 
   ALIASES (backward compat)
@@ -2610,6 +2660,7 @@ case "${1:-help}" in
     nanoprobe-log)  cmd_nanoprobe_log "${@:2}" ;;
     watch)          cmd_watch "${@:2}" ;;
     reap)           cmd_reap "${@:2}" ;;
+    reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
     # Legacy aliases → consolidated command
     ls)       cmd_link "${@:2}" ;;
     status)   cmd_link "${@:2}" ;;
