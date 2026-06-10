@@ -250,7 +250,7 @@ _build_self_contained_hook() {
 _build_self_contained_hook "$HOOKS_SRC/bash-guard.sh"        "$HOOKS_DST/bash-guard.sh"        0
 _build_self_contained_hook "$HOOKS_SRC/pre-commit-remind.sh" "$HOOKS_DST/pre-commit-remind.sh" 0
 _build_self_contained_hook "$HOOKS_SRC/tool-count-nudge.sh"  "$HOOKS_DST/tool-count-nudge.sh"  0
-_build_self_contained_hook "$HOOKS_SRC/notify.sh"            "$HOOKS_DST/notify.sh"            0
+_build_self_contained_hook "$HOOKS_SRC/notify.sh"            "$HOOKS_DST/notify.sh"            1
 
 # Hooks that source lib/borg-hooks.sh: inline the helpers.
 _build_self_contained_hook "$HOOKS_SRC/borg-link-down.sh"    "$HOOKS_DST/borg-link-down.sh"    1
