@@ -1882,7 +1882,10 @@ _borg_unregister_hook() {
 
     local tmp="$settings.tmp.$$"
     jq --arg evt "$event" --arg cmd "$hook_cmd" '
-        .hooks[$evt] |= map(select(.hooks | all(.command != $cmd)))
+        .hooks[$evt] |= (
+            map(.hooks |= map(select(.command != $cmd)))
+            | map(select((.hooks | length) > 0))
+        )
     ' "$settings" > "$tmp" && mv "$tmp" "$settings"
     info "  $event: $label (removed)"
 }
@@ -2080,6 +2083,7 @@ CONF
             "\$HOME/.claude/hooks/borg-plan-promote.sh"
             "\$HOME/.claude/hooks/tool-count-nudge.sh"
             "\$HOME/.claude/hooks/borg-nanoprobe-log.sh"
+            "\$HOME/.claude/hooks/notify.sh"
         )
         local _dedup_events=(
             "SessionStart"
@@ -2091,6 +2095,7 @@ CONF
             "PreToolUse"
             "PostToolUse"
             "SubagentStop"
+            "Stop"
         )
         local _n=${#_dedup_hooks[@]}
         local _i
