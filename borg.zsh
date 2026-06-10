@@ -2060,31 +2060,56 @@ CONF
         cp "$lib" "$HOME/.claude/lib/${lib:t}"
     done
 
-    # ── 3. Register hooks in settings.json ────────────────────────────────────
+    # ── 3. De-dup: remove literal-path borg hook entries from Claude Code settings.json ──
+    # Hook registration is now owned by the borg-collective plugin (hooks/hooks.json).
+    # borg setup STOPS writing hooks into settings.json. It instead REMOVES the literal
+    # ~/.claude/hooks/... entries it used to write, so the plugin can own them without
+    # double-firing. Permissions and other settings.json keys are preserved.
     if [[ -f "$CLAUDE_SETTINGS" ]]; then
-        info "Registering hooks in Claude Code settings.json..."
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-link-down.sh"   "SessionStart" "borg-link-down.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-link-up.sh"     "Stop"         "borg-link-up.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/notify.sh"             "Notification"  "notify.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-notify.sh"       "Notification"  "borg-notify.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/pre-commit-remind.sh"  "PreToolUse"   "pre-commit-remind.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/bash-guard.sh"         "PreToolUse"   "bash-guard.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-plan-promote.sh"  "PreToolUse"   "borg-plan-promote.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/tool-count-nudge.sh"  "PostToolUse"  "tool-count-nudge.sh"
-        _borg_register_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-nanoprobe-log.sh" "SubagentStop" "borg-nanoprobe-log.sh"
+        info "De-duping Claude Code settings.json (removing literal-path borg hooks)..."
 
-        # Migration: remove old session-start.sh (merged into borg-link-down.sh)
+        # Remove all literal ~/.claude/hooks/... borg hook entries. These were registered
+        # by previous versions of borg setup; the plugin now owns hook registration.
+        local _dedup_hooks=(
+            "\$HOME/.claude/hooks/borg-link-down.sh"
+            "\$HOME/.claude/hooks/borg-link-up.sh"
+            "\$HOME/.claude/hooks/notify.sh"
+            "\$HOME/.claude/hooks/borg-notify.sh"
+            "\$HOME/.claude/hooks/pre-commit-remind.sh"
+            "\$HOME/.claude/hooks/bash-guard.sh"
+            "\$HOME/.claude/hooks/borg-plan-promote.sh"
+            "\$HOME/.claude/hooks/tool-count-nudge.sh"
+            "\$HOME/.claude/hooks/borg-nanoprobe-log.sh"
+        )
+        local _dedup_events=(
+            "SessionStart"
+            "Stop"
+            "Notification"
+            "Notification"
+            "PreToolUse"
+            "PreToolUse"
+            "PreToolUse"
+            "PostToolUse"
+            "SubagentStop"
+        )
+        local _n=${#_dedup_hooks[@]}
+        local _i
+        for (( _i=1; _i<=_n; _i++ )); do
+            _borg_unregister_hook "$CLAUDE_SETTINGS" "${_dedup_hooks[$_i]}" "${_dedup_events[$_i]}" \
+                "${_dedup_hooks[$_i]##*/}"
+        done
+
+        # Migration: remove old hook names (previous rename cycles)
         _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/session-start.sh" "SessionStart" "session-start.sh"
-        [[ -e "$CLAUDE_HOOKS_DIR/session-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/session-start.sh" \
-            && info "  Removed old session-start.sh"
-
-        # Migration: rename borg-start.sh/borg-stop.sh → borg-link-down.sh/borg-link-up.sh
         _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-start.sh" "SessionStart" "borg-start.sh"
         _borg_unregister_hook "$CLAUDE_SETTINGS" "\$HOME/.claude/hooks/borg-stop.sh" "Stop" "borg-stop.sh"
-        [[ -e "$CLAUDE_HOOKS_DIR/borg-start.sh" ]] && rm "$CLAUDE_HOOKS_DIR/borg-start.sh" \
-            && info "  Removed old borg-start.sh (→ borg-link-down.sh)"
-        [[ -e "$CLAUDE_HOOKS_DIR/borg-stop.sh" ]] && rm "$CLAUDE_HOOKS_DIR/borg-stop.sh" \
-            && info "  Removed old borg-stop.sh (→ borg-link-up.sh)"
+
+        # Clean up stale hook files from previous borg setup runs
+        local _stale_hooks=(session-start.sh borg-start.sh borg-stop.sh)
+        for _sh in "${_stale_hooks[@]}"; do
+            [[ -e "$CLAUDE_HOOKS_DIR/$_sh" ]] && rm "$CLAUDE_HOOKS_DIR/$_sh" \
+                && info "  Removed stale hook file: $_sh"
+        done
 
         # Migration: rename borg-checkpoint skill → borg-link-up skill
         [[ -d "$HOME/.claude/skills/borg-checkpoint" ]] && rm -rf "$HOME/.claude/skills/borg-checkpoint" \
@@ -2102,9 +2127,11 @@ CONF
                 "$CLAUDE_SETTINGS" > "$_claude_local"
             info "Generated $_claude_local (add machine-local overrides here)"
         fi
+        info "  De-dup complete. Hooks are now owned by the borg-collective plugin."
+        info "  If the plugin is not installed, run: claude plugin install borg-collective@noah-local"
     else
         warn "No settings.json at $CLAUDE_SETTINGS"
-        warn "Hooks installed but not registered. See README.md for manual registration."
+        warn "Hooks are managed by the borg-collective plugin. Install it to register hooks."
     fi
 
     # ── 3b. CoCo (Cortex Code) integration ───────────────────────────────────
@@ -2197,6 +2224,17 @@ CONF
             cp -f "$agent_file" "$CLAUDE_AGENTS_DIR/$aname"
             info "  $aname"
         done
+    fi
+
+    # ── 4a-ii. Build plugin (dev machine only) ───────────────────────────────
+    # Rebuild the publishable plugin subset from this repo into the claude-plugins
+    # directory. Guarded to the dev machine: only runs when the plugin target dir
+    # exists (it does not exist on the work machine — the work machine only pulls).
+    local _plugin_build="$BORG_HOME/scripts/build-plugin.sh"
+    local _plugin_dir="/Users/noah/dev/claude-plugins/borg-collective"
+    if [[ -f "$_plugin_build" && -d "$_plugin_dir" ]]; then
+        info "Building plugin (dev machine detected)..."
+        bash "$_plugin_build" 2>&1 | sed 's/^/  /' || warn "plugin build encountered errors — check output above"
     fi
 
     # ── 4b. Per-environment extensions ───────────────────────────────────────

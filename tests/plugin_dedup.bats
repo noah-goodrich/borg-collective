@@ -1,0 +1,224 @@
+#!/usr/bin/env bats
+# Tests for B2 de-dup: _borg_unregister_hook in borg.zsh, and for B1 build-plugin.sh.
+#
+# B2 tests: verify that borg setup removes literal ~/.claude/hooks/... entries from
+# settings.json without disturbing other hooks or permissions.
+#
+# B1 tests: verify build-plugin.sh basic behaviour (idempotency, --dry-run, self-containment).
+
+load test_helper/setup
+
+BORG_ZSH="${BATS_TEST_DIRNAME}/../borg.zsh"
+BUILD_PLUGIN="${BATS_TEST_DIRNAME}/../scripts/build-plugin.sh"
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+_fake_settings_with_hooks() {
+    local settings="$1"
+    cat > "$settings" <<'EOF'
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "$HOME/.claude/hooks/borg-link-down.sh", "timeout": 10 }]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "$HOME/.claude/hooks/borg-link-up.sh", "timeout": 10 }]
+      },
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "$HOME/.claude/hooks/notify.sh", "timeout": 5 }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "$HOME/.claude/hooks/bash-guard.sh", "timeout": 5 }]
+      },
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "/some/external/hook.sh", "timeout": 10 }]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [{ "type": "command", "command": "$HOME/.claude/hooks/tool-count-nudge.sh", "timeout": 10 }]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": ["Bash(*)", "Read(*)"]
+  },
+  "model": "claude-sonnet-4-5"
+}
+EOF
+}
+
+# ─── B2: _borg_unregister_hook tests ─────────────────────────────────────────
+
+@test "B2: _borg_unregister_hook removes matching hook entry from settings.json" {
+    setup_temp_dirs
+    local settings="$BORG_TEST_HOME/.claude/settings.json"
+    mkdir -p "$(dirname "$settings")"
+    _fake_settings_with_hooks "$settings"
+
+    zsh -c "
+        source '$BORG_ZSH' 2>/dev/null || true
+        _borg_unregister_hook '$settings' '\$HOME/.claude/hooks/borg-link-down.sh' 'SessionStart' 'borg-link-down.sh'
+    "
+
+    count=$(jq '.hooks.SessionStart // [] | length' "$settings")
+    [ "$count" -eq 0 ]
+}
+
+@test "B2: _borg_unregister_hook leaves non-borg hooks intact" {
+    setup_temp_dirs
+    local settings="$BORG_TEST_HOME/.claude/settings.json"
+    mkdir -p "$(dirname "$settings")"
+    _fake_settings_with_hooks "$settings"
+
+    zsh -c "
+        source '$BORG_ZSH' 2>/dev/null || true
+        _borg_unregister_hook '$settings' '\$HOME/.claude/hooks/bash-guard.sh' 'PreToolUse' 'bash-guard.sh'
+    "
+
+    external_count=$(jq '[.hooks.PreToolUse[]?.hooks[]? | select(.command == "/some/external/hook.sh")] | length' "$settings")
+    [ "$external_count" -eq 1 ]
+}
+
+@test "B2: _borg_unregister_hook preserves permissions and model keys" {
+    setup_temp_dirs
+    local settings="$BORG_TEST_HOME/.claude/settings.json"
+    mkdir -p "$(dirname "$settings")"
+    _fake_settings_with_hooks "$settings"
+
+    zsh -c "
+        source '$BORG_ZSH' 2>/dev/null || true
+        _borg_unregister_hook '$settings' '\$HOME/.claude/hooks/borg-link-up.sh' 'Stop' 'borg-link-up.sh'
+    "
+
+    model=$(jq -r '.model' "$settings")
+    perm=$(jq -r '.permissions.allow[0]' "$settings")
+    [ "$model" = "claude-sonnet-4-5" ]
+    [ "$perm" = "Bash(*)" ]
+}
+
+@test "B2: _borg_unregister_hook is a no-op when hook not present" {
+    setup_temp_dirs
+    local settings="$BORG_TEST_HOME/.claude/settings.json"
+    mkdir -p "$(dirname "$settings")"
+    echo '{"hooks": {}, "model": "claude-sonnet-4-5"}' > "$settings"
+
+    run zsh -c "
+        source '$BORG_ZSH' 2>/dev/null || true
+        _borg_unregister_hook '$settings' '\$HOME/.claude/hooks/borg-link-down.sh' 'SessionStart' 'borg-link-down.sh'
+    "
+    [ "$status" -eq 0 ]
+
+    model=$(jq -r '.model' "$settings")
+    [ "$model" = "claude-sonnet-4-5" ]
+}
+
+@test "B2: _borg_unregister_hook removes multiple borg hooks leaving non-borg hooks" {
+    setup_temp_dirs
+    local settings="$BORG_TEST_HOME/.claude/settings.json"
+    mkdir -p "$(dirname "$settings")"
+    _fake_settings_with_hooks "$settings"
+
+    zsh -c "
+        source '$BORG_ZSH' 2>/dev/null || true
+        _borg_unregister_hook '$settings' '\$HOME/.claude/hooks/notify.sh' 'Stop' 'notify.sh'
+        _borg_unregister_hook '$settings' '\$HOME/.claude/hooks/borg-link-up.sh' 'Stop' 'borg-link-up.sh'
+    "
+
+    stop_count=$(jq '.hooks.Stop // [] | length' "$settings")
+    [ "$stop_count" -eq 0 ]
+}
+
+# ─── B1: build-plugin.sh tests ───────────────────────────────────────────────
+
+@test "B1: build-plugin.sh exits 0 when plugin dir does not exist" {
+    run bash "$BUILD_PLUGIN" 2>&1
+    [ "$status" -eq 0 ]
+}
+
+@test "B1: build-plugin.sh --dry-run exits 0 and prints nothing harmful" {
+    run bash "$BUILD_PLUGIN" --dry-run
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -qv "ERROR"
+}
+
+@test "B1: build-plugin.sh is idempotent — second run reports no changes" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/fake-plugin"
+    mkdir -p "$fake_plugin/skills" "$fake_plugin/hooks" "$fake_plugin/agents" "$fake_plugin/.claude-plugin"
+    echo '{"version": "0.2.0"}' > "$fake_plugin/.claude-plugin/plugin.json"
+    mkdir -p "$fake_plugin/skills/borg-plan"
+    touch "$fake_plugin/skills/borg-plan/SKILL.md"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    run bash -c "PLUGIN_DIR_OVERRIDE='$fake_plugin' bash '$BUILD_PLUGIN' --dry-run 2>&1"
+    [ "$status" -eq 0 ]
+}
+
+@test "B1: built hooks contain no source references to borg-hooks.sh" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/selfcontained-test"
+    mkdir -p "$fake_plugin/skills" "$fake_plugin/hooks" "$fake_plugin/agents" "$fake_plugin/.claude-plugin"
+    echo '{"version": "0.1.0"}' > "$fake_plugin/.claude-plugin/plugin.json"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    for hook in borg-link-down.sh borg-link-up.sh borg-notify.sh borg-plan-promote.sh; do
+        if [[ -f "$fake_plugin/hooks/$hook" ]]; then
+            run bash -c "grep -E '^source.*borg-hooks\.sh' '$fake_plugin/hooks/$hook'"
+            [ "$status" -ne 0 ]
+        fi
+    done
+}
+
+@test "B1: built lifecycle hooks begin with borg guard" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/guard-test"
+    mkdir -p "$fake_plugin/skills" "$fake_plugin/hooks" "$fake_plugin/agents" "$fake_plugin/.claude-plugin"
+    echo '{"version": "0.1.0"}' > "$fake_plugin/.claude-plugin/plugin.json"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    for hook in borg-link-down.sh borg-link-up.sh borg-notify.sh; do
+        if [[ -f "$fake_plugin/hooks/$hook" ]]; then
+            grep -q "command -v borg" "$fake_plugin/hooks/$hook"
+        fi
+    done
+}
+
+@test "B1: generated hooks.json has top-level hooks wrapper" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/hooksjson-test"
+    mkdir -p "$fake_plugin/skills" "$fake_plugin/hooks" "$fake_plugin/agents" "$fake_plugin/.claude-plugin"
+    echo '{"version": "0.1.0"}' > "$fake_plugin/.claude-plugin/plugin.json"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    if [[ -f "$fake_plugin/hooks/hooks.json" ]]; then
+        run jq -e '.hooks' "$fake_plugin/hooks/hooks.json"
+        [ "$status" -eq 0 ]
+    fi
+}
+
+@test "B1: generated hooks.json covers all 6 lifecycle events" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/events-test"
+    mkdir -p "$fake_plugin/skills" "$fake_plugin/hooks" "$fake_plugin/agents" "$fake_plugin/.claude-plugin"
+    echo '{"version": "0.1.0"}' > "$fake_plugin/.claude-plugin/plugin.json"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    if [[ -f "$fake_plugin/hooks/hooks.json" ]]; then
+        for event in SessionStart Stop Notification PreToolUse PostToolUse SubagentStop; do
+            run jq -e --arg ev "$event" '.hooks[$ev] | length > 0' "$fake_plugin/hooks/hooks.json"
+            [ "$status" -eq 0 ]
+        done
+    fi
+}
