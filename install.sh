@@ -170,7 +170,62 @@ info "  launchd agent bootstrapped."
 info "Running borg setup..."
 "$BORG_HOME/borg.zsh" setup
 
-# ── 5. Summary ────────────────────────────────────────────────────────────────
+# ── 5. Plugin detection + cairn detection ────────────────────────────────────
+
+# Plugin check (REQUIRED): borg hooks are now owned by the borg-collective plugin.
+# Without the plugin installed, no hooks fire. Detect and offer installation.
+_plugin_installed=0
+if command -v claude &>/dev/null; then
+    if claude plugin list 2>/dev/null | grep -q "borg-collective" 2>/dev/null; then
+        _plugin_installed=1
+    fi
+fi
+
+if [[ "$_plugin_installed" -eq 0 ]]; then
+    echo ""
+    warn "borg-collective plugin NOT detected in Claude Code."
+    echo ""
+    echo "  The plugin owns hook registration (SessionStart, Stop, Notification, etc.)."
+    echo "  Without it, borg lifecycle hooks will NOT fire."
+    echo ""
+    echo "  Install the plugin:"
+    echo "    claude plugin install borg-collective@noah-local"
+    echo ""
+    if [[ "$QUIET" -eq 0 ]]; then
+        printf "  Install it now? [y/N] "
+        read -r "_plugin_reply"
+        if [[ "${_plugin_reply:-N}" =~ ^[Yy]$ ]]; then
+            if claude plugin install borg-collective@noah-local 2>&1; then
+                info "Plugin installed."
+            else
+                warn "Plugin install failed. Run manually: claude plugin install borg-collective@noah-local"
+            fi
+        fi
+    fi
+fi
+
+# Cairn check (OPTIONAL): cairn is the knowledge graph. Borg works without it.
+_cairn_ok=0
+if command -v cairn &>/dev/null; then
+    if curl -fsS "http://localhost:8767/health" 2>/dev/null | grep -q '"status":"ok"' 2>/dev/null; then
+        _cairn_ok=1
+    fi
+fi
+
+if [[ "$_cairn_ok" -eq 0 ]]; then
+    echo ""
+    if command -v cairn &>/dev/null; then
+        warn "cairn is installed but not responding at localhost:8767."
+        echo "  To start cairn: drone up cairn"
+    else
+        info "cairn not found — cross-session knowledge graph is optional."
+        echo "  To install: see https://github.com/noah-goodrich/cairn"
+    fi
+    echo "  Borg works fully without cairn; checkpoints still save locally."
+    echo ""
+fi
+
+# ── 6. Summary ────────────────────────────────────────────────────────────────
 
 echo ""
 info "Installation complete."
