@@ -2080,7 +2080,6 @@ CONF
             "\$HOME/.claude/hooks/borg-plan-promote.sh"
             "\$HOME/.claude/hooks/tool-count-nudge.sh"
             "\$HOME/.claude/hooks/borg-nanoprobe-log.sh"
-            "\$HOME/.claude/hooks/tool-count-nudge.sh"
         )
         local _dedup_events=(
             "SessionStart"
@@ -2092,7 +2091,6 @@ CONF
             "PreToolUse"
             "PostToolUse"
             "SubagentStop"
-            "PostToolUse"
         )
         local _n=${#_dedup_hooks[@]}
         local _i
