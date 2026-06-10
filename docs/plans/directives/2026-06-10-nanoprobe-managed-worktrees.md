@@ -29,6 +29,6 @@ repo. Decision is locked: worktrees are nanoprobe-managed, not harness-managed.
 - [ ] Bats tests added under `tests/` covering the worktree reaper
 - [ ] `CLAUDE.md` nanoprobe section updated to describe managed-worktree lifecycle
 - [ ] `borg init` prompt no longer mentions `isolation: worktree`
-- [ ] Both stale `.claude/worktrees/` entries removed and `worktree prune` run
+- [x] Both stale `.claude/worktrees/` entries removed and `worktree prune` run
 - [ ] `bats tests/` passes (all suites green)
 - [ ] `shellcheck` clean on changed shell files
