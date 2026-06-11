@@ -10,6 +10,7 @@ load test_helper/setup
 
 BORG_ZSH="${BATS_TEST_DIRNAME}/../borg.zsh"
 BUILD_PLUGIN="${BATS_TEST_DIRNAME}/../scripts/build-plugin.sh"
+CHECK_VERSION="${BATS_TEST_DIRNAME}/../scripts/check-plugin-version.sh"
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -254,4 +255,59 @@ EOF
             [ "$status" -eq 0 ]
         done
     fi
+}
+
+@test "B1: build-plugin.sh syncs plugin.json version from VERSION file" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/version-sync-test"
+    mkdir -p "$fake_plugin/skills" "$fake_plugin/hooks" "$fake_plugin/agents" "$fake_plugin/.claude-plugin"
+    echo '{"version": "0.2.16"}' > "$fake_plugin/.claude-plugin/plugin.json"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    cli_version=$(tr -d '[:space:]' < "${BATS_TEST_DIRNAME}/../VERSION")
+    plugin_version=$(jq -r '.version' "$fake_plugin/.claude-plugin/plugin.json")
+    [ "$plugin_version" = "$cli_version" ]
+}
+
+@test "B1: build-plugin.sh version sync is idempotent when already in sync" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/version-idempotent-test"
+    mkdir -p "$fake_plugin/skills" "$fake_plugin/hooks" "$fake_plugin/agents" "$fake_plugin/.claude-plugin"
+    cli_version=$(tr -d '[:space:]' < "${BATS_TEST_DIRNAME}/../VERSION")
+    echo "{\"version\": \"$cli_version\"}" > "$fake_plugin/.claude-plugin/plugin.json"
+
+    run bash -c "PLUGIN_DIR_OVERRIDE='$fake_plugin' bash '$BUILD_PLUGIN' --dry-run 2>&1"
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "version already in sync"
+}
+
+# ─── B3: check-plugin-version.sh drift-guard tests ───────────────────────────
+
+@test "B3: check-plugin-version.sh exits 0 when versions match" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/drift-guard-pass"
+    mkdir -p "$fake_plugin/borg-collective/.claude-plugin"
+    cli_version=$(tr -d '[:space:]' < "${BATS_TEST_DIRNAME}/../VERSION")
+    echo "{\"version\": \"$cli_version\"}" > "$fake_plugin/borg-collective/.claude-plugin/plugin.json"
+
+    run bash -c "PLUGIN_DIR_OVERRIDE='$fake_plugin' bash '$CHECK_VERSION'"
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "OK:"
+}
+
+@test "B3: check-plugin-version.sh exits 1 when versions differ" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/drift-guard-fail"
+    mkdir -p "$fake_plugin/borg-collective/.claude-plugin"
+    echo '{"version": "0.2.16"}' > "$fake_plugin/borg-collective/.claude-plugin/plugin.json"
+
+    run bash -c "PLUGIN_DIR_OVERRIDE='$fake_plugin' bash '$CHECK_VERSION'"
+    [ "$status" -eq 1 ]
+    echo "$output" | grep -q "ERROR: version mismatch"
+}
+
+@test "B3: check-plugin-version.sh exits 1 when plugin.json not found" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/drift-guard-missing"
+    mkdir -p "$fake_plugin/borg-collective"
+
+    run bash -c "PLUGIN_DIR_OVERRIDE='$fake_plugin' bash '$CHECK_VERSION'"
+    [ "$status" -eq 1 ]
+    echo "$output" | grep -q "not found"
 }
