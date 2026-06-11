@@ -85,7 +85,8 @@ _borg_worktree_is_stale() {
 
     local threshold="${BORG_REAP_STALE_HOURS:-12}"
     local mtime now age_h
-    mtime=$(stat -f %m "$wt" 2>/dev/null || stat --format=%Y "$wt" 2>/dev/null) || return 1
+    mtime=$(stat -c %Y "$wt" 2>/dev/null || stat -f %m "$wt" 2>/dev/null)
+    case "$mtime" in ''|*[!0-9]*) return 1;; esac
     now=$(date +%s)
     age_h=$(( (now - mtime) / 3600 ))
     [ "$age_h" -ge "$threshold" ]
