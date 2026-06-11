@@ -39,9 +39,13 @@ it is not a lever we need to add. The cost lives in the orchestrator's own conte
 
 ## Acceptance criteria
 
-- [ ] Orchestration rules (`CLAUDE.md` nanoprobe-orchestrator section) document the lean-context
+- [x] Orchestration rules (`CLAUDE.md` nanoprobe-orchestrator section) document the lean-context
       discipline: delegate output-heavy work, return summaries not dumps, keep the main context small.
-- [ ] Guidance to minimize orchestrator turns and avoid unnecessary deep thinking on light steps.
+      → Wired into `agents/borg-nanoprobe.md` (lean-context return contract) and
+        `skills/borg-plan/SKILL.md` (orchestrator turn discipline). PR: borg-spend-opt-and-traceability.
+- [x] Guidance to minimize orchestrator turns and avoid unnecessary deep thinking on light steps.
+      → `skills/borg-plan/SKILL.md` § Orchestrator turn discipline; `agents/borg-nanoprobe.md`
+        lean-context return contract. Same PR.
 - [ ] cairn-warm brief pattern documented + wired into dispatch (after the cairn backfill lands).
 - [ ] Measurement: use `~/.claude/token-spend.jsonl` (the SessionEnd collector) to track the
       main-vs-subagent split per session over time; goal is to shrink the main-loop share.

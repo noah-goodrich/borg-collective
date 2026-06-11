@@ -187,6 +187,16 @@ plan to an external ticket). Read in order; later files extend or override earli
 
 If neither exists, skip silently.
 
+## Orchestrator turn discipline
+
+When implementing a plan, delegate output-heavy reads and multi-file edits to nanoprobes that
+return distilled summaries — conclusions, file:line refs, and diff stats only, never raw dumps.
+Batch related steps into a single orchestrator turn; each extra turn re-reads the full accumulated
+context (~96% of session cost is the main loop). Reserve extended thinking for genuinely hard
+design decisions; mechanical steps like renaming, formatting, or applying a known pattern do not
+warrant deep deliberation. Keep the main context lean: conclusions go here, raw output stays in
+the repo.
+
 ## The Lock Rule
 
 Once PROJECT_PLAN.md is written, do NOT modify acceptance criteria without explicit "I'm changing
