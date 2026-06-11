@@ -1468,9 +1468,15 @@ cmd_search() {
         die "cairn not installed — see docs/quickstart.md for setup"
     fi
     if [[ -n "$project" ]]; then
-        cairn search "$query" --project "$project"
+        _borg_timeout 10 cairn search "$query" --project "$project" || {
+            warn "cairn search timed out or failed — is the service running? (drone up cairn)"
+            return 1
+        }
     else
-        cairn search "$query"
+        _borg_timeout 10 cairn search "$query" || {
+            warn "cairn search timed out or failed — is the service running? (drone up cairn)"
+            return 1
+        }
     fi
 }
 
