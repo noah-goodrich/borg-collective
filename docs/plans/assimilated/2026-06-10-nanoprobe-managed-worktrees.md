@@ -2,7 +2,8 @@
 
 **Filed:** 2026-06-10
 **Issue:** #42
-**Status:** in-progress
+**Status:** done
+**Shipped:** 2026-06-11
 
 ## Background
 
@@ -22,13 +23,13 @@ repo. Decision is locked: worktrees are nanoprobe-managed, not harness-managed.
 
 ## Acceptance Criteria
 
-- [ ] `agents/borg-nanoprobe.md` updated with worktree lifecycle instructions
-- [ ] Worktree path standard documented: `/Users/noah/.local/state/borg/worktrees/<repo>/<slug>`
-- [ ] `lib/reaper.sh` extended with `_borg_worktree_is_stale` and `_borg_reap_worktrees`
-- [ ] `borg reap-worktrees` subcommand added to `borg.zsh` and help text
-- [ ] Bats tests added under `tests/` covering the worktree reaper
-- [ ] `CLAUDE.md` nanoprobe section updated to describe managed-worktree lifecycle
-- [ ] `borg init` prompt no longer mentions `isolation: worktree`
+- [x] `agents/borg-nanoprobe.md` updated with worktree lifecycle instructions
+- [x] Worktree path standard documented: `/Users/noah/.local/state/borg/worktrees/<repo>/<slug>`
+- [x] `lib/reaper.sh` extended with `_borg_worktree_is_stale` and `_borg_reap_worktrees`
+- [x] `borg reap-worktrees` subcommand added to `borg.zsh` and help text
+- [x] Bats tests added under `tests/` covering the worktree reaper
+- [x] `CLAUDE.md` nanoprobe section updated to describe managed-worktree lifecycle
+- [x] `borg init` prompt no longer mentions `isolation: worktree`
 - [x] Both stale `.claude/worktrees/` entries removed and `worktree prune` run
-- [ ] `bats tests/` passes (all suites green)
-- [ ] `shellcheck` clean on changed shell files
+- [x] `bats tests/` passes (all suites green)
+- [x] `shellcheck` clean on changed shell files
