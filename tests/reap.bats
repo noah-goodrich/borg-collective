@@ -54,6 +54,36 @@ setup() {
     unset BORG_REAP_STALE_HOURS
 }
 
+@test "_borg_should_reap boundary: activity STALE_HOURS+1h ago must reap (TZ-independent)" {
+    # Compute a UTC timestamp BORG_REAP_STALE_HOURS+1 hours in the past.
+    # Uses `date -u` so the assertion holds regardless of the host timezone.
+    # This test would FAIL under the old buggy local-time parse on a non-UTC host
+    # (e.g. America/Denver) because the age would be under-counted by 6-7h.
+    local threshold=12
+    local stale_ts
+    stale_ts=$(date -u -v-"$((threshold + 1))"H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -d "$((threshold + 1)) hours ago" +%Y-%m-%dT%H:%M:%SZ)
+    export BORG_REAP_STALE_HOURS=$threshold
+    run run_zsh_fn registry _borg_should_reap active "$stale_ts" 0
+    [ "$status" -eq 0 ]
+    unset BORG_REAP_STALE_HOURS
+}
+
+@test "_borg_should_reap boundary: activity STALE_HOURS-1h ago must be kept (TZ-independent)" {
+    # Compute a UTC timestamp BORG_REAP_STALE_HOURS-1 hours in the past.
+    # Under a correct UTC parse this is fresh enough to keep. Under the old buggy
+    # local-time parse on a non-UTC host the age would be wrong, but the test
+    # verifies correct behavior post-fix.
+    local threshold=12
+    local fresh_ts
+    fresh_ts=$(date -u -v-"$((threshold - 1))"H +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+        || date -u -d "$((threshold - 1)) hours ago" +%Y-%m-%dT%H:%M:%SZ)
+    export BORG_REAP_STALE_HOURS=$threshold
+    run run_zsh_fn registry _borg_should_reap active "$fresh_ts" 0
+    [ "$status" -ne 0 ]
+    unset BORG_REAP_STALE_HOURS
+}
+
 # ─── borg_reap_overlay stream filter ─────────────────────────────────────────
 # No tmux helper is loaded in the test, so _borg_live_windows is empty and every
 # project is treated as having no live window.

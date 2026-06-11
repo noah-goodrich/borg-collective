@@ -7,11 +7,6 @@
 #   _borg_should_reap <status> <last_activity_iso> <has_live_window: 1|0>
 #   _borg_worktree_is_stale <repo_path> <worktree_path>
 #   _borg_reap_worktrees <repo_path>
-#
-# NOTE: _borg_should_reap uses `date -j -f` without `-u`, so the computed age is
-# off by the host's UTC offset. This is a known bug tracked in:
-#   docs/plans/directives/2026-06-06-reaper-utc-timezone-offset.md
-# Do not "fix" it here — the directive has the acceptance criteria.
 
 BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}"
 
@@ -34,8 +29,8 @@ _borg_should_reap() {
         return 0
     fi
     local epoch_ts epoch_now age_h
-    epoch_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s 2>/dev/null \
-        || date -d "$last" +%s 2>/dev/null) || return 0
+    epoch_ts=$(date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s 2>/dev/null \
+        || TZ=UTC date -d "$last" +%s 2>/dev/null) || return 0
     epoch_now=$(date +%s)
     age_h=$(( (epoch_now - epoch_ts) / 3600 ))
     [ "$age_h" -ge "$threshold" ]
