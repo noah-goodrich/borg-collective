@@ -1,6 +1,8 @@
 # Directive: Reaper staleness age is off by the local timezone offset
 
 *Filed: 2026-06-06*
+*Status: done*
+*Shipped: 2026-06-11*
 *Source: borg-collective-review (Devil's Advocate) during PR #39 assimilation*
 
 ## Problem
@@ -26,14 +28,14 @@ avoids a TZ-sensitive boundary (it uses years-old / clearly-fresh timestamps), s
 machine but does not exercise the offset.
 
 ## Acceptance Criteria
-- [ ] `_borg_should_reap` (zsh, `lib/registry.zsh`) parses `Z` timestamps as UTC — add `-u` to the
+- [x] `_borg_should_reap` (zsh, `lib/registry.zsh`) parses `Z` timestamps as UTC — add `-u` to the
       `date -j -f` call, or normalize before comparing. Age must be correct regardless of the host
       timezone or DST.
-- [ ] The bash twin in `lib/borg-hooks.sh` gets the identical fix; the two stay in sync.
-- [ ] `tests/reap.bats` gains a boundary test that would fail under the buggy parse: an activity
+- [x] The bash twin in `lib/borg-hooks.sh` gets the identical fix; the two stay in sync.
+- [x] `tests/reap.bats` gains a boundary test that would fail under the buggy parse: an activity
       `BORG_REAP_STALE_HOURS + 1`h in the past reaps, and one `BORG_REAP_STALE_HOURS - 1`h in the
       past is kept — computed from a UTC `now` so the assertion is TZ-independent.
-- [ ] `bats tests/` green.
+- [x] `bats tests/` green.
 
 ## Scope Boundaries
 - NOT changing: the default 12h threshold or the reap predicate's logic (live-window / missing-last
