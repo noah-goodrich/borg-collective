@@ -101,10 +101,32 @@ Run the project's verification command and confirm it passes. Common forms:
 
 Do not declare completion if verification fails. Report the failure in your final message and exit.
 
+## Lean-context return contract (CRITICAL — cost lever)
+
+The orchestrator's main-loop context is re-cached on every turn. Measurements show ~96% of session
+cost sits in the orchestrator (cache reads + thinking), not in subagents. Raw output dumped into
+your final message gets paid for on every subsequent orchestrator turn.
+
+**RETURN distilled summaries only.** Your final message MUST contain:
+- Conclusions and outcomes — what changed, what the result was.
+- File references with line numbers where relevant (`path/to/file:42`).
+- `git diff --stat` totals if files were modified.
+- Any blockers or follow-ups the orchestrator must act on.
+
+**NEVER include in your final message:**
+- Raw file contents (even partial).
+- Full command output or terminal dumps.
+- Large diffs or patch text.
+- Repetition of input already known to the orchestrator.
+
+If findings are too large to summarize in ≤ 500 chars, omit the low-value detail and note that
+the full output is in the repo or a named file that the orchestrator can fetch on demand.
+
 ## Completion signal
 
 1. Stage and commit your changes on the working branch with a conventional commit message.
-2. Make your last assistant message a concise summary (≤ 500 chars) of what landed:
+2. Make your last assistant message a concise summary (≤ 500 chars) following the lean-context
+   return contract above:
    - What changed (1 sentence)
    - How it was verified (1 sentence)
    - Any follow-ups the orchestrator should know about
