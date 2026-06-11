@@ -402,27 +402,38 @@ HOOKS_JSON='{
 
 _write_if_changed "$HOOKS_JSON" "$HOOKS_DST/hooks.json" "hooks/hooks.json"
 
-# ── Phase 5: Bump plugin.json version (patch) ────────────────────────────────
+# ── Phase 5: Sync plugin.json version from VERSION file ──────────────────────
+#
+# Single source of truth: borg-collective/VERSION.
+# The plugin version always matches the CLI version — no independent counter.
 
-_info "Phase 5: plugin.json version bump"
+_info "Phase 5: plugin.json version sync"
 PLUGIN_JSON="$PLUGIN_DIR/.claude-plugin/plugin.json"
+VERSION_FILE="$REPO_ROOT/VERSION"
 
 if [[ ! -f "$PLUGIN_JSON" ]]; then
-    _warn "plugin.json not found at $PLUGIN_JSON — skipping version bump"
+    _warn "plugin.json not found at $PLUGIN_JSON — skipping version sync"
+elif [[ ! -f "$VERSION_FILE" ]]; then
+    _warn "VERSION file not found at $VERSION_FILE — skipping version sync"
 else
-    current_version=$(jq -r '.version' "$PLUGIN_JSON" 2>/dev/null || echo "0.0.0")
-    # Bump patch: 0.2.0 → 0.2.1
-    IFS='.' read -r vmaj vmin vpatch <<< "$current_version"
-    vpatch="${vpatch:-0}"
-    new_version="${vmaj}.${vmin}.$((vpatch + 1))"
+    new_version=$(tr -d '[:space:]' < "$VERSION_FILE")
+    current_version=$(jq -r '.version' "$PLUGIN_JSON" 2>/dev/null || echo "")
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
-        _dry "would bump version: $current_version → $new_version"
+        if [[ "$current_version" != "$new_version" ]]; then
+            _dry "would sync version: $current_version → $new_version"
+        else
+            _dry "version already in sync: $new_version"
+        fi
     else
-        tmp=$(mktemp)
-        jq --arg v "$new_version" '.version = $v' "$PLUGIN_JSON" > "$tmp"
-        mv "$tmp" "$PLUGIN_JSON"
-        _info "  bumped version: $current_version → $new_version"
+        if [[ "$current_version" != "$new_version" ]]; then
+            tmp=$(mktemp)
+            jq --arg v "$new_version" '.version = $v' "$PLUGIN_JSON" > "$tmp"
+            mv "$tmp" "$PLUGIN_JSON"
+            _info "  synced version: $current_version → $new_version"
+        else
+            _info "  version already in sync: $new_version"
+        fi
     fi
 fi
 
