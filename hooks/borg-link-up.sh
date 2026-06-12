@@ -92,7 +92,7 @@ if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then
                         _orch_notes="$_truncated"
                     fi
                     printf 'borg-link-up: checkpoint truncated for cairn (%d chars -> %d, file: %s)\n' \
-                        "$(cat "$_latest_cp" | wc -m)" "${#_orch_notes}" "$_latest_cp" >&2
+                        "$(wc -m < "$_latest_cp")" "${#_orch_notes}" "$_latest_cp" >&2
                 fi
             fi
         fi
