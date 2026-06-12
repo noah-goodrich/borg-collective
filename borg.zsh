@@ -2237,14 +2237,14 @@ CONF
         done
     fi
 
-    # ── 4a-ii. Build plugin (dev machine only) ───────────────────────────────
-    # Rebuild the publishable plugin subset from this repo into the claude-plugins
-    # directory. Guarded to the dev machine: only runs when the plugin target dir
-    # exists (it does not exist on the work machine — the work machine only pulls).
+    # ── 4a-ii. Build + publish plugin (runs on every machine) ───────────────
+    # Rebuilds the publishable plugin subset from this repo into the claude-plugins
+    # directory, idempotently ensuring the marketplace.json entry is present.
+    # On a fresh machine the target dir may not exist yet; build-plugin.sh creates it.
+    # Safe to re-run — all phases are diff-guarded.
     local _plugin_build="$BORG_HOME/scripts/build-plugin.sh"
-    local _plugin_dir="/Users/noah/dev/claude-plugins/borg-collective"
-    if [[ -f "$_plugin_build" && -d "$_plugin_dir" ]]; then
-        info "Building plugin (dev machine detected)..."
+    if [[ -f "$_plugin_build" ]]; then
+        info "Publishing borg-collective plugin to marketplace..."
         bash "$_plugin_build" 2>&1 | sed 's/^/  /' || warn "plugin build encountered errors — check output above"
     fi
 
@@ -2594,6 +2594,16 @@ cmd_watch() {
     done
 }
 
+cmd_version() {
+    local version_file="$BORG_HOME/VERSION"
+    if [[ -f "$version_file" ]]; then
+        tr -d '[:space:]' < "$version_file"
+        printf '\n'
+    else
+        echo "$BORG_VERSION"
+    fi
+}
+
 cmd_help() {
     cat <<'EOF'
 
@@ -2625,6 +2635,7 @@ cmd_help() {
     regenerate          Archive stale projects (idle >48h)
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
     setup               Register Claude Code hooks, skills, and config
+    version             Print the installed borg version (alias: --version, -V)
     store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
     nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
@@ -2716,6 +2727,7 @@ case "${1:-help}" in
     hail|brief) cmd_link "${@:2}" ;;
     briefing) cmd_link --brief ;;
     refresh)  cmd_link --refresh ;;
+    version|--version|-V) cmd_version ;;
     help|--help|-h) cmd_help ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac
