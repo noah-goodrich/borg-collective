@@ -7,7 +7,7 @@ failure (dependent sequences).
 > Distribution model (context): **borg-collective ships in two forms that share one version (`v0.8.0`):**
 > the **CLI** (via a Homebrew formula `Formula/borg-collective.rb`, or `install.sh`) and the **Claude Code
 > plugin** (hooks/skills/agents, via the `noah-local` marketplace). The plugin version tracks the CLI
-> version, so `borg --version` and `claude plugin list` should report the **same** number. **cairn ships
+> version, so `borg version` and `claude plugin list` should report the **same** number. **cairn ships
 > as a GHCR container image** (Homebrew was rejected for cairn). Homebrew is also used for prerequisite
 > tooling (jq, tmux, …).
 
@@ -153,12 +153,16 @@ runs `borg scan`, and writes `~/.config/borg/config.zsh`.
 
 # 3d. Install the plugin — ONLY if you answered N to install.sh's "Install plugin now?" prompt in 3a.
 # (the plugin owns hook registration — hooks don't fire without it)
+# borg setup (already run in 3a) publishes the plugin package automatically, so this should succeed.
 claude plugin install borg-collective@noah-local
-claude plugin list | grep borg-collective       # expect: borg-collective@noah-local  0.8.0 (== borg --version)
+claude plugin list | grep borg-collective       # expect: borg-collective@noah-local  0.8.0
+borg version                                     # should print the same version number (e.g. 0.8.0)
 ```
 
-**[ASSUMPTION]** No `borg` command writes the marketplace entry; add it via Claude Code `/settings` or
-by editing `~/.claude/settings.json` directly.
+> `borg setup` (run automatically by `install.sh`) publishes the plugin package into
+> `$HOME/dev/claude-plugins/borg-collective/` and ensures the `borg-collective` entry is present in the
+> marketplace manifest — so `claude plugin install borg-collective@noah-local` works on the first run
+> without any manual marketplace editing.
 
 ---
 

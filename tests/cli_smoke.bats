@@ -57,3 +57,33 @@ setup() {
     run "$DRONE_CMD" invalid-command-xyz
     [ "$status" -ne 0 ]
 }
+
+@test "borg version prints VERSION file contents" {
+    run "$BORG_CMD" version
+    [ "$status" -eq 0 ]
+    version_file="$(dirname "$BORG_CMD")/VERSION"
+    expected="$(tr -d '[:space:]' < "$version_file")"
+    [[ "$output" == "$expected" ]]
+}
+
+@test "borg --version prints VERSION file contents" {
+    run "$BORG_CMD" --version
+    [ "$status" -eq 0 ]
+    version_file="$(dirname "$BORG_CMD")/VERSION"
+    expected="$(tr -d '[:space:]' < "$version_file")"
+    [[ "$output" == "$expected" ]]
+}
+
+@test "borg -V prints VERSION file contents" {
+    run "$BORG_CMD" -V
+    [ "$status" -eq 0 ]
+    version_file="$(dirname "$BORG_CMD")/VERSION"
+    expected="$(tr -d '[:space:]' < "$version_file")"
+    [[ "$output" == "$expected" ]]
+}
+
+@test "borg help lists version command" {
+    run "$BORG_CMD" help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"version"* ]]
+}
