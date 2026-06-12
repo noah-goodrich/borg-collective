@@ -280,6 +280,75 @@ EOF
     echo "$output" | grep -q "version already in sync"
 }
 
+# ─── B1b: fresh-machine / path-agnostic tests ────────────────────────────────
+
+@test "B1b: build-plugin.sh creates plugin dir when it does not exist (fresh machine)" {
+    local fake_marketplace="${BATS_TEST_TMPDIR}/fresh-machine-marketplace"
+    local fake_plugin="${fake_marketplace}/borg-collective"
+    mkdir -p "$fake_marketplace/.claude-plugin"
+    echo '{"name":"noah-local","plugins":[]}' > "$fake_marketplace/.claude-plugin/marketplace.json"
+
+    run bash -c "PLUGIN_DIR_OVERRIDE='$fake_plugin' bash '$BUILD_PLUGIN' 2>&1"
+    [ "$status" -eq 0 ]
+    [ -d "$fake_plugin" ]
+}
+
+@test "B1b: build-plugin.sh creates plugin.json when it does not exist (fresh machine)" {
+    local fake_plugin="${BATS_TEST_TMPDIR}/fresh-plugin-json"
+    mkdir -p "$fake_plugin"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    [ -f "$fake_plugin/.claude-plugin/plugin.json" ]
+    cli_version=$(tr -d '[:space:]' < "${BATS_TEST_DIRNAME}/../VERSION")
+    plugin_version=$(jq -r '.version' "$fake_plugin/.claude-plugin/plugin.json")
+    [ "$plugin_version" = "$cli_version" ]
+}
+
+@test "B1b: build-plugin.sh adds borg-collective entry to marketplace.json when absent" {
+    local fake_marketplace="${BATS_TEST_TMPDIR}/marketplace-add-test"
+    local fake_plugin="${fake_marketplace}/borg-collective"
+    mkdir -p "$fake_marketplace/.claude-plugin"
+    echo '{"name":"noah-local","plugins":[]}' > "$fake_marketplace/.claude-plugin/marketplace.json"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    has_entry=$(jq 'any(.plugins[]; .name == "borg-collective")' "$fake_marketplace/.claude-plugin/marketplace.json")
+    [ "$has_entry" = "true" ]
+}
+
+@test "B1b: build-plugin.sh marketplace.json update is idempotent" {
+    local fake_marketplace="${BATS_TEST_TMPDIR}/marketplace-idempotent-test"
+    local fake_plugin="${fake_marketplace}/borg-collective"
+    mkdir -p "$fake_marketplace/.claude-plugin"
+    echo '{"name":"noah-local","plugins":[{"name":"borg-collective","description":"x","source":"./borg-collective"}]}' \
+        > "$fake_marketplace/.claude-plugin/marketplace.json"
+
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+    PLUGIN_DIR_OVERRIDE="$fake_plugin" bash "$BUILD_PLUGIN" 2>&1 || true
+
+    count=$(jq '[.plugins[] | select(.name == "borg-collective")] | length' \
+        "$fake_marketplace/.claude-plugin/marketplace.json")
+    [ "$count" -eq 1 ]
+}
+
+@test "B1b: build-plugin.sh script contains no hardcoded /Users/ path" {
+    run grep -n '/Users/' "$BUILD_PLUGIN"
+    [ "$status" -ne 0 ]
+}
+
+@test "B1b: build-plugin.sh uses HOME-derived default for plugin dir (no hardcoded username)" {
+    local fake_home="${BATS_TEST_TMPDIR}/fake-home-user"
+    local fake_marketplace="${fake_home}/dev/claude-plugins"
+    local fake_plugin="${fake_marketplace}/borg-collective"
+    mkdir -p "$fake_marketplace/.claude-plugin"
+    echo '{"name":"noah-local","plugins":[]}' > "$fake_marketplace/.claude-plugin/marketplace.json"
+
+    run bash -c "HOME='$fake_home' unset PLUGIN_DIR_OVERRIDE; HOME='$fake_home' bash '$BUILD_PLUGIN' --dry-run 2>&1"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"$fake_home"* ]] || [[ "$output" != *"/Users/noah"* ]]
+}
+
 # ─── B3: check-plugin-version.sh drift-guard tests ───────────────────────────
 
 @test "B3: check-plugin-version.sh exits 0 when versions match" {

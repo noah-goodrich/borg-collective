@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # scripts/build-plugin.sh — build the publishable plugin subset from this repo.
 #
-# Source of truth: /Users/noah/dev/borg-collective  (this repo)
-# Plugin target:   /Users/noah/dev/claude-plugins/borg-collective/
+# Source of truth: $BORG_ROOT (or the directory containing this script's parent)
+# Plugin target:   $HOME/dev/claude-plugins/borg-collective/  (or PLUGIN_DIR_OVERRIDE)
 #
 # What this builds:
 #   skills/       — all SKILL.md files (same as sync-plugin.sh, now subsumed)
@@ -10,6 +10,7 @@
 #   agents/       — borg-nanoprobe.md subagent definition
 #   hooks.json    — regenerated hook wiring for all shipped hooks
 #   plugin.json   — version bump (patch) in .claude-plugin/plugin.json
+#   marketplace.json — ensure borg-collective entry is present (idempotent)
 #
 # Self-containment contract for hooks that reference borg state/registry:
 #   1. All helpers from lib/borg-hooks.sh are INLINED — no source path references.
@@ -23,13 +24,26 @@
 #   ./scripts/build-plugin.sh [--dry-run]
 #
 # In --dry-run mode, no files are written; the script prints what would change.
-# Wire into 'borg setup' to auto-run on the dev machine.
+# Invoked automatically by 'borg setup' (idempotent).
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="${SCRIPT_DIR}/.."
-PLUGIN_DIR="${PLUGIN_DIR_OVERRIDE:-/Users/noah/dev/claude-plugins/borg-collective}"
+
+# Discover the marketplace root. Preference order:
+#   1. PLUGIN_DIR_OVERRIDE (explicit override, for testing)
+#   2. $BORG_ORCHESTRATOR_ROOT/claude-plugins  (workspace-relative)
+#   3. $HOME/dev/claude-plugins                (conventional default)
+# We derive PLUGIN_DIR as the borg-collective package subdir inside that root.
+if [[ -n "${PLUGIN_DIR_OVERRIDE:-}" ]]; then
+    PLUGIN_DIR="$PLUGIN_DIR_OVERRIDE"
+else
+    _ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"
+    _MARKETPLACE_ROOT="${_ORCHESTRATOR_ROOT}/claude-plugins"
+    PLUGIN_DIR="${_MARKETPLACE_ROOT}/borg-collective"
+fi
+
 DRY_RUN=0
 
 for arg in "$@"; do
@@ -80,12 +94,15 @@ _write_if_changed() {
     fi
 }
 
-# ── Guard: plugin target must exist ──────────────────────────────────────────
+# ── Ensure plugin target dir exists (create on first run) ────────────────────
 
 if [[ ! -d "$PLUGIN_DIR" ]]; then
-    _warn "Plugin dir not found: $PLUGIN_DIR"
-    _warn "This script is dev-machine-only. Skipping plugin build."
-    exit 0
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        _dry "would create plugin dir: $PLUGIN_DIR"
+    else
+        mkdir -p "$PLUGIN_DIR"
+        _info "Created plugin dir: $PLUGIN_DIR"
+    fi
 fi
 
 _info "Building borg-collective plugin from source..."
@@ -406,33 +423,90 @@ _write_if_changed "$HOOKS_JSON" "$HOOKS_DST/hooks.json" "hooks/hooks.json"
 #
 # Single source of truth: borg-collective/VERSION.
 # The plugin version always matches the CLI version — no independent counter.
+# If .claude-plugin/plugin.json does not yet exist (fresh machine), create it.
 
 _info "Phase 5: plugin.json version sync"
-PLUGIN_JSON="$PLUGIN_DIR/.claude-plugin/plugin.json"
+PLUGIN_JSON_DIR="$PLUGIN_DIR/.claude-plugin"
+PLUGIN_JSON="$PLUGIN_JSON_DIR/plugin.json"
 VERSION_FILE="$REPO_ROOT/VERSION"
 
-if [[ ! -f "$PLUGIN_JSON" ]]; then
-    _warn "plugin.json not found at $PLUGIN_JSON — skipping version sync"
-elif [[ ! -f "$VERSION_FILE" ]]; then
+if [[ ! -f "$VERSION_FILE" ]]; then
     _warn "VERSION file not found at $VERSION_FILE — skipping version sync"
 else
     new_version=$(tr -d '[:space:]' < "$VERSION_FILE")
-    current_version=$(jq -r '.version' "$PLUGIN_JSON" 2>/dev/null || echo "")
 
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-        if [[ "$current_version" != "$new_version" ]]; then
-            _dry "would sync version: $current_version → $new_version"
+    if [[ ! -f "$PLUGIN_JSON" ]]; then
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            _dry "would create plugin.json with version $new_version"
         else
-            _dry "version already in sync: $new_version"
+            mkdir -p "$PLUGIN_JSON_DIR"
+            printf '{
+  "name": "borg-collective",
+  "version": "%s",
+  "description": "The cognitive-load layer for parallel AI coding — skills and lifecycle hooks for sustainable AI-assisted development.",
+  "author": {
+    "name": "Noah Goodrich"
+  },
+  "keywords": [
+    "workflow",
+    "lifecycle",
+    "planning",
+    "review",
+    "cognitive-load",
+    "adhd",
+    "hooks",
+    "skills"
+  ]
+}\n' "$new_version" > "$PLUGIN_JSON"
+            _info "  created plugin.json with version $new_version"
         fi
     else
-        if [[ "$current_version" != "$new_version" ]]; then
-            tmp=$(mktemp)
-            jq --arg v "$new_version" '.version = $v' "$PLUGIN_JSON" > "$tmp"
-            mv "$tmp" "$PLUGIN_JSON"
-            _info "  synced version: $current_version → $new_version"
+        current_version=$(jq -r '.version' "$PLUGIN_JSON" 2>/dev/null || echo "")
+
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            if [[ "$current_version" != "$new_version" ]]; then
+                _dry "would sync version: $current_version → $new_version"
+            else
+                _dry "version already in sync: $new_version"
+            fi
         else
-            _info "  version already in sync: $new_version"
+            if [[ "$current_version" != "$new_version" ]]; then
+                tmp=$(mktemp)
+                jq --arg v "$new_version" '.version = $v' "$PLUGIN_JSON" > "$tmp"
+                mv "$tmp" "$PLUGIN_JSON"
+                _info "  synced version: $current_version → $new_version"
+            else
+                _info "  version already in sync: $new_version"
+            fi
+        fi
+    fi
+fi
+
+# ── Phase 6: Ensure marketplace.json lists borg-collective (idempotent) ───────
+#
+# The marketplace.json at the root of the claude-plugins repo tells Claude Code
+# what plugins are available. On a fresh machine this may already exist (if the
+# repo was cloned from a state that includes the entry) or may be missing the
+# borg-collective entry. We add it with jq if absent — safe to re-run.
+
+_info "Phase 6: marketplace.json entry"
+MARKETPLACE_JSON="$(dirname "$PLUGIN_DIR")/.claude-plugin/marketplace.json"
+
+if [[ ! -f "$MARKETPLACE_JSON" ]]; then
+    _warn "marketplace.json not found at $MARKETPLACE_JSON — skipping"
+else
+    has_entry=$(jq 'any(.plugins[]; .name == "borg-collective")' "$MARKETPLACE_JSON" 2>/dev/null || echo "false")
+    if [[ "$has_entry" == "true" ]]; then
+        _info "  borg-collective already in marketplace.json"
+    else
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            _dry "would add borg-collective entry to marketplace.json"
+        else
+            tmp=$(mktemp)
+            jq '.plugins += [{"name": "borg-collective", "description": "The cognitive-load layer for parallel AI coding — skills and lifecycle hooks for sustainable AI-assisted development.", "source": "./borg-collective"}]' \
+                "$MARKETPLACE_JSON" > "$tmp"
+            mv "$tmp" "$MARKETPLACE_JSON"
+            _info "  added borg-collective to marketplace.json"
         fi
     fi
 fi
@@ -440,6 +514,7 @@ fi
 echo ""
 _info "Build complete."
 if [[ "$DRY_RUN" -eq 0 ]]; then
-    _info "  Next: cd /Users/noah/dev/claude-plugins && git add -A && git commit"
+    _MARKETPLACE_DIR="$(dirname "$PLUGIN_DIR")"
+    _info "  Next: cd $_MARKETPLACE_DIR && git add -A && git commit"
     _info "  Then: claude plugin update borg-collective"
 fi
