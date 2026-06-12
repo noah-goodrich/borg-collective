@@ -2,10 +2,18 @@
 # borg-link-up.sh — Claude Code / Cortex Code Stop hook
 # "Link up" to the collective: flush state from the session when it ends.
 #
+# Project sessions:
 # - State update (state.json): status=idle, claude_session_id, last_activity
 # - Tracks has_uncommitted_changes for next session's reminder
 # - Cleans up per-project skill overlays symlinked during link-down
 # - Nudges on exit if no checkpoint was recorded this session ("run /borg-link-up next time")
+# - Records session to cairn knowledge graph (best-effort, graceful degradation)
+#
+# Orchestrator sessions (CWD == $BORG_ORCHESTRATOR_ROOT):
+# - Records most-recent checkpoint (or last assistant message) to cairn as project
+#   $BORG_ORCHESTRATOR_PROJECT (default: "borg-collective"). Gracefully degrades when cairn
+#   is absent — logs failure to $BORG_DIR/.cairn-write-failed and continues.
+# - No registry writes, no uncommitted-changes scans, no per-project nudges.
 #
 # Does NOT generate LLM debriefs. Checkpoints are user-authored via /borg-link-up
 # (the skill). Registered as a Stop hook in settings.json for both Claude Code and CoCo.
@@ -32,9 +40,58 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/n
 # shellcheck source=../lib/borg-hooks.sh
 source "${HOME}/.claude/lib/borg-hooks.sh"
 
-# Orchestrator-mode sessions touch no project state. Exit before any registry
-# writes, uncommitted-changes scans, or checkpoint nudges fire.
+# Orchestrator-mode sessions touch no per-project state (no registry writes,
+# uncommitted-changes scans, or checkpoint nudges). However, if the user ran
+# /borg-link-up during the session a checkpoint was written at
+# $CWD/.borg/checkpoints/<ts>.md — record that to cairn so orchestrator work is
+# not silently discarded from the knowledge graph.
+#
+# Project tag: BORG_ORCHESTRATOR_PROJECT (default "borg-collective").  A single
+# tag is used for all orchestrator sessions rather than per-project attribution
+# (v1 choice: keeps the implementation simple; the checkpoint body already lists
+# every project touched, so cross-project search still surfaces the record).
 if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then
+    if command -v cairn >/dev/null 2>&1; then
+        _orch_project="${BORG_ORCHESTRATOR_PROJECT:-borg-collective}"
+        _orch_cp_dir="$CWD/.borg/checkpoints"
+        _orch_cairn_id="$(date -u +%Y%m%d-%H%M)-orchestrator"
+
+        # Build notes: prefer the most-recent checkpoint file (user-authored
+        # via /borg-link-up), fall back to last assistant message from transcript.
+        _orch_notes=""
+        if [[ -d "$_orch_cp_dir" ]]; then
+            _latest_cp=$(find "$_orch_cp_dir" -maxdepth 1 -name "*.md" -mmin -120 2>/dev/null \
+                | sort | tail -1 || true)
+            if [[ -n "$_latest_cp" ]]; then
+                _orch_notes=$(head -c 3000 "$_latest_cp" 2>/dev/null || true)
+            fi
+        fi
+
+        # Fall back to last assistant message when no fresh checkpoint exists.
+        if [[ -z "$_orch_notes" && -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" ]]; then
+            _orch_notes=$(tail -c 20000 "$TRANSCRIPT_PATH" 2>/dev/null \
+                | jq -rs '[.[] | select(.message.role == "assistant")] | last | .message.content // ""' \
+                2>/dev/null | head -c 1000 || true)
+        fi
+
+        _orch_cmd=(cairn record session \
+            --id "$_orch_cairn_id" \
+            --project "$_orch_project" \
+            --tool claude-code)
+        [[ -n "$_orch_notes" ]] && _orch_cmd+=(--notes "$_orch_notes")
+
+        _orch_cairn_failed=""
+        if command -v timeout >/dev/null 2>&1; then
+            _orch_cairn_err=$(timeout 5 "${_orch_cmd[@]}" 2>&1 >/dev/null) || _orch_cairn_failed=1
+        else
+            _orch_cairn_err=$("${_orch_cmd[@]}" 2>&1 >/dev/null) || _orch_cairn_failed=1
+        fi
+        if [[ -n "$_orch_cairn_failed" ]]; then
+            printf '%s\t%s\n' \
+                "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                "${_orch_cairn_err:-no stderr captured}" >> "${BORG_DIR}/.cairn-write-failed"
+        fi
+    fi
     exit 0
 fi
 
