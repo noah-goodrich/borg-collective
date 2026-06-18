@@ -183,6 +183,34 @@ if [[ -d "$CHECKPOINT_DIR" ]]; then
     fi
 fi
 
+# ── cairn-extract inbox emission (Layer 1) ────────────────────────────────────
+# If a recent checkpoint exists, copy it to the cairn-extract inbox so the
+# LLM extraction pipeline can pull decisions/patterns/observations from it.
+# Then trigger cairn-extract detached (async, never blocks link-up).
+# If cairn-extract is not installed or cairn is down, this is a silent no-op;
+# the nightly launchd job (Layer 2) will sweep any remaining inbox files.
+CAIRN_INBOX_ROOT="${HOME}/.local/state/borg/cairn-inbox"
+_extract_bin="${HOME}/.config/dotfiles/zsh/bin/cairn-extract"
+if [[ -d "$CHECKPOINT_DIR" ]]; then
+    # Find the most recent checkpoint written this session (within last 2h)
+    _newest_cp=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "*.md" -mmin -120 2>/dev/null \
+        | sort | tail -1 || true)
+    if [[ -n "$_newest_cp" && -f "$_newest_cp" ]]; then
+        _inbox_dir="${CAIRN_INBOX_ROOT}/${PROJECT}"
+        mkdir -p "$_inbox_dir"
+        _cp_stem="${_newest_cp##*/}"
+        # Copy only if not already in inbox or done (idempotent emit)
+        if [[ ! -f "${_inbox_dir}/${_cp_stem}" && ! -f "${_inbox_dir}/done/${_cp_stem}" ]]; then
+            cp "$_newest_cp" "${_inbox_dir}/${_cp_stem}" 2>/dev/null || true
+        fi
+        # Trigger extraction async — detached, log to inbox log, never blocks
+        if [[ -x "$_extract_bin" ]]; then
+            nohup "$_extract_bin" >> "${CAIRN_INBOX_ROOT}/cairn-extract.log" 2>&1 </dev/null &
+            disown 2>/dev/null || true
+        fi
+    fi
+fi
+
 # Directive reconciliation nudge: if commits were made this session, check whether any
 # open directive's ## Key Files section mentions a path touched by those commits.
 # Match against ## Key Files only to avoid false positives from freeform body text.
