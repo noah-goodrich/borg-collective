@@ -46,9 +46,12 @@ it is not a lever we need to add. The cost lives in the orchestrator's own conte
 - [x] Guidance to minimize orchestrator turns and avoid unnecessary deep thinking on light steps.
       → `skills/borg-plan/SKILL.md` § Orchestrator turn discipline; `agents/borg-nanoprobe.md`
         lean-context return contract. Same PR.
-- [ ] cairn-warm brief pattern documented + wired into dispatch (after the cairn backfill lands).
-- [ ] Measurement: use `~/.claude/token-spend.jsonl` (the SessionEnd collector) to track the
+- [x] cairn-warm brief pattern documented + wired into dispatch (after the cairn backfill lands).
+      → `agents/borg-nanoprobe.md` § Cairn-warm brief + `borg.zsh` `cmd_cairn_brief` / `cmd_init`
+        dispatch heredoc. PR: feat/spend-opt-ac3-ac4.
+- [x] Measurement: use `~/.claude/token-spend.jsonl` (the SessionEnd collector) to track the
       main-vs-subagent split per session over time; goal is to shrink the main-loop share.
+      → `borg.zsh` `cmd_spend` (`borg spend`). PR: feat/spend-opt-ac3-ac4.
 
 ## Out of scope (separate follow-ups)
 
