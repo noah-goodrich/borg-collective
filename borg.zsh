@@ -1480,6 +1480,52 @@ cmd_search() {
     fi
 }
 
+# cairn-warm brief (cost lever): pre-load task-relevant collective knowledge so the orchestrator
+# can paste it into a nanoprobe's invocation prompt. Nanoprobes are Agent-tool subagents — they do
+# NOT fire the SessionStart hook, so borg-link-down.sh's cairn injection never reaches them. This
+# command closes that gap. It queries cairn with the TASK text (not the project name) for relevant
+# recall, keeps --project for scoping, and degrades quietly to a single line so it is always safe
+# to wire into dispatch. NEVER errors — a missing/down/empty cairn must not block a spawn.
+cmd_cairn_brief() {
+    local project="" task=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project|-p) project="$2"; shift 2 ;;
+            *) task="${task:+$task }$1"; shift ;;
+        esac
+    done
+    # First positional is the project, the rest is the task: borg cairn-brief <project> <task...>
+    if [[ -z "$project" && -n "$task" ]]; then
+        project="${task%% *}"
+        if [[ "$task" == *" "* ]]; then task="${task#* }"; else task=""; fi
+    fi
+    [[ -z "$project" ]] && die "usage: borg cairn-brief <project> <task...>"
+
+    local heading="## Cairn knowledge (pre-loaded — do not re-derive)"
+    local fallback="(no cairn knowledge — orchestrator will brief cold)"
+
+    # cairn absent → quiet fallback, never error
+    if ! command -v cairn &>/dev/null; then
+        echo "$fallback"
+        return 0
+    fi
+
+    # Query with the task text (or fall back to project name when no task given) for task-relevant
+    # recall; keep --project for scoping. Wrap in the timeout/degrade idiom used at every call site.
+    local search_query="${task:-$project}"
+    local results
+    results=$(_borg_timeout 5 cairn search "$search_query" --project "$project" --max 5 2>/dev/null) || results=""
+
+    if [[ -z "${results//[$' \t\n']/}" ]]; then
+        echo "$fallback"
+        return 0
+    fi
+
+    echo "$heading"
+    echo "$results"
+    return 0
+}
+
 # Build orchestrator context string from registry + checkpoints + cairn.
 # Output goes to stdout; caller captures it.
 _borg_print_briefing() {
@@ -1729,7 +1775,17 @@ invocation prompt. Do NOT use \`isolation: worktree\` — nanoprobes manage thei
 inside the target repo at \`~/.local/state/borg/worktrees/<repo>/<slug>\`. Never edit project
 files from this orchestrator session — your role is to spawn / monitor / synthesize. The standard
 flow is: brief the nanoprobe → spawn → wait for SubagentStop → report results. Use
-\`borg nanoprobes\` to see recent runs and \`borg nanoprobe-log <id>\` to read a transcript."
+\`borg nanoprobes\` to see recent runs and \`borg nanoprobe-log <id>\` to read a transcript.
+
+cairn-warm brief (cost lever): BEFORE spawning a nanoprobe, run
+\`borg cairn-brief <project> \"<task>\"\` and paste its output verbatim into the agent's invocation
+prompt under the pre-loaded heading. This pre-loads task-relevant decisions / patterns / gotchas
+from the collective so neither you nor the nanoprobe re-derives known facts from the repo — leaner
+context on both sides (nanoprobes do NOT fire the SessionStart cairn injection, so this is the only
+path that reaches them). It degrades quietly when cairn is absent, so it is always safe to run.
+
+Spend visibility: \`borg spend\` shows the main-vs-subagent cost split (main-loop %) and a trend —
+use it to confirm the main-loop share is shrinking over time (numbers are for this machine only)."
 
     # Write prompt to file — avoids shell-escaping hell when passing through tmux send-keys
     local prompt_file="${TMPDIR:-/tmp}/borg-orchestrator-prompt.$$"
@@ -2554,6 +2610,145 @@ cmd_nanoprobe_log() {
     fi
 }
 
+# Report main-vs-subagent spend from ~/.claude/token-spend.jsonl (the SessionEnd collector). The
+# directive's actual ask is the main-loop % SHARE — so the goal "shrink the main-loop share" is
+# observable over time — not just raw totals. Default output shows: all-time split with main %, a
+# recent-sessions trend (newest first), and a by-project breakdown sorted by cost.
+#
+# CAVEAT (correctness trap): token-spend.jsonl has NO host/machine field. These numbers therefore
+# reflect THIS MACHINE ONLY. The header and footer state this; do not aggregate across machines from
+# this file alone.
+cmd_spend() {
+    # NOTE: token-spend.jsonl lives under ~/.claude (NOT XDG_CONFIG_HOME — that is agents.jsonl).
+    local log="$HOME/.claude/token-spend.jsonl"
+
+    local project="" by_model=0 last=15
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project|-p) project="$2"; shift 2 ;;
+            --by-model)   by_model=1; shift ;;
+            --last)       last="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+
+    if [[ ! -s "$log" ]]; then
+        info "No spend recorded yet ($log)."
+        info "The token-cost SessionEnd hook appends one record per session here."
+        return 0
+    fi
+
+    # Optional --project filter (mirrors borg search --project).
+    local filter='.'
+    [[ -n "$project" ]] && filter="select(.project == \"$project\")"
+
+    echo -e "${BOLD}Spend — main vs subagent split${NC} ${DIM}(this machine only; token-spend.jsonl has no host field)${NC}"
+    [[ -n "$project" ]] && echo -e "${DIM}filtered to project: $project${NC}"
+    echo
+
+    # ── All-time totals + main-loop share ──
+    jq -s -r --arg flt "$project" '
+        [ .[] | select($flt == "" or .project == $flt) ] as $rows
+        | ($rows | map(.main.est_cost_usd // 0) | add // 0)      as $main
+        | ($rows | map(.subagents.est_cost_usd // 0) | add // 0) as $sub
+        | ($main + $sub)                                         as $total
+        | ($rows | length)                                       as $n
+        | ($rows | map(.subagents.agent_count // 0) | add // 0)  as $agents
+        | (if $total > 0 then ($main / $total * 100) else 0 end) as $mainpct
+        | (if $total > 0 then ($sub  / $total * 100) else 0 end) as $subpct
+        | "  sessions      \($n)  (\($agents) subagents)\n" +
+          "  total         $\($total | .*100 | round / 100)\n" +
+          "  main-loop     $\($main | .*100 | round / 100)  (\($mainpct | round)%)\n" +
+          "  subagents     $\($sub  | .*100 | round / 100)  (\($subpct | round)%)"
+    ' "$log"
+    echo
+
+    # ── Recent-sessions trend (newest first) — date, project, total, main % ──
+    echo -e "${BOLD}Recent sessions${NC} ${DIM}(newest first, main % should trend down)${NC}"
+    tail -r "$log" 2>/dev/null \
+        | jq -r --arg flt "$project" '
+            select($flt == "" or .project == $flt)
+            | (.main.est_cost_usd // 0)      as $main
+            | (.subagents.est_cost_usd // 0) as $sub
+            | ($main + $sub)                 as $total
+            | (if $total > 0 then ($main / $total * 100) else 0 end) as $mainpct
+            | [ ((.ts // "")[0:10]),
+                (.project // "?"),
+                ($total | .*100 | round / 100),
+                ($mainpct | round) ] | @tsv
+        ' 2>/dev/null \
+        | head -n "$last" \
+        | while IFS=$'\t' read -r date proj total mainpct; do
+            printf "  %-10s  %-22s  \$%-8s  main %3s%%\n" "$date" "$proj" "$total" "$mainpct"
+        done
+    echo
+
+    # ── By-project breakdown, sorted by cost desc ──
+    echo -e "${BOLD}By project${NC} ${DIM}(cost desc)${NC}"
+    jq -s -r --arg flt "$project" '
+        [ .[] | select($flt == "" or .project == $flt) ]
+        | group_by(.project)
+        | map({
+            project: .[0].project,
+            total:   (map(.est_cost_usd // 0) | add // 0),
+            main:    (map(.main.est_cost_usd // 0) | add // 0),
+            n:       length
+          })
+        | sort_by(-.total)
+        | .[]
+        | [ .project,
+            (.total | .*100 | round / 100),
+            (if .total > 0 then (.main / .total * 100 | round) else 0 end),
+            .n ] | @tsv
+    ' "$log" 2>/dev/null \
+        | while IFS=$'\t' read -r proj total mainpct n; do
+            printf "  %-22s  \$%-9s  main %3s%%  (%s sessions)\n" "$proj" "$total" "$mainpct" "$n"
+        done
+
+    # ── Optional per-model breakdown ──
+    # by_model records hold only raw token counts (input/output/cache_creation/cache_read) — there
+    # is NO per-model est_cost_usd. We compute cost from the cache-aware pricing table (USD per
+    # million tokens) keyed by model tier, matching the token-cost SKILL. Cache reads are priced at
+    # the read rate, NOT as fresh input.
+    if (( by_model )); then
+        echo
+        echo -e "${BOLD}By model${NC} ${DIM}(layer · model · computed cost, USD/M pricing)${NC}"
+        jq -s -r --arg flt "$project" '
+            # Pricing per million tokens, by tier: [input, output, cache_creation, cache_read]
+            # Pricing per million tokens, by tier: [input, output, cache_creation, cache_read].
+            { "opus":   [15,   75,   18.75, 1.50],
+              "sonnet": [3,    15,   3.75,  0.30],
+              "haiku":  [0.25, 1.25, 0.31,  0.025] } as $price
+            # Map a model id to a tier by substring; default to opus (most expensive — conservative).
+            | def tier($m): if   ($m | test("haiku"))  then "haiku"
+                            elif ($m | test("sonnet")) then "sonnet"
+                            else "opus" end;
+              def cost($u; $m): ($price[tier($m)]) as $p
+                | (($u.input // 0) * $p[0]
+                 + ($u.output // 0) * $p[1]
+                 + ($u.cache_creation // 0) * $p[2]
+                 + ($u.cache_read // 0) * $p[3]) / 1000000;
+              [ .[] | select($flt == "" or .project == $flt) ] as $rows
+            | ( [ $rows[] | .main.by_model // {} | to_entries[]
+                  | {layer:"main", model:.key, cost:cost(.value; .key)} ]
+              + [ $rows[] | .subagents.by_model // {} | to_entries[]
+                  | {layer:"subagents", model:.key, cost:cost(.value; .key)} ] )
+            | group_by([.layer, .model])
+            | map({ layer:.[0].layer, model:.[0].model, cost:(map(.cost) | add // 0) })
+            | sort_by(-.cost)
+            | .[] | [ .layer, .model, (.cost | .*100 | round / 100) ] | @tsv
+        ' "$log" 2>/dev/null \
+            | while IFS=$'\t' read -r layer model cost; do
+                printf "  %-10s  %-26s  \$%s\n" "$layer" "$model" "$cost"
+            done
+        echo
+        echo -e "${DIM}  note: per-model cost is recomputed from raw tokens (cache-aware); rounding may differ slightly from est_cost_usd.${NC}"
+    fi
+
+    echo
+    echo -e "${DIM}Numbers reflect THIS MACHINE only — token-spend.jsonl carries no host field.${NC}"
+}
+
 cmd_watch() {
     local interval=5
     if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
@@ -2626,6 +2821,7 @@ cmd_help() {
     next [--switch]     What needs your attention? (--switch jumps there)
     switch [query]      fzf picker → jump to project tmux window
     search <query>      Search cairn knowledge graph (--project to filter)
+    cairn-brief <proj> <task...>  Pre-load task-relevant cairn knowledge for a nanoprobe brief
     scan                Discover projects from session history
     add [path]          Register a project (defaults to $PWD)
     rm <project>        Unregister a project
@@ -2640,6 +2836,7 @@ cmd_help() {
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
     nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
+    spend               Main-vs-subagent spend split + trend (this machine; --project/--by-model/--last)
     watch [interval]    Live-refresh project status + recent nanoprobes (default: 5s)
     reap                Persist idle to stale active/waiting sessions (no live window)
     reap-worktrees [p]  Remove stale borg-managed nanoprobe worktrees (all repos or one)
@@ -2702,6 +2899,7 @@ case "${1:-help}" in
     link)     cmd_link "${@:2}" ;;
     switch)   cmd_switch "${@:2}" ;;
     search)   cmd_search "${@:2}" ;;
+    cairn-brief) cmd_cairn_brief "${@:2}" ;;
     scan)     cmd_scan "${@:2}" ;;
     add)      cmd_add "${@:2}" ;;
     rm)       cmd_rm "${@:2}" ;;
@@ -2718,6 +2916,7 @@ case "${1:-help}" in
     cortex-resume) cmd_cortex_resume "${@:2}" ;;
     nanoprobes|np)  cmd_nanoprobes "${@:2}" ;;
     nanoprobe-log)  cmd_nanoprobe_log "${@:2}" ;;
+    spend)          cmd_spend "${@:2}" ;;
     watch)          cmd_watch "${@:2}" ;;
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
