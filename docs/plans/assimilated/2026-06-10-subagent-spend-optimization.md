@@ -1,6 +1,6 @@
 # Directive: Spend optimization — orchestrator-first
 
-**Filed:** 2026-06-10 · **Status:** proposed · **Parent:** orchestration layer
+**Filed:** 2026-06-10 · **Status:** shipped 2026-06-17 (PR #47 AC1/AC2, PR #54 AC3/AC4) · **Parent:** orchestration layer
 
 > Reframed after instrumenting real spend. The original premise ("delegation is where the money is; route
 > subagents to Sonnet for ~5×") was **wrong** — see below. The dominant cost is the **orchestrator / main
