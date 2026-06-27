@@ -93,7 +93,11 @@ skills/
     borg-review/            Mid-session diagnostic + loop detection
     borg-link/              Consolidated project intelligence (overview + deep dive)
     borg-link-up/           Flush session state to <project>/.borg/checkpoints/<ts>.md
-install.sh                  Installer: deps, symlinks, hooks, skills, tmux keybinding
+install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
+launchd/
+    com.stillpoint-labs.borg.notifyd.plist    LaunchAgent: borg-notifyd (fswatch daemon)
+    com.stillpoint-labs.borg.cortex-wake.plist LaunchAgent: borg-cortex-watch (30s interval)
+    com.stillpoint-labs.borg.reap.plist        LaunchAgent: borg reap-worktrees (hourly)
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)
     plans/assimilated/      Shipped plans for borg-collective itself (per-project convention)
@@ -153,6 +157,10 @@ docs/
   Inspect runs with `borg nanoprobes` (alias `np`) and pull transcripts with
   `borg nanoprobe-log <id-prefix>`. The agent file installs to `~/.claude/agents/borg-nanoprobe.md`
   via `borg setup`, where both Claude Code and Cortex Code discover it.
+- **Bounded termination (agent loops)**: when fanning out nanoprobes or running any retry/until
+  loop, set an explicit ceiling (max spawns / max iterations) up front and stop when hit. Never
+  rely on judgment to exit loops — explicit stopping conditions only (e.g., `MAX_RETRIES=3`
+  declared before the loop; hard-stop with a failure summary when reached).
 - **Skill extensions (v1, may evolve)**: `borg-plan` and `borg-assimilate` read markdown extension
   files at three load points — `01-context` (start), `02-output` (before artifact), `03-followup`
   (after artifact). At each point both paths are read in order:

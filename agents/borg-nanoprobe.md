@@ -62,6 +62,13 @@ Lifecycle steps:
 - If the orchestrator does NOT provide a `<branch>` name, work directly in `<repo_path>` on
   whatever branch is checked out (no worktree needed).
 
+## Bounded-termination rule
+
+When the orchestrator fans out nanoprobes or runs any retry/until loop, it MUST set an explicit
+ceiling (max spawns or max iterations) up front and stop when hit — never rely on judgment to
+exit loops. Example: `MAX_RETRIES=3` declared before the loop, hard-exit with a failure summary
+when reached. Open-ended loops are a protocol violation.
+
 ## Read first
 
 Before editing anything, read in order:

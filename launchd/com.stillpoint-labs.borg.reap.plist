@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stillpoint-labs.borg.reap</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{BORG_BIN}}</string>
+        <string>reap-worktrees</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/reap.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/reap.stderr.log</string>
+</dict>
+</plist>
