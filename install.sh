@@ -165,6 +165,28 @@ fi
 launchctl bootstrap "gui/$UID" "$CORTEX_PLIST_DEST"
 info "  launchd agent bootstrapped."
 
+# ── 3c. Install borg-reap daemon + LaunchAgent ───────────────────────────────
+
+info "Installing borg-reap (hourly worktree reaper)..."
+
+REAP_PLIST_NAME="com.stillpoint-labs.borg.reap.plist"
+REAP_PLIST_SRC="$BORG_HOME/launchd/$REAP_PLIST_NAME"
+REAP_PLIST_DEST="$HOME/Library/LaunchAgents/$REAP_PLIST_NAME"
+BORG_BIN="$BIN_DIR/borg"
+
+sed \
+    -e "s|{{BORG_BIN}}|$BORG_BIN|g" \
+    -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+    "$REAP_PLIST_SRC" > "$REAP_PLIST_DEST"
+info "  plist -> $REAP_PLIST_DEST"
+
+if launchctl list "com.stillpoint-labs.borg.reap" &>/dev/null 2>&1; then
+    info "  reloading launchd agent..."
+    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.reap" 2>/dev/null || true
+fi
+launchctl bootstrap "gui/$UID" "$REAP_PLIST_DEST"
+info "  launchd agent bootstrapped (runs hourly; logs -> $LOG_DIR/reap.{stdout,stderr}.log)."
+
 # ── 4. Hooks, skills, config, registry → borg setup ──────────────────────────
 
 info "Running borg setup..."
