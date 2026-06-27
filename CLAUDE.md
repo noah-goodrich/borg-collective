@@ -29,7 +29,7 @@ Three independent tools that compose:
 - `drone` CLI: up, down, claude, sh, restart, fix, status
 - Hooks: borg-link-down.sh (status=active + latest-checkpoint injection + cairn context),
   borg-link-up.sh (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh
-- Skills: adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate
+- Skills: adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify
 - Work/life boundary checks on switch
 - Capacity warnings
 - tmux hotkey (Ctrl+Space >)
@@ -93,6 +93,7 @@ skills/
     borg-review/            Mid-session diagnostic + loop detection
     borg-link/              Consolidated project intelligence (overview + deep dive)
     borg-link-up/           Flush session state to <project>/.borg/checkpoints/<ts>.md
+    borg-verify/            Independent pre-merge evaluator gate (spawn reviewer, PASS/FAIL verdict)
 install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
 launchd/
     com.stillpoint-labs.borg.notifyd.plist    LaunchAgent: borg-notifyd (fswatch daemon)
