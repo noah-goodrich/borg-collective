@@ -157,6 +157,20 @@ _new_state=$(printf '%s' "$_cur_state" | jq \
      (if $sid != "" then .claude_session_id = $sid else . end)')
 _borg_state_write "$PROJ_DIR" "$_new_state" || true
 
+# ── Presence close ───────────────────────────────────────────────────────────
+# Mark this session's presence row closed so it stops appearing active to
+# other sessions immediately (rather than waiting out the 30-min TTL).
+# Best-effort: never writes .cairn-write-failed, never surfaces a warning.
+if command -v cairn >/dev/null 2>&1; then
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 5 cairn presence close --session-id "$SESSION_ID" \
+            >/dev/null 2>&1 || true
+    else
+        cairn presence close --session-id "$SESSION_ID" \
+            >/dev/null 2>&1 || true
+    fi
+fi
+
 # Per-project skill overlay cleanup
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
 PROJECT_SKILLS_DIR="$CWD/.borg/skills"
