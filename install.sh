@@ -114,6 +114,11 @@ chmod +x "$BORG_HOME/bin/borg-notifyd"
 ln -sf "$BORG_HOME/bin/borg-notifyd" "$BIN_DIR/borg-notifyd"
 info "  borg-notifyd -> $BORG_HOME/bin/borg-notifyd"
 
+info "Installing borg-vinculum-watch..."
+chmod +x "$BORG_HOME/bin/borg-vinculum-watch"
+ln -sf "$BORG_HOME/bin/borg-vinculum-watch" "$BIN_DIR/borg-vinculum-watch"
+info "  borg-vinculum-watch -> $BORG_HOME/bin/borg-vinculum-watch"
+
 if ! command -v fswatch &>/dev/null; then
     warn "fswatch not found — installing via Homebrew (required by borg-notifyd)..."
     brew install fswatch 2>&1 | grep -E '(Installing|Already|Error)' || true
