@@ -2888,6 +2888,234 @@ cmd_help() {
 EOF
 }
 
+cmd_vinculum() {
+    local VINC_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg/vinculum"
+    local as_label="" verb=""
+    local -a rest=()
+    local skip_next=0 found_verb=0
+
+    for arg in "$@"; do
+        if (( skip_next )); then
+            as_label="$arg"
+            skip_next=0
+        elif [[ "$arg" == "--as" ]]; then
+            skip_next=1
+        elif (( ! found_verb )); then
+            verb="$arg"
+            found_verb=1
+        else
+            rest+=("$arg")
+        fi
+    done
+    verb="${verb:-ls}"
+
+    local sub_id
+    if [[ -n "$as_label" ]]; then
+        sub_id="$as_label"
+    elif [[ -n "${TMUX_PANE:-}" ]]; then
+        sub_id="pane-${TMUX_PANE#%}"
+    else
+        sub_id="host-$$"
+    fi
+
+    case "$verb" in
+        pub)
+            local ch="${rest[1]:-}"
+            [[ -n "$ch" ]] || die "vinculum pub: missing <channel>"
+            local body="${(j: :)rest[2,-1]}"
+            local ch_dir="$VINC_DIR/$ch"
+            mkdir -p "$ch_dir"
+            local log="$ch_dir/log.jsonl"
+            local uuid ts
+            uuid="$(uuidgen | tr '[:upper:]' '[:lower:]')"
+            ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            jq -nc --arg id "$uuid" --arg ts "$ts" --arg from "$sub_id" --arg body "$body" \
+                '{id: $id, ts: $ts, from: $from, body: $body}' >> "$log"
+            ;;
+        sub)
+            local ch="${rest[1]:-}"
+            [[ -n "$ch" ]] || die "vinculum sub: missing <channel>"
+            local ch_dir="$VINC_DIR/$ch"
+            mkdir -p "$ch_dir/cursors" "$ch_dir/meta"
+            local log="$ch_dir/log.jsonl"
+            [[ -f "$log" ]] || touch "$log"
+            local cur_lines
+            cur_lines="$(wc -l < "$log" | tr -d ' ')"
+            local cursor_file="$ch_dir/cursors/$sub_id"
+            local tmp_cursor="${cursor_file}.tmp.$$"
+            printf '%s\n' "$cur_lines" > "$tmp_cursor"
+            mv "$tmp_cursor" "$cursor_file"
+            local sub_list="$ch_dir/subscribers"
+            if ! grep -qxF "$sub_id" "$sub_list" 2>/dev/null; then
+                printf '%s\n' "$sub_id" >> "$sub_list"
+            fi
+            info "Subscribed '$sub_id' to channel '$ch' (cursor at $cur_lines)"
+
+            # ── Live delivery watcher ─────────────────────────────────────────
+            local delivery_pane="${TMUX_PANE:-}"
+            local meta_file="$ch_dir/meta/$sub_id"
+            if [[ -z "$delivery_pane" ]]; then
+                warn "vinculum: not in tmux — subscribed '$sub_id' for pull only (live delivery needs a tmux pane)"
+            else
+                # Idempotent: do not re-spawn if a live PID already exists
+                local existing_pid=0
+                if [[ -f "$meta_file" ]]; then
+                    existing_pid="$(jq -r '.pid // 0' "$meta_file" 2>/dev/null || echo 0)"
+                fi
+                local do_spawn=1
+                if (( existing_pid > 0 )) && kill -0 "$existing_pid" 2>/dev/null; then
+                    do_spawn=0
+                    dbg "vinculum sub: watcher already live for '$sub_id' on '$ch' (PID $existing_pid)"
+                fi
+                if (( do_spawn )); then
+                    local watch_log="$VINC_DIR/$ch/watch-${sub_id}.log"
+                    local watch_pid
+                    nohup borg-vinculum-watch "$ch" --pane "$delivery_pane" --as "$sub_id" \
+                        >> "$watch_log" 2>&1 &
+                    watch_pid=$!
+                    disown "$watch_pid" 2>/dev/null || true
+                    local tmp_meta="${meta_file}.tmp.$$"
+                    printf '{"pane":"%s","pid":%d}\n' "$delivery_pane" "$watch_pid" > "$tmp_meta"
+                    mv "$tmp_meta" "$meta_file"
+                    dbg "vinculum sub: spawned watcher PID $watch_pid → pane $delivery_pane"
+                fi
+            fi
+            ;;
+        unsub)
+            local ch="${rest[1]:-}"
+            [[ -n "$ch" ]] || die "vinculum unsub: missing <channel>"
+
+            # Kill live watcher before removing subscriber record
+            local meta_file_u="$VINC_DIR/$ch/meta/$sub_id"
+            if [[ -f "$meta_file_u" ]]; then
+                local watcher_pid=0
+                watcher_pid="$(jq -r '.pid // 0' "$meta_file_u" 2>/dev/null || echo 0)"
+                if (( watcher_pid > 0 )) && kill -0 "$watcher_pid" 2>/dev/null; then
+                    kill "$watcher_pid" 2>/dev/null || true
+                    dbg "vinculum unsub: killed watcher PID $watcher_pid for '$sub_id' on '$ch'"
+                fi
+                rm -f "$meta_file_u"
+            fi
+
+            local sub_list="$VINC_DIR/$ch/subscribers"
+            if [[ -f "$sub_list" ]]; then
+                local tmp_unsub="${sub_list}.tmp.$$"
+                grep -vxF "$sub_id" "$sub_list" > "$tmp_unsub" 2>/dev/null || true
+                mv "$tmp_unsub" "$sub_list"
+            fi
+            info "Unsubscribed '$sub_id' from channel '$ch'"
+            ;;
+        ls)
+            local ch="${rest[1]:-}"
+            if [[ -z "$ch" ]]; then
+                if [[ ! -d "$VINC_DIR" ]]; then
+                    info "No channels."
+                    return 0
+                fi
+                local found=0 name="" n_msgs=0 n_subs=0 log_f="" sub_f="" ch_dir2=""
+                setopt localoptions nullglob
+                for ch_dir2 in "$VINC_DIR"/*/; do
+                    [[ -d "$ch_dir2" ]] || continue
+                    name="${${ch_dir2%/}##*/}"
+                    n_msgs=0
+                    n_subs=0
+                    log_f="$ch_dir2/log.jsonl"
+                    sub_f="$ch_dir2/subscribers"
+                    [[ -f "$log_f" ]] && n_msgs="$(wc -l < "$log_f" | tr -d ' ')"
+                    [[ -f "$sub_f" ]] && n_subs="$(wc -l < "$sub_f" | tr -d ' ')"
+                    printf '  %-24s  %3d msgs  %2d subs\n' "$name" "$n_msgs" "$n_subs"
+                    found=1
+                done
+                (( found )) || info "No channels."
+            else
+                local ch_dir="$VINC_DIR/$ch"
+                if [[ ! -d "$ch_dir" ]]; then
+                    info "Channel '$ch' does not exist."
+                    return 0
+                fi
+                local log_f2="$ch_dir/log.jsonl"
+                local total_msgs=0
+                [[ -f "$log_f2" ]] && total_msgs="$(wc -l < "$log_f2" | tr -d ' ')"
+                local sub_f2="$ch_dir/subscribers"
+                if [[ ! -f "$sub_f2" ]]; then
+                    info "Channel '$ch': no subscribers."
+                    return 0
+                fi
+                local has_subs=0 sid="" cur_f="" cur=0 unread=0
+                while IFS= read -r sid; do
+                    [[ -z "$sid" ]] && continue
+                    cur_f="$ch_dir/cursors/$sid"
+                    cur=0
+                    [[ -f "$cur_f" ]] && cur="$(tr -d '[:space:]' < "$cur_f")"
+                    unread=$(( total_msgs - cur ))
+                    (( unread < 0 )) && unread=0
+                    local watcher_status="no watcher"
+                    local meta_f_ls="$ch_dir/meta/$sid"
+                    if [[ -f "$meta_f_ls" ]]; then
+                        local w_pid=0
+                        w_pid="$(jq -r '.pid // 0' "$meta_f_ls" 2>/dev/null || echo 0)"
+                        if (( w_pid > 0 )) && kill -0 "$w_pid" 2>/dev/null; then
+                            watcher_status="running (PID $w_pid)"
+                        elif (( w_pid > 0 )); then
+                            watcher_status="stopped (was PID $w_pid)"
+                        fi
+                    fi
+                    printf '  %-32s  %3d unread  %s\n' "$sid" "$unread" "$watcher_status"
+                    has_subs=1
+                done < "$sub_f2"
+                (( has_subs )) || info "Channel '$ch': no subscribers."
+            fi
+            ;;
+        pull)
+            local ch="" do_json=0
+            for a in "${rest[@]}"; do
+                if [[ "$a" == "--json" ]]; then
+                    do_json=1
+                elif [[ -z "$ch" ]]; then
+                    ch="$a"
+                fi
+            done
+            [[ -n "$ch" ]] || die "vinculum pull: missing <channel>"
+            local ch_dir="$VINC_DIR/$ch"
+            local log="$ch_dir/log.jsonl"
+            if [[ ! -f "$log" ]]; then
+                return 0
+            fi
+            local cur_f="$ch_dir/cursors/$sub_id"
+            local cursor=0
+            [[ -f "$cur_f" ]] && cursor="$(tr -d '[:space:]' < "$cur_f")"
+            local total_msgs
+            total_msgs="$(wc -l < "$log" | tr -d ' ')"
+            if (( cursor < total_msgs )); then
+                local line_num=$(( cursor + 1 ))
+                if (( do_json )); then
+                    sed -n "${line_num},\$p" "$log"
+                else
+                    sed -n "${line_num},\$p" "$log" | jq -r '.body'
+                fi
+            fi
+            mkdir -p "$ch_dir/cursors"
+            local tmp_cur="${cur_f}.tmp.$$"
+            printf '%s\n' "$total_msgs" > "$tmp_cur"
+            mv "$tmp_cur" "$cur_f"
+            ;;
+        help)
+            echo "Usage: borg vinculum [--as <label>] <verb> [args]"
+            echo ""
+            echo "  pub <channel> <msg...>   Publish a message to a channel"
+            echo "  sub <channel>            Subscribe this pane to a channel"
+            echo "  unsub <channel>          Unsubscribe this pane from a channel"
+            echo "  ls [channel]             List channels or a channel's subscribers + unread counts"
+            echo "  pull <channel> [--json]  Pull unread messages (advances cursor)"
+            echo ""
+            echo "  --as <label>             Override subId (default: tmux pane or host-PID)"
+            ;;
+        *)
+            die "vinculum: unknown verb '$verb'. Run: borg vinculum help"
+            ;;
+    esac
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
 borg_registry_init
@@ -2920,6 +3148,7 @@ case "${1:-help}" in
     watch)          cmd_watch "${@:2}" ;;
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
+    vinculum|vinc)  cmd_vinculum "${@:2}" ;;
     # Legacy aliases → consolidated command
     ls)       cmd_link "${@:2}" ;;
     status)   cmd_link "${@:2}" ;;

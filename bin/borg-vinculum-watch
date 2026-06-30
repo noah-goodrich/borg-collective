@@ -1,0 +1,176 @@
+#!/usr/bin/env zsh
+# borg-vinculum-watch — per-pane live delivery watcher for vinculum pubsub
+#
+# Usage: borg-vinculum-watch <channel> --pane <tmuxPane> --as <subId> [--once]
+#
+# Watches channel's log.jsonl via fswatch; on each change reads past the
+# subscriber's cursor, filters self-messages, sanitizes body, and delivers
+# via `tmux send-keys`.  Rate-capped to VINC_RATE_MAX_PER_MIN (default 30)
+# deliveries per 60s window; minimum 0.5s gap enforced between sends.
+#
+# DRY_RUN=1  → print "WOULD-SEND -t <pane>: <msg>" instead of calling tmux
+#               (cursor still advances — used by tests and demos)
+# --once     → process pending messages once and exit (no fswatch loop)
+
+set -euo pipefail
+
+export PATH="${BORG_PATH_PREFIX:+$BORG_PATH_PREFIX:}$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+hash -r 2>/dev/null || true
+
+VINC_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg/vinculum"
+VINC_RATE_MAX_PER_MIN="${VINC_RATE_MAX_PER_MIN:-30}"
+DRY_RUN="${DRY_RUN:-}"
+
+# ── Arg parsing ───────────────────────────────────────────────────────────────
+channel="" pane="" sub_id="" _once_mode=0
+_skip_next=0 _last_key=""
+for _arg in "$@"; do
+    if (( _skip_next )); then
+        case "$_last_key" in
+            --pane) pane="$_arg" ;;
+            --as)   sub_id="$_arg" ;;
+        esac
+        _skip_next=0
+        _last_key=""
+    elif [[ "$_arg" == "--pane" || "$_arg" == "--as" ]]; then
+        _last_key="$_arg"
+        _skip_next=1
+    elif [[ "$_arg" == "--once" ]]; then
+        _once_mode=1
+    elif [[ -z "$channel" ]]; then
+        channel="$_arg"
+    fi
+done
+unset _arg _skip_next _last_key
+
+[[ -n "$channel" ]] || { printf 'borg-vinculum-watch: missing <channel>\n' >&2; exit 1; }
+[[ -n "$pane" ]]    || { printf 'borg-vinculum-watch: missing --pane\n'    >&2; exit 1; }
+[[ -n "$sub_id" ]]  || { printf 'borg-vinculum-watch: missing --as\n'      >&2; exit 1; }
+
+LOG_FILE="$VINC_DIR/$channel/log.jsonl"
+CURSOR_FILE="$VINC_DIR/$channel/cursors/$sub_id"
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+_log() { printf '[%s] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
+
+# ── Cursor helpers (temp+rename for torn-write safety) ────────────────────────
+_read_cursor() {
+    local _c=0
+    [[ -f "$CURSOR_FILE" ]] && _c="$(tr -d '[:space:]' < "$CURSOR_FILE")"
+    printf '%d' "${_c:-0}"
+}
+
+_write_cursor() {
+    local _tmp="${CURSOR_FILE}.tmp.$$"
+    printf '%s\n' "$1" > "$_tmp"
+    mv "$_tmp" "$CURSOR_FILE"
+}
+
+# ── Rate-limit state (global integers, reset per window) ──────────────────────
+_win_start=0        # seconds epoch when current window opened
+_win_count=0        # deliveries sent in current window
+_last_send_sec=0    # seconds epoch of last successful send
+
+# ── Delivery ──────────────────────────────────────────────────────────────────
+_deliver() {
+    local _full_msg="$1"
+    if [[ -n "$DRY_RUN" ]]; then
+        printf 'WOULD-SEND -t %s: %s\n' "$pane" "$_full_msg"
+        return 0
+    fi
+    tmux send-keys -t "$pane" -l "$_full_msg" && tmux send-keys -t "$pane" Enter
+}
+
+# ── Core: read and deliver pending messages ───────────────────────────────────
+_process_new_messages() {
+    [[ -f "$LOG_FILE" ]] || return 0
+
+    local _cursor _total _line_num _cur_pos _json _from _body _now _gap _preamble
+
+    _cursor="$(_read_cursor)"
+    _total="$(wc -l < "$LOG_FILE" | tr -d ' ')"
+
+    # Nothing new
+    if (( _cursor >= _total )); then
+        return 0
+    fi
+
+    _line_num=$(( _cursor + 1 ))
+    _cur_pos="$_cursor"
+
+    while IFS= read -r _json; do
+        [[ -z "$_json" ]] && continue
+
+        _from="$(printf '%s' "$_json" | jq -r '.from // ""')"
+        _body="$(printf '%s' "$_json" | jq -r '.body // ""')"
+        _cur_pos=$(( _cur_pos + 1 ))
+
+        # ── Self-echo filter: advance cursor, skip delivery ───────────────────
+        if [[ "$_from" == "$sub_id" ]]; then
+            _write_cursor "$_cur_pos"
+            continue
+        fi
+
+        # ── Sanitize body: collapse embedded newlines/CR to spaces ────────────
+        _body="${_body//$'\n'/ }"
+        _body="${_body//$'\r'/ }"
+
+        # ── Rate-limit: reset window if 60s have elapsed ──────────────────────
+        _now="$(date +%s)"
+        if (( _now - _win_start >= 60 )); then
+            _win_start="$_now"
+            _win_count=0
+        fi
+
+        # ── Rate cap: pause without advancing cursor ──────────────────────────
+        if (( _win_count >= VINC_RATE_MAX_PER_MIN )); then
+            local _wait=$(( 60 - (_now - _win_start) ))
+            (( _wait > 0 )) || _wait=1
+            _log "WARN: rate cap (${_win_count}/${VINC_RATE_MAX_PER_MIN}/60s) pane=${pane}. Pausing ${_wait}s."
+            sleep "$_wait"
+            _win_start="$(date +%s)"
+            _win_count=0
+        fi
+
+        # ── 0.5s gap enforcement ──────────────────────────────────────────────
+        _now="$(date +%s)"
+        _gap=$(( _now - _last_send_sec ))
+        if (( _gap < 1 )); then
+            sleep 0.5
+        fi
+
+        # ── Deliver ───────────────────────────────────────────────────────────
+        _preamble="[vinculum:${channel} ← ${_from}] "
+        if _deliver "${_preamble}${_body}"; then
+            _write_cursor "$_cur_pos"
+            _win_count=$(( _win_count + 1 ))
+            _last_send_sec="$(date +%s)"
+        else
+            _log "ERROR: tmux send-keys failed for pane ${pane} (pane gone?). Exiting."
+            exit 0
+        fi
+
+    done < <(sed -n "${_line_num},\$p" "$LOG_FILE")
+}
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+mkdir -p "$VINC_DIR/$channel/cursors"
+[[ -f "$LOG_FILE" ]] || touch "$LOG_FILE"
+
+_log "started: channel=$channel pane=$pane sub_id=$sub_id${DRY_RUN:+ DRY_RUN=1}${_once_mode:+ once}"
+
+if (( _once_mode )); then
+    _process_new_messages
+    exit 0
+fi
+
+if ! command -v fswatch &>/dev/null; then
+    _log "ERROR: fswatch not found in PATH — live delivery requires fswatch"
+    exit 1
+fi
+
+fswatch -o "$LOG_FILE" | while read -r; do
+    _process_new_messages
+done
+
+_log "exiting"
