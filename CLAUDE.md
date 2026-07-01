@@ -27,8 +27,9 @@ Three independent tools that compose:
 - Core borg CLI: init, claude, next, ls, switch, status, hail, search, scan, add, rm, help
 - CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg ls`, cairn records
 - `drone` CLI: up, down, claude, sh, restart, fix, status
-- Hooks: borg-link-down.sh (status=active + latest-checkpoint injection + cairn context),
-  borg-link-up.sh (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh
+- Hooks: borg-link-down.sh (status=active + latest-checkpoint injection + cairn context + presence
+  open/related), borg-link-up.sh (status=idle + uncommitted-changes tracking + no-checkpoint nudge +
+  presence close), borg-notify.sh
 - Skills: adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify
 - Work/life boundary checks on switch
 - Capacity warnings
@@ -123,6 +124,14 @@ docs/
 - **Debriefs replace summaries**: LLM analysis at session stop, not regex extraction
 - **Boundaries are speed bumps**: one-keystroke confirmations, not hard blocks
 - **Cairn is optional**: borg works without it (registry + file debriefs), cairn adds persistence
+- **Cross-session presence (v0.8.4)**: SessionStart publishes a presence row to cairn
+  (`/presence/open`) and queries related active rows (`/presence/related`). When another session in the
+  same project is active, ONE distilled line is appended to `additionalContext` (format:
+  `▸ N other active session(s) — closest: session <id8> editing <file> in <project>`). Stop closes the
+  row (`/presence/close`). Strictly silent/no-op on every failure path (cairn down, 404, timeout).
+  Requires cairn server migration 004 + `cairn presence` subcommand in dotfiles cairn client. v1
+  limitations: heartbeat only at SessionStart (30-min TTL), touched_paths is a one-time snapshot,
+  orchestrator-mode sessions do NOT publish presence.
 - **Auto-plan promotion (`borg-plan-promote.sh`)**: a `PreToolUse` hook that fires on `Edit`,
   `Write`, and `NotebookEdit`. When Claude exits plan mode (`ExitPlanMode`) and the user
   proceeds to the first file edit, the hook scans the session JSONL for the most recent
