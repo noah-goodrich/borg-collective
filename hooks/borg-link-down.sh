@@ -351,6 +351,41 @@ Sessions will be committed to cairn after this session ends.")
     fi
 fi
 
+# ── 2c. Presence ─────────────────────────────────────────────────────────────
+# Publish this session's presence row (open + heartbeat) and query related
+# active sessions in the same project. Injects ONE distilled line into
+# CONTEXT_PARTS when a related session exists. Strictly silent on every
+# failure path — cairn down / unreachable / 404 / timeout is a no-op.
+if command -v cairn >/dev/null 2>&1; then
+    _p_branch=$(git -C "$CWD" branch --show-current 2>/dev/null || true)
+    _p_paths=""
+    if git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        _p_paths=$(git -C "$CWD" status --porcelain 2>/dev/null \
+            | awk '{print $NF}' | paste -sd, - || true)
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 5 cairn presence open \
+            --session-id "$SESSION_ID" --project "$PROJECT" \
+            --branch "$_p_branch" --paths "$_p_paths" \
+            >/dev/null 2>&1 || true
+    else
+        cairn presence open \
+            --session-id "$SESSION_ID" --project "$PROJECT" \
+            --branch "$_p_branch" --paths "$_p_paths" \
+            >/dev/null 2>&1 || true
+    fi
+    if command -v timeout >/dev/null 2>&1; then
+        _p_line=$(timeout 5 cairn presence related \
+            --session-id "$SESSION_ID" --project "$PROJECT" \
+            --paths "$_p_paths" --format line 2>/dev/null || true)
+    else
+        _p_line=$(cairn presence related \
+            --session-id "$SESSION_ID" --project "$PROJECT" \
+            --paths "$_p_paths" --format line 2>/dev/null || true)
+    fi
+    [[ -n "$_p_line" ]] && CONTEXT_PARTS+=("$_p_line")
+fi
+
 # ── 3. Output ─────────────────────────────────────────────────────────────────
 
 if (( ${#CONTEXT_PARTS[@]} > 0 )); then
