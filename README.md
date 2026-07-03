@@ -13,24 +13,14 @@ cognitive load, persists context across sessions, and answers the question that 
 
 ## Installation
 
-### Homebrew (recommended)
-
-```bash
-brew tap noah-goodrich/borg-collective https://github.com/noah-goodrich/borg-collective.git
-brew install borg-collective
-borg setup
-```
-
-`borg setup` registers Claude Code hooks, installs skills, and configures the tmux keybinding.
-Safe to re-run.
-
-### From source (dev install)
-
 ```bash
 git clone https://github.com/noah-goodrich/borg-collective ~/dev/borg-collective
 cd ~/dev/borg-collective && ./install.sh
 borg init
 ```
+
+`install.sh` installs the `borg` + `drone` CLIs and runs `borg setup`, which registers Claude Code
+hooks, installs skills, and configures the tmux keybinding. Safe to re-run.
 
 ### First run
 
