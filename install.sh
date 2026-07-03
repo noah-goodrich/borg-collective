@@ -9,13 +9,6 @@
 # Usage:
 #   ./install.sh              Full install (interactive, checks deps)
 #   ./install.sh --quiet      Skip ASCII art and prompts
-#
-# NOTE: For non-dev install, use Homebrew:
-#   brew tap noah-goodrich/borg-collective https://github.com/noah-goodrich/borg-collective.git
-#   brew install borg-collective
-#   borg setup
-#
-# Use install.sh only for dev (editing source directly from this clone).
 
 set -e
 
