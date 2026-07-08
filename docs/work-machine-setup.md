@@ -9,6 +9,10 @@ failure (dependent sequences).
 > the `noah-local` marketplace). The plugin version tracks the CLI version, so `borg version` and
 > `claude plugin list` should report the **same** number. **cairn ships as a GHCR container image.**
 > Homebrew is used only for prerequisite tooling (jq, tmux, fswatch, …), never for borg itself.
+> **Personal skills ship as plugins too**, split across two marketplaces: public ones in `claude-plugins`
+> (`noah-local`), Ontra-specific / not-publicly-shareable ones in `claude-plugins-private` (`noah-private`,
+> private GitHub repo). Skills must live in plugins — `borg setup` cleans hand-dropped non-borg skills out of
+> `~/.claude/skills` (the borg-collective#64 stale-skill trap, fixed in v0.8.6 by the cleanup guard).
 
 ---
 
@@ -17,9 +21,9 @@ failure (dependent sequences).
 Already set up? Skip the phases below and run this update flow instead.
 
 ```zsh
-# 1. Pull all three repos
+# 1. Pull all four repos
 git -C ~/dev/borg-collective pull --ff-only && git -C ~/dev/claude-plugins pull --ff-only && \
-  git -C ~/dev/cairn pull --ff-only
+  git -C ~/dev/claude-plugins-private pull --ff-only && git -C ~/dev/cairn pull --ff-only
 
 # 2. Redeploy borg (REQUIRED — see note). install.sh is interactive ("Install plugin now?"); either answer is fine.
 cd ~/dev/borg-collective && ./install.sh        # or: borg setup
@@ -35,10 +39,14 @@ borg version && claude plugin list | grep borg-collective
   bash lib + skills + agents are **copied** into `~/.claude` and only refresh on `install.sh` / `borg setup`.
 - **Step 3 (Claude Code plugins) is automatic:** `code-governance`, `research-tools`, etc. auto-update from the pulled
   `~/dev/claude-plugins` via the `noah-local` marketplace (`autoUpdate: true`) — no extra step; verify with
-  `claude plugin list`.
+  `claude plugin list`. Same for `noah-personal` from `~/dev/claude-plugins-private` via `noah-private`
+  (`autoUpdate: true`).
 
 > **2026-07-08:** additions picked up by a plain pull + setup = the `code-governance` plugin (capability-index +
 > reconcile-req) and the distilled `research` skill.
+> **2026-07-08 (later):** the private marketplace exists now — `claude-plugins-private` repo → `noah-private`
+> marketplace → `noah-personal` plugin (Ontra-specific skills, e.g. `noah-weekly-status`). Clone + register per
+> Phases 1 / 3c / 3e below.
 
 ---
 
@@ -84,6 +92,9 @@ git clone https://github.com/noah-goodrich/borg-collective ~/dev/borg-collective
 git clone https://github.com/noah-goodrich/cairn ~/dev/cairn
 git clone https://github.com/noah-goodrich/dotfiles ~/.config/dotfiles
 git clone https://github.com/noah-goodrich/claude-plugins ~/dev/claude-plugins
+
+# PRIVATE repo (Ontra-specific skills) — requires the `gh auth login` from Phase 0 (or an SSH remote)
+git clone https://github.com/noah-goodrich/claude-plugins-private ~/dev/claude-plugins-private
 
 # Wire dotfiles symlinks (zshrc, tmux, secrets.zsh, CLAUDE.md)
 bash ~/.config/dotfiles/install.sh
@@ -158,11 +169,13 @@ borg setup
 runs `borg scan`, and writes `~/.config/borg/config.zsh`.
 
 ```zsh
-# 3c. Register the noah-local plugin marketplace (add to ~/.claude/settings.json if missing).
-# Use YOUR real home path — on this work machine that's /Users/noahgoodrich/dev/claude-plugins.
+# 3c. Register BOTH plugin marketplaces (add to ~/.claude/settings.json if missing).
+# Use YOUR real home path — on this work machine that's /Users/noahgoodrich/dev/....
 #   "extraKnownMarketplaces": {
-#     "noah-local": { "source": { "source": "directory", "path": "$HOME/dev/claude-plugins" },
-#                     "autoUpdate": true }
+#     "noah-local":   { "source": { "source": "directory", "path": "$HOME/dev/claude-plugins" },
+#                       "autoUpdate": true },
+#     "noah-private": { "source": { "source": "directory", "path": "$HOME/dev/claude-plugins-private" },
+#                       "autoUpdate": true }
 #   }
 # If Claude Code does not expand $HOME in settings.json, use the literal absolute path
 # (e.g. /Users/noahgoodrich/dev/claude-plugins).
@@ -179,6 +192,17 @@ borg version                                     # should print the same version
 > `$HOME/dev/claude-plugins/borg-collective/` and ensures the `borg-collective` entry is present in the
 > marketplace manifest — so `claude plugin install borg-collective@noah-local` works on the first run
 > without any manual marketplace editing.
+
+```zsh
+# 3e. Install the private personal plugin (Ontra-specific skills) from the noah-private marketplace.
+claude plugin install noah-personal@noah-private
+claude plugin list | grep noah-personal
+```
+
+> **Why plugins and not `~/.claude/skills`:** `borg setup` cleans non-borg skills out of `~/.claude/skills`
+> (the borg-collective#64 stale-skill trap — a v0.8.6 guard now scopes the cleanup, but the rule stands).
+> Hand-authored skills belong in a plugin repo: public → `claude-plugins` (`noah-local`), Ontra-specific or
+> otherwise sensitive → `claude-plugins-private` (`noah-private`). Never park skills loose in `~/.claude/skills`.
 
 ---
 
