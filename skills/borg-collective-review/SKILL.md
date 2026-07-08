@@ -212,3 +212,8 @@ the shipping checklist. Personas need specific context to give specific feedback
 - When invoked by borg-plan: voices analyze the codebase and situation before objectives.
 - When invoked by borg-assimilate: voices evaluate the deliverable before shipping.
 - When invoked directly: voices analyze whatever context the developer provides.
+
+### Step 4 — Persist the debate
+
+After presenting the results, run `cairn convene --question "<the review question>" --project <project>` with the Bash
+tool so the Collective's debate is recorded to the knowledge graph for future sessions.
