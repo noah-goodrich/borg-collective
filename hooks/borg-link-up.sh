@@ -304,6 +304,32 @@ if command -v cairn >/dev/null 2>&1; then
             "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             "${_cairn_err:-no stderr captured}" >> "${BORG_DIR}/.cairn-write-failed"
     fi
+
+    # Record the newest checkpoint as a cairn document (best-effort; contract §5).
+    # Upserts by (source, doc_type, project, slug) — slug is the session cairn id so
+    # a re-run overwrites rather than duplicating. Failures append to the same log as
+    # the session write and never block the hook.
+    _doc_cp=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "*.md" -mmin -120 2>/dev/null \
+        | sort | tail -1 || true)
+    if [[ -n "$_doc_cp" && -f "$_doc_cp" ]]; then
+        _doc_body=$(cat "$_doc_cp" 2>/dev/null || true)
+        if [[ -n "$_doc_body" ]]; then
+            _doc_cmd=(cairn record document \
+                --source borg --doc-type checkpoint \
+                --project "$PROJECT" --slug "$_cairn_id" --body "$_doc_body")
+            _doc_failed=""
+            if command -v timeout >/dev/null 2>&1; then
+                _doc_err=$(timeout 5 "${_doc_cmd[@]}" 2>&1 >/dev/null) || _doc_failed=1
+            else
+                _doc_err=$("${_doc_cmd[@]}" 2>&1 >/dev/null) || _doc_failed=1
+            fi
+            if [[ -n "$_doc_failed" ]]; then
+                printf '%s\t%s\n' \
+                    "cairn document write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                    "${_doc_err:-no stderr captured}" >> "${BORG_DIR}/.cairn-write-failed"
+            fi
+        fi
+    fi
 fi
 
 exit 0
