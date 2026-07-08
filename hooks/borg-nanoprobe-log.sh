@@ -101,6 +101,25 @@ if [[ "$EVIDENCE_FOUND" == "false" && -n "$LAST_MSG" ]]; then
         "${TRANSCRIPT_PATH:-unknown}" >&2
 fi
 
+# ─── Zero-commit detection ────────────────────────────────────────────────────
+# An empty branch = a 0-write run (the 15-read/0-write/32k-abort failure). Flag it
+# loudly so the orchestrator re-spawns instead of believing the work landed.
+ZERO_COMMIT=false
+if [[ -n "$CWD" ]] && command -v git >/dev/null 2>&1 \
+   && git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    _base=$(git -C "$CWD" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null \
+            || git -C "$CWD" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo "")
+    if [[ -n "$_base" ]]; then
+        _n=$(git -C "$CWD" rev-list --count "${_base}..HEAD" 2>/dev/null || echo 0)
+        if [[ "$_n" -eq 0 ]] && ! git -C "$CWD" diff --quiet 2>/dev/null; then _n=1; fi
+        if [[ "$_n" -eq 0 ]]; then
+            ZERO_COMMIT=true
+            printf '\n\033[1;31m▸ NANOPROBE ZERO-COMMIT: %s left branch empty (0 writes). Re-spawn with a tighter, single-deliverable brief.\033[0m\n\n' \
+                "${AGENT_ID:0:8}" >&2
+        fi
+    fi
+fi
+
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Atomic append: build the line in jq, then >> the file. Drop the line silently
@@ -114,6 +133,7 @@ LINE=$(jq -nc \
     --arg cwd "$CWD" \
     --argjson evidence_found "$EVIDENCE_FOUND" \
     --argjson evidence_score "$EVIDENCE_SCORE" \
+    --argjson zero_commit "$ZERO_COMMIT" \
     '{
         id: $id,
         agent_type: $type,
@@ -123,7 +143,8 @@ LINE=$(jq -nc \
         finished_at: $finished,
         cwd: $cwd,
         evidence_found: $evidence_found,
-        evidence_score: $evidence_score
+        evidence_score: $evidence_score,
+        zero_commit: $zero_commit
     }' 2>/dev/null || true)
 
 [[ -n "$LINE" ]] || exit 0
