@@ -12,6 +12,36 @@ failure (dependent sequences).
 
 ---
 
+## Updating an existing machine (incremental sync)
+
+Already set up? Skip the phases below and run this update flow instead.
+
+```zsh
+# 1. Pull all three repos
+git -C ~/dev/borg-collective pull --ff-only && git -C ~/dev/claude-plugins pull --ff-only && \
+  git -C ~/dev/cairn pull --ff-only
+
+# 2. Redeploy borg (REQUIRED — see note). install.sh is interactive ("Install plugin now?"); either answer is fine.
+cd ~/dev/borg-collective && ./install.sh        # or: borg setup
+
+# 4. cairn — ONLY if its GHCR image bumped; otherwise no action.
+cd ~/dev/cairn && ./bin/cairn-up
+
+# 5. Verify borg CLI and plugin report the SAME version
+borg version && claude plugin list | grep borg-collective
+```
+
+- **Step 2 is required:** borg's CLI/libs run from the source clone (a pull refreshes those live), but hooks + the
+  bash lib + skills + agents are **copied** into `~/.claude` and only refresh on `install.sh` / `borg setup`.
+- **Step 3 (Claude Code plugins) is automatic:** `code-governance`, `research-tools`, etc. auto-update from the pulled
+  `~/dev/claude-plugins` via the `noah-local` marketplace (`autoUpdate: true`) — no extra step; verify with
+  `claude plugin list`.
+
+> **2026-07-08:** additions picked up by a plain pull + setup = the `code-governance` plugin (capability-index +
+> reconcile-req) and the distilled `research` skill.
+
+---
+
 ## Prerequisites to verify manually before running anything
 
 - [x] **VERIFIED (2026-06-11):** `ghcr.io/noah-goodrich/cairn:0.2.0` is **public and pulls cleanly**
