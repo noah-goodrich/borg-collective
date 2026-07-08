@@ -2259,9 +2259,25 @@ CONF
     # ── 4. Install skills ─────────────────────────────────────────────────────
     info "Installing skills..."
 
-    # Clean up stale skills (removed from source)
+    # Migration (v0.8.6+): stamp .borg-managed into any existing skill dir whose name
+    # matches a current borg skill. This is a one-time migration so that skills installed
+    # before the ownership-marker convention are not incorrectly treated as unowned and
+    # removed on the first run of the stricter cleanup below.
     for existing in "$CLAUDE_SKILLS_DIR/"*/(N); do
         [[ -d "$existing" ]] || continue
+        local _mname="${existing:t}"
+        if [[ -d "$BORG_HOME/skills/$_mname" && ! -f "$existing/.borg-managed" ]]; then
+            touch "$existing/.borg-managed"
+        fi
+    done
+
+    # Clean up stale skills (removed from source).
+    # Only removes dirs bearing the .borg-managed ownership marker — NEVER touches
+    # skills that borg did not install (e.g. hand-authored personal skills, plugin
+    # skills from other sources). Fixes: github.com/noah-goodrich/borg-collective/issues/64
+    for existing in "$CLAUDE_SKILLS_DIR/"*/(N); do
+        [[ -d "$existing" ]] || continue
+        [[ -f "$existing/.borg-managed" ]] || continue
         local ename="${existing:t}"
         [[ ! -d "$BORG_HOME/skills/$ename" ]] && rm -rf "$existing" && info "  Removed stale skill: $ename"
     done
@@ -2274,6 +2290,7 @@ CONF
         # Copy (not symlink) so skills work inside devcontainers
         rm -rf "$target"
         cp -R "$skill_dir" "$target"
+        touch "$target/.borg-managed"
         info "  $name"
     done
 
