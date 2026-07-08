@@ -4,12 +4,11 @@
 Copy-paste blocks chain with `&&` or `;` — `;` continues on failure (independent steps), `&&` stops on
 failure (dependent sequences).
 
-> Distribution model (context): **borg-collective ships in two forms that share one version (`v0.8.0`):**
-> the **CLI** (via a Homebrew formula `Formula/borg-collective.rb`, or `install.sh`) and the **Claude Code
-> plugin** (hooks/skills/agents, via the `noah-local` marketplace). The plugin version tracks the CLI
-> version, so `borg version` and `claude plugin list` should report the **same** number. **cairn ships
-> as a GHCR container image** (Homebrew was rejected for cairn). Homebrew is also used for prerequisite
-> tooling (jq, tmux, …).
+> Distribution model (context): **borg-collective ships in two forms that share one version:** the
+> **CLI** (via `install.sh` from a source clone) and the **Claude Code plugin** (hooks/skills/agents, via
+> the `noah-local` marketplace). The plugin version tracks the CLI version, so `borg version` and
+> `claude plugin list` should report the **same** number. **cairn ships as a GHCR container image.**
+> Homebrew is used only for prerequisite tooling (jq, tmux, fswatch, …), never for borg itself.
 
 ---
 
@@ -99,24 +98,11 @@ echo "ANTHROPIC_SDK_KEY length: ${#ANTHROPIC_SDK_KEY}"   # verify it resolves
 
 ---
 
-## Phase 3 — borg-collective install + Claude Code plugin (v0.8.0)
+## Phase 3 — borg-collective install + Claude Code plugin
 
-The CLI and the plugin share version **v0.8.0**. `install.sh` is the recommended path (it installs the
-borg + drone CLIs, LaunchAgents, and runs `borg setup`). A published **Homebrew tap** exists as a
-CLI-only alternative:
-
-```zsh
-brew install noah-goodrich/borg-collective/borg-collective
-# equivalently: brew tap noah-goodrich/borg-collective && brew install borg-collective
-```
-
-…but the tap installs only the `borg` CLI — you still need `./install.sh` / `borg setup` afterward for
-hooks, drone, agents, and the plugin, so prefer `install.sh` on a fresh machine.
-
-> ⚠ **Do not `brew uninstall borg-collective` casually.** It cascades and removes orphaned dependencies
-> including **`jq`, `fzf`, and `oniguruma`** — and **borg depends on `jq`**, so this leaves borg broken.
-> If you ever switch off the brew install, immediately run `brew install jq fzf` to restore the runtime
-> deps.
+`install.sh` is the only supported install path: it installs the borg + drone CLIs, LaunchAgents, and
+runs `borg setup` (hooks, skills, agents, tmux keybinding, plugin). There is no Homebrew formula for
+borg itself — Homebrew is used only for the prerequisite tooling installed back in Phase 0.
 
 ```zsh
 # 3a. Install borg + drone CLIs (also runs `borg setup` automatically).
