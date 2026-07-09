@@ -85,6 +85,23 @@ _bg_chmod_danger() {
     return 1
 }
 
+# True (0) if $1 (normalized) is a `git push` force-pushing to main/master.
+# Requires --force or -f — NOT --force-with-lease, the recommended safe form.
+# Matches the ref as a token: main, :main (HEAD:main), or /main (refs/heads/main).
+_bg_gitforce_danger() {
+    printf '%s' "$1" | grep -qE '(^| )git push( |$)' || return 1
+    printf '%s' "$1" | grep -qE ' --force( |$)| -f( |$)' || return 1
+    printf '%s' "$1" | grep -qE '(^| |:|/)(main|master)( |$)' && return 0
+    return 1
+}
+
+# True (0) if $1 (normalized) redirects (> or >>) into a .claude/settings.json
+# path, in any home notation (~, $HOME, absolute). Reads are untouched.
+_bg_settings_write_danger() {
+    printf '%s' "$1" | grep -qE '>>? *[^ ]*\.claude/settings\.json' && return 0
+    return 1
+}
+
 NORM=$(_bg_norm "$COMMAND")
 
 if _bg_rm_danger "$NORM"; then
@@ -95,6 +112,14 @@ if _bg_chmod_danger "$NORM"; then
     echo "Blocked: recursive world-writable chmod" >&2; exit 2
 fi
 
+if _bg_gitforce_danger "$NORM"; then
+    echo "Blocked: force push to main/master — use --force-with-lease or push to a branch" >&2; exit 2
+fi
+
+if _bg_settings_write_danger "$NORM"; then
+    echo "Blocked: writing Claude settings file" >&2; exit 2
+fi
+
 # ── Layer 1: destructive patterns (always hard-blocked) ───────────────────────
 
 case "$COMMAND" in
@@ -102,10 +127,6 @@ case "$COMMAND" in
         echo "Blocked: raw disk write" >&2; exit 2 ;;
     *"curl"*"| bash"*|*"wget"*"| bash"*|*"curl"*"| sh"*|*"wget"*"| sh"*)
         echo "Blocked: piping remote script to shell" >&2; exit 2 ;;
-    *"git push --force"*" main"*|*"git push --force"*" master"*|*"git push -f "*" main"*|*"git push -f "*" master"*)
-        echo "Blocked: force push to main/master — use --force-with-lease or push to a branch" >&2; exit 2 ;;
-    *"> ~/.claude/settings.json"*|*">\$HOME/.claude/settings.json"*|*"> /Users/"*"/.claude/settings.json"*)
-        echo "Blocked: truncating Claude settings file" >&2; exit 2 ;;
 esac
 
 # Escape valve: skip the classifier but keep Layer 1 (already ran).

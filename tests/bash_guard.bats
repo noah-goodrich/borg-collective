@@ -174,6 +174,75 @@ _assert_blocked() {
     [ "$status" -ne 2 ]
 }
 
+# ─── Layer 1: force-push-to-main ref bypasses (audit C2) ───────────────────────
+#
+# Layer 1 required the literal " main" after "git push --force". A quoted ref, a
+# HEAD:main / refs/heads/main form, or --force before the remote all evaded it —
+# and git is blanket-approved at Layer 3, so evading Layer 1 meant a force-push to
+# main was PRE-APPROVED. Match the ref after normalization (quotes gone), as a ref
+# token including :main and refs/heads/main.
+
+@test "C2: blocks force push to a quoted main ref" {
+    _run_guard "git push --force origin 'main'"
+    _assert_blocked
+}
+
+@test "C2: blocks force push to HEAD:main" {
+    _run_guard "git push --force origin HEAD:main"
+    _assert_blocked
+}
+
+@test "C2: blocks force push to refs/heads/master" {
+    _run_guard "git push --force origin refs/heads/master"
+    _assert_blocked
+}
+
+@test "C2: blocks short-flag force push to main" {
+    _run_guard "git push -f origin main"
+    _assert_blocked
+}
+
+# Guard-rails: safe pushes must NOT be hard-blocked.
+@test "C2: does not block force push to a feature branch" {
+    _run_guard "git push --force origin feature/x"
+    [ "$status" -ne 2 ]
+}
+
+@test "C2: does not block --force-with-lease to main" {
+    _run_guard "git push --force-with-lease origin main"
+    [ "$status" -ne 2 ]
+}
+
+@test "C2: does not block a normal push to main" {
+    _run_guard "git push origin main"
+    [ "$status" -ne 2 ]
+}
+
+# ─── Layer 1: append to Claude settings (audit C3) ─────────────────────────────
+#
+# The truncate guard matched "> ~/.claude/settings.json". An append (>>) or a
+# $HOME/absolute path form must be caught too.
+
+@test "C3: blocks append (>>) to Claude settings via ~" {
+    _run_guard "echo x >> ~/.claude/settings.json"
+    _assert_blocked
+}
+
+@test "C3: blocks append to Claude settings via an absolute path" {
+    _run_guard "echo x >> /Users/noah/.claude/settings.json"
+    _assert_blocked
+}
+
+@test "C3: blocks truncate (>) to Claude settings via \$HOME" {
+    _run_guard "echo x > \$HOME/.claude/settings.json"
+    _assert_blocked
+}
+
+@test "C3: does not block reading Claude settings" {
+    _run_guard "cat ~/.claude/settings.json"
+    [ "$status" -ne 2 ]
+}
+
 # ─── Layer 3: RO classifier — simple RO commands pre-approved ─────────────────
 
 @test "pre-approves cat" {
