@@ -370,6 +370,32 @@ WALK
     _assert_approved
 }
 
+# ─── Layer 1.5: for-loop prologue pre-approval removed (audit finding A2) ──────
+#
+# The guard used to pre-approve any command starting `for f in *.borg/checkpoints/*` or
+# `for f in */docs/plans/*`. Pre-approval covered the ENTIRE loop, so the body could be any
+# command at all — the `for` prologue was the whole ticket. No skill actually emits such a Bash
+# loop (borg-link's scans run inside the zsh CLI, not as Bash tool calls), so the branch is
+# removed outright: these now fall through to the classifier, which reads the body on its merits.
+
+@test "A2: a checkpoints for-loop with a destructive body is not pre-approved" {
+    _run_guard 'for f in /x/.borg/checkpoints/*; do rm -f "$f"; done'
+    _assert_fallthrough
+}
+
+@test "A2: a docs/plans for-loop with a write body is not pre-approved" {
+    _run_guard 'for f in /x/docs/plans/*; do echo pwned > "$f"; done'
+    _assert_fallthrough
+}
+
+@test "A2: even a read-only checkpoints for-loop now falls through (prompts, does not bypass)" {
+    # The classifier cannot parse for-loops — that gap is exactly why the prologue was
+    # pre-approved. With the branch removed, a read-only loop falls through and prompts. That is
+    # the accepted cost of closing A2: a prompt on a rare read-only loop, versus a blanket bypass.
+    _run_guard 'for f in /x/.borg/checkpoints/*; do cat "$f"; done'
+    _assert_fallthrough
+}
+
 # ─── Empty / non-Bash input ───────────────────────────────────────────────────
 
 @test "exits 0 on empty stdin" {

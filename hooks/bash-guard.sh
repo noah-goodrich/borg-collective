@@ -90,11 +90,11 @@ if [[ "$(_canon_ws "$COMMAND")" == "$_BORG_MARKER_WALK" ]]; then
     _preapprove "borg marker walk — read-only directory scan"
 fi
 
-case "$COMMAND" in
-    "for f in "*.borg/checkpoints/*|"for f in "*/docs/plans/*)
-        # borg-link plan/checkpoint scan — read-only for loop over markdown files
-        _preapprove "borg-link read-only markdown scan (for loop)" ;;
-esac
+# NOTE: a `for f in *.borg/checkpoints/* | */docs/plans/*` prologue used to be
+# pre-approved here. Pre-approval covered the whole LOOP, so the body could be any
+# command — the prologue was the entire ticket (audit finding A2). No skill emits
+# such a Bash loop, so the branch is gone: these fall through to the classifier,
+# which reads the loop body on its own merits.
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
