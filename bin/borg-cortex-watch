@@ -40,6 +40,9 @@ log() {
     local line="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
     echo "$line" >> "$LOG"
     (( DEBUG )) && echo "$line" >&2
+    # `(( DEBUG ))` is FALSE when DEBUG=0, so as the last command it makes log() return 1 -- and
+    # under `set -e` that kills the agent the first time it logs anything. Do not remove.
+    return 0
 }
 
 # Dependency check — exit 0 (not crash) on missing deps so launchd does not throttle-respawn.
