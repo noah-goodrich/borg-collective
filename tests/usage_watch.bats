@@ -34,6 +34,29 @@ _row_field() {
     jq -r "$1" "$BORG_USAGE_SAMPLES"
 }
 
+# ─── synthetic-session marker ────────────────────────────────────────────────
+#
+# Each poll opens a real Claude Code session, so token-cost's SessionEnd hook appended a zero-token
+# record every 120s — 54% of that ledger within 11 hours. BORG_NO_SPEND_RECORD tells the hook to
+# skip. It must be set on the `claude` invocation itself, and must NOT leak into the poller's own
+# environment (nothing else here should silently stop recording spend).
+
+@test "spend guard: claude is invoked with BORG_NO_SPEND_RECORD=1" {
+    _write_mock_claude "printf '%s' \"\${BORG_NO_SPEND_RECORD:-unset}\" > '$BATS_TEST_TMPDIR/marker'; cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/marker")" = "1" ]
+}
+
+@test "spend guard: the marker does not leak into the poller's own environment" {
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # If the script had `export`ed it, the variable would still be set after the call returns.
+    run grep -c '^export BORG_NO_SPEND_RECORD' "$SCRIPT"
+    [ "$output" = "0" ]
+}
+
 # ─── format-drift tripwire: parse the real fixture ──────────────────────────
 
 @test "fixture parse: session_pct, week_pct, resets_at extracted correctly" {
