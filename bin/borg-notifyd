@@ -4,7 +4,10 @@
 
 set -euo pipefail
 
-export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+# $HOME/.local/bin holds `claude` (native installer). launchd hands jobs a minimal PATH that omits
+# it, so leaving it out makes this daemon exit 127 on every fire while `launchctl list` shows it
+# registered. See tests/agent_path.bats — every launchd-run script must keep this prefix.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 REGISTRY="${BORG_REGISTRY:-$HOME/.config/borg/registry.json}"
 LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
