@@ -47,6 +47,10 @@ borg version && claude plugin list | grep borg-collective
 > **2026-07-08 (later):** the private marketplace exists now — `claude-plugins-private` repo → `noah-private`
 > marketplace → `noah-personal` plugin (Ontra-specific skills, e.g. `noah-weekly-status`). Clone + register per
 > Phases 1 / 3c / 3e below.
+> **2026-07-09:** `install.sh` now installs the `borg-usage-watch` LaunchAgent by default (opt out with
+> `BORG_USAGE_WATCH=0 ./install.sh`) and verifies it produces a fresh sample after bootstrap. New command
+> `borg doctor` checks all four launchd agents (notifyd, cortex-wake, usage-watch, reap) for registration,
+> exit status, and output freshness — run it any time an agent seems blind or unhealthy.
 
 ---
 
@@ -164,9 +168,16 @@ borg setup
 > with `echo $PATH | tr ':' '\n' | grep -E '\.claude/bin|\.local/bin'` after `source ~/.zshrc`; if both
 > appear, ignore the warning.
 
-`install.sh` installs `~/.local/bin/{borg,drone,borg-notifyd,borg-cortex-watch}` + LaunchAgents.
-`borg setup` deploys hooks, skills, agents (incl. `borg-nanoprobe`), bin utilities, the tmux keybinding,
-runs `borg scan`, and writes `~/.config/borg/config.zsh`.
+`install.sh` installs
+`~/.local/bin/{borg,drone,borg-notifyd,borg-cortex-watch,borg-vinculum-watch,borg-usage-watch}` +
+LaunchAgents. `borg setup` deploys hooks, skills, agents (incl. `borg-nanoprobe`), bin utilities, the
+tmux keybinding, runs `borg scan`, and writes `~/.config/borg/config.zsh`.
+
+The `borg-usage-watch` LaunchAgent samples `claude -p "/usage"` every 120s to observe session/week
+usage percentages (observe-only — no checkpointing, no dispatch veto). It costs **$0**: verified via
+`total_cost_usd: 0`, `num_turns: 0`, and zero tokens in its own transcript — it never invokes a model.
+It is installed by default on every machine; set `BORG_USAGE_WATCH=0 ./install.sh` to opt out (this
+also removes an already-bootstrapped agent so the flag takes effect on re-run).
 
 ```zsh
 # 3c. Register BOTH plugin marketplaces (add to ~/.claude/settings.json if missing).
@@ -243,6 +254,7 @@ cairn health                             # liveness
 cairn stats                              # record counts (0 on a fresh machine is fine)
 claude plugin list | grep borg-collective
 borg next                                # recommendation engine
+borg doctor                              # verify the 4 launchd agents (registered/exit/fresh output)
 borg init                                # optional: morning briefing + orchestrator session
 ```
 

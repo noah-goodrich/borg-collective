@@ -164,33 +164,79 @@ launchctl bootstrap "gui/$UID" "$CORTEX_PLIST_DEST"
 info "  launchd agent bootstrapped."
 
 # ── 3b2. Install borg-usage-watch daemon + LaunchAgent ───────────────────────
-
-info "Installing borg-usage-watch..."
-chmod +x "$BORG_HOME/bin/borg-usage-watch"
-ln -sf "$BORG_HOME/bin/borg-usage-watch" "$BIN_DIR/borg-usage-watch"
-info "  borg-usage-watch -> $BORG_HOME/bin/borg-usage-watch"
-
+#
+# BORG_USAGE_WATCH opt-out: default ON (installed/bootstrapped when unset or any value other
+# than "0"). Set BORG_USAGE_WATCH=0 to skip installing/bootstrapping it entirely. If it is
+# already bootstrapped from a previous run and the flag is now 0, bootout it so the opt-out
+# actually takes effect on re-run.
 USAGE_PLIST_NAME="com.stillpoint-labs.borg.usage-watch.plist"
-USAGE_PLIST_SRC="$BORG_HOME/launchd/$USAGE_PLIST_NAME"
 USAGE_PLIST_DEST="$HOME/Library/LaunchAgents/$USAGE_PLIST_NAME"
-USAGE_WATCH_BIN="$BIN_DIR/borg-usage-watch"
-USAGE_PATH_VALUE="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
-sed \
-    -e "s|{{USAGE_WATCH_BIN}}|$USAGE_WATCH_BIN|g" \
-    -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
-    -e "s|{{USER}}|$USER|g" \
-    -e "s|{{HOME}}|$HOME|g" \
-    -e "s|{{PATH_VALUE}}|$USAGE_PATH_VALUE|g" \
-    "$USAGE_PLIST_SRC" > "$USAGE_PLIST_DEST"
-info "  plist -> $USAGE_PLIST_DEST"
+if [[ "${BORG_USAGE_WATCH:-1}" == "0" ]]; then
+    info "BORG_USAGE_WATCH=0 — skipping borg-usage-watch install."
+    if launchctl list "com.stillpoint-labs.borg.usage-watch" &>/dev/null 2>&1; then
+        info "  removing previously-bootstrapped agent..."
+        launchctl bootout "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
+    fi
+else
+    info "Installing borg-usage-watch (BORG_USAGE_WATCH=0 to opt out)..."
+    chmod +x "$BORG_HOME/bin/borg-usage-watch"
+    ln -sf "$BORG_HOME/bin/borg-usage-watch" "$BIN_DIR/borg-usage-watch"
+    info "  borg-usage-watch -> $BORG_HOME/bin/borg-usage-watch"
 
-if launchctl list "com.stillpoint-labs.borg.usage-watch" &>/dev/null 2>&1; then
-    info "  reloading launchd agent..."
-    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
+    USAGE_PLIST_SRC="$BORG_HOME/launchd/$USAGE_PLIST_NAME"
+    USAGE_WATCH_BIN="$BIN_DIR/borg-usage-watch"
+    USAGE_PATH_VALUE="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    USAGE_SAMPLES="${XDG_STATE_HOME:-$HOME/.local/state}/borg/usage-samples.jsonl"
+    USAGE_WATCH_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/borg/usage-watch.log"
+
+    sed \
+        -e "s|{{USAGE_WATCH_BIN}}|$USAGE_WATCH_BIN|g" \
+        -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+        -e "s|{{USER}}|$USER|g" \
+        -e "s|{{HOME}}|$HOME|g" \
+        -e "s|{{PATH_VALUE}}|$USAGE_PATH_VALUE|g" \
+        "$USAGE_PLIST_SRC" > "$USAGE_PLIST_DEST"
+    info "  plist -> $USAGE_PLIST_DEST"
+
+    if launchctl list "com.stillpoint-labs.borg.usage-watch" &>/dev/null 2>&1; then
+        info "  reloading launchd agent..."
+        launchctl bootout "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
+    fi
+    launchctl bootstrap "gui/$UID" "$USAGE_PLIST_DEST"
+    info "  launchd agent bootstrapped."
+
+    # Verify it actually produces output. Depends on #68 (idle polls also write a row); on
+    # current main, an idle poll writes NO row, so this check is only meaningful once #68 lands.
+    # An absent new row after kickstart is treated as informational, not fatal — a fresh machine
+    # may have no claude panes running, but with #68 that legitimately yields an "idle" row, so
+    # any new row (including an idle one) counts as pass.
+    mkdir -p "$(dirname "$USAGE_SAMPLES")"
+    BEFORE_COUNT=0
+    [[ -f "$USAGE_SAMPLES" ]] && BEFORE_COUNT=$(wc -l < "$USAGE_SAMPLES" | tr -d ' ')
+
+    info "  verifying usage-watch produces output (kickstart + poll up to 30s)..."
+    launchctl kickstart -k "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
+
+    VERIFIED=0
+    for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        sleep 2
+        AFTER_COUNT=0
+        [[ -f "$USAGE_SAMPLES" ]] && AFTER_COUNT=$(wc -l < "$USAGE_SAMPLES" | tr -d ' ')
+        if (( AFTER_COUNT > BEFORE_COUNT )); then
+            VERIFIED=1
+            break
+        fi
+    done
+
+    if (( VERIFIED )); then
+        info "  usage-watch verified: new sample row written."
+    else
+        warn "usage-watch did not produce a new sample within 30s."
+        warn "  Check: $USAGE_WATCH_LOG"
+        warn "  Then run: borg doctor"
+    fi
 fi
-launchctl bootstrap "gui/$UID" "$USAGE_PLIST_DEST"
-info "  launchd agent bootstrapped."
 
 # ── 3c. Install borg-reap daemon + LaunchAgent ───────────────────────────────
 
