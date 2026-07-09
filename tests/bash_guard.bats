@@ -68,6 +68,59 @@ _assert_blocked() {
     _assert_blocked
 }
 
+# ─── Layer 1: rm equivalent-notation bypasses (audit C1 + C4) ──────────────────
+#
+# Layer 1 matched the literal substring "rm -rf /". Reordered flags, a bare -r, a
+# leading backslash, or a path-qualified binary all evaded it while remaining just
+# as destructive. Normalize, then match rm by basename with the recursive flag in
+# any order against a dangerous target (root, home, .claude).
+
+@test "C1: blocks rm with reordered flags (-fr) targeting root" {
+    _run_guard "rm -fr /"
+    _assert_blocked
+}
+
+@test "C1: blocks rm with reordered flags (-Rf) targeting root" {
+    _run_guard "rm -Rf /"
+    _assert_blocked
+}
+
+@test "C1: blocks rm targeting root glob (/*)" {
+    _run_guard "rm -rf /*"
+    _assert_blocked
+}
+
+@test "C1: blocks a path-qualified rm targeting home" {
+    _run_guard "/bin/rm -rf ~"
+    _assert_blocked
+}
+
+@test "C4: blocks recursive rm of .claude without -f" {
+    _run_guard "rm -r ~/.claude"
+    _assert_blocked
+}
+
+@test "C4: blocks recursive rm of an absolute .claude path" {
+    _run_guard "rm -R /Users/noah/.claude"
+    _assert_blocked
+}
+
+# Guard-rails: legitimate recursive deletes must NOT be hard-blocked.
+@test "C1: does not block rm -rf of a scoped temp path" {
+    _run_guard "rm -rf /tmp/scratch"
+    [ "$status" -ne 2 ]
+}
+
+@test "C1: does not block rm -rf node_modules" {
+    _run_guard "rm -rf node_modules"
+    [ "$status" -ne 2 ]
+}
+
+@test "C1: does not block rm -r of a relative build dir" {
+    _run_guard "rm -r ./build"
+    [ "$status" -ne 2 ]
+}
+
 # ─── Layer 3: RO classifier — simple RO commands pre-approved ─────────────────
 
 @test "pre-approves cat" {

@@ -27,19 +27,63 @@ set -u
 COMMAND=$(jq -r '.tool_input.command' < /dev/stdin 2>/dev/null) || exit 0
 [[ -z "$COMMAND" || "$COMMAND" == "null" ]] && exit 0
 
+# ── Normalization pre-pass (audit cross-cutting fix) ──────────────────────────
+# Layer 1's literal-substring matching was brittle against ordinary shell
+# equivalence: quoting, flag reordering, path-qualified binaries, extra
+# whitespace. Normalize ONCE — drop quote characters (content kept), fold
+# newlines/tabs to spaces, collapse runs, trim — then match the hard-block
+# categories on the normalized form. NORM is for MATCHING only; the user's
+# original COMMAND still runs if allowed.
+_bg_norm() {
+    printf '%s' "$1" | tr -d '\047"' | tr '\n\t' '  ' | sed -E 's/  +/ /g; s/^ //; s/ $//'
+}
+
+# Split a normalized command into segments on top-level ; && || | operators.
+# Emits one segment per line (leading/trailing space trimmed by the caller).
+_bg_segments() {
+    printf '%s' "$1" | sed -E 's/ *(&&|\|\||[;|]) */\n/g'
+}
+
+# Basename of a segment's leading token, with a single leading backslash removed
+# (\rm) and any path prefix stripped (/bin/rm, /usr/bin/rm) → rm.
+_bg_seg_bin() {
+    local first="${1%% *}"
+    first="${first#\\}"
+    printf '%s' "${first##*/}"
+}
+
+# True (0) if a recursive rm in $1 (normalized) targets root, home, or .claude.
+# Recursive = any flag cluster containing r/R, or --recursive. Targets:
+#   /  or /*  (root)      ~  ~/… or $HOME/${HOME} (home)      …*.claude… (settings)
+_bg_rm_danger() {
+    local seg args segs
+    # Here-string (not process substitution): a here-string appends a trailing
+    # newline, so `read` does not drop a single unterminated segment.
+    segs=$(_bg_segments "$1")
+    while IFS= read -r seg; do
+        [[ "$(_bg_seg_bin "$seg")" == "rm" ]] || continue
+        args=" ${seg#* } "
+        printf '%s' "$args" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || continue
+        printf '%s' "$args" | grep -qE ' /( |\*|$)| ~( |/|$)| \$\{?HOME\}?( |/|$)| [^ ]*\.claude( |/|$)' && return 0
+    done <<< "$segs"
+    return 1
+}
+
+NORM=$(_bg_norm "$COMMAND")
+
+if _bg_rm_danger "$NORM"; then
+    echo "Blocked: recursive delete of root, home, or Claude settings directory" >&2; exit 2
+fi
+
 # ── Layer 1: destructive patterns (always hard-blocked) ───────────────────────
 
 case "$COMMAND" in
-    *"rm -rf /"*|*"rm -rf ~"*|*"rm -rf \$HOME"*)
-        echo "Blocked: recursive delete of home or root directory" >&2; exit 2 ;;
     *"chmod -R 777"*)
         echo "Blocked: world-writable recursive chmod" >&2; exit 2 ;;
     *"> /dev/sda"*|*"dd if="*"of=/dev/"*)
         echo "Blocked: raw disk write" >&2; exit 2 ;;
     *"curl"*"| bash"*|*"wget"*"| bash"*|*"curl"*"| sh"*|*"wget"*"| sh"*)
         echo "Blocked: piping remote script to shell" >&2; exit 2 ;;
-    *"rm -rf"*".claude"*)
-        echo "Blocked: recursive delete of Claude settings directory" >&2; exit 2 ;;
     *"git push --force"*" main"*|*"git push --force"*" master"*|*"git push -f "*" main"*|*"git push -f "*" master"*)
         echo "Blocked: force push to main/master — use --force-with-lease or push to a branch" >&2; exit 2 ;;
     *"> ~/.claude/settings.json"*|*">\$HOME/.claude/settings.json"*|*"> /Users/"*"/.claude/settings.json"*)
