@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+# borg-usage-watch — host poller: sample `claude -p "/usage"` and log observations.
+#
+# Managed by launchd (phase 1: OBSERVE-ONLY — no checkpointing, no dispatch veto, no tmux
+# writes of any kind). Each invocation does ONE sample then exits.
+#
+#   --once    Single sample then exit (default; same as no flag — explicit for clarity).
+#   --debug   Log to stderr in addition to file.
+#
+# Samples land at $BORG_USAGE_SAMPLES (default ~/.local/state/borg/usage-samples.jsonl).
+# Log lives at $BORG_USAGE_LOG (default ~/.local/state/borg/usage-watch.log).
+
+set -euo pipefail
+
+# Self-heal env FIRST — claude -p "/usage" prints nothing and exits 0 when USER is unset.
+USER="${USER:-$(id -un)}"
+export USER
+HOME="${HOME:-$(eval echo "~$USER")}"
+export HOME
+
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+BORG_USAGE_CHECKPOINT_PCT="${BORG_USAGE_CHECKPOINT_PCT:-85}"
+BORG_USAGE_HALT_PCT="${BORG_USAGE_HALT_PCT:-92}"
+
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+SAMPLES="${BORG_USAGE_SAMPLES:-$STATE_DIR/usage-samples.jsonl}"
+LOG="${BORG_USAGE_LOG:-$STATE_DIR/usage-watch.log}"
+
+CLAUDE_BIN="${BORG_USAGE_CLAUDE_BIN:-claude}"
+
+DEBUG=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --once)  shift ;;
+        --debug) DEBUG=1; shift ;;
+        *) echo "usage: borg-usage-watch [--once] [--debug]" >&2; exit 2 ;;
+    esac
+done
+
+mkdir -p "$STATE_DIR"
+
+log() {
+    local line="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
+    echo "$line" >> "$LOG"
+    (( DEBUG )) && echo "$line" >&2
+    return 0
+}
+
+# Count tmux panes running Claude Code.
+#
+# A native-install Claude pane reports pane_current_command as its VERSION STRING ("2.1.205"),
+# not "claude" — the binary lives at ~/.local/share/claude/versions/<version> and argv[0] is the
+# version. Matching only /^claude$/ silently counts zero on every real machine, which would make
+# this poller log "idle" forever and collect nothing. Keep the version alternative.
+# (Older npm-style installs do exec a binary named `claude`, so both forms must match.)
+#
+# Overridable for tests via BORG_USAGE_PANE_CMD, which must print one line per pane.
+_claude_pane_count() {
+    local lister="tmux list-panes -a -F '#{pane_current_command}'"
+    if [[ -n "${BORG_USAGE_PANE_CMD:-}" ]]; then
+        lister="$BORG_USAGE_PANE_CMD"
+    fi
+    eval "$lister" 2>/dev/null | grep -cE '^(claude|[0-9]+\.[0-9]+\.[0-9]+)$' || true
+}
+
+# A single row is far below PIPE_BUF, so a plain O(1) append is already atomic. Do not
+# "improve" this into a tmp+rename: that rewrites the whole file on every poll.
+_append_sample() {
+    printf '%s\n' "$1" >> "$SAMPLES"
+}
+
+pane_count=$(_claude_pane_count)
+if [[ -z "$pane_count" || "$pane_count" -eq 0 ]]; then
+    log "debug: no claude panes running — skipping poll"
+    exit 0
+fi
+
+output=$("$CLAUDE_BIN" -p "/usage" 2>/dev/null) || output=""
+
+session_line=$(echo "$output" | grep -oE 'Current session: [0-9]+% used · resets [^(]+' | head -1) || session_line=""
+session_pct=$(echo "$session_line" | sed -E 's/^Current session: ([0-9]+)% used · resets .+$/\1/') || session_pct=""
+if [[ "$session_pct" == "$session_line" ]]; then session_pct=""; fi
+resets_at=$(echo "$session_line" | sed -E 's/^Current session: [0-9]+% used · resets (.+)$/\1/' | sed -E 's/ +$//') || resets_at=""
+if [[ "$resets_at" == "$session_line" ]]; then resets_at=""; fi
+week_line=$(echo "$output" | grep -oE 'Current week \(all models\): [0-9]+% used' | head -1) || week_line=""
+week_pct=$(echo "$week_line" | sed -E 's/^Current week \(all models\): ([0-9]+)% used$/\1/') || week_pct=""
+if [[ "$week_pct" == "$week_line" ]]; then week_pct=""; fi
+
+if [[ -z "$session_pct" ]] || ! [[ "$session_pct" =~ ^[0-9]+$ ]] || [[ "$session_pct" -gt 100 ]]; then
+    log "WARNING: could not parse session_pct from /usage output — state UNKNOWN, no sample written"
+    exit 0
+fi
+
+if [[ -z "$week_pct" ]] || ! [[ "$week_pct" =~ ^[0-9]+$ ]]; then
+    week_pct="null"
+    week_pct_arg=(--argjson week_pct null)
+else
+    week_pct_arg=(--argjson week_pct "$week_pct")
+fi
+
+ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+row=$(jq -c -n \
+    --arg ts "$ts" \
+    --argjson session_pct "$session_pct" \
+    "${week_pct_arg[@]}" \
+    --arg resets_at "$resets_at" \
+    '{ts:$ts, session_pct:$session_pct, week_pct:$week_pct, resets_at:$resets_at}')
+
+_append_sample "$row"
+log "sample: session_pct=$session_pct week_pct=$week_pct resets_at=$resets_at"
+
+if (( session_pct >= BORG_USAGE_HALT_PCT )); then
+    log "WARNING: session_pct=$session_pct >= halt threshold $BORG_USAGE_HALT_PCT (observe-only — no action taken)"
+elif (( session_pct >= BORG_USAGE_CHECKPOINT_PCT )); then
+    log "WARNING: session_pct=$session_pct >= checkpoint threshold $BORG_USAGE_CHECKPOINT_PCT (observe-only — no action taken)"
+fi
+
+exit 0
