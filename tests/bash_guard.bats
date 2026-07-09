@@ -314,6 +314,141 @@ _assert_blocked() {
     _assert_blocked
 }
 
+# ─── Layer 1.5: .borg-project pre-approval must be anchored (audit finding A1) ─
+#
+# The guard used to pre-approve ANY command containing the substring ".borg-project".
+# Pre-approval emits permissionDecision=allow and exits immediately, so it skips the read-only
+# classifier and the normal allowlist entirely. Appending `# .borg-project` as a comment to an
+# arbitrary write turned the guard off for that command.
+#
+# Only the canonical borg-link marker walk (skills/borg-link/SKILL.md) may be pre-approved.
+# Anything else must fall through to normal classification. Falling through is safe: an
+# unrecognized walk merely prompts, rather than being waved past every check.
+
+# The exact command borg-link tells Claude to run. Kept byte-for-byte in sync with SKILL.md.
+_marker_walk() {
+    cat <<'WALK'
+dir="$PWD"; while [[ "$dir" != "/" ]]; do
+        [[ -f "$dir/.borg-project" ]] && { echo "WORKSPACE=$dir"; echo "PROJECT=$(cat "$dir/.borg-project")"; break; }
+        dir=$(dirname "$dir")
+      done
+WALK
+}
+
+@test "A1: the canonical borg-link marker walk is still pre-approved" {
+    _run_guard "$(_marker_walk)"
+    _assert_approved
+}
+
+@test "A1: a trailing '# .borg-project' comment does not pre-approve a file write" {
+    _run_guard "touch /tmp/borg-guard-poc # .borg-project"
+    _assert_fallthrough
+}
+
+@test "A1: a trailing '# .borg-project' comment does not pre-approve a move" {
+    _run_guard "mv /tmp/a /tmp/b # .borg-project"
+    _assert_fallthrough
+}
+
+@test "A1: a trailing '# .borg-project' comment does not pre-approve a disk write" {
+    _run_guard "dd if=/dev/zero of=/tmp/fill bs=1m # .borg-project"
+    _assert_fallthrough
+}
+
+@test "A1: .borg-project inside a quoted string does not pre-approve a write" {
+    _run_guard "echo '.borg-project' > /tmp/evil"
+    _assert_fallthrough
+}
+
+@test "A1: a marker-walk prologue with an injected body is not pre-approved" {
+    _run_guard 'dir="$PWD"; while [[ "$dir" != "/" ]]; do touch /tmp/pwned; done'
+    _assert_fallthrough
+}
+
+@test "A1: reading a .borg-project file still classifies read-only on its own merits" {
+    _run_guard "cat /Users/noah/dev/ingle/.borg-project"
+    _assert_approved
+}
+
+# ─── Layer 1.5: for-loop prologue pre-approval removed (audit finding A2) ──────
+#
+# The guard used to pre-approve any command starting `for f in *.borg/checkpoints/*` or
+# `for f in */docs/plans/*`. Pre-approval covered the ENTIRE loop, so the body could be any
+# command at all — the `for` prologue was the whole ticket. No skill actually emits such a Bash
+# loop (borg-link's scans run inside the zsh CLI, not as Bash tool calls), so the branch is
+# removed outright: these now fall through to the classifier, which reads the body on its merits.
+
+@test "A2: a checkpoints for-loop with a destructive body is not pre-approved" {
+    _run_guard 'for f in /x/.borg/checkpoints/*; do rm -f "$f"; done'
+    _assert_fallthrough
+}
+
+@test "A2: a docs/plans for-loop with a write body is not pre-approved" {
+    _run_guard 'for f in /x/docs/plans/*; do echo pwned > "$f"; done'
+    _assert_fallthrough
+}
+
+@test "A2: even a read-only checkpoints for-loop now falls through (prompts, does not bypass)" {
+    # The classifier cannot parse for-loops — that gap is exactly why the prologue was
+    # pre-approved. With the branch removed, a read-only loop falls through and prompts. That is
+    # the accepted cost of closing A2: a prompt on a rare read-only loop, versus a blanket bypass.
+    _run_guard 'for f in /x/.borg/checkpoints/*; do cat "$f"; done'
+    _assert_fallthrough
+}
+
+# ─── Layer 3: backtick command substitution (audit finding A3) ────────────────
+#
+# The classifier resolved `$(...)` substitutions and classified their inner command, but never
+# looked at backtick `...` substitutions. And _strip_quotes deletes whole double-quoted spans, so
+# a backtick inside double quotes vanished entirely. Either way the outer binary (echo) read as
+# read-only and the whole command was pre-approved while the backtick body ran unchecked.
+
+@test "A3: backtick substitution with a delete body is not pre-approved" {
+    _run_guard 'echo `rm /tmp/x`'
+    _assert_fallthrough
+}
+
+@test "A3: backtick substitution with a move body is not pre-approved" {
+    _run_guard 'echo `mv /tmp/a /tmp/b`'
+    _assert_fallthrough
+}
+
+@test "A3: a backtick inside double quotes is not pre-approved" {
+    _run_guard 'echo "`rm /tmp/x`"'
+    _assert_fallthrough
+}
+
+@test "A3: a backtick wrapping a read-only command stays pre-approved" {
+    _run_guard 'echo `date`'
+    _assert_approved
+}
+
+# ─── Layer 3: quoted find destructive flag (audit finding A4) ──────────────────
+#
+# _strip_quotes removes quoted spans before the find destructive-flag check runs, so quoting the
+# flag itself — find . "-exec" ... or find . '-delete' — deleted the token the check looks for,
+# and the find classified read-only. The check must see the flag through the quotes.
+
+@test "A4: a quoted -exec flag is not pre-approved" {
+    _run_guard 'find . "-exec" rm {} ;'
+    _assert_fallthrough
+}
+
+@test "A4: a quoted -delete flag is not pre-approved" {
+    _run_guard "find . '-delete'"
+    _assert_fallthrough
+}
+
+@test "A4: an unquoted -exec is still not pre-approved (regression guard)" {
+    _run_guard 'find . -exec rm {} ;'
+    _assert_fallthrough
+}
+
+@test "A4: find with no destructive flag and a quoted glob stays pre-approved" {
+    _run_guard 'find . -name "*.md"'
+    _assert_approved
+}
+
 # ─── Empty / non-Bash input ───────────────────────────────────────────────────
 
 @test "exits 0 on empty stdin" {
