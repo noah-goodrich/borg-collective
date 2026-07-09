@@ -18,7 +18,10 @@ export USER
 HOME="${HOME:-$(eval echo "~$USER")}"
 export HOME
 
-export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+# $HOME/.local/bin is where Claude Code's native installer puts `claude`. launchd hands jobs a
+# minimal PATH that omits it, so leaving it out makes the poller permanently blind under launchd
+# while still passing every manual run from a login shell.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 BORG_USAGE_CHECKPOINT_PCT="${BORG_USAGE_CHECKPOINT_PCT:-85}"
 BORG_USAGE_HALT_PCT="${BORG_USAGE_HALT_PCT:-92}"
@@ -74,6 +77,14 @@ pane_count=$(_claude_pane_count)
 if [[ -z "$pane_count" || "$pane_count" -eq 0 ]]; then
     log "debug: no claude panes running — skipping poll"
     exit 0
+fi
+
+# An unresolvable binary is a permanent misconfiguration; an unparseable output is a transient
+# format drift. Collapsing both into output="" reports the first as the second and still exits 0,
+# so launchd reports the job healthy while it samples nothing. Fail loudly and distinctly instead.
+if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
+    log "ERROR: claude binary '$CLAUDE_BIN' not found on PATH ($PATH) — poller is blind, not idle"
+    exit 1
 fi
 
 output=$("$CLAUDE_BIN" -p "/usage" 2>/dev/null) || output=""

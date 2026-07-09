@@ -48,6 +48,27 @@ _write_mock_claude() {
     [ ! -f "$BORG_USAGE_SAMPLES" ]
     grep -q "WARNING" "$BORG_USAGE_LOG"
     ! grep -q '"session_pct":0' "$BORG_USAGE_LOG"
+    # An empty-output parse failure is transient; it must NOT be reported as the permanent
+    # misconfiguration that a missing binary is.
+    ! grep -q "ERROR" "$BORG_USAGE_LOG"
+}
+
+# ─── fail-loud: unresolvable binary is a misconfiguration, not a parse failure ───
+#
+# Regression: the launchd plist's minimal PATH omitted $HOME/.local/bin, where the native
+# installer puts `claude`. The script masked the missing binary as output="" and exited 0, so
+# `launchctl list` showed the job healthy while it sampled nothing for every poll.
+
+@test "fail-loud: claude binary not on PATH -> nonzero exit, ERROR logged, no sample row" {
+    export BORG_USAGE_CLAUDE_BIN="definitely-not-a-real-binary-$$"
+    run "$SCRIPT" --once
+    [ "$status" -ne 0 ]
+    [ ! -f "$BORG_USAGE_SAMPLES" ]
+    grep -q "ERROR:.*not found on PATH" "$BORG_USAGE_LOG"
+}
+
+@test "PATH includes \$HOME/.local/bin so launchd can resolve the native claude install" {
+    grep -q 'PATH="\$HOME/.local/bin:' "$SCRIPT"
 }
 
 # ─── fail-closed: garbage / non-numeric ──────────────────────────────────────
