@@ -314,6 +314,62 @@ _assert_blocked() {
     _assert_blocked
 }
 
+# ─── Layer 1.5: .borg-project pre-approval must be anchored (audit finding A1) ─
+#
+# The guard used to pre-approve ANY command containing the substring ".borg-project".
+# Pre-approval emits permissionDecision=allow and exits immediately, so it skips the read-only
+# classifier and the normal allowlist entirely. Appending `# .borg-project` as a comment to an
+# arbitrary write turned the guard off for that command.
+#
+# Only the canonical borg-link marker walk (skills/borg-link/SKILL.md) may be pre-approved.
+# Anything else must fall through to normal classification. Falling through is safe: an
+# unrecognized walk merely prompts, rather than being waved past every check.
+
+# The exact command borg-link tells Claude to run. Kept byte-for-byte in sync with SKILL.md.
+_marker_walk() {
+    cat <<'WALK'
+dir="$PWD"; while [[ "$dir" != "/" ]]; do
+        [[ -f "$dir/.borg-project" ]] && { echo "WORKSPACE=$dir"; echo "PROJECT=$(cat "$dir/.borg-project")"; break; }
+        dir=$(dirname "$dir")
+      done
+WALK
+}
+
+@test "A1: the canonical borg-link marker walk is still pre-approved" {
+    _run_guard "$(_marker_walk)"
+    _assert_approved
+}
+
+@test "A1: a trailing '# .borg-project' comment does not pre-approve a file write" {
+    _run_guard "touch /tmp/borg-guard-poc # .borg-project"
+    _assert_fallthrough
+}
+
+@test "A1: a trailing '# .borg-project' comment does not pre-approve a move" {
+    _run_guard "mv /tmp/a /tmp/b # .borg-project"
+    _assert_fallthrough
+}
+
+@test "A1: a trailing '# .borg-project' comment does not pre-approve a disk write" {
+    _run_guard "dd if=/dev/zero of=/tmp/fill bs=1m # .borg-project"
+    _assert_fallthrough
+}
+
+@test "A1: .borg-project inside a quoted string does not pre-approve a write" {
+    _run_guard "echo '.borg-project' > /tmp/evil"
+    _assert_fallthrough
+}
+
+@test "A1: a marker-walk prologue with an injected body is not pre-approved" {
+    _run_guard 'dir="$PWD"; while [[ "$dir" != "/" ]]; do touch /tmp/pwned; done'
+    _assert_fallthrough
+}
+
+@test "A1: reading a .borg-project file still classifies read-only on its own merits" {
+    _run_guard "cat /Users/noah/dev/ingle/.borg-project"
+    _assert_approved
+}
+
 # ─── Empty / non-Bash input ───────────────────────────────────────────────────
 
 @test "exits 0 on empty stdin" {

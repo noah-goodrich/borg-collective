@@ -62,11 +62,35 @@ _preapprove() {
 # ── Layer 1.5: known-safe borg skill patterns ─────────────────────────────────
 # These commands use shell constructs (while loops, variable assignments) that
 # the RO classifier can't parse, but are known read-only by inspection.
+#
+# Pre-approval is the strongest decision this hook can make: it emits
+# permissionDecision=allow and exits, skipping the classifier AND the normal
+# allowlist. So it must match a SPECIFIC command, never a substring.
+#
+# This branch previously matched *".borg-project"* — any command containing that
+# substring anywhere, including in a trailing comment. `touch /etc/x # .borg-project`
+# was waved past every remaining check. Anchor on the exact canonical command instead.
+
+# Collapse newlines/tabs/space-runs to single spaces and trim, so the multi-line
+# heredoc shape in skills/borg-link/SKILL.md compares equal to a one-line paste.
+# Also normalizes an optional `;` before the closing `done`.
+_canon_ws() {
+    printf '%s' "$1" | tr '\n\t' '  ' | sed -E 's/  +/ /g; s/^ //; s/ $//; s/; done$/ done/'
+}
+
+# The one command skills/borg-link/SKILL.md tells Claude to run. Keep byte-for-byte
+# in sync with that file (and with tests/bash_guard.bats `_marker_walk`). Single-quoted:
+# every $ here is literal — this is a pattern to compare against, never to evaluate.
+# shellcheck disable=SC2016
+_BORG_MARKER_WALK='dir="$PWD"; while [[ "$dir" != "/" ]]; do [[ -f "$dir/.borg-project" ]] && { echo "WORKSPACE=$dir"; echo "PROJECT=$(cat "$dir/.borg-project")"; break; } dir=$(dirname "$dir") done'
+
+# A walk that does not match exactly is not pre-approved — it falls through to the
+# classifier and, at worst, prompts. Fail closed: a prompt is cheap, a bypass is not.
+if [[ "$(_canon_ws "$COMMAND")" == "$_BORG_MARKER_WALK" ]]; then
+    _preapprove "borg marker walk — read-only directory scan"
+fi
+
 case "$COMMAND" in
-    *".borg-project"*)
-        # Marker walk — reads up the directory tree looking for a .borg-project
-        # marker file; emits WORKSPACE= and PROJECT= via echo. No writes.
-        _preapprove "borg marker walk — read-only directory scan" ;;
     "for f in "*.borg/checkpoints/*|"for f in "*/docs/plans/*)
         # borg-link plan/checkpoint scan — read-only for loop over markdown files
         _preapprove "borg-link read-only markdown scan (for loop)" ;;
