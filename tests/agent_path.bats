@@ -41,6 +41,32 @@ BIN_DIR="$BORG_HOME/bin"
     }
 }
 
+# `(( DEBUG ))` evaluates FALSE when DEBUG=0. As the last command in log(), that makes log()
+# return 1, and under `set -e` the agent dies the first time it logs. borg-cortex-watch shipped
+# exactly that and exited nonzero on its first orphan sweep. Any log() that tests DEBUG must end
+# with an explicit `return 0`.
+@test "log() never ends on a bare (( DEBUG )) under set -e" {
+    local checked=0 offenders=""
+
+    for script in "$BIN_DIR"/*; do
+        [ -f "$script" ] || continue
+        grep -q 'set -[eu]*e' "$script" || continue
+        grep -q '(( DEBUG ))' "$script" || continue
+
+        checked=$((checked + 1))
+        # An explicit `return 0` must follow `(( DEBUG ))` before the function closes. Allow
+        # intervening comment lines explaining why it is there.
+        grep -A4 '(( DEBUG ))' "$script" | grep -q '^[[:space:]]*return 0' \
+            || offenders="$offenders ${script##*/}"
+    done
+
+    [ "$checked" -ge 1 ]
+    [ -z "$offenders" ] || {
+        echo "log() ending on a bare (( DEBUG )) under set -e:$offenders"
+        false
+    }
+}
+
 @test "the three launchd-run agents all self-heal PATH" {
     for agent in borg-notifyd borg-cortex-watch borg-usage-watch; do
         run grep -m1 -E '^export PATH=.*\$HOME/\.local/bin' "$BIN_DIR/$agent"

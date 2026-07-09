@@ -2822,9 +2822,14 @@ cmd_doctor() {
     local la_dir="$HOME/Library/LaunchAgents"
 
     # name  label-suffix  artifact-path (or "" for n/a)
+    #
+    # Only list an artifact for agents that write one on EVERY interval. notifyd and cortex-wake
+    # are event-driven: their logs are written when something happens, so an old mtime means "a
+    # quiet hour", not "broken". Checking freshness there reports a healthy agent as stale, and a
+    # health check that cries wolf gets ignored.
     local -a agents=(
         "notifyd|com.stillpoint-labs.borg.notifyd|"
-        "cortex-wake|com.stillpoint-labs.borg.cortex-wake|$data_dir/cortex-wake.stdout.log"
+        "cortex-wake|com.stillpoint-labs.borg.cortex-wake|"
         "usage-watch|com.stillpoint-labs.borg.usage-watch|$state_dir/usage-samples.jsonl"
         "reap|com.stillpoint-labs.borg.reap|$data_dir/reap.stdout.log"
     )
@@ -2853,9 +2858,22 @@ cmd_doctor() {
             hint="not registered — re-run ./install.sh"
         else
             reg="yes"
+            local pid=""
+            pid=$(echo "$reg_line" | awk '{print $1}')
             exit_status=$(echo "$reg_line" | awk '{print $2}')
             [[ -z "$exit_status" ]] && exit_status="?"
-            if [[ "$exit_status" != "0" && "$exit_status" != "-" ]]; then
+
+            if [[ "$pid" == <-> ]]; then
+                # A live PID means the agent is running right now. `launchctl`'s second column is
+                # then the PREVIOUS instance's exit status — for a daemon that was restarted, that
+                # is the signal we sent it (e.g. -15 = SIGTERM). Reporting FAIL there is a false
+                # alarm about the corpse of an instance we killed ourselves.
+                exit_status="run"
+            elif [[ "$exit_status" == -* ]]; then
+                # Negative = terminated by a signal, not a failed exit. Worth noticing, not a FAIL.
+                agent_warn=1
+                hint="terminated by signal (${exit_status#-}) — expected after a kickstart; check logs in $data_dir if it recurs"
+            elif [[ "$exit_status" != "0" && "$exit_status" != "-" ]]; then
                 agent_ok=0
                 hint="last exit status $exit_status — check logs in $data_dir, then re-run ./install.sh"
             fi

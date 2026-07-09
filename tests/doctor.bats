@@ -36,11 +36,15 @@ setup() {
     touch "$CORTEX_LOG" "$REAP_LOG"
     echo '{"ts":"now"}' > "$USAGE_SAMPLES"
 
+    # Real `launchctl list` prints "-" in the PID column for an agent that is not currently
+    # running, and a numeric PID only while it is. Interval-driven agents are almost always "-".
+    # Fixtures with fake PIDs made every agent look permanently running, which silently disabled
+    # the exit-status check these tests exist to exercise.
     _write_launchctl_list "\
-1 0 $NOTIFYD_LABEL
-2 0 $CORTEX_LABEL
-3 0 $USAGE_LABEL
-4 0 $REAP_LABEL"
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
 }
 
 # Args: <label> <start-interval-or-empty>
@@ -90,10 +94,10 @@ EOF
 
 @test "one agent with nonzero last exit -> doctor exits nonzero, that agent FAILs" {
     _write_launchctl_list "\
-1 0 $NOTIFYD_LABEL
-2 1 $CORTEX_LABEL
-3 0 $USAGE_LABEL
-4 0 $REAP_LABEL"
+- 0 $NOTIFYD_LABEL
+- 1 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -ne 0 ]
     [[ "$output" == *"cortex-wake"*"FAIL"* ]]
@@ -103,21 +107,53 @@ EOF
 
 @test "one agent missing from launchctl list -> FAIL" {
     _write_launchctl_list "\
-1 0 $NOTIFYD_LABEL
-3 0 $USAGE_LABEL
-4 0 $REAP_LABEL"
+- 0 $NOTIFYD_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -ne 0 ]
     [[ "$output" == *"cortex-wake"*"FAIL"* ]]
 }
 
+# ─── a running daemon is healthy, whatever the previous instance's exit was ────
+#
+# notifyd is a long-lived fswatch daemon. `launchctl kickstart -k` restarts it, and the second
+# column then reports the SIGTERM we sent the old instance (-15). Reporting FAIL there is a false
+# alarm about a corpse we created ourselves — and a health check that cries wolf gets ignored.
+
+@test "a live PID means OK even when the previous instance was signalled" {
+    _write_launchctl_list "\
+74574 -15 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"notifyd"*"run"*"OK"* ]]
+}
+
+@test "a signalled exit with no live PID is WARN, not FAIL" {
+    _write_launchctl_list "\
+- -15 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"notifyd"*"WARN"* ]]
+}
+
 # ─── stale output artifact ─────────────────────────────────────────────────────
+#
+# usage-watch is the only agent contractually required to write on every interval, so it is the
+# only one where an old mtime proves breakage. notifyd and cortex-wake are event-driven: a quiet
+# hour is not a fault, which is why they carry no artifact.
 
 @test "stale output artifact -> WARN (not silently OK)" {
-    # 3x the 30s interval is 90s; back-date the cortex-wake log well past that.
-    touch -t "202001010000" "$CORTEX_LOG"
+    # 3x the 120s interval is 360s; back-date the samples file well past that.
+    touch -t "202001010000" "$USAGE_SAMPLES"
     run "$BORG_CMD" doctor
-    [[ "$output" == *"cortex-wake"*"WARN"* ]]
+    [[ "$output" == *"usage-watch"*"WARN"* ]]
 }
 
 # ─── no StartInterval -> freshness n/a, does not FAIL ─────────────────────────
