@@ -163,6 +163,35 @@ fi
 launchctl bootstrap "gui/$UID" "$CORTEX_PLIST_DEST"
 info "  launchd agent bootstrapped."
 
+# ── 3b2. Install borg-usage-watch daemon + LaunchAgent ───────────────────────
+
+info "Installing borg-usage-watch..."
+chmod +x "$BORG_HOME/bin/borg-usage-watch"
+ln -sf "$BORG_HOME/bin/borg-usage-watch" "$BIN_DIR/borg-usage-watch"
+info "  borg-usage-watch -> $BORG_HOME/bin/borg-usage-watch"
+
+USAGE_PLIST_NAME="com.stillpoint-labs.borg.usage-watch.plist"
+USAGE_PLIST_SRC="$BORG_HOME/launchd/$USAGE_PLIST_NAME"
+USAGE_PLIST_DEST="$HOME/Library/LaunchAgents/$USAGE_PLIST_NAME"
+USAGE_WATCH_BIN="$BIN_DIR/borg-usage-watch"
+USAGE_PATH_VALUE="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+sed \
+    -e "s|{{USAGE_WATCH_BIN}}|$USAGE_WATCH_BIN|g" \
+    -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+    -e "s|{{USER}}|$USER|g" \
+    -e "s|{{HOME}}|$HOME|g" \
+    -e "s|{{PATH_VALUE}}|$USAGE_PATH_VALUE|g" \
+    "$USAGE_PLIST_SRC" > "$USAGE_PLIST_DEST"
+info "  plist -> $USAGE_PLIST_DEST"
+
+if launchctl list "com.stillpoint-labs.borg.usage-watch" &>/dev/null 2>&1; then
+    info "  reloading launchd agent..."
+    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
+fi
+launchctl bootstrap "gui/$UID" "$USAGE_PLIST_DEST"
+info "  launchd agent bootstrapped."
+
 # ── 3c. Install borg-reap daemon + LaunchAgent ───────────────────────────────
 
 info "Installing borg-reap (hourly worktree reaper)..."

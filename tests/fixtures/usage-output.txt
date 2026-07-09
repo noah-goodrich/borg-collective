@@ -1,0 +1,24 @@
+You are currently using your subscription to power your Claude Code usage
+
+Current session: 21% used · resets Jul 9 at 1:20am (America/Denver)
+Current week (all models): 39% used · resets Jul 14 at 7am (America/Denver)
+Current week (Fable): 26% used · resets Jul 14 at 7am (America/Denver)
+
+What's contributing to your limits usage?
+Approximate, based on local sessions on this machine — does not include other devices or claude.ai. Behaviors are independent characteristics, not a breakdown.
+
+Last 24h · 1616 requests · 9 sessions
+  98% of your usage came from subagent-heavy sessions
+  72% of your usage was at >150k context
+  Top subagents: borg-collective:borg-nanoprobe 16%, workflow-subagent 10%, borg-nanoprobe 1%
+  Top plugins: borg-collective 16%
+  Top MCP servers: claude.ai Supabase 3%
+
+Last 7d · 7655 requests · 16 sessions
+  99% of your usage came from subagent-heavy sessions
+  61% of your usage was at >150k context
+  53% of your usage came from sessions active for 8+ hours
+  Top skills: /borg-link-up 2%, /borg-plan 1%
+  Top subagents: workflow-subagent 22%, borg-nanoprobe 6%, borg-collective:borg-nanoprobe 5%
+  Top plugins: borg-collective 5%, research-tools 1%
+  Top MCP servers: claude.ai Supabase 7%, claude-in-chrome 4%

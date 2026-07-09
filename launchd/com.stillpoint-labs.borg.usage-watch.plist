@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stillpoint-labs.borg.usage-watch</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{USAGE_WATCH_BIN}}</string>
+        <string>--once</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>120</integer>
+    <!-- USER is REQUIRED: `claude -p "/usage"` prints nothing and exits 0 when USER is unset in
+         the environment. launchd hands jobs a minimal env, so without this block the poller is
+         permanently, silently blind. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>USER</key>
+        <string>{{USER}}</string>
+        <key>HOME</key>
+        <string>{{HOME}}</string>
+        <key>PATH</key>
+        <string>{{PATH_VALUE}}</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/usage-watch.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/usage-watch.stderr.log</string>
+</dict>
+</plist>
