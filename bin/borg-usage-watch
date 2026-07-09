@@ -9,6 +9,28 @@
 #
 # Samples land at $BORG_USAGE_SAMPLES (default ~/.local/state/borg/usage-samples.jsonl).
 # Log lives at $BORG_USAGE_LOG (default ~/.local/state/borg/usage-watch.log).
+#
+# ── ROW SCHEMA (self-auditing contract) ──────────────────────────────────────────
+# EVERY poll appends exactly one JSONL row to $BORG_USAGE_SAMPLES. Silence in the samples
+# file has exactly one meaning: the poller did not run at all (e.g. launchd job disabled).
+# All rows have `ts` (ISO8601 UTC) and `status`. `pane_count` (integer) is present on every
+# row.
+#
+#   status:"ok"      session_pct, week_pct, resets_at populated as before.
+#   status:"idle"     pane_count:0, session_pct/week_pct/resets_at:null. No claude panes AND
+#                      no independent claude process detected either.
+#   status:"suspect"  pane_count:0 but the independent process cross-check (proc_count > 0)
+#                      disagrees — likely the pane-matching regex is blind to a real session.
+#                      session_pct/week_pct/resets_at:null, same as idle otherwise.
+#   status:"error"    session_pct/week_pct/resets_at:null, plus a `reason` field:
+#                        "binary_not_found" — claude not resolvable on PATH (exit 1, permanent
+#                                             misconfiguration).
+#                        "claude_failed"    — claude ran but exited nonzero (exit 0, transient).
+#                        "parse_failed"     — claude exited 0 but output didn't parse (exit 0).
+#
+# Rows written BEFORE this change have no `status` field at all — any consumer must treat a
+# missing `status` key as `status:"ok"` (the old, only, format). The existing samples file is
+# NOT rewritten or migrated.
 
 set -euo pipefail
 
@@ -67,15 +89,52 @@ _claude_pane_count() {
     eval "$lister" 2>/dev/null | grep -cE '^(claude|[0-9]+\.[0-9]+\.[0-9]+)$' || true
 }
 
+# Independent, second detector of "is claude running" — the pane gate above cannot check itself
+# (the version-named-pane bug was exactly the gate being wrong while reporting healthy). This
+# looks for the actual OS process the native installer execs, entirely independent of tmux.
+#
+# Overridable for tests via BORG_USAGE_PROC_CMD, which must print one line per matching process.
+_claude_proc_count() {
+    local prober="pgrep -f '/\.local/share/claude/versions/'"
+    if [[ -n "${BORG_USAGE_PROC_CMD:-}" ]]; then
+        prober="$BORG_USAGE_PROC_CMD"
+    fi
+    eval "$prober" 2>/dev/null | grep -c . || true
+}
+
 # A single row is far below PIPE_BUF, so a plain O(1) append is already atomic. Do not
 # "improve" this into a tmp+rename: that rewrites the whole file on every poll.
 _append_sample() {
     printf '%s\n' "$1" >> "$SAMPLES"
 }
 
+# Log up to 400 chars of captured claude output (stdout+stderr merged, flattened to one line) so
+# a future blind window is diagnosable after the fact. Never written to the JSONL row itself —
+# log file only.
+_log_output_excerpt() {
+    local excerpt
+    excerpt=$(printf '%s' "$1" | tr '\n' '|' | cut -c1-400)
+    log "output excerpt (first 400 chars): $excerpt"
+}
+
+ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 pane_count=$(_claude_pane_count)
-if [[ -z "$pane_count" || "$pane_count" -eq 0 ]]; then
-    log "debug: no claude panes running — skipping poll"
+[[ -z "$pane_count" ]] && pane_count=0
+
+if [[ "$pane_count" -eq 0 ]]; then
+    proc_count=$(_claude_proc_count)
+    [[ -z "$proc_count" ]] && proc_count=0
+    if [[ "$proc_count" -gt 0 ]]; then
+        log "WARNING: pane_count=0 but proc_count=$proc_count — tmux pane gate disagrees with the independent process check; marking suspect"
+        row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
+            '{ts:$ts, status:"suspect", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
+        _append_sample "$row"
+        exit 0
+    fi
+    log "debug: no claude panes running — skipping poll (idle)"
+    row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
+        '{ts:$ts, status:"idle", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
+    _append_sample "$row"
     exit 0
 fi
 
@@ -84,10 +143,23 @@ fi
 # so launchd reports the job healthy while it samples nothing. Fail loudly and distinctly instead.
 if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
     log "ERROR: claude binary '$CLAUDE_BIN' not found on PATH ($PATH) — poller is blind, not idle"
+    row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
+        '{ts:$ts, status:"error", reason:"binary_not_found", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
+    _append_sample "$row"
     exit 1
 fi
 
-output=$("$CLAUDE_BIN" -p "/usage" 2>/dev/null) || output=""
+claude_exit=0
+output=$("$CLAUDE_BIN" -p "/usage" 2>&1) || claude_exit=$?
+
+if [[ "$claude_exit" -ne 0 ]]; then
+    log "ERROR: claude exited $claude_exit for '/usage' — poller could not sample"
+    _log_output_excerpt "$output"
+    row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
+        '{ts:$ts, status:"error", reason:"claude_failed", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
+    _append_sample "$row"
+    exit 0
+fi
 
 session_line=$(echo "$output" | grep -oE 'Current session: [0-9]+% used · resets [^(]+' | head -1) || session_line=""
 session_pct=$(echo "$session_line" | sed -E 's/^Current session: ([0-9]+)% used · resets .+$/\1/') || session_pct=""
@@ -99,7 +171,11 @@ week_pct=$(echo "$week_line" | sed -E 's/^Current week \(all models\): ([0-9]+)%
 if [[ "$week_pct" == "$week_line" ]]; then week_pct=""; fi
 
 if [[ -z "$session_pct" ]] || ! [[ "$session_pct" =~ ^[0-9]+$ ]] || [[ "$session_pct" -gt 100 ]]; then
-    log "WARNING: could not parse session_pct from /usage output — state UNKNOWN, no sample written"
+    log "WARNING: could not parse session_pct from /usage output — state UNKNOWN"
+    _log_output_excerpt "$output"
+    row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
+        '{ts:$ts, status:"error", reason:"parse_failed", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
+    _append_sample "$row"
     exit 0
 fi
 
@@ -110,14 +186,13 @@ else
     week_pct_arg=(--argjson week_pct "$week_pct")
 fi
 
-ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-
 row=$(jq -c -n \
     --arg ts "$ts" \
+    --argjson pane_count "$pane_count" \
     --argjson session_pct "$session_pct" \
     "${week_pct_arg[@]}" \
     --arg resets_at "$resets_at" \
-    '{ts:$ts, session_pct:$session_pct, week_pct:$week_pct, resets_at:$resets_at}')
+    '{ts:$ts, status:"ok", pane_count:$pane_count, session_pct:$session_pct, week_pct:$week_pct, resets_at:$resets_at}')
 
 _append_sample "$row"
 log "sample: session_pct=$session_pct week_pct=$week_pct resets_at=$resets_at"
