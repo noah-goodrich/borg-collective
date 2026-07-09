@@ -1,0 +1,5 @@
+zsh
+nvim
+2.1.205
+bash
+zsh
