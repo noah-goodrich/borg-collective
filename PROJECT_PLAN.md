@@ -1,46 +1,61 @@
-# Project Plan: Usage-Guardian — Detection Feasibility Spike
+# Project Plan: Usage Guardian — Phase 1 (Observe-Only)
 *Established: 2026-07-08*
 
 ## Objective
-Determine whether Claude Code exposes a trustworthy, low-cost, real-time signal of remaining usage in
-the current rate-limit window — enough to checkpoint drones *before* the cap — and deliver a go/no-go
-recommendation. If go: specify the detection approach and threshold. If no-go: document why, and the
-reactive (limit-event) fallback becomes the design. Resume engine is pre-locked: local launchd
-(cortex-wake pattern).
+Ship a launchd poller (`bin/borg-usage-watch`) that samples Claude Code's rate-limit headroom via
+`claude -p "/usage"` and records `(timestamp, session_pct, week_pct, resets_at)` to a structured log — taking **no
+action**. This produces the burn-rate dataset needed to defensibly set the checkpoint threshold, and proves the
+detection path survives launchd's stripped environment, before any drone-checkpointing behaviour is built.
 
 ## Acceptance Criteria
-- [ ] `/usage` parseability probed — is there any non-interactive/programmatic path to "% used" +
-      "resets at"?
-  - Verify: findings-doc section documents the attempt + a working PoC command, or a documented
-    dead-end with the reason.
-- [ ] token-spend live-estimate evaluated against a known cap; accuracy / error bounds characterized.
-  - Verify: doc section shows the estimate math and identifies where it breaks down.
-- [ ] Filesystem / API / env sweep for undocumented usage or limit sources completed.
-  - Verify: doc enumerates exactly what was checked (paths, endpoints, env vars) and each result.
-- [ ] Prior art documented — the `borg-resume` skill and the `cortex-wake` launchd pattern, and how
-      each informs the resume half of the eventual feature.
-  - Verify: doc section references both with file paths and the reuse takeaway.
-- [ ] Go/no-go recommendation with a chosen detection strategy (predictive vs reactive) and, if go,
-      the concrete signal + threshold.
-  - Verify: an explicit `VERDICT: GO` / `VERDICT: NO-GO` line in the doc.
-- [ ] (nothing-breaks) No changes to shipped borg skills or hooks — spike is read/doc only.
-  - Verify: `git status` in `~/dev/borg-collective` shows only the new findings doc (+ this plan).
+
+- [ ] `bin/borg-usage-watch --once` polls `/usage`, parses `session_pct` / `week_pct` / `resets_at`, and appends one
+      JSON sample per poll to `~/.local/state/borg/usage-samples.jsonl`.
+  - Verify: `bin/borg-usage-watch --once --debug` then `tail -1 ~/.local/state/borg/usage-samples.jsonl | jq .` shows
+    numeric `session_pct` + non-empty `resets_at`.
+- [ ] **Fail-closed parse.** Empty, non-numeric, or absent `/usage` output yields state `UNKNOWN`: no sample row is
+      written, a warning is logged, and the exit code is 0.
+  - Verify: `bats tests/usage_watch.bats` — a mock `claude` on `PATH` that prints nothing must produce `UNKNOWN`,
+    never `session_pct=0`.
+- [ ] **Format-drift tripwire.** The parse regex is pinned against a captured fixture, so a Claude Code release that
+      reformats the `/usage` line fails the suite loudly instead of silently disarming the guardian.
+  - Verify: `tests/fixtures/usage-output.txt` exists and `bats tests/usage_watch.bats` asserts the regex against it.
+- [ ] **Idle gate.** When no tmux pane is running a `claude` process, the poll is skipped entirely (no CLI spawn, no
+      `$0` record appended to `token-spend.jsonl`).
+  - Verify: bats test with a stubbed pane-lister returning nothing asserts `claude` is never invoked.
+- [ ] **launchd-safe environment.** `launchd/com.stillpoint-labs.borg.usage-watch.plist` sets `USER`, `HOME`, and
+      `PATH` under `EnvironmentVariables`, and `install.sh` registers the agent via the existing `sed` template +
+      `launchctl bootstrap` pattern.
+  - Verify: `grep -A2 '<key>USER</key>' launchd/com.stillpoint-labs.borg.usage-watch.plist` and
+    `grep USAGE_WATCH_BIN install.sh`. Without `USER`, `/usage` prints nothing and exits 0 — this is the trap the
+    spike found.
+- [ ] **Observe-only.** The guardian takes no action: no `tmux send-keys`, no checkpoint, no dispatch veto.
+  - Verify: `grep -c 'send-keys' bin/borg-usage-watch` returns 0.
+- [ ] (nothing-breaks) The full suite stays green and the new script passes shellcheck.
+  - Verify: `bats tests/*.bats` all pass; `shellcheck bin/borg-usage-watch`.
 
 ## Scope Boundaries
-- NOT building: the guardian hook / launchd job this session (spike only).
-- NOT building: resume automation (engine decided = launchd; deferred to the build directive).
-- NOT building: any change to the claude-plugins publishable subset (nothing to promote yet).
-- If done early: ship the doc + file the build directive — do not start building.
+- NOT building: the 85% checkpoint sweep. Its delivery mechanism (`tmux send-keys` into a *busy* pane) is unproven
+  and probably unreliable — the `borg:8` zombie is the precedent. Phase 2, gated on a delivery spike.
+- NOT building: the `>=92%` dispatch hard-stop. A launchd job cannot veto an in-process `Agent` call; that needs a
+  `PreToolUse` hook reading guardian state. Separate component, separate plan.
+- NOT building: the `token-spend.jsonl` `$0`-record filter, or the `borg-resume` disclaimer correction and its
+  ownership import. Tracked in the build directive; both are independent of this poller.
+- If done early: ship, don't expand. The next thing is a *week of data*, not more code.
 
 ## Ship Definition
-Findings + recommendation doc committed to `~/dev/borg-collective` on branch
-`feat/usage-guardian-detection-spike` → PR opened → CI passes → merged · go/no-go stated in the doc ·
-if GO, a follow-up build directive filed under `docs/plans/directives/`.
+Committed on `feat/usage-guardian-observe` → PR opened → CI passes (bats + shellcheck, ubuntu + macos) → merged.
 
 ## Timeline
-Target: this session (~1-2 hours). Mostly probing + writing; no feature code.
+Target: this session (~1-2 hours). One script, one plist, one `install.sh` block, one bats file. The prior art
+(`bin/borg-cortex-watch`) supplies the skeleton verbatim.
 
 ## Risks
-- `/usage` may be interactive-only (no scrape without a PTY hack) → predictive path dies, fall to reactive.
-- Self-estimation may be unfalsifiable without Anthropic's exact window math → false-confidence trap.
-- Even a "go" signal could be fragile across Claude Code updates (TUI format drift) → maintenance tax.
+- **The plist is where this dies.** `com.stillpoint-labs.borg.cortex-wake.plist` sets no `EnvironmentVariables` and
+  `borg-cortex-watch:14` hard-resets `PATH`. Cloning that pattern reproduces exactly the silent-blindness bug the
+  spike found. The script must also self-heal (`USER="${USER:-$(id -un)}"`), since a plist is easy to get wrong.
+- **A blind guardian is indistinguishable from a healthy one.** `/usage` exits 0 while printing nothing. Without the
+  `UNKNOWN` state being first-class and logged, a permanently broken poller looks like a quiet, well-behaved one.
+- **Threshold false-confidence.** The 85% figure in the directive rests on a *single* burn-rate observation
+  (~1%/4 min). This phase exists precisely so nobody hard-codes it on that basis. Do not tune until the log has a
+  week in it.
