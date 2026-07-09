@@ -2833,7 +2833,7 @@ cmd_doctor() {
         label="${rest%%|*}"
         artifact="${rest#*|}"
 
-        local reg_line reg="MISSING" exit_status="?" fresh="n/a"
+        local reg_line="" reg="MISSING" exit_status="?" fresh="n/a"
         local agent_ok=1 agent_warn=0 hint=""
 
         reg_line=$(echo "$list_output" | grep -F "$label" | head -1) || reg_line=""
@@ -2865,7 +2865,7 @@ cmd_doctor() {
                 agent_warn=1
                 [[ -z "$hint" ]] && hint="no output yet at $artifact"
             else
-                local mtime now age max_age
+                local mtime=0 now=0 age=0 max_age=0
                 mtime=$(stat -f "%m" "$artifact" 2>/dev/null) || mtime=0
                 now=$(date +%s)
                 age=$(( now - mtime ))
@@ -2880,7 +2880,7 @@ cmd_doctor() {
             fi
         fi
 
-        local color status_word
+        local color="" status_word=""
         if (( ! agent_ok )); then
             color="$RED"; status_word="FAIL"; overall_exit=1
         elif (( agent_warn )); then
