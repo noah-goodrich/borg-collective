@@ -2806,6 +2806,114 @@ cmd_watch() {
     done
 }
 
+# Print a file's mtime as a unix timestamp. `stat -f %m` is BSD (macOS); `stat -c %Y` is GNU
+# (Linux, and CI). Return nonzero when neither works so callers can distinguish "cannot tell"
+# from "very old" — collapsing those two is how a stat failure becomes a false staleness report.
+_borg_file_mtime() {
+    local f="$1" m=""
+    m=$(stat -f "%m" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
+    m=$(stat -c "%Y" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
+    return 1
+}
+
+cmd_doctor() {
+    local state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+    local data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
+    local la_dir="$HOME/Library/LaunchAgents"
+
+    # name  label-suffix  artifact-path (or "" for n/a)
+    local -a agents=(
+        "notifyd|com.stillpoint-labs.borg.notifyd|"
+        "cortex-wake|com.stillpoint-labs.borg.cortex-wake|$data_dir/cortex-wake.stdout.log"
+        "usage-watch|com.stillpoint-labs.borg.usage-watch|$state_dir/usage-samples.jsonl"
+        "reap|com.stillpoint-labs.borg.reap|$data_dir/reap.stdout.log"
+    )
+
+    local overall_exit=0
+    local list_output
+    list_output=$(launchctl list 2>/dev/null) || list_output=""
+
+    printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "AGENT" "REG" "EXIT" "FRESH" "STATUS"
+    printf '%0.s─' {1..70}; echo
+
+    local agent_line name label artifact
+    for agent_line in "${agents[@]}"; do
+        name="${agent_line%%|*}"
+        local rest="${agent_line#*|}"
+        label="${rest%%|*}"
+        artifact="${rest#*|}"
+
+        local reg_line="" reg="MISSING" exit_status="?" fresh="n/a"
+        local agent_ok=1 agent_warn=0 hint=""
+
+        reg_line=$(echo "$list_output" | grep -F "$label" | head -1) || reg_line=""
+        if [[ -z "$reg_line" ]]; then
+            reg="MISSING"
+            agent_ok=0
+            hint="not registered — re-run ./install.sh"
+        else
+            reg="yes"
+            exit_status=$(echo "$reg_line" | awk '{print $2}')
+            [[ -z "$exit_status" ]] && exit_status="?"
+            if [[ "$exit_status" != "0" && "$exit_status" != "-" ]]; then
+                agent_ok=0
+                hint="last exit status $exit_status — check logs in $data_dir, then re-run ./install.sh"
+            fi
+        fi
+
+        # Freshness: only evaluated when registered and an artifact path is defined.
+        if [[ "$reg" == "yes" && -n "$artifact" ]]; then
+            local plist="$la_dir/$label.plist"
+            local interval=""
+            if [[ -f "$plist" ]]; then
+                interval=$(grep -A1 'StartInterval' "$plist" | grep -oE '[0-9]+' | head -1) || interval=""
+            fi
+            if [[ -z "$interval" ]]; then
+                fresh="n/a"
+            elif [[ ! -f "$artifact" ]]; then
+                fresh="WARN"
+                agent_warn=1
+                [[ -z "$hint" ]] && hint="no output yet at $artifact"
+            else
+                local mtime="" now=0 age=0 max_age=0
+                mtime=$(_borg_file_mtime "$artifact") || mtime=""
+                if [[ -z "$mtime" ]]; then
+                    # `stat` could not report an mtime. That is ignorance, not staleness — saying
+                    # WARN here would be a confident wrong answer, which is the failure shape this
+                    # command exists to catch.
+                    fresh="n/a"
+                else
+                    now=$(date +%s)
+                    age=$(( now - mtime ))
+                    max_age=$(( interval * 3 ))
+                    if (( age > max_age )); then
+                        fresh="WARN"
+                        agent_warn=1
+                        [[ -z "$hint" ]] && hint="stale output ($artifact) — check logs, re-run ./install.sh"
+                    else
+                        fresh="OK"
+                    fi
+                fi
+            fi
+        fi
+
+        local color="" status_word=""
+        if (( ! agent_ok )); then
+            color="$RED"; status_word="FAIL"; overall_exit=1
+        elif (( agent_warn )); then
+            color="$YELLOW"; status_word="WARN"
+        else
+            color="$GREEN"; status_word="OK"
+        fi
+
+        printf " %-14s %-10s %-8s %-10s ${color}%s${NC}\n" "$name" "$reg" "$exit_status" "$fresh" "$status_word"
+        [[ -n "$hint" ]] && echo -e "   ${DIM}→ $hint${NC}"
+    done
+    echo
+
+    return $overall_exit
+}
+
 cmd_version() {
     local version_file="$BORG_HOME/VERSION"
     if [[ -f "$version_file" ]]; then
@@ -2857,6 +2965,7 @@ cmd_help() {
     watch [interval]    Live-refresh project status + recent nanoprobes (default: 5s)
     reap                Persist idle to stale active/waiting sessions (no live window)
     reap-worktrees [p]  Remove stale borg-managed nanoprobe worktrees (all repos or one)
+    doctor              Verify the 4 launchd agents (registered/exit status/fresh output)
     help                Show this message
 
   ALIASES (backward compat)
@@ -3165,6 +3274,7 @@ case "${1:-help}" in
     watch)          cmd_watch "${@:2}" ;;
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
+    doctor)         cmd_doctor "${@:2}" ;;
     vinculum|vinc)  cmd_vinculum "${@:2}" ;;
     # Legacy aliases → consolidated command
     ls)       cmd_link "${@:2}" ;;
