@@ -2806,6 +2806,16 @@ cmd_watch() {
     done
 }
 
+# Print a file's mtime as a unix timestamp. `stat -f %m` is BSD (macOS); `stat -c %Y` is GNU
+# (Linux, and CI). Return nonzero when neither works so callers can distinguish "cannot tell"
+# from "very old" — collapsing those two is how a stat failure becomes a false staleness report.
+_borg_file_mtime() {
+    local f="$1" m=""
+    m=$(stat -f "%m" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
+    m=$(stat -c "%Y" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
+    return 1
+}
+
 cmd_doctor() {
     local state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
     local data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
@@ -2865,17 +2875,24 @@ cmd_doctor() {
                 agent_warn=1
                 [[ -z "$hint" ]] && hint="no output yet at $artifact"
             else
-                local mtime=0 now=0 age=0 max_age=0
-                mtime=$(stat -f "%m" "$artifact" 2>/dev/null) || mtime=0
-                now=$(date +%s)
-                age=$(( now - mtime ))
-                max_age=$(( interval * 3 ))
-                if (( age > max_age )); then
-                    fresh="WARN"
-                    agent_warn=1
-                    [[ -z "$hint" ]] && hint="stale output ($artifact) — check logs, re-run ./install.sh"
+                local mtime="" now=0 age=0 max_age=0
+                mtime=$(_borg_file_mtime "$artifact") || mtime=""
+                if [[ -z "$mtime" ]]; then
+                    # `stat` could not report an mtime. That is ignorance, not staleness — saying
+                    # WARN here would be a confident wrong answer, which is the failure shape this
+                    # command exists to catch.
+                    fresh="n/a"
                 else
-                    fresh="OK"
+                    now=$(date +%s)
+                    age=$(( now - mtime ))
+                    max_age=$(( interval * 3 ))
+                    if (( age > max_age )); then
+                        fresh="WARN"
+                        agent_warn=1
+                        [[ -z "$hint" ]] && hint="stale output ($artifact) — check logs, re-run ./install.sh"
+                    else
+                        fresh="OK"
+                    fi
                 fi
             fi
         fi
