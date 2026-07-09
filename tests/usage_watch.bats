@@ -48,6 +48,9 @@ _write_mock_claude() {
     [ ! -f "$BORG_USAGE_SAMPLES" ]
     grep -q "WARNING" "$BORG_USAGE_LOG"
     ! grep -q '"session_pct":0' "$BORG_USAGE_LOG"
+    # An empty-output parse failure is transient; it must NOT be reported as the permanent
+    # misconfiguration that a missing binary is.
+    ! grep -q "ERROR" "$BORG_USAGE_LOG"
 }
 
 # ─── fail-loud: unresolvable binary is a misconfiguration, not a parse failure ───
@@ -61,16 +64,7 @@ _write_mock_claude() {
     run "$SCRIPT" --once
     [ "$status" -ne 0 ]
     [ ! -f "$BORG_USAGE_SAMPLES" ]
-    grep -q "ERROR" "$BORG_USAGE_LOG"
-    grep -q "not found on PATH" "$BORG_USAGE_LOG"
-}
-
-@test "fail-loud: missing binary is distinguishable from an empty-output parse failure" {
-    _write_mock_claude ""
-    run "$SCRIPT" --once
-    [ "$status" -eq 0 ]
-    grep -q "WARNING" "$BORG_USAGE_LOG"
-    ! grep -q "ERROR" "$BORG_USAGE_LOG"
+    grep -q "ERROR:.*not found on PATH" "$BORG_USAGE_LOG"
 }
 
 @test "PATH includes \$HOME/.local/bin so launchd can resolve the native claude install" {
