@@ -11,7 +11,10 @@
 
 set -euo pipefail
 
-export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+# $HOME/.local/bin holds `claude` and `cortex` (native installers). launchd hands jobs a minimal
+# PATH that omits it, so leaving it out makes this watcher exit 127 on every fire while
+# `launchctl list` shows it registered. See tests/agent_path.bats.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 [[ -f "$HOME/.claude/lib/borg-hooks.sh" ]] && source "$HOME/.claude/lib/borg-hooks.sh"
 
