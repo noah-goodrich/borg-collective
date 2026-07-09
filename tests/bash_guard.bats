@@ -396,6 +396,59 @@ WALK
     _assert_fallthrough
 }
 
+# ─── Layer 3: backtick command substitution (audit finding A3) ────────────────
+#
+# The classifier resolved `$(...)` substitutions and classified their inner command, but never
+# looked at backtick `...` substitutions. And _strip_quotes deletes whole double-quoted spans, so
+# a backtick inside double quotes vanished entirely. Either way the outer binary (echo) read as
+# read-only and the whole command was pre-approved while the backtick body ran unchecked.
+
+@test "A3: backtick substitution with a delete body is not pre-approved" {
+    _run_guard 'echo `rm /tmp/x`'
+    _assert_fallthrough
+}
+
+@test "A3: backtick substitution with a move body is not pre-approved" {
+    _run_guard 'echo `mv /tmp/a /tmp/b`'
+    _assert_fallthrough
+}
+
+@test "A3: a backtick inside double quotes is not pre-approved" {
+    _run_guard 'echo "`rm /tmp/x`"'
+    _assert_fallthrough
+}
+
+@test "A3: a backtick wrapping a read-only command stays pre-approved" {
+    _run_guard 'echo `date`'
+    _assert_approved
+}
+
+# ─── Layer 3: quoted find destructive flag (audit finding A4) ──────────────────
+#
+# _strip_quotes removes quoted spans before the find destructive-flag check runs, so quoting the
+# flag itself — find . "-exec" ... or find . '-delete' — deleted the token the check looks for,
+# and the find classified read-only. The check must see the flag through the quotes.
+
+@test "A4: a quoted -exec flag is not pre-approved" {
+    _run_guard 'find . "-exec" rm {} ;'
+    _assert_fallthrough
+}
+
+@test "A4: a quoted -delete flag is not pre-approved" {
+    _run_guard "find . '-delete'"
+    _assert_fallthrough
+}
+
+@test "A4: an unquoted -exec is still not pre-approved (regression guard)" {
+    _run_guard 'find . -exec rm {} ;'
+    _assert_fallthrough
+}
+
+@test "A4: find with no destructive flag and a quoted glob stays pre-approved" {
+    _run_guard 'find . -name "*.md"'
+    _assert_approved
+}
+
 # ─── Empty / non-Bash input ───────────────────────────────────────────────────
 
 @test "exits 0 on empty stdin" {

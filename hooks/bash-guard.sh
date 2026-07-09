@@ -301,6 +301,39 @@ is_command_ro() {
             ;;
     esac
 
+    # A3: backtick command substitution. The $() resolver below only sees $(...),
+    # and _strip_quotes deletes a backtick span sitting inside double quotes before
+    # it is ever examined — so scan the RAW command here. Same rule as $(): a non-RO
+    # inner command makes the whole command non-RO. Mirrors the $() loop below.
+    local bt_scan bt_inner bt_cmd bt_count=0
+    bt_scan="$cmd"
+    # shellcheck disable=SC2016  # grep regex literal — single quotes intentional
+    while echo "$bt_scan" | grep -q '`'; do
+        bt_inner=$(echo "$bt_scan" | grep -oE '`[^`]*`' | head -1)
+        [[ -z "$bt_inner" ]] && break   # unbalanced backtick — no span to classify
+        bt_cmd="${bt_inner#\`}"; bt_cmd="${bt_cmd%\`}"
+        is_command_ro "$bt_cmd" || return 1
+        bt_scan="${bt_scan//$bt_inner/__RO_SUB__}"
+        bt_count=$((bt_count + 1))
+        (( bt_count > 20 )) && return 1  # safety
+    done
+
+    # A4: quoted find destructive flag. _strip_quotes removes whole quoted spans, so
+    # a quoted flag (find . "-exec" ... / find . '-delete') is gone before the find
+    # check in is_segment_ro runs. Detect it here on a copy with only the quote
+    # CHARACTERS removed, and only when `find` is a segment's leading token — so a
+    # benign `echo "find . -delete"` is not affected.
+    local uq_seg uq_split
+    # Here-string (not `< <(...)`) so the final segment is not dropped: a here-string
+    # appends a trailing newline, process substitution does not, and BSD sed keeps the
+    # input's missing terminator — `while read` then skips the last, unterminated line.
+    uq_split=$(printf '%s' "$cmd" | tr -d '\047"' | sed -E 's/[[:space:]]*(&&|\|\||[;|])[[:space:]]*/\n/g')
+    while IFS= read -r uq_seg; do
+        uq_seg=$(_trim "$uq_seg")
+        [[ "${uq_seg%% *}" == "find" ]] || continue
+        echo " $uq_seg " | grep -qE '[[:space:]](-exec|-delete|-ok|-execdir|-okdir|-fprint|-fprintf)([[:space:]]|$)' && return 1
+    done <<< "$uq_split"
+
     stripped=$(_strip_quotes "$cmd")
 
     # Output redirection > or >> to anywhere except /dev/null → RW.
