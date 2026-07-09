@@ -121,6 +121,59 @@ _assert_blocked() {
     [ "$status" -ne 2 ]
 }
 
+# ─── Layer 1: chmod world-writable bypasses (audit C5) ─────────────────────────
+#
+# Layer 1 matched only "chmod -R 777". A leading zero, a symbolic mode, or any
+# other others-writable octal evaded it. Match recursive chmod granting write to
+# "other" — octal whose last digit has the write bit (2,3,6,7), or symbolic +w to
+# a/o/all.
+
+@test "C5: blocks recursive chmod 0777 (leading zero)" {
+    _run_guard "chmod -R 0777 /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: blocks recursive chmod a+rwx" {
+    _run_guard "chmod -R a+rwx /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: blocks recursive chmod ugo+rwx" {
+    _run_guard "chmod -R ugo+rwx /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: blocks recursive chmod o+w" {
+    _run_guard "chmod -R o+w /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: blocks recursive chmod with an others-writable octal (766)" {
+    _run_guard "chmod -R 766 /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: still blocks the literal chmod -R 777" {
+    _run_guard "chmod -R 777 /tmp/foo"
+    _assert_blocked
+}
+
+# Guard-rails: non-others-writable or non-recursive chmod must NOT be hard-blocked.
+@test "C5: does not block recursive chmod 755" {
+    _run_guard "chmod -R 755 dist"
+    [ "$status" -ne 2 ]
+}
+
+@test "C5: does not block recursive chmod u+w (owner only)" {
+    _run_guard "chmod -R u+w src"
+    [ "$status" -ne 2 ]
+}
+
+@test "C5: does not block a non-recursive chmod 777" {
+    _run_guard "chmod 777 /tmp/onefile"
+    [ "$status" -ne 2 ]
+}
+
 # ─── Layer 3: RO classifier — simple RO commands pre-approved ─────────────────
 
 @test "pre-approves cat" {

@@ -69,17 +69,35 @@ _bg_rm_danger() {
     return 1
 }
 
+# True (0) if a recursive chmod in $1 (normalized) grants write to "other".
+# Others-writable = an octal mode whose last digit has the write bit (2,3,6,7),
+# or a symbolic mode granting w to a/o/all (a+w, o+w, ugo+rwx, bare +w). Owner-
+# or group-only grants (u+w, g+w) and non-others octals (755) are left alone.
+_bg_chmod_danger() {
+    local seg args segs
+    segs=$(_bg_segments "$1")
+    while IFS= read -r seg; do
+        [[ "$(_bg_seg_bin "$seg")" == "chmod" ]] || continue
+        args=" ${seg#* } "
+        printf '%s' "$args" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || continue
+        printf '%s' "$args" | grep -qE ' [0-7]{2,3}[2367]( |$)| [ugo]*[ao][ugo]*\+[A-Za-z]*w| \+[A-Za-z]*w' && return 0
+    done <<< "$segs"
+    return 1
+}
+
 NORM=$(_bg_norm "$COMMAND")
 
 if _bg_rm_danger "$NORM"; then
     echo "Blocked: recursive delete of root, home, or Claude settings directory" >&2; exit 2
 fi
 
+if _bg_chmod_danger "$NORM"; then
+    echo "Blocked: recursive world-writable chmod" >&2; exit 2
+fi
+
 # ── Layer 1: destructive patterns (always hard-blocked) ───────────────────────
 
 case "$COMMAND" in
-    *"chmod -R 777"*)
-        echo "Blocked: world-writable recursive chmod" >&2; exit 2 ;;
     *"> /dev/sda"*|*"dd if="*"of=/dev/"*)
         echo "Blocked: raw disk write" >&2; exit 2 ;;
     *"curl"*"| bash"*|*"wget"*"| bash"*|*"curl"*"| sh"*|*"wget"*"| sh"*)
