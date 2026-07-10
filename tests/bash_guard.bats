@@ -121,6 +121,75 @@ _assert_blocked() {
     [ "$status" -ne 2 ]
 }
 
+# ─── Layer 1: wrapper-prefix and segment-delimiter bypasses (review of #74) ────
+#
+# The normalization rewrite matches a segment's LITERAL first token against
+# rm/chmod, and splits segments only on && || ; | — not bare & or ()/{}. A
+# wrapper prefix (sudo, env, command, ...) or a backgrounding/subshell
+# delimiter therefore hides the real binary from the danger checks.
+
+@test "W1: blocks sudo rm -rf /" {
+    _run_guard "sudo rm -rf /"
+    _assert_blocked
+}
+
+@test "W1: blocks env rm -rf ~" {
+    _run_guard "env rm -rf ~"
+    _assert_blocked
+}
+
+@test "W1: blocks command rm -rf ~/.claude" {
+    _run_guard "command rm -rf ~/.claude"
+    _assert_blocked
+}
+
+@test "W1: blocks sudo chmod -R 777 /etc" {
+    _run_guard "sudo chmod -R 777 /etc"
+    _assert_blocked
+}
+
+@test "W1: blocks rm -rf / backgrounded after another command (bare &)" {
+    _run_guard "echo hi & rm -rf /"
+    _assert_blocked
+}
+
+@test "W1: blocks rm -rf / inside a subshell group" {
+    _run_guard "(rm -rf /)"
+    _assert_blocked
+}
+
+# Guard-rails: wrapper/delimiter forms that are NOT dangerous must not be blocked.
+
+@test "W1: does not block sudo apt install foo" {
+    _run_guard "sudo apt install foo"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block env FOO=bar echo hi" {
+    _run_guard "env FOO=bar echo hi"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block command ls" {
+    _run_guard "command ls"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block a benign backgrounded pair (echo done & echo more)" {
+    _run_guard "echo done & echo more"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block a benign subshell ((cd /tmp && ls))" {
+    _run_guard "(cd /tmp && ls)"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block a git commit message containing an ampersand" {
+    _run_guard 'git commit -m "fix & ship"'
+    [ "$status" -ne 2 ]
+}
+
 # ─── Layer 1: chmod world-writable bypasses (audit C5) ─────────────────────────
 #
 # Layer 1 matched only "chmod -R 777". A leading zero, a symbolic mode, or any

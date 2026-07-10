@@ -38,18 +38,53 @@ _bg_norm() {
     printf '%s' "$1" | tr -d '\047"' | tr '\n\t' '  ' | sed -E 's/  +/ /g; s/^ //; s/ $//'
 }
 
-# Split a normalized command into segments on top-level ; && || | operators.
+# Split a normalized command into segments on top-level ; && || | & operators,
+# plus subshell/group delimiters ( ) { } — a bare & (backgrounding, NOT the
+# already-handled &&) starts a new segment, and ( ) { } are stripped at
+# segment boundaries so `(rm -rf /)` yields a bare `rm -rf /` segment instead
+# of hiding it behind a leading `(`.
 # Emits one segment per line (leading/trailing space trimmed by the caller).
 _bg_segments() {
-    printf '%s' "$1" | sed -E 's/ *(&&|\|\||[;|]) */\n/g'
+    printf '%s' "$1" \
+        | sed -E 's/ *(&&|\|\||[;|]) */\n/g' \
+        | sed -E 's/([^&])&([^&]|$)/\1\n\2/g' \
+        | sed -E 's/[(){}]+/\n/g'
 }
 
-# Basename of a segment's leading token, with a single leading backslash removed
-# (\rm) and any path prefix stripped (/bin/rm, /usr/bin/rm) → rm.
+# Wrapper commands whose real payload is the NEXT (non-flag, non-assignment)
+# token: running-as-another-user, environment shims, verbatim/builtin
+# dispatch, and scheduling/priority/logging wrappers. A segment that starts
+# with one or more of these must be unwrapped before checking the binary.
+_bg_wrappers='sudo|doas|env|command|exec|builtin|nice|ionice|nohup|time|stdbuf|xargs'
+
+# Basename of a segment's leading REAL binary — the one that will actually
+# execute rm/chmod — after stripping:
+#   - a single leading backslash (\rm)
+#   - any path prefix (/bin/rm, /usr/bin/rm)
+#   - a chain of wrapper prefixes (sudo, env, command, nice -n 5, ...) and any
+#     VAR=val assignment tokens that precede the real command (env FOO=1 rm).
 _bg_seg_bin() {
-    local first="${1%% *}"
-    first="${first#\\}"
-    printf '%s' "${first##*/}"
+    local seg="$1" tok
+    seg="${seg# }"
+    while [[ -n "$seg" ]]; do
+        tok="${seg%% *}"
+        if [[ "$tok" =~ ^($_bg_wrappers)$ ]]; then
+            seg="${seg#"$tok"}"; seg="${seg# }"
+            continue
+        fi
+        if [[ "$tok" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+            seg="${seg#"$tok"}"; seg="${seg# }"
+            continue
+        fi
+        if [[ "$tok" == -* ]]; then
+            seg="${seg#"$tok"}"; seg="${seg# }"
+            continue
+        fi
+        break
+    done
+    tok="${seg%% *}"
+    tok="${tok#\\}"
+    printf '%s' "${tok##*/}"
 }
 
 # True (0) if a recursive rm in $1 (normalized) targets root, home, or .claude.
