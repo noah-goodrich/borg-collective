@@ -27,23 +27,153 @@ set -u
 COMMAND=$(jq -r '.tool_input.command' < /dev/stdin 2>/dev/null) || exit 0
 [[ -z "$COMMAND" || "$COMMAND" == "null" ]] && exit 0
 
+# ── Normalization pre-pass (audit cross-cutting fix) ──────────────────────────
+# Layer 1's literal-substring matching was brittle against ordinary shell
+# equivalence: quoting, flag reordering, path-qualified binaries, extra
+# whitespace. Normalize ONCE — drop quote characters (content kept), fold
+# newlines/tabs to spaces, collapse runs, trim — then match the hard-block
+# categories on the normalized form. NORM is for MATCHING only; the user's
+# original COMMAND still runs if allowed.
+_bg_norm() {
+    printf '%s' "$1" | tr -d '\047"' | tr '\n\t' '  ' | sed -E 's/  +/ /g; s/^ //; s/ $//'
+}
+
+# Split a normalized command into segments on top-level ; && || | & operators,
+# plus subshell/group delimiters ( ) { } — a bare & (backgrounding, NOT the
+# already-handled &&) starts a new segment, and ( ) { } are stripped at
+# segment boundaries so `(rm -rf /)` yields a bare `rm -rf /` segment instead
+# of hiding it behind a leading `(`.
+# Emits one segment per line (leading/trailing space trimmed by the caller).
+_bg_segments() {
+    printf '%s' "$1" \
+        | sed -E 's/ *(&&|\|\||[;|]) */\n/g' \
+        | sed -E 's/([^&])&([^&]|$)/\1\n\2/g' \
+        | sed -E 's/[(){}]+/\n/g'
+}
+
+# Basename of ONE token — strip a single leading backslash (\rm) and any path
+# prefix (/bin/rm, /usr/bin/rm) — no wrapper/assignment awareness. Used to test
+# individual tokens inside a segment, not just the leading one.
+_bg_tok_bin() {
+    local tok="$1"
+    tok="${tok#\\}"
+    printf '%s' "${tok##*/}"
+}
+
+# Find a $2-named token ANYWHERE in segment $1 (basename-aware) and print the
+# text that follows it (padded with a leading+trailing space), one match per
+# call — checks matches left-to-right and returns on the first whose args the
+# caller's danger-check ($3, a function name) reports dangerous.
+#
+# This replaces trying to resolve "the" real leading binary through wrapper
+# prefixes (sudo, env, nice -n 5, timeout 5, ...) — an unbounded and easily
+# incomplete list. A wrapper doesn't hide rm/chmod from a token scan: whatever
+# precedes the rm/chmod token (sudo, env FOO=1, nice -n 5, timeout 5, sudo -u
+# root, sudo nice -n 5, ...) is irrelevant — only the args AFTER the token
+# matter, and those are unchanged by whatever wrapper ran it.
+_bg_scan_danger() {
+    local segment="$1" target="$2" checker="$3"
+    local -a toks
+    read -ra toks <<< "$segment"
+    local i n=${#toks[@]}
+    for (( i = 0; i < n; i++ )); do
+        [[ "$(_bg_tok_bin "${toks[i]}")" == "$target" ]] || continue
+        local rest=" ${toks[*]:i+1} "
+        "$checker" "$rest" && return 0
+    done
+    return 1
+}
+
+# True (0) if rm args $1 (" -flags target ", already padded) are recursive
+# and target root, home, or .claude. Invoked indirectly by _bg_scan_danger via
+# its $checker name argument — shellcheck can't see that call.
+# shellcheck disable=SC2329
+_bg_rm_args_danger() {
+    printf '%s' "$1" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || return 1
+    printf '%s' "$1" | grep -qE ' /( |\*|$)| ~( |/|$)| \$\{?HOME\}?( |/|$)| [^ ]*\.claude( |/|$)'
+}
+
+# True (0) if chmod args $1 (" -flags mode ", already padded) are recursive
+# and grant write to "other". Invoked indirectly by _bg_scan_danger; see above.
+# shellcheck disable=SC2329
+_bg_chmod_args_danger() {
+    printf '%s' "$1" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || return 1
+    printf '%s' "$1" | grep -qE ' [0-7]{2,3}[2367]( |$)| [ugo]*[ao][ugo]*\+[A-Za-z]*w| \+[A-Za-z]*w'
+}
+
+# True (0) if a recursive rm in $1 (normalized) targets root, home, or .claude.
+# Recursive = any flag cluster containing r/R, or --recursive. Targets:
+#   /  or /*  (root)      ~  ~/… or $HOME/${HOME} (home)      …*.claude… (settings)
+# Scans for an `rm` token ANYWHERE in each segment — not just the leading
+# token — so a wrapper prefix (sudo, env, nice -n 5, timeout 5, ...) of any
+# shape cannot hide the real invocation from this check.
+_bg_rm_danger() {
+    local seg segs
+    # Here-string (not process substitution): a here-string appends a trailing
+    # newline, so `read` does not drop a single unterminated segment.
+    segs=$(_bg_segments "$1")
+    while IFS= read -r seg; do
+        _bg_scan_danger "$seg" "rm" _bg_rm_args_danger && return 0
+    done <<< "$segs"
+    return 1
+}
+
+# True (0) if a recursive chmod in $1 (normalized) grants write to "other".
+# Others-writable = an octal mode whose last digit has the write bit (2,3,6,7),
+# or a symbolic mode granting w to a/o/all (a+w, o+w, ugo+rwx, bare +w). Owner-
+# or group-only grants (u+w, g+w) and non-others octals (755) are left alone.
+# Same wrapper-proof token scan as _bg_rm_danger.
+_bg_chmod_danger() {
+    local seg segs
+    segs=$(_bg_segments "$1")
+    while IFS= read -r seg; do
+        _bg_scan_danger "$seg" "chmod" _bg_chmod_args_danger && return 0
+    done <<< "$segs"
+    return 1
+}
+
+# True (0) if $1 (normalized) is a `git push` force-pushing to main/master.
+# Requires --force or -f — NOT --force-with-lease, the recommended safe form.
+# Matches the ref as a token: main, :main (HEAD:main), or /main (refs/heads/main).
+_bg_gitforce_danger() {
+    printf '%s' "$1" | grep -qE '(^| )git push( |$)' || return 1
+    printf '%s' "$1" | grep -qE ' --force( |$)| -f( |$)' || return 1
+    printf '%s' "$1" | grep -qE '(^| |:|/)(main|master)( |$)' && return 0
+    return 1
+}
+
+# True (0) if $1 (normalized) redirects (> or >>) into a .claude/settings.json
+# path, in any home notation (~, $HOME, absolute). Reads are untouched.
+_bg_settings_write_danger() {
+    printf '%s' "$1" | grep -qE '>>? *[^ ]*\.claude/settings\.json' && return 0
+    return 1
+}
+
+NORM=$(_bg_norm "$COMMAND")
+
+if _bg_rm_danger "$NORM"; then
+    echo "Blocked: recursive delete of root, home, or Claude settings directory" >&2; exit 2
+fi
+
+if _bg_chmod_danger "$NORM"; then
+    echo "Blocked: recursive world-writable chmod" >&2; exit 2
+fi
+
+if _bg_gitforce_danger "$NORM"; then
+    echo "Blocked: force push to main/master — use --force-with-lease or push to a branch" >&2; exit 2
+fi
+
+if _bg_settings_write_danger "$NORM"; then
+    echo "Blocked: writing Claude settings file" >&2; exit 2
+fi
+
 # ── Layer 1: destructive patterns (always hard-blocked) ───────────────────────
 
 case "$COMMAND" in
-    *"rm -rf /"*|*"rm -rf ~"*|*"rm -rf \$HOME"*)
-        echo "Blocked: recursive delete of home or root directory" >&2; exit 2 ;;
-    *"chmod -R 777"*)
-        echo "Blocked: world-writable recursive chmod" >&2; exit 2 ;;
     *"> /dev/sda"*|*"dd if="*"of=/dev/"*)
         echo "Blocked: raw disk write" >&2; exit 2 ;;
     *"curl"*"| bash"*|*"wget"*"| bash"*|*"curl"*"| sh"*|*"wget"*"| sh"*)
         echo "Blocked: piping remote script to shell" >&2; exit 2 ;;
-    *"rm -rf"*".claude"*)
-        echo "Blocked: recursive delete of Claude settings directory" >&2; exit 2 ;;
-    *"git push --force"*" main"*|*"git push --force"*" master"*|*"git push -f "*" main"*|*"git push -f "*" master"*)
-        echo "Blocked: force push to main/master — use --force-with-lease or push to a branch" >&2; exit 2 ;;
-    *"> ~/.claude/settings.json"*|*">\$HOME/.claude/settings.json"*|*"> /Users/"*"/.claude/settings.json"*)
-        echo "Blocked: truncating Claude settings file" >&2; exit 2 ;;
 esac
 
 # Escape valve: skip the classifier but keep Layer 1 (already ran).

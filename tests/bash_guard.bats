@@ -68,6 +68,317 @@ _assert_blocked() {
     _assert_blocked
 }
 
+# ─── Layer 1: rm equivalent-notation bypasses (audit C1 + C4) ──────────────────
+#
+# Layer 1 matched the literal substring "rm -rf /". Reordered flags, a bare -r, a
+# leading backslash, or a path-qualified binary all evaded it while remaining just
+# as destructive. Normalize, then match rm by basename with the recursive flag in
+# any order against a dangerous target (root, home, .claude).
+
+@test "C1: blocks rm with reordered flags (-fr) targeting root" {
+    _run_guard "rm -fr /"
+    _assert_blocked
+}
+
+@test "C1: blocks rm with reordered flags (-Rf) targeting root" {
+    _run_guard "rm -Rf /"
+    _assert_blocked
+}
+
+@test "C1: blocks rm targeting root glob (/*)" {
+    _run_guard "rm -rf /*"
+    _assert_blocked
+}
+
+@test "C1: blocks a path-qualified rm targeting home" {
+    _run_guard "/bin/rm -rf ~"
+    _assert_blocked
+}
+
+@test "C4: blocks recursive rm of .claude without -f" {
+    _run_guard "rm -r ~/.claude"
+    _assert_blocked
+}
+
+@test "C4: blocks recursive rm of an absolute .claude path" {
+    _run_guard "rm -R /Users/noah/.claude"
+    _assert_blocked
+}
+
+# Guard-rails: legitimate recursive deletes must NOT be hard-blocked.
+@test "C1: does not block rm -rf of a scoped temp path" {
+    _run_guard "rm -rf /tmp/scratch"
+    [ "$status" -ne 2 ]
+}
+
+@test "C1: does not block rm -rf node_modules" {
+    _run_guard "rm -rf node_modules"
+    [ "$status" -ne 2 ]
+}
+
+@test "C1: does not block rm -r of a relative build dir" {
+    _run_guard "rm -r ./build"
+    [ "$status" -ne 2 ]
+}
+
+# ─── Layer 1: wrapper-prefix and segment-delimiter bypasses (review of #74) ────
+#
+# The normalization rewrite matches a segment's LITERAL first token against
+# rm/chmod, and splits segments only on && || ; | — not bare & or ()/{}. A
+# wrapper prefix (sudo, env, command, ...) or a backgrounding/subshell
+# delimiter therefore hides the real binary from the danger checks.
+
+@test "W1: blocks sudo rm -rf /" {
+    _run_guard "sudo rm -rf /"
+    _assert_blocked
+}
+
+@test "W1: blocks env rm -rf ~" {
+    _run_guard "env rm -rf ~"
+    _assert_blocked
+}
+
+@test "W1: blocks command rm -rf ~/.claude" {
+    _run_guard "command rm -rf ~/.claude"
+    _assert_blocked
+}
+
+@test "W1: blocks sudo chmod -R 777 /etc" {
+    _run_guard "sudo chmod -R 777 /etc"
+    _assert_blocked
+}
+
+@test "W1: blocks rm -rf / backgrounded after another command (bare &)" {
+    _run_guard "echo hi & rm -rf /"
+    _assert_blocked
+}
+
+@test "W1: blocks rm -rf / inside a subshell group" {
+    _run_guard "(rm -rf /)"
+    _assert_blocked
+}
+
+# Guard-rails: wrapper/delimiter forms that are NOT dangerous must not be blocked.
+
+@test "W1: does not block sudo apt install foo" {
+    _run_guard "sudo apt install foo"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block env FOO=bar echo hi" {
+    _run_guard "env FOO=bar echo hi"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block command ls" {
+    _run_guard "command ls"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block a benign backgrounded pair (echo done & echo more)" {
+    _run_guard "echo done & echo more"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block a benign subshell ((cd /tmp && ls))" {
+    _run_guard "(cd /tmp && ls)"
+    [ "$status" -ne 2 ]
+}
+
+@test "W1: does not block a git commit message containing an ampersand" {
+    _run_guard 'git commit -m "fix & ship"'
+    [ "$status" -ne 2 ]
+}
+
+# ─── Layer 1: wrapper-argument bypasses (2nd-pass review of #74) ───────────────
+#
+# The first wrapper-list fix resolved "the" leading binary by unwrapping known
+# wrapper tokens — but any wrapper that itself takes a positional/option
+# argument (sudo -u root, nice -n 5, timeout 5, or an unlisted wrapper like
+# timeout) landed the resolver on the wrapper's ARGUMENT, not the real binary,
+# and the danger check silently skipped the segment. Fixed by scanning for an
+# rm/chmod token ANYWHERE in the segment instead of resolving a "the" leading
+# binary at all.
+
+@test "W2: blocks sudo -u root rm -rf /" {
+    _run_guard "sudo -u root rm -rf /"
+    _assert_blocked
+}
+
+@test "W2: blocks nice -n 5 rm -rf /" {
+    _run_guard "nice -n 5 rm -rf /"
+    _assert_blocked
+}
+
+@test "W2: blocks ionice -c 3 rm -rf /" {
+    _run_guard "ionice -c 3 rm -rf /"
+    _assert_blocked
+}
+
+@test "W2: blocks timeout 5 rm -rf / (unlisted wrapper)" {
+    _run_guard "timeout 5 rm -rf /"
+    _assert_blocked
+}
+
+@test "W2: blocks chained sudo nice -n 5 rm -rf ~" {
+    _run_guard "sudo nice -n 5 rm -rf ~"
+    _assert_blocked
+}
+
+# Guard-rails: must still ALLOW.
+
+@test "W2: does not block rm -rf of a scoped temp path" {
+    _run_guard "rm -rf /tmp/scratch"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block rm -rf node_modules" {
+    _run_guard "rm -rf node_modules"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block chmod -R 755 dist" {
+    _run_guard "chmod -R 755 dist"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block sudo apt install foo" {
+    _run_guard "sudo apt install foo"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block a bare 'echo rm' (no flags/target)" {
+    _run_guard "echo rm"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block a git commit message mentioning removal" {
+    _run_guard 'git commit -m "remove stuff"'
+    [ "$status" -ne 2 ]
+}
+
+# ─── Layer 1: chmod world-writable bypasses (audit C5) ─────────────────────────
+#
+# Layer 1 matched only "chmod -R 777". A leading zero, a symbolic mode, or any
+# other others-writable octal evaded it. Match recursive chmod granting write to
+# "other" — octal whose last digit has the write bit (2,3,6,7), or symbolic +w to
+# a/o/all.
+
+@test "C5: blocks recursive chmod 0777 (leading zero)" {
+    _run_guard "chmod -R 0777 /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: blocks recursive chmod a+rwx" {
+    _run_guard "chmod -R a+rwx /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: blocks recursive chmod ugo+rwx" {
+    _run_guard "chmod -R ugo+rwx /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: blocks recursive chmod o+w" {
+    _run_guard "chmod -R o+w /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: blocks recursive chmod with an others-writable octal (766)" {
+    _run_guard "chmod -R 766 /tmp/x"
+    _assert_blocked
+}
+
+@test "C5: still blocks the literal chmod -R 777" {
+    _run_guard "chmod -R 777 /tmp/foo"
+    _assert_blocked
+}
+
+# Guard-rails: non-others-writable or non-recursive chmod must NOT be hard-blocked.
+@test "C5: does not block recursive chmod 755" {
+    _run_guard "chmod -R 755 dist"
+    [ "$status" -ne 2 ]
+}
+
+@test "C5: does not block recursive chmod u+w (owner only)" {
+    _run_guard "chmod -R u+w src"
+    [ "$status" -ne 2 ]
+}
+
+@test "C5: does not block a non-recursive chmod 777" {
+    _run_guard "chmod 777 /tmp/onefile"
+    [ "$status" -ne 2 ]
+}
+
+# ─── Layer 1: force-push-to-main ref bypasses (audit C2) ───────────────────────
+#
+# Layer 1 required the literal " main" after "git push --force". A quoted ref, a
+# HEAD:main / refs/heads/main form, or --force before the remote all evaded it —
+# and git is blanket-approved at Layer 3, so evading Layer 1 meant a force-push to
+# main was PRE-APPROVED. Match the ref after normalization (quotes gone), as a ref
+# token including :main and refs/heads/main.
+
+@test "C2: blocks force push to a quoted main ref" {
+    _run_guard "git push --force origin 'main'"
+    _assert_blocked
+}
+
+@test "C2: blocks force push to HEAD:main" {
+    _run_guard "git push --force origin HEAD:main"
+    _assert_blocked
+}
+
+@test "C2: blocks force push to refs/heads/master" {
+    _run_guard "git push --force origin refs/heads/master"
+    _assert_blocked
+}
+
+@test "C2: blocks short-flag force push to main" {
+    _run_guard "git push -f origin main"
+    _assert_blocked
+}
+
+# Guard-rails: safe pushes must NOT be hard-blocked.
+@test "C2: does not block force push to a feature branch" {
+    _run_guard "git push --force origin feature/x"
+    [ "$status" -ne 2 ]
+}
+
+@test "C2: does not block --force-with-lease to main" {
+    _run_guard "git push --force-with-lease origin main"
+    [ "$status" -ne 2 ]
+}
+
+@test "C2: does not block a normal push to main" {
+    _run_guard "git push origin main"
+    [ "$status" -ne 2 ]
+}
+
+# ─── Layer 1: append to Claude settings (audit C3) ─────────────────────────────
+#
+# The truncate guard matched "> ~/.claude/settings.json". An append (>>) or a
+# $HOME/absolute path form must be caught too.
+
+@test "C3: blocks append (>>) to Claude settings via ~" {
+    _run_guard "echo x >> ~/.claude/settings.json"
+    _assert_blocked
+}
+
+@test "C3: blocks append to Claude settings via an absolute path" {
+    _run_guard "echo x >> /Users/noah/.claude/settings.json"
+    _assert_blocked
+}
+
+@test "C3: blocks truncate (>) to Claude settings via \$HOME" {
+    _run_guard "echo x > \$HOME/.claude/settings.json"
+    _assert_blocked
+}
+
+@test "C3: does not block reading Claude settings" {
+    _run_guard "cat ~/.claude/settings.json"
+    [ "$status" -ne 2 ]
+}
+
 # ─── Layer 3: RO classifier — simple RO commands pre-approved ─────────────────
 
 @test "pre-approves cat" {
