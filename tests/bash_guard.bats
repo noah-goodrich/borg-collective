@@ -190,6 +190,73 @@ _assert_blocked() {
     [ "$status" -ne 2 ]
 }
 
+# ─── Layer 1: wrapper-argument bypasses (2nd-pass review of #74) ───────────────
+#
+# The first wrapper-list fix resolved "the" leading binary by unwrapping known
+# wrapper tokens — but any wrapper that itself takes a positional/option
+# argument (sudo -u root, nice -n 5, timeout 5, or an unlisted wrapper like
+# timeout) landed the resolver on the wrapper's ARGUMENT, not the real binary,
+# and the danger check silently skipped the segment. Fixed by scanning for an
+# rm/chmod token ANYWHERE in the segment instead of resolving a "the" leading
+# binary at all.
+
+@test "W2: blocks sudo -u root rm -rf /" {
+    _run_guard "sudo -u root rm -rf /"
+    _assert_blocked
+}
+
+@test "W2: blocks nice -n 5 rm -rf /" {
+    _run_guard "nice -n 5 rm -rf /"
+    _assert_blocked
+}
+
+@test "W2: blocks ionice -c 3 rm -rf /" {
+    _run_guard "ionice -c 3 rm -rf /"
+    _assert_blocked
+}
+
+@test "W2: blocks timeout 5 rm -rf / (unlisted wrapper)" {
+    _run_guard "timeout 5 rm -rf /"
+    _assert_blocked
+}
+
+@test "W2: blocks chained sudo nice -n 5 rm -rf ~" {
+    _run_guard "sudo nice -n 5 rm -rf ~"
+    _assert_blocked
+}
+
+# Guard-rails: must still ALLOW.
+
+@test "W2: does not block rm -rf of a scoped temp path" {
+    _run_guard "rm -rf /tmp/scratch"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block rm -rf node_modules" {
+    _run_guard "rm -rf node_modules"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block chmod -R 755 dist" {
+    _run_guard "chmod -R 755 dist"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block sudo apt install foo" {
+    _run_guard "sudo apt install foo"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block a bare 'echo rm' (no flags/target)" {
+    _run_guard "echo rm"
+    [ "$status" -ne 2 ]
+}
+
+@test "W2: does not block a git commit message mentioning removal" {
+    _run_guard 'git commit -m "remove stuff"'
+    [ "$status" -ne 2 ]
+}
+
 # ─── Layer 1: chmod world-writable bypasses (audit C5) ─────────────────────────
 #
 # Layer 1 matched only "chmod -R 777". A leading zero, a symbolic mode, or any

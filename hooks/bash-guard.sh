@@ -51,55 +51,69 @@ _bg_segments() {
         | sed -E 's/[(){}]+/\n/g'
 }
 
-# Wrapper commands whose real payload is the NEXT (non-flag, non-assignment)
-# token: running-as-another-user, environment shims, verbatim/builtin
-# dispatch, and scheduling/priority/logging wrappers. A segment that starts
-# with one or more of these must be unwrapped before checking the binary.
-_bg_wrappers='sudo|doas|env|command|exec|builtin|nice|ionice|nohup|time|stdbuf|xargs'
-
-# Basename of a segment's leading REAL binary — the one that will actually
-# execute rm/chmod — after stripping:
-#   - a single leading backslash (\rm)
-#   - any path prefix (/bin/rm, /usr/bin/rm)
-#   - a chain of wrapper prefixes (sudo, env, command, nice -n 5, ...) and any
-#     VAR=val assignment tokens that precede the real command (env FOO=1 rm).
-_bg_seg_bin() {
-    local seg="$1" tok
-    seg="${seg# }"
-    while [[ -n "$seg" ]]; do
-        tok="${seg%% *}"
-        if [[ "$tok" =~ ^($_bg_wrappers)$ ]]; then
-            seg="${seg#"$tok"}"; seg="${seg# }"
-            continue
-        fi
-        if [[ "$tok" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
-            seg="${seg#"$tok"}"; seg="${seg# }"
-            continue
-        fi
-        if [[ "$tok" == -* ]]; then
-            seg="${seg#"$tok"}"; seg="${seg# }"
-            continue
-        fi
-        break
-    done
-    tok="${seg%% *}"
+# Basename of ONE token — strip a single leading backslash (\rm) and any path
+# prefix (/bin/rm, /usr/bin/rm) — no wrapper/assignment awareness. Used to test
+# individual tokens inside a segment, not just the leading one.
+_bg_tok_bin() {
+    local tok="$1"
     tok="${tok#\\}"
     printf '%s' "${tok##*/}"
+}
+
+# Find a $2-named token ANYWHERE in segment $1 (basename-aware) and print the
+# text that follows it (padded with a leading+trailing space), one match per
+# call — checks matches left-to-right and returns on the first whose args the
+# caller's danger-check ($3, a function name) reports dangerous.
+#
+# This replaces trying to resolve "the" real leading binary through wrapper
+# prefixes (sudo, env, nice -n 5, timeout 5, ...) — an unbounded and easily
+# incomplete list. A wrapper doesn't hide rm/chmod from a token scan: whatever
+# precedes the rm/chmod token (sudo, env FOO=1, nice -n 5, timeout 5, sudo -u
+# root, sudo nice -n 5, ...) is irrelevant — only the args AFTER the token
+# matter, and those are unchanged by whatever wrapper ran it.
+_bg_scan_danger() {
+    local segment="$1" target="$2" checker="$3"
+    local -a toks
+    read -ra toks <<< "$segment"
+    local i n=${#toks[@]}
+    for (( i = 0; i < n; i++ )); do
+        [[ "$(_bg_tok_bin "${toks[i]}")" == "$target" ]] || continue
+        local rest=" ${toks[*]:i+1} "
+        "$checker" "$rest" && return 0
+    done
+    return 1
+}
+
+# True (0) if rm args $1 (" -flags target ", already padded) are recursive
+# and target root, home, or .claude. Invoked indirectly by _bg_scan_danger via
+# its $checker name argument — shellcheck can't see that call.
+# shellcheck disable=SC2329
+_bg_rm_args_danger() {
+    printf '%s' "$1" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || return 1
+    printf '%s' "$1" | grep -qE ' /( |\*|$)| ~( |/|$)| \$\{?HOME\}?( |/|$)| [^ ]*\.claude( |/|$)'
+}
+
+# True (0) if chmod args $1 (" -flags mode ", already padded) are recursive
+# and grant write to "other". Invoked indirectly by _bg_scan_danger; see above.
+# shellcheck disable=SC2329
+_bg_chmod_args_danger() {
+    printf '%s' "$1" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || return 1
+    printf '%s' "$1" | grep -qE ' [0-7]{2,3}[2367]( |$)| [ugo]*[ao][ugo]*\+[A-Za-z]*w| \+[A-Za-z]*w'
 }
 
 # True (0) if a recursive rm in $1 (normalized) targets root, home, or .claude.
 # Recursive = any flag cluster containing r/R, or --recursive. Targets:
 #   /  or /*  (root)      ~  ~/… or $HOME/${HOME} (home)      …*.claude… (settings)
+# Scans for an `rm` token ANYWHERE in each segment — not just the leading
+# token — so a wrapper prefix (sudo, env, nice -n 5, timeout 5, ...) of any
+# shape cannot hide the real invocation from this check.
 _bg_rm_danger() {
-    local seg args segs
+    local seg segs
     # Here-string (not process substitution): a here-string appends a trailing
     # newline, so `read` does not drop a single unterminated segment.
     segs=$(_bg_segments "$1")
     while IFS= read -r seg; do
-        [[ "$(_bg_seg_bin "$seg")" == "rm" ]] || continue
-        args=" ${seg#* } "
-        printf '%s' "$args" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || continue
-        printf '%s' "$args" | grep -qE ' /( |\*|$)| ~( |/|$)| \$\{?HOME\}?( |/|$)| [^ ]*\.claude( |/|$)' && return 0
+        _bg_scan_danger "$seg" "rm" _bg_rm_args_danger && return 0
     done <<< "$segs"
     return 1
 }
@@ -108,14 +122,12 @@ _bg_rm_danger() {
 # Others-writable = an octal mode whose last digit has the write bit (2,3,6,7),
 # or a symbolic mode granting w to a/o/all (a+w, o+w, ugo+rwx, bare +w). Owner-
 # or group-only grants (u+w, g+w) and non-others octals (755) are left alone.
+# Same wrapper-proof token scan as _bg_rm_danger.
 _bg_chmod_danger() {
-    local seg args segs
+    local seg segs
     segs=$(_bg_segments "$1")
     while IFS= read -r seg; do
-        [[ "$(_bg_seg_bin "$seg")" == "chmod" ]] || continue
-        args=" ${seg#* } "
-        printf '%s' "$args" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || continue
-        printf '%s' "$args" | grep -qE ' [0-7]{2,3}[2367]( |$)| [ugo]*[ao][ugo]*\+[A-Za-z]*w| \+[A-Za-z]*w' && return 0
+        _bg_scan_danger "$seg" "chmod" _bg_chmod_args_danger && return 0
     done <<< "$segs"
     return 1
 }
