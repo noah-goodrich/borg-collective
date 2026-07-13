@@ -87,7 +87,7 @@ _bg_scan_danger() {
 # True (0) if rm args $1 (" -flags target ", already padded) are recursive
 # and target root, home, or .claude. Invoked indirectly by _bg_scan_danger via
 # its $checker name argument — shellcheck can't see that call.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2329,SC2317
 _bg_rm_args_danger() {
     printf '%s' "$1" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || return 1
     printf '%s' "$1" | grep -qE ' /( |\*|$)| ~( |/|$)| \$\{?HOME\}?( |/|$)| [^ ]*\.claude( |/|$)'
@@ -95,7 +95,7 @@ _bg_rm_args_danger() {
 
 # True (0) if chmod args $1 (" -flags mode ", already padded) are recursive
 # and grant write to "other". Invoked indirectly by _bg_scan_danger; see above.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2329,SC2317
 _bg_chmod_args_danger() {
     printf '%s' "$1" | grep -qE ' -[A-Za-z]*[rR][A-Za-z]* | --recursive ' || return 1
     printf '%s' "$1" | grep -qE ' [0-7]{2,3}[2367]( |$)| [ugo]*[ao][ugo]*\+[A-Za-z]*w| \+[A-Za-z]*w'
