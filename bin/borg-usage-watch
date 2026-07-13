@@ -152,9 +152,12 @@ fi
 # Each poll opens a real Claude Code session, so the token-cost SessionEnd hook would append a
 # zero-token record to ~/.claude/token-spend.jsonl on every one — ~720/day, drowning real sessions
 # in any count or average over that ledger. BORG_NO_SPEND_RECORD tells that hook to skip. Scoped to
-# this invocation, not exported, so nothing else in the process inherits it.
+# this invocation, not exported, so nothing else in the process inherits it. Same story for the
+# SessionStart hook (borg-link-down.sh): this poller runs with cwd="/" (no WorkingDirectory in the
+# launchd plist), which would otherwise spam cairn with "/" project searches — BORG_NO_SESSION_HOOKS
+# tells it to skip too.
 claude_exit=0
-output=$(BORG_NO_SPEND_RECORD=1 "$CLAUDE_BIN" -p "/usage" 2>&1) || claude_exit=$?
+output=$(BORG_NO_SPEND_RECORD=1 BORG_NO_SESSION_HOOKS=1 "$CLAUDE_BIN" -p "/usage" 2>&1) || claude_exit=$?
 
 if [[ "$claude_exit" -ne 0 ]]; then
     log "ERROR: claude exited $claude_exit for '/usage' — poller could not sample"
