@@ -57,6 +57,28 @@ _row_field() {
     [ "$output" = "0" ]
 }
 
+# ─── session-hooks marker (cairn pollution guard) ────────────────────────────
+#
+# The poller's launchd plist sets no WorkingDirectory, so this claude -p "/usage" invocation
+# inherits cwd="/". That fires borg-link-down.sh's SessionStart hook, which falls through to
+# `basename "/"` and spams cairn ("/" project search + presence-open) every 120s.
+# BORG_NO_SESSION_HOOKS tells that hook to skip. Same contract as BORG_NO_SPEND_RECORD above.
+
+@test "session-hooks guard: claude is invoked with BORG_NO_SESSION_HOOKS=1" {
+    _write_mock_claude "printf '%s' \"\${BORG_NO_SESSION_HOOKS:-unset}\" > '$BATS_TEST_TMPDIR/marker'; cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(cat "$BATS_TEST_TMPDIR/marker")" = "1" ]
+}
+
+@test "session-hooks guard: the marker does not leak into the poller's own environment" {
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    run grep -c '^export BORG_NO_SESSION_HOOKS' "$SCRIPT"
+    [ "$output" = "0" ]
+}
+
 # ─── format-drift tripwire: parse the real fixture ──────────────────────────
 
 @test "fixture parse: session_pct, week_pct, resets_at extracted correctly" {

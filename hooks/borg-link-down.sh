@@ -25,11 +25,20 @@ export PATH
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_REGISTRY="$BORG_DIR/registry.json"
 
+# BORG_NO_SESSION_HOOKS=1 opts an internal/synthetic session (e.g. the headless
+# `claude -p "/usage"` probe spawned by bin/borg-usage-watch) out of all
+# SessionStart context injection. Mirrors BORG_NO_SPEND_RECORD's opt-out for the
+# SessionEnd token-spend hook. Fail-safe: unset/anything-but-1 is a no-op.
+[[ "${BORG_NO_SESSION_HOOKS:-}" == "1" ]] && exit 0
+
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 
-[[ -z "$CWD" ]] && exit 0
+# Empty CWD, or CWD="/" (e.g. a launchd timer with no WorkingDirectory set):
+# "/" can never be a real borg project, so treat it the same as empty and
+# bail before any project-resolution or cairn call is attempted.
+[[ -z "$CWD" || "$CWD" == "/" ]] && exit 0
 
 # shellcheck source=../lib/borg-hooks.sh
 source "${HOME}/.claude/lib/borg-hooks.sh"
