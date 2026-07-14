@@ -1,5 +1,6 @@
 # Project Plan: Usage Guardian — Phase 1 (Observe-Only)
 *Established: 2026-07-08*
+*Shipped: 2026-07-14 — PRs #66/#67/#68/#69/#70/#71/#75 merged to main*
 
 ## Objective
 Ship a launchd poller (`bin/borg-usage-watch`) that samples Claude Code's rate-limit headroom via
@@ -9,29 +10,29 @@ detection path survives launchd's stripped environment, before any drone-checkpo
 
 ## Acceptance Criteria
 
-- [ ] `bin/borg-usage-watch --once` polls `/usage`, parses `session_pct` / `week_pct` / `resets_at`, and appends one
+- [x] `bin/borg-usage-watch --once` polls `/usage`, parses `session_pct` / `week_pct` / `resets_at`, and appends one
       JSON sample per poll to `~/.local/state/borg/usage-samples.jsonl`.
   - Verify: `bin/borg-usage-watch --once --debug` then `tail -1 ~/.local/state/borg/usage-samples.jsonl | jq .` shows
     numeric `session_pct` + non-empty `resets_at`.
-- [ ] **Fail-closed parse.** Empty, non-numeric, or absent `/usage` output yields state `UNKNOWN`: no sample row is
+- [x] **Fail-closed parse.** Empty, non-numeric, or absent `/usage` output yields state `UNKNOWN`: no sample row is
       written, a warning is logged, and the exit code is 0.
   - Verify: `bats tests/usage_watch.bats` — a mock `claude` on `PATH` that prints nothing must produce `UNKNOWN`,
     never `session_pct=0`.
-- [ ] **Format-drift tripwire.** The parse regex is pinned against a captured fixture, so a Claude Code release that
+- [x] **Format-drift tripwire.** The parse regex is pinned against a captured fixture, so a Claude Code release that
       reformats the `/usage` line fails the suite loudly instead of silently disarming the guardian.
   - Verify: `tests/fixtures/usage-output.txt` exists and `bats tests/usage_watch.bats` asserts the regex against it.
-- [ ] **Idle gate.** When no tmux pane is running a `claude` process, the poll is skipped entirely (no CLI spawn, no
+- [x] **Idle gate.** When no tmux pane is running a `claude` process, the poll is skipped entirely (no CLI spawn, no
       `$0` record appended to `token-spend.jsonl`).
   - Verify: bats test with a stubbed pane-lister returning nothing asserts `claude` is never invoked.
-- [ ] **launchd-safe environment.** `launchd/com.stillpoint-labs.borg.usage-watch.plist` sets `USER`, `HOME`, and
+- [x] **launchd-safe environment.** `launchd/com.stillpoint-labs.borg.usage-watch.plist` sets `USER`, `HOME`, and
       `PATH` under `EnvironmentVariables`, and `install.sh` registers the agent via the existing `sed` template +
       `launchctl bootstrap` pattern.
   - Verify: `grep -A2 '<key>USER</key>' launchd/com.stillpoint-labs.borg.usage-watch.plist` and
     `grep USAGE_WATCH_BIN install.sh`. Without `USER`, `/usage` prints nothing and exits 0 — this is the trap the
     spike found.
-- [ ] **Observe-only.** The guardian takes no action: no `tmux send-keys`, no checkpoint, no dispatch veto.
+- [x] **Observe-only.** The guardian takes no action: no `tmux send-keys`, no checkpoint, no dispatch veto.
   - Verify: `grep -c 'send-keys' bin/borg-usage-watch` returns 0.
-- [ ] (nothing-breaks) The full suite stays green and the new script passes shellcheck.
+- [x] (nothing-breaks) The full suite stays green and the new script passes shellcheck.
   - Verify: `bats tests/*.bats` all pass; `shellcheck bin/borg-usage-watch`.
 
 ## Scope Boundaries
@@ -59,3 +60,31 @@ Target: this session (~1-2 hours). One script, one plist, one `install.sh` block
 - **Threshold false-confidence.** The 85% figure in the directive rests on a *single* burn-rate observation
   (~1%/4 min). This phase exists precisely so nobody hard-codes it on that basis. Do not tune until the log has a
   week in it.
+
+## Additional Work Shipped (beyond the original criteria)
+
+The build hardened well past the observe-only skeleton across a run of follow-up PRs:
+
+- **Never-silent contract (#68).** Criterion 2's original wording said a bad parse writes *no* row. The shipped code
+  instead writes an **explicit `parse_failed` / idle / error row on every poll** — silence in the samples log is now
+  itself the failure signal. This directly closes the plan's own "a blind guardian is indistinguishable from a
+  healthy one" risk. Deliberate strengthening, not a deviation from intent.
+- **launchd PATH resolution (#67).** Resolve the native `claude` install from `$HOME/.local/bin` under launchd's
+  stripped `PATH`; fail loud (nonzero exit + ERROR row) when the binary is missing, rather than going quietly blind.
+- **Spend-log hygiene (#70).** Invoke the internal poll with `BORG_NO_SPEND_RECORD=1` so the poller stops flooding
+  `~/.claude/token-spend.jsonl` with `$0` records.
+- **Session-hook muting (#75).** Invoke the poll probe with `BORG_NO_SESSION_HOOKS=1` so the internal `/usage`
+  session does not fire SessionStart/Stop hooks (which would corrupt registry/presence state).
+- **`borg doctor` + install verification (#69).** Added alongside, and it caught two unrelated dead launchd agents
+  (notifyd/cortex-wake exiting 127) which were fixed in #71 (`BASH_SOURCE` in a zsh script).
+
+Final verification at assimilation (2026-07-14): `bats tests/usage_watch.bats` 24/24 pass, `bats tests/*.bats`
+422/422 pass, `shellcheck bin/borg-usage-watch` + `hooks/*.sh` clean.
+
+## Still Open After This Assimilation (do NOT infer these are done)
+
+- **`docs/plans/directives/2026-07-08-usage-guardian-build.md`** — the larger directive this plan is Phase 1 of.
+  Phase 2 (the `>=85%` checkpoint sweep, `>=92%` dispatch hard-stop) is unbuilt, plus its two "Also do" items remain
+  undone: `borg-resume`'s disclaimer is still stale ("not predictable from inside a session") and `borg-resume` has
+  no source under `skills/` (canonical-source violation).
+- **The actual point of Phase 1: collect a week of real burn-rate data** before anyone tunes the 85% threshold.
