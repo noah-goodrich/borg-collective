@@ -1,8 +1,25 @@
 # Directive: Finish the cairn-pollution plugin-guard deploy
 
-*Filed: 2026-07-13 · Status: OPEN · Gated by: pre-existing red claude-plugins CI (borg-link-down JSON bug)*
+*Filed: 2026-07-13 · Status: ASSIMILATED (shipped 2026-07-14) · Gated by: pre-existing red claude-plugins CI*
 *Found by: a cairn session that shipped the cairn-side fixes and rebuilt the plugin, but hit unrelated
 red CI on the plugin PR and handed the remainder here.*
+
+## Assimilation note (2026-07-14)
+
+Shipped. All "Done when" criteria met: claude-plugins CI green, PR #33 merged, plugin 0.8.7 → 0.8.8
+installed, cairn `call_log` shows **0** synthetic `project='/'` rows in the last 24h (and none in
+`/stats/usage`).
+
+**Root cause was NOT what step 1 predicted.** The `additionalContext` JSON was already assembled
+correctly via `jq -n --arg`. The real bug: the cairn-hits.log metric append was
+`printf ... >> "$BORG_DIR/cairn-hits.log" 2>/dev/null` — and bash opens a redirect target *before*
+applying the same-command `2>/dev/null`, so a missing `$BORG_DIR` leaked
+`<hook>: line N: <path>: No such file or directory` to **stderr**. `bats run` merges stderr into
+`$output`, splicing that line ahead of the JSON; `jq` then failed at "column 88" (the 87-char CI hook
+path + `: line`). `$BORG_DIR` was absent under CI because the bats setup overrides `HOME` but not
+`XDG_CONFIG_HOME`, and the hook recomputes `BORG_DIR` from `${XDG_CONFIG_HOME:-$HOME/.config}`.
+Fix: brace-group the redirect so `2>/dev/null` covers the open (borg-collective #77 → claude-plugins
+#33). Regression test added in `tests/lifecycle.bats`.
 
 Full context + step-by-step in the handoff checkpoint: `.borg/checkpoints/2026-07-13-2141.md`.
 
