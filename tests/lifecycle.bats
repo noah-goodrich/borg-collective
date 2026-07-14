@@ -106,6 +106,24 @@ EOF
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null
 }
 
+@test "start hook emits clean JSON (no stderr leak) when BORG_DIR config home is absent" {
+    # Regression: the cairn-hits.log metric append was written as
+    #   printf ... >> "$BORG_DIR/cairn-hits.log" 2>/dev/null
+    # but bash OPENS the redirect target before applying 2>/dev/null, so a missing
+    # $BORG_DIR leaked a "No such file or directory" line to stderr. A merging consumer
+    # (bats `run`, the claude-plugins CI suite) then spliced that line into the hook's
+    # JSON stdout, breaking `jq` ("Invalid numeric literal"). The append is now
+    # brace-grouped so 2>/dev/null covers the open. Point XDG_CONFIG_HOME at a path that
+    # does not exist so the hook's computed BORG_DIR ("$XDG_CONFIG_HOME/borg") is absent.
+    export XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/absent-config-home/config"
+    [ ! -d "$XDG_CONFIG_HOME/borg" ]
+
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+    # bats merges stderr into $output; any leaked stderr line makes this parse fail.
+    printf '%s' "$output" | jq -e . >/dev/null
+}
+
 @test "start hook includes uncommitted-changes reminder when flag set" {
     # Set the flag in state.json
     mkdir -p "${TEST_CWD}/.borg"

@@ -345,10 +345,14 @@ Check cairn service health: cairn health")
     else
         CAIRN_OUT=$(cairn search "$PROJECT" --project "$PROJECT" --max 5 2>/dev/null || true)
     fi
-    # Log hit metrics for the 4-week validation window
+    # Log hit metrics for the 4-week validation window. Brace-group the redirection so
+    # 2>/dev/null is in effect when bash OPENS the log for append: a bare
+    # `cmd >> "$dir/f" 2>/dev/null` opens the target before applying the stderr redirect,
+    # so a missing $BORG_DIR leaks a "No such file or directory" line to stderr — which a
+    # merging consumer (bats `run`) then splices into this hook's JSON stdout, breaking it.
     CAIRN_BYTES=$(printf '%s' "$CAIRN_OUT" | wc -c | tr -d ' ')
-    printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PROJECT" "$CAIRN_BYTES" \
-        >> "${BORG_DIR}/cairn-hits.log" 2>/dev/null || true
+    { printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$PROJECT" "$CAIRN_BYTES" \
+        >> "${BORG_DIR}/cairn-hits.log"; } 2>/dev/null || true
 
     if [[ -n "$CAIRN_OUT" ]]; then
         CONTEXT_PARTS+=("Cairn knowledge for $PROJECT:
