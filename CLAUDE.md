@@ -224,3 +224,19 @@ docs/
   to know whether it acted, return a status code or accept a callback — don't read before/after
   mtime from outside the helper. That's leaky and adds syscalls. Simplest: just log
   unconditionally or restructure so the caller does the condition check itself.
+- **`cmd >> file 2>/dev/null` does NOT silence a redirect-open error**: bash opens redirection
+  targets left-to-right BEFORE the command runs, so it opens `>> file` while fd2 is still the
+  terminal — a missing directory prints `<script>: line N: <path>: No such file or directory` to
+  stderr no matter where `2>/dev/null` sits on the same simple command. In a hook whose stdout is
+  JSON, and whose stderr a consumer merges into stdout (`bats run`, any `2>&1` wrapper), that leaked
+  line splices ahead of the JSON and breaks `jq`. Fix: brace-group so the stderr redirect is
+  established first — `{ cmd >> "$dir/f"; } 2>/dev/null` — or `mkdir -p "$dir"` before writing.
+  This bug kept claude-plugins CI red for weeks (borg-link-down.bats 12/14/15, "Invalid numeric
+  literal at line 1, column 88" — the 87-char CI hook path + `: line N:`). It only reproduces where
+  the target dir is absent; the CI bats setup overrode `HOME` but not `XDG_CONFIG_HOME`, so the
+  hook recomputed `BORG_DIR` from the runner's real config home, which didn't exist in the sandbox.
+- **Hooks recompute their own config paths — test isolation must override `XDG_CONFIG_HOME` too**:
+  `borg-link-down.sh` derives `BORG_DIR` from `${XDG_CONFIG_HOME:-$HOME/.config}/borg`, ignoring any
+  exported `BORG_DIR`. A bats suite that overrides only `HOME` leaks the host/runner
+  `XDG_CONFIG_HOME` into the hook and points it outside the sandbox. Override both (or unset
+  `XDG_CONFIG_HOME`) in hook-integration test setup.
