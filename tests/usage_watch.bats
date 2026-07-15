@@ -9,6 +9,7 @@ load test_helper/setup
 
 SCRIPT="${BATS_TEST_DIRNAME}/../bin/borg-usage-watch"
 FIXTURE="${BATS_TEST_DIRNAME}/fixtures/usage-output.txt"
+IDLE_FIXTURE="${BATS_TEST_DIRNAME}/fixtures/usage-output-idle.txt"
 PANES_FIXTURE="${BATS_TEST_DIRNAME}/fixtures/tmux-panes.txt"
 PLIST="${BATS_TEST_DIRNAME}/../launchd/com.stillpoint-labs.borg.usage-watch.plist"
 INSTALL_SH="${BATS_TEST_DIRNAME}/../install.sh"
@@ -94,6 +95,24 @@ _row_field() {
     [ "$week_pct" = "39" ]
     [ -n "$resets_at" ]
     [ "$resets_at" != "null" ]
+}
+
+# ─── 0%-session variant: no "· resets" clause must still parse (not fail) ───
+#
+# Regression: at session_pct=0 Claude Code renders a bare "Current session: 0% used" with no
+# "· resets <time>" suffix. The original regex required that suffix, so every idle 0% poll was
+# mis-recorded as parse_failed with session_pct=null (582 of 591 observed failures). A legitimate
+# 0% reading must land as an ok row with session_pct=0 and a null resets_at.
+
+@test "0%-session variant: bare 'Current session: 0% used' parses to session_pct=0, not parse_failed" {
+    _write_mock_claude "cat '$IDLE_FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$BORG_USAGE_SAMPLES" ]
+    [ "$(_row_field '.status')" = "ok" ]
+    [ "$(_row_field '.session_pct')" = "0" ]
+    [ "$(_row_field '.week_pct')" = "0" ]
+    [ "$(_row_field '.resets_at')" = "" ] || [ "$(_row_field '.resets_at')" = "null" ]
 }
 
 # ─── fail-closed: no output → parse failure, but a row IS written ───────────

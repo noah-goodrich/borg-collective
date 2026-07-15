@@ -168,8 +168,14 @@ if [[ "$claude_exit" -ne 0 ]]; then
     exit 0
 fi
 
-session_line=$(echo "$output" | grep -oE 'Current session: [0-9]+% used · resets [^(]+' | head -1) || session_line=""
-session_pct=$(echo "$session_line" | sed -E 's/^Current session: ([0-9]+)% used · resets .+$/\1/') || session_pct=""
+# The "· resets <time>" suffix is present only when session_pct > 0. At 0% Claude Code renders a
+# bare "Current session: 0% used" with no reset clause, so the suffix must be OPTIONAL here — a
+# required "· resets" mis-parsed every idle 0% poll as parse_failed (582 of 591 observed failures).
+# Match the percentage (always present when the session line exists) and let resets_at (below) pick
+# up the clause only when it is there. A genuinely absent "Current session:" line still yields an
+# empty session_pct → parse_failed, which is correct.
+session_line=$(echo "$output" | grep -oE 'Current session: [0-9]+% used( · resets [^(]+)?' | head -1) || session_line=""
+session_pct=$(echo "$session_line" | sed -E 's/^Current session: ([0-9]+)% used.*$/\1/') || session_pct=""
 if [[ "$session_pct" == "$session_line" ]]; then session_pct=""; fi
 resets_at=$(echo "$session_line" | sed -E 's/^Current session: [0-9]+% used · resets (.+)$/\1/' | sed -E 's/ +$//') || resets_at=""
 if [[ "$resets_at" == "$session_line" ]]; then resets_at=""; fi
