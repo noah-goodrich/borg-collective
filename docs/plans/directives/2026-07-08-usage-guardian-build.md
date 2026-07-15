@@ -1,7 +1,29 @@
 # Directive: Build the Usage Guardian
 
-*Filed: 2026-07-08 · Status: OPEN · Gated by: nothing (spike returned GO)*
+*Filed: 2026-07-08 · Status: OPEN (Phase 1 shipped; Phase 2 pending data) · Gated by: nothing (spike returned GO)*
 *Source: `docs/research/2026-07-08-usage-guardian-detection-spike.md`*
+
+> ## Data-readiness note — 2026-07-14 (before tuning any threshold, read this)
+>
+> Phase 1 (the observe-only poller) shipped and has run since Jul 9. A review of
+> `~/.local/state/borg/usage-samples.jsonl` (3080 rows, ~6 days) found the data **not yet
+> sufficient to tune the 85% checkpoint threshold**, but clarified what is and isn't a blocker:
+>
+> - **Only ONE near-cap episode exists.** All 15 samples ≥85% are from Jul 9; every other day has
+>   zero. This is still the single-observation trap the Risks section names — do NOT tune on it.
+> - **Burn accelerates near the cap.** That one trajectory climbed ~1%/min in the 85→93 band —
+>   roughly **4× the ~1%/4min** the spike assumed. An 85% trigger gives *less* lead time than the
+>   directive imagined; factor this in when Phase 2 sets the sweep threshold + timing.
+> - **Detection near the cap is reliable — the error rate was a red herring.** ~19% of rows were
+>   `parse_failed`, but 582/591 were the benign 0%-idle variant (a bare `Current session: 0% used`
+>   with no reset clause). That parser bug is **fixed** (PR #80, `bin/borg-usage-watch`), with a
+>   fixture + regression test. **No near-cap sample was ever lost** — high-burn windows always
+>   carry the reset clause and parsed fine. So the guardian is trustworthy at the dangerous end.
+>
+> **Net:** the remaining Phase-2 blocker is simply *collecting more near-cap episodes* (time +
+> heavy multi-agent sessions), not a code or reliability problem. Let the (now-cleaner) log fill
+> before tuning. The delivery-spike half of Phase 2 (can `tmux send-keys` reach a busy pane?) is
+> data-independent and can proceed anytime.
 
 ## Why
 
