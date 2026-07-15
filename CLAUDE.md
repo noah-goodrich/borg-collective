@@ -150,6 +150,21 @@ docs/
 - **`drone scaffold --supabase <dir>`**: generate a devcontainer joined to the external
   `supabase_network_<project>` network plus standard borg-hooks that call `supabase start`
   on up and `supabase stop` on down.
+- **`drone scaffold --supabase-shared <dir>` (opt-in, INERT until cutover)**: a second,
+  separate scaffold path for the shared-local-Supabase consolidation. Instead of a
+  per-project Supabase instance, the generated devcontainer joins the fixed, always-on
+  `supabase_network_stillpoint` Docker network (containers `supabase_*_stillpoint`, ports
+  API 54321 / DB 54322 / Analytics 54327). Shared config lives in the `stillpoint` repo
+  (`~/dev/stillpoint/supabase`, overridable via `BORG_STILLPOINT_SUPABASE_DIR`). Templates
+  at `templates/supabase-shared/`. The shared stack is **ALWAYS-ON** — started once, never
+  per-drone: `borg-hooks/pre-up.sh` checks `docker inspect -f '{{.State.Running}}'
+  supabase_db_stillpoint` and only runs `supabase start` (from the stillpoint repo) if it
+  isn't already running; it never runs a per-project `supabase init`/`start`.
+  `borg-hooks/post-down.sh` is a hard no-op — an individual `drone down` must never stop
+  infra shared by other projects. Stop the shared stack explicitly and deliberately from
+  the stillpoint repo (`supabase stop`), never via a drone's lifecycle. Does not alter
+  `--supabase` semantics; the two scaffold paths are independent. This mechanism is scaffolded
+  but not yet wired into any project — no per-project cutover has happened.
 - **Nanoprobe orchestrator (drones vs nanoprobes)**: drones are persistent devcontainers (long-lived,
   one per project); nanoprobes are ephemeral Claude Code subagents (`agents/borg-nanoprobe.md`)
   spawned by the orchestrator via the Agent tool with `background: true` (no harness worktree
