@@ -1,6 +1,7 @@
 # Directive: Build the Usage Guardian
 
-*Filed: 2026-07-08 · Status: OPEN (Phase 1 shipped; Phase 2 pending data) · Gated by: nothing (spike returned GO)*
+*Filed: 2026-07-08 · Status: OPEN (Phase 1 shipped; Phase-2 delivery spike RESOLVED 2026-07-15; sweep now gated only on
+threshold-tuning data) · Gated by: nothing (spike returned GO)*
 *Source: `docs/research/2026-07-08-usage-guardian-detection-spike.md`*
 
 > ## Data-readiness note — 2026-07-14 (before tuning any threshold, read this)
@@ -24,6 +25,38 @@
 > heavy multi-agent sessions), not a code or reliability problem. Let the (now-cleaner) log fill
 > before tuning. The delivery-spike half of Phase 2 (can `tmux send-keys` reach a busy pane?) is
 > data-independent and can proceed anytime.
+
+> ## Delivery-spike result — 2026-07-15 (RESOLVED: send-keys DOES reach a busy pane)
+>
+> Ran the by-hand test the prior checkpoints kept deferring: launched a real Claude Code pane
+> (v2.1.205) in a throwaway tmux session, drove it to a genuine mid-turn state (long generation,
+> `esc to interrupt` showing), and fired the exact delivery the sweep would use. Observed via
+> `capture-pane`. The `borg:8` "zombie / probably unreliable" fear is **disproven** — the mechanism
+> works, with one non-obvious caveat. Three findings:
+>
+> 1. **A queued `/`-command executes as a real command.** Typed mid-turn, the message lands in the
+>    input box; the TUI shows it inline as a queued message (`❯ /cmd`, box reads "Press up to edit
+>    queued messages"). When the current turn ends, it dequeues and runs **through the slash-command
+>    pipeline** — proven by an `Unknown command: /spike-probe-BRAVO` response to a deliberately fake
+>    command. A real `/borg-link-up` would therefore fire the skill. No corruption, no interrupt,
+>    nothing lost.
+> 2. **Delivery is deferred-not-immediate — which is correct for a checkpoint.** The sweep does NOT
+>    interrupt the in-flight turn; it queues behind it and runs at the *next* turn boundary. That is
+>    exactly what you want: `/borg-link-up` should flush state at a clean boundary, not mid-thought.
+>    Implication: the guardian must fire *before* the cap with enough headroom for the current turn
+>    to finish AND the queued checkpoint turn to run — with burn at ~1%/min near the cap (see the
+>    data note above), an 85% trigger is defensible but tight; do not push it later.
+> 3. **Bundle text+Enter in ONE `send-keys` is NOT reliable — send Enter SEPARATELY.** A long input
+>    sent as `send-keys "<text>" Enter` in one call was treated as a paste: the trailing Enter became
+>    a literal newline and did **not** submit. A second, separate `send-keys Enter` submitted/queued
+>    it cleanly. (Short strings like cortex-watch's `"wake up!" Enter` likely dodge the paste
+>    heuristic, which is why that path has worked — but the sweep must not rely on it.) **Sweep
+>    implementation rule:** send the command text, then a separate `Enter` after a short delay
+>    (~0.5s). This is strictly safer for any input length.
+>
+> **Net:** the checkpoint-sweep delivery path is GREEN. Phase 2's remaining blocker is now *only*
+> the threshold-tuning data (more near-cap episodes) — no delivery redesign needed. When Phase 2
+> builds the sweep, use the separate-Enter form and treat delivery as end-of-turn, not immediate.
 
 ## Why
 
@@ -55,6 +88,9 @@ A launchd-driven poller that checkpoints active drones before the session window
 3. **Actions**
    - `session_pct >= 85` → checkpoint every active drone via the proven launchd→tmux path
      (`tmux send-keys` `/borg-link-up`), the same delivery mechanism `borg-cortex-watch` uses.
+     **Send the command text and `Enter` as two separate `send-keys` calls** (~0.5s apart), NOT
+     bundled — see the 2026-07-15 delivery-spike result above (bundled Enter can land as a literal
+     newline on long inputs). Delivery is end-of-turn (queued), not an interrupt — this is correct.
    - `session_pct >= 92` → hard-stop new nanoprobe/workflow dispatch.
    - `week_pct >= 90` → warn only. Do not sweep; a checkpoint does not help a 7-day window.
    - Thresholds env-tunable as `BORG_USAGE_CHECKPOINT_PCT` / `BORG_USAGE_HALT_PCT`, following the
@@ -74,12 +110,11 @@ A launchd-driven poller that checkpoints active drones before the session window
 
 ## Also do
 
-- **Fix `borg-resume`'s premise.** `~/.claude/skills/borg-resume/SKILL.md` asserts the limit "is not predictable from
-  inside a session." That is now false — a subprocess reads it for free. Update the disclaimer and point at the
-  guardian. Keep the skill otherwise verbatim: its `resumeFromRunId` recovery is correct and remains the backstop for a
-  limit hit between polls.
-- **Reconcile skill ownership.** `borg-resume` is installed at `~/.claude/skills/borg-resume/` with **no source under
-  `borg-collective/skills/`**, violating the canonical-source rule (borg-collective → claude-plugins). Import it.
+- **Fix `borg-resume`'s premise.** ✅ DONE 2026-07-15. The "not predictable from inside a session" disclaimer is
+  corrected (intro + Notes) to point at the usage guardian; the `resumeFromRunId` recovery is kept verbatim as the
+  between-polls backstop.
+- **Reconcile skill ownership.** ✅ DONE 2026-07-15. `borg-resume` imported to `skills/borg-resume/SKILL.md` (canonical
+  source); `borg setup` now stamps it `.borg-managed` and `build-plugin.sh` publishes it to the plugin distro.
 - **Poll noise.** Each poll appends a `$0` record to `~/.claude/token-spend.jsonl` via the `SessionEnd` hook.
   `--settings '{"hooks":{}}'` does *not* suppress it. Either filter `est_cost_usd > 0` in token-cost analytics, or add
   an env guard the hook honours. Benign; do not let it block the build.
