@@ -1001,6 +1001,55 @@ _cmd_scaffold_supabase() {
     info "  3. Link: supabase link --project-ref <ref>"
 }
 
+# ── drone scaffold --supabase-shared ────────────────────────────────────────────
+
+# Generate a devcontainer that JOINS the always-on shared stillpoint Supabase
+# stack (network `supabase_network_stillpoint`) instead of creating a
+# per-project network + running its own `supabase init`/`start`. Does NOT
+# alter --supabase semantics — this is a wholly separate opt-in path.
+_cmd_scaffold_supabase_shared() {
+    local project_dir="$1" workspace="$2"
+    _scaffold_preflight "$project_dir"
+    project_dir="$_sp_dir"
+    local dc_dir="$project_dir/.devcontainer"
+
+    local project_name="${project_dir##*/}"
+    local project_name_upper
+    project_name_upper="${project_name:u}"
+    project_name_upper="${project_name_upper//-/_}"
+
+    local tmpl_dir="$DRONE_SCRIPT_DIR/templates/supabase-shared"
+    [[ -d "$tmpl_dir" ]] || die "Template directory missing: $tmpl_dir"
+
+    info "Scaffolding shared-Supabase devcontainer for '$project_name'..."
+    mkdir -p "$dc_dir/borg-hooks"
+
+    local ws_symlink
+    ws_symlink=$(_ws_symlink_snippet "$workspace")
+
+    _subst_template() {
+        sed -e "s|__PROJECT_NAME__|$project_name|g" \
+            -e "s|__PROJECT_NAME_UPPER__|$project_name_upper|g" \
+            -e "s|__WORKSPACE__|$workspace|g" \
+            -e "s|__WS_SYMLINK__|$ws_symlink|g" \
+            "$1" > "$2"
+    }
+
+    _subst_template "$tmpl_dir/Dockerfile"          "$dc_dir/Dockerfile"
+    _subst_template "$tmpl_dir/docker-compose.yml"  "$dc_dir/docker-compose.yml"
+    _subst_template "$tmpl_dir/devcontainer.json"   "$dc_dir/devcontainer.json"
+    cp "$tmpl_dir/borg-hooks/pre-up.sh"   "$dc_dir/borg-hooks/pre-up.sh"
+    cp "$tmpl_dir/borg-hooks/post-down.sh" "$dc_dir/borg-hooks/post-down.sh"
+    chmod +x "$dc_dir/borg-hooks/pre-up.sh" "$dc_dir/borg-hooks/post-down.sh"
+
+    info "Scaffolded shared-Supabase project in $project_dir"
+    echo
+    info "Joins the ALWAYS-ON shared stillpoint stack (network: supabase_network_stillpoint)."
+    info "The shared stack is started/stopped independently — see stillpoint repo."
+    info "Next steps:"
+    info "  1. drone up $project_name"
+}
+
 # ── drone scaffold ────────────────────────────────────────────────────────────
 
 cmd_scaffold() {
@@ -1013,13 +1062,14 @@ cmd_scaffold() {
             --lang)     lang="${2:-none}"; shift 2 ;;
             --workspace) workspace="${2:-}"; workspace_explicit=1; shift 2 ;;
             --supabase) preset="supabase"; shift ;;
+            --supabase-shared) preset="supabase-shared"; shift ;;
             *)          project_dir="$1"; shift ;;
         esac
     done
 
-    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--supabase] [--lang python|node|none] [--workspace /workspaces/<project>]"
+    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--supabase|--supabase-shared] [--lang python|node|none] [--workspace /workspaces/<project>]"
 
-    # Default workspace from raw basename; the supabase branch runs its own preflight.
+    # Default workspace from raw basename; the supabase branches run their own preflight.
     if (( ! workspace_explicit )); then
         local _raw_basename="${project_dir%/}"
         _raw_basename="${_raw_basename##*/}"
@@ -1028,6 +1078,11 @@ cmd_scaffold() {
 
     if [[ "$preset" == "supabase" ]]; then
         _cmd_scaffold_supabase "$project_dir" "$workspace"
+        return
+    fi
+
+    if [[ "$preset" == "supabase-shared" ]]; then
+        _cmd_scaffold_supabase_shared "$project_dir" "$workspace"
         return
     fi
 
@@ -1201,7 +1256,7 @@ cmd_help() {
     fix [project]        Restore standard 2-pane layout for project window
     fix --all            Restore layout for all windows
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
-    scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase)
+    scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase, --supabase-shared)
     status               Show all active drones (containers + Claude status)
     help                 Show this message
 

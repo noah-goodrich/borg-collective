@@ -1,0 +1,21 @@
+{
+  "name": "__PROJECT_NAME__",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "__WORKSPACE__",
+  "features": {},
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ],
+      "settings": {}
+    }
+  },
+  "postCreateCommand": "true",
+  "postStartCommand": "sudo mkdir -p /Users && sudo ln -sfn /home/dev /Users/noah; sudo chmod a+rw /run/host-services/ssh-auth.sock 2>/dev/null || true__WS_SYMLINK__",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "dev",
+  "updateRemoteUserUID": true
+}
