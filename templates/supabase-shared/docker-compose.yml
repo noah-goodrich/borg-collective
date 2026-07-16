@@ -1,0 +1,48 @@
+services:
+  devcontainer:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    labels:
+      - dev.role=app
+    volumes:
+      # --- project files ---
+      - ..:__WORKSPACE__:cached
+
+      # --- standard dotfile mounts (keep in sync with borg scaffold output) ---
+      - ~/.zshrc:/home/dev/.zshrc:cached
+      - ~/.p10k.zsh:/home/dev/.p10k.zsh:cached
+      - ~/.config/zsh:/home/dev/.config/zsh:cached
+      - ~/.config/nvim:/home/dev/.config/nvim:cached
+      # Don't bind-mount ~/.ssh as a dir — Docker Desktop's grpcfuse xattr
+      # writeback can strip the x-bit off ~/.ssh/agent/ and kill ssh-agent.
+      - ~/.ssh/config:/home/dev/.ssh/config:ro
+      - ~/.ssh/known_hosts:/home/dev/.ssh/known_hosts:ro
+      - ~/.gitconfig:/home/dev/.gitconfig:cached
+      - /run/host-services/ssh-auth.sock:/run/host-services/ssh-auth.sock
+      # Host-first Claude: ~/.claude is no longer mounted into the container
+      # (Claude runs on host; container is a `drone exec` dispatch target).
+      - ~/.config/borg:/home/dev/.config/borg:cached
+
+    working_dir: __WORKSPACE__
+    user: dev
+    command: sleep infinity
+    environment:
+      SSH_AUTH_SOCK: /run/host-services/ssh-auth.sock
+
+      # Shared stillpoint Supabase Postgres, reachable via the joined external
+      # network. This is the ALWAYS-ON shared stack (started once, never
+      # per-drone) — NOT a per-project Supabase instance. Default creds:
+      # postgres/postgres (Supabase CLI local-dev convention). See
+      # .devcontainer/borg-hooks/pre-up.sh for the lifecycle that ensures the
+      # shared stack is running before compose up.
+      __PROJECT_NAME_UPPER___DB_URL: postgresql://postgres:postgres@supabase_db_stillpoint:5432/postgres
+
+    networks:
+      - default
+      - supabase
+
+networks:
+  supabase:
+    name: supabase_network_stillpoint
+    external: true
