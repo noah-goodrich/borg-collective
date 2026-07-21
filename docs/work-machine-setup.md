@@ -22,6 +22,22 @@ Already set up? Skip the phases below and run this **one-block update flow** ins
 four repos, redeploys borg, and finishes with `borg doctor` so you know the machine is actually healthy,
 not just "pulled."
 
+> ⚠️ **MANDATORY — back up cairn's database before pulling.** cairn stores its knowledge graph in
+> **Postgres** (not SQLite), in the shared `dev-postgres` container, database `cairn`, user `dev`
+> (confirmed via `~/dev/cairn/compose.yml` and `~/dev/cairn/CLAUDE.md`). cairn has **no first-class
+> `backup`/`export` command** (`cairn --help` only lists `search`/`record`/`stats`/`health`/`presence`)
+> — the correct mechanism is `pg_dump` straight from the container. Pulling `~/dev/cairn` and
+> redeploying can bring in a new Alembic migration that runs automatically on next boot (e.g. migration
+> 007 dropped a CHECK constraint) — a bad migration or a fat-fingered pull is otherwise unrecoverable.
+>
+> ```zsh
+> docker exec dev-postgres pg_dump -U dev -d cairn -F c -f /tmp/cairn-backup-$(date +%Y%m%d).dump && \
+>   docker cp dev-postgres:/tmp/cairn-backup-$(date +%Y%m%d).dump ~/cairn-backup-$(date +%Y%m%d).dump
+> ```
+>
+> **Restore** if a migration goes bad: `docker cp ~/cairn-backup-YYYYMMDD.dump dev-postgres:/tmp/restore.dump
+> && docker exec dev-postgres pg_restore -U dev -d cairn --clean --if-exists /tmp/restore.dump`.
+
 ```zsh
 # 1. Pull all four repos on main, fast-forward only
 git -C ~/dev/borg-collective pull --ff-only && git -C ~/dev/claude-plugins pull --ff-only && \
