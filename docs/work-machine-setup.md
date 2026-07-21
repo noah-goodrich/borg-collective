@@ -96,10 +96,10 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 
 ## Prerequisites to verify manually before running anything
 
-- [x] **VERIFIED (2026-06-11):** `ghcr.io/noah-goodrich/cairn:0.2.0` is **public and pulls cleanly**
-      (multi-arch amd64+arm64), so Phase 4 Option A works as written — no action needed. (If it ever
-      401/404s after a re-tag, re-set the package visibility to "Public" in GitHub → Packages; otherwise
-      Option A falls back to the local source build in Option B.)
+- [x] **VERIFIED (2026-07-21):** cairn `compose.yml` now pins `ghcr.io/noah-goodrich/cairn:0.4.0` (up from
+      0.2.0, which was verified public + multi-arch amd64+arm64 on 2026-06-11). Phase 4 Option A works as
+      written — no action needed. (If the image ever 401/404s after a re-tag, re-set the package visibility to
+      "Public" in GitHub → Packages; otherwise Option A falls back to the local source build in Option B.)
 - [ ] macOS with Xcode Command Line Tools (`xcode-select --install`).
 
 ---
@@ -113,8 +113,10 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 # Required CLI tools for borg + general dev
 brew install jq fzf tmux git gh ripgrep neovim fswatch
 
-# Docker runtime — choose ONE. OrbStack is recommended on Apple Silicon.
-brew install --cask orbstack        # recommended
+# Container runtime — choose ONE. This work machine runs Podman (docker is a thin client over
+# podman-machine-default). Podman does NOT auto-start at login — see Phase 4 and "Ongoing".
+brew install podman && podman machine init && podman machine start   # current work-machine runtime
+# brew install --cask orbstack      # alternative — auto-starts at login on Apple Silicon
 # brew install --cask docker        # alternative
 
 # Claude Code CLI (Node first)
@@ -261,6 +263,10 @@ claude plugin list | grep noah-personal
 
 cairn is optional; borg degrades gracefully without it.
 
+> **Runtime prerequisite (Podman):** if this machine runs Podman, `docker` is a client over
+> `podman-machine-default` — start the VM first or cairn-up hangs: `podman machine start`. Podman does **not**
+> auto-start at login (unlike OrbStack), so re-run it after every reboot before bringing cairn up.
+
 ```zsh
 # 4a. Docker network
 docker network inspect devnet >/dev/null 2>&1 || docker network create devnet
@@ -304,6 +310,8 @@ borg init                                # optional: morning briefing + orchestr
 
 - cairn's `compose.yml` uses `restart: unless-stopped` — it auto-restarts after reboot as long as the
   Docker daemon starts at login (OrbStack: default yes; Docker Desktop: enable "Start at Login").
+- **Podman:** the machine VM does **not** auto-start at login — cairn will not survive a reboot until you run
+  `podman machine start` (then `./bin/cairn-up` if needed). There is no login-item equivalent to OrbStack.
 - Restart manually anytime: `cd ~/dev/cairn && ./bin/cairn-up`.
 
 ---
