@@ -48,6 +48,19 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bi
 BORG_USAGE_CHECKPOINT_PCT="${BORG_USAGE_CHECKPOINT_PCT:-85}"
 BORG_USAGE_HALT_PCT="${BORG_USAGE_HALT_PCT:-92}"
 
+# Phase-2 checkpoint sweep. DEFAULT-OFF: the guardian ships inert until a human arms it, because the
+# 85% trigger rests on a single near-cap episode and must not be hard-tuned yet (directive's
+# data-readiness note). The threshold above (BORG_USAGE_CHECKPOINT_PCT) is the config knob; this
+# flag is the master switch.
+BORG_USAGE_SWEEP_ENABLED="${BORG_USAGE_SWEEP_ENABLED:-0}"
+BORG_USAGE_SWEEP_CMD_TEXT="${BORG_USAGE_SWEEP_CMD_TEXT:-/borg-link-up}"
+BORG_USAGE_SENDKEYS_DELAY="${BORG_USAGE_SENDKEYS_DELAY:-0.5}"
+
+# Idempotence state (sweep once per window). Distinct from the samples log; lives under the config
+# dir per the directive. tmp+rename writes only.
+BORG_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
+GUARDIAN_STATE="${BORG_USAGE_GUARDIAN_STATE:-$BORG_CONFIG_DIR/usage-guardian.json}"
+
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
 SAMPLES="${BORG_USAGE_SAMPLES:-$STATE_DIR/usage-samples.jsonl}"
 LOG="${BORG_USAGE_LOG:-$STATE_DIR/usage-watch.log}"
@@ -115,6 +128,100 @@ _log_output_excerpt() {
     local excerpt
     excerpt=$(printf '%s' "$1" | tr '\n' '|' | cut -c1-400)
     log "output excerpt (first 400 chars): $excerpt"
+}
+
+# ── Phase-2 checkpoint sweep ─────────────────────────────────────────────────
+# All tmux WRITES live here (Phase 1 was strictly read-only). The sweep is gated behind
+# BORG_USAGE_SWEEP_ENABLED and fires at most once per session window.
+
+# Enumerate tmux panes running Claude Code, one per line: pane_id<TAB>session<TAB>window<TAB>index.
+# Same claude|version match as _claude_pane_count — a native-install pane reports its version string
+# ("2.1.205") as pane_current_command, never "claude". Overridable for tests via BORG_USAGE_PANES_CMD,
+# which must emit raw tmux-format lines (pane_id<TAB>cmd<TAB>session<TAB>window<TAB>index).
+_claude_panes() {
+    local lister="tmux list-panes -a -F '#{pane_id}	#{pane_current_command}	#{session_name}	#{window_name}	#{pane_index}'"
+    [[ -n "${BORG_USAGE_PANES_CMD:-}" ]] && lister="$BORG_USAGE_PANES_CMD"
+    eval "$lister" 2>/dev/null \
+        | awk -F'\t' '$2 ~ /^(claude|[0-9]+\.[0-9]+\.[0-9]+)$/ { print $1"\t"$3"\t"$4"\t"$5 }'
+}
+
+# Deliver the checkpoint command to one pane using the SEPARATE-ENTER rule from the 2026-07-15
+# delivery spike: send the command text, then a SEPARATE Enter after a short delay. Bundling
+# text+Enter in one send-keys call can land as a literal newline on long input. Non-zero return on
+# any keystroke failure so the caller can log-and-leave (reaper stance). Overridable via
+# BORG_USAGE_SENDKEYS_CMD for tests (default: `tmux send-keys`).
+_send_checkpoint() {
+    local pane_id="$1"
+    local -a sk
+    if [[ -n "${BORG_USAGE_SENDKEYS_CMD:-}" ]]; then
+        # shellcheck disable=SC2206
+        sk=(${BORG_USAGE_SENDKEYS_CMD})
+    else
+        sk=(tmux send-keys)
+    fi
+    "${sk[@]}" -t "$pane_id" "$BORG_USAGE_SWEEP_CMD_TEXT" || return 1
+    sleep "$BORG_USAGE_SENDKEYS_DELAY" 2>/dev/null || true
+    "${sk[@]}" -t "$pane_id" Enter || return 1
+    return 0
+}
+
+# Read one field from the guardian state file (empty string when absent/unreadable).
+_guardian_get() {
+    [[ -f "$GUARDIAN_STATE" ]] || { printf ''; return 0; }
+    jq -r --arg k "$1" '.[$k] // ""' "$GUARDIAN_STATE" 2>/dev/null || printf ''
+}
+
+# Atomically record that the sweep fired for a window (tmp + rename).
+_guardian_set_swept() {
+    local window_key="$1" pct="$2" fired="$3" failed="$4"
+    mkdir -p "$(dirname "$GUARDIAN_STATE")"
+    local tmp="$GUARDIAN_STATE.tmp.$$"
+    if jq -c -n --arg w "$window_key" --argjson pct "$pct" --arg ts "$ts" \
+        --argjson fired "$fired" --argjson failed "$failed" \
+        '{swept_window:$w, last_session_pct:$pct, last_swept_at:$ts, last_fired:$fired, last_failed:$failed}' \
+        > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$GUARDIAN_STATE"
+    else
+        rm -f "$tmp"
+        log "WARNING: sweep: could not write guardian state at $GUARDIAN_STATE"
+    fi
+}
+
+# Fire the sweep: deliver to every active Claude pane, at most once per window (idempotence keyed on
+# the reset timestamp). Marks the window swept only if at least one pane was attempted, so a breach
+# with zero panes re-arms on the next poll rather than silently consuming the window.
+_run_sweep() {
+    local session_pct="$1" window_key="$2"
+
+    local last_swept
+    last_swept=$(_guardian_get swept_window)
+    if [[ -n "$window_key" && "$last_swept" == "$window_key" ]]; then
+        log "sweep: already fired for window '$window_key' — skipping (idempotent)"
+        return 0
+    fi
+
+    local panes
+    panes=$(_claude_panes)
+    if [[ -z "$panes" ]]; then
+        log "sweep: session_pct=$session_pct >= threshold but no Claude panes to checkpoint — re-arming"
+        return 0
+    fi
+
+    local pane_id session window pane_index fired=0 failed=0
+    while IFS=$'\t' read -r pane_id session window pane_index; do
+        [[ -z "$pane_id" ]] && continue
+        if _send_checkpoint "$pane_id"; then
+            log "sweep: delivered $BORG_USAGE_SWEEP_CMD_TEXT to pane=$pane_id ($session:$window.$pane_index)"
+            fired=$((fired + 1))
+        else
+            log "WARNING: sweep: send-keys failed for pane=$pane_id ($session:$window.$pane_index) — leaving it alone"
+            failed=$((failed + 1))
+        fi
+    done <<<"$panes"
+
+    _guardian_set_swept "$window_key" "$session_pct" "$fired" "$failed"
+    log "sweep: window='$window_key' fired=$fired failed=$failed"
+    return 0
 }
 
 ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -210,10 +317,20 @@ row=$(jq -c -n \
 _append_sample "$row"
 log "sample: session_pct=$session_pct week_pct=$week_pct resets_at=$resets_at"
 
+# Halt and checkpoint are independent thresholds — a 95% session needs BOTH the halt signal AND a
+# checkpoint sweep, so these are separate `if`s, not elif. The >=92 dispatch hard-stop veto is a
+# separate PreToolUse-hook component (a launchd job cannot veto an in-process Agent call); here we
+# only surface the signal.
 if (( session_pct >= BORG_USAGE_HALT_PCT )); then
-    log "WARNING: session_pct=$session_pct >= halt threshold $BORG_USAGE_HALT_PCT (observe-only — no action taken)"
-elif (( session_pct >= BORG_USAGE_CHECKPOINT_PCT )); then
-    log "WARNING: session_pct=$session_pct >= checkpoint threshold $BORG_USAGE_CHECKPOINT_PCT (observe-only — no action taken)"
+    log "WARNING: session_pct=$session_pct >= halt threshold $BORG_USAGE_HALT_PCT (dispatch hard-stop veto is a separate PreToolUse hook — not enforced here)"
+fi
+
+if (( session_pct >= BORG_USAGE_CHECKPOINT_PCT )); then
+    if [[ "$BORG_USAGE_SWEEP_ENABLED" == "1" ]]; then
+        _run_sweep "$session_pct" "$resets_at"
+    else
+        log "WARNING: session_pct=$session_pct >= checkpoint threshold $BORG_USAGE_CHECKPOINT_PCT (sweep disabled — observe-only)"
+    fi
 fi
 
 exit 0

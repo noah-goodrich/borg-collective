@@ -21,6 +21,51 @@ setup() {
     export BORG_USAGE_SAMPLES="${BATS_TEST_TMPDIR}/usage-samples.jsonl"
     export BORG_USAGE_LOG="${BATS_TEST_TMPDIR}/usage-watch.log"
     export BORG_USAGE_PANE_CMD="echo claude"
+    # ─ Phase-2 sweep test scaffolding ─
+    # Isolated idempotence state, a captured send-keys sink, and a zeroed inter-key delay so the
+    # suite does not sleep. Individual tests opt into the sweep via BORG_USAGE_SWEEP_ENABLED=1.
+    export BORG_USAGE_GUARDIAN_STATE="${BATS_TEST_TMPDIR}/usage-guardian.json"
+    export SENDKEYS_SINK="${BATS_TEST_TMPDIR}/sendkeys.log"
+    export BORG_USAGE_SENDKEYS_DELAY=0
+}
+
+# A mock for `tmux send-keys` that records every invocation's argv (one line per call) to
+# $SENDKEYS_SINK. Optional arg: a pane id to FAIL on (non-zero exit) — used to prove the sweep is
+# fail-safe per pane. Records the argv even on the failing call so the attempt is observable.
+_write_mock_sendkeys() {
+    local fail_pane="${1:-}"
+    {
+        printf '#!/usr/bin/env bash\n'
+        printf 'printf "%%s\\n" "$*" >> %q\n' "$SENDKEYS_SINK"
+        if [ -n "$fail_pane" ]; then
+            printf 'for a in "$@"; do [ "$a" = %q ] && exit 1; done\n' "$fail_pane"
+        fi
+        printf 'exit 0\n'
+    } > "$MOCK_BIN/sendkeys-mock"
+    chmod +x "$MOCK_BIN/sendkeys-mock"
+    export BORG_USAGE_SENDKEYS_CMD="$MOCK_BIN/sendkeys-mock"
+}
+
+# Emit raw tmux-format pane lines (pane_id<TAB>cmd<TAB>session<TAB>window<TAB>index) for the given
+# pane ids. All are marked as claude/version panes so the sweep targets them; shell panes are the
+# caller's job to exclude (see the dedicated filter test).
+_panes_env() {
+    local out=""
+    local i=0
+    for pid in "$@"; do
+        local cmd="claude"
+        (( i % 2 == 1 )) && cmd="2.1.205"   # alternate claude / version-named to exercise both
+        out+="${pid}\t${cmd}\tborg\twin${i}\t0\n"
+        i=$((i + 1))
+    done
+    export BORG_USAGE_PANES_CMD="printf '%b' '${out}'"
+}
+
+# Mock claude that reports a given session pct with a given reset label (drives the sweep + its
+# per-window idempotence key).
+_mock_claude_at() {
+    local pct="$1" resets="$2"
+    _write_mock_claude "echo 'Current session: ${pct}% used · resets ${resets}'; echo 'Current week (all models): 40% used · resets Jul 30 at 7am (America/Denver)'"
 }
 
 _write_mock_claude() {
@@ -207,11 +252,153 @@ _row_field() {
     [ "$(_row_field '.pane_count')" = "1" ]
 }
 
-# ─── observe-only hard constraint ────────────────────────────────────────────
+# ─── Phase-2 sweep: DEFAULT-OFF is the safety belt (criterion 1) ──────────────
+#
+# Replaces the old blanket "script contains no send-keys" invariant. Phase 2 adds send-keys, so the
+# guarantee we now pin is stronger and behavioural: with the sweep DISABLED (the default), a poll
+# above threshold performs NO delivery and still logs the observe-only warning.
 
-@test "observe-only: script contains no send-keys" {
-    run grep -c send-keys "$SCRIPT"
-    [ "$output" = "0" ]
+@test "default-OFF: above threshold with sweep disabled performs no send-keys, still warns" {
+    _write_mock_sendkeys
+    _panes_env paneA paneB
+    _mock_claude_at 90 "Jul 9 at 1:20am (America/Denver)"
+    # BORG_USAGE_SWEEP_ENABLED intentionally unset (the default).
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(_row_field '.status')" = "ok" ]
+    [ "$(_row_field '.session_pct')" = "90" ]
+    # No delivery happened at all.
+    [ ! -f "$SENDKEYS_SINK" ] || [ ! -s "$SENDKEYS_SINK" ]
+    grep -q "WARNING.*checkpoint threshold.*sweep disabled" "$BORG_USAGE_LOG"
+}
+
+# The separate-Enter rule is also a grep-able source invariant, so a future refactor that bundles
+# text+Enter into one send-keys call fails loudly (see the 2026-07-15 delivery-spike finding).
+@test "source invariant: sweep never bundles command text with Enter in one send-keys call" {
+    # No line should contain both the command text and a trailing Enter argument.
+    run grep -nE 'send-keys.*/borg-link-up.*Enter' "$SCRIPT"
+    [ "$status" -ne 0 ]
+}
+
+# ─── Phase-2 sweep: two-step delivery when ENABLED (criterion 2) ──────────────
+
+@test "enabled: sweep delivers /borg-link-up then a SEPARATE Enter to each claude pane" {
+    _write_mock_sendkeys
+    _panes_env paneA paneB
+    _mock_claude_at 90 "Jul 9 at 1:20am (America/Denver)"
+    export BORG_USAGE_SWEEP_ENABLED=1
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$SENDKEYS_SINK" ]
+    # Per pane: exactly two calls, text first (no Enter), then a bare Enter.
+    run grep -c . "$SENDKEYS_SINK"
+    [ "$output" = "4" ]
+    # paneA: text call carries the command and NOT Enter; the following call is only Enter.
+    grep -qE '^-t paneA /borg-link-up$' "$SENDKEYS_SINK"
+    grep -qE '^-t paneA Enter$' "$SENDKEYS_SINK"
+    grep -qE '^-t paneB /borg-link-up$' "$SENDKEYS_SINK"
+    grep -qE '^-t paneB Enter$' "$SENDKEYS_SINK"
+    # Ordering: the text delivery for paneA precedes its Enter.
+    text_line=$(grep -nE '^-t paneA /borg-link-up$' "$SENDKEYS_SINK" | head -1 | cut -d: -f1)
+    enter_line=$(grep -nE '^-t paneA Enter$' "$SENDKEYS_SINK" | head -1 | cut -d: -f1)
+    [ "$text_line" -lt "$enter_line" ]
+}
+
+# ─── Phase-2 sweep: idempotence, one sweep per window (criterion 3) ───────────
+
+@test "idempotence: two polls above threshold in one window fire exactly ONE sweep" {
+    _write_mock_sendkeys
+    _panes_env paneA
+    _mock_claude_at 90 "Jul 9 at 1:20am (America/Denver)"
+    export BORG_USAGE_SWEEP_ENABLED=1
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # One sweep = 2 send-keys calls (text + Enter) for the single pane, NOT 4.
+    run grep -c . "$SENDKEYS_SINK"
+    [ "$output" = "2" ]
+    grep -q "already fired for window" "$BORG_USAGE_LOG"
+}
+
+@test "idempotence: a new window (changed resets_at) re-arms and sweeps again" {
+    _write_mock_sendkeys
+    _panes_env paneA
+    _mock_claude_at 90 "Jul 9 at 1:20am (America/Denver)"
+    export BORG_USAGE_SWEEP_ENABLED=1
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # New window: different reset label.
+    _mock_claude_at 90 "Jul 10 at 2:30am (America/Denver)"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # Two sweeps = 4 calls.
+    run grep -c . "$SENDKEYS_SINK"
+    [ "$output" = "4" ]
+}
+
+# ─── Phase-2 sweep: threshold is config, not hard-tuned (criterion 4) ─────────
+
+@test "config threshold: BORG_USAGE_CHECKPOINT_PCT governs the trigger" {
+    _write_mock_sendkeys
+    _panes_env paneA
+    export BORG_USAGE_SWEEP_ENABLED=1
+    export BORG_USAGE_CHECKPOINT_PCT=50
+    # 60% is below the default 85 but above the configured 50 -> must sweep.
+    _mock_claude_at 60 "Jul 9 at 1:20am (America/Denver)"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    run grep -c . "$SENDKEYS_SINK"
+    [ "$output" = "2" ]
+}
+
+@test "config threshold: below the configured threshold does not sweep" {
+    _write_mock_sendkeys
+    _panes_env paneA
+    export BORG_USAGE_SWEEP_ENABLED=1
+    export BORG_USAGE_CHECKPOINT_PCT=50
+    _mock_claude_at 40 "Jul 9 at 1:20am (America/Denver)"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ ! -f "$SENDKEYS_SINK" ] || [ ! -s "$SENDKEYS_SINK" ]
+}
+
+# ─── Phase-2 sweep: fail-safe per pane, reaper stance (criterion 5) ───────────
+
+@test "fail-safe: a send-keys failure on one pane does not abort the others or the poll" {
+    _write_mock_sendkeys paneA   # paneA's delivery fails; paneB must still be attempted
+    _panes_env paneA paneB
+    _mock_claude_at 90 "Jul 9 at 1:20am (America/Denver)"
+    export BORG_USAGE_SWEEP_ENABLED=1
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # paneA attempted (its failing text call is recorded) and paneB fully delivered.
+    grep -qE '^-t paneA /borg-link-up$' "$SENDKEYS_SINK"
+    grep -qE '^-t paneB /borg-link-up$' "$SENDKEYS_SINK"
+    grep -qE '^-t paneB Enter$' "$SENDKEYS_SINK"
+    grep -qE "WARNING.*send-keys failed for pane=paneA" "$BORG_USAGE_LOG"
+}
+
+# ─── Phase-2 sweep: enabled but no panes -> no delivery, window not consumed ──
+
+@test "enabled: threshold reached but zero claude panes -> no send-keys, re-arms next poll" {
+    _write_mock_sendkeys
+    export BORG_USAGE_PANES_CMD="true"   # no panes
+    # A pane must still exist for the poll gate itself; that gate uses BORG_USAGE_PANE_CMD.
+    export BORG_USAGE_PANE_CMD="echo claude"
+    _mock_claude_at 90 "Jul 9 at 1:20am (America/Denver)"
+    export BORG_USAGE_SWEEP_ENABLED=1
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ ! -f "$SENDKEYS_SINK" ] || [ ! -s "$SENDKEYS_SINK" ]
+    # Because nothing was checkpointed, the window is NOT marked swept.
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # still no state consumed -> guardian state absent or without a swept_window
+    if [ -f "$BORG_USAGE_GUARDIAN_STATE" ]; then
+        run jq -r '.swept_window // ""' "$BORG_USAGE_GUARDIAN_STATE"
+        [ "$output" = "" ]
+    fi
 }
 
 # ─── threshold warning ────────────────────────────────────────────────────────
@@ -353,6 +540,14 @@ _launchd_path_value() {
     [ "$status" -eq 0 ]
     [ -f "$BORG_USAGE_SAMPLES" ]
     [ "$(_row_field '.status')" = "ok" ]
+}
+
+# ─── plist carries USER (the #1 blindness trap) ──────────────────────────────
+#
+# `claude -p "/usage"` prints nothing and exits 0 when USER is unset in the launchd environment, so
+# the plist MUST export it. Without this the guardian is permanently, silently blind.
+@test "plist: launchd EnvironmentVariables sets USER" {
+    grep -q '<key>USER</key>' "$PLIST"
 }
 
 @test "hostile env: USER unset still resolves and samples" {

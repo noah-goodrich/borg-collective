@@ -127,7 +127,34 @@ A launchd-driven poller that checkpoints active drones before the session window
 - Do not derive any threshold from `token-spend.jsonl`. It is written at `SessionEnd`, so a running session contributes
   zero — it is structurally blind to the sessions worth protecting.
 
+> ## Sweep-mechanism result — 2026-07-21 (BUILT: default-OFF, threshold-as-config, idempotent)
+>
+> Phase 2's checkpoint-sweep **mechanism** is built in `bin/borg-usage-watch` (TDD, 12 new bats,
+> shellcheck clean). What shipped:
+>
+> - **Default-OFF master switch** `BORG_USAGE_SWEEP_ENABLED` (default `0`). The guardian stays inert
+>   — a threshold breach with the sweep disabled behaves exactly as Phase-1 observe-only (warning +
+>   `ok` row, zero tmux writes). The old blanket "no send-keys" test was *replaced* by a behavioural
+>   default-OFF test, not deleted.
+> - **Threshold is config, not hard-tuned.** `BORG_USAGE_CHECKPOINT_PCT` governs the trigger;
+>   default stays 85 and inert. The number is NOT tuned — data-gated per the note above.
+> - **Two-step delivery** per the 2026-07-15 spike: command text, then a SEPARATE `Enter` after
+>   `BORG_USAGE_SENDKEYS_DELAY` (0.5s). A grep-able source invariant test forbids re-bundling.
+> - **Idempotent, once per window.** State at `~/.config/borg/usage-guardian.json` (tmp+rename),
+>   keyed on the reset timestamp. A breach with zero panes re-arms rather than consuming the window.
+> - **Fail-safe per pane** (reaper stance): one pane's `send-keys` failure is logged and does not
+>   abort the others or the poll (exit 0).
+> - **Halt (>=92) is signal-only here.** Separate `if` from checkpoint (a 95% session needs both).
+>   The dispatch hard-stop VETO remains a separate `PreToolUse`-hook component — still deferred.
+>
+> **Still deferred (out of this build):** (1) the `>=92` dispatch hard-stop veto hook; (2) live
+> end-to-end validation against a real 5-hour cap; (3) actually *arming* the sweep in the plist —
+> it ships OFF on purpose until (2) is done and more near-cap episodes accrue.
+
 ## Done when
 
 The guardian checkpoints every active drone before a real 5-hour cap, verified once against a live limit approach; the
 `bats` suite is green; `install.sh` registers the plist; `borg-resume`'s disclaimer is corrected.
+
+**Progress:** ✅ sweep mechanism built + green (2026-07-21, default-OFF). ⏳ Remaining: live-cap
+verification, the `>=92` veto hook, then arming the sweep once data supports the threshold.
