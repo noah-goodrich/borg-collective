@@ -156,5 +156,29 @@ A launchd-driven poller that checkpoints active drones before the session window
 The guardian checkpoints every active drone before a real 5-hour cap, verified once against a live limit approach; the
 `bats` suite is green; `install.sh` registers the plist; `borg-resume`'s disclaimer is corrected.
 
-**Progress:** ✅ sweep mechanism built + green (2026-07-21, default-OFF). ⏳ Remaining: live-cap
-verification, the `>=92` veto hook, then arming the sweep once data supports the threshold.
+> ## Dispatch-guard result — 2026-07-21 (BUILT: default-OFF, fail-OPEN veto hook)
+>
+> The `>=92` dispatch hard-stop is built as `hooks/borg-dispatch-guard.sh` — a `PreToolUse` hook
+> (matcher `Agent|Workflow`) that DENIES new nanoprobe/workflow dispatch when the guardian's latest
+> sample is a fresh ok row at/above the halt threshold (TDD, 18 bats, shellcheck clean):
+>
+> - **Reads the existing `usage-samples.jsonl` last row** — no poller change, no new state.
+> - **Fail-OPEN is the contract.** Every uncertainty exits 0 (allow): disabled, missing/garbage
+>   sample, STALE sample (older than `BORG_USAGE_HALT_TTL_SEC`, default 300s — a stopped poller must
+>   never freeze dispatch), non-ok row, non-numeric pct, missing `jq`, empty stdin, non-dispatch
+>   tool. It denies (exit 2 + reason on stderr) ONLY when armed + fresh + ok + at/above threshold.
+> - **Default-OFF** master switch `BORG_USAGE_HALT_ENABLED` (ships inert). Threshold config via
+>   `BORG_USAGE_HALT_PCT` (default 92). Tool is `Agent` (confirmed in transcripts), matched with
+>   `Workflow`.
+> - **Wired** in `scripts/build-plugin.sh` (hooks.json `Agent|Workflow` entry + build-list copy),
+>   asserted by a source-parity test so it cannot silently drop. Installs to `~/.claude/hooks` via
+>   `borg setup` (glob) and publishes to the plugin distro on build.
+>
+> **Not done (out of this build):** end-to-end validation that Claude Code actually blocks on the
+> hook's exit 2 (bats only asserts the hook emits exit 2 under the right state); and arming it.
+> Both fold into the single live-cap validation step below.
+
+**Progress:** ✅ sweep mechanism built + green (2026-07-21, default-OFF). ✅ `>=92` dispatch-guard
+veto hook built + green (2026-07-21, default-OFF, fail-OPEN). ⏳ Remaining: ONE live-cap
+verification pass (confirms the sweep delivers AND the guard's exit-2 actually blocks), then arm
+both halves once data supports the thresholds.
