@@ -96,7 +96,7 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 
 ## Prerequisites to verify manually before running anything
 
-- [x] **VERIFIED (2026-07-21):** cairn `compose.yml` now pins `ghcr.io/noah-goodrich/cairn:0.4.0` (up from
+- [x] **VERIFIED (2026-07-21):** cairn `compose.yml` now pins `ghcr.io/noah-goodrich/cairn:0.5.2` (up from
       0.2.0, which was verified public + multi-arch amd64+arm64 on 2026-06-11). Phase 4 Option A works as
       written — no action needed. (If the image ever 401/404s after a re-tag, re-set the package visibility to
       "Public" in GitHub → Packages; otherwise Option A falls back to the local source build in Option B.)
