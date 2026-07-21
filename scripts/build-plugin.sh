@@ -276,6 +276,8 @@ _build_self_contained_hook "$HOOKS_SRC/borg-notify.sh"       "$HOOKS_DST/borg-no
 _build_self_contained_hook "$HOOKS_SRC/borg-plan-promote.sh" "$HOOKS_DST/borg-plan-promote.sh" 1
 # borg-nanoprobe-log.sh has no lib source — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-nanoprobe-log.sh" "$HOOKS_DST/borg-nanoprobe-log.sh" 0
+# borg-dispatch-guard.sh is self-contained (reads samples file only) — copy as-is with guard.
+_build_self_contained_hook "$HOOKS_SRC/borg-dispatch-guard.sh" "$HOOKS_DST/borg-dispatch-guard.sh" 0
 
 # ── Phase 3: Agent definition ─────────────────────────────────────────────────
 
@@ -386,6 +388,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-plan-promote.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-dispatch-guard.sh",
+            "timeout": 5
           }
         ]
       }
