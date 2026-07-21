@@ -1,5 +1,8 @@
 # Fresh macOS Work Machine — Borg + Cairn Setup Runbook
 
+> Setting up dotfiles identity/config sync (git email, layered config)? That lives in a separate doc:
+> `~/.config/dotfiles/docs/work-machine-setup.md`.
+
 **Target:** Apple Silicon macOS. Read every phase before running. Steps are in dependency order.
 Copy-paste blocks chain with `&&` or `;` — `;` continues on failure (independent steps), `&&` stops on
 failure (dependent sequences).
