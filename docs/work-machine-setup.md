@@ -18,29 +18,35 @@ failure (dependent sequences).
 
 ## Updating an existing machine (incremental sync)
 
-Already set up? Skip the phases below and run this update flow instead.
+Already set up? Skip the phases below and run this **one-block update flow** instead — it pulls all
+four repos, redeploys borg, and finishes with `borg doctor` so you know the machine is actually healthy,
+not just "pulled."
 
 ```zsh
-# 1. Pull all four repos
+# 1. Pull all four repos on main, fast-forward only
 git -C ~/dev/borg-collective pull --ff-only && git -C ~/dev/claude-plugins pull --ff-only && \
   git -C ~/dev/claude-plugins-private pull --ff-only && git -C ~/dev/cairn pull --ff-only
 
 # 2. Redeploy borg (REQUIRED — see note). install.sh is interactive ("Install plugin now?"); either answer is fine.
 cd ~/dev/borg-collective && ./install.sh        # or: borg setup
 
-# 4. cairn — ONLY if its GHCR image bumped; otherwise no action.
+# 3. cairn — ONLY if its GHCR image bumped; otherwise no action.
 cd ~/dev/cairn && ./bin/cairn-up
 
-# 5. Verify borg CLI and plugin report the SAME version
-borg version && claude plugin list | grep borg-collective
+# 4. Verify borg CLI and plugin report the SAME version, then run the full health check
+borg version && claude plugin list | grep borg-collective && borg doctor
 ```
 
 - **Step 2 is required:** borg's CLI/libs run from the source clone (a pull refreshes those live), but hooks + the
   bash lib + skills + agents are **copied** into `~/.claude` and only refresh on `install.sh` / `borg setup`.
-- **Step 3 (Claude Code plugins) is automatic:** `code-governance`, `research-tools`, etc. auto-update from the pulled
+- **Claude Code plugins update automatically:** `code-governance`, `research-tools`, etc. auto-update from the pulled
   `~/dev/claude-plugins` via the `noah-local` marketplace (`autoUpdate: true`) — no extra step; verify with
   `claude plugin list`. Same for `noah-personal` from `~/dev/claude-plugins-private` via `noah-private`
   (`autoUpdate: true`).
+- **Step 4's `borg doctor` is the real verification step** — it checks all four launchd agents
+  (notifyd, cortex-wake, usage-watch, reap) for registration, exit status, and output freshness in one
+  shot. A clean pull + `install.sh` with no `borg doctor` check is an unverified update; always finish
+  with it.
 
 > **2026-07-08:** additions picked up by a plain pull + setup = the `code-governance` plugin (capability-index +
 > reconcile-req) and the distilled `research` skill.
@@ -51,6 +57,24 @@ borg version && claude plugin list | grep borg-collective
 > `BORG_USAGE_WATCH=0 ./install.sh`) and verifies it produces a fresh sample after bootstrap. New command
 > `borg doctor` checks all four launchd agents (notifyd, cortex-wake, usage-watch, reap) for registration,
 > exit status, and output freshness — run it any time an agent seems blind or unhealthy.
+
+### What's new since 2026-07-09
+
+- **borg-collective is now v0.8.8** (was 0.8.6 on 2026-07-09; `VERSION` file + plugin manifest both
+  confirmed). The `claude-plugins` mirror of the plugin is rebuilt to match (0.8.8) with a full
+  synthetic-session guard, so hooks stay quiet during internal `/usage` polling and other non-interactive
+  probe sessions.
+- **`bash-guard` security hardening** — closed four Tier-A pre-approval bypasses (`rm`/`chmod` token
+  matching, force-push + settings-write normalization, wrapper-prefix and bare-`&` segment bypasses).
+  Nothing to run — just be aware guard behavior changed if a previously-allowed one-liner now prompts.
+- **`borg doctor` and the `borg-usage-watch` LaunchAgent** (introduced 2026-07-09, see note above) have
+  since had bug fixes: bare 0%-session line parsing, a stderr-leak fix so `borg-link-down` never splices
+  a shell error into its JSON output, and delivery-spike resolution for the usage guardian.
+- **`drone scaffold --supabase-shared`** — a second, opt-in scaffold path for a shared-local-Supabase
+  setup (join a fixed always-on Supabase Docker network instead of a per-project instance). Inert unless
+  you explicitly use the `--supabase-shared` flag; does not change default `--supabase` behavior.
+- **cairn is now 0.5.2** (was tracked loosely before; confirmed in `pyproject.toml`) — adds a feedback
+  REST endpoint and `superseded_by`/`source_session`/`times_applied` edge backfill (migration 007).
 
 ---
 
@@ -195,8 +219,8 @@ also removes an already-bootstrapped agent so the flag takes effect on re-run).
 # (the plugin owns hook registration — hooks don't fire without it)
 # borg setup (already run in 3a) publishes the plugin package automatically, so this should succeed.
 claude plugin install borg-collective@noah-local
-claude plugin list | grep borg-collective       # expect: borg-collective@noah-local  0.8.0
-borg version                                     # should print the same version number (e.g. 0.8.0)
+claude plugin list | grep borg-collective       # expect: borg-collective@noah-local  0.8.8
+borg version                                     # should print the same version number (e.g. 0.8.8)
 ```
 
 > `borg setup` (run automatically by `install.sh`) publishes the plugin package into
