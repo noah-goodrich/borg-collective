@@ -71,6 +71,44 @@ _assert_allowed() {
     _assert_blocked
 }
 
+# ─── BLOCK/ALLOW: the cd target in the chain must win, never .cwd ────────────
+# Regression coverage: _segments used to split the command on &&/; BEFORE the
+# effective-dir resolution ran, so the `cd` prefix was stripped off the segment
+# holding `supabase start` and the code silently fell back to .cwd — a bypass
+# (cd into a non-stillpoint dir but .cwd says stillpoint -> wrongly ALLOWED)
+# and a false positive (cd into stillpoint but .cwd says elsewhere -> wrongly
+# BLOCKED) in the same fix.
+
+@test "blocks: cd into non-stillpoint (&&) even when .cwd says stillpoint" {
+    _run_guard "cd /Users/noah/dev/ingle && supabase start" "/Users/noah/dev/stillpoint"
+    _assert_blocked
+}
+
+@test "allows: cd into stillpoint (&&) even when .cwd says a non-stillpoint dir" {
+    _run_guard "cd /Users/noah/dev/stillpoint && supabase start" "/Users/noah/dev/ingle"
+    _assert_allowed
+}
+
+@test "blocks: cd into non-stillpoint (;) even when .cwd says stillpoint" {
+    _run_guard "cd /Users/noah/dev/ingle; supabase start" "/Users/noah/dev/stillpoint"
+    _assert_blocked
+}
+
+@test "allows: cd into stillpoint (;) even when .cwd says a non-stillpoint dir" {
+    _run_guard "cd /Users/noah/dev/stillpoint; supabase start" "/Users/noah/dev/ingle"
+    _assert_allowed
+}
+
+@test "allows: relative-path cd resolves against the chain's current dir to stillpoint" {
+    _run_guard "cd ../stillpoint && supabase start" "/Users/noah/dev/ingle"
+    _assert_allowed
+}
+
+@test "blocks: relative-path cd resolves against the chain's current dir to a non-stillpoint dir" {
+    _run_guard "cd ../ingle && supabase start" "/Users/noah/dev/stillpoint"
+    _assert_blocked
+}
+
 # ─── BLOCK: force-stopping the shared stack by name/filter ──────────────────
 
 @test "blocks: docker ps --filter name=stillpoint piped into xargs docker stop" {

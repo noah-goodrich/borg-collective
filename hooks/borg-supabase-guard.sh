@@ -14,9 +14,13 @@
 #
 # DENY (exit 2, reason on stderr) when EITHER:
 #   1. `supabase start` / `supabase stop` / `supabase db reset` is invoked with an effective
-#      target directory that is NOT the shared stillpoint dir. Effective dir resolution order:
-#      a `--workdir <path>` (or `--workdir=<path>`) flag > a leading `cd <path> && ...` prefix >
-#      the hook's `.cwd`.
+#      target directory that is NOT the shared stillpoint dir. Effective dir is resolved PER
+#      lifecycle segment, in the order the shell would actually apply it: (a) the supabase
+#      command's own `--workdir <path>`/`--workdir=<path>` if present; else (b) the target of the
+#      nearest preceding `cd <dir>` in the SAME `&&`/`;` chain (a relative cd is resolved against
+#      whatever directory the chain is in at that point, starting from `.cwd`); else (c) `.cwd`.
+#      The directory the command would ACTUALLY run in always wins — `.cwd` never overrides an
+#      explicit in-chain `cd`.
 #   2. The command force-stops the shared stack from outside stillpoint: `docker stop|kill|rm`
 #      targeting a `supabase_*_stillpoint` container name, or any docker/xargs invocation that
 #      filters on `name=stillpoint` (the `docker ps --filter name=stillpoint -q | xargs -r docker
@@ -37,7 +41,7 @@
 #
 # Registered as a PreToolUse (matcher Bash) hook via scripts/build-plugin.sh.
 
-set -u
+set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
 
@@ -60,29 +64,21 @@ _deny() {
     exit 2
 }
 
-# ── Effective target dir: --workdir flag > leading `cd <path> &&` > .cwd ─────
-_effective_dir() {
-    local cmd="$1" dir=""
+# ── Trim leading/trailing whitespace ──────────────────────────────────────────
+_trim() {
+    local s="$1"
+    s="${s#"${s%%[![:space:]]*}"}"
+    s="${s%"${s##*[![:space:]]}"}"
+    printf '%s' "$s"
+}
 
-    # --workdir <path>  or  --workdir=<path>
-    if [[ "$cmd" =~ --workdir=([^[:space:]]+) ]]; then
-        dir="${BASH_REMATCH[1]}"
-    elif [[ "$cmd" =~ --workdir[[:space:]]+([^[:space:]]+) ]]; then
-        dir="${BASH_REMATCH[1]}"
-    elif [[ "$cmd" =~ ^[[:space:]]*cd[[:space:]]+([^[:space:]]+)[[:space:]]*(\&\&|\;) ]]; then
-        dir="${BASH_REMATCH[1]}"
-    fi
-
-    if [[ -z "$dir" ]]; then
-        dir="$CWD"
-    fi
-
-    # Strip surrounding quotes and a trailing slash.
+# ── Strip surrounding quotes, a trailing slash, and expand a leading ~ ───────
+_normalize_dir() {
+    local dir="$1"
     dir="${dir%\"}"; dir="${dir#\"}"
     dir="${dir%\'}"; dir="${dir#\'}"
     dir="${dir%/}"
 
-    # Expand a leading ~ to $HOME (cheap, no external command needed).
     # shellcheck disable=SC2088  # glob-pattern comparison, not a literal path we execute
     if [[ "$dir" == "~" ]]; then
         dir="$HOME"
@@ -93,7 +89,67 @@ _effective_dir() {
     printf '%s' "$dir"
 }
 
-# ── Split on top-level ; && chain operators — one segment per invocation ────
+# ── Collapse `.`/`..`/duplicate-slash components in a (possibly relative) path.
+# "/a/b/../c" -> "/a/c"; a leading "/" is preserved iff the input had one.
+# Uses ${out[$((n-1))]}/unset 'out[n-1]' (NOT the bash-4.3+ out[-1] form) — macOS ships bash 3.2,
+# and this hook must run under it.
+_collapse_path() {
+    local path="$1" abs=0
+    [[ "$path" == /* ]] && abs=1
+    local -a parts out
+    IFS='/' read -ra parts <<< "$path"
+    local p last_idx
+    for p in "${parts[@]}"; do
+        case "$p" in
+            ""|".") continue ;;
+            "..")
+                last_idx=$(( ${#out[@]} - 1 ))
+                if (( last_idx >= 0 )) && [[ "${out[$last_idx]}" != ".." ]]; then
+                    unset "out[$last_idx]"
+                    out=("${out[@]}")
+                else
+                    if (( abs == 0 )); then
+                        out+=("..")
+                    fi
+                fi
+                ;;
+            *) out+=("$p") ;;
+        esac
+    done
+    local joined
+    joined=$(IFS=/; printf '%s' "${out[*]:-}")
+    if (( abs )); then
+        printf '/%s' "$joined"
+    else
+        printf '%s' "$joined"
+    fi
+}
+
+# ── Resolve a `cd` target against the chain's current dir (base) ────────────
+_resolve_cd_target() {
+    local base="$1" target
+    target=$(_normalize_dir "$2")
+    if [[ "$target" == /* ]]; then
+        _collapse_path "$target"
+    else
+        _collapse_path "${base%/}/$target"
+    fi
+}
+
+# ── --workdir <path> / --workdir=<path> on a single segment, if present ─────
+_extract_workdir() {
+    local cmd="$1" dir=""
+    if [[ "$cmd" =~ --workdir=([^[:space:]]+) ]]; then
+        dir="${BASH_REMATCH[1]}"
+    elif [[ "$cmd" =~ --workdir[[:space:]]+([^[:space:]]+) ]]; then
+        dir="${BASH_REMATCH[1]}"
+    fi
+    printf '%s' "$dir"
+}
+
+# ── Split on top-level ; && chain operators — one segment per invocation,
+# in ORDER (order matters: a `cd` segment must be seen before the segments
+# that follow it in the same chain, so the segments below are NOT reordered).
 _segments() {
     printf '%s' "$1" | sed -E 's/[[:space:]]*(&&|;)[[:space:]]*/\n/g'
 }
@@ -108,9 +164,21 @@ if printf '%s' "$COMMAND" | grep -qE -- '--filter[[:space:]]+name=stillpoint'; t
 fi
 
 # ── Rule 1: supabase start | stop | db reset outside the stillpoint dir ─────
+# chain_dir tracks "the directory this &&/; chain is currently in", updated as each `cd` segment
+# is walked IN ORDER — it starts at .cwd (the directory the whole command line actually launches
+# from) and is only ever advanced by an explicit `cd` segment seen earlier in the SAME chain.
+chain_dir=$(_normalize_dir "$CWD")
 SEGMENTS=$(_segments "$COMMAND")
-while IFS= read -r seg; do
+while IFS= read -r raw_seg; do
+    seg=$(_trim "$raw_seg")
     [[ -z "$seg" ]] && continue
+
+    # A segment that IS a `cd` invocation advances the chain's current dir for every segment
+    # that follows it, then contributes nothing else (a bare `cd` never boots a local stack).
+    if [[ "$seg" =~ ^cd[[:space:]]+([^[:space:]]+) ]]; then
+        chain_dir=$(_resolve_cd_target "$chain_dir" "${BASH_REMATCH[1]}")
+        continue
+    fi
 
     # Only consider segments that actually invoke the supabase CLI.
     printf '%s' "$seg" | grep -qE '(^|[[:space:]])supabase([[:space:]]|$)' || continue
@@ -127,7 +195,12 @@ while IFS= read -r seg; do
 
     (( is_dangerous == 0 )) && continue
 
-    eff_dir=$(_effective_dir "$seg")
+    workdir=$(_extract_workdir "$seg")
+    if [[ -n "$workdir" ]]; then
+        eff_dir=$(_normalize_dir "$workdir")
+    else
+        eff_dir="$chain_dir"
+    fi
 
     if [[ "$eff_dir" != "$STILLPOINT_DIR" ]]; then
         _deny "\`$reason\` targets a local Supabase stack, but the effective directory (${eff_dir:-<unknown>}) is not the shared stillpoint dir ($STILLPOINT_DIR)"
