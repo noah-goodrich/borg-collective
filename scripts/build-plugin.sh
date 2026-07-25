@@ -278,6 +278,8 @@ _build_self_contained_hook "$HOOKS_SRC/borg-plan-promote.sh" "$HOOKS_DST/borg-pl
 _build_self_contained_hook "$HOOKS_SRC/borg-nanoprobe-log.sh" "$HOOKS_DST/borg-nanoprobe-log.sh" 0
 # borg-dispatch-guard.sh is self-contained (reads samples file only) — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-dispatch-guard.sh" "$HOOKS_DST/borg-dispatch-guard.sh" 0
+# borg-supabase-guard.sh is self-contained (parses stdin JSON only) — copy as-is with guard.
+_build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-supabase-guard.sh" 0
 
 # ── Phase 3: Agent definition ─────────────────────────────────────────────────
 
@@ -397,6 +399,16 @@ HOOKS_JSON='{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-dispatch-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-supabase-guard.sh",
             "timeout": 5
           }
         ]
