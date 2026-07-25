@@ -53,9 +53,56 @@ setup() {
     [ "$status" -eq 0 ]
     [ -f "$TEST_PROJECT/.devcontainer/docker-compose.yml" ]
     ! grep -q '__PROJECT_NAME__' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+    ! grep -q '__SCHEMA__' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
     grep -q 'supabase_network_stillpoint' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
     grep -q 'supabase_db_stillpoint' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
     grep -q 'MYAPP_DB_URL' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+}
+
+@test "scaffold --supabase-shared: attaches via the supabase_shared network alias" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    [ "$status" -eq 0 ]
+    grep -q '^\s*- supabase_shared$' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+    grep -qE '^\s*supabase_shared:$' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+}
+
+@test "scaffold --supabase-shared: DB URL and API URL are schema-scoped (default = project name)" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    [ "$status" -eq 0 ]
+    grep -q 'search_path%3Dmyapp' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+    grep -q 'MYAPP_SUPABASE_URL: http://supabase_kong_stillpoint:8000' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+}
+
+@test "scaffold --supabase-shared: --schema overrides the default project-name schema" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT" --schema custom_schema
+    [ "$status" -eq 0 ]
+    grep -q 'search_path%3Dcustom_schema' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+    ! grep -q 'search_path%3Dmyapp' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+}
+
+@test "scaffold --supabase-shared: appends the shared-stack block to a new CLAUDE.md" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    [ "$status" -eq 0 ]
+    [ -f "$TEST_PROJECT/CLAUDE.md" ]
+    grep -q '## Local Supabase — ONE shared stack' "$TEST_PROJECT/CLAUDE.md"
+    grep -q 'the `myapp` schema via `search_path`' "$TEST_PROJECT/CLAUDE.md"
+    grep -q 'borg-supabase-guard.sh' "$TEST_PROJECT/CLAUDE.md"
+    ! grep -q '__SCHEMA__' "$TEST_PROJECT/CLAUDE.md"
+}
+
+@test "scaffold --supabase-shared: appends (not overwrites) an existing CLAUDE.md" {
+    printf '# myapp\n\nExisting project notes.\n' > "$TEST_PROJECT/CLAUDE.md"
+    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    [ "$status" -eq 0 ]
+    grep -q 'Existing project notes.' "$TEST_PROJECT/CLAUDE.md"
+    grep -q '## Local Supabase — ONE shared stack' "$TEST_PROJECT/CLAUDE.md"
+}
+
+@test "scaffold --supabase-shared: CLAUDE.md block wraps at 120 columns" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    [ "$status" -eq 0 ]
+    run awk '{ if (length($0) > 120) { print; exit 1 } }' "$TEST_PROJECT/CLAUDE.md"
+    [ "$status" -eq 0 ]
 }
 
 @test "scaffold --supabase-shared: writes devcontainer.json with project name" {

@@ -32,17 +32,21 @@ services:
 
       # Shared stillpoint Supabase Postgres, reachable via the joined external
       # network. This is the ALWAYS-ON shared stack (started once, never
-      # per-drone) — NOT a per-project Supabase instance. Default creds:
-      # postgres/postgres (Supabase CLI local-dev convention). See
-      # .devcontainer/borg-hooks/pre-up.sh for the lifecycle that ensures the
-      # shared stack is running before compose up.
-      __PROJECT_NAME_UPPER___DB_URL: postgresql://postgres:postgres@supabase_db_stillpoint:5432/postgres
+      # per-drone) — NOT a per-project Supabase instance. Schema-per-app:
+      # this project's rows live under the __SCHEMA__ schema (search_path),
+      # never `public`. Default creds: postgres/postgres (Supabase CLI
+      # local-dev convention). See .devcontainer/borg-hooks/pre-up.sh for the
+      # lifecycle that ensures the shared stack is running before compose up.
+      __PROJECT_NAME_UPPER___DB_URL: postgresql://postgres:postgres@supabase_db_stillpoint:5432/postgres?options=-csearch_path%3D__SCHEMA__
+
+      # Supabase client (API gateway / Kong) for the shared local stack.
+      __PROJECT_NAME_UPPER___SUPABASE_URL: http://supabase_kong_stillpoint:8000
 
     networks:
       - default
-      - supabase
+      - supabase_shared
 
 networks:
-  supabase:
+  supabase_shared:
     name: supabase_network_stillpoint
     external: true

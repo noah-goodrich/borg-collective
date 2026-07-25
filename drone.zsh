@@ -1008,7 +1008,7 @@ _cmd_scaffold_supabase() {
 # per-project network + running its own `supabase init`/`start`. Does NOT
 # alter --supabase semantics — this is a wholly separate opt-in path.
 _cmd_scaffold_supabase_shared() {
-    local project_dir="$1" workspace="$2"
+    local project_dir="$1" workspace="$2" schema="$3"
     _scaffold_preflight "$project_dir"
     project_dir="$_sp_dir"
     local dc_dir="$project_dir/.devcontainer"
@@ -1018,10 +1018,14 @@ _cmd_scaffold_supabase_shared() {
     project_name_upper="${project_name:u}"
     project_name_upper="${project_name_upper//-/_}"
 
+    # Schema defaults to the project name (schema-per-app convention); pass
+    # --schema explicitly if the project's schema already differs.
+    [[ -z "$schema" ]] && schema="$project_name"
+
     local tmpl_dir="$DRONE_SCRIPT_DIR/templates/supabase-shared"
     [[ -d "$tmpl_dir" ]] || die "Template directory missing: $tmpl_dir"
 
-    info "Scaffolding shared-Supabase devcontainer for '$project_name'..."
+    info "Scaffolding shared-Supabase devcontainer for '$project_name' (schema: $schema)..."
     mkdir -p "$dc_dir/borg-hooks"
 
     local ws_symlink
@@ -1032,6 +1036,7 @@ _cmd_scaffold_supabase_shared() {
             -e "s|__PROJECT_NAME_UPPER__|$project_name_upper|g" \
             -e "s|__WORKSPACE__|$workspace|g" \
             -e "s|__WS_SYMLINK__|$ws_symlink|g" \
+            -e "s|__SCHEMA__|$schema|g" \
             "$1" > "$2"
     }
 
@@ -1042,6 +1047,8 @@ _cmd_scaffold_supabase_shared() {
     cp "$tmpl_dir/borg-hooks/post-down.sh" "$dc_dir/borg-hooks/post-down.sh"
     chmod +x "$dc_dir/borg-hooks/pre-up.sh" "$dc_dir/borg-hooks/post-down.sh"
 
+    _scaffold_append_claude_md "$project_dir" "$schema"
+
     info "Scaffolded shared-Supabase project in $project_dir"
     echo
     info "Joins the ALWAYS-ON shared stillpoint stack (network: supabase_network_stillpoint)."
@@ -1050,10 +1057,56 @@ _cmd_scaffold_supabase_shared() {
     info "  1. drone up $project_name"
 }
 
+# Append the "Local Supabase — ONE shared stack" doc block to the scaffolded
+# project's CLAUDE.md, substituting the real schema. Creates CLAUDE.md if it
+# doesn't exist yet; otherwise appends with a blank-line separator. Idempotent:
+# a no-op if the block (matched by its heading) is already present.
+_scaffold_append_claude_md() {
+    local project_dir="$1" schema="$2"
+    local claude_md="$project_dir/CLAUDE.md"
+    local heading="## Local Supabase — ONE shared stack (never boot a per-project stack)"
+
+    if [[ -f "$claude_md" ]] && grep -qF "$heading" "$claude_md"; then
+        info "CLAUDE.md already has the shared-Supabase block — skipping"
+        return 0
+    fi
+
+    local block
+    block=$(cat <<EOF
+$heading
+
+Local dev for every Stillpoint project shares a SINGLE always-on Supabase stack owned by the
+\`stillpoint\` repo — one Postgres (\`supabase_db_stillpoint\` / gateway \`supabase_kong_stillpoint\`)
+with a schema per app. This project's rows live under the \`$schema\` schema via \`search_path\`, never
+\`public\`. The devcontainer attaches to the external network \`supabase_network_stillpoint\`;
+\`.devcontainer/borg-hooks/pre-up.sh\` brings the shared stack up once (idempotent) on \`drone up\`.
+This project has NO local stack of its own.
+
+**Never run these from this repo** — they boot or kill a COMPETING local stack that collides on
+ports 54321/54322 and takes the shared stack down for every project:
+
+- \`supabase start\` · \`supabase stop\` · \`supabase db reset\` — boot/kill the local stack
+- \`docker stop|kill|rm\` of any \`supabase_*_stillpoint\` container
+
+A PreToolUse guard (\`borg-supabase-guard.sh\`) blocks the above from any non-\`stillpoint\` directory.
+To reset or reseed LOCAL data, do it from the \`stillpoint\` repo (\`~/dev/stillpoint\`), which owns the
+stack. Commands against **Supabase Cloud** (\`supabase db push\`, \`supabase migration …\` with
+\`--project-ref\`) are unaffected.
+EOF
+)
+
+    if [[ -f "$claude_md" ]]; then
+        printf '\n%s\n' "$block" >> "$claude_md"
+    else
+        printf '%s\n' "$block" > "$claude_md"
+    fi
+    info "Appended shared-Supabase block to CLAUDE.md"
+}
+
 # ── drone scaffold ────────────────────────────────────────────────────────────
 
 cmd_scaffold() {
-    local project_dir="" lang="none" workspace="" preset=""
+    local project_dir="" lang="none" workspace="" preset="" schema=""
     local workspace_explicit=0
 
     # Parse args
@@ -1063,11 +1116,12 @@ cmd_scaffold() {
             --workspace) workspace="${2:-}"; workspace_explicit=1; shift 2 ;;
             --supabase) preset="supabase"; shift ;;
             --supabase-shared) preset="supabase-shared"; shift ;;
+            --schema)   schema="${2:-}"; shift 2 ;;
             *)          project_dir="$1"; shift ;;
         esac
     done
 
-    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--supabase|--supabase-shared] [--lang python|node|none] [--workspace /workspaces/<project>]"
+    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--supabase|--supabase-shared [--schema <name>]] [--lang python|node|none] [--workspace /workspaces/<project>]"
 
     # Default workspace from raw basename; the supabase branches run their own preflight.
     if (( ! workspace_explicit )); then
@@ -1082,7 +1136,7 @@ cmd_scaffold() {
     fi
 
     if [[ "$preset" == "supabase-shared" ]]; then
-        _cmd_scaffold_supabase_shared "$project_dir" "$workspace"
+        _cmd_scaffold_supabase_shared "$project_dir" "$workspace" "$schema"
         return
     fi
 
