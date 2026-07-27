@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# recon-adapter-github — reference recon source adapter (proof-of-interface).
+#
+# This is the ONE reference adapter shipped with borg. It demonstrates the source-agnostic adapter
+# contract; it is NOT the place to add Slack/Jira/Notion/Ontra sources — those are a separate,
+# machine-injected layer dropped onto BORG_RECON_ADAPTER_PATH.
+#
+# Adapter contract (Recon Contract v0):
+#   Invoked:  recon-adapter-<source> --since <ISO8601> --projects <projects.json path>
+#             projects.json is the registry's `.projects` object: { "<name>": {"path": "...", ...} }
+#   stdout:   exactly one JSON object — {"source": "...", "summary": "<terse>", "items": [Item,...]}
+#   Item  =   {project, source, ref, title, state, changed, owner, action_needed, urgency, one_line}
+#   exit 0 =  success (even for an empty sweep). Non-zero or malformed output = the engine records
+#             the track as failed and continues. NEVER emit raw dumps — only the structured object.
+#
+# This adapter sweeps each project's GitHub repo for PRs updated since `since` via `gh`. It degrades
+# gracefully to an empty, explained track when gh is missing, unauthenticated, or a project has no
+# github remote — a source being unavailable must never break the fan-out.
+
+set -euo pipefail
+
+SOURCE="github"
+SINCE=""
+PROJECTS_FILE=""
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --since)    SINCE="$2"; shift 2 ;;
+        --projects) PROJECTS_FILE="$2"; shift 2 ;;
+        *)          shift ;;
+    esac
+done
+
+# Emit a terse, item-less track and exit cleanly. Used for every "can't sweep" path.
+emit_skip() {
+    jq -n --arg s "$SOURCE" --arg m "$1" '{source:$s, summary:$m, items:[]}'
+    exit 0
+}
+
+command -v jq >/dev/null 2>&1 || { printf '{"source":"github","summary":"jq missing","items":[]}\n'; exit 0; }
+command -v gh >/dev/null 2>&1 || emit_skip "gh not installed — github track skipped"
+[ -n "$SINCE" ] || emit_skip "no --since provided — github track skipped"
+[ -n "$PROJECTS_FILE" ] && [ -f "$PROJECTS_FILE" ] || emit_skip "no projects file — github track skipped"
+gh auth status >/dev/null 2>&1 || emit_skip "gh not authenticated — github track skipped"
+
+# gh's search:updated wants a bare date; derive YYYY-MM-DD from the ISO `since`.
+SINCE_DATE="${SINCE%%T*}"
+
+# Who is "you"? Compare PR author logins to the authenticated gh user to set the owner field.
+ME="$(gh api user -q .login 2>/dev/null || echo "")"
+
+ITEMS_FILE="$(mktemp)"
+trap 'rm -f "$ITEMS_FILE"' EXIT
+printf '[]' > "$ITEMS_FILE"
+SWEPT=0
+
+# Iterate projects. Each line: "<project>\t<path>".
+while IFS=$'\t' read -r PROJECT PPATH; do
+    [ -n "$PROJECT" ] && [ -n "$PPATH" ] || continue
+    [ -d "$PPATH/.git" ] || continue
+
+    # Resolve owner/repo from the origin remote; skip non-github or remoteless repos.
+    REMOTE="$(git -C "$PPATH" remote get-url origin 2>/dev/null || echo "")"
+    case "$REMOTE" in *github.com*) : ;; *) continue ;; esac
+    REPO="$(printf '%s' "$REMOTE" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
+    [ -n "$REPO" ] || continue
+    SWEPT=$((SWEPT + 1))
+
+    # Pull PRs touched since the mark. Bounded (--limit) so a busy repo can't flood the sweep.
+    PRS="$(gh pr list --repo "$REPO" --state all --limit 30 \
+        --search "updated:>=$SINCE_DATE" \
+        --json number,title,state,isDraft,updatedAt,author,url 2>/dev/null || echo "[]")"
+
+    MAPPED="$(printf '%s' "$PRS" | jq \
+        --arg project "$PROJECT" --arg source "$SOURCE" --arg repo "$REPO" --arg me "$ME" '
+        [ .[] | {
+            project: $project,
+            source:  $source,
+            ref:     ($repo + "#" + (.number|tostring)),
+            title:   .title,
+            state:   (.state | ascii_downcase),
+            changed: ("updated " + .updatedAt + "; state=" + (.state|ascii_downcase)
+                      + (if .isDraft then "; draft" else "" end)),
+            owner:   (if ($me != "" and .author.login == $me) then "you" else "unknown" end),
+            action_needed: ((.state == "OPEN") and (.isDraft | not)),
+            urgency: (if (.state != "OPEN") then "fyi"
+                      elif (.title | test("urgent|hotfix|revert|broken|p0|sev";"i")) then "now"
+                      else "this_week" end),
+            one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]")
+        } ]' 2>/dev/null || echo "[]")"
+
+    COMBINED="$(jq -s '.[0] + .[1]' "$ITEMS_FILE" <(printf '%s' "$MAPPED") 2>/dev/null || cat "$ITEMS_FILE")"
+    printf '%s' "$COMBINED" > "$ITEMS_FILE"
+done < <(jq -r 'to_entries[] | [.key, (.value.path // "")] | @tsv' "$PROJECTS_FILE" 2>/dev/null)
+
+COUNT="$(jq 'length' "$ITEMS_FILE" 2>/dev/null || echo 0)"
+SUMMARY="swept $SWEPT github repo(s) since $SINCE_DATE — $COUNT PR item(s)"
+jq -n --arg s "$SOURCE" --arg m "$SUMMARY" --slurpfile items "$ITEMS_FILE" \
+    '{source:$s, summary:$m, items:$items[0]}'

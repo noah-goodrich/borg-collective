@@ -197,6 +197,21 @@ docs/
   that says "Ask which JIRA ticket this work targets, then read it via `acli jira workitem view`
   and use its description as the plan source." On a personal machine, the file doesn't exist and
   `/borg-plan` behaves exactly as it always did.
+- **Recon fan-out (`borg recon` + `/borg-recon`)**: source-agnostic "morning link-up" primitive. The
+  engine (`lib/recon.sh`, portable sh, sourced by the zsh CLI via the `lib/recon.zsh` shim — same
+  split as `reaper.sh`↔`registry.zsh`) resolves a `since` mark (explicit > newest checkpoint mtime >
+  last-run marker > 24h), fans out concurrently+bounded over pluggable **adapters**, normalizes every
+  finding to an Item `{project,source,ref,title,state,changed,owner,action_needed,urgency,one_line}`,
+  merges by project, and detects checkpoint-blocker-vs-resolved-source contradictions. An adapter is
+  ANY executable named `recon-adapter-<source>` on `BORG_RECON_ADAPTER_PATH` (config dir shadows the
+  repo dir) — dropping a file registers a source, no code change. Sources are NEVER hardcoded: Ontra
+  adapters (Slack/Jira/Notion) are a separate machine-injected layer; this repo ships ONE reference
+  adapter (`lib/recon/adapters/recon-adapter-github`, via `gh`). `borg recon --json` emits the
+  reconciled doc the `/borg-recon` skill synthesizes into a by-project, most-urgent-first, ELI10
+  briefing + Yours(human)-vs-Mine(agent) action lists + a bounded read-only kickoff batch. cairn
+  persistence is a thin fail-quiet hook (`_recon_cairn_record`), never a hard dependency. zsh gotchas
+  baked in: never a `path` loop var (tied to `$PATH`); quoted `find`, not bare globs (zsh NOMATCH is
+  fatal); jq `//` treats `false` as empty (use `if has("ok")`, not `.ok // true`).
 
 ## External Dependencies
 
