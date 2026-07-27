@@ -75,6 +75,46 @@ _borg_relative_time() {
     fi
 }
 
+# One-line cairn health + recording status, shared by `borg hail` and `borg init`
+# (both render via _borg_print_briefing). Mirrors _borg_cairn_health_line in
+# lib/borg-hooks.sh (bash, used by the hooks) — kept as a separate zsh copy because
+# borg.zsh does not source lib/borg-hooks.sh. Fail-OPEN: bounded by _borg_timeout,
+# never non-zero, always prints exactly one line.
+_borg_cairn_health_line() {
+    local compose_hint="${BORG_CAIRN_COMPOSE:-$HOME/dev/cairn/compose.yml}"
+
+    if ! command -v cairn &>/dev/null; then
+        echo "cairn: DEGRADED — not in PATH · run: borg setup"
+        return 0
+    fi
+
+    local raw status db
+    raw=$(_borg_timeout 3 cairn health 2>/dev/null) || raw=""
+    status=$(echo "$raw" | jq -r '.status // ""' 2>/dev/null || echo "")
+    db=$(echo "$raw" | jq -r '.db // ""' 2>/dev/null || echo "")
+
+    if [[ "$status" != "ok" ]]; then
+        echo "cairn: DEGRADED — db ${db:-unreachable} · run: docker compose -f $compose_hint up -d"
+        return 0
+    fi
+
+    local marker="$BORG_DIR/.cairn-last-write" age="never"
+    if [[ -f "$marker" ]]; then
+        local mtime
+        mtime=$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker" 2>/dev/null || echo 0)
+        local now diff
+        now=$(date +%s)
+        diff=$(( now - mtime ))
+        if (( diff < 60 )); then age="${diff}s ago"
+        elif (( diff < 3600 )); then age="$(( diff / 60 ))m ago"
+        elif (( diff < 86400 )); then age="$(( diff / 3600 ))h ago"
+        else age="$(( diff / 86400 ))d ago"
+        fi
+    fi
+    echo "cairn: healthy · recording (last write $age)"
+    return 0
+}
+
 # Check if current time is within work hours
 _borg_is_work_hours() {
     [[ -z "$BORG_WORK_HOURS" ]] && return 0
@@ -1536,6 +1576,9 @@ _borg_print_briefing() {
     local registry cutoff active_names inactive_names payload name
     local proj_status last_activity summary waiting_reason rel_time project_path
     local checkpoint_file briefing_prompt briefing fallback_text fields
+
+    # Cairn health callout — one line, always printed first, never blocks the briefing.
+    echo -e "${DIM}$(_borg_cairn_health_line)${NC}"
 
     registry=$(borg_registry_with_state)
 
