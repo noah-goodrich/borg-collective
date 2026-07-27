@@ -28,20 +28,35 @@ and all four repos, redeploys borg, and finishes with `borg doctor` so you know 
 healthy, not just "pulled."
 
 > ⚠️ **MANDATORY — back up cairn's database before pulling.** cairn stores its knowledge graph in
-> **Postgres** (not SQLite), in the shared `dev-postgres` container, database `cairn`, user `dev`
-> (confirmed via `~/dev/cairn/compose.yml` and `~/dev/cairn/CLAUDE.md`). cairn has **no first-class
-> `backup`/`export` command** (`cairn --help` only lists `search`/`record`/`stats`/`health`/`presence`)
-> — the correct mechanism is `pg_dump` straight from the container. Pulling `~/dev/cairn` and
-> redeploying can bring in a new Alembic migration that runs automatically on next boot (e.g. migration
-> 007 dropped a CHECK constraint) — a bad migration or a fat-fingered pull is otherwise unrecoverable.
+> **Postgres** (not SQLite), database `cairn`, user `dev` (confirmed via `~/dev/cairn/compose.yml`
+> and `~/dev/cairn/CLAUDE.md`). cairn has **no first-class `backup`/`export` command** (`cairn --help`
+> only lists `search`/`record`/`stats`/`health`/`presence`) — the correct mechanism is `pg_dump`
+> straight from the container. Pulling `~/dev/cairn` and redeploying can bring in a new Alembic
+> migration that runs automatically on next boot (e.g. migration 007 dropped a CHECK constraint) —
+> a bad migration or a fat-fingered pull is otherwise unrecoverable.
+>
+> **Which container?** `compose.yml` honors `${CAIRN_DB_HOST:-dev-postgres}` — `cairn-up` reuses the
+> shared `dev-postgres` container if one already exists, otherwise it bundles its own fallback named
+> `cairn-postgres`. Which one you actually have depends on whether `dev-postgres` existed the *first*
+> time `cairn-up` ran on this machine — **resolve the running container, don't assume the name**:
 >
 > ```zsh
-> docker exec dev-postgres pg_dump -U dev -d cairn -F c -f /tmp/cairn-backup-$(date +%Y%m%d).dump && \
->   docker cp dev-postgres:/tmp/cairn-backup-$(date +%Y%m%d).dump ~/cairn-backup-$(date +%Y%m%d).dump
+> CAIRN_DB=$(docker ps --format '{{.Names}}' | grep -E '^(dev-postgres|cairn-postgres)$' | head -1) && \
+>   echo "resolved cairn Postgres container: $CAIRN_DB"
+> D=$(date +%Y%m%d) && docker exec $CAIRN_DB pg_dump -U dev -d cairn -F c -f /tmp/cairn-backup-$D.dump && \
+>   docker cp $CAIRN_DB:/tmp/cairn-backup-$D.dump ~/cairn-backup-$D.dump
 > ```
 >
-> **Restore** if a migration goes bad: `docker cp ~/cairn-backup-YYYYMMDD.dump dev-postgres:/tmp/restore.dump
-> && docker exec dev-postgres pg_restore -U dev -d cairn --clean --if-exists /tmp/restore.dump`.
+> **Verify the dump is valid** — do this *inside* the container, since the host may not have
+> `pg_restore` installed:
+>
+> ```zsh
+> docker cp ~/cairn-backup-$D.dump $CAIRN_DB:/tmp/verify-$D.dump && \
+>   docker exec $CAIRN_DB pg_restore -l /tmp/verify-$D.dump
+> ```
+>
+> **Restore** if a migration goes bad: `docker cp ~/cairn-backup-YYYYMMDD.dump $CAIRN_DB:/tmp/restore.dump
+> && docker exec $CAIRN_DB pg_restore -U dev -d cairn --clean --if-exists /tmp/restore.dump`.
 
 ```zsh
 # 1. Pull dotfiles first and re-run its installer (identity/config sync + LaunchAgents, incl.
