@@ -1,7 +1,9 @@
 # Fresh macOS Work Machine — Borg + Cairn Setup Runbook
 
-> Setting up dotfiles identity/config sync (git email, layered config)? That lives in a separate doc:
-> `~/.config/dotfiles/docs/work-machine-setup.md`.
+> **This is THE canonical work-machine reference** — fresh setup AND ongoing updates. The
+> similarly-named `~/.config/dotfiles/docs/work-machine-setup.md` covers ONLY the dotfiles
+> identity/config-sync slice (git email, Keychain-backed secrets, layered config) and points back here
+> for everything else.
 
 **Target:** Apple Silicon macOS. Read every phase before running. Steps are in dependency order.
 Copy-paste blocks chain with `&&` or `;` — `;` continues on failure (independent steps), `&&` stops on
@@ -21,9 +23,9 @@ failure (dependent sequences).
 
 ## Updating an existing machine (incremental sync)
 
-Already set up? Skip the phases below and run this **one-block update flow** instead — it pulls all
-four repos, redeploys borg, and finishes with `borg doctor` so you know the machine is actually healthy,
-not just "pulled."
+Already set up? Skip the phases below and run this **one-block update flow** instead — it pulls dotfiles
+and all four repos, redeploys borg, and finishes with `borg doctor` so you know the machine is actually
+healthy, not just "pulled."
 
 > ⚠️ **MANDATORY — back up cairn's database before pulling.** cairn stores its knowledge graph in
 > **Postgres** (not SQLite), in the shared `dev-postgres` container, database `cairn`, user `dev`
@@ -42,30 +44,37 @@ not just "pulled."
 > && docker exec dev-postgres pg_restore -U dev -d cairn --clean --if-exists /tmp/restore.dump`.
 
 ```zsh
-# 1. Pull all four repos on main, fast-forward only
+# 1. Pull dotfiles first and re-run its installer (identity/config sync + LaunchAgents, incl.
+#    the dev-postgres auto-start agent that cairn's Postgres backend depends on).
+git -C ~/.config/dotfiles pull --ff-only && bash ~/.config/dotfiles/install.sh
+
+# 2. Pull all four remaining repos on main, fast-forward only
 git -C ~/dev/borg-collective pull --ff-only && git -C ~/dev/claude-plugins pull --ff-only && \
   git -C ~/dev/claude-plugins-private pull --ff-only && git -C ~/dev/cairn pull --ff-only
 
-# 2. Redeploy borg (REQUIRED — see note). install.sh is interactive ("Install plugin now?"); either answer is fine.
+# 3. Redeploy borg (REQUIRED — see note). install.sh is interactive ("Install plugin now?"); either answer is fine.
 cd ~/dev/borg-collective && ./install.sh        # or: borg setup
 
-# 3. cairn — ONLY if its GHCR image bumped; otherwise no action.
+# 4. cairn — ONLY if its GHCR image bumped; otherwise no action.
 cd ~/dev/cairn && ./bin/cairn-up
 
-# 4. Verify borg CLI and plugin report the SAME version, then run the full health check
+# 5. Verify borg CLI and plugin report the SAME version, then run the full health check
 borg version && claude plugin list | grep borg-collective && borg doctor
 ```
 
-- **Step 2 is required:** borg's CLI/libs run from the source clone (a pull refreshes those live), but hooks + the
+- **Step 3 is required:** borg's CLI/libs run from the source clone (a pull refreshes those live), but hooks + the
   bash lib + skills + agents are **copied** into `~/.claude` and only refresh on `install.sh` / `borg setup`.
 - **Claude Code plugins update automatically:** `code-governance`, `research-tools`, etc. auto-update from the pulled
   `~/dev/claude-plugins` via the `noah-local` marketplace (`autoUpdate: true`) — no extra step; verify with
   `claude plugin list`. Same for `noah-personal` from `~/dev/claude-plugins-private` via `noah-private`
   (`autoUpdate: true`).
-- **Step 4's `borg doctor` is the real verification step** — it checks all four launchd agents
+- **Step 5's `borg doctor` is the real verification step** — it checks all four launchd agents
   (notifyd, cortex-wake, usage-watch, reap) for registration, exit status, and output freshness in one
   shot. A clean pull + `install.sh` with no `borg doctor` check is an unverified update; always finish
   with it.
+- **Step 1 (dotfiles) closes a real gap:** the flow previously pulled borg-collective / claude-plugins /
+  claude-plugins-private / cairn but never dotfiles, so LaunchAgent changes there (e.g. the dev-postgres
+  auto-start agent) silently never landed on already-set-up machines.
 
 > **2026-07-08:** additions picked up by a plain pull + setup = the `code-governance` plugin (capability-index +
 > reconcile-req) and the distilled `research` skill.
@@ -78,6 +87,12 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 > exit status, and output freshness — run it any time an agent seems blind or unhealthy.
 
 ### What's new since 2026-07-09
+
+- **2026-07-27:** the update flow now pulls `~/.config/dotfiles` first (was missing) — its
+  `install.sh` re-registers LaunchAgents, including the dev-postgres auto-start agent that cairn's
+  Postgres backend needs. This doc is now the single canonical work-machine reference (fresh setup
+  AND updates); `~/.config/dotfiles/docs/work-machine-setup.md` covers only the dotfiles
+  identity/config-sync slice.
 
 - **borg-collective is now v0.8.8** (was 0.8.6 on 2026-07-09; `VERSION` file + plugin manifest both
   confirmed). The `claude-plugins` mirror of the plugin is rebuilt to match (0.8.8) with a full
