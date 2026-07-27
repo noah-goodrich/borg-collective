@@ -80,6 +80,16 @@ setup() {
     ! grep -q 'search_path%3Dmyapp' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
 }
 
+@test "scaffold --supabase-shared: hyphenated project name yields an underscored schema" {
+    export TEST_HYPHEN_PROJECT="${BATS_TEST_TMPDIR}/my-app"
+    mkdir -p "$TEST_HYPHEN_PROJECT"
+    run "$DRONE" scaffold --supabase-shared "$TEST_HYPHEN_PROJECT"
+    [ "$status" -eq 0 ]
+    grep -q 'search_path%3Dmy_app' "$TEST_HYPHEN_PROJECT/.devcontainer/docker-compose.yml"
+    ! grep -q 'search_path%3Dmy-app' "$TEST_HYPHEN_PROJECT/.devcontainer/docker-compose.yml"
+    grep -q 'the `my_app` schema via `search_path`' "$TEST_HYPHEN_PROJECT/CLAUDE.md"
+}
+
 @test "scaffold --supabase-shared: appends the shared-stack block to a new CLAUDE.md" {
     run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
     [ "$status" -eq 0 ]

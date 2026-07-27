@@ -1020,7 +1020,7 @@ _cmd_scaffold_supabase_shared() {
 
     # Schema defaults to the project name (schema-per-app convention); pass
     # --schema explicitly if the project's schema already differs.
-    [[ -z "$schema" ]] && schema="$project_name"
+    [[ -z "$schema" ]] && schema="${project_name//-/_}"
 
     local tmpl_dir="$DRONE_SCRIPT_DIR/templates/supabase-shared"
     [[ -d "$tmpl_dir" ]] || die "Template directory missing: $tmpl_dir"
