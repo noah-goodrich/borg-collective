@@ -120,6 +120,8 @@ if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then
             printf '%s\t%s\n' \
                 "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                 "${_orch_cairn_err:-no stderr captured}" >> "${BORG_DIR}/.cairn-write-failed"
+        else
+            touch "${BORG_DIR}/.cairn-last-write" 2>/dev/null || true
         fi
     fi
     exit 0
@@ -303,6 +305,8 @@ if command -v cairn >/dev/null 2>&1; then
         printf '%s\t%s\n' \
             "cairn write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             "${_cairn_err:-no stderr captured}" >> "${BORG_DIR}/.cairn-write-failed"
+    else
+        touch "${BORG_DIR}/.cairn-last-write" 2>/dev/null || true
     fi
 
     # Record the newest checkpoint as a cairn document (best-effort; contract §5).
@@ -327,6 +331,8 @@ if command -v cairn >/dev/null 2>&1; then
                 printf '%s\t%s\n' \
                     "cairn document write failed at $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                     "${_doc_err:-no stderr captured}" >> "${BORG_DIR}/.cairn-write-failed"
+            else
+                touch "${BORG_DIR}/.cairn-last-write" 2>/dev/null || true
             fi
         fi
     fi

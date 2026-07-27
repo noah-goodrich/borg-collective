@@ -93,6 +93,7 @@ _orch_next_hint() {
 
 if [[ "$MODE" == "orchestrator" ]]; then
     OVERVIEW=""
+    OVERVIEW+="$(_borg_cairn_health_line)"$'\n\n'
     if [[ -f "$BORG_REGISTRY" ]]; then
         # Read registry for identity fields, then overlay state.json for each project.
         # Build TSV: name, status, last_activity, path — sorted by last_activity desc.
@@ -189,6 +190,9 @@ fi
 # ── 2. Build context ─────────────────────────────────────────────────────────
 
 CONTEXT_PARTS=()
+
+# Cairn health callout — one line, always first, never blocks (fail-open helper).
+CONTEXT_PARTS+=("$(_borg_cairn_health_line)")
 
 # Git context (branch, status, recent commits)
 if git -C "$CWD" rev-parse --is-inside-work-tree &>/dev/null; then

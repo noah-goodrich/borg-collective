@@ -171,3 +171,74 @@ _borg_live_windows() {
     tmux has-session -t "$session" 2>/dev/null || return 0
     tmux list-windows -t "$session" -F '#W' 2>/dev/null || true
 }
+
+# ─── cairn health surfacing ──────────────────────────────────────────────────
+# Source of truth: `cairn health` -> {"status":"ok"|..., "db":"reachable"|..., "version":"..."}.
+# "Recording" freshness is approximated by the mtime of $BORG_DIR/.cairn-last-write, a marker
+# touched by borg-link-up.sh immediately after any successful `cairn record ...` call (there is
+# no last-write endpoint in the cairn CLI as of 0.5.3 — this file IS the minimal addition noted
+# in the task brief). Fail-OPEN contract: this function must never hang (bounded by `timeout`,
+# default 3s) or exit non-zero — every branch prints exactly one line and returns 0.
+#
+# Usage: _borg_cairn_health_line
+_borg_cairn_health_line() {
+    local timeout_secs="${BORG_CAIRN_HEALTH_TIMEOUT:-3}"
+    local compose_hint="${BORG_CAIRN_COMPOSE:-$HOME/dev/cairn/compose.yml}"
+    local dir="${BORG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/borg}"
+
+    if ! command -v cairn >/dev/null 2>&1; then
+        printf 'cairn: DEGRADED — not in PATH · run: borg setup\n'
+        return 0
+    fi
+
+    local raw status db
+    if command -v timeout >/dev/null 2>&1; then
+        raw=$(timeout "$timeout_secs" cairn health 2>/dev/null) || raw=""
+    else
+        raw=$(cairn health 2>/dev/null) || raw=""
+    fi
+    status=$(printf '%s' "$raw" | jq -r '.status // ""' 2>/dev/null || printf '')
+    db=$(printf '%s' "$raw" | jq -r '.db // ""' 2>/dev/null || printf '')
+
+    if [[ "$status" != "ok" ]]; then
+        printf 'cairn: DEGRADED — db %s · run: docker compose -f %s up -d\n' \
+            "${db:-unreachable}" "$compose_hint"
+        return 0
+    fi
+
+    local marker="$dir/.cairn-last-write" age="never"
+    if [[ -f "$marker" ]]; then
+        age=$(_borg_cairn_age_from_epoch "$(_borg_file_mtime_epoch "$marker")")
+    fi
+    printf 'cairn: healthy · recording (last write %s)\n' "$age"
+    return 0
+}
+
+# Cross-platform mtime -> epoch (BSD `stat -f` on macOS, GNU `stat -c` elsewhere).
+# Prints 0 on any failure (missing file, unsupported stat dialect).
+_borg_file_mtime_epoch() {
+    local m
+    m=$(stat -f %m "$1" 2>/dev/null)
+    case "$m" in
+        ''|*[!0-9]*) m=$(stat -c %Y "$1" 2>/dev/null) ;;
+    esac
+    case "$m" in
+        ''|*[!0-9]*) m=0 ;;
+    esac
+    printf '%s' "$m"
+}
+
+# Humanize an epoch-seconds age relative to now. "never" when epoch <= 0.
+_borg_cairn_age_from_epoch() {
+    local epoch="$1"
+    [[ "$epoch" =~ ^[0-9]+$ ]] || { printf 'never'; return; }
+    (( epoch <= 0 )) && { printf 'never'; return; }
+    local now delta
+    now=$(date -u +%s)
+    delta=$(( now - epoch ))
+    (( delta < 0 ))     && { printf 'just now'; return; }
+    (( delta < 60 ))    && { printf '%ds ago' "$delta"; return; }
+    (( delta < 3600 ))  && { printf '%dm ago' $(( delta / 60 )); return; }
+    (( delta < 86400 )) && { printf '%dh ago' $(( delta / 3600 )); return; }
+    printf '%dd ago' $(( delta / 86400 ))
+}
