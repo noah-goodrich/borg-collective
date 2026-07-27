@@ -103,7 +103,7 @@ _borg_cairn_health_line() {
     local marker="$BORG_DIR/.cairn-last-write" age="never"
     if [[ -f "$marker" ]]; then
         local mtime
-        mtime=$(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker" 2>/dev/null || echo 0)
+        mtime=$(_borg_file_mtime "$marker") || mtime=0
         local now diff
         now=$(date +%s)
         diff=$(( now - mtime ))

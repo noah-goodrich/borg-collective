@@ -217,7 +217,15 @@ _borg_cairn_health_line() {
 # Cross-platform mtime -> epoch (BSD `stat -f` on macOS, GNU `stat -c` elsewhere).
 # Prints 0 on any failure (missing file, unsupported stat dialect).
 _borg_file_mtime_epoch() {
-    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || printf '0'
+    local m
+    m=$(stat -f %m "$1" 2>/dev/null)
+    case "$m" in
+        ''|*[!0-9]*) m=$(stat -c %Y "$1" 2>/dev/null) ;;
+    esac
+    case "$m" in
+        ''|*[!0-9]*) m=0 ;;
+    esac
+    printf '%s' "$m"
 }
 
 # Humanize an epoch-seconds age relative to now. "never" when epoch <= 0.
