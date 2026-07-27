@@ -23,8 +23,13 @@ set -euo pipefail
 
 [[ "${BORG_CAIRN_HEARTBEAT_ENABLED:-1}" == "1" ]] || exit 0
 
+# Explicit existence check before sourcing: under `set -e`, `source <missing-file>` aborts the
+# whole script even inside an `|| exit 0` guard (bash treats it as a fatal error, not a normal
+# nonzero return) — so a plain `source X || exit 0` would NOT fail open here.
 # shellcheck source=../lib/borg-hooks.sh
-source "${HOME}/.claude/lib/borg-hooks.sh" 2>/dev/null || exit 0
+_LIB="${HOME}/.claude/lib/borg-hooks.sh"
+[[ -f "$_LIB" ]] || exit 0
+source "$_LIB"
 
 INTERVAL="${BORG_CAIRN_HEARTBEAT_INTERVAL_SEC:-1800}"
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
