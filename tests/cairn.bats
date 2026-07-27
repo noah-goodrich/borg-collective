@@ -77,6 +77,60 @@ EOF
     echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "Cairn knowledge"
 }
 
+# ─── cairn health callout (shared _borg_cairn_health_line) ───────────────────
+
+@test "start hook includes a healthy cairn line when cairn health returns ok" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == "health" ]] && echo '{"status":"ok","db":"reachable","version":"0.5.3"}'
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    run bash "$BORG_START" <<< "$(_hook_input)"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "cairn: healthy"
+}
+
+@test "start hook includes a DEGRADED cairn line when cairn health status is not ok" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == "health" ]] && echo '{"status":"error","db":"unreachable"}'
+exit 1
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    run bash "$BORG_START" <<< "$(_hook_input)"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "cairn: DEGRADED"
+}
+
+# ─── stop hook: last-write marker ─────────────────────────────────────────────
+
+@test "stop hook touches .cairn-last-write when the session record succeeds" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    bash "$BORG_STOP" <<< "$(_hook_input myproject "$TEST_PROJECT_DIR")" 2>/dev/null
+
+    [ -f "$BORG_DIR/.cairn-last-write" ]
+}
+
+@test "stop hook does not touch .cairn-last-write when the session record fails" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    bash "$BORG_STOP" <<< "$(_hook_input myproject "$TEST_PROJECT_DIR")" 2>/dev/null || true
+
+    [ ! -f "$BORG_DIR/.cairn-last-write" ]
+}
+
 # ─── cairn write failure flag from previous stop ──────────────────────────────
 
 @test "start hook surfaces cairn write failure from previous session" {

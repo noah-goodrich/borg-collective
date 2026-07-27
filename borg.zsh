@@ -88,12 +88,14 @@ _borg_cairn_health_line() {
         return 0
     fi
 
-    local raw status db
+    # NOTE: `status` is a read-only zsh special variable ($? alias) — using it as a
+    # local name here silently breaks the whole function with "read-only variable: status".
+    local raw _cairn_status db
     raw=$(_borg_timeout 3 cairn health 2>/dev/null) || raw=""
-    status=$(echo "$raw" | jq -r '.status // ""' 2>/dev/null || echo "")
+    _cairn_status=$(echo "$raw" | jq -r '.status // ""' 2>/dev/null || echo "")
     db=$(echo "$raw" | jq -r '.db // ""' 2>/dev/null || echo "")
 
-    if [[ "$status" != "ok" ]]; then
+    if [[ "$_cairn_status" != "ok" ]]; then
         echo "cairn: DEGRADED — db ${db:-unreachable} · run: docker compose -f $compose_hint up -d"
         return 0
     fi

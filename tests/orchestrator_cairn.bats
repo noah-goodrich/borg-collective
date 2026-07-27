@@ -201,6 +201,30 @@ EOF
     [ ! -f "${TEST_PROJECT_DIR}/.borg/state.json" ]
 }
 
+@test "stop hook in orchestrator mode touches .cairn-last-write on success" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    bash "$BORG_STOP" <<< "$(_orch_input)" 2>/dev/null
+
+    [ -f "$BORG_DIR/.cairn-last-write" ]
+}
+
+@test "stop hook in orchestrator mode does NOT touch .cairn-last-write on failure" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    bash "$BORG_STOP" <<< "$(_orch_input)" 2>/dev/null || true
+
+    [ ! -f "$BORG_DIR/.cairn-last-write" ]
+}
+
 @test "stop hook in orchestrator mode does NOT modify the registry" {
     cat > "$MOCK_BIN/cairn" <<'EOF'
 #!/usr/bin/env bash
