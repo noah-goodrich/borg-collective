@@ -1082,6 +1082,12 @@ with a schema per app. This project's rows live under the \`$schema\` schema via
 \`.devcontainer/borg-hooks/pre-up.sh\` brings the shared stack up once (idempotent) on \`drone up\`.
 This project has NO local stack of its own.
 
+The API URL (\`supabase_kong_stillpoint:8000\`) only serves auth, storage, and realtime on the
+\`public\` schema — the shared stack's PostgREST exposes just \`public\` and \`graphql_public\`. This
+project's own \`$schema\` schema is reachable through the DB URL only. Expanding exposed schemas is a
+deliberate change in the \`stillpoint\` repo's \`supabase/config.toml\` plus a shared-stack restart —
+never something to do from this repo.
+
 **Never run these from this repo** — they boot or kill a COMPETING local stack that collides on
 ports 54321/54322 and takes the shared stack down for every project:
 

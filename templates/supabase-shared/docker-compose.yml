@@ -39,7 +39,8 @@ services:
       # lifecycle that ensures the shared stack is running before compose up.
       __PROJECT_NAME_UPPER___DB_URL: postgresql://postgres:postgres@supabase_db_stillpoint:5432/postgres?options=-csearch_path%3D__SCHEMA__
 
-      # Supabase client (API gateway / Kong) for the shared local stack.
+      # Supabase client (API gateway / Kong) for the shared local stack. Serves auth, storage, and
+      # realtime on `public` only — PostgREST here doesn't expose __SCHEMA__ (see DB URL above).
       __PROJECT_NAME_UPPER___SUPABASE_URL: http://supabase_kong_stillpoint:8000
 
     networks:
