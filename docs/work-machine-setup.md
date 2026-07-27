@@ -94,8 +94,15 @@ borg version && claude plugin list | grep borg-collective && borg doctor
   AND updates); `~/.config/dotfiles/docs/work-machine-setup.md` covers only the dotfiles
   identity/config-sync slice.
 
-- **borg-collective is now v0.8.8** (was 0.8.6 on 2026-07-09; `VERSION` file + plugin manifest both
-  confirmed). The `claude-plugins` mirror of the plugin is rebuilt to match (0.8.8) with a full
+  - **dotfiles #12:** dev-postgres auto-start LaunchAgent (delivered by the update flow's dotfiles
+    pull + `install.sh`).
+  - **cairn #45:** DB auto-reconnect on loss-of-connection + write-failure surfacing (delivered via
+    the new `v0.5.4` image; `cairn-up` pulls it).
+  - **borg-collective #94:** cairn heartbeat Stop hook + hail/link status callouts (rebuilt from
+    source by `install.sh` / `borg setup`).
+
+- **borg-collective is now v0.8.9** (was 0.8.6 on 2026-07-09; `VERSION` file + plugin manifest both
+  confirmed). The `claude-plugins` mirror of the plugin is rebuilt to match (0.8.9) with a full
   synthetic-session guard, so hooks stay quiet during internal `/usage` polling and other non-interactive
   probe sessions.
 - **`bash-guard` security hardening** — closed four Tier-A pre-approval bypasses (`rm`/`chmod` token
@@ -107,14 +114,15 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 - **`drone scaffold --supabase-shared`** — a second, opt-in scaffold path for a shared-local-Supabase
   setup (join a fixed always-on Supabase Docker network instead of a per-project instance). Inert unless
   you explicitly use the `--supabase-shared` flag; does not change default `--supabase` behavior.
-- **cairn is now 0.5.2** (was tracked loosely before; confirmed in `pyproject.toml`) — adds a feedback
-  REST endpoint and `superseded_by`/`source_session`/`times_applied` edge backfill (migration 007).
+- **cairn is now 0.5.4** (was tracked loosely before; confirmed in `pyproject.toml`) — adds DB
+  auto-reconnect on loss-of-connection + write-failure surfacing (migration 008), plus a feedback
+  REST endpoint and edge backfill machinery (migration 007).
 
 ---
 
 ## Prerequisites to verify manually before running anything
 
-- [x] **VERIFIED (2026-07-21):** cairn `compose.yml` now pins `ghcr.io/noah-goodrich/cairn:0.5.2` (up from
+- [x] **VERIFIED (2026-07-21):** cairn `compose.yml` now pins `ghcr.io/noah-goodrich/cairn:0.5.4` (up from
       0.2.0, which was verified public + multi-arch amd64+arm64 on 2026-06-11). Phase 4 Option A works as
       written — no action needed. (If the image ever 401/404s after a re-tag, re-set the package visibility to
       "Public" in GitHub → Packages; otherwise Option A falls back to the local source build in Option B.)
@@ -255,8 +263,8 @@ also removes an already-bootstrapped agent so the flag takes effect on re-run).
 # (the plugin owns hook registration — hooks don't fire without it)
 # borg setup (already run in 3a) publishes the plugin package automatically, so this should succeed.
 claude plugin install borg-collective@noah-local
-claude plugin list | grep borg-collective       # expect: borg-collective@noah-local  0.8.8
-borg version                                     # should print the same version number (e.g. 0.8.8)
+claude plugin list | grep borg-collective       # expect: borg-collective@noah-local  0.8.9
+borg version                                     # should print the same version number (e.g. 0.8.9)
 ```
 
 > `borg setup` (run automatically by `install.sh`) publishes the plugin package into
