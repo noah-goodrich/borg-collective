@@ -158,7 +158,7 @@ absent, `borg setup` warns about missing dotfiles but still proceeds.
 
 Convention: Keychain **SERVICE = ENV_VAR** (uppercase, underscores). You supply all values.
 
-**Critical:** the Anthropic key (Python SDK + cairn boardroom/backfill) is stored as **`ANTHROPIC_SDK_KEY`**,
+**Critical:** the Anthropic key (Python SDK + cairn conductor/backfill) is stored as **`ANTHROPIC_SDK_KEY`**,
 NOT `ANTHROPIC_API_KEY`. Claude Code itself uses your Max subscription and does not read this key.
 
 ```zsh
