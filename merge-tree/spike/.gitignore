@@ -1,0 +1,13 @@
+node_modules/
+*.log
+
+# Ontra-data-bearing spike outputs: real project names, Jira/GitHub refs, titles.
+# borg-collective is a public repo; Ontra data stays machine-local (see CLAUDE.md).
+# These stay on disk (and are mirrored to ~/.local/state/borg/merge-tree/spike/) but are
+# never committed. Only the generic script/tooling is tracked.
+VERDICT.md
+raw_measurements.json
+expanded.svg
+expanded.html
+collapsed.svg
+collapsed.html
