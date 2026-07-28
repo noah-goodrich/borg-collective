@@ -31,6 +31,7 @@ import datetime
 import html
 import json
 import os
+import sys
 from collections import defaultdict
 
 STATE = os.environ.get("BORG_MERGE_TREE_DIR", os.path.expanduser("~/.local/state/borg/merge-tree"))
@@ -50,31 +51,60 @@ DATA = ARGS.data
 ANNOT = ARGS.annotations
 OUT = ARGS.out
 
-with open(DATA) as f:
-    D = json.load(f)
+# Annotation fields that may shallow-override an Item. Deliberately a WHITELIST:
+# the raw annotation payload also carries bookkeeping keys (when/text/source/
+# history), and a provenance "source" would otherwise clobber the item's own
+# source ("github-pr"/"jira" -> the source badge). Only these curation-safe
+# keys may be merged; identity keys (ref/source/repo/project/url/state) never.
+ANNOTATION_MERGE_KEYS = {
+    "note", "one_line", "action_needed", "blocked", "urgency", "owner",
+    "title", "changed", "bucket", "is_entrypoint",
+}
 
-annotations = {}
-if os.path.exists(ANNOT):
-    try:
-        with open(ANNOT) as f:
-            annotations = json.load(f) or {}
-    except (ValueError, OSError):
-        annotations = {}
+
+def load_annotations(path):
+    """Return the machine-local annotations map, or {} on any failure.
+
+    Isolated so a future cairn export can be unioned in here (one merged map is
+    handed to apply_annotations). The render MUST succeed with this file absent,
+    empty, or malformed -- see SCHEMA.md; stdlib only.
+    """
+    ann = {}
+    if os.path.exists(path):
+        try:
+            with open(path) as f:
+                ann = json.load(f) or {}
+        except (ValueError, OSError):
+            ann = {}
+    return ann if isinstance(ann, dict) else {}
+
+
+def apply_annotations(rows, ann):
+    """Shallow-merge whitelisted annotation keys onto each item and stash the raw
+    payload under _annotation for the expandable why/history trail."""
+    for it in rows:
+        ov = ann.get(it.get("ref"))
+        if isinstance(ov, dict):
+            it["_annotation"] = ov
+            it.update({k: v for k, v in ov.items() if k in ANNOTATION_MERGE_KEYS})
+
+
+try:
+    with open(DATA) as f:
+        D = json.load(f)
+except (ValueError, OSError) as exc:
+    sys.exit(f"render.py: cannot read data.json at {DATA}: {exc}")
 
 meta = D.get("meta", {})
-items = D.get("items", [])
+# Skip ref-less items up front: ref is the canonical join key, and a single item
+# missing one used to crash the whole render (KeyError) in both the by_ref build
+# and node_html. Guard once, here, so every downstream consumer is safe.
+items = [it for it in D.get("items", []) if it.get("ref")]
 edges = D.get("edges", [])
 actions = D.get("actions", {})
 
-# apply per-ref annotation overrides (local, uncommitted) onto items; keep
-# the raw annotation payload too so we can render a why/history trail.
-for it in items:
-    ov = annotations.get(it.get("ref"))
-    if isinstance(ov, dict):
-        it["_annotation"] = ov
-        it.update({k: v for k, v in ov.items() if k not in ("history",)})
+apply_annotations(items, load_annotations(ANNOT))
 
-by_ref = {it["ref"]: it for it in items}
 GEN = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S %Z").strip()
 try:
     TODAY = datetime.datetime.strptime(meta.get("today", "")[:10], "%Y-%m-%d").date()
@@ -88,6 +118,18 @@ NOAH = {"noah-goodrich", "noah goodrich", "noahgoodrich", "noah", "ngoodrich"}
 # ---------------------------------------------------------------- helpers
 def esc(s):
     return html.escape(str(s if s is not None else ""))
+
+
+def safe_url(url):
+    """Return the url only if it uses an http/https scheme, else "".
+
+    html.escape() neutralizes quotes/brackets but NOT the scheme, so an
+    ``esc("javascript:alert(1)")`` still executes when dropped into an href.
+    Allow-list the scheme before any URL reaches an anchor.
+    """
+    u = (url or "").strip()
+    low = u.lower()
+    return u if low.startswith("http://") or low.startswith("https://") else ""
 
 
 def is_mine(it):
@@ -265,7 +307,7 @@ def node_html(it):
     if one:
         note = f'<div class="note">{esc(one)}</div>'
 
-    url = it.get("url") or ""
+    url = safe_url(it.get("url"))
     handle = (f'<a class="handle" href="{esc(url)}" target="_blank" rel="noopener">{esc(ref)}</a>'
               if url else f'<span class="handle">{esc(ref)}</span>')
     title = it.get("title") or ""
@@ -389,14 +431,19 @@ sections.append(f"""
     </details>
   </section>""")
 
-# ---- health strip
+# ---- health strip (tri-state: ok=green / warn=amber / down=red, + machine + when)
+HEALTH_DOT = {"ok": "var(--green)", "warn": "var(--wip)", "down": "var(--red)"}
 health_bits = []
 for h in meta.get("health", []):
-    ok = (h.get("status") == "ok")
-    dot = "var(--green)" if ok else "var(--red)"
+    status = (h.get("status") or "down").lower()
+    dot = HEALTH_DOT.get(status, "var(--wip)")
+    where = esc(h.get("machine") or "")
+    when = short_date(h.get("checked_at"))
+    stamp = " &middot; ".join(x for x in (where, when) if x)
+    stamp_html = f' <span class="hstamp">({stamp})</span>' if stamp else ""
     health_bits.append(
-        f'<span class="hchk"><span class="dot" style="background:{dot}"></span>'
-        f'{esc(h.get("check"))}: {esc(h.get("detail"))}</span>')
+        f'<span class="hchk" title="{esc(status)}"><span class="dot" style="background:{dot}"></span>'
+        f'{esc(h.get("check"))}: {esc(h.get("detail"))}{stamp_html}</span>')
 health_html = " ".join(health_bits)
 
 # ---- project + repo legend (color-coding key)
@@ -446,6 +493,7 @@ h1 .sub{color:var(--muted);font-weight:400;font-size:12px;margin-left:10px}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:3px;vertical-align:middle}
 .health{margin-top:6px;display:flex;flex-wrap:wrap;gap:14px;color:var(--muted);font-size:11px}
 .hchk{white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.hstamp{opacity:.6}
 .projlegend,.repolegend{margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;color:var(--muted);font-size:11px;align-items:center}
 main{padding:16px 20px;max-width:1200px;margin:0 auto}
 section{margin-bottom:26px}
