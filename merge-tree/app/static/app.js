@@ -244,8 +244,10 @@ function layoutLens(lens) {
     }
   }
 
-  const colWidth = 210;
-  const rowHeight = 62;
+  // Scale layout for sparse lenses (<=10 nodes): larger spacing and node sizes for confident fill.
+  const isSparse = lens.nodes.length <= 10;
+  const colWidth = isSparse ? 280 : 210;
+  const rowHeight = isSparse ? 100 : 62;
   const marginX = 40;
   const marginY = 30;
   const positions = new Map();
@@ -263,7 +265,7 @@ function layoutLens(lens) {
   const maxRows = Math.max(...[...layers.values()].map((v) => v.length), 1);
   const height = marginY * 2 + (maxRows - 1) * rowHeight + 50;
 
-  return { positions, width, height, nodeById };
+  return { positions, width, height, nodeById, isSparse };
 }
 
 function barycenter(_ref, neighbors, orderIndex) {
@@ -288,7 +290,7 @@ function renderLensSVG(lens) {
     return;
   }
 
-  const { positions, width, height } = layoutLens(lens);
+  const { positions, width, height, isSparse } = layoutLens(lens);
   svg.setAttribute("viewBox", `0 0 ${width} ${Math.max(height, 200)}`);
 
   const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
@@ -301,15 +303,19 @@ function renderLensSVG(lens) {
   const edgeLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
   const nodeLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
 
+  const nodeWidth = isSparse ? 200 : 150;
+  const nodeHeight = isSparse ? 80 : 36;
+  const nodeHalfWidth = nodeWidth / 2;
+
   for (const e of lens.edges) {
     const a = positions.get(e.source);
     const b = positions.get(e.target);
     if (!a || !b) continue;
     const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const x1 = a.x + 150;
-    const y1 = a.y + 18;
+    const x1 = a.x + nodeWidth;
+    const y1 = a.y + nodeHeight / 2;
     const x2 = b.x;
-    const y2 = b.y + 18;
+    const y2 = b.y + nodeHeight / 2;
     const midX = (x1 + x2) / 2;
     path.setAttribute("d", `M${x1},${y1} C${midX},${y1} ${midX},${y2} ${x2},${y2}`);
     path.setAttribute("class", `lens-edge ${e.kind}`);
@@ -326,28 +332,29 @@ function renderLensSVG(lens) {
     g.dataset.ref = n.ref;
 
     const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", "150");
-    rect.setAttribute("height", "36");
+    rect.setAttribute("width", String(nodeWidth));
+    rect.setAttribute("height", String(nodeHeight));
     rect.setAttribute("rx", "6");
     g.appendChild(rect);
 
     const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    dot.setAttribute("cx", "10");
-    dot.setAttribute("cy", "12");
-    dot.setAttribute("r", "4");
+    dot.setAttribute("cx", "12");
+    dot.setAttribute("cy", isSparse ? "20" : "12");
+    dot.setAttribute("r", "5");
     dot.setAttribute("fill", stateColor(n.state));
     g.appendChild(dot);
 
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", "20");
-    label.setAttribute("y", "16");
-    label.textContent = truncate(n.title || n.ref, 20);
+    label.setAttribute("x", "28");
+    label.setAttribute("y", isSparse ? "25" : "16");
+    label.setAttribute("class", isSparse ? "lens-node-title-sparse" : "");
+    label.textContent = truncate(n.title || n.ref, isSparse ? 25 : 20);
     g.appendChild(label);
 
     const refText = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    refText.setAttribute("x", "20");
-    refText.setAttribute("y", "29");
-    refText.setAttribute("class", "node-badge");
+    refText.setAttribute("x", "28");
+    refText.setAttribute("y", isSparse ? "48" : "29");
+    refText.setAttribute("class", "node-badge" + (isSparse ? " node-badge-sparse" : ""));
     refText.textContent = n.containment_badge || n.ref;
     g.appendChild(refText);
 
@@ -439,6 +446,15 @@ async function boot() {
     state.selectedRef = null;
     loadLens("portfolio");
   });
+
+  document.getElementById("lens-portfolio-btn").addEventListener("click", () => {
+    state.selectedRef = null;
+    loadLens("portfolio");
+  });
+
+  if (!location.hash && unblocks.length > 0) {
+    state.lensRoot = unblocks[0].ref;
+  }
 
   await loadLens(state.lensRoot);
 }
