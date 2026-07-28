@@ -554,7 +554,7 @@ html_doc = f"""<!doctype html>
 <title>PR Control Hub</title>
 <style>{CSS}</style></head><body>
 <header>
-  <h1>PR CONTROL HUB <span class="sub">cross-repo merge tree &middot; {len(items)} items across {repos_n} repos &middot; {esc(meta.get('machine',''))}</span></h1>
+  <h1>PR CONTROL HUB <span class="sub">cross-repo merge tree &middot; {len(items)} items across {repos_n} repos &middot; {esc(meta.get('machine',''))} &middot; <a href="graph.html">Graph view &rarr;</a></span></h1>
   <div class="pills">{pills}</div>
   <div class="bar">
     <button class="fbtn on" data-f="all">All</button>
