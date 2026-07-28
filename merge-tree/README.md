@@ -29,9 +29,21 @@ python3 merge-tree/render.py --data /path/to/data.json --out /path/to/index.html
 The render succeeds with `annotations.local.json` absent, empty, or malformed — annotations are optional and
 machine-local by design (see SCHEMA.md).
 
+## Graph view
+
+```
+python3 merge-tree/render_graph.py
+```
+
+Reads the same `data.json` (+ optional `annotations.local.json`) and writes `<STATE>/graph.html`: an interactive,
+self-contained (inline SVG + vanilla JS, no CDN) node-link dependency graph with three drill-down levels (project
+field-of-play → stack sub-graph → full per-item info panel), project/repo filters, and a chain-isolation control.
+`index.html` links to it ("Graph view →") and it links back ("← List view").
+
 ## Files
 
-- `render.py` — the renderer.
+- `render.py` — the list/bucket renderer.
+- `render_graph.py` — the interactive dependency-graph renderer.
 - `SCHEMA.md` — the ratified `data.json` contract and the three-layer model (source state / disposable projection
   / durable machine-local annotations).
 - `PROTOCOL.md` — the action-dispatch contract (`actions[ref] = {label, command, class}`) and the
