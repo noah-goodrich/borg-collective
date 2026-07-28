@@ -1,39 +1,55 @@
 #!/usr/bin/env python3
-"""render_graph.py - interactive drill-down dependency-graph view for the PR control hub.
+"""render_graph.py - the STORY GRAPH: an ownership-first, story-telling hub view.
 
-Reads  <STATE>/data.json               (same curated recon artifact as render.py)
-Reads  <STATE>/annotations.local.json  (OPTIONAL, machine-local; joined at render time)
-Writes <STATE>/graph.html              (self-contained dark-mode node-link graph; no external deps)
+Cards -> state-swimlanes -> isolate-DAG. This replaces the old node-link
+"hairball" with the IA ratified in graph-ia-spec.md:
 
-STATE defaults to ~/.local/state/borg/merge-tree but is overridable via the
-BORG_MERGE_TREE_DIR env var. --data/--out/--annotations CLI flags override the
-individual paths. python3 stdlib only -- see render.py for the schema contract.
+  L0  Project cards (default). ~8 Noah-OWNED projects in two labelled bands
+      (NAMED / ALSO YOURS), each a status ribbon: 5-state meter + one NEXT
+      ACTION command + a "blocked by ->" callout. NOT a graph -- you scroll.
+  L1  One project -> a 4-column state board (Ready | In-flight | Blocked |
+      Pending) + a shipped rail, with parallel-group rails and blocked_by prose.
+  L2  One item -> a right slide-over with full detail (or a graceful stub for
+      the ~20 refs with no data.json row) + an "Isolate chain" button.
+  Isolate  The ONE node-link view: transitive closure of a single chain over
+      the typed edges, deterministic layered layout, with drag-pan + wheel-zoom.
 
-Drill-down model:
-  Level 0 (field of play): projects as columns, one row per TOP-LEVEL item.
-    A top-level item is NOT the child of any stacked/apex edge. A top-level
-    PR with stacked/apex descendants renders as one node with a "+N stacked"
-    badge; its descendants are hidden at this level.
-  Level 1 (stack sub-graph): clicking a grouped top-level node opens its
-    descendants (the stacked/apex chain) as a small internal graph, plus any
-    blocks edges that cross the group boundary (shown as external stubs).
-  Level 2 (info panel): clicking any leaf node opens the full informational
-    panel for that item (ref/title/repo/project/source/state/bucket/owner/
-    url/one_line/action_needed/urgency/blocked + the actions[ref] command).
+Primary source  <STATE>/story.json   (the curated project spine; ownership + state)
+Enriched by     <STATE>/data.json    (per-item PR/issue/Jira detail; the join)
+Overlaid by     <STATE>/annotations.local.json  (OPTIONAL, machine-local why/history)
+Writes          <STATE>/graph.html   (self-contained; inline SVG + vanilla JS; no CDN)
 
-Re-run with:  python3 merge-tree/render_graph.py
+STATE defaults to ~/.local/state/borg/merge-tree, overridable via BORG_MERGE_TREE_DIR.
+--story/--data/--out/--annotations override the individual paths. python3 stdlib only.
+
+Re-run with:
+  BORG_MERGE_TREE_DIR=... python3 merge-tree/render_graph.py
 """
 import argparse
 import html
 import json
 import os
-from collections import defaultdict
+from collections import Counter
 
 STATE = os.environ.get("BORG_MERGE_TREE_DIR", os.path.expanduser("~/.local/state/borg/merge-tree"))
 
+# Projects Noah named in the brief (Password Deprecation umbrella = keypair +
+# SME-PAT; Self-Service Ingestion = snowpipe). Everything else is "also yours".
+NAMED_IDS = ["keypair-migration", "sme-self-service-pat", "self-service-snowpipe"]
+UMBRELLA_IDS = ["keypair-migration", "sme-self-service-pat"]
+STATE_ORDER = ["ready-to-start", "in-flight", "blocked", "pending", "done"]
+
+# Same annotation whitelist as render.py: a provenance "source" must never
+# clobber an item's own source (the source badge). Identity keys never merge.
+ANNOTATION_MERGE_KEYS = {
+    "note", "one_line", "action_needed", "blocked", "urgency", "owner",
+    "title", "changed", "bucket", "is_entrypoint",
+}
+
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Render the interactive dependency-graph view from data.json.")
+    p = argparse.ArgumentParser(description="Render the story-first graph hub (graph.html).")
+    p.add_argument("--story", default=os.path.join(STATE, "story.json"), help="path to story.json")
     p.add_argument("--data", default=os.path.join(STATE, "data.json"), help="path to data.json")
     p.add_argument("--out", default=os.path.join(STATE, "graph.html"), help="path to write graph.html")
     p.add_argument("--annotations", default=os.path.join(STATE, "annotations.local.json"),
@@ -42,605 +58,681 @@ def parse_args():
 
 
 ARGS = parse_args()
-DATA = ARGS.data
-ANNOT = ARGS.annotations
-OUT = ARGS.out
-
-with open(DATA) as f:
-    D = json.load(f)
-
-annotations = {}
-if os.path.exists(ANNOT):
-    try:
-        with open(ANNOT) as f:
-            annotations = json.load(f) or {}
-    except (ValueError, OSError):
-        annotations = {}
-
-meta = D.get("meta", {})
-items = D.get("items", [])
-edges = D.get("edges", [])
-actions = D.get("actions", {})
-
-for it in items:
-    ov = annotations.get(it.get("ref"))
-    if isinstance(ov, dict):
-        it.update({k: v for k, v in ov.items() if k not in ("history",)})
-
-by_ref = {it["ref"]: it for it in items}
 
 
 def esc(s):
     return html.escape(str(s if s is not None else ""))
 
 
-def project_hue(project):
-    """Stable hash -> hue (0-359); same convention as render.py so colors match."""
-    h = 0
-    for ch in project or "":
-        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
-    return h % 360
+def safe_url(url):
+    """http/https only; html.escape does not neutralize a javascript: scheme."""
+    u = (url or "").strip()
+    low = u.lower()
+    return u if low.startswith("http://") or low.startswith("https://") else ""
 
 
-def repo_hue(repo):
-    h = 0
-    for ch in (repo or "")[::-1]:
-        h = (h * 37 + ord(ch)) & 0xFFFFFFFF
-    return h % 360
+def load_json(path, default):
+    """Read a JSON file; return default on any read/parse failure (no traceback)."""
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (ValueError, OSError):
+        return default
 
 
-# ---------------------------------------------------------------- edge indices
-stacked_children = defaultdict(list)   # parent -> [child]  (stacked kind only)
-apex_children = defaultdict(list)      # parent -> [child]  (apex kind only)
-group_parent_children = defaultdict(list)  # parent -> [child] for stacked+apex (grouping)
-blocks_pairs = []                      # [(parent, child)]
-child_of_group = set()                 # refs that are children of a stacked/apex edge
-
-for e in edges:
-    k, p, c = e.get("kind"), e.get("parent"), e.get("child")
-    if not p or not c:
-        continue
-    if k == "stacked":
-        stacked_children[p].append(c)
-        group_parent_children[p].append(c)
-        child_of_group.add(c)
-    elif k == "apex":
-        apex_children[p].append(c)
-        group_parent_children[p].append(c)
-        child_of_group.add(c)
-    elif k == "blocks":
-        blocks_pairs.append((p, c))
+def load_annotations(path):
+    """Machine-local annotations map, or {} on any failure. Isolated so a future
+    cairn export can be unioned in here before apply_annotations sees it."""
+    ann = load_json(path, {}) if os.path.exists(path) else {}
+    return ann if isinstance(ann, dict) else {}
 
 
-def descendants_of(root):
-    """BFS over stacked+apex edges from root -> full flat descendant set (refs only)."""
-    seen = []
-    seen_set = set()
-    frontier = [root]
-    while frontier:
-        nxt = []
-        for node in frontier:
-            for c in group_parent_children.get(node, []):
-                if c not in seen_set and c != root:
-                    seen_set.add(c)
-                    seen.append(c)
-                    nxt.append(c)
-        frontier = nxt
-    return seen
+def apply_annotations(rows, ann):
+    for it in rows:
+        ov = ann.get(it.get("ref"))
+        if isinstance(ov, dict):
+            it.update({k: v for k, v in ov.items() if k in ANNOTATION_MERGE_KEYS})
 
 
-# top-level refs: not a child of any stacked/apex edge, and present in items
-top_level_refs = [it["ref"] for it in items if it["ref"] not in child_of_group]
+# ---------------------------------------------------------------- load + join
+story = load_json(ARGS.story, {"projects": []}) or {"projects": []}
+D = load_json(ARGS.data, {}) or {}
 
-# representative map: any ref -> the top-level ref whose group contains it
-representative = {}
-group_members = {}   # top-level ref -> [descendant refs] (flat)
-for root in top_level_refs:
-    desc = descendants_of(root)
-    group_members[root] = desc
-    representative[root] = root
-    for d in desc:
-        representative[d] = root
+meta = D.get("meta", {})
+items = [it for it in D.get("items", []) if it.get("ref")]   # skip ref-less items
+edges = [e for e in D.get("edges", []) if e.get("parent") and e.get("child")]
+actions = D.get("actions", {}) or {}
 
-# blocks edges projected to top-level representatives, for the level-0 view
-top_blocks = []
-seen_pairs = set()
-for p, c in blocks_pairs:
-    rp = representative.get(p, p)
-    rc = representative.get(c, c)
-    if rp == rc:
-        continue
-    key = (rp, rc)
-    if key in seen_pairs:
-        continue
-    seen_pairs.add(key)
-    top_blocks.append({"parent": rp, "child": rc, "detail": f"{p} blocks {c}"})
+apply_annotations(items, load_annotations(ARGS.annotations))
+by_ref = {it["ref"]: it for it in items}
+projects = story.get("projects", []) or []
 
 
-def node_payload(ref):
+def repo_of_ref(ref):
     it = by_ref.get(ref)
-    if not it:
-        return {"ref": ref, "title": "", "missing": True}
-    act = actions.get(ref) or {}
+    if it and it.get("repo"):
+        return it["repo"]
+    if "#" in ref:
+        return ref.split("#", 1)[0]
+    if ref.startswith("DE-") or ref.startswith("DEV-"):
+        return "jira"
+    if " " in ref:
+        return ref.split(" ", 1)[0]
+    return ref
+
+
+# ---------------------------------------------------------------- derived fields
+def derive_workstream(ws):
+    wsitems = ws.get("items", []) or []
+    ws["n_items"] = len(wsitems)
+    ws["n_blocked_reasons"] = len(ws.get("blocked_by", []) or [])
+    ws["needs_you"] = any((by_ref.get(r) or {}).get("bucket") == "needs-you" for r in wsitems)
+    entry = next((r for r in wsitems if (by_ref.get(r) or {}).get("is_entrypoint")), None)
+    if entry is None:
+        entry = next((r for r in wsitems if r in actions), None)
+    if entry is None and wsitems:
+        entry = wsitems[0]
+    ws["entry"] = entry
+    urgs = [(by_ref[r].get("urgency") or 0) for r in wsitems if r in by_ref]
+    ws["max_urgency"] = max(urgs) if urgs else 0
+
+
+def hero_index(wss):
+    for i, ws in enumerate(wss):
+        if ws.get("state") == "in-flight" and ws.get("needs_you"):
+            return i
+    for target in ("ready-to-start", "in-flight", "blocked", "pending"):
+        for i, ws in enumerate(wss):
+            if ws.get("state") == target:
+                return i
+    return 0 if wss else None
+
+
+def derive_project(p):
+    wss = p.get("workstreams", []) or []
+    for ws in wss:
+        derive_workstream(ws)
+    p["meter"] = {s: 0 for s in STATE_ORDER}
+    for ws in wss:
+        if ws.get("state") in p["meter"]:
+            p["meter"][ws["state"]] += 1
+    p["next_idx"] = hero_index(wss)
+    repos = set()
+    for ws in wss:
+        for r in ws.get("items", []) or []:
+            repos.add(repo_of_ref(r))
+    p["repos"] = sorted(repos)
+    p["named"] = p.get("id") in NAMED_IDS
+    p["any_needs_you"] = any(ws.get("needs_you") for ws in wss)
+
+
+for p in projects:
+    derive_project(p)
+
+
+# ---------------------------------------------------------------- baked payloads
+def trimmed_item(it):
+    ref = it["ref"]
+    act = actions.get(ref)
     return {
-        "ref": ref,
-        "title": it.get("title") or "",
-        "project": it.get("project") or "misc / infra",
-        "repo": it.get("repo") or "",
-        "source": it.get("source") or "",
-        "state": it.get("state") or "",
-        "bucket": it.get("bucket") or "",
-        "owner": it.get("owner") or "",
-        "url": it.get("url") or "",
-        "one_line": it.get("one_line") or "",
-        "action_needed": it.get("action_needed") or "",
-        "urgency": it.get("urgency"),
-        "blocked": bool(it.get("blocked")),
-        "is_entrypoint": bool(it.get("is_entrypoint")),
-        "action": {"label": act.get("label", ""), "command": act.get("command", ""),
-                   "class": act.get("class", "readonly")} if act else None,
+        "ref": ref, "title": it.get("title") or "", "project": it.get("project") or "",
+        "repo": it.get("repo") or "", "source": it.get("source") or "",
+        "state": it.get("state") or "", "bucket": it.get("bucket") or "",
+        "owner": it.get("owner") or "", "url": safe_url(it.get("url")),
+        "one_line": it.get("one_line") or "", "action_needed": it.get("action_needed") or "",
+        "urgency": it.get("urgency"), "is_entrypoint": bool(it.get("is_entrypoint")),
+        "blocked": bool(it.get("blocked")), "changed": it.get("changed") or "",
+        "action": ({"label": act.get("label", ""), "command": act.get("command", ""),
+                    "class": act.get("class", "readonly")} if isinstance(act, dict) else None),
     }
 
 
-# ---------------------------------------------------------------- build node/edge payloads
-nodes_out = {}
-for it in items:
-    nodes_out[it["ref"]] = node_payload(it["ref"])
+BYREF = {it["ref"]: trimmed_item(it) for it in items}
+ACT = {r: {"label": a.get("label", ""), "command": a.get("command", ""),
+           "class": a.get("class", "readonly")}
+       for r, a in actions.items() if isinstance(a, dict)}
+EDGES = [{"parent": e["parent"], "child": e["child"], "kind": e.get("kind", "stacked")} for e in edges]
+STORY = {"projects": projects, "meta": story.get("meta", {})}
+META = {"today": meta.get("today", ""), "machine": meta.get("machine", ""),
+        "repos": meta.get("repos", []), "health": meta.get("health", [])}
 
-top_nodes = []
-for root in top_level_refs:
-    payload = dict(nodes_out[root])
-    payload["group"] = group_members[root]
-    top_nodes.append(payload)
-
-# order projects the same way render.py does: by max urgency desc, then name
-proj_of_top = defaultdict(list)
-for n in top_nodes:
-    proj_of_top[n["project"]].append(n)
-proj_order = sorted(proj_of_top.keys(),
-                     key=lambda p: (-max((n.get("urgency") or 0) for n in proj_of_top[p]), p.lower()))
-for p in proj_order:
-    proj_of_top[p].sort(key=lambda n: (-(n.get("urgency") or 0), n["ref"]))
-
-repo_set = sorted({it.get("repo") for it in items if it.get("repo")})
-project_set = proj_order
-
-internal_edges = [e for e in edges if e.get("kind") in ("stacked", "apex")]
-
-GRAPH_DATA = {
-    "nodes": nodes_out,
-    "topNodes": top_nodes,
-    "projOrder": proj_order,
-    "projGroups": {p: [n["ref"] for n in proj_of_top[p]] for p in proj_order},
-    "groupMembers": group_members,
-    "internalEdges": internal_edges,
-    "blocksEdges": [{"parent": p, "child": c} for p, c in blocks_pairs],
-    "topBlocks": top_blocks,
-    "repoSet": repo_set,
-    "projectSet": project_set,
-    "projectHue": {p: project_hue(p) for p in project_set},
-    "repoHue": {r: repo_hue(r) for r in repo_set},
-}
-
-repos_n = len(meta.get("repos", []))
+CONSTS = (
+    "const STORY=" + json.dumps(STORY, separators=(",", ":")) + ";\n"
+    "const BYREF=" + json.dumps(BYREF, separators=(",", ":")) + ";\n"
+    "const ACT=" + json.dumps(ACT, separators=(",", ":")) + ";\n"
+    "const EDGES=" + json.dumps(EDGES, separators=(",", ":")) + ";\n"
+    "const META=" + json.dumps(META, separators=(",", ":")) + ";\n"
+    "const NAMED=" + json.dumps(NAMED_IDS) + ";\n"
+    "const UMBRELLA=" + json.dumps(UMBRELLA_IDS) + ";\n"
+    "const STATE_ORDER=" + json.dumps(STATE_ORDER) + ";\n"
+)
 
 CSS = """
 :root{
-  --bg:#0d1117; --panel:#161b22; --panel2:#0f141a; --bd:#30363d; --tx:#c9d1d9;
-  --muted:#8b949e; --merged:#6e7681; --draft:#58a6ff; --wip:#d29922; --red:#f85149;
-  --green:#3fb950; --you:#e3b341; --acc:#1f6feb;
+  --bg:#0d1117; --panel:#161b22; --panel2:#0f141a; --bd:#30363d;
+  --tx:#c9d1d9; --muted:#8b949e;
+  --ready:#3fb950; --flight:#d29922; --blocked:#f85149; --pending:#8b949e;
+  --done:#6e7681; --wip:#d29922; --you:#e3b341; --acc:#1f6feb; --red:#f85149;
+  --merged:#6e7681;
+  --card:linear-gradient(180deg,#171d26,#12171f);
+  --card-hi:linear-gradient(180deg,#1b2230,#141a23);
+  --elev:0 1px 0 #ffffff08 inset, 0 2px 6px #00000060;
+  --ring:0 0 0 1px var(--acc) inset;
+  --pg1:#6ea8fe; --pg2:#4bc0b0; --pg3:#c08cf0; --pg4:#e08a5a; --pg5:#8bb26a;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--tx);
-  font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:0 0 40px}
-a{color:inherit;text-decoration:none}
-a:hover{text-decoration:underline}
-header{position:sticky;top:0;z-index:30;background:linear-gradient(180deg,#0d1117,#0d1117f0);
-  border-bottom:1px solid var(--bd);padding:12px 20px 8px;backdrop-filter:blur(4px)}
-h1{font-size:15px;margin:0 0 4px;letter-spacing:.5px}
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;padding:0 0 60px}
+a{color:var(--acc);text-decoration:none} a:hover{text-decoration:underline}
+header{position:sticky;top:0;z-index:30;background:linear-gradient(180deg,#0d1117,#0d1117f2);
+  border-bottom:1px solid var(--bd);padding:12px 20px 8px;backdrop-filter:blur(6px)}
+h1{font-size:15px;margin:0;letter-spacing:.5px}
 h1 .sub{color:var(--muted);font-weight:400;font-size:11px;margin-left:10px}
-.crumbs{font-size:12px;color:var(--muted);margin:4px 0}
-.crumbs span{cursor:pointer;color:var(--acc)}
-.crumbs span:hover{text-decoration:underline}
-.bar{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start;margin-top:6px}
-.grp{display:flex;flex-wrap:wrap;gap:4px;align-items:center;max-width:520px}
-.grp b{color:var(--muted);font-weight:400;margin-right:4px;font-size:11px}
-.chip-f{cursor:pointer;padding:2px 8px;border-radius:10px;border:1px solid var(--bd);
-  background:var(--panel);color:var(--muted);font-size:11px}
+.bar{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;margin-top:8px}
+.fgroup{display:flex;flex-wrap:wrap;gap:4px;align-items:center;max-width:640px}
+.fgroup b{color:var(--muted);font-weight:400;margin-right:4px;font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+.fgroup.toggles{margin-left:auto}
+.chip-f{cursor:pointer;padding:2px 9px;border-radius:11px;border:1px solid var(--bd);
+  background:var(--panel);color:var(--muted);font-size:11px;transition:.12s ease}
+.chip-f:hover{border-color:var(--acc)}
 .chip-f.on{background:var(--acc);color:#fff;border-color:var(--acc)}
-.fbtn{cursor:pointer;padding:3px 12px;border-radius:6px;border:1px solid var(--bd);
+.tg{cursor:pointer;padding:3px 12px;border-radius:6px;border:1px solid var(--bd);
   background:var(--panel);color:var(--muted);font-size:12px}
-.fbtn.on{background:var(--you);color:#000;border-color:var(--you)}
-.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:11px;margin-top:6px}
-.legend span{white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
-.dot{display:inline-block;width:9px;height:9px;border-radius:50%}
-.lineseg{display:inline-block;width:18px;height:0;border-top:2px solid var(--tx);vertical-align:middle}
-.lineseg.dash{border-top:2px dashed var(--red)}
-.lineseg.apex{border-top:2px dotted var(--green)}
-#stage{position:relative;margin:10px 20px;border:1px solid var(--bd);border-radius:8px;
-  background:var(--panel2);overflow:auto;max-height:74vh}
-svg{display:block}
-.node rect{stroke:var(--bd);stroke-width:1.5;fill:var(--panel)}
-.node.merged rect{opacity:.5}
-.node.blocked rect{stroke:var(--red)}
-.node.entry rect{stroke:var(--green);stroke-width:2}
-.node.dim{opacity:.15}
-.node.ext rect{fill:var(--panel2);stroke-dasharray:3,2}
-.node text{fill:var(--tx);font:12px ui-monospace,Menlo,Consolas,monospace}
-.node .ref{font-weight:700;fill:var(--acc)}
-.node .repo{fill:var(--muted);font-size:10px}
-.node .badge{fill:var(--you);font-size:10px}
-.node{cursor:pointer}
-.node:hover rect{stroke:var(--acc);stroke-width:2}
-.edge{fill:none;stroke:var(--tx);stroke-width:1.6;opacity:.8}
-.edge.stacked{stroke:var(--tx)}
-.edge.apex{stroke:var(--green);stroke-dasharray:1,4;stroke-linecap:round}
-.edge.blocks{stroke:var(--red);stroke-dasharray:5,3}
-.edge.dim{opacity:.08}
-#panel{position:fixed;top:0;right:0;bottom:0;width:380px;max-width:92vw;background:var(--panel);
-  border-left:1px solid var(--bd);z-index:50;overflow-y:auto;padding:16px;transform:translateX(100%);
-  transition:transform .15s ease}
-#panel.open{transform:translateX(0)}
-#panel h3{margin:0 0 8px;font-size:14px}
-#panel .close{position:absolute;top:10px;right:14px;cursor:pointer;color:var(--muted);font-size:16px}
-#panel .row{margin:8px 0;font-size:12px}
-#panel .row b{color:var(--muted);display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px}
-#panel .cmd{margin-top:4px;background:#0d1117;border:1px solid var(--bd);border-radius:5px;padding:6px 8px;
-  font-size:11px;cursor:copy;word-break:break-all}
-#panel .cmd .cls{display:inline-block;margin-bottom:4px;font-size:9px;text-transform:uppercase;
-  border-radius:8px;padding:1px 6px;border:1px solid}
-#panel .cmd.readonly .cls{color:var(--green);border-color:#1f3a26}
-#panel .cmd.confirm .cls{color:var(--you);border-color:var(--you)}
+.tg.on{background:var(--you);color:#000;border-color:var(--you)}
+.crumbs{font-size:12px;color:var(--muted);margin:8px 0 2px}
+.crumbs .cr{cursor:pointer;color:var(--acc)} .crumbs .cr:hover{text-decoration:underline}
+.crumbs .sep{color:var(--muted);margin:0 6px}
+main{max-width:1280px;margin:0 auto;padding:18px 20px}
+
+/* ---- L0 bands + cards ---- */
+.band{margin-bottom:26px}
+.bandhdr{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;
+  color:var(--muted);border-bottom:1px solid var(--bd);padding-bottom:6px;margin-bottom:14px}
+.bandsub{font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px;opacity:.8}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px}
+.umbrella{border-top:1px dashed var(--bd);padding-top:10px;margin-bottom:16px}
+.umbrella .kicker{font-size:11px;text-transform:uppercase;letter-spacing:.9px;color:var(--you);margin-bottom:10px}
+.pcard{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:14px;
+  box-shadow:var(--elev);cursor:pointer;transition:.12s ease;display:flex;flex-direction:column;gap:8px}
+.pcard:hover{background:var(--card-hi);transform:translateY(-1px);border-color:#3d4756}
+.pcard.named{border-left:3px solid var(--acc)}
+.pcard.needsyou{border-left:3px solid var(--you);background:linear-gradient(180deg,#1c1810,#141009)}
+.chead{display:flex;align-items:center;gap:8px}
+.rank{font-size:11px;color:var(--muted);border:1px solid var(--bd);border-radius:6px;padding:0 6px}
+.ptitle{font-size:15px;font-weight:600;flex:1;line-height:1.25}
+.pip{color:var(--you)}
+.crow{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.owner{color:var(--muted);font-size:11px;margin-right:2px}
+.badge{font-size:10px;color:var(--muted);border:1px solid var(--bd);border-radius:4px;padding:0 5px;text-transform:lowercase}
+.badge.muted{opacity:.7}
+.summary{font-size:12px;color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden}
+.meterlabs{display:flex;gap:8px;font-size:11px;height:14px}
+.mlab{font-weight:600}
+.meter{display:flex;gap:2px;height:10px;background:var(--bg);border-radius:5px;overflow:hidden}
+.mseg{min-width:3px;border-radius:0}
+.mseg:first-child{border-radius:5px 0 0 5px} .mseg:last-child{border-radius:0 5px 5px 0}
+.nextact{font-size:12px;color:var(--tx);margin-top:2px}
+.nextact .tri{color:var(--ready);font-weight:700;margin-right:5px}
+.blockedby{font-size:11px;color:var(--blocked);border-left:2px solid var(--blocked);
+  padding-left:8px;margin-top:2px}
+.blockedby .more{color:var(--muted)}
+.cmd{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:11px;cursor:copy}
+.cmd code{background:var(--bg);border:1px solid var(--bd);border-radius:5px;padding:2px 7px;
+  color:var(--tx);white-space:pre-wrap;word-break:break-all;flex:1}
+.cmd-cls{font-size:9px;text-transform:uppercase;letter-spacing:.4px;border-radius:8px;padding:1px 6px;border:1px solid}
+.cmd-readonly .cmd-cls{color:var(--ready);border-color:#1f3a26}
+.cmd-confirm .cmd-cls{color:var(--you);border-color:var(--you)}
+
+/* ---- L1 board ---- */
+.board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:start}
+.col{background:var(--panel2);border:1px solid var(--bd);border-radius:8px;padding:10px;border-top:3px solid var(--bd);min-height:80px}
+.col-ready{border-top-color:var(--ready)} .col-flight{border-top-color:var(--flight)}
+.col-blocked{border-top-color:var(--blocked)} .col-pending{border-top-color:var(--pending)}
+.colhdr{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px}
+.colhdr .cc{float:right;opacity:.7}
+.colempty{color:var(--muted);opacity:.35;text-align:center;font-size:22px;padding:12px 0}
+.wscard{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px;
+  box-shadow:var(--elev);transition:.12s ease}
+.wscard.dim{opacity:.2}
+.wshead{display:flex;align-items:center;gap:6px}
+.wstitle{font-weight:600;font-size:13px;flex:1;line-height:1.25}
+.pgtag{font-size:10px;color:var(--muted);border:1px solid var(--bd);border-radius:8px;padding:0 6px;white-space:nowrap}
+.wsmeta{display:flex;gap:8px;align-items:center;margin:6px 0;color:var(--muted);font-size:11px}
+.ownerchip{color:var(--muted)}
+.nitems{opacity:.8}
+.wsnext{font-size:11px;color:var(--tx);margin-bottom:8px}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+.ichip{font-size:11px;font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--acc);
+  background:var(--bg);border:1px solid var(--bd);border-radius:5px;padding:1px 6px;cursor:pointer}
+.ichip:hover{border-color:var(--acc)}
+.ichip.entry{box-shadow:0 0 0 1px var(--ready) inset}
+.ichip.blk{border-left:3px solid var(--blocked)}
+.ichip.you{color:var(--you);border-color:var(--you)}
+.ichip.untracked{color:var(--muted);opacity:.75}
+.waiting{margin-top:8px;border:1px solid var(--blocked);border-radius:6px;padding:7px 8px;background:#1a0f0f}
+.waiting b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--blocked);margin-bottom:4px}
+.wrow{font-size:11px;color:var(--tx);margin:2px 0}
+.shiprail{margin-top:16px;border-top:1px dashed var(--bd);padding-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.shiprail .rl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-right:6px}
+.shipitem{font-size:11px;color:var(--merged);text-decoration:line-through;opacity:.6;border:1px solid var(--bd);border-radius:5px;padding:1px 7px}
+
+/* ---- L2 slide-over ---- */
 #overlay{position:fixed;inset:0;background:#000a;z-index:40;display:none}
 #overlay.open{display:block}
-footer{color:var(--muted);font-size:11px;text-align:center;margin-top:14px}
+#panel{position:fixed;top:0;right:0;bottom:0;width:360px;max-width:94vw;background:var(--panel2);
+  border-left:1px solid var(--bd);box-shadow:var(--elev);z-index:50;overflow-y:auto;padding:16px;
+  transform:translateX(100%);transition:transform .16s ease}
+#panel.open{transform:translateX(0)}
+#panel h3{margin:0 0 10px;font-size:14px;color:var(--acc)}
+.pclose{position:absolute;top:10px;right:14px;cursor:pointer;color:var(--muted);font-size:16px}
+.pclose:hover{color:var(--tx)}
+#panel .row{margin:9px 0;font-size:12px}
+#panel .row b{color:var(--muted);display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
+.badges{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+.schip{font-size:10px;text-transform:uppercase;letter-spacing:.4px;padding:1px 7px;border-radius:10px;border:1px solid}
+.schip-open{color:var(--tx);border-color:var(--bd)}
+.schip-blocked{color:var(--blocked);border-color:var(--blocked)}
+.schip-merged{color:var(--merged);border-color:var(--merged)}
+.schip-wip{color:var(--wip);border-color:var(--wip)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.erow{font-size:11px;margin:3px 0}
+.ekind{display:inline-block;min-width:56px;color:var(--muted)}
+.erow-blocks .ekind{color:var(--blocked)}
+.erow-apex .ekind{color:var(--acc)}
+.eref{cursor:pointer;color:var(--acc)} .eref:hover{text-decoration:underline}
+.isorow{margin-top:14px}
+.btn{cursor:pointer;padding:5px 12px;border-radius:6px;border:1px solid var(--acc);
+  background:transparent;color:var(--acc);font:12px ui-monospace,Menlo,monospace}
+.btn:hover{background:var(--acc);color:#fff}
+
+/* ---- isolate canvas ---- */
+#isoWrap{position:fixed;inset:0;z-index:60;background:#0a0d12f2;display:none;flex-direction:column}
+#isoWrap.open{display:flex}
+#isoBar{display:flex;align-items:center;gap:14px;padding:10px 18px;border-bottom:1px solid var(--bd);
+  background:var(--panel);z-index:2}
+#isoTitle{font-weight:600}
+.isohint{color:var(--muted);font-size:11px}
+#isoBar .btn{margin-left:0}
+#isoBar .spacer{flex:1}
+#isoStage{flex:1;width:100%;cursor:grab;touch-action:none;background:
+  radial-gradient(circle at 1px 1px,#ffffff0a 1px,transparent 0);background-size:26px 26px}
+.gn rect{fill:var(--panel);stroke:var(--bd);stroke-width:1.5}
+.gn.entry rect{stroke:var(--ready);stroke-width:2}
+.gn.blk rect{stroke:var(--blocked)}
+.gn.you rect{stroke:var(--you)}
+.gn.root rect{stroke:var(--acc);stroke-width:2.5}
+.gn.missing rect{stroke-dasharray:3,3;fill:var(--panel2)}
+.gn text{fill:var(--tx);font:12px ui-monospace,Menlo,Consolas,monospace}
+.gn .gref{font-weight:700;fill:var(--acc)}
+.gn .grepo{fill:var(--muted);font-size:10px}
+.gn{cursor:pointer}
+.ge{fill:none}
+.ge-stacked{stroke:var(--bd);stroke-width:1.5}
+.ge-apex{stroke:var(--acc);stroke-width:1.5;stroke-dasharray:2,4}
+.ge-blocks{stroke:var(--blocked);stroke-width:2}
+.ge-back{stroke-dasharray:5,4;opacity:.6}
+footer{color:var(--muted);font-size:11px;text-align:center;margin-top:24px}
+"""
+
+JS = r"""
+function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}
+const LS='borg-hub-story-v2';
+function defState(){return{level:0,project:null,ref:null,isolate:null,
+  filters:{projects:[],repos:[],namedOnly:false,parallel:false},cam:{tx:0,ty:0,k:1}};}
+function loadState(){try{var s=JSON.parse(localStorage.getItem(LS));if(s&&typeof s==='object'){
+  var d=defState();d=Object.assign(d,s);d.filters=Object.assign(defState().filters,s.filters||{});
+  d.cam=Object.assign({tx:0,ty:0,k:1},s.cam||{});return d;}}catch(e){}return defState();}
+function saveState(){try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){}}
+var S=loadState();
+
+var PROJ={};STORY.projects.forEach(function(p){PROJ[p.id]=p;});
+var STATE_VAR={'ready-to-start':'--ready','in-flight':'--flight','blocked':'--blocked','pending':'--pending','done':'--done'};
+var STATE_LABEL={'ready-to-start':'Ready','in-flight':'In-flight','blocked':'Blocked','pending':'Pending','done':'Done'};
+var COL_MAP=[['ready-to-start','ready'],['in-flight','flight'],['blocked','blocked'],['pending','pending']];
+var PG_VARS=['--pg1','--pg2','--pg3','--pg4','--pg5'];
+var PG_COLOR={};(function(){var i=0;STORY.projects.forEach(function(p){(p.workstreams||[]).forEach(function(w){
+  if(w.parallel_group&&!(w.parallel_group in PG_COLOR)){PG_COLOR[w.parallel_group]=PG_VARS[i%PG_VARS.length];i++;}});});})();
+
+function shortTitle(p){return (p.name||p.id||'').split('(')[0].split(' -- ')[0].trim();}
+function shortOwner(o){return (o||'').split('(')[0].trim()||'noah';}
+function ageStr(s){if(!s)return '-';var d=new Date(String(s).slice(0,10));var t=new Date(String(META.today||'').slice(0,10));
+  if(isNaN(d)||isNaN(t))return String(s).slice(0,10);var days=Math.round((t-d)/86400000);return days<=0?'today':days+'d';}
+function urg(r){var it=BYREF[r];return it&&typeof it.urgency==='number'?it.urgency:0;}
+function workstreamOf(ref){for(var i=0;i<STORY.projects.length;i++){var ws=STORY.projects[i].workstreams||[];
+  for(var j=0;j<ws.length;j++){if((ws[j].items||[]).indexOf(ref)>=0)return ws[j];}}return null;}
+
+/* ---- filters ---- */
+function projRepos(p){return p.repos||[];}
+function repoOk(repos){if(!S.filters.repos.length)return true;return repos.some(function(r){return S.filters.repos.indexOf(r)>=0;});}
+function projPasses(p){
+  if(S.filters.projects.length&&S.filters.projects.indexOf(p.id)<0)return false;
+  if(!repoOk(projRepos(p)))return false;return true;}
+
+function buildFilters(){
+  var pf=document.getElementById('projFilter');
+  STORY.projects.slice().sort(byPriority).forEach(function(p){
+    var c=document.createElement('span');c.className='chip-f';c.textContent=shortTitle(p);c.dataset.p=p.id;
+    if(S.filters.projects.indexOf(p.id)>=0)c.classList.add('on');
+    c.addEventListener('click',function(){var i=S.filters.projects.indexOf(p.id);
+      if(i>=0)S.filters.projects.splice(i,1);else S.filters.projects.push(p.id);c.classList.toggle('on');render();});
+    pf.appendChild(c);});
+  var rf=document.getElementById('repoFilter');
+  (META.repos||[]).forEach(function(r){
+    var c=document.createElement('span');c.className='chip-f badge';c.textContent=r;c.dataset.r=r;
+    if(S.filters.repos.indexOf(r)>=0)c.classList.add('on');
+    c.addEventListener('click',function(){var i=S.filters.repos.indexOf(r);
+      if(i>=0)S.filters.repos.splice(i,1);else S.filters.repos.push(r);c.classList.toggle('on');render();});
+    rf.appendChild(c);});
+  var nt=document.getElementById('namedToggle');nt.classList.toggle('on',S.filters.namedOnly);
+  nt.addEventListener('click',function(){S.filters.namedOnly=!S.filters.namedOnly;nt.classList.toggle('on');render();});
+  var pt=document.getElementById('parallelToggle');pt.classList.toggle('on',S.filters.parallel);
+  pt.addEventListener('click',function(){S.filters.parallel=!S.filters.parallel;pt.classList.toggle('on');render();});
+}
+function byPriority(a,b){return (a.priority-b.priority)||((b.any_needs_you?1:0)-(a.any_needs_you?1:0))||(a.id<b.id?-1:1);}
+
+/* ---- crumbs ---- */
+function renderCrumbs(){
+  var c=document.getElementById('crumbs');var b=['<span class="cr" data-lvl="0">Projects</span>'];
+  if(S.level>=1&&S.project&&PROJ[S.project]){b.push('<span class="sep">&#9656;</span><span class="cr" data-lvl="1">'+esc(shortTitle(PROJ[S.project]))+'</span>');}
+  if(S.ref){b.push('<span class="sep">&#9656;</span><span class="cr" data-lvl="ref">'+esc(S.ref)+'</span>');}
+  c.innerHTML=b.join('');
+  [].forEach.call(c.querySelectorAll('.cr'),function(s){s.addEventListener('click',function(){
+    var l=s.dataset.lvl;if(l==='0'){goto(0,null);}else if(l==='1'){goto(1,S.project);}else{openPanel(S.ref);}});});
+}
+function goto(level,project){S.level=level;S.project=project;if(level===0)S.project=null;closePanel();render();}
+
+/* ---- L0 ---- */
+function meterHtml(p){
+  var labs=STATE_ORDER.map(function(s){var c=p.meter[s]||0;return c>0?'<span class="mlab" style="color:var('+STATE_VAR[s]+')">'+c+'</span>':'';}).join('');
+  var segs=STATE_ORDER.map(function(s){var c=p.meter[s]||0;
+    return '<span class="mseg" title="'+STATE_LABEL[s]+': '+c+'" style="flex-grow:'+(c>0?c:0)+';background:var('+STATE_VAR[s]+');opacity:'+(c>0?1:.3)+'"></span>';}).join('');
+  return '<div class="meterlabs">'+labs+'</div><div class="meter">'+segs+'</div>';}
+function cmdHtml(act){var cls=act['class']==='confirm'?'confirm':'readonly';
+  return '<div class="cmd cmd-'+cls+'" data-cmd="'+esc(act.command)+'"><span class="cmd-cls">'+cls+'</span><code>'+esc(act.command)+'</code></div>';}
+function nextHtml(p){if(p.next_idx==null)return '';var ws=p.workstreams[p.next_idx];if(!ws)return '';
+  var h='<div class="nextact"><span class="tri">&#9656;</span>'+esc(ws.next_action)+'</div>';
+  var act=ws.entry&&ACT[ws.entry];if(act&&act.command)h+=cmdHtml(act);return h;}
+function blockedByHtml(p){
+  var ws=p.next_idx!=null?p.workstreams[p.next_idx]:null;
+  var hasReady=(p.workstreams||[]).some(function(w){return w.state==='ready-to-start';});
+  var anyBlk=(p.workstreams||[]).some(function(w){return w.state==='blocked';});
+  var show=(ws&&ws.state==='blocked')||(anyBlk&&!hasReady);if(!show)return '';
+  var bws=(ws&&ws.state==='blocked'&&(ws.blocked_by||[]).length)?ws:(p.workstreams||[]).filter(function(w){return w.state==='blocked'&&(w.blocked_by||[]).length;})[0];
+  if(!bws)return '';var first=bws.blocked_by[0];
+  var more=bws.blocked_by.length>1?' <span class="more">+'+(bws.blocked_by.length-1)+' more</span>':'';
+  return '<div class="blockedby">blocked by &rarr; '+esc(first)+more+'</div>';}
+function cardHtml(p){
+  var cls=['pcard'];if(p.named)cls.push('named');if(p.any_needs_you)cls.push('needsyou');
+  var pip=p.any_needs_you?'<span class="pip" title="needs you">&#9873;</span>':'';
+  var repos=(p.repos||[]).map(function(r){return '<span class="badge">'+esc(r)+'</span>';}).join('');
+  return '<div class="'+cls.join(' ')+'" data-proj="'+esc(p.id)+'">'
+    +'<div class="chead"><span class="rank">#'+esc(p.priority)+'</span><span class="ptitle">'+esc(shortTitle(p))+'</span>'+pip+'</div>'
+    +'<div class="crow"><span class="owner">@'+esc(shortOwner(p.owner))+'</span>'+repos+'</div>'
+    +'<div class="summary" title="'+esc(p.summary)+'">'+esc(p.summary)+'</div>'
+    +meterHtml(p)+nextHtml(p)+blockedByHtml(p)+'</div>';}
+function renderL0(){
+  var projs=STORY.projects.filter(projPasses);
+  var named=projs.filter(function(p){return p.named;}).sort(byPriority);
+  var others=projs.filter(function(p){return !p.named;}).sort(byPriority);
+  var umb=named.filter(function(p){return UMBRELLA.indexOf(p.id)>=0;}).sort(byPriority);
+  var restNamed=named.filter(function(p){return UMBRELLA.indexOf(p.id)<0;});
+  var nh='';
+  if(umb.length>1)nh+='<div class="umbrella"><div class="kicker">Snowflake Password Deprecation</div><div class="grid">'+umb.map(cardHtml).join('')+'</div></div>';
+  else if(umb.length===1)restNamed.unshift(umb[0]);
+  if(restNamed.length)nh+='<div class="grid">'+restNamed.map(cardHtml).join('')+'</div>';
+  var out='<div class="band"><div class="bandhdr">NAMED<span class="bandsub">your top-of-mind programs</span></div>'+(nh||'<div class="colempty">none match filters</div>')+'</div>';
+  if(!S.filters.namedOnly)
+    out+='<div class="band"><div class="bandhdr">ALSO YOURS<span class="bandsub">easy to forget ('+others.length+')</span></div><div class="grid">'+(others.map(cardHtml).join('')||'<div class="colempty">none match filters</div>')+'</div></div>';
+  return out;}
+function wireL0(){
+  [].forEach.call(document.querySelectorAll('.pcard'),function(card){
+    card.addEventListener('click',function(ev){if(ev.target.closest('.cmd'))return;goto(1,card.dataset.proj);});});
+  wireCopy();}
+
+/* ---- L1 ---- */
+function chipHtml(ref){var it=BYREF[ref];var cls=['ichip'];
+  if(it){if(it.is_entrypoint)cls.push('entry');if(it.blocked)cls.push('blk');if(it.bucket==='needs-you')cls.push('you');}
+  else cls.push('untracked');
+  return '<span class="'+cls.join(' ')+'" data-ref="'+esc(ref)+'">'+esc(ref)+'</span>';}
+function wsCardHtml(ws){
+  var pg=ws.parallel_group;var rail=pg?'var('+PG_COLOR[pg]+')':'transparent';
+  var chips=(ws.items||[]).map(chipHtml).join('');
+  var blk='';if(ws.state==='blocked'&&(ws.blocked_by||[]).length)
+    blk='<div class="waiting"><b>waiting on</b>'+ws.blocked_by.map(function(b){return '<div class="wrow">'+esc(b)+'</div>';}).join('')+'</div>';
+  var pgtag=pg?'<span class="pgtag">&#8741; '+esc(pg)+'</span>':'';
+  var pip=ws.needs_you?'<span class="pip" title="needs you">&#9873;</span>':'';
+  return '<div class="wscard" data-pg="'+esc(pg||'')+'" style="border-left:3px solid '+rail+'">'
+    +'<div class="wshead"><span class="wstitle">'+esc(ws.title)+'</span>'+pgtag+pip+'</div>'
+    +'<div class="wsmeta"><span class="ownerchip">@'+esc(shortOwner(ws.owner))+'</span><span class="nitems">'+ws.n_items+' items</span></div>'
+    +'<div class="wsnext">'+esc(ws.next_action)+'</div>'
+    +'<div class="chips">'+chips+'</div>'+blk+'</div>';}
+function renderL1(p){
+  var cols=COL_MAP.map(function(cm){
+    var st=cm[0];var list=(p.workstreams||[]).filter(function(w){return w.state===st;})
+      .sort(function(a,b){return (b.max_urgency-a.max_urgency)||(a.title<b.title?-1:1);});
+    var body=list.length?list.map(wsCardHtml).join(''):'<div class="colempty">0</div>';
+    return '<div class="col col-'+cm[1]+'"><div class="colhdr">'+STATE_LABEL[st]+'<span class="cc">'+list.length+'</span></div>'+body+'</div>';
+  }).join('');
+  var done=(p.workstreams||[]).filter(function(w){return w.state==='done';});
+  var ship='';if(done.length){ship='<div class="shiprail"><span class="rl">shipped</span>'
+    +done.map(function(w){return '<span class="shipitem" title="'+esc(w.next_action)+'">'+esc(w.title)+'</span>';}).join('')+'</div>';}
+  return '<div class="board">'+cols+'</div>'+ship;}
+function wireL1(){
+  [].forEach.call(document.querySelectorAll('.ichip:not(.untracked)'),function(ch){
+    ch.addEventListener('click',function(){openPanel(ch.dataset.ref);});});
+  [].forEach.call(document.querySelectorAll('.ichip.untracked'),function(ch){
+    ch.addEventListener('click',function(){openPanel(ch.dataset.ref);});});
+  if(S.filters.parallel){
+    [].forEach.call(document.querySelectorAll('.wscard'),function(card){
+      var pg=card.dataset.pg;if(!pg)return;
+      card.addEventListener('mouseenter',function(){[].forEach.call(document.querySelectorAll('.wscard'),function(o){
+        o.classList.toggle('dim',o.dataset.pg!==pg);});});
+      card.addEventListener('mouseleave',function(){[].forEach.call(document.querySelectorAll('.wscard'),function(o){o.classList.remove('dim');});});});
+  }}
+
+/* ---- L2 panel ---- */
+function stateChip(it){var st=(it.state||'').toUpperCase();var c='open',l=it.state||'open';
+  if(it.blocked&&st==='OPEN'){c='blocked';l='blocked';}else if(st==='MERGED'){c='merged';l='merged';}
+  else if(st==='CLOSED'){c='merged';l='closed';}else if(st==='OPEN'){c='open';l='open';}else{c='wip';l=it.state;}
+  return '<span class="schip schip-'+c+'">'+esc(l)+'</span>';}
+function edgeListHtml(ref){var rows=[];EDGES.forEach(function(e){
+  if(e.parent===ref)rows.push({kind:e.kind,dir:'&rarr;',other:e.child});
+  else if(e.child===ref)rows.push({kind:e.kind,dir:'&larr;',other:e.parent});});
+  if(!rows.length)return '';
+  var body=rows.map(function(r){return '<div class="erow erow-'+r.kind+'"><span class="ekind">'+r.kind+'</span> '+r.dir+' <span class="eref" data-ref="'+esc(r.other)+'">'+esc(r.other)+'</span></div>';}).join('');
+  return '<div class="row"><b>edges</b>'+body+'</div>';}
+function openPanel(ref){
+  S.ref=ref;var it=BYREF[ref];var body=document.getElementById('panelBody');
+  if(it){
+    var act='';if(it.action&&it.action.command)act='<div class="row"><b>action</b>'+esc(it.action.label)+cmdHtml(it.action)+'</div>';
+    var link=it.url?'<a href="'+esc(it.url)+'" target="_blank" rel="noopener">'+esc(it.title||ref)+'</a>':esc(it.title||ref);
+    body.innerHTML='<h3>'+esc(ref)+'</h3>'
+      +'<div class="row"><b>title</b>'+link+'</div>'
+      +'<div class="badges">'+stateChip(it)+(it.repo?'<span class="badge">'+esc(it.repo)+'</span>':'')+(it.source?'<span class="badge">'+esc(it.source)+'</span>':'')+'</div>'
+      +'<div class="row"><b>owner</b>'+esc(it.owner||'-')+'</div>'
+      +'<div class="row"><b>age</b>'+esc(ageStr(it.changed))+(typeof it.urgency==='number'?' &middot; urgency '+it.urgency:'')+'</div>'
+      +'<div class="row"><b>one line</b>'+esc(it.one_line||'-')+'</div>'
+      +'<div class="row"><b>action needed</b>'+esc(it.action_needed||'-')+'</div>'
+      +act+edgeListHtml(ref)
+      +'<div class="isorow"><button class="btn" id="isoBtn">Isolate chain &rarr;</button></div>';
+    var ib=document.getElementById('isoBtn');if(ib)ib.addEventListener('click',function(){openIsolate(ref);});
+    [].forEach.call(body.querySelectorAll('.eref'),function(e){e.addEventListener('click',function(){openPanel(e.dataset.ref);});});
+  }else{
+    var tag=ref.indexOf('DE-')===0?'jira (not gathered)':'local / untracked';
+    var ws=workstreamOf(ref);
+    body.innerHTML='<h3>'+esc(ref)+'</h3>'
+      +'<div class="row"><b>ref</b><span class="mono">'+esc(ref)+'</span></div>'
+      +'<div class="row"><b>status</b><span class="badge muted">'+esc(tag)+'</span></div>'
+      +'<div class="row"><b>next action</b>'+esc(ws?ws.next_action:'-')+'</div>'
+      +edgeListHtml(ref);
+    [].forEach.call(body.querySelectorAll('.eref'),function(e){e.addEventListener('click',function(){openPanel(e.dataset.ref);});});
+  }
+  wireCopy();
+  document.getElementById('panel').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+  renderCrumbs();saveState();}
+function closePanel(){S.ref=null;document.getElementById('panel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');renderCrumbs();saveState();}
+
+/* ---- isolate canvas (the one node-link view) ---- */
+var NW=190,NH=60,COL_W=250,ROW_H=96,SVGNS='http://www.w3.org/2000/svg';
+function connectedSet(ref){var adj={};function add(a,b){(adj[a]=adj[a]||{})[b]=1;(adj[b]=adj[b]||{})[a]=1;}
+  EDGES.forEach(function(e){add(e.parent,e.child);});
+  var seen={};seen[ref]=1;var q=[ref];while(q.length){var c=q.shift();var nb=adj[c]||{};
+    Object.keys(nb).forEach(function(n){if(!seen[n]){seen[n]=1;q.push(n);}});}return Object.keys(seen);}
+function layout(refs){
+  var setobj={};refs.forEach(function(r){setobj[r]=1;});
+  var din={},outA={},back={};refs.forEach(function(r){din[r]=0;});
+  EDGES.forEach(function(e){if((e.kind==='stacked'||e.kind==='blocks')&&setobj[e.parent]&&setobj[e.child]){
+    (outA[e.parent]=outA[e.parent]||[]).push(e.child);din[e.child]++;}});
+  var rank={};refs.forEach(function(r){rank[r]=0;});
+  var indeg=Object.assign({},din);var q=refs.filter(function(r){return indeg[r]===0;});var proc=0;
+  var qq=q.slice();while(qq.length){var n=qq.shift();proc++;(outA[n]||[]).forEach(function(c){
+    if(rank[n]+1>rank[c])rank[c]=rank[n]+1;if(--indeg[c]===0)qq.push(c);});}
+  var byRank={};refs.forEach(function(r){(byRank[rank[r]]=byRank[rank[r]]||[]).push(r);});
+  var pos={};Object.keys(byRank).map(Number).sort(function(a,b){return a-b;}).forEach(function(rk){
+    var col=byRank[rk].sort(function(a,b){return (urg(b)-urg(a))||(a<b?-1:1);});
+    col.forEach(function(r,i){pos[r]={x:rk*COL_W,y:i*ROW_H,rank:rk};});});
+  return {pos:pos,rank:rank};}
+function mkNode(ref,pos){var it=BYREF[ref];var cls=['gn'];
+  if(ref===S.isolate)cls.push('root');
+  if(it){if(it.is_entrypoint)cls.push('entry');if(it.blocked)cls.push('blk');if(it.bucket==='needs-you')cls.push('you');}
+  else cls.push('missing');
+  var g=document.createElementNS(SVGNS,'g');g.setAttribute('class',cls.join(' '));
+  g.setAttribute('transform','translate('+pos.x+','+pos.y+')');g.dataset.ref=ref;
+  var repo=it?(it.repo||''):(ref.indexOf('DE-')===0?'jira (not gathered)':'untracked');
+  var title=it?(it.title||''):'';
+  g.innerHTML='<rect width="'+NW+'" height="'+NH+'" rx="7"></rect>'
+    +'<text class="gref" x="10" y="18">'+esc(ref)+'</text>'
+    +'<text class="grepo" x="10" y="34">'+esc(repo)+'</text>'
+    +'<text x="10" y="50" font-size="10" fill="var(--muted)">'+esc(title.slice(0,26))+'</text>';
+  g.addEventListener('click',function(ev){ev.stopPropagation();openPanel(ref);});
+  return g;}
+function mkEdge(a,b,kind,back){var p=document.createElementNS(SVGNS,'path');
+  var x1=a.x+NW,y1=a.y+NH/2,x2=b.x,y2=b.y+NH/2;var mx=(x1+x2)/2;
+  p.setAttribute('d','M'+x1+','+y1+' C'+mx+','+y1+' '+mx+','+y2+' '+x2+','+y2);
+  p.setAttribute('class','ge ge-'+kind+(back?' ge-back':''));
+  if(kind==='blocks')p.setAttribute('marker-end','url(#arrow)');return p;}
+function openIsolate(ref){
+  S.isolate=ref;var refs=connectedSet(ref);var lo=layout(refs);var pos=lo.pos,rank=lo.rank;
+  var cam=document.getElementById('camG');cam.innerHTML='<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--blocked)"/></marker></defs>';
+  var setobj={};refs.forEach(function(r){setobj[r]=1;});
+  EDGES.forEach(function(e){
+    if(!setobj[e.parent]||!setobj[e.child])return;var a=pos[e.parent],b=pos[e.child];if(!a||!b)return;
+    var isBack=(e.kind==='stacked'||e.kind==='blocks')&&rank[e.parent]>=rank[e.child];
+    cam.appendChild(mkEdge(a,b,e.kind,isBack));});
+  refs.forEach(function(r){cam.appendChild(mkNode(r,pos[r]));});
+  document.getElementById('isoTitle').textContent='Chain from '+ref+'  ('+refs.length+' nodes)';
+  document.getElementById('isoWrap').classList.add('open');
+  fit();renderCrumbs();saveState();}
+function closeIsolate(){S.isolate=null;document.getElementById('isoWrap').classList.remove('open');saveState();}
+function applyCam(){document.getElementById('camG').setAttribute('transform','translate('+S.cam.tx+','+S.cam.ty+') scale('+S.cam.k+')');}
+function stageEl(){return document.getElementById('isoStage');}
+function fit(pad){pad=pad||34;var cam=document.getElementById('camG');var b;try{b=cam.getBBox();}catch(e){return;}
+  if(!b.width||!b.height)return;var r=stageEl().getBoundingClientRect();
+  var k=Math.min((r.width-2*pad)/b.width,(r.height-2*pad)/b.height);k=Math.min(2.5,Math.max(0.3,k));
+  S.cam.k=k;S.cam.tx=(r.width-b.width*k)/2-b.x*k;S.cam.ty=(r.height-b.height*k)/2-b.y*k;applyCam();saveState();}
+/* pan (mouse drag) + zoom (wheel) -- confined to the isolate stage */
+var dragging=false,px=0,py=0;
+function onDown(e){dragging=true;px=e.clientX;py=e.clientY;stageEl().style.cursor='grabbing';}
+function onMove(e){if(!dragging)return;S.cam.tx+=e.clientX-px;S.cam.ty+=e.clientY-py;px=e.clientX;py=e.clientY;applyCam();}
+function onUp(){if(!dragging)return;dragging=false;stageEl().style.cursor='grab';saveState();}
+function onWheel(e){e.preventDefault();var r=stageEl().getBoundingClientRect();var cx=e.clientX-r.left,cy=e.clientY-r.top;
+  var kOld=S.cam.k;var k=S.cam.k*(e.deltaY<0?1.1:1/1.1);k=Math.min(2.5,Math.max(0.3,k));
+  S.cam.tx=cx-(cx-S.cam.tx)*(k/kOld);S.cam.ty=cy-(cy-S.cam.ty)*(k/kOld);S.cam.k=k;applyCam();saveState();}
+
+/* ---- copy wiring ---- */
+function wireCopy(){[].forEach.call(document.querySelectorAll('.cmd'),function(c){
+  if(c._wired)return;c._wired=1;c.title='click to copy';
+  c.addEventListener('click',function(ev){ev.stopPropagation();var t=c.dataset.cmd||c.textContent;
+    if(navigator.clipboard)navigator.clipboard.writeText(t);
+    c.classList.add('copied');setTimeout(function(){c.classList.remove('copied');},600);});});}
+
+/* ---- dispatcher ---- */
+function render(){
+  renderCrumbs();var v=document.getElementById('view');
+  if(S.level===1&&S.project&&PROJ[S.project]){v.innerHTML=renderL1(PROJ[S.project]);wireL1();}
+  else{S.level=0;v.innerHTML=renderL0();wireL0();}
+  saveState();}
+
+function wireGlobal(){
+  document.getElementById('panelClose').addEventListener('click',closePanel);
+  document.getElementById('overlay').addEventListener('click',closePanel);
+  document.getElementById('isoClose').addEventListener('click',closeIsolate);
+  document.getElementById('isoFit').addEventListener('click',function(){fit();});
+  var st=stageEl();
+  st.addEventListener('mousedown',onDown);
+  window.addEventListener('mousemove',onMove);
+  window.addEventListener('mouseup',onUp);
+  st.addEventListener('wheel',onWheel,{passive:false});
+  window.addEventListener('keydown',function(e){
+    if(document.getElementById('isoWrap').classList.contains('open')){
+      if(e.key==='Escape'){closeIsolate();return;}
+      if(e.key==='0'){fit();return;}
+      if(e.key==='+'||e.key==='='){S.cam.k=Math.min(2.5,S.cam.k*1.1);applyCam();saveState();return;}
+      if(e.key==='-'){S.cam.k=Math.max(0.3,S.cam.k/1.1);applyCam();saveState();return;}
+    }
+    if(e.key==='Escape'){
+      if(document.getElementById('panel').classList.contains('open')){closePanel();return;}
+      if(S.level>0){goto(S.level-1,null);return;}
+    }});
+}
+
+function init(){buildFilters();wireGlobal();S.ref=null;render();
+  if(S.isolate&&BYREF){openIsolate(S.isolate);}}
+init();
 """
 
 
-def node_svg_group(n, x, y, w=200, h=44, ext=False):
-    st = (n.get("state") or "").upper()
-    cls = ["node"]
-    if st in ("MERGED", "CLOSED") or st == "DONE":
-        cls.append("merged")
-    if n.get("blocked"):
-        cls.append("blocked")
-    if n.get("is_entrypoint"):
-        cls.append("entry")
-    if ext:
-        cls.append("ext")
-    hue = project_hue(n.get("project"))
-    badge = ""
-    grp = n.get("group") or []
-    if grp:
-        badge = f'<text class="badge" x="{w - 8}" y="14" text-anchor="end">+{len(grp)}</text>'
-    repo_txt = esc(n.get("repo") or "")
-    title_txt = esc((n.get("title") or "")[:34])
-    return (f'<g class="{" ".join(cls)}" data-ref="{esc(n["ref"])}" transform="translate({x},{y})">'
-            f'<rect width="{w}" height="{h}" rx="6" style="border-left-color:hsl({hue},55%,50%)" '
-            f'stroke-width="1.5" fill="var(--panel)"/>'
-            f'<rect x="0" y="0" width="4" height="{h}" fill="hsl({hue},55%,50%)"/>'
-            f'<text class="ref" x="10" y="16">{esc(n["ref"])}</text>'
-            f'{badge}'
-            f'<text class="repo" x="10" y="30">{repo_txt}</text>'
-            f'<text x="10" y="42" font-size="10" fill="var(--muted)">{title_txt}</text>'
-            f'</g>')
+def build_html():
+    proj_n = len(projects)
+    ws_n = sum(len(p.get("workstreams", []) or []) for p in projects)
+    repos_n = len(META.get("repos", []))
+    header = (
+        '<header>'
+        f'<h1>STORY GRAPH <span class="sub">{proj_n} projects &middot; {ws_n} workstreams &middot; '
+        f'{len(items)} items / {repos_n} repos &middot; {esc(META.get("machine",""))} &middot; '
+        '<a href="index.html">&larr; List view</a></span></h1>'
+        '<div class="bar">'
+        '<div class="fgroup" id="projFilter"><b>project</b></div>'
+        '<div class="fgroup" id="repoFilter"><b>repo</b></div>'
+        '<div class="fgroup toggles"><button class="tg" id="namedToggle">Named only</button>'
+        '<button class="tg" id="parallelToggle">Highlight parallel</button></div>'
+        '</div>'
+        '<div class="crumbs" id="crumbs"></div>'
+        '</header>'
+    )
+    body = (
+        '<main><div id="view"></div>'
+        '<footer>story-first hub &middot; source: story.json (spine) + data.json (detail) &middot; '
+        'merge-tree/render_graph.py</footer></main>'
+        '<div id="overlay"></div>'
+        '<aside id="panel"><span class="pclose" id="panelClose">&#10005;</span><div id="panelBody"></div></aside>'
+        '<div id="isoWrap"><div id="isoBar"><span id="isoTitle"></span>'
+        '<span class="isohint">drag to pan &middot; wheel to zoom &middot; 0 = fit &middot; Esc = close</span>'
+        '<span class="spacer"></span><button class="btn" id="isoFit">Fit</button>'
+        '<button class="btn" id="isoClose">Close &#10005;</button></div>'
+        '<svg id="isoStage" xmlns="http://www.w3.org/2000/svg"><g id="camG"></g></svg></div>'
+    )
+    return (
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>Story Graph - PR Control Hub</title>'
+        '<style>' + CSS + '</style></head><body>'
+        + header + body
+        + '<script>' + CONSTS + JS + '</script>'
+        + '</body></html>'
+    )
 
 
-html_doc = f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PR Control Hub - Dependency Graph</title>
-<style>{CSS}</style></head><body>
-<header>
-  <h1>DEPENDENCY GRAPH <span class="sub">{len(items)} items across {repos_n} repos &middot;
-    {len(top_nodes)} top-level &middot; <a href="index.html">&larr; List view</a></span></h1>
-  <div class="crumbs" id="crumbs"></div>
-  <div class="bar">
-    <div class="grp" id="projFilter"><b>project</b></div>
-    <div class="grp" id="repoFilter"><b>repo</b></div>
-    <div class="grp">
-      <button class="fbtn" id="isolateBtn">Isolate chain</button>
-      <button class="fbtn" id="clearBtn">Clear</button>
-    </div>
-  </div>
-  <div class="legend">
-    <span><span class="dot" style="background:var(--green)"></span>entrypoint</span>
-    <span><span class="dot" style="background:var(--red)"></span>blocked</span>
-    <span><span class="dot" style="background:var(--merged);opacity:.6"></span>merged/closed (faded)</span>
-    <span><span class="lineseg"></span>stacked</span>
-    <span><span class="lineseg apex"></span>apex group</span>
-    <span><span class="lineseg dash"></span>blocks (dependency)</span>
-    <span>click a node: drill in / open info &middot; click empty space to go up</span>
-  </div>
-</header>
-<div id="stage"><svg id="canvas" xmlns="http://www.w3.org/2000/svg"></svg></div>
-<div id="overlay"></div>
-<div id="panel">
-  <span class="close" id="panelClose">&#10005;</span>
-  <div id="panelBody"></div>
-</div>
-<footer>generated from data.json &middot; source: merge-tree/render_graph.py</footer>
-<script>
-const DATA = {json.dumps(GRAPH_DATA)};
-const NODE_W = 200, NODE_H = 44, COL_W = 230, ROW_H = 56, PAD = 30;
-
-let state = {{level:0, group:null, filterProj:new Set(), filterRepo:new Set(), isolate:null, isolateMode:false}};
-
-function esc(s){{
-  const d = document.createElement('div'); d.textContent = s==null? '': String(s); return d.innerHTML;
-}}
-
-function buildFilterChips(){{
-  const pf = document.getElementById('projFilter');
-  DATA.projectSet.forEach(p=>{{
-    const c = document.createElement('span');
-    c.className='chip-f'; c.textContent=p; c.dataset.p=p;
-    c.addEventListener('click',()=>{{
-      if(state.filterProj.has(p)) state.filterProj.delete(p); else state.filterProj.add(p);
-      c.classList.toggle('on'); render();
-    }});
-    pf.appendChild(c);
-  }});
-  const rf = document.getElementById('repoFilter');
-  DATA.repoSet.forEach(r=>{{
-    const c = document.createElement('span');
-    c.className='chip-f'; c.textContent=r; c.dataset.r=r;
-    c.addEventListener('click',()=>{{
-      if(state.filterRepo.has(r)) state.filterRepo.delete(r); else state.filterRepo.add(r);
-      c.classList.toggle('on'); render();
-    }});
-    rf.appendChild(c);
-  }});
-}}
-
-function passesFilter(n){{
-  if(state.filterProj.size && !state.filterProj.has(n.project)) return false;
-  if(state.filterRepo.size && !state.filterRepo.has(n.repo)) return false;
-  return true;
-}}
-
-function nodeGroup(n, x, y, ext){{
-  const cls = ['node'];
-  const st = (n.state||'').toUpperCase();
-  if(st==='MERGED'||st==='CLOSED'||st==='DONE') cls.push('merged');
-  if(n.blocked) cls.push('blocked');
-  if(n.is_entrypoint) cls.push('entry');
-  if(ext) cls.push('ext');
-  const hue = DATA.projectHue[n.project] || 0;
-  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
-  g.setAttribute('class', cls.join(' '));
-  g.setAttribute('transform', `translate(${{x}},${{y}})`);
-  g.dataset.ref = n.ref;
-  g.innerHTML = `
-    <rect width="${{NODE_W}}" height="${{NODE_H}}" rx="6"></rect>
-    <rect x="0" y="0" width="4" height="${{NODE_H}}" fill="hsl(${{hue}},55%,50%)"></rect>
-    <text class="ref" x="10" y="16">${{esc(n.ref)}}</text>
-    ${{ (n.group && n.group.length) ? `<text class="badge" x="${{NODE_W-8}}" y="14" text-anchor="end">+${{n.group.length}} stacked</text>` : '' }}
-    <text class="repo" x="10" y="30">${{esc(n.repo||'')}}</text>
-    <text x="10" y="42" font-size="10" fill="var(--muted)">${{esc((n.title||'').slice(0,32))}}</text>
-  `;
-  g.addEventListener('click',(ev)=>{{
-    ev.stopPropagation();
-    if(state.isolateMode){{ doIsolate(n.ref); return; }}
-    onNodeClick(n);
-  }});
-  return g;
-}}
-
-function edgePath(x1,y1,x2,y2,kind){{
-  const p = document.createElementNS('http://www.w3.org/2000/svg','path');
-  const mx = (x1+x2)/2;
-  p.setAttribute('d', `M${{x1}},${{y1}} C${{mx}},${{y1}} ${{mx}},${{y2}} ${{x2}},${{y2}}`);
-  p.setAttribute('class', 'edge ' + kind);
-  return p;
-}}
-
-function onNodeClick(n){{
-  if(n.group && n.group.length){{
-    state.level = 1; state.group = n.ref; render();
-  }} else {{
-    openPanel(n.ref);
-  }}
-}}
-
-function crumbTo(level){{
-  state.level = level; if(level===0) state.group=null;
-  render();
-}}
-
-function renderCrumbs(){{
-  const c = document.getElementById('crumbs');
-  let bits = ['<span data-lvl="0">field of play</span>'];
-  if(state.level>=1 && state.group) bits.push(' &raquo; <span data-lvl="1">'+esc(state.group)+' stack</span>');
-  c.innerHTML = bits.join('');
-  [...c.querySelectorAll('span')].forEach(s=>s.addEventListener('click',()=>crumbTo(parseInt(s.dataset.lvl))));
-}}
-
-function doIsolate(ref){{
-  state.isolate = ref; state.isolateMode = false;
-  document.getElementById('isolateBtn').classList.remove('on');
-  render();
-}}
-
-function connectedSet(ref){{
-  // upstream+downstream over stacked + blocks edges, both directions
-  const adj = {{}};
-  function link(a,b){{ (adj[a] = adj[a]||new Set()).add(b); (adj[b]=adj[b]||new Set()).add(a); }}
-  DATA.internalEdges.forEach(e=>{{ if(e.kind==='stacked') link(e.parent, e.child); }});
-  DATA.blocksEdges.forEach(e=>link(e.parent, e.child));
-  const seen = new Set([ref]); const q=[ref];
-  while(q.length){{
-    const cur = q.shift();
-    (adj[cur]||new Set()).forEach(nb=>{{ if(!seen.has(nb)){{ seen.add(nb); q.push(nb); }} }});
-  }}
-  return seen;
-}}
-
-function render(){{
-  renderCrumbs();
-  const svg = document.getElementById('canvas');
-  while(svg.firstChild) svg.removeChild(svg.firstChild);
-  const isoSet = state.isolate ? connectedSet(state.isolate) : null;
-
-  if(state.level===0){{
-    let x = PAD;
-    const cols = [];
-    DATA.projOrder.forEach(p=>{{
-      const refs = DATA.projGroups[p].map(r=>DATA.nodes[r]).filter(passesFilter);
-      if(!refs.length) return;
-      cols.push({{p, refs, x}});
-      x += COL_W;
-    }});
-    const maxRows = Math.max(1, ...cols.map(c=>c.refs.length));
-    const height = PAD*2 + maxRows*ROW_H + 20;
-    svg.setAttribute('width', Math.max(400, x+PAD));
-    svg.setAttribute('height', height);
-    const posByRef = {{}};
-    cols.forEach(col=>{{
-      const label = document.createElementNS('http://www.w3.org/2000/svg','text');
-      label.setAttribute('x', col.x); label.setAttribute('y', 18);
-      label.setAttribute('fill', 'var(--muted)'); label.setAttribute('font-size','11');
-      label.textContent = col.p;
-      svg.appendChild(label);
-      col.refs.forEach((n,i)=>{{
-        const y = PAD + i*ROW_H + 10;
-        posByRef[n.ref] = {{x:col.x, y, w:NODE_W, h:NODE_H}};
-        svg.appendChild(nodeGroup(n, col.x, y, false));
-      }});
-    }});
-    DATA.topBlocks.forEach(e=>{{
-      const a = posByRef[e.parent], b = posByRef[e.child];
-      if(!a || !b) return;
-      const path = edgePath(a.x+a.w, a.y+a.h/2, b.x, b.y+b.h/2, 'blocks');
-      path.setAttribute('title', e.detail);
-      svg.insertBefore(path, svg.firstChild);
-    }});
-    if(isoSet){{
-      [...svg.querySelectorAll('.node')].forEach(g=>{{
-        const ref = g.dataset.ref;
-        const inSet = isoSet.has(ref) || (DATA.nodes[ref] && DATA.nodes[ref].group||[]).some(d=>isoSet.has(d));
-        g.classList.toggle('dim', !inSet);
-      }});
-      [...svg.querySelectorAll('.edge')].forEach(p=>p.classList.add('dim'));
-    }}
-  }} else if(state.level===1){{
-    const rootRef = state.group;
-    const root = DATA.nodes[rootRef];
-    const members = DATA.groupMembers[rootRef] || [];
-    const allRefs = [rootRef, ...members];
-    const nodesHere = allRefs.map(r=>DATA.nodes[r]);
-    let y = PAD;
-    const posByRef = {{}};
-    nodesHere.forEach(n=>{{
-      posByRef[n.ref] = {{x:PAD, y, w:NODE_W, h:NODE_H}};
-      y += ROW_H;
-    }});
-    // external blocks stubs
-    const extRefs = new Set();
-    DATA.blocksEdges.forEach(e=>{{
-      if(allRefs.includes(e.parent) && !allRefs.includes(e.child)) extRefs.add(e.child);
-      if(allRefs.includes(e.child) && !allRefs.includes(e.parent)) extRefs.add(e.parent);
-    }});
-    let ey = PAD;
-    [...extRefs].forEach(r=>{{
-      posByRef[r] = {{x:PAD + COL_W + 60, y:ey, w:NODE_W, h:NODE_H}};
-      ey += ROW_H;
-    }});
-    const height = PAD*2 + Math.max(y, ey) + 10;
-    svg.setAttribute('width', PAD*2 + COL_W + 60 + NODE_W);
-    svg.setAttribute('height', height);
-    nodesHere.forEach(n=>{{
-      const pos = posByRef[n.ref];
-      svg.appendChild(nodeGroup(n, pos.x, pos.y, false));
-    }});
-    [...extRefs].forEach(r=>{{
-      const n = DATA.nodes[r] || {{ref:r, title:'', project:'', repo:''}};
-      const pos = posByRef[r];
-      svg.appendChild(nodeGroup(n, pos.x, pos.y, true));
-    }});
-    DATA.internalEdges.forEach(e=>{{
-      if(!allRefs.includes(e.parent) || !allRefs.includes(e.child)) return;
-      const a = posByRef[e.parent], b = posByRef[e.child];
-      if(!a||!b) return;
-      svg.insertBefore(edgePath(a.x+a.w/2, a.y+a.h, b.x+b.w/2, b.y, e.kind), svg.firstChild);
-    }});
-    DATA.blocksEdges.forEach(e=>{{
-      if(!(allRefs.includes(e.parent) || allRefs.includes(e.child))) return;
-      const a = posByRef[e.parent], b = posByRef[e.child];
-      if(!a||!b) return;
-      svg.insertBefore(edgePath(a.x+a.w, a.y+a.h/2, b.x, b.y+b.h/2, 'blocks'), svg.firstChild);
-    }});
-    if(isoSet){{
-      [...svg.querySelectorAll('.node')].forEach(g=>g.classList.toggle('dim', !isoSet.has(g.dataset.ref)));
-      [...svg.querySelectorAll('.edge')].forEach(p=>p.classList.add('dim'));
-    }}
-  }}
-}}
-
-function openPanel(ref){{
-  const n = DATA.nodes[ref];
-  if(!n) return;
-  const body = document.getElementById('panelBody');
-  let actionHtml = '';
-  if(n.action && (n.action.label || n.action.command)){{
-    actionHtml = `<div class="row"><b>action</b>${{esc(n.action.label)}}
-      ${{ n.action.command ? `<div class="cmd ${{esc(n.action.class)}}"><span class="cls">${{esc(n.action.class)}}</span><br>${{esc(n.action.command)}}</div>` : '' }}
-    </div>`;
-  }}
-  body.innerHTML = `
-    <h3>${{esc(n.ref)}}</h3>
-    <div class="row"><b>title</b>${{esc(n.title)}}</div>
-    <div class="row"><b>repo / project</b>${{esc(n.repo)}} &middot; ${{esc(n.project)}}</div>
-    <div class="row"><b>source</b>${{esc(n.source)}}</div>
-    <div class="row"><b>state / bucket</b>${{esc(n.state)}} &middot; ${{esc(n.bucket)}}</div>
-    <div class="row"><b>owner</b>${{esc(n.owner)}}</div>
-    <div class="row"><b>url</b><a href="${{esc(n.url)}}" target="_blank" rel="noopener">${{esc(n.url)}}</a></div>
-    <div class="row"><b>one_line</b>${{esc(n.one_line)}}</div>
-    <div class="row"><b>action_needed</b>${{esc(n.action_needed)}}</div>
-    <div class="row"><b>urgency</b>${{esc(n.urgency)}}</div>
-    <div class="row"><b>blocked</b>${{n.blocked?'yes':'no'}}</div>
-    ${{actionHtml}}
-  `;
-  [...body.querySelectorAll('.cmd')].forEach(c=>{{
-    c.addEventListener('click',()=>{{ navigator.clipboard && navigator.clipboard.writeText(c.textContent); }});
-  }});
-  document.getElementById('panel').classList.add('open');
-  document.getElementById('overlay').classList.add('open');
-}}
-
-document.getElementById('panelClose').addEventListener('click', ()=>{{
-  document.getElementById('panel').classList.remove('open');
-  document.getElementById('overlay').classList.remove('open');
-}});
-document.getElementById('overlay').addEventListener('click', ()=>{{
-  document.getElementById('panel').classList.remove('open');
-  document.getElementById('overlay').classList.remove('open');
-}});
-document.getElementById('stage').addEventListener('click', (ev)=>{{
-  if(ev.target.id==='stage' || ev.target.id==='canvas'){{
-    if(state.level>0) crumbTo(state.level-1);
-  }}
-}});
-document.getElementById('isolateBtn').addEventListener('click', ()=>{{
-  state.isolateMode = !state.isolateMode;
-  document.getElementById('isolateBtn').classList.toggle('on', state.isolateMode);
-}});
-document.getElementById('clearBtn').addEventListener('click', ()=>{{
-  state.isolate = null; state.isolateMode = false;
-  document.getElementById('isolateBtn').classList.remove('on');
-  render();
-}});
-
-buildFilterChips();
-render();
-</script>
-</body></html>"""
-
-with open(OUT, "w") as f:
-    f.write(html_doc)
-
-print("wrote", OUT)
-print("top-level nodes:", len(top_nodes), "projects:", len(proj_order), "repos:", len(repo_set))
-print("internal edges (stacked/apex):", len(internal_edges), "blocks edges:", len(blocks_pairs),
-      "top-level blocks:", len(top_blocks))
-print("bytes:", os.path.getsize(OUT))
+if __name__ == "__main__":
+    doc = build_html()
+    with open(ARGS.out, "w") as f:
+        f.write(doc)
+    top_level = len(projects)
+    print("wrote", ARGS.out)
+    print("top-level project cards:", top_level,
+          "workstreams:", sum(len(p.get("workstreams", []) or []) for p in projects),
+          "items joined:", len(items), "edges:", len(EDGES))
+    print("bytes:", os.path.getsize(ARGS.out))
