@@ -138,6 +138,85 @@ directly.
 **Why it exists**: You forget what every project is doing. This skill rebuilds the picture without
 round-tripping through multiple commands.
 
+### /simplify — Review and Fix Changed Code
+
+**Activation**: Manual (`/simplify`), borg-installed (not a Claude Code built-in)
+
+Reviews code touched in the current session for reuse, quality, and efficiency, then fixes any
+issues found directly — dead code, redundant logic, reinvented utilities, unnecessary complexity.
+Operates only on files changed this session, not the whole repo.
+
+**Why it exists**: Catches the small messes that accumulate during implementation before they ship,
+without requiring a separate manual pass.
+
+### /borg-next — What Needs Attention
+
+**Activation**: Manual (`/borg-next`)
+
+Shows what project needs attention most urgently. Use when asking "what should I work on?" or
+"what's next?".
+
+### /borg-switch — Jump to a Project
+
+**Activation**: Manual (`/borg-switch`)
+
+Switches to a different project's tmux window. Use when saying "switch to X", "go to X", or "jump
+to X".
+
+### /borg-search — Search Cairn Knowledge
+
+**Activation**: Manual (`/borg-search`)
+
+Searches the cairn knowledge graph for lessons, decisions, or patterns across projects. Use when
+asking to search knowledge, find past decisions, or look something up.
+
+### /borg-recon — Morning Link-Up
+
+**Activation**: Manual (`/borg-recon`)
+
+Fans out across pluggable source adapters since a mark, reconciles findings against each project's
+local `.borg` checkpoints, and synthesizes a prioritized, by-project briefing with Yours-vs-Mine
+action lists and a recommended parallel kickoff batch. Source-agnostic — adapters are injected,
+never hardcoded. Use for "morning link-up", "what changed", or "catch me up".
+
+### /borg-verify — Pre-Merge Evaluator Gate
+
+**Activation**: Manual (`/borg-verify`)
+
+Spawns a fresh reviewer subagent to re-run tests, map acceptance criteria to diff evidence, and
+issue a structured PASS/FAIL verdict. Call after a nanoprobe completes and before merging its PR.
+
+### /borg-resume — Auto-Resume a Paused Workflow
+
+**Activation**: Manual (`/borg-resume`)
+
+Auto-resumes a workflow or long task paused or killed by a session/usage limit. Schedules a
+one-shot trigger to re-run the workflow with `resumeFromRunId` after the limit resets, so cached
+completed agents return instantly and only unfinished steps re-run.
+
+### /fable-reviewer — Fable's 5-Gate Working Discipline
+
+**Activation**: Manual (`/fable-reviewer`) or by request ("apply the gates", "fable mode")
+
+Distills Fable's 5-gate discipline (scope-before-work, evidence-before-reasoning, adversarial
+self-review, verification against real test suites, response calibration) so Opus/Sonnet inherit
+the same rigor in the Borg environment. Use for non-trivial changes at risk of scope creep or
+vibe-coding.
+
+### /break-glass — Permission Escape Hatch
+
+**Activation**: Manual (`/break-glass`)
+
+Adds a local permission exception to a project's `settings.local.json`. The formal escape hatch for
+commands too dangerous or project-specific for the global allowlist.
+
+### /no-unnecessary-read-perms — Suppress Redundant Read Prompts
+
+**Activation**: Automatic (always active)
+
+Suppresses unnecessary read-permission prompts for files already accessible via normal tool use.
+Applies to Claude's own tool calls and to subagent prompts that include the system subagent rules.
+
 ### /adhd-guardrails — Cognitive Load Guardrails
 
 **Activation**: Automatic (always active)
@@ -185,11 +264,11 @@ design, and more.
 
 ## Built-in Claude Code Skills
 
-These come with Claude Code — no installation needed:
+These come with Claude Code — no installation needed. (`/simplify` is a borg-installed skill, not a
+built-in — see the Borg Skills section above.)
 
 | Skill | What it does | When to use |
 |-------|-------------|-------------|
-| `/simplify` | Three parallel agents review code (efficiency, correctness, maintainability) | After implementation, before PR |
 | `/checkpoint` | Quick 3-5 bullet summary | Before breaks |
 | `/batch` | Parallelizes large changes into 5-30 units | Large-scale refactors |
 | `/compact` | Compresses conversation context | When context gets long |
