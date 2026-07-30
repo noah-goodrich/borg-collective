@@ -301,14 +301,65 @@ _recon_assemble() {
 
 # ── 6. cairn persistence (thin, optional, fail-quiet) ───────────────────────────
 
-# Record a reconciliation/decision/observation to cairn. cairn is WIP — this hook is a NO-OP when
-# cairn is absent and NEVER errors (returns 0 on every path), so recon has no hard dependency on it.
-# Args: <kind: decision|observation> <project> <text>
-_recon_cairn_record() {
-    _kind="$1"; _project="$2"; _text="$3"
+# Deterministic id for a reconciled contradiction, so re-running the same sweep dedupes
+# (cairn's /record/batch does on_conflict_do_nothing on id). Same (project, ref) -> same id
+# every time. Prefers shasum, falls back to sha1sum, falls back to cksum if neither exists.
+# Args: <project> <ref>
+_recon_stable_id() {
+    _project="$1"; _ref="$2"
+    if command -v shasum >/dev/null 2>&1; then
+        _hash=$(printf '%s' "$_ref" | shasum -a 1 | cut -c1-12)
+    elif command -v sha1sum >/dev/null 2>&1; then
+        _hash=$(printf '%s' "$_ref" | sha1sum | cut -c1-12)
+    else
+        _hash=$(printf '%s' "$_ref" | cksum | awk '{print $1}')
+    fi
+    printf 'recon-%s-%s\n' "$_project" "$_hash"
+}
+
+# Persist reconciled contradictions to cairn's /record/batch REST endpoint. NEVER blocks or
+# errors recon (returns 0 on every path) — cairn is WIP and has no hard dependency here. POSTs
+# directly via curl (NOT the host `cairn` shim, which drifts behind the API and silently drops
+# unknown subcommands). NO-OP when: BORG_RECON_NO_CAIRN is set, curl is absent, there are zero
+# contradictions, or the endpoint is unreachable/times out (bounded by _recon_timeout, 5s).
+# Args: <assembled recon doc JSON>
+_recon_persist_contradictions() {
+    _doc="$1"
     [ -n "${BORG_RECON_NO_CAIRN:-}" ] && return 0
-    command -v cairn >/dev/null 2>&1 || return 0
-    _recon_timeout 5 cairn record "$_kind" --project "$_project" --notes "$_text" \
-        >/dev/null 2>&1 || true
+    command -v curl >/dev/null 2>&1 || return 0
+
+    _contra=$(printf '%s' "$_doc" | jq -c '.contradictions // []' 2>/dev/null) || return 0
+    _count=$(printf '%s' "$_contra" | jq 'length' 2>/dev/null) || return 0
+    [ "$_count" -gt 0 ] 2>/dev/null || return 0
+
+    _items="[]"
+    _i=0
+    while [ "$_i" -lt "$_count" ]; do
+        _row=$(printf '%s' "$_contra" | jq -c ".[$_i]")
+        _project=$(printf '%s' "$_row" | jq -r '.project')
+        _ref=$(printf '%s' "$_row" | jq -r '.ref')
+        _note=$(printf '%s' "$_row" | jq -r '.note')
+        _source_says=$(printf '%s' "$_row" | jq -r '.source_says')
+        _id=$(_recon_stable_id "$_project" "$_ref")
+        _item=$(jq -n --arg id "$_id" --arg project "$_project" \
+            --arg content "$_note — ref $_ref; source says: $_source_says" \
+            '{type: "observation", id: $id, project: $project, tool: "recon",
+              category: "reconciliation", content: $content, tags: ["recon", "contradiction"]}')
+        _items=$(printf '%s' "$_items" | jq -c --argjson it "$_item" '. + [$it]')
+        _i=$((_i + 1))
+    done
+
+    # Emit null (not "") when no session is set: source_session is an FK to sessions(id); an empty
+    # string matches no row (FK violation) or links to historical empty-session junk. null == "no
+    # session", which cairn's _ensure_session_row and the nullable FK both handle cleanly.
+    _session="${CAIRN_SESSION_ID:-}"
+    _payload=$(jq -n --argjson items "$_items" --arg session "$_session" \
+        '{items: $items, source_session: (if $session == "" then null else $session end)}')
+
+    _tmp=$(mktemp "${TMPDIR:-/tmp}/recon-cairn.XXXXXX" 2>/dev/null) || return 0
+    printf '%s' "$_payload" > "$_tmp"
+    _recon_timeout 5 curl -fsS -X POST -H 'Content-Type: application/json' \
+        --data @"$_tmp" "${CAIRN_API_URL:-http://localhost:8767}/record/batch" >/dev/null 2>&1
+    rm -f "$_tmp"
     return 0
 }
