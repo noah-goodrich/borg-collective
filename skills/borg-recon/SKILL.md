@@ -100,11 +100,18 @@ mutate). These are safe to fire immediately while the human works the "Yours" li
 
 Keep the batch bounded (≤ 5). State the ceiling; never open-ended.
 
-## Step 4 — Persist decisions to cairn (optional, fail-quiet)
+## Step 4 — Persist decisions to cairn (auto for contradictions, optional for the rest)
 
-The engine already records the sweep as an observation. For each reconciliation JUDGMENT you make
-(especially a resolved contradiction — "checkpoint was stale, here's the truth"), record it so the
-next session inherits it. cairn is WIP — this is best-effort; skip silently if `cairn` is absent.
+The engine already auto-persists every reconciled *contradiction* to cairn's `/record/batch` REST
+endpoint (POSTed directly via `curl`, not the host `cairn` shim, which drifts behind the API). It
+is fail-quiet — never blocks or errors recon — and insert-once: each contradiction gets a stable
+id (`recon-<project>-<12hex sha1 of ref>`), so re-running the same morning's sweep dedupes instead
+of duplicating. Opt out with `--no-cairn` / `BORG_RECON_NO_CAIRN`.
+
+For a reconciliation JUDGMENT that is NOT a mechanical contradiction (a synthesis call, a
+priority tradeoff, a "needs a human decision" note), you may still record it manually as an
+OPTIONAL augmentation so the next session inherits it. cairn is WIP — this is best-effort; skip
+silently if `cairn` is absent.
 
 ```bash
 command -v cairn >/dev/null 2>&1 && cairn record decision --project <project> \
