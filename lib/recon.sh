@@ -349,9 +349,12 @@ _recon_persist_contradictions() {
         _i=$((_i + 1))
     done
 
+    # Emit null (not "") when no session is set: source_session is an FK to sessions(id); an empty
+    # string matches no row (FK violation) or links to historical empty-session junk. null == "no
+    # session", which cairn's _ensure_session_row and the nullable FK both handle cleanly.
     _session="${CAIRN_SESSION_ID:-}"
     _payload=$(jq -n --argjson items "$_items" --arg session "$_session" \
-        '{items: $items, source_session: $session}')
+        '{items: $items, source_session: (if $session == "" then null else $session end)}')
 
     _tmp=$(mktemp "${TMPDIR:-/tmp}/recon-cairn.XXXXXX" 2>/dev/null) || return 0
     printf '%s' "$_payload" > "$_tmp"
