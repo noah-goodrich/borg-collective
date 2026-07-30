@@ -211,9 +211,9 @@ CSS = """
 :root{
   --bg:#0d1117; --panel:#161b22; --panel2:#0f141a; --bd:#30363d;
   --tx:#c9d1d9; --muted:#8b949e;
-  --ready:#3fb950; --flight:#d29922; --blocked:#f85149; --pending:#8b949e;
+  --ready:#3fb950; --flight:#d29922; --blocked:#f85149; --blocked-soft:#a35b52; --pending:#8b949e;
   --done:#6e7681; --wip:#d29922; --you:#e3b341; --acc:#1f6feb; --red:#f85149;
-  --merged:#6e7681;
+  --merged:#6e7681; --you-glow:0 0 0 1px var(--you) inset,0 0 10px #e3b34155;
   --card:linear-gradient(180deg,#171d26,#12171f);
   --card-hi:linear-gradient(180deg,#1b2230,#141a23);
   --elev:0 1px 0 #ffffff08 inset, 0 2px 6px #00000060;
@@ -256,11 +256,12 @@ main{max-width:1280px;margin:0 auto;padding:18px 20px}
   box-shadow:var(--elev);cursor:pointer;transition:.12s ease;display:flex;flex-direction:column;gap:8px}
 .pcard:hover{background:var(--card-hi);transform:translateY(-1px);border-color:#3d4756}
 .pcard.named{border-left:3px solid var(--acc)}
-.pcard.needsyou{border-left:3px solid var(--you);background:linear-gradient(180deg,#1c1810,#141009)}
+.pcard.needsyou{border:1px solid var(--you);border-left:4px solid var(--you);
+  background:linear-gradient(180deg,#221c0e,#151007);box-shadow:var(--you-glow),var(--elev)}
 .chead{display:flex;align-items:center;gap:8px}
 .rank{font-size:11px;color:var(--muted);border:1px solid var(--bd);border-radius:6px;padding:0 6px}
 .ptitle{font-size:15px;font-weight:600;flex:1;line-height:1.25}
-.pip{color:var(--you)}
+.pip{color:#000;background:var(--you);border-radius:5px;padding:0 6px;font-weight:700;box-shadow:0 0 8px #e3b34166}
 .crow{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
 .owner{color:var(--muted);font-size:11px;margin-right:2px}
 .badge{font-size:10px;color:var(--muted);border:1px solid var(--bd);border-radius:4px;padding:0 5px;text-transform:lowercase}
@@ -274,7 +275,7 @@ main{max-width:1280px;margin:0 auto;padding:18px 20px}
 .mseg:first-child{border-radius:5px 0 0 5px} .mseg:last-child{border-radius:0 5px 5px 0}
 .nextact{font-size:12px;color:var(--tx);margin-top:2px}
 .nextact .tri{color:var(--ready);font-weight:700;margin-right:5px}
-.blockedby{font-size:11px;color:var(--blocked);border-left:2px solid var(--blocked);
+.blockedby{font-size:11px;color:var(--muted);border-left:2px solid var(--blocked-soft);
   padding-left:8px;margin-top:2px}
 .blockedby .more{color:var(--muted)}
 .cmd{margin-top:6px;display:flex;align-items:center;gap:8px;font-size:11px;cursor:copy}
@@ -288,7 +289,7 @@ main{max-width:1280px;margin:0 auto;padding:18px 20px}
 .board{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;align-items:start}
 .col{background:var(--panel2);border:1px solid var(--bd);border-radius:8px;padding:10px;border-top:3px solid var(--bd);min-height:80px}
 .col-ready{border-top-color:var(--ready)} .col-flight{border-top-color:var(--flight)}
-.col-blocked{border-top-color:var(--blocked)} .col-pending{border-top-color:var(--pending)}
+.col-blocked{border-top-color:var(--blocked-soft)} .col-pending{border-top-color:var(--pending)}
 .colhdr{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:10px}
 .colhdr .cc{float:right;opacity:.7}
 .colempty{color:var(--muted);opacity:.35;text-align:center;font-size:22px;padding:12px 0}
@@ -307,11 +308,11 @@ main{max-width:1280px;margin:0 auto;padding:18px 20px}
   background:var(--bg);border:1px solid var(--bd);border-radius:5px;padding:1px 6px;cursor:pointer}
 .ichip:hover{border-color:var(--acc)}
 .ichip.entry{box-shadow:0 0 0 1px var(--ready) inset}
-.ichip.blk{border-left:3px solid var(--blocked)}
-.ichip.you{color:var(--you);border-color:var(--you)}
+.ichip.blk{border-left:3px solid var(--blocked-soft)}
+.ichip.you{color:#000;background:var(--you);border-color:var(--you);font-weight:700}
 .ichip.untracked{color:var(--muted);opacity:.75}
-.waiting{margin-top:8px;border:1px solid var(--blocked);border-radius:6px;padding:7px 8px;background:#1a0f0f}
-.waiting b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--blocked);margin-bottom:4px}
+.waiting{margin-top:8px;border:1px solid var(--bd);border-radius:6px;padding:7px 8px;background:var(--panel2)}
+.waiting b{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--blocked-soft);margin-bottom:4px}
 .wrow{font-size:11px;color:var(--tx);margin:2px 0}
 .shiprail{margin-top:16px;border-top:1px dashed var(--bd);padding-top:8px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .shiprail .rl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-right:6px}
@@ -332,7 +333,7 @@ main{max-width:1280px;margin:0 auto;padding:18px 20px}
 .badges{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .schip{font-size:10px;text-transform:uppercase;letter-spacing:.4px;padding:1px 7px;border-radius:10px;border:1px solid}
 .schip-open{color:var(--tx);border-color:var(--bd)}
-.schip-blocked{color:var(--blocked);border-color:var(--blocked)}
+.schip-blocked{color:var(--blocked-soft);border-color:var(--blocked-soft)}
 .schip-merged{color:var(--merged);border-color:var(--merged)}
 .schip-wip{color:var(--wip);border-color:var(--wip)}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
@@ -357,10 +358,14 @@ main{max-width:1280px;margin:0 auto;padding:18px 20px}
 #isoBar .spacer{flex:1}
 #isoStage{flex:1;width:100%;cursor:grab;touch-action:none;background:
   radial-gradient(circle at 1px 1px,#ffffff0a 1px,transparent 0);background-size:26px 26px}
+/* P6: animate the level/zoom jumps (reuse the panel's .16s ease); bypass while
+   actively drag-panning so the pan stays 1:1 with the cursor. */
+#camG{transition:transform .16s ease}
+#camG.panning{transition:none}
 .gn rect{fill:var(--panel);stroke:var(--bd);stroke-width:1.5}
 .gn.entry rect{stroke:var(--ready);stroke-width:2}
-.gn.blk rect{stroke:var(--blocked)}
-.gn.you rect{stroke:var(--you)}
+.gn.blk rect{stroke:var(--blocked-soft)}
+.gn.you rect{stroke:var(--you);stroke-width:3;fill:#1c1810}
 .gn.root rect{stroke:var(--acc);stroke-width:2.5}
 .gn.missing rect{stroke-dasharray:3,3;fill:var(--panel2)}
 .gn text{fill:var(--tx);font:12px ui-monospace,Menlo,Consolas,monospace}
@@ -370,7 +375,7 @@ main{max-width:1280px;margin:0 auto;padding:18px 20px}
 .ge{fill:none}
 .ge-stacked{stroke:var(--bd);stroke-width:1.5}
 .ge-apex{stroke:var(--acc);stroke-width:1.5;stroke-dasharray:2,4}
-.ge-blocks{stroke:var(--blocked);stroke-width:2}
+.ge-blocks{stroke:var(--blocked-soft);stroke-width:1.5}
 .ge-back{stroke-dasharray:5,4;opacity:.6}
 footer{color:var(--muted);font-size:11px;text-align:center;margin-top:24px}
 """
@@ -616,7 +621,7 @@ function mkEdge(a,b,kind,back){var p=document.createElementNS(SVGNS,'path');
   if(kind==='blocks')p.setAttribute('marker-end','url(#arrow)');return p;}
 function openIsolate(ref){
   S.isolate=ref;var refs=connectedSet(ref);var lo=layout(refs);var pos=lo.pos,rank=lo.rank;
-  var cam=document.getElementById('camG');cam.innerHTML='<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--blocked)"/></marker></defs>';
+  var cam=document.getElementById('camG');cam.innerHTML='<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--blocked-soft)"/></marker></defs>';
   var setobj={};refs.forEach(function(r){setobj[r]=1;});
   EDGES.forEach(function(e){
     if(!setobj[e.parent]||!setobj[e.child])return;var a=pos[e.parent],b=pos[e.child];if(!a||!b)return;
@@ -635,9 +640,9 @@ function fit(pad){pad=pad||34;var cam=document.getElementById('camG');var b;try{
   S.cam.k=k;S.cam.tx=(r.width-b.width*k)/2-b.x*k;S.cam.ty=(r.height-b.height*k)/2-b.y*k;applyCam();saveState();}
 /* pan (mouse drag) + zoom (wheel) -- confined to the isolate stage */
 var dragging=false,px=0,py=0;
-function onDown(e){dragging=true;px=e.clientX;py=e.clientY;stageEl().style.cursor='grabbing';}
+function onDown(e){dragging=true;px=e.clientX;py=e.clientY;stageEl().style.cursor='grabbing';document.getElementById('camG').classList.add('panning');}
 function onMove(e){if(!dragging)return;S.cam.tx+=e.clientX-px;S.cam.ty+=e.clientY-py;px=e.clientX;py=e.clientY;applyCam();}
-function onUp(){if(!dragging)return;dragging=false;stageEl().style.cursor='grab';saveState();}
+function onUp(){if(!dragging)return;dragging=false;stageEl().style.cursor='grab';document.getElementById('camG').classList.remove('panning');saveState();}
 function onWheel(e){e.preventDefault();var r=stageEl().getBoundingClientRect();var cx=e.clientX-r.left,cy=e.clientY-r.top;
   var kOld=S.cam.k;var k=S.cam.k*(e.deltaY<0?1.1:1/1.1);k=Math.min(2.5,Math.max(0.3,k));
   S.cam.tx=cx-(cx-S.cam.tx)*(k/kOld);S.cam.ty=cy-(cy-S.cam.ty)*(k/kOld);S.cam.k=k;applyCam();saveState();}
