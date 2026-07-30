@@ -3131,9 +3131,7 @@ cmd_recon() {
     doc=$(_recon_assemble "$resolved_since" "$sources_json" "$by_project" "$contra_json")
 
     _recon_write_last_run "$resolved_since"
-    local src_names; src_names=$(printf '%s' "$sources_json" | jq -r '[.[].source] | join(", ")')
-    _recon_cairn_record observation "borg-collective" \
-        "recon sweep since $resolved_since across sources: ${src_names}."
+    _recon_persist_contradictions "$doc"
 
     rm -rf "$workdir"
 
