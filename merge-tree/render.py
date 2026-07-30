@@ -112,6 +112,7 @@ except (ValueError, TypeError):
     TODAY = datetime.date.today()
 
 BUCKETS = ["needs-you", "active-chains", "standalone", "collapsed-noise"]
+REVIEW_BUCKET = "review-queue"  # Awaiting-Noah review queue -> its own labeled tier
 NOAH = {"noah-goodrich", "noah goodrich", "noahgoodrich", "noah", "ngoodrich"}
 
 
@@ -223,7 +224,7 @@ def source_badge(it):
 
 
 def data_attrs(it):
-    needs_you = it.get("bucket") == "needs-you"
+    needs_you = it.get("bucket") in ("needs-you", REVIEW_BUCKET)
     in_chain = it.get("bucket") == "active-chains"
     return (
         f'data-mine="{str(is_mine(it)).lower()}" '
@@ -331,7 +332,7 @@ def node_html(it):
 
 
 # ---------------------------------------------------------------- bucketing
-buckets = {b: [] for b in BUCKETS}
+buckets = {b: [] for b in BUCKETS + [REVIEW_BUCKET]}
 for it in items:
     b = it.get("bucket")
     if b in buckets:
@@ -388,6 +389,18 @@ sections.append(f"""
   <section id="needs-you" class="hero">
     <h2><span class="tiernum">1</span> What needs you now <span class="cnt">{len(needs_you)}</span></h2>
     <div class="hero-body">{hero_nodes}</div>
+  </section>""")
+
+# ---- awaiting-noah review queue (its own labeled tier, right under the hero)
+review_q = sorted(buckets[REVIEW_BUCKET],
+                  key=lambda it: (-(it.get("urgency") or 0), it.get("ref", "")))
+if review_q:
+    review_nodes = "\n".join(node_html(it) for it in review_q)
+    sections.append(f"""
+  <section id="review-queue" class="reviewq">
+    <h2><span class="tiernum tiernum-r">R</span> Awaiting Noah / review queue <span class="cnt">{len(review_q)}</span></h2>
+    <div class="reviewq-sub">snowflake-permissions PRs to review before they go to Kelly &middot; + program apexes for nav</div>
+    <div class="reviewq-body">{review_nodes}</div>
   </section>""")
 
 
@@ -505,6 +518,10 @@ h2{font-size:14px;border-bottom:1px solid var(--bd);padding-bottom:5px;
 .hero{background:var(--panel);border:1px solid var(--you);border-radius:8px;padding:6px 14px 12px}
 .hero h2{border-color:#2b2a1f}
 .hero .tiernum{background:var(--you);color:#000}
+.reviewq{background:var(--panel);border:1px solid var(--acc);border-radius:8px;padding:6px 14px 12px}
+.reviewq h2{border-color:#1c2a44}
+.reviewq .tiernum-r{background:var(--you);color:#000}
+.reviewq-sub{color:var(--muted);font-size:11px;margin:4px 0 8px}
 .node{border:1px solid var(--bd);border-left:3px solid var(--bd);border-radius:6px;padding:7px 10px;margin:6px 0;background:var(--panel)}
 .node.merged{opacity:.5;background:var(--panel2)}
 .node.merged .title,.node.merged .handle{text-decoration:line-through;color:var(--merged)}
