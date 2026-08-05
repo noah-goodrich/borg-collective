@@ -3,16 +3,17 @@
 **Principle: the expensive tier is opt-IN. Route to the cheapest tier that fits.**
 
 Every unspecified subagent inherits the **main session model**. On this machine the session default is
-**Fable 5** (`settings.json` → `model`), the single most expensive tier — pricier per token than Opus.
-So an unspecified subagent is not "usually Opus" anymore; it is Fable 5, and a fan-out of them is the
-fastest way to burn an allotment. Use this matrix to pick the right tier before spawning.
+**Opus 4.8** (`settings.json` → `model`). An unspecified subagent therefore inherits Opus 4.8, not a
+cheap tier — still pricier than pinning Haiku or Sonnet for mechanical or judgment-tier work. Use this
+matrix to pick the right tier before spawning rather than letting a stage silently inherit the default.
 
 **Two spawn paths, one rule.** This guide governs BOTH:
 - the **`Agent` tool** (`subagent_type:` — the borg specialists below carry their own `model:` frontmatter,
   so routing to them is already cheap); and
 - the **`Workflow` tool** (`agent()` inside a workflow script — this path has NO default specialist and
   **inherits the session model unless you pass `model:`**). See "Model routing inside Workflow scripts"
-  below. The workflow path is the one that silently runs Fable 5 at fan-out scale; it is the primary leak.
+  below. The workflow path is the one where an unpinned fan-out quietly runs the full session model
+  (Opus 4.8) at scale instead of a cheaper pinned tier.
 
 ---
 
@@ -49,7 +50,8 @@ Is the task fully specified (no judgment calls)?
                     ├── YES → borg-reviewer (Sonnet/high)
                     └── NO  → is it a single-task with judgment?
                               ├── YES → borg-nanoprobe (Sonnet)
-                              └── NO  → claude/general-purpose (Opus — LAST RESORT)
+                              └── NO  → claude/general-purpose (Opus 4.8 — LAST RESORT, also the
+                                        inherited session default)
 ```
 
 ---
@@ -60,26 +62,27 @@ Is the task fully specified (no judgment calls)?
 |------------------|-------|--------|------------|---------------------------------------------------|
 | Haiku 4.5        | $1    | $5     | $0.10      | Mechanical / read-only tier.                      |
 | Sonnet 4.6       | $3    | $15    | $0.30      | Judgment / analysis / review tier.                |
-| Opus 4.6+ (4.8)  | $5    | $25    | $0.50      | Open-ended reasoning; the intended orchestrator.  |
-| **Fable 5**      | $10   | $50    | $1.00      | **Most expensive. The current session default.**  |
+| **Opus 4.6+ (4.8)** | $5 | $25    | $0.50      | **Current session default** — the intended orchestrator tier, and what any unspecified subagent inherits. |
+| Fable 5          | $10   | $50    | $1.00      | Most expensive; opt-in only, never the inherited default. |
 
-Two things changed from the old table and both matter: **Opus dropped ~3x** at the 4.6 generation
-($15/$75 → $5/$25), and **Fable 5 now sits ABOVE Opus** at $10/$50. So the inherited-default tier is no
-longer "expensive Opus" — it is *even-more-expensive Fable 5*. A Haiku subagent is ~10x cheaper on output
-than Opus and ~50x cheaper than the inherited Fable 5 default. Routing a mechanical grep or a read-only
-search to the inherited model instead of Haiku is the single most avoidable cost in a multi-agent session.
-Cache reads of the growing orchestrator context usually dominate a long session — keep the main loop lean
-(delegate verbose reads; don't pull large tool output into the orchestrator).
+Two things matter here: **Opus dropped ~3x** at the 4.6 generation ($15/$75 → $5/$25), which is why it is
+now the session default rather than an emergency-only tier; and **Fable 5 sits ABOVE Opus** at $10/$50, so
+it must be selected deliberately — it is never something a session or workflow inherits by accident. A
+Haiku subagent is still ~10x cheaper on output than the inherited Opus 4.8 default. Routing a mechanical
+grep or a read-only search to the inherited model instead of Haiku is the single most avoidable cost in a
+multi-agent session. Cache reads of the growing orchestrator context usually dominate a long session —
+keep the main loop lean (delegate verbose reads; don't pull large tool output into the orchestrator).
 
 ---
 
-## Model routing inside Workflow scripts (the leak that burns the most)
+## Model routing inside Workflow scripts
 
 The `Agent`-tool matrix above does NOT apply automatically inside a `Workflow` script. In a workflow,
-`agent(prompt, opts)` spawns a generic worker that **inherits the session model (Fable 5) unless `opts.model`
-is set**. A 30-agent fan-out with no `model:` is 30 Fable 5 agents — the exact pattern that trips session and
-weekly limits. Treat an `agent()` call with no `model:` as a bug in any workflow that is not doing genuinely
-open-ended reasoning in that stage.
+`agent(prompt, opts)` spawns a generic worker that **inherits the session model (currently Opus 4.8)
+unless `opts.model` is set**. A 30-agent fan-out with no `model:` is 30 Opus 4.8 agents — wasteful for
+mechanical or judgment-tier work even though it is no longer the Fable-5-scale cost bomb it briefly was.
+Treat an `agent()` call with no `model:` as a bug in any workflow that is not doing genuinely open-ended
+reasoning in that stage.
 
 **Rule: every `agent()` call carries an explicit `model:` (and usually an `effort:`).** Pick with the same
 logic as the matrix:
@@ -96,12 +99,13 @@ logic as the matrix:
 - **Compose with the specialists.** `agent(prompt, { agentType: 'borg-scout' })` reuses a borg specialist
   (and its cheap model) from inside a workflow — prefer this for search/locate stages so the model choice and
   the system prompt both come from the specialist definition.
-- **Only the last row justifies inheriting Fable 5.** If you can write a clear brief for the stage, you do not
-  need the inherited tier — pass `sonnet`. Reserve the inherited (session) model for the one or two stages that
-  truly cannot be briefed.
-- **The gate stage is worth Sonnet-high, not Fable.** A verifier/reviewer that guards a deliverable should be
-  the strongest *cheap* tier (`sonnet` + `effort:'high'`), not the inherited default — independence and rigor
-  come from the blind setup and the high effort, not from spending the top tier.
+- **Only the last row justifies inheriting the session default.** If you can write a clear brief for the
+  stage, you do not need the inherited tier — pass `sonnet`. Reserve the inherited (session) model, currently
+  Opus 4.8, for the one or two stages that truly cannot be briefed.
+- **The gate stage is worth Sonnet-high, not the inherited default.** A verifier/reviewer that guards a
+  deliverable should be the strongest *cheap* tier (`sonnet` + `effort:'high'`), not the inherited Opus 4.8
+  default — independence and rigor come from the blind setup and the high effort, not from spending the top
+  tier.
 
 ## Practical tips
 

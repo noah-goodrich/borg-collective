@@ -373,6 +373,19 @@ the plumbing — borg handles it.
 | `/adhd-guardrails` | Always-on skill | Scope discipline, break reminders, shame-free language |
 | `/borg-link` | Skill — overview or per-project deep dive | "What's the state of this project?" |
 | `/borg-link-up` | Skill — flush session state to a checkpoint | Persist context before stopping |
+| `/borg-recon` | Skill — fan out across GitHub (and other adapters) per project | "What changed everywhere?" |
+| `/borg-next` | Skill — recommend + switch to the most pressing project | "What should I do right now?" |
+| `/borg-resume` | Skill — pick back up after a usage-window reset or Guardian veto | "Continue where I was blocked" |
+| `/borg-search` | Skill — query cairn from inside a session | "Have I solved this before?" |
+| `/borg-switch` | Skill — fzf-style project switch from inside a session | "Switch to a different project" |
+| `/borg-verify` | Skill — spawn an independent reviewer for a PASS/FAIL merge gate | "Is this ready to merge?" |
+| `/break-glass` | Skill — explicit, logged override for a normally-blocked action | "Bypass a guardrail, on purpose" |
+
+> **Nanoprobes vs in-session work:** for a task that's fully scoped and can run unattended (a bug
+> fix, a test, a focused refactor), it's often better to delegate to a background nanoprobe — an
+> ephemeral subagent that does the work in its own git worktree and reports back — rather than
+> doing it live in your current session. That keeps your session free to keep thinking/reviewing
+> while the nanoprobe grinds. Ask Claude to "spin up a nanoprobe for X" when you want that split.
 
 ### How they compose
 

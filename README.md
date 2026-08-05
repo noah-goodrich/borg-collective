@@ -46,17 +46,22 @@ borg init   # morning briefing + launch orchestrator session
 | `borg init` | Morning briefing + launch orchestrator Claude session |
 | `borg` / `borg next` | What needs attention? Switch to it. |
 | `borg claude` | Resume orchestrator Claude session |
-| `borg ls [--all]` | Dashboard: all projects sorted by urgency |
+| `borg link [project]` | **Primary overview.** No arg = dashboard; with a project = deep dive (checkpoint, plan, cairn) |
 | `borg switch [query]` | fzf picker → jump to project tmux window |
-| `borg status [project]` | Detailed status for one project |
-| `borg hail [project]` | Morning briefing (no arg) or project detail |
 | `borg search "query"` | Search knowledge graph (requires cairn) |
+| `borg recon` | Fan out across source adapters, reconcile against checkpoints, synthesize a briefing |
 | `borg nanoprobes` (`np`) | List recent nanoprobe runs (subagents) |
 | `borg nanoprobe-log <id>` | Show transcript for a nanoprobe run |
+| `borg reap-worktrees [project]` | Remove stale borg-managed nanoprobe worktrees |
+| `borg spend` | Main-vs-subagent spend split + trend |
+| `borg doctor` | Verify the launchd agents (registered/exit status/fresh output) |
 | `borg scan` | Auto-discover projects from session history |
 | `borg add [path]` | Register a project (defaults to `$PWD`) |
 | `borg rm <name>` | Unregister a project |
 | `borg help` | Full command reference |
+| `borg ls [--all]` | *Legacy alias* for `borg link` (dashboard view) |
+| `borg status [project]` | *Legacy alias* for `borg link <project>` |
+| `borg hail [project]` | *Legacy alias* for `borg link` |
 
 ### `drone` — Project Lifecycle
 
@@ -66,7 +71,9 @@ borg init   # morning briefing + launch orchestrator session
 | `drone up [project]` | Start container + create tmux window (resume existing work) |
 | `drone down [project]` | Stop container + remove tmux window |
 | `drone claude [project]` | Launch Claude Code session in project context |
+| `drone cortex [project]` | Launch Cortex Code (CoCo) session in project context |
 | `drone sh [project]` | Shell into project container |
+| `drone exec [project] -- <cmd>` | Run a command inside the project container |
 | `drone restart [project\|--all]` | Restart container(s) + re-exec all panes |
 | `drone rebuild [project\|--all]` | Rebuild image (no cache) + restart + re-exec panes |
 | `drone fix [project\|--all]` | Restore standard 2-pane layout |
@@ -132,7 +139,8 @@ No more "where was I?" — your last checkpoint tells you.
 
 ## Skills
 
-Borg installs six skills to `~/.claude/skills/`:
+Borg installs 17 skills to `~/.claude/skills/`. See [Skills Guide](docs/skills-guide.md) for the full
+list, or run `/help` in a Claude Code session — the highlights:
 
 ### Always Active
 
@@ -146,8 +154,8 @@ suggests breaks after sustained work, uses shame-free language. Based on
 objectives, acceptance criteria, verification strategy, scope boundaries, and ship definition. You
 validate and confirm. Criteria are locked once established — scope changes require explicit confirmation.
 
-**`/borg-ship`** — Shipping checklist. Evaluates every acceptance criterion with evidence from code,
-tests, and git. Tells you what's done, what's left, and provides the exact commands to ship.
+**`/borg-assimilate`** — Shipping checklist + execution. Evaluates every acceptance criterion with
+evidence from code, tests, and git, then executes shipping (merge PR, archive plan) with confirmation.
 
 **`/borg-review`** — Mid-session diagnostic. Checks progress against the plan, detects scope creep and
 bad loops (same error 3+ times, yak shaving, perfectionism spirals), and gives ONE recommendation for

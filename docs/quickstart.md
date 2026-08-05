@@ -9,7 +9,7 @@ Borg is two command-line tools:
 - **`borg`** — Orchestrates your AI development sessions (recommendations, boundaries, planning)
 - **`drone`** — Manages project containers and tmux windows (start/stop, shell access, Claude launch)
 
-Plus seven Claude Code skills, four hooks, and a tmux keybinding.
+Plus 17 Claude Code skills, four hooks, and a tmux keybinding.
 
 ## Prerequisites
 
@@ -63,11 +63,11 @@ start. Resume any time with `borg claude`.
 # What needs attention?
 borg next
 
-# Dashboard
-borg ls
+# Overview of all projects (primary command; `borg ls` is a legacy alias)
+borg link
 
 # Start new feature work (creates git worktree + branch, launches Claude)
-drone start my-project my-feature
+drone feature my-project my-feature
 
 # Or resume existing work
 drone up my-project
@@ -124,7 +124,7 @@ After installation, verify:
 
 - [ ] `which borg` → `~/.local/bin/borg`
 - [ ] `which drone` → `~/.local/bin/drone`
-- [ ] `borg ls` → shows discovered projects (or "No projects registered")
+- [ ] `borg link` → shows discovered projects (or "No projects registered")
 - [ ] `borg help` → shows full command reference
 - [ ] `ls ~/.claude/skills/` → includes borg-plan, borg-assimilate, borg-review, borg-link-up, etc.
 - [ ] In a Claude session: `/borg-plan` is recognized as a skill
