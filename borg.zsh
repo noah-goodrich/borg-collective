@@ -18,7 +18,7 @@ hash -r 2>/dev/null || true
 
 set -e
 
-BORG_VERSION="v0.8.0"
+BORG_VERSION="v0.8.9"
 BORG_HOME="${BORG_HOME:-${0:A:h}}"  # directory containing this script (for lib/, hooks/, skills/)
 BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"  # workspace root where projects live; orchestrator session runs here
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"

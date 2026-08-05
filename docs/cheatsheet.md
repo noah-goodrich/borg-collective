@@ -7,8 +7,7 @@ borg init                    First-time setup + launch orchestrator
 borg                         What needs attention? Switch to it.
 borg claude                  Launch/resume orchestrator Claude session
 
-borg ls                      Dashboard: projects sorted by urgency
-borg ls --all                Include archived projects
+borg link [project]          Primary overview: dashboard (no arg) or deep dive (with project)
 borg next                    Single recommendation: what to work on now
 borg next --switch           Recommend AND switch to that project
 borg switch                  fzf picker → jump to tmux window
@@ -16,24 +15,38 @@ borg switch <name>           Jump directly (skips fzf)
 
 borg search "query"          Search knowledge graph (requires cairn)
 borg search "query" --project <name>   Filter to a project
+borg recon                   Fan out across source adapters, reconcile against checkpoints
+
+borg nanoprobes (np)         List recent nanoprobe (subagent) runs
+borg nanoprobe-log <id>      Show transcript for a nanoprobe run
+borg reap-worktrees [proj]   Remove stale borg-managed nanoprobe worktrees
+borg spend                   Main-vs-subagent spend split + trend
+borg doctor                  Verify the launchd agents
 
 borg scan                    Auto-discover projects from session history
 borg add [path]              Register a project (defaults to $PWD)
 borg rm <name>               Unregister a project
 borg help                    Show help
+
+# Legacy aliases (backward compat)
+borg ls [--all]               = borg link (dashboard view)
+borg status [project]         = borg link <project>
+borg hail [project]           = borg link
 ```
 
 ## Drone Commands (Project Lifecycle)
 
 ```
-drone start <project> <feature>  Create worktree + branch, launch Claude (Boris workflow)
+drone feature <project> <branch>  Create worktree + branch, launch Claude (Boris workflow)
 drone up [project]           Start container + create tmux window (resume existing work)
 drone down [project]         Stop container + remove window
 drone claude [project]       Launch Claude Code in project context
+drone cortex [project]       Launch Cortex Code (CoCo) in project context
 drone sh [project]           Shell into container
+drone exec [project] -- <cmd>  Run a command inside the container
 drone restart [project]      Restart container + re-exec panes
-drone fix [project]          Restore 3-pane layout
-drone toggle [project]       Show/hide top-right side pane
+drone fix [project]          Restore standard 2-pane layout
+drone toggle [project]       Show/hide top-right side pane (2-pane ↔ 3-pane)
 drone status                 Show all drones
 ```
 
@@ -46,8 +59,19 @@ drone status                 Show all drones
 /borg-collective-review      Adversarial multi-persona review (The Collective)
 /borg-link                   Project intelligence (overview or per-project deep dive)
 /borg-link-up                Flush session state to <project>/.borg/checkpoints/<ts>.md
+/borg-next                   What project needs attention most urgently?
+/borg-switch                 Switch to a different project's tmux window
+/borg-search                 Search the cairn knowledge graph
+/borg-recon                  Morning link-up: fan out + reconcile + briefing
+/borg-verify                 Independent pre-merge evaluator gate (PASS/FAIL)
+/borg-resume                 Auto-resume a workflow paused by a session/usage limit
 /adhd-guardrails             Cognitive load guardrails (always active, auto)
-/simplify                    Three parallel code review agents (built-in)
+/simplify                    Review changed code for reuse, quality, efficiency (borg-installed)
+/fable-reviewer               Fable's 5-gate working discipline (scope, evidence, adversarial review)
+/break-glass                  Add a local permission exception to settings.local.json
+/no-unnecessary-read-perms     Suppress redundant read-permission prompts (always active)
+
+Full list (17 skills): docs/skills-guide.md or run /help in a session.
 ```
 
 ## Hotkey
@@ -77,7 +101,7 @@ Over capacity                 "4 sessions need attention (limit: 3)"
 ```
 borg init                         Morning: orchestrator presents briefing
 Ctrl+Space >                      Switch to recommended project
-drone start my-project my-feature Create worktree + branch, launch Claude
+drone feature my-project my-feature  Create worktree + branch, launch Claude
 /borg-plan                        Lock objectives + acceptance criteria
 [work]                            Claude has last session's checkpoint as context
 /simplify                         Review changed code before committing

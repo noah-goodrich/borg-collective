@@ -21,16 +21,31 @@ Three independent tools that compose:
 - **drone** — Container lifecycle, tmux windows, pane layouts. Forked from dev.sh. Runs on host.
 - **cairn** — Knowledge graph. Runs in a container with PostgreSQL. Optional.
 
-## Current State (v2)
+## Current State (v2, release v0.8.9)
 
 ### Implemented
-- Core borg CLI: init, claude, next, ls, switch, status, hail, search, scan, add, rm, help
+- Core borg CLI: init, claude, next, ls, switch, status, hail, search, scan, add, rm, help, and the
+  wider command surface below (recon, nanoprobes, spend, watch, doctor, sync, focus, pin/unpin,
+  setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`)
 - CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg ls`, cairn records
-- `drone` CLI: up, down, claude, sh, restart, fix, status
-- Hooks: borg-link-down.sh (status=active + latest-checkpoint injection + cairn context + presence
-  open/related), borg-link-up.sh (status=idle + uncommitted-changes tracking + no-checkpoint nudge +
-  presence close), borg-notify.sh
-- Skills: adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify
+- `drone` CLI: up, down, claude, sh, restart, rebuild, fix, status, feature, cortex, exec, toggle,
+  scaffold
+- Hooks (12): borg-link-down.sh (status=active + latest-checkpoint injection + cairn context +
+  presence open/related), borg-link-up.sh (status=idle + uncommitted-changes tracking +
+  no-checkpoint nudge + presence close), borg-notify.sh, plus bash-guard, borg-cairn-heartbeat,
+  borg-dispatch-guard, borg-plan-promote, borg-supabase-guard, notify, pre-commit-remind,
+  tool-count-nudge (full list under Files below)
+- Skills (17): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
+  and 11 more (full list under Files below)
+- Agents (6, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
+  borg-reviewer, borg-scout, ROUTING
+- Usage guardian: 85% checkpoint sweep (bin/borg-usage-watch) + `borg-dispatch-guard.sh`
+  >=92% hard-stop veto on new Agent/Workflow dispatch — both fail-open, dispatch-guard is
+  default-OFF (`BORG_USAGE_HALT_ENABLED=1` to arm)
+- Recon fan-out: `borg recon` / `/borg-recon` — pluggable source adapters, since-mark resolution,
+  checkpoint-vs-source contradiction detection, cairn persistence as a fail-quiet hook
+- `borg-sync` (lib/borg-sync.zsh): mtime-based file sync helpers shared by the CLI and hooks
+- Cross-session presence: SessionStart/Stop hooks publish/query/close presence rows via cairn
 - Work/life boundary checks on switch
 - Capacity warnings
 - tmux hotkey (Ctrl+Space >)
@@ -55,13 +70,35 @@ borg search "query"      Search cairn knowledge graph
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
 borg rm <project>        Unregister
+borg focus               Zoom current pane / project window
+borg pin / unpin         Pin (or unpin) a project to the top of borg ls
+borg reap / reap-worktrees  Reap stale active/waiting statuses; clean stale nanoprobe worktrees
+borg recon               Fan out across source adapters, reconcile against local checkpoints
+borg nanoprobes (np)     List recent ephemeral subagent runs
+borg nanoprobe-log <id>  Fetch the transcript/summary for a nanoprobe run
+borg spend               Summarize accurate token spend from ~/.claude/token-spend.jsonl
+borg watch               Live-tail registry/session activity
+borg doctor              Environment/dependency health check
+borg setup               Install/refresh hooks, skills, agents, launchd, tmux keybinding
+borg store-secret        Patch a project's secrets.zsh with a new keychain export
+borg sever               Retire/archive a directive or project without deleting it
+borg tidy                Housekeeping pass over registry/checkpoints
+borg color / image       Cosmetic project registry fields (tmux color, session image)
+borg version             Print BORG_VERSION
 borg help                Full command reference
 
 drone up [project]       Start container + tmux window
 drone down [project]     Stop container + remove window
 drone claude [project]   Launch Claude in project context
+drone cortex [project]   Launch Cortex Code (CoCo) in project context
 drone sh [project]       Shell into container
+drone exec [project] -- <cmd>  Run a command inside the devcontainer (never on host)
 drone restart [project]  Restart container
+drone rebuild [project]  Rebuild + restart container
+drone fix [project]      Repair a broken container/window state
+drone feature <project> <branch>  Create a git worktree on <branch> + open its dev window/container
+drone toggle [project]   Toggle the optional 3rd side pane (2 ↔ 3 panes)
+drone scaffold --supabase|--supabase-shared <dir>  Generate a devcontainer + borg-hooks for Supabase
 drone link               Deep dive on current project (alias for borg link)
 drone status             Show all drones
 ```
@@ -73,7 +110,7 @@ drone status             Show all drones
 ### Files
 
 ```
-borg.zsh                    Main CLI (~770 lines)
+borg.zsh                    Main CLI (case dispatch over cmd_* functions)
 drone.zsh                   Project lifecycle (forked from dev.sh + drone claude)
 lib/
     registry.zsh            Registry CRUD for ~/.config/borg/registry.json
@@ -81,12 +118,28 @@ lib/
     claude.zsh              Session discovery from ~/.claude/projects/
     coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
     desktop.zsh             Claude Desktop session reader
+    colors.zsh              tmux window color helpers (registry → hash fallback)
+    secrets.zsh             `borg store-secret` idempotent secrets.zsh patcher
+    drone-hooks.zsh         Host-side pre-up/post-down borg-hooks runner for drone
+    reaper.sh               Shared staleness predicate (portable sh, hooks + zsh CLI)
+    recon.sh                Recon fan-out engine (portable sh): since-mark, adapters, merge
+    recon.zsh               zsh shim sourcing recon.sh into the borg CLI (mirrors reaper↔registry)
+    recon/                  Recon adapter scripts (e.g. recon-adapter-github)
+    borg-hooks.sh           Shared bash helpers for hook scripts (sync, session-mode classifier)
+    borg-sync.zsh           mtime-based file sync helpers for the zsh CLI (mirrors borg-hooks.sh)
 hooks/
-    borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
-    borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
+    borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection + presence
+    borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge + presence
     borg-notify.sh          Notification → status=waiting + waiting_reason
     borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
-skills/
+    bash-guard.sh           PreToolUse (Bash) → destructive-pattern hard-block + RO pre-approval
+    borg-cairn-heartbeat.sh Stop → throttled cairn health heartbeat (fail-open, print-only)
+    borg-dispatch-guard.sh  PreToolUse (Agent/Workflow) → >=92% usage hard-stop veto (default-OFF)
+    borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
+    notify.sh               Host-side macOS notification on turn completion (skipped in-container)
+    pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
+    tool-count-nudge.sh     PostToolUse → review reminder every 75 tool calls
+skills/ (17)
     adhd-guardrails/        Cognitive load guardrails (always active)
     borg-plan/              Project planning + Collective review
     borg-assimilate/        Shipping checklist + Collective review + execution
@@ -95,11 +148,28 @@ skills/
     borg-link/              Consolidated project intelligence (overview + deep dive)
     borg-link-up/           Flush session state to <project>/.borg/checkpoints/<ts>.md
     borg-verify/            Independent pre-merge evaluator gate (spawn reviewer, PASS/FAIL verdict)
+    borg-next/              "What should I work on?" priority answer
+    borg-recon/             Morning link-up: fan out adapters, reconcile against checkpoints
+    borg-resume/            Auto-resume a workflow paused/killed by a session or usage limit
+    borg-search/            Search the cairn knowledge graph for lessons/decisions/patterns
+    borg-switch/            Switch to a project's tmux window by name
+    break-glass/            Add a local permission exception to a project's settings.local.json
+    fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
+    no-unnecessary-read-perms/  Suppress redundant read-permission prompts (always active)
+    simplify/               Review session-touched code for reuse/quality/efficiency, then fix
+agents/ (6, ephemeral nanoprobe roster)
+    borg-nanoprobe.md       Default worker: one discrete unit of work, manages its own worktree
+    borg-grunt.md           Narrow mechanical task executor
+    borg-researcher.md      Read-heavy investigation/research subagent
+    borg-reviewer.md        Independent review/verdict subagent
+    borg-scout.md           Lightweight recon/discovery subagent
+    ROUTING.md              Guidance for which agent to spawn for a given task shape
 install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
 launchd/
-    com.stillpoint-labs.borg.notifyd.plist    LaunchAgent: borg-notifyd (fswatch daemon)
-    com.stillpoint-labs.borg.cortex-wake.plist LaunchAgent: borg-cortex-watch (30s interval)
-    com.stillpoint-labs.borg.reap.plist        LaunchAgent: borg reap-worktrees (hourly)
+    com.stillpoint-labs.borg.notifyd.plist       LaunchAgent: borg-notifyd (fswatch daemon)
+    com.stillpoint-labs.borg.cortex-wake.plist   LaunchAgent: borg-cortex-watch (30s interval)
+    com.stillpoint-labs.borg.reap.plist          LaunchAgent: borg reap-worktrees (hourly)
+    com.stillpoint-labs.borg.usage-watch.plist   LaunchAgent: borg-usage-watch (usage guardian sweep)
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)
     plans/assimilated/      Shipped plans for borg-collective itself (per-project convention)
@@ -240,9 +310,13 @@ docs/
 - **Notifications must not steal focus**: macOS notifications should only activate the target app
   on click (`-activate`), never on fire. Unsolicited focus changes interrupt whatever the user is
   doing.
-- **devcontainer postStartCommand vs postCreateCommand**: `drone` only runs `postStartCommand`.
-  Symlinks and per-start setup (zshrc, CLAUDE.md, .claude.json) must live in `postStartCommand`.
-  `postCreateCommand` is for one-time setup (pip install, chmod) and is never run by `drone`.
+- **devcontainer postStartCommand vs postCreateCommand**: `drone` runs BOTH. `run_post_create_command`
+  executes `postCreateCommand` ONCE — sentinel-guarded by `/tmp/.drone-created`, so one-time deps
+  (pip/npm install, chmod) run on first create and are skipped thereafter. `run_post_start_command`
+  executes `postStartCommand` on EVERY start (per-start symlinks: zshrc, .p10k, workspace symlink).
+  So per-start setup belongs in `postStartCommand`; one-time dependency install belongs in
+  `postCreateCommand`. (Earlier docs said drone never ran `postCreateCommand` — that is now stale;
+  it is invoked from the `drone up`/start paths in `drone.zsh`.)
 - **`claude plugin install` takes a marketplace name, not a file path**: the correct syntax is
   `claude plugin install <name>@<marketplace>`, not `claude plugin install <file>.plugin`. The
   local marketplace (`noah-local`) resolves from the plugins source directory, not `dist/`.
