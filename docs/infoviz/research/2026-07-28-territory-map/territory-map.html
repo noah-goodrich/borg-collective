@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Infoviz Territory Map</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="file:///Users/noahgoodrich/.local/state/borg/artifacts/house.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Infoviz Territory Map</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a
+href="#infoviz-territory-map-what-the-field-knows-where-it-still-fights-and-what-to-read-first"
+id="toc-infoviz-territory-map-what-the-field-knows-where-it-still-fights-and-what-to-read-first">Infoviz
+Territory Map: What the Field Knows, Where It Still Fights, and What to
+Read First</a>
+<ul>
+<li><a href="#glossary" id="toc-glossary">Glossary</a></li>
+<li><a href="#recommendations" id="toc-recommendations">1.
+Recommendations</a></li>
+<li><a href="#summary" id="toc-summary">2. Summary</a></li>
+<li><a href="#the-territory-map" id="toc-the-territory-map">3. The
+Territory Map</a></li>
+<li><a href="#analysis" id="toc-analysis">4. Analysis</a></li>
+<li><a href="#research" id="toc-research">5. Research</a></li>
+<li><a href="#methodology" id="toc-methodology">6. Methodology</a></li>
+<li><a href="#bibliography" id="toc-bibliography">7.
+Bibliography</a></li>
+</ul></li>
+</ul>
+</nav>
+<p>Generated: 2026-07-28</p>
+<h1
+id="infoviz-territory-map-what-the-field-knows-where-it-still-fights-and-what-to-read-first">Infoviz
+Territory Map: What the Field Knows, Where It Still Fights, and What to
+Read First</h1>
+<p>AI-scoring: 82/100 Program: infoviz learning program, Phase 0
+(territory map). Audience: a senior data engineer, not a viz specialist.
+Corpus: 36 source cards across 7 subfields. 72 logged searches.
+Verification: 11 of 36 cards sampled, 0 failures. Companions:
+curriculum.md (the reading course), verification-report.md (citation
+audit).</p>
+<h2 id="glossary">Glossary</h2>
+<p>Twelve terms, defined the way I would explain them to a ten-year-old.
+Every one also gets defined inline the first time it matters.</p>
+<ol type="1">
+<li><strong>Evidence level</strong>: a 1-to-8 ladder for how strong a
+source’s proof is. Level 1 means someone systematically reviewed all the
+studies. Level 2 means a controlled experiment. Level 7 means a smart
+person’s opinion. Level 8 means one person’s story.</li>
+<li><strong>Visual channel</strong>: the property of a shape that
+carries a number: its position on an axis, its length, its angle, its
+area, or its color.</li>
+<li><strong>Preattentive processing</strong>: what your eyes pick up in
+a fraction of a second before you consciously look, like one red dot
+jumping out of a field of gray dots.</li>
+<li><strong>Inattentional blindness</strong>: missing something fully
+visible because your attention was busy elsewhere. The famous “invisible
+gorilla” effect.</li>
+<li><strong>Grammar of graphics</strong>: building charts from parts
+(data, mappings, geometry, scales) the way sentences are built from
+words, instead of picking from a fixed menu of chart types.</li>
+<li><strong>Data-ink ratio</strong>: Tufte’s rule of thumb that every
+drop of ink on a chart should carry data, and that decoration is
+waste.</li>
+<li><strong>The Mantra</strong>: Shneiderman’s 1996 design recipe:
+“Overview first, zoom and filter, then details-on-demand.”</li>
+<li><strong>Focus+context</strong>: showing the detail you care about
+inside the bigger picture, like a magnifying glass that keeps the rest
+of the page visible around it.</li>
+<li><strong>Progressive disclosure</strong>: show the few things most
+people need up front; hide the rest behind a click.</li>
+<li><strong>Information scent</strong>: the clues (titles, labels,
+layout) that tell a user whether looking or clicking somewhere will pay
+off.</li>
+<li><strong>Hairball</strong>: a network diagram with so many nodes and
+crossing lines that it becomes an unreadable tangle.</li>
+<li><strong>Annotation layer</strong>: the words written directly on a
+chart (labels, active titles, callouts) that tell the reader what they
+are looking at and why it matters.</li>
+</ol>
+<h2 id="recommendations">1. Recommendations</h2>
+<ul>
+<li><strong>Run Deep-Dive 1 first: “The glanceable operational
+surface.”</strong> Combine the dashboards/operational subfield with
+perception (the two top-ranked territories in section 3’s relevance
+map). The question: what does a single screen of pipeline status have to
+look like so the one number that matters gets noticed in under a second,
+given that 46% of people miss a gorilla walking through a basketball
+game (section 5, perception)? Anchor sources: Few, Google SRE, NN/G
+information foraging, Simons &amp; Chabris.</li>
+<li><strong>Run Deep-Dive 2 second: “When interaction earns its
+keep.”</strong> The Mosca/Ottley/Chang RCT showed adding interaction can
+actively hurt comprehension, and Craft &amp; Cairns showed the Mantra
+was never validated (section 3, debates 4 and 5; section 4, contested
+zones). Before building a single filter or drill-down, settle a house
+rule for when a static chart wins. Anchor sources: Mosca et al., Craft
+&amp; Cairns, Cockburn et al., Nielsen.</li>
+<li><strong>Run Deep-Dive 3 third: “The annotation layer as the ELI10
+workhorse.”</strong> Active titles, direct labels, and on-chart callouts
+are the cheapest technique in the whole corpus for making a chart pass
+an explain-like-I’m-10 test, and the NYT’s Amanda Cox calls the
+annotation layer “the most important thing we do” (section 5,
+narrative). Fold the minimalism-vs-embellishment fight (Tufte
+vs. Bateman/Elavsky, section 3, debate 2) into this dive rather than
+running it standalone, because the practical question is the same: how
+many words and how much ink does a chart earn?</li>
+<li><strong>Run Deep-Dive 4 fourth: “Pipelines without
+hairballs.”</strong> Scope it to the graph shapes Noah actually meets:
+dbt DAGs, lineage, dependency trees. The evidence says representation
+family (node-link vs. matrix vs. treemap) matters more than layout
+tuning, and the crossover starts around 20 vertices (section 5,
+networks). Anchor sources: Ghoniem et al., Burch et al., Kosara,
+Shneiderman treemaps + NN/G critique.</li>
+<li><strong>Defer a standalone “grammar of graphics” dive.</strong>
+Bertin, Munzner, and Wickham form settled vocabulary, not a live fight
+(section 4, consensus zones). Learn it through the curriculum, not a
+research project.</li>
+<li><strong>Adopt the evidence-level habit now.</strong> Sixteen of the
+36 keeper sources are Level 7 (expert opinion). Tag every design “rule”
+you meet with its level before trusting it; section 6 has the full
+distribution and section 3’s debate register lists the rules that turned
+out to be folklore.</li>
+<li><strong>Start the first parallel read today:</strong> Stephen Few,
+<em>Information Dashboard Design</em>, Chapter 1 (the single-screen
+definition and the 13 mistakes), paired with the free Google SRE
+“Monitoring Distributed Systems” chapter the same week. The curriculum
+(curriculum.md) starts there and explains why.</li>
+</ul>
+<h2 id="summary">2. Summary</h2>
+<p>Think of this phase as sending surveyors into a territory nobody on
+the team has walked before. We did not build anything, test anything, or
+run any experiment of our own. This is a literature territory map: seven
+scout tracks fanned out, carded 36 sources, and an independent verifier
+re-fetched a random 11 of those cards (30.6%) and checked 24 quote
+strings character-for-character against the live sources. Zero failed.
+So the map is honest about what it is: a well-checked reading of other
+people’s evidence, not primary evidence of our own. The corpus itself
+does contain top-shelf proof, though: three Level 1 systematic reviews
+and seven Level 2 controlled experiments, so the “no primary evidence”
+flag defined for this program does not apply to this report.</p>
+<p>The territory splits into two big traditions that mostly ignore each
+other. The academic line runs from Jacques Bertin’s 1967 <em>Semiology
+of Graphics</em> through Cleveland &amp; McGill’s 1984 experiments to
+Colin Ware’s perception textbook and Tamara Munzner’s what-why-how
+framework: careful, experimental, and slow. The practitioner line runs
+from Tufte through Stephen Few and Alberto Cairo into the newsrooms:
+opinionated, fast, and full of rules that sound like science but often
+are not. A third voice, the institutional one (Nielsen Norman Group, the
+Data Visualization Society, Google’s SRE book), translates between the
+two. The most useful surprise of the survey is how often the traditions
+converge without citing each other: Few argues from perceptual
+psychology and Google’s SREs argue from pager fatigue, and both land on
+the same design, a single glanceable screen that shows exceptions and
+pushes everything subcritical out of the interrupt channel.</p>
+<p>The settled valleys are worth naming because they are load-bearing.
+Position and length beat angle, area, and volume for reading numbers off
+a chart; that 1984 ranking has been replicated on Mechanical Turk with
+hundreds of subjects and still holds at the population level. Tables win
+when the reader needs a precise value or a rank; charts win when the
+reader needs a pattern. Attention, not visibility, gates what people
+see: in the gorilla experiment, only 54% of 192 viewers noticed a person
+in a gorilla suit walk through the scene they were staring at, which
+means “it’s on the dashboard” and “someone saw it” are different claims.
+And words on the chart beat words beside the chart: two newsrooms
+independently call annotation the heart of the craft.</p>
+<p>The borderlands are just as important, because that is where a naive
+reader gets hurt. The famous channel ranking describes an average
+observer, and a 2022 study found as much as 30% of people are likely not
+“best with the Bar,” so one ranking does not fit every reader.
+Interaction is not a free win; the only RCT on the question found adding
+it to a well-designed static chart sometimes made comprehension worse.
+The Mantra, cited 5,700+ times, has never been rigorously validated; its
+own author called it descriptive, not prescriptive. Tufte’s data-ink
+minimalism took a real experimental hit: embellished charts were
+recalled significantly better after two to three weeks with no accuracy
+penalty. Scrollytelling splits the newsroom from the critics. And
+“dashboards are dead,” the most-read contrarian take in the corpus
+(250,000+ views), was walked back by its own author three years later
+into a claim about organizations, not artifacts.</p>
+<p>For the program’s stated goal, complex operational information that
+passes an ELI10 readability test, the relevance map in section 3 ranks
+the subfields in this order: dashboards/operational first, perception
+second, encoding third, narrative/annotation fourth, interaction fifth,
+networks sixth (situationally higher when the data is a DAG), and
+field-meta last. The question inventory in section 3 is the deliverable
+to keep open while reading: it turns each subfield into the questions a
+practitioner would actually ask about a status page, and it hands Phase
+1 its backlog.</p>
+<p>Testability classification, stated plainly: everything in this report
+is literature-derived. Where a claim rests on a Level 1 or Level 2
+source, I say so; where it rests on Level 7 opinion, I say that too.
+Nothing here was empirically tested by this phase.</p>
+<h2 id="the-territory-map">3. The Territory Map</h2>
+<h3 id="the-framework-two-traditions-three-voices-seven-subfields">3.1
+The framework: two traditions, three voices, seven subfields</h3>
+<p>The field’s family tree is short enough to hold in your head. On the
+academic side, Bertin (1967) named the visual variables, Cleveland &amp;
+McGill (1984) measured them, Ware synthesized the vision science, and
+Munzner (2009/2014) organized the whole discipline into a nested
+what-why-how stack whose central warning is that an upstream mistake
+(wrong task, wrong abstraction) cascades and cannot be fixed by a
+beautiful chart downstream. On the practitioner side, Tufte set the
+minimalist orthodoxy, Few carried it into dashboards, Cairo carried it
+into journalism while explicitly rebelling against Tufte’s one-right-way
+dogmatism, and working newsrooms (NYT, FT) turned annotation into the
+craft’s center of gravity. The institutional voice (NN/G, the Data
+Visualization Society, Google SRE) publishes the guidance most working
+engineers actually meet first. The Data Visualization Society’s own
+onboarding guide assigns Munzner and Cairo side by side, which is decent
+evidence the two traditions share one canon even while they argue.</p>
+<table>
+<colgroup>
+<col style="width: 9%" />
+<col style="width: 30%" />
+<col style="width: 33%" />
+<col style="width: 27%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Subfield</th>
+<th>Core claim</th>
+<th>Anchors</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Perception &amp; cognition</td>
+<td>Channels differ in accuracy; attention gates it all</td>
+<td>Cleveland &amp; McGill; Ware; Simons</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Encoding &amp; grammar</td>
+<td>Marks, channels, mappings; match channel to task</td>
+<td>Bertin; Munzner; Wickham</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Interaction &amp; exploration</td>
+<td>Overview, zoom, filter, details; every mechanism can fail</td>
+<td>Shneiderman; Cockburn</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Narrative &amp; explanatory</td>
+<td>Author vs. reader control; annotation carries meaning</td>
+<td>Segel &amp; Heer; Schwabish</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Dashboards &amp; operational</td>
+<td>One glanceable screen; alert only urgent + actionable</td>
+<td>Few; Google SRE; NN/G</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Networks &amp; hierarchy</td>
+<td>Representation family beats layout; node-link dies at scale</td>
+<td>Ghoniem; Burch; Kosara</td>
+</tr>
+<tr>
+<td>7</td>
+<td>The field itself (meta)</td>
+<td>Two schools, one canon, rules that outrun their evidence</td>
+<td>Munzner; Makulec; Bateman</td>
+</tr>
+</tbody>
+</table>
+<h3 id="the-question-inventory">3.2 The Question Inventory</h3>
+<p>This is the central deliverable. Each subfield is translated into the
+questions its practitioners would ask about one concrete artifact: a
+page showing complex operational information (pipeline health, grant
+drift, alert queues) that a smart ten-year-old should be able to read.
+Groups are ranked by RQ4 relevance; questions inside each group are
+ranked by how early they bite in a real design.</p>
+<p><strong>Group A: Dashboards &amp; operational UI (relevance rank 1,
+the direct hit)</strong></p>
+<ol type="1">
+<li>Does everything fit on one screen, entirely within eye span, with no
+scrolling? (Few’s boundary test)</li>
+<li>Is this signal an alert or dashboard material? An alert must be
+urgent, actionable, and user-visible; everything else belongs on the
+glanceable surface. (Google SRE)</li>
+<li>Am I alerting on symptoms (what users feel) or causes (what I
+suspect), and do I know why symptom-based is more robust? (Google
+SRE)</li>
+<li>Does the layout give off scent? Can a user find the number that
+matters from the title, the hierarchy, and what sits above the fold, in
+about a second? (NN/G information foraging)</li>
+<li>Is this one artifact being asked to do three incompatible jobs at
+once (storytelling, precise lookup, and ad hoc analysis)? (Brownlow’s
+over-tasking diagnosis)</li>
+<li>Which of Few’s 13 failure modes is this design already committing,
+and is any gauge or traffic light here because it communicates or
+because it demos well?</li>
+<li>How many alerts per day can this team absorb before desensitization
+sets in, and who is measuring that? (the ACM alert-fatigue survey says
+nobody has solved this yet)</li>
+</ol>
+<p><strong>Group B: Perception &amp; graphical cognition (relevance rank
+2, the physics underneath)</strong></p>
+<ol type="1">
+<li>Which visual channel carries the most important number, and is it
+position or length rather than area, angle, or color? (Cleveland &amp;
+McGill, replicated by Heer &amp; Bostock)</li>
+<li>Will the anomaly pop out preattentively, or does noticing it require
+attention I cannot assume the on-call engineer has to spare? (Ware
+vs. Simons &amp; Chabris)</li>
+<li>Am I designing for the average observer, knowing as much as 30% of
+real viewers deviate from the canonical channel ranking? (Davis et
+al.)</li>
+<li>How much can one glance actually register, and what happens to
+everything else on the screen while attention is on the incident?
+(working-memory and inattentional-blindness limits)</li>
+<li>Is the unexpected thing visually similar to what people are already
+monitoring? Similarity, not proximity, drives whether it gets noticed.
+(Simons &amp; Chabris)</li>
+</ol>
+<p><strong>Group C: Visual encoding &amp; the grammar of graphics
+(relevance rank 3, the chart-or-table fork)</strong></p>
+<ol type="1">
+<li>Is the reader’s task lookup and precision (use a table) or pattern
+and trend (use a chart)? (Remshard &amp; Queenborough)</li>
+<li>Does the encoding show all and only the information in the data,
+without implying an order that is not there? (Munzner’s expressiveness
+principle)</li>
+<li>Does the most noticeable channel carry the most important attribute?
+(Munzner’s effectiveness principle)</li>
+<li>How much ink can I strip before minimalism becomes an accessibility
+barrier or hurts recall? (Elavsky and Bateman against reflexive data-ink
+maximizing)</li>
+<li>Can I describe this chart as data plus mappings plus geometry
+(grammar of graphics), or am I just picking from a chart-type menu and
+hoping? (Wickham)</li>
+</ol>
+<p><strong>Group D: Narrative &amp; explanatory visualization (relevance
+rank 4, the ELI10 delivery vehicle)</strong></p>
+<ol type="1">
+<li>What are the three solid points a reader should walk away with, and
+what got cut to protect them? (the NYT climate team’s stated design
+target)</li>
+<li>Does the title state the finding (“Bot logins fell 40% after keypair
+rollout”) or just the axes? (active titles, Schwabish)</li>
+<li>Are the labels on the data, or in a legend the reader must decode
+back and forth? (Schwabish)</li>
+<li>Is this truthful before it is functional, and functional before it
+is beautiful? (Cairo’s ordering)</li>
+<li>Who controls the pacing, author or reader, and did I choose that on
+purpose? (Segel &amp; Heer’s spectrum)</li>
+<li>If the presentation scrolls, does continuous scroll actually fit
+discrete story steps, or would an explicit stepper serve better?
+(Kosara’s objection)</li>
+</ol>
+<p><strong>Group E: Interaction &amp; exploration (relevance rank 5,
+powerful and overrated)</strong></p>
+<ol type="1">
+<li>Should this be interactive at all? Would a well-designed static view
+beat it for the actual task? (Mosca, Ottley &amp; Chang)</li>
+<li>Which mechanism fits the task: overview+detail, zooming,
+focus+context distortion, or cue-based highlighting? Each has documented
+failure modes. (Cockburn et al.)</li>
+<li>How many disclosure levels am I asking users to descend? Past two,
+people get lost. (Nielsen, an institutional heuristic that has never
+been independently re-tested)</li>
+<li>Did I classify anything frequently needed as “secondary”? That
+misclassification, not hiding itself, is progressive disclosure’s main
+failure mode. (Nielsen)</li>
+<li>Am I following the Mantra because evidence says so or because
+everyone cites it? (Craft &amp; Cairns)</li>
+</ol>
+<p><strong>Group F: Network, hierarchy &amp; graph visualization
+(relevance rank 6, situational but Noah-shaped)</strong></p>
+<ol type="1">
+<li>How big and dense is the graph, and what is the task? Past roughly
+20 vertices, matrices beat node-link on most tasks except path-finding.
+(Ghoniem et al., complicated by later replications)</li>
+<li>Will this be a hairball at production scale, and am I reaching for
+bundling or filtering when the honest move is a different representation
+family? (Kosara)</li>
+<li>If I bundle edges, do I accept that path tracing gets slower and
+less accurate in exchange for cleaner cluster structure? (Burch et
+al. on McGee &amp; Dingliana)</li>
+<li>Is area precise enough for the comparison users need, or is this
+treemap asking area (a weak, non-preattentive channel) to do position’s
+job? (NN/G on treemaps)</li>
+<li>Does the layout need to stay stable across refreshes, and do I know
+that mental-map preservation has never been conclusively shown to help
+comprehension? (Burch et al.)</li>
+</ol>
+<p><strong>Group G: The field itself (relevance rank 7, orientation
+value)</strong></p>
+<ol type="1">
+<li>Which school’s advice am I taking right now, and what is its
+evidence level?</li>
+<li>Is this “rule” a validated finding, or folklore with 5,000
+citations? (the Mantra and the data-ink ratio both fail this check in
+different ways)</li>
+<li>When a chart misleads, do I locate the failure in the person (Cairo)
+or in the design defaults (Few), and what does that choice imply about
+the fix?</li>
+</ol>
+<h3 id="the-live-debate-register">3.3 The live-debate register</h3>
+<p>These are the fifteen places where credentialed experts still
+disagree. Each is a future deep-dive candidate; the four recommended
+dives in section 1 cover debates 1 through 10.</p>
+<ol type="1">
+<li><strong>Universal channel ranking vs. individual
+differences.</strong> Cleveland &amp; McGill’s hierarchy (reaffirmed by
+Heer &amp; Bostock 2010) vs. Davis et al. 2022’s finding that up to 30%
+of viewers deviate from the average observer. The ranking holds in
+aggregate; its use as a per-person design law is contested.</li>
+<li><strong>Data-ink minimalism vs. embellishment.</strong> Tufte’s
+orthodoxy vs. Bateman et al.’s CHI 2010 RCT (better recall at 2-3 weeks,
+no accuracy penalty) and Elavsky’s 2025 accessibility critique.</li>
+<li><strong>Preattentive pop-out vs. attention-gated
+perception.</strong> Ware’s parallel pop-out framing vs. Simons &amp;
+Chabris’s demonstration that salient objects are routinely missed
+without focused attention.</li>
+<li><strong>Does interaction improve comprehension?</strong> Toolmaker
+folklore says yes; the only RCT in the corpus (Mosca et al. 2021) found
+it can significantly detract, moderated by spatial ability.</li>
+<li><strong>Is the Mantra validated or folklore?</strong> Craft &amp;
+Cairns found no validation study despite near-universal citation; even
+they concede “for most designers, the Mantra works.”</li>
+<li><strong>Which focus+context mechanism wins?</strong> Cockburn et
+al.: none universally; task type decides, and fisheye distortion
+measurably hurt targeting in a shipped product (the Mac OS X Dock).</li>
+<li><strong>Scrollytelling: affordance or gimmick?</strong> NYT
+practitioners defend disciplined scroll-driven narrative; Kosara argues
+continuous scroll mismatches discrete story steps and steppers usually
+serve better.</li>
+<li><strong>Dashboards: dead artifact or implementation
+failure?</strong> Brownlow 2020 vs. the rebuttal corpus (Holistics,
+Taft) vs. Brownlow’s own 2023 revision blaming process and
+relationships, not tooling.</li>
+<li><strong>The alert/dashboard boundary.</strong> SRE philosophy draws
+a clean line (interrupt only for urgent, actionable, user-visible); the
+2025 ACM survey shows industry still cannot operationalize it (four
+unresolved causes of alert fatigue).</li>
+<li><strong>Node-link vs. matrix.</strong> Ghoniem’s 20-vertex crossover
+vs. Okoe et al.’s 835-person replication where node-link regained path
+tasks and matrices kept neighbor/group tasks. Task-dependent,
+unresolved.</li>
+<li><strong>Does edge bundling help?</strong> Preferred for large
+compound graphs (Telea et al.) but slower and less accurate for path
+reading (McGee &amp; Dingliana). A trade, not a win.</li>
+<li><strong>Mental-map preservation.</strong> Widely assumed design
+principle; no experiment has found conclusive evidence it improves
+comprehension of graph evolution.</li>
+<li><strong>Rules vs. context.</strong> Tufte’s prescriptive
+one-right-way vs. Cairo’s five context-dependent qualities (truthful,
+functional, beautiful, insightful, enlightening).</li>
+<li><strong>Tables vs. charts: boundary or spectrum?</strong> The
+academic split (precision vs. pattern) vs. practitioner hybrids
+(sparklines inside tables) the literature has not caught up with.</li>
+<li><strong>Is academic InfoVis rigorous, or rigor-theater?</strong>
+Replication-crisis and design-study-rigor critiques from inside CHI
+raise how much weight the academic tradition’s own evaluation culture
+deserves.</li>
+</ol>
+<h2 id="analysis">4. Analysis</h2>
+<h3 id="consensus-zones-answers-to-rq1-and-rq2">4.1 Consensus zones
+(answers to RQ1 and RQ2)</h3>
+<p>Six claims sit in settled valleys, meaning multiple independent
+traditions or replications agree.</p>
+<p>Position and length beat angle, area, and volume for decoding
+quantity. The 1984 experiments, the 2010 crowdsourced replication,
+Munzner’s textbook, and even the 2022 individual-differences critique
+all agree at the population level (perception: keep, Levels 2 and 7).
+Attention gates perception: 54% of 192 observers noticed the gorilla,
+and task difficulty (not salience) predicted noticing (Simons &amp;
+Chabris, keep, Level 2). Tables serve precision and lookup; charts serve
+pattern and trend (Remshard &amp; Queenborough, keep, Level 4,
+corroborated across practitioner blogs). Operational surfaces should be
+single-screen, exception-based, and scent-rich, a conclusion Few reaches
+from perceptual psychology, Google SRE reaches from pager fatigue, and
+NN/G reaches from foraging theory, three roads into the same valley
+(keep, Levels 7, 5, 4). Annotation moves decoding work from the reader’s
+head onto the page, endorsed independently by the NYT and the FT and
+consistent with Segel &amp; Heer’s visual-narrative tactics (keep,
+Levels 7 and 6). And the encoding vocabulary itself (Bertin’s variables,
+Munzner’s marks and channels, Wickham’s layered grammar) is settled
+infrastructure: the three frameworks descend from each other rather than
+compete (keep, Level 7).</p>
+<h3 id="contested-zones-rq3-both-sides-fairly">4.2 Contested zones (RQ3,
+both sides fairly)</h3>
+<p>The register in section 3.3 lists all fifteen; four deserve a fair
+both-sides paragraph here because a naive reading would get them
+wrong.</p>
+<p>On minimalism: Tufte’s position is not a straw man. His original
+target was non-functional decoration, and Elavsky’s own reductio
+(stripping a chart to one pixel per point) concedes that some “within
+reason” clause was always doing the work. The Bateman side holds a real
+Level 2 result, better recall after two to three weeks with no accuracy
+cost, but its authors explicitly refuse to recommend embellishing
+everything. The honest reading: the data-ink ratio is a heuristic, not a
+law, and both camps now mostly agree on that.</p>
+<p>On interaction: Mosca, Ottley &amp; Chang is one RCT on one task type
+(Bayesian reasoning), and its authors scope it carefully. It does not
+prove interaction is bad; it proves interaction is not automatically
+good, and that a well-designed static chart can match or beat an
+interactive one. The mantra tradition, for its part, was never claiming
+experimental backing; Shneiderman himself called the paper descriptive.
+The fight is really about burden of proof, and the RCT shifts it onto
+whoever wants to add the widget.</p>
+<p>On dashboards: Brownlow’s over-tasking diagnosis (one artifact asked
+to do storytelling, lookup, and analysis at once) survives even her own
+2023 retraction of the tooling blame, and the rebuttals (Holistics,
+Taft) agree the failures are real while relocating the cause to strategy
+and implementation. Both sides describe the same patient; they disagree
+about the diagnosis, not the symptoms.</p>
+<p>On graphs: Ghoniem’s matrices-beat-node-link result is real but
+narrower than its fame. Later, larger replications split the tasks
+(node-link recovered path-finding; matrices kept neighbor and group
+tasks), and hybrids like MatLink beat both pure forms in a 36-person
+study. Kosara’s abandon-the-node-link position is the contrarian pole;
+the academic mainstream treats the families as complementary tools.</p>
+<h3 id="gaps-rq3-fuel-for-future-dives">4.3 Gaps (RQ3 fuel for future
+dives)</h3>
+<p>The blank patches on the map, where a claim everyone repeats has
+never been properly tested: the Mantra has no validation study (Craft
+&amp; Cairns looked); Nielsen’s two-level disclosure cap is repeated
+across 2020s UX writing without independent re-testing; mental-map
+preservation has no conclusive supporting experiment; nobody in the
+annotation camp seriously engages the Tufte-side worry that dense
+on-chart text becomes chartjunk; the ACM survey’s four causes of alert
+fatigue remain unsolved at industry scale; Few’s “most dashboards fail”
+ships with no measured failure rate; the tables-vs-charts hybrid zone
+(sparklines in tables) is practitioner-led with no academic verdict; and
+the individual-differences program (Davis et al.) is young, with few
+independent replications of its novel claim.</p>
+<h3 id="institutional-vs.-ground-truth-rq4">4.4 Institutional vs. ground
+truth (RQ4)</h3>
+<p>Where the official guidance and the working world diverge, the map
+should say so. NN/G’s guidance is the most widely read in the corpus,
+and its foraging material faithfully carries real Pirolli &amp; Card
+research, but its two-level cap is an institutional heuristic resting on
+unpublished testing. BI vendors still sell the gauges and traffic lights
+Few condemned in 2006; the tooling defaults have outlived the critique.
+Newsroom practice runs ahead of academic validation: the NYT’s
+sketch-first, three-takeaways discipline is exactly the ELI10 method
+this program wants, documented only as interview evidence (Level 6).
+Google’s SRE line is the reverse case, ground truth that became
+institutional guidance, and it converges with Few’s perception-derived
+rules, which is the strongest cross-tradition corroboration in the
+corpus. Finally, the field’s own professional body (DVS) canonizes both
+schools’ books in one reading list, so the schools’ fight is real but
+their canon is shared, which answers RQ1’s “how do the schools relate”
+more neatly than any single source does.</p>
+<h2 id="research">5. Research</h2>
+<p>Findings per subfield. Every citation carries its score band and
+evidence level; full entries live in the bibliography (section 7).</p>
+<h3 id="perception-graphical-cognition">5.1 Perception &amp; graphical
+cognition</h3>
+<p>Cleveland &amp; McGill (1984; keep, Level 2) defined ten elementary
+perceptual tasks and ranked them by decoding accuracy: position on a
+common scale first, then non-aligned position, then
+length/direction/angle, then area, volume/curvature, and
+shading/saturation last. That ranking is why bar charts beat pie charts
+for comparison. Heer &amp; Bostock (2010; keep, Level 2) replicated the
+ranking on Mechanical Turk with far larger samples, found one divergence
+(angle vs. length), and added new results: extreme aspect ratios hurt
+rectangular-area judgment (directly informing squarified treemaps), and
+chart size and gridline spacing have quantifiable effects. Ware (3rd
+ed. 2012; keep, Level 7) is the synthesis bridge: perception science,
+correctly applied, makes important patterns stand out, and disobeying it
+makes data “incomprehensible or misleading.” Simons &amp; Chabris (1999;
+keep, Level 2) supply the constraint the encoding papers assume away:
+with attention loaded, only 54% of 192 observers noticed the gorilla,
+similarity to attended objects drove detection, and proximity did not.
+Davis et al. (2022; keep, Level 2) closed the loop with Bayesian
+multilevel modeling of the classic paradigm: the population ranking
+largely holds, but as much as 30% of people are likely not “best with
+the Bar,” so the field should report distributions, not just
+average-observer rankings.</p>
+<h3 id="visual-encoding-the-grammar-of-graphics">5.2 Visual encoding
+&amp; the grammar of graphics</h3>
+<p>Bertin via Sluis (1967/2016; keep, Level 7) contributes the original
+vocabulary: two planar variables plus six retinal variables (size,
+value, texture, color, orientation, shape), influential everywhere and
+read almost nowhere. Munzner (2014; keep, Level 7) modernizes it into
+marks and channels inside the what-why-how frame, with the
+expressiveness principle (show all and only the data) and effectiveness
+principle (salience matched to importance); she insists the process is a
+guide, not a “straightjacket.” Wickham (2010; keep, Level 7)
+operationalizes Wilkinson’s grammar into the layered form that became
+ggplot2 and its ports in four-plus languages; the proof is a decade of
+adoption rather than an experiment. Remshard &amp; Queenborough (2023;
+keep, Level 4) draw the tables-vs-charts boundary (precision/lookup
+vs. pattern/trend) and give auditable table rules: right-flush numerals,
+tabular fonts, consistent precision, minimal gridlines, active titles.
+Elavsky (2025; keep, Level 7, the batch’s weakest keep at roughly 7.1
+weighted) runs the contrarian stress test: the data-ink ratio taken
+literally produces unreadable charts, minimalism pushed too far excludes
+readers, and the Bateman RCT (see 5.7) backs the critique with data.</p>
+<h3 id="interaction-exploration">5.3 Interaction &amp; exploration</h3>
+<p>Shneiderman (1996; keep, Level 7) states the Mantra and the
+seven-task-by-seven-data-type taxonomy that the whole subfield descends
+from; his most-cited paper (5,700+ citations) is design synthesis, not
+experiment. Craft &amp; Cairns (2005; keep, Level 6) reviewed the citing
+literature and found no validation study of the Mantra, while conceding
+it “works” for most designers: a call for evidence, not a rebuttal.
+Cockburn, Karlson &amp; Bederson (2008; keep, Level 1) is the subfield’s
+strongest evidence artifact, a systematic review sorting all techniques
+into overview+detail, zooming, focus+context, and cue-based families,
+each with documented failure modes; zooming “is easy to do badly,” and
+the Mac OS X Dock’s fisheye measurably harmed targeting. Mosca, Ottley
+&amp; Chang (2021; keep, Level 2) ran the falsification check: across
+two randomized experiments, adding interaction did not improve
+Bayesian-reasoning accuracy and sometimes significantly detracted, with
+spatial ability moderating the effect. Nielsen (2006; keep band,
+Supporting decision, Level 4) contributes progressive disclosure and its
+two-level ceiling, the corpus’s named weakest keep: high authority,
+dated, and methodologically thin.</p>
+<h3 id="narrative-explanatory-visualization">5.4 Narrative &amp;
+explanatory visualization</h3>
+<p>Segel &amp; Heer (2010; keep, Level 6) coded 58 real examples into
+seven genres and two tactic families, and named the field’s founding
+tension: author-driven flow vs. reader-driven discovery. The paper
+carries an IEEE Test-of-Time Award. Cairo (2016; borderline, Level 7)
+supplies the values ordering (truthful, then functional, then beautiful)
+and the reading-not-seeing thesis; his book was reachable only through
+interview and course material this session, and one named critic calls
+his statistical casualness “very dangerous.” Schwabish (2018; keep,
+Level 7) gives the three concrete annotation moves: direct labels
+instead of legends, active titles that state the finding, and added
+on-chart detail, anchored by Amanda Cox (“the annotation layer is the
+most important thing we do”) and John Burn-Murdoch. Storybench’s NYT
+interview (2022; keep, Level 6) documents the production discipline:
+sketch first, pair paragraphs with visuals, spend at least 50% of the
+work on detail polish, and cut until “three really solid points” remain.
+Kosara (2016; borderline, Level 7) is the deliberate contrarian:
+continuous scroll mismatches discrete story steps, scroll-jacking and
+missing progress indicators are named failure modes, and a stepper
+usually serves readers better.</p>
+<h3 id="dashboards-operationalmonitoring-ui">5.5 Dashboards &amp;
+operational/monitoring UI</h3>
+<p>Few (2006/2013; keep, Level 7) defines the artifact: the most
+important information for an objective, consolidated on a single screen,
+monitorable at a glance, with 13 named failure modes and a warning that
+cute gauges “lose their spark in a matter of days.” Google SRE (2016;
+keep, Level 5) independently derives the same shape from operations:
+four golden signals (latency, traffic, errors, saturation),
+symptom-based alerting, pages only for urgent-actionable-user-visible
+conditions, and everything subcritical pushed to a dashboard. NN/G’s
+information-foraging article (2019; keep, Level 4) supplies the
+mechanism: users satisfice, scent is carried by titles, images, and
+above-the-fold content, and misaligned scent makes users abandon a view.
+Brownlow (2020/2023; borderline, Level 8, the named marginal keep)
+argues dashboards fail because they are asked to do incompatible jobs at
+once, then revises her own diagnosis in 2023 toward relationships and
+process; the 250,000+ views and multiple published rebuttals prove the
+tension is live. Tariq et al. (2025; keep, Level 1) close the arc with
+an ACM Computing Surveys review: alert fatigue in security operations
+has four major causes and no solved mitigation, and the problem
+generalizes beyond security to other command-and-control domains.</p>
+<h3 id="network-hierarchy-graph-visualization">5.6 Network, hierarchy
+&amp; graph visualization</h3>
+<p>Shneiderman (1992; keep, Level 7) invented treemaps to see a
+chronically full 80MB shared disk: recursive space-filling rectangles
+that trade path-tracing for magnitude-at-a-glance. NN/G’s Laubheimer
+(2019; keep, Level 7) pairs the origin with its critique: area is not
+preattentive, so treemaps fail precise comparisons and degrade into “a
+sea of tiny rectangles.” Ghoniem, Fekete &amp; Castagliola (2004/2005;
+keep, Level 2) ran the subfield’s landmark controlled experiment: past
+about 20 vertices, matrices beat node-link on most of seven tasks,
+except path-finding. Kosara (2012; borderline, Level 7, the run’s
+lowest-scoring keeper) translates the result for practitioners:
+bundling, filtering, and layout tricks do not solve the hairball, so
+change representation family (matrices, node quilts, PivotGraph). Holten
+(2006; keep, Level 7) contributes hierarchical edge bundling, the
+standard clutter-reduction technique for compound graphs, evaluated only
+informally in the original paper. Burch et al. (2021; keep, Level 1) is
+the meta-check: replications split the node-link/matrix result by task,
+bundling helps cluster judgments while hurting path reading, hybrids
+beat both pure forms in one study, and mental-map preservation lacks
+conclusive evidence.</p>
+<h3 id="the-field-itself-schools-history-meta">5.7 The field itself
+(schools, history, meta)</h3>
+<p>Munzner’s nested model (2009; keep, Level 4) is the academic
+tradition’s self-description: four nested levels (domain, abstraction,
+encoding/interaction, algorithm) where upstream errors cascade
+downstream, adopted at 80+ universities. Cairo’s <em>How Charts Lie</em>
+via Kosara’s review (2019; keep, Level 7) is the practitioner-skeptic
+entry: “charts don’t lie, people do,” a chart is a visual argument, and
+Tufte’s one-right-way tradition deserves rebellion. Bateman et
+al. (2010; keep, Level 2) is the empirical shot at minimalism:
+embellished charts matched plain ones on accuracy and beat them
+significantly on 2-3-week recall, with the authors explicitly cautious
+about overgeneralizing. Few’s “Why Most Dashboards Fail” (2007;
+borderline, Level 7) grounds the skeptic case in operational BI: an
+unhedged, uncited “most fail” claim, blamed on vendor incentives, kept
+deliberately as the boots-on-the-ground voice with its evidence weakness
+flagged. Makulec’s DVS guide (2022; keep, Level 4) is the institutional
+map: concepts before tools, one tool deeply before many, and a canon
+list that independently endorses both Munzner and Cairo.</p>
+<h2 id="methodology">6. Methodology</h2>
+<h3 id="search-log">6.1 Search log</h3>
+<p>All 72 scout queries, verbatim, grouped by track.</p>
+<p><strong>Perception (12 queries)</strong></p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Cleveland McGill graphical perception experiments encoding
+effectiveness</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Cleveland McGill 1984 replication modern study visual encoding
+accuracy</td>
+</tr>
+<tr>
+<td>3</td>
+<td>preattentive processing data visualization Colin Ware practitioner
+review</td>
+</tr>
+<tr>
+<td>4</td>
+<td>change blindness working memory limits visualization criticism
+debunked</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Heer Bostock 2010 crowdsourcing graphical perception Mechanical Turk
+CHI paper</td>
+</tr>
+<tr>
+<td>6</td>
+<td>“risks of ranking” graphical perception individual differences
+critique Cleveland McGill</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Simons Chabris invisible gorilla change blindness sustained
+inattentional blindness experiment</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Munzner Visualization Analysis Design perception chapter channels
+effectiveness ranking</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Heer Bostock “crowdsourcing graphical perception” pdf
+jeffrey-heer.com OR homes.cs.washington.edu</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Colin Ware “Information Visualization” “preattentive” “milliseconds”
+quote book excerpt</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Colin Ware “Information Visualization Perception for Design” review
+“the choice of” preattentive quote</td>
+</tr>
+<tr>
+<td>12</td>
+<td>“Cleveland” “McGill” 1984 “Graphical Perception” JASA abstract
+“elementary perceptual tasks” pdf</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Encoding (7 queries)</strong></p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Munzner what why how visualization channels marks book</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Bertin semiology of graphics visual variables review critique</td>
+</tr>
+<tr>
+<td>3</td>
+<td>when tables beat charts research readability</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Tufte data-ink ratio criticism debunked grammar of graphics</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Wilkinson “Grammar of Graphics” book ggplot2 Wickham layered
+grammar</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Bateman 2010 useful junk chartjunk memorability study</td>
+</tr>
+<tr>
+<td>7</td>
+<td>“Munzner” “expressiveness” “effectiveness” visualization idiom what
+why how quote</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Interaction (11 queries)</strong></p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Shneiderman “overview first, zoom and filter, then
+details-on-demand” mantra visual information seeking</td>
+</tr>
+<tr>
+<td>2</td>
+<td>critique of Shneiderman’s visual information seeking mantra
+interaction visualization</td>
+</tr>
+<tr>
+<td>3</td>
+<td>brushing and linking focus plus context semantic zoom progressive
+disclosure visualization</td>
+</tr>
+<tr>
+<td>4</td>
+<td>“interaction” visualization “does more harm than good” OR “harmful”
+evaluation study</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Cockburn Karlson Bederson “review of overview+detail, zooming, and
+focus+context interfaces”</td>
+</tr>
+<tr>
+<td>6</td>
+<td>practitioner blog “interactive dashboards” nobody uses filters
+click-through rate low</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Stephen Few interactivity dashboards critique “interaction” overused
+analytics</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Nielsen Norman Group progressive disclosure definition when to
+use</td>
+</tr>
+<tr>
+<td>9</td>
+<td>“Does Interaction Improve Bayesian Reasoning with Visualization”
+Mosca Wattenberg authors CHI 2021</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Shneiderman 1996 “The Eyes Have It” task by data type taxonomy full
+text pdf</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Nielsen Norman Group “progressive disclosure” article Budiu full
+text hide options</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Narrative (11 queries)</strong></p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Segel Heer narrative visualization design space genres storytelling
+techniques</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Alberto Cairo functional art truthful visualization criticism
+review</td>
+</tr>
+<tr>
+<td>3</td>
+<td>scrollytelling design guide best practices data journalism</td>
+</tr>
+<tr>
+<td>4</td>
+<td>annotation-first chart design does not work criticism narrative
+visualization</td>
+</tr>
+<tr>
+<td>5</td>
+<td>scrollytelling backlash criticism overused gimmick data
+journalism</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Jonathan Schwabish “Better Data Visualizations” storytelling chapter
+review</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Robert Kosara “story points” narrative visualization definition
+problems with the term</td>
+</tr>
+<tr>
+<td>8</td>
+<td>New York Times Upshot annotated chart design case study visual
+explanation</td>
+</tr>
+<tr>
+<td>9</td>
+<td>eagereyes “The Scrollytelling Scourge” Kosara</td>
+</tr>
+<tr>
+<td>10</td>
+<td>“Narrative Visualization: Telling Stories with Data” abstract “we
+present a1” OR “In this paper we examine”</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Cairo “The Truthful Art” quote “visualizations, first and foremost,
+must be accurate”</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Dashboards &amp; operational (9 queries)</strong></p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Stephen Few dashboard design principles information display</td>
+</tr>
+<tr>
+<td>2</td>
+<td>glanceability research dashboard cognitive load empirical study</td>
+</tr>
+<tr>
+<td>3</td>
+<td>“death to dashboards” contrarian dashboards don’t work</td>
+</tr>
+<tr>
+<td>4</td>
+<td>alerting fatigue status UX information scent monitoring dashboards
+research</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Pirolli Card information scent foraging theory information
+seeking</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Google SRE book “My Philosophy on Alerting” Rob Ewaschuk monitoring
+distilled</td>
+</tr>
+<tr>
+<td>7</td>
+<td>“Dashboards are dead” Taylor Brownlow Count medium</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Stephen Few “Information Dashboard Design” “thirteen common
+mistakes” quote excerpt</td>
+</tr>
+<tr>
+<td>9</td>
+<td>“Alert Fatigue in Security Operations Centres” ACM Computing Surveys
+abstract authors</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Networks &amp; graphs (10 queries)</strong></p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>graph drawing aesthetics criteria readability crossing minimization
+survey</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Holten edge bundling hierarchical compound graphs paper</td>
+</tr>
+<tr>
+<td>3</td>
+<td>hairball network visualization critique matrices small multiples
+alternative</td>
+</tr>
+<tr>
+<td>4</td>
+<td>node-link diagrams don’t work stop using force-directed graph
+visualization criticism</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Ghoniem Fekete Castagliola readability of graphs using node-link and
+matrix representations user study</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Shneiderman treemap “tree visualization” 1992 space-filling
+approach</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Purchase “graph drawing aesthetics” empirical study which criteria
+matter most cognition</td>
+</tr>
+<tr>
+<td>8</td>
+<td>mental map preservation dynamic graph layout stability survey Beck
+Burch</td>
+</tr>
+<tr>
+<td>9</td>
+<td>treemap criticism problems reading hierarchy usability
+limitations</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Ghoniem readability graphs node-link matrix pdf aviz.fr OR
+fekete.free.fr</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Field/meta (12 queries)</strong></p>
+<table>
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 70%" />
+</colgroup>
+<thead>
+<tr>
+<th>#</th>
+<th>Query</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>history of information visualization academic InfoVis subfields
+taxonomy</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Tufte vs Few vs Cairo data visualization philosophy differences</td>
+</tr>
+<tr>
+<td>3</td>
+<td>how I learned data visualization career advice practitioner
+blog</td>
+</tr>
+<tr>
+<td>4</td>
+<td>most data visualizations fail readers critique chartjunk misleading
+charts</td>
+</tr>
+<tr>
+<td>5</td>
+<td>“replication crisis” OR “rigor” criticism of information
+visualization research CHI empirical methods</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Alberto Cairo “How Charts Lie” book review key argument</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Munzner “Visualization Analysis and Design” nested model textbook
+review</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Bateman Mandryk “Useful Junk” chartjunk memorability study
+abstract</td>
+</tr>
+<tr>
+<td>9</td>
+<td>Munzner “A Nested Process Model for Visualization Design and
+Validation” 2009 PDF</td>
+</tr>
+<tr>
+<td>10</td>
+<td>site:cs.ubc.ca tmm papers nestedModel infovis09 pdf</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Stephen Few “most dashboards fail” OR “dashboard design”
+perceptualedge critique business intelligence</td>
+</tr>
+<tr>
+<td>12</td>
+<td>“useful junk” Bateman 2010 abstract “visual embellishment”
+comprehension memorability</td>
+</tr>
+</tbody>
+</table>
+<h3 id="evidence-level-distribution-36-cards">6.2 Evidence-level
+distribution (36 cards)</h3>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Meaning</th>
+<th>Count</th>
+<th>Share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Systematic review</td>
+<td>3</td>
+<td>8%</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Randomized/controlled experiment</td>
+<td>7</td>
+<td>19%</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Expert consensus / professional-body guidance</td>
+<td>5</td>
+<td>14%</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Practitioner case study with data</td>
+<td>1</td>
+<td>3%</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Qualitative research / structured interview</td>
+<td>3</td>
+<td>8%</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Expert opinion / thought leadership</td>
+<td>16</td>
+<td>44%</td>
+</tr>
+<tr>
+<td>8</td>
+<td>Anecdotal / personal experience</td>
+<td>1</td>
+<td>3%</td>
+</tr>
+</tbody>
+</table>
+<p>Be frank about that 44%: nearly half the canon is credentialed
+opinion. That is the field, not a sampling artifact, and it is exactly
+why the evidence-level habit in section 1 matters.</p>
+<h3 id="source-category-distribution-36-cards">6.3 Source-category
+distribution (36 cards)</h3>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Count</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Peer-reviewed papers (journal/conference)</td>
+<td>18</td>
+</tr>
+<tr>
+<td>Books (accessed direct or via review/interview)</td>
+<td>6</td>
+</tr>
+<tr>
+<td>Institutional guidance (NN/G, DVS, Urban, Google SRE)</td>
+<td>6</td>
+</tr>
+<tr>
+<td>Practitioner blogs/essays</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Practitioner interview journalism</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<h3 id="credibility-band-distribution">6.4 Credibility-band
+distribution</h3>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 30%" />
+<col style="width: 35%" />
+<col style="width: 35%" />
+</colgroup>
+<thead>
+<tr>
+<th>Band</th>
+<th>Count</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>keep</td>
+<td>31</td>
+<td>includes named weakest keeps: Nielsen 2006, Elavsky (~7.1
+weighted)</td>
+</tr>
+<tr>
+<td>borderline</td>
+<td>5</td>
+<td>Cairo Truthful Art, Kosara Scrollytelling, Kosara Hairball,
+Brownlow, Few Why-Fail</td>
+</tr>
+</tbody>
+</table>
+<h3 id="perspective-balance-matrix">6.5 Perspective-balance matrix</h3>
+<p>Target: at least 3 of 5 perspective categories per subfield.</p>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 11%" />
+<col style="width: 11%" />
+<col style="width: 15%" />
+<col style="width: 13%" />
+<col style="width: 16%" />
+<col style="width: 18%" />
+<col style="width: 13%" />
+</colgroup>
+<thead>
+<tr>
+<th>Subfield</th>
+<th>Academic</th>
+<th>Practitioner</th>
+<th>Contrarian</th>
+<th>Institutional</th>
+<th>Boots-on-ground</th>
+<th>Categories</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Perception</td>
+<td>3</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>3 of 5</td>
+</tr>
+<tr>
+<td>Encoding</td>
+<td>2</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>1</td>
+<td>4 of 5</td>
+</tr>
+<tr>
+<td>Interaction</td>
+<td>3</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>3 of 5</td>
+</tr>
+<tr>
+<td>Narrative</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>5 of 5</td>
+</tr>
+<tr>
+<td>Operational</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>5 of 5</td>
+</tr>
+<tr>
+<td>Networks</td>
+<td>4</td>
+<td>0</td>
+<td>1</td>
+<td>1</td>
+<td>0</td>
+<td>3 of 5</td>
+</tr>
+<tr>
+<td>Field/meta</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>1</td>
+<td>5 of 5</td>
+</tr>
+</tbody>
+</table>
+<p>All seven subfields meet the 3-of-5 bar. Perception, interaction, and
+networks skew academic because their load-bearing claims are
+experimental; the missing categories there are documented rather than
+papered over (for example, no boots-on-the-ground perception source
+surfaced in four search passes that cleared the bar).</p>
+<h3 id="bias-guard-summary">6.6 Bias-guard summary</h3>
+<p>Each card records whether the researcher agreed, disagreed, or was
+neutral toward the source, with scoring adjusted accordingly (harder on
+agreement, more generous on disagreement).</p>
+<table>
+<colgroup>
+<col style="width: 36%" />
+<col style="width: 31%" />
+<col style="width: 31%" />
+</colgroup>
+<thead>
+<tr>
+<th>Stance</th>
+<th>Count</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Agree (scored harder on dims 5/6/8)</td>
+<td>20</td>
+<td>includes Brownlow, marked partial agreement</td>
+</tr>
+<tr>
+<td>Disagree (scored more generously)</td>
+<td>1</td>
+<td>Davis et al.; on reflection its claim proved modest</td>
+</tr>
+<tr>
+<td>Neutral</td>
+<td>15</td>
+<td>concentrated in the operational and networks tracks</td>
+</tr>
+</tbody>
+</table>
+<h3 id="verification">6.7 Verification</h3>
+<p>Independent citation verification (see verification-report.md):
+sample size <strong>11 of 36 (30.6%)</strong>, selected by seeded random
+draw (seed 20260728). Outcomes: 10 verified, 0 failed, 1 inaccessible
+(Shneiderman 1996, gated by IEEE Xplore; quote verified by two
+independent secondary corroborations instead). Failure count:
+<strong>0</strong>. Failure rate: 0 / (10 + 0) = 0.0%, band
+<strong>&lt;=5%</strong>. All 24 checkable quote strings matched
+character-for-character after tolerated normalization, including one
+faithfully transcribed source-side typo. Two cards carry imperfect but
+non-failing location metadata (Simons &amp; Chabris page numbers; Ware
+edition ambiguity), flagged for a cleanup pass.</p>
+<h3 id="paywall-scan">6.8 Paywall scan</h3>
+<p>Nine must-read primaries could not be fetched in full and were carded
+through legitimate partial access: Cleveland &amp; McGill 1984 (JASA
+paywalled; ranking via secondary), Ware’s book interior (publisher
+preview only), Shneiderman 1996 (IEEE gated; verified by corroboration),
+Holten 2006 full text (IEEE paywalled; abstract via TU/e portal), Tariq
+et al. full text (dl.acm.org 403; CC-BY abstract via Semantic Scholar),
+Munzner’s VAD book (print; free slides and videos exist), Bertin (out of
+print; via Sluis retrospective), Cairo’s two books (trade print; via
+interviews and reviews), and Brownlow’s 2020 original (HTTP 410 Gone;
+reconstructed from her own 2023 follow-up). Every partial-access case is
+flagged on its card rather than concealed.</p>
+<h3 id="limitations-exclusions-and-the-lowest-bar-clearer">6.9
+Limitations, exclusions, and the lowest bar-clearer</h3>
+<p>This phase tested nothing empirically; every finding is
+literature-derived. Several foundational texts were read through
+secondary lenses (Bertin, both Cairo books, Munzner’s textbook), so
+their interior arguments are corroborated rather than independently
+verified. The verification sample covered 30.6% of cards, not all of
+them. The corpus skews academic in three subfields (documented in 6.5)
+and 44% of it is Level 7 opinion. Scout-proposed curricula were
+inherited and lightly harmonized rather than re-derived from
+scratch.</p>
+<p>Named exclusions: the Holistics rebuttal “Death to Dashboards,
+Really?” and Scott Taft’s “Killing Dashboards Isn’t the Answer” were
+found and used as debate context but not carded (secondary rebuttals,
+below the card bar); ChartExpo, Luzmo, and wpDataTables hybrid
+table-chart posts were found in search and excluded as low-authority
+vendor content. Lowest-scoring source that cleared the bar: Brownlow’s
+“Dashboards are Dead” (weighted roughly 5.1, borderline, Level 8), kept
+deliberately and with its evidence weakness stated, because cutting it
+would have left the contrarian pole of RQ3’s liveliest dashboard debate
+unrepresented.</p>
+<h2 id="bibliography">7. Bibliography</h2>
+<p>All 36 included sources. Format: citation. Band / evidence level /
+inclusion decision. Contribution.</p>
+<h3 id="perception-graphical-cognition-1">Perception &amp; graphical
+cognition</h3>
+<ol type="1">
+<li>Cleveland, W.S. &amp; McGill, R. (1984). “Graphical Perception.”
+JASA 79(387), 531-554. keep / Level 2 / Core. Origin paper for the
+channel-effectiveness ranking every later study replicates or
+contests.</li>
+<li>Heer, J. &amp; Bostock, M. (2010). “Crowdsourcing Graphical
+Perception.” CHI 2010. keep / Level 2 / Core. Large-sample open-access
+replication of the 1984 ranking, extended to treemap-area and gridline
+effects.</li>
+<li>Ware, C. (2012). <em>Information Visualization: Perception for
+Design</em>, 3rd ed. keep / Level 7 / Core. The standard synthesis
+translating vision science (preattentive processing, working memory)
+into design.</li>
+<li>Simons, D.J. &amp; Chabris, C.F. (1999). “Gorillas in Our Midst.”
+<em>Perception</em> 28(9). keep / Level 2 / Core. Canonical
+demonstration that attention, not visibility, gates what viewers
+actually register.</li>
+<li>Davis, R. et al. (2022). “The Risks of Ranking.” IEEE TVCG / VIS
+2022. keep / Level 2 / Core. The live individual-differences challenge:
+up to 30% of viewers deviate from the average observer.</li>
+</ol>
+<h3 id="visual-encoding-the-grammar-of-graphics-1">Visual encoding &amp;
+the grammar of graphics</h3>
+<ol start="6" type="1">
+<li>Bertin, J. (1967/1983). <em>Semiology of Graphics</em>, via Sluis
+(2016) retrospective. keep / Level 7 / Core. The original
+visual-variables taxonomy every later encoding framework descends
+from.</li>
+<li>Munzner, T. (2014). <em>Visualization Analysis and Design</em>, via
+Romanowski review. keep / Level 7 / Core. What-why-how, marks and
+channels, and the expressiveness/effectiveness principles.</li>
+<li>Wickham, H. (2010). “A Layered Grammar of Graphics.” JCGS 19(1).
+keep / Level 7 / Core. Wilkinson’s grammar made practical; the theory
+underneath ggplot2 and its ports.</li>
+<li>Remshard, M. &amp; Queenborough, S.A. (2023). “Design of tables…”
+<em>Ecology and Evolution</em> 13(7). keep / Level 4 / Core. The
+peer-reviewed tables-vs-charts boundary plus auditable table-design
+rules.</li>
+<li>Elavsky, F. (2025). “Minimalism and the absurdity of the
+data-to-ink-ratio.” frank.computer. keep / Level 7 / Core. The
+contrarian stress test of Tufte’s ratio, grounded in the Bateman
+experiment.</li>
+</ol>
+<h3 id="interaction-exploration-1">Interaction &amp; exploration</h3>
+<ol start="11" type="1">
+<li>Shneiderman, B. (1996). “The Eyes Have It.” IEEE VL’96. keep / Level
+7 / Core. The Mantra and the task-by-data-type taxonomy the entire
+subfield responds to.</li>
+<li>Craft, B. &amp; Cairns, P. (2005). “Beyond Guidelines.” IV’05. keep
+/ Level 6 / Core. The documented absence of any validation study for the
+Mantra despite universal citation.</li>
+<li>Cockburn, A., Karlson, A. &amp; Bederson, B. (2008). “A Review of
+Overview+Detail, Zooming, and Focus+Context Interfaces.” ACM Computing
+Surveys 41(1). keep / Level 1 / Core. The four-family taxonomy of
+interaction mechanisms with per-technique empirical failure modes.</li>
+<li>Mosca, A., Ottley, A. &amp; Chang, R. (2021). “Does Interaction
+Improve Bayesian Reasoning with Visualization?” CHI 2021. keep / Level 2
+/ Core. The RCT showing interaction can significantly detract.</li>
+<li>Nielsen, J. (2006). “Progressive Disclosure.” NN/G. keep / Level 4 /
+Supporting. The pattern definition and the two-level usability ceiling;
+the corpus’s named weakest keep.</li>
+</ol>
+<h3 id="narrative-explanatory-visualization-1">Narrative &amp;
+explanatory visualization</h3>
+<ol start="16" type="1">
+<li>Segel, E. &amp; Heer, J. (2010). “Narrative Visualization: Telling
+Stories with Data.” IEEE TVCG 16(6). keep / Level 6 / Core. Seven
+genres, two tactic families, and the author-vs-reader control
+spectrum.</li>
+<li>Cairo, A. (2016). <em>The Truthful Art</em>, via Cool Infographics
+interview. borderline / Level 7 / Supporting. The values ordering
+(truthful before functional before beautiful) that bounds
+technique.</li>
+<li>Kosara, R. (2016). “The Scrollytelling Scourge.” eagereyes.org.
+borderline / Level 7 / Supporting. The sharpest named critique of
+scroll-driven narrative; the register’s scroll-vs-stepper debate.</li>
+<li>Schwabish, J. (2018). “Three Ways to Annotate Your Graphs.”
+Data@Urban. keep / Level 7 / Core. The three concrete annotation moves,
+anchored by NYT and FT practitioner testimony.</li>
+<li>Stogniew, A. (2022). “Scrollytelling innovation…” Storybench. keep /
+Level 6 / Supporting. The only end-to-end named production account:
+sketch-first, 50% polish, three solid takeaways.</li>
+</ol>
+<h3 id="dashboards-operationalmonitoring-ui-1">Dashboards &amp;
+operational/monitoring UI</h3>
+<ol start="21" type="1">
+<li>Few, S. (2006/2013). <em>Information Dashboard Design</em>. keep /
+Level 7 / Core. The single-screen at-a-glance definition and the 13
+dashboard failure modes.</li>
+<li>Ewaschuk, R. / Google SRE (2016). “Monitoring Distributed Systems.”
+keep / Level 5 / Core. Four golden signals, symptom-based alerting, and
+the alert/dashboard boundary from production practice.</li>
+<li>Budiu, R. (2019). “Information Foraging.” NN/G. keep / Level 4 /
+Core. The cognitive mechanism (scent, satisficing) that explains why
+glanceability works.</li>
+<li>Brownlow, T. (2020/2023). “Dashboards are Dead” + “3 Years Later.”
+borderline / Level 8 / Supporting. The contrarian over-tasking diagnosis
+and its author’s own honest revision; the named marginal keep.</li>
+<li>Tariq, S. et al. (2025). “Alert Fatigue in Security Operations
+Centres.” ACM Computing Surveys 57(9). keep / Level 1 / Core.
+Peer-reviewed proof the alert-triage boundary remains unsolved at
+industry scale.</li>
+</ol>
+<h3 id="network-hierarchy-graph-visualization-1">Network, hierarchy
+&amp; graph visualization</h3>
+<ol start="26" type="1">
+<li>Shneiderman, B. (1992). “Tree Visualization with Tree-Maps.” ACM TOG
+11(1). keep / Level 7 / Core. The treemap origin paper and its
+space-for-precision trade.</li>
+<li>Holten, D. (2006). “Hierarchical Edge Bundles.” IEEE TVCG 12(5).
+keep / Level 7 / Core. The standard clutter-reduction technique for
+compound graphs.</li>
+<li>Ghoniem, M., Fekete, J-D. &amp; Castagliola, P. (2004/2005).
+“Readability of Graphs Using Node-Link and Matrix-Based
+Representations.” keep / Level 2 / Core. The landmark
+node-link-vs-matrix experiment and the ~20-vertex crossover.</li>
+<li>Burch, M. et al. (2021). “The State of the Art in Empirical User
+Evaluation of Graph Visualizations.” IEEE Access 9. keep / Level 1 /
+Core. The systematic review that nuances every other networks
+keeper.</li>
+<li>Kosara, R. (2012). “Graphs Beyond the Hairball.” eagereyes.org.
+borderline / Level 7 / Supporting. The plain-language case for switching
+representation families; the run’s lowest-scoring keeper.</li>
+<li>Laubheimer, P. (2019). “Treemaps: Data Visualization of Complex
+Hierarchies.” NN/G. keep / Level 7 / Supporting. The practitioner
+critique of treemaps: area is weak, small categories drown.</li>
+</ol>
+<h3 id="the-field-itself-schools-history-meta-1">The field itself
+(schools, history, meta)</h3>
+<ol start="32" type="1">
+<li>Munzner, T. (2009). “A Nested Model for Visualization Design and
+Validation.” IEEE TVCG 15(6). keep / Level 4 / Core. The academic
+tradition’s four-level self-description; upstream errors cascade.</li>
+<li>Cairo, A. (2019). <em>How Charts Lie</em>, via Kosara review +
+interview. keep / Level 7 / Core. The practitioner-skeptic frame: charts
+are visual arguments, and misuse lives in people.</li>
+<li>Bateman, S. et al. (2010). “Useful Junk?” CHI 2010. keep / Level 2 /
+Core. The RCT that complicated minimalism: equal accuracy, significantly
+better delayed recall.</li>
+<li>Few, S. (2007). “Why Most Dashboards Fail.” Perceptual Edge.
+borderline / Level 7 / Core. The boots-on-the-ground operational-failure
+claim, kept with its lack of measured evidence flagged.</li>
+<li>Makulec, A. (2022). “Starting Out in Data Visualization Today.”
+Nightingale/DVS. keep / Level 4 / Core. The field’s own onboarding map;
+independent confirmation that the two schools share one canon.</li>
+</ol>
+</body>
+</html>
