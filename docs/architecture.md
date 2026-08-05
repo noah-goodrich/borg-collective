@@ -57,6 +57,12 @@ This prevents corruption from concurrent hook executions.
 
 ### Repository
 
+The repo has grown past a size where a full file listing stays accurate for long — run
+`ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
+writing: **12 hooks**, **~14 lib files**, **17 skills**, **6 agents** (5 specialists + `ROUTING.md`),
+**4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
+`borg-vinculum-watch`, `borg-notifyd`, `run-in`).
+
 ```
 ~/dev/borg-collective/
     borg.zsh                    Main orchestration CLI
@@ -67,11 +73,23 @@ This prevents corruption from concurrent hook executions.
         claude.zsh              Session discovery from ~/.claude/projects/
         coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
         desktop.zsh             Claude Desktop session reader
+        recon.sh / recon.zsh    Recon fan-out engine (portable sh core + zsh CLI shim)
+        recon/adapters/         Recon source adapters (recon-adapter-<source>)
+        borg-hooks.sh           Shared bash helpers used by hooks (not sourced by borg.zsh)
+        borg-sync.zsh           Skill/hook sync helpers
+        drone-hooks.zsh         Project-side pre-up/post-down hook runner
+        reaper.sh               Stale-worktree reaping (portable sh core for `borg reap-worktrees`)
+        colors.zsh, secrets.zsh Output styling + secret handling helpers
     hooks/
-        borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
-        borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
+        borg-link-down.sh       SessionStart → status=active + checkpoint/cairn/presence injection
+        borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge + presence close
         borg-notify.sh          Notification → status=waiting + reason
         borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
+        borg-dispatch-guard.sh  PreToolUse → >=92% usage dispatch veto (Usage Guardian)
+        borg-cairn-heartbeat.sh Periodic cairn presence heartbeat
+        borg-nanoprobe-log.sh   SubagentStop → append nanoprobe completion to agents.jsonl
+        bash-guard.sh, borg-supabase-guard.sh, notify.sh,
+        pre-commit-remind.sh, tool-count-nudge.sh  Smaller guardrail/reminder hooks
     skills/
         adhd-guardrails/        Cognitive load guardrails (always active)
         borg-plan/              Project planning + Collective review
@@ -80,6 +98,23 @@ This prevents corruption from concurrent hook executions.
         borg-review/            Mid-session diagnostic + loop detection
         borg-link/              Consolidated project intelligence (overview + deep dive)
         borg-link-up/           Flush session state to a per-project checkpoint file
+        borg-recon/             Synthesize cross-source recon fan-out into an ELI10 briefing
+        borg-next/, borg-resume/, borg-search/, borg-switch/, borg-verify/, break-glass/,
+        simplify/, fable-reviewer/, no-unnecessary-read-perms/   Remaining user-invocable skills
+    agents/
+        borg-grunt.md            Haiku — fully-specified mechanical execution
+        borg-scout.md            Haiku — read-only locate/search
+        borg-nanoprobe.md        Sonnet — single-task judgment work (implement/fix/refactor)
+        borg-researcher.md       Sonnet — from-zero web research, one track
+        borg-reviewer.md         Sonnet/high — blind adversarial review
+        ROUTING.md               Model/effort routing matrix for all of the above
+    bin/
+        borg-usage-watch         Usage Guardian poller (see below)
+    launchd/
+        com.stillpoint-labs.borg.notifyd.plist       fswatch presence daemon
+        com.stillpoint-labs.borg.cortex-wake.plist    30s Cortex Code session watcher
+        com.stillpoint-labs.borg.reap.plist           Hourly `borg reap-worktrees`
+        com.stillpoint-labs.borg.usage-watch.plist    Usage Guardian poller schedule
     install.sh                  Installer
     docs/                       Documentation
 ```
@@ -259,6 +294,92 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | borg-review | Manual | Mid-session diagnostic, loop detection, one recommendation |
 | borg-link | Manual | Consolidated project intelligence (overview or per-project deep dive) |
 | borg-link-up | Manual | Flush session state to `<project>/.borg/checkpoints/<ts>.md` |
+| borg-recon | Manual | Synthesize `borg recon --json` output into a by-project, urgency-ranked briefing |
+| borg-next / borg-resume / borg-search / borg-switch / borg-verify | Manual | Skill-form CLI wrappers |
+| break-glass | Manual | Explicit, logged override for a normally-blocked action |
+| simplify / fable-reviewer / no-unnecessary-read-perms | Manual / auto | Code + permission hygiene guardrails |
+
+The full, current roster (17 skills as of this writing) is always `ls skills/` — this table lists
+role, not an exhaustive spec.
+
+---
+
+## Usage Guardian (default OFF)
+
+A two-part safety net that prevents runaway agent fan-out from silently burning a usage window,
+without ever hard-blocking work by default:
+
+1. **`bin/borg-usage-watch`** — a launchd-scheduled poller (`launchd/com.stillpoint-labs.borg.usage-watch.plist`)
+   that samples `claude -p "/usage"` on an interval and appends one JSONL row per poll to
+   `~/.local/state/borg/usage-samples.jsonl` (schema: `ts`, `status` — `ok` / `idle` / `suspect` /
+   `error` — plus `session_pct`, `week_pct`, `resets_at` when known). Silence in the samples file has
+   exactly one meaning: the poller did not run.
+2. **85% checkpoint sweep** — at 85% session usage, the poller nudges in-flight sessions toward
+   writing a checkpoint (`/borg-link-up`) before the window resets, so work is resumable rather than
+   lost mid-stream.
+3. **`hooks/borg-dispatch-guard.sh`** — a `PreToolUse` hook that hard-vetoes *new* Agent/Workflow
+   dispatch once session usage reaches `BORG_USAGE_HALT_PCT` (default **92%**). It does not touch
+   already-running work — only new fan-out. Disable with `BORG_USAGE_HALT_ENABLED=0`.
+
+**Default posture: OFF and fail-OPEN.** Neither the poller nor the guard is installed/enabled by
+default; when enabled, any failure to read a usage sample (binary not found, parse failure, stale
+data) fails open — it never blocks dispatch on its own error. This is opt-in cost protection, not a
+default constraint.
+
+---
+
+## Recon Fan-Out
+
+`borg recon` (and the `/borg-recon` skill) is a source-agnostic "morning link-up" primitive that
+answers "what happened everywhere since I last looked?" across every registered project.
+
+- **Engine**: `lib/recon.sh` (portable `sh`, mirrors the `reaper.sh` ↔ `registry.zsh` split) is
+  sourced by the zsh CLI via `lib/recon.zsh`. It resolves a `since` mark (explicit override > newest
+  checkpoint mtime > last-run marker > 24h fallback), then fans out concurrently (bounded
+  parallelism) over pluggable **adapters**.
+- **Adapter contract**: any executable named `recon-adapter-<source>` found on
+  `BORG_RECON_ADAPTER_PATH` registers a new source — no code change required. The config directory
+  shadows the repo directory. This repo ships exactly one reference adapter,
+  `lib/recon/adapters/recon-adapter-github` (via `gh`); Slack/Jira/Notion adapters are a separate,
+  machine-specific injected layer, never hardcoded here.
+- **Normalization**: every finding becomes an Item —
+  `{project, source, ref, title, state, changed, owner, action_needed, urgency, one_line}` — merged
+  by project across all adapters.
+- **Contradiction reconciliation**: recon cross-checks each project's latest checkpoint against
+  fresh source state and flags checkpoint-blocker-vs-resolved-source contradictions (e.g. a
+  checkpoint says "blocked on review" but the PR merged since).
+- **Cairn persistence**: reconciled contradictions are recorded to cairn (`/record/batch`) via a
+  thin, fail-quiet hook (`_recon_cairn_record`) — never a hard dependency; recon works fully
+  without cairn.
+- **Output**: `borg recon --json` emits the reconciled document; `/borg-recon` synthesizes it into
+  a by-project, most-urgent-first, ELI10 briefing plus Yours(human)-vs-Mine(agent) action lists and
+  a bounded read-only kickoff batch.
+
+---
+
+## Agent Roster and Nanoprobe Delegation
+
+The orchestrator session never edits project files directly — it briefs, spawns, monitors, and
+synthesizes. Actual work is delegated to ephemeral subagents via the Agent tool, routed by model
+tier per `agents/ROUTING.md`:
+
+| Agent | Model | Role |
+|-------|-------|------|
+| borg-grunt | Haiku | Fully-specified mechanical execution: apply an edit, run tests, rote refactor |
+| borg-scout | Haiku | Read-only locate/search — never writes |
+| borg-nanoprobe | Sonnet | Single discrete task requiring judgment — implement, fix, refactor |
+| borg-researcher | Sonnet | From-zero web research on one track, structured findings |
+| borg-reviewer | Sonnet (high effort) | Blind adversarial review, arrives cold with no author context |
+
+Nanoprobes (and any subagent doing multi-file work) manage their own git worktrees rather than
+relying on harness-level isolation: `git -C <repo_path> worktree add
+/Users/noah/.local/state/borg/worktrees/<repo>/<slug> -b <branch>`. All edits and commits happen
+inside that worktree; on completion the subagent removes it. `borg reap-worktrees`
+(`launchd/com.stillpoint-labs.borg.reap.plist`, hourly) is the safety net that auto-cleans any borg
+worktree whose branch has merged or that has gone stale (`BORG_REAP_STALE_HOURS`, default 12h).
+Nanoprobe lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (`SubagentStop`) to
+`~/.config/borg/agents.jsonl`; inspect with `borg nanoprobes` (alias `np`) and pull transcripts with
+`borg nanoprobe-log <id-prefix>`.
 
 ---
 
@@ -269,13 +390,26 @@ with it when available:
 
 | Borg Action | Cairn Integration |
 |-------------|-------------------|
-| `borg-link-up.sh` | Optionally commits session record if cairn is reachable |
-| `borg-link-down.sh` | Fetches cairn briefing for project context |
+| `borg-link-up.sh` | Optionally commits session record; closes the presence row (`/presence/close`) |
+| `borg-link-down.sh` | Fetches cairn briefing; publishes presence (`/presence/open`) + queries related sessions |
 | `borg search` | Wraps `cairn search` for cross-project knowledge |
 | `borg init` | Includes cairn knowledge in orchestrator briefing |
+| `borg recon` | Persists reconciled contradictions via `/record/batch` (fail-quiet, optional) |
 
 When cairn is unavailable, borg degrades gracefully: checkpoints live in each project's
 `.borg/checkpoints/` directory and are loaded on session start. `borg search` is unavailable.
+
+### Cross-Session Presence
+
+At `SessionStart`, `borg-link-down.sh` publishes a presence row to cairn (`/presence/open`) and
+queries for other active sessions on the same project (`/presence/related`). If a related session
+is found, one distilled line is appended to `additionalContext`:
+`▸ N other active session(s) — closest: session <id8> editing <file> in <project>`. At `Stop`,
+`borg-link-up.sh` closes the row (`/presence/close`). The feature is strictly silent/no-op on every
+failure path (cairn down, 404, timeout) and requires cairn server migration 004 plus the `cairn
+presence` subcommand. v1 limitations: heartbeat only fires at `SessionStart` (30-minute TTL),
+`touched_paths` is a one-time snapshot rather than live, and orchestrator-mode sessions do not
+publish presence.
 
 ---
 
