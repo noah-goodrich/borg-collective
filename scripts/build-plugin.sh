@@ -274,7 +274,6 @@ _build_self_contained_hook "$HOOKS_SRC/borg-link-down.sh"    "$HOOKS_DST/borg-li
 _build_self_contained_hook "$HOOKS_SRC/borg-link-up.sh"      "$HOOKS_DST/borg-link-up.sh"      1
 _build_self_contained_hook "$HOOKS_SRC/borg-notify.sh"       "$HOOKS_DST/borg-notify.sh"       1
 _build_self_contained_hook "$HOOKS_SRC/borg-plan-promote.sh" "$HOOKS_DST/borg-plan-promote.sh" 1
-_build_self_contained_hook "$HOOKS_SRC/borg-cairn-heartbeat.sh" "$HOOKS_DST/borg-cairn-heartbeat.sh" 1
 # borg-nanoprobe-log.sh has no lib source — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-nanoprobe-log.sh" "$HOOKS_DST/borg-nanoprobe-log.sh" 0
 # borg-dispatch-guard.sh is self-contained (reads samples file only) — copy as-is with guard.
@@ -339,16 +338,6 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/notify.sh",
             "timeout": 5
-          }
-        ]
-      },
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-cairn-heartbeat.sh",
-            "timeout": 10
           }
         ]
       }

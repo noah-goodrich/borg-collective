@@ -75,48 +75,6 @@ _borg_relative_time() {
     fi
 }
 
-# One-line cairn health + recording status, shared by `borg hail` and `borg init`
-# (both render via _borg_print_briefing). Mirrors _borg_cairn_health_line in
-# lib/borg-hooks.sh (bash, used by the hooks) — kept as a separate zsh copy because
-# borg.zsh does not source lib/borg-hooks.sh. Fail-OPEN: bounded by _borg_timeout,
-# never non-zero, always prints exactly one line.
-_borg_cairn_health_line() {
-    local compose_hint="${BORG_CAIRN_COMPOSE:-$HOME/dev/cairn/compose.yml}"
-
-    if ! command -v cairn &>/dev/null; then
-        echo "cairn: DEGRADED — not in PATH · run: borg setup"
-        return 0
-    fi
-
-    # NOTE: `status` is a read-only zsh special variable ($? alias) — using it as a
-    # local name here silently breaks the whole function with "read-only variable: status".
-    local raw _cairn_status db
-    raw=$(_borg_timeout 3 cairn health 2>/dev/null) || raw=""
-    _cairn_status=$(echo "$raw" | jq -r '.status // ""' 2>/dev/null || echo "")
-    db=$(echo "$raw" | jq -r '.db // ""' 2>/dev/null || echo "")
-
-    if [[ "$_cairn_status" != "ok" ]]; then
-        echo "cairn: DEGRADED — db ${db:-unreachable} · run: docker compose -f $compose_hint up -d"
-        return 0
-    fi
-
-    local marker="$BORG_DIR/.cairn-last-write" age="never"
-    if [[ -f "$marker" ]]; then
-        local mtime
-        mtime=$(_borg_file_mtime "$marker") || mtime=0
-        local now diff
-        now=$(date +%s)
-        diff=$(( now - mtime ))
-        if (( diff < 60 )); then age="${diff}s ago"
-        elif (( diff < 3600 )); then age="$(( diff / 60 ))m ago"
-        elif (( diff < 86400 )); then age="$(( diff / 3600 ))h ago"
-        else age="$(( diff / 86400 ))d ago"
-        fi
-    fi
-    echo "cairn: healthy · recording (last write $age)"
-    return 0
-}
-
 # Check if current time is within work hours
 _borg_is_work_hours() {
     [[ -z "$BORG_WORK_HOURS" ]] && return 0
@@ -546,14 +504,6 @@ _borg_link_deep() {
         fi
     fi
 
-    # Cairn knowledge
-    if command -v cairn &>/dev/null; then
-        echo
-        info "Cairn knowledge for $project:"
-        _borg_timeout 5 cairn search "$project" --project "$project" --max 5 2>/dev/null || {
-            warn "cairn search timed out or failed"
-        }
-    fi
     echo
 }
 
@@ -801,11 +751,6 @@ _borg_do_switch() {
                 rel_time=$(_borg_relative_time "$last")
                 echo -e "  ${DIM}Last active:${NC} $rel_time"
                 echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
-                if command -v cairn &>/dev/null; then
-                    local cairn_brief
-                    cairn_brief=$(_borg_timeout 3 cairn search "$project" --project "$project" --max 1 2>/dev/null) || true
-                    [[ -n "$cairn_brief" ]] && echo -e "  ${CYAN}cairn:${NC} $cairn_brief"
-                fi
                 echo
             fi
             info "Switching to $project ($tmux_window)"
@@ -918,13 +863,10 @@ cmd_scan() {
     fi
 
     # ── Phase 2: Refresh summaries for all registered projects ────────────────
-    # Auto-enable LLM summaries when cairn is unavailable, unless user said --no-llm
+    # LLM summaries default on (richer context, no external service to supplement it),
+    # unless the user opts out with --no-llm.
     if (( ! llm_explicit && ! use_llm )); then
-        if ! command -v cairn &>/dev/null || \
-           [[ -z "$(_borg_timeout 3 cairn search "any" --max 1 2>/dev/null)" ]]; then
-            dbg "cairn unavailable or empty — auto-enabling LLM summaries"
-            use_llm=1
-        fi
+        use_llm=1
     fi
 
     info "Refreshing project summaries..."
@@ -1486,89 +1428,11 @@ cmd_hail() {
         return
     fi
 
-    # Specific project → detailed status + cairn knowledge
+    # Specific project → detailed status
     cmd_status "$project"
-    if command -v cairn &>/dev/null; then
-        echo ""
-        info "Cairn knowledge for $project:"
-        _borg_timeout 5 cairn search "$project" --project "$project" --max 5 2>/dev/null || {
-            warn "cairn search timed out or failed"
-        }
-    fi
 }
 
-cmd_search() {
-    local query="" project=""
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --project|-p) project="$2"; shift 2 ;;
-            *) query="${query:+$query }$1"; shift ;;
-        esac
-    done
-    [[ -z "$query" ]] && die "usage: borg search <query> [--project <name>]"
-    if ! command -v cairn &>/dev/null; then
-        die "cairn not installed — see docs/quickstart.md for setup"
-    fi
-    if [[ -n "$project" ]]; then
-        _borg_timeout 10 cairn search "$query" --project "$project" || {
-            warn "cairn search timed out or failed — is the service running? (drone up cairn)"
-            return 1
-        }
-    else
-        _borg_timeout 10 cairn search "$query" || {
-            warn "cairn search timed out or failed — is the service running? (drone up cairn)"
-            return 1
-        }
-    fi
-}
-
-# cairn-warm brief (cost lever): pre-load task-relevant collective knowledge so the orchestrator
-# can paste it into a nanoprobe's invocation prompt. Nanoprobes are Agent-tool subagents — they do
-# NOT fire the SessionStart hook, so borg-link-down.sh's cairn injection never reaches them. This
-# command closes that gap. It queries cairn with the TASK text (not the project name) for relevant
-# recall, keeps --project for scoping, and degrades quietly to a single line so it is always safe
-# to wire into dispatch. NEVER errors — a missing/down/empty cairn must not block a spawn.
-cmd_cairn_brief() {
-    local project="" task=""
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --project|-p) project="$2"; shift 2 ;;
-            *) task="${task:+$task }$1"; shift ;;
-        esac
-    done
-    # First positional is the project, the rest is the task: borg cairn-brief <project> <task...>
-    if [[ -z "$project" && -n "$task" ]]; then
-        project="${task%% *}"
-        if [[ "$task" == *" "* ]]; then task="${task#* }"; else task=""; fi
-    fi
-    [[ -z "$project" ]] && die "usage: borg cairn-brief <project> <task...>"
-
-    local heading="## Cairn knowledge (pre-loaded — do not re-derive)"
-    local fallback="(no cairn knowledge — orchestrator will brief cold)"
-
-    # cairn absent → quiet fallback, never error
-    if ! command -v cairn &>/dev/null; then
-        echo "$fallback"
-        return 0
-    fi
-
-    # Query with the task text (or fall back to project name when no task given) for task-relevant
-    # recall; keep --project for scoping. Wrap in the timeout/degrade idiom used at every call site.
-    local search_query="${task:-$project}"
-    local results
-    results=$(_borg_timeout 5 cairn search "$search_query" --project "$project" --max 5 2>/dev/null) || results=""
-
-    if [[ -z "${results//[$' \t\n']/}" ]]; then
-        echo "$fallback"
-        return 0
-    fi
-
-    echo "$heading"
-    echo "$results"
-    return 0
-}
-
-# Build orchestrator context string from registry + checkpoints + cairn.
+# Build orchestrator context string from registry + checkpoints.
 # Output goes to stdout; caller captures it.
 _borg_print_briefing() {
     # Suppress xtrace — trace output pollutes the briefing when PS4 is empty.
@@ -1578,9 +1442,6 @@ _borg_print_briefing() {
     local registry cutoff active_names inactive_names payload name
     local proj_status last_activity summary waiting_reason rel_time project_path
     local checkpoint_file briefing_prompt briefing fallback_text fields
-
-    # Cairn health callout — one line, always printed first, never blocks the briefing.
-    echo -e "${DIM}$(_borg_cairn_health_line)${NC}"
 
     registry=$(borg_registry_with_state)
 
@@ -1772,17 +1633,6 @@ _borg_orchestrator_context() {
         head -c 1500 "$cp"
         echo ""
     done <<< "$top3"
-
-    # Cairn cross-project knowledge (optional)
-    if command -v cairn &>/dev/null; then
-        local cairn_out
-        cairn_out=$(_borg_timeout 5 cairn search "current work priorities" --max 3 2>/dev/null || true)
-        if [[ -n "$cairn_out" ]]; then
-            echo ""
-            echo "Cairn knowledge:"
-            echo "$cairn_out"
-        fi
-    fi
 }
 
 cmd_init() {
@@ -1821,13 +1671,6 @@ inside the target repo at \`~/.local/state/borg/worktrees/<repo>/<slug>\`. Never
 files from this orchestrator session — your role is to spawn / monitor / synthesize. The standard
 flow is: brief the nanoprobe → spawn → wait for SubagentStop → report results. Use
 \`borg nanoprobes\` to see recent runs and \`borg nanoprobe-log <id>\` to read a transcript.
-
-cairn-warm brief (cost lever): BEFORE spawning a nanoprobe, run
-\`borg cairn-brief <project> \"<task>\"\` and paste its output verbatim into the agent's invocation
-prompt under the pre-loaded heading. This pre-loads task-relevant decisions / patterns / gotchas
-from the collective so neither you nor the nanoprobe re-derives known facts from the repo — leaner
-context on both sides (nanoprobes do NOT fire the SessionStart cairn injection, so this is the only
-path that reaches them). It degrades quietly when cairn is absent, so it is always safe to run.
 
 Spend visibility: \`borg spend\` shows the main-vs-subagent cost split (main-loop %) and a trend —
 use it to confirm the main-loop share is shrinking over time (numbers are for this machine only)."
@@ -3029,7 +2872,7 @@ _recon_print_digest() {
 }
 
 cmd_recon() {
-    local since="" sources_filter="" projects_filter="" json_only="" list_only="" no_cairn=""
+    local since="" sources_filter="" projects_filter="" json_only="" list_only=""
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --since)         since="$2"; shift 2 ;;
@@ -3037,7 +2880,6 @@ cmd_recon() {
             --projects)      projects_filter="$2"; shift 2 ;;
             --json)          json_only=1; shift ;;
             --adapters|--list) list_only=1; shift ;;
-            --no-cairn)      no_cairn=1; shift ;;
             -h|--help)
                 echo "usage: borg recon [--since ISO] [--projects a,b] [--sources github,..] [--json] [--adapters]"
                 return 0 ;;
@@ -3045,7 +2887,6 @@ cmd_recon() {
         esac
     done
     command -v jq >/dev/null 2>&1 || die "recon needs jq"
-    [[ -n "$no_cairn" ]] && export BORG_RECON_NO_CAIRN=1
 
     if [[ -n "$list_only" ]]; then
         local disc; disc=$(_recon_discover_adapters)
@@ -3131,7 +2972,6 @@ cmd_recon() {
     doc=$(_recon_assemble "$resolved_since" "$sources_json" "$by_project" "$contra_json")
 
     _recon_write_last_run "$resolved_since"
-    _recon_persist_contradictions "$doc"
 
     rm -rf "$workdir"
 
@@ -3163,14 +3003,12 @@ cmd_help() {
                           --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
     switch [query]      fzf picker → jump to project tmux window
-    search <query>      Search cairn knowledge graph (--project to filter)
     recon               Fan out across source adapters since a mark → reconciled by-project digest
                           --since ISO    Override the mark (default: newest checkpoint mtime)
                           --projects a,b Limit to a subset of registered projects
                           --sources s,t  Limit to a subset of discovered adapters
                           --json         Emit the reconciled JSON (what /borg-recon consumes)
                           --adapters     List discovered source adapters and exit
-    cairn-brief <proj> <task...>  Pre-load task-relevant cairn knowledge for a nanoprobe brief
     scan                Discover projects from session history
     add [path]          Register a project (defaults to $PWD)
     rm <project>        Unregister a project
@@ -3210,7 +3048,6 @@ cmd_help() {
     /borg-link              Same as 'borg link' — overview or deep dive
     /borg-next              Same as 'borg next' — what needs attention
     /borg-switch            Same as 'borg switch' — jump to project
-    /borg-search            Same as 'borg search' — search cairn knowledge
     /borg-recon             Morning link-up: fan-out recon + reconcile + Yours-vs-Mine action lists
     /adhd-guardrails        Compassionate constraints (always active)
 
@@ -3477,9 +3314,7 @@ case "${1:-help}" in
     next)     cmd_next "${@:2}" ;;
     link)     cmd_link "${@:2}" ;;
     switch)   cmd_switch "${@:2}" ;;
-    search)   cmd_search "${@:2}" ;;
     recon)    cmd_recon "${@:2}" ;;
-    cairn-brief) cmd_cairn_brief "${@:2}" ;;
     scan)     cmd_scan "${@:2}" ;;
     add)      cmd_add "${@:2}" ;;
     rm)       cmd_rm "${@:2}" ;;

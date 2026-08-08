@@ -9,7 +9,7 @@
 COCO_PROJECTS_DIR="$HOME/.snowflake/cortex/projects"
 COCO_SESSION_LOG="$HOME/.snowflake/cortex/session-log.md"
 
-# Convert /Users/noah/dev/cairn → -Users-noah-dev-cairn
+# Convert /Users/noah/dev/troth → -Users-noah-dev-troth
 borg_coco_encode_path() {
     local path="${1%/}"  # strip trailing slash
     echo "${path//\//-}"

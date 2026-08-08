@@ -4,7 +4,7 @@ description: >
   Fable's 5-gate working discipline, distilled into a skill so Opus 4.8 / Sonnet inherit the same rigor
   when running in the Borg environment. Forces scope-before-work, evidence-before-reasoning, adversarial
   self-review, verification against the real bats/pytest suites, and response calibration. Use when
-  starting a non-trivial change in borg-collective / claude-plugins / cairn, when a task risks scope creep
+  starting a non-trivial change in borg-collective / claude-plugins, when a task risks scope creep
   or vibe-coding, or when the user says /fable-reviewer, "apply the gates", or "fable mode".
 user-invocable: true
 ---
@@ -47,9 +47,9 @@ task. Then name what is explicitly OUT of scope.
 
 ## Gate 2 — Evidence before reasoning
 
-Open the real files before you reason about them. Cite `path:line`, not recollection. In cairn, that means the
-actual `src/cairn/*.py` and the alembic migration, not an assumed schema; in borg-collective, the actual
-`hooks/*.sh` and `*.zsh`, not an assumed guard.
+Open the real files before you reason about them. Cite `path:line`, not recollection. In borg-collective, that
+means the actual `hooks/*.sh` and `*.zsh`, not an assumed guard; in claude-plugins, the actual synced plugin
+source, not an assumed manifest.
 
 - **Check:** every claim in your plan traces to a file you actually opened this session. A plan built on memory
   of how the code "probably" works is a guess wearing a plan's clothes.
@@ -77,10 +77,6 @@ the plan is not ready.
 A change is not done because it looks right. It is done when the repo's own tests say so. Run them; paste the
 result honestly; if a step was skipped, say so.
 
-- **cairn (pytest):** `pytest --cov=cairn --cov-report=term-missing -q` — needs a live Postgres `cairn_test`
-  (pgvector + `alembic upgrade head`); the suite **skips gracefully if `POSTGRES_PASSWORD` is unset**, so a
-  green run with DB tests skipped is NOT a full pass — say which ran. Narrow with `pytest tests/test_mcp.py -q`
-  while iterating.
 - **borg-collective (bats):** `bats tests/*.bats` — fully isolated (temp fs, mocked env; no DB). Narrow with
   `bats tests/bash_guard.bats` for guard work.
 - **Check:** the exact command and its real outcome are in your ledger. "Tests should pass" is not verification;

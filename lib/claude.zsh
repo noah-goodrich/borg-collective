@@ -6,7 +6,7 @@
 CLAUDE_PROJECTS_DIR="$HOME/.claude/projects"
 CLAUDE_SESSION_LOG="$HOME/.claude/session-log.md"
 
-# Convert /Users/noah/dev/cairn → -Users-noah-dev-cairn
+# Convert /Users/noah/dev/troth → -Users-noah-dev-troth
 borg_claude_encode_path() {
     local path="${1%/}"  # strip trailing slash
     echo "${path//\//-}"

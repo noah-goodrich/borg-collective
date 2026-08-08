@@ -3,7 +3,7 @@ name: borg-link
 description: >
   Project intelligence — the neural link to the collective. No args = overview of all projects
   with directives and recent ships. With a project name = deep dive with registry, latest
-  checkpoint, plan, directives, assimilated history, and cairn knowledge. Works on the host
+  checkpoint, plan, directives, and assimilated history. Works on the host
   and inside a drone container by reading the bind-mounted files directly. Use when the user
   asks for status, overview, briefing, "what's going on", or project details.
 user-invocable: true
@@ -26,11 +26,10 @@ For every project `P` in the registry:
 | Directives (backlog)     | `<P.workspace>/docs/plans/directives/*.md`             |
 | Severed (cancelled)      | `<P.workspace>/docs/plans/severed/*.md`                |
 | Assimilated (shipped)    | `<P.workspace>/docs/plans/assimilated/*.md`            |
-| Cairn knowledge          | `cairn search P` (skip silently if `cairn` not in PATH)|
 
 ### Resolving `<P.workspace>`
 
-The registry stores *host* paths (e.g. `/Users/noah/dev/cairn`), which do **not** resolve
+The registry stores *host* paths (e.g. `/Users/noah/dev/troth`), which do **not** resolve
 inside a drone container where the same workspace is bind-mounted to a different path
 (typically `/workspace`). Use this rule instead:
 
@@ -48,7 +47,7 @@ inside a drone container where the same workspace is bind-mounted to a different
 
 The registry is always reachable because `~/.config/borg/` is bind-mounted into every drone.
 Checkpoints live in the project workspace, so they're visible to the current drone but not
-to other projects' drones. Cairn is host-only for now. Degrade silently — do not print
+to other projects' drones. Degrade silently — do not print
 "file not found" errors for workspace files that a drone can't see.
 
 ## Modes
@@ -149,7 +148,6 @@ Then:
    the title; `Shipped:` field has the date. Print as "Recently assimilated."
 6. Glob `<workspace>/docs/plans/severed/*.md`. For each file, the H1 is the title. Print as
    "Cancelled (N)" with a bullet list — titles only, no bodies. Skip the section if empty.
-7. If `cairn` is in PATH, run `cairn search P --project P --max 5`. Otherwise skip silently.
 
 Inside a drone, for a project that isn't the current one, steps 3–5 will usually be skipped
 because `<workspace>` (the host path from the registry) isn't reachable. That's expected
@@ -167,8 +165,7 @@ behavior, not an error.
    prefixes:
    - `Directives: N pending` → `- [project] title`
    - `Recently assimilated` (newest 3 globally) → `- [project] title (YYYY-MM-DD)`
-5. Skip per-project cairn lookups in overview mode — too expensive.
-6. If a project's workspace isn't reachable (common inside drones for every project except
+5. If a project's workspace isn't reachable (common inside drones for every project except
    the current one), omit its directives and assimilated entries but still show its
    registry row.
 

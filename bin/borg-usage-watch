@@ -261,8 +261,8 @@ fi
 # in any count or average over that ledger. BORG_NO_SPEND_RECORD tells that hook to skip. Scoped to
 # this invocation, not exported, so nothing else in the process inherits it. Same story for the
 # SessionStart hook (borg-link-down.sh): this poller runs with cwd="/" (no WorkingDirectory in the
-# launchd plist), which would otherwise spam cairn with "/" project searches — BORG_NO_SESSION_HOOKS
-# tells it to skip too.
+# launchd plist), which would otherwise pollute per-project state with "/" as a bogus project —
+# BORG_NO_SESSION_HOOKS tells it to skip too.
 claude_exit=0
 output=$(BORG_NO_SPEND_RECORD=1 BORG_NO_SESSION_HOOKS=1 "$CLAUDE_BIN" -p "/usage" 2>&1) || claude_exit=$?
 

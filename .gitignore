@@ -14,6 +14,7 @@ registry.json
 .borg/*
 !.borg/checkpoints/
 !.borg/skill-extensions/
+!.borg/knowledge/
 
 # Claude Code project-level settings and session state — local only
 .claude/

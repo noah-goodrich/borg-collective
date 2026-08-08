@@ -10,29 +10,6 @@ description: >
 
 # Link Up — Session Checkpoint
 
-## 0. Cairn status (print first, before the checkpoint)
-
-Run this and print its single line of output verbatim as the first line of your response, before
-the checkpoint sections below. It never blocks — treat any error as "cairn: DEGRADED". If `cairn`
-is not installed, skip this step silently (no line printed) rather than erroring.
-
-```bash
-raw=$(timeout 3 cairn health 2>/dev/null)
-status=$(echo "$raw" | jq -r '.status // ""' 2>/dev/null)
-if [[ "$status" == "ok" ]]; then
-    marker="${XDG_CONFIG_HOME:-$HOME/.config}/borg/.cairn-last-write"
-    if [[ -f "$marker" ]]; then
-        age=$(( $(date +%s) - $(stat -f %m "$marker" 2>/dev/null || stat -c %Y "$marker" 2>/dev/null || echo 0) ))
-        echo "cairn: healthy · recording (last write ${age}s ago)"
-    else
-        echo "cairn: healthy · recording (last write never)"
-    fi
-else
-    db=$(echo "$raw" | jq -r '.db // "unreachable"' 2>/dev/null)
-    echo "cairn: DEGRADED — db ${db} · run: docker compose -f ~/dev/cairn/compose.yml up -d"
-fi
-```
-
 Flush the session state into a structured checkpoint. Use exactly these five sections:
 
 ## 1. Goal

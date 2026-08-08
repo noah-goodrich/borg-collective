@@ -3,57 +3,58 @@
 ## What This Is
 
 AI development orchestration framework. Two CLIs — `borg` (orchestration) and `drone` (project
-lifecycle) — that coordinate parallel Claude Code sessions across projects and containers. Uses cairn
-(PostgreSQL + pgvector knowledge graph) as an optional persistence layer for cross-session knowledge.
+lifecycle) — that coordinate parallel Claude Code sessions across projects and containers.
+Cross-session knowledge persists via user-authored checkpoints (`.borg/checkpoints/`) and Claude
+Code's own project-memory system — see "Cairn decommission" under Learned for why a separate
+knowledge-graph service was retired.
 
 ## Architecture
 
 ```
-borg (orchestrator)     drone (project lifecycle)     cairn (knowledge, optional)
-  - Morning briefing      - Container up/down           - Decisions + reasoning
-  - Priority scoring      - tmux window management      - Patterns + gotchas
-  - Work/life boundaries  - Claude session launching    - Session debriefs
-  - Knowledge search      - 3-pane dev layout           - Vector search
+borg (orchestrator)     drone (project lifecycle)
+  - Morning briefing      - Container up/down
+  - Priority scoring      - tmux window management
+  - Work/life boundaries  - Claude session launching
+  - Checkpoint briefing   - 3-pane dev layout
 ```
 
-Three independent tools that compose:
+Two independent tools that compose:
 - **borg** — Session coordination, recommendations, boundaries. Runs on host.
 - **drone** — Container lifecycle, tmux windows, pane layouts. Forked from dev.sh. Runs on host.
-- **cairn** — Knowledge graph. Runs in a container with PostgreSQL. Optional.
 
 ## Current State (v2, release v0.8.9)
 
 ### Implemented
-- Core borg CLI: init, claude, next, ls, switch, status, hail, search, scan, add, rm, help, and the
+- Core borg CLI: init, claude, next, ls, switch, status, hail, scan, add, rm, help, and the
   wider command surface below (recon, nanoprobes, spend, watch, doctor, sync, focus, pin/unpin,
   setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`)
-- CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg ls`, cairn records
+- CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg ls`
 - `drone` CLI: up, down, claude, sh, restart, rebuild, fix, status, feature, cortex, exec, toggle,
   scaffold
-- Hooks (12): borg-link-down.sh (status=active + latest-checkpoint injection + cairn context +
-  presence open/related), borg-link-up.sh (status=idle + uncommitted-changes tracking +
-  no-checkpoint nudge + presence close), borg-notify.sh, plus bash-guard, borg-cairn-heartbeat,
-  borg-dispatch-guard, borg-plan-promote, borg-supabase-guard, notify, pre-commit-remind,
-  tool-count-nudge (full list under Files below)
-- Skills (17): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
-  and 11 more (full list under Files below)
+- Hooks (12): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+  (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
+  bash-guard, borg-dispatch-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
+  notify, pre-commit-remind, tool-count-nudge (full list under Files below)
+- Skills (16): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
+  and 10 more (full list under Files below)
 - Agents (6, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
   borg-reviewer, borg-scout, ROUTING
 - Usage guardian: 85% checkpoint sweep (bin/borg-usage-watch) + `borg-dispatch-guard.sh`
   >=92% hard-stop veto on new Agent/Workflow dispatch — both fail-open, dispatch-guard is
   default-OFF (`BORG_USAGE_HALT_ENABLED=1` to arm)
 - Recon fan-out: `borg recon` / `/borg-recon` — pluggable source adapters, since-mark resolution,
-  checkpoint-vs-source contradiction detection, cairn persistence as a fail-quiet hook
+  checkpoint-vs-source contradiction detection
 - `borg-sync` (lib/borg-sync.zsh): mtime-based file sync helpers shared by the CLI and hooks
-- Cross-session presence: SessionStart/Stop hooks publish/query/close presence rows via cairn
+- Auto-memory read instrumentation: `borg-memory-read-log.sh` (PostToolUse/Read) logs every read
+  of a Claude Code project-memory file to `$BORG_DIR/memory-hits.log`; `bin/memory-hits-report`
+  computes reads/session against a pre-registered null (see cairn's decommission research)
 - Work/life boundary checks on switch
 - Capacity warnings
 - tmux hotkey (Ctrl+Space >)
 - Registry-based project tracking with atomic writes
 - User-authored session checkpoints at <project>/.borg/checkpoints/<ts>.md (via /borg-link-up)
-- Session context loaded at start from latest checkpoint + cairn (if available)
-- `borg init` orchestrator: morning briefing from registry + checkpoints + cairn
-- Cairn integration: optional knowledge-graph persistence; knowledge search via `borg search`
+- Session context loaded at start from the latest checkpoint
+- `borg init` orchestrator: morning briefing from registry + checkpoints
 
 ### Commands
 
@@ -66,7 +67,6 @@ borg link [project]      Overview (no arg) or deep dive (with project)
                            --refresh Regenerate summaries
                            --all     Include archived projects
 borg switch [query]      fzf picker → tmux window switch
-borg search "query"      Search cairn knowledge graph
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
 borg rm <project>        Unregister
@@ -128,18 +128,18 @@ lib/
     borg-hooks.sh           Shared bash helpers for hook scripts (sync, session-mode classifier)
     borg-sync.zsh           mtime-based file sync helpers for the zsh CLI (mirrors borg-hooks.sh)
 hooks/
-    borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection + presence
-    borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge + presence
+    borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
+    borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
     borg-notify.sh          Notification → status=waiting + waiting_reason
     borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
     bash-guard.sh           PreToolUse (Bash) → destructive-pattern hard-block + RO pre-approval
-    borg-cairn-heartbeat.sh Stop → throttled cairn health heartbeat (fail-open, print-only)
+    borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log
     borg-dispatch-guard.sh  PreToolUse (Agent/Workflow) → >=92% usage hard-stop veto (default-OFF)
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
     tool-count-nudge.sh     PostToolUse → review reminder every 75 tool calls
-skills/ (17)
+skills/ (16)
     adhd-guardrails/        Cognitive load guardrails (always active)
     borg-plan/              Project planning + Collective review
     borg-assimilate/        Shipping checklist + Collective review + execution
@@ -151,7 +151,6 @@ skills/ (17)
     borg-next/              "What should I work on?" priority answer
     borg-recon/             Morning link-up: fan out adapters, reconcile against checkpoints
     borg-resume/            Auto-resume a workflow paused/killed by a session or usage limit
-    borg-search/            Search the cairn knowledge graph for lessons/decisions/patterns
     borg-switch/            Switch to a project's tmux window by name
     break-glass/            Add a local permission exception to a project's settings.local.json
     fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
@@ -193,15 +192,6 @@ docs/
 - **Skills do the thinking**: Claude proposes, developer validates. Minimum cognitive load.
 - **Debriefs replace summaries**: LLM analysis at session stop, not regex extraction
 - **Boundaries are speed bumps**: one-keystroke confirmations, not hard blocks
-- **Cairn is optional**: borg works without it (registry + file debriefs), cairn adds persistence
-- **Cross-session presence (v0.8.4)**: SessionStart publishes a presence row to cairn
-  (`/presence/open`) and queries related active rows (`/presence/related`). When another session in the
-  same project is active, ONE distilled line is appended to `additionalContext` (format:
-  `▸ N other active session(s) — closest: session <id8> editing <file> in <project>`). Stop closes the
-  row (`/presence/close`). Strictly silent/no-op on every failure path (cairn down, 404, timeout).
-  Requires cairn server migration 004 + `cairn presence` subcommand in dotfiles cairn client. v1
-  limitations: heartbeat only at SessionStart (30-min TTL), touched_paths is a one-time snapshot,
-  orchestrator-mode sessions do NOT publish presence.
 - **Auto-plan promotion (`borg-plan-promote.sh`)**: a `PreToolUse` hook that fires on `Edit`,
   `Write`, and `NotebookEdit`. When Claude exits plan mode (`ExitPlanMode`) and the user
   proceeds to the first file edit, the hook scans the session JSONL for the most recent
@@ -278,8 +268,7 @@ docs/
   adapters (Slack/Jira/Notion) are a separate machine-injected layer; this repo ships ONE reference
   adapter (`lib/recon/adapters/recon-adapter-github`, via `gh`). `borg recon --json` emits the
   reconciled doc the `/borg-recon` skill synthesizes into a by-project, most-urgent-first, ELI10
-  briefing + Yours(human)-vs-Mine(agent) action lists + a bounded read-only kickoff batch. cairn
-  persistence is a thin fail-quiet hook (`_recon_cairn_record`), never a hard dependency. zsh gotchas
+  briefing + Yours(human)-vs-Mine(agent) action lists + a bounded read-only kickoff batch. zsh gotchas
   baked in: never a `path` loop var (tied to `$PATH`); quoted `find`, not bare globs (zsh NOMATCH is
   fatal); jq `//` treats `false` as empty (use `if has("ok")`, not `.ok // true`).
 
@@ -291,7 +280,6 @@ docs/
 | fzf | `fzf` | Fuzzy picker for `borg switch` |
 | claude | `claude` | LLM debriefs (Sonnet), orchestrator session |
 | cortex | `cortex` | Cortex Code CLI (CoCo) — optional, detected at install |
-| cairn | `cairn` | Knowledge persistence (optional) |
 
 ## Style Rules
 
@@ -304,6 +292,16 @@ docs/
 
 ## Learned
 
+- **Cairn decommission (2026-08)**: cairn (a Postgres+pgvector knowledge-graph service) was retired
+  after a research pass found its sole differentiating claim — cross-project semantic recall —
+  measured at 0.4% restatement, indistinguishable from a null baseline; same-project restatement
+  (17%) was real but already served by checkpoints. See `~/dev/cairn/docs/research/README.md` for
+  the full evidence base and `docs/plans/directives/2026-08-08-cairn-decommission-and-unconditional-block.md`
+  for the teardown. The transferable lesson: build capture that derives from an artifact the agent
+  already produces (checkpoint mining worked); never build capture that asks the agent to
+  volunteer (four shipped, tested, exposed voluntary-write surfaces produced one real row in five
+  months). `borg-memory-read-log.sh` now instruments the replacement (Claude Code project memory)
+  so the same blind spot can't recur unnoticed.
 - **tmux zoom is a toggle**: `resize-pane -Z` toggles zoom on/off. If a helper zooms a pane and
   the caller also zooms it, the second call unzooms. Apply zoom in exactly one place — the final
   caller, not intermediate helpers.
