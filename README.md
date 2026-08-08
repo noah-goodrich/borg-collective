@@ -35,7 +35,6 @@ borg init   # morning briefing + launch orchestrator session
 - zsh, tmux, jq, fzf
 - Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)
 - Docker (optional, for devcontainer-based projects)
-- [Cairn](https://github.com/your-username/cairn) (optional, for cross-session knowledge persistence)
 
 ## Commands
 
@@ -46,9 +45,8 @@ borg init   # morning briefing + launch orchestrator session
 | `borg init` | Morning briefing + launch orchestrator Claude session |
 | `borg` / `borg next` | What needs attention? Switch to it. |
 | `borg claude` | Resume orchestrator Claude session |
-| `borg link [project]` | **Primary overview.** No arg = dashboard; with a project = deep dive (checkpoint, plan, cairn) |
+| `borg link [project]` | **Primary overview.** No arg = dashboard; with a project = deep dive (checkpoint, plan) |
 | `borg switch [query]` | fzf picker → jump to project tmux window |
-| `borg search "query"` | Search knowledge graph (requires cairn) |
 | `borg recon` | Fan out across source adapters, reconcile against checkpoints, synthesize a briefing |
 | `borg nanoprobes` (`np`) | List recent nanoprobe runs (subagents) |
 | `borg nanoprobe-log <id>` | Show transcript for a nanoprobe run |
@@ -191,17 +189,12 @@ With boundaries enabled:
 - Capacity warning when more than 3 sessions need attention
 - These are speed bumps (one keystroke), not walls
 
-## Knowledge Persistence (Cairn)
+## Cross-Session Knowledge
 
-[Cairn](https://github.com/your-username/cairn) is an optional knowledge graph (PostgreSQL + pgvector)
-that persists decisions, patterns, and session context across sessions and projects. When available:
-
-- Cross-session patterns and decisions can be committed to the graph for vector search
-- `borg search "query"` finds relevant past decisions and patterns
-- Orchestrator briefings include cairn knowledge
-
-Borg works without cairn — checkpoints live in each project's `.borg/checkpoints/` and are loaded
-on session start. Cairn adds cross-project search and long-term knowledge persistence.
+Checkpoints live in each project's `.borg/checkpoints/` (written via `/borg-link-up`) and are loaded
+on session start — that is the durable, per-project record. Cross-project recall comes from Claude
+Code's own project-memory system, instrumented by `borg-memory-read-log.sh` /
+`bin/memory-hits-report` so its actual usage is visible rather than assumed.
 
 ## Devcontainer Setup
 
