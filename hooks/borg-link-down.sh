@@ -344,10 +344,16 @@ Check cairn service health: cairn health")
         rm -f "$CAIRN_FAILED_FLAG"
     fi
 
+    # Attribute the retrieval to this session. cairn's usage ledger has always had a session_id
+    # column on call_log, but no caller ever populated it, so it was NULL on 100% of rows and the
+    # cost/query join returned zero rows in production. Guarded on non-empty: passing an empty
+    # --session-id would log the literal empty string rather than leaving it NULL.
+    CAIRN_SEARCH_ARGS=(--project "$PROJECT" --max 5)
+    [[ -n "$SESSION_ID" ]] && CAIRN_SEARCH_ARGS+=(--session-id "$SESSION_ID")
     if command -v timeout >/dev/null 2>&1; then
-        CAIRN_OUT=$(timeout 5 cairn search "$PROJECT" --project "$PROJECT" --max 5 2>/dev/null || true)
+        CAIRN_OUT=$(timeout 5 cairn search "$PROJECT" "${CAIRN_SEARCH_ARGS[@]}" 2>/dev/null || true)
     else
-        CAIRN_OUT=$(cairn search "$PROJECT" --project "$PROJECT" --max 5 2>/dev/null || true)
+        CAIRN_OUT=$(cairn search "$PROJECT" "${CAIRN_SEARCH_ARGS[@]}" 2>/dev/null || true)
     fi
     # Log hit metrics for the 4-week validation window. Brace-group the redirection so
     # 2>/dev/null is in effect when bash OPENS the log for append: a bare
