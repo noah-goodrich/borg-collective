@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# memory-hits-report — reads/session for Claude Code project-memory files.
+#
+# Answers the question nobody asked before cairn's decommission: is auto-memory
+# (~/.claude/projects/*/memory/*.md) actually READ? See ~/dev/cairn/docs/research/README.md.
+#
+# Reads $BORG_DIR/memory-hits.log (written by hooks/borg-memory-read-log.sh, a PostToolUse(Read)
+# hook) for the numerator, and counts real session transcripts in the window for the
+# denominator — total sessions, not just sessions that happened to read memory, which would be
+# circular. Excludes the -/ and -private-tmp/ pollution dirs, matching the exclusion cairn's own
+# ROI analysis used.
+#
+# PRE-REGISTERED NULL (set before reading the number — do not move it after):
+#   < 0.2 reads/session  =>  auto-memory is a second write-only store, the exact hole cairn died in.
+#
+# Usage: memory-hits-report [--days N]   (default 30)
+
+set -euo pipefail
+
+DAYS="${1:-}"
+if [[ "${DAYS}" == "--days" ]]; then
+    DAYS="${2:-30}"
+else
+    DAYS="30"
+fi
+
+BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
+HITS_LOG="${BORG_DIR}/memory-hits.log"
+PROJECTS_DIR="${HOME}/.claude/projects"
+CUTOFF_EPOCH=$(( $(date -u +%s) - DAYS * 86400 ))
+
+if [[ ! -f "$HITS_LOG" ]]; then
+    echo "memory-hits-report: no data yet — ${HITS_LOG} does not exist."
+    echo "The hook (hooks/borg-memory-read-log.sh) registers at SESSION START, so it cannot"
+    echo "retroactively log a session already in progress. Check again after at least one"
+    echo "fresh session has run since the plugin was updated."
+    exit 0
+fi
+
+# Numerator: reads within the window. Row format: ts \t session_id \t project \t filename \t bytes
+READS=$(awk -F'\t' -v cutoff="$(date -u -r "$CUTOFF_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@${CUTOFF_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
+    '$1 >= cutoff' "$HITS_LOG" | wc -l | tr -d ' ')
+
+# Denominator: distinct real session transcripts modified within the window, excluding known
+# pollution dirs. One .jsonl file per session_id, so counting files == counting sessions.
+# -mtime -N is portable BSD/GNU find; -newermt "@epoch" is GNU-only and fails silently on BSD find.
+SESSIONS=0
+while IFS= read -r -d '' f; do
+    SESSIONS=$((SESSIONS + 1))
+done < <(find "$PROJECTS_DIR" -mindepth 2 -maxdepth 2 -name '*.jsonl' -mtime "-${DAYS}" \
+    -not -path '*/-/*' -not -path '*/-private-tmp/*' -print0 2>/dev/null)
+
+echo "memory-hits-report — last ${DAYS} days"
+echo "  reads:    ${READS}"
+echo "  sessions: ${SESSIONS}"
+
+if [[ "$SESSIONS" -eq 0 ]]; then
+    echo "  ratio:    n/a (no sessions in window)"
+    exit 0
+fi
+
+RATIO=$(awk -v r="$READS" -v s="$SESSIONS" 'BEGIN { printf "%.3f", r / s }')
+echo "  ratio:    ${RATIO} reads/session"
+echo ""
+
+VERDICT=$(awk -v r="$RATIO" 'BEGIN { print (r < 0.2) ? "FAIL" : "PASS" }')
+if [[ "$VERDICT" == "FAIL" ]]; then
+    echo "  VERDICT: FAIL — < 0.2 reads/session — auto-memory is a second write-only store."
+else
+    echo "  VERDICT: PASS — >= 0.2 reads/session — the fallback layer is genuinely used."
+fi
+
+echo ""
+echo "  by project (reads within window):"
+awk -F'\t' -v cutoff="$(date -u -r "$CUTOFF_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@${CUTOFF_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
+    '$1 >= cutoff { c[$3]++ } END { for (p in c) printf "    %-32s %d\n", p, c[p] }' "$HITS_LOG" | sort -t' ' -k2 -rn
