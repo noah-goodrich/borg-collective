@@ -44,14 +44,6 @@ EOF
 exit 1
 EOF
     chmod +x "$MOCK_BIN/claude"
-
-    # Default: stub cairn healthy so the callout has a deterministic value.
-    cat > "$MOCK_BIN/cairn" <<'EOF'
-#!/usr/bin/env bash
-[[ "$1" == "health" ]] && echo '{"status":"ok","db":"reachable","version":"0.5.3"}'
-exit 0
-EOF
-    chmod +x "$MOCK_BIN/cairn"
 }
 
 # ── Fallback (claude unavailable) ─────────────────────────────────────────────
@@ -138,33 +130,4 @@ EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"borg scan"* ]]
-}
-
-# ── Cairn health callout ───────────────────────────────────────────────────────
-
-@test "briefing: shows a healthy cairn line when cairn health returns ok" {
-    run "$BORG_CMD" link --brief
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"cairn: healthy"* ]]
-}
-
-@test "briefing: shows a DEGRADED cairn line when cairn health is not ok" {
-    cat > "$MOCK_BIN/cairn" <<'EOF'
-#!/usr/bin/env bash
-[[ "$1" == "health" ]] && echo '{"status":"error","db":"unreachable"}'
-exit 1
-EOF
-    chmod +x "$MOCK_BIN/cairn"
-
-    run "$BORG_CMD" link --brief
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"cairn: DEGRADED"* ]]
-}
-
-@test "briefing: shows a DEGRADED cairn line when cairn is not installed" {
-    rm -f "$MOCK_BIN/cairn"
-
-    run "$BORG_CMD" link --brief
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"cairn: DEGRADED"* ]]
 }

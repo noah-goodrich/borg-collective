@@ -1322,7 +1322,7 @@ cmd_help() {
 
   PROJECT RESOLUTION
     drone up             Uses current directory (backwards-compatible with dev.sh)
-    drone up cairn       Looks up 'cairn' in borg registry, then $BORG_ORCHESTRATOR_ROOT/cairn
+    drone up troth       Looks up 'troth' in borg registry, then $BORG_ORCHESTRATOR_ROOT/troth
 
   WINDOW LAYOUT
     Top    (75%): main editor / Claude session

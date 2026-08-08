@@ -8,9 +8,6 @@
 #   - concurrent fan-out (writes one track file per source; a broken source is isolated, not fatal)
 #   - malformed-item dropping (the engine is the last line of defense against a raw dump)
 #   - reconcile: merge-by-project + stale-blocker contradiction detection
-#   - cairn persistence: POSTs reconciled contradictions to /record/batch via curl, with stable
-#     deterministic ids, and is fail-quiet on every failure path (opt-out, no curl, endpoint down,
-#     zero contradictions)
 
 load test_helper/setup
 
@@ -20,7 +17,6 @@ setup() {
     export ADAPTERS="${BATS_TEST_TMPDIR}/adapters"
     mkdir -p "$ADAPTERS"
     export BORG_RECON_ADAPTER_PATH="$ADAPTERS"
-    export BORG_RECON_NO_CAIRN=1
 }
 
 # Write an adapter that echoes a fixed track object. Usage: make_adapter <name> <json>
@@ -209,97 +205,4 @@ EOF
     local items="[$(echo "$VALID_ITEM" | jq '.state="merged"')]"
     run _recon_project_contradictions alpha "" "$items"
     [ "$(echo "$output" | jq 'length')" -eq 0 ]
-}
-
-# ── cairn hook (fail-quiet, /record/batch writeback) ────────────────────────────
-
-# Write a mock `curl` on PATH that records its args + stdin to files under $CURL_CALLS, then
-# exits with the given code (default 0). Usage: make_mock_curl [exit_code]
-make_mock_curl() {
-    local exit_code="${1:-0}"
-    export CURL_CALLS="${BATS_TEST_TMPDIR}/curl_calls"
-    mkdir -p "$CURL_CALLS"
-    cat > "$MOCK_BIN/curl" <<EOF
-#!/usr/bin/env bash
-echo "\$@" > "$CURL_CALLS/args"
-# Find the --data @<file> argument and copy its contents as the posted body.
-prev=""
-for a in "\$@"; do
-    if [ "\$prev" = "--data" ]; then
-        cp "\${a#@}" "$CURL_CALLS/body" 2>/dev/null || true
-    fi
-    prev="\$a"
-done
-exit $exit_code
-EOF
-    chmod +x "$MOCK_BIN/curl"
-}
-
-DOC_WITH_CONTRADICTION='{"since":"s","generated_at":"g","sources":[],"items_by_project":{},
-  "contradictions":[{"project":"alpha","ref":"PR#42","checkpoint_says":"blocked",
-    "source_says":"merged — shipped it","note":"checkpoint still calls this blocked"}]}'
-
-DOC_NO_CONTRADICTIONS='{"since":"s","generated_at":"g","sources":[],"items_by_project":{},"contradictions":[]}'
-
-@test "_recon_stable_id is deterministic for the same (project, ref)" {
-    run _recon_stable_id alpha "PR#42"
-    local first="$output"
-    run _recon_stable_id alpha "PR#42"
-    [ "$status" -eq 0 ]
-    [ "$output" = "$first" ]
-    [[ "$output" == recon-alpha-* ]]
-}
-
-@test "_recon_persist_contradictions POSTs a valid batch with a stable item id" {
-    setup_mock_bin
-    make_mock_curl 0
-    unset BORG_RECON_NO_CAIRN
-    run _recon_persist_contradictions "$DOC_WITH_CONTRADICTION"
-    [ "$status" -eq 0 ]
-    [ -f "$CURL_CALLS/args" ]
-    grep -q '/record/batch' "$CURL_CALLS/args"
-    [ -f "$CURL_CALLS/body" ]
-    run jq -e . "$CURL_CALLS/body"
-    [ "$status" -eq 0 ]
-    local expected_id; run _recon_stable_id alpha "PR#42"
-    expected_id="$output"
-    run jq -r --arg id "$expected_id" '.items[] | select(.id == $id) | .type' "$CURL_CALLS/body"
-    [ "$status" -eq 0 ]
-    [ "$output" = "observation" ]
-}
-
-@test "_recon_persist_contradictions honors the BORG_RECON_NO_CAIRN opt-out (no POST)" {
-    setup_mock_bin
-    make_mock_curl 0
-    export BORG_RECON_NO_CAIRN=1
-    run _recon_persist_contradictions "$DOC_WITH_CONTRADICTION"
-    [ "$status" -eq 0 ]
-    [ ! -f "$CURL_CALLS/args" ]
-}
-
-@test "_recon_persist_contradictions is a no-op when curl is absent" {
-    unset BORG_RECON_NO_CAIRN
-    mkdir -p "${BATS_TEST_TMPDIR}/empty"
-    local old_path="$PATH"
-    PATH="${BATS_TEST_TMPDIR}/empty"
-    run _recon_persist_contradictions "$DOC_WITH_CONTRADICTION"
-    PATH="$old_path"
-    [ "$status" -eq 0 ]
-}
-
-@test "_recon_persist_contradictions still returns 0 when the endpoint is down" {
-    setup_mock_bin
-    make_mock_curl 22
-    unset BORG_RECON_NO_CAIRN
-    run _recon_persist_contradictions "$DOC_WITH_CONTRADICTION"
-    [ "$status" -eq 0 ]
-}
-
-@test "_recon_persist_contradictions skips the POST when there are zero contradictions" {
-    setup_mock_bin
-    make_mock_curl 0
-    unset BORG_RECON_NO_CAIRN
-    run _recon_persist_contradictions "$DOC_NO_CONTRADICTIONS"
-    [ "$status" -eq 0 ]
-    [ ! -f "$CURL_CALLS/args" ]
 }
