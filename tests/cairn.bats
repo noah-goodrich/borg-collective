@@ -77,6 +77,40 @@ EOF
     echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "Cairn knowledge"
 }
 
+# ─── usage-ledger attribution ────────────────────────────────────────────────
+# cairn's call_log has always had a session_id column, but no caller ever populated it, so it was
+# NULL on 100% of search rows and the ledger's cost/query join returned zero rows in production.
+# These pin the fix. Note the cairn shim's arg parser ends in a `*) shift` catch-all that silently
+# discards unknown flags — so a shim without the --session-id case would swallow it and still exit
+# 0. That is why the assertion is on the argv the hook actually emits.
+
+@test "start hook passes --session-id to cairn search" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == "search" ]] && printf '%s\n' "$*" > "$MOCK_BIN/.search-argv"
+echo "Lesson: recorded"
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    run bash "$BORG_START" <<< "$(_hook_input)"
+    [ "$status" -eq 0 ]
+    grep -q -- "--session-id test-session-123" "$MOCK_BIN/.search-argv"
+}
+
+@test "start hook omits --session-id entirely when the session id is empty" {
+    cat > "$MOCK_BIN/cairn" <<'EOF'
+#!/usr/bin/env bash
+[[ "$1" == "search" ]] && printf '%s\n' "$*" > "$MOCK_BIN/.search-argv"
+echo "Lesson: recorded"
+EOF
+    chmod +x "$MOCK_BIN/cairn"
+
+    run bash "$BORG_START" <<< '{"session_id":"","cwd":"/tmp/myproject"}'
+    [ "$status" -eq 0 ]
+    # An empty --session-id would log the literal empty string instead of leaving the column NULL.
+    ! grep -q -- "--session-id" "$MOCK_BIN/.search-argv"
+}
+
 # ─── cairn health callout (shared _borg_cairn_health_line) ───────────────────
 
 @test "start hook includes a healthy cairn line when cairn health returns ok" {
