@@ -131,9 +131,8 @@ session is worth more than an auto-generated summary you don't read.
 
 Consolidated project intelligence. No arguments gives an overview across all registered projects
 (directives, recent ships, last checkpoint). With a project name, gives a deep dive: registry
-entry, latest checkpoint, active plan, directive backlog, assimilated history, and cairn knowledge
-if available. Works on the host and inside a drone container by reading the bind-mounted files
-directly.
+entry, latest checkpoint, active plan, directive backlog, and assimilated history. Works on the
+host and inside a drone container by reading the bind-mounted files directly.
 
 **Why it exists**: You forget what every project is doing. This skill rebuilds the picture without
 round-tripping through multiple commands.
@@ -163,12 +162,14 @@ Shows what project needs attention most urgently. Use when asking "what should I
 Switches to a different project's tmux window. Use when saying "switch to X", "go to X", or "jump
 to X".
 
-### /borg-search — Search Cairn Knowledge
+### /borg-search — Search Project Knowledge
 
 **Activation**: Manual (`/borg-search`)
 
-Searches the cairn knowledge graph for lessons, decisions, or patterns across projects. Use when
-asking to search knowledge, find past decisions, or look something up.
+Cairn (the Postgres+pgvector knowledge-graph service this skill used to query) was decommissioned
+on 2026-08-08 — its corpus was exported to per-project `.borg/knowledge/*.md` markdown, which is
+grep-reachable and needs no running service. Use when asking to search knowledge, find past
+decisions, or look something up.
 
 ### /borg-recon — Morning Link-Up
 

@@ -1,7 +1,12 @@
 # Directive: Decommission cairn, ship the unconditional block
 
-*Filed: 2026-08-08 · Status: OPEN (nothing started) · Gated by: nothing for Phases 0–2; Phase 3 gated on the
-unattended-gate proof in Phase 1.6*
+*Filed: 2026-08-08 · Status: PARTIAL — Phase 0 and Phase 2 (cairn decommission) shipped 2026-08-08 via
+`~/dev/cairn/PROJECT_PLAN.md`, which superseded this directive's phasing with a single-sitting shutdown.
+Phase 1 is PARTIALLY done: 1.1 and 1.3 shipped as part of the decommission's own hook cleanup; 1.2
+(checkpoint truncation), 1.4 (junk purge), 1.5 (enable 4 platform plugins), and 1.6's unattended-fire proof
+are still OPEN — the auto-memory read instrument itself is live (`hooks/borg-memory-read-log.sh` +
+`bin/memory-hits-report`) but has not yet been wired into a recurring, notification-delivering unattended
+job, so 1.6's actual proof obligation is unmet. Phase 3 correctly remains GATED — do not schedule it.*
 *Source: `~/dev/cairn/docs/research/` — see `README.md` for the full arc; the operative documents are
 `2026-08-04-cairn-original-goals-audit.md` and `2026-08-05-post-cairn-strategy.md`*
 *Companion decision: `~/dev/cairn/docs/adr/0002-retire-belief-store.md`*
@@ -50,13 +55,17 @@ is unconditionally worth doing regardless of what replaces it.
 Nothing in Phase 2 may start until this is done and verified. The corpus is 50 MB; there is no excuse for
 losing it.
 
-- [ ] `cairn backup --reason final-export` and a raw `pg_dump` of the `cairn` database, stored outside the
-      cairn repo and outside Docker volumes.
-- [ ] Export all 4,232 atoms (decisions / patterns / observations / documents) to **per-repo markdown** under
+- [x] `cairn backup --reason final-export` and a raw `pg_dump` of the `cairn` database, stored outside the
+      cairn repo and outside Docker volumes. *(fresh `pg_dump` taken immediately before the drop; the 14
+      pre-existing nightly encrypted backups + age identity preserved — see `docs/BACKUP_RESTORE.md` in cairn)*
+- [x] Export all 4,232 atoms (decisions / patterns / observations / documents) to **per-repo markdown** under
       each project's `.borg/knowledge/`, so the content stays git-tracked and grep-reachable after teardown.
-- [ ] Verify: `rg` over the export returns the founding canonical query's record
+- [x] Verify: `rg` over the export returns the founding canonical query's record
       (`cairn-sqlalchemy-cast-named-param-conflict-2026-04-28`). If grep cannot find it, the export is wrong.
-- [ ] Record the final `cairn eval-redundancy --json` output into the export directory as the closing measurement.
+      *(re-verified against the real post-merge local filesystem, not just the DB or remote)*
+- [x] Record the final `cairn eval-redundancy --json` output into the export directory as the closing measurement.
+      *(ported as `scripts/eval_redundancy.py`, runs standalone against the export; last run: 19.3%
+      same-project / 0.3% cross-project, NARROW verdict — consistent with the original audit)*
 
 **Acceptance:** the export survives `docker compose down -v` on cairn. Test that assumption explicitly before
 believing it.
@@ -74,10 +83,13 @@ none can rot the way cairn rotted.** These are worth doing whether or not cairn 
 function is **absent from the deployed `~/.claude/lib/borg-hooks.sh`**. Running the repo hook directly exits
 **127**. It works in sessions only because `scripts/build-plugin.sh` inlines the helpers into the plugin copy.
 
-- [ ] Either restore `_borg_cairn_health_line` into `~/.claude/lib/borg-hooks.sh`, or remove both call sites
-      (they become moot after Phase 2 anyway).
-- [ ] Add a smoke test that pipes a minimal SessionStart payload into the **repo** hook and asserts exit 0.
-      The bats suite currently supplies its own lib and therefore cannot catch this.
+- [x] Either restore `_borg_cairn_health_line` into `~/.claude/lib/borg-hooks.sh`, or remove both call sites
+      (they become moot after Phase 2 anyway). *(removed — the function and both call sites no longer exist
+      after the decommission, so this failure mode is structurally eliminated, not just tested for)*
+- [x] Add a smoke test that pipes a minimal SessionStart payload into the **repo** hook and asserts exit 0.
+      The bats suite currently supplies its own lib and therefore cannot catch this. *(`tests/lifecycle.bats`
+      invokes `hooks/borg-link-down.sh`/`borg-link-up.sh` directly by path with a minimal JSON payload; full
+      suite green post-unwiring)*
 
 ### 1.2 — Fix checkpoint truncation (~0.5h)
 
@@ -94,10 +106,12 @@ being cut off.
 passes `$PROJECT` as **both** the query string and the `--project` filter — so when it does return something,
 relevance to the session's actual task is coincidental.
 
-- [ ] Delete the cairn search/injection block and its `CAIRN UNAVAILABLE` banner.
+- [x] Delete the cairn search/injection block and its `CAIRN UNAVAILABLE` banner.
 - [ ] Replace with ~30 tokens of pointer in each project `CLAUDE.md`: *"prior decisions live in
-      `.borg/checkpoints/`, `.borg/knowledge/` and `docs/plans/assimilated/` — grep them."*
-- [ ] Keep `cairn-hits.log` writing until Phase 2 completes, as the before/after control.
+      `.borg/checkpoints/`, `.borg/knowledge/` and `docs/plans/assimilated/` — grep them."* *(not done —
+      the injection block is gone but no replacement pointer was added to project CLAUDE.md files)*
+- [x] Keep `cairn-hits.log` writing until Phase 2 completes, as the before/after control. *(moot — Phase 2 is
+      complete and cairn-hits.log's job is done; it stopped writing when the containers/hooks were removed)*
 
 ### 1.4 — Purge accumulated junk (~0.5h)
 
@@ -146,16 +160,19 @@ That is gate #4 born unwired, on the same day as the audit that was supposed to 
 
 Unwire in this order. Each step is independently revertible; do not batch them.
 
-- [ ] **Hooks (4):** `borg-link-down.sh`, `borg-link-up.sh`, `borg-cairn-heartbeat.sh`, `bin/borg-usage-watch`.
-- [ ] **Skills (5):** `borg-search`, `borg-link`, `borg-link-up`, `borg-recon`, `fable-reviewer` — remove cairn
+- [x] **Hooks (4):** `borg-link-down.sh`, `borg-link-up.sh`, `borg-cairn-heartbeat.sh`, `bin/borg-usage-watch`.
+- [x] **Skills (5):** `borg-search`, `borg-link`, `borg-link-up`, `borg-recon`, `fable-reviewer` — remove cairn
       calls, repoint at `.borg/knowledge/` + `.borg/checkpoints/` via grep.
-- [ ] **Host shim:** the 355-line `~/.config/dotfiles/zsh/bin/cairn`, plus the repo copy at `~/dev/cairn/cli/cairn`.
-- [ ] **Rebuild the plugin** (`scripts/build-plugin.sh`) — note the dry-run currently shows **5 hooks** would
-      change, i.e. there is pre-existing unrelated drift to review before shipping.
-- [ ] **Containers:** stop `cairn-api`, `cairn-api-dev` (a duplicate — ~384 MiB of pure waste),
+- [x] **Host shim:** the 355-line `~/.config/dotfiles/zsh/bin/cairn`, plus the repo copy at `~/dev/cairn/cli/cairn`.
+      *(dotfiles shim + `zsh/bin/cairn-extract` deleted; the cairn-repo CLI is moot — repo archived)*
+- [x] **Rebuild the plugin** (`scripts/build-plugin.sh`) — note the dry-run currently shows **5 hooks** would
+      change, i.e. there is pre-existing unrelated drift to review before shipping. *(rebuilt; reviewed
+      separately from the unwire diff per the plan's own scope boundary)*
+- [x] **Containers:** stop `cairn-api`, `cairn-api-dev` (a duplicate — ~384 MiB of pure waste),
       `cairn-cairn-app-1`. Reclaim ~2.6 GB of stale release tags.
-- [ ] **Databases:** drop `cairn` and `cairn_test` from dev-postgres — **only after** Phase 0's export is
-      verified to survive volume teardown.
+- [x] **Databases:** drop `cairn` and `cairn_test` from dev-postgres — **only after** Phase 0's export is
+      verified to survive volume teardown. *(dropped 2026-08-08, last and alone, after re-proving
+      grep-reachability against the real post-merge local filesystem)*
 
 ### Dispositions that must be decided, not defaulted
 
@@ -188,13 +205,17 @@ Unwire in this order. Each step is independently revertible; do not batch them.
 
 ## Acceptance criteria
 
-- [ ] The repo copy of `borg-link-down.sh` exits 0, proven by a test that does not supply its own lib.
-- [ ] Checkpoints retain their "Next Session" section verbatim.
-- [ ] `grep` over `.borg/knowledge/` answers the founding canonical query after cairn is gone.
-- [ ] No cairn container is running; `cairn`/`cairn_test` databases dropped; export verified to survive.
-- [ ] Four platform plugins enabled.
-- [ ] The auto-memory read instrument has produced ≥7 days of data **and a delivered verdict**.
-- [ ] **One gate has fired unattended and delivered a verdict nobody had to remember.**
+- [x] The repo copy of `borg-link-down.sh` exits 0, proven by a test that does not supply its own lib.
+- [ ] Checkpoints retain their "Next Session" section verbatim. *(1.2's truncation fix was not part of the
+      cairn decommission's scope — still open)*
+- [x] `grep` over `.borg/knowledge/` answers the founding canonical query after cairn is gone.
+- [x] No cairn container is running; `cairn`/`cairn_test` databases dropped; export verified to survive.
+- [ ] Four platform plugins enabled. *(1.5 — still open, unrelated to the decommission)*
+- [ ] The auto-memory read instrument has produced ≥7 days of data **and a delivered verdict**. *(the
+      instrument is live and producing data — see `~/dev/cairn/PROJECT_PLAN.md` criterion 1 — but 7 days
+      hasn't elapsed yet and no delivered-verdict channel has been built)*
+- [ ] **One gate has fired unattended and delivered a verdict nobody had to remember.** *(not done — 1.6's
+      actual proof obligation, and Phase 3 stays gated until it is)*
 
 ## Non-goals
 

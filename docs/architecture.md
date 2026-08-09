@@ -6,7 +6,7 @@ How every component of Borg fits together.
 
 ## System Overview
 
-Borg is an AI development orchestration framework with three layers:
+Borg is an AI development orchestration framework with two layers:
 
 1. **`borg` (orchestration)** — Runs on the host. Manages a JSON registry of projects, scores
    priorities, enforces work/life boundaries, launches an orchestrator Claude session for morning
@@ -16,10 +16,11 @@ Borg is an AI development orchestration framework with three layers:
    windows, and pane layouts. Launches Claude Code sessions inside project containers. Forked
    from `dev.sh`.
 
-3. **cairn (knowledge persistence, optional)** — Runs in a container with PostgreSQL + pgvector.
-   Stores decisions, patterns, and observations with vector embeddings. Enables `borg search` for
-   cross-project knowledge retrieval. Borg works without it — user-authored session checkpoints
-   are stored per-project as files.
+Knowledge persistence is file-based: user-authored session checkpoints are stored per-project at
+`<project>/.borg/checkpoints/`. (Borg previously integrated with cairn, a separate
+PostgreSQL+pgvector knowledge graph service, for cross-project semantic recall; cairn was
+decommissioned 2026-08-08 and its corpus exported to per-project `.borg/knowledge/` markdown,
+which is grep-reachable directly — no service required.)
 
 ### Data Flow
 
@@ -29,7 +30,7 @@ Session lifecycle:
   drone up project          → Container starts, tmux window created
   drone claude project      → Claude Code session begins
   borg-link-down.sh fires   → Registry: status=active
-                            → Injects additionalContext: latest checkpoint + cairn knowledge
+                            → Injects additionalContext: latest checkpoint
                             ↓
   [developer works]         → Claude uses skills, reads checkpoint from last session
                             ↓
@@ -43,7 +44,6 @@ Session lifecycle:
                                1. Registry: status=idle
                                2. Warn if uncommitted changes remain
                                3. Nudge if no recent checkpoint exists
-                               4. If cairn reachable: optional session record
 ```
 
 ### Registry Writes
@@ -59,7 +59,7 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **12 hooks**, **~14 lib files**, **17 skills**, **6 agents** (5 specialists + `ROUTING.md`),
+writing: **12 hooks**, **~14 lib files**, **16 skills**, **6 agents** (5 specialists + `ROUTING.md`),
 **4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
@@ -81,12 +81,11 @@ writing: **12 hooks**, **~14 lib files**, **17 skills**, **6 agents** (5 special
         reaper.sh               Stale-worktree reaping (portable sh core for `borg reap-worktrees`)
         colors.zsh, secrets.zsh Output styling + secret handling helpers
     hooks/
-        borg-link-down.sh       SessionStart → status=active + checkpoint/cairn/presence injection
-        borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge + presence close
+        borg-link-down.sh       SessionStart → status=active + checkpoint injection
+        borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
         borg-notify.sh          Notification → status=waiting + reason
         borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
         borg-dispatch-guard.sh  PreToolUse → >=92% usage dispatch veto (Usage Guardian)
-        borg-cairn-heartbeat.sh Periodic cairn presence heartbeat
         borg-nanoprobe-log.sh   SubagentStop → append nanoprobe completion to agents.jsonl
         bash-guard.sh, borg-supabase-guard.sh, notify.sh,
         pre-commit-remind.sh, tool-count-nudge.sh  Smaller guardrail/reminder hooks
@@ -99,7 +98,7 @@ writing: **12 hooks**, **~14 lib files**, **17 skills**, **6 agents** (5 special
         borg-link/              Consolidated project intelligence (overview + deep dive)
         borg-link-up/           Flush session state to a per-project checkpoint file
         borg-recon/             Synthesize cross-source recon fan-out into an ELI10 briefing
-        borg-next/, borg-resume/, borg-search/, borg-switch/, borg-verify/, break-glass/,
+        borg-next/, borg-resume/, borg-switch/, borg-verify/, break-glass/,
         simplify/, fable-reviewer/, no-unnecessary-read-perms/   Remaining user-invocable skills
     agents/
         borg-grunt.md            Haiku — fully-specified mechanical execution
@@ -203,8 +202,7 @@ borg.zsh
   │   ├── cmd_ls          Dashboard with sorting, markers, capacity warning
   │   ├── cmd_switch      fzf picker or direct switch
   │   ├── cmd_status      Detailed single-project view
-  │   ├── cmd_hail        cairn search for project (falls back to cmd_status)
-  │   ├── cmd_search      cairn search with optional --project filter
+  │   ├── cmd_hail        Full briefing (no arg) or project status (falls back to cmd_status)
   │   ├── cmd_scan        Auto-discover from session history
   │   ├── cmd_add/rm      Manual registration
   │   └── cmd_help        Command reference
@@ -236,13 +234,13 @@ TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // ""')
 **Design rules:**
 - Always exit 0 (failures must not block Claude)
 - Registry writes are atomic (tmp + mv)
-- Graceful degradation (if cairn is unreachable, skip; if registry is missing, skip)
+- Graceful degradation (if registry is missing, skip)
 - Fast path only — no LLM calls in hooks; the expensive work (authoring checkpoints) is user-driven
 
 ### Link-up / Link-down Semantics
 
 The hook names reflect a collective metaphor: at session start, the drone **links down** from the
-host — it pulls state (the latest checkpoint, cairn context) into the session. At session end, the
+host — it pulls state (the latest checkpoint) into the session. At session end, the
 drone **links up** — it flushes state back (status update, uncommitted-changes warning, checkpoint
 nudge). The user-invoked `/borg-link-up` skill is the explicit flush: it writes the checkpoint that
 the next session's `borg-link-down.sh` will read.
@@ -295,11 +293,11 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | borg-link | Manual | Consolidated project intelligence (overview or per-project deep dive) |
 | borg-link-up | Manual | Flush session state to `<project>/.borg/checkpoints/<ts>.md` |
 | borg-recon | Manual | Synthesize `borg recon --json` output into a by-project, urgency-ranked briefing |
-| borg-next / borg-resume / borg-search / borg-switch / borg-verify | Manual | Skill-form CLI wrappers |
+| borg-next / borg-resume / borg-switch / borg-verify | Manual | Skill-form CLI wrappers |
 | break-glass | Manual | Explicit, logged override for a normally-blocked action |
 | simplify / fable-reviewer / no-unnecessary-read-perms | Manual / auto | Code + permission hygiene guardrails |
 
-The full, current roster (17 skills as of this writing) is always `ls skills/` — this table lists
+The full, current roster (16 skills as of this writing) is always `ls skills/` — this table lists
 role, not an exhaustive spec.
 
 ---
@@ -348,9 +346,6 @@ answers "what happened everywhere since I last looked?" across every registered 
 - **Contradiction reconciliation**: recon cross-checks each project's latest checkpoint against
   fresh source state and flags checkpoint-blocker-vs-resolved-source contradictions (e.g. a
   checkpoint says "blocked on review" but the PR merged since).
-- **Cairn persistence**: reconciled contradictions are recorded to cairn (`/record/batch`) via a
-  thin, fail-quiet hook (`_recon_cairn_record`) — never a hard dependency; recon works fully
-  without cairn.
 - **Output**: `borg recon --json` emits the reconciled document; `/borg-recon` synthesizes it into
   a by-project, most-urgent-first, ELI10 briefing plus Yours(human)-vs-Mine(agent) action lists and
   a bounded read-only kickoff batch.
@@ -383,33 +378,16 @@ Nanoprobe lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (`SubagentStop`) 
 
 ---
 
-## Cairn Integration (Optional)
+## Cairn Integration (Decommissioned)
 
-Cairn is a separate project — a knowledge graph backed by PostgreSQL + pgvector. Borg integrates
-with it when available:
-
-| Borg Action | Cairn Integration |
-|-------------|-------------------|
-| `borg-link-up.sh` | Optionally commits session record; closes the presence row (`/presence/close`) |
-| `borg-link-down.sh` | Fetches cairn briefing; publishes presence (`/presence/open`) + queries related sessions |
-| `borg search` | Wraps `cairn search` for cross-project knowledge |
-| `borg init` | Includes cairn knowledge in orchestrator briefing |
-| `borg recon` | Persists reconciled contradictions via `/record/batch` (fail-quiet, optional) |
-
-When cairn is unavailable, borg degrades gracefully: checkpoints live in each project's
-`.borg/checkpoints/` directory and are loaded on session start. `borg search` is unavailable.
-
-### Cross-Session Presence
-
-At `SessionStart`, `borg-link-down.sh` publishes a presence row to cairn (`/presence/open`) and
-queries for other active sessions on the same project (`/presence/related`). If a related session
-is found, one distilled line is appended to `additionalContext`:
-`▸ N other active session(s) — closest: session <id8> editing <file> in <project>`. At `Stop`,
-`borg-link-up.sh` closes the row (`/presence/close`). The feature is strictly silent/no-op on every
-failure path (cairn down, 404, timeout) and requires cairn server migration 004 plus the `cairn
-presence` subcommand. v1 limitations: heartbeat only fires at `SessionStart` (30-minute TTL),
-`touched_paths` is a one-time snapshot rather than live, and orchestrator-mode sessions do not
-publish presence.
+Borg previously integrated with cairn, a separate PostgreSQL+pgvector knowledge graph service, for
+cross-project search, briefing enrichment, and cross-session presence tracking. Cairn was
+decommissioned 2026-08-08 (its differentiating cross-project recall measured indistinguishable from
+a null baseline), and every integration point — `borg search`, cairn-enriched briefings, and
+presence publish/close — was removed along with it. The corpus was exported to per-project
+`.borg/knowledge/*.md` markdown, which is grep-reachable directly and requires no service.
+Knowledge persistence today is purely file-based: checkpoints in `<project>/.borg/checkpoints/`,
+loaded on session start.
 
 ---
 
@@ -442,5 +420,4 @@ directory names.
 | fzf | Yes | Fuzzy picker for `borg switch` |
 | tmux | Yes | Session multiplexing |
 | claude | Optional | Orchestrator session, `borg link --brief` narrative briefing |
-| cairn | Optional | Knowledge persistence |
 | Docker | Optional | Devcontainer support |

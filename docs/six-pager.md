@@ -122,15 +122,12 @@ implemented. The tmux hotkey (`Ctrl+Space >`) switches to the most pressing proj
 - **`drone` CLI**: Forked from `dev.sh` into the borg-collective repo. `drone up/down/claude/sh/restart/fix/status`
   manages the full project lifecycle.
 - **`borg init` orchestrator**: Launches a Claude session with a morning briefing built from the
-  registry, recent session checkpoints, and cairn knowledge. `borg claude` re-enters the session.
+  registry and recent session checkpoints. `borg claude` re-enters the session.
 - **User-authored checkpoints**: `/borg-link-up` writes a structured checkpoint from the live
   session to `<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. The SessionStart hook
   (`borg-link-down.sh`) reads the newest checkpoint on the next start and injects it as
   `additionalContext`. No per-session LLM spend, no hidden global summaries — the prose is yours
   and lives in-repo.
-- **Cairn integration**: Optional knowledge graph (PostgreSQL + pgvector). Session records can be
-  committed when cairn is reachable. Knowledge searched at session start and via `borg search`.
-  Borg degrades gracefully without it.
 - **tmux session**: Default renamed from `dev` → `borg`.
 
 ### What's been cut
@@ -169,12 +166,14 @@ diagnoses.
 with different conventions forces the developer to maintain a mental model of which tool does what. The
 unified `borg` + `drone` model reduces this to two commands with consistent patterns.
 
-**Lesson 5: Cairn solves the persistence problem.** Session context is ephemeral — it's lost on
+**Lesson 5: Cairn was tried and decommissioned.** Session context is ephemeral — it's lost on
 compaction, context overflow, or session end. Per-project checkpoints at
-`<project>/.borg/checkpoints/` handle the common case (pick up where you left off). Cairn — an
-optional knowledge graph — extends that across projects: decisions, patterns, and cross-session
-knowledge the developer (and Claude) never has to re-derive. Borg works without cairn; cairn adds
-vector search across the whole history when available.
+`<project>/.borg/checkpoints/` handle the common case (pick up where you left off). Cairn, an
+optional cross-project knowledge graph (PostgreSQL + pgvector), was built to extend that further —
+but measurement (2026-08-08) showed its differentiating claim, cross-project semantic recall, at
+0.4% restatement, indistinguishable from the null baseline. It was decommissioned and its corpus
+exported to per-project `.borg/knowledge/*.md` markdown, which the same checkpoint/auto-memory path
+already surfaces at zero marginal cost.
 
 ---
 
@@ -205,16 +204,17 @@ to run `/borg-link-up` if no recent checkpoint exists. `summarize.py` deprecated
 
 ### Phase 4: Orchestrator ✓
 
-`borg init` generates context from registry + latest checkpoints + cairn via
+`borg init` generates context from registry + latest checkpoints via
 `_borg_orchestrator_context` and launches `claude --append-system-prompt`. `borg claude` re-enters
 with `--continue`.
 
-### Phase 5: Cairn integration ✓
+### Phase 5: Cairn integration (decommissioned)
 
-`borg-link-down.sh` merges cairn knowledge into session context alongside the latest checkpoint.
-`borg search` wraps `cairn search`. `borg hail` uses `cairn search --project`. All cairn calls
-degrade silently if cairn is unavailable — the per-project checkpoint is always the primary
-persistence.
+Cairn (PostgreSQL + pgvector) was decommissioned 2026-08-08: its differentiating claim,
+cross-project semantic recall, measured at 0.4% restatement — indistinguishable from the null
+baseline. The corpus was exported to per-project `.borg/knowledge/*.md` markdown before the
+database was dropped; cross-session persistence is served by per-project checkpoints and Claude
+Code project auto-memory.
 
 ### Phase 6: Documentation ✓
 
