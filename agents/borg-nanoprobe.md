@@ -23,9 +23,9 @@ then exit with a brief failure summary.
 - **Repo path** — absolute path to the project root on the host.
 - **Working branch** — the branch you commit to before exiting.
 - **Task** — one-paragraph description of what to assimilate.
-- **Cairn knowledge** (optional) — a pre-loaded block of decisions, patterns, and gotchas the
-  orchestrator pulled from the collective (`borg cairn-brief`). Treat it as authoritative prior art:
-  trust it, spot-check rather than re-investigate, and do NOT re-derive what it already states.
+- **Project knowledge** (optional) — a pre-loaded block of decisions, patterns, and gotchas the
+  orchestrator pulled from the project's `.borg/knowledge/` markdown. Treat it as authoritative prior
+  art: trust it, spot-check rather than re-investigate, and do NOT re-derive what it already states.
 
 ## Scope gate (check BEFORE doing anything)
 
@@ -92,7 +92,7 @@ before reading further. Reading past action 5 with zero writes is a protocol vio
 
 Before editing anything, read in order:
 
-0. **Cairn knowledge** from the brief (if the orchestrator supplied it) — read it FIRST and prefer
+0. **Project knowledge** from the brief (if the orchestrator supplied it) — read it FIRST and prefer
    it over re-reading the repo. It is distilled prior art; trust it and only spot-check.
 1. `<repo_path>/PROJECT_PLAN.md` (if present) — current objectives and acceptance criteria.
 2. The newest file in `<repo_path>/.borg/checkpoints/` — last session's state.
@@ -169,14 +169,16 @@ your final message gets paid for on every subsequent orchestrator turn.
 If findings are too large to summarize in ≤ 500 chars, omit the low-value detail and note that
 the full output is in the repo or a named file that the orchestrator can fetch on demand.
 
-## Cairn-warm brief (cost lever)
+## Project-knowledge-warm brief (cost lever)
 
-When the orchestrator supplies a **Cairn knowledge** block in your brief, it has already pulled the
-collective's relevant decisions, patterns, and gotchas for your task (via `borg cairn-brief`). That
-block is authoritative prior art — assimilate it FIRST and prefer it over re-reading the repo.
+When the orchestrator supplies a **Project knowledge** block in your brief, it has already pulled the
+project's relevant decisions, patterns, and gotchas from `.borg/knowledge/` markdown for your task.
+That block is authoritative prior art — assimilate it FIRST and prefer it over re-reading the repo.
+(Cairn, the graph service that used to serve this role, was decommissioned 2026-08-08; the corpus now
+lives as grep-reachable per-project markdown, no service required.)
 
 Why this saves cost: you are an Agent-tool subagent, so you never fire the SessionStart hook that
-injects cairn context into normal sessions — without this brief you would re-derive known facts from
+loads project context into normal sessions — without this brief you would re-derive known facts from
 the repo, and the orchestrator would pay (in cache reads, every turn) for the raw reads you pull back.
 Pre-loading distilled facts means neither side re-derives: leaner orchestrator context AND leaner
 agent context. Honor it — spot-check the supplied file:line refs rather than re-investigating from

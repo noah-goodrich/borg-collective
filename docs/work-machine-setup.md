@@ -1,9 +1,14 @@
-# Fresh macOS Work Machine — Borg + Cairn Setup Runbook
+# Fresh macOS Work Machine — Borg Setup Runbook
 
 > **This is THE canonical work-machine reference** — fresh setup AND ongoing updates. The
 > similarly-named `~/.config/dotfiles/docs/work-machine-setup.md` covers ONLY the dotfiles
 > identity/config-sync slice (git email, Keychain-backed secrets, layered config) and points back here
 > for everything else.
+
+> **cairn decommissioned (2026-08-08):** cairn (the Postgres+pgvector knowledge-graph service formerly
+> set up here) has been fully decommissioned — DB dropped, service/hooks/CLI removed, repo archived.
+> Its corpus now lives in per-project `.borg/knowledge/*.md` markdown, grep-reachable with no service
+> required. Any cairn references below are historical.
 
 **Target:** Apple Silicon macOS. Read every phase before running. Steps are in dependency order.
 Copy-paste blocks chain with `&&` or `;` — `;` continues on failure (independent steps), `&&` stops on
@@ -12,7 +17,7 @@ failure (dependent sequences).
 > Distribution model (context): **borg-collective ships in two forms that share one version:** the
 > **CLI** (via `install.sh` from a source clone) and the **Claude Code plugin** (hooks/skills/agents, via
 > the `noah-local` marketplace). The plugin version tracks the CLI version, so `borg version` and
-> `claude plugin list` should report the **same** number. **cairn ships as a GHCR container image.**
+> `claude plugin list` should report the **same** number.
 > Homebrew is used only for prerequisite tooling (jq, tmux, fswatch, …), never for borg itself.
 > **Personal skills ship as plugins too**, split across two marketplaces: public ones in `claude-plugins`
 > (`noah-local`), Ontra-specific / not-publicly-shareable ones in `claude-plugins-private` (`noah-private`,
@@ -24,56 +29,22 @@ failure (dependent sequences).
 ## Updating an existing machine (incremental sync)
 
 Already set up? Skip the phases below and run this **one-block update flow** instead — it pulls dotfiles
-and all four repos, redeploys borg, and finishes with `borg doctor` so you know the machine is actually
+and all three repos, redeploys borg, and finishes with `borg doctor` so you know the machine is actually
 healthy, not just "pulled."
-
-> ⚠️ **MANDATORY — back up cairn's database before pulling.** cairn stores its knowledge graph in
-> **Postgres** (not SQLite), database `cairn`, user `dev` (confirmed via `~/dev/cairn/compose.yml`
-> and `~/dev/cairn/CLAUDE.md`). cairn has **no first-class `backup`/`export` command** (`cairn --help`
-> only lists `search`/`record`/`stats`/`health`/`presence`) — the correct mechanism is `pg_dump`
-> straight from the container. Pulling `~/dev/cairn` and redeploying can bring in a new Alembic
-> migration that runs automatically on next boot (e.g. migration 007 dropped a CHECK constraint) —
-> a bad migration or a fat-fingered pull is otherwise unrecoverable.
->
-> **Which container?** `compose.yml` honors `${CAIRN_DB_HOST:-dev-postgres}` — `cairn-up` reuses the
-> shared `dev-postgres` container if one already exists, otherwise it bundles its own fallback named
-> `cairn-postgres`. Which one you actually have depends on whether `dev-postgres` existed the *first*
-> time `cairn-up` ran on this machine — **resolve the running container, don't assume the name**:
->
-> ```zsh
-> CAIRN_DB=$(docker ps --format '{{.Names}}' | grep -E '^(dev-postgres|cairn-postgres)$' | head -1) && \
->   echo "resolved cairn Postgres container: $CAIRN_DB"
-> D=$(date +%Y%m%d) && docker exec $CAIRN_DB pg_dump -U dev -d cairn -F c -f /tmp/cairn-backup-$D.dump && \
->   docker cp $CAIRN_DB:/tmp/cairn-backup-$D.dump ~/cairn-backup-$D.dump
-> ```
->
-> **Verify the dump is valid** — do this *inside* the container, since the host may not have
-> `pg_restore` installed:
->
-> ```zsh
-> docker cp ~/cairn-backup-$D.dump $CAIRN_DB:/tmp/verify-$D.dump && \
->   docker exec $CAIRN_DB pg_restore -l /tmp/verify-$D.dump
-> ```
->
-> **Restore** if a migration goes bad: `docker cp ~/cairn-backup-YYYYMMDD.dump $CAIRN_DB:/tmp/restore.dump
-> && docker exec $CAIRN_DB pg_restore -U dev -d cairn --clean --if-exists /tmp/restore.dump`.
 
 ```zsh
 # 1. Pull dotfiles first and re-run its installer (identity/config sync + LaunchAgents, incl.
-#    the dev-postgres auto-start agent that cairn's Postgres backend depends on).
+#    the dev-postgres auto-start agent that local project databases depend on).
 git -C ~/.config/dotfiles pull --ff-only && bash ~/.config/dotfiles/install.sh
 
-# 2. Pull all four remaining repos on main, fast-forward only
+# 2. Pull all three remaining repos on main, fast-forward only
 git -C ~/dev/borg-collective pull --ff-only && git -C ~/dev/claude-plugins pull --ff-only && \
-  git -C ~/dev/claude-plugins-private pull --ff-only && git -C ~/dev/cairn pull --ff-only
+  git -C ~/dev/claude-plugins-private pull --ff-only
 
 # 3. Redeploy borg (REQUIRED — see note). install.sh is interactive ("Install plugin now?"); either answer is fine.
 cd ~/dev/borg-collective && ./install.sh        # or: borg setup
 
-# 4. cairn — ONLY if its GHCR image bumped; otherwise no action.
-cd ~/dev/cairn && ./bin/cairn-up
-
-# 5. Verify borg CLI and plugin report the SAME version, then run the full health check
+# 4. Verify borg CLI and plugin report the SAME version, then run the full health check
 borg version && claude plugin list | grep borg-collective && borg doctor
 ```
 
@@ -83,7 +54,7 @@ borg version && claude plugin list | grep borg-collective && borg doctor
   auto-update from the pulled `~/dev/claude-plugins` via the `noah-local` marketplace (`autoUpdate: true`). Same for
   `noah-personal` from `~/dev/claude-plugins-private` via `noah-private` (`autoUpdate: true`). **But `autoUpdate` is
   best-effort, not guaranteed** — it has been observed to silently not fire, leaving a plugin stuck on an old
-  version. **Step 5's version-parity check is the gate, not a formality:**
+  version. **Step 4's version-parity check is the gate, not a formality:**
   ```zsh
   borg version && claude plugin list | grep borg-collective
   ```
@@ -96,7 +67,7 @@ borg version && claude plugin list | grep borg-collective && borg doctor
   not the canonical source repo. If the mirror lags a merge to `borg-collective`, `claude plugin list` can report a
   version that *looks* like parity while the plugin is actually missing a newly shipped hook/skill/agent. When in
   doubt, check the mirror's last sync against `borg-collective`'s latest tag, not just the version string.
-- **Step 5's `borg doctor` is the real health verification step** — it checks all four launchd agents
+- **Step 4's `borg doctor` is the real health verification step** — it checks all four launchd agents
   (notifyd, cortex-wake, usage-watch, reap) for registration, exit status, and output freshness in one
   shot. A clean pull + `install.sh` with no `borg doctor` check is an unverified update; always finish
   with it.
@@ -117,15 +88,13 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 ### What's new since 2026-07-09
 
 - **2026-07-27:** the update flow now pulls `~/.config/dotfiles` first (was missing) — its
-  `install.sh` re-registers LaunchAgents, including the dev-postgres auto-start agent that cairn's
-  Postgres backend needs. This doc is now the single canonical work-machine reference (fresh setup
+  `install.sh` re-registers LaunchAgents, including the dev-postgres auto-start agent that local
+  project databases need. This doc is now the single canonical work-machine reference (fresh setup
   AND updates); `~/.config/dotfiles/docs/work-machine-setup.md` covers only the dotfiles
   identity/config-sync slice.
 
   - **dotfiles #12:** dev-postgres auto-start LaunchAgent (delivered by the update flow's dotfiles
     pull + `install.sh`).
-  - **cairn #45:** DB auto-reconnect on loss-of-connection + write-failure surfacing (delivered via
-    the new `v0.5.4` image; `cairn-up` pulls it).
   - **borg-collective #94:** cairn heartbeat Stop hook + hail/link status callouts (rebuilt from
     source by `install.sh` / `borg setup`).
 
@@ -142,18 +111,11 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 - **`drone scaffold --supabase-shared`** — a second, opt-in scaffold path for a shared-local-Supabase
   setup (join a fixed always-on Supabase Docker network instead of a per-project instance). Inert unless
   you explicitly use the `--supabase-shared` flag; does not change default `--supabase` behavior.
-- **cairn is now 0.5.4** (was tracked loosely before; confirmed in `pyproject.toml`) — adds DB
-  auto-reconnect on loss-of-connection + write-failure surfacing (migration 008), plus a feedback
-  REST endpoint and edge backfill machinery (migration 007).
 
 ---
 
 ## Prerequisites to verify manually before running anything
 
-- [x] **VERIFIED (2026-07-21):** cairn `compose.yml` now pins `ghcr.io/noah-goodrich/cairn:0.5.4` (up from
-      0.2.0, which was verified public + multi-arch amd64+arm64 on 2026-06-11). Phase 4 Option A works as
-      written — no action needed. (If the image ever 401/404s after a re-tag, re-set the package visibility to
-      "Public" in GitHub → Packages; otherwise Option A falls back to the local source build in Option B.)
 - [ ] macOS with Xcode Command Line Tools (`xcode-select --install`).
 
 ---
@@ -189,7 +151,6 @@ Expected layout under `~/dev/` — borg expects `BORG_ORCHESTRATOR_ROOT=$HOME/de
 ```zsh
 mkdir -p ~/dev
 git clone https://github.com/noah-goodrich/borg-collective ~/dev/borg-collective
-git clone https://github.com/noah-goodrich/cairn ~/dev/cairn
 git clone https://github.com/noah-goodrich/dotfiles ~/.config/dotfiles
 git clone https://github.com/noah-goodrich/claude-plugins ~/dev/claude-plugins
 
@@ -209,11 +170,11 @@ absent, `borg setup` warns about missing dotfiles but still proceeds.
 
 Convention: Keychain **SERVICE = ENV_VAR** (uppercase, underscores). You supply all values.
 
-**Critical:** the Anthropic key (Python SDK + cairn conductor/backfill) is stored as **`ANTHROPIC_SDK_KEY`**,
+**Critical:** the Anthropic key (used by Python SDK scripts) is stored as **`ANTHROPIC_SDK_KEY`**,
 NOT `ANTHROPIC_API_KEY`. Claude Code itself uses your Max subscription and does not read this key.
 
 ```zsh
-# Core (borg + cairn)
+# Core (borg)
 security add-generic-password -s "ANTHROPIC_SDK_KEY" -a "$USER" -w "<your-anthropic-api-key>" -U
 security add-generic-password -s "GOOGLE_API_KEY"    -a "$USER" -w "<your-google-api-key>" -U   # optional
 
@@ -313,35 +274,14 @@ claude plugin list | grep noah-personal
 
 ---
 
-## Phase 4 — cairn bring-up
+## Phase 4 — cairn (decommissioned)
 
-cairn is optional; borg degrades gracefully without it.
+cairn was decommissioned on 2026-08-08: DB dropped, service/hooks/CLI removed, repo archived. Its
+corpus now lives in per-project `.borg/knowledge/*.md` markdown (grep-reachable, no service required).
+This phase is no longer part of setup.
 
-> **Runtime prerequisite (Podman):** if this machine runs Podman, `docker` is a client over
-> `podman-machine-default` — start the VM first or cairn-up hangs: `podman machine start`. Podman does **not**
-> auto-start at login (unlike OrbStack), so re-run it after every reboot before bringing cairn up.
-
-```zsh
-# 4a. Docker network
-docker network inspect devnet >/dev/null 2>&1 || docker network create devnet
-
-# 4b. Bring up cairn (Option A GHCR image; auto-falls-back to local build via compose `build:` block)
-cd ~/dev/cairn && ./bin/cairn-up
-
-# 4c. Smoke test
-curl -s http://localhost:8767/health | jq .        # expect {"status":"ok","db":"reachable",...}
-curl -s http://localhost:8767/ready                # confirms embedding model + migrations loaded
-
-# 4d. Install the cairn CLI (symlinks cli/cairn -> ~/.local/bin/cairn, idempotent)
-cd ~/dev/cairn && make install-cli
-
-# 4e. Remove the legacy dotfiles shim ONLY after the repo CLI is confirmed healthy
-cairn health && rm ~/.config/dotfiles/zsh/bin/cairn && echo "Shim removed — repo CLI active."
-```
-
-`cairn-up` creates `devnet`, detects/starts `dev-postgres` (bundles one if absent), generates
-`~/dev/cairn/.env` with a random `POSTGRES_PASSWORD`, runs `docker compose`, and polls `/ready` until the
-~400 MB fastembed model loads (up to ~3 min first boot).
+> **Podman reminder:** the machine VM does **not** auto-start at login (unlike OrbStack) — run
+> `podman machine start` after every reboot before running any local container workloads.
 
 ---
 
@@ -350,8 +290,6 @@ cairn health && rm ~/.config/dotfiles/zsh/bin/cairn && echo "Shim removed — re
 ```zsh
 borg ls                                  # project dashboard
 borg add ~/dev                           # register orchestrator root if not auto-discovered
-cairn health                             # liveness
-cairn stats                              # record counts (0 on a fresh machine is fine)
 claude plugin list | grep borg-collective
 borg next                                # recommendation engine
 borg doctor                              # verify the 4 launchd agents (registered/exit/fresh output)
@@ -362,23 +300,6 @@ borg init                                # optional: morning briefing + orchestr
 
 ## Ongoing
 
-- cairn's `compose.yml` uses `restart: unless-stopped` — it auto-restarts after reboot as long as the
-  Docker daemon starts at login (OrbStack: default yes; Docker Desktop: enable "Start at Login").
-- **Podman:** the machine VM does **not** auto-start at login — cairn will not survive a reboot until you run
-  `podman machine start` (then `./bin/cairn-up` if needed). There is no login-item equivalent to OrbStack.
-- Restart manually anytime: `cd ~/dev/cairn && ./bin/cairn-up`.
-
----
-
-## Cairn — effective daily use
-
-- **`cairn health`** — liveness; run when a hook warns "cairn unavailable". `/ready` confirms model +
-  migrations after a restart.
-- **`cairn stats`** — record counts by type; sanity-check that hooks are writing.
-- **`cairn search "query"`** — semantic search across recorded knowledge (also via `borg search`).
-- **`cairn record decision --id … --project … …`** — manual save; the `record_*` MCP tools do the same
-  from inside a Claude Code session.
-- **Hooks auto-record** — the Stop hook (`borg-link-up.sh`) writes a session debrief to cairn; run
-  `/borg-link-up` before ending a session to flush the checkpoint and trigger it.
-- **Optional + graceful** — borg probes `:8767/health` at hook time; if down, it warns and skips the
-  write. `<project>/.borg/checkpoints/` is the always-present local fallback.
+- **Podman:** the machine VM does **not** auto-start at login — restart it after every reboot with
+  `podman machine start` before running local container workloads. There is no login-item equivalent
+  to OrbStack.
