@@ -1331,6 +1331,29 @@ _borg_offer_checkpoint() {
     warn "Timed out waiting for checkpoint. Severing $wname anyway."
 }
 
+# Stop the shared stillpoint Supabase stack if it is running. Mirrors the
+# idempotent running-check in templates/supabase-shared/borg-hooks/pre-up.sh.
+# Fail-open on every path (no docker, no supabase CLI, missing config, stop
+# error) so it can never block a sever.
+_borg_stop_shared_supabase() {
+    command -v docker >/dev/null 2>&1 || return 0
+
+    local running
+    running=$(docker inspect -f '{{.State.Running}}' supabase_db_stillpoint 2>/dev/null) || true
+    [[ "$running" == "true" ]] || return 0
+
+    local stillpoint_dir="${BORG_STILLPOINT_SUPABASE_DIR:-$HOME/dev/stillpoint}"
+    if ! command -v supabase >/dev/null 2>&1 || [[ ! -d "$stillpoint_dir/supabase" ]]; then
+        warn "Shared stillpoint Supabase stack is running but cannot be stopped automatically."
+        warn "  Stop it manually: cd $stillpoint_dir && supabase stop"
+        return 0
+    fi
+
+    info "Stopping shared stillpoint Supabase stack..."
+    ( cd "$stillpoint_dir" && supabase stop ) 2>/dev/null \
+        || warn "supabase stop failed — stop it manually: cd $stillpoint_dir && supabase stop"
+}
+
 cmd_down() {
     info "Severing link to the Collective..."
 
@@ -1358,6 +1381,12 @@ cmd_down() {
     # Stop shared postgres
     local postgres_compose="$HOME/.config/dotfiles/devcontainer/docker-compose.postgres.yml"
     [[ -f "$postgres_compose" ]] && docker compose -f "$postgres_compose" down 2>/dev/null || true
+
+    # Stop the ALWAYS-ON shared stillpoint Supabase stack. Per-project
+    # borg-hooks/post-down.sh intentionally never touches it (it is shared
+    # across projects), so sever — the deliberate "tear down everything" —
+    # is the one place that stops it explicitly. Fail-open: never block sever.
+    _borg_stop_shared_supabase
 
     # Kill the tmux session
     tmux kill-session -t "$BORG_TMUX_SESSION" 2>/dev/null || true
