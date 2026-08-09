@@ -13,8 +13,6 @@ borg next --switch           Recommend AND switch to that project
 borg switch                  fzf picker → jump to tmux window
 borg switch <name>           Jump directly (skips fzf)
 
-borg search "query"          Search knowledge graph (requires cairn)
-borg search "query" --project <name>   Filter to a project
 borg recon                   Fan out across source adapters, reconcile against checkpoints
 
 borg nanoprobes (np)         List recent nanoprobe (subagent) runs
@@ -61,7 +59,6 @@ drone status                 Show all drones
 /borg-link-up                Flush session state to <project>/.borg/checkpoints/<ts>.md
 /borg-next                   What project needs attention most urgently?
 /borg-switch                 Switch to a different project's tmux window
-/borg-search                 Search the cairn knowledge graph
 /borg-recon                  Morning link-up: fan out + reconcile + briefing
 /borg-verify                 Independent pre-merge evaluator gate (PASS/FAIL)
 /borg-resume                 Auto-resume a workflow paused by a session/usage limit
@@ -71,7 +68,7 @@ drone status                 Show all drones
 /break-glass                  Add a local permission exception to settings.local.json
 /no-unnecessary-read-perms     Suppress redundant read-permission prompts (always active)
 
-Full list (17 skills): docs/skills-guide.md or run /help in a session.
+Full list (16 skills): docs/skills-guide.md or run /help in a session.
 ```
 
 ## Hotkey

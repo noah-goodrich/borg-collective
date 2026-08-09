@@ -18,7 +18,6 @@ Plus 17 Claude Code skills, four hooks, and a tmux keybinding.
   [fzf](https://github.com/junegunn/fzf)
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`npm install -g @anthropic-ai/claude-code`)
 - Docker (optional, for devcontainer-based projects)
-- [Cairn](https://github.com/your-username/cairn) (optional, for cross-session knowledge persistence)
 
 ## Step 1: Clone and Install
 

@@ -10,8 +10,10 @@ when to pivot.
 blind-reviewed recommendations. Headline: borg is not being out-competed, it is being *partially
 absorbed by the platform* — Anthropic made the parallel-fan-out mechanism native (background-by-
 default subagents, depth-3 nesting, 200-cap, shipped Jun-Jul 2026), which is convergence on borg's
-nanoprobe approach, not a threat to it. Three pillars remain uncontested: the ADHD/boundary layer,
-recon's checkpoint-vs-source contradiction reconciliation, and cairn's local opt-in knowledge graph.
+nanoprobe approach, not a threat to it. Two pillars remain uncontested: the ADHD/boundary layer and
+recon's checkpoint-vs-source contradiction reconciliation. (cairn, formerly a third pillar via its
+local opt-in knowledge graph, was decommissioned 2026-08-08; its corpus now lives in per-project
+`.borg/knowledge/` markdown.)
 
 ---
 
@@ -37,10 +39,10 @@ recon's checkpoint-vs-source contradiction reconciliation, and cairn's local opt
 | Session checkpoints | Yes (user-authored, per-project) | No | No | Beta agent-checkpointing (task-tree only) |
 | Work/life boundaries | Yes | No | No | No |
 | Shipping discipline | Yes (locked criteria) | Think→Ship phases | No | No |
-| Cross-session persistence | Yes (checkpoints + cairn) | No | Campaign persistence (markdown) | No — Agent Teams persistence closed #33764 |
+| Cross-session persistence | Yes (checkpoints) | No | Campaign persistence (markdown) | No — Agent Teams persistence closed #33764 |
 | Container-first design | Yes | No | No | No |
 | Role-based skills | No | Yes (23 specialists) | No | No |
-| Knowledge graph | Yes (cairn, optional, Postgres+pgvector) | No | No | Managed Agents Memory (cloud-only) |
+| Knowledge graph | No (cairn decommissioned 2026-08-08) | No | No | Managed Agents Memory (cloud-only) |
 | Persistent browser | No | Yes (Chromium, 100-200ms) | No | No |
 | Plugin/skill ecosystem | 6 custom skills | Marketplace | Plugins | Official marketplace |
 
@@ -59,16 +61,16 @@ memory is markdown-file based, not a pgvector graph.
 multi-harness — the highest handoff-overlap competitor. Borg deliberately keeps checkpoint prose
 in the developer's hands so it actually gets read the next morning; a claude-mem bake-off is
 worth running, but only as a *replacement* for borg's automatic under-layer with an explicit
-SessionStart token budget, never as a fourth stacked injection alongside checkpoint + cairn +
-presence context (see analysis.md Rec 5).
+SessionStart token budget, never as a third stacked injection alongside checkpoint + presence
+context (see analysis.md Rec 5).
 
 **CCPM** (Automazeio) — Project management using GitHub Issues + git worktrees. Stalled since
 March 2026.
 
 **Claude Code native (Jun-Jul 2026 changelog)** — Shipped background-by-default subagents,
 depth-3 nesting, a 200-spawn cap, and a maturing `isolation:worktree`. This is a genuine partial
-convergence on borg's nanoprobe fan-out mechanism — keep worktree hygiene, cairn logging, and
-bounded-termination discipline, but re-test whether native background agents now work when the
+convergence on borg's nanoprobe fan-out mechanism — keep worktree hygiene and bounded-termination
+discipline, but re-test whether native background agents now work when the
 orchestrator CWD is not a git repo before reducing investment further (analysis.md Rec 2).
 Agent Teams cross-session persistence was formally closed "not planned" (issue #33764) — this
 remains a durable gap borg fills and is unlikely to close natively.
@@ -95,14 +97,14 @@ When to re-evaluate borg's components:
   adopting gstack + borg hooks as a lighter combination.
 - **If native background subagents pass a direct re-test** (non-git-repo orchestrator CWD,
   `isolation:worktree` maturity) → reduce investment in the custom nanoprobe fan-out mechanism,
-  but keep worktree hygiene, cairn logging, and bounded-termination as borg-level discipline
+  but keep worktree hygiene and bounded-termination as borg-level discipline
   regardless (analysis.md Rec 2).
 - **If recon's shipped contradiction logic (`ebf866a`, #46 Track 2) proves deficient at scale** →
   evaluate Graphiti for the temporal-edge reconciliation; do not swap on a hypothesis alone
   (analysis.md Rec 4).
 - **If a claude-mem bake-off is run** → it may only *replace* borg's automatic
-  under-layer within a defined SessionStart token budget, never stack as a fourth injection
-  alongside checkpoint + cairn + presence (analysis.md Rec 5).
+  under-layer within a defined SessionStart token budget, never stack as a third injection
+  alongside checkpoint + presence (analysis.md Rec 5).
 - **Before any core-path dependency (Graphiti, claude-mem) goes load-bearing** → require a
   bus-factor/license/maintenance gate first (analysis.md Rec 6).
 - **If a tool solves the complete stack better** → migrate philosophy into that tool's skill
@@ -122,7 +124,7 @@ When to re-evaluate borg's components:
   - Claude Code changelog / release notes
   - gstack, claude-mem, Citadel releases
   - Anthropic blog / announcements about Agent Teams and Managed Agents Memory (watch for a
-    cloud-only → CLI backport that would compete with cairn)
+    cloud-only → CLI backport)
 - Update this document with findings
 
 ---

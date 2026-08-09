@@ -366,7 +366,6 @@ the plumbing — borg handles it.
 > points to absorb context-specific behavior (e.g. JIRA on the work machine). See the "Skill
 > extensions" entry under Key Patterns in [CLAUDE.md](../CLAUDE.md) for the protocol.
 
-| `borg search` | Queries cairn knowledge graph | "Have I solved this before?" |
 | `drone start <project> <feature>` | Worktree + branch + Claude in one command | "Start new feature work" |
 | `drone up/down` | Start/stop project containers | Container lifecycle (resuming existing work) |
 | `drone claude` | Launch Claude in project window | "Resume work on this project" |
@@ -376,7 +375,6 @@ the plumbing — borg handles it.
 | `/borg-recon` | Skill — fan out across GitHub (and other adapters) per project | "What changed everywhere?" |
 | `/borg-next` | Skill — recommend + switch to the most pressing project | "What should I do right now?" |
 | `/borg-resume` | Skill — pick back up after a usage-window reset or Guardian veto | "Continue where I was blocked" |
-| `/borg-search` | Skill — query cairn from inside a session | "Have I solved this before?" |
 | `/borg-switch` | Skill — fzf-style project switch from inside a session | "Switch to a different project" |
 | `/borg-verify` | Skill — spawn an independent reviewer for a PASS/FAIL merge gate | "Is this ready to merge?" |
 | `/break-glass` | Skill — explicit, logged override for a normally-blocked action | "Bypass a guardrail, on purpose" |
@@ -398,7 +396,6 @@ the plumbing — borg handles it.
 │  "Resume project"          →  drone up + drone claude           │
 │  "What am I building?"     →  /borg-plan (sets criteria)        │
 │  "Am I done?"              →  /borg-assimilate (checks + ships) │
-│  "Have I done this before?" → borg search (queries cairn)       │
 │  "I'm done for now"        →  /borg-link-up + /exit             │
 │  "What's next?"            →  Ctrl+Space > (switches window)    │
 │                                                                 │
@@ -410,19 +407,19 @@ the plumbing — borg handles it.
 │  - Knowledge persistence    - Pane layout (3-pane dev setup)    │
 │                                                                 │
 ├─────────────────────────────────────────────────────────────────┤
-│  Claude Code (the AI)       Cairn (knowledge graph)             │
-│  - Plan Mode                - Decisions + reasoning             │
-│  - Code generation          - Patterns + gotchas                │
-│  - Verification loops       - Session checkpoints               │
-│  - Skills + hooks           - Vector search across history      │
-│  - /simplify review         - Cross-project knowledge           │
+│  Claude Code (the AI)                                           │
+│  - Plan Mode                                                    │
+│  - Code generation                                              │
+│  - Verification loops                                           │
+│  - Skills + hooks                                               │
+│  - /simplify review                                             │
 │                                                                 │
 ├─────────────────────────────────────────────────────────────────┤
 │  tmux (multiplexer)         Docker (isolation)                  │
 │  - Session: borg            - One container per project         │
-│  - Windows per project      - Shared postgres for cairn         │
-│  - 3-pane layout            - bind-mounted ~/.claude/ for hooks │
-│  - Ctrl+Space prefix        - devnet shared network             │
+│  - Windows per project      - bind-mounted ~/.claude/ for hooks │
+│  - 3-pane layout            - devnet shared network             │
+│  - Ctrl+Space prefix                                            │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -439,8 +436,8 @@ If you're reading this and want to try the workflow:
 4. Give Claude verification: "run tests after changes"
 5. Run `/simplify` before shipping
 
-That's it. You're already using the Boris workflow. Everything else — borg, drone, cairn, the hooks —
-is scaffolding that makes the workflow sustainable at scale.
+That's it. You're already using the Boris workflow. Everything else — borg, drone, the hooks — is
+scaffolding that makes the workflow sustainable at scale.
 
 **Full setup (with borg):**
 ```
