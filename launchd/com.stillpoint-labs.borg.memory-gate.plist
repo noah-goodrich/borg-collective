@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stillpoint-labs.borg.memory-gate</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{MEMORY_GATE_BIN}}</string>
+        <string>--once</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>StartInterval</key>
+    <integer>86400</integer>
+    <!-- USER/HOME are REQUIRED for the notification helper (~/.claude/lib/borg-hooks.sh) and for
+         resolving $BORG_DIR — launchd hands jobs a minimal env, so without this block the gate is
+         permanently, silently blind, same failure mode as borg-usage-watch. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>USER</key>
+        <string>{{USER}}</string>
+        <key>HOME</key>
+        <string>{{HOME}}</string>
+        <key>PATH</key>
+        <string>{{PATH_VALUE}}</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/memory-gate.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/memory-gate.stderr.log</string>
+</dict>
+</plist>
