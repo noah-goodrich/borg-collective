@@ -286,6 +286,42 @@ EOF
     [ ! -f "${TEST_CWD}/.borg/state.json" ]
 }
 
+# ─── clock divergence detection ───────────────────────────────────────────────
+
+@test "stop hook detects clock divergence when checkpoint filename vs mtime disagree by >5m" {
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+    local cp="${TEST_CWD}/.borg/checkpoints/2026-01-01-0000.md"
+    echo "# checkpoint" > "$cp"
+    # Force the file's actual mtime 20 minutes after the name-encoded time.
+    touch -d "2026-01-01T00:20:00" "$cp" 2>/dev/null || touch -t 202601010020 "$cp"
+
+    bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
+
+    detected=$(jq -r '.clock_divergence.detected' "${TEST_CWD}/.borg/state.json")
+    [ "$detected" = "true" ]
+}
+
+@test "stop hook does not flag clock divergence when checkpoint name and mtime agree" {
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+    local cp="${TEST_CWD}/.borg/checkpoints/2026-01-01-0000.md"
+    echo "# checkpoint" > "$cp"
+    touch -d "2026-01-01T00:00:30" "$cp" 2>/dev/null || touch -t 202601010000 "$cp"
+
+    bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
+
+    detected=$(jq -r '.clock_divergence.detected' "${TEST_CWD}/.borg/state.json")
+    [ "$detected" = "false" ]
+}
+
+@test "start hook surfaces clock divergence warning in additionalContext" {
+    mkdir -p "${TEST_CWD}/.borg"
+    echo '{"clock_divergence":{"detected":true,"delta_seconds":1200}}' > "${TEST_CWD}/.borg/state.json"
+
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "CLOCK DIVERGENCE DETECTED"
+}
+
 @test "notify hook in orchestrator mode does NOT write state.json" {
     local borg_notify="${BATS_TEST_DIRNAME}/../hooks/borg-notify.sh"
     local orch_cwd="$HOME/dev"
