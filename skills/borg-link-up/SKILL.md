@@ -32,11 +32,21 @@ knows exactly where to start. Include the exact file and function if applicable.
 
 ## Save to disk
 
-After displaying the checkpoint, save it to `<project-root>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`.
+After displaying the checkpoint, save it to `<project-root>/.borg/checkpoints/<timestamp>.md`.
+
+To determine `<timestamp>`: do NOT compose it from your own sense of the current date/time — a
+session's ambient clock can be skewed (e.g. a container clock frozen across a host sleep/resume).
+Instead, run `date +%Y-%m-%d-%H%M` via the Bash tool and use its literal stdout, unmodified, as
+`<timestamp>`.
 
 To determine `<project-root>`: use the directory that contains `PROJECT_PLAN.md`, or the git root
 (run `git rev-parse --show-toplevel`), or the current working directory if neither applies.
 
-Create the directory if it does not exist. Use the Write tool. The file content should be the full
-five-section checkpoint exactly as displayed above (no additional wrapper or header). Echo the saved
-path at the end of your response so the developer can `cat` it later.
+Create the directory if it does not exist. Before writing, check whether
+`<project-root>/.borg/checkpoints/<timestamp>.md` already exists (e.g. via the Bash tool,
+`test -e <path>`). If it does, do not overwrite it — append `-2` to the timestamp and check again
+(then `-3`, and so on) until you find a filename that does not yet exist, and save there instead.
+
+Use the Write tool. The file content should be the full five-section checkpoint exactly as displayed
+above (no additional wrapper or header). Echo the saved path at the end of your response so the
+developer can `cat` it later.
