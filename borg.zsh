@@ -2,9 +2,9 @@
 # borg — The Borg Collective: multi-session Claude Code manager
 #
 # Usage:
-#   borg ls                   # list all tracked projects
+#   borg link                 # overview of all tracked projects
+#   borg link [project]       # deep dive on one project
 #   borg switch [query]       # fzf picker → tmux window switch
-#   borg status [project]     # detailed status for one project
 #   borg scan                 # auto-discover projects from session history
 #   borg add [path]           # manually register a project
 #   borg rm <name>            # unregister a project
@@ -551,7 +551,7 @@ cmd_ls() {
     ')
 
     if [[ -z "$sorted_names" ]]; then
-        info "No projects to show. Run: borg ls --all"
+        info "No projects to show. Run: borg link --all"
         return 0
     fi
 
@@ -686,7 +686,7 @@ cmd_switch() {
         fzf --query "$query" \
             --prompt "borg> " \
             --header "Switch to project (Enter=switch, Esc=cancel)" \
-            --preview "borg status {1}" \
+            --preview "borg link {1}" \
             --preview-window "right:45:wrap" \
             --delimiter '\t' \
             --with-nth 1,3,5 \
@@ -3059,11 +3059,9 @@ cmd_help() {
     doctor              Verify the 4 launchd agents (registered/exit status/fresh output)
     help                Show this message
 
-  ALIASES (backward compat)
-    ls                  → link
-    status              → link
-    hail                → link
-    refresh             → link --refresh
+  REMOVED (2026-08-10 — use 'link')
+    ls, status, hail, brief, briefing, refresh were aliases for 'link'.
+    Six names for one command; 'borg link' is now the only one.
 
   HOTKEY
     Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
@@ -3366,13 +3364,14 @@ case "${1:-help}" in
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
     doctor)         cmd_doctor "${@:2}" ;;
     vinculum|vinc)  cmd_vinculum "${@:2}" ;;
-    # Legacy aliases → consolidated command
-    ls)       cmd_link "${@:2}" ;;
-    status)   cmd_link "${@:2}" ;;
-    hail|brief) cmd_link "${@:2}" ;;
-    briefing) cmd_link --brief ;;
-    refresh)  cmd_link --refresh ;;
     version|--version|-V) cmd_version ;;
     help|--help|-h) cmd_help ;;
+    # Removed 2026-08-10: ls/status/hail/brief/briefing/refresh were aliases for `link`. Six names
+    # for one command meant the docs, the skills, and the research all disagreed about what to call
+    # it. Point the muscle memory at the real name rather than failing bare.
+    ls|status|hail|brief)
+        die "'borg ${1}' was removed — it was an alias for 'link'. Run: borg link" ;;
+    briefing) die "'borg briefing' was removed. Run: borg link --brief" ;;
+    refresh)  die "'borg refresh' was removed. Run: borg link --refresh" ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac

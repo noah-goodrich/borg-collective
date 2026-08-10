@@ -94,7 +94,7 @@ Volatile status lives in each project's `<workspace>/.borg/state.json`, not the 
 
 ## Reaper-aware status (match the CLI)
 
-Apply the same staleness rule as `borg next`/`borg ls`: a project whose `state.json` says
+Apply the same staleness rule as `borg next`/`borg link`: a project whose `state.json` says
 `active`/`waiting` but has no live tmux window AND a `last_activity` older than
 `BORG_REAP_STALE_HOURS` (default 12h) should be reported as **idle (stale)**. The authoritative
 implementation is `lib/reaper.sh:_borg_should_reap` — do not re-specify the predicate here.

@@ -104,6 +104,14 @@ const RUNS = [
   }
 ];
 
+// ?only=<run id> restricts the session to one run. Run 3 (interrupts) needs no specimen and no
+// build step, so `?only=phase2-interrupts` works by opening this file straight off disk.
+const ONLY = new URLSearchParams(location.search).get("only");
+if (ONLY) {
+  const keep = RUNS.filter(r => r.id === ONLY);
+  if (keep.length) RUNS.length = 0, RUNS.push(...keep);
+}
+
 const results = { started_at: new Date().toISOString(), viewer: "", seed: (window.SPECIMENS_BUILT||{}).seed, runs: {} };
 const stage = document.getElementById("stage");
 const overlay = document.getElementById("overlay");
@@ -113,9 +121,11 @@ let runIdx = 0;
 function h(html) { stage.innerHTML = html; }
 
 function intro() {
+  const solo = RUNS.length === 1;
   h(`<h1>Infoviz Comprehension Check</h1>
-  <p class="mut">Phase 1 and Phase 2 checks, run against <strong>shuffled fixture data</strong> —
-  the layouts are familiar, the answers are not.</p>
+  <p class="mut">${solo ? `Running <strong>${RUNS[0].title}</strong> only.`
+    : `Phase 1 and Phase 2 checks, run against <strong>shuffled fixture data</strong> —
+       the layouts are familiar, the answers are not.`}</p>
   <div class="card warn">
     <div class="q">Before you start</div>
     <ol class="steps sm mut">
