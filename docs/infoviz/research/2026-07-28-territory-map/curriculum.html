@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.10.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Infoviz Curriculum</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="file:///Users/noahgoodrich/.local/state/borg/artifacts/house.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Infoviz Curriculum</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#infoviz-reading-course-seven-tracks-one-question-per-book"
+id="toc-infoviz-reading-course-seven-tracks-one-question-per-book">Infoviz
+Reading Course: Seven Tracks, One Question Per Book</a>
+<ul>
+<li><a href="#track-1-dashboards-operationalmonitoring-ui-read-first"
+id="toc-track-1-dashboards-operationalmonitoring-ui-read-first">Track 1:
+Dashboards &amp; operational/monitoring UI (read first)</a></li>
+<li><a href="#track-2-perception-graphical-cognition-read-second"
+id="toc-track-2-perception-graphical-cognition-read-second">Track 2:
+Perception &amp; graphical cognition (read second)</a></li>
+<li><a
+href="#track-3-visual-encoding-the-grammar-of-graphics-read-third"
+id="toc-track-3-visual-encoding-the-grammar-of-graphics-read-third">Track
+3: Visual encoding &amp; the grammar of graphics (read third)</a></li>
+<li><a href="#track-4-narrative-explanatory-visualization-read-fourth"
+id="toc-track-4-narrative-explanatory-visualization-read-fourth">Track
+4: Narrative &amp; explanatory visualization (read fourth)</a></li>
+<li><a href="#track-5-interaction-exploration-read-fifth"
+id="toc-track-5-interaction-exploration-read-fifth">Track 5: Interaction
+&amp; exploration (read fifth)</a></li>
+<li><a
+href="#track-6-network-hierarchy-graph-visualization-read-sixth-first-if-a-dag-project-is-live"
+id="toc-track-6-network-hierarchy-graph-visualization-read-sixth-first-if-a-dag-project-is-live">Track
+6: Network, hierarchy &amp; graph visualization (read sixth; first if a
+DAG project is live)</a></li>
+<li><a
+href="#track-7-the-field-itself-read-anytime-a-fine-hour-zero-orientation"
+id="toc-track-7-the-field-itself-read-anytime-a-fine-hour-zero-orientation">Track
+7: The field itself (read anytime; a fine hour-zero
+orientation)</a></li>
+<li><a href="#suggested-pacing" id="toc-suggested-pacing">Suggested
+pacing</a></li>
+</ul></li>
+</ul>
+</nav>
+<p>Generated: 2026-07-28</p>
+<h1
+id="infoviz-reading-course-seven-tracks-one-question-per-book">Infoviz
+Reading Course: Seven Tracks, One Question Per Book</h1>
+<p>Companion to analysis.md (the territory map). This is the standalone
+course: per subfield, the 3-6 canon sources, why each earns its slot,
+the order to read them in, and the question to hold in your head while
+reading. Tracks are ordered by relevance to the program goal (complex
+operational information that passes an ELI10 readability test), matching
+the relevance map in analysis.md section 3.</p>
+<p><strong>First read, per the territory map’s recommendations:</strong>
+Stephen Few, <em>Information Dashboard Design</em>, Chapter 1 (the
+single-screen definition and the 13 mistakes), paired the same week with
+the free Google SRE “Monitoring Distributed Systems” chapter at
+sre.google. Few gives you the design constraint; the SRE chapter shows
+the same constraint derived independently from pager fatigue, in a
+domain you already live in. Every other track hangs off the vocabulary
+those two establish.</p>
+<p>A note on how to read all of this: every source below carries an
+evidence level on its card (1 = systematic review, 2 = controlled
+experiment, 7 = expert opinion, 8 = personal story). Sixteen of the 36
+are Level 7. Respect the opinions, but do not confuse them with the
+experiments.</p>
+<h2 id="track-1-dashboards-operationalmonitoring-ui-read-first">Track 1:
+Dashboards &amp; operational/monitoring UI (read first)</h2>
+<p>Track question: is this one screen, does it show exceptions, and is
+every interrupt urgent AND actionable?</p>
+<ol type="1">
+<li><strong>Few, <em>Information Dashboard Design</em>
+(2006/2013).</strong> Read first because it defines the artifact: a
+dashboard fits on a single screen, monitorable at a glance, or it has
+“transgressed the boundaries of a dashboard.” Everything later in the
+track builds on or argues with this. Hold: which of the 13 mistakes is
+my current status page committing?</li>
+<li><strong>Budiu / NN/G, “Information Foraging” (2019, free).</strong>
+The cognitive why underneath Few’s what: users satisfice, and scent
+(titles, hierarchy, above-the-fold content) decides where they look.
+Hold: where does my layout leak scent?</li>
+<li><strong>Ewaschuk / Google SRE, “Monitoring Distributed Systems”
+(2016, free).</strong> The same glanceable-exception logic derived from
+production incident response, plus the alert/dashboard boundary and the
+four golden signals. Hold: which of my alerts would fail the
+urgent-actionable-user-visible test?</li>
+<li><strong>Tariq et al., “Alert Fatigue in Security Operations Centres”
+(ACM Computing Surveys, 2025).</strong> The Level 1 evidence that the
+alert-triage boundary is still an open research problem at industry
+scale. Hold: where does the science actually stop?</li>
+<li><strong>Brownlow, “Dashboards are Dead” + “3 Years Later”
+(2020/2023).</strong> The contrarian close: even a well-designed
+dashboard fails when asked to do storytelling, lookup, and analysis at
+once. Hold: what jobs is my dashboard being asked to do, and which
+should move elsewhere?</li>
+</ol>
+<h2 id="track-2-perception-graphical-cognition-read-second">Track 2:
+Perception &amp; graphical cognition (read second)</h2>
+<p>Track question: what does a human eye actually register in one
+glance, and for which 30% of people does the standard advice not
+hold?</p>
+<ol type="1">
+<li><strong>Ware, <em>Information Visualization: Perception for
+Design</em> (preface + Ch. 1-2).</strong> The most readable entry point;
+frames why perception science matters before you hit the primary papers.
+Hold: which of my design habits have a perceptual mechanism behind them,
+and which are just habits?</li>
+<li><strong>Cleveland &amp; McGill, “Graphical Perception”
+(1984).</strong> The foundational experiment: position beats length
+beats angle beats area beats volume. Paywalled; the ranking and design
+are summarized on the card, and the next read re-verifies it. Hold:
+which channel carries my most important number?</li>
+<li><strong>Heer &amp; Bostock, “Crowdsourcing Graphical Perception”
+(2010, free).</strong> The modern replication with far larger samples,
+plus new results on area judgment and gridlines. Hold: where did the
+1984 ranking hold, and where did it crack?</li>
+<li><strong>Simons &amp; Chabris, “Gorillas in Our Midst” (1999,
+free).</strong> The half of perception the encoding papers assume away:
+without attention, half your viewers miss the gorilla. Hold: what on my
+dashboard depends on somebody happening to look?</li>
+<li><strong>Davis et al., “The Risks of Ranking” (2022, free on
+arXiv).</strong> The live debate: up to 30% of people deviate from the
+average-observer ranking. Hold: who is my actual audience, and what if
+they are not “best with the Bar”?</li>
+</ol>
+<h2
+id="track-3-visual-encoding-the-grammar-of-graphics-read-third">Track 3:
+Visual encoding &amp; the grammar of graphics (read third)</h2>
+<p>Track question: table or chart, and does the loudest channel carry
+the most important attribute?</p>
+<ol type="1">
+<li><strong>Bertin, <em>Semiology of Graphics</em>, via the Sluis
+retrospective (free).</strong> The 1967 ground floor: two planar
+variables, six retinal variables. Hold: which variables am I already
+using without naming them?</li>
+<li><strong>Munzner, <em>Visualization Analysis and Design</em>
+(What-Why-How chapters; free slides and videos at the book
+site).</strong> Bertin modernized into marks and channels, plus the
+expressiveness and effectiveness principles. Hold: does my encoding
+imply an order the data does not have?</li>
+<li><strong>Wickham, “A Layered Grammar of Graphics” (2010,
+free).</strong> Theory becomes a tool: data, mappings, geoms, scales,
+facets. Hold: can I describe my chart as a sentence in this
+grammar?</li>
+<li><strong>Remshard &amp; Queenborough, tables vs. charts (2023, free
+on PMC).</strong> The practical fork you will hit weekly: tables for
+precision and lookup, charts for pattern. Hold: what is the reader’s
+task, precisely?</li>
+<li><strong>Elavsky, “Minimalism and the absurdity of the
+data-to-ink-ratio” (2025, free).</strong> The stress test: read last so
+the clean-minimal instinct built by 1-4 gets challenged with the Bateman
+evidence. Hold: when does stripping ink start excluding readers?</li>
+</ol>
+<h2 id="track-4-narrative-explanatory-visualization-read-fourth">Track
+4: Narrative &amp; explanatory visualization (read fourth)</h2>
+<p>Track question: what are the three solid points, and do the words
+live on the chart or beside it?</p>
+<ol type="1">
+<li><strong>Segel &amp; Heer, “Narrative Visualization” (2010,
+free).</strong> The shared vocabulary: seven genres, visual and
+structural tactics, and the author-vs-reader control spectrum. Hold: who
+controls the pacing of my explanation, and did I choose that?</li>
+<li><strong>Cairo, <em>The Truthful Art</em> (2016).</strong> The values
+ceiling: truthful, then functional, then beautiful. Hold: am I about to
+make something engaging at accuracy’s expense?</li>
+<li><strong>Schwabish, “Three Ways to Annotate Your Graphs” (2018,
+free).</strong> The single most reusable ELI10 technique in the corpus:
+direct labels, active titles, on-chart detail. Hold: does my title state
+the finding or just the axes?</li>
+<li><strong>Storybench, NYT climate scrollytelling interview (2022,
+free).</strong> Theory applied end-to-end: sketch first, pair paragraphs
+with visuals, cut to three solid points. Hold: what would I cut from my
+current explainer to protect three takeaways?</li>
+<li><strong>Kosara, “The Scrollytelling Scourge” (2016, free).</strong>
+The contrarian gut-check, read last so you adopt scroll-driven narrative
+only where it earns its cost. Hold: does continuous scroll fit my
+discrete steps?</li>
+</ol>
+<h2 id="track-5-interaction-exploration-read-fifth">Track 5: Interaction
+&amp; exploration (read fifth)</h2>
+<p>Track question: would a well-designed static view beat this
+interactive one for the actual task?</p>
+<ol type="1">
+<li><strong>Shneiderman, “The Eyes Have It” (1996).</strong> The Mantra
+and the seven tasks; the vocabulary every later source assumes. Hold:
+which of the seven tasks does my design actually serve?</li>
+<li><strong>Craft &amp; Cairns, “Beyond Guidelines” (2005,
+free).</strong> Read immediately after: the Mantra is widely cited and
+never validated. Hold: how much weight was I about to put on it?</li>
+<li><strong>Cockburn, Karlson &amp; Bederson, overview+detail / zooming
+/ focus+context review (2008, free).</strong> The mechanism layer, with
+documented failure modes per technique. Hold: which family fits my task,
+and what is its known failure mode?</li>
+<li><strong>Nielsen, “Progressive Disclosure” (2006, free).</strong> The
+applied pattern closest to daily dashboard work, with the two-level
+ceiling. Hold: did I classify anything frequently needed as
+secondary?</li>
+<li><strong>Mosca, Ottley &amp; Chang, “Does Interaction Improve
+Bayesian Reasoning with Visualization?” (2021, free on arXiv).</strong>
+The falsification check: interaction can significantly detract. Hold:
+what is my evidence that this widget helps?</li>
+</ol>
+<h2
+id="track-6-network-hierarchy-graph-visualization-read-sixth-first-if-a-dag-project-is-live">Track
+6: Network, hierarchy &amp; graph visualization (read sixth; first if a
+DAG project is live)</h2>
+<p>Track question: which representation family fits this graph’s size,
+density, and task?</p>
+<ol type="1">
+<li><strong>Shneiderman, “Tree Visualization with Tree-Maps” (1992,
+free).</strong> The most intuitive alternative to node-link trees, born
+from a full 80MB disk. Hold: what does area buy me, and what does it
+cost?</li>
+<li><strong>Laubheimer / NN/G, “Treemaps” (2019, free).</strong> The
+immediate critique: area is not preattentive, small categories drown.
+Hold: is my comparison task precise or approximate?</li>
+<li><strong>Ghoniem, Fekete &amp; Castagliola, node-link vs. matrix
+(2004/2005, free).</strong> The landmark experiment: past ~20 vertices,
+matrices win most tasks except path-finding. Hold: how big is my graph,
+really?</li>
+<li><strong>Kosara, “Graphs Beyond the Hairball” (2012, free).</strong>
+The plain-language bridge: change representation family instead of
+patching the hairball. Hold: am I tuning a layout when I should switch
+families?</li>
+<li><strong>Holten, “Hierarchical Edge Bundles” (2006).</strong> The
+leading clutter fix for compound graphs, and its costs. Hold: do I need
+cluster structure more than path tracing?</li>
+<li><strong>Burch et al., empirical-evaluation survey (2021,
+free).</strong> The capstone: what replicated, what split by task, what
+remains open. Hold: which of my beliefs from reads 1-5 just got
+complicated?</li>
+</ol>
+<h2
+id="track-7-the-field-itself-read-anytime-a-fine-hour-zero-orientation">Track
+7: The field itself (read anytime; a fine hour-zero orientation)</h2>
+<p>Track question: whose advice is this, and what evidence level does it
+rest on?</p>
+<ol type="1">
+<li><strong>Makulec, “Starting Out in Data Visualization Today” (2022,
+free).</strong> The field’s own map of itself and its canon;
+independently confirms the cross-school picks in this course. Hold: what
+does the field think a newcomer needs?</li>
+<li><strong>Munzner, “A Nested Model for Visualization Design and
+Validation” (2009, free).</strong> The academic vocabulary: four nested
+levels, upstream errors cascade. Hold: at which level is my current
+design mistake living?</li>
+<li><strong>Cairo, <em>How Charts Lie</em> (2019).</strong> The
+practitioner counterweight: charts are visual arguments, and context
+beats rules. Hold: where does my chart argue rather than report?</li>
+<li><strong>Bateman et al., “Useful Junk?” (2010, free).</strong> The
+experiment that complicated minimalism: equal accuracy, better recall
+for embellished charts. Hold: which field “rules” are actually
+contested?</li>
+<li><strong>Few, “Why Most Dashboards Fail” (2007, free).</strong> Read
+last, with the rigor lens from 2-4 switched on: an unhedged claim from
+consulting practice, useful and unproven at once. Hold: can I now spot
+the difference between a finding and a strong opinion?</li>
+</ol>
+<h2 id="suggested-pacing">Suggested pacing</h2>
+<p>One track every two weeks fits around a full-time job: the papers are
+short and the books are skimmable at the chapter level. Tracks 1 and 2
+are the load-bearing pair; if the program gets cut short, finishing
+those two plus Schwabish’s annotation piece (Track 4, read 3) still
+delivers most of the ELI10 payoff. Free sources are marked; the
+paywalled items (Cleveland &amp; McGill, Ware’s interior chapters,
+Holten’s full text, the Munzner and Cairo books) all have card-level
+summaries in the sources directory that carry the load-bearing claims
+with verified quotes.</p>
+</body>
+</html>
