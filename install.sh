@@ -260,6 +260,47 @@ fi
 launchctl bootstrap "gui/$UID" "$REAP_PLIST_DEST"
 info "  launchd agent bootstrapped (runs hourly; logs -> $LOG_DIR/reap.{stdout,stderr}.log)."
 
+# ── 3d. Install borg-memory-gate daemon + LaunchAgent ────────────────────────
+#
+# Phase 1.6 of the cairn-decommission directive — the load-bearing step: one recurring,
+# unattended job that checks the auto-memory read instrument (bin/memory-hits-report) against
+# its pre-registered < 0.2 reads/session threshold and delivers a verdict through a channel that
+# interrupts (macOS notification + a loud SessionStart context block), not just a log.
+
+info "Installing borg-memory-gate (daily auto-memory read-instrument check)..."
+
+chmod +x "$BORG_HOME/bin/borg-memory-gate"
+ln -sf "$BORG_HOME/bin/borg-memory-gate" "$BIN_DIR/borg-memory-gate"
+info "  borg-memory-gate -> $BORG_HOME/bin/borg-memory-gate"
+
+MEMORY_GATE_PLIST_NAME="com.stillpoint-labs.borg.memory-gate.plist"
+MEMORY_GATE_PLIST_SRC="$BORG_HOME/launchd/$MEMORY_GATE_PLIST_NAME"
+MEMORY_GATE_PLIST_DEST="$HOME/Library/LaunchAgents/$MEMORY_GATE_PLIST_NAME"
+MEMORY_GATE_BIN="$BIN_DIR/borg-memory-gate"
+MEMORY_GATE_PATH_VALUE="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+sed \
+    -e "s|{{MEMORY_GATE_BIN}}|$MEMORY_GATE_BIN|g" \
+    -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+    -e "s|{{USER}}|$USER|g" \
+    -e "s|{{HOME}}|$HOME|g" \
+    -e "s|{{PATH_VALUE}}|$MEMORY_GATE_PATH_VALUE|g" \
+    "$MEMORY_GATE_PLIST_SRC" > "$MEMORY_GATE_PLIST_DEST"
+info "  plist -> $MEMORY_GATE_PLIST_DEST"
+
+if launchctl list "com.stillpoint-labs.borg.memory-gate" &>/dev/null 2>&1; then
+    info "  reloading launchd agent..."
+    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.memory-gate" 2>/dev/null || true
+fi
+launchctl bootstrap "gui/$UID" "$MEMORY_GATE_PLIST_DEST"
+info "  launchd agent bootstrapped (runs daily; logs -> $LOG_DIR/memory-gate.{stdout,stderr}.log)."
+
+# Kickstart once so Phase 1.6's proof obligation ("fires once, unattended, with nobody
+# remembering it") gets its first real, unprompted run right now rather than waiting up to 24h
+# for the first StartInterval tick.
+info "  kickstarting first run..."
+launchctl kickstart -k "gui/$UID/com.stillpoint-labs.borg.memory-gate" 2>/dev/null || true
+
 # ── 4. Hooks, skills, config, registry → borg setup ──────────────────────────
 
 info "Running borg setup..."
