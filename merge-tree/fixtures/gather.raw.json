@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "gathered_at": "2026-07-28T12:00:00Z",
+    "machine": "fixture",
+    "today": "2026-07-28",
+    "repos": ["ai-data-engineer", "cairn", "dbt", "infrastructure", "o-warehouse", "warehouse-permissions"],
+    "health": [
+      {"check": "cairn", "machine": "fixture", "status": "ok", "detail": "db reachable, v0.5.4", "checked_at": "2026-07-28T12:00:00Z"},
+      {"check": "gather-repos", "machine": "fixture", "status": "warn", "detail": "jira adapter rate-limited, partial fetch", "checked_at": "2026-07-28T12:00:00Z"}
+    ]
+  },
+  "items": [
+    {"ref": "warehouse-permissions#292", "project": "WHP - Keypair migration", "repo": "warehouse-permissions", "source": "github-pr", "title": "PROJ-1365 Keypair Phase 0: pure-Python lib primitives", "state": "OPEN", "changed": "2026-07-17T18:25:50Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/warehouse-permissions/pull/292", "urgency": "now", "action_needed": "Address CHANGES_REQUESTED review - keypair linchpin.", "is_entrypoint": true, "blocked": true},
+    {"ref": "warehouse-permissions#314", "project": "WHP - Keypair migration", "repo": "warehouse-permissions", "source": "github-pr", "title": "docs(keypair): correct Phase-0 lib status + Airflow keypair sourcing", "state": "OPEN", "changed": "2026-07-15T17:25:54Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/warehouse-permissions/pull/314", "urgency": "this_week", "action_needed": "", "is_entrypoint": false, "blocked": false},
+    {"ref": "warehouse-permissions#319", "project": "WHP - Keypair migration", "repo": "warehouse-permissions", "source": "github-pr", "title": "docs(dcm): active incremental migration model (Option C) + keypair ref fix", "state": "OPEN", "changed": "2026-07-15T19:41:22Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/warehouse-permissions/pull/319", "urgency": "this_week", "action_needed": "", "is_entrypoint": false, "blocked": false},
+    {"ref": "warehouse-permissions#339", "project": "WHP - team-token provisioning", "repo": "warehouse-permissions", "source": "github-pr", "title": "SME bot PAT self-service - per-owner MODIFY PAM grants (v1/Dylan)", "state": "OPEN", "changed": "2026-07-23T23:01:22Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/warehouse-permissions/pull/339", "urgency": "this_week", "action_needed": "Review-first team-token trio - walk owners through #339/#340/#341, then merge.", "is_entrypoint": true, "blocked": false},
+    {"ref": "warehouse-permissions#340", "project": "WHP - team-token provisioning", "repo": "warehouse-permissions", "source": "github-pr", "title": "New SME SageMaker bot provisioning pattern (v1/Dylan)", "state": "OPEN", "changed": "2026-07-23T23:01:58Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/warehouse-permissions/pull/340", "urgency": "this_week", "action_needed": "Merge + apply after #339.", "is_entrypoint": false, "blocked": false},
+    {"ref": "warehouse-permissions#341", "project": "WHP - team-token provisioning", "repo": "warehouse-permissions", "source": "github-pr", "title": "DRAFT PAT rotation authentication policy for SME bots (v1/Dylan)", "state": "OPEN", "changed": "2026-07-23T23:03:20Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/warehouse-permissions/pull/341", "urgency": "fyi", "action_needed": "Merge + apply after #339.", "is_entrypoint": false, "blocked": false},
+    {"ref": "warehouse-permissions#302", "project": "WHP - Snowpipe", "repo": "warehouse-permissions", "source": "github-pr", "title": "docs(snowpipe): design-in dev-first rollout", "state": "MERGED", "changed": "2026-07-16T17:21:32Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/warehouse-permissions/pull/302", "urgency": "fyi", "action_needed": "", "is_entrypoint": false, "blocked": false},
+    {"ref": "warehouse-permissions#301", "project": "WHP - Snowpipe", "repo": "warehouse-permissions", "source": "github-pr", "title": "chore: add snowpipe shared-bucket storage integration allowed location", "state": "OPEN", "changed": "2026-07-07T19:21:14Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/warehouse-permissions/pull/301", "urgency": "this_week", "action_needed": "BLOCKED on infrastructure#2334 - do not merge yet.", "is_entrypoint": false, "blocked": true},
+    {"ref": "infrastructure#2334", "project": "WHP - Snowpipe", "repo": "infrastructure", "source": "github-pr", "title": "feat(snowpipe): shared prod bucket + broaden snowflake-snowpipe IAM read", "state": "OPEN", "changed": "2026-07-13T00:00:00Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/infrastructure/pull/2334", "urgency": "now", "action_needed": "Atlantis-apply the PROD promotion after DEV validates.", "is_entrypoint": true, "blocked": true},
+    {"ref": "dbt#1145", "project": "dbt - models & pipelines (misc)", "repo": "dbt", "source": "github-pr", "title": "PROJ-1881: MCP tool call fact + attributes dim (segment -> DIM2)", "state": "OPEN", "changed": "2026-07-23T22:58:54Z", "owner": "ontres", "url": "https://github.com/acme-co/dbt/pull/1145", "urgency": "now", "action_needed": "Drive/re-review CHANGES_REQUESTED.", "is_entrypoint": true, "blocked": true},
+    {"ref": "ai-data-engineer#16", "project": "AE tooling", "repo": "ai-data-engineer", "source": "github-pr", "title": "feat(data-engineer): stacked-pr-program skill (v1.4.0)", "state": "OPEN", "changed": "2026-07-17T17:16:01Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/ai-data-engineer/pull/16", "urgency": "fyi", "action_needed": "", "is_entrypoint": false, "blocked": false},
+    {"ref": "o-warehouse#9", "project": "o-warehouse - keypair auth", "repo": "o-warehouse", "source": "github-pr", "title": "feat: keypair (SNOWFLAKE_JWT) auth + devcontainer", "state": "MERGED", "changed": "2026-07-15T20:39:38Z", "owner": "noah-goodrich", "url": "https://github.com/acme-co/o-warehouse/pull/9", "urgency": "fyi", "action_needed": "", "is_entrypoint": false, "blocked": false},
+    {"ref": "cairn#42", "project": "cairn - belief store", "repo": "cairn", "source": "github-pr", "title": "release: bump cairn to 0.5.3", "state": "MERGED", "changed": "2026-07-24T00:00:00Z", "owner": "noah-goodrich", "url": "https://github.com/noah-goodrich/cairn/pull/42", "urgency": "fyi", "action_needed": "", "is_entrypoint": false, "blocked": false}
+  ],
+  "edges": [
+    {"parent": "warehouse-permissions#292", "child": "warehouse-permissions#314", "kind": "stacked"},
+    {"parent": "warehouse-permissions#314", "child": "warehouse-permissions#319", "kind": "stacked"},
+    {"parent": "warehouse-permissions#292", "child": "warehouse-permissions#314", "kind": "blocks"},
+    {"parent": "warehouse-permissions#338", "child": "warehouse-permissions#339", "kind": "stacked"},
+    {"parent": "warehouse-permissions#339", "child": "warehouse-permissions#340", "kind": "stacked"},
+    {"parent": "warehouse-permissions#340", "child": "warehouse-permissions#341", "kind": "stacked"},
+    {"parent": "warehouse-permissions#333", "child": "warehouse-permissions#339", "kind": "apex"},
+    {"parent": "warehouse-permissions#302", "child": "warehouse-permissions#301", "kind": "stacked"},
+    {"parent": "infrastructure#2334", "child": "warehouse-permissions#301", "kind": "blocks"}
+  ],
+  "actions": {
+    "warehouse-permissions#292": {"label": "Address CHANGES_REQUESTED review - keypair linchpin.", "command": "gh pr view 292 --repo acme-co/warehouse-permissions", "class": "readonly"},
+    "warehouse-permissions#339": {"label": "Merge the review-first team-token trio.", "command": "gh pr merge 339 --repo acme-co/warehouse-permissions", "class": "confirm"},
+    "infrastructure#2334": {"label": "Atlantis-apply the PROD snowpipe promotion.", "command": "gh pr view 2334 --repo acme-co/infrastructure", "class": "readonly"},
+    "dbt#1145": {"label": "Drive/re-review CHANGES_REQUESTED.", "command": "gh pr view 1145 --repo acme-co/dbt", "class": "readonly"}
+  }
+}
