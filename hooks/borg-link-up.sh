@@ -63,14 +63,45 @@ else
     DIRTY_FLAG=false
 fi
 
-# Write status=idle + session fields + has_uncommitted_changes to state.json.
+# Clock divergence check: compare the newest checkpoint filename's encoded timestamp
+# (<YYYY-MM-DD-HHMM>...) against the checkpoint file's actual mtime. A container/VM
+# clock that froze during a laptop sleep/resume (e.g. the Podman VM) shows up as a
+# large gap between "when the name says it was written" and "when the filesystem says
+# it was written" — a direct, dependency-free divergence signal that needs no separate
+# host-time source. >5 minutes of skew is treated as divergence.
+CLOCK_DIVERGED=false
+CLOCK_DELTA=0
+_cdiv_dir="$CWD/.borg/checkpoints"
+if [[ -d "$_cdiv_dir" ]]; then
+    _cdiv_latest=$(find "$_cdiv_dir" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
+    if [[ -n "$_cdiv_latest" && -f "$_cdiv_latest" ]]; then
+        _cdiv_base="${_cdiv_latest##*/}"
+        _cdiv_ts="${_cdiv_base:0:15}"
+        if [[ "$_cdiv_ts" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}$ ]]; then
+            _cdiv_name_epoch=$(date -j -f "%Y-%m-%d-%H%M" "$_cdiv_ts" +%s 2>/dev/null \
+                || date -d "${_cdiv_ts:0:10} ${_cdiv_ts:11:2}:${_cdiv_ts:13:2}" +%s 2>/dev/null || true)
+            _cdiv_mtime_epoch=$(stat -f %m "$_cdiv_latest" 2>/dev/null || stat -c %Y "$_cdiv_latest" 2>/dev/null || true)
+            if [[ -n "$_cdiv_name_epoch" && -n "$_cdiv_mtime_epoch" ]]; then
+                CLOCK_DELTA=$(( _cdiv_mtime_epoch - _cdiv_name_epoch ))
+                (( CLOCK_DELTA < 0 )) && CLOCK_DELTA=$(( -CLOCK_DELTA ))
+                (( CLOCK_DELTA > 300 )) && CLOCK_DIVERGED=true
+            fi
+        fi
+    fi
+fi
+
+# Write status=idle + session fields + has_uncommitted_changes + clock_divergence to
+# state.json (same atomic tmp+mv write this hook already uses for every other field).
 _cur_state=$(_borg_state_read "$PROJ_DIR")
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg sid "$SESSION_ID" \
     --arg now "$NOW" \
     --argjson dirty "$DIRTY_FLAG" \
+    --argjson diverged "$CLOCK_DIVERGED" \
+    --argjson delta "$CLOCK_DELTA" \
     '.status = "idle" | .last_activity = $now |
      .has_uncommitted_changes = $dirty |
+     .clock_divergence = {detected: $diverged, delta_seconds: $delta} |
      (if $sid != "" then .claude_session_id = $sid else . end)')
 _borg_state_write "$PROJ_DIR" "$_new_state" || true
 
