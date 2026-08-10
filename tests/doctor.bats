@@ -163,3 +163,65 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"notifyd"*"n/a"*"OK"* ]]
 }
+
+# ─── container clock skew ──────────────────────────────────────────────────────
+#
+# `docker ps --filter label=dev.role=app` enumerates running drone containers (same filter
+# `get_project_container` in drone.zsh uses); `docker exec <c> date +%s` reads each one's clock.
+
+# Args: <ps-output> <container-name> <container-epoch-or-empty-for-exec-failure>
+_write_docker_mock() {
+    local names="$1" container="$2" epoch="$3"
+    cat > "$MOCK_BIN/docker" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1" == "ps" ]]; then
+    printf '%s\n' "$names"
+    exit 0
+fi
+if [[ "\$1" == "exec" && "\$3" == "date" ]]; then
+    if [[ "\$2" == "$container" ]]; then
+        if [[ -n "$epoch" ]]; then
+            echo "$epoch"
+            exit 0
+        else
+            exit 1
+        fi
+    fi
+    exit 1
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/docker"
+}
+
+@test "no running drone containers -> no clock-skew table printed" {
+    _write_docker_mock "" "" ""
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"CONTAINER"* ]]
+}
+
+@test "container clock in sync -> OK, exits 0" {
+    local now
+    now=$(date +%s)
+    _write_docker_mock "sample-app-1" "sample-app-1" "$now"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"sample-app-1"*"OK"* ]]
+}
+
+@test "container clock skewed > 120s -> WARN, not FAIL (exits 0)" {
+    local skewed
+    skewed=$(($(date +%s) + 300))
+    _write_docker_mock "sample-app-1" "sample-app-1" "$skewed"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"sample-app-1"*"WARN"* ]]
+}
+
+@test "docker exec fails to read container clock -> FAIL" {
+    _write_docker_mock "sample-app-1" "sample-app-1" ""
+    run "$BORG_CMD" doctor
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"sample-app-1"*"FAIL"* ]]
+}

@@ -2848,6 +2848,55 @@ cmd_doctor() {
     done
     echo
 
+    # Clock skew: for each running drone container, compare its clock against the host's. A
+    # skewed VM clock silently corrupts freshness/mtime checks elsewhere (this is how #98 hid) —
+    # catching it here is cheap and proactive. Not a launchd agent, so it borrows the same table
+    # columns: REG is whether we could reach the container's clock at all, EXIT carries the skew
+    # in seconds (repurposed — there is no process exit code here), FRESH is n/a.
+    local -a containers
+    containers=(${(f)"$(docker ps --filter 'label=dev.role=app' --format '{{.Names}}' 2>/dev/null)"})
+    containers=(${containers:#})
+
+    if (( ${#containers[@]} > 0 )); then
+        printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "CONTAINER" "REG" "SKEW" "FRESH" "STATUS"
+        printf '%0.s─' {1..70}; echo
+
+        local container host_epoch container_epoch skew
+        for container in "${containers[@]}"; do
+            local c_ok=1 c_warn=0 c_hint="" c_reg="yes" c_exit="n/a"
+
+            host_epoch=$(date +%s)
+            container_epoch=$(docker exec "$container" date +%s 2>/dev/null) || container_epoch=""
+
+            if [[ -z "$container_epoch" || "$container_epoch" != <-> ]]; then
+                c_reg="MISSING"
+                c_ok=0
+                c_hint="could not read clock via docker exec — is the container running?"
+            else
+                skew=$(( container_epoch - host_epoch ))
+                (( skew < 0 )) && skew=$(( -skew ))
+                c_exit="${skew}s"
+                if (( skew > 120 )); then
+                    c_warn=1
+                    c_hint="clock skew ${skew}s vs host — restart the container/VM"
+                fi
+            fi
+
+            local c_color="" c_status=""
+            if (( ! c_ok )); then
+                c_color="$RED"; c_status="FAIL"; overall_exit=1
+            elif (( c_warn )); then
+                c_color="$YELLOW"; c_status="WARN"
+            else
+                c_color="$GREEN"; c_status="OK"
+            fi
+
+            printf " %-14s %-10s %-8s %-10s ${c_color}%s${NC}\n" "$container" "$c_reg" "$c_exit" "n/a" "$c_status"
+            [[ -n "$c_hint" ]] && echo -e "   ${DIM}→ $c_hint${NC}"
+        done
+        echo
+    fi
+
     return $overall_exit
 }
 
