@@ -1,5 +1,6 @@
 # Project Plan: drone pane command
 *Established: 2026-08-10*
+*Shipped: 2026-08-10 — merged to main, full bats suite (530/530) green*
 
 ## Objective
 Add `drone pane <top|bottom|left|right>` — a general-purpose command to split the current tmux
@@ -8,22 +9,22 @@ pane-creation logic (`drone.zsh:861-878`). Ship it as a Claude Code skill (`/pan
 so it's directly callable from inside a session.
 
 ## Acceptance Criteria
-- [ ] `drone pane top|bottom|left|right` splits the active pane in the right direction (`-v -b` /
+- [x] `drone pane top|bottom|left|right` splits the active pane in the right direction (`-v -b` /
       `-v` / `-h -b` / `-h`) when run inside a tmux session belonging to a registered project.
   - Verify: manual tmux session, run each of the 4 directions, confirm placement.
-- [ ] Devcontainer projects: the new pane execs into the container shell (same as `cmd_toggle`'s
+- [x] Devcontainer projects: the new pane execs into the container shell (same as `cmd_toggle`'s
       pane creation); non-devcontainer projects just `cd` into the project dir.
   - Verify: manual check inside a devcontainer project vs. a plain project.
-- [ ] Invalid direction or no active tmux session produces a clear error, non-zero exit.
+- [x] Invalid direction or no active tmux session produces a clear error, non-zero exit.
   - Verify: `drone pane sideways` → error; run outside tmux → error.
-- [ ] New bats coverage for the direction→flags mapping and error cases (establishes a minimal
+- [x] New bats coverage for the direction→flags mapping and error cases (establishes a minimal
       tmux-mocking convention — none exists in this repo's tests yet).
   - Verify: `bats tests/drone_pane.bats`, plus full `bats tests/*.bats` stays green.
-- [ ] `skills/pane/SKILL.md` — thin wrapper skill (same pattern as `skills/borg-switch/SKILL.md`)
+- [x] `skills/pane/SKILL.md` — thin wrapper skill (same pattern as `skills/borg-switch/SKILL.md`)
       that runs `drone pane <direction>` via the Bash tool.
   - Verify: skill file follows the existing frontmatter/instruction pattern; manually invoke
     `/pane right` in a session and confirm it shells out correctly.
-- [ ] `drone` help text and `CLAUDE.md`'s command table updated to list the new command.
+- [x] `drone` help text and `CLAUDE.md`'s command table updated to list the new command.
   - Verify: `drone help` shows `pane`; `CLAUDE.md`'s drone command table has it.
 
 ## Scope Boundaries
