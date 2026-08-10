@@ -1289,9 +1289,9 @@ _borg_has_recent_checkpoint() {
 # Offer to run /borg-link-up in the Claude pane of a window, then wait for the
 # checkpoint file to appear (up to TIMEOUT seconds) before returning.
 _borg_offer_checkpoint() {
-    local wname="$1" pdir="$2" timeout="${3:-120}"
+    local wname="$1" pdir="$2" timeout="${3:-120}" threshold_hours="${4:-8}"
 
-    warn "$wname has no checkpoint from the last 8 hours."
+    warn "$wname has no checkpoint from the last ${threshold_hours} hours."
     printf "  Run /borg-link-up in that session now? [Y/n] "
     local reply
     read -r reply
@@ -1364,13 +1364,15 @@ cmd_down() {
 
     local windows
     windows=(${(f)"$(tmux list-windows -t "$BORG_TMUX_SESSION" -F '#W' 2>/dev/null)"})
+    local checkpoint_threshold_hours=8
 
     for wname in $windows; do
         [[ "$wname" == "orchestrator" || "$wname" == "host" ]] && continue
         local pdir
         pdir=$(tmux show-option -t "$BORG_TMUX_SESSION:$wname" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" ]]; then
-            _borg_has_recent_checkpoint "$pdir" || _borg_offer_checkpoint "$wname" "$pdir"
+            _borg_has_recent_checkpoint "$pdir" "$checkpoint_threshold_hours" \
+                || _borg_offer_checkpoint "$wname" "$pdir" "" "$checkpoint_threshold_hours"
             info "Stopping $wname..."
             drone down "$wname" 2>/dev/null || tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
         else
