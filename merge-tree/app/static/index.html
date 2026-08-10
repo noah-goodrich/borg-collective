@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>hub — story rail + focus lens</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">hub</div>
+    <div class="subtitle">story rail + focus lens</div>
+    <div class="breadcrumb" id="breadcrumb"></div>
+  </header>
+
+  <div class="layout">
+    <aside class="rail" id="rail">
+      <section class="unblocks" id="unblocks-panel">
+        <h2>What unblocks most</h2>
+        <ol id="unblocks-list" class="unblocks-list"></ol>
+      </section>
+
+      <section class="projects" id="projects-panel">
+        <h2>Projects</h2>
+        <div id="projects-list"></div>
+      </section>
+
+      <section class="detail" id="detail-panel">
+        <h2>Detail</h2>
+        <div id="detail-body" class="detail-body">
+          <p class="muted">Select a workstream, node, or ranked item to see detail here.</p>
+        </div>
+      </section>
+    </aside>
+
+    <main class="lens-pane">
+      <div class="lens-toolbar">
+        <span id="lens-root-label" class="lens-root-label">portfolio</span>
+        <button id="lens-reset" class="btn-ghost" title="Reset to portfolio lens">reset</button>
+        <button id="lens-portfolio-btn" class="btn-ghost" title="View portfolio lens">Portfolio</button>
+      </div>
+      <svg id="lens-svg" class="lens-svg"></svg>
+    </main>
+  </div>
+</div>
+<script src="/static/app.js"></script>
+</body>
+</html>
