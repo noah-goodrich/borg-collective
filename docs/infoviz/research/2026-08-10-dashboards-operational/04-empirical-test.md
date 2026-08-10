@@ -139,31 +139,41 @@ the boundaries of a dashboard."
 
 ### D2 — scent at the top
 
-**FAIL, and this is the most consequential finding for the display.** The first **8 lines** are ASCII-art of a
-Borg cube plus the tagline "resistance is futile." That is the highest-scent region of the display — the region
-D2 identifies as deciding whether anything below is read at all — spent entirely on decoration.
+**FAIL — but not for the reason this document originally gave.** The first draft asserted that the 8 lines of
+Borg-cube ASCII art occupied "the highest-scent region" and that sorting live projects last inverted the display.
+**Both claims were wrong, and both came from applying a web-page model of D2 to a terminal.** Corrected on
+2026-08-10 after the human viewer pointed out that terminal output auto-scrolls: the eye lands at the **bottom**,
+beside the prompt, and the top has scrolled away. See the correction note on D2.
 
-Worse, the answer to the top task is at the **bottom**. The observed row order runs `never` → `122d` → `62d` →
-… → `9d` → `just now`, placing the most recently active projects last. Whatever the intended sort, for the task
-"what needs me right now?" the display is inverted: the reader must traverse 20 rows of stale entries to reach
-the live ones, and D2's finding is that most readers will have quit before then.
+Re-derived against the corrected rule:
 
-This is also where the **P7 tension actually bites.** Phase 1's P7 held that embellishment is not automatically
-waste — Bateman et al. found better multi-week recall for embellished charts. The Borg cube is exactly that kind
-of embellishment: it carries identity and it is part of why the tool is pleasant to use. D2 says it is not
-neutral — it occupies the region that determines whether the rest is read.
+- **The ASCII art is exonerated.** Eight lines printed *first* in an append-only medium sit in the **lowest**-value
+  region, not the highest. It is the most skippable content on the display, which is exactly where decoration
+  belongs. No change needed.
+- **The project-table sort is accidentally correct.** The order runs `never` → `122d` → … → `9d` → `just now`,
+  putting the most recently active projects *closest to the prompt*. For a terminal that is the right direction.
+- **The actual failure is what sits between the table and the prompt.** `borg ls` prints the directive block
+  **last** — 46 bullets, of which **30 render as `---`**. So the landing region, the few lines the eye is
+  guaranteed to hit, is **65% delimiter noise**, and it displaces the project table out of the landing zone
+  entirely. This is a worse finding than the one it replaces: the display spends its single highest-value region
+  on content that is not merely low-value but malformed.
 
-**Revised after reading Bateman first-hand (2026-08-10).** The tension is weaker than this document originally
-claimed, because P7 is weaker: the multi-week recall result rests on **n=10**, from a 20-person study using
-charts by a single artist, and the authors explicitly decline to generalize it. Meanwhile D1/D3 gained Level 1
-support. So the honest position is no longer "two equal principles in conflict" — it is that a well-evidenced
-reduction principle is being weighed against a suggestive but thinly-sampled one.
+The remediation therefore inverts too. The answer to "what needs you?" belongs in the **last three to five lines**
+before the prompt; context, counts, and inventory belong first, where they scroll away harmlessly and stay
+recoverable by scrolling back.
 
-That still does not settle it, because **neither phase supplies a test for distinguishing load-bearing chrome
-from decoration**, and Bateman's finding, whatever its sample, is the only direct evidence either way on
-memorability. What can be said: the cost is specific and locatable (8 of 83 lines, at the top, in the
-highest-scent region), the benefit is real but rests on ten people, and if the display were bounded to one
-screen per D1 the trade-off would be forced into the open rather than absorbed by scrolling.
+**The P7 tension largely dissolves for this artifact, and it was the corrected D2 that dissolved it.** The
+original draft treated the Borg cube as the flashpoint: P7 says embellishment is not automatically waste, D2 said
+it was occupying the region that decides whether anything else is read. Under the corrected rule those two never
+actually collide here — decoration printed first in a terminal costs nothing it was competing for, because the
+first lines are the cheapest lines. The cube keeps its P7 justification and incurs no D2 cost. Keep it.
+
+The tension is real, but it lives elsewhere and is now asymmetric on the evidence. P7 got weaker on first-hand
+reading (n=10 for the multi-week recall result, single artist, authors declining to generalize) while D1/D3
+gained Level 1 support. So where a *genuine* conflict arises — decoration competing for the landing region, which
+in a terminal means the last lines before the prompt — the evidence favors reduction. It still does not settle
+the general case, because **neither phase supplies a test for distinguishing load-bearing chrome from
+decoration**, and Bateman remains the only direct evidence either way on memorability.
 
 ### D3 — exceptions, not inventory
 

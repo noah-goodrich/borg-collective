@@ -26,8 +26,9 @@ independent of Few and arrives from operational research rather than design theo
 convention, not a measurement. Treat "one screen" as a cheap, falsifiable check you should actually run; treat
 "overloaded displays cause measurable harm" as established.
 
-**D2 — The top of the display decides whether the rest is read at all. Put the answer to the top task there,
-and spend that space on nothing else.**
+**D2 — Put the answer to the top task where the eye lands when rendering finishes, and spend that space on
+nothing else. That location is MEDIUM-DEPENDENT: above the fold in top-anchored media (web pages, fixed-viewport
+dashboards), but the LAST lines before the prompt in append-only media (terminal output, chat, log streams).**
 Evidence: information scent is "how promising a potential source of information appears to the user," and on a
 view "the scent is given by the title, images, and the information that is easily visible above the fold." Users
 satisfice under bounded rationality and abandon when "the rate-of-gain ratio would decrease." [Budiu / NN/G 2019,
@@ -35,8 +36,22 @@ Level 4, summarizing Pirolli & Card's information-foraging program, Level 3]
 Confidence: **high for the mechanism, moderate for specific layout prescriptions.** The foraging account is a
 large, long-running HCI research program; NN/G's particular formatting advice (bulleted lists, bold keywords,
 descriptive headlines) is professional-body guidance. The load-bearing consequence is stronger than "important
-things first": content below the fold is not merely seen later, it is seen *conditionally on the top earning the
-reader's continued attention*. Decorative headers occupy the highest-value real estate on the display.
+things first": content outside the landing region is not merely seen later, it is seen *conditionally on the
+landing region earning the reader's continued attention*.
+
+**Correction, 2026-08-10 — the original phrasing of this rule was wrong, and the error is instructive.** It read
+"the top of the display decides whether the rest is read at all," which silently imported a **web-page**
+assumption from a source (NN/G) whose subject was *web navigation*. In an append-only medium the viewport
+auto-scrolls to the end of output: the eye lands at the **bottom**, beside the prompt, and earlier lines have
+scrolled away. The scent mechanism is medium-independent; the *location* inverts. Anything printed first in a
+terminal is in the **lowest**-value region, not the highest — it is the most easily skipped content, not the
+least. Practical consequence: in a CLI, put context and supplemental detail first (it is recoverable by
+scrolling) and the answer last.
+
+This correction came from the human running the comprehension check, not from the source appraisal — which is
+the point of running these checks against a person instead of reasoning about them. It also means any Phase 2
+finding that invoked "top of the display" against a terminal specimen has to be re-derived; see the revised D2
+verdict in `04-empirical-test.md`.
 
 **D3 — Show exceptions and summaries, not the full inventory. A row that says the same thing as every other row
 is costing space and returning nothing.**

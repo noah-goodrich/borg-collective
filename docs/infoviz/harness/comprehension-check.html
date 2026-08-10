@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>Infoviz Comprehension Check</title>
+<!--
+  Runs the Phase 1 (5-second story) and Phase 2 (three-question) comprehension checks.
+
+  Two rules are baked in on purpose:
+    1. The specimen is shown for exactly 5000ms, then removed. No re-looking.
+    2. Scoring criteria are NEVER shown during a run. You record what you actually saw, then score
+       in a separate pass. Showing the criteria first makes you grade toward the expected answer.
+-->
+<style>
+  :root { --bg:#0d1117; --fg:#c9d1d9; --mut:#8b949e; --acc:#e3b341; --ok:#3fb950; --bd:#30363d; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.6 -apple-system,BlinkMacSystemFont,sans-serif; }
+  #stage { max-width: 780px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 21px; margin: 0 0 6px; }
+  h2 { font-size: 17px; margin: 28px 0 8px; }
+  .mut { color: var(--mut); }
+  .sm { font-size: 13px; }
+  button { font: inherit; font-weight: 600; background: var(--acc); color:#000; border:0;
+           border-radius:6px; padding:10px 18px; cursor:pointer; }
+  button.ghost { background: transparent; color: var(--fg); border:1px solid var(--bd); font-weight:400; }
+  button:disabled { opacity:.4; cursor:default; }
+  textarea { width:100%; min-height:110px; background:#0f141a; color:var(--fg);
+             border:1px solid var(--bd); border-radius:6px; padding:10px; font:inherit; }
+  .row { display:flex; gap:10px; align-items:center; margin-top:16px; flex-wrap:wrap; }
+  .card { border:1px solid var(--bd); border-radius:8px; padding:16px 18px; margin:14px 0; background:#11161d; }
+  .q { font-weight:600; margin-bottom:4px; }
+  .hint { color:var(--mut); font-size:13px; margin-bottom:10px; }
+  ol.steps li { margin-bottom:6px; }
+  #overlay { position:fixed; inset:0; background:#000; z-index:50; display:none; }
+  #overlay.on { display:block; }
+  #overlay iframe, #overlay .term { width:100%; height:100%; border:0; }
+  #overlay .term { overflow:hidden; padding:18px 22px; margin:0; background:#0d1117;
+                   font:13px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace; white-space:pre; color:var(--fg); }
+  #count { position:fixed; inset:0; z-index:60; background:#000; color:var(--acc);
+           display:none; align-items:center; justify-content:center; font-size:80px; font-weight:700; }
+  #count.on { display:flex; }
+  code { background:#161b22; padding:1px 5px; border-radius:4px; font-size:13px; }
+  .warn { border-left:3px solid var(--acc); padding-left:12px; }
+</style>
+
+<div id="count"></div>
+<div id="overlay"></div>
+<div id="stage"></div>
+
+<script src="specimens.js"></script>
+<script>
+const RUNS = [
+  {
+    id: "phase1-story-lens",
+    title: "Run 1 — Story-Lens hub (5-second story)",
+    specimen: { kind: "iframe", src: "story-lens.html" },
+    timed: true,
+    blurb: "You'll see a project hub for exactly 5 seconds, then it disappears. Don't try to read " +
+           "everything — react the way you would if it flashed up on a screen.",
+    questions: [
+      { id: "p1c1", q: "What is the one thing this screen wanted you to know?",
+        hint: "First reaction, in your own words. Don't polish it." },
+      { id: "p1c2", q: "If you needed more detail about something on that screen, where would you go?",
+        hint: "Only what you noticed — not what you know exists." },
+      { id: "p1c3", q: "Was anything urgent or out of place? If so, what?",
+        hint: "If nothing stood out, say so. That's a real answer." }
+    ]
+  },
+  {
+    id: "phase2-borg-ls",
+    title: "Run 2 — borg ls (5-second story)",
+    specimen: { kind: "term", src: "borg-ls.html" },
+    timed: true,
+    blurb: "Same format: a terminal status display for exactly 5 seconds.",
+    questions: [
+      { id: "p2ca", q: "What needs your attention right now?",
+        hint: "Name something specific if you can. 'Couldn't tell' is a valid answer." },
+      { id: "p2cb", q: "Roughly how much of what you saw was normal / unremarkable?",
+        hint: "A rough proportion is fine." }
+    ]
+  },
+  {
+    id: "phase2-interrupts",
+    title: "Run 3 — Interrupts (no timer)",
+    specimen: null,
+    timed: false,
+    blurb: "No timing on this one. These are the two advisory messages borg injects into a session. " +
+           "For each, answer honestly about your own behaviour — you are the target user, so your " +
+           "answer here is the whole population.",
+    questions: [
+      { id: "p2cc1",
+        q: "SESSION CHECK-IN: 75+ tool calls this session. Consider running /borg-review to check " +
+           "progress against the plan, or /borg-link-up if this is a good save point.\n\n" +
+           "→ Would you do anything DIFFERENTLY on receiving this now versus an hour from now?",
+        hint: "If your response is the same every time, say that plainly." },
+      { id: "p2cc2",
+        q: "WORKFLOW REMINDER: About to commit. Have you run /simplify on the changed code this " +
+           "session? If yes, proceed. If not, run /simplify first.\n\n" +
+           "→ Would you do anything DIFFERENTLY on receiving this now versus an hour from now?",
+        hint: "Also: has it ever changed what you did? Roughly how often?" },
+      { id: "p2cc3",
+        q: "Either of these two — is there a version that WOULD change your behaviour? What would " +
+           "it have to know about the session to be worth the interruption?",
+        hint: "This one is design input, not a test. Speculate freely." }
+    ]
+  }
+];
+
+const results = { started_at: new Date().toISOString(), viewer: "", seed: (window.SPECIMENS_BUILT||{}).seed, runs: {} };
+const stage = document.getElementById("stage");
+const overlay = document.getElementById("overlay");
+const counter = document.getElementById("count");
+let runIdx = 0;
+
+function h(html) { stage.innerHTML = html; }
+
+function intro() {
+  h(`<h1>Infoviz Comprehension Check</h1>
+  <p class="mut">Phase 1 and Phase 2 checks, run against <strong>shuffled fixture data</strong> —
+  the layouts are familiar, the answers are not.</p>
+  <div class="card warn">
+    <div class="q">Before you start</div>
+    <ol class="steps sm mut">
+      <li>Three runs. Two are timed at exactly 5 seconds; the third has no timer.</li>
+      <li>Answer with your <strong>first reaction</strong>. Don't reason toward a good answer.</li>
+      <li>"I couldn't tell" is a real result and more useful than a guess.</li>
+      <li>Do <strong>not</strong> open <code>answer-key.json</code> until you've finished all three.</li>
+    </ol>
+  </div>
+  <div class="card sm mut">
+    <strong>What your own result can and can't establish:</strong> you know these artifacts, so this is a
+    one-way test. If you <em>fail</em> a check against data you've never seen, that's decisive. If you
+    pass, it's weak evidence — you know where to look. Confirmatory signal needs viewers who've never
+    seen the tools.
+  </div>
+  <div class="row">
+    <input id="viewer" placeholder="your name / initials" style="background:#0f141a;color:var(--fg);
+      border:1px solid var(--bd);border-radius:6px;padding:9px 11px;font:inherit">
+    <button onclick="startRun()">Begin run 1</button>
+  </div>`);
+}
+
+function startRun() {
+  const v = document.getElementById("viewer");
+  if (v) results.viewer = v.value.trim() || "anonymous";
+  const run = RUNS[runIdx];
+  h(`<h1>${run.title}</h1>
+     <p class="mut">${run.blurb}</p>
+     ${run.timed ? `<div class="card sm mut">A 3-2-1 countdown, then the screen appears for 5 seconds
+       and is removed automatically. You only get one look.</div>` : ``}
+     <div class="row"><button onclick="${run.timed ? "countdown()" : "askQuestions()"}">
+       ${run.timed ? "Show it" : "Start"}</button></div>`);
+}
+
+function countdown() {
+  let n = 3;
+  counter.classList.add("on");
+  counter.textContent = n;
+  const iv = setInterval(() => {
+    n -= 1;
+    if (n === 0) { clearInterval(iv); counter.classList.remove("on"); showSpecimen(); }
+    else counter.textContent = n;
+  }, 800);
+}
+
+async function showSpecimen() {
+  const run = RUNS[runIdx];
+  if (run.specimen.kind === "iframe") {
+    overlay.innerHTML = `<iframe src="${run.specimen.src}"></iframe>`;
+  } else {
+    const txt = await (await fetch(run.specimen.src)).text();
+    overlay.innerHTML = `<pre class="term">${txt}</pre>`;
+  }
+  overlay.classList.add("on");
+  const shownAt = performance.now();
+  setTimeout(() => {
+    overlay.classList.remove("on");
+    overlay.innerHTML = "";
+    results.runs[run.id] = results.runs[run.id] || {};
+    results.runs[run.id].exposure_ms = Math.round(performance.now() - shownAt);
+    askQuestions();
+  }, 5000);
+}
+
+function askQuestions() {
+  const run = RUNS[runIdx];
+  let qi = 0;
+  const answers = {};
+  function ask() {
+    if (qi >= run.questions.length) {
+      results.runs[run.id] = Object.assign(results.runs[run.id] || {}, { answers });
+      runIdx += 1;
+      return runIdx < RUNS.length ? startRun() : finish();
+    }
+    const q = run.questions[qi];
+    h(`<h2>${run.title}</h2>
+       <div class="card">
+         <div class="q" style="white-space:pre-wrap">${q.q}</div>
+         <div class="hint">${q.hint}</div>
+         <textarea id="ans" autofocus></textarea>
+       </div>
+       <div class="row">
+         <button onclick="window.__next()">${qi === run.questions.length - 1 ? "Finish run" : "Next"}</button>
+         <span class="mut sm">question ${qi + 1} of ${run.questions.length}</span>
+       </div>`);
+    document.getElementById("ans").focus();
+    window.__next = () => { answers[q.id] = document.getElementById("ans").value.trim(); qi += 1; ask(); };
+  }
+  ask();
+}
+
+function finish() {
+  results.finished_at = new Date().toISOString();
+  const blob = JSON.stringify(results, null, 2);
+  h(`<h1>Done — ${RUNS.length} runs recorded</h1>
+     <p class="mut">Nothing has been scored. Save this, then score it in a separate pass against the
+     criteria in the phase docs — and only now open <code>answer-key.json</code>.</p>
+     <div class="row">
+       <button onclick="navigator.clipboard.writeText(document.getElementById('out').value)">Copy JSON</button>
+       <button class="ghost" onclick="dl()">Download</button>
+     </div>
+     <textarea id="out" style="min-height:340px;margin-top:14px;font:12px/1.5 ui-monospace,monospace">${blob}</textarea>`);
+  window.dl = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([blob], { type: "application/json" }));
+    a.download = `comprehension-${results.viewer.replace(/\W+/g, "-")}-${Date.now()}.json`;
+    a.click();
+  };
+}
+
+intro();
+</script>
