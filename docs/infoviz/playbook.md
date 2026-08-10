@@ -18,9 +18,21 @@ empirical test).
 **P1 — Put the most important number on the highest-ranked channel available: position on a shared scale
 first, then length, then angle, then area, then color/shading last.**
 Evidence: Cleveland & McGill (1984) ranking, position > length ≈ angle > area > volume > color, replicated at
-scale by Heer & Bostock (2010). [Cleveland & McGill 1984; Heer & Bostock 2010]
+scale by Heer & Bostock (2010) and again by Davis et al. (2022). [Cleveland & McGill 1984; Heer & Bostock 2010;
+Davis et al. 2022]
 Confidence: high for population-level design defaults. Caveat: this is a strong prior, not a universal law —
 see P2.
+
+**Weighting audit, 2026-08-10.** Re-checked after Bateman et al. turned out to be thinner than P7 assumed.
+**P1 holds.** Its weight does not rest on the 1984 original — which this program has still only read via a
+third-party paraphrase — but on **two independent Level 2 replications that were both read first-hand**: Heer &
+Bostock (2010), which replicated the spatial-encoding ranking on a crowdsourced pool, and Davis et al. (2022),
+which replicated and extended it with Bayesian multilevel regression. Davis also confirms the exact scope P1
+claims: the ranking is a population-average result and "fails to hold consistently at the individual level,"
+which is what P2 exists to handle. Two known limits: Heer & Bostock found a divergence on angle-vs-length
+(already encoded in the `≈` above), and their sample size is not verified first-hand here — `vis.stanford.edu`
+serves a mismatched TLS certificate, so only secondary figures were available. Consequence: reading Cleveland &
+McGill (1984) directly is now **historical interest, not a blocking gap**.
 
 **P2 — For high-stakes or accessibility-sensitive displays, never rely on channel choice alone; pair the
 top-ranked channel with a redundant cue (direct label, exact value on hover/print).**

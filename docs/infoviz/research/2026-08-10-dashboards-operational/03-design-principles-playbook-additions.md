@@ -160,10 +160,16 @@ doubt on an operational display, the evidence now favors reduction.
   sub-project. Note this is now a *less urgent* blocker than when first written: with P7 downgraded and D1/D3
   gaining Level 1 support, the default on operational displays is reduction, so the boundary matters mainly for
   the narrower question of how much identity/brand chrome an otherwise-compliant display can afford.
-- **Re-verify the rest of the Phase 1 corpus for the same n-size problem.** Bateman turned out to rest on n=10
-  for its headline claim. Cleveland & McGill (1984) is still read only via a third-party paraphrase of its
-  ranking, and its sample sizes were "small by modern crowdsourcing standards" per its own Phase 0 card. Worth
-  a pass to check whether any other P-rule is carrying more weight than its sample supports.
+- ~~Re-verify the rest of the Phase 1 corpus for the same n-size problem.~~ **P1 CHECKED 2026-08-10 — holds.**
+  Unlike P7, P1 rests on **two independent Level 2 replications both read first-hand** (Heer & Bostock 2010;
+  Davis et al. 2022), not on the 1984 original. Davis confirms P1's stated scope exactly: population-average
+  valid, individual-level not — which is P2's job. Consequence: **reading Cleveland & McGill (1984) directly is
+  demoted from a blocking gap to historical interest.** Two residual limits recorded in P1's audit note: the
+  angle-vs-length divergence (already encoded), and Heer & Bostock's sample size unverified first-hand because
+  `vis.stanford.edu` serves a mismatched TLS certificate.
+- **Still unaudited: P3, P4, P5, P6.** The two rules that have been checked came out opposite (P7 down, P1
+  holding), so the audit is worth finishing rather than assuming either result generalizes. P4 is the most
+  exposed — it rests on Munzner's textbook read via a secondary review, with no first-hand source at all.
 - **D6's transfer claim is untested.** The symptom/cause distinction is crisp for user-facing services and fuzzy
   for developer tooling and personal operational displays. Worth checking whether the HCI or
   human-factors literature has an equivalent formulation outside the SRE lineage.
