@@ -65,7 +65,7 @@ ANNOTATION_MERGE_KEYS = {
 def load_annotations(path):
     """Return the machine-local annotations map, or {} on any failure.
 
-    Isolated so a future cairn export can be unioned in here (one merged map is
+    Isolated so a future external annotation export can be unioned in here (one merged map is
     handed to apply_annotations). The render MUST succeed with this file absent,
     empty, or malformed -- see SCHEMA.md; stdlib only.
     """

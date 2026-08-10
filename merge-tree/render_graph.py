@@ -39,6 +39,13 @@ NAMED_IDS = ["keypair-migration", "sme-self-service-pat", "self-service-snowpipe
 UMBRELLA_IDS = ["keypair-migration", "sme-self-service-pat"]
 STATE_ORDER = ["ready-to-start", "in-flight", "blocked", "pending", "done"]
 
+# Infoviz P1 (Cleveland-McGill): the L0 meter's LENGTH is a quantity encoding, so it has to be
+# comparable across cards -- a 3-workstream project must not render the same width as a 12-workstream
+# one. Meter width is therefore total/MAX_METER_TOTAL of the full-width track. The floor keeps
+# single-workstream projects from collapsing to a sliver that its numeric labels (P2) float above
+# with nothing underneath them; 0.25 is tuned by eye against the live story.json, not derived.
+METER_MIN_WIDTH_FRAC = 0.25
+
 # Same annotation whitelist as render.py: a provenance "source" must never
 # clobber an item's own source (the source badge). Identity keys never merge.
 ANNOTATION_MERGE_KEYS = {
@@ -82,7 +89,7 @@ def load_json(path, default):
 
 def load_annotations(path):
     """Machine-local annotations map, or {} on any failure. Isolated so a future
-    cairn export can be unioned in here before apply_annotations sees it."""
+    external annotation export can be unioned in here before apply_annotations sees it."""
     ann = load_json(path, {}) if os.path.exists(path) else {}
     return ann if isinstance(ann, dict) else {}
 
@@ -156,6 +163,7 @@ def derive_project(p):
     for ws in wss:
         if ws.get("state") in p["meter"]:
             p["meter"][ws["state"]] += 1
+    p["meter_total"] = sum(p["meter"].values())
     p["next_idx"] = hero_index(wss)
     repos = set()
     for ws in wss:
@@ -168,6 +176,10 @@ def derive_project(p):
 
 for p in projects:
     derive_project(p)
+
+# Computed once here, not per card: meterHtml() runs for every rendered project, and rescanning all
+# projects inside it would make L0 render O(n^2) for a value that never changes after this point.
+MAX_METER_TOTAL = max((p["meter_total"] for p in projects), default=0)
 
 
 # ---------------------------------------------------------------- baked payloads
@@ -205,6 +217,8 @@ CONSTS = (
     "const NAMED=" + json.dumps(NAMED_IDS) + ";\n"
     "const UMBRELLA=" + json.dumps(UMBRELLA_IDS) + ";\n"
     "const STATE_ORDER=" + json.dumps(STATE_ORDER) + ";\n"
+    "const MAX_METER_TOTAL=" + json.dumps(MAX_METER_TOTAL) + ";\n"
+    "const METER_MIN_WIDTH_FRAC=" + json.dumps(METER_MIN_WIDTH_FRAC) + ";\n"
 )
 
 CSS = """
@@ -270,6 +284,9 @@ main{max-width:1280px;margin:0 auto;padding:18px 20px}
   -webkit-box-orient:vertical;overflow:hidden}
 .meterlabs{display:flex;gap:8px;font-size:11px;height:14px}
 .mlab{font-weight:600}
+/* .metertrack is the full-width shared reference the proportional .meter is read against, so
+   "how long is this bar" is a judgment against a common scale rather than against nothing. */
+.metertrack{width:100%;height:10px;background:var(--bg);border-radius:5px}
 .meter{display:flex;gap:2px;height:10px;background:var(--bg);border-radius:5px;overflow:hidden}
 .mseg{min-width:3px;border-radius:0}
 .mseg:first-child{border-radius:5px 0 0 5px} .mseg:last-child{border-radius:0 5px 5px 0}
@@ -452,7 +469,10 @@ function meterHtml(p){
   var labs=STATE_ORDER.map(function(s){var c=p.meter[s]||0;return c>0?'<span class="mlab" style="color:var('+STATE_VAR[s]+')">'+c+'</span>':'';}).join('');
   var segs=STATE_ORDER.map(function(s){var c=p.meter[s]||0;
     return '<span class="mseg" title="'+STATE_LABEL[s]+': '+c+'" style="flex-grow:'+(c>0?c:0)+';background:var('+STATE_VAR[s]+');opacity:'+(c>0?1:.3)+'"></span>';}).join('');
-  return '<div class="meterlabs">'+labs+'</div><div class="meter">'+segs+'</div>';}
+  var total=p.meter_total||0;
+  var frac=MAX_METER_TOTAL>0?Math.max(METER_MIN_WIDTH_FRAC,total/MAX_METER_TOTAL):1;
+  return '<div class="meterlabs">'+labs+'</div><div class="metertrack" title="'+total+' of '+MAX_METER_TOTAL+' (busiest project)">'
+    +'<div class="meter" style="width:'+(frac*100).toFixed(1)+'%">'+segs+'</div></div>';}
 function cmdHtml(act){var cls=act['class']==='confirm'?'confirm':'readonly';
   return '<div class="cmd cmd-'+cls+'" data-cmd="'+esc(act.command)+'"><span class="cmd-cls">'+cls+'</span><code>'+esc(act.command)+'</code></div>';}
 function nextHtml(p){if(p.next_idx==null)return '';var ws=p.workstreams[p.next_idx];if(!ws)return '';
