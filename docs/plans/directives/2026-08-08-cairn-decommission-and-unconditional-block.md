@@ -3,10 +3,10 @@
 *Filed: 2026-08-08 · Status: PARTIAL — Phase 0 and Phase 2 (cairn decommission) shipped 2026-08-08 via
 `~/dev/cairn/PROJECT_PLAN.md`, which superseded this directive's phasing with a single-sitting shutdown.
 Phase 1 is PARTIALLY done: 1.1 and 1.3 shipped as part of the decommission's own hook cleanup; 1.2
-(checkpoint truncation), 1.4 (junk purge), 1.5 (enable 4 platform plugins), and 1.6's unattended-fire proof
-are still OPEN — the auto-memory read instrument itself is live (`hooks/borg-memory-read-log.sh` +
-`bin/memory-hits-report`) but has not yet been wired into a recurring, notification-delivering unattended
-job, so 1.6's actual proof obligation is unmet. Phase 3 correctly remains GATED — do not schedule it.*
+(checkpoint truncation), 1.4 (junk purge), and 1.5 (enable 4 platform plugins) are still OPEN. 1.6's job
+creation shipped 2026-08-10 (`bin/borg-memory-gate` + daily launchd job + `hooks/borg-link-down.sh`
+surfacing), but its **proof obligation is still unmet** — it must fire unattended over real elapsed time
+before Phase 3 can unblock; re-check in 7+ days. Phase 3 correctly remains GATED — do not schedule it.*
 *Source: `~/dev/cairn/docs/research/` — see `README.md` for the full arc; the operative documents are
 `2026-08-04-cairn-original-goals-audit.md` and `2026-08-05-post-cairn-strategy.md`*
 *Companion decision: `~/dev/cairn/docs/adr/0002-retire-belief-store.md`*
@@ -144,15 +144,26 @@ is enabled. These four have been sitting unenabled since **2026-07-08**:
 scheduler**. `~/Library/LaunchAgents` contains `cairn-backup`, `cairn-extract`, `cairn-watch` — no review job.
 That is gate #4 born unwired, on the same day as the audit that was supposed to teach this lesson.
 
-- [ ] Create one recurring job that **runs a check, evaluates it against a pre-registered threshold, and
+- [x] Create one recurring job that **runs a check, evaluates it against a pre-registered threshold, and
       delivers a verdict through a channel that interrupts** (macOS notification and/or a file the SessionStart
       hook surfaces loudly). Printing to a log is not delivery — that is what the last three gates did.
-- [ ] Its first job: the **auto-memory read instrument**. 283 files / 723,639 bytes and **no hit log exists**.
+      *(shipped: `bin/borg-memory-gate` — daily launchd job, `launchd/com.stillpoint-labs.borg.memory-gate.plist`,
+      wired in `install.sh` with a `launchctl kickstart -k` on install. FAIL delivers via the same
+      `_borg_osa_notify` helper `hooks/notify.sh` uses, plus a verdict file `hooks/borg-link-down.sh` surfaces
+      as a loud `additionalContext` SessionStart block, mirroring the existing PROJECT_PLAN.md nudge pattern.)*
+- [x] Its first job: the **auto-memory read instrument**. 283 files / 723,639 bytes and **no hit log exists**.
       Nobody has ever checked whether auto-memory is *read*. Pre-registered null:
       **< 0.2 reads/session ⇒ there is no working retrieval loop and it is a second write-only store** —
       exactly the hole cairn died in, sitting unexamined.
+      *(shipped: `bin/borg-memory-gate` wraps the existing `bin/memory-hits-report`/`hooks/borg-memory-read-log.sh`
+      instrument — no new measurement logic, just delivery.)*
 - [ ] **The proof obligation:** the gate must fire once, unattended, and produce a verdict *without anyone
       remembering it exists*. Until that happens, Phase 3 is not scheduled.
+      *(NOT YET PROVEN — the job creation above is wired and self-kickstarts once on install, but the actual
+      proof requires real elapsed time: the daily `StartInterval` firing on its own, unprompted, days after
+      this session ends. Re-check in 7+ days: confirm `~/.local/state/borg/memory-gate.log` has entries with
+      no session/human triggering them, and that `$BORG_DIR/memory-gate-state.json` shows a `last_delivered_at`
+      that nobody manually invoked. Only then does this item flip to `[x]` and Phase 3 unblock.)*
 
 ---
 
