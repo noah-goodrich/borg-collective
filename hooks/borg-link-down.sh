@@ -230,6 +230,24 @@ If this is exploratory/investigative work with no deliverable, state that explic
 and you may proceed without /borg-plan.")
 fi
 
+# Memory-gate verdict — Phase 1.6 of the cairn-decommission directive. bin/borg-memory-gate
+# (a daily launchd job) writes this file only while the auto-memory read instrument's last
+# check came back FAIL (< 0.2 reads/session); it is removed on the next PASS. Surface it loudly
+# here, the same CONTEXT_PARTS pattern as the PROJECT_PLAN.md nudge above — printing to a log
+# is not delivery, per the directive.
+MEMORY_GATE_VERDICT_FILE="${BORG_MEMORY_GATE_VERDICT_FILE:-$BORG_DIR/memory-gate-verdict.json}"
+if [[ -f "$MEMORY_GATE_VERDICT_FILE" ]]; then
+    _mg_ratio=$(jq -r '.ratio // "?"' "$MEMORY_GATE_VERDICT_FILE" 2>/dev/null || echo "?")
+    _mg_checked=$(jq -r '.checked_at // "?"' "$MEMORY_GATE_VERDICT_FILE" 2>/dev/null || echo "?")
+    CONTEXT_PARTS+=("WORKFLOW REQUIREMENT — AUTO-MEMORY GATE: FAIL
+
+The auto-memory read instrument (bin/memory-hits-report, checked ${_mg_checked}) measured
+${_mg_ratio} reads/session, below the pre-registered < 0.2 reads/session threshold. Auto-memory
+(~/.claude/projects/*/memory/*.md) looks like a second write-only store — the exact hole cairn
+died in. See docs/plans/directives/2026-08-08-cairn-decommission-and-unconditional-block.md
+Phase 1.6 for the pre-registered null and what to do about it.")
+fi
+
 # Capacity warning — count active/waiting by scanning per-project state.json files.
 # Reaper-aware: a stale active/waiting session (no live tmux window AND no recent
 # activity) is treated as idle and excluded, matching the CLI capacity count.
