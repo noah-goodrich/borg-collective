@@ -276,6 +276,23 @@ if [[ "$UNCOMMITTED_FLAG" == "true" ]]; then
 Run 'git status' to see what's pending. Consider /simplify and committing before new work.")
 fi
 
+# Clock divergence warning — set by borg-link-up.sh when the last checkpoint's
+# filename-encoded timestamp and its on-disk mtime disagreed by more than 5 minutes.
+# Strong signal of container/VM clock skew (e.g. a Podman VM clock freeze after a
+# laptop sleep/resume), which makes commit/checkpoint/state.json timestamps unreliable.
+CLOCK_DIVERGED=$(jq -r '.clock_divergence.detected // false' \
+    "$(_borg_state_file "$PROJ_DIR")" 2>/dev/null || echo "false")
+if [[ "$CLOCK_DIVERGED" == "true" ]]; then
+    CLOCK_DELTA=$(jq -r '.clock_divergence.delta_seconds // 0' \
+        "$(_borg_state_file "$PROJ_DIR")" 2>/dev/null || echo "0")
+    CONTEXT_PARTS+=("⚠ CLOCK DIVERGENCE DETECTED for $PROJECT (~${CLOCK_DELTA}s skew).
+The last checkpoint's filename timestamp and its on-disk mtime disagree by more than 5
+minutes — a strong signal the container/VM clock is out of sync with real time (common
+after a laptop sleep/resume freezes the Podman VM clock). Commit times, checkpoint
+timestamps, and state.json timestamps from this environment may be unreliable until the
+clock is corrected. Consider 'drone restart' or restarting the devcontainer to resync.")
+fi
+
 # Active directives for this project — inject filename + objective line only (no full bodies)
 DIRECTIVES_DIR="$CWD/docs/plans/directives"
 if [[ -d "$DIRECTIVES_DIR" ]]; then
