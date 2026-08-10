@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+# borg-memory-gate — daily launchd job: run the auto-memory read instrument and deliver a verdict
+# through a channel that INTERRUPTS, not just logs.
+#
+# Phase 1.6 of the cairn-decommission directive
+# (docs/plans/directives/2026-08-08-cairn-decommission-and-unconditional-block.md): "Create one
+# recurring job that runs a check, evaluates it against a pre-registered threshold, and delivers a
+# verdict through a channel that interrupts (macOS notification and/or a file the SessionStart hook
+# surfaces loudly). Printing to a log is not delivery — that is what the last three gates did."
+#
+# This job wraps bin/memory-hits-report (which already computes reads/session and prints a
+# `VERDICT: FAIL`/`PASS` line against the pre-registered < 0.2 reads/session threshold) and, on a
+# state TRANSITION:
+#   FAIL: writes a verdict file under $BORG_DIR (surfaced loudly by hooks/borg-link-down.sh as a
+#         SessionStart additionalContext block) AND fires a macOS notification via the same
+#         _borg_osa_notify helper hooks/notify.sh uses.
+#   PASS: clears any prior FAIL verdict file so a stale FAIL doesn't nag forever.
+#
+#   --once    Single check then exit (default; same as no flag — explicit for clarity).
+#   --debug   Log to stderr in addition to file.
+
+set -euo pipefail
+
+# Self-heal env FIRST — launchd hands jobs a minimal env (no USER/HOME/PATH), same failure mode
+# documented in bin/borg-usage-watch.
+USER="${USER:-$(id -un)}"
+export USER
+HOME="${HOME:-$(eval echo "~$USER")}"
+export HOME
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
+BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+LOG="${BORG_MEMORY_GATE_LOG:-$STATE_DIR/memory-gate.log}"
+
+# The verdict file hooks/borg-link-down.sh checks for a loud SessionStart surface. Present only
+# while the last-known verdict is FAIL; removed on PASS.
+VERDICT_FILE="${BORG_MEMORY_GATE_VERDICT_FILE:-$BORG_DIR/memory-gate-verdict.json}"
+
+# Idempotence state: last delivered verdict, so a run that repeats the same verdict does not
+# re-notify every time (mirrors bin/borg-usage-watch's guardian-state approach — track what was
+# last acted on, only act again on a transition).
+GATE_STATE="${BORG_MEMORY_GATE_STATE:-$BORG_DIR/memory-gate-state.json}"
+
+REPORT_BIN="${BORG_MEMORY_GATE_REPORT_BIN:-$(command -v memory-hits-report 2>/dev/null || true)}"
+if [[ -z "$REPORT_BIN" ]]; then
+    SELF_DIR="${0:A:h}" 2>/dev/null || SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+    REPORT_BIN="$SELF_DIR/memory-hits-report"
+fi
+
+DEBUG=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --once)  shift ;;
+        --debug) DEBUG=1; shift ;;
+        *) echo "usage: borg-memory-gate [--once] [--debug]" >&2; exit 2 ;;
+    esac
+done
+
+mkdir -p "$STATE_DIR" "$BORG_DIR"
+
+log() {
+    local line="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
+    echo "$line" >> "$LOG"
+    (( DEBUG )) && echo "$line" >&2
+    return 0
+}
+
+if [[ ! -x "$REPORT_BIN" ]]; then
+    log "ERROR: memory-hits-report not found/executable at '$REPORT_BIN' — gate could not run"
+    exit 1
+fi
+
+ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+REPORT_OUTPUT=""
+report_exit=0
+REPORT_OUTPUT=$("$REPORT_BIN" 2>&1) || report_exit=$?
+
+if [[ "$report_exit" -ne 0 ]]; then
+    log "ERROR: memory-hits-report exited $report_exit — gate could not evaluate"
+    exit 1
+fi
+
+# No-data case: memory-hits-report exits 0 with an explanatory message and no VERDICT line when
+# the hits log doesn't exist yet. Treat as "nothing to report" — not a verdict, don't notify.
+if ! echo "$REPORT_OUTPUT" | grep -q '^  VERDICT:'; then
+    log "no VERDICT line in memory-hits-report output — likely no data yet, skipping"
+    exit 0
+fi
+
+VERDICT=$(echo "$REPORT_OUTPUT" | grep -m1 '^  VERDICT:' | sed -E 's/^  VERDICT: (PASS|FAIL).*$/\1/')
+RATIO=$(echo "$REPORT_OUTPUT" | grep -m1 '^  ratio:' | sed -E 's/^  ratio: *([0-9.]+|n\/a).*$/\1/')
+
+if [[ "$VERDICT" != "PASS" && "$VERDICT" != "FAIL" ]]; then
+    log "ERROR: could not parse VERDICT from memory-hits-report output"
+    exit 1
+fi
+
+# Read the last-delivered verdict (empty string when absent/unreadable).
+_gate_get() {
+    [[ -f "$GATE_STATE" ]] || { printf ''; return 0; }
+    jq -r --arg k "$1" '.[$k] // ""' "$GATE_STATE" 2>/dev/null || printf ''
+}
+
+# Atomically record the last-delivered verdict (tmp + rename, per this repo's documented
+# atomic-write convention — see lib/registry.zsh's _borg_registry_write / _borg_state_write).
+_gate_set_delivered() {
+    local verdict="$1" ratio="$2"
+    local tmp="$GATE_STATE.tmp.$$"
+    if jq -c -n --arg v "$verdict" --arg r "$ratio" --arg ts "$ts" \
+        '{last_verdict:$v, last_ratio:$r, last_delivered_at:$ts}' > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$GATE_STATE"
+    else
+        rm -f "$tmp"
+        log "WARNING: could not write gate state at $GATE_STATE"
+    fi
+}
+
+_write_verdict_file() {
+    local verdict="$1" ratio="$2"
+    local tmp="$VERDICT_FILE.tmp.$$"
+    if jq -c -n --arg v "$verdict" --arg r "$ratio" --arg ts "$ts" \
+        --arg threshold "< 0.2 reads/session" \
+        '{verdict:$v, ratio:$r, threshold:$threshold, checked_at:$ts}' > "$tmp" 2>/dev/null; then
+        mv "$tmp" "$VERDICT_FILE"
+    else
+        rm -f "$tmp"
+        log "WARNING: could not write verdict file at $VERDICT_FILE"
+    fi
+}
+
+_notify() {
+    local message="$1"
+    if [[ -f "$HOME/.claude/lib/borg-hooks.sh" ]]; then
+        # shellcheck source=/dev/null
+        source "$HOME/.claude/lib/borg-hooks.sh"
+        _borg_osa_notify "Borg Memory Gate" "Auto-memory read verdict" "$message" || true
+    else
+        log "WARNING: $HOME/.claude/lib/borg-hooks.sh not found — cannot deliver notification (log-only, which is exactly the failure mode this gate exists to avoid)"
+    fi
+}
+
+last_verdict=$(_gate_get last_verdict)
+
+log "verdict=$VERDICT ratio=$RATIO last_verdict=${last_verdict:-none}"
+
+if [[ "$VERDICT" == "FAIL" ]]; then
+    _write_verdict_file "$VERDICT" "$RATIO"
+    if [[ "$last_verdict" != "FAIL" ]]; then
+        _notify "FAIL — ${RATIO} reads/session (< 0.2 threshold). Auto-memory looks write-only."
+        log "delivered FAIL notification (transition from '${last_verdict:-none}')"
+    else
+        log "FAIL already delivered previously — not re-notifying (idempotent)"
+    fi
+    _gate_set_delivered "$VERDICT" "$RATIO"
+else
+    # PASS: clear any stale FAIL verdict file so it doesn't linger and re-nag forever.
+    if [[ -f "$VERDICT_FILE" ]]; then
+        rm -f "$VERDICT_FILE"
+        log "cleared prior FAIL verdict file (now PASS)"
+    fi
+    if [[ "$last_verdict" != "PASS" ]]; then
+        log "verdict transitioned to PASS (from '${last_verdict:-none}') — not notifying on PASS, only clearing"
+    fi
+    _gate_set_delivered "$VERDICT" "$RATIO"
+fi
+
+exit 0
