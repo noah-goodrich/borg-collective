@@ -17,11 +17,14 @@ stop pretending to be a status display.**
 Evidence: Few's canonical definition — "consolidated and arranged on a single screen so the information can be
 monitored at a glance" — and its boundary condition: "If you must scroll around to see all the information, it
 has transgressed the boundaries of a dashboard." [Few, *Information Dashboard Design*, Ch. 1, Level 7]
-Confidence: **moderate, and only for the direction.** Level 7 expert opinion; no source in this track tested one
-screen against 1.5 or 3, so the threshold is a convention, not a measurement. What raises it above one man's
-taste is that the SRE chapter reaches a compatible bounded-signal conclusion from unrelated premises (production
-on-call cost), and D2 supplies an independent mechanism for why early-quitting makes long displays fail. Treat
-"one screen" as a cheap, falsifiable check you should actually run — not as a proven threshold.
+Confidence: **moderate-to-high for the claim underneath, moderate for the threshold.** Separate the two. That
+**display overload is a real, harm-causing failure mode** now has Level 1 support: Tariq et al.'s systematic
+review names "Disconnected and Overloaded Dashboards" as one of four primary causes of alert fatigue, citing
+"the absence of tools for organising and presenting information" [Tariq et al. 2025, §5.3.3, Level 1]. That is
+independent of Few and arrives from operational research rather than design theory. What remains Level 7 is the
+**one-screen threshold specifically** — no source tested one screen against 1.5 or 3, so the boundary is a
+convention, not a measurement. Treat "one screen" as a cheap, falsifiable check you should actually run; treat
+"overloaded displays cause measurable harm" as established.
 
 **D2 — The top of the display decides whether the rest is read at all. Put the answer to the top task there,
 and spend that space on nothing else.**
@@ -40,9 +43,12 @@ is costing space and returning nothing.**
 Evidence: Few — a dashboard shows abbreviated summaries and exceptions because "you cannot monitor at a glance
 all the details needed to achieve your objectives" [Level 7]; Google SRE independently routes subcritical,
 non-exceptional signal to a dashboard and off the interrupt path [Level 5].
-Confidence: **moderate.** Two sources, neither experimental, but they converge from unrelated starting points
-(perceptual limits vs. on-call cost). Practical test: compute the variance of your status column. If nearly every
-row carries the same value, that column is displaying zero information at full cost.
+Confidence: **moderate-to-high.** Two non-experimental sources converging from unrelated starting points
+(perceptual limits vs. on-call cost), now joined by Level 1 corroboration: the same "Disconnected and Overloaded
+Dashboards" finding traces the failure specifically to difficulty "consolidating data from multiple sources" and
+the absence of tools for "organising and presenting information" — which is what D3 prescribes fixing [Tariq et
+al. 2025, §5.3.3, Level 1]. Practical test: compute the variance of your status column. If nearly every row
+carries the same value, that column is displaying zero information at full cost.
 
 **D4 — An interrupt must be urgent, actionable, human-judgment-requiring, and actively user-visible — all four.
 If the correct response is the same every time, it must not interrupt.**
@@ -82,15 +88,25 @@ differently — which puts it in direct violation of D4.
 **D7 — Treat every added alert as a withdrawal from a shared, finite attention budget. Alert fatigue is a
 documented failure mode with no established fix.**
 Evidence: the only Level 1 source in the track — a systematic review finding that "recent studies, by both
-industry and academia, have highlighted the problem of alert fatigue and burnout," that the authors "identify
-four major causes of alert fatigue in SOC," that existing mitigations have "shortcomings," and that the problem
-generalizes "not just in SOCs but across other Command and Control (C2) domains as well." [Tariq et al., ACM
-CSUR 2025, Level 1]
-Confidence: **high that the phenomenon is real, generalizes beyond security operations, and is unsolved — this
-is the one claim in Phase 2 resting on Level 1 evidence. Low on any specific mitigation**, for two reasons: the
-review's own finding is that existing solutions fall short, and **its four causes could not be read** (ACM DL
-returns 403 to automated fetch; only the abstract was verifiable). Do not cite specific causes of alert fatigue
-from this program until someone reads the full text. The rule claims only what the abstract supports.
+industry and academia, have highlighted the problem of alert fatigue and burnout," that existing mitigations
+have "shortcomings," and that the problem generalizes "not just in SOCs but across other Command and Control
+(C2) domains as well." [Tariq et al., ACM CSUR 2025, Level 1]
+
+The review's §5.3 identifies **four overarching causes**, read first-hand:
+1. **Staff and Skills Shortage** — analyst scarcity producing long hours and overload.
+2. **High False-alarm Rate** — "one of the biggest problems with SOCs is the high rate of false positives."
+3. **Disconnected and Overloaded Dashboards** — "SOCs struggle with fragmented and overloaded dashboards,
+   hindering enterprise-wide visibility and alert correlation," with the lack of visibility traced partly to
+   "the absence of tools for organising and presenting information."
+4. **Inefficient Standard Operating Procedures (SOPs)** — absent playbooks and orchestration, leaving manual
+   interventions "prone to errors, delays, and inconsistencies."
+
+Confidence: **high that the phenomenon is real, that these are its principal causes, that it generalizes beyond
+security operations, and that it is unsolved.** This is the one Level 1 anchor in Phase 2. **Still low on any
+specific mitigation** — the review's own conclusion is that existing solutions fall short, and it proposes
+research directions rather than fixes. Note also that the paper reports its own cited industry survey
+inconsistently (p.2: 51% of SOC teams overwhelmed, ">25%" of time on false positives; p.8: 54% overwhelmed, 27%
+of time — same citation), so quote its percentages with care even though the causal categories are sound.
 
 **D8 — Before adding a job to a display, ask which existing job it will degrade. Do not treat this as evidence
 that displays are doomed.**
@@ -107,30 +123,47 @@ is not evidence of anything.
 
 ## Tension carried forward from Phase 1 (unresolved)
 
-D1/D3 push toward **reduction**: fewer mechanisms, tighter boundary, exceptions only. Phase 1's **P7** establishes
-that stripping ink is not an unqualified virtue, citing Bateman et al.'s finding that embellished charts scored no
+D1/D3 push toward **reduction**: fewer mechanisms, tighter boundary, exceptions only. Phase 1's **P7** held that
+stripping ink is not an unqualified virtue, citing Bateman et al.'s finding that embellished charts scored no
 worse on accuracy and significantly better on multi-week recall.
 
-These are not flatly contradictory. Few targets decorative *display mechanisms* — "those gauges, meters, and
-traffic lights are so damn cute, but their appeal is only skin deep" — rather than annotation, labels, and
-status chrome, which Phase 1 found load-bearing. But **neither source supplies a test for telling useful chrome
-from cute gauge**, and D2 sharpens the stakes: decoration is not merely neutral, it consumes the highest-scent
-region of the display. Phase 2 does not resolve this. Where the two pull in opposite directions on a real
-artifact, `04-empirical-test.md` says so rather than picking a winner.
+**This tension is now substantially less symmetric than it looked when Phase 2 was drafted.** Both sides were
+re-read first-hand on 2026-08-10, and they moved in opposite directions:
+
+- **D1/D3 gained Level 1 support** — overloaded displays are named as a primary cause of alert fatigue in a
+  systematic review (above).
+- **P7 got weaker.** Bateman et al. is n=20 total, and the multi-week recall result — P7's load-bearing claim —
+  rests on a **10-participant** subgroup, using 14 charts all embellished by a single artist. The authors
+  explicitly decline to generalize: "we do not advocate this strategy as a general principle, because the use of
+  strong images in charts is contentious." See Phase 1's revised P7.
+
+Few's target was always decorative *display mechanisms* — "those gauges, meters, and traffic lights are so damn
+cute, but their appeal is only skin deep" — rather than annotation and labels, which Phase 1 correctly found
+load-bearing. That distinction survives. What does not survive is treating P7 as an equal-weight counterweight
+to D1/D3. **Neither source still supplies a test for telling useful chrome from cute gauge**, and D2 sharpens
+the stakes: decoration is not merely neutral, it consumes the highest-scent region of the display. When in
+doubt on an operational display, the evidence now favors reduction.
 
 ---
 
 ## Open items for Phase 3+
 
-- **Read Tariq et al. (2025) in full and enumerate the four causes of alert fatigue.** This is the phase's one
-  unclosed source gap and the highest-value unblock in the track — it is the only Level 1 evidence available,
-  and D7 is currently written to claim strictly less than the paper knows. https://doi.org/10.1145/3723158
-  (ACM DL 403s to automated fetch; needs subscription or institutional access.)
+- ~~Read Tariq et al. (2025) in full and enumerate the four causes of alert fatigue.~~ **CLOSED 2026-08-10.**
+  Read first-hand; the four causes are enumerated in D7 above. The paper is **CC BY 4.0 open access** — the
+  earlier "paywalled" label was wrong. `dl.acm.org` blocks *automated* fetch (HTTP 403); a browser retrieves it
+  freely. Standing lesson for this program: distinguish **bot-blocked** from **paywalled** before recording a
+  source as inaccessible, because the remedy is completely different.
 - **Few's *Information Dashboard Design* beyond Chapter 1** — in particular the full enumeration of the 13
   mistakes, of which only the first (exceeding the single-screen boundary) is verified here. The available
   full-text scan has uncertain provenance; a legitimate copy should back any citation past Ch. 1.
-- **The useful-chrome vs. cute-gauge boundary has no test in either phase.** Candidate for a dedicated
-  sub-project: it is now blocking clean application of P7 against D1/D3 on real artifacts.
+- **The useful-chrome vs. cute-gauge boundary still has no test in either phase.** Candidate for a dedicated
+  sub-project. Note this is now a *less urgent* blocker than when first written: with P7 downgraded and D1/D3
+  gaining Level 1 support, the default on operational displays is reduction, so the boundary matters mainly for
+  the narrower question of how much identity/brand chrome an otherwise-compliant display can afford.
+- **Re-verify the rest of the Phase 1 corpus for the same n-size problem.** Bateman turned out to rest on n=10
+  for its headline claim. Cleveland & McGill (1984) is still read only via a third-party paraphrase of its
+  ranking, and its sample sizes were "small by modern crowdsourcing standards" per its own Phase 0 card. Worth
+  a pass to check whether any other P-rule is carrying more weight than its sample supports.
 - **D6's transfer claim is untested.** The symptom/cause distinction is crisp for user-facing services and fuzzy
   for developer tooling and personal operational displays. Worth checking whether the HCI or
   human-factors literature has an equivalent formulation outside the SRE lineage.

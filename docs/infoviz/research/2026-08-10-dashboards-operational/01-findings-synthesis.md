@@ -163,16 +163,42 @@ The review establishes three things relevant here:
 3. Existing mitigations are **not adequate** — the paper "examine[s] the shortcomings of existing solutions and
    propose[s] several potential research directions leveraging AI."
 
-**The gap, stated plainly:** the four causes could not be read first-hand. `dl.acm.org` returns HTTP 403 to
-automated fetch at both the DOI record and the full-text URL; the Phase 0 card verified the abstract via the
-Semantic Scholar Graph API, and an independent mirror (ouci.dntb.gov.ua) confirms the abstract says four causes
-are identified but does not enumerate them. **We know a Level 1 review found four causes and we do not know what
-they are.** Any Phase 2 rule invoking specific causes of alert fatigue would be fabricating them. The rule
-derived below (D7) therefore claims only what the abstract supports: the phenomenon is real, it generalizes past
-security operations, and it is unsolved.
+### The four causes (§5.3), read first-hand
 
-This is the phase's one genuine unclosed source gap. See "Open items" in
-`03-design-principles-playbook-additions.md`.
+> Through a meticulous evaluation of the existing literature […] we have identified four overarching groups of
+> factors causing alert fatigue in SOC.
+
+1. **Staff and Skills Shortage** (§5.3.1) — "the significant demand for skilled personnel and the shortage of
+   proficient analysts […] leads to long working hours, overload, and, ultimately, alert fatigue," worsened by
+   "the continuous growth in the volume and complexity of security alerts."
+2. **High False-alarm Rate** (§5.3.2) — "One of the biggest problems with SOCs is the high rate of false
+   positives."
+3. **Disconnected and Overloaded Dashboards** (§5.3.3) — "SOCs struggle with fragmented and overloaded
+   dashboards, hindering enterprise-wide visibility and alert correlation. The lack of visibility stems from
+   analysts' restricted access, difficulties in consolidating data from multiple sources, and the absence of
+   tools for organising and presenting information."
+4. **Inefficient Standard Operating Procedures (SOPs)** (§5.3.4) — absent playbooks and orchestration leave
+   "manual […] interventions that are prone to errors, delays, and inconsistencies."
+
+**Cause 3 is the most consequential result in Phase 2.** A Level 1 systematic review independently names
+*overloaded displays* as a primary cause of a documented, measurable harm — arriving from operational research,
+with no reference to Few or the design-theory lineage. This is what D1 and D3 were asserting on Level 7
+authority alone. It does **not** validate "one screen" as a threshold; it validates the claim underneath it.
+Cause 2 does the same work for D4: a high false-alarm rate is precisely the condition where the correct response
+to an alert is always the same, which is what D4 forbids.
+
+**One appraisal note against the paper.** It reports its own cited industry survey inconsistently. Page 2: "51%
+of SOC teams feel overwhelmed by alert volume, with analysts spending over 25% of their time handling false
+positives." Page 8: "54% of SOC teams feel overwhelmed by alerts, 55% lack confidence in prioritising or
+responding to them, and security experts spend 27% of their time handling false positives." Same citation [83].
+The causal categories are sound and are what this phase relies on; the percentages should not be quoted from
+this source without checking the underlying Trend Micro survey directly.
+
+**Access correction (2026-08-10).** An earlier draft of this document recorded the four causes as unreadable and
+the paper as paywalled. **Both were wrong.** The article is **CC BY 4.0 open access** — the license is printed on
+its first page. What blocked retrieval was `dl.acm.org` returning HTTP 403 to *automated* fetch; a browser
+downloads it freely. The standing lesson for this program: **bot-blocked is not the same as paywalled**, the two
+have completely different remedies, and conflating them cost this phase a Level 1 anchor it always had access to.
 
 ---
 
@@ -218,21 +244,22 @@ this track has, and it is still not an experiment.
 of whom presents data. The field's most-repeated claim about dashboards failing rests on Level 7 and Level 8
 sources.
 
-**A real tension left unresolved:**
+**A tension that resolved asymmetrically once both sides were read first-hand:**
 Few's prescription is *reduce* — fewer mechanisms, less decoration, tighter boundary. Phase 1's P7 (Elavsky via
-Bateman) established that stripping ink is not an unqualified virtue and that embellishment measurably aided
-recall. These are not directly contradictory — Few targets decorative *display mechanisms* (gauges, traffic
-lights) rather than annotation and chrome — but the boundary between "useful chrome" and "cute gauge" is not
-specified by either source, and neither offers a test for telling them apart. Phase 2 does not resolve this;
-D-rules below flag it where it bites.
+Bateman) held that stripping ink is not an unqualified virtue and that embellishment measurably aided recall.
+Read directly on 2026-08-10, the two sides moved in opposite directions: the reduction side gained **Level 1**
+support (§4, cause 3), while Bateman turned out to rest on **n=20 total, n=10 for the multi-week recall result**,
+using charts from a single artist, with the authors explicitly declining to generalize. Few's distinction —
+decorative *display mechanisms* versus load-bearing annotation — still stands, and no source supplies a test for
+telling them apart. But these are no longer equal weights, and on operational displays the evidence now favors
+reduction. See the tension section in `03-design-principles-playbook-additions.md` and Phase 1's revised P7.
 
 ---
 
 ## 7. Paywalled / unverified for this phase
 
-- **Tariq et al. (2025), ACM CSUR 57(9), Art. 224** — https://doi.org/10.1145/3723158. The **four causes of alert
-  fatigue** remain unread; `dl.acm.org` 403s to automated fetch. Access: ACM DL subscription or institutional
-  library. This is the highest-value unblock in the phase — it is the only Level 1 source in the track.
+- ~~**Tariq et al. (2025)** — four causes unread.~~ **RESOLVED 2026-08-10.** Never paywalled: the article is
+  CC BY 4.0 open access and `dl.acm.org` merely 403s automated fetch. Read in full; see §4.
 - **Few, *Information Dashboard Design*** — Chapter 1 claims are verified against a full-text scan at
   http://public.magendanz.com/Temp/Information%20Dashboard%20Design.pdf, whose provenance is a personal temp
   directory. The quotes used here are cross-checked against the widely reproduced canonical definition, but
@@ -245,7 +272,7 @@ D-rules below flag it where it bites.
 
 | # | Source | Level | Access |
 |---|---|---|---|
-| 1 | Tariq et al., Alert Fatigue in SOCs (2025) | 1 | abstract only (403 on full text) |
+| 1 | Tariq et al., Alert Fatigue in SOCs (2025) | 1 | full text read (CC BY; browser only, 403s to bots) |
 | 2 | Budiu / NN/G, Information Foraging (2019) | 4 | live, re-verified this phase |
 | 3 | Ewaschuk / Google SRE, Monitoring Distributed Systems (2016) | 5 | live, re-verified this phase |
 | 4 | Few, Information Dashboard Design (2006/2013) | 7 | scan, uncertain provenance |

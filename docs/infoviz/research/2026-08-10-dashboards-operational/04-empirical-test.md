@@ -111,9 +111,19 @@ of aggregate interrupt cost and no mechanism that would notice fatigue setting i
 alert as a withdrawal from a finite shared budget; borg has no ledger. The honest statement is that we do not
 know the current interrupt rate per session and have never measured it.
 
-Worth noting what D7's own confidence caveat forbids here: the Level 1 review's **four causes of alert fatigue
-could not be read**, so this analysis cannot claim which specific cause borg is exhibiting. It can only say the
-phenomenon is documented, generalizes beyond security operations, and that borg has no defense against it.
+**Update after reading Tariq et al. in full (2026-08-10).** The four causes are now known, and borg maps onto two
+of them:
+
+- **Cause 2, High False-alarm Rate.** Both unconditional nudges are, in the review's terms, pure false alarms:
+  they fire on conditions that do not indicate a problem. Every firing of `tool-count-nudge` where the session
+  was healthy is a false positive, and the hook has no mechanism that could produce a true positive.
+- **Cause 3, Disconnected and Overloaded Dashboards.** This is the same finding as the `borg ls` verdict below,
+  arriving from the alerting side. The review traces the failure to "the absence of tools for organising and
+  presenting information" — which is exactly the missing display tier identified under D5.
+
+Borg does **not** exhibit causes 1 (staff shortage) or 4 (inefficient SOPs) in any meaningful sense; those are
+organizational conditions of a staffed SOC. Two of four is a real signal, not a stretch, and it is worth stating
+that the two it exhibits are the two that are properties of *tooling* rather than of *staffing*.
 
 ---
 
@@ -138,14 +148,22 @@ Worse, the answer to the top task is at the **bottom**. The observed row order r
 "what needs me right now?" the display is inverted: the reader must traverse 20 rows of stale entries to reach
 the live ones, and D2's finding is that most readers will have quit before then.
 
-This is also where the **P7 tension flagged in `03-design-principles-playbook-additions.md` actually bites.**
-Phase 1's P7 says embellishment is not automatically waste — Bateman et al. found better multi-week recall for
-embellished charts. The Borg cube is exactly that kind of embellishment: it carries identity and it is part of
-why the tool is pleasant to use. But D2 says it is not neutral — it occupies the region that determines whether
-the rest is read. **Neither phase supplies a test that resolves this**, and this document declines to pick a
-winner. What can be said without picking one: the cost is specific and locatable (8 of 83 lines, at the top),
-and if the display were bounded to one screen per D1 the trade-off would be forced into the open rather than
-absorbed by scrolling.
+This is also where the **P7 tension actually bites.** Phase 1's P7 held that embellishment is not automatically
+waste — Bateman et al. found better multi-week recall for embellished charts. The Borg cube is exactly that kind
+of embellishment: it carries identity and it is part of why the tool is pleasant to use. D2 says it is not
+neutral — it occupies the region that determines whether the rest is read.
+
+**Revised after reading Bateman first-hand (2026-08-10).** The tension is weaker than this document originally
+claimed, because P7 is weaker: the multi-week recall result rests on **n=10**, from a 20-person study using
+charts by a single artist, and the authors explicitly decline to generalize it. Meanwhile D1/D3 gained Level 1
+support. So the honest position is no longer "two equal principles in conflict" — it is that a well-evidenced
+reduction principle is being weighed against a suggestive but thinly-sampled one.
+
+That still does not settle it, because **neither phase supplies a test for distinguishing load-bearing chrome
+from decoration**, and Bateman's finding, whatever its sample, is the only direct evidence either way on
+memorability. What can be said: the cost is specific and locatable (8 of 83 lines, at the top, in the
+highest-scent region), the benefit is real but rests on ten people, and if the display were bounded to one
+screen per D1 the trade-off would be forced into the open rather than absorbed by scrolling.
 
 ### D3 — exceptions, not inventory
 

@@ -76,12 +76,26 @@ smooth transitions, since jumpy zoom is the documented failure mode.
 **P7 — Don't treat "minimalism"/data-ink reduction as an unqualified virtue; strip ink only up to the point it
 stops helping, and watch for accessibility exclusion.**
 Evidence: Elavsky (2025) — pushing the data-ink ratio to its logical extreme produces imperceptible charts,
-showing the ratio alone can't be the design criterion; cites Bateman et al. (CHI 2010, not yet independently
-verified — see paywalled must-reads) showing embellished charts had no worse comprehension accuracy and
-significantly better multi-week recall than minimalist ones. [Elavsky 2025; Bateman et al. 2010, secondhand]
-Confidence: moderate — the critique of literal data-ink-ratio-as-law is well-argued and cites real experimental
-evidence, but that underlying experiment (Bateman et al.) has not yet been independently read in this program;
-treat P7 as directionally right but re-verify Bateman et al. directly before treating it as fully load-bearing.
+showing the ratio alone can't be the design criterion. [Elavsky 2025] Bateman et al. (CHI 2010), **read
+first-hand 2026-08-10**: embellished (Nigel Holmes) charts were described no less accurately than plain ones,
+and recalled significantly better after a two-to-three-week gap; eye-tracking confirmed participants attended to
+the non-data ink, and they "overwhelmingly chose Holmes-style charts over plain charts." [Bateman et al. 2010]
+
+Confidence: **REVISED DOWN 2026-08-10 — moderate on the core critique, low-to-moderate on the memorability
+claim.** Separate the two:
+- The *critique of data-ink-ratio-as-law* (Elavsky) stands on its own argument and does not depend on Bateman.
+  Unchanged.
+- The *memorability finding* is thinner than this program assumed when citing it secondhand. The study is
+  **n=20 total** (9 male, 11 female, one university), across 14 charts all embellished by a **single artist**,
+  and participants were split into immediate- and long-term-recall conditions with **ten in each** — so P7's
+  load-bearing multi-week result rests on **n=10**. It is a real, peer-reviewed CHI result with a coherent
+  mechanism; it is not a foundation to win design arguments with.
+- The authors refuse to generalize it, and the reason matters: "we do not advocate this strategy as a general
+  principle, because the use of strong images in charts is contentious — for example, images convey messages
+  that may intentionally or unintentionally bias the viewer's interpretation of the data."
+- Cross-phase note: Phase 2's D1/D3 gained **Level 1** support pulling the other way (Tariq et al. name
+  overloaded displays as a primary cause of alert fatigue). On operational displays, default to reduction. Read
+  P7 as a caution against *dogmatic* minimalism, not as a licence to embellish.
 
 ---
 

@@ -81,12 +81,26 @@ smooth transitions, since jumpy zoom is the documented failure mode.
 **P7 — Don't treat "minimalism"/data-ink reduction as an unqualified virtue; strip ink only up to the point it
 stops helping, and watch for accessibility exclusion.**
 Evidence: Elavsky (2025) — pushing the data-ink ratio to its logical extreme produces imperceptible charts,
-showing the ratio alone can't be the design criterion; cites Bateman et al. (CHI 2010, not yet independently
-verified — see paywalled must-reads) showing embellished charts had no worse comprehension accuracy and
-significantly better multi-week recall than minimalist ones. [Elavsky 2025; Bateman et al. 2010, secondhand]
-Confidence: moderate — the critique of literal data-ink-ratio-as-law is well-argued and cites real experimental
-evidence, but that underlying experiment (Bateman et al.) has not yet been independently read in this program;
-treat P7 as directionally right but re-verify Bateman et al. directly before treating it as fully load-bearing.
+showing the ratio alone can't be the design criterion. [Elavsky 2025] Bateman et al. (CHI 2010), **read
+first-hand 2026-08-10**: embellished (Nigel Holmes) charts were described no less accurately than plain ones,
+and recalled significantly better after a two-to-three-week gap; eye-tracking confirmed participants attended to
+the non-data ink, and they "overwhelmingly chose Holmes-style charts over plain charts." [Bateman et al. 2010]
+
+Confidence: **REVISED DOWN 2026-08-10 — moderate on the core critique, low-to-moderate on the memorability
+claim.** Separate the two:
+- The *critique of data-ink-ratio-as-law* (Elavsky) stands on its own argument and does not depend on Bateman.
+  Unchanged.
+- The *memorability finding* is thinner than this program assumed when citing it secondhand. The study is
+  **n=20 total** (9 male, 11 female, one university), across 14 charts all embellished by a **single artist**,
+  and participants were split into immediate- and long-term-recall conditions with **ten in each** — so P7's
+  load-bearing multi-week result rests on **n=10**. It is a real, peer-reviewed CHI result with a coherent
+  mechanism; it is not a foundation to win design arguments with.
+- The authors refuse to generalize it, and the reason matters: "we do not advocate this strategy as a general
+  principle, because the use of strong images in charts is contentious — for example, images convey messages
+  that may intentionally or unintentionally bias the viewer's interpretation of the data."
+- Cross-phase note: Phase 2's D1/D3 gained **Level 1** support pulling the other way (Tariq et al. name
+  overloaded displays as a primary cause of alert fatigue). On operational displays, default to reduction. Read
+  P7 as a caution against *dogmatic* minimalism, not as a licence to embellish.
 
 ---
 
@@ -105,11 +119,14 @@ stop pretending to be a status display.**
 Evidence: Few's canonical definition — "consolidated and arranged on a single screen so the information can be
 monitored at a glance" — and its boundary condition: "If you must scroll around to see all the information, it
 has transgressed the boundaries of a dashboard." [Few, *Information Dashboard Design*, Ch. 1, Level 7]
-Confidence: **moderate, and only for the direction.** Level 7 expert opinion; no source in this track tested one
-screen against 1.5 or 3, so the threshold is a convention, not a measurement. What raises it above one man's
-taste is that the SRE chapter reaches a compatible bounded-signal conclusion from unrelated premises (production
-on-call cost), and D2 supplies an independent mechanism for why early-quitting makes long displays fail. Treat
-"one screen" as a cheap, falsifiable check you should actually run — not as a proven threshold.
+Confidence: **moderate-to-high for the claim underneath, moderate for the threshold.** Separate the two. That
+**display overload is a real, harm-causing failure mode** now has Level 1 support: Tariq et al.'s systematic
+review names "Disconnected and Overloaded Dashboards" as one of four primary causes of alert fatigue, citing
+"the absence of tools for organising and presenting information" [Tariq et al. 2025, §5.3.3, Level 1]. That is
+independent of Few and arrives from operational research rather than design theory. What remains Level 7 is the
+**one-screen threshold specifically** — no source tested one screen against 1.5 or 3, so the boundary is a
+convention, not a measurement. Treat "one screen" as a cheap, falsifiable check you should actually run; treat
+"overloaded displays cause measurable harm" as established.
 
 **D2 — The top of the display decides whether the rest is read at all. Put the answer to the top task there,
 and spend that space on nothing else.**
@@ -128,9 +145,12 @@ is costing space and returning nothing.**
 Evidence: Few — a dashboard shows abbreviated summaries and exceptions because "you cannot monitor at a glance
 all the details needed to achieve your objectives" [Level 7]; Google SRE independently routes subcritical,
 non-exceptional signal to a dashboard and off the interrupt path [Level 5].
-Confidence: **moderate.** Two sources, neither experimental, but they converge from unrelated starting points
-(perceptual limits vs. on-call cost). Practical test: compute the variance of your status column. If nearly every
-row carries the same value, that column is displaying zero information at full cost.
+Confidence: **moderate-to-high.** Two non-experimental sources converging from unrelated starting points
+(perceptual limits vs. on-call cost), now joined by Level 1 corroboration: the same "Disconnected and Overloaded
+Dashboards" finding traces the failure specifically to difficulty "consolidating data from multiple sources" and
+the absence of tools for "organising and presenting information" — which is what D3 prescribes fixing [Tariq et
+al. 2025, §5.3.3, Level 1]. Practical test: compute the variance of your status column. If nearly every row
+carries the same value, that column is displaying zero information at full cost.
 
 **D4 — An interrupt must be urgent, actionable, human-judgment-requiring, and actively user-visible — all four.
 If the correct response is the same every time, it must not interrupt.**
@@ -170,15 +190,25 @@ differently — which puts it in direct violation of D4.
 **D7 — Treat every added alert as a withdrawal from a shared, finite attention budget. Alert fatigue is a
 documented failure mode with no established fix.**
 Evidence: the only Level 1 source in the track — a systematic review finding that "recent studies, by both
-industry and academia, have highlighted the problem of alert fatigue and burnout," that the authors "identify
-four major causes of alert fatigue in SOC," that existing mitigations have "shortcomings," and that the problem
-generalizes "not just in SOCs but across other Command and Control (C2) domains as well." [Tariq et al., ACM
-CSUR 2025, Level 1]
-Confidence: **high that the phenomenon is real, generalizes beyond security operations, and is unsolved — this
-is the one claim in Phase 2 resting on Level 1 evidence. Low on any specific mitigation**, for two reasons: the
-review's own finding is that existing solutions fall short, and **its four causes could not be read** (ACM DL
-returns 403 to automated fetch; only the abstract was verifiable). Do not cite specific causes of alert fatigue
-from this program until someone reads the full text. The rule claims only what the abstract supports.
+industry and academia, have highlighted the problem of alert fatigue and burnout," that existing mitigations
+have "shortcomings," and that the problem generalizes "not just in SOCs but across other Command and Control
+(C2) domains as well." [Tariq et al., ACM CSUR 2025, Level 1]
+
+The review's §5.3 identifies **four overarching causes**, read first-hand:
+1. **Staff and Skills Shortage** — analyst scarcity producing long hours and overload.
+2. **High False-alarm Rate** — "one of the biggest problems with SOCs is the high rate of false positives."
+3. **Disconnected and Overloaded Dashboards** — "SOCs struggle with fragmented and overloaded dashboards,
+   hindering enterprise-wide visibility and alert correlation," with the lack of visibility traced partly to
+   "the absence of tools for organising and presenting information."
+4. **Inefficient Standard Operating Procedures (SOPs)** — absent playbooks and orchestration, leaving manual
+   interventions "prone to errors, delays, and inconsistencies."
+
+Confidence: **high that the phenomenon is real, that these are its principal causes, that it generalizes beyond
+security operations, and that it is unsolved.** This is the one Level 1 anchor in Phase 2. **Still low on any
+specific mitigation** — the review's own conclusion is that existing solutions fall short, and it proposes
+research directions rather than fixes. Note also that the paper reports its own cited industry survey
+inconsistently (p.2: 51% of SOC teams overwhelmed, ">25%" of time on false positives; p.8: 54% overwhelmed, 27%
+of time — same citation), so quote its percentages with care even though the causal categories are sound.
 
 **D8 — Before adding a job to a display, ask which existing job it will degrade. Do not treat this as evidence
 that displays are doomed.**
@@ -195,15 +225,23 @@ is not evidence of anything.
 
 ## Tension carried forward from Phase 1 (unresolved)
 
-D1/D3 push toward **reduction**: fewer mechanisms, tighter boundary, exceptions only. Phase 1's **P7** establishes
-that stripping ink is not an unqualified virtue, citing Bateman et al.'s finding that embellished charts scored no
+D1/D3 push toward **reduction**: fewer mechanisms, tighter boundary, exceptions only. Phase 1's **P7** held that
+stripping ink is not an unqualified virtue, citing Bateman et al.'s finding that embellished charts scored no
 worse on accuracy and significantly better on multi-week recall.
 
-These are not flatly contradictory. Few targets decorative *display mechanisms* — "those gauges, meters, and
-traffic lights are so damn cute, but their appeal is only skin deep" — rather than annotation, labels, and
-status chrome, which Phase 1 found load-bearing. But **neither source supplies a test for telling useful chrome
-from cute gauge**, and D2 sharpens the stakes: decoration is not merely neutral, it consumes the highest-scent
-region of the display. Phase 2 does not resolve this. Where the two pull in opposite directions on a real
-artifact, `04-empirical-test.md` says so rather than picking a winner.
+**This tension is now substantially less symmetric than it looked when Phase 2 was drafted.** Both sides were
+re-read first-hand on 2026-08-10, and they moved in opposite directions:
 
----
+- **D1/D3 gained Level 1 support** — overloaded displays are named as a primary cause of alert fatigue in a
+  systematic review (above).
+- **P7 got weaker.** Bateman et al. is n=20 total, and the multi-week recall result — P7's load-bearing claim —
+  rests on a **10-participant** subgroup, using 14 charts all embellished by a single artist. The authors
+  explicitly decline to generalize: "we do not advocate this strategy as a general principle, because the use of
+  strong images in charts is contentious." See Phase 1's revised P7.
+
+Few's target was always decorative *display mechanisms* — "those gauges, meters, and traffic lights are so damn
+cute, but their appeal is only skin deep" — rather than annotation and labels, which Phase 1 correctly found
+load-bearing. That distinction survives. What does not survive is treating P7 as an equal-weight counterweight
+to D1/D3. **Neither source still supplies a test for telling useful chrome from cute gauge**, and D2 sharpens
+the stakes: decoration is not merely neutral, it consumes the highest-scent region of the display. When in
+doubt on an operational display, the evidence now favors reduction.

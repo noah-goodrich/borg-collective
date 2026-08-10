@@ -93,7 +93,17 @@ seconds, take it away, then ask:
 
 The one-screen threshold is an expert's opinion, not a measurement, and no source in this track tested what
 happens at 1.5 screens versus 3. The alerting test comes from running huge web services, and applying it to a
-developer's command-line tool is an analogy — a good one, but an analogy. And the one genuinely rigorous source
-here identified four causes of alert fatigue that **we could not read**, because the paper is behind a paywall
-that blocked automated access. So if this brief sounds confident, that confidence is doing more work than the
-evidence underneath it, and you should know that.
+developer's command-line tool is an analogy — a good one, but an analogy.
+
+**Update, same day.** The one genuinely rigorous source here — the alert-fatigue review — was originally recorded
+as unreadable. That was a mistake: it's free to anyone with a browser, and the automated fetch was simply being
+blocked. Reading it changed two things. First, one of its four causes of alert fatigue is literally *"disconnected
+and overloaded dashboards"* — so "don't overload the screen" moved from a smart person's opinion to something a
+careful review of the evidence actually found. Second, the famous study saying decoration helps people remember
+charts turned out to have **20 people in it, and only 10 in the part that produced the famous result**. That
+doesn't make it wrong — it was published at a top conference and the researchers were careful — but it does mean
+it shouldn't be used to win arguments. The researchers said so themselves: they "do not advocate this strategy as
+a general principle."
+
+The lesson worth keeping is the one about checking: two things this brief called unavailable were sitting in the
+open, and one thing it treated as settled was resting on ten people.
