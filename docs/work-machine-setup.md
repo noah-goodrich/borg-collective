@@ -87,6 +87,18 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 
 ### What's new since 2026-07-09
 
+- **2026-08-08: cairn fully decommissioned.** The Postgres+pgvector knowledge-graph service (DB, container,
+  hooks, CLI, and the `borg-collective#94` Stop-hook heartbeat) has been removed outright — not just
+  disabled. Its corpus now lives in per-project `.borg/knowledge/*.md` markdown, grep-reachable with no
+  service required; a fresh pull removes Phase 4 (below) entirely, there's nothing left to run. **If a
+  session was already running when the pull landed, its Stop hook may still reference the deleted
+  `borg-cairn-heartbeat.sh` and log a harmless "No such file or directory" — restart the Claude Code
+  session after this pull to clear it; nothing else is affected.** See `CLAUDE.md`'s "Cairn decommission"
+  entry under Learned for the full rationale (measured near-zero cross-project recall value).
+- **2026-08-08: `borg sever` now stops the shared Supabase stack.** Fixed a gap (#110) where severing a
+  project left the shared `supabase_*_stillpoint` containers running; `cmd_down` now calls
+  `_borg_stop_shared_supabase` (idempotent, fail-open) as part of the sever flow. Nothing to run — behavior
+  change only.
 - **2026-07-27:** the update flow now pulls `~/.config/dotfiles` first (was missing) — its
   `install.sh` re-registers LaunchAgents, including the dev-postgres auto-start agent that local
   project databases need. This doc is now the single canonical work-machine reference (fresh setup
@@ -96,7 +108,9 @@ borg version && claude plugin list | grep borg-collective && borg doctor
   - **dotfiles #12:** dev-postgres auto-start LaunchAgent (delivered by the update flow's dotfiles
     pull + `install.sh`).
   - **borg-collective #94:** cairn heartbeat Stop hook + hail/link status callouts (rebuilt from
-    source by `install.sh` / `borg setup`).
+    source by `install.sh` / `borg setup`). **Superseded 2026-08-08** — the cairn heartbeat hook was
+    removed outright in the decommission above; hail/link status callouts now read local
+    `.borg/knowledge/*.md` instead.
 
 - **borg-collective is now v0.8.9** (was 0.8.6 on 2026-07-09; `VERSION` file + plugin manifest both
   confirmed). The `claude-plugins` mirror of the plugin is rebuilt to match (0.8.9) with a full
