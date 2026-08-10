@@ -13,7 +13,7 @@ it lets adapters stay dumb, curation stay re-runnable, and durable reasoning sur
 |---|---|---|---|
 | PR / issue / Jira state | GitHub, Jira (via the recon fan-out, [borg#95](https://github.com/noah-goodrich/borg-collective/issues/95)) | Ephemeral — re-gathered every run | Source of truth for *what is true right now*. |
 | `data.json` | The gather + a curation pass | Disposable — rebuildable from scratch anytime | A curated **projection**, not a database. Never hand-edited. |
-| Annotations (`annotations.local.json`) | cairn, exported machine-local | Durable, machine-scoped | The *why* — rationale, decisions, action-outcome history. See "Annotations" below. |
+| Annotations (`annotations.local.json`) | hand- and tool-maintained, machine-local | Durable, machine-scoped | The *why* — rationale, decisions, action-outcome history. See "Annotations" below. |
 
 `bucket` and `urgency` are **curation-derived**, not adapter-emitted — the recon adapters that populate `items[]`
 stay source-agnostic and dumb; all judgment about what's urgent or which bucket an item belongs in concentrates in
@@ -42,7 +42,7 @@ data.json = {
 | `health[]` | `HealthCheck[]` | environment-health panel data, see below |
 
 `HealthCheck = { check, machine, status: "ok"|"warn"|"down", detail, checked_at }`. The health panel exists so
-outages (cairn down, container/VM clock skew, source-adapter/auth failures) are visible at a glance rather than
+outages (container/VM clock skew, source-adapter/auth failures) are visible at a glance rather than
 silently degrading the render — see [borg#98](https://github.com/noah-goodrich/borg-collective/issues/98) and
 [borg#99](https://github.com/noah-goodrich/borg-collective/issues/99).
 
@@ -94,8 +94,9 @@ PROTOCOL.md for the dispatch contract.
 ## Annotations (`annotations.local.json`) — machine-local, v1
 
 Annotations are the durable *why* layer: why a PR is parked, what a previous session already tried, what the
-decision was and its rationale. They are cairn's genuine fit here (belief lineage, contradiction review) — but the
-v1 substrate decision, ratified in the same thread, keeps them **strictly machine-local**:
+decision was and its rationale. (An earlier draft of this schema named cairn as their source; cairn was
+decommissioned in 2026-08, so annotations are maintained locally with no service behind them.) The v1 substrate
+decision keeps them **strictly machine-local**:
 
 - **No committed file.** `annotations.local.json` is never checked into git — see the `.gitignore` note below.
 - **No cross-machine sync in v1.** Each machine's hub renders only its own annotations. A committed
@@ -104,8 +105,8 @@ v1 substrate decision, ratified in the same thread, keeps them **strictly machin
   colleague it's waiting on" and prod-action outcomes) — committing them here would publish Ontra-internal
   reasoning to the open internet.
 - **Cross-machine is deferred, not abandoned.** When both machines' annotations need to appear in one view, the
-  answer is a **shared database both machines phone home to** (e.g. a schema in the shared stillpoint Postgres, or
-  a centralized cairn) — explicitly **not** a git repo. Git-repo-as-mutable-data-store is out; git stays the
+  answer is a **shared database both machines phone home to** (e.g. a schema in the shared stillpoint Postgres)
+  — explicitly **not** a git repo. Git-repo-as-mutable-data-store is out; git stays the
   substrate for *code* only.
 - **Never a precondition.** The render must succeed with `annotations.local.json` absent, empty, or malformed.
   `render.py` treats any read/parse failure as "no annotations" and continues.
