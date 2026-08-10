@@ -15,6 +15,23 @@ channel, so every signal it emits is by construction an interrupt. The fix for t
 somewhere else for non-urgent signal to land. `borg link` is that somewhere. So the display has to be worth
 looking at *before* the interrupts can stop shouting.
 
+## The problem, observed live (2026-08-10)
+
+The `1:orchestrator` tmux session is the case for this directive. After a week away, it spent 51 seconds of
+model time reconstructing, by hand, a dependency picture that spanned the `infrastructure`,
+`snowflake-permissions`, and `o-snowflake` repos plus Jira: an 8-step chain gated on `#2564`, a stacked-PR
+restructure (`#2566` rebased onto `#2564`), a competing P0 (`DE-1365`, due 2026-09-01, 0 of 61 bots migrated),
+and a correction retracting a dependency it had previously asserted.
+
+**None of that was persisted.** It exists in a tmux scrollback. The next session reconstructs it again, and the
+human spent "a good portion of today" doing the same reconstruction in parallel.
+
+The capture principle from the cairn decommission applies directly (CLAUDE.md, Learned): *build capture that
+derives from an artifact the agent already produces; never build capture that asks the agent to volunteer.* The
+orchestrator's chain analysis **is** an artifact it already produces, every session, unprompted. Mining it into
+the spine is derived capture. Adding a "please record your dependency findings" step would be volunteered
+capture, and four shipped attempts at that pattern produced one real row in five months.
+
 ## Prior art that constrains this
 - **`docs/research/2026-07-28-dependency-graph-tool/recommendation.md`** — the chosen design (Option E, Frozen
   Atlas) for the *rich* cross-repo view. This directive is **not** that build. It is the CLI/skill layer, which
@@ -55,13 +72,39 @@ bottom, beside the prompt, and earlier lines have scrolled away. Therefore:
       members in order, which end Noah owns, and how many downstream items are idle because of it.
   - Verify: with fixture data containing a known A→B→C chain spanning three repos, the chain renders as one
     line with correct membership and a correct downstream count.
-- [ ] C6 — The recommended next action is ranked by **downstream unblock count**, not by recency. Ties break on
-      recency.
-  - Verify: with fixture data where the most-recently-touched project unblocks nothing and an older one unblocks
-    two items, `borg link` recommends the older one.
+- [ ] C6 — **Two ranking axes, presented side by side, never collapsed into one number:** *most things unblocked*
+      (downstream unblock count) and *highest stakes* (nearest hard deadline, weighted by remaining work). Where
+      they disagree, show both and say they don't compete for the same hours.
+  - Verify: with fixture data where project A unblocks 4 items and project B has a P0 due in 3 weeks at 0%
+    complete, `borg link` surfaces **both**, labelled, rather than picking one.
+  - **Falsified the original version of this criterion.** It read "ranked by downstream unblock count, ties break
+    on recency." Observing the live `1:orchestrator` session showed recency is not the tiebreak and stakes is not
+    a tiebreak at all — it is a co-equal axis. The orchestrator's own words: *"Most things unblocked → push
+    #2564. Highest stakes → the keypair e2e. They don't compete for the same hours; the first is a git
+    restructure, the second is a test run."* Deadlines are not currently in the model anywhere.
 - [ ] C7 — Chain data derives from the existing `story.json` `blocked_by` edge model. No new schema, no second
       source of truth.
   - Verify: no new persisted file is introduced; the chain builder reads the merge-tree spine.
+- [ ] C7a — **Staleness is surfaced, loudly.** `borg link` states how old the spine is and refuses to present
+      chains as current when it exceeds a threshold.
+  - Verify: with `story.json` older than the threshold, output carries an explicit staleness warning and the
+    refresh command.
+  - Rationale: the spine is dated **2026-07-28T16:15Z — 13 days stale** as of filing, which brackets a week of
+    vacation exactly. It already spans repos and sources correctly (`keypair-migration` alone joins
+    `o-snowflake#*`, `snowflake-permissions#*`, and Jira `DE-*`), but it has no knowledge of `infrastructure`
+    #2564/#2566 — the exact PRs the orchestrator spent 51 seconds reconstructing by hand this morning. **A stale
+    spine is worse than no spine, because it looks authoritative.**
+- [ ] C7b — The edge model distinguishes **stacked-branch** dependencies from **blocked-by** dependencies.
+  - Verify: fixture data with a stacked pair renders differently from a blocking pair.
+  - Rationale: `#2566` is rebased onto `#2564` — that is a different relationship from "A blocks B," it implies a
+    rebase-order constraint, and getting it wrong is expensive. From the orchestrator: *"a careless force-push
+    has already cost you Kelly's fix once."*
+- [ ] C7c — Edges carry **provenance** (which source asserted them, when), so a wrong edge can be found and
+      corrected rather than silently propagated.
+  - Verify: `borg link --json` includes a source and timestamp per edge.
+  - Rationale: the orchestrator had to publish a correction — *"I told you the missing ontra-dms-
+    AdministratorAccess profile was step 0 and gated everything. That was wrong."* That is a false edge in a
+    mental graph, discovered late, with no way to check it. Provenance is what makes an edge falsifiable.
 
 ### Layout
 - [ ] C8 — Output is bottom-anchored per the corrected D2: inventory first, answer in the final 3-5 lines.
