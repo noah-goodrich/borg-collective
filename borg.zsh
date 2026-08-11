@@ -1280,7 +1280,9 @@ _borg_has_recent_checkpoint() {
     latest=$(ls -t "$cp_dir"/*.md 2>/dev/null | head -1)
     [[ -n "$latest" ]] || return 1
     local mtime now age
-    mtime=$(stat -f %m "$latest" 2>/dev/null) || return 1
+    # Was `stat -f %m` with no fallback — BSD-only, so this returned 1 on Linux/CI and every
+    # caller read "no recent checkpoint" regardless of the actual mtime. Use the shared helper.
+    mtime=$(_borg_file_mtime "$latest") || return 1
     now=$(date +%s)
     age=$(( (now - mtime) / 3600 ))
     (( age < threshold_hours ))
@@ -2725,13 +2727,20 @@ cmd_watch() {
     done
 }
 
-# Print a file's mtime as a unix timestamp. `stat -f %m` is BSD (macOS); `stat -c %Y` is GNU
-# (Linux, and CI). Return nonzero when neither works so callers can distinguish "cannot tell"
-# from "very old" — collapsing those two is how a stat failure becomes a false staleness report.
+# Print a file's mtime as a unix timestamp. `stat -c %Y` is GNU (Linux, and CI); `stat -f %m` is
+# BSD (macOS). Return nonzero when neither works so callers can distinguish "cannot tell" from
+# "very old" — collapsing those two is how a stat failure becomes a false staleness report.
+#
+# ORDER MATTERS, AND NOT FOR THE OBVIOUS REASON. Try GNU FIRST. On GNU, `-f` means "filesystem
+# status", so `stat -f %m FILE` treats %m as an operand, PRINTS A FILESYSTEM BLOCK TO STDOUT
+# ("File: ...", "ID: ...", "Block size: ..."), and only then exits 1. A `bsd || gnu` chain
+# therefore captures that block CONCATENATED with the real answer, and the caller does arithmetic
+# on "File: ... 1786418121" — which under `set -u` dies with "File: unbound variable". The reverse
+# order is clean: BSD's `stat -c` fails with EMPTY stdout, so the fallback output stands alone.
 _borg_file_mtime() {
     local f="$1" m=""
-    m=$(stat -f "%m" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
     m=$(stat -c "%Y" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
+    m=$(stat -f "%m" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
     return 1
 }
 
