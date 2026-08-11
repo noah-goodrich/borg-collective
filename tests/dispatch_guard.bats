@@ -56,8 +56,8 @@ _input() {
     export BORG_USAGE_HALT_ENABLED=1
     run "$HOOK" <<<"$(_input Agent)"
     [ "$status" -eq 2 ]
-    [[ "$output" == *"95"* ]]
-    [[ "$output" == *"2:50pm"* ]]
+    [[ "$output" == *"95"* ]] || false
+    [[ "$output" == *"2:50pm"* ]] || false
 }
 
 @test "deny: armed + fresh over-threshold + Workflow -> exit 2" {
@@ -188,7 +188,7 @@ _input() {
     # (a) hooks.json wiring: the matcher entry and the hook appear together in the PreToolUse block.
     run grep -A6 '"matcher": "Agent|Workflow"' "$BUILD_PLUGIN"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"borg-dispatch-guard.sh"* ]]
+    [[ "$output" == *"borg-dispatch-guard.sh"* ]] || false
     # (b) build-list: the hook is actually copied into the plugin (not just wired in hooks.json).
     grep -qE '_build_self_contained_hook .*borg-dispatch-guard\.sh' "$BUILD_PLUGIN"
 }

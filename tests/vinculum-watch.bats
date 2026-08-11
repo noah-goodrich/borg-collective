@@ -24,10 +24,10 @@ vinc_cursor() { echo "${XDG_DATA_HOME}/borg/vinculum/${1}/cursors/${2}"; }
 
     run env DRY_RUN=1 "$WATCH_CMD" watchchan --pane "%1" --as paneA --once
     [ "$status" -eq 0 ]
-    [[ "$output" == *"WOULD-SEND"* ]]
-    [[ "$output" == *"-t %1:"* ]]
-    [[ "$output" == *"[vinculum:watchchan ← tester]"* ]]
-    [[ "$output" == *"hello watcher"* ]]
+    [[ "$output" == *"WOULD-SEND"* ]] || false
+    [[ "$output" == *"-t %1:"* ]] || false
+    [[ "$output" == *"[vinculum:watchchan ← tester]"* ]] || false
+    [[ "$output" == *"hello watcher"* ]] || false
 }
 
 # ── Test b: message from own subId is NOT delivered (self-echo filter) ─────────
@@ -41,7 +41,7 @@ vinc_cursor() { echo "${XDG_DATA_HOME}/borg/vinculum/${1}/cursors/${2}"; }
     run env DRY_RUN=1 "$WATCH_CMD" selfchan --pane "%1" --as paneA --once
     [ "$status" -eq 0 ]
     # No WOULD-SEND output for a self-echo
-    [[ "$output" != *"WOULD-SEND"* ]]
+    [[ "$output" != *"WOULD-SEND"* ]] || false
 }
 
 # ── Test c: cursor advances so each message delivers exactly once ─────────────
@@ -54,7 +54,7 @@ vinc_cursor() { echo "${XDG_DATA_HOME}/borg/vinculum/${1}/cursors/${2}"; }
     # First run: delivers the message
     run env DRY_RUN=1 "$WATCH_CMD" idxchan --pane "%2" --as paneA --once
     [ "$status" -eq 0 ]
-    [[ "$output" == *"WOULD-SEND"* ]]
+    [[ "$output" == *"WOULD-SEND"* ]] || false
 
     # Cursor must now be 1 (one line consumed)
     local cur
@@ -64,7 +64,7 @@ vinc_cursor() { echo "${XDG_DATA_HOME}/borg/vinculum/${1}/cursors/${2}"; }
     # Second run: cursor already at end, nothing delivered
     run env DRY_RUN=1 "$WATCH_CMD" idxchan --pane "%2" --as paneA --once
     [ "$status" -eq 0 ]
-    [[ "$output" != *"WOULD-SEND"* ]]
+    [[ "$output" != *"WOULD-SEND"* ]] || false
 }
 
 # ── Test d: body embedded newlines are collapsed to spaces ────────────────────
@@ -84,7 +84,7 @@ vinc_cursor() { echo "${XDG_DATA_HOME}/borg/vinculum/${1}/cursors/${2}"; }
 
     run env DRY_RUN=1 "$WATCH_CMD" nlchan --pane "%3" --as paneA --once
     [ "$status" -eq 0 ]
-    [[ "$output" == *"WOULD-SEND"* ]]
+    [[ "$output" == *"WOULD-SEND"* ]] || false
     # Newline must be collapsed to a space
-    [[ "$output" == *"line1 line2"* ]]
+    [[ "$output" == *"line1 line2"* ]] || false
 }

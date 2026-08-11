@@ -39,21 +39,21 @@ EOF
 @test "scaffold --supabase: refuses when project dir does not exist" {
     run "$DRONE" scaffold --supabase "${BATS_TEST_TMPDIR}/does-not-exist"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"does not exist"* ]]
+    [[ "$output" == *"does not exist"* ]] || false
 }
 
 @test "scaffold --supabase: refuses when .devcontainer already exists" {
     mkdir "$TEST_PROJECT/.devcontainer"
     run "$DRONE" scaffold --supabase "$TEST_PROJECT"
     [ "$status" -ne 0 ]
-    [[ "$output" == *".devcontainer/"* ]]
+    [[ "$output" == *".devcontainer/"* ]] || false
 }
 
 @test "scaffold --supabase: refuses when supabase/ already exists" {
     mkdir "$TEST_PROJECT/supabase"
     run "$DRONE" scaffold --supabase "$TEST_PROJECT"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"supabase/"* ]]
+    [[ "$output" == *"supabase/"* ]] || false
 }
 
 # NOTE: Cannot reliably test "supabase CLI is missing" in a single bats case —

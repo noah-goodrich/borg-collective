@@ -163,17 +163,17 @@ setup() {
 @test "borg help includes store-secret" {
     run "$BORG_CMD" help
     [ "$status" -eq 0 ]
-    [[ "$output" == *"store-secret"* ]]
+    [[ "$output" == *"store-secret"* ]] || false
 }
 
 @test "borg store-secret fails without TTY" {
     run bash -c "echo '' | '$BORG_CMD' store-secret TEST_KEY"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"interactive terminal"* ]]
+    [[ "$output" == *"interactive terminal"* ]] || false
 }
 
 @test "borg store-secret fails without a name argument" {
     run bash -c "echo '' | '$BORG_CMD' store-secret"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"usage"* ]]
+    [[ "$output" == *"usage"* ]] || false
 }
