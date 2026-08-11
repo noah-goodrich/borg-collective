@@ -26,10 +26,6 @@ borg add [path]              Register a project (defaults to $PWD)
 borg rm <name>               Unregister a project
 borg help                    Show help
 
-# Legacy aliases (backward compat)
-borg ls [--all]               = borg link (dashboard view)
-borg status [project]         = borg link <project>
-borg hail [project]           = borg link
 ```
 
 ## Drone Commands (Project Lifecycle)

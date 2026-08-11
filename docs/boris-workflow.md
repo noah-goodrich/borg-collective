@@ -358,7 +358,7 @@ the plumbing — borg handles it.
 | `borg init` | Launches orchestrator with morning briefing | "What should I work on?" |
 | `borg claude` | Opens/resumes orchestrator session | Re-enter orchestrator after stepping away |
 | `borg next` / `Ctrl+Space >` | Switches to most pressing project | Decision paralysis elimination |
-| `borg ls` | Dashboard of all projects | "What's the state of everything?" |
+| `borg link` | Dashboard of all projects | "What's the state of everything?" |
 | `/borg-plan` | Skill — Claude proposes, you validate | Establishes locked acceptance criteria |
 | `/borg-assimilate` | Skill — evaluates criteria with evidence + ships | "Am I done? Ship it." |
 

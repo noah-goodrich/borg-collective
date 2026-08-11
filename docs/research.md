@@ -94,7 +94,7 @@ https://www.interaction-design.org/master-classes/how-to-design-for-neurodiversi
 **Distraction-free modes are essential for ADHD users.**
 UXmatters (2024). "Embracing Neurodiversity in UX Design."
 https://www.uxmatters.com/mt/archives/2024/04/embracing-neurodiversity-in-ux-design-crafting-inclusive-digital-environments.php
-*Basis for: dimming out-of-context projects, clean `borg ls` output, archiving stale items.*
+*Basis for: dimming out-of-context projects, clean `borg link` output, archiving stale items.*
 
 **Adaptive UX frameworks for AI-driven interfaces should integrate cognitive load management.**
 ResearchGate (2025). "Adaptive UX Frameworks for Neurodivergent Users."

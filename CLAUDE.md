@@ -25,10 +25,13 @@ Two independent tools that compose:
 ## Current State (v2, release v0.8.9)
 
 ### Implemented
-- Core borg CLI: init, claude, next, ls, switch, status, hail, scan, add, rm, help, and the
+- Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
   wider command surface below (recon, nanoprobes, spend, watch, doctor, sync, focus, pin/unpin,
-  setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`)
-- CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg ls`
+  setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`).
+  **The `ls`/`status`/`hail`/`brief`/`briefing`/`refresh` aliases for `link` were removed
+  2026-08-10** — six names for one command meant the docs, skills, and research all disagreed
+  about what to call it. `borg link` is the only name.
+- CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg link`
 - `drone` CLI: up, down, claude, sh, restart, rebuild, fix, status, feature, cortex, exec, toggle,
   scaffold
 - Hooks (12): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
@@ -71,7 +74,7 @@ borg scan                Auto-discover from session history
 borg add [path]          Register a project
 borg rm <project>        Unregister
 borg focus               Zoom current pane / project window
-borg pin / unpin         Pin (or unpin) a project to the top of borg ls
+borg pin / unpin         Pin (or unpin) a project to the top of borg link
 borg reap / reap-worktrees  Reap stale active/waiting statuses; clean stale nanoprobe worktrees
 borg recon               Fan out across source adapters, reconcile against local checkpoints
 borg nanoprobes (np)     List recent ephemeral subagent runs

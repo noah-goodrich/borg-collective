@@ -302,7 +302,7 @@ This phase is no longer part of setup.
 ## Phase 5 — Verify everything
 
 ```zsh
-borg ls                                  # project dashboard
+borg link                                # project dashboard
 borg add ~/dev                           # register orchestrator root if not auto-discovered
 claude plugin list | grep borg-collective
 borg next                                # recommendation engine

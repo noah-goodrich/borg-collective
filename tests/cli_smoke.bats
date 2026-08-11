@@ -41,11 +41,40 @@ setup() {
     run "$BORG_CMD" help
     [[ "$output" == *"init"* ]]
     [[ "$output" == *"next"* ]]
-    [[ "$output" == *"ls"* ]]
+    [[ "$output" == *"link"* ]]
     [[ "$output" == *"scan"* ]]
     [[ "$output" == *"add"* ]]
     [[ "$output" == *"rm"* ]]
-    [[ "$output" == *"refresh"* ]]
+    [[ "$output" == *"switch"* ]]
+}
+
+# The aliases ls/status/hail/brief/briefing/refresh were removed 2026-08-10. These assert the
+# removal is real AND that it points somewhere useful — a bare "unknown command" would send years
+# of muscle memory into a dead end. Note the previous version of the help test above passed
+# vacuously after removal, because `borg help` still contains the strings "ls" and "refresh" inside
+# the removed-commands notice; that is why it now asserts on "link" and "switch" instead.
+@test "removed link aliases exit non-zero and point at 'borg link'" {
+    for alias in ls status hail brief; do
+        run "$BORG_CMD" "$alias"
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"borg link"* ]]
+    done
+}
+
+@test "removed briefing/refresh aliases point at the right link flag" {
+    run "$BORG_CMD" briefing
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"borg link --brief"* ]]
+
+    run "$BORG_CMD" refresh
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"borg link --refresh"* ]]
+}
+
+@test "borg link is still dispatched" {
+    run "$BORG_CMD" link --help
+    [[ "$output" != *"unknown command"* ]]
+    [[ "$output" != *"was removed"* ]]
 }
 
 @test "drone help exits 0" {

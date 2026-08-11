@@ -2,7 +2,7 @@
 
 Copy the section below into your Claude Desktop Project's "Project Instructions" field.
 This tells Claude Desktop to report session state to the Borg Collective registry,
-enabling `borg ls` to show Desktop conversations alongside CLI sessions.
+enabling `borg link` to show Desktop conversations alongside CLI sessions.
 
 ---
 

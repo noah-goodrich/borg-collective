@@ -6,7 +6,7 @@
 # claude_session_id, has_uncommitted_changes, waiting_reason, notify_origin)
 # lives in per-project .borg/state.json files.
 # Use borg_registry_with_state / borg_registry_get_with_state for reads that
-# need volatile fields (borg ls, borg status, borg next, etc.).
+# need volatile fields (borg link, borg next, etc.).
 
 # Source shared reaper predicate (single home; also sourced by lib/borg-hooks.sh).
 source "${${(%):-%x}:A:h}/reaper.sh"

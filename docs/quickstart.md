@@ -62,7 +62,7 @@ start. Resume any time with `borg claude`.
 # What needs attention?
 borg next
 
-# Overview of all projects (primary command; `borg ls` is a legacy alias)
+# Overview of all projects
 borg link
 
 # Start new feature work (creates git worktree + branch, launches Claude)

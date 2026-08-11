@@ -210,7 +210,7 @@ Claude Code first.
    fork is needed — the same hook scripts read CoCo's stdin via `lib/borg-hooks.sh`.
 
 3. **Registry `source` field** — Already a free-form string. Adding `"coco"` as a value requires no schema
-   change. Projects would appear in `borg ls` with a new badge (e.g., `[S]` for Snowflake).
+   change. Projects would appear in `borg link` with a new badge (e.g., `[S]` for Snowflake).
 
 4. **Session IDs** — CoCo uses the same UUID format as Claude Code. No format changes needed.
 
@@ -286,7 +286,7 @@ cortex -c dev -w ~/src/analytics
 
 ```
 Morning:
-  borg ls                          # See all Claude Code projects
+  borg link                        # See all Claude Code projects
   borg next                        # Get recommendation
   borg switch api-service          # Jump to work project (Claude Code)
 
@@ -321,7 +321,7 @@ cp -r ~/.claude/skills/borg-link-up ~/.snowflake/cortex/skills/
 
 ### Future Borg Integration
 
-When CoCo tracking is added to borg, the `borg ls` output will show all sessions:
+When CoCo tracking is added to borg, the `borg link` output will show all sessions:
 
 ```
 PROJECT        SRC  STATUS    LAST ACTIVE  SUMMARY

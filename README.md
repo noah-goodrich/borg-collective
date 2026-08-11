@@ -57,9 +57,6 @@ borg init   # morning briefing + launch orchestrator session
 | `borg add [path]` | Register a project (defaults to `$PWD`) |
 | `borg rm <name>` | Unregister a project |
 | `borg help` | Full command reference |
-| `borg ls [--all]` | *Legacy alias* for `borg link` (dashboard view) |
-| `borg status [project]` | *Legacy alias* for `borg link <project>` |
-| `borg hail [project]` | *Legacy alias* for `borg link` |
 
 ### `drone` — Project Lifecycle
 
