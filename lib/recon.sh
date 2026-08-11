@@ -74,7 +74,9 @@ _recon_epoch_to_iso() {
 
 # mtime (epoch seconds) of a file, portable across BSD (macOS) and GNU stat.
 _recon_file_mtime() {
-    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null
+    # GNU first — see _borg_file_mtime in borg.zsh: GNU `stat -f` prints a filesystem block to
+    # STDOUT before exiting 1, so a bsd||gnu chain concatenates garbage with the real answer.
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
 }
 
 # Newest checkpoint mtime (epoch) across a whitespace/newline-separated list of project dirs.

@@ -80,7 +80,10 @@ if [[ -d "$_cdiv_dir" ]]; then
         if [[ "$_cdiv_ts" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}$ ]]; then
             _cdiv_name_epoch=$(date -j -f "%Y-%m-%d-%H%M" "$_cdiv_ts" +%s 2>/dev/null \
                 || date -d "${_cdiv_ts:0:10} ${_cdiv_ts:11:2}:${_cdiv_ts:13:2}" +%s 2>/dev/null || true)
-            _cdiv_mtime_epoch=$(stat -f %m "$_cdiv_latest" 2>/dev/null || stat -c %Y "$_cdiv_latest" 2>/dev/null || true)
+            # GNU first: GNU `stat -f` prints a filesystem block to STDOUT before exiting 1, so a
+            # bsd||gnu chain captures "File: ...\nID: ...\n<epoch>" and the arithmetic below dies
+            # with "File: unbound variable" under `set -u`. BSD's `stat -c` fails with empty stdout.
+            _cdiv_mtime_epoch=$(stat -c %Y "$_cdiv_latest" 2>/dev/null || stat -f %m "$_cdiv_latest" 2>/dev/null || true)
             if [[ -n "$_cdiv_name_epoch" && -n "$_cdiv_mtime_epoch" ]]; then
                 CLOCK_DELTA=$(( _cdiv_mtime_epoch - _cdiv_name_epoch ))
                 (( CLOCK_DELTA < 0 )) && CLOCK_DELTA=$(( -CLOCK_DELTA ))
