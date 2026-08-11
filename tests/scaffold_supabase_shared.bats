@@ -25,14 +25,14 @@ setup() {
 @test "scaffold --supabase-shared: refuses when project dir does not exist" {
     run "$DRONE" scaffold --supabase-shared "${BATS_TEST_TMPDIR}/does-not-exist"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"does not exist"* ]]
+    [[ "$output" == *"does not exist"* ]] || false
 }
 
 @test "scaffold --supabase-shared: refuses when .devcontainer already exists" {
     mkdir "$TEST_PROJECT/.devcontainer"
     run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
     [ "$status" -ne 0 ]
-    [[ "$output" == *".devcontainer/"* ]]
+    [[ "$output" == *".devcontainer/"* ]] || false
 }
 
 @test "scaffold --supabase-shared: does NOT require supabase CLI at scaffold time" {
@@ -147,8 +147,8 @@ EOF
     # here (command not found), proving the no-op path was taken.
     run bash "$TEMPLATES/borg-hooks/pre-up.sh"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"already running"* ]]
-    [[ "$output" == *"no-op"* ]]
+    [[ "$output" == *"already running"* ]] || false
+    [[ "$output" == *"no-op"* ]] || false
 }
 
 @test "shared pre-up.sh: starts the shared stack once when absent" {
@@ -218,8 +218,8 @@ EOF
 
     run bash "$TEMPLATES/borg-hooks/post-down.sh"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"no-op"* ]]
-    [[ "$output" == *"persists"* ]]
+    [[ "$output" == *"no-op"* ]] || false
+    [[ "$output" == *"persists"* ]] || false
     [ ! -s "$SUPABASE_CALLED" ]
 }
 

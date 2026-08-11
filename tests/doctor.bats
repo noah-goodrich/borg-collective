@@ -84,10 +84,10 @@ EOF
 @test "all agents registered, exit 0, fresh output -> doctor exits 0 with OK lines" {
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"notifyd"*"OK"* ]]
-    [[ "$output" == *"cortex-wake"*"OK"* ]]
-    [[ "$output" == *"usage-watch"*"OK"* ]]
-    [[ "$output" == *"reap"*"OK"* ]]
+    [[ "$output" == *"notifyd"*"OK"* ]] || false
+    [[ "$output" == *"cortex-wake"*"OK"* ]] || false
+    [[ "$output" == *"usage-watch"*"OK"* ]] || false
+    [[ "$output" == *"reap"*"OK"* ]] || false
 }
 
 # ─── nonzero last exit status ─────────────────────────────────────────────────
@@ -100,7 +100,7 @@ EOF
 - 0 $REAP_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -ne 0 ]
-    [[ "$output" == *"cortex-wake"*"FAIL"* ]]
+    [[ "$output" == *"cortex-wake"*"FAIL"* ]] || false
 }
 
 # ─── missing from launchctl list ──────────────────────────────────────────────
@@ -112,7 +112,7 @@ EOF
 - 0 $REAP_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -ne 0 ]
-    [[ "$output" == *"cortex-wake"*"FAIL"* ]]
+    [[ "$output" == *"cortex-wake"*"FAIL"* ]] || false
 }
 
 # ─── a running daemon is healthy, whatever the previous instance's exit was ────
@@ -129,7 +129,7 @@ EOF
 - 0 $REAP_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"notifyd"*"run"*"OK"* ]]
+    [[ "$output" == *"notifyd"*"run"*"OK"* ]] || false
 }
 
 @test "a signalled exit with no live PID is WARN, not FAIL" {
@@ -140,7 +140,7 @@ EOF
 - 0 $REAP_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"notifyd"*"WARN"* ]]
+    [[ "$output" == *"notifyd"*"WARN"* ]] || false
 }
 
 # ─── stale output artifact ─────────────────────────────────────────────────────
@@ -153,7 +153,7 @@ EOF
     # 3x the 120s interval is 360s; back-date the samples file well past that.
     touch -t "202001010000" "$USAGE_SAMPLES"
     run "$BORG_CMD" doctor
-    [[ "$output" == *"usage-watch"*"WARN"* ]]
+    [[ "$output" == *"usage-watch"*"WARN"* ]] || false
 }
 
 # ─── no StartInterval -> freshness n/a, does not FAIL ─────────────────────────
@@ -161,7 +161,7 @@ EOF
 @test "agent with no StartInterval -> freshness prints n/a, does not FAIL" {
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"notifyd"*"n/a"*"OK"* ]]
+    [[ "$output" == *"notifyd"*"n/a"*"OK"* ]] || false
 }
 
 # ─── container clock skew ──────────────────────────────────────────────────────
@@ -198,7 +198,7 @@ EOF
     _write_docker_mock "" "" ""
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
-    [[ "$output" != *"CONTAINER"* ]]
+    [[ "$output" != *"CONTAINER"* ]] || false
 }
 
 @test "container clock in sync -> OK, exits 0" {
@@ -207,7 +207,7 @@ EOF
     _write_docker_mock "sample-app-1" "sample-app-1" "$now"
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"sample-app-1"*"OK"* ]]
+    [[ "$output" == *"sample-app-1"*"OK"* ]] || false
 }
 
 @test "container clock skewed > 120s -> WARN, not FAIL (exits 0)" {
@@ -216,12 +216,12 @@ EOF
     _write_docker_mock "sample-app-1" "sample-app-1" "$skewed"
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"sample-app-1"*"WARN"* ]]
+    [[ "$output" == *"sample-app-1"*"WARN"* ]] || false
 }
 
 @test "docker exec fails to read container clock -> FAIL" {
     _write_docker_mock "sample-app-1" "sample-app-1" ""
     run "$BORG_CMD" doctor
     [ "$status" -ne 0 ]
-    [[ "$output" == *"sample-app-1"*"FAIL"* ]]
+    [[ "$output" == *"sample-app-1"*"FAIL"* ]] || false
 }
