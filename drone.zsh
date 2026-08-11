@@ -15,6 +15,7 @@
 #   drone rebuild [project]      Rebuild images (no cache) + restart
 #   drone fix [project|--all]    Restore standard 2-pane layout
 #   drone toggle [project]       Add/remove side pane (2-pane ↔ 3-pane)
+#   drone pane <direction>       Split active pane top|bottom|left|right
 #   drone status                 Show all active drones
 #   drone help                   Command reference
 
@@ -883,6 +884,49 @@ cmd_toggle() {
     fi
 }
 
+# ── drone pane ────────────────────────────────────────────────────────────────
+
+cmd_pane() {
+    local direction="${1:-}"
+    [[ -n "$direction" ]] || die "Specify a direction: top, bottom, left, or right."
+
+    local flags
+    case "$direction" in
+        top)    flags="-v -b" ;;
+        bottom) flags="-v" ;;
+        left)   flags="-h -b" ;;
+        right)  flags="-h" ;;
+        *)      die "Invalid direction '$direction'. Use: top, bottom, left, or right." ;;
+    esac
+
+    [[ -n "$TMUX" ]] || die "Not inside a tmux session. Run 'drone pane' from within tmux."
+
+    local wname
+    wname=$(tmux display-message -p '#W')
+
+    local new_pane
+    new_pane=$(tmux split-window ${=flags} -PF '#{pane_id}')
+
+    # If this is a devcontainer project, exec into the container (same logic as cmd_toggle);
+    # otherwise just cd into the project dir.
+    local pdir
+    pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
+    if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
+        local container shell service exec_cmd
+        container=$(get_project_container "$pdir") || true
+        if [[ -n "$container" ]]; then
+            shell=$(get_shell "$container")
+            service=$(get_service_name "$pdir")
+            exec_cmd=$(build_exec_cmd "$wname" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
+            tmux send-keys -t "$new_pane" "$exec_cmd" Enter
+        fi
+    elif [[ -n "$pdir" ]]; then
+        tmux send-keys -t "$new_pane" "cd $pdir" Enter
+    fi
+
+    info "$wname: new pane opened ($direction)"
+}
+
 # ── drone status ──────────────────────────────────────────────────────────────
 
 cmd_status() {
@@ -1316,6 +1360,7 @@ cmd_help() {
     fix [project]        Restore standard 2-pane layout for project window
     fix --all            Restore layout for all windows
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
+    pane <direction>     Split active pane top|bottom|left|right (devcontainer-aware)
     scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase, --supabase-shared)
     status               Show all active drones (containers + Claude status)
     help                 Show this message
@@ -1354,6 +1399,7 @@ case "${1:-}" in
     rebuild)    cmd_rebuild "${2:-}" ;;
     fix)        cmd_fix "${2:-}" ;;
     toggle)     cmd_toggle "${2:-}" ;;
+    pane)       cmd_pane "${2:-}" ;;
     scaffold)   shift; cmd_scaffold "$@" ;;
     status)     cmd_status ;;
     link)       exec borg link "${2:-${PWD##*/}}" "${@:3}" ;;

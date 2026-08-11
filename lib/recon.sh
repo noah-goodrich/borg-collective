@@ -28,7 +28,17 @@ _recon_borg_dir() {
 
 # Directory that holds this lib, used to locate the shipped reference adapters.
 _recon_lib_dir() {
-    # ${BASH_SOURCE[0]} in bash, $0 in zsh when sourced.
+    # The zsh shim (lib/recon.zsh) sets BORG_RECON_LIB_DIR before sourcing this file, because the
+    # bash idiom below DOES NOT WORK IN ZSH: `BASH_SOURCE` is a bash-only array that expands to
+    # empty, and zsh's `$0` inside a sourced file carries no directory component. `dirname` then
+    # returns ".", which silently drops the repo's shipped reference adapters out of the search path
+    # — so `borg recon` reports "No recon adapters found" on a machine that has one installed, and
+    # the whole fan-out is inert with no error. Failing silently is why this survived since #95.
+    if [ -n "${BORG_RECON_LIB_DIR:-}" ]; then
+        printf '%s\n' "$BORG_RECON_LIB_DIR"
+        return 0
+    fi
+    # bash (and the bats suite, which sources this directly).
     dirname "${BASH_SOURCE[0]:-$0}"
 }
 
@@ -74,7 +84,9 @@ _recon_epoch_to_iso() {
 
 # mtime (epoch seconds) of a file, portable across BSD (macOS) and GNU stat.
 _recon_file_mtime() {
-    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null
+    # GNU first — see _borg_file_mtime in borg.zsh: GNU `stat -f` prints a filesystem block to
+    # STDOUT before exiting 1, so a bsd||gnu chain concatenates garbage with the real answer.
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
 }
 
 # Newest checkpoint mtime (epoch) across a whitespace/newline-separated list of project dirs.
@@ -139,21 +151,25 @@ _recon_write_last_run() {
 # a repo one of the same name. This is the ONLY registration mechanism: dropping an executable on
 # the path adds a source. Ontra-specific adapters are injected this way, never hardcoded here.
 _recon_discover_adapters() {
-    _path=$(_recon_adapter_path)
-    _oldifs="$IFS"; IFS=":"
-    # shellcheck disable=SC2086
-    set -- $_path
-    IFS="$_oldifs"
+    # Split the search path on ':' by TRANSLATING TO NEWLINES, not via `IFS=:; set -- $var`.
+    # zsh does not word-split unquoted parameter expansions, so that idiom yields ONE positional
+    # parameter in zsh and TWO in bash — meaning discovery found zero directories under the real
+    # zsh CLI while passing cleanly in the bash bats suite. The engine ran, reported "No recon
+    # adapters found", and exited 0, so the whole fan-out was inert with no error anywhere.
+    # tr + read behaves identically in sh, bash, and zsh.
+    _searchpath=$(_recon_adapter_path)
     # Gather candidates from every search dir first (quoted -name → no shell glob → zsh-NOMATCH-safe),
     # then dedup in a single pass so first-on-path wins and state survives across dirs.
-    _cands=""
-    for _d in "$@"; do
-        [ -d "$_d" ] || continue
-        _found=$(find "$_d" -maxdepth 1 -type f -name 'recon-adapter-*' 2>/dev/null)
-        [ -n "$_found" ] && _cands="$_cands$_found
+    printf '%s\n' "$_searchpath" | tr ':' '\n' | {
+        _cands=""
+        while IFS= read -r _d; do
+            [ -n "$_d" ] && [ -d "$_d" ] || continue
+            _found=$(find "$_d" -maxdepth 1 -type f -name 'recon-adapter-*' 2>/dev/null)
+            [ -n "$_found" ] && _cands="$_cands$_found
 "
-    done
-    printf '%s' "$_cands" | {
+        done
+        printf '%s' "$_cands"
+    } | {
         _seen=" "
         while IFS= read -r _f; do
             [ -n "$_f" ] && [ -x "$_f" ] || continue

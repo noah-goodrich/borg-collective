@@ -1280,7 +1280,9 @@ _borg_has_recent_checkpoint() {
     latest=$(ls -t "$cp_dir"/*.md 2>/dev/null | head -1)
     [[ -n "$latest" ]] || return 1
     local mtime now age
-    mtime=$(stat -f %m "$latest" 2>/dev/null) || return 1
+    # Was `stat -f %m` with no fallback — BSD-only, so this returned 1 on Linux/CI and every
+    # caller read "no recent checkpoint" regardless of the actual mtime. Use the shared helper.
+    mtime=$(_borg_file_mtime "$latest") || return 1
     now=$(date +%s)
     age=$(( (now - mtime) / 3600 ))
     (( age < threshold_hours ))
@@ -1289,9 +1291,9 @@ _borg_has_recent_checkpoint() {
 # Offer to run /borg-link-up in the Claude pane of a window, then wait for the
 # checkpoint file to appear (up to TIMEOUT seconds) before returning.
 _borg_offer_checkpoint() {
-    local wname="$1" pdir="$2" timeout="${3:-120}"
+    local wname="$1" pdir="$2" timeout="${3:-120}" threshold_hours="${4:-8}"
 
-    warn "$wname has no checkpoint from the last 8 hours."
+    warn "$wname has no checkpoint from the last ${threshold_hours} hours."
     printf "  Run /borg-link-up in that session now? [Y/n] "
     local reply
     read -r reply
@@ -1364,13 +1366,15 @@ cmd_down() {
 
     local windows
     windows=(${(f)"$(tmux list-windows -t "$BORG_TMUX_SESSION" -F '#W' 2>/dev/null)"})
+    local checkpoint_threshold_hours=8
 
     for wname in $windows; do
         [[ "$wname" == "orchestrator" || "$wname" == "host" ]] && continue
         local pdir
         pdir=$(tmux show-option -t "$BORG_TMUX_SESSION:$wname" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" ]]; then
-            _borg_has_recent_checkpoint "$pdir" || _borg_offer_checkpoint "$wname" "$pdir"
+            _borg_has_recent_checkpoint "$pdir" "$checkpoint_threshold_hours" \
+                || _borg_offer_checkpoint "$wname" "$pdir" "" "$checkpoint_threshold_hours"
             info "Stopping $wname..."
             drone down "$wname" 2>/dev/null || tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
         else
@@ -2723,13 +2727,20 @@ cmd_watch() {
     done
 }
 
-# Print a file's mtime as a unix timestamp. `stat -f %m` is BSD (macOS); `stat -c %Y` is GNU
-# (Linux, and CI). Return nonzero when neither works so callers can distinguish "cannot tell"
-# from "very old" — collapsing those two is how a stat failure becomes a false staleness report.
+# Print a file's mtime as a unix timestamp. `stat -c %Y` is GNU (Linux, and CI); `stat -f %m` is
+# BSD (macOS). Return nonzero when neither works so callers can distinguish "cannot tell" from
+# "very old" — collapsing those two is how a stat failure becomes a false staleness report.
+#
+# ORDER MATTERS, AND NOT FOR THE OBVIOUS REASON. Try GNU FIRST. On GNU, `-f` means "filesystem
+# status", so `stat -f %m FILE` treats %m as an operand, PRINTS A FILESYSTEM BLOCK TO STDOUT
+# ("File: ...", "ID: ...", "Block size: ..."), and only then exits 1. A `bsd || gnu` chain
+# therefore captures that block CONCATENATED with the real answer, and the caller does arithmetic
+# on "File: ... 1786418121" — which under `set -u` dies with "File: unbound variable". The reverse
+# order is clean: BSD's `stat -c` fails with EMPTY stdout, so the fallback output stands alone.
 _borg_file_mtime() {
     local f="$1" m=""
-    m=$(stat -f "%m" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
     m=$(stat -c "%Y" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
+    m=$(stat -f "%m" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
     return 1
 }
 
@@ -2845,6 +2856,55 @@ cmd_doctor() {
         [[ -n "$hint" ]] && echo -e "   ${DIM}→ $hint${NC}"
     done
     echo
+
+    # Clock skew: for each running drone container, compare its clock against the host's. A
+    # skewed VM clock silently corrupts freshness/mtime checks elsewhere (this is how #98 hid) —
+    # catching it here is cheap and proactive. Not a launchd agent, so it borrows the same table
+    # columns: REG is whether we could reach the container's clock at all, EXIT carries the skew
+    # in seconds (repurposed — there is no process exit code here), FRESH is n/a.
+    local -a containers
+    containers=(${(f)"$(docker ps --filter 'label=dev.role=app' --format '{{.Names}}' 2>/dev/null)"})
+    containers=(${containers:#})
+
+    if (( ${#containers[@]} > 0 )); then
+        printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "CONTAINER" "REG" "SKEW" "FRESH" "STATUS"
+        printf '%0.s─' {1..70}; echo
+
+        local container host_epoch container_epoch skew
+        for container in "${containers[@]}"; do
+            local c_ok=1 c_warn=0 c_hint="" c_reg="yes" c_exit="n/a"
+
+            host_epoch=$(date +%s)
+            container_epoch=$(docker exec "$container" date +%s 2>/dev/null) || container_epoch=""
+
+            if [[ -z "$container_epoch" || "$container_epoch" != <-> ]]; then
+                c_reg="MISSING"
+                c_ok=0
+                c_hint="could not read clock via docker exec — is the container running?"
+            else
+                skew=$(( container_epoch - host_epoch ))
+                (( skew < 0 )) && skew=$(( -skew ))
+                c_exit="${skew}s"
+                if (( skew > 120 )); then
+                    c_warn=1
+                    c_hint="clock skew ${skew}s vs host — restart the container/VM"
+                fi
+            fi
+
+            local c_color="" c_status=""
+            if (( ! c_ok )); then
+                c_color="$RED"; c_status="FAIL"; overall_exit=1
+            elif (( c_warn )); then
+                c_color="$YELLOW"; c_status="WARN"
+            else
+                c_color="$GREEN"; c_status="OK"
+            fi
+
+            printf " %-14s %-10s %-8s %-10s ${c_color}%s${NC}\n" "$container" "$c_reg" "$c_exit" "n/a" "$c_status"
+            [[ -n "$c_hint" ]] && echo -e "   ${DIM}→ $c_hint${NC}"
+        done
+        echo
+    fi
 
     return $overall_exit
 }
