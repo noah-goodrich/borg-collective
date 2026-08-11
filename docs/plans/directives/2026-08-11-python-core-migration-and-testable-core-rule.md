@@ -37,9 +37,36 @@ Each was invisible to the test suite by construction, and the tooling gap is per
 - **macOS ships bash 3.2.57 (2007).** Its `set -e` silently ignores non-final `[[ ]]`, which hid 161 assertions
   until 2026-08-11.
 
-Python inverts all four: `pytest` + `coverage` + `mypy` + `mutmut` + `ruff` all exist, are mature, and run
-identically on every platform. `merge-tree/` already contains **1,349 lines of Python**, so the precedent and the
-toolchain are in-repo.
+Python has mature answers to all four — `pytest`, `coverage`, `mypy`, `mutmut`, `ruff` — which exist and run
+identically on every platform.
+
+**But do not mistake available tooling for adopted tooling.** Corrected after blind review: `merge-tree/` contains
+**1,349 lines of Python with zero tests, no `pyproject.toml`, and no `conftest.py`** — verified by repo inspection.
+An earlier draft of this directive cited that as "the precedent and the toolchain are in-repo." That was **false**,
+and the reviewer's reading of it is the more useful one: it is the same undisciplined-shipping problem restated in
+a second language. The existing Python is evidence *for* Part 1 (the rule), not evidence that Part 2 is safe.
+
+Which is why **M0 below tests that existing Python first.** If the rule cannot be made to hold on 1,349 lines that
+already exist, it will not hold on 4,000 more.
+
+### Which of the three motivating bugs this actually prevents
+
+Stated precisely, because "migrate to Python" does not uniformly imply "these bugs go away":
+
+**#113a — `BASH_SOURCE` empty in zsh.** Lived in `lib/recon.sh:30` (`_recon_lib_dir`). Migrates under M3.
+**Prevented** — Python has no `BASH_SOURCE` analogue to get wrong.
+
+**#113b — zsh does not word-split unquoted expansions.** Lived in `lib/recon.sh`
+(`_recon_discover_adapters`). Migrates under M3. **Prevented** — `str.split(":")` has exactly one behavior.
+
+**#114 — `stat` fallback captured stdout.** Lived in three places: `borg.zsh`, `lib/recon.sh`, **and
+`hooks/borg-link-up.sh`**. The first two migrate; the hook does not, by design. **Partially prevented** —
+`os.stat().st_mtime` fixes the migrated copies; the hook keeps its shell exposure permanently.
+
+**Two of three fully, one partially.** The blind review argued bug (a) was structurally exempted because it lived
+in the wrapper — that is incorrect on the specifics (it lived in a portable-sh lib, which migrates), but the
+general concern is sound: any logic that stays in `borg.zsh` or the hooks keeps its shell-idiom exposure
+permanently. The honest claim is "this removes the exposure from the migrated surface," not "this fixes shell bugs."
 
 ## The measured constraint that sets the migration boundary
 
@@ -52,13 +79,57 @@ Benchmarked on this machine (arm64 macOS, 20 runs each):
 | `python3 -c pass` | 48.4 ms |
 | `python3 -c 'import typer'` | **57.1 ms** |
 
-**+34 ms per invocation.** That is irrelevant for a human typing `borg link`. It is **not** irrelevant for hooks:
+**+34 ms per invocation.** At 57 ms total, that sits under the ~100 ms threshold conventionally treated as
+"instant" for direct manipulation, so it should be imperceptible for a human typing `borg link` — though note this
+is a reference point, not a measurement of *this* CLI, and **looped or scripted invocation was not measured.**
+Anything that calls `borg` in a loop would multiply it. It is **not** imperceptible for hooks:
 `borg-memory-read-log.sh` and `tool-count-nudge.sh` are `PostToolUse` hooks that fire on **every tool call**. A
 250-call session would pay ~17 extra seconds of pure latency, felt as sluggishness, for no benefit — the hooks are
 small (the largest non-guard hook is 378 lines), already tested, and already shellcheck-clean.
 
 **Therefore the boundary is: CLI logic → Python. Hooks stay shell.** This is a deliberate, measured split, not an
 unfinished migration. Record it so nobody "completes" it later by porting the hooks.
+
+## Blind adversarial review (D5) — verdict: **REVISE**
+
+A reviewer was given the problem, the option set, and the chosen option, but **not** the reasoning for why it won.
+Verdict: **REVISE** — Part 1 sound as written; Part 2's mechanics good *conditional on Python being the right
+target*, a conditional never tested against the strongest competitor.
+
+**Strongest objection, verbatim:**
+
+> "the precedent and the toolchain are in-repo" is false — this repo currently has 1,349 lines of Python with zero
+> tests and no `pyproject.toml`, which is the same undisciplined-shipping problem the directive exists to solve,
+> restated in a second language.
+
+**Accepted and acted on:** the false precedent claim is corrected above and converted into gate **M0**; the
+`cli_contract.bats` tense error is corrected and the #115 dependency stated; `mypy`/`ruff` are now gating in M1;
+the +34 ms claim is labelled as a reference point with the unmeasured looped case named; per-bug prevention is now
+accounted for precisely.
+
+**Rejected on the specifics:** the review argued bug (a) is "structurally exempted" because it lives in the
+wrapper. It lives in `lib/recon.sh:30`, a portable-sh lib that migrates under M3. The general concern — that
+anything staying in `borg.zsh` or the hooks keeps its shell-idiom exposure forever — is accepted and stated.
+
+**Open, and Noah's call — the option the study genuinely missed:**
+
+> A compiled single-binary language (Go/Rust) dominates C on every axis the directive itself uses.
+
+This is the review's best point and it is not resolved here. On this directive's *own* stated criteria a compiled
+binary wins: near-zero startup means the hook/CLI boundary — which this directive calls a permanent, load-bearing
+split — **would not need to exist**, so hooks could migrate too and the "two languages forever" risk disappears;
+`go test`/`go vet`/`gremlins` cover the same tooling gap; and a static binary removes the container
+dependency-fragility risk named below entirely.
+
+The counter-argument, which the reviewer could not see because it is about the maintainer rather than the code:
+**Noah works in Python daily** (dbt, Snowflake, data engineering) and requested Typer explicitly. A Go binary he
+edits reluctantly is worse than Python he edits fluently, and maintainability-by-the-actual-maintainer is the whole
+justification for this directive. That is a real argument, but it is a *preference* argument, and it should be made
+knowingly rather than by omission. **Decide this before M1.** M0 is language-agnostic and worth doing either way.
+
+**Also recorded:** the review notes three bugs in one deliberately portability-focused day is a thin base rate for
+a multi-month architecture bet, and no historical bug-frequency data is offered. True. This directive's honest
+justification is Part 1's rule plus developer ergonomics — not a measured defect rate.
 
 ## Part 1 — The Testable-Core Rule (do this first; it is cheap and it compounds)
 
@@ -89,16 +160,30 @@ unfinished migration. Record it so nobody "completes" it later by porting the ho
 ### Non-negotiables
 - **No rewrite.** A big-bang rewrite of a 2,717-line file whose safety net is the thing being fixed is how this
   goes wrong. Migrate command by command.
-- **Behavior parity is proven by the existing suite, not asserted.** `tests/cli_contract.bats` (12 black-box
-  tests added 2026-08-11) is the parity harness: it asserts observable CLI behavior and does not care what
-  language implements it. **Grow it before migrating, not after.**
+- **Behavior parity is proven by a suite, not asserted.** `tests/cli_contract.bats` — 12 black-box tests that
+  invoke the real CLI and do not care what language implements it — is the parity harness. **It is not on `main`
+  yet**; it lives in PR #115. Corrected after blind review, which rightly flagged that an earlier draft described
+  it in the present tense as though it had landed. **Part 2 is therefore blocked on #115 merging.** Grow it before
+  migrating, not after.
 - **`borg` stays a zsh entry point.** `borg.zsh` keeps owning argv and delegates to `python -m borg_core …`.
   Existing muscle memory, tmux integration, and hook contracts are untouched.
 
 ### Acceptance Criteria
-- [ ] M1 — A `borg_core/` Python package exists with `pyproject.toml`, Typer as the CLI framework, and a working
-      `pytest` + `coverage` + `ruff` + `mypy` setup wired into CI.
-  - Verify: `pytest` passes; `coverage report` emits a number; CI has a `python` job.
+- [ ] **M0 — GATE. Test the Python that already exists, before writing any new Python.** Stand up
+      `pyproject.toml` + `pytest` + `coverage` + `ruff` + `mypy` and bring `merge-tree/`'s existing 1,349 lines
+      under test, starting with `curate.py` (pure transformation, the easiest honest win) and `render_graph.py`'s
+      derivation helpers. **If this gate cannot be cleared, Part 2 does not begin** — a maintainer who cannot get
+      tests onto 1,349 existing lines will not get them onto 4,000 new ones, and the migration would move
+      untestable code into a language where that is no longer excusable.
+  - Verify: `pytest` collects and passes ≥1 test per `merge-tree/*.py`; `coverage report` shows ≥60% on
+    `curate.py`; `ruff check` and `mypy` both exit 0 in CI.
+  - Rationale: this criterion exists because the blind review correctly refuted the claim that Python precedent
+    made this safe. It converts the strongest objection into the plan's first deliverable.
+- [ ] M1 — A `borg_core/` Python package exists with Typer as the CLI framework, reusing the toolchain M0 stood
+      up. **`mypy` and `ruff` are gating in CI, not aspirational** — the review flagged that an earlier draft
+      asserted them in prose while only verifying `pytest`/`coverage`.
+  - Verify: `pytest` passes; `coverage report` emits a number; `ruff check` exits 0; `mypy borg_core` exits 0;
+    all three run in a CI `python` job that blocks merge.
 - [ ] M2 — The contract suite is grown to cover **every** command `borg.zsh` dispatches, before any command is
       migrated. This is the parity net.
   - Verify: every case in `borg.zsh`'s top-level `case` statement has at least one `cli_contract.bats` test.
