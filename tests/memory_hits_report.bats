@@ -33,7 +33,7 @@ _seed_hit() {
 @test "reports no-data message when the hit log does not exist" {
     run bash "$REPORT"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"no data yet"* ]]
+    [[ "$output" == *"no data yet"* ]] || false
 }
 
 @test "computes ratio and PASSes when reads/session is at least 0.2" {
@@ -43,10 +43,10 @@ _seed_hit() {
 
     run bash "$REPORT" --days 30
     [ "$status" -eq 0 ]
-    [[ "$output" == *"reads:    2"* ]]
-    [[ "$output" == *"sessions: 5"* ]]
-    [[ "$output" == *"0.400 reads/session"* ]]
-    [[ "$output" == *"PASS"* ]]
+    [[ "$output" == *"reads:    2"* ]] || false
+    [[ "$output" == *"sessions: 5"* ]] || false
+    [[ "$output" == *"0.400 reads/session"* ]] || false
+    [[ "$output" == *"PASS"* ]] || false
 }
 
 @test "FAILs when reads/session is below 0.2" {
@@ -55,8 +55,8 @@ _seed_hit() {
 
     run bash "$REPORT" --days 30
     [ "$status" -eq 0 ]
-    [[ "$output" == *"0.100 reads/session"* ]]
-    [[ "$output" == *"auto-memory is a second write-only store"* ]]
+    [[ "$output" == *"0.100 reads/session"* ]] || false
+    [[ "$output" == *"auto-memory is a second write-only store"* ]] || false
 }
 
 @test "excludes the -/ and -private-tmp/ pollution dirs from the session denominator" {
@@ -66,7 +66,7 @@ _seed_hit() {
     printf '{}' > "$HOME/.claude/projects/-private-tmp/pollution-2.jsonl"
 
     run bash "$REPORT" --days 30
-    [[ "$output" == *"sessions: 1"* ]]
+    [[ "$output" == *"sessions: 1"* ]] || false
 }
 
 @test "reports n/a ratio when there is hit data but zero sessions in window" {
@@ -74,7 +74,7 @@ _seed_hit() {
 
     run bash "$REPORT" --days 30
     [ "$status" -eq 0 ]
-    [[ "$output" == *"n/a"* ]]
+    [[ "$output" == *"n/a"* ]] || false
 }
 
 @test "breaks down reads by project" {
@@ -84,8 +84,8 @@ _seed_hit() {
     _seed_hit "sess-2" "troth"
 
     run bash "$REPORT" --days 30
-    [[ "$output" == *"ingle"*"2"* ]]
-    [[ "$output" == *"troth"*"1"* ]]
+    [[ "$output" == *"ingle"*"2"* ]] || false
+    [[ "$output" == *"troth"*"1"* ]] || false
 }
 
 @test "defaults to a 30-day window when no --days argument is given" {
@@ -94,5 +94,5 @@ _seed_hit() {
 
     run bash "$REPORT"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"last 30 days"* ]]
+    [[ "$output" == *"last 30 days"* ]] || false
 }

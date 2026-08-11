@@ -27,7 +27,7 @@ setup() {
 @test "borg_claude_project_dir returns correct path" {
     run run_zsh_fn claude borg_claude_project_dir /Users/noah/dev/cairn
     [ "$status" -eq 0 ]
-    [[ "$output" == *"/.claude/projects/-Users-noah-dev-cairn" ]]
+    [[ "$output" == *"/.claude/projects/-Users-noah-dev-cairn" ]] || false
 }
 
 @test "borg_claude_latest_session_id returns empty for missing dir" {
@@ -51,7 +51,7 @@ setup() {
 @test "borg_claude_session_jsonl returns correct path" {
     run run_zsh_fn claude borg_claude_session_jsonl /Users/noah/dev/cairn abc-123
     [ "$status" -eq 0 ]
-    [[ "$output" == *"/-Users-noah-dev-cairn/abc-123.jsonl" ]]
+    [[ "$output" == *"/-Users-noah-dev-cairn/abc-123.jsonl" ]] || false
 }
 
 @test "borg_claude_scan_session_log returns empty when log missing" {
@@ -70,8 +70,8 @@ LOG
 
     run run_zsh_fn claude borg_claude_scan_session_log
     [ "$status" -eq 0 ]
-    [[ "$output" == *"/Users/noah/dev/cairn"* ]]
-    [[ "$output" == *"/Users/noah/dev/borg"* ]]
+    [[ "$output" == *"/Users/noah/dev/cairn"* ]] || false
+    [[ "$output" == *"/Users/noah/dev/borg"* ]] || false
     # Should deduplicate
     local count
     count=$(echo "$output" | grep -c "cairn" || true)

@@ -48,7 +48,7 @@ VALID_ITEM='{"project":"p","source":"s","ref":"r#1","title":"t","state":"open","
     touch -t 202402030000 "$proj/.borg/checkpoints/new.md"
     run _recon_resolve_since "" "$proj"
     [ "$status" -eq 0 ]
-    [[ "$output" == 2024-02-03T* ]]
+    [[ "$output" == 2024-02-03T* ]] || false
 }
 
 @test "_recon_resolve_since falls back to the last-run marker" {
@@ -62,7 +62,7 @@ VALID_ITEM='{"project":"p","source":"s","ref":"r#1","title":"t","state":"open","
 @test "_recon_resolve_since defaults to ~24h ago when nothing else is available" {
     run _recon_resolve_since "" "${BATS_TEST_TMPDIR}/no-such-project"
     [ "$status" -eq 0 ]
-    [[ "$output" == 20*T*Z ]]
+    [[ "$output" == 20*T*Z ]] || false
 }
 
 # ── adapter discovery ────────────────────────────────────────────────────────
@@ -71,13 +71,13 @@ VALID_ITEM='{"project":"p","source":"s","ref":"r#1","title":"t","state":"open","
     make_adapter github '{}'
     run _recon_discover_adapters
     [ "$status" -eq 0 ]
-    [[ "$output" == github$'\t'* ]]
+    [[ "$output" == github$'\t'* ]] || false
 }
 
 @test "_recon_discover_adapters ignores non-executable files" {
     echo '{}' > "$ADAPTERS/recon-adapter-noexec"
     run _recon_discover_adapters
-    [[ "$output" != *noexec* ]]
+    [[ "$output" != *noexec* ]] || false
 }
 
 @test "_recon_discover_adapters dedups by source, first path wins" {
@@ -89,7 +89,7 @@ VALID_ITEM='{"project":"p","source":"s","ref":"r#1","title":"t","state":"open","
     export BORG_RECON_ADAPTER_PATH="$userdir:$ADAPTERS"
     run _recon_discover_adapters
     [ "$(echo "$output" | grep -c 'dup')" -eq 1 ]
-    [[ "$output" == *"$userdir/recon-adapter-dup"* ]]
+    [[ "$output" == *"$userdir/recon-adapter-dup"* ]] || false
 }
 
 @test "_recon_discover_adapters is safe when a search dir has no adapters" {
@@ -184,8 +184,8 @@ VALID_ITEM='{"project":"p","source":"s","ref":"r#1","title":"t","state":"open","
 do stuff
 EOF
     run _recon_checkpoint_blockers "$proj"
-    [[ "$output" == *"repo#7 waiting on review"* ]]
-    [[ "$output" != *"do stuff"* ]]
+    [[ "$output" == *"repo#7 waiting on review"* ]] || false
+    [[ "$output" != *"do stuff"* ]] || false
 }
 
 @test "_recon_project_contradictions flags a resolved item still listed as a blocker" {
@@ -231,8 +231,8 @@ EOF
     export BORG_RECON_LIB_DIR="/sentinel/lib"
     run _recon_adapter_path
     [ "$status" -eq 0 ]
-    [[ "$output" == *"/sentinel/lib/recon/adapters"* ]]
-    [[ "$output" != *":./recon/adapters"* ]]
+    [[ "$output" == *"/sentinel/lib/recon/adapters"* ]] || false
+    [[ "$output" != *":./recon/adapters"* ]] || false
 }
 
 @test "adapter discovery splits a multi-directory search path" {
@@ -245,8 +245,8 @@ EOF
     export BORG_RECON_ADAPTER_PATH="$ADAPTERS:$d2"
     run _recon_discover_adapters
     [ "$status" -eq 0 ]
-    [[ "$output" == *"alpha"* ]]
-    [[ "$output" == *"beta"* ]]
+    [[ "$output" == *"alpha"* ]] || false
+    [[ "$output" == *"beta"* ]] || false
 }
 
 @test "zsh CLI discovers the repo's shipped github adapter" {
@@ -254,6 +254,6 @@ EOF
     unset BORG_RECON_ADAPTER_PATH
     run zsh -c "unset BORG_RECON_ADAPTER_PATH; '$BORG_HOME/borg.zsh' recon --adapters"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"github"* ]]
-    [[ "$output" != *"No recon adapters found"* ]]
+    [[ "$output" == *"github"* ]] || false
+    [[ "$output" != *"No recon adapters found"* ]] || false
 }

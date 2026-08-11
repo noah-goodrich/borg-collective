@@ -168,7 +168,7 @@ _run_hook() {
     BORG_ORCHESTRATOR_ROOT="${BORG_TEST_HOME}/dev" \
         run bash -c "bash '$HOOK' <<< '$input' 2>&1 1>/dev/null"
 
-    [[ "$output" == *"auto-promoted"* ]]
+    [[ "$output" == *"auto-promoted"* ]] || false
 }
 
 @test "plan_promote: Write tool also triggers promotion" {
