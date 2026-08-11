@@ -6,9 +6,9 @@ description: >
 ---
 
 If the user named a specific project: run `borg switch <name>` with the Bash tool.
-If no project was named: run `borg ls --all`, show the list, ask which one to switch to,
+If no project was named: run `borg link --all`, show the list, ask which one to switch to,
 then run `borg switch <chosen>`.
 
 After switching, confirm: "Switched to <project>." No further commentary needed.
 If the switch fails (project not found or no tmux window), show the error and suggest
-running `borg ls` to see available projects.
+running `borg link` to see available projects.
