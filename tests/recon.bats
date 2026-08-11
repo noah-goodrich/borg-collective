@@ -206,3 +206,54 @@ EOF
     run _recon_project_contradictions alpha "" "$items"
     [ "$(echo "$output" | jq 'length')" -eq 0 ]
 }
+
+# ── Regression: default adapter path + zsh word-splitting ────────────────────────────────────────
+#
+# Both bugs these cover shipped in #95 and survived until 2026-08-10 for the same reason: EVERY
+# other test in this file sets BORG_RECON_ADAPTER_PATH to a single directory. That override
+# short-circuits _recon_adapter_path() entirely, so the default two-directory path was never
+# resolved, and the colon-splitting was never exercised with more than one element.
+#
+# On top of that, bats runs bash and the borg CLI runs zsh. zsh does not word-split unquoted
+# parameter expansions, so `IFS=:; set -- $var` yielded ONE argument in zsh and TWO in bash — the
+# suite passed green while `borg recon` found zero adapters on the real CLI and exited 0.
+
+# WHICH OF THESE ACTUALLY GATES THE BUG. Reverting the fix and re-running locally fails only the
+# zsh test — the bash tests still pass, because the old implementation worked correctly in bash.
+# That is the entire nature of the bug, and it makes the zsh test the real gate.
+#
+# Read that local result with care, though: macOS ships bash 3.2.57 (2007), whose `set -e` does not
+# fire on a failing `[[ ]]` unless it is the LAST command in the body, so intermediate assertions
+# are silently ignored locally. CI runs Ubuntu bash 5.x and enforces them. Local green is therefore
+# WEAKER than CI green on this machine — treat CI as the gate, not a local run.
+@test "BORG_RECON_LIB_DIR override is honored by the adapter path" {
+    unset BORG_RECON_ADAPTER_PATH
+    export BORG_RECON_LIB_DIR="/sentinel/lib"
+    run _recon_adapter_path
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"/sentinel/lib/recon/adapters"* ]]
+    [[ "$output" != *":./recon/adapters"* ]]
+}
+
+@test "adapter discovery splits a multi-directory search path" {
+    local d2="${BATS_TEST_TMPDIR}/adapters2"
+    mkdir -p "$d2"
+    make_adapter "alpha" '{"source":"alpha","summary":"s","items":[]}'
+    printf '#!/usr/bin/env bash\necho ok\n' > "$d2/recon-adapter-beta"
+    chmod +x "$d2/recon-adapter-beta"
+
+    export BORG_RECON_ADAPTER_PATH="$ADAPTERS:$d2"
+    run _recon_discover_adapters
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"alpha"* ]]
+    [[ "$output" == *"beta"* ]]
+}
+
+@test "zsh CLI discovers the repo's shipped github adapter" {
+    command -v zsh >/dev/null 2>&1 || skip "zsh not available"
+    unset BORG_RECON_ADAPTER_PATH
+    run zsh -c "unset BORG_RECON_ADAPTER_PATH; '$BORG_HOME/borg.zsh' recon --adapters"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"github"* ]]
+    [[ "$output" != *"No recon adapters found"* ]]
+}
