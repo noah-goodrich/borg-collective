@@ -119,15 +119,15 @@ EOF
     _install_hook pre-up.sh 7
     run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample pre-up.sh strict"
     [ "$status" -eq 7 ]
-    [[ "$output" == *"aborting"* ]]
+    [[ "$output" == *"aborting"* ]] || false
 }
 
 @test "run_borg_hook: lenient mode swallows non-zero exit" {
     _install_hook post-down.sh 5
     run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample post-down.sh lenient"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"WARN"* ]]
-    [[ "$output" == *"continuing"* ]]
+    [[ "$output" == *"WARN"* ]] || false
+    [[ "$output" == *"continuing"* ]] || false
 }
 
 @test "run_borg_hook: non-executable hook is skipped with warning" {
@@ -138,7 +138,7 @@ EOF
     # deliberately no chmod +x
     run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample pre-up.sh strict"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"not executable"* ]]
+    [[ "$output" == *"not executable"* ]] || false
 }
 
 @test "run_borg_hook: passes BORG_PROJECT_NAME to hook" {
@@ -213,7 +213,7 @@ EOF
     _install_hook post-down.sh 13
     run "$DRONE" down "$TEST_PROJECT"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"post-down.sh"* ]]
+    [[ "$output" == *"post-down.sh"* ]] || false
 }
 
 @test "drone restart: pre-up fires, post-down does NOT fire (transient cycle)" {

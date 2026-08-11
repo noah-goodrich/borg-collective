@@ -99,20 +99,20 @@ _split_call() {
 @test "pane with invalid direction errors non-zero" {
     run "$DRONE" pane sideways
     [ "$status" -ne 0 ]
-    [[ "$output" == *"Invalid direction"* ]]
+    [[ "$output" == *"Invalid direction"* ]] || false
 }
 
 @test "pane with no direction errors non-zero" {
     run "$DRONE" pane
     [ "$status" -ne 0 ]
-    [[ "$output" == *"Specify a direction"* ]]
+    [[ "$output" == *"Specify a direction"* ]] || false
 }
 
 @test "pane outside tmux errors non-zero" {
     unset TMUX
     run "$DRONE" pane right
     [ "$status" -ne 0 ]
-    [[ "$output" == *"Not inside a tmux session"* ]]
+    [[ "$output" == *"Not inside a tmux session"* ]] || false
 }
 
 # ─── devcontainer-aware pane creation ──────────────────────────────────────────

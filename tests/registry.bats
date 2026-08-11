@@ -34,8 +34,8 @@ setup() {
     echo '{"projects":{"alpha":{},"beta":{}}}' > "$BORG_REGISTRY"
     run run_zsh_fn registry borg_registry_list
     [ "$status" -eq 0 ]
-    [[ "$output" == *"alpha"* ]]
-    [[ "$output" == *"beta"* ]]
+    [[ "$output" == *"alpha"* ]] || false
+    [[ "$output" == *"beta"* ]] || false
 }
 
 @test "borg_registry_list returns empty for no projects" {
@@ -113,7 +113,7 @@ setup() {
     run jq -r '.status' "${proj_dir}/.borg/state.json"
     [ "$output" = "active" ]
     run jq -r '.last_activity' "${proj_dir}/.borg/state.json"
-    [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]
+    [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]] || false
 }
 
 # ─── borg_scan_path_should_skip ───────────────────────────────────────────────

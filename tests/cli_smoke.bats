@@ -12,7 +12,7 @@ setup() {
 @test "borg help exits 0" {
     run "$BORG_CMD" help
     [ "$status" -eq 0 ]
-    [[ "$output" == *"THE BORG COLLECTIVE"* ]]
+    [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
 }
 
 @test "borg --help exits 0" {
@@ -28,24 +28,24 @@ setup() {
 @test "borg invalid-command exits non-zero" {
     run "$BORG_CMD" invalid-command-xyz
     [ "$status" -ne 0 ]
-    [[ "$output" == *"unknown command"* ]]
+    [[ "$output" == *"unknown command"* ]] || false
 }
 
 @test "borg help lists setup command" {
     run "$BORG_CMD" help
     [ "$status" -eq 0 ]
-    [[ "$output" == *"setup"* ]]
+    [[ "$output" == *"setup"* ]] || false
 }
 
 @test "borg help lists all core commands" {
     run "$BORG_CMD" help
-    [[ "$output" == *"init"* ]]
-    [[ "$output" == *"next"* ]]
-    [[ "$output" == *"link"* ]]
-    [[ "$output" == *"scan"* ]]
-    [[ "$output" == *"add"* ]]
-    [[ "$output" == *"rm"* ]]
-    [[ "$output" == *"switch"* ]]
+    [[ "$output" == *"init"* ]] || false
+    [[ "$output" == *"next"* ]] || false
+    [[ "$output" == *"link"* ]] || false
+    [[ "$output" == *"scan"* ]] || false
+    [[ "$output" == *"add"* ]] || false
+    [[ "$output" == *"rm"* ]] || false
+    [[ "$output" == *"switch"* ]] || false
 }
 
 # The aliases ls/status/hail/brief/briefing/refresh were removed 2026-08-10. These assert the
@@ -57,24 +57,24 @@ setup() {
     for alias in ls status hail brief; do
         run "$BORG_CMD" "$alias"
         [ "$status" -ne 0 ]
-        [[ "$output" == *"borg link"* ]]
+        [[ "$output" == *"borg link"* ]] || false
     done
 }
 
 @test "removed briefing/refresh aliases point at the right link flag" {
     run "$BORG_CMD" briefing
     [ "$status" -ne 0 ]
-    [[ "$output" == *"borg link --brief"* ]]
+    [[ "$output" == *"borg link --brief"* ]] || false
 
     run "$BORG_CMD" refresh
     [ "$status" -ne 0 ]
-    [[ "$output" == *"borg link --refresh"* ]]
+    [[ "$output" == *"borg link --refresh"* ]] || false
 }
 
 @test "borg link is still dispatched" {
     run "$BORG_CMD" link --help
-    [[ "$output" != *"unknown command"* ]]
-    [[ "$output" != *"was removed"* ]]
+    [[ "$output" != *"unknown command"* ]] || false
+    [[ "$output" != *"was removed"* ]] || false
 }
 
 @test "drone help exits 0" {
@@ -92,7 +92,7 @@ setup() {
     [ "$status" -eq 0 ]
     version_file="$(dirname "$BORG_CMD")/VERSION"
     expected="$(tr -d '[:space:]' < "$version_file")"
-    [[ "$output" == "$expected" ]]
+    [[ "$output" == "$expected" ]] || false
 }
 
 @test "borg --version prints VERSION file contents" {
@@ -100,7 +100,7 @@ setup() {
     [ "$status" -eq 0 ]
     version_file="$(dirname "$BORG_CMD")/VERSION"
     expected="$(tr -d '[:space:]' < "$version_file")"
-    [[ "$output" == "$expected" ]]
+    [[ "$output" == "$expected" ]] || false
 }
 
 @test "borg -V prints VERSION file contents" {
@@ -108,11 +108,11 @@ setup() {
     [ "$status" -eq 0 ]
     version_file="$(dirname "$BORG_CMD")/VERSION"
     expected="$(tr -d '[:space:]' < "$version_file")"
-    [[ "$output" == "$expected" ]]
+    [[ "$output" == "$expected" ]] || false
 }
 
 @test "borg help lists version command" {
     run "$BORG_CMD" help
     [ "$status" -eq 0 ]
-    [[ "$output" == *"version"* ]]
+    [[ "$output" == *"version"* ]] || false
 }

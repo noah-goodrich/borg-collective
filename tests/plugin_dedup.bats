@@ -346,7 +346,7 @@ EOF
 
     run bash -c "HOME='$fake_home' unset PLUGIN_DIR_OVERRIDE; HOME='$fake_home' bash '$BUILD_PLUGIN' --dry-run 2>&1"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"$fake_home"* ]] || [[ "$output" != *"/Users/noah"* ]]
+    [[ "$output" == *"$fake_home"* ]] || [[ "$output" != *"/Users/noah"* ]] || false
 }
 
 # ─── B3: check-plugin-version.sh drift-guard tests ───────────────────────────

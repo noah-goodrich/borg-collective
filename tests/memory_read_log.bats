@@ -35,7 +35,7 @@ _run_hook() {
 
     [ -f "$BORG_DIR/memory-hits.log" ]
     run cat "$BORG_DIR/memory-hits.log"
-    [[ "$output" == *$'\t'"test-session-abc"$'\t'"-Users-noah-dev-cairn"$'\t'"MEMORY.md"$'\t'"7" ]]
+    [[ "$output" == *$'\t'"test-session-abc"$'\t'"-Users-noah-dev-cairn"$'\t'"MEMORY.md"$'\t'"7" ]] || false
 }
 
 @test "does not log a read of a non-memory file" {
@@ -71,7 +71,7 @@ _run_hook() {
 
     _run_hook "$mem_dir/project_cairn_overview.md"
     run cat "$BORG_DIR/memory-hits.log"
-    [[ "$output" == *$'\t'"-Users-noah-dev-borg-collective"$'\t'"project_cairn_overview.md"$'\t'"2" ]]
+    [[ "$output" == *$'\t'"-Users-noah-dev-borg-collective"$'\t'"project_cairn_overview.md"$'\t'"2" ]] || false
 }
 
 @test "appends multiple reads across separate invocations" {
@@ -84,7 +84,7 @@ _run_hook() {
     _run_hook "$mem_dir/b.md"
 
     run wc -l < "$BORG_DIR/memory-hits.log"
-    [[ "${output// /}" == "2" ]]
+    [[ "${output// /}" == "2" ]] || false
 }
 
 @test "handles missing session_id gracefully" {
@@ -98,7 +98,7 @@ _run_hook() {
 
     [ "$status" -eq 0 ]
     run cat "$BORG_DIR/memory-hits.log"
-    [[ "$output" == *$'\t'"unknown"$'\t'* ]]
+    [[ "$output" == *$'\t'"unknown"$'\t'* ]] || false
 }
 
 @test "never blocks: exits 0 even with empty stdin" {

@@ -51,30 +51,30 @@ EOF
 @test "briefing: fallback shows active project when claude fails" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"my-active-project"* ]]
+    [[ "$output" == *"my-active-project"* ]] || false
 }
 
 @test "briefing: fallback shows project status" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"waiting"* ]]
+    [[ "$output" == *"waiting"* ]] || false
 }
 
 @test "briefing: inactive projects appear under inactive header" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Inactive"* ]]
-    [[ "$output" == *"old-project"* ]]
+    [[ "$output" == *"Inactive"* ]] || false
+    [[ "$output" == *"old-project"* ]] || false
 }
 
 @test "briefing: no debug variable lines in output" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     # Should not contain shell variable assignment traces
-    [[ "$output" != *"entry='"* ]]
-    [[ "$output" != *"proj_status="* ]]
-    [[ "$output" != *"last_activity="* ]]
-    [[ "$output" != *"rel_time='"* ]]
+    [[ "$output" != *"entry='"* ]] || false
+    [[ "$output" != *"proj_status="* ]] || false
+    [[ "$output" != *"last_activity="* ]] || false
+    [[ "$output" != *"rel_time='"* ]] || false
 }
 
 # ── Error message filtering ────────────────────────────────────────────────────
@@ -88,9 +88,9 @@ EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     # Error message must NOT appear in output
-    [[ "$output" != *"Not logged in"* ]]
+    [[ "$output" != *"Not logged in"* ]] || false
     # Fallback project listing must appear instead
-    [[ "$output" == *"my-active-project"* ]]
+    [[ "$output" == *"my-active-project"* ]] || false
 }
 
 @test "briefing: API error from claude triggers fallback" {
@@ -101,8 +101,8 @@ exit 1
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" != *"Error:"* ]]
-    [[ "$output" == *"my-active-project"* ]]
+    [[ "$output" != *"Error:"* ]] || false
+    [[ "$output" == *"my-active-project"* ]] || false
 }
 
 # ── LLM briefing (claude succeeds) ────────────────────────────────────────────
@@ -119,8 +119,8 @@ echo "Focus: my-active-project — waiting on design review"
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"my-active-project"* ]]
-    [[ "$output" == *"Focus:"* ]]
+    [[ "$output" == *"my-active-project"* ]] || false
+    [[ "$output" == *"Focus:"* ]] || false
 }
 
 # ── Empty registry ─────────────────────────────────────────────────────────────
@@ -129,5 +129,5 @@ EOF
     echo '{"projects":{}}' > "$BORG_REGISTRY"
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"borg scan"* ]]
+    [[ "$output" == *"borg scan"* ]] || false
 }

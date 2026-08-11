@@ -1,6 +1,18 @@
 name: Test
 
-on: [push, pull_request]
+# Two lanes, deliberately. See tests/README.md for what each one proves.
+#   fast lane  — ubuntu, full bats suite. Cannot catch zsh-specific or BSD-specific bugs.
+#   fidelity   — macOS, contract suite only. Catches the bug classes the fast lane structurally
+#                cannot, at ~12 tests' worth of 10x-billed runner minutes instead of 530.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # D4: re-test main independently of PR activity. main went red on 2026-08-10 and stayed red for
+    # hours because nothing re-ran it. A scheduled run makes Noah the actor of record, so GitHub's
+    # own failure email fires.
+    - cron: '17 13 * * *'
 
 jobs:
   lint:
@@ -9,17 +21,38 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
-      - name: Lint hooks (bash)
-        run: shellcheck hooks/*.sh
+      # D2: was `shellcheck hooks/*.sh` only. lib/*.sh was UNLINTED — and lib/recon.sh is exactly
+      # where both #113 bugs lived. shellcheck cannot check the .zsh files at all (its maintainer
+      # has declined zsh support since 2016; forcing `-s bash` is documented as giving false safety
+      # on precisely the word-splitting class that caused #113), so .zsh is intentionally excluded
+      # rather than checked misleadingly.
+      - name: Lint portable sh (hooks + lib)
+        run: shellcheck hooks/*.sh lib/*.sh
 
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
-        run: |
-          sudo apt-get install -y zsh jq fzf
-          git clone --depth 1 https://github.com/bats-core/bats-core.git /tmp/bats
-          sudo /tmp/bats/install.sh /usr/local
-      - name: Run tests
+        run: sudo apt-get install -y zsh jq fzf
+      # D3: was `git clone --depth 1 ... master` — completely unpinned, so the harness could change
+      # under us with no signal in this repo. Pinned to a released action version.
+      - name: Setup bats
+        uses: bats-core/bats-action@4.0.0
+      - name: Run full suite
         run: bats tests/*.bats
+
+  contract-macos:
+    # B3: the fidelity lane. macOS runners bill ~10x ubuntu minutes, so this runs ONLY the contract
+    # suite (~12 subprocess tests), not the full 530. This is the only job that executes borg.zsh
+    # under a real zsh on a real BSD userland — the two conditions under which #113 and #114 were
+    # invisible.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install jq
+      - name: Setup bats
+        uses: bats-core/bats-action@4.0.0
+      - name: Run CLI contract suite
+        run: bats tests/cli_contract.bats

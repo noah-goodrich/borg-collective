@@ -27,7 +27,7 @@ _run_guard() {
 
 _assert_blocked() {
     [ "$status" -eq 2 ]
-    [[ "$output" == *"stillpoint Supabase stack"* ]]
+    [[ "$output" == *"stillpoint Supabase stack"* ]] || false
 }
 
 _assert_allowed() {

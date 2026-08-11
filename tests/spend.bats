@@ -36,7 +36,7 @@ EOF
     rm -f "$SPEND_LOG"
     run "$BORG_CMD" spend
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No spend recorded"* ]]
+    [[ "$output" == *"No spend recorded"* ]] || false
 }
 
 # ─── all-time totals + main-loop % ────────────────────────────────────────────
@@ -45,11 +45,11 @@ EOF
     _write_fixture
     run "$BORG_CMD" spend
     [ "$status" -eq 0 ]
-    [[ "$output" == *"total         \$200"* ]]
-    [[ "$output" == *"main-loop     \$170"* ]]
-    [[ "$output" == *"(85%)"* ]]
-    [[ "$output" == *"subagents     \$30"* ]]
-    [[ "$output" == *"(15%)"* ]]
+    [[ "$output" == *"total         \$200"* ]] || false
+    [[ "$output" == *"main-loop     \$170"* ]] || false
+    [[ "$output" == *"(85%)"* ]] || false
+    [[ "$output" == *"subagents     \$30"* ]] || false
+    [[ "$output" == *"(15%)"* ]] || false
 }
 
 # ─── per-project filter ───────────────────────────────────────────────────────
@@ -58,11 +58,11 @@ EOF
     _write_fixture
     run "$BORG_CMD" spend --project alpha
     [ "$status" -eq 0 ]
-    [[ "$output" == *"filtered to project: alpha"* ]]
-    [[ "$output" == *"total         \$100"* ]]
-    [[ "$output" == *"(80%)"* ]]
+    [[ "$output" == *"filtered to project: alpha"* ]] || false
+    [[ "$output" == *"total         \$100"* ]] || false
+    [[ "$output" == *"(80%)"* ]] || false
     # beta must not appear in the filtered trend/breakdown.
-    [[ "$output" != *"beta"* ]]
+    [[ "$output" != *"beta"* ]] || false
 }
 
 # ─── trend + by-project sections present ──────────────────────────────────────
@@ -71,10 +71,10 @@ EOF
     _write_fixture
     run "$BORG_CMD" spend
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Recent sessions"* ]]
-    [[ "$output" == *"By project"* ]]
-    [[ "$output" == *"alpha"* ]]
-    [[ "$output" == *"beta"* ]]
+    [[ "$output" == *"Recent sessions"* ]] || false
+    [[ "$output" == *"By project"* ]] || false
+    [[ "$output" == *"alpha"* ]] || false
+    [[ "$output" == *"beta"* ]] || false
 }
 
 # ─── per-machine caveat ───────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ EOF
     _write_fixture
     run "$BORG_CMD" spend
     [ "$status" -eq 0 ]
-    [[ "$output" == *"THIS MACHINE only"* ]]
+    [[ "$output" == *"THIS MACHINE only"* ]] || false
 }
 
 # ─── by-model flag computes from raw tokens without erroring ──────────────────
@@ -92,7 +92,7 @@ EOF
     _write_fixture
     run "$BORG_CMD" spend --by-model
     [ "$status" -eq 0 ]
-    [[ "$output" == *"By model"* ]]
+    [[ "$output" == *"By model"* ]] || false
 }
 
 # ─── help + dispatch wiring ───────────────────────────────────────────────────
@@ -100,5 +100,5 @@ EOF
 @test "borg help lists spend" {
     run "$BORG_CMD" help
     [ "$status" -eq 0 ]
-    [[ "$output" == *"spend"* ]]
+    [[ "$output" == *"spend"* ]] || false
 }

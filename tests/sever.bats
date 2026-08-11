@@ -82,7 +82,7 @@ run_borg_fn() {
         source '$BORG_CMD' >/dev/null 2>&1
         _borg_offer_checkpoint mywindow '$PDIR' 5 48
     \""
-    [[ "$output" == *"last 48 hours"* ]]
+    [[ "$output" == *"last 48 hours"* ]] || false
 }
 
 @test "_borg_offer_checkpoint falls back to the default 8h message when no threshold is passed" {
@@ -92,5 +92,5 @@ run_borg_fn() {
         source '$BORG_CMD' >/dev/null 2>&1
         _borg_offer_checkpoint mywindow '$PDIR' 5
     \" <<< 'n'"
-    [[ "$output" == *"last 8 hours"* ]]
+    [[ "$output" == *"last 8 hours"* ]] || false
 }
