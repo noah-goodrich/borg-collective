@@ -1,3 +1,31 @@
+---
+Severed: 2026-08-11
+Reason: Decomposed, not cancelled. This directive conflated four concerns; C1/C2 shipped,
+        C5-C7c were superseded by a corrected ranking model, and the remainder split into two
+        independent directives. Retained in full below as the reasoning record — the
+        2026-08-10 post-mortem and the corrected-D2 rationale live here.
+---
+
+# SEVERED — where every criterion went
+
+| Criterion | Disposition |
+|---|---|
+| C1, C2 — remove all `cmd_link` aliases + update every reference | **SHIPPED** in #112 (`2242ddd`) |
+| C3, C4 — `borg link --json`, rewrite `/borg-link` as synthesis layer | → `link-unification-and-layout` (L1, L2) |
+| C5, C6, C7 — cross-repo chains + ranking | **SUPERSEDED** by `2026-08-11-viz-3-cross-repo-chains.md` |
+| C7a — surface spine staleness | **SUPERSEDED** by `2026-08-11-viz-2-spine-generator.md` (S3, S4) |
+| C7b, C7c — stacked-branch edge type, edge provenance | **SUPERSEDED** by `viz-3` (X5, X6) |
+| C8, C9, C10 — bottom-anchored layout, collapse idle, fix `---` | → `link-unification-and-layout` (L3-L5) |
+| C11, C12, C13, C14 — non-interrupting channel, condition the nudges | → `2026-08-11-attention-routing.md` (A1-A5) |
+
+**Why C6 was superseded rather than carried forward.** It ranked by downstream unblock count with recency as the
+tiebreak. The 2026-08-10 post-mortem falsified that: the most pressing project (`sme-self-service-pat`, three
+approved+green PRs behind one human merge gate) had few dependents, **no Jira ticket at all** so the stakes axis
+scored it zero, and lost to a stacked-branch restructure explicitly flagged as risky. `viz-3` replaces the single
+score with three tiers and adds value-over-effort. See `viz-1` for the tier that would have caught it outright.
+
+---
+
 # Directive: Link Unification + Cross-Repo Chains + Attention Routing
 *Filed: 2026-08-10 (supersedes the alert-layer-remediation scope filed earlier the same day)*
 
