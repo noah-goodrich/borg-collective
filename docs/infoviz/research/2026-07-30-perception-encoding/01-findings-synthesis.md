@@ -224,10 +224,14 @@ transitions/animation to avoid the documented cognitive-discontinuity failure mo
   seven-task taxonomy that every zoom/focus+context/progressive-disclosure paper since cites as ancestor; only
   corroborated via secondary quotation here, not fetched live (IEEE Xplore gate). Access: IEEE Xplore
   subscription or university library.
-- **Bateman, S. et al. (2010), "Useful Junk? The Effects of Visual Embellishment on Comprehension and
-  Memorability of Charts," CHI 2010.** Why it matters: the controlled experiment underpinning the
-  "chartjunk isn't always harmful" counter-claim to Tufte's data-ink ratio; cited secondhand via Elavsky here,
-  not yet independently verified. Access: ACM Digital Library or author's site.
+- ~~**Bateman, S. et al. (2010), "Useful Junk?" CHI 2010** — cited secondhand via Elavsky, not yet independently
+  verified.~~ **RESOLVED 2026-08-10.** Read first-hand. Free full text is mirrored at
+  https://sites.stat.columbia.edu/gelman/communication/Bateman2010.pdf (DOI record:
+  https://dl.acm.org/doi/10.1145/1753326.1753716). Reading it **downgraded P7** rather than confirming it: the
+  study is n=20 total with the load-bearing multi-week recall result resting on an **n=10** subgroup, using 14
+  charts by a single artist, and the authors explicitly decline to generalize. See the revised P7 in
+  `03-design-principles-playbook-additions.md`. Standing lesson: a claim this program had been citing
+  secondhand for months was both freely available and weaker than assumed.
 
 ## Sources index
 

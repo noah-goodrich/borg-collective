@@ -1,130 +1,16 @@
-# Infoviz Design-Principles Playbook
+# Phase 2 Playbook Additions — Dashboards & Operational UI (D1-D8)
 
-The canonical, accreting playbook for the infoviz learning program. Each phase APPENDS its evidence-traced
-house rules here rather than re-deriving them. Every rule states the house rule, the evidence it traces to,
-and its confidence/caveat. Rules are prefixed by phase (P = Phase 1 Perception & Encoding, D = Phase 2
-Dashboards & Operational UI); later phases continue the numbering scheme with their own prefixes.
+**Date:** 2026-08-10
+**Derived in:** `01-findings-synthesis.md`. These rules are appended verbatim to `docs/infoviz/playbook.md`
+under a Phase 2 heading. Phase 1's P1-P7 are untouched.
 
-For the full derivation, source appraisal, and the 5-second-story comprehension check, see the phase research
-folders under `research/`.
-
----
-
-## Phase 1 — Perception & Encoding Effectiveness (2026-07-30)
-
-Derived in `research/2026-07-30-perception-encoding/` (findings synthesis, ELI10 brief, playbook additions,
-empirical test).
-
-**P1 — Put the most important number on the highest-ranked channel available: position on a shared scale
-first, then length, then angle, then area, then color/shading last.**
-Evidence: Cleveland & McGill (1984) ranking, position > length ≈ angle > area > volume > color, replicated at
-scale by Heer & Bostock (2010) and again by Davis et al. (2022). [Cleveland & McGill 1984; Heer & Bostock 2010;
-Davis et al. 2022]
-Confidence: high for population-level design defaults. Caveat: this is a strong prior, not a universal law —
-see P2.
-
-**Weighting audit, 2026-08-10.** Re-checked after Bateman et al. turned out to be thinner than P7 assumed.
-**P1 holds.** Its weight does not rest on the 1984 original — which this program has still only read via a
-third-party paraphrase — but on **two independent Level 2 replications that were both read first-hand**: Heer &
-Bostock (2010), which replicated the spatial-encoding ranking on a crowdsourced pool, and Davis et al. (2022),
-which replicated and extended it with Bayesian multilevel regression. Davis also confirms the exact scope P1
-claims: the ranking is a population-average result and "fails to hold consistently at the individual level,"
-which is what P2 exists to handle. Two known limits: Heer & Bostock found a divergence on angle-vs-length
-(already encoded in the `≈` above), and their sample size is not verified first-hand here — `vis.stanford.edu`
-serves a mismatched TLS certificate, so only secondary figures were available. Consequence: reading Cleveland &
-McGill (1984) directly is now **historical interest, not a blocking gap**.
-
-**P2 — For high-stakes or accessibility-sensitive displays, never rely on channel choice alone; pair the
-top-ranked channel with a redundant cue (direct label, exact value on hover/print).**
-Evidence: Davis et al. (2022/2023) found ~30% of viewers deviate from the "average observer" ranking the
-Cleveland-McGill rule assumes. [Davis et al. 2022]
-Confidence: high that individual variance exists; moderate on the specific 30% figure generalizing beyond the
-tested task set — treat as directional, not a universal constant.
-
-**P3 — An anomaly that must be noticed needs to visually stand out from its neighbors, not merely be present
-and "visible."**
-Evidence: Simons & Chabris (1999) — 46% of attentionally-loaded observers missed a fully visible, unexpected
-event; detection depended on dissimilarity from attended items, not on raw visual salience or spatial
-proximity to what's already being watched. [Simons & Chabris 1999]
-Confidence: high (Level 2 controlled experiment, extremely widely replicated). Caveat: "make it pop" is a
-directional design principle here, not a specific pixel/color spec — that specification work is downstream.
-
-**P4 — Match the highest-salience channel to the most important attribute in the data; don't let a
-low-priority attribute accidentally grab the loudest channel (Munzner's "effectiveness principle"). Don't
-imply an order the data doesn't have (Munzner's "expressiveness principle").**
-Evidence: Munzner, *Visualization Analysis and Design* (2014), marks/channels framework, operationalizing the
-Cleveland-McGill ranking as a design rule. [Munzner VAD 2014, via Romanowski review 2023]
-Confidence: high — this is the field's standard teaching framework, directly derived from P1's evidence base.
-
-**P5 — Ask "does the reader need to look up an exact number, or spot a trend?" before choosing table vs.
-chart. Default to a table for precision/lookup tasks; default to a chart for comparison/trend/pattern
-tasks.**
-Evidence: Remshard & Queenborough (2023) — tables for "specific information, precise numerical values, or
-ranks," charts for "comparisons, predictions, or perceiving patterns and trends." [Remshard & Queenborough
-2023]
-Confidence: high, peer-reviewed, task-based (not aesthetic) framing.
-
-**P6 (STANDING REQUIREMENT — Noah-flagged) — Visualizations of hierarchical/complex operational data should
-support navigable multi-level / semantic zoom: an overview by default, with zoom/filter into a level of
-detail, and full detail only on demand.**
-Evidence chain:
-- The requirement's classic articulation is Shneiderman's Mantra: "Overview first, zoom and filter, then
-  details-on-demand." [Shneiderman 1996] — but this is Level-7 expert opinion; Craft & Cairns (2005) found "no
-  reasonably obvious studies that have validated Shneiderman's recommendations" as a complete prescription,
-  while explicitly not claiming it's wrong ("For most designers, the Mantra works"). [Craft & Cairns 2005]
-- The *zooming* mechanism specifically (as opposed to the Mantra as a whole) has strong Level-1 evidence:
-  Cockburn, Karlson & Bederson's systematic review (2008) confirms zoom-based techniques work but are "easy to
-  do badly" — the failure mode is cognitive discontinuity between pre- and post-zoom states, mitigated by
-  animated/smooth transitions. No single technique (overview+detail, zooming, focus+context, cue-based)
-  dominates for every task; task type should drive the choice. [Cockburn, Karlson & Bederson 2008]
-- Recent (2025-2026) domain-specific work applying semantic zoom to large hierarchical/network structures
-  (software architecture "cities," supply-chain flow networks) reports improved task performance and reduced
-  navigation time for smooth macro↔detail zoom versus flat, all-at-once layouts — current corroboration for
-  this exact use case, though only verified via search summaries, not full-text fetch. [arXiv 2510.00003,
-  2025; arXiv 2604.08823, 2026 — flagged for follow-up full-text verification]
-
-**Confidence:** the *requirement itself* (build multi-level/semantic zoom) is well-supported at the mechanism
-level (Level 1 review + current 2025-2026 domain studies), even though the umbrella "Mantra" it's usually cited
-under is Level 7 and formally unvalidated as a complete prescription. Practical implication: justify the zoom
-requirement to stakeholders by citing the mechanism-level evidence (Cockburn et al.) and the 2025-2026
-domain studies, not by citing Shneiderman's 1996 mantra alone as if it were proven — and always spec animated/
-smooth transitions, since jumpy zoom is the documented failure mode.
-
-**P7 — Don't treat "minimalism"/data-ink reduction as an unqualified virtue; strip ink only up to the point it
-stops helping, and watch for accessibility exclusion.**
-Evidence: Elavsky (2025) — pushing the data-ink ratio to its logical extreme produces imperceptible charts,
-showing the ratio alone can't be the design criterion. [Elavsky 2025] Bateman et al. (CHI 2010), **read
-first-hand 2026-08-10**: embellished (Nigel Holmes) charts were described no less accurately than plain ones,
-and recalled significantly better after a two-to-three-week gap; eye-tracking confirmed participants attended to
-the non-data ink, and they "overwhelmingly chose Holmes-style charts over plain charts." [Bateman et al. 2010]
-
-Confidence: **REVISED DOWN 2026-08-10 — moderate on the core critique, low-to-moderate on the memorability
-claim.** Separate the two:
-- The *critique of data-ink-ratio-as-law* (Elavsky) stands on its own argument and does not depend on Bateman.
-  Unchanged.
-- The *memorability finding* is thinner than this program assumed when citing it secondhand. The study is
-  **n=20 total** (9 male, 11 female, one university), across 14 charts all embellished by a **single artist**,
-  and participants were split into immediate- and long-term-recall conditions with **ten in each** — so P7's
-  load-bearing multi-week result rests on **n=10**. It is a real, peer-reviewed CHI result with a coherent
-  mechanism; it is not a foundation to win design arguments with.
-- The authors refuse to generalize it, and the reason matters: "we do not advocate this strategy as a general
-  principle, because the use of strong images in charts is contentious — for example, images convey messages
-  that may intentionally or unintentionally bias the viewer's interpretation of the data."
-- Cross-phase note: Phase 2's D1/D3 gained **Level 1** support pulling the other way (Tariq et al. name
-  overloaded displays as a primary cause of alert fatigue). On operational displays, default to reduction. Read
-  P7 as a caution against *dogmatic* minimalism, not as a licence to embellish.
+**A standing note on this phase's confidence.** Track 1 carries the corpus's weakest evidence base: one Level 1
+source, one Level 4, one Level 5, two Level 7, one Level 8 (see findings synthesis §0). Phase 1's rules could
+anchor to a controlled experiment and its large-N replication; most of these cannot. Every rule below states its
+level. **No rule derived solely from a Level 7 or Level 8 source is stated at high confidence** — that
+constraint is deliberate and should survive future edits.
 
 ---
-
-## Phase 2 — Dashboards & Operational UI (2026-08-10)
-
-Derived in `research/2026-08-10-dashboards-operational/` (findings synthesis, ELI10 brief, playbook
-additions, empirical test).
-
-**Standing note on this phase's confidence.** Track 1 carries the corpus's weakest evidence base: one
-Level 1 source, one Level 4, one Level 5, two Level 7, one Level 8. Every rule below states its level, and
-**no rule derived solely from a Level 7 or Level 8 source is stated at high confidence.** That constraint
-is deliberate — preserve it through future edits.
 
 **D1 — A status display must fit in one screen without scrolling. If it doesn't, it is a report, and it should
 stop pretending to be a status display.**
@@ -272,3 +158,36 @@ load-bearing. That distinction survives. What does not survive is treating P7 as
 to D1/D3. **Neither source still supplies a test for telling useful chrome from cute gauge**, and D2 sharpens
 the stakes: decoration is not merely neutral, it consumes the highest-scent region of the display. When in
 doubt on an operational display, the evidence now favors reduction.
+
+---
+
+## Open items for Phase 3+
+
+- ~~Read Tariq et al. (2025) in full and enumerate the four causes of alert fatigue.~~ **CLOSED 2026-08-10.**
+  Read first-hand; the four causes are enumerated in D7 above. The paper is **CC BY 4.0 open access** — the
+  earlier "paywalled" label was wrong. `dl.acm.org` blocks *automated* fetch (HTTP 403); a browser retrieves it
+  freely. Standing lesson for this program: distinguish **bot-blocked** from **paywalled** before recording a
+  source as inaccessible, because the remedy is completely different.
+- **Few's *Information Dashboard Design* beyond Chapter 1** — in particular the full enumeration of the 13
+  mistakes, of which only the first (exceeding the single-screen boundary) is verified here. The available
+  full-text scan has uncertain provenance; a legitimate copy should back any citation past Ch. 1.
+- **The useful-chrome vs. cute-gauge boundary still has no test in either phase.** Candidate for a dedicated
+  sub-project. Note this is now a *less urgent* blocker than when first written: with P7 downgraded and D1/D3
+  gaining Level 1 support, the default on operational displays is reduction, so the boundary matters mainly for
+  the narrower question of how much identity/brand chrome an otherwise-compliant display can afford.
+- ~~Re-verify the rest of the Phase 1 corpus for the same n-size problem.~~ **P1 CHECKED 2026-08-10 — holds.**
+  Unlike P7, P1 rests on **two independent Level 2 replications both read first-hand** (Heer & Bostock 2010;
+  Davis et al. 2022), not on the 1984 original. Davis confirms P1's stated scope exactly: population-average
+  valid, individual-level not — which is P2's job. Consequence: **reading Cleveland & McGill (1984) directly is
+  demoted from a blocking gap to historical interest.** Two residual limits recorded in P1's audit note: the
+  angle-vs-length divergence (already encoded), and Heer & Bostock's sample size unverified first-hand because
+  `vis.stanford.edu` serves a mismatched TLS certificate.
+- **Still unaudited: P3, P4, P5, P6.** The two rules that have been checked came out opposite (P7 down, P1
+  holding), so the audit is worth finishing rather than assuming either result generalizes. P4 is the most
+  exposed — it rests on Munzner's textbook read via a secondary review, with no first-hand source at all.
+- **D6's transfer claim is untested.** The symptom/cause distinction is crisp for user-facing services and fuzzy
+  for developer tooling and personal operational displays. Worth checking whether the HCI or
+  human-factors literature has an equivalent formulation outside the SRE lineage.
+- **Track 1 is now done; the curriculum's next-highest-relevance track is Track 2 (Perception), already
+  completed as Phase 1.** Sequencing choice for Phase 3 is open — Track 4 (Narrative) feeds the ELI10 mandate
+  most directly; Track 6 (Networks) becomes urgent if a DAG project goes live, per the curriculum's own note.
