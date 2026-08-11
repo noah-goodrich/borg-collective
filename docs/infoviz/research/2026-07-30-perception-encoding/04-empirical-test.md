@@ -139,3 +139,44 @@ not from an instrumented human 5-second trial. The 5-second-story outcomes are r
 the Phase-1 evidence (esp. Simons & Chabris on inattentional blindness and the Cleveland-McGill/Munzner channel
 ranking), and should be confirmed with a real viewer when convenient. This matches the program's "directional,
 re-verify" posture on P2/P3/P7.
+
+## Resolution (2026-08-10)
+
+All three fixes have now been applied to `render_graph.py`, carried by **PR #104**
+(`feature/graduate-merge-tree-hub`). Status per fix:
+
+| Fix | Rule | Commit | State |
+|---|---|---|---|
+| 1 — give "needs you next" the loudest channel | P4/P3 | `f07d103` | **Resolved** |
+| 2 — make the meter's length comparable across projects | P1 | `df97603` | **Resolved** |
+| 3 — animate the level transitions | P6 | `f07d103` | **Partially resolved** |
+
+**Fix 1** elevated needs-you to a gold glow ring + filled pip/chip + thickest isolate-node stroke, and demoted
+blocked to a muted `--blocked-soft` (#a35b52), retaining canonical red only in the small state-meter legend
+segment. The channel-priority inversion this document identified as the artifact's one real defect is closed.
+
+**Fix 2** took option (a) from the fixes list: `.meter` width is now `total/MAX_METER_TOTAL` of a new full-width
+`.metertrack`, so bar length is read against a common scale instead of being normalized away. `meter_total` is
+baked per project and the max computed once at render time (emitted as a JS const beside `STATE_ORDER`) rather
+than rescanned per card. A named `METER_MIN_WIDTH_FRAC` (0.25) floors the width so a single-workstream project
+keeps a mark wide enough to sit under its P2 numeric labels. Against live `story.json` the 8 projects span
+totals 3-6, rendering at 50%-100% width; the floor does not engage at this data size.
+
+Option (b) — a separate shared-baseline mini-bar for one key quantity — was considered and rejected: the L0 card
+already carries rank, pip, meter, next-action, and blocked-by, and a second mark would compete with the fix-1
+salience change rather than reinforce it.
+
+**Fix 3 is only half done, and the remaining half is a genuine open item.** The prescription had two parts: animate
+the Isolate `0 = fit` camera reset, *and* animate the L0→L1→L2 level transitions. `f07d103` did the first
+(`#camG{transition:transform .16s ease}` with a `.panning` bypass so drag stays 1:1 with the cursor). It did not
+do the second — `goto()` still calls `render()`, replacing the view's DOM outright, so level changes remain
+jump-cuts. Cockburn, Karlson & Bederson's documented failure mode for zoom techniques (cognitive discontinuity
+between pre- and post-zoom states) therefore still applies to the level swaps, which are the more frequently
+traversed transition of the two. Carrying this forward as **the one unclosed Phase-1 artifact item**.
+
+### What this does not establish
+
+The 5-second-story checks above have still never been run against a human. Fixes 1 and 3 were predicted to flip
+checks 1 and 3 from FAIL to PASS; that prediction remains unverified, and applying the fixes does not verify it.
+Re-running the 5-second protocol with a real viewer against the current renderer is the honest close-out for this
+sub-project and has not been done.
