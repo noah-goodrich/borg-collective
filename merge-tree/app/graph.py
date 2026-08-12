@@ -9,13 +9,13 @@ Kinds observed in data.json edges: "stacked" (PR-stack base -> top), "apex" (ape
 stacked PR it umbrellas), "blocks" (parent must land before child; the true dependency edge used
 for blocking-chain / unblock-ranking algebra).
 """
+
 from __future__ import annotations
 
 import json
 import os
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Any
 
 BLOCKING_KIND = "blocks"
 
@@ -205,19 +205,21 @@ class Dataset:
             states = []
             for ws in p.get("workstreams", []):
                 states.append(ws.get("state", "pending"))
-            nodes.append({
-                "ref": p["id"],
-                "title": p["name"],
-                "state": _rollup_state(states),
-                "bucket": "",
-                "project": p["name"],
-                "repo": "",
-                "url": "",
-                "blocked": "blocked" in states,
-                "action_needed": "",
-                "containment_badge": "",
-                "has_action": False,
-            })
+            nodes.append(
+                {
+                    "ref": p["id"],
+                    "title": p["name"],
+                    "state": _rollup_state(states),
+                    "bucket": "",
+                    "project": p["name"],
+                    "repo": "",
+                    "url": "",
+                    "blocked": "blocked" in states,
+                    "action_needed": "",
+                    "containment_badge": "",
+                    "has_action": False,
+                }
+            )
         edges = [{"source": a, "target": b, "kind": BLOCKING_KIND} for a, b in sorted(proj_edges)]
         return {"root": "portfolio", "nodes": nodes, "edges": edges, "truncated": 0}
 
@@ -254,12 +256,14 @@ class Dataset:
             workstreams = []
             for ws in p.get("workstreams", []):
                 item_states = [self.items_by_ref.get(r, {}) for r in ws.get("items", [])]
-                workstreams.append({
-                    **ws,
-                    "item_count": len(ws.get("items", [])),
-                    "open_count": sum(1 for it in item_states if it.get("state") == "OPEN"),
-                    "blocked_count": sum(1 for it in item_states if it.get("blocked")),
-                })
+                workstreams.append(
+                    {
+                        **ws,
+                        "item_count": len(ws.get("items", [])),
+                        "open_count": sum(1 for it in item_states if it.get("state") == "OPEN"),
+                        "blocked_count": sum(1 for it in item_states if it.get("blocked")),
+                    }
+                )
             projects.append({**p, "workstreams": workstreams})
         return {"meta": self.story.get("meta", {}), "projects": projects}
 

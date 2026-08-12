@@ -11,8 +11,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from curate import bucket_for, chain_refs, curate, normalize_health, numeric_urgency
 
 FIXTURES = Path(__file__).parent / "fixtures"
