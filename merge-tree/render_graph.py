@@ -63,22 +63,24 @@ ANNOTATION_MERGE_KEYS = {
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Render the story-first graph hub (graph.html).")
-    p.add_argument("--story", default=os.path.join(STATE, "story.json"), help="path to story.json")
-    p.add_argument("--data", default=os.path.join(STATE, "data.json"), help="path to data.json")
-    p.add_argument("--out", default=os.path.join(STATE, "graph.html"), help="path to write graph.html")
-    p.add_argument(
+    """Parse CLI args for the graph.html renderer."""
+    parser = argparse.ArgumentParser(description="Render the story-first graph hub (graph.html).")
+    parser.add_argument("--story", default=os.path.join(STATE, "story.json"), help="path to story.json")
+    parser.add_argument("--data", default=os.path.join(STATE, "data.json"), help="path to data.json")
+    parser.add_argument("--out", default=os.path.join(STATE, "graph.html"), help="path to write graph.html")
+    parser.add_argument(
         "--annotations",
         default=os.path.join(STATE, "annotations.local.json"),
         help="path to the optional machine-local annotations file",
     )
-    return p.parse_args()
+    return parser.parse_args()
 
 
 ARGS = parse_args()
 
 
 def esc(s):
+    """HTML-escape a value, treating None as an empty string."""
     return html.escape(str(s if s is not None else ""))
 
 
@@ -92,8 +94,8 @@ def safe_url(url):
 def load_json(path, default):
     """Read a JSON file; return default on any read/parse failure (no traceback)."""
     try:
-        with open(path) as f:
-            return json.load(f)
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh)
     except (ValueError, OSError):
         return default
 
@@ -106,6 +108,7 @@ def load_annotations(path):
 
 
 def apply_annotations(rows, ann):
+    """Merge machine-local annotation overrides into each row, in place."""
     for it in rows:
         ov = ann.get(it.get("ref"))
         if isinstance(ov, dict):
@@ -127,6 +130,7 @@ projects = story.get("projects", []) or []
 
 
 def repo_of_ref(ref):
+    """Best-effort repo name for a ref: joined item's repo, else parsed from the ref string."""
     it = by_ref.get(ref)
     if it and it.get("repo"):
         return it["repo"]
@@ -141,6 +145,7 @@ def repo_of_ref(ref):
 
 # ---------------------------------------------------------------- derived fields
 def derive_workstream(ws):
+    """Compute derived fields (counts, needs_you, entry ref, max_urgency) on a workstream, in place."""
     wsitems = ws.get("items", []) or []
     ws["n_items"] = len(wsitems)
     ws["n_blocked_reasons"] = len(ws.get("blocked_by", []) or [])
@@ -156,6 +161,7 @@ def derive_workstream(ws):
 
 
 def hero_index(wss):
+    """Index of the workstream to highlight: needs-you-and-in-flight first, else state priority order."""
     for i, ws in enumerate(wss):
         if ws.get("state") == "in-flight" and ws.get("needs_you"):
             return i
@@ -166,23 +172,24 @@ def hero_index(wss):
     return 0 if wss else None
 
 
-def derive_project(p):
-    wss = p.get("workstreams", []) or []
+def derive_project(project):
+    """Compute derived fields (meter, next_idx, repos, named, any_needs_you) on a project, in place."""
+    wss = project.get("workstreams", []) or []
     for ws in wss:
         derive_workstream(ws)
-    p["meter"] = {s: 0 for s in STATE_ORDER}
+    project["meter"] = {s: 0 for s in STATE_ORDER}
     for ws in wss:
-        if ws.get("state") in p["meter"]:
-            p["meter"][ws["state"]] += 1
-    p["meter_total"] = sum(p["meter"].values())
-    p["next_idx"] = hero_index(wss)
+        if ws.get("state") in project["meter"]:
+            project["meter"][ws["state"]] += 1
+    project["meter_total"] = sum(project["meter"].values())
+    project["next_idx"] = hero_index(wss)
     repos = set()
     for ws in wss:
         for r in ws.get("items", []) or []:
             repos.add(repo_of_ref(r))
-    p["repos"] = sorted(repos)
-    p["named"] = p.get("id") in NAMED_IDS
-    p["any_needs_you"] = any(ws.get("needs_you") for ws in wss)
+    project["repos"] = sorted(repos)
+    project["named"] = project.get("id") in NAMED_IDS
+    project["any_needs_you"] = any(ws.get("needs_you") for ws in wss)
 
 
 for p in projects:
@@ -195,6 +202,7 @@ MAX_METER_TOTAL = max((p["meter_total"] for p in projects), default=0)
 
 # ---------------------------------------------------------------- baked payloads
 def trimmed_item(it):
+    """Flatten one item to the fields the client needs, plus its action block if any."""
     ref = it["ref"]
     act = actions.get(ref)
     return {
@@ -739,6 +747,7 @@ init();
 
 
 def build_html():
+    """Assemble the full graph.html document: CSS, header, body, baked JSON payloads, and JS."""
     proj_n = len(projects)
     ws_n = sum(len(p.get("workstreams", []) or []) for p in projects)
     repos_n = len(META.get("repos", []))
@@ -787,7 +796,7 @@ def build_html():
 
 if __name__ == "__main__":
     doc = build_html()
-    with open(ARGS.out, "w") as f:
+    with open(ARGS.out, "w", encoding="utf-8") as f:
         f.write(doc)
     top_level = len(projects)
     print("wrote", ARGS.out)
