@@ -44,7 +44,24 @@ GATE_STATE="${BORG_MEMORY_GATE_STATE:-$BORG_DIR/memory-gate-state.json}"
 
 REPORT_BIN="${BORG_MEMORY_GATE_REPORT_BIN:-$(command -v memory-hits-report 2>/dev/null || true)}"
 if [[ -z "$REPORT_BIN" ]]; then
-    SELF_DIR="${0:A:h}" 2>/dev/null || SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+    # Resolve $0 through any symlinks so the sibling lookup lands in the repo's bin/ — this
+    # script installs as ~/.local/bin/borg-memory-gate -> <repo>/bin/borg-memory-gate, and
+    # memory-hits-report only exists next to the real file, never next to the symlink.
+    #
+    # This was `SELF_DIR="${0:A:h}"`, a ZSH-only expansion, in a bash script running
+    # `set -euo pipefail`. Bash reads `${0:A:h}` as substring expansion and evaluates `A` as
+    # arithmetic, so `-u` aborted with "A: unbound variable" before the `||` fallback could
+    # run. Under launchd that made the gate exit 1 on every fire — silently, because the
+    # only caller that could have noticed is the gate itself.
+    _self="$0"
+    while [[ -L "$_self" ]]; do
+        _link="$(readlink "$_self")"
+        case "$_link" in
+            /*) _self="$_link" ;;
+            *)  _self="$(dirname "$_self")/$_link" ;;
+        esac
+    done
+    SELF_DIR="$(cd "$(dirname "$_self")" && pwd)"
     REPORT_BIN="$SELF_DIR/memory-hits-report"
 fi
 
