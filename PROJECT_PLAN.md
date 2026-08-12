@@ -113,20 +113,20 @@ recorded so the option is remembered rather than rediscovered.
 Not a new pattern to invent. It already exists across `pytest-coverage-impact`, `snowfort`, and
 `pylint-clean-architecture`. Copy it.
 
-- [ ] **T1** — `pyproject.toml` at the repo root: `[tool.ruff]` with `line-length = 120`,
+- [x] **T1** — `pyproject.toml` at the repo root: `[tool.ruff]` with `line-length = 120`,
       `select = ["E", "F", "W", "C90"]`, `[tool.ruff.lint.mccabe] max-complexity = 10`; `[tool.mypy]` with
       `warn_return_any` and `warn_unused_configs`; `[tool.pytest.ini_options]` with `--strict-markers` and
       `unit`/`integration`/`functional` markers, slow tests excluded from default runs.
   - Verify: `ruff check`, `mypy`, `pytest` all run from config with no CLI flags.
   - `line-length = 120` matches the existing repo-wide 120-char rule for markdown and shell. One number for
     everything.
-- [ ] **T2** — A `Makefile` with `clean` / `test` / `lint` / `format`, and **CI invokes those same targets.**
+- [x] **T2** — A `Makefile` with `clean` / `test` / `lint` / `format`, and **CI invokes those same targets.**
   - Verify: `.github/workflows/` calls `make lint` and `make test`, not inline commands.
   - **The highest-leverage item in this directive, which is why it is T2 and not housekeeping.** The 2026-08-11
     session found 161 assertions silently ignored on macOS for weeks because local and CI ran the suite
     differently. A Makefile makes "run the tests" have exactly one definition — it fixes a class of bug, not a
     style inconsistency.
-- [ ] **T3** — `pylint-clean-architecture` (v1.5.2, PyPI, Python ≥3.9) as a dev dependency, gating in CI, with
+- [x] **T3** — `pylint-clean-architecture` (v1.5.2, PyPI, Python ≥3.9) as a dev dependency, gating in CI, with
       `[tool.pylint.main] load-plugins = ["clean_architecture_linter"]` and
       `[tool.clean-arch] visibility_enforcement = true`.
   - Verify: `make lint` runs pylint with the plugin loaded; CI fails on a deliberate violation.
@@ -135,13 +135,18 @@ Not a new pattern to invent. It already exists across `pytest-coverage-impact`, 
     delegate to interfaces/adapters, *is* the testable-core rule mechanically enforced. Its dependency-injection
     checks, forbidding instantiation of infrastructure inside UseCases, are the other half. Nothing needs
     inventing; adopt the linter rather than writing a convention document.
-- [ ] **T4** — A `python` CI job on `ubuntu-latest` pinned to the Python version installed on **both** machines
+- [x] **T4** — A `python` CI job on `ubuntu-latest` pinned to the Python version installed on **both** machines
       (this machine: 3.14.5). Single version, not a matrix — borg ships to nobody and runs on two known machines.
   - Verify: the job exists, runs `make lint` and `make test`, and blocks merge.
-- [ ] **T5** — Coverage reported, with **no threshold gate initially.** Record the starting number honestly.
+- [x] **T5** — Coverage reported, with **no threshold gate initially.** Record the starting number honestly.
   - Verify: `coverage report` runs in CI; the baseline percentage is written into the PR body.
   - A threshold set before a baseline exists gets set wrong and then disabled.
-- [ ] **T6** — The rule is stated in `CLAUDE.md` under a new **Architecture Rules** heading, adjacent to Style
+  - **Deviation, recorded 2026-08-12:** commit `488010d` set `--fail-under=90` in the Makefile's `test`
+    target immediately, not after a baseline-only period, and no baseline number was ever written into a
+    PR body (none opened yet on this branch). In practice this didn't bite — the migrated `recon` module
+    landed at 96% — but the sequencing this item specifies was not followed. Flagging rather than silently
+    checking this off as fully compliant.
+- [x] **T6** — The rule is stated in `CLAUDE.md` under a new **Architecture Rules** heading, adjacent to Style
       Rules: *"Logic goes in a testable core. Shell is a wrapper. New modules ship with tests in the same
       commit."* Plus a `borg-plan` skill extension at
       `~/.config/borg/extensions/skill-extensions/borg-plan/02-output.md` requiring a **Testability** section in
@@ -151,16 +156,24 @@ Not a new pattern to invent. It already exists across `pytest-coverage-impact`, 
   - The extension point already exists for exactly this. Use it rather than hoping a CLAUDE.md line gets read. The
     normative wording must name no language, so it ports unchanged to dbt/Snowflake/TS repos.
 
+**Re-verified 2026-08-12** (checkboxes above were never ticked despite the work landing across commits
+`86e29e9`/`488010d` and prior sessions — corrected here, no new work performed except T5's deviation note):
+T1 `pyproject.toml` has all three sections scoped to `borg_core/`. T2 `Makefile` has all four targets; CI's
+`python` job calls `make lint`/`make test`, not inline commands. T3 `pylint-clean-architecture==1.5.2` is
+pinned with `visibility_enforcement = true`. T4 the `python` CI job pins 3.14, runs alongside the other
+three jobs with nothing marking it non-blocking. T6 both the `CLAUDE.md` Architecture Rules heading and the
+`borg-plan` `02-output.md` Testability extension exist verbatim as specified.
+
 ## Part 2 — GATE: bring the existing Python under test
 
 **`merge-tree/` has 1,349 lines of Python with zero tests, no `pyproject.toml`, and no `conftest.py`.** An earlier
 draft cited that as precedent for Python being safe; a blind review correctly refuted it — it is the same
 undisciplined-shipping problem in a second language, and therefore evidence *for* Part 1, not for Part 3.
 
-- [ ] **P1** — `curate.py` under test first: pure transformation, no I/O, the easiest honest win. ≥80% on that
+- [x] **P1** — `curate.py` under test first: pure transformation, no I/O, the easiest honest win. ≥80% on that
       module.
   - Verify: `coverage report --include='merge-tree/curate.py'` ≥ 80%.
-- [ ] **P2** — `numeric_urgency`, `chain_refs`, and `bucket_for` have tests covering **edge cases**, not happy
+- [x] **P2** — `numeric_urgency`, `chain_refs`, and `bucket_for` have tests covering **edge cases**, not happy
       paths: `urgency` absent, `urgency` already numeric (the pass-through branch), an unrecognised urgency word,
       `state` absent.
   - Verify: those cases exist as named tests.
@@ -171,12 +184,24 @@ undisciplined-shipping problem in a second language, and therefore evidence *for
     `needs-you` is assigned for `urgency: "now"` is the guard, and it does not exist. Once `mypy` gates, consider
     modelling the two pipeline stages as **distinct types** so the transition is unrepresentable rather than
     merely tested.
-- [ ] **P3** — `render_graph.py`'s derivation helpers (`derive_project`, the meter computation) under test.
+- [x] **P3** — `render_graph.py`'s derivation helpers (`derive_project`, the meter computation) under test.
       Rendering/HTML output is explicitly **not** in scope — assert on derived data, not markup.
   - Verify: tests exist for the derivation functions; no test asserts on HTML strings.
-- [ ] **P4 — GATE.** If P1–P3 cannot be completed, **Part 3 does not begin.** A maintainer who cannot get tests
+- [x] **P4 — GATE.** If P1–P3 cannot be completed, **Part 3 does not begin.** A maintainer who cannot get tests
       onto 1,349 existing lines will not get them onto 4,000 new ones, and the migration would relocate untestable
       code into a language where that is no longer excusable.
+  - **Re-verified 2026-08-12** (P1–P4 boxes were never ticked despite the work existing — corrected here):
+    `test_curate.py` (56 tests) covers `curate.py` at **99%** (107 stmts, 1 miss), well past the 80% bar,
+    including the exact edge cases P2 names — `test_urgency_absent_falls_back_to_fyi_base`,
+    `test_urgency_already_numeric_is_passthrough`, `test_unrecognised_urgency_word_falls_back_to_fyi_base`,
+    and critically `test_numeric_urgency_never_equals_now_string_no_crash` /
+    `test_item_with_urgency_now_is_assigned_needs_you_bucket`, which is the regression guard for the exact
+    `bucket_for`-reads-string / `numeric_urgency`-writes-number bug this section documented finding.
+    `test_render_graph.py` (46 tests) covers `derive_project`/entry-selection/meter-count derivation
+    functions; the one assertion resembling markup (`esc("<script>")`) tests HTML-escaping logic, not
+    rendered output, so P3's "no test asserts on HTML strings" holds. Full merge-tree suite: 102/102 passing.
+    The gate was in fact satisfied before Part 3 began — it was just never marked as such, which read as
+    if Part 3 had started with the gate unchecked. It hadn't; the paperwork was just behind the work.
 
 ## Part 3 — The migration (strangler, not rewrite)
 
@@ -234,6 +259,15 @@ undisciplined-shipping problem in a second language, and therefore evidence *for
   - Done 2026-08-12: `lib/recon.sh`, `lib/recon.zsh`, and `tests/recon.bats` deleted (both bats suites had
     already passed unchanged against the Python port — the testing-discipline gate); `cmd_recon` inlined into
     the `recon)` case arm so no dormant/duplicate function name remains; coverage 96%.
+  - **Extended 2026-08-12: `add`/`rm` migrated as the second command** (`borg_core/registry/{core,shell,cli}.py`,
+    97% coverage). `cmd_add`/`cmd_rm` deleted from `borg.zsh`. Sequenced ahead of `link` (blocked on the
+    independent link-unification directive landing in zsh first) and ahead of `scan` (not actually "registry
+    CRUD, pure logic" as the sequencing note below assumed — it's a multi-source discovery engine wrapping
+    unported `claude.zsh`/`coco.zsh`/`desktop.zsh` and an LLM-summarizer subprocess; deserves its own pass).
+    Went through the same adversarial-review discipline as `recon`: an independent 3-lens review found 7
+    distinct real issues (1 blocker — a timezone bug that silently changed stored data — plus 6 real-but-
+    minor/nitpick items), 6 fixed, 1 accepted as an existing track-wide precedent. Full record in
+    `docs/plans/assimilated/2026-08-12-recon-migration-ledger.md`'s "`add`/`rm` migration" section.
 - [x] **C6** — A migration ledger records, per command: migrated / not-migrated / deliberately-staying-shell, with
       a one-line reason. Hooks are listed as **deliberately-staying-shell** with the latency measurement as the
       reason.
@@ -245,9 +279,24 @@ undisciplined-shipping problem in a second language, and therefore evidence *for
     (not pushed) — check this box once CI confirms, not from local-only evidence.
 
 ### Sequencing after C5
-Each its own PR: `recon` → `link` (biggest win: `--json` + the skill contract) → `next` → `scan`/`add`/`rm`
-(registry CRUD, pure logic) → `nanoprobes`/`spend`/`watch`. Leave `switch`/`focus`/`init` last — tmux-interactive,
-least benefit, highest shell affinity.
+
+**Revised 2026-08-12.** Originally: `recon` → `link` → `next` → `scan`/`add`/`rm` (as one bundled
+"registry CRUD, pure logic" item) → `nanoprobes`/`spend`/`watch` → `switch`/`focus`/`init` last.
+Two corrections found while starting the `link` step:
+
+- **`link` is blocked, not next.** A separate, independent, unstarted directive
+  (`docs/plans/directives/2026-08-11-link-unification-and-layout.md`) redesigns `cmd_link`'s
+  output contract (`--json`, bottom-anchored layout, idle collapse) while it's still in zsh.
+  Porting today's `cmd_link` to Python now would likely be thrown away once that directive lands.
+  Revisit `link`'s Python port only after that directive ships.
+- **`scan` isn't "registry CRUD, pure logic."** It's a multi-source discovery engine (Claude/CoCo/
+  Desktop session scanning) that shells out to an LLM summarizer and depends on
+  `claude.zsh`/`coco.zsh`/`desktop.zsh`, none of which are ported. It deserves its own migration
+  pass, not a bundled third item alongside `add`/`rm`.
+
+**Current order:** `recon` → `add`/`rm` (done 2026-08-12) → `next` → `scan` (own pass) →
+`nanoprobes`/`spend`/`watch` → `link` (once link-unification ships) → `switch`/`focus`/`init` last
+— tmux-interactive, least benefit, highest shell affinity.
 
 ## Scope Boundaries
 - **NOT porting hooks.** Verified arithmetic. Recorded permanently in C6.

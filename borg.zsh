@@ -943,61 +943,6 @@ cmd_scan() {
     fi
 }
 
-cmd_add() {
-    local ppath="${1:-$PWD}"
-    ppath=$(realpath "$ppath" 2>/dev/null || echo "$ppath")
-    local name
-    name="${ppath##*/}"
-
-    local tmux_window=""
-    borg_tmux_window_exists "$name" && tmux_window="$name"
-
-    local session_id
-    session_id=$(borg_claude_latest_session_id "$ppath")
-
-    # Seed last_activity from transcript mtime if a session exists
-    local last_activity="null"
-    if [[ -n "$session_id" ]]; then
-        local jsonl
-        jsonl=$(borg_claude_session_jsonl "$ppath" "$session_id")
-        if [[ -f "$jsonl" ]]; then
-            local mtime
-            mtime=$(stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%SZ" "$jsonl" 2>/dev/null) || mtime=""
-            [[ -n "$mtime" ]] && last_activity="\"$mtime\""
-        fi
-    fi
-
-    local json
-    json=$(jq -n \
-        --arg path "$ppath" \
-        --arg source "cli" \
-        --arg tmux_session "$BORG_TMUX_SESSION" \
-        --argjson tmux_window "$([ -n "$tmux_window" ] && echo "\"$tmux_window\"" || echo 'null')" \
-        --argjson session_id "$([ -n "$session_id" ] && echo "\"$session_id\"" || echo 'null')" \
-        --argjson last_activity "$last_activity" \
-        '{
-            path: $path,
-            source: $source,
-            tmux_session: $tmux_session,
-            tmux_window: $tmux_window,
-            claude_session_id: $session_id,
-            last_activity: $last_activity,
-            summary: null
-        }')
-
-    borg_registry_merge "$name" "$json"
-    info "Registered: $name"
-    [[ -n "$session_id" ]] && info "Latest session: $session_id"
-}
-
-cmd_rm() {
-    local project="${1:-}"
-    [[ -z "$project" ]] && die "usage: borg rm <project>"
-    borg_registry_has "$project" || die "project '$project' not in registry"
-    borg_registry_remove "$project"
-    info "Removed: $project"
-}
-
 cmd_color() {
     local project="${1:-}" color="${2:-}"
     [[ -z "$project" || -z "$color" ]] && die "Usage: borg color <project> <color>"
@@ -3279,8 +3224,19 @@ case "${1:-help}" in
         PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.recon.cli "${_recon_py_args[@]}"
         ;;
     scan)     cmd_scan "${@:2}" ;;
-    add)      cmd_add "${@:2}" ;;
-    rm)       cmd_rm "${@:2}" ;;
+    add)
+        # Dispatches to the Python port (borg_core/registry/{core,shell,cli}.py). Inlined here, no
+        # dispatch wrapper function for this arm, so `add` is fully migrated per the migration
+        # ledger -- see docs/plans/assimilated/2026-08-12-recon-migration-ledger.md.
+        shift
+        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.registry.cli add "$@"
+        ;;
+    rm)
+        # Dispatches to the Python port (borg_core/registry/{core,shell,cli}.py). See the `add)`
+        # arm above and the migration ledger for the same rationale.
+        shift
+        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.registry.cli rm "$@"
+        ;;
     color)    cmd_color "${@:2}" ;;
     image)    cmd_image "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
