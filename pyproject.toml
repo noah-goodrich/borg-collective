@@ -1,0 +1,66 @@
+# borg-collective is a zsh CLI, not a distributable Python package (no [build-system]/[project] —
+# there is nothing to build). merge-tree/ and docs/infoviz/harness/ are Python surfaces that get
+# tool config (ruff/mypy/pylint/pytest/coverage) below, and a PEP 735 dependency group for the
+# toolchain itself, installed via `pip install --group dev` (pip>=25.1).
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "coverage>=6.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "pylint>=2.15.0",
+    "pylint-clean-architecture==1.5.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["merge-tree", "docs/infoviz/harness"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+# Exclude functional tests from default runs (they're slow)
+norecursedirs = ["tests/functional"]
+addopts = [
+    "--strict-markers",
+]
+markers = [
+    "unit: Unit tests (fast, isolated)",
+    "integration: Integration tests (may require external services)",
+    "functional: Functional tests (end-to-end workflows, slow)",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "C90"]
+ignore = ["E501"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pylint.main]
+load-plugins = ["clean_architecture_linter"]
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.clean-arch]
+project_type = "generic"
+visibility_enforcement = true
+project_name = "BORG"
+color = "green"
+welcome_msg = "The Collective Lints"
+
+[tool.coverage.run]
+source = ["merge-tree", "docs/infoviz/harness"]
+omit = [
+    "**/tests/**",
+]
