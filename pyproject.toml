@@ -33,6 +33,10 @@ markers = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
+# merge-tree/app/ is a separate, self-contained FastAPI sub-app with its own requirements.txt
+# (fastapi, uvicorn) and its own .venv workflow (see merge-tree/app/README.md). It was never meant
+# to share this root toolchain's scope.
+exclude = ["merge-tree/app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C90"]
@@ -45,6 +49,10 @@ max-complexity = 10
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
+# merge-tree/app/ is a separate, self-contained FastAPI sub-app with its own requirements.txt
+# (fastapi, uvicorn) not installed at the root level; excluding it avoids spurious
+# import-not-found errors unrelated to this toolchain's scope.
+exclude = ["^merge-tree/app/"]
 
 [tool.pylint.main]
 load-plugins = ["clean_architecture_linter"]
