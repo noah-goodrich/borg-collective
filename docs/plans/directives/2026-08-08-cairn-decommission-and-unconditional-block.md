@@ -3,10 +3,14 @@
 *Filed: 2026-08-08 · Status: PARTIAL — Phase 0 and Phase 2 (cairn decommission) shipped 2026-08-08 via
 `~/dev/cairn/PROJECT_PLAN.md`, which superseded this directive's phasing with a single-sitting shutdown.
 Phase 1 is PARTIALLY done: 1.1 and 1.3 shipped as part of the decommission's own hook cleanup; 1.2
-(checkpoint truncation), 1.4 (junk purge), and 1.5 (enable 4 platform plugins) are still OPEN. 1.6's job
-creation shipped 2026-08-10 (`bin/borg-memory-gate` + daily launchd job + `hooks/borg-link-down.sh`
-surfacing), but its **proof obligation is still unmet** — it must fire unattended over real elapsed time
-before Phase 3 can unblock; re-check in 7+ days. Phase 3 correctly remains GATED — do not schedule it.*
+(checkpoint truncation), 1.4 (junk purge), and 1.5 (enable 4 platform plugins) are still OPEN.
+**Re-verified 2026-08-12:** 1.6's code (`bin/borg-memory-gate`,
+`launchd/com.stillpoint-labs.borg.memory-gate.plist`) is committed to the repo, but the plist was never
+copied to `~/Library/LaunchAgents/` and `launchctl list` shows no such job loaded — `~/.local/state/borg/`
+has no `memory-gate.log` and no `memory-gate-state.json` exists. The 7-day unattended-proof clock has not
+started; "shipped 2026-08-10" describes code landing in the repo, not deployment. Needs a `borg setup`
+rerun to install the launchd job before Phase 1.6's proof obligation can even begin accumulating. Phase 3
+correctly remains GATED — do not schedule it. This directive stays open; not ready to close.*
 *Source: `~/dev/cairn/docs/research/` — see `README.md` for the full arc; the operative documents are
 `2026-08-04-cairn-original-goals-audit.md` and `2026-08-05-post-cairn-strategy.md`*
 *Companion decision: `~/dev/cairn/docs/adr/0002-retire-belief-store.md`*
