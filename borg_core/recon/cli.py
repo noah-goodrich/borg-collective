@@ -1,11 +1,17 @@
-"""Typer CLI entrypoint for `borg recon` (ports cmd_recon / _recon_print_digest in borg.zsh).
+"""stdlib argparse CLI entrypoint for `borg recon` (ports cmd_recon / _recon_print_digest in borg.zsh).
 
-typer is imported LAZILY inside main() (Part 1 convention): importing this module for tests must
-stay cheap and must not pull in the CLI framework at package-import time.
+Deliberately stdlib-only (no `typer`/`click`). `typer` was the original Part 1 convention, but it is
+declared only in the `dev` dependency group (pyproject.toml), never provisioned at runtime by
+install.sh, and `cmd_recon` in borg.zsh dispatches to this module unconditionally with no shell
+fallback -- so a real (non-dev) install would hard-crash with ModuleNotFoundError. argparse ships
+with every Python 3 interpreter, so this removes the unprovisioned runtime dependency entirely
+rather than papering over it with an install-time pip step. See the migration ledger
+(docs/plans/assimilated/2026-08-12-recon-migration-ledger.md) for the record of this deviation.
 """
 
 from __future__ import annotations
 
+import argparse
 import json as jsonlib
 import os
 import sys
@@ -122,25 +128,28 @@ def _run_list_adapters() -> int:
     return 0
 
 
-def main() -> None:
-    """Entrypoint for `python3 -m borg_core.recon.cli`. Imports typer lazily (Part 1 convention)."""
-    # JUSTIFICATION: lazy import keeps importing this module for tests cheap (Part 1 convention).
-    import typer  # pylint: disable=import-outside-toplevel
+def _build_parser() -> argparse.ArgumentParser:
+    """Build the stdlib argparse parser mirroring the zsh `cmd_recon` flag surface."""
+    parser = argparse.ArgumentParser(
+        prog="borg recon",
+        description="Fan out across recon source adapters and reconcile against local checkpoints.",
+    )
+    parser.add_argument("--since", default="")
+    parser.add_argument("--sources", default="")
+    parser.add_argument("--projects", default="")
+    parser.add_argument("--json", dest="json_only", action="store_true")
+    parser.add_argument("--adapters", "--list", dest="adapters", action="store_true")
+    return parser
 
-    app = typer.Typer(add_completion=False)
 
-    @app.command()
-    def recon(
-        since: str = typer.Option("", "--since"),
-        sources: str = typer.Option("", "--sources"),
-        projects: str = typer.Option("", "--projects"),
-        json_only: bool = typer.Option(False, "--json"),
-        adapters: bool = typer.Option(False, "--adapters", "--list"),
-    ) -> None:
-        exit_code = _run(since, sources, projects, json_only, adapters)
-        raise SystemExit(exit_code)
+def main(argv: list[str] | None = None) -> None:
+    """Entrypoint for `python3 -m borg_core.recon.cli`.
 
-    app()
+    stdlib argparse only -- see the module docstring for why this isn't typer/click.
+    """
+    args = _build_parser().parse_args(argv)
+    exit_code = _run(args.since, args.sources, args.projects, args.json_only, args.adapters)
+    raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":

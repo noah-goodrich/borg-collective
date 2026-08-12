@@ -190,29 +190,59 @@ undisciplined-shipping problem in a second language, and therefore evidence *for
   and hook contracts are untouched.
 
 ### Criteria
-- [ ] **C1** — `borg_core/` laid out in the layers `pylint-clean-architecture` understands — domain / usecase /
+- [x] **C1** — `borg_core/` laid out in the layers `pylint-clean-architecture` understands — domain / usecase /
       infrastructure — so the Silent Core Rule and DI checks apply from the first commit rather than being
       retrofitted.
   - Verify: the package tree has those layers; `make lint` passes with `visibility_enforcement = true`.
-- [ ] **C2** — Infrastructure adapters wrap every external call (`git`, `gh`, `tmux`, `docker`, `jq`, filesystem)
+  - **Superseded 2026-08-12:** a same-day research pass (`docs/research/2026-08-12-clean-architecture-
+    for-ai-agents/`, three rounds of independent blind review, one empirical spike against real code)
+    found the 4-directory layout carries a measured AI-agent correctness penalty. Shipped instead: one
+    `borg_core/<command>/` folder per command, `core.py` (pure logic, `module_map`-tagged Domain layer)
+    + `shell.py` (all I/O), colocated tests — same Silent Core Rule enforcement (`W9004` fires on raw
+    I/O in `core.py`, confirmed zero findings), same DI-in-spirit boundary, without the forced
+    directory depth. See `recommendation.md` in that research directory for the full option analysis.
+  - Verify (revised): `make lint` passes with `visibility_enforcement = true`; `pylint
+    --load-plugins=clean_architecture_linter borg_core/recon/core.py` shows zero `W9004` findings.
+- [x] **C2** — Infrastructure adapters wrap every external call (`git`, `gh`, `tmux`, `docker`, `jq`, filesystem)
       behind an interface the domain depends on abstractly. This is what makes the core testable without
       subprocesses.
   - Verify: `grep -rn 'subprocess' borg_core/domain borg_core/usecase` returns nothing.
-- [ ] **C3** — `typer` is **lazily imported**, never at module top level in any path a hook could reach.
+  - **Superseded 2026-08-12:** same architecture pivot as C1 — no `domain`/`usecase` directories exist.
+    The boundary is `core.py` (zero I/O) vs. `shell.py` (all I/O — subprocess, filesystem, adapter
+    discovery), enforced by `module_map` + `allowed_prefixes`, not by directory-scoped DI.
+  - Verify (revised): `grep -n '^import subprocess\|^from subprocess'
+    borg_core/recon/core.py` returns nothing (the module's own docstring and comments legitimately
+    discuss subprocess-avoidance in prose, so a bare-word grep false-positives; check for an actual
+    import statement instead). `pylint --load-plugins=clean_architecture_linter
+    borg_core/recon/core.py` showing zero `W9004` findings is the authoritative check either way.
+- [x] **C3** — `typer` is **lazily imported**, never at module top level in any path a hook could reach.
   - Verify: `python3 -c "import borg_core"` does not pull typer into `sys.modules`.
   - Measured at 12.0 ms of the 59.6 ms figure above. Free to recover.
-- [ ] **C4** — The contract suite covers **every** command `borg.zsh` dispatches, before any command is migrated.
+  - **Superseded 2026-08-12:** `typer` was declared dev-only and never provisioned by `install.sh`,
+    so `cmd_recon`'s unconditional dispatch would `ModuleNotFoundError` on a real install. Replaced
+    with stdlib `argparse` — no CLI framework import at all, so this criterion is vacuously
+    satisfied. See the migration ledger.
+- [x] **C4** — The contract suite covers **every** command `borg.zsh` dispatches, before any command is migrated.
   - Verify: every arm of `borg.zsh`'s top-level `case` has at least one `cli_contract.bats` test.
-- [ ] **C5** — **One** command migrated end to end as the pattern-setter, its zsh implementation **deleted** (not
+  - Done (commit `7fdaf79`, prior session): checkbox was never ticked at the time despite the work
+    landing — corrected here, no new work performed.
+- [x] **C5** — **One** command migrated end to end as the pattern-setter, its zsh implementation **deleted** (not
       left dormant). Recommend `borg recon`: already portable sh, has a JSON contract, most recently bug-ridden,
       clearest input/output boundary.
   - Verify: `grep -c 'cmd_recon' borg.zsh` returns 0; `borg recon --adapters` still passes its contract test;
     `coverage report` shows the migrated module ≥90%.
-- [ ] **C6** — A migration ledger records, per command: migrated / not-migrated / deliberately-staying-shell, with
+  - Done 2026-08-12: `lib/recon.sh`, `lib/recon.zsh`, and `tests/recon.bats` deleted (both bats suites had
+    already passed unchanged against the Python port — the testing-discipline gate); `cmd_recon` inlined into
+    the `recon)` case arm so no dormant/duplicate function name remains; coverage 96%.
+- [x] **C6** — A migration ledger records, per command: migrated / not-migrated / deliberately-staying-shell, with
       a one-line reason. Hooks are listed as **deliberately-staying-shell** with the latency measurement as the
       reason.
   - Verify: the ledger exists and every `case` arm in `borg.zsh` appears in it.
+  - `docs/plans/assimilated/2026-08-12-recon-migration-ledger.md`.
 - [ ] **C7** — Regression: the full bats suite and the macOS contract leg stay green at every step.
+  - Left unchecked deliberately: this is an ongoing property, not a one-time gate. Local status as of
+    2026-08-12: `bats tests/*.bats` 585/585 green on this branch. The macOS CI leg has not run yet
+    (not pushed) — check this box once CI confirms, not from local-only evidence.
 
 ### Sequencing after C5
 Each its own PR: `recon` → `link` (biggest win: `--json` + the skill contract) → `next` → `scan`/`add`/`rm`

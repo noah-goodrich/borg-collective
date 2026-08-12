@@ -213,6 +213,40 @@ def test_fanout_empty_adapter_list(isolated_env):
     assert shell.fanout("since", "/dev/null", []) == []
 
 
+def test_run_adapter_timeout_is_failed_track(isolated_env, tmp_path, monkeypatch):
+    script = tmp_path / "recon-adapter-slow"
+    _make_executable(script, "#!/usr/bin/env bash\nsleep 5\n")
+    monkeypatch.setenv("BORG_RECON_TRACK_TIMEOUT", "0")
+    result = shell.run_adapter("slow", str(script), "2025-01-01T00:00:00Z", "/dev/null")
+    assert result["ok"] is False
+
+
+def test_fanout_bounds_concurrency_to_max_tracks(isolated_env, tmp_path, monkeypatch):
+    # Three adapters that each block until a shared "started" counter proves at most
+    # max_tracks() (here 1) ever run concurrently -- a real assertion on the ThreadPoolExecutor
+    # bound, not just that fanout() eventually returns.
+    monkeypatch.setenv("BORG_RECON_MAX_TRACKS", "1")
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    adapters = []
+    for name in ("a", "b", "c"):
+        script = tmp_path / f"recon-adapter-{name}"
+        _make_executable(
+            script,
+            "#!/usr/bin/env bash\n"
+            f"touch '{lock_dir}/{name}.running'\n"
+            f"count=$(ls '{lock_dir}'/*.running 2>/dev/null | wc -l)\n"
+            f"echo \"$count\" >> '{lock_dir}/max_seen'\n"
+            "sleep 0.1\n"
+            f"rm -f '{lock_dir}/{name}.running'\n"
+            f'cat <<JSON\n{{"source":"{name}","summary":"ok","items":[]}}\nJSON\n',
+        )
+        adapters.append((name, str(script)))
+    shell.fanout("2025-01-01T00:00:00Z", "/dev/null", adapters)
+    seen = [int(line) for line in (lock_dir / "max_seen").read_text().splitlines() if line.strip()]
+    assert max(seen) == 1
+
+
 # ── checkpoint blockers ──────────────────────────────────────────────────────
 
 

@@ -15,7 +15,6 @@ dev = [
     "mypy>=1.0.0",
     "pylint>=2.15.0",
     "pylint-clean-architecture==1.5.2",
-    "typer>=0.12",
     "import-linter>=2.0",
 ]
 

@@ -18,7 +18,7 @@ test:
 	@if [ -d borg_core ]; then \
 		set -e; \
 		coverage run -m pytest || test $$? -eq 5; \
-		coverage report -m; \
+		coverage report -m --fail-under=90; \
 	else \
 		echo "borg_core/ does not exist yet (Part 3 not started) -- nothing to test"; \
 	fi

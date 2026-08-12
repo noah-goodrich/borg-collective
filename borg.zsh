@@ -2922,65 +2922,9 @@ cmd_version() {
 # ── recon fan-out ──────────────────────────────────────────────────────────────
 # Source-agnostic "recon fan-out" primitive: sweep activity across pluggable source adapters since
 # a mark, normalize to Items, reconcile against local .borg checkpoints, emit one reconciled doc.
-# The mechanical engine lives in lib/recon.sh; the judgment/synthesis layer is the /borg-recon skill.
-# This command is the driver: resolve inputs, fan out, reconcile, and print JSON (--json) or a terse
-# by-project digest. It never hardcodes any source — adapters are discovered on BORG_RECON_ADAPTER_PATH.
-
-# Render the terse, most-urgent-first by-project digest from a reconciled doc (stdin arg $1).
-_recon_print_digest() {
-    printf '%s' "$1" | jq -r '
-        def urank: {"now":0,"this_week":1,"fyi":2}[.] // 3;
-        def rlabel: ["now","this_week","fyi"][.] // "fyi";
-        "Recon sweep — since \(.since)  (generated \(.generated_at))",
-        "",
-        "Sources:",
-        (.sources[] | "  \(.source): \(.summary)" + (if .ok then "" else "  [FAILED]" end)
-            + (if (.dropped // 0) > 0 then "  (dropped \(.dropped) malformed)" else "" end)),
-        "",
-        (if (.contradictions | length) > 0 then
-            ("Contradictions to resolve (\(.contradictions | length)):"),
-            (.contradictions[] | "  ⚠ [\(.project)] \(.ref) — \(.note)"),
-            ""
-         else empty end),
-        "By project (most urgent first):",
-        "",
-        (if (.items_by_project | length) == 0 then "  (no activity since the mark — quiet sweep)"
-         else
-            (.items_by_project | to_entries
-             | map(. + {r: ([.value[].urgency | urank] | min // 3)})
-             | sort_by(.r)[]
-             | ("● \(.key)  [\(.r | rlabel)]"),
-               (.value | sort_by(.urgency | urank)[]
-                 | "    - \(.one_line)  (\(.owner), \(.urgency)"
-                   + (if .action_needed then ", action" else "" end) + ")"),
-               "")
-         end),
-        "Run /borg-recon for the full morning link-up: reconcile, Yours-vs-Mine action lists,",
-        "and a recommended parallel kickoff batch."
-    '
-}
-
-cmd_recon() {
-    # Dispatches to the Python port (borg_core/recon/{core,shell,cli}.py). lib/recon.sh and
-    # lib/recon.zsh are left in place, unused by this command, so a later phase can diff behavior
-    # before they're deleted. PYTHONPATH is set explicitly rather than relying on cwd, since borg
-    # can be invoked from any directory.
-    local -a py_args
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --since)            py_args+=(--since "$2"); shift 2 ;;
-            --sources)          py_args+=(--sources "$2"); shift 2 ;;
-            --projects)         py_args+=(--projects "$2"); shift 2 ;;
-            --json)             py_args+=(--json); shift ;;
-            --adapters|--list)  py_args+=(--adapters); shift ;;
-            -h|--help)
-                echo "usage: borg recon [--since ISO] [--projects a,b] [--sources github,..] [--json] [--adapters]"
-                return 0 ;;
-            *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
-        esac
-    done
-    PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.recon.cli "${py_args[@]}"
-}
+# Fully migrated to Python (borg_core/recon/{core,shell,cli}.py) -- see the `recon)` case arm below
+# and docs/plans/assimilated/2026-08-12-recon-migration-ledger.md. The judgment/synthesis layer is
+# the /borg-recon skill.
 
 cmd_help() {
     cat <<'EOF'
@@ -3312,7 +3256,28 @@ case "${1:-help}" in
     next)     cmd_next "${@:2}" ;;
     link)     cmd_link "${@:2}" ;;
     switch)   cmd_switch "${@:2}" ;;
-    recon)    cmd_recon "${@:2}" ;;
+    recon)
+        # Dispatches to the Python port (borg_core/recon/{core,shell,cli}.py). Inlined here, no
+        # dispatch wrapper function for this arm, so `recon` is fully migrated per the migration
+        # ledger -- see docs/plans/assimilated/2026-08-12-recon-migration-ledger.md. PYTHONPATH is
+        # set explicitly rather than relying on cwd, since borg can be invoked from any directory.
+        shift
+        typeset -a _recon_py_args
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --since)            _recon_py_args+=(--since "$2"); shift 2 ;;
+                --sources)          _recon_py_args+=(--sources "$2"); shift 2 ;;
+                --projects)         _recon_py_args+=(--projects "$2"); shift 2 ;;
+                --json)             _recon_py_args+=(--json); shift ;;
+                --adapters|--list)  _recon_py_args+=(--adapters); shift ;;
+                -h|--help)
+                    echo "usage: borg recon [--since ISO] [--projects a,b] [--sources github,..] [--json] [--adapters]"
+                    exit 0 ;;
+                *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
+            esac
+        done
+        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.recon.cli "${_recon_py_args[@]}"
+        ;;
     scan)     cmd_scan "${@:2}" ;;
     add)      cmd_add "${@:2}" ;;
     rm)       cmd_rm "${@:2}" ;;
