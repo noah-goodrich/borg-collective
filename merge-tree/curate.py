@@ -24,6 +24,7 @@ Run with:
   python3 merge-tree/curate.py --in merge-tree/fixtures/gather.raw.json \\
       --out merge-tree/fixtures/data.golden.json   # regenerate the golden fixture
 """
+
 from __future__ import annotations
 
 import argparse
@@ -146,13 +147,14 @@ def curate(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def main() -> int:
+    """CLI entrypoint: read a raw gather, curate it, write ratified data.json."""
     p = argparse.ArgumentParser(description="Curate a raw recon gather into ratified data.json.")
     p.add_argument("--in", dest="src", required=True, help="path to the raw gather JSON")
     p.add_argument("--out", dest="dst", required=True, help="path to write the curated data.json")
     args = p.parse_args()
 
     try:
-        with open(args.src) as f:
+        with open(args.src, encoding="utf-8") as f:
             raw = json.load(f)
     except (ValueError, OSError) as exc:
         return _fail(f"curate.py: cannot read gather at {args.src}: {exc}")
@@ -160,7 +162,7 @@ def main() -> int:
     data = curate(raw)
 
     try:
-        with open(args.dst, "w") as f:
+        with open(args.dst, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
             f.write("\n")
     except OSError as exc:

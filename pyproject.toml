@@ -35,8 +35,10 @@ line-length = 120
 target-version = "py312"
 # merge-tree/app/ is a separate, self-contained FastAPI sub-app with its own requirements.txt
 # (fastapi, uvicorn) and its own .venv workflow (see merge-tree/app/README.md). It was never meant
-# to share this root toolchain's scope.
-exclude = ["merge-tree/app"]
+# to share this root toolchain's scope. merge-tree/render.py has no test coverage and its status
+# relative to render_graph.py (the "Story-Lens") is an open product question, not a settled one --
+# excluded until that's resolved rather than covered by assumption either way.
+exclude = ["merge-tree/app", "merge-tree/render.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C90"]
@@ -51,11 +53,15 @@ warn_return_any = true
 warn_unused_configs = true
 # merge-tree/app/ is a separate, self-contained FastAPI sub-app with its own requirements.txt
 # (fastapi, uvicorn) not installed at the root level; excluding it avoids spurious
-# import-not-found errors unrelated to this toolchain's scope.
-exclude = ["^merge-tree/app/"]
+# import-not-found errors unrelated to this toolchain's scope. merge-tree/render.py: see the
+# matching note under [tool.ruff].
+exclude = ["^merge-tree/app/", "^merge-tree/render\\.py$"]
 
 [tool.pylint.main]
 load-plugins = ["clean_architecture_linter"]
+# Match the [tool.ruff]/[tool.mypy] excludes above -- pylint has its own scan and does not read
+# those sections, so without this it silently re-includes merge-tree/app/ and merge-tree/render.py.
+ignore-paths = ["^merge-tree/app/.*", "^merge-tree/render\\.py$"]
 
 [tool.pylint.format]
 max-line-length = 120
@@ -71,4 +77,5 @@ welcome_msg = "The Collective Lints"
 source = ["merge-tree", "docs/infoviz/harness"]
 omit = [
     "**/tests/**",
+    "merge-tree/render.py",
 ]
