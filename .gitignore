@@ -19,6 +19,13 @@ registry.json
 # Claude Code project-level settings and session state — local only
 .claude/
 
+# Python toolchain: local virtualenv + coverage/pytest artifacts
+.venv/
+.coverage
+coverage.xml
+__pycache__/
+*.pyc
+
 # Runtime session state inside template scaffolds (same convention as root .borg/)
 templates/supabase/.borg/
 .borg/state.json
