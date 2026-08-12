@@ -53,6 +53,10 @@ warn_unused_configs = true
 
 [tool.pylint.main]
 load-plugins = ["clean_architecture_linter"]
+# Test files are the callers exercising private/internal functions by design (e.g. cli._run,
+# cli._die) and are exempt from docstring/fixture-shadowing style rules that make sense for
+# production code but not for pytest test modules.
+ignore-patterns = ["test_.*\\.py$"]
 
 [tool.pylint.format]
 max-line-length = 120
@@ -63,7 +67,7 @@ visibility_enforcement = true
 project_name = "BORG"
 color = "green"
 welcome_msg = "The Collective Lints"
-allowed_prefixes = ["borg_core"]
+allowed_prefixes = ["borg_core", "__future__"]
 
 [tool.clean-arch.module_map]
 Domain = ["core.py"]

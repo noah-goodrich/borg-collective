@@ -2961,114 +2961,25 @@ _recon_print_digest() {
 }
 
 cmd_recon() {
-    local since="" sources_filter="" projects_filter="" json_only="" list_only=""
+    # Dispatches to the Python port (borg_core/recon/{core,shell,cli}.py). lib/recon.sh and
+    # lib/recon.zsh are left in place, unused by this command, so a later phase can diff behavior
+    # before they're deleted. PYTHONPATH is set explicitly rather than relying on cwd, since borg
+    # can be invoked from any directory.
+    local -a py_args
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --since)         since="$2"; shift 2 ;;
-            --sources)       sources_filter="$2"; shift 2 ;;
-            --projects)      projects_filter="$2"; shift 2 ;;
-            --json)          json_only=1; shift ;;
-            --adapters|--list) list_only=1; shift ;;
+            --since)            py_args+=(--since "$2"); shift 2 ;;
+            --sources)          py_args+=(--sources "$2"); shift 2 ;;
+            --projects)         py_args+=(--projects "$2"); shift 2 ;;
+            --json)             py_args+=(--json); shift ;;
+            --adapters|--list)  py_args+=(--adapters); shift ;;
             -h|--help)
                 echo "usage: borg recon [--since ISO] [--projects a,b] [--sources github,..] [--json] [--adapters]"
                 return 0 ;;
             *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
         esac
     done
-    command -v jq >/dev/null 2>&1 || die "recon needs jq"
-
-    if [[ -n "$list_only" ]]; then
-        local disc; disc=$(_recon_discover_adapters)
-        if [[ -z "$disc" ]]; then
-            echo "No recon adapters found on: $(_recon_adapter_path)"
-            echo "Drop an executable named 'recon-adapter-<source>' on that path to add a source."
-        else
-            echo "Available recon sources:"
-            echo "$disc" | while IFS=$'\t' read -r s p; do printf '  %-12s %s\n' "$s" "$p"; done
-        fi
-        return 0
-    fi
-
-    [[ -f "$BORG_REGISTRY" ]] || die "no registry at $BORG_REGISTRY"
-
-    local workdir projects_file
-    workdir=$(mktemp -d "${TMPDIR:-/tmp}/borg-recon.XXXXXX")
-    projects_file="$workdir/projects.json"
-    if [[ -n "$projects_filter" ]]; then
-        local filt_json
-        filt_json=$(echo "$projects_filter" | jq -R 'split(",") | map(gsub("^ +| +$";""))')
-        jq --argjson keep "$filt_json" \
-            '.projects | with_entries(select(.key as $k | $keep | index($k)))' \
-            "$BORG_REGISTRY" > "$projects_file"
-    else
-        jq '.projects' "$BORG_REGISTRY" > "$projects_file"
-    fi
-
-    local -a proj_dirs
-    proj_dirs=("${(@f)$(jq -r '.[].path // empty' "$projects_file")}")
-
-    local resolved_since
-    resolved_since=$(_recon_resolve_since "$since" "${proj_dirs[@]}")
-
-    local disc; disc=$(_recon_discover_adapters)
-    if [[ -z "$disc" ]]; then
-        rm -rf "$workdir"
-        die "no recon adapters found on $(_recon_adapter_path) — see 'borg recon --adapters'"
-    fi
-    local -a fanout_args; local s p
-    while IFS=$'\t' read -r s p; do
-        [[ -z "$s" ]] && continue
-        if [[ -n "$sources_filter" ]]; then
-            case ",$sources_filter," in *",$s,"*) : ;; *) continue ;; esac
-        fi
-        fanout_args+=("$s" "$p")
-    done <<< "$disc"
-    if [[ ${#fanout_args} -eq 0 ]]; then
-        rm -rf "$workdir"
-        die "no adapters matched --sources '$sources_filter'"
-    fi
-
-    _recon_fanout "$resolved_since" "$projects_file" "$workdir/tracks" "${fanout_args[@]}"
-
-    local -a track_files
-    setopt localoptions nullglob
-    track_files=("$workdir"/tracks/*.json)
-    local by_project sources_json
-    by_project=$(_recon_merge_by_project "${track_files[@]}")
-    # Make --projects authoritative even if an adapter over-returns: keep only requested projects.
-    if [[ -n "$projects_filter" ]]; then
-        local keepj
-        keepj=$(echo "$projects_filter" | jq -R 'split(",") | map(gsub("^ +| +$";""))')
-        by_project=$(echo "$by_project" | jq --argjson keep "$keepj" \
-            'with_entries(select(.key as $k | $keep | index($k)))')
-    fi
-    sources_json=$(jq -s '[.[] | {source, summary, ok: (if has("ok") then .ok else true end),
-                                  count: (.items | length), dropped: (.dropped // 0)}]' "${track_files[@]}")
-
-    # NB: never name a loop var `path` in zsh — it is tied to $PATH and reading into it wipes PATH.
-    local contra_json="[]" proj ppath items blockers pc
-    while IFS=$'\t' read -r proj ppath; do
-        [[ -z "$proj" || -z "$ppath" ]] && continue
-        items=$(echo "$by_project" | jq -c --arg p "$proj" '.[$p] // []')
-        [[ "$items" == "[]" ]] && continue
-        blockers=$(_recon_checkpoint_blockers "$ppath")
-        [[ -z "$blockers" ]] && continue
-        pc=$(_recon_project_contradictions "$proj" "$blockers" "$items")
-        contra_json=$(jq -s '.[0] + .[1]' <(echo "$contra_json") <(echo "$pc"))
-    done < <(jq -r 'to_entries[] | [.key, (.value.path // "")] | @tsv' "$projects_file")
-
-    local doc
-    doc=$(_recon_assemble "$resolved_since" "$sources_json" "$by_project" "$contra_json")
-
-    _recon_write_last_run "$resolved_since"
-
-    rm -rf "$workdir"
-
-    if [[ -n "$json_only" ]]; then
-        echo "$doc"
-        return 0
-    fi
-    _recon_print_digest "$doc"
+    PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.recon.cli "${py_args[@]}"
 }
 
 cmd_help() {
