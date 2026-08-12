@@ -15,6 +15,8 @@ dev = [
     "mypy>=1.0.0",
     "pylint>=2.15.0",
     "pylint-clean-architecture==1.5.2",
+    "typer>=0.12",
+    "import-linter>=2.0",
 ]
 
 [tool.pytest.ini_options]
@@ -61,6 +63,10 @@ visibility_enforcement = true
 project_name = "BORG"
 color = "green"
 welcome_msg = "The Collective Lints"
+allowed_prefixes = ["borg_core"]
+
+[tool.clean-arch.module_map]
+Domain = ["core.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]
