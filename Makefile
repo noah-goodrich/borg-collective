@@ -1,8 +1,9 @@
 .PHONY: clean test lint format
 
-# Python toolchain surface: merge-tree/ + docs/infoviz/harness/. No borg_core/ yet (Part 3 of the
-# python-core-and-toolchain directive). Part 2 adds tests to merge-tree/; until then `test` may
-# legitimately collect zero tests (pytest exit 5) and that is not a failure.
+# Python toolchain surface: borg_core/ only (Part 3 of the python-core-and-toolchain directive).
+# merge-tree/ and docs/infoviz/harness/ belong to the separate viz/infoviz program and are
+# deliberately out of scope here. borg_core/ doesn't exist until Part 3's first commit -- test/lint
+# no-op gracefully (not a failure) until then, same as pytest legitimately collecting zero tests.
 
 clean:
 	rm -rf dist/
@@ -14,19 +15,32 @@ clean:
 	rm -f coverage.xml
 
 test:
-	@set -e; \
-	coverage run -m pytest || test $$? -eq 5; \
-	coverage report -m
+	@if [ -d borg_core ]; then \
+		set -e; \
+		coverage run -m pytest || test $$? -eq 5; \
+		coverage report -m; \
+	else \
+		echo "borg_core/ does not exist yet (Part 3 not started) -- nothing to test"; \
+	fi
 
 lint:
-	ruff check merge-tree/ docs/infoviz/harness/
-	mypy merge-tree/ docs/infoviz/harness/
-	@if python3 -c "import clean_architecture_linter" > /dev/null 2>&1; then \
-		pylint --load-plugins=clean_architecture_linter merge-tree/ docs/infoviz/harness/; \
+	@if [ -d borg_core ]; then \
+		set -e; \
+		ruff check borg_core/; \
+		mypy borg_core/; \
+		if python3 -c "import clean_architecture_linter" > /dev/null 2>&1; then \
+			pylint --load-plugins=clean_architecture_linter borg_core/; \
+		else \
+			echo "pylint-clean-architecture not installed; falling back to plain pylint"; \
+			pylint borg_core/; \
+		fi; \
 	else \
-		echo "pylint-clean-architecture not installed; falling back to plain pylint"; \
-		pylint merge-tree/ docs/infoviz/harness/; \
+		echo "borg_core/ does not exist yet (Part 3 not started) -- nothing to lint"; \
 	fi
 
 format:
-	ruff format merge-tree/ docs/infoviz/harness/
+	@if [ -d borg_core ]; then \
+		ruff format borg_core/; \
+	else \
+		echo "borg_core/ does not exist yet (Part 3 not started) -- nothing to format"; \
+	fi
