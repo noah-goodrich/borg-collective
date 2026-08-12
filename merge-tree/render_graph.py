@@ -25,11 +25,11 @@ STATE defaults to ~/.local/state/borg/merge-tree, overridable via BORG_MERGE_TRE
 Re-run with:
   BORG_MERGE_TREE_DIR=... python3 merge-tree/render_graph.py
 """
+
 import argparse
 import html
 import json
 import os
-from collections import Counter
 
 STATE = os.environ.get("BORG_MERGE_TREE_DIR", os.path.expanduser("~/.local/state/borg/merge-tree"))
 
@@ -49,8 +49,16 @@ METER_MIN_WIDTH_FRAC = 0.25
 # Same annotation whitelist as render.py: a provenance "source" must never
 # clobber an item's own source (the source badge). Identity keys never merge.
 ANNOTATION_MERGE_KEYS = {
-    "note", "one_line", "action_needed", "blocked", "urgency", "owner",
-    "title", "changed", "bucket", "is_entrypoint",
+    "note",
+    "one_line",
+    "action_needed",
+    "blocked",
+    "urgency",
+    "owner",
+    "title",
+    "changed",
+    "bucket",
+    "is_entrypoint",
 }
 
 
@@ -59,8 +67,11 @@ def parse_args():
     p.add_argument("--story", default=os.path.join(STATE, "story.json"), help="path to story.json")
     p.add_argument("--data", default=os.path.join(STATE, "data.json"), help="path to data.json")
     p.add_argument("--out", default=os.path.join(STATE, "graph.html"), help="path to write graph.html")
-    p.add_argument("--annotations", default=os.path.join(STATE, "annotations.local.json"),
-                   help="path to the optional machine-local annotations file")
+    p.add_argument(
+        "--annotations",
+        default=os.path.join(STATE, "annotations.local.json"),
+        help="path to the optional machine-local annotations file",
+    )
     return p.parse_args()
 
 
@@ -106,7 +117,7 @@ story = load_json(ARGS.story, {"projects": []}) or {"projects": []}
 D = load_json(ARGS.data, {}) or {}
 
 meta = D.get("meta", {})
-items = [it for it in D.get("items", []) if it.get("ref")]   # skip ref-less items
+items = [it for it in D.get("items", []) if it.get("ref")]  # skip ref-less items
 edges = [e for e in D.get("edges", []) if e.get("parent") and e.get("child")]
 actions = D.get("actions", {}) or {}
 
@@ -187,26 +198,43 @@ def trimmed_item(it):
     ref = it["ref"]
     act = actions.get(ref)
     return {
-        "ref": ref, "title": it.get("title") or "", "project": it.get("project") or "",
-        "repo": it.get("repo") or "", "source": it.get("source") or "",
-        "state": it.get("state") or "", "bucket": it.get("bucket") or "",
-        "owner": it.get("owner") or "", "url": safe_url(it.get("url")),
-        "one_line": it.get("one_line") or "", "action_needed": it.get("action_needed") or "",
-        "urgency": it.get("urgency"), "is_entrypoint": bool(it.get("is_entrypoint")),
-        "blocked": bool(it.get("blocked")), "changed": it.get("changed") or "",
-        "action": ({"label": act.get("label", ""), "command": act.get("command", ""),
-                    "class": act.get("class", "readonly")} if isinstance(act, dict) else None),
+        "ref": ref,
+        "title": it.get("title") or "",
+        "project": it.get("project") or "",
+        "repo": it.get("repo") or "",
+        "source": it.get("source") or "",
+        "state": it.get("state") or "",
+        "bucket": it.get("bucket") or "",
+        "owner": it.get("owner") or "",
+        "url": safe_url(it.get("url")),
+        "one_line": it.get("one_line") or "",
+        "action_needed": it.get("action_needed") or "",
+        "urgency": it.get("urgency"),
+        "is_entrypoint": bool(it.get("is_entrypoint")),
+        "blocked": bool(it.get("blocked")),
+        "changed": it.get("changed") or "",
+        "action": (
+            {"label": act.get("label", ""), "command": act.get("command", ""), "class": act.get("class", "readonly")}
+            if isinstance(act, dict)
+            else None
+        ),
     }
 
 
 BYREF = {it["ref"]: trimmed_item(it) for it in items}
-ACT = {r: {"label": a.get("label", ""), "command": a.get("command", ""),
-           "class": a.get("class", "readonly")}
-       for r, a in actions.items() if isinstance(a, dict)}
+ACT = {
+    r: {"label": a.get("label", ""), "command": a.get("command", ""), "class": a.get("class", "readonly")}
+    for r, a in actions.items()
+    if isinstance(a, dict)
+}
 EDGES = [{"parent": e["parent"], "child": e["child"], "kind": e.get("kind", "stacked")} for e in edges]
 STORY = {"projects": projects, "meta": story.get("meta", {})}
-META = {"today": meta.get("today", ""), "machine": meta.get("machine", ""),
-        "repos": meta.get("repos", []), "health": meta.get("health", [])}
+META = {
+    "today": meta.get("today", ""),
+    "machine": meta.get("machine", ""),
+    "repos": meta.get("repos", []),
+    "health": meta.get("health", []),
+}
 
 CONSTS = (
     "const STORY=" + json.dumps(STORY, separators=(",", ":")) + ";\n"
@@ -715,23 +743,23 @@ def build_html():
     ws_n = sum(len(p.get("workstreams", []) or []) for p in projects)
     repos_n = len(META.get("repos", []))
     header = (
-        '<header>'
+        "<header>"
         f'<h1>STORY GRAPH <span class="sub">{proj_n} projects &middot; {ws_n} workstreams &middot; '
-        f'{len(items)} items / {repos_n} repos &middot; {esc(META.get("machine",""))} &middot; '
+        f"{len(items)} items / {repos_n} repos &middot; {esc(META.get('machine', ''))} &middot; "
         '<a href="index.html">&larr; List view</a></span></h1>'
         '<div class="bar">'
         '<div class="fgroup" id="projFilter"><b>project</b></div>'
         '<div class="fgroup" id="repoFilter"><b>repo</b></div>'
         '<div class="fgroup toggles"><button class="tg" id="namedToggle">Named only</button>'
         '<button class="tg" id="parallelToggle">Highlight parallel</button></div>'
-        '</div>'
+        "</div>"
         '<div class="crumbs" id="crumbs"></div>'
-        '</header>'
+        "</header>"
     )
     body = (
         '<main><div id="view"></div>'
-        '<footer>story-first hub &middot; source: story.json (spine) + data.json (detail) &middot; '
-        'merge-tree/render_graph.py</footer></main>'
+        "<footer>story-first hub &middot; source: story.json (spine) + data.json (detail) &middot; "
+        "merge-tree/render_graph.py</footer></main>"
         '<div id="overlay"></div>'
         '<aside id="panel"><span class="pclose" id="panelClose">&#10005;</span><div id="panelBody"></div></aside>'
         '<div id="isoWrap"><div id="isoBar"><span id="isoTitle"></span>'
@@ -743,11 +771,17 @@ def build_html():
     return (
         '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<title>Story Graph - PR Control Hub</title>'
-        '<style>' + CSS + '</style></head><body>'
-        + header + body
-        + '<script>' + CONSTS + JS + '</script>'
-        + '</body></html>'
+        "<title>Story Graph - PR Control Hub</title>"
+        "<style>"
+        + CSS
+        + "</style></head><body>"
+        + header
+        + body
+        + "<script>"
+        + CONSTS
+        + JS
+        + "</script>"
+        + "</body></html>"
     )
 
 
@@ -757,7 +791,14 @@ if __name__ == "__main__":
         f.write(doc)
     top_level = len(projects)
     print("wrote", ARGS.out)
-    print("top-level project cards:", top_level,
-          "workstreams:", sum(len(p.get("workstreams", []) or []) for p in projects),
-          "items joined:", len(items), "edges:", len(EDGES))
+    print(
+        "top-level project cards:",
+        top_level,
+        "workstreams:",
+        sum(len(p.get("workstreams", []) or []) for p in projects),
+        "items joined:",
+        len(items),
+        "edges:",
+        len(EDGES),
+    )
     print("bytes:", os.path.getsize(ARGS.out))
