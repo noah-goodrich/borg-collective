@@ -288,6 +288,8 @@ docs/
 ## Architecture Rules
 
 - Logic goes in a testable core. Shell is a wrapper. New modules ship with tests in the same commit.
+- Prior decisions live in `.borg/checkpoints/`, `.borg/knowledge/`, and `docs/plans/assimilated/` —
+  grep them before assuming something is undocumented.
 
 ## Style Rules
 

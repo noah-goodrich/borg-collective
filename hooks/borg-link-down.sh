@@ -347,7 +347,18 @@ if [[ -d "$CWD/.borg/checkpoints" ]]; then
     CHECKPOINT_FILE=$(find "$CWD/.borg/checkpoints" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
 fi
 if [[ -n "$CHECKPOINT_FILE" && -f "$CHECKPOINT_FILE" ]]; then
-    CHECKPOINT=$(head -c 4000 "$CHECKPOINT_FILE" 2>/dev/null || true)
+    # Take sections 4 (Blockers) and 5 (Next Session) verbatim rather than byte-capping.
+    # The old `head -c 4000` amputated "Next Session" — the highest-value section, and the
+    # whole reason the injection exists — on 169 of 350 checkpoints. Stops at the first
+    # `## ` header that is not 4 or 5, so a trailing section cannot bleed in.
+    CHECKPOINT=$(awk '/^## [45]\./ { insec = 1; print; next }
+                      /^## /       { if (insec) exit }
+                      insec        { print }' "$CHECKPOINT_FILE" 2>/dev/null || true)
+    # Legacy checkpoints predate the numbered-section template and yield nothing above;
+    # fall back to the old byte cap so they still surface something.
+    if [[ -z "$CHECKPOINT" ]]; then
+        CHECKPOINT=$(head -c 4000 "$CHECKPOINT_FILE" 2>/dev/null || true)
+    fi
     if [[ -n "$CHECKPOINT" ]]; then
         CP_BASENAME="${CHECKPOINT_FILE##*/}"
         CONTEXT_PARTS+=("Latest checkpoint for $PROJECT ($CP_BASENAME):
