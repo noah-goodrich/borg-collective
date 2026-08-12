@@ -943,61 +943,6 @@ cmd_scan() {
     fi
 }
 
-cmd_add() {
-    local ppath="${1:-$PWD}"
-    ppath=$(realpath "$ppath" 2>/dev/null || echo "$ppath")
-    local name
-    name="${ppath##*/}"
-
-    local tmux_window=""
-    borg_tmux_window_exists "$name" && tmux_window="$name"
-
-    local session_id
-    session_id=$(borg_claude_latest_session_id "$ppath")
-
-    # Seed last_activity from transcript mtime if a session exists
-    local last_activity="null"
-    if [[ -n "$session_id" ]]; then
-        local jsonl
-        jsonl=$(borg_claude_session_jsonl "$ppath" "$session_id")
-        if [[ -f "$jsonl" ]]; then
-            local mtime
-            mtime=$(stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%SZ" "$jsonl" 2>/dev/null) || mtime=""
-            [[ -n "$mtime" ]] && last_activity="\"$mtime\""
-        fi
-    fi
-
-    local json
-    json=$(jq -n \
-        --arg path "$ppath" \
-        --arg source "cli" \
-        --arg tmux_session "$BORG_TMUX_SESSION" \
-        --argjson tmux_window "$([ -n "$tmux_window" ] && echo "\"$tmux_window\"" || echo 'null')" \
-        --argjson session_id "$([ -n "$session_id" ] && echo "\"$session_id\"" || echo 'null')" \
-        --argjson last_activity "$last_activity" \
-        '{
-            path: $path,
-            source: $source,
-            tmux_session: $tmux_session,
-            tmux_window: $tmux_window,
-            claude_session_id: $session_id,
-            last_activity: $last_activity,
-            summary: null
-        }')
-
-    borg_registry_merge "$name" "$json"
-    info "Registered: $name"
-    [[ -n "$session_id" ]] && info "Latest session: $session_id"
-}
-
-cmd_rm() {
-    local project="${1:-}"
-    [[ -z "$project" ]] && die "usage: borg rm <project>"
-    borg_registry_has "$project" || die "project '$project' not in registry"
-    borg_registry_remove "$project"
-    info "Removed: $project"
-}
-
 cmd_color() {
     local project="${1:-}" color="${2:-}"
     [[ -z "$project" || -z "$color" ]] && die "Usage: borg color <project> <color>"
@@ -2922,154 +2867,9 @@ cmd_version() {
 # ── recon fan-out ──────────────────────────────────────────────────────────────
 # Source-agnostic "recon fan-out" primitive: sweep activity across pluggable source adapters since
 # a mark, normalize to Items, reconcile against local .borg checkpoints, emit one reconciled doc.
-# The mechanical engine lives in lib/recon.sh; the judgment/synthesis layer is the /borg-recon skill.
-# This command is the driver: resolve inputs, fan out, reconcile, and print JSON (--json) or a terse
-# by-project digest. It never hardcodes any source — adapters are discovered on BORG_RECON_ADAPTER_PATH.
-
-# Render the terse, most-urgent-first by-project digest from a reconciled doc (stdin arg $1).
-_recon_print_digest() {
-    printf '%s' "$1" | jq -r '
-        def urank: {"now":0,"this_week":1,"fyi":2}[.] // 3;
-        def rlabel: ["now","this_week","fyi"][.] // "fyi";
-        "Recon sweep — since \(.since)  (generated \(.generated_at))",
-        "",
-        "Sources:",
-        (.sources[] | "  \(.source): \(.summary)" + (if .ok then "" else "  [FAILED]" end)
-            + (if (.dropped // 0) > 0 then "  (dropped \(.dropped) malformed)" else "" end)),
-        "",
-        (if (.contradictions | length) > 0 then
-            ("Contradictions to resolve (\(.contradictions | length)):"),
-            (.contradictions[] | "  ⚠ [\(.project)] \(.ref) — \(.note)"),
-            ""
-         else empty end),
-        "By project (most urgent first):",
-        "",
-        (if (.items_by_project | length) == 0 then "  (no activity since the mark — quiet sweep)"
-         else
-            (.items_by_project | to_entries
-             | map(. + {r: ([.value[].urgency | urank] | min // 3)})
-             | sort_by(.r)[]
-             | ("● \(.key)  [\(.r | rlabel)]"),
-               (.value | sort_by(.urgency | urank)[]
-                 | "    - \(.one_line)  (\(.owner), \(.urgency)"
-                   + (if .action_needed then ", action" else "" end) + ")"),
-               "")
-         end),
-        "Run /borg-recon for the full morning link-up: reconcile, Yours-vs-Mine action lists,",
-        "and a recommended parallel kickoff batch."
-    '
-}
-
-cmd_recon() {
-    local since="" sources_filter="" projects_filter="" json_only="" list_only=""
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --since)         since="$2"; shift 2 ;;
-            --sources)       sources_filter="$2"; shift 2 ;;
-            --projects)      projects_filter="$2"; shift 2 ;;
-            --json)          json_only=1; shift ;;
-            --adapters|--list) list_only=1; shift ;;
-            -h|--help)
-                echo "usage: borg recon [--since ISO] [--projects a,b] [--sources github,..] [--json] [--adapters]"
-                return 0 ;;
-            *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
-        esac
-    done
-    command -v jq >/dev/null 2>&1 || die "recon needs jq"
-
-    if [[ -n "$list_only" ]]; then
-        local disc; disc=$(_recon_discover_adapters)
-        if [[ -z "$disc" ]]; then
-            echo "No recon adapters found on: $(_recon_adapter_path)"
-            echo "Drop an executable named 'recon-adapter-<source>' on that path to add a source."
-        else
-            echo "Available recon sources:"
-            echo "$disc" | while IFS=$'\t' read -r s p; do printf '  %-12s %s\n' "$s" "$p"; done
-        fi
-        return 0
-    fi
-
-    [[ -f "$BORG_REGISTRY" ]] || die "no registry at $BORG_REGISTRY"
-
-    local workdir projects_file
-    workdir=$(mktemp -d "${TMPDIR:-/tmp}/borg-recon.XXXXXX")
-    projects_file="$workdir/projects.json"
-    if [[ -n "$projects_filter" ]]; then
-        local filt_json
-        filt_json=$(echo "$projects_filter" | jq -R 'split(",") | map(gsub("^ +| +$";""))')
-        jq --argjson keep "$filt_json" \
-            '.projects | with_entries(select(.key as $k | $keep | index($k)))' \
-            "$BORG_REGISTRY" > "$projects_file"
-    else
-        jq '.projects' "$BORG_REGISTRY" > "$projects_file"
-    fi
-
-    local -a proj_dirs
-    proj_dirs=("${(@f)$(jq -r '.[].path // empty' "$projects_file")}")
-
-    local resolved_since
-    resolved_since=$(_recon_resolve_since "$since" "${proj_dirs[@]}")
-
-    local disc; disc=$(_recon_discover_adapters)
-    if [[ -z "$disc" ]]; then
-        rm -rf "$workdir"
-        die "no recon adapters found on $(_recon_adapter_path) — see 'borg recon --adapters'"
-    fi
-    local -a fanout_args; local s p
-    while IFS=$'\t' read -r s p; do
-        [[ -z "$s" ]] && continue
-        if [[ -n "$sources_filter" ]]; then
-            case ",$sources_filter," in *",$s,"*) : ;; *) continue ;; esac
-        fi
-        fanout_args+=("$s" "$p")
-    done <<< "$disc"
-    if [[ ${#fanout_args} -eq 0 ]]; then
-        rm -rf "$workdir"
-        die "no adapters matched --sources '$sources_filter'"
-    fi
-
-    _recon_fanout "$resolved_since" "$projects_file" "$workdir/tracks" "${fanout_args[@]}"
-
-    local -a track_files
-    setopt localoptions nullglob
-    track_files=("$workdir"/tracks/*.json)
-    local by_project sources_json
-    by_project=$(_recon_merge_by_project "${track_files[@]}")
-    # Make --projects authoritative even if an adapter over-returns: keep only requested projects.
-    if [[ -n "$projects_filter" ]]; then
-        local keepj
-        keepj=$(echo "$projects_filter" | jq -R 'split(",") | map(gsub("^ +| +$";""))')
-        by_project=$(echo "$by_project" | jq --argjson keep "$keepj" \
-            'with_entries(select(.key as $k | $keep | index($k)))')
-    fi
-    sources_json=$(jq -s '[.[] | {source, summary, ok: (if has("ok") then .ok else true end),
-                                  count: (.items | length), dropped: (.dropped // 0)}]' "${track_files[@]}")
-
-    # NB: never name a loop var `path` in zsh — it is tied to $PATH and reading into it wipes PATH.
-    local contra_json="[]" proj ppath items blockers pc
-    while IFS=$'\t' read -r proj ppath; do
-        [[ -z "$proj" || -z "$ppath" ]] && continue
-        items=$(echo "$by_project" | jq -c --arg p "$proj" '.[$p] // []')
-        [[ "$items" == "[]" ]] && continue
-        blockers=$(_recon_checkpoint_blockers "$ppath")
-        [[ -z "$blockers" ]] && continue
-        pc=$(_recon_project_contradictions "$proj" "$blockers" "$items")
-        contra_json=$(jq -s '.[0] + .[1]' <(echo "$contra_json") <(echo "$pc"))
-    done < <(jq -r 'to_entries[] | [.key, (.value.path // "")] | @tsv' "$projects_file")
-
-    local doc
-    doc=$(_recon_assemble "$resolved_since" "$sources_json" "$by_project" "$contra_json")
-
-    _recon_write_last_run "$resolved_since"
-
-    rm -rf "$workdir"
-
-    if [[ -n "$json_only" ]]; then
-        echo "$doc"
-        return 0
-    fi
-    _recon_print_digest "$doc"
-}
+# Fully migrated to Python (borg_core/recon/{core,shell,cli}.py) -- see the `recon)` case arm below
+# and docs/plans/assimilated/2026-08-12-recon-migration-ledger.md. The judgment/synthesis layer is
+# the /borg-recon skill.
 
 cmd_help() {
     cat <<'EOF'
@@ -3401,10 +3201,42 @@ case "${1:-help}" in
     next)     cmd_next "${@:2}" ;;
     link)     cmd_link "${@:2}" ;;
     switch)   cmd_switch "${@:2}" ;;
-    recon)    cmd_recon "${@:2}" ;;
+    recon)
+        # Dispatches to the Python port (borg_core/recon/{core,shell,cli}.py). Inlined here, no
+        # dispatch wrapper function for this arm, so `recon` is fully migrated per the migration
+        # ledger -- see docs/plans/assimilated/2026-08-12-recon-migration-ledger.md. PYTHONPATH is
+        # set explicitly rather than relying on cwd, since borg can be invoked from any directory.
+        shift
+        typeset -a _recon_py_args
+        while [[ $# -gt 0 ]]; do
+            case "$1" in
+                --since)            _recon_py_args+=(--since "$2"); shift 2 ;;
+                --sources)          _recon_py_args+=(--sources "$2"); shift 2 ;;
+                --projects)         _recon_py_args+=(--projects "$2"); shift 2 ;;
+                --json)             _recon_py_args+=(--json); shift ;;
+                --adapters|--list)  _recon_py_args+=(--adapters); shift ;;
+                -h|--help)
+                    echo "usage: borg recon [--since ISO] [--projects a,b] [--sources github,..] [--json] [--adapters]"
+                    exit 0 ;;
+                *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
+            esac
+        done
+        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.recon.cli "${_recon_py_args[@]}"
+        ;;
     scan)     cmd_scan "${@:2}" ;;
-    add)      cmd_add "${@:2}" ;;
-    rm)       cmd_rm "${@:2}" ;;
+    add)
+        # Dispatches to the Python port (borg_core/registry/{core,shell,cli}.py). Inlined here, no
+        # dispatch wrapper function for this arm, so `add` is fully migrated per the migration
+        # ledger -- see docs/plans/assimilated/2026-08-12-recon-migration-ledger.md.
+        shift
+        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.registry.cli add "$@"
+        ;;
+    rm)
+        # Dispatches to the Python port (borg_core/registry/{core,shell,cli}.py). See the `add)`
+        # arm above and the migration ledger for the same rationale.
+        shift
+        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.registry.cli rm "$@"
+        ;;
     color)    cmd_color "${@:2}" ;;
     image)    cmd_image "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
