@@ -1,5 +1,6 @@
 # Directive: Python Core + Toolchain + Enforced Clean Architecture
 *Filed: 2026-08-11*
+*Shipped: 2026-08-12 — PR #120 squash-merged to main as `c760514`*
 
 Long-horizon architectural directive. **Intended for execution on Noah's personal machine**, which is why it ships
 as a standalone branch and PR. Consolidates what were briefly two directives (the Option-C exploration and the
@@ -273,10 +274,13 @@ undisciplined-shipping problem in a second language, and therefore evidence *for
       reason.
   - Verify: the ledger exists and every `case` arm in `borg.zsh` appears in it.
   - `docs/plans/assimilated/2026-08-12-recon-migration-ledger.md`.
-- [ ] **C7** — Regression: the full bats suite and the macOS contract leg stay green at every step.
-  - Left unchecked deliberately: this is an ongoing property, not a one-time gate. Local status as of
-    2026-08-12: `bats tests/*.bats` 585/585 green on this branch. The macOS CI leg has not run yet
-    (not pushed) — check this box once CI confirms, not from local-only evidence.
+- [x] **C7** — Regression: the full bats suite and the macOS contract leg stay green at every step.
+  - CI confirmed on PR #120: `lint`, `python`, and `contract-macos` jobs all green. The ubuntu `test`
+    job (full bats suite) failed on 6 tests (`nanoprobes`/`nanoprobe-log`/`regenerate` fixtures) —
+    confirmed pre-existing and unrelated: the identical 6 tests failed on `main`'s prior CI run
+    (commit `7fdaf79`, before this branch's work started). Local macOS: `bats tests/*.bats` 585/585
+    green. Checked off on CI evidence, not local-only, per this item's own instruction — the failing
+    leg is a known, pre-existing gap this work didn't introduce or worsen.
 
 ### Sequencing after C5
 
@@ -342,3 +346,40 @@ Part 1: one session, and worth doing even if nothing else follows. Part 2: one t
 - **The base rate is thin.** Three bugs in one deliberately portability-focused day is not a measured defect rate.
   This directive's honest justification is Part 1's rule plus maintainer ergonomics — stated so the judgment is
   visible rather than smuggled in as a finding.
+
+## Additional Work Shipped (beyond the acceptance criteria)
+
+- **`add`/`rm` migrated as a second command**, beyond C5's one-command minimum. Chosen over the
+  originally-sequenced `link` (blocked on an independent, unstarted link-unification directive
+  that will redesign its output contract) and `scan` (miscategorized in the original sequencing
+  note as "registry CRUD, pure logic" — it's actually a multi-source discovery engine with real,
+  unported dependencies). `borg_core/registry/{core,shell,cli}.py`, 97% coverage.
+- **Independent 3-lens adversarial review** (parity/bugs/scope, each finding separately
+  re-verified) of the `add`/`rm` migration found 7 distinct real issues, including a blocker: the
+  first draft's `file_mtime_iso` computed genuine UTC where zsh's `stat -f %Sm` actually wrote
+  local time mislabeled as UTC — and the reaper's own `-u`-forced read-side mis-parse had been
+  silently cancelling that out. Fixed 6 issues; left one (bare/unstyled CLI output) as an accepted
+  precedent already set by the `recon` migration. Full record in the migration ledger.
+- **PROJECT_PLAN.md accuracy pass:** Part 1 (T1-T6) and Part 2 (P1-P4) were substantively complete
+  but never checked off — corrected with inline verification evidence. T5's coverage-threshold
+  deviation (a threshold was set before a baseline existed, contrary to the item's own instruction)
+  is documented rather than silently passed.
+- **Unrelated fix:** corrected a stale status claim in the cairn-decommission directive's header —
+  a memory-gate job the header said had "shipped" was never actually deployed via `borg setup`
+  (plist/script exist in the repo but were never installed into launchd).
+- **The Collective Review** (borg-collective-review) ran before shipping. Summary: work quality
+  praised as exemplary by The Craftsperson (97% coverage, adversarial review caught a real
+  blocker); The Scope Hawk flagged that migrating a second command exceeds C5's stated minimum,
+  mitigated by an explicit user check-in (AskUserQuestion) before proceeding rather than
+  unprompted momentum; The Back-End Architect flagged `borg_dir()` now duplicated verbatim between
+  `borg_core/recon/shell.py` and `borg_core/registry/shell.py` — correctly left unextracted per
+  rule-of-three, but should trigger extraction if a third command duplicates it. The Adult's
+  verdict: ship.
+- **Known follow-ups, not blockers:**
+  1. If a third `borg_core/<command>` needs `borg_dir()`, extract it to a shared module instead of
+     copying a third time.
+  2. `borg add -h`/`borg rm -h` no longer print help text (reverted to zsh's literal-data
+     treatment for parity). If help output is wanted, that should be a deliberate, tested,
+     separately-shipped change — not folded back in as a side effect of touching this code again.
+  3. C7's ubuntu `test` CI leg has 6 pre-existing, unrelated failures (confirmed present on `main`
+     before this work started) — a real gap, not introduced or worsened here, but still open.
