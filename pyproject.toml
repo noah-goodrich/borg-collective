@@ -1,7 +1,10 @@
-# borg-collective is a zsh CLI, not a distributable Python package (no [build-system]/[project] —
-# there is nothing to build). merge-tree/ and docs/infoviz/harness/ are Python surfaces that get
-# tool config (ruff/mypy/pylint/pytest/coverage) below, and a PEP 735 dependency group for the
-# toolchain itself, installed via `pip install --group dev` (pip>=25.1).
+# borg-collective is a zsh CLI, not a distributable Python package (no [build-system]/[project] --
+# there is nothing to build). This toolchain (ruff/mypy/pylint/pytest/coverage below, plus a PEP 735
+# dependency group installed via `pip install --group dev`, pip>=25.1) is scoped to `borg_core/`,
+# the Python core the python-core-and-toolchain directive's Part 3 builds. merge-tree/ and
+# docs/infoviz/harness/ belong to a separate program (the viz/infoviz work) and are deliberately
+# NOT covered here -- see the directive's Scope Boundaries. `borg_core/` does not exist yet until
+# Part 3's first commit; `make lint`/`make test` no-op gracefully until then (see Makefile).
 
 [dependency-groups]
 dev = [
@@ -15,7 +18,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["merge-tree", "docs/infoviz/harness"]
+testpaths = ["borg_core"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -33,12 +36,6 @@ markers = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-# merge-tree/app/ is a separate, self-contained FastAPI sub-app with its own requirements.txt
-# (fastapi, uvicorn) and its own .venv workflow (see merge-tree/app/README.md). It was never meant
-# to share this root toolchain's scope. merge-tree/render.py has no test coverage and its status
-# relative to render_graph.py (the "Story-Lens") is an open product question, not a settled one --
-# excluded until that's resolved rather than covered by assumption either way.
-exclude = ["merge-tree/app", "merge-tree/render.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C90"]
@@ -51,17 +48,9 @@ max-complexity = 10
 python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
-# merge-tree/app/ is a separate, self-contained FastAPI sub-app with its own requirements.txt
-# (fastapi, uvicorn) not installed at the root level; excluding it avoids spurious
-# import-not-found errors unrelated to this toolchain's scope. merge-tree/render.py: see the
-# matching note under [tool.ruff].
-exclude = ["^merge-tree/app/", "^merge-tree/render\\.py$"]
 
 [tool.pylint.main]
 load-plugins = ["clean_architecture_linter"]
-# Match the [tool.ruff]/[tool.mypy] excludes above -- pylint has its own scan and does not read
-# those sections, so without this it silently re-includes merge-tree/app/ and merge-tree/render.py.
-ignore-paths = ["^merge-tree/app/.*", "^merge-tree/render\\.py$"]
 
 [tool.pylint.format]
 max-line-length = 120
@@ -74,8 +63,7 @@ color = "green"
 welcome_msg = "The Collective Lints"
 
 [tool.coverage.run]
-source = ["merge-tree", "docs/infoviz/harness"]
+source = ["borg_core"]
 omit = [
     "**/tests/**",
-    "merge-tree/render.py",
 ]
