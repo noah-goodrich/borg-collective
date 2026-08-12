@@ -64,7 +64,7 @@ _borg_relative_time() {
     local ts="$1"
     [[ -z "$ts" || "$ts" == "null" ]] && echo "never" && return
     local epoch_ts epoch_now diff
-    epoch_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$ts" +%s 2>/dev/null) || { echo "$ts"; return; }
+    epoch_ts=$(_borg_iso_to_epoch "$ts") || { echo "$ts"; return; }
     epoch_now=$(date +%s)
     diff=$(( epoch_now - epoch_ts ))
     if (( diff < 60 )); then echo "just now"
@@ -1362,7 +1362,7 @@ cmd_tidy() {
         last=$(echo "$entry" | jq -r '.last_activity // ""')
         [[ -z "$last" || "$last" == "null" ]] && { candidates+=("$name (never active)"); continue; }
 
-        epoch_last=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$last" +%s 2>/dev/null) || continue
+        epoch_last=$(_borg_iso_to_epoch "$last") || continue
         diff=$(( now_epoch - epoch_last ))
         if (( diff > stale_threshold )); then
             local rel
@@ -2380,7 +2380,7 @@ cmd_store_secret() {
 _borg_cortex_countdown() {
     local reset_at="$1"
     local reset_epoch now_epoch diff h m s
-    reset_epoch=$(TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$reset_at" +%s 2>/dev/null) || { echo "?"; return; }
+    reset_epoch=$(_borg_iso_to_epoch "$reset_at") || { echo "?"; return; }
     now_epoch=$(date +%s)
     diff=$(( reset_epoch - now_epoch ))
     if (( diff <= 0 )); then echo "now"; return; fi
@@ -2682,6 +2682,23 @@ cmd_watch() {
 # therefore captures that block CONCATENATED with the real answer, and the caller does arithmetic
 # on "File: ... 1786418121" — which under `set -u` dies with "File: unbound variable". The reverse
 # order is clean: BSD's `stat -c` fails with EMPTY stdout, so the fallback output stands alone.
+# Parse an ISO-8601 "...Z" timestamp to a unix epoch, in UTC. `date -j -u -f` is BSD (macOS);
+# `date -d` is GNU (Linux, and CI). BSD FIRST here — the opposite of _borg_file_mtime, and for a
+# different reason: both forms fail with EMPTY stdout on the wrong platform, so either order is
+# pollution-free, and BSD-first matches lib/reaper.sh, which already had this right.
+#
+# NOTE — THIS NORMALIZES A PRE-EXISTING 7-HOUR BUG, and could not avoid doing so. borg.zsh:67 and
+# :1365 previously used `date -j -f` with NO `-u`, which parses a Z-suffixed UTC timestamp as LOCAL
+# time. For 2020-01-01T00:00:00Z that yields 1577862000 instead of 1577836800 — off by the local UTC
+# offset (7h at that date). Against a 12h staleness threshold that is more than half the budget, and
+# it is the #98/#99 clock-skew cluster. Preserving it was not an option: BSD parses such a stamp as
+# local and GNU parses it as UTC, so a portable helper that "kept existing behavior" would have made
+# the two platforms disagree by 7 hours. UTC is both correct and the only self-consistent choice.
+_borg_iso_to_epoch() {
+    TZ=UTC date -j -u -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s 2>/dev/null \
+        || TZ=UTC date -d "$1" +%s 2>/dev/null
+}
+
 # Print a file's lines in reverse. `tac` is GNU (Linux, and CI); `tail -r` is BSD (macOS). Same
 # split, and the same silent-failure risk, as _borg_file_mtime below: four call sites used bare
 # `tail -r "$f" 2>/dev/null`, which on GNU emits NOTHING and exits nonzero with stderr suppressed —
