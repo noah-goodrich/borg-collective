@@ -2457,7 +2457,7 @@ cmd_nanoprobes() {
     fi
 
     # Newest first; format: short_id  agent_type  summary  finished_at
-    tail -r "$log" 2>/dev/null | head -50 | jq -r '
+    _borg_reverse_lines "$log" | head -50 | jq -r '
         [
             (.id // "")[0:8],
             (.agent_type // "?"),
@@ -2478,7 +2478,7 @@ cmd_nanoprobe_log() {
 
     # Find the newest matching JSONL entry by id prefix
     local entry
-    entry=$(tail -r "$log" 2>/dev/null | jq -c --arg q "$query" \
+    entry=$(_borg_reverse_lines "$log" | jq -c --arg q "$query" \
         'select((.id // "") | startswith($q))' 2>/dev/null | head -1)
 
     [[ -n "$entry" ]] || die "no nanoprobe matching '$query'"
@@ -2548,7 +2548,7 @@ cmd_spend() {
 
     # ── Recent-sessions trend (newest first) — date, project, total, main % ──
     echo -e "${BOLD}Recent sessions${NC} ${DIM}(newest first, main % should trend down)${NC}"
-    tail -r "$log" 2>/dev/null \
+    _borg_reverse_lines "$log" \
         | jq -r --arg flt "$project" '
             select($flt == "" or .project == $flt)
             | (.main.est_cost_usd // 0)      as $main
@@ -2652,7 +2652,7 @@ cmd_watch() {
         printf '\n'
         printf '  \033[1mRECENT NANOPROBES\033[0m\n'
         if [[ -s "$_log" ]]; then
-            tail -r "$_log" 2>/dev/null | head -5 | jq -r '
+            _borg_reverse_lines "$_log" | head -5 | jq -r '
                 [
                     (.id // "")[0:8],
                     (.agent_type // "?"),
@@ -2682,6 +2682,17 @@ cmd_watch() {
 # therefore captures that block CONCATENATED with the real answer, and the caller does arithmetic
 # on "File: ... 1786418121" — which under `set -u` dies with "File: unbound variable". The reverse
 # order is clean: BSD's `stat -c` fails with EMPTY stdout, so the fallback output stands alone.
+# Print a file's lines in reverse. `tac` is GNU (Linux, and CI); `tail -r` is BSD (macOS). Same
+# split, and the same silent-failure risk, as _borg_file_mtime below: four call sites used bare
+# `tail -r "$f" 2>/dev/null`, which on GNU emits NOTHING and exits nonzero with stderr suppressed —
+# so `borg nanoprobes`, `nanoprobe-log`, `spend`, and `watch` all rendered empty on Linux while
+# looking like "no records yet". Verified both fall through cleanly with EMPTY stdout on the other
+# platform (macOS `tac` exits 127; GNU `tail -r` prints nothing), so unlike the #114 stat bug there
+# is no risk of the failing branch's output concatenating with the real answer.
+_borg_reverse_lines() {
+    tac "$1" 2>/dev/null || tail -r "$1" 2>/dev/null
+}
+
 _borg_file_mtime() {
     local f="$1" m=""
     m=$(stat -c "%Y" "$f" 2>/dev/null) && { print -r -- "$m"; return 0; }
