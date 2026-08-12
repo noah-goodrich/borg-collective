@@ -99,36 +99,9 @@ class Dataset:
         if ref == "portfolio":
             return self.portfolio_lens()
 
-        nodes: set[str] = {ref}
-        edges: list[dict] = []
-        seen_edges: set[tuple[str, str, str]] = set()
+        nodes, edges, seen_edges = self._bounded_neighborhood(ref, radius, direction)
 
-        # 1. bounded neighborhood over ALL edge kinds, up to `radius` hops.
-        frontier = {ref}
-        for _ in range(max(radius, 0)):
-            next_frontier: set[str] = set()
-            for n in frontier:
-                if direction in ("out", "both"):
-                    for c, k in self.fwd_any.get(n, []):
-                        key = (n, c, k)
-                        if key not in seen_edges:
-                            seen_edges.add(key)
-                            edges.append({"source": n, "target": c, "kind": k})
-                        if c not in nodes:
-                            nodes.add(c)
-                            next_frontier.add(c)
-                if direction in ("in", "both"):
-                    for p, k in self.back_any.get(n, []):
-                        key = (p, n, k)
-                        if key not in seen_edges:
-                            seen_edges.add(key)
-                            edges.append({"source": p, "target": n, "kind": k})
-                        if p not in nodes:
-                            nodes.add(p)
-                            next_frontier.add(p)
-            frontier = next_frontier
-
-        # 2. full transitive blocking closure, both directions, regardless of radius.
+        # full transitive blocking closure, both directions, regardless of radius.
         closure_nodes = self._blocking_closure(ref)
         nodes |= closure_nodes
         for n in list(nodes):
@@ -147,6 +120,62 @@ class Dataset:
             "edges": edges,
             "truncated": truncated,
         }
+
+    def _bounded_neighborhood(
+        self, ref: str, radius: int, direction: str
+    ) -> tuple[set[str], list[dict], set[tuple[str, str, str]]]:
+        """Bounded neighborhood over ALL edge kinds, up to `radius` hops. Returns (nodes, edges, seen_edges)."""
+        nodes: set[str] = {ref}
+        edges: list[dict] = []
+        seen_edges: set[tuple[str, str, str]] = set()
+        frontier = {ref}
+        for _ in range(max(radius, 0)):
+            next_frontier: set[str] = set()
+            for n in frontier:
+                if direction in ("out", "both"):
+                    self._absorb_directed_edges(
+                        self.fwd_any.get(n, []),
+                        n,
+                        forward=True,
+                        nodes=nodes,
+                        edges=edges,
+                        seen_edges=seen_edges,
+                        next_frontier=next_frontier,
+                    )
+                if direction in ("in", "both"):
+                    self._absorb_directed_edges(
+                        self.back_any.get(n, []),
+                        n,
+                        forward=False,
+                        nodes=nodes,
+                        edges=edges,
+                        seen_edges=seen_edges,
+                        next_frontier=next_frontier,
+                    )
+            frontier = next_frontier
+        return nodes, edges, seen_edges
+
+    @staticmethod
+    def _absorb_directed_edges(
+        pairs: list[tuple[str, str]],
+        n: str,
+        *,
+        forward: bool,
+        nodes: set[str],
+        edges: list[dict],
+        seen_edges: set[tuple[str, str, str]],
+        next_frontier: set[str],
+    ) -> None:
+        """Absorb one node's outgoing (forward=True) or incoming (forward=False) edges in-place."""
+        for other, k in pairs:
+            source, target = (n, other) if forward else (other, n)
+            key = (source, target, k)
+            if key not in seen_edges:
+                seen_edges.add(key)
+                edges.append({"source": source, "target": target, "kind": k})
+            if other not in nodes:
+                nodes.add(other)
+                next_frontier.add(other)
 
     def _blocking_closure(self, ref: str) -> set[str]:
         seen = {ref}
@@ -175,11 +204,15 @@ class Dataset:
 
     def portfolio_lens(self) -> dict:
         projects = self.story.get("projects", [])
-        proj_ids = {p["id"] for p in projects}
-        proj_edges: set[tuple[str, str]] = set()
+        proj_edges = self._cross_project_edges_from_blocks() | self._cross_project_edges_from_prose(projects)
+        nodes = self._portfolio_nodes(projects)
+        edges = [{"source": a, "target": b, "kind": BLOCKING_KIND} for a, b in sorted(proj_edges)]
+        return {"root": "portfolio", "nodes": nodes, "edges": edges, "truncated": 0}
 
-        # cross-project blocking edges, derived from data.json "blocks" edges whose two refs
-        # resolve to different projects via the curated story spine.
+    def _cross_project_edges_from_blocks(self) -> set[tuple[str, str]]:
+        """Cross-project blocking edges derived from data.json "blocks" edges whose two refs
+        resolve to different projects via the curated story spine."""
+        proj_edges: set[tuple[str, str]] = set()
         for e in self.edges:
             if e["kind"] != BLOCKING_KIND:
                 continue
@@ -187,9 +220,13 @@ class Dataset:
             c_home = self.ref_home.get(e["child"])
             if p_home and c_home and p_home[0] != c_home[0]:
                 proj_edges.add((p_home[0], c_home[0]))
+        return proj_edges
 
-        # cross-project blocking derived from curated blocked_by prose: match any other project's
-        # id or name as a substring of the prose text (best-effort, curated data is prose not refs).
+    @staticmethod
+    def _cross_project_edges_from_prose(projects: list[dict]) -> set[tuple[str, str]]:
+        """Cross-project blocking derived from curated blocked_by prose: match any other project's
+        id or name as a substring of the prose text (best-effort, curated data is prose not refs)."""
+        proj_edges: set[tuple[str, str]] = set()
         name_by_id = {p["id"]: p["name"] for p in projects}
         for project in projects:
             for ws in project.get("workstreams", []):
@@ -199,7 +236,10 @@ class Dataset:
                             continue
                         if other_id in prose or other_name in prose:
                             proj_edges.add((other_id, project["id"]))
+        return proj_edges
 
+    @staticmethod
+    def _portfolio_nodes(projects: list[dict]) -> list[dict]:
         nodes = []
         for p in projects:
             states = []
@@ -220,8 +260,7 @@ class Dataset:
                     "has_action": False,
                 }
             )
-        edges = [{"source": a, "target": b, "kind": BLOCKING_KIND} for a, b in sorted(proj_edges)]
-        return {"root": "portfolio", "nodes": nodes, "edges": edges, "truncated": 0}
+        return nodes
 
     # -- unblock ranking -----------------------------------------------------
 
