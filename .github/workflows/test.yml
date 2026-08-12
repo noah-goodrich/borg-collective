@@ -42,6 +42,25 @@ jobs:
       - name: Run full suite
         run: bats tests/*.bats
 
+  python:
+    # T4 (python-core-and-toolchain directive, Part 1): pinned to the Python version installed on
+    # both of Noah's machines (3.14.x), single version deliberately — borg ships to nobody and runs
+    # on two known machines, not a matrix. Runs the exact `make lint`/`make test` targets used
+    # locally so CI and local can never drift the way the 161-assertion bats bug did.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install dev toolchain
+        run: pip install --group dev
+      - name: Lint (ruff + mypy + pylint w/ clean-architecture plugin)
+        run: make lint
+      - name: Test + coverage baseline
+        run: make test
+
   contract-macos:
     # B3: the fidelity lane. macOS runners bill ~10x ubuntu minutes, so this runs ONLY the contract
     # suite (~12 subprocess tests), not the full 530. This is the only job that executes borg.zsh

@@ -285,6 +285,10 @@ docs/
 | claude | `claude` | LLM debriefs (Sonnet), orchestrator session |
 | cortex | `cortex` | Cortex Code CLI (CoCo) — optional, detected at install |
 
+## Architecture Rules
+
+- Logic goes in a testable core. Shell is a wrapper. New modules ship with tests in the same commit.
+
 ## Style Rules
 
 - All markdown and text files must wrap at 120 characters. No line may exceed 120 chars.
