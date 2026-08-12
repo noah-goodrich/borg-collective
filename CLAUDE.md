@@ -82,7 +82,9 @@ borg nanoprobe-log <id>  Fetch the transcript/summary for a nanoprobe run
 borg spend               Summarize accurate token spend from ~/.claude/token-spend.jsonl
 borg watch               Live-tail registry/session activity
 borg doctor              Environment/dependency health check
-borg setup               Install/refresh hooks, skills, agents, launchd, tmux keybinding
+borg setup               Install/refresh hooks, skills, agents, tmux keybinding
+                           NOT launchd — plists are installed by install.sh only, which calls
+                           `borg setup` at the end. A new launchd job needs an install.sh run.
 borg store-secret        Patch a project's secrets.zsh with a new keychain export
 borg sever               Retire/archive a directive or project without deleting it
 borg tidy                Housekeeping pass over registry/checkpoints
