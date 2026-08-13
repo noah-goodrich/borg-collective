@@ -2,9 +2,6 @@
 # Integration tests for the full session context lifecycle:
 #   borg-link-down.sh → context injection (including latest checkpoint) → borg-link-up.sh
 #   → registry update + nudge if no recent checkpoint
-#
-# Note: debrief LLM generation and cairn auto-commit were removed 2026-04-23; these tests
-# may have scenarios that no longer apply. Tests referencing those paths should be culled.
 
 load test_helper/setup
 
@@ -44,18 +41,6 @@ setup() {
     cat > "$BORG_REGISTRY" <<EOF
 {"projects":{"myproject":{"path":"${TEST_CWD}","status":"idle","source":"cli"}}}
 EOF
-
-    # Mock cairn: always succeeds, returns empty search results
-    cat > "$MOCK_BIN/cairn" <<'EOF'
-#!/usr/bin/env bash
-# cairn mock: record always succeeds; search returns nothing
-case "$1" in
-    record) exit 0 ;;
-    search) exit 0 ;;
-    *) exit 0 ;;
-esac
-EOF
-    chmod +x "$MOCK_BIN/cairn"
 
     # Mock claude: generate a fake debrief
     cat > "$MOCK_BIN/claude" <<'EOF'
@@ -122,6 +107,69 @@ EOF
     [ "$status" -eq 0 ]
     # bats merges stderr into $output; any leaked stderr line makes this parse fail.
     printf '%s' "$output" | jq -e . >/dev/null
+}
+
+# ─── checkpoint section extraction (replaces the old 4000-byte cap) ──────────
+#
+# Regression: the injection used `head -c 4000`, which amputated section 5 ("Next Session")
+# on 169 of 350 real checkpoints — the single highest-value content, and the reason the
+# injection exists at all. It now extracts sections 4 and 5 verbatim.
+
+_write_long_checkpoint() {
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+    local cp="${TEST_CWD}/.borg/checkpoints/2026-01-01-0000.md"
+    {
+        echo "## 1. Goal"
+        echo "Ship the thing."
+        echo ""
+        echo "## 2. Accomplished"
+        # Padding well past the old 4000-byte cap so sections 4/5 fall outside it.
+        local i
+        for i in $(seq 1 200); do
+            echo "- Did a thing that had a reasonably long description attached to it, number $i"
+        done
+        echo ""
+        echo "## 3. Ready to Commit"
+        echo "Nothing."
+        echo ""
+        echo "## 4. Blockers"
+        echo "BLOCKER_SENTINEL waiting on review"
+        echo ""
+        echo "## 5. Next Session"
+        echo "NEXT_SENTINEL run the migration"
+    } > "$cp"
+    echo "$cp"
+}
+
+@test "start hook surfaces Next Session even when the checkpoint exceeds 4000 bytes" {
+    _write_long_checkpoint >/dev/null
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"NEXT_SENTINEL run the migration"* ]] || false
+    [[ "$ctx" == *"BLOCKER_SENTINEL waiting on review"* ]] || false
+}
+
+@test "start hook omits the bulky Accomplished section from the checkpoint injection" {
+    _write_long_checkpoint >/dev/null
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" != *"## 2. Accomplished"* ]] || false
+}
+
+@test "start hook falls back to byte cap for legacy checkpoints with no numbered sections" {
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+    printf '# Legacy checkpoint\n\nLEGACY_SENTINEL free-form notes with no section headers.\n' \
+        > "${TEST_CWD}/.borg/checkpoints/2026-01-01-0000.md"
+
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"LEGACY_SENTINEL"* ]] || false
 }
 
 @test "start hook includes uncommitted-changes reminder when flag set" {
