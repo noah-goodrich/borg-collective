@@ -349,6 +349,22 @@ docs/
   literal at line 1, column 88" — the 87-char CI hook path + `: line N:`). It only reproduces where
   the target dir is absent; the CI bats setup overrode `HOME` but not `XDG_CONFIG_HOME`, so the
   hook recomputed `BORG_DIR` from the runner's real config home, which didn't exist in the sandbox.
+- **A shell variable is not an environment variable — the zsh→Python boundary loses every config var**:
+  `borg.zsh` assigns its whole config surface without `export` (`BORG_DIR` :24, `BORG_MAX_ACTIVE`/
+  `BORG_CORTEX_WAKES` :43-48, `BORG_REGISTRY` in `lib/registry.zsh:15`, `BORG_TMUX_SESSION` in
+  `lib/tmux.zsh:5`, `BORG_REAP_STALE_HOURS` in `lib/reaper.sh:11`). An in-process zsh function sees all of
+  them; a `python3 -m borg_core...` child sees none. This shipped: `borg recon` read `BORG_REGISTRY` from the
+  environment with no fallback and died with `no registry at ` on **every** real invocation except
+  `--adapters`, which returns before the check — the command was non-functional from the migration until
+  2026-08-13. Two rules follow. (1) Route every Python dispatch through `_borg_py` (defined just above the
+  `case` block in `borg.zsh`) so the child gets the config surface, with defaults applied *in the wrapper* —
+  an exported-empty `BORG_REAP_STALE_HOURS` makes `int("")` raise, so an unset var must arrive as its default
+  or not at all. (2) The Python side still resolves its own defaults (`borg_core/paths.py`), because a module
+  invoked directly has no wrapper. **Why no test caught it**: every test reaching the Python core puts
+  `BORG_REGISTRY` in the environment *itself* — `tests/test_helper/setup.bash` exports it, the pytest suites
+  monkeypatch it — so the inheritance path was the one line no test ever executed. Same shape as the
+  usage-watch and memory-gate blind spots below: **when a test supplies the value the production path is
+  supposed to derive, it proves nothing about production.**
 - **Hooks recompute their own config paths — test isolation must override `XDG_CONFIG_HOME` too**:
   `borg-link-down.sh` derives `BORG_DIR` from `${XDG_CONFIG_HOME:-$HOME/.config}/borg`, ignoring any
   exported `BORG_DIR`. A bats suite that overrides only `HOME` leaks the host/runner
