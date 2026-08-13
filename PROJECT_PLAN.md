@@ -73,10 +73,17 @@ Python target next.
     dropping the tertiary sort key (porcelain + both overviews red, deep green), widening the checkpoint
     caps (deep only), making `--all` ineffective (overview-all only), dropping `display_name` (both
     overviews), removing the `--llm` alias, and disabling the reap overlay.
-- [ ] **A2 — Config vars reach the Python child.**
+- [x] **A2 — Config vars reach the Python child.**
       `BORG_MAX_ACTIVE`, `BORG_REAP_STALE_HOURS`, `BORG_TMUX_SESSION`, `BORG_CORTEX_WAKES` are all currently
       set *without* `export`, so a `python3 -m` child inherits none of them.
   - Verify: a contract test sets `BORG_MAX_ACTIVE=6` and asserts the Python path honors it identically to zsh.
+  - **Done 2026-08-13** via `_borg_py` (`borg.zsh`, just above the `case` block), which hands the child
+    `BORG_DIR`, `BORG_REGISTRY`, `BORG_MAX_ACTIVE`, `BORG_REAP_STALE_HOURS`, `BORG_TMUX_SESSION`,
+    `BORG_CORTEX_WAKES` and `PYTHONPATH`, with defaults applied *in the wrapper* (an exported-empty
+    `BORG_REAP_STALE_HOURS` makes `int("")` raise). This was not hypothetical: `borg recon` had been
+    dying with `no registry at ` on every real invocation since its migration, because it read
+    `BORG_REGISTRY` from an environment that never had it. Contract test mocks `python3` and asserts
+    the **child's** environment, including that a caller-supplied value is carried through.
 - [ ] **A3 — `borg link --json` emits the full document and is not polluted by the zsh pre-pass.**
       `warn()` writes to **stdout** (borg.zsh:30), and the mandatory `borg_desktop_scan` pre-pass can emit
       "registry write blocked" there, breaking `jq`. Diagnostics must move to stderr on this path.
@@ -103,6 +110,46 @@ Python target next.
       by hand on `coverage report -m`, not inferred from the global `--fail-under=90` (which is a total over
       `borg_core` and currently masks `recon/cli.py` at 82%).
   - Verify: `bats tests/*.bats` exits 0; `coverage report -m` shows every `borg_core/link/*.py` at `>= 90%`.
+
+## Phase log
+
+**Phase 0 — parity harness. Done 2026-08-13.** See A1.
+
+**Phase 1 — pure leaves + chokepoint. Done 2026-08-13.** `borg_core/link/{core,shell}.py` plus colocated
+tests, and `borg_core/paths.py` extracted (third caller triggered pylint's duplicate-code). **Zero tracked
+files modified** — pure addition, so every A1 golden passes unchanged, which is what A4 will later need.
+`core.py` 100%, `shell.py` 100% on `coverage report -m` (per-module, not inferred from the global gate);
+`make lint` 10.00/10; 328 pytest; `bats tests/*.bats` 627/627.
+
+The shared case table the Risks section demands is `tests/fixtures/reaper-cases.tsv`: 22 rows read by
+**both** `tests/reaper_cases.bats` (against live `lib/reaper.sh` under zsh) and
+`borg_core/link/test_core.py` (against `core.should_reap`), asserting the same expected column. A second
+5-row block covers `borg_reap_overlay`'s window resolution — the half an earlier draft missed, and the half
+the Risks section actually names.
+
+Three bugs were found while specifying this phase and fixed **outside** it, so Phase 1 stayed zsh-free:
+`borg recon` dying on an unexported `BORG_REGISTRY`; one malformed `state.json` blanking the whole registry;
+and `grep -qx` matching window names as regexes (`troth.site` matched a live `troth-site`), which would have
+made zsh and Python disagree about liveness forever.
+
+### Deviations, signed off 2026-08-13
+
+- **`iso_to_epoch` uses one strict grammar.** BSD `date -j -u -f` accepts trailing garbage and normalizes
+  `2026-02-30`; GNU `date -d` accepts a far larger grammar still. The two platforms already disagree, so one
+  strict grammar normalizes an existing split rather than adding a third behavior. No value borg itself
+  writes is affected — every writer uses `date -u +%Y-%m-%dT%H:%M:%SZ`.
+- **`read_assimilated` sorts filename-DESC.** The `(NOm)` glob lists the three *oldest* plans and disagrees
+  with the overview's aggregate, which already sorts by filename. One ordering for the JSON contract, and it
+  survives a fresh clone where every file shares the checkout mtime.
+- **`plan_progress` returns ints.** `grep -c … || echo 0` captures `0\n0`, rendering `Progress:` across two
+  lines on every fresh plan.
+- **`cortex_pending` emits no `cd=` noise.** zsh's `local cd` inside its loop prints the parameter from
+  iteration two onward. `_borg_cortex_pending` is deleted by A5, so the fix has no surviving twin.
+- **`registry_with_state` computes one snapshot.** zsh runs the whole pipeline twice per `borg link` (once
+  for the table, once inside the capacity warning), so a hook writing between them can make the two
+  disagree. Unobservable until Phase 3.
+- **`live_windows` is one fork.** Collapses `tmux has-session` + `list-windows`; tmux resolves a `-t` target
+  identically for both subcommands.
 
 ## Scope Boundaries
 
