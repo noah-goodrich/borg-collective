@@ -39,6 +39,18 @@ def test_borg_dir_falls_back_to_xdg(tmp_path, monkeypatch):
     assert shell.borg_dir() == tmp_path / "xdg" / "borg"
 
 
+def test_registry_path_uses_explicit_env(isolated_env, monkeypatch):
+    monkeypatch.setenv("BORG_REGISTRY", "/sentinel/registry.json")
+    assert shell.registry_path() == Path("/sentinel/registry.json")
+
+
+def test_registry_path_falls_back_to_borg_dir(isolated_env, monkeypatch):
+    # The regression that made `borg recon` unrunnable: borg.zsh assigns BORG_REGISTRY without
+    # `export`, so the python3 child sees nothing here and cli.py had no fallback.
+    monkeypatch.delenv("BORG_REGISTRY", raising=False)
+    assert shell.registry_path() == isolated_env / "borg-dir" / "registry.json"
+
+
 def test_lib_dir_uses_override(isolated_env, monkeypatch):
     monkeypatch.setenv("BORG_RECON_LIB_DIR", "/sentinel/lib")
     assert shell.lib_dir() == Path("/sentinel/lib")
