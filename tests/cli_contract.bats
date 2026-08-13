@@ -1337,6 +1337,499 @@ EOF
     [ ! -f "$repo/PROJECT_PLAN.md" ]
 }
 
+# ══════════════════════════════════════════════════════════════════════════════
+# `borg link` PARITY HARNESS — Phase 0 of the Python-core port (PROJECT_PLAN A1)
+#
+# WHY THIS EXISTS. `borg link` is moving out of zsh into borg_core/link/ with human-readable output
+# unchanged. A port needs contract tests written against TODAY's zsh that pass *unchanged* on
+# Python — an edited assertion is not a parity proof (A4). Everything below is therefore written
+# against the zsh implementation on `main` and must be green BEFORE any port work starts.
+#
+# HOW PARITY IS ASSERTED. The three primary renderers (--porcelain, overview, deep dive) are pinned
+# with golden files under tests/fixtures/link/ and compared with `diff` on EXACT bytes — ANSI escape
+# sequences, column padding and blank lines included. Substring assertions would pass against a
+# renderer that quietly changed padding or dropped a color, which is precisely the drift this port
+# can produce. Branch behavior that is time-, environment-, or exit-code-dependent is asserted
+# directly instead, because a golden cannot express it.
+#
+# THE ONE NORMALIZATION. `$BATS_TEST_TMPDIR` is a fresh random path per run, and the deep dive
+# prints the project's path. It is rewritten to `<TMP>` before the diff; nothing else is touched.
+#
+# DETERMINISM RULES followed by every fixture here:
+#   - tmux is ALWAYS mocked. borg_reap_overlay shells out to the real tmux on every registry read,
+#     so an unmocked `active` fixture is silently downgraded to `idle` (and probes the developer's
+#     real session — CRITICAL SAFETY RULE #2).
+#   - Modes that print a RAW timestamp (--porcelain, deep dive) use fixed ISO dates. The overview
+#     prints a RELATIVE time, so its fixture timestamps are computed at run time and land in stable
+#     buckets ("2h ago", "yesterday", "5d ago").
+#   - The deep dive's summary is kept under 70 chars so `fold -s -w 70` is a no-op; GNU and BSD fold
+#     do not agree on where to break, and this suite runs on both (ubuntu `test` + macos `contract`).
+#
+# REGENERATING GOLDENS: `BORG_UPDATE_GOLDEN=1 bats tests/cli_contract.bats`. Do NOT do this during
+# the port. Regenerating is how a parity harness silently becomes a screenshot of the new behavior.
+# ══════════════════════════════════════════════════════════════════════════════
+
+LINK_GOLDEN_DIR="${BATS_TEST_DIRNAME}/fixtures/link"
+
+# ISO-8601 UTC timestamp `$1` seconds in the past, computed at RUN time so the overview's relative
+# -time column is stable in a golden. BSD takes an epoch via `-r`; GNU's `-r` means "reference file"
+# and fails, falling through to `-d @epoch`. Same split as _borg_file_mtime / _borg_reverse_lines.
+_link_iso_ago() {
+    local secs="$1" now epoch
+    now=$(date -u +%s)
+    epoch=$((now - secs))
+    date -u -r "$epoch" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null \
+        || date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+# Mock tmux so each project named in $1 (one per LINE) reads as a live window, exempting it from the
+# reap overlay. TRACE must be exported before _mock_tmux's script runs: its `>> "$TRACE"` would
+# otherwise fail to open and leak a shell error onto stderr, which the golden diff would catch as a
+# spurious mismatch (same redirect-open-order trap documented in CLAUDE.md).
+_link_mock_tmux() {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export TRACE="${BATS_TEST_TMPDIR}/tmux-trace.log"
+    : > "$TRACE"
+    export TMUX_MOCK_HAS_SESSION=1
+    export TMUX_MOCK_WINDOWS="$1"
+    _mock_tmux
+}
+
+# Byte-compare a `borg link` invocation against tests/fixtures/link/<name>.golden.
+_assert_link_golden() {
+    local name="$1"; shift
+    local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
+    zsh "$BORG" "$@" > "$raw" 2>&1
+    sed "s|${BATS_TEST_TMPDIR}|<TMP>|g" "$raw" > "$actual"
+
+    if [ -n "${BORG_UPDATE_GOLDEN:-}" ]; then
+        mkdir -p "$LINK_GOLDEN_DIR"
+        cp "$actual" "${LINK_GOLDEN_DIR}/${name}.golden"
+    fi
+
+    [ -f "${LINK_GOLDEN_DIR}/${name}.golden" ] || {
+        echo "missing golden: ${name}.golden (regenerate with BORG_UPDATE_GOLDEN=1)" >&2
+        false
+    }
+    run diff -u "${LINK_GOLDEN_DIR}/${name}.golden" "$actual"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+}
+
+# ── fixtures ─────────────────────────────────────────────────────────────────
+
+# --porcelain and the deep dive print raw timestamps, so these are fixed dates. `alpha`'s summary is
+# deliberately past 80 chars: _borg_link_porcelain cuts at 80 with NO ellipsis (the overview cuts at
+# 50 WITH one), and the two limits have been silently different since the command was written.
+_link_registry_porcelain() {
+    cat > "$BORG_REGISTRY" <<'EOF'
+{
+  "projects": {
+    "alpha": {"path": null, "source": "cli", "status": "idle",
+              "last_activity": "2026-08-01T10:00:00Z",
+              "summary": "Alpha porcelain summary running well past the eighty character cut so truncation is pinned."},
+    "bravo": {"path": null, "source": "desktop", "status": "waiting",
+              "last_activity": "2026-08-02T10:00:00Z", "summary": "Bravo is waiting."},
+    "charlie": {"path": null, "source": "coco", "status": "active",
+                "last_activity": "2026-08-03T10:00:00Z", "summary": "Charlie is active."},
+    "delta": {"path": null, "source": "cli", "status": "archived",
+              "last_activity": "2026-08-04T10:00:00Z", "summary": "Delta is archived."},
+    "echo": {"path": null, "source": "cli", "status": "idle", "pinned": true,
+             "last_activity": "2026-08-05T10:00:00Z", "summary": "Echo is pinned."}
+  }
+}
+EOF
+}
+
+# Workspaces backing the overview's two AGGREGATE sections. The fourth assimilated file exists so
+# "newest 3 by filename DESC" is actually proven to drop one rather than just happening to fit.
+_link_build_overview_ws() {
+    local root="${BATS_TEST_TMPDIR}/ws"
+    mkdir -p "$root/alpha/docs/plans/directives" "$root/alpha/docs/plans/assimilated" \
+             "$root/bravo/docs/plans/directives" "$root/bravo/docs/plans/assimilated"
+
+    printf '# Alpha directive one\n' > "$root/alpha/docs/plans/directives/2026-01-01-alpha-one.md"
+    printf '# Alpha directive two\n' > "$root/alpha/docs/plans/directives/2026-01-02-alpha-two.md"
+    printf '# Bravo directive\n'     > "$root/bravo/docs/plans/directives/2026-01-03-bravo-one.md"
+
+    printf '# Alpha shipped first\nShipped: 2026-01-15\n' \
+        > "$root/alpha/docs/plans/assimilated/2026-01-15-alpha-first.md"
+    printf '# Alpha shipped old\nShipped: 2026-02-01\n' \
+        > "$root/alpha/docs/plans/assimilated/2026-02-01-alpha-old.md"
+    printf '# Bravo shipped\nShipped: 2026-02-02\n' \
+        > "$root/bravo/docs/plans/assimilated/2026-02-02-bravo.md"
+    printf '# Alpha shipped new\nShipped: 2026-02-03\n' \
+        > "$root/alpha/docs/plans/assimilated/2026-02-03-alpha-new.md"
+}
+
+# Covers, in one render: the pin mark, the "waiting <<<" status decoration, all three source badges
+# ([C]/[X]/[D]), the "(no summary)" default, the 50-char summary cut WITH ellipsis, four distinct
+# relative-time buckets, and both aggregate sections. active+waiting is 2, under the default
+# BORG_MAX_ACTIVE=3, so the capacity warning stays out of this golden and is tested on its own.
+_link_registry_overview() {
+    local root="${BATS_TEST_TMPDIR}/ws"
+    local t_alpha t_bravo t_charlie t_echo
+    t_alpha=$(_link_iso_ago 7200)     # "2h ago"
+    t_bravo=$(_link_iso_ago 93600)    # "yesterday"
+    t_charlie=$(_link_iso_ago 10800)  # "3h ago"
+    t_echo=$(_link_iso_ago 432000)    # "5d ago"
+
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "alpha": {"path": "$root/alpha", "source": "cli", "status": "idle",
+              "last_activity": "$t_alpha",
+              "summary": "Alpha carries a long summary so the fifty character overview cut is pinned."},
+    "bravo": {"path": "$root/bravo", "source": "desktop", "status": "waiting",
+              "last_activity": "$t_bravo", "summary": "Bravo is waiting."},
+    "charlie": {"path": null, "source": "coco", "status": "active",
+                "last_activity": "$t_charlie"},
+    "echo": {"path": null, "source": "cli", "status": "idle", "pinned": true,
+             "last_activity": "$t_echo", "summary": "Echo is pinned."}
+  }
+}
+EOF
+}
+
+# Deep-dive workspace: every optional section populated at once. Assimilated mtimes are set
+# explicitly with `touch -t` because _borg_read_assimilated orders by mtime, and file-creation order
+# is not a contract. Four files, so the 3-item cap is actually exercised.
+_link_build_deep_ws() {
+    local d="${BATS_TEST_TMPDIR}/ws/delta"
+    mkdir -p "$d/.borg/checkpoints" "$d/docs/plans/directives" "$d/docs/plans/assimilated"
+
+    cat > "$d/PROJECT_PLAN.md" <<'EOF'
+# Project Plan: Delta
+
+## Objective
+
+Keep the delta fixture stable so the deep dive renders identically on every run.
+
+## Acceptance Criteria
+
+- [x] First criterion, already met.
+- [ ] Second criterion, outstanding.
+- [ ] Third criterion, outstanding.
+EOF
+
+    printf '# Checkpoint one\n\nOldest checkpoint body.\n'  > "$d/.borg/checkpoints/2026-08-01-1000.md"
+    printf '# Checkpoint two\n\nMiddle checkpoint body.\n'  > "$d/.borg/checkpoints/2026-08-02-1000.md"
+    printf '# Checkpoint three\n\nNewest checkpoint body.\n' > "$d/.borg/checkpoints/2026-08-03-1000.md"
+
+    printf '# Delta directive one\n' > "$d/docs/plans/directives/2026-04-01-delta-one.md"
+    printf '# Delta directive two\n' > "$d/docs/plans/directives/2026-04-02-delta-two.md"
+
+    printf '# Delta shipped A\nShipped: 2026-03-01\n' > "$d/docs/plans/assimilated/2026-03-01-delta-a.md"
+    printf '# Delta shipped B\nShipped: 2026-03-02\n' > "$d/docs/plans/assimilated/2026-03-02-delta-b.md"
+    printf '# Delta shipped C\nShipped: 2026-03-03\n' > "$d/docs/plans/assimilated/2026-03-03-delta-c.md"
+    printf '# Delta shipped D\nShipped: 2026-03-04\n' > "$d/docs/plans/assimilated/2026-03-04-delta-d.md"
+    touch -t 202603010000 "$d/docs/plans/assimilated/2026-03-01-delta-a.md"
+    touch -t 202603020000 "$d/docs/plans/assimilated/2026-03-02-delta-b.md"
+    touch -t 202603030000 "$d/docs/plans/assimilated/2026-03-03-delta-c.md"
+    touch -t 202603040000 "$d/docs/plans/assimilated/2026-03-04-delta-d.md"
+}
+
+_link_registry_deep() {
+    local d="${BATS_TEST_TMPDIR}/ws/delta"
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "delta": {
+      "path": "$d",
+      "source": "cli",
+      "status": "active",
+      "last_activity": "2026-08-03T10:00:00Z",
+      "summary": "Delta keeps the deep dive deterministic.",
+      "claude_session_id": "sess-delta-0001",
+      "tmux_window": "delta"
+    }
+  }
+}
+EOF
+}
+
+# N projects, all active, all with a live window so none are reaped. Used by the capacity tests.
+_link_registry_busy() {
+    _link_mock_tmux $'p1\np2\np3\np4'
+    cat > "$BORG_REGISTRY" <<'EOF'
+{
+  "projects": {
+    "p1": {"path": null, "source": "cli", "status": "active", "last_activity": "2026-08-01T10:00:00Z"},
+    "p2": {"path": null, "source": "cli", "status": "active", "last_activity": "2026-08-01T10:00:00Z"},
+    "p3": {"path": null, "source": "cli", "status": "waiting", "last_activity": "2026-08-01T10:00:00Z"},
+    "p4": {"path": null, "source": "cli", "status": "active", "last_activity": "2026-08-01T10:00:00Z"}
+  }
+}
+EOF
+}
+
+# ── mode 1/4: --porcelain ────────────────────────────────────────────────────
+
+@test "contract: link --porcelain renders byte-identically to its golden" {
+    _link_mock_tmux $'bravo\ncharlie'
+    _link_registry_porcelain
+    _assert_link_golden link-porcelain link --porcelain
+}
+
+# Archived projects are filtered out unless --all is passed; --all must also keep them LAST in the
+# sort (status priority archived=3), not merely present somewhere in the listing.
+@test "contract: link --porcelain --all admits archived projects and sorts them last" {
+    _link_mock_tmux $'bravo\ncharlie'
+    _link_registry_porcelain
+
+    run_zsh_borg link --porcelain
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"delta"* ]] || false
+
+    run_zsh_borg link --porcelain --all
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"delta"* ]] || false
+    [[ "$output" == *"alpha"*"delta"* ]] || false
+}
+
+# EXTERNAL CONSUMER (borg.zsh:689): cmd_switch pipes a porcelain listing into fzf with
+# `--delimiter '\t' --with-nth 1,3,5` and `--preview "borg link {1}"`. Two undeclared contracts sit
+# in that one line — the row must have exactly 5 tab-separated fields (fewer and --with-nth 5 shows
+# nothing; more and the summary splits), and column 1 must be a name the deep dive accepts.
+@test "contract: link --porcelain rows are 5 tab-separated fields and column 1 feeds the fzf preview" {
+    _link_mock_tmux $'bravo\ncharlie'
+    _link_registry_porcelain
+
+    run bash -c "zsh '$BORG' link --porcelain | awk -F'\t' '{print NF}' | sort -u"
+    [ "$status" -eq 0 ]
+    [ "$output" = "5" ]
+
+    run bash -c "zsh '$BORG' link --porcelain | head -1 | cut -f1"
+    [ "$status" -eq 0 ]
+    [ "$output" = "echo" ]
+
+    run_zsh_borg link echo
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Session ID:"* ]] || false
+}
+
+# ── mode 2/4: overview ───────────────────────────────────────────────────────
+
+@test "contract: link overview renders byte-identically to its golden" {
+    _link_mock_tmux $'bravo\ncharlie'
+    _link_build_overview_ws
+    _link_registry_overview
+    _assert_link_golden link-overview link
+}
+
+@test "contract: link overview on an empty registry prints the scan hint and exits 0" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No projects registered. Run: borg scan"* ]] || false
+}
+
+@test "contract: link overview prints the discovery tip when only one project is registered" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle"}}}' > "$BORG_REGISTRY"
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"run 'borg scan' to discover projects from session history"* ]] || false
+}
+
+# Distinct from the empty-registry branch above: projects EXIST but all are filtered out, so the
+# hint points at --all rather than at scan. Two archived projects, not one, so the <=1 tip does not
+# also fire and blur which branch produced the output.
+@test "contract: link overview points at --all when every project is archived" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"a1":{"path":null,"status":"archived"},"a2":{"path":null,"status":"archived"}}}' \
+        > "$BORG_REGISTRY"
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No projects to show. Run: borg link --all"* ]] || false
+}
+
+@test "contract: link overview warns when active sessions exceed the default capacity" {
+    _link_registry_busy
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"4 sessions need attention"* ]] || false
+    [[ "$output" == *"(limit: 3)"* ]] || false
+}
+
+# A2 SEED. BORG_MAX_ACTIVE is assigned in borg.zsh WITHOUT `export`, so a `python3 -m` child inherits
+# nothing — this asserts the knob is honored end to end and is the test that will catch it if the
+# port forgets to pass it through. Under zsh today it passes because the var is read in-process.
+@test "contract: link overview honors an exported BORG_MAX_ACTIVE override" {
+    _link_registry_busy
+
+    run env BORG_MAX_ACTIVE=6 zsh "$BORG" link
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"sessions need attention"* ]] || false
+}
+
+# The cortex pause row is the only per-project line rendered BELOW its own table row, and the only
+# one sourced from outside the registry ($BORG_DIR/cortex-wakes.json). Its countdown is wall-clock
+# derived, so it is asserted structurally rather than pinned in a golden.
+@test "contract: link overview renders a cortex pause row under the paused project" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"paused":{"path":null,"source":"coco","status":"idle","summary":"Paused."}}}' \
+        > "$BORG_REGISTRY"
+
+    local future
+    future=$(_link_iso_ago -7200)  # negative offset = two hours in the FUTURE, so a wake is pending
+    printf '{"wakes":[{"project":"paused","reset_at":"%s"}]}\n' "$future" > "$BORG_DIR/cortex-wakes.json"
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resumes in"* ]] || false
+    [[ "$output" == *"paused"*"resumes in"* ]] || false
+}
+
+# ── mode 3/4: deep dive ──────────────────────────────────────────────────────
+
+@test "contract: link <project> deep dive renders byte-identically to its golden" {
+    _link_mock_tmux "delta"
+    _link_build_deep_ws
+    _link_registry_deep
+    _assert_link_golden link-deep link delta
+}
+
+# Every optional section is guarded by `[[ "$ppath" != "null" ]]`. A path-null project (the shape
+# every Desktop-sourced entry has) must render the header block and NOTHING else — no plan, no
+# checkpoints, no directives, no assimilated, and no error from reading a path that isn't there.
+@test "contract: link <project> deep dive omits every optional section for a path-null project" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"nopath":{"path":null,"source":"desktop","status":"idle","summary":"No path."}}}' \
+        > "$BORG_REGISTRY"
+
+    run_zsh_borg link nopath
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Source:"* ]] || false
+    [[ "$output" == *"Session ID:"* ]] || false
+    [[ "$output" != *"Path:"* ]] || false
+    [[ "$output" != *"Active Plan"* ]] || false
+    [[ "$output" != *"Recent Checkpoints"* ]] || false
+    [[ "$output" != *"Directives:"* ]] || false
+    [[ "$output" != *"Recently assimilated"* ]] || false
+}
+
+@test "contract: link <project> dies non-zero on a project that is not registered" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"known":{"path":null,"status":"idle"}}}' > "$BORG_REGISTRY"
+
+    run_zsh_borg link ghost-project
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"project 'ghost-project' not in registry"* ]] || false
+    [[ "$output" == *"Run: borg add"* ]] || false
+}
+
+# PIN, NOT ENDORSEMENT. borg.zsh:147 globs `(NOm)`: `om` is newest-first, and `O` REVERSES it, so the
+# deep dive's "Recently assimilated" currently lists the three OLDEST plans. It also disagrees with
+# _borg_collect_all_assimilated (filename DESC) which feeds the overview, so the two sections of one
+# command answer "recent" differently. PROJECT_PLAN.md records fixing this as an intentional
+# deviation during the port: when it is fixed, this test must FLIP (delta-d appears, delta-a leaves)
+# rather than quietly keep passing.
+@test "contract: link <project> assimilated is currently OLDEST-first (pins the (NOm) bug)" {
+    _link_mock_tmux "delta"
+    _link_build_deep_ws
+    _link_registry_deep
+
+    run_zsh_borg link delta
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Delta shipped A"* ]] || false
+    [[ "$output" == *"Delta shipped B"* ]] || false
+    [[ "$output" == *"Delta shipped C"* ]] || false
+    [[ "$output" != *"Delta shipped D"* ]] || false
+    [[ "$output" == *"Delta shipped A"*"Delta shipped C"* ]] || false
+}
+
+# ── mode 4/4: --brief ────────────────────────────────────────────────────────
+
+# --brief stays in zsh this pass (PROJECT_PLAN scope boundary: _borg_print_briefing is contested
+# ground with the briefing-fallback directive). What the port MUST preserve is the dispatch: the
+# --brief arm of cmd_link reaches _borg_print_briefing rather than falling through to the overview.
+# The empty-registry early return is the only branch that proves this without a real `claude -p` call.
+@test "contract: link --brief dispatches to the briefing path, not the overview" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+
+    run_zsh_borg link --brief
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No projects in registry. Run: borg scan"* ]] || false
+    [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
+}
+
+# ── flag parity ──────────────────────────────────────────────────────────────
+
+# cmd_link's `-*) shift` arm swallows ANY unknown flag and renders the overview at exit 0. A
+# recon-shaped arm that `die`s on unknown flags would be a user-facing behavior change, so this pins
+# the lenient behavior as the parity target. Both `--help` and a nonsense flag take the same path.
+@test "contract: link tolerates an unknown flag and still renders the overview at exit 0" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+        > "$BORG_REGISTRY"
+
+    run_zsh_borg link --totally-bogus
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
+
+    run_zsh_borg link --help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
+}
+
+# ── external consumers ───────────────────────────────────────────────────────
+
+# EXTERNAL CONSUMER (drone.zsh:964): `drone status` greps `Status:` out of the HUMAN deep dive and
+# shows it as the `claude:<status>` column. That text format is an undeclared cross-CLI API with no
+# test anywhere — break it and the column silently blanks. This runs drone's exact extraction
+# pipeline against real `borg link` output.
+#
+# NOTE ON WHAT IS PINNED. borg.zsh emits color unconditionally (no isatty check), so the value drone
+# actually captures today is a reset escape plus padding plus the status — `sed 's/.*Status:...'`
+# stops at the ESC. Asserting those exact bytes would freeze an ANSI leak into the contract, so this
+# asserts what drone's column depends on: the value ENDS in the status and is a single line.
+@test "contract: drone status can still extract Status: from the deep dive" {
+    _link_mock_tmux "delta"
+    _link_build_deep_ws
+    _link_registry_deep
+
+    run bash -c "zsh '$BORG' link delta 2>/dev/null | grep -m1 'Status:' | sed 's/.*Status:[[:space:]]*//' | tr -d '\n'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *active ]] || false
+    [ "${#lines[@]}" -eq 1 ]
+}
+
+# EXTERNAL CONSUMER (drone.zsh:1405): `drone link` is `exec borg link "${2:-${PWD##*/}}"`. It resolves
+# `borg` from PATH, so this mocks `borg` (via BORG_DRONE_EXTRA_PATH, which drone.zsh honors after its
+# own PATH reset) and asserts the forwarded argv — including the no-arg cwd-basename default, which
+# is the ONLY caller that reaches _borg_link_deep's `${PWD##*/}` fallback.
+@test "contract: drone link forwards the project name to borg link, defaulting to the cwd basename" {
+    setup_mock_bin
+    export TRACE="${BATS_TEST_TMPDIR}/borg-trace.log"
+    : > "$TRACE"
+    cat > "$MOCK_BIN/borg" <<'EOF'
+#!/usr/bin/env bash
+echo "borg $*" >> "$TRACE"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/borg"
+
+    local drone="${BATS_TEST_DIRNAME}/../drone.zsh"
+    run zsh "$drone" link delta
+    [ "$status" -eq 0 ]
+
+    local cwd_proj="${BATS_TEST_TMPDIR}/ws/echo"
+    mkdir -p "$cwd_proj"
+    run bash -c "cd '$cwd_proj' && zsh '$drone' link"
+    [ "$status" -eq 0 ]
+
+    run cat "$TRACE"
+    [[ "$output" == *"borg link delta"* ]] || false
+    [[ "$output" == *"borg link echo"* ]] || false
+}
+
 # ── meta ─────────────────────────────────────────────────────────────────────
 
 @test "contract: this suite actually invokes zsh (guards against a well-meaning refactor)" {

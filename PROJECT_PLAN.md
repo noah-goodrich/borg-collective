@@ -37,12 +37,20 @@ Python target next.
 
 ## Acceptance Criteria
 
-- [ ] **A1 — Parity harness exists and is green against today's zsh, before any port work.**
+- [x] **A1 — Parity harness exists and is green against today's zsh, before any port work.**
       14-18 cases in `tests/cli_contract.bats` covering all four output modes, the deep dive's optional
       sections, aggregate directives/assimilated, cortex pause row, capacity warning, empty-registry hint,
       unknown-project die, and all three external consumers (`drone.zsh:963` `Status:` grep, `drone.zsh:1405`
       `drone link`, `borg.zsh:689` fzf preview).
   - Verify: `bats tests/cli_contract.bats` green on unmodified `main`; case count `>= 14`.
+  - **Done 2026-08-13.** 18 cases added; suite 91/91, full `bats tests/*.bats` 613/613. The three primary
+    renderers are pinned by byte-exact golden files under `tests/fixtures/link/` (ANSI escapes and column
+    padding included), not substrings — a substring harness would pass against a renderer that changed
+    padding or dropped a color, which is the drift this port can produce. Non-vacuity was verified by
+    mutation: cutting the porcelain summary at 70 instead of 80, widening the overview `%-12s` status
+    column to `%-13s`, and renaming the deep dive's `Status:` label each turned the corresponding golden
+    (and, for the label, the `drone status` consumer test) red. The `(NOm)` oldest-first assimilated bug is
+    pinned as a deviation, so fixing it during the port must FLIP that test rather than pass silently.
 - [ ] **A2 — Config vars reach the Python child.**
       `BORG_MAX_ACTIVE`, `BORG_REAP_STALE_HOURS`, `BORG_TMUX_SESSION`, `BORG_CORTEX_WAKES` are all currently
       set *without* `export`, so a `python3 -m` child inherits none of them.
