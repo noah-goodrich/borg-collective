@@ -1,9 +1,21 @@
-.PHONY: clean test lint format
+.PHONY: clean test lint format test-viz lint-viz format-viz
 
-# Python toolchain surface: borg_core/ only (Part 3 of the python-core-and-toolchain directive).
-# merge-tree/ and docs/infoviz/harness/ belong to the separate viz/infoviz program and are
-# deliberately out of scope here. borg_core/ doesn't exist until Part 3's first commit -- test/lint
-# no-op gracefully (not a failure) until then, same as pytest legitimately collecting zero tests.
+# TWO Python surfaces, deliberately separate — do not merge them.
+#
+#   test / lint / format          -> borg_core/   (python-core-and-toolchain, Part 3)
+#   test-viz / lint-viz / format-viz -> merge-tree/ (the viz/infoviz program)
+#
+# The split is intentional: borg_core/ is the CLI core being migrated from zsh and is held to a 90%
+# coverage floor and clean-architecture enforcement; merge-tree/ is the infoviz renderer program with
+# a different shape (no layered domain/usecase split to enforce) and its own coverage reality.
+#
+# But "out of scope" had turned into "ungated". merge-tree/ carried 124 passing tests written by the
+# directive's Part 2 -- curate.py at 99%, render_graph.py at 88% -- and `testpaths = ["borg_core"]`
+# meant pytest never collected them, so no gate ran them and nothing would have caught a regression.
+# These targets close that without dragging merge-tree into borg_core's rules.
+#
+# borg_core/ doesn't exist until Part 3's first commit -- test/lint no-op gracefully (not a failure)
+# until then, same as pytest legitimately collecting zero tests.
 
 clean:
 	rm -rf dist/
@@ -43,4 +55,33 @@ format:
 		ruff format borg_core/; \
 	else \
 		echo "borg_core/ does not exist yet (Part 3 not started) -- nothing to format"; \
+	fi
+
+# ── viz/infoviz program (merge-tree/) ────────────────────────────────────────────────────────────
+# Separate coverage floor from borg_core's 90%: render.py is the LEGACY renderer that viz-1 slates
+# for deletion once REVIEW_BUCKET is ported out of it, so it sits at 0% by design and would drag any
+# whole-tree number down. The floor is therefore set on the modules that are actually live.
+
+test-viz:
+	@if [ -d merge-tree ]; then \
+		set -e; \
+		coverage run --source=merge-tree -m pytest merge-tree/ || test $$? -eq 5; \
+		coverage report -m --include='merge-tree/curate.py,merge-tree/render_graph.py' --fail-under=85; \
+	else \
+		echo "merge-tree/ not present -- nothing to test"; \
+	fi
+
+lint-viz:
+	@if [ -d merge-tree ]; then \
+		set -e; \
+		ruff check merge-tree/; \
+	else \
+		echo "merge-tree/ not present -- nothing to lint"; \
+	fi
+
+format-viz:
+	@if [ -d merge-tree ]; then \
+		ruff format merge-tree/; \
+	else \
+		echo "merge-tree/ not present -- nothing to format"; \
 	fi

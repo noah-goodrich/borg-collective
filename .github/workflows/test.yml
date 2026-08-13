@@ -61,6 +61,31 @@ jobs:
       - name: Test + coverage baseline
         run: make test
 
+
+  viz:
+    # The infoviz program (merge-tree/) has its own gate, deliberately separate from the `python`
+    # job above. borg_core/ is held to a 90% floor with clean-architecture enforcement; merge-tree/
+    # is a renderer program with a different shape and its own coverage reality.
+    #
+    # This job exists because "out of scope" had silently become "ungated". merge-tree/ carried 124
+    # passing tests from the python-core-and-toolchain directive's Part 2 -- curate.py at 99%,
+    # render_graph.py at 88% -- but `testpaths = ["borg_core"]` meant pytest never collected them.
+    # They were written, committed, and then never run by anything. A regression in the infoviz
+    # renderer would have shipped green.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install dev toolchain
+        run: pip install --group dev
+      - name: Lint viz program (ruff)
+        run: make lint-viz
+      - name: Test viz program + coverage floor
+        run: make test-viz
+
   contract-macos:
     # B3: the fidelity lane. macOS runners bill ~10x ubuntu minutes, so this runs ONLY the contract
     # suite (~12 subprocess tests), not the full 530. This is the only job that executes borg.zsh
