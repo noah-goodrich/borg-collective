@@ -269,7 +269,8 @@ if [[ -f "$BORG_REGISTRY" ]]; then
         _last=$(jq -r '.last_activity // ""' "$_sf" 2>/dev/null || true)
         [[ "$_rwin" == "-" || -z "$_rwin" || "$_rwin" == "null" ]] && _rwin="$_rname"
         _live=0
-        if [[ -n "$_live_windows" ]] && printf '%s\n' "$_live_windows" | grep -qx "$_rwin"; then
+        # -F: a window name is data, never a pattern (see lib/registry.zsh's reap overlay).
+        if [[ -n "$_live_windows" ]] && printf '%s\n' "$_live_windows" | grep -qxF "$_rwin"; then
             _live=1
         fi
         _borg_should_reap "$_s" "$_last" "$_live" && continue
