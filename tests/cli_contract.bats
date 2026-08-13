@@ -1803,6 +1803,40 @@ EOF
     [[ "$plain" =~ held[[:space:]]+\[C\][[:space:]]+active ]] || false
 }
 
+# ONE project with an unparseable .borg/state.json used to blank the ENTIRE registry. jq's --argjson
+# refuses the bad file, and the guard at lib/registry.zsh was `result=$(... | jq ...) ||
+# result="$result"` — a no-op, because command substitution assigns BEFORE the `||` runs, so `result`
+# was already empty when the fallback reassigned empty to empty. Every consumer of
+# borg_registry_with_state saw an empty registry: `borg link` printed "No projects registered. Run:
+# borg scan", and next/switch/init/reap/watch saw nothing either. A partial write from a hook or a
+# killed session was enough. The healthy project must still receive its state overlay — asserted via
+# `last_activity`, which exists ONLY in state.json here, so a merge that silently stopped merging
+# would render "never".
+@test "contract: link survives one project with a malformed state.json" {
+    _link_mock_tmux ""
+    local good="${BATS_TEST_TMPDIR}/ws/goodproj" bad="${BATS_TEST_TMPDIR}/ws/badproj"
+    mkdir -p "$good/.borg" "$bad/.borg"
+    printf '{"status":"idle","last_activity":"2026-08-01T10:00:00Z"}' > "$good/.borg/state.json"
+    printf 'NOT JSON AT ALL' > "$bad/.borg/state.json"
+    printf '{"projects":{"goodproj":{"path":"%s","source":"cli","summary":"Good."},"badproj":{"path":"%s","source":"cli","summary":"Bad."}}}' \
+        "$good" "$bad" > "$BORG_REGISTRY"
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"No projects registered"* ]] || false
+    [[ "$output" == *"goodproj"* ]] || false
+    [[ "$output" == *"badproj"* ]] || false
+
+    local plain
+    plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
+    # The overlay still ran for the healthy project: last_activity comes only from its state.json.
+    [[ "$plain" != *"goodproj"*"never"* ]] || false
+    # And nothing from the merge loop leaked onto stdout. A bare `local merged` inside that loop
+    # re-declares an already-declared parameter, which zsh PRINTS — sending `merged=$'{...'` into the
+    # caller's jq. Hit for real while fixing this; guarded here so it cannot come back.
+    [[ "$output" != *"merged="* ]] || false
+}
+
 @test "contract: link overview on an empty registry prints the scan hint and exits 0" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
