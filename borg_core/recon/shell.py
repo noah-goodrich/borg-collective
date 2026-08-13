@@ -14,6 +14,7 @@ import subprocess
 import time
 from pathlib import Path
 
+from borg_core import paths
 from borg_core.recon import core
 
 DEFAULT_MAX_TRACKS = 8
@@ -21,12 +22,17 @@ DEFAULT_TRACK_TIMEOUT = 30
 FALLBACK_WINDOW_SECONDS = 86400
 
 
-def borg_dir() -> Path:
-    """Resolve BORG_DIR, mirroring _recon_borg_dir (XDG-first)."""
-    if os.environ.get("BORG_DIR"):
-        return Path(os.environ["BORG_DIR"])
-    xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(xdg) / "borg"
+# Re-exported, not redefined: borg_core/paths.py holds the single definition of both, so this
+# package keeps its own `shell.borg_dir()` / `shell.registry_path()` surface (and its tests) without
+# a second copy of the resolution rules. `registry_path` is new to recon -- cli.py used to read
+# BORG_REGISTRY from the environment with no fallback, which made `borg recon` unrunnable on a
+# normal machine, since borg.zsh assigns that variable without `export` and the python3 child
+# inherited an empty value. Nothing caught it: every test reaching this path puts BORG_REGISTRY in
+# the environment itself (tests/test_helper/setup.bash exports it, the pytest suites monkeypatch
+# it), so the resolution path had never once executed under test -- the same shape as the
+# usage-watch and memory-gate blind spots recorded in CLAUDE.md.
+borg_dir = paths.borg_dir
+registry_path = paths.registry_path
 
 
 def lib_dir() -> Path:
@@ -190,9 +196,13 @@ def read_checkpoint_blockers(project_dir: str) -> str:
     return core.extract_checkpoint_blockers(text)
 
 
-def load_registry_projects(registry_path: str, projects_filter: list[str] | None) -> dict:
-    """Read the registry's `.projects` object, optionally filtered to a subset of names."""
-    with open(registry_path, encoding="utf-8") as f:
+def load_registry_projects(registry_file: str, projects_filter: list[str] | None) -> dict:
+    """Read the registry's `.projects` object, optionally filtered to a subset of names.
+
+    The parameter is `registry_file`, not `registry_path`: this module now re-exports a
+    module-level `registry_path` (see the top of the file) and the old parameter name shadowed it.
+    """
+    with open(registry_file, encoding="utf-8") as f:
         registry = json.load(f)
     projects: dict = registry.get("projects", {})
     if projects_filter:
