@@ -125,6 +125,74 @@ _row_field() {
     [ "$output" = "0" ]
 }
 
+# ─── probe-transcript pruning ────────────────────────────────────────────────
+#
+# Every `claude -p` persists a session transcript. This poller runs at a 120s interval with cwd="/"
+# (no WorkingDirectory in the plist), which Claude Code encodes as the project dir "-", so it
+# deposited 15,108 files / 60 MB there between Jul 12 and Aug 12 2026. BORG_NO_SESSION_HOOKS (above)
+# stops borg's hooks firing on those sessions; nothing stopped the transcript write itself.
+#
+# Pruning that one directory is safe because hooks/borg-link-down.sh declares "'/' can never be a
+# real borg project" and bails on it — so nothing a human cares about can legitimately live there.
+
+_seed_probe_dir() {
+    export BORG_USAGE_PROBE_TRANSCRIPT_DIR="${BATS_TEST_TMPDIR}/probe-transcripts"
+    mkdir -p "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/memory"
+    # Ancient (well past any retention floor)
+    touch -t 202001010000 "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/old-1.jsonl"
+    touch -t 202001010000 "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/old-2.jsonl"
+    # Just written — a concurrent probe could still be mid-write; must survive
+    touch "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/fresh.jsonl"
+    # Neither a transcript nor at maxdepth 1 — must be untouchable
+    touch -t 202001010000 "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/notes.md"
+    touch -t 202001010000 "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/memory/MEMORY.md"
+}
+
+@test "prune: removes probe transcripts older than the retention floor" {
+    _write_mock_claude "cat '$FIXTURE'"
+    _seed_probe_dir
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ ! -f "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/old-1.jsonl" ]
+    [ ! -f "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/old-2.jsonl" ]
+}
+
+@test "prune: leaves recently-written transcripts alone (no unlink race)" {
+    _write_mock_claude "cat '$FIXTURE'"
+    _seed_probe_dir
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/fresh.jsonl" ]
+}
+
+@test "prune: never touches non-transcripts or the memory/ subdirectory" {
+    _write_mock_claude "cat '$FIXTURE'"
+    _seed_probe_dir
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/notes.md" ]
+    [ -f "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/memory/MEMORY.md" ]
+}
+
+@test "prune: retention floor is configurable and honoured" {
+    _write_mock_claude "cat '$FIXTURE'"
+    _seed_probe_dir
+    # A floor beyond the fixture's age means nothing qualifies — even the ancient files survive.
+    export BORG_USAGE_PROBE_RETAIN_MIN=99999999
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$BORG_USAGE_PROBE_TRANSCRIPT_DIR/old-1.jsonl" ]
+}
+
+@test "prune: is fail-open when the probe directory does not exist" {
+    _write_mock_claude "cat '$FIXTURE'"
+    export BORG_USAGE_PROBE_TRANSCRIPT_DIR="${BATS_TEST_TMPDIR}/nonexistent"
+    run "$SCRIPT" --once
+    # Housekeeping must never take down usage sampling — the poll still records its row.
+    [ "$status" -eq 0 ]
+    [ -f "$BORG_USAGE_SAMPLES" ]
+}
+
 # ─── format-drift tripwire: parse the real fixture ──────────────────────────
 
 @test "fixture parse: session_pct, week_pct, resets_at extracted correctly" {
