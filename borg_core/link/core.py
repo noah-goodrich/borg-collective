@@ -422,7 +422,7 @@ def project_sort_key(entry: dict) -> tuple[int, int, str]:
           EMPTY STRING is truthy in jq, so "" passes through as "" and sorts before "0".
     """
     pinned = 0 if entry.get("pinned") is True else 1
-    rank = _STATUS_RANK.get(entry.get("status"), _OTHER_STATUS_RANK)
+    rank = _STATUS_RANK.get(str(entry.get("status")), _OTHER_STATUS_RANK)
     activity = entry.get("last_activity")
     if activity is None or activity is False:
         activity = _NO_ACTIVITY_SENTINEL
@@ -471,9 +471,8 @@ def capacity(active: int, limit: int) -> dict:
     return {"active": active, "limit": limit, "over_limit": active > limit}
 
 
-# JUSTIFICATION: one flat argument per top-level key of the document; a bag parameter or a
-# dataclass here would hide the contract this function exists to state.
-def assemble(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+# JUSTIFICATION: one flat argument per top-level key of the document; `capacity` names the wire block.
+def assemble(  # pylint: disable=too-many-arguments,too-many-positional-arguments,redefined-outer-name
     generated_at, show_all, capacity, projects, order, directives, assimilated, cortex_pending, focus
 ) -> dict:
     """Assemble the `borg link --json` document from already-gathered data. Pure: no clock, no shell
