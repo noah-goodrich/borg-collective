@@ -240,7 +240,12 @@ borg_reap_overlay() {
         [[ "$tw" == "-" || -z "$tw" || "$tw" == "null" ]] && tw="$name"
         [[ "$last" == "-" ]] && last=""
         live=0
-        if [[ -n "$live_windows" ]] && printf '%s\n' "$live_windows" | /usr/bin/grep -qx "$tw"; then
+        # -F, not just -x. A window name is DATA, never a pattern: without -F, `grep -x` still treats
+        # it as a basic regex, so a project whose tmux_window is `troth.site` matches a live window
+        # named `troth-site` and is reported alive when its session is dead. Domain-named projects are
+        # exactly the shape that hits it. -qxF is already this repo's convention (lib/secrets.zsh:22,
+        # borg.zsh:3058); these window comparisons were the outliers.
+        if [[ -n "$live_windows" ]] && printf '%s\n' "$live_windows" | /usr/bin/grep -qxF "$tw"; then
             live=1
         fi
         if _borg_should_reap "$st" "$last" "$live"; then

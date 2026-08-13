@@ -179,7 +179,8 @@ get_shell() {
 }
 
 has_window() {
-    tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qx "$1"
+    # -F: a window name is data, never a pattern (see lib/registry.zsh's reap overlay).
+    tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -qxF "$1"
 }
 
 window_pane_count() {
