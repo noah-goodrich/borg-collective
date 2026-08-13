@@ -704,10 +704,20 @@ EOF
 # machines. Instead: background the real invocation with a generous interval so the loop cannot reach
 # a second `sleep` cycle during the test, poll the redirected output file with a bounded, short-
 # interval loop (no blind long sleep), then kill+wait unconditionally. Worst-case orphaned-child
-# lifetime if `kill` somehow failed to land is bounded by the interval itself (10s) — short and
+# lifetime if `kill` somehow failed to land is bounded by the interval itself (30s) — short and
 # self-cleaning, never a real hang. tmux is mocked because cmd_watch calls cmd_link ->
 # borg_registry_with_state -> borg_reap_overlay -> _borg_live_windows -> the real `tmux` binary,
 # unconditionally, even against an empty registry.
+#
+# THE POLL MUST WAIT FOR A COMPLETE FRAME, NOT FOR THE FIRST BYTE. This test failed 3/3 on the
+# 2026-08-12 baseline and intermittently thereafter for a reason that had nothing to do with the code
+# under test: `[ ! -s "$outfile" ]` goes false the moment the `BORG WATCH` header lands (borg.zsh:2646),
+# but the assertions below also require `cmd_link`'s body (:2650) and the `RECENT NANOPROBES` section
+# (:2653) — and `cmd_link` shells out to jq/tmux many times, so on a loaded runner the kill lands
+# mid-frame and the later sections never get written. The wait condition has to be the LAST line a
+# frame emits (`Ctrl-C to exit`, :2670); anything earlier is a race the assertions can lose. The
+# ceiling is raised to 200 (10s) to give a slow runner room to finish one frame, and the interval to
+# 30s so that ceiling still cannot reach a second frame — the invariant the paragraph above depends on.
 
 @test "contract: watch dispatches into the live-refresh loop and renders under zsh (background+kill)" {
     setup_mock_bin
@@ -719,11 +729,11 @@ EOF
     chmod +x "$MOCK_BIN/tmux"
 
     local outfile="${BATS_TEST_TMPDIR}/watch.out"
-    zsh "$BORG" watch 10 > "$outfile" 2>&1 &
+    zsh "$BORG" watch 30 > "$outfile" 2>&1 &
     local pid=$!
 
     local waited=0
-    while [ ! -s "$outfile" ] && [ "$waited" -lt 100 ]; do
+    while ! grep -q "Ctrl-C to exit" "$outfile" 2>/dev/null && [ "$waited" -lt 200 ]; do
         sleep 0.05
         waited=$((waited + 1))
     done
@@ -1686,9 +1696,17 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" = "5" ]
 
+    # Diagnostics on failure, matching _assert_link_golden's pattern: this assertion went red on both
+    # CI lanes while passing locally and the bare `[ x = y ]` reported only that it failed, which was
+    # not enough to tell a sort regression from output that never reached `cut` at all.
     run bash -c "zsh '$BORG' link --porcelain | head -1 | cut -f1"
     [ "$status" -eq 0 ]
-    [ "$output" = "echo" ]
+    [ "$output" = "echo" ] || {
+        printf 'first field was [%s] (status %s)\n' "$output" "$status" >&2
+        printf -- '--- full porcelain, octal-escaped ---\n' >&2
+        zsh "$BORG" link --porcelain 2>&1 | od -c >&2
+        false
+    }
 
     # ...and that column-1 name must be something `borg link {1}` can render.
     run_zsh_borg link echo
