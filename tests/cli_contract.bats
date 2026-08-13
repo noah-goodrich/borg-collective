@@ -586,13 +586,17 @@ EOF
     [[ "$output" != *"unknown command"* ]] || false
 }
 
-# Relies on BSD `tail -r` (macOS) — the same platform-specific choice borg.zsh itself already makes
-# at cmd_nanoprobes/cmd_nanoprobe_log/cmd_spend/cmd_watch (all four use `tail -r ... 2>/dev/null`).
-# This test therefore verifies real behavior on macOS; on a GNU/Linux runner `tail -r` doesn't exist,
-# the pipeline silently produces no output (stderr suppressed), and this test would fail there. That
-# mirrors how tests/cli_contract.bats already handles the #114 BSD-vs-GNU stat split: run everywhere,
-# meaningful proof on the userland it targets. Not introduced by this test — it is pinning existing,
-# already-shipped application behavior.
+# CORRECTED 2026-08-12. An earlier version of this comment said this test relies on BSD `tail -r`
+# and "would fail" on a GNU/Linux runner, treating that as acceptable by analogy with the #114
+# stat split. It was not acceptable: the ubuntu `test` job runs `bats tests/*.bats`, which includes
+# this file, so these tests ran on Linux and turned main red from the commit that added them.
+#
+# More importantly the analogy was backwards. #114's lesson was that a silently-empty result from a
+# wrong-platform tool is a BUG, not a platform caveat to test around — `tail -r` on GNU emits
+# nothing and exits nonzero with stderr suppressed, so `borg nanoprobes`/`nanoprobe-log`/`spend`/
+# `watch` all rendered empty on Linux while looking like "no records yet". Fixed at the source via
+# `_borg_reverse_lines` (borg.zsh); these tests now pass on both userlands and the ubuntu run is a
+# deliberate portability canary rather than a known-failing duplicate.
 @test "contract: nanoprobes renders fixture rows newest-first under zsh" {
     local log="$BORG_DIR/agents.jsonl"
     printf '{"id":"aaaa1111-1111-1111-1111-111111111111","agent_type":"borg-nanoprobe","summary":"Did the older thing","finished_at":"2026-08-01T10:00:00Z"}\n' > "$log"
