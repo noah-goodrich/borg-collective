@@ -1,0 +1,419 @@
+"""Unit tests for borg_core.link.core (pure logic).
+
+The first section is THE PYTHON HALF OF THE SHARED REAP CASE TABLE: it reads
+tests/fixtures/reaper-cases.tsv -- the same file tests/reaper_cases.bats reads -- and asserts the
+same expected column against core.should_reap and core.reap_overlay. PROJECT_PLAN.md's Risks section
+names shared-helper divergence as this port's crux; two readers over one table is the mitigation it
+specifies. Changing an expected value here changes it for zsh too.
+"""
+
+from pathlib import Path
+
+import pytest
+
+from borg_core.link import core
+
+CASES = Path(__file__).resolve().parent.parent.parent / "tests" / "fixtures" / "reaper-cases.tsv"
+
+NOW = 1_800_000_000  # a fixed "now"; the table expresses every age relative to it
+
+
+def _iso(epoch: int) -> str:
+    from datetime import datetime, timezone  # noqa: PLC0415 — test-local, keeps core import surface honest
+
+    return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime(core.ISO_FORMAT)
+
+
+def _age_to_timestamp(token: str) -> str:
+    if token == "EMPTY":
+        return ""
+    if token == "NULL":
+        return "null"
+    if token == "GARBAGE":
+        return "not-a-timestamp"
+    if token.startswith("NOW-"):
+        return _iso(NOW - int(token[len("NOW-") :]))
+    if token.startswith("NOW+"):
+        return _iso(NOW + int(token[len("NOW+") :]))
+    return token
+
+
+def _load_cases() -> list[dict]:
+    rows = []
+    for line in CASES.read_text(encoding="utf-8").split("\n"):
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split("\t")
+        if fields[0] == "id":
+            continue
+        case_id, status, age, live, threshold, expect, why = fields
+        rows.append(
+            {
+                "id": case_id,
+                "status": "" if status == "EMPTY" else status,
+                "last_activity": _age_to_timestamp(age),
+                "live": live == "1",
+                "threshold": None if threshold == "GARBAGE" else int(threshold),
+                "expect": expect == "REAP",
+                "why": why,
+            }
+        )
+    return rows
+
+
+CASE_ROWS = _load_cases()
+
+
+def test_case_table_is_not_empty():
+    # A parse bug that silently yielded zero rows would make every parametrized test below vanish
+    # while the suite stayed green -- the shape of blindness this repo keeps getting bitten by.
+    assert len(CASE_ROWS) >= 20
+
+
+@pytest.mark.parametrize("case", CASE_ROWS, ids=[c["id"] for c in CASE_ROWS])
+def test_should_reap_matches_the_shared_case_table(case):
+    actual = core.should_reap(case["status"], case["last_activity"], case["live"], NOW, case["threshold"])
+    assert actual is case["expect"], case["why"]
+
+
+@pytest.mark.parametrize(
+    "window_field,live_windows,expect_reaped",
+    [
+        (None, ["proj"], False),
+        (None, ["other"], True),
+        ("-", ["proj"], False),
+        ("explicit", ["explicit"], False),
+        ("explicit", ["proj"], True),
+    ],
+)
+def test_reap_overlay_window_resolution(window_field, live_windows, expect_reaped):
+    # The half the case table's first section cannot see: should_reap never receives a tmux_window,
+    # because the overlay resolves it first. tests/reaper_cases.bats runs these same five rows
+    # against the live zsh via borg_registry_with_state.
+    registry = {
+        "projects": {
+            "proj": {
+                "path": None,
+                "status": "active",
+                "last_activity": _iso(NOW - 999999),
+                "tmux_window": window_field,
+            }
+        }
+    }
+    result = core.reap_overlay(registry, live_windows, NOW, 12)
+    assert (result["projects"]["proj"]["status"] == "idle") is expect_reaped
+
+
+def test_reap_overlay_liveness_is_literal_not_a_regex():
+    # zsh matched with `grep -qx` and no -F, so `dotted.name` matched a live `dotted-name`. That was
+    # fixed in zsh (lib/registry.zsh) rather than reproduced here; this pins that the two agree.
+    registry = {
+        "projects": {
+            "dotted.name": {"status": "active", "last_activity": _iso(NOW - 999999)},
+        }
+    }
+    result = core.reap_overlay(registry, ["dotted-name"], NOW, 12)
+    assert result["projects"]["dotted.name"]["status"] == "idle"
+
+
+def test_reap_overlay_records_the_previous_status_and_does_not_mutate():
+    registry = {"projects": {"p": {"status": "waiting", "last_activity": None}}}
+    result = core.reap_overlay(registry, [], NOW, 12)
+    assert result["projects"]["p"]["_reaped_from"] == "waiting"
+    assert result["projects"]["p"]["status"] == "idle"
+    assert registry["projects"]["p"]["status"] == "waiting"
+
+
+def test_reap_overlay_maps_the_tsv_sentinel_in_last_activity():
+    # "-" is jq's empty-column sentinel, mapped back to "" by the shell loop; it must mean "no
+    # timestamp" (and therefore reap), not "an unparseable timestamp".
+    registry = {"projects": {"p": {"status": "active", "last_activity": "-"}}}
+    result = core.reap_overlay(registry, [], NOW, 12)
+    assert result["projects"]["p"]["status"] == "idle"
+
+
+def test_reap_overlay_leaves_unreapable_projects_alone():
+    registry = {"projects": {"p": {"status": "idle", "last_activity": None}}}
+    result = core.reap_overlay(registry, [], NOW, 12)
+    assert "_reaped_from" not in result["projects"]["p"]
+
+
+def test_reap_overlay_handles_a_registry_with_no_projects_key():
+    assert core.reap_overlay({}, [], NOW, 12) == {"projects": {}}
+
+
+# ── relative_time ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "delta,expected",
+    [
+        (0, "just now"),
+        (59, "just now"),
+        (60, "1m ago"),
+        (3599, "59m ago"),
+        (3600, "1h ago"),
+        (86399, "23h ago"),
+        (86400, "yesterday"),
+        (172799, "yesterday"),
+        (172800, "2d ago"),
+        (432000, "5d ago"),
+    ],
+)
+def test_relative_time_buckets(delta, expected):
+    assert core.relative_time(_iso(NOW - delta), NOW) == expected
+
+
+@pytest.mark.parametrize("value", ["", None, "null"])
+def test_relative_time_absent_is_never(value):
+    assert core.relative_time(value, NOW) == "never"
+
+
+def test_relative_time_echoes_an_unparseable_value_verbatim():
+    # Deliberately NOT "never" -- zsh's `|| { echo "$ts"; return; }` echoes the input back, and
+    # should_reap treats the same condition oppositely.
+    assert core.relative_time("garbage", NOW) == "garbage"
+
+
+def test_relative_time_treats_the_future_as_just_now():
+    assert core.relative_time(_iso(NOW + 99999), NOW) == "just now"
+
+
+# ── iso_to_epoch ─────────────────────────────────────────────────────────────
+
+
+def test_iso_to_epoch_roundtrips():
+    assert core.iso_to_epoch(_iso(NOW)) == NOW
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["", None, "garbage", "2026-08-01", "2026-08-01T10:00:00", "2026-08-01T10:00:00Zextra"],
+)
+def test_iso_to_epoch_rejects_everything_outside_the_strict_grammar(value):
+    # The signed-off deviation: BSD `date -j -u -f` accepts trailing garbage and GNU `date -d`
+    # accepts a far larger grammar, so the two platforms already disagree. One strict grammar
+    # normalizes that split rather than adding a third behavior.
+    assert core.iso_to_epoch(value) is None
+
+
+def test_iso_to_epoch_rejects_an_out_of_range_date():
+    assert core.iso_to_epoch("2026-02-30T00:00:00Z") is None
+
+
+# ── countdown ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "delta,expected",
+    [
+        (7200, "2h 0m"),  # the zero minute is NOT suppressed
+        (7260, "2h 1m"),
+        (3600, "1h 0m"),
+        (125, "2m 5s"),
+        (59, "59s"),
+        (0, "now"),
+        (-10, "now"),
+    ],
+)
+def test_countdown(delta, expected):
+    assert core.countdown(_iso(NOW + delta), NOW) == expected
+
+
+@pytest.mark.parametrize("value", ["", None, "garbage"])
+def test_countdown_unparseable_is_a_question_mark(value):
+    assert core.countdown(value, NOW) == "?"
+
+
+# ── state overlay ────────────────────────────────────────────────────────────
+
+
+def test_overlay_state_lets_state_win():
+    merged = core.overlay_state({"status": "idle", "summary": "old"}, {"status": "active"})
+    assert merged["status"] == "active"
+    assert merged["summary"] == "old"
+
+
+def test_overlay_state_protects_archived_status_only():
+    merged = core.overlay_state(
+        {"status": "archived", "last_activity": "old"},
+        {"status": "active", "last_activity": "new"},
+    )
+    assert merged["status"] == "archived"
+    assert merged["last_activity"] == "new"
+
+
+def test_overlay_state_does_not_mutate():
+    entry = {"status": "idle"}
+    core.overlay_state(entry, {"status": "active"})
+    assert entry["status"] == "idle"
+
+
+def test_with_state_applies_overlays_and_defaults_missing_status():
+    registry = {"projects": {"a": {"path": "/a"}, "b": {"path": "/b", "status": "waiting"}}}
+    result = core.with_state(registry, {"b": {"status": "active"}})
+    assert result["projects"]["a"]["status"] == "idle"
+    assert result["projects"]["b"]["status"] == "active"
+
+
+@pytest.mark.parametrize("falsy", [None, "", False])
+def test_with_state_replaces_every_falsy_status(falsy):
+    # jq's `//=` replaces false as well as null; reproduced deliberately.
+    result = core.with_state({"projects": {"a": {"status": falsy}}}, {})
+    assert result["projects"]["a"]["status"] == "idle"
+
+
+def test_with_state_does_not_mutate_the_input():
+    registry = {"projects": {"a": {"path": "/a"}}}
+    core.with_state(registry, {"a": {"status": "active"}})
+    assert "status" not in registry["projects"]["a"]
+
+
+def test_with_state_handles_an_empty_registry():
+    assert core.with_state({}, {}) == {"projects": {}}
+
+
+# ── small primitives ─────────────────────────────────────────────────────────
+
+
+def test_active_count_counts_waiting_and_active_only():
+    registry = {
+        "projects": {
+            "a": {"status": "active"},
+            "b": {"status": "waiting"},
+            "c": {"status": "idle"},
+            "d": {"status": "archived"},
+        }
+    }
+    assert core.active_count(registry) == 2
+
+
+def test_project_paths_preserves_insertion_order_and_blanks_nulls():
+    registry = {"projects": {"z": {"path": "/z"}, "a": {"path": None}, "m": {}}}
+    assert core.project_paths(registry) == [("z", "/z"), ("a", ""), ("m", "")]
+
+
+def test_resolve_window_falls_back_to_the_project_name():
+    for value in (None, "", "null", "-"):
+        assert core.resolve_window("proj", {"tmux_window": value}) == "proj"
+    assert core.resolve_window("proj", {}) == "proj"
+    assert core.resolve_window("proj", {"tmux_window": "win"}) == "win"
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("# Title\nbody", "Title"),
+        ("## Title", "Title"),
+        ("#Title", "Title"),
+        ("   Title", "Title"),
+        ("", ""),
+        ("\t# X", "\t# X"),
+        ("# Title\r\nbody", "Title\r"),
+    ],
+)
+def test_heading_title(text, expected):
+    assert core.heading_title(text) == expected
+
+
+def test_heading_title_ignores_unicode_line_separators():
+    # `head -1` breaks on \n only; str.splitlines() would also break on \x0b, \x0c and U+2028.
+    assert core.heading_title("# A B") == "A B"
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("# T\nShipped: 2026-03-01\n", "2026-03-01"),
+        ("Shipped: 2026-03-01 by someone", "2026-03-01"),
+        ("Shipped:2026-03-01", "2026-03-01"),
+        ("prefix Shipped: A Shipped: B", "B"),
+        ("no date here", ""),
+        ("", ""),
+    ],
+)
+def test_ship_date(text, expected):
+    assert core.ship_date(text) == expected
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [("a.md", "a"), ("a.txt", "a.txt"), ("a.md.md", "a.md"), ("a", "a"), (".md", "")],
+)
+def test_slug_from_filename(name, expected):
+    assert core.slug_from_filename(name) == expected
+
+
+def test_sort_assimilated_is_filename_descending_with_a_tie_break():
+    entries = [
+        {"filename": "2026-01-01-a.md", "path": "/x", "project": "p"},
+        {"filename": "2026-03-01-c.md", "path": "/z", "project": "p"},
+        {"filename": "2026-02-01-b.md", "path": "/y", "project": "p"},
+        {"filename": "2026-02-01-b.md", "path": "/y2", "project": "p"},
+    ]
+    result = core.sort_assimilated(entries)
+    assert [e["filename"] for e in result] == [
+        "2026-03-01-c.md",
+        "2026-02-01-b.md",
+        "2026-02-01-b.md",
+        "2026-01-01-a.md",
+    ]
+    assert result[1]["path"] == "/y2"
+
+
+def test_sort_checkpoints_is_name_descending_and_capped():
+    names = ["2026-08-01.md", "2026-08-05.md", "2026-08-03.md", "2026-08-04.md"]
+    assert core.sort_checkpoints(names) == ["2026-08-05.md", "2026-08-04.md", "2026-08-03.md"]
+    assert core.sort_checkpoints(names, limit=1) == ["2026-08-05.md"]
+    assert core.sort_checkpoints([]) == []
+
+
+PLAN = """# Project Plan: X
+
+## Objective
+
+The objective line.
+
+## Acceptance Criteria
+
+- [x] done one
+- [ ] not done
+- [ ] also not done
+"""
+
+
+def test_plan_objective_takes_the_first_non_blank_line_within_two():
+    assert core.plan_objective(PLAN) == "The objective line."
+
+
+def test_plan_objective_misses_an_objective_more_than_two_lines_down():
+    # grep -A2 only yields two lines after the heading; preserved deliberately.
+    text = "## Objective\n\n\nToo far down.\n"
+    assert core.plan_objective(text) == ""
+
+
+def test_plan_objective_absent_heading():
+    assert core.plan_objective("# X\n\nno heading here") == ""
+
+
+def test_plan_progress_counts_met_and_total():
+    assert core.plan_progress(PLAN) == (1, 3)
+
+
+def test_plan_progress_with_nothing_met():
+    # The shell renders this as "Progress: 0\n0/2 criteria met" across two lines; returning ints is
+    # the signed-off deviation.
+    text = "- [ ] one\n- [ ] two\n"
+    assert core.plan_progress(text) == (0, 2)
+
+
+def test_plan_progress_with_no_criteria_at_all():
+    assert core.plan_progress("# X\n\nnothing\n") == (0, 0)
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [(None, "null"), (True, "true"), (False, "false"), ("x", "x"), (3, "3")],
+)
+def test_jq_interp(value, expected):
+    assert core.jq_interp(value) == expected
