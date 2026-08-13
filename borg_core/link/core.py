@@ -10,8 +10,9 @@ _borg_should_reap (lib/reaper.sh), borg_registry_with_state's merge algebra and 
 decision logic (lib/registry.zsh), _borg_active_count, and the title/ship-date/slug/sort/plan
 primitives the deep dive and the four collectors share.
 
-PHASE 1 SCOPE: leaves and the chokepoint only. No renderer, no ordering for the human table, no
-document assembly -- those are Phases 2 and 3 (see PROJECT_PLAN.md).
+PHASE 2 SCOPE: the human table's ordering (project_sort_key/order_projects) and the pure document
+assembler (assemble) now live here too. No renderer lives here yet -- the porcelain/overview/deep
+flip is still Phase 3 (see PROJECT_PLAN.md).
 """
 
 from __future__ import annotations
@@ -29,6 +30,22 @@ DEFAULT_REAP_STALE_HOURS = 12
 # The zsh loop maps the sentinel back (lib/registry.zsh:221-222); so does reap_overlay below. The
 # consequence is inherited, not chosen: a tmux_window whose literal value is "-" is treated as absent.
 TSV_EMPTY_SENTINEL = "-"
+
+# The `--json` document's format-version, bumped whenever the wire shape changes (see assemble's
+# docstring). Not a parameter: it is a property of the assembler, not an input any caller chooses.
+DOCUMENT_VERSION = 1
+
+# The human table's three-key sort (project_sort_key) ranks status ascending: waiting < active <
+# idle. See project_sort_key's docstring for the full writeup of all four judgment calls baked in.
+_STATUS_RANK = {"waiting": 0, "active": 1, "idle": 2}
+
+# Catches archived rows AND any truly-unknown status -- both fall into jq's `else 3` bucket at
+# borg.zsh:303-310; do not give archived its own rank without re-deriving the whole sort.
+_OTHER_STATUS_RANK = 3
+
+# The third sort key's substitute for a jq-falsy last_activity (missing, JSON null, or false). An
+# empty string is jq-truthy and is therefore NOT replaced -- see project_sort_key's docstring.
+_NO_ACTIVITY_SENTINEL = "0"
 
 _HEADING_PREFIX = re.compile(r"^#* *")
 
@@ -377,3 +394,109 @@ def jq_interp(value: object) -> str:
     if isinstance(value, str):
         return value
     return str(value)
+
+
+def format_iso(epoch_seconds: int) -> str:
+    """UTC ISO-8601 for `epoch_seconds`, in the exact grammar iso_to_epoch parses back.
+
+    Uses the same ISO_FORMAT constant as the parser -- never re-hardcode the literal here.
+    """
+    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).strftime(ISO_FORMAT)
+
+
+def project_sort_key(entry: dict) -> tuple[int, int, str]:
+    """The human table's three-key sort, ported from the jq at borg.zsh:303-310 (byte-identical text
+    also at :255-262 and :543-550): pinned first, then waiting < active < idle < other, then
+    last_activity ascending as a raw string compare.
+
+    Four judgment calls, all deliberate:
+      (a) `pinned` uses `is True`, NOT truthiness -- jq's `.value.pinned == true` treats the STRING
+          "true" and the number 1 as unpinned.
+      (b) All THREE keys are ASCENDING -- never reverse=True, never a negated key. last_activity
+          ascending means OLDEST FIRST, which looks like a bug and is not. cmd_next
+          (borg.zsh:1029-1030) uses a DIFFERENT direction-mixed sort; do not copy it here.
+      (c) last_activity is compared as a RAW STRING (lexicographic ISO), never converted to an
+          epoch -- the "0" sentinel only sorts first because "0" < "2".
+      (d) The sentinel substitutes only for jq-falsy values (JSON null / false / a missing key). An
+          EMPTY STRING is truthy in jq, so "" passes through as "" and sorts before "0".
+    """
+    pinned = 0 if entry.get("pinned") is True else 1
+    rank = _STATUS_RANK.get(entry.get("status"), _OTHER_STATUS_RANK)
+    activity = entry.get("last_activity")
+    if activity is None or activity is False:
+        activity = _NO_ACTIVITY_SENTINEL
+    return (pinned, rank, str(activity))
+
+
+def public_entry(entry: dict, now_epoch: int) -> dict:
+    """A registry entry as it may cross the `--json` wire: every key EXCEPT those starting with "_",
+    plus one derived key.
+
+    Keys beginning with "_" are reap_overlay's internal display annotations (`_reaped_from`,
+    core.py's reap_overlay) and are deliberately NOT part of the JSON contract. `relative_activity`
+    is the ONE derived field, computed with the document's single shared epoch.
+    """
+    public = {k: v for k, v in entry.items() if not k.startswith("_")}
+    public["relative_activity"] = relative_time(public.get("last_activity"), now_epoch)
+    return public
+
+
+def visible_projects(registry: dict, show_all: bool, now_epoch: int) -> dict[str, dict]:
+    """The projects a `borg link` invocation shows, keyed by name, with public_entry applied.
+
+    Ports the archived filter FUSED into the jq pipeline at borg.zsh:302, which runs BEFORE the
+    sort. Insertion order is preserved -- it is the tie-break order_projects's stable sort relies on.
+    """
+    projects = registry.get("projects") or {}
+    return {
+        name: public_entry(entry, now_epoch)
+        for name, entry in projects.items()
+        if show_all or entry.get("status") != "archived"
+    }
+
+
+def order_projects(projects: dict[str, dict]) -> list[str]:
+    """The display order for `projects`, mirroring jq's stable sort_by.
+
+    Python's sort is stable, reproducing jq's stable sort_by falling back to registry insertion
+    order on a full three-key tie.
+    """
+    return sorted(projects, key=lambda name: project_sort_key(projects[name]))
+
+
+def capacity(active: int, limit: int) -> dict:
+    """The capacity block feeding borg.zsh:406-411's warning, with a strict `>` comparison mirroring
+    `(( active_count > BORG_MAX_ACTIVE ))` at borg.zsh:407."""
+    return {"active": active, "limit": limit, "over_limit": active > limit}
+
+
+# JUSTIFICATION: one flat argument per top-level key of the document; a bag parameter or a
+# dataclass here would hide the contract this function exists to state.
+def assemble(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    generated_at, show_all, capacity, projects, order, directives, assimilated, cortex_pending, focus
+) -> dict:
+    """Assemble the `borg link --json` document from already-gathered data. Pure: no clock, no shell
+    import, no os.environ.
+
+    `order` is NOT redundant with `projects`' key order: jq's `keys` builtin sorts alphabetically;
+    only `keys_unsorted`/`to_entries` preserve insertion order, so any consumer must read `.order`
+    directly and never derive it from `.projects`.
+
+    Building the projects map as {name: projects[name] for name in order} is what makes A3's
+    `(.order|length) == (.projects|length)` structurally true and emits the map in display order.
+
+    A name in `order` that is absent from `projects` raises KeyError; callers must derive `order`
+    from the same map they pass as `projects`.
+    """
+    return {
+        "version": DOCUMENT_VERSION,
+        "generated_at": generated_at,
+        "show_all": show_all,
+        "capacity": capacity,
+        "order": order,
+        "projects": {name: projects[name] for name in order},
+        "directives": directives,
+        "assimilated": assimilated,
+        "cortex_pending": cortex_pending,
+        "focus": focus,
+    }
