@@ -82,6 +82,17 @@ def test_reap_disabled_by_any_non_empty_value(isolated_env, monkeypatch):
     assert shell.reap_disabled() is True
 
 
+def test_max_active_defaults_to_three_when_unset_or_empty_or_garbage(isolated_env, monkeypatch):
+    monkeypatch.delenv("BORG_MAX_ACTIVE", raising=False)
+    assert shell.max_active() == 3
+    monkeypatch.setenv("BORG_MAX_ACTIVE", "")
+    assert shell.max_active() == 3
+    monkeypatch.setenv("BORG_MAX_ACTIVE", "abc")
+    assert shell.max_active() == 3
+    monkeypatch.setenv("BORG_MAX_ACTIVE", "7")
+    assert shell.max_active() == 7
+
+
 # ── live_windows ─────────────────────────────────────────────────────────────
 
 
@@ -214,6 +225,22 @@ def test_registry_with_state_survives_one_malformed_state_json(isolated_env, mon
     result = shell.registry_with_state()
     assert set(result["projects"]) == {"good", "bad"}
     assert result["projects"]["bad"]["status"] == "idle"
+
+
+def test_registry_with_state_uses_the_injected_now_for_the_reap_decision(isolated_env, monkeypatch):
+    epoch = 1_700_000_000
+    last_activity = core.format_iso(epoch)
+    path = _project(isolated_env, "proj", state=f'{{"status":"active","last_activity":"{last_activity}"}}')
+    _write_registry(isolated_env, {"proj": {"path": path}})
+    monkeypatch.setattr(shell, "live_windows", lambda: [])
+    monkeypatch.setenv("BORG_REAP_STALE_HOURS", "1")
+
+    soon = shell.registry_with_state(now=epoch + 60)
+    assert soon["projects"]["proj"]["status"] == "active"
+
+    later = shell.registry_with_state(now=epoch + 7200)
+    assert later["projects"]["proj"]["status"] == "idle"
+    assert later["projects"]["proj"]["_reaped_from"] == "active"
 
 
 # ── directives / assimilated ─────────────────────────────────────────────────
