@@ -1837,6 +1837,59 @@ EOF
     [[ "$output" != *"merged="* ]] || false
 }
 
+# The reap overlay used to match live windows with `grep -qx "$tw"` — no -F, so the window NAME was
+# compiled as a basic regex. A project whose tmux_window is `troth.site` matched a live window named
+# `troth-site` and was reported ALIVE while its session was dead. Domain-named projects are exactly
+# the shape that hits it, and no test in the repo had ever exercised the match with a metacharacter.
+#
+# This also has to hold for the Python port: `name in live_windows` is a literal match, so leaving zsh
+# on a regex would make the two implementations answer differently on the same registry — the
+# divergence PROJECT_PLAN.md names as the port's top risk.
+@test "contract: a live-window match is literal, not a regex" {
+    _link_mock_tmux $'dotted-name\nplain'
+    cat > "$BORG_REGISTRY" <<'EOF'
+{
+  "projects": {
+    "dotted.name": {"path": null, "source": "cli", "status": "active",
+                    "last_activity": "2020-01-01T00:00:00Z", "summary": "Regex bait."},
+    "plain": {"path": null, "source": "cli", "status": "active",
+              "last_activity": "2020-01-01T00:00:00Z", "summary": "Genuinely live."}
+  }
+}
+EOF
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+
+    local plain
+    plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
+    # `dotted.name` must NOT be rescued by the live window `dotted-name`.
+    [[ "$plain" =~ dotted\.name[[:space:]]+\[C\][[:space:]]+idle ]] || false
+    # ...while a genuine whole-string match still counts as live.
+    [[ "$plain" =~ plain[[:space:]]+\[C\][[:space:]]+active ]] || false
+}
+
+# Same defect, same fix, in the other window-existence check the CLI uses (lib/tmux.zsh).
+@test "contract: borg_tmux_window_exists matches a window name literally" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    cat > "$MOCK_BIN/tmux" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+    has-session) exit 0 ;;
+    list-windows) printf '%s\n' "dotted-name" ;;
+esac
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/tmux"
+
+    run zsh -c "set -- help; source '$BORG' >/dev/null 2>&1; borg_tmux_window_exists 'dotted.name'"
+    [ "$status" -ne 0 ]
+
+    run zsh -c "set -- help; source '$BORG' >/dev/null 2>&1; borg_tmux_window_exists 'dotted-name'"
+    [ "$status" -eq 0 ]
+}
+
 @test "contract: link overview on an empty registry prints the scan hint and exits 0" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
