@@ -543,3 +543,25 @@ def test_format_iso_round_trips_with_iso_to_epoch():
     formatted = core.format_iso(epoch)
     assert formatted == "2027-01-15T08:00:00Z"
     assert core.iso_to_epoch(formatted) == epoch
+
+
+# Phase 3 entry gate, test 1: capacity's `active > limit` is strict, mirroring borg.zsh:408's
+# `(( active_count > BORG_MAX_ACTIVE ))`. Every prior exercise of core.capacity() passed 0 or a
+# non-boundary pair as the active count (e.g. `capacity(0, 3)` at :502/:529), which is mutation-blind
+# by construction: `>` and `>=` agree everywhere except exactly on the boundary. This asserts the
+# boundary directly, in both directions, so mutating `>` to `>=` fails here even though nothing else
+# in this file would move.
+@pytest.mark.parametrize(
+    ("active", "limit", "expected_over_limit"),
+    [
+        (3, 3, False),
+        (4, 4, False),
+        (4, 3, True),
+        (5, 4, True),
+    ],
+)
+def test_capacity_over_limit_boundary_is_strictly_greater_than(active, limit, expected_over_limit):
+    result = core.capacity(active, limit)
+    assert result["over_limit"] is expected_over_limit
+    assert result["active"] == active
+    assert result["limit"] == limit

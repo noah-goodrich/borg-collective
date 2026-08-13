@@ -84,12 +84,27 @@ Python target next.
     dying with `no registry at ` on every real invocation since its migration, because it read
     `BORG_REGISTRY` from an environment that never had it. Contract test mocks `python3` and asserts
     the **child's** environment, including that a caller-supplied value is carried through.
-- [ ] **A3 — `borg link --json` emits the full document and is not polluted by the zsh pre-pass.**
+- [x] **A3 — `borg link --json` emits the full document and is not polluted by the zsh pre-pass.**
       `warn()` writes to **stdout** (borg.zsh:30), and the mandatory `borg_desktop_scan` pre-pass can emit
       "registry write blocked" there, breaking `jq`. Diagnostics must move to stderr on this path.
   - Verify: `borg link --json | jq -e '.projects and .generated_at and (.order | length) == (.projects | length)'`
     exits 0 — not the directive's `.projects and .generated_at`, which passes on an empty object. Plus a test
     that forces the registry-write warning and asserts stdout is still valid JSON.
+  - **Done 2026-08-13**, merged as `358f0aa` ([#134](https://github.com/noah-goodrich/borg-collective/pull/134)).
+    Verified by an independent evaluator that re-ran the gate live (exit 0) rather than restating it, plus five
+    green CI lanes: `make lint` 10.00/10, 346 pytest, `bats tests/cli_contract.bats` 112/112, `bats tests/*.bats`
+    636/636. Diagnostics move to stderr via `1>&2 2>/dev/null` on the pre-pass (`borg.zsh:3275-3321`).
+  - **Non-vacuity measured by 8 mutations, not assumed: 7 killed, 1 survived.** Killed — reversing the
+    `last_activity` tie-break, `pinned` truthiness vs `is True`, swapping the waiting/active rank, leaking
+    `_`-prefixed keys, ignoring `--all`, a second wall-clock read, and ungating `borg_desktop_scan` on the focus
+    path. Most died at BOTH tiers independently. Also proven: 7 of the 9 new bats tests really cross the
+    zsh→python3 boundary (replacing `cli.py:93` with `print("{}")` turned exactly those 7 red).
+  - **Branch coverage confirmed honest**: with `branch = true` the new code is 149/150 arcs — `core.py` 74/74,
+    `shell.py` 68/68, zero partials; the only miss is `cli.py:116→117`, the `if __name__` guard, which is
+    structurally uncoverable under pytest. Statement→branch moves the PR by 0.11pp.
+  - **The one survivor is carried to Phase 3, not silently dropped**: `core.capacity()`'s `active > limit` can be
+    changed to `>=` with 346 pytest + 112 bats still green. Current code is correct and matches `borg.zsh:407`;
+    what is missing is a discriminating assertion. See "Phase 3 entry gate" below.
 - [ ] **A4 — Human output is byte-identical after the port.**
       All A1 assertions pass **unchanged** against the Python implementation. A modified assertion is not a
       parity proof.
@@ -159,6 +174,43 @@ only) plus additive `core.py`/`shell.py` primitives (`project_sort_key`, `visibl
 `git diff main -- tests/cli_contract.bats | grep '^-' | grep -v '^---'` prints nothing. Interpreter pinning
 and a `borg doctor` python3 check are DEFERRED to Phase 3, when human rendering starts depending on Python;
 see the corrected CI risk bullet above.
+
+### Phase 3 entry gate — three tests, from the post-merge depth audit
+
+These close gaps that a 12-agent audit *measured* on the merged Phase 2 code. All three are latent today
+because nothing consumes the document yet; **all three become user-visible the instant Phase 3 flips the
+renderers onto it**, which is why they gate Phase 3 rather than having blocked #134. Roughly one commit.
+
+1. **Capacity boundary discriminator.** `core.capacity()`'s `active > limit` survives mutation to `>=` with
+   the entire suite green. `grep -rn over_limit tests/` matches nothing; its only exercise is `capacity(0, 3)`
+   passed as an argument, and 0-vs-3 is mutation-blind by construction. The 4-vs-4 case *is* tested — at
+   `cli_contract.bats:1943`, without `--json`, so it never reaches `core.py`. Fix: a parametrized assert on
+   `capacity(4,4)` and `capacity(5,4)`, plus a bats assertion on `.capacity.over_limit`.
+2. **`.order` vs golden row order must be derived, not re-typed.** Nothing asserts the two agree. Proven in
+   both directions: swapping `_STATUS_RANK` fails only the `--json` test while all four goldens stay green;
+   swapping the jq ranks at `borg.zsh:305-306` fails the goldens while all 7 real-boundary `--json` tests stay
+   green. `link-porcelain.golden` column 1 and the literal at `cli_contract.bats:2341` are identical text with
+   no derivation between them. Fix: parse the golden's first column and diff it against `jq -r '.order[]'`
+   over the *same* fixture. **This one must land before the flip** — a refactor touching both sides can move
+   them together into a state no assertion covers.
+3. **Reap overlay end-to-end on the JSON path.** Forcing `BORG_NO_REAP="${BORG_NO_REAP:-1}"` in `_borg_py` —
+   permanently disabling the overlay for every Python child — leaves the contract suite at 112/112. The
+   link-path test at `bats:2452` only greps the variable *name* from a **mocked** python3's env dump; no value
+   assertion, no `borg_core` execution, unlike the A2 test at `:2298-2304` which does pin a value. `status` is
+   the field this tool exists to report. Fix: a stale active row asserting `.status == "idle"` without the var
+   and `"active"` with it.
+
+Also carried, lower priority and each cheap: `cli.py:111` catches only `ValueError`, so nine malformed-registry
+shapes produce a raw traceback with zero bytes on stdout; EACCES is silent wrong data (an unreadable
+`PROJECT_PLAN.md` renders a real 1-of-3 plan as 0-of-0); `relative_activity` has no wire type contract
+(`last_activity: 12345` emits a JSON number on a `str | None` field); the A3 force test still skips on any
+uid-0 runner, and it is the sole assertion covering the pre-pass gate.
+
+**Coverage-gate defect found in passing (repo-wide, not this plan's):** `omit = ["**/tests/**"]` matches
+nothing, because tests are colocated as `borg_core/<pkg>/test_*.py`. 1407 of 2331 measured statements (60.4%)
+are test files grading themselves; real production coverage is **96%, not 98%**. One-line fix —
+`omit = ["*/test_*.py"]` plus `branch = true` — and the 90% gate still passes with 8 points of headroom
+(verified, not assumed).
 
 ## Scope Boundaries
 
