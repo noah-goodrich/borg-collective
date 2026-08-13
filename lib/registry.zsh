@@ -163,7 +163,12 @@ borg_state_write() {
 # durable persist. Pass a non-empty BORG_NO_REAP to skip the overlay (used by
 # `borg reap` itself, which needs the un-downgraded view to decide what to write).
 borg_registry_with_state() {
-    local raw result name ppath state
+    # `merged` is declared HERE, not at its use site inside the loop. A bare `local merged` in a loop
+    # body re-declares an already-declared parameter, and zsh's `local` (a `typeset` alias) then
+    # PRINTS it -- `merged=$'{\n  "projects": ...'` lands on stdout from the second iteration onward,
+    # straight into the caller's `jq`, which dies with "Invalid numeric literal". Hit while writing
+    # this very fix. _borg_cortex_pending (borg.zsh:2402) has the same latent `local cd` in a loop.
+    local raw result name ppath state merged
     raw=$(borg_registry_read)
     result="$raw"
     while IFS=$'\t' read -r name ppath; do
@@ -171,13 +176,27 @@ borg_registry_with_state() {
         [[ -f "$ppath/.borg/state.json" ]] || continue
         state=$(/bin/cat "$ppath/.borg/state.json" 2>/dev/null || true)
         [[ -z "$state" ]] && continue
-        result=$(printf '%s' "$result" | jq \
+        # `|| result="$result"` USED TO BE HERE and was a no-op that silently blanked the registry.
+        # Command substitution assigns BEFORE the `||` runs, so once jq failed, `result` was already
+        # the empty string and the fallback reassigned empty to empty. jq fails on any project whose
+        # .borg/state.json is not valid JSON (--argjson refuses it) -- a partial write from a hook, a
+        # killed session, a hand edit. ONE such file emptied the WHOLE registry for every consumer of
+        # borg_registry_with_state: `borg link` printed "No projects registered. Run: borg scan",
+        # and next/switch/init/reap/watch saw nothing either. Verified by probe before this fix.
+        # Merge into a scratch variable and only adopt it when jq actually produced something, so a
+        # bad state.json costs that ONE project its overlay instead of costing the registry.
+        merged=$(printf '%s' "$result" | jq \
             --arg p "$name" \
             --argjson s "$state" \
             '(.projects[$p].status == "archived") as $arch |
              .projects[$p] += $s |
              if $arch then .projects[$p].status = "archived" else . end' \
-            2>/dev/null) || result="$result"
+            2>/dev/null) || merged=""
+        # An `[[ ... ]] && result=...` one-liner would return 1 on the empty branch and `set -e`
+        # would kill the function mid-loop -- the same trap borg.zsh:172-174 documents for `(( n++ ))`.
+        if [[ -n "$merged" ]]; then
+            result="$merged"
+        fi
     done < <(printf '%s' "$raw" \
         | jq -r '.projects | to_entries[] | [.key, (.value.path // "")] | @tsv' 2>/dev/null)
     # Default status to "idle" for any project that has neither a state.json nor a registry status
