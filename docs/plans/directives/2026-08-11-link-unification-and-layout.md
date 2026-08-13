@@ -1,5 +1,13 @@
 # Directive: Link Unification + Bottom-Anchored Layout
 *Filed: 2026-08-11*
+*Revised 2026-08-12: RESEQUENCED. This is now the SECOND half of a two-pass split. The Python-core port
+ships first as `PROJECT_PLAN.md` ("Port `borg link` to the Python Core, behavior unchanged"), which carries
+L1, L2, and L6. What remains here is the layout redesign — L3 and L5 — against a stable Python target.
+Reason: a port needs contract tests that pass UNCHANGED, and L3/L5 rewrite the exact output those assertions
+pin; parity cannot be proven against a moving target. **L4 is withdrawn** — verified empirically that the
+`---` defect does not reproduce (`borg link | grep -c -- '---$'` returns 0; 0 of 118 directive files across
+`~/dev` begin with `---`). **L5's baseline is 160 lines, not the 83 recorded below.** Do not start this
+directive until the port has shipped.*
 
 Independent project. Carved out of `2026-08-10-link-unification-and-attention-routing.md` (now severed — it
 conflated four concerns and two of them have shipped or been superseded). This is the surviving **display**
