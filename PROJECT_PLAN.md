@@ -43,14 +43,36 @@ Python target next.
       unknown-project die, and all three external consumers (`drone.zsh:963` `Status:` grep, `drone.zsh:1405`
       `drone link`, `borg.zsh:689` fzf preview).
   - Verify: `bats tests/cli_contract.bats` green on unmodified `main`; case count `>= 14`.
-  - **Done 2026-08-13.** 18 cases added; suite 91/91, full `bats tests/*.bats` 613/613. The three primary
-    renderers are pinned by byte-exact golden files under `tests/fixtures/link/` (ANSI escapes and column
-    padding included), not substrings — a substring harness would pass against a renderer that changed
-    padding or dropped a color, which is the drift this port can produce. Non-vacuity was verified by
-    mutation: cutting the porcelain summary at 70 instead of 80, widening the overview `%-12s` status
-    column to `%-13s`, and renaming the deep dive's `Status:` label each turned the corresponding golden
-    (and, for the label, the `drone status` consumer test) red. The `(NOm)` oldest-first assimilated bug is
-    pinned as a deviation, so fixing it during the port must FLIP that test rather than pass silently.
+  - **Done 2026-08-13.** 25 cases; suite 98/98, full `bats tests/*.bats` 620/620, and the whole contract
+    file green on GNU/Linux (ubuntu:24.04 container) as well as macOS — the goldens byte-match on both.
+    Four renderers are pinned by byte-exact golden files under `tests/fixtures/link/` (ANSI escapes and
+    column padding included), not substrings: a substring harness passes against a renderer that changes
+    padding or drops a color, which is the drift this port produces.
+  - **Hardened after a blind adversarial pass** (3 lenses: reuse, vacuity, portability). The first draft
+    was green and still under-constrained in ways that mattered:
+    - The **tertiary sort key** (`last_activity` ASC) was invisible — no fixture put two projects in the
+      same (pinned, status) bucket, so reversing it, the change a porter is most likely to make since
+      oldest-first reads as a bug, rendered byte-identically. Three projects now tie that bucket.
+    - The **human `--all` path** was never rendered at all; `--all` was only exercised via `--porcelain`.
+      Added `link-overview-all.golden`.
+    - `display_name`, the checkpoint `head -3`/`head -20` caps, name-vs-mtime checkpoint ordering, the
+      `never` relative-time bucket, the deep dive's `(never)`/`(none)`/`(unknown)` defaults, the
+      `fold -s -w 70` wrap and its continuation indent, the `--llm` alias, and the reap overlay's
+      downgrade direction were all unpinned. Each now has a case.
+    - The claimed external consumer at `borg.zsh:689` was **wrong**: fzf reads `cmd_ls --porcelain`
+      (`borg.zsh:685`), not `link --porcelain`, and the two already diverge on an empty registry. Both
+      halves are now pinned against the producer that actually feeds each.
+  - **A second known deviation surfaced and is now pinned**: `criteria_done=$(grep -c … || echo 0)`
+    (`borg.zsh:459`) captures *both* grep's `0` and the `|| echo 0` fallback when nothing matches, so a
+    plan with no completed criteria renders `Progress: 0` / `0/2 criteria met` across two lines. Every
+    fresh plan hits it. The port will "fix" it merely by being Python, so it must land as a deliberate
+    deviation, not a silent change. The `(NOm)` oldest-first assimilated bug is likewise pinned — and
+    deliberately kept OUT of the deep-dive golden, so fixing it flips one substring test instead of
+    forcing a golden regeneration that A4 rules out as a parity proof.
+  - Non-vacuity verified by **six mutations**, each caught by exactly the goldens that should see it:
+    dropping the tertiary sort key (porcelain + both overviews red, deep green), widening the checkpoint
+    caps (deep only), making `--all` ineffective (overview-all only), dropping `display_name` (both
+    overviews), removing the `--llm` alias, and disabling the reap overlay.
 - [ ] **A2 — Config vars reach the Python child.**
       `BORG_MAX_ACTIVE`, `BORG_REAP_STALE_HOURS`, `BORG_TMUX_SESSION`, `BORG_CORTEX_WAKES` are all currently
       set *without* `export`, so a `python3 -m` child inherits none of them.

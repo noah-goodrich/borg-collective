@@ -1,4 +1,6 @@
 echo	cli	idle	2026-08-05T10:00:00Z	Echo is pinned.
 bravo	desktop	waiting	2026-08-02T10:00:00Z	Bravo is waiting.
 charlie	coco	active	2026-08-03T10:00:00Z	Charlie is active.
+golf	cli	idle	2026-06-01T10:00:00Z	Golf has no status field.
+foxtrot	cli	idle	2026-07-01T10:00:00Z	Foxtrot ties alpha's bucket.
 alpha	cli	idle	2026-08-01T10:00:00Z	Alpha porcelain summary running well past the eighty character cut so truncation
