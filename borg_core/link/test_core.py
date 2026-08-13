@@ -417,3 +417,129 @@ def test_plan_progress_with_no_criteria_at_all():
 )
 def test_jq_interp(value, expected):
     assert core.jq_interp(value) == expected
+
+
+# ── Phase 2: document primitives ─────────────────────────────────────────────
+
+
+def _porcelain_projects():
+    """Mirrors tests/cli_contract.bats:1443-1465's _link_setup_porcelain fixture."""
+    return {
+        "echo": {"status": "idle", "pinned": True, "last_activity": "2026-08-05T10:00:00Z"},
+        "bravo": {"status": "waiting", "pinned": False, "last_activity": "2026-08-04T10:00:00Z"},
+        "charlie": {"status": "active", "pinned": False, "last_activity": "2026-08-03T10:00:00Z"},
+        "delta": {"status": "archived", "pinned": False, "last_activity": "2026-08-02T10:00:00Z"},
+        "alpha": {"status": "idle", "pinned": False, "last_activity": "2026-08-01T00:00:00Z"},
+        "foxtrot": {"status": "idle", "pinned": False, "last_activity": "2026-07-01T00:00:00Z"},
+        "golf": {"status": "idle", "pinned": False, "last_activity": "2026-06-01T00:00:00Z"},
+    }
+
+
+def test_order_projects_matches_the_jq_three_key_sort():
+    projects = _porcelain_projects()
+    visible = {name: entry for name, entry in projects.items() if entry["status"] != "archived"}
+    assert core.order_projects(visible) == ["echo", "bravo", "charlie", "golf", "foxtrot", "alpha"]
+
+
+def test_order_projects_treats_string_true_as_unpinned():
+    projects = {
+        "a": {"status": "idle", "pinned": "true", "last_activity": "2026-08-01T00:00:00Z"},
+        "b": {"status": "idle", "pinned": 1, "last_activity": "2026-08-02T00:00:00Z"},
+        "c": {"status": "idle", "pinned": True, "last_activity": "2026-08-03T00:00:00Z"},
+    }
+    # Only "c" is a real JSON boolean true, so it sorts first; "a" and "b" stay in the unpinned
+    # bucket and are ordered by their last_activity like any other unpinned row.
+    assert core.order_projects(projects) == ["c", "a", "b"]
+
+
+def test_project_sort_key_activity_sentinel_only_replaces_jq_falsy():
+    missing = core.project_sort_key({"status": "idle"})
+    explicit_null = core.project_sort_key({"status": "idle", "last_activity": None})
+    empty_string = core.project_sort_key({"status": "idle", "last_activity": ""})
+    unparseable = core.project_sort_key({"status": "idle", "last_activity": "2026-1-01T00:00:00Z"})
+
+    assert missing[2] == "0"
+    assert explicit_null[2] == "0"
+    assert empty_string[2] == ""
+    assert empty_string[2] < missing[2]  # "" sorts before "0"
+    assert unparseable[2] == "2026-1-01T00:00:00Z"  # raw string, never epoch-parsed, never raises
+
+
+def test_visible_projects_filters_archived_and_show_all_restores_it():
+    registry = {"projects": _porcelain_projects()}
+    now = 1_800_000_000
+
+    hidden = core.visible_projects(registry, False, now)
+    assert "delta" not in hidden
+    assert len(hidden) == 6
+
+    shown = core.visible_projects(registry, True, now)
+    assert "delta" in shown
+    assert len(shown) == 7
+    assert core.order_projects(shown)[-1] == "delta"  # archived sorts last (rank 3)
+
+
+def test_visible_projects_strips_internal_keys_and_adds_relative_activity():
+    now = 1_800_007_200  # 7200s after the entry's last_activity
+    entry = {
+        "status": "idle",
+        "last_activity": core.format_iso(1_800_000_000),
+        "_reaped_from": "active",
+    }
+    registry = {"projects": {"proj": entry}}
+
+    public = core.visible_projects(registry, False, now)["proj"]
+    assert "_reaped_from" not in public
+    assert public["relative_activity"] == "2h ago"
+
+
+def test_assemble_emits_the_ten_keys_and_keeps_order_and_projects_in_lockstep():
+    projects = {"a": {"status": "idle"}, "b": {"status": "idle"}}
+    order = ["b", "a"]
+    doc = core.assemble(
+        generated_at="2026-08-13T00:00:00Z",
+        show_all=False,
+        capacity=core.capacity(0, 3),
+        projects=projects,
+        order=order,
+        directives=[],
+        assimilated=[],
+        cortex_pending=[],
+        focus=None,
+    )
+    assert list(doc) == [
+        "version",
+        "generated_at",
+        "show_all",
+        "capacity",
+        "order",
+        "projects",
+        "directives",
+        "assimilated",
+        "cortex_pending",
+        "focus",
+    ]
+    assert doc["version"] == 1
+    assert list(doc["projects"]) == doc["order"] == order
+
+    # a name absent from `order` is dropped from the emitted map, not desynchronized.
+    doc2 = core.assemble(
+        generated_at="x",
+        show_all=False,
+        capacity=core.capacity(0, 3),
+        projects=projects,
+        order=["b"],
+        directives=[],
+        assimilated=[],
+        cortex_pending=[],
+        focus=None,
+    )
+    assert list(doc2["projects"]) == ["b"]
+    assert len(doc2["order"]) == len(doc2["projects"])
+
+
+def test_format_iso_round_trips_with_iso_to_epoch():
+    epoch = 1_800_000_000
+    formatted = core.format_iso(epoch)
+    assert formatted == "2027-01-15T08:00:00Z"
+    assert core.iso_to_epoch(formatted) == epoch
