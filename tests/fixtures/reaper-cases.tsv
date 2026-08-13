@@ -1,0 +1,60 @@
+# THE SHARED REAP CASE TABLE — read by BOTH implementations, with identical expected values.
+#
+# PROJECT_PLAN.md's Risks section names shared-helper divergence as the crux of this port:
+# borg_reap_overlay and _borg_should_reap stay live in zsh (nine call sites) while Python
+# reimplements them, and divergence shows up as `borg link` saying idle while `borg next` says
+# waiting — a plausible-looking wrong answer with no crash, the exact failure mode this repo has
+# been bitten by three times. The stated mitigation is ONE case table exercised by both sides.
+# This is that table.
+#
+#   tests/reaper_cases.bats          reads it and runs lib/reaper.sh + borg_reap_overlay under zsh
+#   borg_core/link/test_core.py      reads it and runs core.should_reap + core.reap_overlay
+#
+# Both readers assert the SAME expected column. A row that disagrees fails one side loudly instead
+# of drifting silently.
+#
+# COLUMNS (tab-separated):
+#   id          stable identifier, referenced in failure messages
+#   status      the project's status as the registry/state.json holds it; EMPTY means ""
+#               (spelled out, never left blank: a blank column is two consecutive tabs, and zsh's
+#               `read` with a whitespace IFS collapses them and shifts every later field left --
+#               the same trap lib/registry.zsh:213-217 documents for its own @tsv stream)
+#   age         last_activity, expressed RELATIVE to the test's "now" so no row rots:
+#                 NOW-<seconds>   that many seconds in the past
+#                 NOW+<seconds>   that many seconds in the FUTURE
+#                 EMPTY           the empty string
+#                 NULL            the literal four-character string "null"
+#                 GARBAGE         an unparseable value
+#   live        1 if a live tmux window matches, else 0
+#   threshold   BORG_REAP_STALE_HOURS; GARBAGE means a non-integer value
+#   expect      REAP or KEEP
+#   why         one line, for the failure message
+#
+# Boundary rows use offsets far from an hour boundary on purpose. An earlier draft had a row at
+# exactly 3600s against a 1h threshold, which flips on a sub-second timing difference between
+# fixture setup and evaluation; every boundary here is probed with >= 60s of slack.
+#
+id	status	age	live	threshold	expect	why
+status-idle	idle	NOW-999999	0	12	KEEP	idle is not a reapable status
+status-archived	archived	NOW-999999	0	12	KEEP	archived is not a reapable status
+status-unknown	unknown	NOW-999999	0	12	KEEP	an unrecognized status is not reapable
+status-empty	EMPTY	NOW-999999	0	12	KEEP	an empty status is not reapable
+status-case	Active	NOW-999999	0	12	KEEP	the status match is case-sensitive
+live-active	active	NOW-999999	1	12	KEEP	a live window is never reaped however stale
+live-waiting	waiting	NOW-999999	1	12	KEEP	same, for waiting
+live-beats-empty-age	active	EMPTY	1	12	KEEP	liveness is checked before the missing-timestamp rule
+age-empty	active	EMPTY	0	12	REAP	no last_activity at all means reap
+age-null	active	NULL	0	12	REAP	the literal string null counts as no timestamp
+age-garbage	active	GARBAGE	0	12	REAP	an unparseable timestamp reaps, unlike relative_time which echoes it
+age-empty-garbage-threshold	active	EMPTY	0	GARBAGE	REAP	a garbage threshold still reaps a project with no timestamp
+threshold-garbage	active	NOW-999999	0	GARBAGE	KEEP	a non-integer threshold makes the shell test return 2, read as keep
+fresh-active	active	NOW-3600	0	12	KEEP	one hour old, well inside a twelve hour threshold
+stale-active	active	NOW-86400	0	12	REAP	a day old, well past it
+stale-waiting	waiting	NOW-86400	0	12	REAP	same, for waiting
+boundary-under	active	NOW-42600	0	12	KEEP	11h50m: under the threshold by ten minutes
+boundary-over	active	NOW-43800	0	12	REAP	12h10m: over it by ten minutes
+threshold-zero-past	active	NOW-60	0	0	REAP	a zero threshold reaps anything at or past its timestamp
+threshold-zero-future-small	active	NOW+100	0	0	REAP	TRUNCATION: shell arithmetic gives -100/3600 = 0, so 0 >= 0 reaps
+threshold-zero-future-large	active	NOW+7200	0	0	KEEP	-7200/3600 = -2, which is below the threshold
+threshold-one-future	active	NOW+7200	0	1	KEEP	a future timestamp is never stale against a positive threshold
+threshold-large	active	NOW-86400	0	999	KEEP	a day old is nowhere near a 999 hour threshold
