@@ -1696,15 +1696,22 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" = "5" ]
 
-    # Diagnostics on failure, matching _assert_link_golden's pattern: this assertion went red on both
-    # CI lanes while passing locally and the bare `[ x = y ]` reported only that it failed, which was
-    # not enough to tell a sort regression from output that never reached `cut` at all.
-    run bash -c "zsh '$BORG' link --porcelain | head -1 | cut -f1"
+    # DO NOT CLOSE THIS PIPE EARLY. Reading column 1 of row 1 as `... | head -1 | cut -f1` is the
+    # obvious spelling and it is the wrong one: `head` exits after the first line, the printf loop in
+    # _borg_link_porcelain (borg.zsh:273) then takes EPIPE on the next row, and zsh reports that on
+    # STDERR as `_borg_link_porcelain:printf:28: write error: broken pipe`. bats `run` merges stderr
+    # into $output, so the comparison saw the row PLUS two zsh diagnostics. It failed on both CI lanes
+    # while passing locally because whether the loop's next write loses the race to head's exit is
+    # timing-dependent — the class of green-locally/red-on-CI bug this whole file exists to catch.
+    # The two field-count assertions above are immune: awk and sort both drain to EOF, so nothing
+    # closes the pipe early. Take the field from bats' own $lines instead, over the same unpiped
+    # invocation shape the golden assertions already use.
+    run_zsh_borg link --porcelain
     [ "$status" -eq 0 ]
-    [ "$output" = "echo" ] || {
-        printf 'first field was [%s] (status %s)\n' "$output" "$status" >&2
+    [ "${lines[0]%%$'\t'*}" = "echo" ] || {
+        printf 'first field was [%s] (status %s)\n' "${lines[0]%%$'\t'*}" "$status" >&2
         printf -- '--- full porcelain, octal-escaped ---\n' >&2
-        zsh "$BORG" link --porcelain 2>&1 | od -c >&2
+        printf '%s\n' "$output" | od -c >&2
         false
     }
 
