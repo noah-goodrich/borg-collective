@@ -2315,3 +2315,180 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" -ge 60 ]
 }
+
+# ── Phase 2: the borg link --json seam (A3) ─────────────────────────────────
+
+@test "contract: link --json emits a document whose order and projects agree" {
+    _link_setup_porcelain
+
+    run bash -c "zsh '$BORG' link --json | jq -e '.projects and .generated_at and (.order | length) == (.projects | length)'"
+    [ "$status" -eq 0 ]
+
+    run bash -c "zsh '$BORG' link --json | jq -r '.order | length'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "6" ]  # delta (archived) is filtered out
+
+    run bash -c "zsh '$BORG' link --json | jq -r '.version'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1" ]
+}
+
+@test "contract: link --json orders pinned first, then status, then last_activity ascending" {
+    _link_setup_porcelain
+
+    run bash -c "zsh '$BORG' link --json | jq -r '.order | join(\",\")'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "echo,bravo,charlie,golf,foxtrot,alpha" ]
+}
+
+@test "contract: link --json --all restores archived projects to both order and projects" {
+    _link_setup_porcelain
+
+    run bash -c "zsh '$BORG' link --json --all | jq -r '.order | length'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "7" ]
+
+    run bash -c "zsh '$BORG' link --json --all | jq -r '.order[-1]'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "delta" ]
+
+    run bash -c "zsh '$BORG' link --json --all | jq -r '.projects.delta.status'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "archived" ]
+
+    run bash -c "zsh '$BORG' link --json --all | jq -r '.show_all'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "true" ]
+}
+
+@test "contract: link --json stdout stays valid JSON when the registry write warning fires, and the focus path never triggers it" {
+    if [ "$(id -u)" -eq 0 ]; then
+        skip 'chmod force is a no-op for root'
+    fi
+    _link_setup_deep
+    mkdir -p "$BORG_DIR/desktop"
+    printf '{}' > "$BORG_DIR/desktop/one.json"
+    chmod a-w "$BORG_DIR"
+
+    # STEP 1 (anti-vacuity guard): the human path really does splice the warning onto stdout.
+    zsh "$BORG" link --porcelain > "${BATS_TEST_TMPDIR}/p.out" 2> "${BATS_TEST_TMPDIR}/p.err"
+    run grep -c 'registry write blocked' "${BATS_TEST_TMPDIR}/p.out"
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+
+    # STEP 2: the overview --json shape stays clean JSON and the warning lands on stderr instead.
+    zsh "$BORG" link --json > "${BATS_TEST_TMPDIR}/j.out" 2> "${BATS_TEST_TMPDIR}/j.err"
+    [ -s "${BATS_TEST_TMPDIR}/j.out" ]
+    run bash -c "jq -e '.projects and .generated_at' < '${BATS_TEST_TMPDIR}/j.out'"
+    [ "$status" -eq 0 ]
+    run grep -c 'registry write blocked' "${BATS_TEST_TMPDIR}/j.out"
+    [ "$output" -eq 0 ]
+    run grep -c 'registry write blocked' "${BATS_TEST_TMPDIR}/j.err"
+    [ "$output" -ge 1 ]
+
+    # STEP 3: the desktop pre-pass is gated off the focus shape, so no warning appears at all.
+    zsh "$BORG" link --json delta > "${BATS_TEST_TMPDIR}/f.out" 2> "${BATS_TEST_TMPDIR}/f.err"
+    run grep -c 'registry write blocked' "${BATS_TEST_TMPDIR}/f.err"
+    [ "$output" -eq 0 ]
+    run bash -c "jq -e '.focus.name' < '${BATS_TEST_TMPDIR}/f.out'"
+    [ "$status" -eq 0 ]
+
+    chmod u+w "$BORG_DIR"
+}
+
+@test "contract: link --json <project> adds a focus block and leaves the deep dive alone" {
+    _link_setup_deep
+
+    run bash -c "zsh '$BORG' link --json delta | jq -r '.focus.name'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "delta" ]
+
+    run bash -c "zsh '$BORG' link --json delta | jq -r '.focus.plan.met'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1" ]
+
+    run bash -c "zsh '$BORG' link --json delta | jq -r '.focus.plan.total'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "3" ]
+
+    run bash -c "zsh '$BORG' link --json delta | jq -r '.focus.checkpoints | length'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "3" ]
+
+    run bash -c "zsh '$BORG' link --json delta | jq -r '.focus.checkpoints[0]'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "2026-08-05-1000.md" ]
+
+    run bash -c "zsh '$BORG' link --json delta | jq -r '.focus.directives | length'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "2" ]
+}
+
+@test "contract: link --json --refresh keeps cmd_scan's info lines off stdout" {
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+        > "$BORG_REGISTRY"
+
+    zsh "$BORG" link --json --refresh > "${BATS_TEST_TMPDIR}/r.out" 2> "${BATS_TEST_TMPDIR}/r.err"
+    run bash -c "jq -e '.projects and .generated_at' < '${BATS_TEST_TMPDIR}/r.out'"
+    [ "$status" -eq 0 ]
+
+    local word
+    for word in Scanning Refreshing 'summary updated'; do
+        run grep -c "$word" "${BATS_TEST_TMPDIR}/r.out"
+        [ "$output" -eq 0 ]
+    done
+}
+
+@test "contract: link --json dies on an unknown project with empty stdout" {
+    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+
+    run bash -c "zsh '$BORG' link --json ghost > '${BATS_TEST_TMPDIR}/o' 2> '${BATS_TEST_TMPDIR}/e'"
+    [ "$status" -eq 1 ]
+    [ ! -s "${BATS_TEST_TMPDIR}/o" ]
+    run grep -c 'not in registry' "${BATS_TEST_TMPDIR}/e"
+    [ "$output" -ge 1 ]
+}
+
+@test "contract: the link --json arm dispatches through the python3 config wrapper" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export ENVDUMP="${BATS_TEST_TMPDIR}/link-child-env.txt"
+    cat > "$MOCK_BIN/python3" <<'EOF'
+#!/usr/bin/env bash
+env > "$ENVDUMP"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    run zsh "$BORG" link --json
+    [ "$status" -eq 0 ]
+    [ -f "$ENVDUMP" ]
+
+    local var
+    for var in BORG_DIR BORG_REGISTRY BORG_MAX_ACTIVE BORG_REAP_STALE_HOURS BORG_TMUX_SESSION \
+               BORG_CORTEX_WAKES BORG_NO_REAP PYTHONPATH; do
+        run grep -c "^${var}=" "$ENVDUMP"
+        [ "$status" -eq 0 ]
+        [ "$output" -ge 1 ]
+    done
+}
+
+@test "contract: link without --json still routes to the zsh renderer (the four goldens, unmodified)" {
+    # Regression gate for Phase 2: the four EXISTING golden assertions, run again explicitly, must
+    # still pass byte-for-byte with zero edits to this file's earlier golden tests.
+    _link_setup_porcelain
+    _assert_link_golden link-porcelain link --porcelain
+
+    _link_mock_tmux $'bravo\ncharlie'
+    _link_registry_overview
+    _link_build_overview_ws
+    _assert_link_golden link-overview link
+
+    _link_mock_tmux $'bravo\ncharlie'
+    _link_registry_overview
+    _link_build_overview_ws
+    _assert_link_golden link-overview-all link --all
+
+    _link_setup_deep
+    _assert_link_golden link-deep link delta
+}

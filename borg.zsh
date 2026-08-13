@@ -3260,15 +3260,69 @@ _borg_py() {
     BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}" \
     BORG_TMUX_SESSION="${BORG_TMUX_SESSION:-borg}" \
     BORG_CORTEX_WAKES="$BORG_CORTEX_WAKES" \
+    BORG_NO_REAP="$BORG_NO_REAP" \
     PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
     python3 -m "$@"
 }
+# BORG_NO_REAP above is a BARE pass-through with NO `:-` default: borg_core/link/shell.py's
+# reap_disabled() reads it with `bool(os.environ.get(...))`, so an exported-empty value is
+# correctly falsy -- unlike BORG_REAP_STALE_HOURS, which must arrive as its default because
+# `int("")` raises. This changes the environment of the existing recon/add/rm children too; that
+# is safe because nothing else in borg_core reads BORG_NO_REAP, and tests/cli_contract.bats:2275
+# asserts only the PRESENCE of a fixed list of names.
 
 case "${1:-help}" in
     init)     cmd_init ;;
     claude)   cmd_claude ;;
     next)     cmd_next "${@:2}" ;;
-    link)     cmd_link "${@:2}" ;;
+    link)
+        # `--json` is the ONE link mode served by the Python port (borg_core/link/cli.py). Every
+        # other mode still renders in zsh via cmd_link, unchanged and byte-for-byte: the
+        # porcelain/overview/deep flip is Phase 3 and has to happen atomically across all three.
+        #
+        # Diagnostics on the --json path go to STDERR. `warn` (borg.zsh:30) writes to STDOUT, and
+        # the desktop pre-pass reaches it via borg_registry_merge -> _borg_registry_write
+        # (lib/registry.zsh:31): one blocked write splices a colored "registry write blocked" line
+        # ahead of the document and `jq` dies on it. `2>/dev/null` does NOT catch that -- the
+        # warning is on fd 1. `1>&2 2>/dev/null` moves it to fd 2 and keeps today's stderr
+        # suppression (VERIFIED: redirections apply left-to-right, so fd1 is duped from the
+        # ORIGINAL fd2 before fd2 is reopened on /dev/null).
+        #
+        # The desktop pre-pass runs ONLY for the overview shape (no project positional). Today's
+        # human deep dive (_borg_link_deep, borg.zsh:415-508) never scans and never writes the
+        # registry; running it for `--json <project>` would add a registry WRITE to a path that has
+        # always been read-only. Deliberate, not an oversight.
+        shift
+        typeset _link_json=0 _link_refresh=0 _link_all=0 _link_project="" _link_arg
+        for _link_arg in "$@"; do
+            case "$_link_arg" in
+                --json)     _link_json=1 ;;
+                --refresh)  _link_refresh=1 ;;
+                --all)      _link_all=1 ;;
+                -*)         ;;                       # lenient, matching cmd_link's `-*) shift`
+                *)          _link_project="$_link_arg" ;;   # last-wins, matching cmd_link
+            esac
+        done
+        if (( _link_json )); then
+            if (( _link_refresh )); then
+                cmd_scan --llm 1>&2 || true
+            fi
+            if [[ -z "$_link_project" ]]; then
+                borg_desktop_scan 1>&2 2>/dev/null || true
+            fi
+            typeset -a _link_py_args
+            _link_py_args=(--json)
+            if (( _link_all )); then
+                _link_py_args+=(--all)
+            fi
+            if [[ -n "$_link_project" ]]; then
+                _link_py_args+=(-- "$_link_project")
+            fi
+            _borg_py borg_core.link.cli "${_link_py_args[@]}"
+        else
+            cmd_link "$@"
+        fi
+        ;;
     switch)   cmd_switch "${@:2}" ;;
     recon)
         # Dispatches to the Python port (borg_core/recon/{core,shell,cli}.py). Inlined here, no

@@ -151,6 +151,15 @@ made zsh and Python disagree about liveness forever.
 - **`live_windows` is one fork.** Collapses `tmux has-session` + `list-windows`; tmux resolves a `-t` target
   identically for both subcommands.
 
+**Phase 2 — the `--json` seam. Done 2026-08-13.** See A3. Adds `borg_core/link/cli.py` (new file, `--json`
+only) plus additive `core.py`/`shell.py` primitives (`project_sort_key`, `visible_projects`,
+`order_projects`, `capacity`, `assemble`, `max_active`, `registry_with_state(now=...)`) and wires the
+`link)` arm in `borg.zsh` through `_borg_py`. **Zero renderer touched** — every existing golden
+(`link-porcelain`, `link-overview`, `link-overview-all`, `link-deep`) still passes byte-identical, and
+`git diff main -- tests/cli_contract.bats | grep '^-' | grep -v '^---'` prints nothing. Interpreter pinning
+and a `borg doctor` python3 check are DEFERRED to Phase 3, when human rendering starts depending on Python;
+see the corrected CI risk bullet above.
+
 ## Scope Boundaries
 
 - **NOT L3/L4/L5** (bottom-anchored layout, idle collapse, line-count re-measure) — second directive, against
@@ -205,10 +214,20 @@ fully coherent — the natural stopping point if budget runs out.
   API with no test anywhere; breaking it yields a silently blank column. A1 must pin it.
 - **`cmd_watch` pays interpreter startup every redraw** (~40-60ms) where zsh paid an in-process call. Net
   should still win (current path spends 3 + 8N jq spawns per redraw) but it is the one repeated constant.
-- **CI has no Python provisioning on either bats lane** (`test.yml:32-43` installs `zsh jq fzf`; `:64-77`
-  installs `jq`; neither runs `setup-python`). `borg.zsh:15` hard-resets PATH, so the contract suite exercises
-  whatever system python3 the runner ships — not the pinned 3.14. `recon` introduced this on a low-traffic
-  arm; this puts the daily path on an unpinned interpreter.
+- **CORRECTED 2026-08-13 (Phase 2): the interpreter is unpinned, not absent.** The original bullet's
+  premise was wrong and its citation was stale. `test.yml:64-77` is now the `viz` job (commit
+  5876951 inserted it); the macOS contract lane moved to `test.yml:89-102`. And both bats lanes
+  already execute borg_core through `_borg_py` today with zero `setup-python`: `borg add`, `borg rm`
+  and `borg recon` all dispatch to Python, and their contract tests pass on ubuntu-latest and
+  macos-latest. `borg.zsh:15` rebuilds PATH from a fixed list that excludes the hosted toolcache, so
+  `actions/setup-python` alone would change nothing — routing to it requires symlinking into a
+  directory on that fixed list, and ~34 tests overwrite `BORG_PATH_PREFIX`. What is genuinely
+  unpinned is the interpreter VERSION: ubuntu-24.04 runs `/usr/bin/python3` 3.12.3 and macos-26 runs
+  `/opt/homebrew/bin/python3` 3.14.x, while the dedicated `python` lane lints and tests on 3.14.7 —
+  and 3.12 is the declared target (ruff `target-version = py312`, mypy `python_version = 3.12`), so
+  the ubuntu bats lane is currently the ONLY place that target is ever exercised. Pinning ubuntu to
+  3.14 would remove that. Interpreter pinning and a `borg doctor` python3 check are therefore
+  DEFERRED to Phase 3, when human rendering starts depending on Python and the risk becomes real.
 - **Unknown-flag parity is self-contradictory as originally scoped.** Today `borg link --totally-bogus` and
   `borg link --help` both render the overview and exit 0 (`-*) shift ;;` at borg.zsh:226), and `cli_smoke.bats`
   already asserts it. A recon-shaped arm that `die`s on unknown flags is a user-facing change. Pick parity;
