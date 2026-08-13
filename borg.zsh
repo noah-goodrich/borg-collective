@@ -2699,15 +2699,21 @@ _borg_iso_to_epoch() {
         || TZ=UTC date -d "$1" +%s 2>/dev/null
 }
 
-# Print a file's lines in reverse. `tac` is GNU (Linux, and CI); `tail -r` is BSD (macOS). Same
+# Print a file's lines in reverse. `tail -r` is BSD (macOS); `tac` is GNU (Linux, and CI). Same
 # split, and the same silent-failure risk, as _borg_file_mtime below: four call sites used bare
 # `tail -r "$f" 2>/dev/null`, which on GNU emits NOTHING and exits nonzero with stderr suppressed —
 # so `borg nanoprobes`, `nanoprobe-log`, `spend`, and `watch` all rendered empty on Linux while
 # looking like "no records yet". Verified both fall through cleanly with EMPTY stdout on the other
 # platform (macOS `tac` exits 127; GNU `tail -r` prints nothing), so unlike the #114 stat bug there
 # is no risk of the failing branch's output concatenating with the real answer.
+#
+# BSD FIRST, and the order is load-bearing for a reason that is not correctness. borg runs on macOS;
+# putting `tac` first meant every macOS render paid a failed fork+exec before falling back. That is
+# invisible almost everywhere, but `cmd_watch` re-renders inside a 50ms polling loop, and the
+# GNU-first ordering was enough to make its contract test fail on the CI macOS runner. Fast path
+# belongs on the platform the tool actually runs on. Matches _borg_iso_to_epoch's ordering too.
 _borg_reverse_lines() {
-    tac "$1" 2>/dev/null || tail -r "$1" 2>/dev/null
+    tail -r "$1" 2>/dev/null || tac "$1" 2>/dev/null
 }
 
 _borg_file_mtime() {
