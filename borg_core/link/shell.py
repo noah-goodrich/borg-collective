@@ -93,6 +93,23 @@ def reap_threshold_hours() -> int | None:
         return None
 
 
+def max_active() -> int:
+    """BORG_MAX_ACTIVE as an int, defaulting to 3 (borg.zsh:43 `${BORG_MAX_ACTIVE:-3}`).
+
+    Unset OR EMPTY gives the default -- _borg_py passes the variable through and an unset one
+    arrives as the EMPTY STRING, so this must be truthiness-checked, not existence-checked.
+    DEVIATION: a non-numeric value falls back to 3 here, where zsh's `(( x > BORG_MAX_ACTIVE ))`
+    would raise a bad-math-expression error. Same class as reap_threshold_hours.
+    """
+    raw = os.environ.get("BORG_MAX_ACTIVE")
+    if not raw:
+        return core.DEFAULT_MAX_ACTIVE
+    try:
+        return int(raw)
+    except ValueError:
+        return core.DEFAULT_MAX_ACTIVE
+
+
 def reap_disabled() -> bool:
     """Whether BORG_NO_REAP suppresses the overlay.
 
@@ -161,7 +178,7 @@ def collect_states(registry: dict) -> dict[str, dict]:
     return states
 
 
-def registry_with_state(apply_reap: bool = True) -> dict:
+def registry_with_state(apply_reap: bool = True, now: int | None = None) -> dict:
     """The registry with state.json overlaid and, unless suppressed, the reap overlay applied.
 
     Mirrors borg_registry_with_state (lib/registry.zsh:165-189). BORG_NO_REAP wins over `apply_reap`,
@@ -172,11 +189,16 @@ def registry_with_state(apply_reap: bool = True) -> dict:
     (borg.zsh:407) -- so a state.json written by a hook between the two passes can make the table and
     the warning disagree today. This computes one snapshot and derives both from it. Unobservable
     until Phase 3 flips the renderer; recorded now so it is not discovered as a surprise then.
+
+    `now` lets a caller (cli._document) thread ONE shared instant through the reap decision. It
+    exists so a whole document is built from ONE instant; without it the reap decision,
+    `generated_at`, the relative times and the cortex countdowns can straddle a second boundary.
     """
     registry = read_registry()
     merged = core.with_state(registry, collect_states(registry))
+    moment = now_epoch() if now is None else now
     if apply_reap and not reap_disabled():
-        return core.reap_overlay(merged, live_windows(), now_epoch(), reap_threshold_hours())
+        return core.reap_overlay(merged, live_windows(), moment, reap_threshold_hours())
     return merged
 
 

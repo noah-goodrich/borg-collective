@@ -24,6 +24,7 @@ ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 REAPABLE_STATUSES = ("active", "waiting")
 DEFAULT_STATUS = "idle"
 DEFAULT_REAP_STALE_HOURS = 12
+DEFAULT_MAX_ACTIVE = 3
 
 # jq emits "-" as a sentinel for an empty column in the reap overlay's @tsv stream, because zsh's
 # `read` with a whitespace IFS collapses consecutive tabs and would shift every later field left.
