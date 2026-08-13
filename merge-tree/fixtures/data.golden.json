@@ -1,8 +1,315 @@
 {
+  "actions": {
+    "dbt#1145": {
+      "class": "readonly",
+      "command": "gh pr view 1145 --repo Ontra-ai/dbt",
+      "label": "Drive/re-review CHANGES_REQUESTED."
+    },
+    "infrastructure#2334": {
+      "class": "readonly",
+      "command": "gh pr view 2334 --repo Ontra-ai/infrastructure",
+      "label": "Atlantis-apply the PROD snowpipe promotion."
+    },
+    "snowflake-permissions#292": {
+      "class": "readonly",
+      "command": "gh pr view 292 --repo Ontra-ai/snowflake-permissions",
+      "label": "Address CHANGES_REQUESTED review - keypair linchpin."
+    },
+    "snowflake-permissions#339": {
+      "class": "confirm",
+      "command": "gh pr merge 339 --repo Ontra-ai/snowflake-permissions",
+      "label": "Merge the review-first SME-PAT trio."
+    }
+  },
+  "edges": [
+    {
+      "child": "snowflake-permissions#314",
+      "kind": "stacked",
+      "parent": "snowflake-permissions#292"
+    },
+    {
+      "child": "snowflake-permissions#319",
+      "kind": "stacked",
+      "parent": "snowflake-permissions#314"
+    },
+    {
+      "child": "snowflake-permissions#314",
+      "kind": "blocks",
+      "parent": "snowflake-permissions#292"
+    },
+    {
+      "child": "snowflake-permissions#339",
+      "kind": "stacked",
+      "parent": "snowflake-permissions#338"
+    },
+    {
+      "child": "snowflake-permissions#340",
+      "kind": "stacked",
+      "parent": "snowflake-permissions#339"
+    },
+    {
+      "child": "snowflake-permissions#341",
+      "kind": "stacked",
+      "parent": "snowflake-permissions#340"
+    },
+    {
+      "child": "snowflake-permissions#339",
+      "kind": "apex",
+      "parent": "snowflake-permissions#333"
+    },
+    {
+      "child": "snowflake-permissions#301",
+      "kind": "stacked",
+      "parent": "snowflake-permissions#302"
+    },
+    {
+      "child": "snowflake-permissions#301",
+      "kind": "blocks",
+      "parent": "infrastructure#2334"
+    }
+  ],
+  "items": [
+    {
+      "action_needed": "Drive/re-review CHANGES_REQUESTED.",
+      "blocked": true,
+      "bucket": "needs-you",
+      "changed": "2026-07-23T22:58:54Z",
+      "is_entrypoint": true,
+      "one_line": "",
+      "owner": "ontres",
+      "project": "dbt - models & pipelines (misc)",
+      "ref": "dbt#1145",
+      "repo": "dbt",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "DE-1881: MCP tool call fact + attributes dim (segment -> DIM2)",
+      "urgency": 98,
+      "url": "https://github.com/Ontra-ai/dbt/pull/1145"
+    },
+    {
+      "action_needed": "Atlantis-apply the PROD promotion after DEV validates.",
+      "blocked": true,
+      "bucket": "needs-you",
+      "changed": "2026-07-13T00:00:00Z",
+      "is_entrypoint": true,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - Snowpipe",
+      "ref": "infrastructure#2334",
+      "repo": "infrastructure",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "feat(snowpipe): shared prod bucket + broaden snowflake-snowpipe IAM read",
+      "urgency": 98,
+      "url": "https://github.com/Ontra-ai/infrastructure/pull/2334"
+    },
+    {
+      "action_needed": "Address CHANGES_REQUESTED review - keypair linchpin.",
+      "blocked": true,
+      "bucket": "needs-you",
+      "changed": "2026-07-17T18:25:50Z",
+      "is_entrypoint": true,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - Keypair migration",
+      "ref": "snowflake-permissions#292",
+      "repo": "snowflake-permissions",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "DE-1365 Keypair Phase 0: pure-Python lib primitives",
+      "urgency": 98,
+      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/292"
+    },
+    {
+      "action_needed": "BLOCKED on infrastructure#2334 - do not merge yet.",
+      "blocked": true,
+      "bucket": "review-queue",
+      "changed": "2026-07-07T19:21:14Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - Snowpipe",
+      "ref": "snowflake-permissions#301",
+      "repo": "snowflake-permissions",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "chore: add snowpipe shared-bucket storage integration allowed location",
+      "urgency": 60,
+      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/301"
+    },
+    {
+      "action_needed": "Review-first SME-PAT trio - walk owners through #339/#340/#341, then merge.",
+      "blocked": false,
+      "bucket": "review-queue",
+      "changed": "2026-07-23T23:01:22Z",
+      "is_entrypoint": true,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - SME-PAT provisioning",
+      "ref": "snowflake-permissions#339",
+      "repo": "snowflake-permissions",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "SME bot PAT self-service - per-owner MODIFY PAM grants (v1/Dylan)",
+      "urgency": 60,
+      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/339"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "active-chains",
+      "changed": "2026-07-15T17:25:54Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - Keypair migration",
+      "ref": "snowflake-permissions#314",
+      "repo": "snowflake-permissions",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "docs(keypair): correct Phase-0 lib status + Airflow keypair sourcing",
+      "urgency": 55,
+      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/314"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "active-chains",
+      "changed": "2026-07-15T19:41:22Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - Keypair migration",
+      "ref": "snowflake-permissions#319",
+      "repo": "snowflake-permissions",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "docs(dcm): active incremental migration model (Option C) + keypair ref fix",
+      "urgency": 55,
+      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/319"
+    },
+    {
+      "action_needed": "Merge + apply after #339.",
+      "blocked": false,
+      "bucket": "review-queue",
+      "changed": "2026-07-23T23:01:58Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - SME-PAT provisioning",
+      "ref": "snowflake-permissions#340",
+      "repo": "snowflake-permissions",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "New SME SageMaker bot provisioning pattern (v1/Dylan)",
+      "urgency": 55,
+      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/340"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "standalone",
+      "changed": "2026-07-17T17:16:01Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "AE tooling",
+      "ref": "ai-data-engineer#16",
+      "repo": "ai-data-engineer",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "feat(data-engineer): stacked-pr-program skill (v1.4.0)",
+      "urgency": 30,
+      "url": "https://github.com/Ontra-ai/ai-data-engineer/pull/16"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "collapsed-noise",
+      "changed": "2026-07-24T00:00:00Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "cairn - belief store",
+      "ref": "cairn#42",
+      "repo": "cairn",
+      "source": "github-pr",
+      "state": "MERGED",
+      "title": "release: bump cairn to 0.5.3",
+      "urgency": 30,
+      "url": "https://github.com/noah-goodrich/cairn/pull/42"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "collapsed-noise",
+      "changed": "2026-07-15T20:39:38Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "o-snowflake - keypair auth",
+      "ref": "o-snowflake#9",
+      "repo": "o-snowflake",
+      "source": "github-pr",
+      "state": "MERGED",
+      "title": "feat: keypair (SNOWFLAKE_JWT) auth + devcontainer",
+      "urgency": 30,
+      "url": "https://github.com/Ontra-ai/o-snowflake/pull/9"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "active-chains",
+      "changed": "2026-07-16T17:21:32Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - Snowpipe",
+      "ref": "snowflake-permissions#302",
+      "repo": "snowflake-permissions",
+      "source": "github-pr",
+      "state": "MERGED",
+      "title": "docs(snowpipe): design-in dev-first rollout",
+      "urgency": 30,
+      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/302"
+    },
+    {
+      "action_needed": "Merge + apply after #339.",
+      "blocked": false,
+      "bucket": "review-queue",
+      "changed": "2026-07-23T23:03:20Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "SFP - SME-PAT provisioning",
+      "ref": "snowflake-permissions#341",
+      "repo": "snowflake-permissions",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "DRAFT PAT rotation authentication policy for SME bots (v1/Dylan)",
+      "urgency": 30,
+      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/341"
+    }
+  ],
   "meta": {
     "gathered_at": "2026-07-28T12:00:00Z",
+    "health": [
+      {
+        "check": "cairn",
+        "checked_at": "2026-07-28T12:00:00Z",
+        "detail": "db reachable, v0.5.4",
+        "machine": "fixture",
+        "status": "ok"
+      },
+      {
+        "check": "gather-repos",
+        "checked_at": "2026-07-28T12:00:00Z",
+        "detail": "jira adapter rate-limited, partial fetch",
+        "machine": "fixture",
+        "status": "warn"
+      }
+    ],
     "machine": "fixture",
-    "today": "2026-07-28",
     "repos": [
       "ai-data-engineer",
       "cairn",
@@ -11,313 +318,6 @@
       "o-snowflake",
       "snowflake-permissions"
     ],
-    "health": [
-      {
-        "check": "cairn",
-        "machine": "fixture",
-        "status": "ok",
-        "detail": "db reachable, v0.5.4",
-        "checked_at": "2026-07-28T12:00:00Z"
-      },
-      {
-        "check": "gather-repos",
-        "machine": "fixture",
-        "status": "warn",
-        "detail": "jira adapter rate-limited, partial fetch",
-        "checked_at": "2026-07-28T12:00:00Z"
-      }
-    ]
-  },
-  "items": [
-    {
-      "ref": "dbt#1145",
-      "project": "dbt - models & pipelines (misc)",
-      "repo": "dbt",
-      "source": "github-pr",
-      "title": "DE-1881: MCP tool call fact + attributes dim (segment -> DIM2)",
-      "state": "OPEN",
-      "changed": "2026-07-23T22:58:54Z",
-      "owner": "ontres",
-      "url": "https://github.com/Ontra-ai/dbt/pull/1145",
-      "urgency": 98,
-      "action_needed": "Drive/re-review CHANGES_REQUESTED.",
-      "is_entrypoint": true,
-      "blocked": true,
-      "bucket": "needs-you",
-      "one_line": ""
-    },
-    {
-      "ref": "infrastructure#2334",
-      "project": "SFP - Snowpipe",
-      "repo": "infrastructure",
-      "source": "github-pr",
-      "title": "feat(snowpipe): shared prod bucket + broaden snowflake-snowpipe IAM read",
-      "state": "OPEN",
-      "changed": "2026-07-13T00:00:00Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/infrastructure/pull/2334",
-      "urgency": 98,
-      "action_needed": "Atlantis-apply the PROD promotion after DEV validates.",
-      "is_entrypoint": true,
-      "blocked": true,
-      "bucket": "needs-you",
-      "one_line": ""
-    },
-    {
-      "ref": "snowflake-permissions#292",
-      "project": "SFP - Keypair migration",
-      "repo": "snowflake-permissions",
-      "source": "github-pr",
-      "title": "DE-1365 Keypair Phase 0: pure-Python lib primitives",
-      "state": "OPEN",
-      "changed": "2026-07-17T18:25:50Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/292",
-      "urgency": 98,
-      "action_needed": "Address CHANGES_REQUESTED review - keypair linchpin.",
-      "is_entrypoint": true,
-      "blocked": true,
-      "bucket": "needs-you",
-      "one_line": ""
-    },
-    {
-      "ref": "snowflake-permissions#301",
-      "project": "SFP - Snowpipe",
-      "repo": "snowflake-permissions",
-      "source": "github-pr",
-      "title": "chore: add snowpipe shared-bucket storage integration allowed location",
-      "state": "OPEN",
-      "changed": "2026-07-07T19:21:14Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/301",
-      "urgency": 60,
-      "action_needed": "BLOCKED on infrastructure#2334 - do not merge yet.",
-      "is_entrypoint": false,
-      "blocked": true,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "snowflake-permissions#339",
-      "project": "SFP - SME-PAT provisioning",
-      "repo": "snowflake-permissions",
-      "source": "github-pr",
-      "title": "SME bot PAT self-service - per-owner MODIFY PAM grants (v1/Dylan)",
-      "state": "OPEN",
-      "changed": "2026-07-23T23:01:22Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/339",
-      "urgency": 60,
-      "action_needed": "Review-first SME-PAT trio - walk owners through #339/#340/#341, then merge.",
-      "is_entrypoint": true,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "snowflake-permissions#314",
-      "project": "SFP - Keypair migration",
-      "repo": "snowflake-permissions",
-      "source": "github-pr",
-      "title": "docs(keypair): correct Phase-0 lib status + Airflow keypair sourcing",
-      "state": "OPEN",
-      "changed": "2026-07-15T17:25:54Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/314",
-      "urgency": 55,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "snowflake-permissions#319",
-      "project": "SFP - Keypair migration",
-      "repo": "snowflake-permissions",
-      "source": "github-pr",
-      "title": "docs(dcm): active incremental migration model (Option C) + keypair ref fix",
-      "state": "OPEN",
-      "changed": "2026-07-15T19:41:22Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/319",
-      "urgency": 55,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "snowflake-permissions#340",
-      "project": "SFP - SME-PAT provisioning",
-      "repo": "snowflake-permissions",
-      "source": "github-pr",
-      "title": "New SME SageMaker bot provisioning pattern (v1/Dylan)",
-      "state": "OPEN",
-      "changed": "2026-07-23T23:01:58Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/340",
-      "urgency": 55,
-      "action_needed": "Merge + apply after #339.",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "ai-data-engineer#16",
-      "project": "AE tooling",
-      "repo": "ai-data-engineer",
-      "source": "github-pr",
-      "title": "feat(data-engineer): stacked-pr-program skill (v1.4.0)",
-      "state": "OPEN",
-      "changed": "2026-07-17T17:16:01Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/ai-data-engineer/pull/16",
-      "urgency": 30,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "standalone",
-      "one_line": ""
-    },
-    {
-      "ref": "cairn#42",
-      "project": "cairn - belief store",
-      "repo": "cairn",
-      "source": "github-pr",
-      "title": "release: bump cairn to 0.5.3",
-      "state": "MERGED",
-      "changed": "2026-07-24T00:00:00Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/noah-goodrich/cairn/pull/42",
-      "urgency": 30,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "collapsed-noise",
-      "one_line": ""
-    },
-    {
-      "ref": "o-snowflake#9",
-      "project": "o-snowflake - keypair auth",
-      "repo": "o-snowflake",
-      "source": "github-pr",
-      "title": "feat: keypair (SNOWFLAKE_JWT) auth + devcontainer",
-      "state": "MERGED",
-      "changed": "2026-07-15T20:39:38Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/o-snowflake/pull/9",
-      "urgency": 30,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "collapsed-noise",
-      "one_line": ""
-    },
-    {
-      "ref": "snowflake-permissions#302",
-      "project": "SFP - Snowpipe",
-      "repo": "snowflake-permissions",
-      "source": "github-pr",
-      "title": "docs(snowpipe): design-in dev-first rollout",
-      "state": "MERGED",
-      "changed": "2026-07-16T17:21:32Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/302",
-      "urgency": 30,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "snowflake-permissions#341",
-      "project": "SFP - SME-PAT provisioning",
-      "repo": "snowflake-permissions",
-      "source": "github-pr",
-      "title": "DRAFT PAT rotation authentication policy for SME bots (v1/Dylan)",
-      "state": "OPEN",
-      "changed": "2026-07-23T23:03:20Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/Ontra-ai/snowflake-permissions/pull/341",
-      "urgency": 30,
-      "action_needed": "Merge + apply after #339.",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    }
-  ],
-  "edges": [
-    {
-      "parent": "snowflake-permissions#292",
-      "child": "snowflake-permissions#314",
-      "kind": "stacked"
-    },
-    {
-      "parent": "snowflake-permissions#314",
-      "child": "snowflake-permissions#319",
-      "kind": "stacked"
-    },
-    {
-      "parent": "snowflake-permissions#292",
-      "child": "snowflake-permissions#314",
-      "kind": "blocks"
-    },
-    {
-      "parent": "snowflake-permissions#338",
-      "child": "snowflake-permissions#339",
-      "kind": "stacked"
-    },
-    {
-      "parent": "snowflake-permissions#339",
-      "child": "snowflake-permissions#340",
-      "kind": "stacked"
-    },
-    {
-      "parent": "snowflake-permissions#340",
-      "child": "snowflake-permissions#341",
-      "kind": "stacked"
-    },
-    {
-      "parent": "snowflake-permissions#333",
-      "child": "snowflake-permissions#339",
-      "kind": "apex"
-    },
-    {
-      "parent": "snowflake-permissions#302",
-      "child": "snowflake-permissions#301",
-      "kind": "stacked"
-    },
-    {
-      "parent": "infrastructure#2334",
-      "child": "snowflake-permissions#301",
-      "kind": "blocks"
-    }
-  ],
-  "actions": {
-    "snowflake-permissions#292": {
-      "label": "Address CHANGES_REQUESTED review - keypair linchpin.",
-      "command": "gh pr view 292 --repo Ontra-ai/snowflake-permissions",
-      "class": "readonly"
-    },
-    "snowflake-permissions#339": {
-      "label": "Merge the review-first SME-PAT trio.",
-      "command": "gh pr merge 339 --repo Ontra-ai/snowflake-permissions",
-      "class": "confirm"
-    },
-    "infrastructure#2334": {
-      "label": "Atlantis-apply the PROD snowpipe promotion.",
-      "command": "gh pr view 2334 --repo Ontra-ai/infrastructure",
-      "class": "readonly"
-    },
-    "dbt#1145": {
-      "label": "Drive/re-review CHANGES_REQUESTED.",
-      "command": "gh pr view 1145 --repo Ontra-ai/dbt",
-      "class": "readonly"
-    }
+    "today": "2026-07-28"
   }
 }
