@@ -2442,8 +2442,7 @@ EOF
 @test "contract: link --json dies on an unknown project with empty stdout" {
     printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
 
-    zsh "$BORG" link --json ghost > "${BATS_TEST_TMPDIR}/o" 2> "${BATS_TEST_TMPDIR}/e"
-    status=$?
+    run bash -c "zsh '$BORG' link --json ghost > '${BATS_TEST_TMPDIR}/o' 2> '${BATS_TEST_TMPDIR}/e'"
     [ "$status" -eq 1 ]
     [ ! -s "${BATS_TEST_TMPDIR}/o" ]
     run grep -c 'not in registry' "${BATS_TEST_TMPDIR}/e"
