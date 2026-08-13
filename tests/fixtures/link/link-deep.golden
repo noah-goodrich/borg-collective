@@ -16,21 +16,36 @@
   [0;36mProgress:[0m 1/3 criteria met
 
   [1mRecent Checkpoints[0m
+    [0;36m2026-08-05-1000.md[0m
+    [0;36m2026-08-04-1000.md[0m
     [0;36m2026-08-03-1000.md[0m
-    [0;36m2026-08-02-1000.md[0m
-    [0;36m2026-08-01-1000.md[0m
 
   [1mLatest Checkpoint[0m
-  # Checkpoint three
-  
-  Newest checkpoint body.
+  # Checkpoint five
+  body line 02
+  body line 03
+  body line 04
+  body line 05
+  body line 06
+  body line 07
+  body line 08
+  body line 09
+  body line 10
+  body line 11
+  body line 12
+  body line 13
+  body line 14
+  body line 15
+  body line 16
+  body line 17
+  body line 18
+  body line 19
+  body line 20
 
   [0;36mDirectives:[0m 2 pending
     [2m- Delta directive one[0m
     [2m- Delta directive two[0m
 
   [0;32mRecently assimilated:[0m
-    [2m- Delta shipped A (2026-03-01)[0m
-    [2m- Delta shipped B (2026-03-02)[0m
-    [2m- Delta shipped C (2026-03-03)[0m
+    [2m- Delta shipped only (2026-03-01)[0m
 
