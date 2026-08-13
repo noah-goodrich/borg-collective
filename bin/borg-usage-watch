@@ -287,10 +287,13 @@ output=$(BORG_NO_SPEND_RECORD=1 BORG_NO_SESSION_HOOKS=1 "$CLAUDE_BIN" -p "/usage
 # take down usage sampling, which is the poller's actual job.
 _prune_probe_transcripts() {
     [[ -d "$PROBE_TRANSCRIPT_DIR" ]] || return 0
-    local pruned=0
-    pruned=$(find "$PROBE_TRANSCRIPT_DIR" -maxdepth 1 -name '*.jsonl' -mmin "+$PROBE_RETAIN_MIN" 2>/dev/null | wc -l | tr -d ' ') || pruned=0
+    # -print -delete prints each match then unlinks it, so one traversal both deletes and
+    # counts. Two separate finds would walk a 15k-file directory twice and, worse, duplicate
+    # the predicate — an edit to one and not the other silently desyncs the count from the
+    # deletion.
+    local pruned
+    pruned=$(find "$PROBE_TRANSCRIPT_DIR" -maxdepth 1 -name '*.jsonl' -mmin "+$PROBE_RETAIN_MIN" -print -delete 2>/dev/null | wc -l | tr -d ' ') || pruned=0
     [[ "$pruned" == "0" ]] && return 0
-    find "$PROBE_TRANSCRIPT_DIR" -maxdepth 1 -name '*.jsonl' -mmin "+$PROBE_RETAIN_MIN" -delete 2>/dev/null || true
     log "pruned $pruned probe transcript(s) older than ${PROBE_RETAIN_MIN}m from $PROBE_TRANSCRIPT_DIR"
     return 0
 }
