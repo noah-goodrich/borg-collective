@@ -49,6 +49,30 @@ def test_run_missing_registry_dies(tmp_path, monkeypatch, capsys):
         cli._run("", "", "", False, False)
 
 
+def test_run_resolves_registry_from_borg_dir_when_env_override_absent(tmp_path, monkeypatch, capsys):
+    """With no BORG_REGISTRY in the environment the registry must still resolve from BORG_DIR.
+
+    This is the exact condition every real `borg recon` invocation runs under: borg.zsh assigns
+    BORG_REGISTRY as a shell variable without `export`, so the child process never received it and
+    recon died with "no registry at " before doing anything. Dying LATER, at adapter discovery, is
+    the proof that the registry check passed.
+    """
+    borg_dir = tmp_path / "borg-dir"
+    borg_dir.mkdir()
+    (borg_dir / "registry.json").write_text(json.dumps({"projects": {}}))
+    monkeypatch.setenv("BORG_DIR", str(borg_dir))
+    monkeypatch.delenv("BORG_REGISTRY", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(tmp_path / "no-adapters-here"))
+
+    with pytest.raises(SystemExit):
+        cli._run("", "", "", False, False)
+
+    err = capsys.readouterr().err
+    assert "no registry at" not in err
+    assert "no recon adapters found" in err
+
+
 def test_run_no_adapters_dies(isolated_env):
     with pytest.raises(SystemExit):
         cli._run("", "", "", False, False)

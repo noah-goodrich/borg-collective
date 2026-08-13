@@ -3229,6 +3229,41 @@ cmd_vinculum() {
 
 borg_registry_init
 
+# Run a borg_core Python module with the config surface it needs.
+#
+# WHY THIS EXISTS. Every config variable borg.zsh owns is assigned WITHOUT `export` -- BORG_DIR
+# (borg.zsh:24), BORG_MAX_ACTIVE and BORG_CORTEX_WAKES (borg.zsh:43-48), BORG_REGISTRY
+# (lib/registry.zsh:15), BORG_TMUX_SESSION (lib/tmux.zsh:5), BORG_REAP_STALE_HOURS
+# (lib/reaper.sh:11). They are shell variables, so an in-process zsh function sees them and a
+# `python3 -m` CHILD sees none of them. That is not theoretical: it shipped. `borg recon` read
+# BORG_REGISTRY from the environment with no fallback and therefore died with "no registry at " on
+# every real invocation except `--adapters`, which returns before the check. It stayed invisible
+# because every test that reaches the Python path puts BORG_REGISTRY in the environment itself
+# (tests/test_helper/setup.bash exports it; the pytest suites monkeypatch it), so the inheritance
+# path was never once exercised -- the same shape as the usage-watch and memory-gate blind spots in
+# CLAUDE.md's Learned section.
+#
+# Defaults are applied HERE rather than passed through empty: a child reading
+# `os.environ.get("BORG_REAP_STALE_HOURS", "12")` gets "" -- not "12" -- if the variable is exported
+# empty, and int("") raises. An unset variable must arrive as its default or not at all.
+#
+# Deliberately a prefix assignment, not `export`: only the Python children get these, so hooks,
+# `claude`, docker and every other child keep the environment they have today.
+#
+# Deliberately defined HERE, immediately above its only callers, rather than up in the Helpers
+# section: inserting 30 lines at the top of this file silently shifts every `borg.zsh:<N>` reference
+# in tests/cli_contract.bats and PROJECT_PLAN.md by 30. Nothing references a line below this point.
+_borg_py() {
+    BORG_DIR="$BORG_DIR" \
+    BORG_REGISTRY="$BORG_REGISTRY" \
+    BORG_MAX_ACTIVE="${BORG_MAX_ACTIVE:-3}" \
+    BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}" \
+    BORG_TMUX_SESSION="${BORG_TMUX_SESSION:-borg}" \
+    BORG_CORTEX_WAKES="$BORG_CORTEX_WAKES" \
+    PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m "$@"
+}
+
 case "${1:-help}" in
     init)     cmd_init ;;
     claude)   cmd_claude ;;
@@ -3255,7 +3290,7 @@ case "${1:-help}" in
                 *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
             esac
         done
-        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.recon.cli "${_recon_py_args[@]}"
+        _borg_py borg_core.recon.cli "${_recon_py_args[@]}"
         ;;
     scan)     cmd_scan "${@:2}" ;;
     add)
@@ -3263,13 +3298,13 @@ case "${1:-help}" in
         # dispatch wrapper function for this arm, so `add` is fully migrated per the migration
         # ledger -- see docs/plans/assimilated/2026-08-12-recon-migration-ledger.md.
         shift
-        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.registry.cli add "$@"
+        _borg_py borg_core.registry.cli add "$@"
         ;;
     rm)
         # Dispatches to the Python port (borg_core/registry/{core,shell,cli}.py). See the `add)`
         # arm above and the migration ledger for the same rationale.
         shift
-        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.registry.cli rm "$@"
+        _borg_py borg_core.registry.cli rm "$@"
         ;;
     color)    cmd_color "${@:2}" ;;
     image)    cmd_image "${@:2}" ;;

@@ -13,25 +13,17 @@ import subprocess
 import time
 from pathlib import Path
 
+from borg_core import paths
 from borg_core.registry import core
 
 DEFAULT_TMUX_SESSION = "borg"
 
 
-def borg_dir() -> Path:
-    """Resolve BORG_DIR, mirroring lib/registry.zsh's `${XDG_CONFIG_HOME:-$HOME/.config}/borg`."""
-    if os.environ.get("BORG_DIR"):
-        return Path(os.environ["BORG_DIR"])
-    xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(xdg) / "borg"
-
-
-def registry_path() -> Path:
-    """Path to registry.json, mirroring $BORG_REGISTRY."""
-    override = os.environ.get("BORG_REGISTRY")
-    if override:
-        return Path(override)
-    return borg_dir() / "registry.json"
+# Re-exported, not redefined: borg_core/paths.py holds the single definition of both, so this
+# package keeps its own `shell.borg_dir()` / `shell.registry_path()` surface (and its tests) without
+# a second copy of the resolution rules.
+borg_dir = paths.borg_dir
+registry_path = paths.registry_path
 
 
 def read_registry() -> dict:

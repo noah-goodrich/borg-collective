@@ -99,12 +99,12 @@ def _run(
     if list_only:
         return _run_list_adapters()
 
-    registry_path = os.environ.get("BORG_REGISTRY", "")
-    if not registry_path or not os.path.isfile(registry_path):
-        _die(f"no registry at {registry_path}")
+    registry_file = str(shell.registry_path())
+    if not os.path.isfile(registry_file):
+        _die(f"no registry at {registry_file}")
 
     projects_names = [p.strip() for p in projects_filter.split(",") if p.strip()] if projects_filter else None
-    projects = shell.load_registry_projects(registry_path, projects_names)
+    projects = shell.load_registry_projects(registry_file, projects_names)
 
     doc = _sweep(since, sources_filter, projects, projects_names)
 
