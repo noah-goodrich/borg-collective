@@ -2160,6 +2160,63 @@ EOF
     [[ "$output" == *"borg link echo"* ]] || false
 }
 
+# ── python child environment (_borg_py) ──────────────────────────────────────
+#
+# borg.zsh assigns every config variable it owns WITHOUT `export`: BORG_DIR (borg.zsh:24),
+# BORG_MAX_ACTIVE / BORG_CORTEX_WAKES (borg.zsh:43-48), BORG_REGISTRY (lib/registry.zsh:15),
+# BORG_TMUX_SESSION (lib/tmux.zsh:5), BORG_REAP_STALE_HOURS (lib/reaper.sh:11). An in-process zsh
+# function sees all of them; a `python3 -m` child sees none.
+#
+# That shipped as a live defect: borg_core/recon/cli.py read BORG_REGISTRY from the environment with
+# no fallback, so `borg recon` died with "borg recon: no registry at " on every real invocation
+# except `--adapters` (which returns before the check). It was invisible to the whole test suite
+# because everything that reaches the Python path puts BORG_REGISTRY in the environment ITSELF --
+# tests/test_helper/setup.bash exports it, the pytest suites monkeypatch it -- so the inheritance
+# path was never once executed under test. These two cases execute it.
+
+@test "contract: recon resolves the registry with no BORG_REGISTRY in the environment" {
+    run zsh -c "unset BORG_REGISTRY BORG_DIR; '$BORG' recon --sources deliberately-no-such-source"
+    [ "$status" -ne 0 ]
+    # Dying at adapter selection instead of the registry check is the proof it got that far.
+    [[ "$output" != *"no registry at"* ]] || false
+    [[ "$output" == *"no adapters matched"* ]] || false
+}
+
+# Mocks python3 itself and dumps the child's environment, so this asserts what the CHILD receives
+# rather than what the parent happens to hold. Also pins that a caller-supplied value is carried
+# through rather than the default being hardcoded -- which is the A2 mechanism the link port needs.
+@test "contract: the python3 dispatch wrapper hands borg's config surface to the child" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export ENVDUMP="${BATS_TEST_TMPDIR}/child-env.txt"
+    cat > "$MOCK_BIN/python3" <<'EOF'
+#!/usr/bin/env bash
+env > "$ENVDUMP"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    run zsh "$BORG" rm some-project
+    [ "$status" -eq 0 ]
+    [ -f "$ENVDUMP" ]
+
+    local var
+    for var in BORG_DIR BORG_REGISTRY BORG_MAX_ACTIVE BORG_REAP_STALE_HOURS BORG_TMUX_SESSION \
+               BORG_CORTEX_WAKES PYTHONPATH; do
+        run grep -c "^${var}=" "$ENVDUMP"
+        [ "$status" -eq 0 ]
+        [ "$output" -ge 1 ]
+    done
+
+    run grep '^BORG_MAX_ACTIVE=' "$ENVDUMP"
+    [ "$output" = "BORG_MAX_ACTIVE=3" ]
+
+    run env BORG_MAX_ACTIVE=7 zsh "$BORG" rm some-project
+    [ "$status" -eq 0 ]
+    run grep '^BORG_MAX_ACTIVE=' "$ENVDUMP"
+    [ "$output" = "BORG_MAX_ACTIVE=7" ]
+}
+
 # ── meta ─────────────────────────────────────────────────────────────────────
 
 # The threshold used to be `>= 8` against a bare `grep -c 'zsh'`, which also matched every mention of
