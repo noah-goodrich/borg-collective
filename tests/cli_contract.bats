@@ -2492,3 +2492,77 @@ EOF
     _link_setup_deep
     _assert_link_golden link-deep link delta
 }
+
+# ── Phase 3 entry gate ───────────────────────────────────────────────────────
+#
+# Three tests closing gaps a post-merge depth audit measured on the merged Phase 2 code (#134). See
+# PROJECT_PLAN.md, "Phase 3 entry gate", for the full evidence for each. This file may only be
+# APPENDED to (A4) -- nothing above this marker was touched to add these.
+
+# Test 1 (part 2/2 -- part 1/2 is the parametrized pytest boundary assert in
+# borg_core/link/test_core.py). The pytest half pins core.capacity() directly; this half proves the
+# same boundary is reachable end to end through the real CLI on the --json path, which is what a
+# user/skill actually observes. `_link_registry_busy` gives 4 active-or-waiting projects with live
+# tmux windows (so none are reaped out from under the count), matching borg.zsh:408's semantics
+# `(( active_count > BORG_MAX_ACTIVE ))`.
+@test "contract: link --json reports capacity.over_limit on the strict > boundary" {
+    _link_registry_busy
+
+    run bash -c "env BORG_MAX_ACTIVE=4 zsh '$BORG' link --json | jq -r '.capacity.over_limit'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "false" ]
+
+    run bash -c "env BORG_MAX_ACTIVE=3 zsh '$BORG' link --json | jq -r '.capacity.over_limit'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "true" ]
+}
+
+# Test 2. `.order` (the JSON/core.py path) and column 1 of a LIVE `link --porcelain` render (the
+# zsh/jq path, borg.zsh:299-310) must agree on display order for the SAME fixture -- the exact
+# fixture and exact command (`_link_setup_porcelain` + `link --porcelain`) that produces
+# tests/fixtures/link/link-porcelain.golden. Deliberately NOT read from the frozen golden file: that
+# static text only changes on a deliberate `BORG_UPDATE_GOLDEN=1` regeneration, so it cannot observe
+# a mutation to the zsh/jq ranking table -- only a live re-render can. Neither side here is a
+# hand-typed literal; both are read from a live command, which is what makes this catch BOTH
+# directions: a `core.py` rank swap (breaks the json side vs. the still-correct zsh side) and a
+# `borg.zsh` jq rank swap (breaks the zsh side vs. the still-correct json side).
+#
+# `jq -r '.order | join(",")'` and `awk`/`paste` over the porcelain output both fully drain their
+# input -- no `head`/`grep -q` early close -- so this does not hit the zsh-EPIPE-under-bats-`run`
+# trap documented at the top of this file.
+@test "contract: link --json .order agrees with a live link --porcelain column-1 order" {
+    _link_setup_porcelain
+
+    local zsh_order json_order
+    run bash -c "zsh '$BORG' link --porcelain | awk -F'\t' '{ print \$1 }' | paste -sd, -"
+    [ "$status" -eq 0 ]
+    zsh_order="$output"
+    [ -n "$zsh_order" ]
+
+    run bash -c "zsh '$BORG' link --json | jq -r '.order | join(\",\")'"
+    [ "$status" -eq 0 ]
+    json_order="$output"
+    [ -n "$json_order" ]
+
+    [ "$zsh_order" = "$json_order" ]
+}
+
+# Test 3. `status` is the field this tool exists to report, and the reap overlay is what keeps it
+# honest when a session dies without a live window. `_link_mock_tmux ""` gives zero live windows, so
+# `stale1` (status active, last_activity in 2020) is a reap candidate under the default
+# BORG_REAP_STALE_HOURS=12 per lib/reaper.sh:_borg_should_reap. Unlike bats:2452 (which only greps
+# the variable NAME out of a mocked python3's env dump), this asserts the VALUE end to end through a
+# real borg_core execution, mirroring the A2 test's shape (bats:2298-2304).
+@test "contract: link --json reaps a stale active project to idle, and BORG_NO_REAP restores it" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"stale1":{"path":null,"source":"cli","status":"active","last_activity":"2020-01-01T00:00:00Z"}}}' \
+        > "$BORG_REGISTRY"
+
+    run bash -c "zsh '$BORG' link --json | jq -r '.projects.stale1.status'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "idle" ]
+
+    run bash -c "env BORG_NO_REAP=1 zsh '$BORG' link --json | jq -r '.projects.stale1.status'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "active" ]
+}
