@@ -1,4 +1,4 @@
-.PHONY: clean test lint format test-viz lint-viz format-viz
+.PHONY: clean test lint format test-viz lint-viz format-viz spine
 
 # TWO Python surfaces, deliberately separate — do not merge them.
 #
@@ -66,7 +66,7 @@ test-viz:
 	@if [ -d merge-tree ]; then \
 		set -e; \
 		coverage run --source=merge-tree -m pytest merge-tree/ || test $$? -eq 5; \
-		coverage report -m --include='merge-tree/curate.py,merge-tree/render_graph.py' --fail-under=85; \
+		coverage report -m --include='merge-tree/curate.py,merge-tree/render_graph.py,merge-tree/spine.py' --fail-under=85; \
 	else \
 		echo "merge-tree/ not present -- nothing to test"; \
 	fi
@@ -85,3 +85,10 @@ format-viz:
 	else \
 		echo "merge-tree/ not present -- nothing to format"; \
 	fi
+
+# ── S6 (viz-2): the one documented command that refreshes the spine end to end ───────────────────
+# Regenerates story.json's skeleton from the latest gather while preserving judgment from the
+# overlay. Safe to run at any time: the skeleton always wins on structure, the overlay always wins
+# on prose, and anything unjudged is reported rather than silently rendered blank.
+spine:
+	python3 merge-tree/spine.py
