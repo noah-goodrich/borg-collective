@@ -11,7 +11,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from curate import bucket_for, chain_refs, curate, normalize_health, numeric_urgency
+from curate import (
+    REVIEW_BUCKET,
+    awaits_you,
+    bucket_for,
+    chain_refs,
+    curate,
+    is_noah,
+    normalize_health,
+    numeric_urgency,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -324,7 +333,17 @@ class TestCurate:
         counts: dict[str, int] = {}
         for it in result["items"]:
             counts[it["bucket"]] = counts.get(it["bucket"], 0) + 1
-        assert counts == {"needs-you": 3, "active-chains": 7, "collapsed-noise": 2, "standalone": 1}
+        # Updated by viz-1 (2026-08-12): four items moved active-chains -> review-queue when the
+        # awaiting-you derivation landed. Three of them are snowflake-permissions#339/#340/#341 --
+        # the SME-PAT trio that was buried inside its chain and never surfaced on 2026-08-10. That
+        # this fixture moves those exact refs is the tier working on real-shaped data.
+        assert counts == {
+            "needs-you": 3,
+            "review-queue": 4,
+            "active-chains": 3,
+            "collapsed-noise": 2,
+            "standalone": 1,
+        }
 
     def test_golden_fixture_matches_checked_in_golden_json(self):
         raw = json.loads((FIXTURES / "gather.raw.json").read_text())
@@ -374,3 +393,85 @@ class TestMainCLI:
         )
         rc = curate_module.main()
         assert rc == 1
+
+
+# ── awaiting-you tier (viz-1) ────────────────────────────────────────────────────────────────────
+# These are the falsification gate for the tier. Confirmed to FAIL against the pre-fix curate.py
+# (which had no REVIEW_BUCKET derivation at all) before the fix was applied — recorded per the
+# directive's V6, since no mutation tooling exists for this codebase and the check is manual.
+
+
+def _item(**over):
+    base = {
+        "ref": "repo#1",
+        "project": "p",
+        "source": "github",
+        "title": "t",
+        "state": "OPEN",
+        "changed": "c",
+        "owner": "noah-goodrich",
+        "one_line": "ol",
+        "action_needed": "Review before it goes to Kelly.",
+        "urgency": "this_week",
+    }
+    base.update(over)
+    return base
+
+
+class TestAwaitingYouTier:
+    """The viz-1 awaiting-you tier: derivation, precedence, and owner matching."""
+
+    def test_awaiting_you_item_gets_the_review_bucket(self):
+        assert bucket_for(_item(), set()) == REVIEW_BUCKET
+
+
+    def test_awaiting_you_requires_a_non_empty_action(self):
+        # 6 of 13 golden-fixture items carry action_needed "" — without this clause every open PR Noah
+        # authored would land in the tier and reproduce the overload it exists to cut through.
+        assert bucket_for(_item(action_needed=""), set()) != REVIEW_BUCKET
+        assert bucket_for(_item(action_needed="   "), set()) != REVIEW_BUCKET
+
+
+    def test_awaiting_you_requires_open_state(self):
+        assert bucket_for(_item(state="MERGED"), set()) != REVIEW_BUCKET
+
+
+    def test_awaiting_you_requires_the_owner_to_be_noah(self):
+        assert bucket_for(_item(owner="ontres"), set()) != REVIEW_BUCKET
+        assert bucket_for(_item(owner=None), set()) != REVIEW_BUCKET
+
+
+    def test_owner_match_is_case_and_format_insensitive(self):
+        for login in ("Noah-Goodrich", "NOAHGOODRICH", "  ngoodrich  "):
+            assert bucket_for(_item(owner=login), set()) == REVIEW_BUCKET
+
+
+    def test_urgent_items_stay_in_needs_you_not_the_review_queue(self):
+        # An item that is both urgent and awaiting Noah belongs in the hero tier.
+        assert bucket_for(_item(urgency="now"), set()) == "needs-you"
+
+
+    def test_review_bucket_outranks_chain_membership(self):
+        # Being blocked ON THE READER is more actionable than being mid-chain — the ranking inversion
+        # that hid sme-self-service-pat on 2026-08-10.
+        assert bucket_for(_item(), {"repo#1"}) == REVIEW_BUCKET
+
+
+    def test_curate_end_to_end_assigns_the_review_bucket(self):
+        raw = {"meta": {}, "items": [_item()], "edges": [], "actions": {}}
+        out = curate(raw)
+        assert out["items"][0]["bucket"] == REVIEW_BUCKET
+
+
+    def test_is_noah_matches_known_login_forms_and_rejects_others(self):
+        for login in ("noah-goodrich", "Noah Goodrich", "NOAHGOODRICH", " ngoodrich "):
+            assert is_noah(login) is True
+        for login in ("ontres", "", None, "noah-goodrich-bot"):
+            assert is_noah(login) is False
+
+
+    def test_awaits_you_predicate_directly(self):
+        assert awaits_you(_item()) is True
+        assert awaits_you(_item(state="MERGED")) is False
+        assert awaits_you(_item(action_needed="")) is False
+        assert awaits_you(_item(owner="ontres")) is False

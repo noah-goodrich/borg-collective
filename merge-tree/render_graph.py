@@ -145,11 +145,16 @@ def repo_of_ref(ref):
 
 # ---------------------------------------------------------------- derived fields
 def derive_workstream(ws):
-    """Compute derived fields (counts, needs_you, entry ref, max_urgency) on a workstream, in place."""
+    """Compute derived fields (counts, needs_you, awaiting_you, entry ref, max_urgency) on a workstream, in place."""
     wsitems = ws.get("items", []) or []
     ws["n_items"] = len(wsitems)
     ws["n_blocked_reasons"] = len(ws.get("blocked_by", []) or [])
     ws["needs_you"] = any((by_ref.get(r) or {}).get("bucket") == "needs-you" for r in wsitems)
+    # viz-1: the awaiting-you tier. Mirrors needs_you exactly, one bucket over. curate.py assigns
+    # "review-queue" to open items with a non-empty action_needed owned by Noah — i.e. blocked ON
+    # THE READER, which is the most actionable state there is and the one that went unsurfaced on
+    # 2026-08-10 because it was buried inside its chain.
+    ws["awaiting_you"] = any((by_ref.get(r) or {}).get("bucket") == "review-queue" for r in wsitems)
     entry = next((r for r in wsitems if (by_ref.get(r) or {}).get("is_entrypoint")), None)
     if entry is None:
         entry = next((r for r in wsitems if r in actions), None)
@@ -173,7 +178,7 @@ def hero_index(wss):
 
 
 def derive_project(project):
-    """Compute derived fields (meter, next_idx, repos, named, any_needs_you) on a project, in place."""
+    """Compute derived fields (meter, next_idx, repos, named, any_needs_you, any_awaiting_you) on a project, in place."""
     wss = project.get("workstreams", []) or []
     for ws in wss:
         derive_workstream(ws)
@@ -190,6 +195,7 @@ def derive_project(project):
     project["repos"] = sorted(repos)
     project["named"] = project.get("id") in NAMED_IDS
     project["any_needs_you"] = any(ws.get("needs_you") for ws in wss)
+    project["any_awaiting_you"] = any(ws.get("awaiting_you") for ws in wss)
 
 
 for p in projects:
@@ -542,7 +548,15 @@ function renderL0(){
   if(umb.length>1)nh+='<div class="umbrella"><div class="kicker">Snowflake Password Deprecation</div><div class="grid">'+umb.map(cardHtml).join('')+'</div></div>';
   else if(umb.length===1)restNamed.unshift(umb[0]);
   if(restNamed.length)nh+='<div class="grid">'+restNamed.map(cardHtml).join('')+'</div>';
-  var out='<div class="band"><div class="bandhdr">NAMED<span class="bandsub">your top-of-mind programs</span></div>'+(nh||'<div class="colempty">none match filters</div>')+'</div>';
+  // viz-1: the awaiting-you tier, ABOVE the named band. Deliberately absent (not empty) when
+  // nothing awaits you -- an always-present labelled section in the highest-value region trains the
+  // eye to skip that region, which is D3's "a row that says what every other row says costs space
+  // and returns nothing".
+  var awaiting=projs.filter(function(p){return p.any_awaiting_you;}).sort(byPriority);
+  var out='';
+  if(awaiting.length)
+    out+='<div class="band"><div class="bandhdr">AWAITING YOU<span class="bandsub">blocked on you \u2014 '+awaiting.length+'</span></div><div class="grid">'+awaiting.map(cardHtml).join('')+'</div></div>';
+  out+='<div class="band"><div class="bandhdr">NAMED<span class="bandsub">your top-of-mind programs</span></div>'+(nh||'<div class="colempty">none match filters</div>')+'</div>';
   if(!S.filters.namedOnly)
     out+='<div class="band"><div class="bandhdr">ALSO YOURS<span class="bandsub">easy to forget ('+others.length+')</span></div><div class="grid">'+(others.map(cardHtml).join('')||'<div class="colempty">none match filters</div>')+'</div></div>';
   return out;}
