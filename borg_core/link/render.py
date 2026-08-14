@@ -212,11 +212,21 @@ def _overview_directives_block(directives: list[dict]) -> list[str]:
     return out
 
 
+def _ship_date_suffix(item: dict) -> str:
+    """ " (date)" when a ship date is present, else "" -- omit the parens entirely rather than
+    render an empty "()". A missing/empty ship date is TSV_EMPTY_SENTINEL-shaped upstream (see
+    core.ship_date's docstring: no matching "Shipped:" line -> ""); this is the render-side half
+    of that contract, not a second sentinel.
+    """
+    ship_date = item.get("ship_date") or ""
+    return f" ({ship_date})" if ship_date else ""
+
+
 def _overview_assimilated_block(assimilated: list[dict]) -> list[str]:
     if not assimilated:
         return []
     out = ["\n", f"  {GREEN}Recently assimilated:{NC}\n"]
-    out.extend(f"    {DIM}- [{item['project']}] {item['title']} ({item['ship_date']}){NC}\n" for item in assimilated)
+    out.extend(f"    {DIM}- [{item['project']}] {item['title']}{_ship_date_suffix(item)}{NC}\n" for item in assimilated)
     return out
 
 
@@ -347,7 +357,7 @@ def deep(doc: dict) -> str:  # pylint: disable=too-many-branches,too-many-locals
         out.append("\n")
         out.append(f"  {GREEN}Recently assimilated:{NC}\n")
         for item in assimilated:
-            out.append(f"    {DIM}- {item['title']} ({item['ship_date']}){NC}\n")
+            out.append(f"    {DIM}- {item['title']}{_ship_date_suffix(item)}{NC}\n")
 
     out.append("\n")
     return "".join(out)
