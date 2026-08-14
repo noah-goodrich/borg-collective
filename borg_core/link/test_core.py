@@ -493,12 +493,13 @@ def test_visible_projects_strips_internal_keys_and_adds_relative_activity():
     assert public["relative_activity"] == "2h ago"
 
 
-def test_assemble_emits_the_ten_keys_and_keeps_order_and_projects_in_lockstep():
+def test_assemble_emits_the_eleven_keys_and_keeps_order_and_projects_in_lockstep():
     projects = {"a": {"status": "idle"}, "b": {"status": "idle"}}
     order = ["b", "a"]
     doc = core.assemble(
         generated_at="2026-08-13T00:00:00Z",
         show_all=False,
+        total_projects=2,
         capacity=core.capacity(0, 3),
         projects=projects,
         order=order,
@@ -511,6 +512,7 @@ def test_assemble_emits_the_ten_keys_and_keeps_order_and_projects_in_lockstep():
         "version",
         "generated_at",
         "show_all",
+        "total_projects",
         "capacity",
         "order",
         "projects",
@@ -519,13 +521,15 @@ def test_assemble_emits_the_ten_keys_and_keeps_order_and_projects_in_lockstep():
         "cortex_pending",
         "focus",
     ]
-    assert doc["version"] == 1
+    assert doc["version"] == 2
+    assert doc["total_projects"] == 2
     assert list(doc["projects"]) == doc["order"] == order
 
     # a name absent from `order` is dropped from the emitted map, not desynchronized.
     doc2 = core.assemble(
         generated_at="x",
         show_all=False,
+        total_projects=2,
         capacity=core.capacity(0, 3),
         projects=projects,
         order=["b"],
@@ -536,6 +540,53 @@ def test_assemble_emits_the_ten_keys_and_keeps_order_and_projects_in_lockstep():
     )
     assert list(doc2["projects"]) == ["b"]
     assert len(doc2["order"]) == len(doc2["projects"])
+
+
+def test_assemble_total_projects_is_independent_of_order_and_projects():
+    # The whole reason total_projects is a wire key rather than derived: an empty registry and an
+    # all-archived one both emit order=[]/projects={}, but must be distinguishable.
+    doc = core.assemble(
+        generated_at="x",
+        show_all=False,
+        total_projects=3,
+        capacity=core.capacity(0, 3),
+        projects={},
+        order=[],
+        directives=[],
+        assimilated=[],
+        cortex_pending=[],
+        focus=None,
+    )
+    assert doc["total_projects"] == 3
+    assert doc["order"] == []
+    assert doc["projects"] == {}
+
+
+@pytest.mark.parametrize(
+    "value,default,expected",
+    [
+        (None, "X", "X"),
+        (False, "X", "X"),
+        ("", "X", ""),
+        (0, "X", 0),
+        ("text", "X", "text"),
+    ],
+)
+def test_jq_default_reproduces_jqs_alternative_operator(value, default, expected):
+    # jq's `//` replaces null / false / missing ONLY -- NOT the empty string, NOT 0. Measured live:
+    # `echo '{"a":""}' | jq '.a // "X"'` -> "", and `{"a":0}` -> 0. A bare `value or default` would
+    # fail the "" and 0 cases here.
+    assert core.jq_default(value, default) == expected
+
+
+@pytest.mark.parametrize(
+    "last_activity",
+    [1_754_000_000, False, None, "2026-08-01T00:00:00Z"],
+)
+def test_public_entry_relative_activity_is_always_a_str(last_activity):
+    entry = {"status": "idle", "last_activity": last_activity}
+    public = core.public_entry(entry, now_epoch=1_800_000_000)
+    assert isinstance(public["relative_activity"], str)
 
 
 def test_format_iso_round_trips_with_iso_to_epoch():
