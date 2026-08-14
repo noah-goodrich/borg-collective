@@ -42,11 +42,14 @@ bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_a
 One call serves both — `borg link --json <project>` returns the full overview document PLUS
 `focus`. Never make two calls for a deep dive.
 
-**Why the jq.** Neither pipe enumerates a field, so anything the document gains later passes
-through untouched. Overview: collapses the one uncapped array (directives, ~121 items live) from
-27,298 bytes raw to ~13,935. Deep dive: drops the 20-project `projects` map, the full `order`, and
-the uncapped cross-project arrays the skeleton never reads, from 31,136 bytes raw to ~4,661 — an
-85% cut. If `jq` is missing, drop the pipe and read the raw document.
+**Why the jq.** The two pipes work differently. The overview pipe (`.directives |= (...)`) does not
+enumerate a field — it transforms one key in place, so anything the document gains later passes
+through untouched. It collapses the one uncapped array (directives, ~121 items live) from 27,298
+bytes raw to ~13,935. The deep-dive pipe (`{version, generated_at, capacity, total_projects,
+focus}`) is the opposite: an explicit top-level whitelist. It drops the 20-project `projects` map,
+the full `order`, and the uncapped cross-project arrays the skeleton never reads, from 31,136 bytes
+raw to ~4,661 — an 85% cut — but a field the document gains later is invisible until this list is
+updated to include it. If `jq` is missing, drop the pipe and read the raw document.
 
 **Mode selection.** To decide the mode, run the MARKER-WALK block below — it is the only
 pre-approved way to detect the current project; do not write an ad hoc find/ls command. Marker
@@ -135,10 +138,17 @@ sentences and getting them backwards is the known trap.
 **Trigger — this is the whole condition. Do not paraphrase it, and do not fall back for any other
 reason.**
 
-Capture every branch input in one call (no `$()`, per repo rule):
+The probe must re-run the SAME command Step 1 used, including the project argument if there was
+one. `ProjectNotFound` is only raised when a project name is passed (`borg_core/link/cli.py:61`); an
+argument-less overview call can never hit the `not in registry` row, so a probe that drops the
+argument makes that row unreachable. If Step 1's failing call was the overview (no project), that
+row simply won't fire for it — that is correct, not a bug.
+
+Capture every branch input in one call (no `$()`, per repo rule). Substitute `<project>` with the
+same argument (or nothing, for an overview) that Step 1 used:
 
 ```bash
-bash -c 'borg link --json >/tmp/borg-link.out 2>/tmp/borg-link.err
+bash -c 'borg link --json <project> >/tmp/borg-link.out 2>/tmp/borg-link.err
 echo "rc=$?"
 wc -c </tmp/borg-link.out
 grep -c "not in registry" /tmp/borg-link.err
