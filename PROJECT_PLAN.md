@@ -105,8 +105,8 @@ Python target next.
   - **The one survivor is carried to Phase 3, not silently dropped**: `core.capacity()`'s `active > limit` can be
     changed to `>=` with 346 pytest + 112 bats still green. Current code is correct and matches `borg.zsh:407`;
     what is missing is a discriminating assertion. See "Phase 3 entry gate" below.
-- [x] **A4 — Human output is byte-identical after the port.** *(Done 2026-08-13. AMENDED 2026-08-13 — owner signed off; the
-      original text is preserved below.)*
+- [x] **A4 — Human output is byte-identical after the port.** *(Done 2026-08-13. AMENDED 2026-08-13 — owner
+      signed off; the original text is preserved below.)*
       All four goldens byte-match with **ZERO regeneration**. 23 of the 25 A1 assertions pass unchanged;
       exactly **two** flip to their documented post-fix values — the `(NOm)` assimilated-ordering test
       (`cli_contract.bats:2112`, lines 2112/2118/2121/2122) and the two-line Progress test (`:2078`, lines
@@ -193,11 +193,22 @@ Python target next.
       every project stale inside a drone).
   - Verify: SKILL.md runs `borg link --json` first; fallback section states its trigger. Redeployed via
     `install.sh` and the **deployed** copy re-read to confirm.
-- [x] **A7 — Regression.** *(Done 2026-08-13.)* Full bats suite + macOS contract leg green; per-module
-      coverage `>= 90%` checked by hand on `coverage report -m`, not inferred from the global
-      `--fail-under=90` (which is a total over `borg_core` and currently masks `recon/cli.py` at 82%).
-  - Verify: `bats tests/*.bats` exits 0 (639/639); `coverage report -m` shows every `borg_core/link/*.py`
-    at `>= 90%` (`core.py` 100%, `shell.py` 100%, `cli.py` 98%, `render.py` 99%).
+- [ ] **A7 — Regression.** Full bats suite + macOS contract leg green; per-module coverage `>= 90%` checked
+      by hand on `coverage report -m`, not inferred from the global `--fail-under=90` (which is a total over
+      `borg_core` and currently masks `recon/cli.py` at 82%).
+  - Verify: `bats tests/*.bats` exits 0; `coverage report -m` shows every `borg_core/link/*.py` at `>= 90%`.
+  - **Un-ticked 2026-08-13 after being marked done during Phase 3.** A7 is this plan's CLOSING gate, not a
+    per-phase check. A6 rewrites `skills/borg-link/SKILL.md` and requires an `install.sh` redeploy, so any
+    regression evidence gathered before A6 lands is stale by construction. It also carried the wrong count
+    (639/639, the figure at `7a42c6e`, before the render fix added two tests — the real figure at merge was
+    645/645). **A7 is verified once, after A6, against the final tree.**
+  - Phase 3's regression evidence is recorded in the Phase log below; it is a phase result, not A7.
+  - When A7 is finally run, prefer the corrected coverage config from
+    `docs/plans/directives/2026-08-13-coverage-gate-measures-the-wrong-thing.md`: today's
+    `omit = ["**/tests/**"]` matches nothing (tests are colocated as `borg_core/<pkg>/test_*.py`), so 60.4%
+    of measured statements are test files grading themselves and the reported total is inflated — real
+    production coverage is 96%, not 98%. A7's "checked by hand, not inferred from the global gate" wording
+    exists precisely because of this; the directive is the mechanical fix.
 
 ## Phase log
 
