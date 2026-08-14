@@ -2567,3 +2567,83 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" = "active" ]
 }
+
+# ── Phase 3 (A4+A5) verification ────────────────────────────────────────────
+#
+# A5's original verify ("grep -c 'cmd_link' borg.zsh returns 0") is the weakest possible form of its
+# own criterion: satisfiable while 8 of 9 functions linger as orphaned dead code, satisfiable by a
+# pure rename, three of its six matches were COMMENTS (so it can go red on prose after a perfect
+# deletion, or green by editing prose while code survives), and `grep -c` EXITS 1 on a zero count --
+# as literally written it signals failure exactly when it passes. These three tests replace it.
+
+# Check 1: definition-anchored, repo-wide absence. Catches a rename or a relocation grep alone would
+# miss if it only scanned for the bare string "cmd_link".
+@test "contract: the nine deleted link helpers are absent as function definitions repo-wide" {
+    run bash -c "grep -rnE '^[[:space:]]*(function[[:space:]]+)?(cmd_link|_borg_link_porcelain|_borg_link_overview|_borg_link_deep|_borg_cortex_pending|_borg_cortex_countdown|_borg_collect_all_directives|_borg_collect_all_assimilated|_borg_read_assimilated)[[:space:]]*\\(\\)' '$BORG_HOME/borg.zsh' '$BORG_HOME'/lib/*.zsh"
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+# Check 2: runtime absence via `whence -w`, which catches a helper relocated into lib/*.zsh (sourced
+# by glob) or defined via eval -- grep on borg.zsh alone cannot see either. The SAME test asserts the
+# positive half: _borg_read_directives, cmd_ls and cmd_watch must SURVIVE (cmd_next:1106 still calls
+# _borg_read_directives). Verified on the pre-flip tree to print "STILL DEFINED" for 9/9; this must be
+# green only after a real deletion.
+@test "contract: the nine deleted link helpers are undefined at runtime, and their survivors are not" {
+    run zsh -c "set -- help; source '$BORG_HOME/borg.zsh' >/dev/null 2>&1
+        for f in cmd_link _borg_link_porcelain _borg_link_overview _borg_link_deep \
+                 _borg_cortex_pending _borg_cortex_countdown _borg_collect_all_directives \
+                 _borg_collect_all_assimilated _borg_read_assimilated; do
+            whence -w \$f >/dev/null 2>&1 && { print -r -- \"STILL DEFINED: \$f\"; exit 1; }
+        done
+        for f in _borg_read_directives cmd_ls cmd_watch; do
+            whence -w \$f >/dev/null 2>&1 || { print -r -- \"MISSING: \$f\"; exit 1; }
+        done
+        exit 0"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+# Check 3: positive non-vacuity. The only one of the three that proves the renderer actually MOVED
+# rather than being renamed, re-pointed, or left behind a surviving zsh fallback. Injects a python3
+# that exits non-zero via BORG_PATH_PREFIX (the same seam cli_contract.bats:724 uses) and asserts all
+# three human modes fail. On the pre-flip tree (zero python3 dependency in any human mode) this was
+# RED; it can only pass after a real flip with no zsh renderer left standing behind the dispatch.
+@test "contract: all three human link modes fail when python3 is unavailable" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+        > "$BORG_REGISTRY"
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    cat > "$MOCK_BIN/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    run_zsh_borg link
+    [ "$status" -ne 0 ]
+
+    run_zsh_borg link --porcelain
+    [ "$status" -ne 0 ]
+
+    run_zsh_borg link solo
+    [ "$status" -ne 0 ]
+}
+
+# The fzf split-brain tripwire. After the flip, cmd_ls (borg.zsh:539-551 in the pre-flip numbering)
+# is the LAST surviving zsh copy of a sort whose authority now lives in core.order_projects. All
+# three jq copies were byte-identical before the deletion, so there is no disagreement on flip day --
+# this is the tripwire for the day someone changes one sort and not the other.
+@test "contract: cmd_ls --porcelain column 1 still agrees with link --json .order after the flip" {
+    _link_setup_porcelain
+
+    run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_ls --porcelain\" | awk -F'\t' '{ print \$1 }' | paste -sd, -"
+    [ "$status" -eq 0 ]
+    local ls_order="$output"
+    [ -n "$ls_order" ]
+
+    run bash -c "zsh '$BORG' link --json | jq -r '.order | join(\",\")'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$ls_order" ]
+}
