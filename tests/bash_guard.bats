@@ -636,14 +636,22 @@ _assert_blocked() {
 # Anything else must fall through to normal classification. Falling through is safe: an
 # unrecognized walk merely prompts, rather than being waved past every check.
 
-# The exact command borg-link tells Claude to run. Kept byte-for-byte in sync with SKILL.md.
+# Extracted from skills/borg-link/SKILL.md itself, between the MARKER-WALK-BEGIN/END anchors,
+# rather than held as a third hardcoded copy. This is the fix for a real defect: before this
+# change, this test fed its own copy to the guard and compared the guard's copy against the
+# test's copy — it never read SKILL.md, so a SKILL.md drift left this test green while the guard
+# silently stopped pre-approving the walk in production. Strips the fence lines and the leading
+# "Bash: " prefix exactly the way Claude would before running the command.
 _marker_walk() {
-    cat <<'WALK'
-dir="$PWD"; while [[ "$dir" != "/" ]]; do
-        [[ -f "$dir/.borg-project" ]] && { echo "WORKSPACE=$dir"; echo "PROJECT=$(cat "$dir/.borg-project")"; break; }
-        dir=$(dirname "$dir")
-      done
-WALK
+    awk '
+        /<!-- MARKER-WALK-BEGIN -->/ { want=1; next }
+        /<!-- MARKER-WALK-END -->/   { want=0 }
+        want && /^```/ { next }
+        want {
+            if (!started) { sub(/^Bash: /, ""); started=1 }
+            print
+        }
+    ' "${BORG_HOME}/skills/borg-link/SKILL.md"
 }
 
 @test "A1: the canonical borg-link marker walk is still pre-approved" {

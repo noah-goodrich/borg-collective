@@ -47,6 +47,72 @@ EOF
     export BORG_MEMORY_GATE_REPORT_BIN="$MOCK_BIN/mock-report"
 }
 
+# ─── REPORT_BIN self-resolution (the path every other test bypasses) ─────────
+#
+# Regression: every other test in this file exports BORG_MEMORY_GATE_REPORT_BIN in its mock
+# helper, so the `if [[ -z "$REPORT_BIN" ]]` self-resolution block never executed under bats.
+# It shipped containing `SELF_DIR="${0:A:h}"` — a zsh-only expansion. In this bash script
+# under `set -euo pipefail`, bash read it as substring expansion, evaluated `A` as arithmetic,
+# and aborted with "A: unbound variable" before the `||` fallback could run. The launchd job
+# therefore exited 1 on every single fire while the suite stayed green. These tests drive the
+# resolution path with NO env override and NO memory-hits-report on PATH.
+
+@test "self-resolves memory-hits-report as a sibling when not on PATH and no override set" {
+    local fake_repo="${BATS_TEST_TMPDIR}/repo/bin"
+    mkdir -p "$fake_repo"
+    cp "$SCRIPT" "$fake_repo/borg-memory-gate"
+    cat > "$fake_repo/memory-hits-report" <<'EOF'
+#!/usr/bin/env bash
+echo "memory-hits-report — last 30 days"
+echo "  reads:    9"
+echo "  sessions: 10"
+echo "  ratio:    0.900 reads/session"
+echo ""
+echo "  VERDICT: PASS — sibling resolution worked"
+EOF
+    chmod +x "$fake_repo/memory-hits-report" "$fake_repo/borg-memory-gate"
+
+    unset BORG_MEMORY_GATE_REPORT_BIN
+    run env PATH="/usr/bin:/bin" \
+        HOME="$BORG_TEST_HOME" \
+        BORG_MEMORY_GATE_VERDICT_FILE="$BORG_MEMORY_GATE_VERDICT_FILE" \
+        BORG_MEMORY_GATE_STATE="$BORG_MEMORY_GATE_STATE" \
+        BORG_MEMORY_GATE_LOG="$BORG_MEMORY_GATE_LOG" \
+        "$fake_repo/borg-memory-gate" --once
+    [ "$status" -eq 0 ]
+    grep -q 'verdict=PASS' "$BORG_MEMORY_GATE_LOG"
+}
+
+@test "self-resolution follows the install symlink to the real bin/ directory" {
+    # Mirrors the real install: ~/.local/bin/borg-memory-gate -> <repo>/bin/borg-memory-gate,
+    # with memory-hits-report present ONLY next to the real file.
+    local fake_repo="${BATS_TEST_TMPDIR}/repo/bin"
+    local link_dir="${BATS_TEST_TMPDIR}/localbin"
+    mkdir -p "$fake_repo" "$link_dir"
+    cp "$SCRIPT" "$fake_repo/borg-memory-gate"
+    cat > "$fake_repo/memory-hits-report" <<'EOF'
+#!/usr/bin/env bash
+echo "memory-hits-report — last 30 days"
+echo "  reads:    9"
+echo "  sessions: 10"
+echo "  ratio:    0.900 reads/session"
+echo ""
+echo "  VERDICT: PASS — symlink resolution worked"
+EOF
+    chmod +x "$fake_repo/memory-hits-report" "$fake_repo/borg-memory-gate"
+    ln -s "$fake_repo/borg-memory-gate" "$link_dir/borg-memory-gate"
+
+    unset BORG_MEMORY_GATE_REPORT_BIN
+    run env PATH="/usr/bin:/bin" \
+        HOME="$BORG_TEST_HOME" \
+        BORG_MEMORY_GATE_VERDICT_FILE="$BORG_MEMORY_GATE_VERDICT_FILE" \
+        BORG_MEMORY_GATE_STATE="$BORG_MEMORY_GATE_STATE" \
+        BORG_MEMORY_GATE_LOG="$BORG_MEMORY_GATE_LOG" \
+        "$link_dir/borg-memory-gate" --once
+    [ "$status" -eq 0 ]
+    grep -q 'verdict=PASS' "$BORG_MEMORY_GATE_LOG"
+}
+
 @test "FAIL verdict writes verdict file and delivers one notification" {
     _mock_report "FAIL" "0.100"
     run bash "$SCRIPT" --once

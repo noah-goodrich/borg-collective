@@ -1,0 +1,491 @@
+# Project Plan: Port `borg link` to the Python Core (behavior unchanged)
+*Established: 2026-08-12*
+*Shipped: 2026-08-14 — PRs #129, #133–#142 squash-merged to main, closing at `fb983a4`*
+
+## What a reader in six months should take from this
+
+Seven criteria, all met. The engineering is unremarkable; **how the defects were found is the value here.**
+
+**Three real defects shipped past a fully green suite, and every one was caught by a real oracle rather than
+a test.** In order: the empty-`Shipped:` field-shift (found by diffing against the owner's real registry),
+the capacity `>` boundary (found by a mutation audit — it survived 346 pytest and 112 bats), and `_fold_s`
+failing to reproduce `fold -s` (found by a ship-time review reading code against its own docstring). At the
+moment each was found, the suite was green, per-module coverage was ≥97%, and all five CI lanes passed.
+
+The mechanism was identical each time: **a fixture that avoids the hard input proves nothing about it.**
+`cli_contract.bats:1375` deliberately keeps the deep fixture's summary under 70 chars "so `fold -s -w 70`
+is a no-op" — so the single path where the port could drift was the one path the oracle never exercised.
+Every assimilated fixture wrote a `Shipped:` line, so the empty-date branch had no coverage at all.
+`capacity(0, 3)` is mutation-blind by construction.
+
+**A4 was ticked while measurably false, and A6 was ticked and then invalidated.** A6 was verified against
+both deployed copies, ticked — and forty minutes later #139 edited the very artifact that had been
+verified. Neither pinning test could catch it: both read the repo source, and nothing read what
+`borg setup` writes. The suite was green precisely because it never looked at what ships.
+
+**What to reach for instead of the suite**: `bin/link-parity-harness`, the zsh-vs-Python differential
+committed in #142. It is the only remaining oracle — the zsh implementation was deleted in Phase 3 and
+survives solely at `ad99612` in git history. Its real run: 20 projects, 23 cases, 12 identical, 11
+differing with every one classified against a signed-off deviation, 0 unexpected.
+
+**One correction worth not repeating**: the claim that GNU and BSD `fold` agree was measured on ASCII and
+recorded as general. There are three counting algorithms — `_fold_s` counts codepoints, BSD counts display
+columns, GNU counts bytes — and they diverge on the first em dash. Scope a refutation to the experiment
+that was actually run.
+
+## Objective
+
+Move `borg link` out of zsh and into `borg_core/link/`, following the established `recon`/`registry`
+core/shell/cli convention, with **human-readable output byte-identical to today's**. Add `borg link --json`
+as new additive surface and rewrite `/borg-link` to consume it. Layout redesign is explicitly deferred to a
+second directive so this pass has a real parity harness.
+
+## Why this shape
+
+The owner's direction is that `link` belongs in the Python core, which correctly cut a circular deferral:
+the recon-migration-ledger blocked `link` on the link-unification directive, and that directive assumed a
+zsh implementation. Doing both at once means writing the logic twice.
+
+But a scoping pass (5 agents, call graph + conventions + contract + adversarial challenge) surfaced a second
+conflict underneath: **you cannot prove parity against a target you are simultaneously redesigning.** A port
+needs contract tests written against today's zsh that pass *unchanged* on Python. L3/L4/L5 of
+`2026-08-11-link-unification-and-layout.md` deliberately rewrite that exact output. The moment the layout
+lands, every parity assertion must be edited — and an edited assertion proves nothing about what came before.
+
+This plan resolves it by splitting on that seam: re-platform an unchanged command here, redesign a stable
+Python target next.
+
+## Corrections to the record (verified empirically, supersede the directive's text)
+
+- **L4's `---` defect does not reproduce.** `borg link | sed 's/\x1b\[[0-9;]*m//g' | grep -c -- '---$'`
+  returns **0**, and **0 of 118** directive files across `~/dev` begin with `---`. The `head -1 | sed` title
+  extraction is theoretically fragile but no real data triggers it. L4 is not carried here or in the layout
+  directive as written.
+- **L5's baseline is stale.** The directive says 83 lines; actual is **160**.
+- **`_borg_read_assimilated:147` is a real bug.** `(NOm)` — in zsh `Om` *reverses* to oldest-first, so
+  `borg link <project>` lists the three **oldest** assimilated plans under "Recently assimilated". It also
+  disagrees with `_borg_collect_all_assimilated`, which sorts filename DESC. Must be fixed here because the
+  JSON contract requires one ordering; recorded as an intentional deviation with a pinning test.
+
+## Acceptance Criteria
+
+- [x] **A1 — Parity harness exists and is green against today's zsh, before any port work.**
+      14-18 cases in `tests/cli_contract.bats` covering all four output modes, the deep dive's optional
+      sections, aggregate directives/assimilated, cortex pause row, capacity warning, empty-registry hint,
+      unknown-project die, and all three external consumers (`drone.zsh:963` `Status:` grep, `drone.zsh:1405`
+      `drone link`, `borg.zsh:689` fzf preview).
+  - Verify: `bats tests/cli_contract.bats` green on unmodified `main`; case count `>= 14`.
+  - **Done 2026-08-13.** 25 cases; suite 98/98, full `bats tests/*.bats` 620/620, and the whole contract
+    file green on GNU/Linux (ubuntu:24.04 container) as well as macOS — the goldens byte-match on both.
+    Four renderers are pinned by byte-exact golden files under `tests/fixtures/link/` (ANSI escapes and
+    column padding included), not substrings: a substring harness passes against a renderer that changes
+    padding or drops a color, which is the drift this port produces.
+  - **Hardened after a blind adversarial pass** (3 lenses: reuse, vacuity, portability). The first draft
+    was green and still under-constrained in ways that mattered:
+    - The **tertiary sort key** (`last_activity` ASC) was invisible — no fixture put two projects in the
+      same (pinned, status) bucket, so reversing it, the change a porter is most likely to make since
+      oldest-first reads as a bug, rendered byte-identically. Three projects now tie that bucket.
+    - The **human `--all` path** was never rendered at all; `--all` was only exercised via `--porcelain`.
+      Added `link-overview-all.golden`.
+    - `display_name`, the checkpoint `head -3`/`head -20` caps, name-vs-mtime checkpoint ordering, the
+      `never` relative-time bucket, the deep dive's `(never)`/`(none)`/`(unknown)` defaults, the
+      `fold -s -w 70` wrap and its continuation indent, the `--llm` alias, and the reap overlay's
+      downgrade direction were all unpinned. Each now has a case.
+    - The claimed external consumer at `borg.zsh:689` was **wrong**: fzf reads `cmd_ls --porcelain`
+      (`borg.zsh:685`), not `link --porcelain`, and the two already diverge on an empty registry. Both
+      halves are now pinned against the producer that actually feeds each.
+  - **A second known deviation surfaced and is now pinned**: `criteria_done=$(grep -c … || echo 0)`
+    (`borg.zsh:459`) captures *both* grep's `0` and the `|| echo 0` fallback when nothing matches, so a
+    plan with no completed criteria renders `Progress: 0` / `0/2 criteria met` across two lines. Every
+    fresh plan hits it. The port will "fix" it merely by being Python, so it must land as a deliberate
+    deviation, not a silent change. The `(NOm)` oldest-first assimilated bug is likewise pinned — and
+    deliberately kept OUT of the deep-dive golden, so fixing it flips one substring test instead of
+    forcing a golden regeneration that A4 rules out as a parity proof.
+  - Non-vacuity verified by **six mutations**, each caught by exactly the goldens that should see it:
+    dropping the tertiary sort key (porcelain + both overviews red, deep green), widening the checkpoint
+    caps (deep only), making `--all` ineffective (overview-all only), dropping `display_name` (both
+    overviews), removing the `--llm` alias, and disabling the reap overlay.
+- [x] **A2 — Config vars reach the Python child.**
+      `BORG_MAX_ACTIVE`, `BORG_REAP_STALE_HOURS`, `BORG_TMUX_SESSION`, `BORG_CORTEX_WAKES` are all currently
+      set *without* `export`, so a `python3 -m` child inherits none of them.
+  - Verify: a contract test sets `BORG_MAX_ACTIVE=6` and asserts the Python path honors it identically to zsh.
+  - **Done 2026-08-13** via `_borg_py` (`borg.zsh`, just above the `case` block), which hands the child
+    `BORG_DIR`, `BORG_REGISTRY`, `BORG_MAX_ACTIVE`, `BORG_REAP_STALE_HOURS`, `BORG_TMUX_SESSION`,
+    `BORG_CORTEX_WAKES` and `PYTHONPATH`, with defaults applied *in the wrapper* (an exported-empty
+    `BORG_REAP_STALE_HOURS` makes `int("")` raise). This was not hypothetical: `borg recon` had been
+    dying with `no registry at ` on every real invocation since its migration, because it read
+    `BORG_REGISTRY` from an environment that never had it. Contract test mocks `python3` and asserts
+    the **child's** environment, including that a caller-supplied value is carried through.
+- [x] **A3 — `borg link --json` emits the full document and is not polluted by the zsh pre-pass.**
+      `warn()` writes to **stdout** (borg.zsh:30), and the mandatory `borg_desktop_scan` pre-pass can emit
+      "registry write blocked" there, breaking `jq`. Diagnostics must move to stderr on this path.
+  - Verify: `borg link --json | jq -e '.projects and .generated_at and (.order | length) == (.projects | length)'`
+    exits 0 — not the directive's `.projects and .generated_at`, which passes on an empty object. Plus a test
+    that forces the registry-write warning and asserts stdout is still valid JSON.
+  - **Done 2026-08-13**, merged as `358f0aa` ([#134](https://github.com/noah-goodrich/borg-collective/pull/134)).
+    Verified by an independent evaluator that re-ran the gate live (exit 0) rather than restating it, plus five
+    green CI lanes: `make lint` 10.00/10, 346 pytest, `bats tests/cli_contract.bats` 112/112, `bats tests/*.bats`
+    636/636. Diagnostics move to stderr via `1>&2 2>/dev/null` on the pre-pass (`borg.zsh:3275-3321`).
+  - **Non-vacuity measured by 8 mutations, not assumed: 7 killed, 1 survived.** Killed — reversing the
+    `last_activity` tie-break, `pinned` truthiness vs `is True`, swapping the waiting/active rank, leaking
+    `_`-prefixed keys, ignoring `--all`, a second wall-clock read, and ungating `borg_desktop_scan` on the focus
+    path. Most died at BOTH tiers independently. Also proven: 7 of the 9 new bats tests really cross the
+    zsh→python3 boundary (replacing `cli.py:93` with `print("{}")` turned exactly those 7 red).
+  - **Branch coverage confirmed honest**: with `branch = true` the new code is 149/150 arcs — `core.py` 74/74,
+    `shell.py` 68/68, zero partials; the only miss is `cli.py:116→117`, the `if __name__` guard, which is
+    structurally uncoverable under pytest. Statement→branch moves the PR by 0.11pp.
+  - **The one survivor is carried to Phase 3, not silently dropped**: `core.capacity()`'s `active > limit` can be
+    changed to `>=` with 346 pytest + 112 bats still green. Current code is correct and matches `borg.zsh:407`;
+    what is missing is a discriminating assertion. See "Phase 3 entry gate" below.
+- [x] **A4 — Human output is byte-identical after the port.** *(Done 2026-08-14 — see the fifth deviation.
+      AMENDED 2026-08-13 — owner signed off; the original text is preserved below.)*
+  - **A FIFTH deviation, and the one that matters most in this record: A4 was ticked while measurably
+    false, and a ship-time review caught it.** `render.py`'s `_fold_s` did not reproduce `fold -s`. It
+    windowed on `remaining[:width + 1]` (treating a blank at exactly the wrap column as an in-window break)
+    and emitted `remaining[:break_at]`, dropping the blank POSIX says stays on the line — while the
+    function's own docstring stated the correct behavior. A differential harness measured **3504/4000**
+    randomized inputs mismatching real `fold -s`; after the fix, **0/4000**, independently re-confirmed at
+    2000/2000 by the orchestrator. Fixed in
+    [#140](https://github.com/noah-goodrich/borg-collective/pull/140).
+  - **Why every green number missed it.** `cli_contract.bats:1375` deliberately keeps the deep fixture's
+    summary **under 70 chars so `fold -s -w 70` is a no-op**, and the one long-summary case asserts
+    structure (`^  [^ ]`) rather than bytes. So the single path where the port could drift was the one path
+    the oracle never exercised. "All four goldens unchanged" was true and proved byte-identity only for
+    inputs the goldens contain. No live project summary is currently long enough to wrap, which is why the
+    real-registry diff was also clean — 164/164 lines identical.
+  - **A premise in the suite is false FOR ASCII, and the correction was initially over-generalized — twice.**
+    `cli_contract.bats:1376` claims GNU and BSD `fold` disagree on break points, which is why the wrapping
+    test was structural. Measured on ASCII: GNU coreutils 9.4 (Docker) and BSD `fold -s` agree
+    **1000/1000**, and the fix matches both. **That scope is the whole claim** — a first pass recorded it
+    here and in `render.py`'s docstring as a general refutation, and two independent reviewers then showed
+    it is false outside ASCII. There are **three** counting algorithms, not two vendors and a port:
+    `_fold_s` counts **codepoints**, BSD `fold` counts **display columns**, GNU `fold` counts **bytes**
+    (and will split a UTF-8 sequence mid-codepoint). They diverge on the first **em dash** — the single
+    most likely non-ASCII character in an LLM-written summary — and on 6 of 6 non-ASCII probes.
+  - **Consequence, which is a live trap and not a curiosity**: the wrapping path is pinned by a
+    **differential** test that shells out to the live `fold` binary, proven non-vacuous (reverting the
+    emission fix reddens 8 cases including a hardcoded one; reverting the window fix reddens 3). Its cases
+    are deliberately **ASCII, width-1, tab-free**. Adding a non-ASCII case would pass on a macOS dev host
+    and fail in CI's ubuntu lane. Width-1 non-ASCII matched BSD 303/303, so the host-path claim holds for
+    realistic data; wide characters (CJK, emoji) match neither vendor (44/200). For non-ASCII, escalate —
+    do not guess which vendor to match.
+  - **This was the third defect in this plan found only by running against a real oracle** — after the
+    empty-`Shipped:` field-shift (also real-registry) and the capacity-boundary mutation survivor (also an
+    audit, not the suite). Three for three, the suite was green and the defect was real. That pattern is
+    the most transferable thing here: **a fixture that avoids the hard input proves nothing about it.**
+      All four goldens byte-match with **ZERO regeneration**. 23 of the 25 A1 assertions pass unchanged;
+      exactly **two** flip to their documented post-fix values — the `(NOm)` assimilated-ordering test
+      (`cli_contract.bats:2112`, lines 2112/2118/2121/2122) and the two-line Progress test (`:2078`, lines
+      2078/2089). One Phase-2 assertion also moves: the `.version` literal at `:2333`, `1` -> `2`. Nothing
+      else in `tests/cli_contract.bats` is modified, deleted, **skipped, or neutered**.
+  - **A fourth deviation, found post-merge against the owner's real registry, not by any fixture in
+    this suite.** `borg link`'s "Recently assimilated" render used `IFS=$'\t' read -r slug title ship
+    aproject` over a TSV row. Tab is a whitespace `IFS` character, so zsh **collapses consecutive
+    tabs** — when a plan has no `Shipped:` line, `ship_date` is empty and `project` shifts left into
+    `ship`'s slot, rendering a bare, empty `()` after the title (`- [] Project Plan: … (ingle)` instead
+    of `- [ingle] Project Plan: …`). This is a **fix, not a regression**: the Python port reproduced the
+    same empty-`()` artifact (`item['ship_date']` interpolated unconditionally), and both render paths
+    (overview aggregate, deep dive) now omit the date's parens entirely when `ship_date` is empty,
+    leaving a title's own trailing parenthetical (e.g. `(C6)`) untouched. **No golden moves** — pinned
+    by a dedicated `kilo` fixture/registry scenario, appended as two new bats tests plus direct pytest
+    coverage in `test_render.py`, never by editing `_link_build_overview_ws`/`_link_registry_overview`
+    or the `delta` deep-dive fixture, all of whose assimilated plans carry a `Shipped:` line by design.
+    Both new suites were confirmed non-vacuous by reverting `render.py` and observing the exact
+    pre-fix `()` artifact reappear.
+  - Verify (three mechanical commands, all must hold):
+    1. `git diff 9257c3b..HEAD --stat -- tests/fixtures/link/` prints **nothing**.
+    2. `git diff 9257c3b..HEAD -- tests/cli_contract.bats | grep '^-' | grep -v '^---'` prints **only**
+       lines belonging to those three enumerated locations.
+    3. `grep -c '^\s*skip ' tests/cli_contract.bats` equals **1** (the pre-existing uid-0 guard at `:2366`),
+       and the bats TAP run reports zero `# skip` results beyond that one.
+  - **Why amended.** The original — "all A1 assertions pass unchanged" — was in direct contradiction with
+    this plan's own signed-off Phase 1 deviations. Two of the 25 A1 tests exist *specifically* to pin the
+    `(NOm)` ordering bug and the two-line `Progress` artefact, and their in-file comments say they are
+    designed to flip when those are fixed. One of the two had to move; keeping A4 verbatim would have meant
+    reverting already-shipped, already-tested Python (`shell.py:232-256`, `core.py:357`). The original verify
+    recipe was independently defective: `git stash` + "no diff" forbids *adding* tests, which Phases 2 and 3
+    have already done 12 times.
+  - **Why check 3 is not decoration.** Checks 1-2 only catch REMOVED or MODIFIED lines. An assertion can be
+    neutered by a pure ADDITION — a `skip`, an early `return`, an `if false; then` wrap — and both checks
+    still pass, while `bats … exits 0` counts a skip as a pass. Check 3 closes that hole, which sits exactly
+    where the pressure will be.
+  - **Verified before amending, not asserted**: `git diff 9257c3b..HEAD --stat -- tests/fixtures/link/` is
+    empty at `ad99612`; `link-deep.golden:50` carries exactly one assimilated line (so oldest-first vs
+    filename-DESC is unobservable there); `link-deep.golden:16` renders `Progress: 1/3 criteria met` on one
+    line because the fixture plan leads with `- [x]`, so the `|| echo 0` fallback never fires. **No golden
+    moves. `BORG_UPDATE_GOLDEN=1` must never be run during Phase 3.**
+  - *Original text, superseded:* "All A1 assertions pass **unchanged** against the Python implementation. A
+    modified assertion is not a parity proof. Verify: `git stash` the test file, confirm no diff between its
+    `main` and branch versions; suite green."
+- [x] **A5 — `cmd_link` and its helpers are deleted, not shadowed.** *(Done 2026-08-13.)*
+      `cmd_link`, `_borg_link_porcelain`, `_borg_link_overview`, `_borg_link_deep`, `_borg_cortex_pending`,
+      `_borg_cortex_countdown`, `_borg_collect_all_directives`, `_borg_collect_all_assimilated`,
+      `_borg_read_assimilated` removed; `cmd_watch` rewired to `_borg_link_dispatch`.
+  - Verify (three bats tests, not a checklist item -- `grep -c 'cmd_link' borg.zsh` is satisfiable by
+    a pure rename, passes while 8/9 functions linger as orphaned dead code, and three of its own six
+    matches were comments):
+    1. `contract: the nine deleted link helpers are absent as function definitions repo-wide` --
+       definition-anchored `grep -rnE` across `borg.zsh` and `lib/*.zsh`.
+    2. `contract: the nine deleted link helpers are undefined at runtime, and their survivors are not`
+       -- `whence -w` inside a sourced zsh subshell; catches a relocation into `lib/*.zsh` or an
+       `eval`-defined function that grep alone cannot see. Also asserts the POSITIVE half:
+       `_borg_read_directives`, `cmd_ls` and `cmd_watch` must survive (`cmd_next:1106` still calls
+       `_borg_read_directives`).
+    3. `contract: all three human link modes fail when python3 is unavailable` -- the only positive
+       non-vacuity proof. Injects a failing `python3` via `BORG_PATH_PREFIX` and asserts `borg link`,
+       `borg link --porcelain` and `borg link <project>` all fail; cannot be satisfied by a rename, a
+       re-pointed dispatch, or a surviving zsh fallback renderer.
+  - **Amended 2026-08-13 -- owner decided.** Post-merge, the owner literally ran the criterion's
+    original proxy, `grep -c 'cmd_link' borg.zsh`, and it returns **5**, not 0 -- every match is a
+    provenance comment (`borg.zsh:2883, 2891, 2903, 2904, 2957`), and the deletion is genuinely
+    complete (checks 1-3 above already proved it). That command is a bad proxy in **both**
+    directions: it passes while a differently-named helper lingers, and it fails when a comment
+    merely mentions the name. This is **not** loosening the criterion to fit the code -- checks 1-3
+    were already the real verification; the raw count is superseded because, taken literally, it
+    contradicts a deletion the three bats tests independently confirm. Replaced with two direct
+    commands, run against this branch and confirmed to print nothing:
+    1. `grep -nE '^[[:space:]]*(cmd_link|_borg_link_porcelain|_borg_link_overview|_borg_link_deep|
+       _borg_cortex_pending|_borg_cortex_countdown|_borg_collect_all_directives|
+       _borg_collect_all_assimilated|_borg_read_assimilated)[[:space:]]*\(\)' borg.zsh` -- no
+       definition survives.
+    2. The same nine names, non-comment references, across `borg.zsh` `drone.zsh` `lib/` `hooks/` --
+       no caller survives. The five provenance comments above are the intended, permanent reason
+       this second command must strip comments before matching, not evidence of an incomplete
+       deletion.
+- [x] **A6 — `/borg-link` consumes `borg link --json`.** *(Done 2026-08-14. Ticked, UN-ticked on deploy
+      drift, re-verified and re-ticked after a second `borg setup` — the history below is the point.)*
+  - **Re-verified 2026-08-14 against `9377019`, after the last source change to the skill.** Both deployed
+    copies byte-identical to source: `~/.claude/skills/borg-link/SKILL.md` (personal, the copy Claude Code
+    loads) and `claude-plugins/borg-collective/skills/borg-link/SKILL.md` (plugin). #139's fallback-probe
+    fix confirmed present in the deployed artifact, not merely in the repo.
+  - **The tick was true when made and false forty minutes later, and the sequencing error is instructive.**
+    The owner redeployed, both deployed copies were verified byte-identical to source, A6 was ticked — and
+    then [#139](https://github.com/noah-goodrich/borg-collective/pull/139) merged, editing
+    `skills/borg-link/SKILL.md` itself. **Verifying a deployed artifact and then merging a change to it
+    invalidates the verification.** Measured on `9377019`: `~/.claude/skills/borg-link/SKILL.md` (13105
+    bytes, the copy Claude Code loads for the personal `borg-link` skill) is byte-identical to
+    `git show 7d4a129:skills/borg-link/SKILL.md` — the **pre-#139** file. The plugin copy
+    (`claude-plugins/borg-collective/skills/borg-link/SKILL.md`, 13976 bytes) *did* track. So the
+    unreachable fallback probe #139 exists to fix is still what actually runs.
+  - **Neither pinning test can catch this, by construction.** `tests/skill_borg_link.bats:17` and
+    `tests/bash_guard.bats:654` both read the repo **source**; nothing reads the artifact `borg setup`
+    writes to `$CLAUDE_DIR/skills`. The suite is green precisely because it never looks at what ships.
+    A directive is filed to close the class — a drift check across all 16 skills and 12 hooks, not just
+    this one — because that mechanism, not a reviewer, is what should have caught it.
+  - **To re-tick**, owner-only, in a real terminal, and *after* the last source change to the skill:
+    ```
+    S=/Users/noah/dev/borg-collective/skills/borg-link/SKILL.md
+    borg setup && diff "$S" /Users/noah/.claude/skills/borg-link/SKILL.md && \
+      diff "$S" /Users/noah/dev/claude-plugins/borg-collective/skills/borg-link/SKILL.md && echo DEPLOY_OK
+    ```
+      Rewritten as a synthesis layer matching `/borg-recon`'s shape. The direct-file-read path survives only
+      as the drone-container fallback, with its trigger condition stated verbatim, `has_live_window: null`,
+      and **no** staleness downgrade (no-tmux is indistinguishable from no-window; a naive fallback marks
+      every project stale inside a drone).
+  - Verify: SKILL.md runs `borg link --json` first; fallback section states its trigger. Redeployed via
+    `install.sh` and the **deployed** copy re-read to confirm.
+  - **Source-tree rewrite done 2026-08-14; box stays UNCHECKED until the owner redeploys.** The nanoprobe
+    that did the rewrite does not run `install.sh` or `borg setup` (both write outside the repo into
+    `$HOME/.claude` and the `claude-plugins` working tree, and `cmd_setup` is interactive). What remains,
+    owner-only, in one uninterrupted terminal block:
+    ```
+    borg setup && \
+      diff /Users/noah/dev/borg-collective/skills/borg-link/SKILL.md \
+           /Users/noah/.claude/skills/borg-link/SKILL.md && \
+      diff /Users/noah/dev/borg-collective/skills/borg-link/SKILL.md \
+           /Users/noah/dev/claude-plugins/borg-collective/skills/borg-link/SKILL.md && \
+      echo DEPLOY_OK
+    ```
+    — both diffs must be clean (Claude Code discovers `borg-link` twice: personal + plugin). Then a live
+    smoke of `/borg-link` and `/borg-link borg-collective`, pasted into the placeholder comment at the top
+    of `tests/skill_borg_link.bats`. Only after that: tick this box with the diff + smoke evidence.
+- [x] **A7 — Regression.** *(Done 2026-08-14, against the final tree at `7d4a129`, after A6's deploy.)*
+      Full bats suite + macOS contract leg green; per-module coverage `>= 90%` checked
+      by hand on `coverage report -m`, not inferred from the global `--fail-under=90` (which is a total over
+      `borg_core` and currently masks `recon/cli.py` at 82%).
+  - Verify: `bats tests/*.bats` exits 0; `coverage report -m` shows every `borg_core/link/*.py` at `>= 90%`.
+  - **Re-measured 2026-08-14 on `9377019`**, the final tree after the post-ship fixes below. `bats
+    tests/*.bats` **649/649**; macOS contract leg green in CI on
+    [#141](https://github.com/noah-goodrich/borg-collective/pull/141); `make lint` 10.00/10; **404 pytest**.
+    Per-module, read by hand off `coverage report -m` rather than inferred: `core.py` **100%**,
+    `shell.py` **100%**, `render.py` **99%** (lines 111, 158), `cli.py` **97%** (lines 151, 189).
+  - **An earlier measurement on `7d4a129` was recorded here and was premature.** It is superseded, not
+    deleted, because the reason matters more than the numbers: a simplify + Collective ship review run at
+    assimilation time returned **do-not-ship** on a byte-parity defect that every one of those green numbers
+    was blind to. See A4.
+  - **The global figure remains untrustworthy and this tick does not endorse it.** `coverage report -m`
+    prints TOTAL 99%, but `omit = ["**/tests/**"]` matches nothing — tests are colocated as
+    `borg_core/<pkg>/test_*.py`, so test files are grading themselves and inflating the total. That is
+    exactly why A7 was written to demand per-module numbers by hand. The mechanical fix is filed as
+    `docs/plans/directives/2026-08-13-coverage-gate-measures-the-wrong-thing.md`.
+  - **Un-ticked 2026-08-13 after being marked done during Phase 3.** A7 is this plan's CLOSING gate, not a
+    per-phase check. A6 rewrites `skills/borg-link/SKILL.md` and requires an `install.sh` redeploy, so any
+    regression evidence gathered before A6 lands is stale by construction. It also carried the wrong count
+    (639/639, the figure at `7a42c6e`, before the render fix added two tests — the real figure at merge was
+    645/645). **A7 is verified once, after A6, against the final tree.**
+  - Phase 3's regression evidence is recorded in the Phase log below; it is a phase result, not A7.
+  - When A7 is finally run, prefer the corrected coverage config from
+    `docs/plans/directives/2026-08-13-coverage-gate-measures-the-wrong-thing.md`: today's
+    `omit = ["**/tests/**"]` matches nothing (tests are colocated as `borg_core/<pkg>/test_*.py`), so 60.4%
+    of measured statements are test files grading themselves and the reported total is inflated — real
+    production coverage is 96%, not 98%. A7's "checked by hand, not inferred from the global gate" wording
+    exists precisely because of this; the directive is the mechanical fix.
+
+## Phase log
+
+**Phase 0 — parity harness. Done 2026-08-13.** See A1.
+
+**Phase 1 — pure leaves + chokepoint. Done 2026-08-13.** `borg_core/link/{core,shell}.py` plus colocated
+tests, and `borg_core/paths.py` extracted (third caller triggered pylint's duplicate-code). **Zero tracked
+files modified** — pure addition, so every A1 golden passes unchanged, which is what A4 will later need.
+`core.py` 100%, `shell.py` 100% on `coverage report -m` (per-module, not inferred from the global gate);
+`make lint` 10.00/10; 328 pytest; `bats tests/*.bats` 627/627.
+
+The shared case table the Risks section demands is `tests/fixtures/reaper-cases.tsv`: 22 rows read by
+**both** `tests/reaper_cases.bats` (against live `lib/reaper.sh` under zsh) and
+`borg_core/link/test_core.py` (against `core.should_reap`), asserting the same expected column. A second
+5-row block covers `borg_reap_overlay`'s window resolution — the half an earlier draft missed, and the half
+the Risks section actually names.
+
+Three bugs were found while specifying this phase and fixed **outside** it, so Phase 1 stayed zsh-free:
+`borg recon` dying on an unexported `BORG_REGISTRY`; one malformed `state.json` blanking the whole registry;
+and `grep -qx` matching window names as regexes (`troth.site` matched a live `troth-site`), which would have
+made zsh and Python disagree about liveness forever.
+
+### Deviations, signed off 2026-08-13
+
+- **`iso_to_epoch` uses one strict grammar.** BSD `date -j -u -f` accepts trailing garbage and normalizes
+  `2026-02-30`; GNU `date -d` accepts a far larger grammar still. The two platforms already disagree, so one
+  strict grammar normalizes an existing split rather than adding a third behavior. No value borg itself
+  writes is affected — every writer uses `date -u +%Y-%m-%dT%H:%M:%SZ`.
+- **`read_assimilated` sorts filename-DESC.** The `(NOm)` glob lists the three *oldest* plans and disagrees
+  with the overview's aggregate, which already sorts by filename. One ordering for the JSON contract, and it
+  survives a fresh clone where every file shares the checkout mtime.
+- **`plan_progress` returns ints.** `grep -c … || echo 0` captures `0\n0`, rendering `Progress:` across two
+  lines on every fresh plan.
+- **`cortex_pending` emits no `cd=` noise.** zsh's `local cd` inside its loop prints the parameter from
+  iteration two onward. `_borg_cortex_pending` is deleted by A5, so the fix has no surviving twin.
+- **`registry_with_state` computes one snapshot.** zsh runs the whole pipeline twice per `borg link` (once
+  for the table, once inside the capacity warning), so a hook writing between them can make the two
+  disagree. Unobservable until Phase 3.
+- **`live_windows` is one fork.** Collapses `tmux has-session` + `list-windows`; tmux resolves a `-t` target
+  identically for both subcommands.
+
+**Phase 2 — the `--json` seam. Done 2026-08-13.** See A3. Adds `borg_core/link/cli.py` (new file, `--json`
+only) plus additive `core.py`/`shell.py` primitives (`project_sort_key`, `visible_projects`,
+`order_projects`, `capacity`, `assemble`, `max_active`, `registry_with_state(now=...)`) and wires the
+`link)` arm in `borg.zsh` through `_borg_py`. **Zero renderer touched** — every existing golden
+(`link-porcelain`, `link-overview`, `link-overview-all`, `link-deep`) still passes byte-identical, and
+`git diff main -- tests/cli_contract.bats | grep '^-' | grep -v '^---'` prints nothing. Interpreter pinning
+and a `borg doctor` python3 check are DEFERRED to Phase 3, when human rendering starts depending on Python;
+see the corrected CI risk bullet above.
+
+### Phase 3 entry gate — three tests, from the post-merge depth audit
+
+These close gaps that a 12-agent audit *measured* on the merged Phase 2 code. All three are latent today
+because nothing consumes the document yet; **all three become user-visible the instant Phase 3 flips the
+renderers onto it**, which is why they gate Phase 3 rather than having blocked #134. Roughly one commit.
+
+1. **Capacity boundary discriminator.** `core.capacity()`'s `active > limit` survives mutation to `>=` with
+   the entire suite green. `grep -rn over_limit tests/` matches nothing; its only exercise is `capacity(0, 3)`
+   passed as an argument, and 0-vs-3 is mutation-blind by construction. The 4-vs-4 case *is* tested — at
+   `cli_contract.bats:1943`, without `--json`, so it never reaches `core.py`. Fix: a parametrized assert on
+   `capacity(4,4)` and `capacity(5,4)`, plus a bats assertion on `.capacity.over_limit`.
+2. **`.order` vs golden row order must be derived, not re-typed.** Nothing asserts the two agree. Proven in
+   both directions: swapping `_STATUS_RANK` fails only the `--json` test while all four goldens stay green;
+   swapping the jq ranks at `borg.zsh:305-306` fails the goldens while all 7 real-boundary `--json` tests stay
+   green. `link-porcelain.golden` column 1 and the literal at `cli_contract.bats:2341` are identical text with
+   no derivation between them. Fix: parse the golden's first column and diff it against `jq -r '.order[]'`
+   over the *same* fixture. **This one must land before the flip** — a refactor touching both sides can move
+   them together into a state no assertion covers.
+3. **Reap overlay end-to-end on the JSON path.** Forcing `BORG_NO_REAP="${BORG_NO_REAP:-1}"` in `_borg_py` —
+   permanently disabling the overlay for every Python child — leaves the contract suite at 112/112. The
+   link-path test at `bats:2452` only greps the variable *name* from a **mocked** python3's env dump; no value
+   assertion, no `borg_core` execution, unlike the A2 test at `:2298-2304` which does pin a value. `status` is
+   the field this tool exists to report. Fix: a stale active row asserting `.status == "idle"` without the var
+   and `"active"` with it.
+
+Also carried, lower priority and each cheap: `cli.py:111` catches only `ValueError`, so nine malformed-registry
+shapes produce a raw traceback with zero bytes on stdout; EACCES is silent wrong data (an unreadable
+`PROJECT_PLAN.md` renders a real 1-of-3 plan as 0-of-0); `relative_activity` has no wire type contract
+(`last_activity: 12345` emits a JSON number on a `str | None` field); the A3 force test still skips on any
+uid-0 runner, and it is the sole assertion covering the pre-pass gate.
+
+**Coverage-gate defect found in passing (repo-wide, not this plan's):** `omit = ["**/tests/**"]` matches
+nothing, because tests are colocated as `borg_core/<pkg>/test_*.py`. 1407 of 2331 measured statements (60.4%)
+are test files grading themselves; real production coverage is **96%, not 98%**. One-line fix —
+`omit = ["*/test_*.py"]` plus `branch = true` — and the 90% gate still passes with 8 points of headroom
+(verified, not assumed).
+
+## Scope Boundaries
+
+- **NOT L3/L4/L5** (bottom-anchored layout, idle collapse, line-count re-measure) — second directive, against
+  the stable Python target. This is the whole point of the split.
+- **NOT `--brief` / `_borg_print_briefing`.** It stays zsh this pass. The open
+  `2026-08-10-briefing-fallback-and-summary-provenance.md` directive targets the same 144 lines and its
+  criteria *require* changing `briefing.bats`, contradicting "briefing.bats passes unchanged." Two owners,
+  same code. That directive ships first or they merge — either way, not here.
+- **NOT `borg scan` / `--refresh`.** `_borg_scan_source` passes function names as strings and mutates a
+  caller-scope array via zsh dynamic scoping; no mechanical port survives it. The arm runs `cmd_scan --llm`
+  in zsh before dispatching.
+- **NOT `borg_desktop_scan`.** Stays a zsh pre-pass in the case arm — it is a non-atomic registry
+  read-modify-write shared by scan/next/init/switch/watch. Consequence to document in `cli.py`'s docstring:
+  invoking the module directly differs from `borg link`, so the skill must call the CLI, never the module.
+- **NOT `cmd_ls` / `cmd_status` / `cmd_next`.** They keep their zsh copies (kept alive by `cmd_switch`). The
+  port temporarily *increases* duplication across the zsh/Python line until those migrate — accepted and
+  recorded, not hidden.
+- **NOT fixing `borg_coco_latest_session_id:34`**, which has the identical `(NOm[1])` bug but sits in the
+  out-of-scope scan surface.
+- If done early: ship, don't expand.
+
+## Ship Definition
+
+PR against `main`; full bats suite + macOS contract leg green; per-module coverage recorded in the PR body;
+independent 3-lens adversarial review (parity / bugs / scope) as with the `add`/`rm` migration; ledger row
+added to `docs/plans/assimilated/2026-08-12-recon-migration-ledger.md` recording that porting `link` ahead of
+`next`/`scan` is a deliberate owner-cut deviation from the controlling plan's stated order.
+
+## Timeline
+
+Target: 4-6 sessions, ~16-22h.
+
+Phase 0 parity harness ~3-4h · Phase 1 pure leaves + chokepoint ~3-4h · Phase 2 `--json` seam ~3-4h ·
+Phase 3 render flip (atomic across porcelain/overview/deep) ~4-6h · Phase 4 L2 skill + gate ~2-3h.
+
+The seam is `--json`: a new flag with zero existing consumers, so the entire document builder ships while
+every byte of human output is still produced by untouched zsh renderers. Phases 0-2 alone leave the command
+fully coherent — the natural stopping point if budget runs out.
+
+## Risks
+
+- **Shared-helper divergence is the crux.** `borg_registry_with_state` has 9 call sites across
+  link/next/switch/init/reap/watch, with `borg_reap_overlay` inside each. Python must reimplement both while
+  the zsh copies stay live. Divergence shows up as `borg link` saying idle while `borg next` says waiting —
+  a plausible-looking wrong answer with no crash, the exact failure mode this repo has been bitten by three
+  times. Mitigation: one shared case table (status x last_activity x live_window x threshold) exercised by
+  **both** a bats test against zsh and a pytest against Python, with identical expected values.
+- **`_borg_should_reap` becomes triple-implemented** across sh (hooks), zsh (CLI), and Python. Routing the
+  SessionStart hook through `python3` would add interpreter startup to every session start — not worth it.
+  Explicit recorded decision, not a mid-implementation discovery.
+- **`drone.zsh:963` greps `Status:` out of the human deep dive.** That text format is an undeclared cross-CLI
+  API with no test anywhere; breaking it yields a silently blank column. A1 must pin it.
+- **`cmd_watch` pays interpreter startup every redraw** (~40-60ms) where zsh paid an in-process call. Net
+  should still win (current path spends 3 + 8N jq spawns per redraw) but it is the one repeated constant.
+- **CORRECTED 2026-08-13 (Phase 2): the interpreter is unpinned, not absent.** The original bullet's
+  premise was wrong and its citation was stale. `test.yml:64-77` is now the `viz` job (commit
+  5876951 inserted it); the macOS contract lane moved to `test.yml:89-102`. And both bats lanes
+  already execute borg_core through `_borg_py` today with zero `setup-python`: `borg add`, `borg rm`
+  and `borg recon` all dispatch to Python, and their contract tests pass on ubuntu-latest and
+  macos-latest. `borg.zsh:15` rebuilds PATH from a fixed list that excludes the hosted toolcache, so
+  `actions/setup-python` alone would change nothing — routing to it requires symlinking into a
+  directory on that fixed list, and ~34 tests overwrite `BORG_PATH_PREFIX`. What is genuinely
+  unpinned is the interpreter VERSION: ubuntu-24.04 runs `/usr/bin/python3` 3.12.3 and macos-26 runs
+  `/opt/homebrew/bin/python3` 3.14.x, while the dedicated `python` lane lints and tests on 3.14.7 —
+  and 3.12 is the declared target (ruff `target-version = py312`, mypy `python_version = 3.12`), so
+  the ubuntu bats lane is currently the ONLY place that target is ever exercised. Pinning ubuntu to
+  3.14 would remove that. Interpreter pinning and a `borg doctor` python3 check are therefore
+  DEFERRED to Phase 3, when human rendering starts depending on Python and the risk becomes real.
+- **Unknown-flag parity is self-contradictory as originally scoped.** Today `borg link --totally-bogus` and
+  `borg link --help` both render the overview and exit 0 (`-*) shift ;;` at borg.zsh:226), and `cli_smoke.bats`
+  already asserts it. A recon-shaped arm that `die`s on unknown flags is a user-facing change. Pick parity;
+  note the deviation if not.

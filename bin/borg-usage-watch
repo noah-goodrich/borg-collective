@@ -67,6 +67,18 @@ LOG="${BORG_USAGE_LOG:-$STATE_DIR/usage-watch.log}"
 
 CLAUDE_BIN="${BORG_USAGE_CLAUDE_BIN:-claude}"
 
+# Every `claude -p` invocation persists a session transcript. This poller runs with cwd="/" (no
+# WorkingDirectory in the launchd plist), which Claude Code encodes as the project directory "-", so
+# at a 120s interval it deposits ~720 transcripts/day there forever. Measured 2026-08-12: 15,108
+# files / 60 MB accumulated since Jul 12. BORG_NO_SESSION_HOOKS stops borg's hooks from firing on
+# those sessions, but nothing stopped the transcript itself from being written.
+#
+# "/" is a declared quarantine, not an accident — hooks/borg-link-down.sh states "'/' can never be a
+# real borg project" and bails on it. That invariant is what makes pruning this one directory safe:
+# nothing a human cares about can legitimately live there.
+PROBE_TRANSCRIPT_DIR="${BORG_USAGE_PROBE_TRANSCRIPT_DIR:-$HOME/.claude/projects/-}"
+PROBE_RETAIN_MIN="${BORG_USAGE_PROBE_RETAIN_MIN:-60}"
+
 DEBUG=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -265,6 +277,27 @@ fi
 # BORG_NO_SESSION_HOOKS tells it to skip too.
 claude_exit=0
 output=$(BORG_NO_SPEND_RECORD=1 BORG_NO_SESSION_HOOKS=1 "$CLAUDE_BIN" -p "/usage" 2>&1) || claude_exit=$?
+
+# Bound the transcript pile this poll just added to. Age-based, not delete-everything: a concurrent
+# probe may be mid-write, and an unlink under it is a race for no benefit. At a 120s interval a
+# 60-minute floor keeps ~30 files instead of an unbounded 720/day.
+#
+# Deliberately narrow: -maxdepth 1 and -name '*.jsonl' only, so the sibling memory/ directory and
+# anything that is not a transcript are untouchable. Fail-open — a housekeeping failure must never
+# take down usage sampling, which is the poller's actual job.
+_prune_probe_transcripts() {
+    [[ -d "$PROBE_TRANSCRIPT_DIR" ]] || return 0
+    # -print -delete prints each match then unlinks it, so one traversal both deletes and
+    # counts. Two separate finds would walk a 15k-file directory twice and, worse, duplicate
+    # the predicate — an edit to one and not the other silently desyncs the count from the
+    # deletion.
+    local pruned
+    pruned=$(find "$PROBE_TRANSCRIPT_DIR" -maxdepth 1 -name '*.jsonl' -mmin "+$PROBE_RETAIN_MIN" -print -delete 2>/dev/null | wc -l | tr -d ' ') || pruned=0
+    [[ "$pruned" == "0" ]] && return 0
+    log "pruned $pruned probe transcript(s) older than ${PROBE_RETAIN_MIN}m from $PROBE_TRANSCRIPT_DIR"
+    return 0
+}
+_prune_probe_transcripts || true
 
 if [[ "$claude_exit" -ne 0 ]]; then
     log "ERROR: claude exited $claude_exit for '/usage' — poller could not sample"

@@ -47,7 +47,9 @@ borg_tmux_current_session() {
 
 borg_tmux_window_exists() {
     local name="$1"
-    borg_tmux_windows | /usr/bin/grep -qx "$name"
+    # -F: a window name is data, never a pattern. See lib/registry.zsh's reap overlay for the full
+    # rationale — without it, `troth.site` matches a live `troth-site`.
+    borg_tmux_windows | /usr/bin/grep -qxF "$name"
 }
 
 # Return last activity timestamp (epoch seconds) for a window

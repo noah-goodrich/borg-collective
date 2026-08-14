@@ -136,376 +136,7 @@ _borg_read_directives() {
     done
 }
 
-# Read recent assimilated plans from a project's own docs/plans/assimilated/ directory.
-# Arguments: absolute path to the project root, optional max count (default 3).
-# Output: slug\ttitle\tship-date lines (max N, newest first by mtime)
-_borg_read_assimilated() {
-    local ppath="${1:-}" max="${2:-3}" count=0 title ship_date f dir
-    [[ -z "$ppath" || "$ppath" == "null" ]] && return 0
-    dir="$ppath/docs/plans/assimilated"
-    [[ -d "$dir" ]] || return 0
-    local files=("$dir"/*.md(NOm))  # newest first by mtime
-    (( ${#files[@]} == 0 )) && return 0
-    for f in "${files[@]}"; do
-        (( count >= max )) && break
-        title=$(head -1 "$f" | sed 's/^#* *//')
-        ship_date=$(grep -m1 'Shipped:' "$f" | sed 's/.*Shipped: *//' | sed 's/ .*//')
-        printf '%s\t%s\t%s\n' "${${f:t}%.md}" "$title" "$ship_date"
-        count=$((count + 1))
-    done
-}
-
-# Iterate every registered project and collect directives from each project's
-# docs/plans/directives/ directory. Skips projects whose path is unreachable.
-# Output: first line = total count, subsequent lines = slug\ttitle\tproject
-_borg_collect_all_directives() {
-    local registry names_paths name ppath f title
-    registry=$(borg_registry_read)
-    names_paths=$(echo "$registry" | jq -r '.projects | to_entries[] | .key + "\t" + (.value.path // "")')
-
-    local entries=() count=0
-    while IFS=$'\t' read -r name ppath; do
-        [[ -z "$name" || -z "$ppath" || ! -d "$ppath/docs/plans/directives" ]] && continue
-        for f in "$ppath"/docs/plans/directives/*.md(N); do
-            title=$(head -1 "$f" | sed 's/^#* *//')
-            entries+=("${${f:t}%.md}"$'\t'"$title"$'\t'"$name")
-            # Explicit arithmetic assignment, not (( count++ )). Post-increment
-            # evaluates to the pre-value (0 on first iter) → exit status 1 →
-            # `set -e` kills the function silently.
-            count=$((count + 1))
-        done
-    done <<< "$names_paths"
-
-    echo "$count"
-    if (( count > 0 )); then
-        printf '%s\n' "${entries[@]}"
-    fi
-    return 0
-}
-
-# Iterate every registered project and collect the newest assimilated plans
-# across all projects. Skips projects whose path is unreachable. Sort is by
-# filename DESC (shipped filenames are ISO-dated so this matches ship order).
-# Output: slug\ttitle\tship-date\tproject lines (max N)
-_borg_collect_all_assimilated() {
-    local max="${1:-3}"
-    local registry names_paths name ppath f
-    registry=$(borg_registry_read)
-    names_paths=$(echo "$registry" | jq -r '.projects | to_entries[] | .key + "\t" + (.value.path // "")')
-
-    local entries=()
-    while IFS=$'\t' read -r name ppath; do
-        [[ -z "$name" || -z "$ppath" || ! -d "$ppath/docs/plans/assimilated" ]] && continue
-        for f in "$ppath"/docs/plans/assimilated/*.md(N); do
-            entries+=("${f:t}"$'\t'"$f"$'\t'"$name")
-        done
-    done <<< "$names_paths"
-
-    (( ${#entries[@]} == 0 )) && return 0
-
-    local sorted basename fullpath title ship_date
-    sorted=$(printf '%s\n' "${entries[@]}" | sort -r -k1,1 | head -n "$max")
-    while IFS=$'\t' read -r basename fullpath name; do
-        [[ -z "$fullpath" ]] && continue
-        title=$(head -1 "$fullpath" | sed 's/^#* *//')
-        ship_date=$(grep -m1 'Shipped:' "$fullpath" | sed 's/.*Shipped: *//' | sed 's/ .*//')
-        printf '%s\t%s\t%s\t%s\n' "${basename%.md}" "$title" "$ship_date" "$name"
-    done <<< "$sorted"
-}
-
 # ── Commands ──────────────────────────────────────────────────────────────────
-
-cmd_link() {
-    local project="" do_refresh=0 do_brief=0 porcelain=0 show_all=0
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --refresh)    do_refresh=1; shift ;;
-            --brief|--llm) do_brief=1; shift ;;
-            --porcelain)  porcelain=1; shift ;;
-            --all)        show_all=1; shift ;;
-            -*)           shift ;;
-            *)            project="$1"; shift ;;
-        esac
-    done
-
-    (( do_refresh )) && cmd_scan --llm
-
-    if (( porcelain )); then
-        _borg_link_porcelain "$show_all"
-    elif [[ -n "$project" ]]; then
-        _borg_link_deep "$project" "$do_brief"
-    elif (( do_brief )); then
-        borg_desktop_scan 2>/dev/null || true
-        _borg_print_briefing
-    else
-        _borg_link_overview "$show_all"
-    fi
-}
-
-_borg_link_porcelain() {
-    local show_all="${1:-0}"
-    borg_desktop_scan 2>/dev/null || true
-    local registry
-    registry=$(borg_registry_with_state)
-    local sorted_names
-    sorted_names=$(echo "$registry" | jq -r '
-        .projects | to_entries |
-        map(.value.name = .key) |
-        map(select(if .value.status == "archived" then '$show_all' == 1 else true end)) |
-        sort_by(
-            (if .value.pinned == true then 0 else 1 end),
-            (if .value.status == "waiting" then 0
-             elif .value.status == "active" then 1
-             elif .value.status == "idle" then 2
-             else 3 end),
-            (if .value.last_activity then .value.last_activity else "0" end)
-        ) | .[].key
-    ')
-    [[ -z "$sorted_names" ]] && return 0
-    local name entry source proj_status last summary
-    while IFS= read -r name; do
-        entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
-        source=$(echo "$entry" | jq -r '.source // "cli"')
-        proj_status=$(echo "$entry" | jq -r '.status // "unknown"')
-        last=$(echo "$entry"   | jq -r '.last_activity // ""')
-        summary=$(echo "$entry"| jq -r '.summary // ""')
-        summary="${summary:0:80}"
-        printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$source" "$proj_status" "$last" "$summary"
-    done <<< "$sorted_names"
-}
-
-_borg_link_overview() {
-    local show_all="${1:-0}"
-
-    # Merge Desktop sessions into registry before listing
-    borg_desktop_scan 2>/dev/null || true
-
-    local registry
-    registry=$(borg_registry_with_state)
-    local project_count
-    project_count=$(echo "$registry" | jq '.projects | length')
-
-    if (( project_count == 0 )); then
-        info "No projects registered. Run: borg scan"
-        return 0
-    fi
-
-    if (( project_count <= 1 )); then
-        echo -e "  ${DIM}Tip: run 'borg scan' to discover projects from session history${NC}"
-    fi
-
-    # Sort by: pinned DESC, status priority (waiting>active>idle>archived), last_activity
-    local sorted_names
-    sorted_names=$(echo "$registry" | jq -r '
-        .projects | to_entries |
-        map(.value.name = .key) |
-        map(select(if .value.status == "archived" then '$show_all' == 1 else true end)) |
-        sort_by(
-            (if .value.pinned == true then 0 else 1 end),
-            (if .value.status == "waiting" then 0
-             elif .value.status == "active" then 1
-             elif .value.status == "idle" then 2
-             else 3 end),
-            (if .value.last_activity then .value.last_activity else "0" end)
-        ) | .[].key
-    ')
-
-    if [[ -z "$sorted_names" ]]; then
-        info "No projects to show. Run: borg link --all"
-        return 0
-    fi
-
-    # Human-readable table
-    echo ""
-    echo -e "  ${DIM}_______________${NC}"
-    echo -e "  ${DIM}/|             /|${NC}      ${BOLD}THE BORG COLLECTIVE${NC}"
-    echo -e "  ${DIM}/ |            / |${NC}      ${DIM}resistance is futile${NC}"
-    echo -e "  ${DIM}  |___________|  |${NC}"
-    echo -e "  ${DIM}  |  |        |  |${NC}"
-    echo -e "  ${DIM}  |  |________|__|${NC}"
-    echo -e "  ${DIM}  | /         | /${NC}"
-    echo -e "  ${DIM}  |/          |/${NC}"
-    echo ""
-    printf "${BOLD} %-20s %-4s %-12s %-12s %s${NC}\n" "PROJECT" "SRC" "STATUS" "LAST ACTIVE" "SUMMARY"
-    printf '%0.s─' {1..90}; echo
-
-    # Index pending cortex wakes by project for the pause indicator.
-    local cortex_pending
-    cortex_pending=$(_borg_cortex_pending 2>/dev/null || true)
-
-    local name entry source proj_status last summary display status_color src_badge summary_short
-    local last_display pinned pin_mark status_display pause_cd
-    while IFS= read -r name; do
-        entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
-        source=$(echo "$entry"  | jq -r '.source // "cli"')
-        proj_status=$(echo "$entry"  | jq -r '.status // "unknown"')
-        last=$(echo "$entry"    | jq -r '.last_activity // ""')
-        summary=$(echo "$entry" | jq -r '.summary // "(no summary)"')
-        pinned=$(echo "$entry"  | jq -r '.pinned // false')
-        display=$(echo "$entry" | jq -r 'if .display_name and .display_name != "" then .display_name else "" end')
-        [[ -z "$display" ]] && display="$name"
-
-        [[ "$pinned" == "true" ]] && pin_mark="*" || pin_mark=" "
-
-        case "$proj_status" in
-            active)  status_color="$GREEN" ;;
-            waiting) status_color="$YELLOW" ;;
-            idle)    status_color="$DIM" ;;
-            *)       status_color="$NC" ;;
-        esac
-
-        status_display="$proj_status"
-        [[ "$proj_status" == "waiting" ]] && status_display="waiting <<<"
-
-        case "$source" in
-            desktop) src_badge="[D]" ;;
-            coco)    src_badge="[X]" ;;
-            *)       src_badge="[C]" ;;
-        esac
-
-        summary_short="${summary:0:50}"
-        [[ ${#summary} -gt 50 ]] && summary_short="${summary_short}..."
-
-        last_display=$(_borg_relative_time "$last")
-
-        printf "%s%-20s %-4s ${status_color}%-12s${NC} %-12s %s\n" \
-            "$pin_mark" "$display" "$src_badge" "$status_display" "$last_display" "$summary_short"
-
-        pause_cd=$(echo "$cortex_pending" | awk -F'\t' -v p="$name" '$1 == p { print $3; exit }')
-        if [[ -n "$pause_cd" ]]; then
-            echo -e "                       ${CYAN}⏸ resumes in ${pause_cd}${NC}"
-        fi
-    done <<< "$sorted_names"
-
-    # Directives (across all reachable projects)
-    local directive_output directive_count
-    directive_output=$(_borg_collect_all_directives)
-    directive_count=$(echo "$directive_output" | head -1)
-    if (( directive_count > 0 )); then
-        echo ""
-        echo -e "  ${CYAN}Directives:${NC} $directive_count pending"
-        echo "$directive_output" | tail -n +2 | while IFS=$'\t' read -r slug title dproject; do
-            [[ -z "$slug" ]] && continue
-            echo -e "    ${DIM}- [$dproject] $title${NC}"
-        done
-    fi
-
-    # Recent assimilations (across all reachable projects)
-    local assim_output
-    assim_output=$(_borg_collect_all_assimilated 3)
-    if [[ -n "$assim_output" ]]; then
-        echo ""
-        echo -e "  ${GREEN}Recently assimilated:${NC}"
-        echo "$assim_output" | while IFS=$'\t' read -r slug title ship_date aproject; do
-            [[ -z "$slug" ]] && continue
-            echo -e "    ${DIM}- [$aproject] $title ($ship_date)${NC}"
-        done
-    fi
-
-    # Capacity warning
-    local active_count
-    active_count=$(_borg_active_count)
-    if (( active_count > BORG_MAX_ACTIVE )); then
-        echo
-        warn "${BOLD}$active_count sessions need attention${NC} (limit: $BORG_MAX_ACTIVE)"
-    fi
-    echo
-}
-
-_borg_link_deep() {
-    local project="$1" do_brief="${2:-0}"
-
-    if [[ -z "$project" ]]; then
-        project="${PWD##*/}"
-    fi
-
-    if ! borg_registry_has "$project"; then
-        die "project '$project' not in registry. Run: borg add [path]"
-    fi
-
-    local entry
-    entry=$(borg_registry_get_with_state "$project")
-
-    local source ppath proj_status last summary session_id tmux_window
-    source=$(echo "$entry"     | jq -r '.source // "cli"')
-    ppath=$(echo "$entry"      | jq -r '.path // "null"')
-    proj_status=$(echo "$entry"     | jq -r '.status // "unknown"')
-    last=$(echo "$entry"       | jq -r '.last_activity // "(never)"')
-    summary=$(echo "$entry"    | jq -r '.summary // "(no summary)"')
-    session_id=$(echo "$entry" | jq -r '.claude_session_id // "(unknown)"')
-    tmux_window=$(echo "$entry"| jq -r '.tmux_window // "(none)"')
-
-    echo -e "\n${BOLD}${project}${NC}"
-    printf '%0.s─' {1..40}; echo
-    echo -e "  ${DIM}Source:${NC}       $source"
-    [[ "$ppath" != "null" ]] && echo -e "  ${DIM}Path:${NC}         $ppath"
-    echo -e "  ${DIM}Status:${NC}       $proj_status"
-    echo -e "  ${DIM}Last active:${NC}  $last"
-    echo -e "  ${DIM}tmux window:${NC}  $tmux_window"
-    echo -e "  ${DIM}Session ID:${NC}   $session_id"
-    echo
-    echo -e "  ${BOLD}Summary${NC}"
-    echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
-
-    # PROJECT_PLAN.md
-    if [[ "$ppath" != "null" && -f "$ppath/PROJECT_PLAN.md" ]]; then
-        echo
-        echo -e "  ${BOLD}Active Plan${NC}"
-        local obj
-        obj=$(grep -A2 "^## Objective" "$ppath/PROJECT_PLAN.md" | grep -v "^## Objective" | grep -v "^$" | head -1)
-        [[ -n "$obj" ]] && echo -e "  ${CYAN}Objective:${NC} $obj"
-        local criteria_total criteria_done
-        criteria_total=$(grep -c '^\- \[' "$ppath/PROJECT_PLAN.md" 2>/dev/null || echo 0)
-        criteria_done=$(grep -c '^\- \[x\]' "$ppath/PROJECT_PLAN.md" 2>/dev/null || echo 0)
-        echo -e "  ${CYAN}Progress:${NC} $criteria_done/$criteria_total criteria met"
-    fi
-
-    # Recent checkpoints (newest first)
-    if [[ "$ppath" != "null" && -d "$ppath/.borg/checkpoints" ]]; then
-        local -a cp_files
-        cp_files=(${(f)"$(find "$ppath/.borg/checkpoints" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r | head -3)"})
-        if (( ${#cp_files[@]} > 0 )); then
-            echo
-            echo -e "  ${BOLD}Recent Checkpoints${NC}"
-            for _cp in "${cp_files[@]}"; do
-                [[ -z "$_cp" ]] && continue
-                echo -e "    ${CYAN}${_cp##*/}${NC}"
-            done
-            echo
-            echo -e "  ${BOLD}Latest Checkpoint${NC}"
-            head -20 "${cp_files[1]}" | sed 's/^/  /'
-        fi
-    fi
-
-    # Directives for this project (read from its own docs/plans/directives/)
-    if [[ "$ppath" != "null" ]]; then
-        local directive_output directive_count
-        directive_output=$(_borg_read_directives "$ppath")
-        directive_count=$(echo "$directive_output" | head -1)
-        if (( directive_count > 0 )); then
-            echo
-            echo -e "  ${CYAN}Directives:${NC} $directive_count pending"
-            echo "$directive_output" | tail -n +2 | while IFS=$'\t' read -r slug title; do
-                [[ -z "$slug" ]] && continue
-                echo -e "    ${DIM}- $title${NC}"
-            done
-        fi
-
-        # Recent assimilations for this project
-        local assim_output
-        assim_output=$(_borg_read_assimilated "$ppath" 3)
-        if [[ -n "$assim_output" ]]; then
-            echo
-            echo -e "  ${GREEN}Recently assimilated:${NC}"
-            echo "$assim_output" | while IFS=$'\t' read -r slug title ship_date; do
-                [[ -z "$slug" ]] && continue
-                echo -e "    ${DIM}- $title ($ship_date)${NC}"
-            done
-        fi
-    fi
-
-    echo
-}
 
 cmd_ls() {
     local porcelain=0 show_all=0
@@ -2376,34 +2007,6 @@ cmd_store_secret() {
     info "done"
 }
 
-# Format remaining time as "Xh Ym" / "Ym Zs" / "now".
-_borg_cortex_countdown() {
-    local reset_at="$1"
-    local reset_epoch now_epoch diff h m s
-    reset_epoch=$(_borg_iso_to_epoch "$reset_at") || { echo "?"; return; }
-    now_epoch=$(date +%s)
-    diff=$(( reset_epoch - now_epoch ))
-    if (( diff <= 0 )); then echo "now"; return; fi
-    h=$(( diff / 3600 ))
-    m=$(( (diff % 3600) / 60 ))
-    s=$(( diff % 60 ))
-    if (( h > 0 )); then echo "${h}h ${m}m"
-    elif (( m > 0 )); then echo "${m}m ${s}s"
-    else echo "${s}s"
-    fi
-}
-
-# Stdout: tab-separated `project<TAB>reset_at<TAB>countdown` for each pending wake.
-_borg_cortex_pending() {
-    [[ -f "$BORG_CORTEX_WAKES" ]] || return 0
-    jq -r '.wakes[]? | "\(.project)\t\(.reset_at)"' "$BORG_CORTEX_WAKES" 2>/dev/null \
-        | while IFS=$'\t' read -r project reset_at; do
-            [[ -z "$project" ]] && continue
-            local cd; cd=$(_borg_cortex_countdown "$reset_at")
-            printf '%s\t%s\t%s\n' "$project" "$reset_at" "$cd"
-        done
-}
-
 cmd_cortex_resume() {
     local target="${1:-}"
     [[ -f "$BORG_CORTEX_WAKES" ]] || die "no pending cortex wakes (state file missing)"
@@ -2647,7 +2250,12 @@ cmd_watch() {
             "$interval" "$(date '+%H:%M:%S')"
         printf '%0.s─' {1..70}; printf '\n'
 
-        cmd_link 2>/dev/null || true
+        # Rewired to _borg_link_dispatch, NOT `_borg_py borg_core.link.cli` directly: the direct
+        # call would skip the borg_desktop_scan pre-pass that _borg_link_dispatch preserves for the
+        # overview shape, silently dropping the Desktop merge from every redraw. `2>/dev/null ||
+        # true` is preserved VERBATIM -- `set -e` is active and an uncaught Python shape would
+        # otherwise kill the polling loop.
+        _borg_link_dispatch 2>/dev/null || true
 
         printf '\n'
         printf '  \033[1mRECENT NANOPROBES\033[0m\n'
@@ -3229,11 +2837,143 @@ cmd_vinculum() {
 
 borg_registry_init
 
+# Run a borg_core Python module with the config surface it needs.
+#
+# WHY THIS EXISTS. Every config variable borg.zsh owns is assigned WITHOUT `export` -- BORG_DIR
+# (borg.zsh:24), BORG_MAX_ACTIVE and BORG_CORTEX_WAKES (borg.zsh:43-48), BORG_REGISTRY
+# (lib/registry.zsh:15), BORG_TMUX_SESSION (lib/tmux.zsh:5), BORG_REAP_STALE_HOURS
+# (lib/reaper.sh:11). They are shell variables, so an in-process zsh function sees them and a
+# `python3 -m` CHILD sees none of them. That is not theoretical: it shipped. `borg recon` read
+# BORG_REGISTRY from the environment with no fallback and therefore died with "no registry at " on
+# every real invocation except `--adapters`, which returns before the check. It stayed invisible
+# because every test that reaches the Python path puts BORG_REGISTRY in the environment itself
+# (tests/test_helper/setup.bash exports it; the pytest suites monkeypatch it), so the inheritance
+# path was never once exercised -- the same shape as the usage-watch and memory-gate blind spots in
+# CLAUDE.md's Learned section.
+#
+# Defaults are applied HERE rather than passed through empty: a child reading
+# `os.environ.get("BORG_REAP_STALE_HOURS", "12")` gets "" -- not "12" -- if the variable is exported
+# empty, and int("") raises. An unset variable must arrive as its default or not at all.
+#
+# Deliberately a prefix assignment, not `export`: only the Python children get these, so hooks,
+# `claude`, docker and every other child keep the environment they have today.
+#
+# Deliberately defined HERE, immediately above its only callers, rather than up in the Helpers
+# section: inserting 30 lines at the top of this file silently shifts every `borg.zsh:<N>` reference
+# in tests/cli_contract.bats and PROJECT_PLAN.md by 30. Nothing references a line below this point.
+_borg_py() {
+    BORG_DIR="$BORG_DIR" \
+    BORG_REGISTRY="$BORG_REGISTRY" \
+    BORG_MAX_ACTIVE="${BORG_MAX_ACTIVE:-3}" \
+    BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}" \
+    BORG_TMUX_SESSION="${BORG_TMUX_SESSION:-borg}" \
+    BORG_CORTEX_WAKES="$BORG_CORTEX_WAKES" \
+    BORG_NO_REAP="$BORG_NO_REAP" \
+    PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m "$@"
+}
+# BORG_NO_REAP above is a BARE pass-through with NO `:-` default: borg_core/link/shell.py's
+# reap_disabled() reads it with `bool(os.environ.get(...))`, so an exported-empty value is
+# correctly falsy -- unlike BORG_REAP_STALE_HOURS, which must arrive as its default because
+# `int("")` raises. This changes the environment of the existing recon/add/rm children too; that
+# is safe because nothing else in borg_core reads BORG_NO_REAP, and tests/cli_contract.bats:2275
+# asserts only the PRESENCE of a fixed list of names.
+
+# Phase 3 (A4+A5): the ONE dispatch point for every `borg link` shape. Collapses today's two parse
+# layers (the top-level case arm's `--json` intercept plus cmd_link's own flag loop) into ONE loop
+# with the SAME semantics. Does NOT `shift` -- the `link)` case arm strips the subcommand itself, so
+# cmd_watch can call this with no arguments at all.
+#
+# Flags recognised: --json, --porcelain, --brief|--llm (aliases), --refresh, --all. ANY other `-*`
+# is silently swallowed (no die, exit 0) -- pinned at cli_contract.bats:2183-2195; do NOT adopt
+# recon's die-on-unknown-flag behavior here. A bare word sets the project, LAST-WINS (`link a b`
+# deep-dives `b`). Precedence, strictly: json > porcelain > project(deep) > brief > overview -- this
+# merges today's two layers, where the top arm intercepted `--json` first and cmd_link's own order
+# was porcelain > project > brief > overview.
+_borg_link_dispatch() {
+    typeset _link_json=0 _link_porcelain=0 _link_brief=0 _link_refresh=0 _link_all=0
+    typeset _link_project="" _link_arg
+    for _link_arg in "$@"; do
+        case "$_link_arg" in
+            --json)        _link_json=1 ;;
+            --porcelain)   _link_porcelain=1 ;;
+            --brief|--llm) _link_brief=1 ;;
+            --refresh)     _link_refresh=1 ;;
+            --all)         _link_all=1 ;;
+            -*)            ;;                            # lenient, matching cmd_link's `-*) shift`
+            *)             _link_project="$_link_arg" ;;  # last-wins, matching cmd_link
+        esac
+    done
+
+    if (( _link_json )); then
+        # Diagnostics on the --json path go to STDERR. `warn` (borg.zsh:30) writes to STDOUT, and
+        # the desktop pre-pass reaches it via borg_registry_merge -> _borg_registry_write
+        # (lib/registry.zsh:31): one blocked write splices a colored "registry write blocked" line
+        # ahead of the document and `jq` dies on it. `2>/dev/null` does NOT catch that -- the
+        # warning is on fd 1. `1>&2 2>/dev/null` moves it to fd 2 and keeps today's stderr
+        # suppression (VERIFIED: redirections apply left-to-right, so fd1 is duped from the
+        # ORIGINAL fd2 before fd2 is reopened on /dev/null).
+        #
+        # The desktop pre-pass runs ONLY for the overview shape (no project positional). The deep
+        # dive never scans and never writes the registry; running it for `--json <project>` would
+        # add a registry WRITE to a path that has always been read-only. Deliberate, not an oversight.
+        if (( _link_refresh )); then
+            cmd_scan --llm 1>&2 || true
+        fi
+        if [[ -z "$_link_project" ]]; then
+            borg_desktop_scan 1>&2 2>/dev/null || true
+        fi
+        typeset -a _link_py_args
+        _link_py_args=(--json)
+        (( _link_all )) && _link_py_args+=(--all)
+        [[ -n "$_link_project" ]] && _link_py_args+=(-- "$_link_project")
+        _borg_py borg_core.link.cli "${_link_py_args[@]}"
+        return 0
+    fi
+
+    if (( _link_porcelain )); then
+        (( _link_refresh )) && cmd_scan --llm
+        # Human arms keep the desktop pre-pass warning on STDOUT (today's behavior) -- do NOT reuse
+        # the --json arm's `1>&2 2>/dev/null` redirect here; cli_contract.bats:2373-2377 STEP 1
+        # asserts the human path really does splice the warning onto stdout.
+        borg_desktop_scan 2>/dev/null || true
+        # CRITICAL: do NOT forward the positional in porcelain mode. `link --porcelain nosuchproject`
+        # exits 0 with the listing today; forwarding it would build a focus block and die instead.
+        typeset -a _link_py_args
+        _link_py_args=(--porcelain)
+        (( _link_all )) && _link_py_args+=(--all)
+        _borg_py borg_core.link.cli "${_link_py_args[@]}"
+        return 0
+    fi
+
+    if [[ -n "$_link_project" ]]; then
+        (( _link_refresh )) && cmd_scan --llm
+        # The deep dive stays read-only and never scans -- no desktop pre-pass here, matching today.
+        _borg_py borg_core.link.cli --deep -- "$_link_project"
+        return 0
+    fi
+
+    if (( _link_brief )); then
+        # --brief stays zsh this pass; only its DISPATCH is relocated out of the deleted cmd_link.
+        (( _link_refresh )) && cmd_scan --llm
+        borg_desktop_scan 2>/dev/null || true
+        _borg_print_briefing
+        return 0
+    fi
+
+    (( _link_refresh )) && cmd_scan --llm
+    borg_desktop_scan 2>/dev/null || true
+    typeset -a _link_py_args
+    _link_py_args=()
+    (( _link_all )) && _link_py_args+=(--all)
+    _borg_py borg_core.link.cli "${_link_py_args[@]}"
+}
+
 case "${1:-help}" in
     init)     cmd_init ;;
     claude)   cmd_claude ;;
     next)     cmd_next "${@:2}" ;;
-    link)     cmd_link "${@:2}" ;;
+    link)  _borg_link_dispatch "${@:2}" ;;
     switch)   cmd_switch "${@:2}" ;;
     recon)
         # Dispatches to the Python port (borg_core/recon/{core,shell,cli}.py). Inlined here, no
@@ -3255,7 +2995,7 @@ case "${1:-help}" in
                 *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
             esac
         done
-        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.recon.cli "${_recon_py_args[@]}"
+        _borg_py borg_core.recon.cli "${_recon_py_args[@]}"
         ;;
     scan)     cmd_scan "${@:2}" ;;
     add)
@@ -3263,13 +3003,13 @@ case "${1:-help}" in
         # dispatch wrapper function for this arm, so `add` is fully migrated per the migration
         # ledger -- see docs/plans/assimilated/2026-08-12-recon-migration-ledger.md.
         shift
-        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.registry.cli add "$@"
+        _borg_py borg_core.registry.cli add "$@"
         ;;
     rm)
         # Dispatches to the Python port (borg_core/registry/{core,shell,cli}.py). See the `add)`
         # arm above and the migration ledger for the same rationale.
         shift
-        PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.registry.cli rm "$@"
+        _borg_py borg_core.registry.cli rm "$@"
         ;;
     color)    cmd_color "${@:2}" ;;
     image)    cmd_image "${@:2}" ;;
