@@ -6,6 +6,8 @@ oracle (exercised end to end via tests/cli_contract.bats); these are the microsc
 """
 
 import datetime
+import shutil
+import subprocess
 import time
 
 import pytest
@@ -161,7 +163,7 @@ class TestFoldS:
     def test_breaks_after_last_space_at_or_before_width(self):
         text = "a" * 68 + " " + "b" * 10
         lines = render._fold_s(text, width=70)  # pylint: disable=protected-access
-        assert lines[0] == "a" * 68
+        assert lines[0] == "a" * 68 + " "
         assert lines[1] == "b" * 10
         assert not lines[1].startswith(" ")
 
@@ -180,6 +182,41 @@ class TestFoldS:
         lines = render._fold_s(text, width=70)  # pylint: disable=protected-access
         assert lines[0] == "a" * 70
         assert lines[1] == "a"
+
+    @pytest.mark.skipif(shutil.which("fold") is None, reason="no `fold` binary on this host")
+    @pytest.mark.parametrize(
+        "text,width",
+        [
+            ("short", 70),
+            ("a" * 68 + " " + "b" * 10, 70),
+            ("a" * 140, 70),
+            ("a" * 70, 70),
+            ("a" * 71, 70),
+            ("aa bbb cc", 6),
+            ("   abc def ghi", 5),
+            ("abc def " * 5, 6),
+            ("a b c d e f g h i j k l m n o p", 3),
+            ("", 70),
+            ("     ", 4),
+            ("word " * 20, 20),
+        ],
+    )
+    def test_matches_real_fold_s_binary(self, text, width):
+        """Differential, not hardcoded: shells out to whatever `fold -s` this host actually has
+        (BSD on macOS CI, GNU in a devcontainer) so the assertion is correct by construction on
+        every platform instead of pinning one vendor's output. This is the test that would have
+        caught the original `_fold_s` divergence -- see the PR body for the RED-before-fix run."""
+        proc = subprocess.run(
+            ["fold", "-s", "-w", str(width)],
+            input=text,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        # `fold` never appends a newline that wasn't already on the (newline-free) input, so its
+        # stdout is directly comparable to `"\n".join(lines)` with no trailing-newline massaging.
+        got = render._fold_s(text, width=width)  # pylint: disable=protected-access
+        assert "\n".join(got) == proc.stdout
 
 
 def test_overview_directives_assimilated_capacity_and_cortex_row_all_render():
