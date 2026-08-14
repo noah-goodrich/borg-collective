@@ -42,6 +42,43 @@ URGENCY_CAP = 99
 NOISE_STATES = {"MERGED", "CLOSED"}
 VALID_STATUS = {"ok", "warn", "down"}
 
+# The "awaiting you" tier. Its own bucket so it can render as a labelled section rather than being
+# ranked against everything else — see docs/plans/directives/2026-08-11-viz-1-awaiting-you-tier.md.
+#
+# WHY THIS DERIVATION EXISTS AT ALL. render.py has referenced `bucket == "review-queue"` since
+# 2026-07-30, but NOTHING EVER PRODUCED IT: bucket_for() returned only the four buckets below, and
+# fixtures/data.golden.json contains zero such items. The eight in the machine-local data.json were
+# hand-assigned and are dated 2026-07-27. So this tier has never been reproducible — it was curated
+# data plus a renderer, and it silently emptied the moment anything regenerated. That is why
+# sme-self-service-pat (three approved PRs behind one human merge gate) was never surfaced on
+# 2026-08-10 despite the renderer nominally supporting the tier.
+#
+# The directive's stronger condition (open + reviewDecision==APPROVED + mergeable==MERGEABLE) is NOT
+# yet derivable: recon-adapter-github fetches only number/title/state/isDraft/updatedAt/author/url,
+# so review and mergeability are not gathered. This is the weaker condition that today's gather can
+# actually support; tightening it is queued behind the adapter change (see viz-2).
+NOAH_LOGINS = {"noah-goodrich", "noah goodrich", "noahgoodrich", "noah", "ngoodrich"}
+REVIEW_BUCKET = "review-queue"
+
+
+def is_noah(owner: Any) -> bool:
+    """True when an item's owner login resolves to Noah, case/format-insensitively."""
+    return str(owner or "").strip().lower() in NOAH_LOGINS
+
+
+def awaits_you(item: dict[str, Any]) -> bool:
+    """True when an item is open, needs a human action, and that human is Noah.
+
+    Deliberately requires a NON-EMPTY action_needed rather than merely `open + mine`: in the golden
+    fixture 6 of 13 items carry `action_needed: ""`, so dropping that clause would sweep every open
+    PR Noah authored into the tier and reproduce the overload the tier exists to cut through.
+    """
+    return (
+        str(item.get("state") or "").upper() == "OPEN"
+        and bool(str(item.get("action_needed") or "").strip())
+        and is_noah(item.get("owner"))
+    )
+
 
 def numeric_urgency(item: dict[str, Any]) -> int:
     """Map a coarse string urgency to a stable numeric score (capped)."""
@@ -76,6 +113,12 @@ def bucket_for(item: dict[str, Any], in_chain: set[str]) -> str:
     """
     if str(item.get("urgency")).lower() == "now":
         return "needs-you"
+    # Ranked BELOW needs-you deliberately: an item that is both urgent and awaiting Noah belongs in
+    # the hero tier, not the review queue. Ranked ABOVE active-chains so a PR waiting on Noah is not
+    # buried inside its chain — being blocked ON THE READER is the most actionable state there is,
+    # which is exactly the inversion that hid sme-self-service-pat on 2026-08-10.
+    if awaits_you(item):
+        return REVIEW_BUCKET
     if item.get("ref") in in_chain:
         return "active-chains"
     if (item.get("state") or "").upper() in NOISE_STATES:
