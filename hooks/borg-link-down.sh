@@ -111,7 +111,11 @@ if [[ "$MODE" == "orchestrator" ]]; then
                 _status=$(jq -r '.status // "idle"' "$_path/.borg/state.json" 2>/dev/null || echo "idle")
                 _last=$(jq -r '.last_activity // ""' "$_path/.borg/state.json" 2>/dev/null || echo "")
             fi
-            _projects_tsv+=$(printf '%s\t%s\t%s\t%s' "$_name" "$_status" "$_last" "$_path")$'\n'
+            # Sentinel ("-") for an empty last_activity: bash `read` with a whitespace IFS (tab is
+            # whitespace) collapses consecutive separators, so an empty _last (field 3 of 4, NOT
+            # the last field) would shift _path into _last and leave _path empty. Same class of
+            # bug as the sentinel pattern below (~line 260) — keep every column populated here too.
+            _projects_tsv+=$(printf '%s\t%s\t%s\t%s' "$_name" "$_status" "${_last:--}" "$_path")$'\n'
         done <<< "$_raw_tsv"
 
         # Sort by last_activity desc (ISO timestamps sort lexicographically)
@@ -122,6 +126,7 @@ if [[ "$MODE" == "orchestrator" ]]; then
         if [[ -n "$_projects_tsv" ]]; then
             while IFS=$'\t' read -r _name _status _last _path; do
                 [[ -z "$_name" ]] && continue
+                [[ "$_last" == "-" ]] && _last=""
                 _age=$(_orch_humanize_age "$_last")
                 _hint=$(_orch_next_hint "$_path")
                 OVERVIEW+="  • ${_name} [${_status}] — ${_age} — ${_hint}"$'\n'

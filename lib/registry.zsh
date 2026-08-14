@@ -171,6 +171,8 @@ borg_registry_with_state() {
     local raw result name ppath state merged
     raw=$(borg_registry_read)
     result="$raw"
+    # tab-safe: name (.key, never empty) is field 1 of 2; an empty ppath (field 2, last)
+    # cannot shift anything after it, and is guarded below regardless.
     while IFS=$'\t' read -r name ppath; do
         [[ -z "$name" || -z "$ppath" || "$ppath" == "null" ]] && continue
         [[ -f "$ppath/.borg/state.json" ]] || continue
@@ -274,6 +276,8 @@ borg_reap_persist() {
     local overlaid name ppath from cur new count=0
     # Build the overlay against the *un-reaped* view so _reaped_from is populated.
     overlaid=$(BORG_NO_REAP=1 borg_registry_with_state | borg_reap_overlay)
+    # tab-safe: name is field 1 of 2 (never empty — selected via ._reaped_from != null);
+    # from (field 2, last, always the prior status string) cannot shift anything after it.
     while IFS=$'\t' read -r name from; do
         [[ -z "$name" ]] && continue
         ppath=$(printf '%s' "$overlaid" | jq -r --arg p "$name" '.projects[$p].path // ""')

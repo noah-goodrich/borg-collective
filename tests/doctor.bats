@@ -225,3 +225,45 @@ EOF
     [ "$status" -ne 0 ]
     [[ "$output" == *"sample-app-1"*"FAIL"* ]] || false
 }
+
+# ─── headless `claude -p` reachability (2026-08-10 directive: dead narrative path) ─────────────
+#
+# `borg link --brief`'s LLM narrative was silently dead on the owner's machine with no health
+# check to catch it. `borg doctor` now probes `claude -p` directly so this is a WARN a health
+# check surfaces, not something noticed by reading thin briefing output.
+
+@test "claude -p reachable -> claude-cli row is OK" {
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "ok"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/claude"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"claude-cli"*"OK"* ]] || false
+}
+
+@test "claude -p not logged in headless -> claude-cli row is WARN, not FAIL" {
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "Not logged in · Please run /login"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/claude"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"claude-cli"*"WARN"* ]] || false
+    [[ "$output" == *"not logged in"* ]] || false
+}
+
+@test "claude -p exits nonzero -> claude-cli row is WARN with the exit code" {
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+exit 3
+EOF
+    chmod +x "$MOCK_BIN/claude"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"claude-cli"*"3"*"WARN"* ]] || false
+}
