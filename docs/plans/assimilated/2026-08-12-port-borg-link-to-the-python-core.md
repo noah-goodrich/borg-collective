@@ -1,5 +1,37 @@
 # Project Plan: Port `borg link` to the Python Core (behavior unchanged)
 *Established: 2026-08-12*
+*Shipped: 2026-08-14 — PRs #129, #133–#142 squash-merged to main, closing at `fb983a4`*
+
+## What a reader in six months should take from this
+
+Seven criteria, all met. The engineering is unremarkable; **how the defects were found is the value here.**
+
+**Three real defects shipped past a fully green suite, and every one was caught by a real oracle rather than
+a test.** In order: the empty-`Shipped:` field-shift (found by diffing against the owner's real registry),
+the capacity `>` boundary (found by a mutation audit — it survived 346 pytest and 112 bats), and `_fold_s`
+failing to reproduce `fold -s` (found by a ship-time review reading code against its own docstring). At the
+moment each was found, the suite was green, per-module coverage was ≥97%, and all five CI lanes passed.
+
+The mechanism was identical each time: **a fixture that avoids the hard input proves nothing about it.**
+`cli_contract.bats:1375` deliberately keeps the deep fixture's summary under 70 chars "so `fold -s -w 70`
+is a no-op" — so the single path where the port could drift was the one path the oracle never exercised.
+Every assimilated fixture wrote a `Shipped:` line, so the empty-date branch had no coverage at all.
+`capacity(0, 3)` is mutation-blind by construction.
+
+**A4 was ticked while measurably false, and A6 was ticked and then invalidated.** A6 was verified against
+both deployed copies, ticked — and forty minutes later #139 edited the very artifact that had been
+verified. Neither pinning test could catch it: both read the repo source, and nothing read what
+`borg setup` writes. The suite was green precisely because it never looked at what ships.
+
+**What to reach for instead of the suite**: `bin/link-parity-harness`, the zsh-vs-Python differential
+committed in #142. It is the only remaining oracle — the zsh implementation was deleted in Phase 3 and
+survives solely at `ad99612` in git history. Its real run: 20 projects, 23 cases, 12 identical, 11
+differing with every one classified against a signed-off deviation, 0 unexpected.
+
+**One correction worth not repeating**: the claim that GNU and BSD `fold` agree was measured on ASCII and
+recorded as general. There are three counting algorithms — `_fold_s` counts codepoints, BSD counts display
+columns, GNU counts bytes — and they diverge on the first em dash. Scope a refutation to the experiment
+that was actually run.
 
 ## Objective
 
