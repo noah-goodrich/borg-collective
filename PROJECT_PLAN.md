@@ -105,10 +105,38 @@ Python target next.
   - **The one survivor is carried to Phase 3, not silently dropped**: `core.capacity()`'s `active > limit` can be
     changed to `>=` with 346 pytest + 112 bats still green. Current code is correct and matches `borg.zsh:407`;
     what is missing is a discriminating assertion. See "Phase 3 entry gate" below.
-- [ ] **A4 — Human output is byte-identical after the port.**
-      All A1 assertions pass **unchanged** against the Python implementation. A modified assertion is not a
-      parity proof.
-  - Verify: `git stash` the test file, confirm no diff between its `main` and branch versions; suite green.
+- [ ] **A4 — Human output is byte-identical after the port.** *(AMENDED 2026-08-13 — owner signed off; the
+      original text is preserved below.)*
+      All four goldens byte-match with **ZERO regeneration**. 23 of the 25 A1 assertions pass unchanged;
+      exactly **two** flip to their documented post-fix values — the `(NOm)` assimilated-ordering test
+      (`cli_contract.bats:2112`, lines 2112/2118/2121/2122) and the two-line Progress test (`:2078`, lines
+      2078/2089). One Phase-2 assertion also moves: the `.version` literal at `:2333`, `1` -> `2`. Nothing
+      else in `tests/cli_contract.bats` is modified, deleted, **skipped, or neutered**.
+  - Verify (three mechanical commands, all must hold):
+    1. `git diff 9257c3b..HEAD --stat -- tests/fixtures/link/` prints **nothing**.
+    2. `git diff 9257c3b..HEAD -- tests/cli_contract.bats | grep '^-' | grep -v '^---'` prints **only**
+       lines belonging to those three enumerated locations.
+    3. `grep -c '^\s*skip ' tests/cli_contract.bats` equals **1** (the pre-existing uid-0 guard at `:2366`),
+       and the bats TAP run reports zero `# skip` results beyond that one.
+  - **Why amended.** The original — "all A1 assertions pass unchanged" — was in direct contradiction with
+    this plan's own signed-off Phase 1 deviations. Two of the 25 A1 tests exist *specifically* to pin the
+    `(NOm)` ordering bug and the two-line `Progress` artefact, and their in-file comments say they are
+    designed to flip when those are fixed. One of the two had to move; keeping A4 verbatim would have meant
+    reverting already-shipped, already-tested Python (`shell.py:232-256`, `core.py:357`). The original verify
+    recipe was independently defective: `git stash` + "no diff" forbids *adding* tests, which Phases 2 and 3
+    have already done 12 times.
+  - **Why check 3 is not decoration.** Checks 1-2 only catch REMOVED or MODIFIED lines. An assertion can be
+    neutered by a pure ADDITION — a `skip`, an early `return`, an `if false; then` wrap — and both checks
+    still pass, while `bats … exits 0` counts a skip as a pass. Check 3 closes that hole, which sits exactly
+    where the pressure will be.
+  - **Verified before amending, not asserted**: `git diff 9257c3b..HEAD --stat -- tests/fixtures/link/` is
+    empty at `ad99612`; `link-deep.golden:50` carries exactly one assimilated line (so oldest-first vs
+    filename-DESC is unobservable there); `link-deep.golden:16` renders `Progress: 1/3 criteria met` on one
+    line because the fixture plan leads with `- [x]`, so the `|| echo 0` fallback never fires. **No golden
+    moves. `BORG_UPDATE_GOLDEN=1` must never be run during Phase 3.**
+  - *Original text, superseded:* "All A1 assertions pass **unchanged** against the Python implementation. A
+    modified assertion is not a parity proof. Verify: `git stash` the test file, confirm no diff between its
+    `main` and branch versions; suite green."
 - [ ] **A5 — `cmd_link` and its helpers are deleted, not shadowed.**
       `cmd_link`, `_borg_link_porcelain`, `_borg_link_overview`, `_borg_link_deep`, `_borg_cortex_pending`,
       `_borg_cortex_countdown`, `_borg_collect_all_directives`, `_borg_collect_all_assimilated`,
