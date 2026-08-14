@@ -197,15 +197,16 @@ def with_state(registry: dict, states: dict[str, dict]) -> dict:
     """Apply every project's state.json overlay, then default missing statuses to idle.
 
     Mirrors borg_registry_with_state's merge half (lib/registry.zsh:165-184). The default uses jq's
-    `//=`, which also replaces `false` -- reproduced here. Never mutates the input registry.
+    `//=`, which replaces null/false/missing only -- NOT an empty string, which is jq-truthy and
+    survives unchanged. Reproduced via jq_default rather than a bare Python truthiness check; see
+    jq_default's docstring. Never mutates the input registry.
     """
     projects = registry.get("projects") or {}
     merged: dict[str, dict] = {}
     for name, entry in projects.items():
         state = states.get(name)
         merged[name] = overlay_state(entry, state) if state else dict(entry)
-        if not merged[name].get("status"):
-            merged[name]["status"] = DEFAULT_STATUS
+        merged[name]["status"] = jq_default(merged[name].get("status"), DEFAULT_STATUS)
     return {**registry, "projects": merged}
 
 
@@ -266,12 +267,13 @@ def active_count(registry: dict) -> int:
 def project_paths(registry: dict) -> list[tuple[str, str]]:
     """(name, path) for every project, mirroring the collectors' `[.key, (.value.path // "")] | @tsv`.
 
-    A null or missing path becomes "". Order is the registry's JSON insertion order, which json.loads
-    preserves and which the aggregate directive/assimilated sections depend on. Callers apply their
-    own skip rules.
+    A null, false, or missing path becomes "" -- via jq_default, not a bare Python truthiness check,
+    so a (nonsensical but not impossible) numeric path of 0 is NOT replaced, matching jq's `//`. Order
+    is the registry's JSON insertion order, which json.loads preserves and which the aggregate
+    directive/assimilated sections depend on. Callers apply their own skip rules.
     """
     projects = registry.get("projects") or {}
-    return [(name, entry.get("path") or "") for name, entry in projects.items()]
+    return [(name, str(jq_default(entry.get("path"), ""))) for name, entry in projects.items()]
 
 
 def heading_title(text: str) -> str:
