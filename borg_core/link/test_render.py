@@ -251,3 +251,40 @@ def test_render_reads_no_clock(monkeypatch):
     render.porcelain(doc)
     render.overview(doc)
     render.deep(doc)
+
+
+def test_overview_assimilated_omits_parens_when_ship_date_empty():
+    # Regression for the zsh-port bug: a missing "Shipped:" line produced ship_date="", and the
+    # old f"({item['ship_date']})" rendered a bare, empty "()" after the title. A title that
+    # itself ends in a parenthetical (e.g. "(C6)") must survive untouched -- only the DATE's own
+    # parens are conditional, never a suffix stripped from the title.
+    doc = _doc(
+        total_projects=1,
+        order=["a"],
+        projects={"a": {"source": "cli", "status": "idle", "relative_activity": "2h ago", "summary": "s"}},
+        assimilated=[
+            {"project": "ingle", "title": "T-4 mutation gate", "ship_date": ""},
+            {"project": "borg-collective", "title": "recon migration ledger (C6)", "ship_date": "2026-08-12"},
+        ],
+    )
+    out = render.overview(doc)
+    assert "[ingle] T-4 mutation gate\x1b[0m\n" in out
+    assert "()" not in out
+    assert "[borg-collective] recon migration ledger (C6) (2026-08-12)" in out
+
+
+def test_deep_dive_assimilated_omits_parens_when_ship_date_empty():
+    doc = _doc(
+        focus={
+            "name": "p",
+            "entry": {"path": "null", "status": "idle"},
+            "plan": None,
+            "checkpoints": [],
+            "checkpoint_head": "",
+            "directives": [],
+            "assimilated": [{"slug": "s", "title": "Deep shipped (C6)", "ship_date": ""}],
+        }
+    )
+    out = render.deep(doc)
+    assert "Deep shipped (C6)\x1b[0m\n" in out
+    assert "()" not in out
