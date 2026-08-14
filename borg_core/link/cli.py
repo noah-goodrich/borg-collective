@@ -154,32 +154,30 @@ def _mode(args: argparse.Namespace) -> str:
 def main(argv: list[str] | None = None) -> None:
     """Entrypoint for `python3 -m borg_core.link.cli`.
 
-    The mode-aware exception boundary: `--json` keeps a narrow, stable failure shape
-    (ValueError/OSError/ProjectNotFound -> `_die_json`); the three human modes catch broadly
-    (Exception -> `_die_human`) because a syntactically-valid registry with a non-dict project entry
-    (e.g. `{"projects":{"foo":null}}`, a plausible partial-write artifact) raises AttributeError from
-    core.py's `entry.items()` -- not ValueError, not OSError. borg_core/registry/shell.py already
-    wraps JSONDecodeError in ValueError, so corrupt JSON was never the uncovered case; the real gap
-    is filesystem OSError and entry-shape violations. This is the ONLY exception boundary in this
-    module, placed here because `_run`/`main` is the only point that already knows the mode.
+    A SINGLE exception boundary, formatter chosen by mode: `_die_json` for `--json` (no ANSI, the
+    `borg link: {message}` shape a machine consumer can rely on), `_die_human` for the three human
+    modes. Both die formatters print to stderr and exit 1 with zero bytes on stdout -- A3 depends on
+    `--json` never leaking a traceback onto stdout, so the catch here must be as broad as the human
+    path's always was. A syntactically-valid registry with a non-dict project entry (e.g.
+    `{"projects":{"foo":null}}`, a plausible partial-write artifact) raises AttributeError from
+    core.py's `entry.items()`/`entry.get()` -- not ValueError, not OSError, and NOT ProjectNotFound.
+    borg_core/registry/shell.py already wraps JSONDecodeError in ValueError, so corrupt JSON was
+    never the uncovered case; a narrow `except (ValueError, OSError)` on the `--json` path left every
+    entry-shape violation (null entry, list entry, string entry, non-dict `projects`, non-dict
+    registry root) to fall through as a raw traceback on stdout -- verified live before this fix.
+    This is the ONLY exception boundary in this module, placed here because `_run`/`main` is the
+    only point that already knows the mode.
     """
     args = _build_parser().parse_args(argv)
     mode = _mode(args)
-    if mode == "json":
-        try:
-            exit_code = _run(args.project, args.show_all, mode)
-        except ProjectNotFound as exc:
-            _die_json(_not_found_message(exc))
-        except (ValueError, OSError) as exc:
-            _die_json(str(exc))
-    else:
-        try:
-            exit_code = _run(args.project, args.show_all, mode)
-        except ProjectNotFound as exc:
-            _die_human(_not_found_message(exc))
-        # JUSTIFICATION: a non-dict entry raises AttributeError, not ValueError/OSError; needs a clean die.
-        except Exception as exc:  # pylint: disable=broad-except
-            _die_human(str(exc))
+    die = _die_json if mode == "json" else _die_human
+    try:
+        exit_code = _run(args.project, args.show_all, mode)
+    except ProjectNotFound as exc:
+        die(_not_found_message(exc))
+    # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.
+    except Exception as exc:  # pylint: disable=broad-except
+        die(str(exc))
     raise SystemExit(exit_code)
 
 
