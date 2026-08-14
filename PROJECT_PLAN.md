@@ -112,6 +112,20 @@ Python target next.
       (`cli_contract.bats:2112`, lines 2112/2118/2121/2122) and the two-line Progress test (`:2078`, lines
       2078/2089). One Phase-2 assertion also moves: the `.version` literal at `:2333`, `1` -> `2`. Nothing
       else in `tests/cli_contract.bats` is modified, deleted, **skipped, or neutered**.
+  - **A fourth deviation, found post-merge against the owner's real registry, not by any fixture in
+    this suite.** `borg link`'s "Recently assimilated" render used `IFS=$'\t' read -r slug title ship
+    aproject` over a TSV row. Tab is a whitespace `IFS` character, so zsh **collapses consecutive
+    tabs** — when a plan has no `Shipped:` line, `ship_date` is empty and `project` shifts left into
+    `ship`'s slot, rendering a bare, empty `()` after the title (`- [] Project Plan: … (ingle)` instead
+    of `- [ingle] Project Plan: …`). This is a **fix, not a regression**: the Python port reproduced the
+    same empty-`()` artifact (`item['ship_date']` interpolated unconditionally), and both render paths
+    (overview aggregate, deep dive) now omit the date's parens entirely when `ship_date` is empty,
+    leaving a title's own trailing parenthetical (e.g. `(C6)`) untouched. **No golden moves** — pinned
+    by a dedicated `kilo` fixture/registry scenario, appended as two new bats tests plus direct pytest
+    coverage in `test_render.py`, never by editing `_link_build_overview_ws`/`_link_registry_overview`
+    or the `delta` deep-dive fixture, all of whose assimilated plans carry a `Shipped:` line by design.
+    Both new suites were confirmed non-vacuous by reverting `render.py` and observing the exact
+    pre-fix `()` artifact reappear.
   - Verify (three mechanical commands, all must hold):
     1. `git diff 9257c3b..HEAD --stat -- tests/fixtures/link/` prints **nothing**.
     2. `git diff 9257c3b..HEAD -- tests/cli_contract.bats | grep '^-' | grep -v '^---'` prints **only**
@@ -155,6 +169,23 @@ Python target next.
        non-vacuity proof. Injects a failing `python3` via `BORG_PATH_PREFIX` and asserts `borg link`,
        `borg link --porcelain` and `borg link <project>` all fail; cannot be satisfied by a rename, a
        re-pointed dispatch, or a surviving zsh fallback renderer.
+  - **Amended 2026-08-13 -- owner decided.** Post-merge, the owner literally ran the criterion's
+    original proxy, `grep -c 'cmd_link' borg.zsh`, and it returns **5**, not 0 -- every match is a
+    provenance comment (`borg.zsh:2883, 2891, 2903, 2904, 2957`), and the deletion is genuinely
+    complete (checks 1-3 above already proved it). That command is a bad proxy in **both**
+    directions: it passes while a differently-named helper lingers, and it fails when a comment
+    merely mentions the name. This is **not** loosening the criterion to fit the code -- checks 1-3
+    were already the real verification; the raw count is superseded because, taken literally, it
+    contradicts a deletion the three bats tests independently confirm. Replaced with two direct
+    commands, run against this branch and confirmed to print nothing:
+    1. `grep -nE '^[[:space:]]*(cmd_link|_borg_link_porcelain|_borg_link_overview|_borg_link_deep|
+       _borg_cortex_pending|_borg_cortex_countdown|_borg_collect_all_directives|
+       _borg_collect_all_assimilated|_borg_read_assimilated)[[:space:]]*\(\)' borg.zsh` -- no
+       definition survives.
+    2. The same nine names, non-comment references, across `borg.zsh` `drone.zsh` `lib/` `hooks/` --
+       no caller survives. The five provenance comments above are the intended, permanent reason
+       this second command must strip comments before matching, not evidence of an incomplete
+       deletion.
 - [ ] **A6 — `/borg-link` consumes `borg link --json`.**
       Rewritten as a synthesis layer matching `/borg-recon`'s shape. The direct-file-read path survives only
       as the drone-container fallback, with its trigger condition stated verbatim, `has_live_window: null`,
