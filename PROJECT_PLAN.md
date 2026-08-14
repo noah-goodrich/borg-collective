@@ -105,8 +105,42 @@ Python target next.
   - **The one survivor is carried to Phase 3, not silently dropped**: `core.capacity()`'s `active > limit` can be
     changed to `>=` with 346 pytest + 112 bats still green. Current code is correct and matches `borg.zsh:407`;
     what is missing is a discriminating assertion. See "Phase 3 entry gate" below.
-- [x] **A4 — Human output is byte-identical after the port.** *(Done 2026-08-13. AMENDED 2026-08-13 — owner
-      signed off; the original text is preserved below.)*
+- [x] **A4 — Human output is byte-identical after the port.** *(Done 2026-08-14 — see the fifth deviation.
+      AMENDED 2026-08-13 — owner signed off; the original text is preserved below.)*
+  - **A FIFTH deviation, and the one that matters most in this record: A4 was ticked while measurably
+    false, and a ship-time review caught it.** `render.py`'s `_fold_s` did not reproduce `fold -s`. It
+    windowed on `remaining[:width + 1]` (treating a blank at exactly the wrap column as an in-window break)
+    and emitted `remaining[:break_at]`, dropping the blank POSIX says stays on the line — while the
+    function's own docstring stated the correct behavior. A differential harness measured **3504/4000**
+    randomized inputs mismatching real `fold -s`; after the fix, **0/4000**, independently re-confirmed at
+    2000/2000 by the orchestrator. Fixed in
+    [#140](https://github.com/noah-goodrich/borg-collective/pull/140).
+  - **Why every green number missed it.** `cli_contract.bats:1375` deliberately keeps the deep fixture's
+    summary **under 70 chars so `fold -s -w 70` is a no-op**, and the one long-summary case asserts
+    structure (`^  [^ ]`) rather than bytes. So the single path where the port could drift was the one path
+    the oracle never exercised. "All four goldens unchanged" was true and proved byte-identity only for
+    inputs the goldens contain. No live project summary is currently long enough to wrap, which is why the
+    real-registry diff was also clean — 164/164 lines identical.
+  - **A premise in the suite is false FOR ASCII, and the correction was initially over-generalized — twice.**
+    `cli_contract.bats:1376` claims GNU and BSD `fold` disagree on break points, which is why the wrapping
+    test was structural. Measured on ASCII: GNU coreutils 9.4 (Docker) and BSD `fold -s` agree
+    **1000/1000**, and the fix matches both. **That scope is the whole claim** — a first pass recorded it
+    here and in `render.py`'s docstring as a general refutation, and two independent reviewers then showed
+    it is false outside ASCII. There are **three** counting algorithms, not two vendors and a port:
+    `_fold_s` counts **codepoints**, BSD `fold` counts **display columns**, GNU `fold` counts **bytes**
+    (and will split a UTF-8 sequence mid-codepoint). They diverge on the first **em dash** — the single
+    most likely non-ASCII character in an LLM-written summary — and on 6 of 6 non-ASCII probes.
+  - **Consequence, which is a live trap and not a curiosity**: the wrapping path is pinned by a
+    **differential** test that shells out to the live `fold` binary, proven non-vacuous (reverting the
+    emission fix reddens 8 cases including a hardcoded one; reverting the window fix reddens 3). Its cases
+    are deliberately **ASCII, width-1, tab-free**. Adding a non-ASCII case would pass on a macOS dev host
+    and fail in CI's ubuntu lane. Width-1 non-ASCII matched BSD 303/303, so the host-path claim holds for
+    realistic data; wide characters (CJK, emoji) match neither vendor (44/200). For non-ASCII, escalate —
+    do not guess which vendor to match.
+  - **This was the third defect in this plan found only by running against a real oracle** — after the
+    empty-`Shipped:` field-shift (also real-registry) and the capacity-boundary mutation survivor (also an
+    audit, not the suite). Three for three, the suite was green and the defect was real. That pattern is
+    the most transferable thing here: **a fixture that avoids the hard input proves nothing about it.**
       All four goldens byte-match with **ZERO regeneration**. 23 of the 25 A1 assertions pass unchanged;
       exactly **two** flip to their documented post-fix values — the `(NOm)` assimilated-ordering test
       (`cli_contract.bats:2112`, lines 2112/2118/2121/2122) and the two-line Progress test (`:2078`, lines
@@ -186,8 +220,32 @@ Python target next.
        no caller survives. The five provenance comments above are the intended, permanent reason
        this second command must strip comments before matching, not evidence of an incomplete
        deletion.
-- [x] **A6 — `/borg-link` consumes `borg link --json`.** *(Done 2026-08-14 — owner redeployed; both deployed
-      copies verified identical to source.)*
+- [x] **A6 — `/borg-link` consumes `borg link --json`.** *(Done 2026-08-14. Ticked, UN-ticked on deploy
+      drift, re-verified and re-ticked after a second `borg setup` — the history below is the point.)*
+  - **Re-verified 2026-08-14 against `9377019`, after the last source change to the skill.** Both deployed
+    copies byte-identical to source: `~/.claude/skills/borg-link/SKILL.md` (personal, the copy Claude Code
+    loads) and `claude-plugins/borg-collective/skills/borg-link/SKILL.md` (plugin). #139's fallback-probe
+    fix confirmed present in the deployed artifact, not merely in the repo.
+  - **The tick was true when made and false forty minutes later, and the sequencing error is instructive.**
+    The owner redeployed, both deployed copies were verified byte-identical to source, A6 was ticked — and
+    then [#139](https://github.com/noah-goodrich/borg-collective/pull/139) merged, editing
+    `skills/borg-link/SKILL.md` itself. **Verifying a deployed artifact and then merging a change to it
+    invalidates the verification.** Measured on `9377019`: `~/.claude/skills/borg-link/SKILL.md` (13105
+    bytes, the copy Claude Code loads for the personal `borg-link` skill) is byte-identical to
+    `git show 7d4a129:skills/borg-link/SKILL.md` — the **pre-#139** file. The plugin copy
+    (`claude-plugins/borg-collective/skills/borg-link/SKILL.md`, 13976 bytes) *did* track. So the
+    unreachable fallback probe #139 exists to fix is still what actually runs.
+  - **Neither pinning test can catch this, by construction.** `tests/skill_borg_link.bats:17` and
+    `tests/bash_guard.bats:654` both read the repo **source**; nothing reads the artifact `borg setup`
+    writes to `$CLAUDE_DIR/skills`. The suite is green precisely because it never looks at what ships.
+    A directive is filed to close the class — a drift check across all 16 skills and 12 hooks, not just
+    this one — because that mechanism, not a reviewer, is what should have caught it.
+  - **To re-tick**, owner-only, in a real terminal, and *after* the last source change to the skill:
+    ```
+    S=/Users/noah/dev/borg-collective/skills/borg-link/SKILL.md
+    borg setup && diff "$S" /Users/noah/.claude/skills/borg-link/SKILL.md && \
+      diff "$S" /Users/noah/dev/claude-plugins/borg-collective/skills/borg-link/SKILL.md && echo DEPLOY_OK
+    ```
       Rewritten as a synthesis layer matching `/borg-recon`'s shape. The direct-file-read path survives only
       as the drone-container fallback, with its trigger condition stated verbatim, `has_live_window: null`,
       and **no** staleness downgrade (no-tmux is indistinguishable from no-window; a naive fallback marks
@@ -214,10 +272,15 @@ Python target next.
       by hand on `coverage report -m`, not inferred from the global `--fail-under=90` (which is a total over
       `borg_core` and currently masks `recon/cli.py` at 82%).
   - Verify: `bats tests/*.bats` exits 0; `coverage report -m` shows every `borg_core/link/*.py` at `>= 90%`.
-  - **Measured 2026-08-14 on `7d4a129`**: `bats tests/*.bats` **649/649**; macOS contract leg green in CI on
-    [#138](https://github.com/noah-goodrich/borg-collective/pull/138). Per-module, read by hand off
-    `coverage report -m` rather than inferred: `core.py` **100%**, `shell.py` **100%**, `render.py` **99%**
-    (lines 103, 150), `cli.py` **98%** (lines 151, 191), `__init__.py` 100%. 387 pytest.
+  - **Re-measured 2026-08-14 on `9377019`**, the final tree after the post-ship fixes below. `bats
+    tests/*.bats` **649/649**; macOS contract leg green in CI on
+    [#141](https://github.com/noah-goodrich/borg-collective/pull/141); `make lint` 10.00/10; **404 pytest**.
+    Per-module, read by hand off `coverage report -m` rather than inferred: `core.py` **100%**,
+    `shell.py` **100%**, `render.py` **99%** (lines 111, 158), `cli.py` **97%** (lines 151, 189).
+  - **An earlier measurement on `7d4a129` was recorded here and was premature.** It is superseded, not
+    deleted, because the reason matters more than the numbers: a simplify + Collective ship review run at
+    assimilation time returned **do-not-ship** on a byte-parity defect that every one of those green numbers
+    was blind to. See A4.
   - **The global figure remains untrustworthy and this tick does not endorse it.** `coverage report -m`
     prints TOTAL 99%, but `omit = ["**/tests/**"]` matches nothing — tests are colocated as
     `borg_core/<pkg>/test_*.py`, so test files are grading themselves and inflating the total. That is
