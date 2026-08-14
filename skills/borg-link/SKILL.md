@@ -3,182 +3,228 @@ name: borg-link
 description: >
   Project intelligence — the neural link to the collective. No args = overview of all projects
   with directives and recent ships. With a project name = deep dive with registry, latest
-  checkpoint, plan, directives, and assimilated history. Works on the host
-  and inside a drone container by reading the bind-mounted files directly. Use when the user
-  asks for status, overview, briefing, "what's going on", or project details.
+  checkpoint, plan, directives, and assimilated history. Runs the `borg link` engine and
+  synthesizes its output; falls back to reading the bind-mounted borg files directly only when
+  the engine cannot run. Use when the user asks for status, overview, briefing, "what's going
+  on", or project details.
 user-invocable: true
 ---
 
 # Borg Link — Neural Link to the Collective
 
-Read the borg data files directly. Do **not** shell out to `borg link` — it may not be in
-PATH (you may be inside a drone container where only the data is mounted).
+You are the synthesis layer on top of the `borg link` engine. The engine does the mechanical
+read, the sort, the staleness overlay and the rendering; you do the thinking. Explain like the
+reader is 10: plain language first, jargon only if it earns its place. Terse. Most-urgent-first.
+Hard-wrap all output at 120 characters.
 
-## The data contract
+## What this is (one breath)
 
-For every project `P` in the registry:
+One `borg link --json` call returns the whole board: every project's live status, how long since
+each was touched, what's queued (directives), what shipped (assimilated), and whether you're over
+capacity. With a project name the same call also returns a `focus` block for the deep dive. Your
+job is to turn that into an answer, not to re-render it.
 
-| Source                   | Path                                                   |
-| ------------------------ | ------------------------------------------------------ |
-| Registry                 | `~/.config/borg/registry.json` (key = `P`)             |
-| Checkpoints              | `<P.workspace>/.borg/checkpoints/*.md` (newest = latest)|
-| Project plan             | `<P.workspace>/PROJECT_PLAN.md`                        |
-| Directives (backlog)     | `<P.workspace>/docs/plans/directives/*.md`             |
-| Severed (cancelled)      | `<P.workspace>/docs/plans/severed/*.md`                |
-| Assimilated (shipped)    | `<P.workspace>/docs/plans/assimilated/*.md`            |
+## Step 1 — Run the engine
 
-### Resolving `<P.workspace>`
+Overview:
 
-The registry stores *host* paths (e.g. `/Users/noah/dev/troth`), which do **not** resolve
-inside a drone container where the same workspace is bind-mounted to a different path
-(typically `/workspace`). Use this rule instead:
+```bash
+bash -c 'set -o pipefail; borg link --json | jq ".directives |=
+  (group_by(.project) | map({project: .[0].project, n: length, titles: [limit(5; .[].title)]}))"'
+```
 
-1. Walk up from `$PWD` looking for a `.borg-project` marker file. If found, read its single
-   line — that's the *current project name* — and the directory containing the marker is
-   the *current workspace*. This works both on the host and inside a drone.
-2. For the **current project**, always use the resolved workspace from step 1 — never the
-   registry's `path` field, which may be a host path.
-3. For **other projects**, use the registry's `path` field. On the host it resolves; inside
-   a drone it usually doesn't, and that's fine — skip workspace-dependent reads (checkpoints,
-   directives, severed, assimilated, PROJECT_PLAN.md) and show only the registry row for
-   those projects.
-4. If no `.borg-project` marker is found (e.g. orchestrator session at `~`), there is no
-   current project — fall back to registry paths for everyone.
+Deep dive:
 
-The registry is always reachable because `~/.config/borg/` is bind-mounted into every drone.
-Checkpoints live in the project workspace, so they're visible to the current drone but not
-to other projects' drones. Degrade silently — do not print
-"file not found" errors for workspace files that a drone can't see.
+```bash
+bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_at, capacity, total_projects, focus}"'
+```
 
-## Modes
+One call serves both — `borg link --json <project>` returns the full overview document PLUS
+`focus`. Never make two calls for a deep dive.
 
-- **No argument + inside a project path** → deep dive on the current project (marker walk
-  found a `.borg-project` file). No explicit project name needed.
-- **No argument + not in a project path** → overview of all projects (orchestrator/host
-  session; marker walk found nothing).
-- **Project name → deep dive** on the named project regardless of CWD.
-- **`--brief` / `--refresh`** → host-only (they need the CLI's LLM pipeline). If asked for
-  these inside a container, tell the user to run `borg link --brief` / `borg link --refresh`
-  from the host.
+**Why the jq.** Neither pipe enumerates a field, so anything the document gains later passes
+through untouched. Overview: collapses the one uncapped array (directives, ~121 items live) from
+27,298 bytes raw to ~13,935. Deep dive: drops the 20-project `projects` map, the full `order`, and
+the uncapped cross-project arrays the skeleton never reads, from 31,136 bytes raw to ~4,661 — an
+85% cut. If `jq` is missing, drop the pipe and read the raw document.
 
-## Step 1 — Resolve the current project (marker walk)
+**Mode selection.** To decide the mode, run the MARKER-WALK block below — it is the only
+pre-approved way to detect the current project; do not write an ad hoc find/ls command. Marker
+found + no argument → deep dive on that project. No marker + no argument → overview. An explicit
+project name → deep dive regardless of CWD.
 
-The canonical marker-walk implementation is `_borg_find_project` in
-`lib/borg-hooks.sh` — it returns the project *name* from the nearest `.borg-project`
-marker. This skill extends it to also emit the workspace *directory* (the dir containing
-the marker), which is what the file reads below need. If you change the marker convention,
-update both places in lockstep.
-
+<!-- MARKER-WALK-BEGIN -->
 ```
 Bash: dir="$PWD"; while [[ "$dir" != "/" ]]; do
         [[ -f "$dir/.borg-project" ]] && { echo "WORKSPACE=$dir"; echo "PROJECT=$(cat "$dir/.borg-project")"; break; }
         dir=$(dirname "$dir")
       done
 ```
+<!-- MARKER-WALK-END -->
 
-If this prints a `PROJECT` and `WORKSPACE`, that's your current project and its resolved
-workspace root. Remember both — you'll use `WORKSPACE` whenever the current project needs a
-workspace path. If the walk produces nothing, there's no current project (orchestrator
-session case).
+**Version gate — read `.version` first.**
+- `== 2` → proceed silently.
+- `> 2` → proceed, but say in one line that this skill was written against v2 and newer fields
+  may go unreported.
+- `< 2` or absent → STOP. Tell the user their borg install is older than this skill
+  (`total_projects` is missing, so the empty-registry vs all-archived branch cannot be rendered
+  correctly). Do NOT fall back on a version mismatch.
 
-## Step 2 — Read the registry
+**Flags that are NOT in the JSON path.** `--brief` (LLM narrative) and `--refresh` (regenerate
+summaries) are still zsh and host-only. If the user asks for either, tell them to run
+`borg link --brief` / `borg link --refresh` from the host — do not attempt them yourself.
+
+**`--all`.** `borg link --json --all` includes archived projects. Needed only when the user asks
+*which* projects are archived; the count alone is `total_projects - (.order | length)`.
+
+If the Step 1 command fails, go to `## Fallback` below — the trigger lives there, verbatim.
+
+## Step 2 — Reconcile (add judgment to the mechanical pass)
+
+The engine already sorted, already applied the staleness overlay, already counted capacity. Go
+one level deeper:
+
+- **Capacity is a finding, not a field.** `capacity.over_limit` true → lead with it and name which
+  projects are eating the budget (the `waiting` and `active` rows, in `.order`).
+- **Contradiction check on the deep dive.** Compare `focus.checkpoint_head` and
+  `focus.plan.objective` against `focus.entry.status` / `focus.entry.relative_activity`. When a
+  checkpoint claims in-flight work on a project that `relative_activity` shows has gone idle, name
+  the disagreement plainly and recommend the fix, the way `/borg-recon` does. Use judgment on
+  `relative_activity` — there is no fixed day threshold in the data.
+- **Empty summaries are the normal case, not an error.** `summary` is null on nearly every project
+  until someone runs `--refresh`. Degrade in this order: `summary` → `waiting_reason` →
+  `relative_activity` → `focus.checkpoint_head`. Never print "(no summary)" for a whole column; if
+  the board has no summaries, say so once and suggest `borg link --refresh` on the host.
+- **Collapse, don't transcribe.** 121 directives across 9 projects is a number plus the top few
+  titles, not a list.
+
+## Step 3 — Synthesize
+
+Overview skeleton:
 
 ```
-Bash: jq '.projects | to_entries | map({name: .key, path: .value.path,
-          status: .value.status, last: .value.last_activity,
-          summary: .value.summary})' ~/.config/borg/registry.json
+## The collective — <N> projects, <A> need attention   (limit <L>)   ← the capacity line, only if it bites
+### ● <project>  [<status>]  · <relative_activity>
+<one plain-language line: what this project is mid-way through, from summary/waiting_reason/checkpoint>
+Queued: <n> directives (top: <title>, <title>)          ← omit the line when n is 0
+> <contradiction or capacity note>                       ← only when this project has one
+...
+Recently shipped: <title> (<project>, <ship_date>)       ← the global newest-3, one line each
+Hidden: <total_projects - (order|length)> archived — run `borg link --all` to see them.   ← omit when 0
 ```
 
-Volatile status lives in each project's `<workspace>/.borg/state.json`, not the registry. Read
-`state.json` for the live `status` / `last_activity` and overlay it on the registry row when both exist.
+Deep-dive skeleton:
 
-## Reaper-aware status (match the CLI)
+```
+## <project>  ·  <status>  ·  <relative_activity>
+<two lines, plain language: where this project actually is right now>
+Plan: <focus.plan.objective>  —  <met>/<total> criteria met     ← omit the whole line when plan is null
+Latest checkpoint (<focus.checkpoints[0]>): <the 2-3 things that matter from checkpoint_head>
+Queued: <n> directives — <up to 5 titles>
+Shipped recently: <title> (<ship_date>)
+> <contradiction between the checkpoint's claims and the live status>
+```
 
-Apply the same staleness rule as `borg next`/`borg link`: a project whose `state.json` says
-`active`/`waiting` but has no live tmux window AND a `last_activity` older than
-`BORG_REAP_STALE_HOURS` (default 12h) should be reported as **idle (stale)**. The authoritative
-implementation is `lib/reaper.sh:_borg_should_reap` — do not re-specify the predicate here.
+Sort by `.order` and nothing else. If `.order` is empty and `total_projects` is 0, say "No
+projects registered — run `borg scan`." and stop. If `.order` is empty and `total_projects > 0`,
+say "All <N> projects are archived — run `borg link --all`." and stop. Those are two different
+sentences and getting them backwards is the known trap.
 
-Check for a live window: `tmux list-windows -t borg -F '#W' 2>/dev/null | grep -qx <project>`.
-Do not rewrite `state.json` — that is what `borg reap` is for. If you find stale sessions,
-mention the user can run `borg reap` to persist the downgrade.
+## Fallback — direct file reads (the drone-container path)
 
-## Command Patterns
+**Trigger — this is the whole condition. Do not paraphrase it, and do not fall back for any other
+reason.**
 
-Use these patterns — they avoid `for` loops and `$()` inside `echo`, which trigger permission
-prompts. All are pre-approved by bash-guard.
+Capture every branch input in one call (no `$()`, per repo rule):
 
-**Extract H1 title from each directive/severed/assimilated file (one title per file):**
 ```bash
-grep -h -m1 '^# ' /path/to/directives/*.md 2>/dev/null | sed 's/^# /- /'
+bash -c 'borg link --json >/tmp/borg-link.out 2>/tmp/borg-link.err
+echo "rc=$?"
+wc -c </tmp/borg-link.out
+grep -c "not in registry" /tmp/borg-link.err
+head -3 /tmp/borg-link.err'
 ```
 
-**Extract H1 title + Shipped date from each assimilated file:**
-```bash
-awk 'FNR==1{if(NR>1 && t) print "- " t " (" s ")"; t=""; s=""} /^# / && !t{t=substr($0,3)} \
-/^Shipped:/{s=$0; sub(/.*Shipped:[[:space:]]*/,"",s)} END{if(t) print "- " t " (" s ")"}' \
-/path/*.md
-```
+On `rc=0`, read `.version` from `/tmp/borg-link.out` with `jq .version /tmp/borg-link.out`.
 
-**Count files:**
-```bash
-ls /path/*.md 2>/dev/null | wc -l
-```
+| what you saw                    | what to do                                                              |
+| -------------------------------- | ------------------------------------------------------------------------ |
+| `rc=0`, `.version == 2`          | CLI path. Never fall back.                                                |
+| `rc=0`, `.version > 2`           | CLI path. Note the version skew in one line.                              |
+| `rc=0`, `.version < 2` or absent | STOP. borg is older than this skill. Do not fall back.                   |
+| `rc != 0`, stderr has `not in registry` | STOP and report it. Do not fall back.                              |
+| `rc != 0`, stderr has `jq:`      | Engine may have answered; only the local pipe failed. Re-run Step 1      |
+|                                   | WITHOUT the jq pipe. Fall back only if that also fails.                  |
+| `rc != 0`, anything else (`command not found` / `rc=127`, a `borg link: ...` line, a traceback) | **FALL BACK.** |
 
-## Step 3 — Deep dive on project `P`
+Why each row:
 
-First decide the workspace path for `P`:
-- If `P == current project`, use `WORKSPACE` from Step 1.
-- Otherwise, use the registry's `path` field.
-- Before reading any workspace file, check it exists (`test -e`). If it doesn't, skip that
-  step silently — do not print an error. This is the normal case for non-current projects
-  inside a drone.
+- `not in registry` is the CLI telling you the project genuinely does not exist
+  (`borg link: project '<name>' not in registry. Run: borg add [path]`). Falling back there would
+  hand-roll a page for a project that isn't real. Report the CLI's message and stop.
+- Every other non-zero exit means the engine could not answer — `borg` is not on PATH (the drone
+  case), the registry is unreadable, or the CLI crashed. On ALL of these stdout is **zero bytes**:
+  never parse partial output, never branch on stderr shape beyond the two substring checks above.
+- The condition is about what the engine did, not where you are. Do not try to detect "am I in a
+  container" — a broken or absent borg install on the host lands in exactly the same place.
 
-Then:
+**`has_live_window` is `null` here — never `false`.** Inside a drone there is no tmux server, so
+`tmux list-windows` fails exactly the way it fails when a window is merely absent. No-tmux and
+no-window are indistinguishable. Therefore: set `has_live_window: null` (unknown) for every
+project, do not run the tmux probe at all, and **apply NO staleness downgrade** — report the
+`status` you read from `state.json` / the registry as-is. A fallback that reads unknown liveness
+as "no window" marks every active and waiting project stale; the whole board goes idle and the
+reading is worthless.
 
-1. Print the header: name, resolved workspace path, status, last active, summary.
-2. Glob `<workspace>/.borg/checkpoints/*.md`, newest first. Show the newest filename under
-   "Latest Checkpoint" and the first ~20 lines of its content. If 2-3 more exist, list their
-   timestamps under "Recent Checkpoints" without bodies.
-3. Read `<workspace>/PROJECT_PLAN.md` if it exists. Extract the Objective line and the count
-   of `- [ ]` / `- [x]` checklist items for a Progress line.
-4. Glob `<workspace>/docs/plans/directives/*.md`. For each file, the H1 is the title. Print
-   as "Directives: N pending" with a bullet list.
-5. Glob `<workspace>/docs/plans/assimilated/*.md`, newest first. Take the top 3. The H1 is
-   the title; `Shipped:` field has the date. Print as "Recently assimilated."
-6. Glob `<workspace>/docs/plans/severed/*.md`. For each file, the H1 is the title. Print as
-   "Cancelled (N)" with a bullet list — titles only, no bodies. Skip the section if empty.
+**Say you are degraded, once, at the top**, carrying the captured error, location-agnostic:
+"degraded mode — the borg link engine could not produce a document (<first line of captured
+stderr, when non-empty>); statuses are un-reaped and may be stale. Run `borg doctor` to check the
+install."
 
-Inside a drone, for a project that isn't the current one, steps 3–5 will usually be skipped
-because `<workspace>` (the host path from the registry) isn't reachable. That's expected
-behavior, not an error.
+**Where the data is.** Registry at `${XDG_CONFIG_HOME:-$HOME/.config}/borg/registry.json` —
+derive the path, never hardcode `~/.config/borg` (`BORG_DIR`, `BORG_REGISTRY` and a non-default
+`XDG_CONFIG_HOME` all move it). Per-project volatile status at `<workspace>/.borg/state.json`,
+overlaid on the registry row. Checkpoints at `<workspace>/.borg/checkpoints/*.md`, plan at
+`<workspace>/PROJECT_PLAN.md`, directives at `<workspace>/docs/plans/directives/*.md`, assimilated
+at `<workspace>/docs/plans/assimilated/*.md`. Test every path with `test -e` before reading and
+degrade silently — a missing file is the normal case here, not an error.
 
-## Step 4 — Overview (no argument)
+**Resolving `<workspace>`.**
 
-1. Resolve the current project per Step 1 (may be empty).
-2. Read the registry per Step 2.
-3. Render a table: project, status, last-active, summary. Sort: pinned first, then status
-   priority (waiting > active > idle > archived), then last-active DESC.
-4. For each project, resolve its workspace path with the same rule (current project →
-   `WORKSPACE`, others → registry `path`). If the resolved workspace exists, collect its
-   directives and newest assimilated files. Aggregate into two lists with project-name
-   prefixes:
-   - `Directives: N pending` → `- [project] title`
-   - `Recently assimilated` (newest 3 globally) → `- [project] title (YYYY-MM-DD)`
-5. If a project's workspace isn't reachable (common inside drones for every project except
-   the current one), omit its directives and assimilated entries but still show its
-   registry row.
+1. Walk up from `$PWD` looking for a `.borg-project` marker file (the MARKER-WALK block above).
+   If found, read its single line — that's the *current project name* — and the directory
+   containing the marker is the *current workspace*. This works both on the host and inside a
+   drone.
+2. For the **current project**, always use the resolved workspace from step 1 — never the
+   registry's `path` field, which may be a host path.
+3. For **other projects**, use the registry's `path` field. On the host it resolves; inside a
+   drone it usually doesn't, and that's fine — skip workspace-dependent reads (checkpoints,
+   directives, assimilated, PROJECT_PLAN.md) and show only the registry row for those projects.
+4. If no `.borg-project` marker is found (e.g. orchestrator session at `~`), there is no current
+   project — fall back to registry paths for everyone.
 
-## When to use
+The registry is bind-mounted into every drone **started by `drone up`** (the `borg` compose
+profile), not into every container — test for the file, don't assert it.
 
-- User asks "what's going on?" / "show me everything" from the orchestrator → overview
-- User asks "what's going on?" from inside a project → deep dive on that project
-- User asks about a specific project (by name) → deep dive
-- User asks for a briefing or morning summary → overview (or suggest `borg link --brief` on
-  the host for the LLM narrative)
-- User says summaries look stale → suggest `borg link --refresh` on the host
+**What the fallback does NOT do:** no writes of any kind (the registry mount is read-write inside
+a drone; `borg reap` on the host is what persists downgrades), no `--brief`, no `--refresh`, no
+capacity warning derived by hand, and no attempt to reproduce the CLI's column widths. It answers
+the question in prose; it does not imitate `borg link`'s frame.
 
-## Presentation
+## Guardrails
 
-Plain text, terse. Mirror the CLI's output style (section headers, bullet lists). No tables
-unless the output is meant to be scanned across many projects.
+- Read `.order` for display order. Never derive order from `.projects`' keys — jq's `keys` sorts
+  alphabetically and would silently reorder the board.
+- Never branch "no projects" off `(.order | length)`. `total_projects` is the unfiltered count; an
+  all-archived registry emits `order: []` with a non-zero `total_projects`.
+- `pinned` and `display_name` are OPTIONAL ABSENT keys, not null-valued ones. Treat missing as
+  absent.
+- An empty `.order` with exit 0 is a SUCCESS, not a failure. Never fall back on it.
+- No raw dumps. Every line is a synthesized takeaway. Never paste the JSON, and never re-render
+  the CLI's table — if the user wants the table, they should run `borg link`.
+- Read-only in spirit: this skill never writes `registry.json` or any `state.json`. Note the one
+  unavoidable exception: `borg link --json` with no project runs the CLI's Claude Desktop
+  pre-pass, which merges into the registry — that is the CLI's normal behavior, not something to
+  work around.
+- One `borg link --json <project>` call is both the overview and the deep dive. Do not call
+  twice.
