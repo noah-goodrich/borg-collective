@@ -2703,3 +2703,44 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" = "$ls_order" ]
 }
+
+# ── recon adapter: credentials must never reach item refs ────────────────────────────────────────
+# Found 2026-08-14 running the pipeline end to end on live data for the first time. The adapter
+# derived $REPO by stripping two exact prefixes (`git@github.com:` and `https://github.com/`). A
+# remote of the form https://x-access-token:<token>@github.com/owner/repo.git matches NEITHER, so the
+# whole URL -- including a live gho_ credential -- became $REPO and flowed into every item's `ref`,
+# and from there into data.json, story.json, and the rendered HTML.
+#
+# These extract the REAL sed expression from the shipped adapter and run it, rather than testing a
+# copied-out duplicate that could drift from the file it is meant to guard.
+
+_repo_norm() {
+    local url="$1" expr
+    expr=$(grep -E '^\s*REPO="\$\(printf' "${BATS_TEST_DIRNAME}/../lib/recon/adapters/recon-adapter-github" \
+        | sed -E "s/.*sed -E '([^']*)'.*/\1/")
+    [ -n "$expr" ] || return 1
+    printf '%s' "$url" | sed -E "$expr"
+}
+
+@test "recon adapter: a credentialed remote never leaks into the repo name" {
+    run _repo_norm "https://x-access-token:gho_EXAMPLETOKEN123456789@github.com/owner/repo.git"
+    [ "$status" -eq 0 ]
+    [ "$output" = "owner/repo" ]
+    [[ "$output" != *"gho_"* ]] || false
+    [[ "$output" != *"@"* ]] || false
+}
+
+@test "recon adapter: basic-auth credentials in a remote are stripped too" {
+    run _repo_norm "https://user:hunter2@github.com/owner/repo.git"
+    [ "$output" = "owner/repo" ]
+    [[ "$output" != *"hunter2"* ]] || false
+}
+
+@test "recon adapter: ordinary ssh and https remotes still normalize correctly" {
+    run _repo_norm "git@github.com:owner/repo.git"
+    [ "$output" = "owner/repo" ]
+    run _repo_norm "https://github.com/owner/repo.git"
+    [ "$output" = "owner/repo" ]
+    run _repo_norm "ssh://git@github.com/owner/repo.git"
+    [ "$output" = "owner/repo" ]
+}
