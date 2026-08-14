@@ -105,7 +105,7 @@ Python target next.
   - **The one survivor is carried to Phase 3, not silently dropped**: `core.capacity()`'s `active > limit` can be
     changed to `>=` with 346 pytest + 112 bats still green. Current code is correct and matches `borg.zsh:407`;
     what is missing is a discriminating assertion. See "Phase 3 entry gate" below.
-- [ ] **A4 — Human output is byte-identical after the port.** *(AMENDED 2026-08-13 — owner signed off; the
+- [x] **A4 — Human output is byte-identical after the port.** *(Done 2026-08-13. AMENDED 2026-08-13 — owner signed off; the
       original text is preserved below.)*
       All four goldens byte-match with **ZERO regeneration**. 23 of the 25 A1 assertions pass unchanged;
       exactly **two** flip to their documented post-fix values — the `(NOm)` assimilated-ordering test
@@ -137,11 +137,24 @@ Python target next.
   - *Original text, superseded:* "All A1 assertions pass **unchanged** against the Python implementation. A
     modified assertion is not a parity proof. Verify: `git stash` the test file, confirm no diff between its
     `main` and branch versions; suite green."
-- [ ] **A5 — `cmd_link` and its helpers are deleted, not shadowed.**
+- [x] **A5 — `cmd_link` and its helpers are deleted, not shadowed.** *(Done 2026-08-13.)*
       `cmd_link`, `_borg_link_porcelain`, `_borg_link_overview`, `_borg_link_deep`, `_borg_cortex_pending`,
       `_borg_cortex_countdown`, `_borg_collect_all_directives`, `_borg_collect_all_assimilated`,
-      `_borg_read_assimilated` removed; `cmd_watch` rewired.
-  - Verify: `grep -c 'cmd_link' borg.zsh` returns 0.
+      `_borg_read_assimilated` removed; `cmd_watch` rewired to `_borg_link_dispatch`.
+  - Verify (three bats tests, not a checklist item -- `grep -c 'cmd_link' borg.zsh` is satisfiable by
+    a pure rename, passes while 8/9 functions linger as orphaned dead code, and three of its own six
+    matches were comments):
+    1. `contract: the nine deleted link helpers are absent as function definitions repo-wide` --
+       definition-anchored `grep -rnE` across `borg.zsh` and `lib/*.zsh`.
+    2. `contract: the nine deleted link helpers are undefined at runtime, and their survivors are not`
+       -- `whence -w` inside a sourced zsh subshell; catches a relocation into `lib/*.zsh` or an
+       `eval`-defined function that grep alone cannot see. Also asserts the POSITIVE half:
+       `_borg_read_directives`, `cmd_ls` and `cmd_watch` must survive (`cmd_next:1106` still calls
+       `_borg_read_directives`).
+    3. `contract: all three human link modes fail when python3 is unavailable` -- the only positive
+       non-vacuity proof. Injects a failing `python3` via `BORG_PATH_PREFIX` and asserts `borg link`,
+       `borg link --porcelain` and `borg link <project>` all fail; cannot be satisfied by a rename, a
+       re-pointed dispatch, or a surviving zsh fallback renderer.
 - [ ] **A6 — `/borg-link` consumes `borg link --json`.**
       Rewritten as a synthesis layer matching `/borg-recon`'s shape. The direct-file-read path survives only
       as the drone-container fallback, with its trigger condition stated verbatim, `has_live_window: null`,
@@ -149,10 +162,11 @@ Python target next.
       every project stale inside a drone).
   - Verify: SKILL.md runs `borg link --json` first; fallback section states its trigger. Redeployed via
     `install.sh` and the **deployed** copy re-read to confirm.
-- [ ] **A7 — Regression.** Full bats suite + macOS contract leg green; per-module coverage `>= 90%` checked
-      by hand on `coverage report -m`, not inferred from the global `--fail-under=90` (which is a total over
-      `borg_core` and currently masks `recon/cli.py` at 82%).
-  - Verify: `bats tests/*.bats` exits 0; `coverage report -m` shows every `borg_core/link/*.py` at `>= 90%`.
+- [x] **A7 — Regression.** *(Done 2026-08-13.)* Full bats suite + macOS contract leg green; per-module
+      coverage `>= 90%` checked by hand on `coverage report -m`, not inferred from the global
+      `--fail-under=90` (which is a total over `borg_core` and currently masks `recon/cli.py` at 82%).
+  - Verify: `bats tests/*.bats` exits 0 (639/639); `coverage report -m` shows every `borg_core/link/*.py`
+    at `>= 90%` (`core.py` 100%, `shell.py` 100%, `cli.py` 98%, `render.py` 99%).
 
 ## Phase log
 
