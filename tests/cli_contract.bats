@@ -2123,6 +2123,62 @@ EOF
     [[ "$output" == *"Delta shipped D"*"Delta shipped C"* ]] || false
 }
 
+# THE EMPTY-DATE FIX. Reproduced against the owner's real registry post-merge, NOT by any fixture in
+# this file: zsh's `IFS=$'\t' read -r slug title ship aproject` COLLAPSES consecutive tabs (tab is a
+# whitespace IFS char), so a plan with no "Shipped:" line shifted `project` left into `ship`'s slot
+# and rendered a bare, empty "()" after the title. See PROJECT_PLAN.md's A4 fourth deviation.
+#
+# A DEDICATED workspace/registry, not _link_build_overview_ws / _link_registry_overview: every
+# assimilated fixture those builders feed carries a "Shipped:" line (see their own docstrings), and
+# adding a Shipped:-less file to either would perturb link-overview.golden / link-overview-all.golden
+# / link-deep.golden, which A4 forbids. "kilo" exists ONLY here. Two files so the aggregate section
+# also proves a PRESENT ship date still renders its parens (the title-trailing-"(K1)" is verbatim
+# title text, never the date's parens, and must survive untouched).
+_link_build_noshipdate_ws() {
+    local root="${BATS_TEST_TMPDIR}/ws-noshipdate"
+    mkdir -p "$root/kilo/docs/plans/assimilated"
+    printf '# Kilo unshipped (K1)\n' > "$root/kilo/docs/plans/assimilated/2026-05-02-kilo-noshipdate.md"
+    printf '# Kilo shipped\nShipped: 2026-05-01\n' > "$root/kilo/docs/plans/assimilated/2026-05-01-kilo-dated.md"
+}
+
+_link_registry_noshipdate() {
+    local root="${BATS_TEST_TMPDIR}/ws-noshipdate"
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "kilo": {"path": "$root/kilo", "source": "cli", "status": "idle",
+             "summary": "Kilo has one assimilated plan with no Shipped: line."}
+  }
+}
+EOF
+}
+
+@test "contract: link overview assimilated omits parens when a plan has no Shipped: date" {
+    _link_mock_tmux ""
+    _link_build_noshipdate_ws
+    _link_registry_noshipdate
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"[kilo] Kilo unshipped (K1)"$'\033''[0m'* ]] || false
+    [[ "$output" != *"[kilo] Kilo unshipped (K1) ("* ]] || false
+    [[ "$output" == *"[kilo] Kilo shipped (2026-05-01)"* ]] || false
+    [[ "$output" != *"()"* ]] || false
+}
+
+@test "contract: link <project> deep dive assimilated omits parens when a plan has no Shipped: date" {
+    _link_mock_tmux ""
+    _link_build_noshipdate_ws
+    _link_registry_noshipdate
+
+    run_zsh_borg link kilo
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Kilo unshipped (K1)"$'\033''[0m'* ]] || false
+    [[ "$output" != *"Kilo unshipped (K1) ("* ]] || false
+    [[ "$output" == *"Kilo shipped (2026-05-01)"* ]] || false
+    [[ "$output" != *"()"* ]] || false
+}
+
 # ── mode 4/4: --brief ────────────────────────────────────────────────────────
 
 # --brief stays in zsh this pass (PROJECT_PLAN scope boundary: _borg_print_briefing is contested
