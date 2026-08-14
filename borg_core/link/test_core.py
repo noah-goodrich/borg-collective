@@ -256,11 +256,18 @@ def test_with_state_applies_overlays_and_defaults_missing_status():
     assert result["projects"]["b"]["status"] == "active"
 
 
-@pytest.mark.parametrize("falsy", [None, "", False])
+@pytest.mark.parametrize("falsy", [None, False])
 def test_with_state_replaces_every_falsy_status(falsy):
     # jq's `//=` replaces false as well as null; reproduced deliberately.
     result = core.with_state({"projects": {"a": {"status": falsy}}}, {})
     assert result["projects"]["a"]["status"] == "idle"
+
+
+def test_with_state_leaves_empty_string_status_alone():
+    # An empty string is jq-truthy, so `//=` does NOT replace it -- confirmed live against jq:
+    # `{"a":{"status":""}} | .a.status //= "idle"` yields `""`, unchanged.
+    result = core.with_state({"projects": {"a": {"status": ""}}}, {})
+    assert result["projects"]["a"]["status"] == ""
 
 
 def test_with_state_does_not_mutate_the_input():
