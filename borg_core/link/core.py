@@ -34,7 +34,9 @@ TSV_EMPTY_SENTINEL = "-"
 
 # The `--json` document's format-version, bumped whenever the wire shape changes (see assemble's
 # docstring). Not a parameter: it is a property of the assembler, not an input any caller chooses.
-DOCUMENT_VERSION = 1
+# Bumped 1 -> 2 in Phase 3: `total_projects` was added as a required top-level wire key (see
+# assemble's docstring for why it cannot be derived from `order` or `projects`).
+DOCUMENT_VERSION = 2
 
 # The human table's three-key sort (project_sort_key) ranks status ascending: waiting < active <
 # idle. See project_sort_key's docstring for the full writeup of all four judgment calls baked in.
@@ -378,6 +380,19 @@ def plan_progress(text: str) -> tuple[int, int]:
     return met, total
 
 
+def jq_default(value: object, default: object) -> object:
+    """Reproduce jq's `//` operator: replaces null / false / MISSING only.
+
+    DELIBERATE, DO NOT SIMPLIFY to a bare `value or default`. jq's `//` is NOT Python's `or` --
+    measured on this machine: `echo '{"a":""}' | jq '.a // "X"'` yields `""`, and `{"a":0}` yields
+    `0`. Every renderer default in render.py goes through this function specifically so an
+    empty-string summary or source renders as an empty column, matching zsh, instead of silently
+    being replaced by a placeholder. There is no fixture anywhere with an empty-string summary, so
+    `or` would pass every existing test and still be wrong.
+    """
+    return default if value is None or value is False else value
+
+
 def jq_interp(value: object) -> str:
     """Reproduce jq's `\\(...)` string interpolation for the cortex-wake fields.
 
@@ -438,7 +453,12 @@ def public_entry(entry: dict, now_epoch: int) -> dict:
     is the ONE derived field, computed with the document's single shared epoch.
     """
     public = {k: v for k, v in entry.items() if not k.startswith("_")}
-    public["relative_activity"] = relative_time(public.get("last_activity"), now_epoch)
+    # str(...) coercion: relative_time echoes an unparseable last_activity back verbatim (parity
+    # with zsh), and a registry can carry a raw numeric timestamp there (reproduced live). That is
+    # parity-correct, but it would leave `relative_activity` as a JSON number on a `str | None`
+    # field. render.py's `f"{v:<12}"` happens to survive an int; `.ljust(12)` and `len(v)` do not,
+    # and the overview renderer calls one of those. Coerce here so the wire type is always str.
+    public["relative_activity"] = str(relative_time(public.get("last_activity"), now_epoch))
     return public
 
 
@@ -473,7 +493,16 @@ def capacity(active: int, limit: int) -> dict:
 
 # JUSTIFICATION: one flat argument per top-level key of the document; `capacity` names the wire block.
 def assemble(  # pylint: disable=too-many-arguments,too-many-positional-arguments,redefined-outer-name
-    generated_at, show_all, capacity, projects, order, directives, assimilated, cortex_pending, focus
+    generated_at,
+    show_all,
+    total_projects,
+    capacity,
+    projects,
+    order,
+    directives,
+    assimilated,
+    cortex_pending,
+    focus,
 ) -> dict:
     """Assemble the `borg link --json` document from already-gathered data. Pure: no clock, no shell
     import, no os.environ.
@@ -487,11 +516,20 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
 
     A name in `order` that is absent from `projects` raises KeyError; callers must derive `order`
     from the same map they pass as `projects`.
+
+    `total_projects` (Phase 3, DOCUMENT_VERSION 2) is the count of the UNFILTERED, state-overlaid
+    registry -- NOT `len(order)` or `len(projects)`, both of which are post-archived-filter. The
+    document's `.order`/`.projects` alone cannot distinguish an empty registry from one that is
+    entirely archived (both emit `order: []`, `projects: {}`), yet the overview must print two
+    different sentences for those two cases. Deriving the overview's "no projects at all" branch
+    from `len(order)` is the single highest-probability Phase 3 bug: it renders correctly on nearly
+    every fixture and silently inverts on a real registry with any archived project.
     """
     return {
         "version": DOCUMENT_VERSION,
         "generated_at": generated_at,
         "show_all": show_all,
+        "total_projects": total_projects,
         "capacity": capacity,
         "order": order,
         "projects": {name: projects[name] for name in order},
