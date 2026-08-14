@@ -193,6 +193,21 @@ Python target next.
       every project stale inside a drone).
   - Verify: SKILL.md runs `borg link --json` first; fallback section states its trigger. Redeployed via
     `install.sh` and the **deployed** copy re-read to confirm.
+  - **Source-tree rewrite done 2026-08-14; box stays UNCHECKED until the owner redeploys.** The nanoprobe
+    that did the rewrite does not run `install.sh` or `borg setup` (both write outside the repo into
+    `$HOME/.claude` and the `claude-plugins` working tree, and `cmd_setup` is interactive). What remains,
+    owner-only, in one uninterrupted terminal block:
+    ```
+    borg setup && \
+      diff /Users/noah/dev/borg-collective/skills/borg-link/SKILL.md \
+           /Users/noah/.claude/skills/borg-link/SKILL.md && \
+      diff /Users/noah/dev/borg-collective/skills/borg-link/SKILL.md \
+           /Users/noah/dev/claude-plugins/borg-collective/skills/borg-link/SKILL.md && \
+      echo DEPLOY_OK
+    ```
+    — both diffs must be clean (Claude Code discovers `borg-link` twice: personal + plugin). Then a live
+    smoke of `/borg-link` and `/borg-link borg-collective`, pasted into the placeholder comment at the top
+    of `tests/skill_borg_link.bats`. Only after that: tick this box with the diff + smoke evidence.
 - [ ] **A7 — Regression.** Full bats suite + macOS contract leg green; per-module coverage `>= 90%` checked
       by hand on `coverage report -m`, not inferred from the global `--fail-under=90` (which is a total over
       `borg_core` and currently masks `recon/cli.py` at 82%).
