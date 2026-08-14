@@ -1,8 +1,315 @@
 {
+  "actions": {
+    "dbt#1201": {
+      "class": "readonly",
+      "command": "gh pr view 1201 --repo acme-co/dbt",
+      "label": "Drive/re-review CHANGES_REQUESTED."
+    },
+    "infra-repo#1101": {
+      "class": "readonly",
+      "command": "gh pr view 1101 --repo acme-co/infra-repo",
+      "label": "Atlantis-apply the PROD snowpipe promotion."
+    },
+    "policy-repo#101": {
+      "class": "readonly",
+      "command": "gh pr view 101 --repo acme-co/policy-repo",
+      "label": "Address CHANGES_REQUESTED review - keypair linchpin."
+    },
+    "policy-repo#108": {
+      "class": "confirm",
+      "command": "gh pr merge 108 --repo acme-co/policy-repo",
+      "label": "Merge the review-first project-gamma trio."
+    }
+  },
+  "edges": [
+    {
+      "child": "policy-repo#104",
+      "kind": "stacked",
+      "parent": "policy-repo#101"
+    },
+    {
+      "child": "policy-repo#105",
+      "kind": "stacked",
+      "parent": "policy-repo#104"
+    },
+    {
+      "child": "policy-repo#104",
+      "kind": "blocks",
+      "parent": "policy-repo#101"
+    },
+    {
+      "child": "policy-repo#108",
+      "kind": "stacked",
+      "parent": "policy-repo#107"
+    },
+    {
+      "child": "policy-repo#109",
+      "kind": "stacked",
+      "parent": "policy-repo#108"
+    },
+    {
+      "child": "policy-repo#110",
+      "kind": "stacked",
+      "parent": "policy-repo#109"
+    },
+    {
+      "child": "policy-repo#108",
+      "kind": "apex",
+      "parent": "policy-repo#106"
+    },
+    {
+      "child": "policy-repo#102",
+      "kind": "stacked",
+      "parent": "policy-repo#103"
+    },
+    {
+      "child": "policy-repo#102",
+      "kind": "blocks",
+      "parent": "infra-repo#1101"
+    }
+  ],
+  "items": [
+    {
+      "action_needed": "Drive/re-review CHANGES_REQUESTED.",
+      "blocked": true,
+      "bucket": "needs-you",
+      "changed": "2026-07-23T22:58:54Z",
+      "is_entrypoint": true,
+      "one_line": "",
+      "owner": "teammate1",
+      "project": "dbt - models & pipelines (misc)",
+      "ref": "dbt#1201",
+      "repo": "dbt",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "PROJ-1881: MCP tool call fact + attributes dim (segment -> DIM2)",
+      "urgency": 98,
+      "url": "https://github.com/acme-co/dbt/pull/1201"
+    },
+    {
+      "action_needed": "Atlantis-apply the PROD promotion after DEV validates.",
+      "blocked": true,
+      "bucket": "needs-you",
+      "changed": "2026-07-13T00:00:00Z",
+      "is_entrypoint": true,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project delta",
+      "ref": "infra-repo#1101",
+      "repo": "infra-repo",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "feat(snowpipe): shared prod bucket + broaden snowflake-snowpipe IAM read",
+      "urgency": 98,
+      "url": "https://github.com/acme-co/infra-repo/pull/1101"
+    },
+    {
+      "action_needed": "Address CHANGES_REQUESTED review - keypair linchpin.",
+      "blocked": true,
+      "bucket": "needs-you",
+      "changed": "2026-07-17T18:25:50Z",
+      "is_entrypoint": true,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project alpha",
+      "ref": "policy-repo#101",
+      "repo": "policy-repo",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "PROJ-1365 Keypair Phase 0: pure-Python lib primitives",
+      "urgency": 98,
+      "url": "https://github.com/acme-co/policy-repo/pull/101"
+    },
+    {
+      "action_needed": "BLOCKED on infra-repo#1101 - do not merge yet.",
+      "blocked": true,
+      "bucket": "review-queue",
+      "changed": "2026-07-07T19:21:14Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project delta",
+      "ref": "policy-repo#102",
+      "repo": "policy-repo",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "chore: add snowpipe shared-bucket storage integration allowed location",
+      "urgency": 60,
+      "url": "https://github.com/acme-co/policy-repo/pull/102"
+    },
+    {
+      "action_needed": "Review-first project-gamma trio - walk owners through #339/#340/#341, then merge.",
+      "blocked": false,
+      "bucket": "review-queue",
+      "changed": "2026-07-23T23:01:22Z",
+      "is_entrypoint": true,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project gamma",
+      "ref": "policy-repo#108",
+      "repo": "policy-repo",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "SME bot PAT self-service - per-owner MODIFY PAM grants (v1/Lee)",
+      "urgency": 60,
+      "url": "https://github.com/acme-co/policy-repo/pull/108"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "active-chains",
+      "changed": "2026-07-15T17:25:54Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project alpha",
+      "ref": "policy-repo#104",
+      "repo": "policy-repo",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "docs(keypair): correct Phase-0 lib status + Airflow keypair sourcing",
+      "urgency": 55,
+      "url": "https://github.com/acme-co/policy-repo/pull/104"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "active-chains",
+      "changed": "2026-07-15T19:41:22Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project alpha",
+      "ref": "policy-repo#105",
+      "repo": "policy-repo",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "docs(dcm): active incremental migration model (Option C) + keypair ref fix",
+      "urgency": 55,
+      "url": "https://github.com/acme-co/policy-repo/pull/105"
+    },
+    {
+      "action_needed": "Merge + apply after #339.",
+      "blocked": false,
+      "bucket": "review-queue",
+      "changed": "2026-07-23T23:01:58Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project gamma",
+      "ref": "policy-repo#109",
+      "repo": "policy-repo",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "New SME SageMaker bot provisioning pattern (v1/Lee)",
+      "urgency": 55,
+      "url": "https://github.com/acme-co/policy-repo/pull/109"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "standalone",
+      "changed": "2026-07-17T17:16:01Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "AE tooling",
+      "ref": "addon-plugins#11",
+      "repo": "addon-plugins",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "feat(work-plugin): stack-program skill (v1.4.0)",
+      "urgency": 30,
+      "url": "https://github.com/acme-co/addon-plugins/pull/11"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "collapsed-noise",
+      "changed": "2026-07-24T00:00:00Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "cairn - belief store",
+      "ref": "cairn#42",
+      "repo": "cairn",
+      "source": "github-pr",
+      "state": "MERGED",
+      "title": "release: bump cairn to 0.5.3",
+      "urgency": 30,
+      "url": "https://github.com/noah-goodrich/cairn/pull/42"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "collapsed-noise",
+      "changed": "2026-07-15T20:39:38Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "mart-repo - keypair auth",
+      "ref": "mart-repo#7",
+      "repo": "mart-repo",
+      "source": "github-pr",
+      "state": "MERGED",
+      "title": "feat: keypair (SNOWFLAKE_JWT) auth + devcontainer",
+      "urgency": 30,
+      "url": "https://github.com/acme-co/mart-repo/pull/7"
+    },
+    {
+      "action_needed": "",
+      "blocked": false,
+      "bucket": "active-chains",
+      "changed": "2026-07-16T17:21:32Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project delta",
+      "ref": "policy-repo#103",
+      "repo": "policy-repo",
+      "source": "github-pr",
+      "state": "MERGED",
+      "title": "docs(snowpipe): design-in dev-first rollout",
+      "urgency": 30,
+      "url": "https://github.com/acme-co/policy-repo/pull/103"
+    },
+    {
+      "action_needed": "Merge + apply after #339.",
+      "blocked": false,
+      "bucket": "review-queue",
+      "changed": "2026-07-23T23:03:20Z",
+      "is_entrypoint": false,
+      "one_line": "",
+      "owner": "noah-goodrich",
+      "project": "GRP - Project gamma",
+      "ref": "policy-repo#110",
+      "repo": "policy-repo",
+      "source": "github-pr",
+      "state": "OPEN",
+      "title": "DRAFT PAT rotation authentication policy for SME bots (v1/Lee)",
+      "urgency": 30,
+      "url": "https://github.com/acme-co/policy-repo/pull/110"
+    }
+  ],
   "meta": {
     "gathered_at": "2026-07-28T12:00:00Z",
+    "health": [
+      {
+        "check": "cairn",
+        "checked_at": "2026-07-28T12:00:00Z",
+        "detail": "db reachable, v0.5.4",
+        "machine": "fixture",
+        "status": "ok"
+      },
+      {
+        "check": "gather-repos",
+        "checked_at": "2026-07-28T12:00:00Z",
+        "detail": "jira adapter rate-limited, partial fetch",
+        "machine": "fixture",
+        "status": "warn"
+      }
+    ],
     "machine": "fixture",
-    "today": "2026-07-28",
     "repos": [
       "addon-plugins",
       "cairn",
@@ -11,313 +318,6 @@
       "mart-repo",
       "policy-repo"
     ],
-    "health": [
-      {
-        "check": "cairn",
-        "machine": "fixture",
-        "status": "ok",
-        "detail": "db reachable, v0.5.4",
-        "checked_at": "2026-07-28T12:00:00Z"
-      },
-      {
-        "check": "gather-repos",
-        "machine": "fixture",
-        "status": "warn",
-        "detail": "jira adapter rate-limited, partial fetch",
-        "checked_at": "2026-07-28T12:00:00Z"
-      }
-    ]
-  },
-  "items": [
-    {
-      "ref": "dbt#1201",
-      "project": "dbt - models & pipelines (misc)",
-      "repo": "dbt",
-      "source": "github-pr",
-      "title": "PROJ-1881: MCP tool call fact + attributes dim (segment -> DIM2)",
-      "state": "OPEN",
-      "changed": "2026-07-23T22:58:54Z",
-      "owner": "teammate1",
-      "url": "https://github.com/acme-co/dbt/pull/1201",
-      "urgency": 98,
-      "action_needed": "Drive/re-review CHANGES_REQUESTED.",
-      "is_entrypoint": true,
-      "blocked": true,
-      "bucket": "needs-you",
-      "one_line": ""
-    },
-    {
-      "ref": "infra-repo#1101",
-      "project": "GRP - Project delta",
-      "repo": "infra-repo",
-      "source": "github-pr",
-      "title": "feat(snowpipe): shared prod bucket + broaden snowflake-snowpipe IAM read",
-      "state": "OPEN",
-      "changed": "2026-07-13T00:00:00Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/infra-repo/pull/1101",
-      "urgency": 98,
-      "action_needed": "Atlantis-apply the PROD promotion after DEV validates.",
-      "is_entrypoint": true,
-      "blocked": true,
-      "bucket": "needs-you",
-      "one_line": ""
-    },
-    {
-      "ref": "policy-repo#101",
-      "project": "GRP - Project alpha",
-      "repo": "policy-repo",
-      "source": "github-pr",
-      "title": "PROJ-1365 Keypair Phase 0: pure-Python lib primitives",
-      "state": "OPEN",
-      "changed": "2026-07-17T18:25:50Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/policy-repo/pull/101",
-      "urgency": 98,
-      "action_needed": "Address CHANGES_REQUESTED review - keypair linchpin.",
-      "is_entrypoint": true,
-      "blocked": true,
-      "bucket": "needs-you",
-      "one_line": ""
-    },
-    {
-      "ref": "policy-repo#102",
-      "project": "GRP - Project delta",
-      "repo": "policy-repo",
-      "source": "github-pr",
-      "title": "chore: add snowpipe shared-bucket storage integration allowed location",
-      "state": "OPEN",
-      "changed": "2026-07-07T19:21:14Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/policy-repo/pull/102",
-      "urgency": 60,
-      "action_needed": "BLOCKED on infra-repo#1101 - do not merge yet.",
-      "is_entrypoint": false,
-      "blocked": true,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "policy-repo#108",
-      "project": "GRP - Project gamma",
-      "repo": "policy-repo",
-      "source": "github-pr",
-      "title": "SME bot PAT self-service - per-owner MODIFY PAM grants (v1/Lee)",
-      "state": "OPEN",
-      "changed": "2026-07-23T23:01:22Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/policy-repo/pull/108",
-      "urgency": 60,
-      "action_needed": "Review-first project-gamma trio - walk owners through #339/#340/#341, then merge.",
-      "is_entrypoint": true,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "policy-repo#104",
-      "project": "GRP - Project alpha",
-      "repo": "policy-repo",
-      "source": "github-pr",
-      "title": "docs(keypair): correct Phase-0 lib status + Airflow keypair sourcing",
-      "state": "OPEN",
-      "changed": "2026-07-15T17:25:54Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/policy-repo/pull/104",
-      "urgency": 55,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "policy-repo#105",
-      "project": "GRP - Project alpha",
-      "repo": "policy-repo",
-      "source": "github-pr",
-      "title": "docs(dcm): active incremental migration model (Option C) + keypair ref fix",
-      "state": "OPEN",
-      "changed": "2026-07-15T19:41:22Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/policy-repo/pull/105",
-      "urgency": 55,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "policy-repo#109",
-      "project": "GRP - Project gamma",
-      "repo": "policy-repo",
-      "source": "github-pr",
-      "title": "New SME SageMaker bot provisioning pattern (v1/Lee)",
-      "state": "OPEN",
-      "changed": "2026-07-23T23:01:58Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/policy-repo/pull/109",
-      "urgency": 55,
-      "action_needed": "Merge + apply after #339.",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "addon-plugins#11",
-      "project": "AE tooling",
-      "repo": "addon-plugins",
-      "source": "github-pr",
-      "title": "feat(work-plugin): stack-program skill (v1.4.0)",
-      "state": "OPEN",
-      "changed": "2026-07-17T17:16:01Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/addon-plugins/pull/11",
-      "urgency": 30,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "standalone",
-      "one_line": ""
-    },
-    {
-      "ref": "cairn#42",
-      "project": "cairn - belief store",
-      "repo": "cairn",
-      "source": "github-pr",
-      "title": "release: bump cairn to 0.5.3",
-      "state": "MERGED",
-      "changed": "2026-07-24T00:00:00Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/noah-goodrich/cairn/pull/42",
-      "urgency": 30,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "collapsed-noise",
-      "one_line": ""
-    },
-    {
-      "ref": "mart-repo#7",
-      "project": "mart-repo - keypair auth",
-      "repo": "mart-repo",
-      "source": "github-pr",
-      "title": "feat: keypair (SNOWFLAKE_JWT) auth + devcontainer",
-      "state": "MERGED",
-      "changed": "2026-07-15T20:39:38Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/mart-repo/pull/7",
-      "urgency": 30,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "collapsed-noise",
-      "one_line": ""
-    },
-    {
-      "ref": "policy-repo#103",
-      "project": "GRP - Project delta",
-      "repo": "policy-repo",
-      "source": "github-pr",
-      "title": "docs(snowpipe): design-in dev-first rollout",
-      "state": "MERGED",
-      "changed": "2026-07-16T17:21:32Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/policy-repo/pull/103",
-      "urgency": 30,
-      "action_needed": "",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    },
-    {
-      "ref": "policy-repo#110",
-      "project": "GRP - Project gamma",
-      "repo": "policy-repo",
-      "source": "github-pr",
-      "title": "DRAFT PAT rotation authentication policy for SME bots (v1/Lee)",
-      "state": "OPEN",
-      "changed": "2026-07-23T23:03:20Z",
-      "owner": "noah-goodrich",
-      "url": "https://github.com/acme-co/policy-repo/pull/110",
-      "urgency": 30,
-      "action_needed": "Merge + apply after #339.",
-      "is_entrypoint": false,
-      "blocked": false,
-      "bucket": "active-chains",
-      "one_line": ""
-    }
-  ],
-  "edges": [
-    {
-      "parent": "policy-repo#101",
-      "child": "policy-repo#104",
-      "kind": "stacked"
-    },
-    {
-      "parent": "policy-repo#104",
-      "child": "policy-repo#105",
-      "kind": "stacked"
-    },
-    {
-      "parent": "policy-repo#101",
-      "child": "policy-repo#104",
-      "kind": "blocks"
-    },
-    {
-      "parent": "policy-repo#107",
-      "child": "policy-repo#108",
-      "kind": "stacked"
-    },
-    {
-      "parent": "policy-repo#108",
-      "child": "policy-repo#109",
-      "kind": "stacked"
-    },
-    {
-      "parent": "policy-repo#109",
-      "child": "policy-repo#110",
-      "kind": "stacked"
-    },
-    {
-      "parent": "policy-repo#106",
-      "child": "policy-repo#108",
-      "kind": "apex"
-    },
-    {
-      "parent": "policy-repo#103",
-      "child": "policy-repo#102",
-      "kind": "stacked"
-    },
-    {
-      "parent": "infra-repo#1101",
-      "child": "policy-repo#102",
-      "kind": "blocks"
-    }
-  ],
-  "actions": {
-    "policy-repo#101": {
-      "label": "Address CHANGES_REQUESTED review - keypair linchpin.",
-      "command": "gh pr view 101 --repo acme-co/policy-repo",
-      "class": "readonly"
-    },
-    "policy-repo#108": {
-      "label": "Merge the review-first project-gamma trio.",
-      "command": "gh pr merge 108 --repo acme-co/policy-repo",
-      "class": "confirm"
-    },
-    "infra-repo#1101": {
-      "label": "Atlantis-apply the PROD snowpipe promotion.",
-      "command": "gh pr view 1101 --repo acme-co/infra-repo",
-      "class": "readonly"
-    },
-    "dbt#1201": {
-      "label": "Drive/re-review CHANGES_REQUESTED.",
-      "command": "gh pr view 1201 --repo acme-co/dbt",
-      "class": "readonly"
-    }
+    "today": "2026-07-28"
   }
 }
