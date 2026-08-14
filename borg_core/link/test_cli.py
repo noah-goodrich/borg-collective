@@ -228,6 +228,79 @@ def test_main_human_mode_clean_error_not_traceback_on_malformed_project_entry(is
     assert "Traceback" not in captured.err
 
 
+def test_main_json_mode_clean_error_not_traceback_on_malformed_project_entry(isolated_env, capsys):
+    # Before this fix, `--json`'s narrow `except (ValueError, OSError)` let a null project entry's
+    # AttributeError (core.py's `entry.get()`/`entry.items()`) fall through as a raw traceback on
+    # stdout -- verified live. `--json` must die exactly like the human modes: stderr only, empty
+    # stdout, no "Traceback".
+    _write_registry(isolated_env, {"foo": None})
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--json"])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("borg link: ")
+    assert "Traceback" not in captured.err
+
+
+def test_main_json_mode_clean_error_not_traceback_on_non_object_projects(isolated_env, capsys):
+    registry_file = isolated_env / "borg-dir" / "registry.json"
+    registry_file.write_text(json.dumps({"projects": [1, 2, 3]}), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--json"])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("borg link: ")
+    assert "Traceback" not in captured.err
+
+
+def test_main_json_mode_clean_error_not_traceback_on_non_object_registry_root(isolated_env, capsys):
+    registry_file = isolated_env / "borg-dir" / "registry.json"
+    registry_file.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--json"])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("borg link: ")
+    assert "Traceback" not in captured.err
+
+
+def test_main_human_mode_clean_error_not_traceback_on_non_object_projects(isolated_env, capsys):
+    registry_file = isolated_env / "borg-dir" / "registry.json"
+    registry_file.write_text(json.dumps({"projects": "nope"}), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--porcelain"])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("\033[0;31m▸ ERROR:\033[0m")
+    assert "Traceback" not in captured.err
+
+
+def test_main_human_mode_clean_error_not_traceback_on_non_object_registry_root(isolated_env, capsys):
+    registry_file = isolated_env / "borg-dir" / "registry.json"
+    registry_file.write_text(json.dumps("just a string"), encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--deep"])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("\033[0;31m▸ ERROR:\033[0m")
+    assert "Traceback" not in captured.err
+
+
 def test_main_porcelain_and_deep_render_through_render_py(isolated_env, capsys):
     path = _delta_workspace(isolated_env)
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle", "summary": "Delta."}})
