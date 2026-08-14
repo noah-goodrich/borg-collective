@@ -2053,16 +2053,17 @@ EOF
     [ "$output" = "0" ]
 }
 
-# KNOWN BUG, pinned deliberately. `criteria_done=$(grep -c ... || echo 0)` (borg.zsh:459) captures
-# BOTH grep's own "0" and the `|| echo 0` fallback when there is no match, because `grep -c` exits 1
-# on zero matches. The variable becomes the two-line string "0\n0" and the deep dive renders
+# FIXED BY THE PORT, as PROJECT_PLAN.md's signed Phase 1 deviation list records.
+# `criteria_done=$(grep -c ... || echo 0)` (borg.zsh:459) used to capture BOTH grep's own "0" and
+# the `|| echo 0` fallback when there was no match, because `grep -c` exits 1 on zero matches. The
+# shell variable became the two-line string "0\n0" and the deep dive rendered
 #   Progress: 0
 #   0/2 criteria met
 # across two lines. The golden fixture's leading `- [x]` is the only reason this never showed: a
-# fresh plan with nothing completed — the common case — hits it every time. borg.zsh:458 mangles
-# `criteria_total` the same way for a plan with no criteria at all. The port will "fix" this simply
-# by being written in Python, so it must show up as a deliberate deviation, not a silent change.
-@test "contract: link <project> deep dive renders Progress across two lines when no criteria are met" {
+# fresh plan with nothing completed — the common case — hit it every time. borg.zsh:458 mangled
+# `criteria_total` the same way for a plan with no criteria at all. `core.plan_progress` returns
+# ints, so the port renders this on one line, matching A4's amended text (cli_contract.bats:2078).
+@test "contract: link <project> deep dive renders Progress on one line when no criteria are met" {
     _link_mock_tmux ""
     local d="${BATS_TEST_TMPDIR}/ws/nox"
     mkdir -p "$d"
@@ -2086,7 +2087,7 @@ EOF
 
     local plain
     plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
-    [[ "$plain" == *"Progress: 0"$'\n'"0/2 criteria met"* ]] || false
+    [[ "$plain" == *"Progress: 0/2 criteria met"* ]] || false
 }
 
 @test "contract: link <project> dies non-zero on a project that is not registered" {
@@ -2099,27 +2100,27 @@ EOF
     [[ "$output" == *"Run: borg add"* ]] || false
 }
 
-# PIN, NOT ENDORSEMENT. borg.zsh:147 globs `(NOm)`: `om` is newest-first, and `O` REVERSES it, so the
-# deep dive's "Recently assimilated" currently lists the three OLDEST plans. It also disagrees with
-# _borg_collect_all_assimilated (filename DESC) which feeds the overview, so the two sections of one
-# command answer "recent" differently. PROJECT_PLAN.md records fixing this as an intentional
-# deviation during the port: when it is fixed, this test must FLIP (delta-d appears, delta-a leaves)
-# rather than quietly keep passing.
+# THE (NOm) FIX LANDED. borg.zsh's deep dive used to glob `(NOm)`: `om` is newest-first by mtime,
+# and `O` REVERSES it, so the deep dive's "Recently assimilated" used to list the three OLDEST
+# plans -- disagreeing with the overview's aggregate (filename DESC), so the two sections of one
+# command answered "recent" differently. PROJECT_PLAN.md's signed Phase 1 deviation list records
+# fixing this: borg_core/link/shell.py's read_assimilated sorts by filename DESC, the same key the
+# aggregate already used, giving the JSON contract one ordering instead of two.
 #
 # The 4-file ordering fixture lives HERE and not in the golden's workspace on purpose. If the golden
-# also encoded the buggy order, fixing the bug would force regenerating a parity golden mid-port —
-# exactly what A4 says is not a parity proof. This test is designed to flip; the golden is not.
-@test "contract: link <project> assimilated is currently OLDEST-first (pins the (NOm) bug)" {
+# also encoded the buggy order, fixing the bug would have forced regenerating a parity golden
+# mid-port -- exactly what A4 says is not a parity proof. This test was designed to flip and did.
+@test "contract: link <project> assimilated is newest-first by filename (the (NOm) fix)" {
     _link_setup_deep
     _link_build_deep_assim_ws
 
     run_zsh_borg link delta
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Delta shipped A"* ]] || false
+    [[ "$output" != *"Delta shipped A"* ]] || false
     [[ "$output" == *"Delta shipped B"* ]] || false
     [[ "$output" == *"Delta shipped C"* ]] || false
-    [[ "$output" != *"Delta shipped D"* ]] || false
-    [[ "$output" == *"Delta shipped A"*"Delta shipped C"* ]] || false
+    [[ "$output" == *"Delta shipped D"* ]] || false
+    [[ "$output" == *"Delta shipped D"*"Delta shipped C"* ]] || false
 }
 
 # ── mode 4/4: --brief ────────────────────────────────────────────────────────
@@ -2330,7 +2331,7 @@ EOF
 
     run bash -c "zsh '$BORG' link --json | jq -r '.version'"
     [ "$status" -eq 0 ]
-    [ "$output" = "1" ]
+    [ "$output" = "2" ]
 }
 
 @test "contract: link --json orders pinned first, then status, then last_activity ascending" {
