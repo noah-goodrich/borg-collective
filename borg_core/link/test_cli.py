@@ -83,26 +83,26 @@ def _delta_workspace(root):
 def test_run_emits_exactly_one_line_of_parseable_json_on_stdout(isolated_env, capsys):
     _write_registry(isolated_env, {})
 
-    exit_code = cli._run("", False, True)  # pylint: disable=protected-access
+    exit_code = cli._run("", False, "json")  # pylint: disable=protected-access
 
     assert exit_code == 0
     captured = capsys.readouterr()
     assert captured.err == ""
     assert captured.out.count("\n") == 1
     doc = json.loads(captured.out)
-    assert doc["version"] == 1
+    assert doc["version"] == 2
 
 
-def test_run_without_json_flag_dies_on_stderr(isolated_env, capsys):
-    _write_registry(isolated_env, {})
+def test_run_overview_mode_renders_the_human_table(isolated_env, capsys):
+    _write_registry(isolated_env, {"solo": {"status": "idle", "last_activity": "2026-08-01T00:00:00Z"}})
 
-    with pytest.raises(SystemExit) as exc_info:
-        cli._run("", False, False)  # pylint: disable=protected-access
+    exit_code = cli._run("", False, "overview")  # pylint: disable=protected-access
 
-    assert exc_info.value.code == 1
+    assert exit_code == 0
     captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err.startswith("borg link: ")
+    assert captured.err == ""
+    assert "THE BORG COLLECTIVE" in captured.out
+    assert "solo" in captured.out
 
 
 def test_run_reads_the_wall_clock_exactly_once_per_document(isolated_env, monkeypatch, capsys):
@@ -116,7 +116,7 @@ def test_run_reads_the_wall_clock_exactly_once_per_document(isolated_env, monkey
 
     monkeypatch.setattr(shell, "now_epoch", counting_now)
 
-    cli._run("", False, True)  # pylint: disable=protected-access
+    cli._run("", False, "json")  # pylint: disable=protected-access
 
     assert calls["n"] == 1
     doc = json.loads(capsys.readouterr().out)
@@ -129,7 +129,7 @@ def test_run_resolves_the_registry_from_borg_dir_with_no_env_override(isolated_e
     # exercises paths.registry_path()'s BORG_DIR-derived fallback.
     _write_registry(isolated_env, {"solo": {"status": "idle"}})
 
-    cli._run("", False, True)  # pylint: disable=protected-access
+    cli._run("", False, "json")  # pylint: disable=protected-access
 
     doc = json.loads(capsys.readouterr().out)
     assert "solo" in doc["order"]
@@ -139,7 +139,7 @@ def test_run_focus_block_for_a_named_project(isolated_env, capsys):
     path = _delta_workspace(isolated_env)
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle"}})
 
-    cli._run("delta", False, True)  # pylint: disable=protected-access
+    cli._run("delta", False, "json")  # pylint: disable=protected-access
 
     doc = json.loads(capsys.readouterr().out)
     focus = doc["focus"]
@@ -169,7 +169,7 @@ def test_run_focus_plan_is_null_when_the_project_has_no_project_plan(isolated_en
     path = _project_dir(isolated_env, "noplan")
     _write_registry(isolated_env, {"noplan": {"path": path, "status": "idle"}})
 
-    cli._run("noplan", False, True)  # pylint: disable=protected-access
+    cli._run("noplan", False, "json")  # pylint: disable=protected-access
 
     doc = json.loads(capsys.readouterr().out)
     assert doc["focus"]["plan"] is None
@@ -177,11 +177,24 @@ def test_run_focus_plan_is_null_when_the_project_has_no_project_plan(isolated_en
     assert doc["focus"]["entry"] is not None
 
 
-def test_run_focus_unknown_project_dies_with_the_deep_dive_message(isolated_env, capsys):
+def test_run_focus_unknown_project_raises_project_not_found(isolated_env):
+    # `_run`/`_document`/`_focus` stay mode-agnostic: they RAISE rather than dying. Only `main`'s
+    # single exception boundary knows the mode and picks a `_die*` format -- see
+    # test_main_json_unknown_project_dies_with_the_deep_dive_message and
+    # test_main_human_mode_unknown_project_dies_via_die_human below.
+    _write_registry(isolated_env, {})
+
+    with pytest.raises(cli.ProjectNotFound) as exc_info:
+        cli._run("nope", False, "json")  # pylint: disable=protected-access
+
+    assert exc_info.value.project == "nope"
+
+
+def test_main_json_unknown_project_dies_with_the_deep_dive_message(isolated_env, capsys):
     _write_registry(isolated_env, {})
 
     with pytest.raises(SystemExit) as exc_info:
-        cli._run("nope", False, True)  # pylint: disable=protected-access
+        cli.main(["--json", "--", "nope"])
 
     assert exc_info.value.code == 1
     captured = capsys.readouterr()
@@ -189,11 +202,54 @@ def test_run_focus_unknown_project_dies_with_the_deep_dive_message(isolated_env,
     assert "project 'nope' not in registry. Run: borg add [path]" in captured.err
 
 
+def test_main_human_mode_unknown_project_dies_via_die_human(isolated_env, capsys):
+    _write_registry(isolated_env, {})
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--deep", "--", "nope"])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("\033[0;31m▸ ERROR:\033[0m")
+    assert "project 'nope' not in registry. Run: borg add [path]" in captured.err
+
+
+def test_main_human_mode_clean_error_not_traceback_on_malformed_project_entry(isolated_env, capsys):
+    _write_registry(isolated_env, {"foo": None})
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--porcelain"])
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith("\033[0;31m▸ ERROR:\033[0m")
+    assert "Traceback" not in captured.err
+
+
+def test_main_porcelain_and_deep_render_through_render_py(isolated_env, capsys):
+    path = _delta_workspace(isolated_env)
+    _write_registry(isolated_env, {"delta": {"path": path, "status": "idle", "summary": "Delta."}})
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--porcelain"])
+    assert exc_info.value.code == 0
+    out = capsys.readouterr().out
+    assert out.startswith("delta\t")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--deep", "--", "delta"])
+    assert exc_info.value.code == 0
+    out = capsys.readouterr().out
+    assert "Session ID:" in out
+
+
 def test_run_focus_finds_an_archived_project_even_without_all(isolated_env, capsys):
     path = _project_dir(isolated_env, "delta")
     _write_registry(isolated_env, {"delta": {"path": path, "status": "archived"}})
 
-    exit_code = cli._run("delta", False, True)  # pylint: disable=protected-access
+    exit_code = cli._run("delta", False, "json")  # pylint: disable=protected-access
 
     assert exit_code == 0
     doc = json.loads(capsys.readouterr().out)
