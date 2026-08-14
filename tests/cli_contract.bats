@@ -2053,16 +2053,17 @@ EOF
     [ "$output" = "0" ]
 }
 
-# KNOWN BUG, pinned deliberately. `criteria_done=$(grep -c ... || echo 0)` (borg.zsh:459) captures
-# BOTH grep's own "0" and the `|| echo 0` fallback when there is no match, because `grep -c` exits 1
-# on zero matches. The variable becomes the two-line string "0\n0" and the deep dive renders
+# FIXED BY THE PORT, as PROJECT_PLAN.md's signed Phase 1 deviation list records.
+# `criteria_done=$(grep -c ... || echo 0)` (borg.zsh:459) used to capture BOTH grep's own "0" and
+# the `|| echo 0` fallback when there was no match, because `grep -c` exits 1 on zero matches. The
+# shell variable became the two-line string "0\n0" and the deep dive rendered
 #   Progress: 0
 #   0/2 criteria met
 # across two lines. The golden fixture's leading `- [x]` is the only reason this never showed: a
-# fresh plan with nothing completed — the common case — hits it every time. borg.zsh:458 mangles
-# `criteria_total` the same way for a plan with no criteria at all. The port will "fix" this simply
-# by being written in Python, so it must show up as a deliberate deviation, not a silent change.
-@test "contract: link <project> deep dive renders Progress across two lines when no criteria are met" {
+# fresh plan with nothing completed — the common case — hit it every time. borg.zsh:458 mangled
+# `criteria_total` the same way for a plan with no criteria at all. `core.plan_progress` returns
+# ints, so the port renders this on one line, matching A4's amended text (cli_contract.bats:2078).
+@test "contract: link <project> deep dive renders Progress on one line when no criteria are met" {
     _link_mock_tmux ""
     local d="${BATS_TEST_TMPDIR}/ws/nox"
     mkdir -p "$d"
@@ -2086,7 +2087,7 @@ EOF
 
     local plain
     plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
-    [[ "$plain" == *"Progress: 0"$'\n'"0/2 criteria met"* ]] || false
+    [[ "$plain" == *"Progress: 0/2 criteria met"* ]] || false
 }
 
 @test "contract: link <project> dies non-zero on a project that is not registered" {
@@ -2099,27 +2100,83 @@ EOF
     [[ "$output" == *"Run: borg add"* ]] || false
 }
 
-# PIN, NOT ENDORSEMENT. borg.zsh:147 globs `(NOm)`: `om` is newest-first, and `O` REVERSES it, so the
-# deep dive's "Recently assimilated" currently lists the three OLDEST plans. It also disagrees with
-# _borg_collect_all_assimilated (filename DESC) which feeds the overview, so the two sections of one
-# command answer "recent" differently. PROJECT_PLAN.md records fixing this as an intentional
-# deviation during the port: when it is fixed, this test must FLIP (delta-d appears, delta-a leaves)
-# rather than quietly keep passing.
+# THE (NOm) FIX LANDED. borg.zsh's deep dive used to glob `(NOm)`: `om` is newest-first by mtime,
+# and `O` REVERSES it, so the deep dive's "Recently assimilated" used to list the three OLDEST
+# plans -- disagreeing with the overview's aggregate (filename DESC), so the two sections of one
+# command answered "recent" differently. PROJECT_PLAN.md's signed Phase 1 deviation list records
+# fixing this: borg_core/link/shell.py's read_assimilated sorts by filename DESC, the same key the
+# aggregate already used, giving the JSON contract one ordering instead of two.
 #
 # The 4-file ordering fixture lives HERE and not in the golden's workspace on purpose. If the golden
-# also encoded the buggy order, fixing the bug would force regenerating a parity golden mid-port —
-# exactly what A4 says is not a parity proof. This test is designed to flip; the golden is not.
-@test "contract: link <project> assimilated is currently OLDEST-first (pins the (NOm) bug)" {
+# also encoded the buggy order, fixing the bug would have forced regenerating a parity golden
+# mid-port -- exactly what A4 says is not a parity proof. This test was designed to flip and did.
+@test "contract: link <project> assimilated is newest-first by filename (the (NOm) fix)" {
     _link_setup_deep
     _link_build_deep_assim_ws
 
     run_zsh_borg link delta
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Delta shipped A"* ]] || false
+    [[ "$output" != *"Delta shipped A"* ]] || false
     [[ "$output" == *"Delta shipped B"* ]] || false
     [[ "$output" == *"Delta shipped C"* ]] || false
-    [[ "$output" != *"Delta shipped D"* ]] || false
-    [[ "$output" == *"Delta shipped A"*"Delta shipped C"* ]] || false
+    [[ "$output" == *"Delta shipped D"* ]] || false
+    [[ "$output" == *"Delta shipped D"*"Delta shipped C"* ]] || false
+}
+
+# THE EMPTY-DATE FIX. Reproduced against the owner's real registry post-merge, NOT by any fixture in
+# this file: zsh's `IFS=$'\t' read -r slug title ship aproject` COLLAPSES consecutive tabs (tab is a
+# whitespace IFS char), so a plan with no "Shipped:" line shifted `project` left into `ship`'s slot
+# and rendered a bare, empty "()" after the title. See PROJECT_PLAN.md's A4 fourth deviation.
+#
+# A DEDICATED workspace/registry, not _link_build_overview_ws / _link_registry_overview: every
+# assimilated fixture those builders feed carries a "Shipped:" line (see their own docstrings), and
+# adding a Shipped:-less file to either would perturb link-overview.golden / link-overview-all.golden
+# / link-deep.golden, which A4 forbids. "kilo" exists ONLY here. Two files so the aggregate section
+# also proves a PRESENT ship date still renders its parens (the title-trailing-"(K1)" is verbatim
+# title text, never the date's parens, and must survive untouched).
+_link_build_noshipdate_ws() {
+    local root="${BATS_TEST_TMPDIR}/ws-noshipdate"
+    mkdir -p "$root/kilo/docs/plans/assimilated"
+    printf '# Kilo unshipped (K1)\n' > "$root/kilo/docs/plans/assimilated/2026-05-02-kilo-noshipdate.md"
+    printf '# Kilo shipped\nShipped: 2026-05-01\n' > "$root/kilo/docs/plans/assimilated/2026-05-01-kilo-dated.md"
+}
+
+_link_registry_noshipdate() {
+    local root="${BATS_TEST_TMPDIR}/ws-noshipdate"
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "kilo": {"path": "$root/kilo", "source": "cli", "status": "idle",
+             "summary": "Kilo has one assimilated plan with no Shipped: line."}
+  }
+}
+EOF
+}
+
+@test "contract: link overview assimilated omits parens when a plan has no Shipped: date" {
+    _link_mock_tmux ""
+    _link_build_noshipdate_ws
+    _link_registry_noshipdate
+
+    run_zsh_borg link
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"[kilo] Kilo unshipped (K1)"$'\033''[0m'* ]] || false
+    [[ "$output" != *"[kilo] Kilo unshipped (K1) ("* ]] || false
+    [[ "$output" == *"[kilo] Kilo shipped (2026-05-01)"* ]] || false
+    [[ "$output" != *"()"* ]] || false
+}
+
+@test "contract: link <project> deep dive assimilated omits parens when a plan has no Shipped: date" {
+    _link_mock_tmux ""
+    _link_build_noshipdate_ws
+    _link_registry_noshipdate
+
+    run_zsh_borg link kilo
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Kilo unshipped (K1)"$'\033''[0m'* ]] || false
+    [[ "$output" != *"Kilo unshipped (K1) ("* ]] || false
+    [[ "$output" == *"Kilo shipped (2026-05-01)"* ]] || false
+    [[ "$output" != *"()"* ]] || false
 }
 
 # ── mode 4/4: --brief ────────────────────────────────────────────────────────
@@ -2330,7 +2387,7 @@ EOF
 
     run bash -c "zsh '$BORG' link --json | jq -r '.version'"
     [ "$status" -eq 0 ]
-    [ "$output" = "1" ]
+    [ "$output" = "2" ]
 }
 
 @test "contract: link --json orders pinned first, then status, then last_activity ascending" {
@@ -2565,4 +2622,84 @@ EOF
     run bash -c "env BORG_NO_REAP=1 zsh '$BORG' link --json | jq -r '.projects.stale1.status'"
     [ "$status" -eq 0 ]
     [ "$output" = "active" ]
+}
+
+# ── Phase 3 (A4+A5) verification ────────────────────────────────────────────
+#
+# A5's original verify ("grep -c 'cmd_link' borg.zsh returns 0") is the weakest possible form of its
+# own criterion: satisfiable while 8 of 9 functions linger as orphaned dead code, satisfiable by a
+# pure rename, three of its six matches were COMMENTS (so it can go red on prose after a perfect
+# deletion, or green by editing prose while code survives), and `grep -c` EXITS 1 on a zero count --
+# as literally written it signals failure exactly when it passes. These three tests replace it.
+
+# Check 1: definition-anchored, repo-wide absence. Catches a rename or a relocation grep alone would
+# miss if it only scanned for the bare string "cmd_link".
+@test "contract: the nine deleted link helpers are absent as function definitions repo-wide" {
+    run bash -c "grep -rnE '^[[:space:]]*(function[[:space:]]+)?(cmd_link|_borg_link_porcelain|_borg_link_overview|_borg_link_deep|_borg_cortex_pending|_borg_cortex_countdown|_borg_collect_all_directives|_borg_collect_all_assimilated|_borg_read_assimilated)[[:space:]]*\\(\\)' '$BORG_HOME/borg.zsh' '$BORG_HOME'/lib/*.zsh"
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+# Check 2: runtime absence via `whence -w`, which catches a helper relocated into lib/*.zsh (sourced
+# by glob) or defined via eval -- grep on borg.zsh alone cannot see either. The SAME test asserts the
+# positive half: _borg_read_directives, cmd_ls and cmd_watch must SURVIVE (cmd_next:1106 still calls
+# _borg_read_directives). Verified on the pre-flip tree to print "STILL DEFINED" for 9/9; this must be
+# green only after a real deletion.
+@test "contract: the nine deleted link helpers are undefined at runtime, and their survivors are not" {
+    run zsh -c "set -- help; source '$BORG_HOME/borg.zsh' >/dev/null 2>&1
+        for f in cmd_link _borg_link_porcelain _borg_link_overview _borg_link_deep \
+                 _borg_cortex_pending _borg_cortex_countdown _borg_collect_all_directives \
+                 _borg_collect_all_assimilated _borg_read_assimilated; do
+            whence -w \$f >/dev/null 2>&1 && { print -r -- \"STILL DEFINED: \$f\"; exit 1; }
+        done
+        for f in _borg_read_directives cmd_ls cmd_watch; do
+            whence -w \$f >/dev/null 2>&1 || { print -r -- \"MISSING: \$f\"; exit 1; }
+        done
+        exit 0"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+# Check 3: positive non-vacuity. The only one of the three that proves the renderer actually MOVED
+# rather than being renamed, re-pointed, or left behind a surviving zsh fallback. Injects a python3
+# that exits non-zero via BORG_PATH_PREFIX (the same seam cli_contract.bats:724 uses) and asserts all
+# three human modes fail. On the pre-flip tree (zero python3 dependency in any human mode) this was
+# RED; it can only pass after a real flip with no zsh renderer left standing behind the dispatch.
+@test "contract: all three human link modes fail when python3 is unavailable" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+        > "$BORG_REGISTRY"
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    cat > "$MOCK_BIN/python3" <<'EOF'
+#!/usr/bin/env bash
+exit 1
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    run_zsh_borg link
+    [ "$status" -ne 0 ]
+
+    run_zsh_borg link --porcelain
+    [ "$status" -ne 0 ]
+
+    run_zsh_borg link solo
+    [ "$status" -ne 0 ]
+}
+
+# The fzf split-brain tripwire. After the flip, cmd_ls (borg.zsh:539-551 in the pre-flip numbering)
+# is the LAST surviving zsh copy of a sort whose authority now lives in core.order_projects. All
+# three jq copies were byte-identical before the deletion, so there is no disagreement on flip day --
+# this is the tripwire for the day someone changes one sort and not the other.
+@test "contract: cmd_ls --porcelain column 1 still agrees with link --json .order after the flip" {
+    _link_setup_porcelain
+
+    run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_ls --porcelain\" | awk -F'\t' '{ print \$1 }' | paste -sd, -"
+    [ "$status" -eq 0 ]
+    local ls_order="$output"
+    [ -n "$ls_order" ]
+
+    run bash -c "zsh '$BORG' link --json | jq -r '.order | join(\",\")'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$ls_order" ]
 }
