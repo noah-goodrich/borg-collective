@@ -186,7 +186,8 @@ Python target next.
        no caller survives. The five provenance comments above are the intended, permanent reason
        this second command must strip comments before matching, not evidence of an incomplete
        deletion.
-- [ ] **A6 — `/borg-link` consumes `borg link --json`.**
+- [x] **A6 — `/borg-link` consumes `borg link --json`.** *(Done 2026-08-14 — owner redeployed; both deployed
+      copies verified identical to source.)*
       Rewritten as a synthesis layer matching `/borg-recon`'s shape. The direct-file-read path survives only
       as the drone-container fallback, with its trigger condition stated verbatim, `has_live_window: null`,
       and **no** staleness downgrade (no-tmux is indistinguishable from no-window; a naive fallback marks
@@ -208,10 +209,20 @@ Python target next.
     — both diffs must be clean (Claude Code discovers `borg-link` twice: personal + plugin). Then a live
     smoke of `/borg-link` and `/borg-link borg-collective`, pasted into the placeholder comment at the top
     of `tests/skill_borg_link.bats`. Only after that: tick this box with the diff + smoke evidence.
-- [ ] **A7 — Regression.** Full bats suite + macOS contract leg green; per-module coverage `>= 90%` checked
+- [x] **A7 — Regression.** *(Done 2026-08-14, against the final tree at `7d4a129`, after A6's deploy.)*
+      Full bats suite + macOS contract leg green; per-module coverage `>= 90%` checked
       by hand on `coverage report -m`, not inferred from the global `--fail-under=90` (which is a total over
       `borg_core` and currently masks `recon/cli.py` at 82%).
   - Verify: `bats tests/*.bats` exits 0; `coverage report -m` shows every `borg_core/link/*.py` at `>= 90%`.
+  - **Measured 2026-08-14 on `7d4a129`**: `bats tests/*.bats` **649/649**; macOS contract leg green in CI on
+    [#138](https://github.com/noah-goodrich/borg-collective/pull/138). Per-module, read by hand off
+    `coverage report -m` rather than inferred: `core.py` **100%**, `shell.py` **100%**, `render.py` **99%**
+    (lines 103, 150), `cli.py` **98%** (lines 151, 191), `__init__.py` 100%. 387 pytest.
+  - **The global figure remains untrustworthy and this tick does not endorse it.** `coverage report -m`
+    prints TOTAL 99%, but `omit = ["**/tests/**"]` matches nothing — tests are colocated as
+    `borg_core/<pkg>/test_*.py`, so test files are grading themselves and inflating the total. That is
+    exactly why A7 was written to demand per-module numbers by hand. The mechanical fix is filed as
+    `docs/plans/directives/2026-08-13-coverage-gate-measures-the-wrong-thing.md`.
   - **Un-ticked 2026-08-13 after being marked done during Phase 3.** A7 is this plan's CLOSING gate, not a
     per-phase check. A6 rewrites `skills/borg-link/SKILL.md` and requires an `install.sh` redeploy, so any
     regression evidence gathered before A6 lands is stale by construction. It also carried the wrong count
