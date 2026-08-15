@@ -10,9 +10,20 @@
 # Samples land at $BORG_USAGE_SAMPLES (default ~/.local/state/borg/usage-samples.jsonl).
 # Log lives at $BORG_USAGE_LOG (default ~/.local/state/borg/usage-watch.log).
 #
+# ── ADAPTIVE CADENCE ──────────────────────────────────────────────────────────────
+# launchd wakes this script every 60s (see launchd/com.stillpoint-labs.borg.usage-watch.plist) —
+# cheap, no Claude session. Whether that wake turns into a real PROBE (`claude -p "/usage"`, the
+# expensive part) is decided here, script-side, by _probe_due: due every BORG_USAGE_BASE_INTERVAL
+# (120s) below BORG_USAGE_FAST_PCT, every BORG_USAGE_FAST_INTERVAL (60s) at/above it. An
+# invocation that is not due exits 0 immediately and writes NOTHING — no samples row, no guardian
+# state, no log line beyond the one "not due" note. This means gaps in the samples file at ~60s
+# spacing during quiet periods are EXPECTED, not silence — see the contract below for what still
+# counts as "the poller did not run."
+#
 # ── ROW SCHEMA (self-auditing contract) ──────────────────────────────────────────
-# EVERY poll appends exactly one JSONL row to $BORG_USAGE_SAMPLES. Silence in the samples
-# file has exactly one meaning: the poller did not run at all (e.g. launchd job disabled).
+# EVERY invocation that decides to PROBE appends exactly one JSONL row to $BORG_USAGE_SAMPLES.
+# Total silence for longer than BORG_USAGE_BASE_INTERVAL (no row AND no "not due" log line) has
+# exactly one meaning: the poller did not run at all (e.g. launchd job disabled).
 # All rows have `ts` (ISO8601 UTC) and `status`. `pane_count` (integer) is present on every
 # row.
 #
@@ -77,6 +88,25 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
 SAMPLES="${BORG_USAGE_SAMPLES:-$STATE_DIR/usage-samples.jsonl}"
 LOG="${BORG_USAGE_LOG:-$STATE_DIR/usage-watch.log}"
 
+# Gap 3 (adaptive cadence, directive: "StartInterval 120 dropping to 60 ... prefer script-managed
+# cadence, one plist"). The plist's StartInterval is 60 — cheap, no Claude session, no transcript.
+# The EXPENSIVE thing is the probe itself (`claude -p "/usage"`), so cadence is gated on that, here,
+# before any probe runs — not by varying the plist. Below BORG_USAGE_FAST_PCT the poller is due
+# every BORG_USAGE_BASE_INTERVAL (120s, matching the OLD StartInterval — baseline probe volume is
+# unchanged); at/above it, due every BORG_USAGE_FAST_INTERVAL (60s). See _probe_due below for the
+# fail-open contract on a missing/unparseable/future last-sample timestamp.
+BORG_USAGE_BASE_INTERVAL="${BORG_USAGE_BASE_INTERVAL:-120}"
+BORG_USAGE_FAST_PCT="${BORG_USAGE_FAST_PCT:-70}"
+BORG_USAGE_FAST_INTERVAL="${BORG_USAGE_FAST_INTERVAL:-60}"
+
+# One-shot bypass for the due-check: `install.sh` touches this sentinel immediately before
+# `launchctl kickstart`, so its "did the poller just produce output" health check still forces a
+# real probe even when the cadence gate would otherwise (correctly) skip it. A launchd job's
+# EnvironmentVariables come only from the plist, never from the shell that issued `kickstart`, so
+# an env var set by install.sh cannot reach the job — a shared sentinel FILE is the only channel
+# that works across that boundary. Consumed (deleted) on use, so it forces exactly one probe.
+FORCE_PROBE_FILE="${BORG_USAGE_FORCE_PROBE_FILE:-$STATE_DIR/usage-watch.force-probe}"
+
 CLAUDE_BIN="${BORG_USAGE_CLAUDE_BIN:-claude}"
 
 # Every `claude -p` invocation persists a session transcript. This poller runs with cwd="/" (no
@@ -107,6 +137,53 @@ log() {
     echo "$line" >> "$LOG"
     (( DEBUG )) && echo "$line" >&2
     return 0
+}
+
+# ISO-8601 UTC -> epoch, both date dialects (mirrors hooks/borg-dispatch-guard.sh's _iso_to_epoch).
+# Unparseable -> 0, and 0 is the caller's signal to fail OPEN (treat as due), never to skip.
+_iso_to_epoch() {
+    TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s 2>/dev/null \
+        || date -u -d "$1" +%s 2>/dev/null \
+        || echo 0
+}
+
+# Gap 3's due-check. Returns success (0) when a real probe should run, failure (1) when this
+# invocation should skip it. FAIL OPEN on every uncertainty — no samples file, an empty last line,
+# a missing/unparseable ts, or a future ts (clock skew) — because a due-check that silently never
+# fires again is exactly this poller's most-repeated failure mode (see the ROW SCHEMA history
+# above: USER unset, PATH missing .local/bin, output="" masking binary_not_found — every one of
+# those was "the poller looks fine but samples nothing," and this must not become a fifth).
+_probe_due() {
+    local now_epoch="$1"
+    [[ -f "$SAMPLES" ]] || return 0
+
+    local last
+    last=$(tail -n 1 "$SAMPLES" 2>/dev/null) || last=""
+    [[ -n "$last" ]] || return 0
+
+    local last_ts
+    last_ts=$(printf '%s' "$last" | jq -r '.ts // ""' 2>/dev/null) || last_ts=""
+    [[ -n "$last_ts" ]] || return 0
+
+    local last_epoch
+    last_epoch=$(_iso_to_epoch "$last_ts")
+    [[ "$last_epoch" -gt 0 ]] || return 0
+
+    local age=$(( now_epoch - last_epoch ))
+    # Negative age (future ts / clock skew) is suspicious, not a licence to skip forever -> due.
+    (( age < 0 )) && return 0
+
+    local last_status last_pct
+    last_status=$(printf '%s' "$last" | jq -r '.status // ""' 2>/dev/null) || last_status=""
+    last_pct=$(printf '%s' "$last" | jq -r \
+        'if (.session_pct|type) == "number" then (.session_pct|floor) else "" end' 2>/dev/null) || last_pct=""
+
+    local interval="$BORG_USAGE_BASE_INTERVAL"
+    if [[ "$last_status" == "ok" ]] && [[ "$last_pct" =~ ^[0-9]+$ ]] && (( last_pct >= BORG_USAGE_FAST_PCT )); then
+        interval="$BORG_USAGE_FAST_INTERVAL"
+    fi
+
+    (( age >= interval ))
 }
 
 # Count tmux panes running Claude Code.
@@ -306,7 +383,20 @@ _run_sweep() {
     return 0
 }
 
-ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+now_epoch="${BORG_USAGE_NOW_EPOCH:-$(date +%s)}"
+
+if [[ -f "$FORCE_PROBE_FILE" ]]; then
+    rm -f "$FORCE_PROBE_FILE"
+    log "cadence: forced probe (one-shot sentinel present) — bypassing due-check"
+elif ! _probe_due "$now_epoch"; then
+    log "cadence: not due yet — skipping probe (baseline ${BORG_USAGE_BASE_INTERVAL}s, fast ${BORG_USAGE_FAST_INTERVAL}s at >=${BORG_USAGE_FAST_PCT}%)"
+    exit 0
+fi
+
+# Derived from the same now_epoch the due-check used (not a fresh `date` call), so tests can drive
+# both consistently via BORG_USAGE_NOW_EPOCH. Two-dialect date, same pattern as elsewhere in this
+# file (macOS `-r`, GNU `-d @`).
+ts=$(date -u -r "$now_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$now_epoch" +%Y-%m-%dT%H:%M:%SZ)
 pane_count=$(_claude_pane_count)
 [[ -z "$pane_count" ]] && pane_count=0
 
