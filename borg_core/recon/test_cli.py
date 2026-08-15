@@ -115,3 +115,97 @@ def test_die_writes_to_stderr_and_exits(capsys):
         cli._die("boom")
     assert exc.value.code == 1
     assert "boom" in capsys.readouterr().err
+
+
+def _item(project, ref, state="open", owner="agent", urgency="fyi", action_needed=False):
+    return {
+        "project": project,
+        "source": "demo",
+        "ref": ref,
+        "title": ref,
+        "state": state,
+        "changed": "2025-01-01T00:00:00Z",
+        "one_line": f"{ref} {state}",
+        "owner": owner,
+        "action_needed": action_needed,
+        "urgency": urgency,
+    }
+
+
+def test_run_json_output_detects_contradiction_end_to_end(isolated_env, capsys):
+    """AC1: drive _collect_contradictions through cli._run's real fan-out path, not a direct call.
+
+    A checkpoint on disk lists PR-42 as a blocker; the adapter reports it resolved. Before this
+    test, every existing test left by_project empty for every project, so the `if not items:
+    continue` branch always fired and read_checkpoint_blockers()/project_contradictions() never
+    ran (arc 48->50). This test forces a non-empty items list for a project that also has a real
+    checkpoint on disk, so the full chain executes.
+    """
+    tmp, adapters_dir = isolated_env
+    project_dir = tmp / "alpha"
+    checkpoints_dir = project_dir / ".borg" / "checkpoints"
+    checkpoints_dir.mkdir(parents=True)
+    (checkpoints_dir / "2025-01-01-0000.md").write_text(
+        "# Checkpoint\n\n## 4. Blockers\n- PR-42 still blocking release\n\n## 5. Next\n- n/a\n"
+    )
+    item = _item("alpha", "PR-42", state="resolved")
+    _make_executable(
+        adapters_dir / "recon-adapter-demo",
+        f'#!/usr/bin/env bash\ncat <<\'JSON\'\n{{"source":"demo","summary":"ok","items":[{json.dumps(item)}]}}\nJSON\n',
+    )
+
+    exit_code = cli._run("2025-01-01T00:00:00Z", "", "", True, False)
+    doc = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert len(doc["contradictions"]) == 1
+    contradiction = doc["contradictions"][0]
+    assert contradiction["project"] == "alpha"
+    assert contradiction["ref"] == "PR-42"
+    assert "checkpoint" in contradiction["checkpoint_says"]
+    assert "resolved" in contradiction["source_says"]
+
+
+def test_run_projects_filter_excludes_other_projects_end_to_end(tmp_path, monkeypatch, capsys):
+    """AC2: drive _filter_by_project through cli._run with an adapter that over-returns items.
+
+    Before this test, every existing test passed keep_names=None/empty, so only the early-return
+    path (`if not keep_names: return by_project`) ever ran; the actual filter (lines 61-62) was
+    unverified. Here the registry only has 'alpha', but the adapter deliberately also emits an item
+    for 'beta' (simulating an adapter that over-returns for other projects) to prove --projects is
+    authoritative even over adapter output, not just registry scoping.
+    """
+    monkeypatch.setenv("BORG_DIR", str(tmp_path / "borg-dir"))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("BORG_RECON_LIB_DIR", raising=False)
+    adapters_dir = tmp_path / "adapters"
+    adapters_dir.mkdir()
+    monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters_dir))
+    registry = tmp_path / "registry.json"
+    registry.write_text(
+        json.dumps(
+            {
+                "projects": {
+                    "alpha": {"path": str(tmp_path / "alpha")},
+                    "beta": {"path": str(tmp_path / "beta")},
+                }
+            }
+        )
+    )
+    monkeypatch.setenv("BORG_REGISTRY", str(registry))
+
+    items = [_item("alpha", "PR-1"), _item("beta", "PR-2")]
+    _make_executable(
+        adapters_dir / "recon-adapter-demo",
+        "#!/usr/bin/env bash\ncat <<'JSON'\n"
+        + json.dumps({"source": "demo", "summary": "ok", "items": items})
+        + "\nJSON\n",
+    )
+
+    exit_code = cli._run("2025-01-01T00:00:00Z", "", "alpha", True, False)
+    doc = json.loads(capsys.readouterr().out)
+
+    assert exit_code == 0
+    assert "alpha" in doc["items_by_project"]
+    assert "beta" not in doc["items_by_project"]
+    assert [item["ref"] for item in doc["items_by_project"]["alpha"]] == ["PR-1"]
