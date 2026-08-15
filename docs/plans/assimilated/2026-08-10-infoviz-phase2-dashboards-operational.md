@@ -22,24 +22,24 @@ opinion, and the contrarian close (Brownlow) is Level 8 anecdote. This is the we
 corpus, and the phase's main intellectual risk is laundering strong opinion into house rules.
 
 ## Acceptance Criteria
-- [ ] C1 — Four research documents exist under `docs/infoviz/research/2026-08-10-dashboards-operational/`,
+- [x] C1 — Four research documents exist under `docs/infoviz/research/2026-08-10-dashboards-operational/`,
       matching Phase 1's shape: `01-findings-synthesis.md`, `02-eli10-brief.md`,
       `03-design-principles-playbook-additions.md`, `04-empirical-test.md`.
   - Verify: `ls docs/infoviz/research/2026-08-10-dashboards-operational/` lists all four.
-- [ ] C2 — D-rules are appended to `docs/infoviz/playbook.md` under a Phase 2 heading, each stating house rule,
+- [x] C2 — D-rules are appended to `docs/infoviz/playbook.md` under a Phase 2 heading, each stating house rule,
       evidence, and confidence/caveat in the same shape as P1-P7. Phase 1's P-rules are untouched.
   - Verify: `grep -c '^\*\*D[0-9]' docs/infoviz/playbook.md` returns the rule count;
     `git diff main -- docs/infoviz/playbook.md` shows only additions.
-- [ ] C3 — Every D-rule names its evidence level explicitly. No rule derived solely from a Level 7/8 source is
+- [x] C3 — Every D-rule names its evidence level explicitly. No rule derived solely from a Level 7/8 source is
       stated at high confidence.
   - Verify: read each rule's Confidence line; each cites at least one source and its level.
-- [ ] C4 — The empirical test applies the D-rules to borg's own alert/hook layer (primary specimen) and
+- [x] C4 — The empirical test applies the D-rules to borg's own alert/hook layer (primary specimen) and
       `borg ls` (secondary), and runs a comprehension check. Findings are derived from the rules, not
       reverse-engineered to fit a known conclusion.
   - Verify: `04-empirical-test.md` has a rule-by-rule critique section and a stated verdict per specimen.
-- [ ] C5 — Open items for Phase 3+ are recorded, including anything the phase could not verify first-hand.
+- [x] C5 — Open items for Phase 3+ are recorded, including anything the phase could not verify first-hand.
   - Verify: `grep -n -i 'open items' docs/infoviz/research/2026-08-10-dashboards-operational/03-*.md`
-- [ ] C6 — Regression: no code touched, bats suite unaffected.
+- [x] C6 — Regression: no code touched, bats suite unaffected.
   - Verify: `git diff --name-only main` shows only files under `docs/`.
 
 ## Scope Boundaries
@@ -52,6 +52,13 @@ corpus, and the phase's main intellectual risk is laundering strong opinion into
 
 ## Ship Definition
 Four documents committed, D-rules appended to the playbook, PR opened against main, CI green.
+
+SHIPPED 2026-08-11 in commit 2242ddd (PR #112). C6 partial by packaging only — the infoviz deliverables are
+docs-only, but PR #112 squash-merged unrelated CLI work (borg.zsh, lib/registry.zsh, install.sh,
+tests/cli_smoke.bats) alongside them. Remediation of the empirical test's findings was correctly deferred to
+the separate 2026-08-11-attention-routing directive. The secondary specimen `borg ls` no longer exists under
+that name — the aliases were removed 2026-08-10 and the command was ported to borg_core in PR #143; the
+critique stands as a historical record of that display.
 
 ## Timeline
 Target: this session. Estimated effort: the largest single item in the session — Phase 1's findings synthesis
