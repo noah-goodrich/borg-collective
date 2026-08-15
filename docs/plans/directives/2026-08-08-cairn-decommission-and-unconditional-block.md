@@ -11,6 +11,11 @@ has no `memory-gate.log` and no `memory-gate-state.json` exists. The 7-day unatt
 started; "shipped 2026-08-10" describes code landing in the repo, not deployment. Needs a `borg setup`
 rerun to install the launchd job before Phase 1.6's proof obligation can even begin accumulating. Phase 3
 correctly remains GATED — do not schedule it. This directive stays open; not ready to close.*
+**Reconciled 2026-08-14:** PR #122 (ea2f5a0) and PR #123 (411333b) landed after the last edit above and
+closed 1.2, 1.3's remaining bullet, and both true 1.4 bullets. 1.4's "16 drifted skill copies" bullet is
+struck as a false premise (zero content drift found). 1.5's four plugins are enabled. 1.6 and Phase 3
+remain OPEN/GATED — see the reconciled note under 1.6 for the current state of the gate's proof obligation
+and three unresolved judgment calls. This directive is still not ready to close.*
 *Source: `~/dev/cairn/docs/research/` — see `README.md` for the full arc; the operative documents are
 `2026-08-04-cairn-original-goals-audit.md` and `2026-08-05-post-cairn-strategy.md`*
 *Companion decision: `~/dev/cairn/docs/adr/0002-retire-belief-store.md`*
@@ -101,8 +106,11 @@ function is **absent from the deployed `~/.claude/lib/borg-hooks.sh`**. Running 
 section on **169 of 350** checkpoints. This is the single highest-value content in a checkpoint and it is
 being cut off.
 
-- [ ] Replace the byte cap with awk section extraction — take sections **4 (Blockers)** and **5 (Next
-      Session)** verbatim rather than the first 4,000 bytes.
+- [x] Replace the byte cap with awk section extraction — take sections **4 (Blockers)** and **5 (Next
+      Session)** verbatim rather than the first 4,000 bytes. *(shipped: `hooks/borg-link-down.sh:355-357` does
+      awk section extraction, with a legacy byte-cap fallback at :360-362 for pre-template checkpoints.
+      Commit 9551115, merged in ea2f5a0 (PR #122). The old unconditional `head -c 4000` is gone from the live
+      path.)*
 
 ### 1.3 — Remove the cairn injection (~0.5h)
 
@@ -111,20 +119,33 @@ passes `$PROJECT` as **both** the query string and the `--project` filter — so
 relevance to the session's actual task is coincidental.
 
 - [x] Delete the cairn search/injection block and its `CAIRN UNAVAILABLE` banner.
-- [ ] Replace with ~30 tokens of pointer in each project `CLAUDE.md`: *"prior decisions live in
-      `.borg/checkpoints/`, `.borg/knowledge/` and `docs/plans/assimilated/` — grep them."* *(not done —
-      the injection block is gone but no replacement pointer was added to project CLAUDE.md files)*
+- [x] Replace with ~30 tokens of pointer in each project `CLAUDE.md`: *"prior decisions live in
+      `.borg/checkpoints/`, `.borg/knowledge/` and `docs/plans/assimilated/` — grep them."* *(shipped in
+      ea2f5a0 (PR #122): CLAUDE.md's "Architecture Rules" now reads "Prior decisions live in
+      `.borg/checkpoints/`, `.borg/knowledge/`, and `docs/plans/assimilated/` — grep them before assuming
+      something is undocumented.")*
 - [x] Keep `cairn-hits.log` writing until Phase 2 completes, as the before/after control. *(moot — Phase 2 is
       complete and cairn-hits.log's job is done; it stopped writing when the containers/hooks were removed)*
 
 ### 1.4 — Purge accumulated junk (~0.5h)
 
-- [ ] `~/.claude/projects/-` holds **11,576 transcript files / 44 MB** from the old launchd `cwd="/"` poller.
+- [x] `~/.claude/projects/-` holds **11,576 transcript files / 44 MB** from the old launchd `cwd="/"` poller.
       Delete. Confirm the poller itself is dead first — it has now polluted `call_log`, `token_spend` **and**
-      `presence`.
-- [ ] **16 drifted skill copies** in `~/.claude/skills`, 2 already divergent. Collapse to one copy each.
-- [ ] Stale artifacts: three 0-byte `registry.json.tmp` files (created 2026-03-29, still present),
-      `plan-promote-debug.log` (36 KB, stopped writing 2026-07-31).
+      `presence`. *(shipped in 411333b (PR #123): `bin/borg-usage-watch:288-300` `_prune_probe_transcripts`
+      deletes probe transcripts older than `PROBE_RETAIN_MIN` (default 60, line 80) every poll. Correction to
+      this bullet's own premise: the poller is `bin/borg-usage-watch` itself, and it is alive by design —
+      `StartInterval` 120s — not dead. The fix bounded its transcript pile structurally instead of killing the
+      poller.)*
+- [~] STRUCK — **16 drifted skill copies** in `~/.claude/skills`, 2 already divergent. Collapse to one copy
+      each. *(the premise is false: a recursive diff of `~/.claude/skills` against `skills/` in this repo
+      shows ZERO content drift — the only deltas are a deliberate per-skill `.borg-managed` marker file and
+      `ducky`, which exists only in the deployed tree. Collapsing is also actively forbidden: Cortex Code has
+      no plugin loader and registers skills straight from source directories, so the two-copy layout is
+      structurally required, not accidental drift. This is a correction of a false premise, not a deferral —
+      do not re-open it as a TODO.)*
+- [x] Stale artifacts: three 0-byte `registry.json.tmp` files (created 2026-03-29, still present),
+      `plan-promote-debug.log` (36 KB, stopped writing 2026-07-31). *(re-verified live: no `*.tmp` and no
+      `plan-promote-debug.log` remain under `~/.config/borg/` or `~/.claude/`.)*
 
 ### 1.5 — Enable the platform capability already on disk (~0.5h)
 
@@ -138,7 +159,8 @@ is enabled. These four have been sitting unenabled since **2026-07-08**:
 | `claude-md-management` | `claude-md-improver` — audits and rewrites CLAUDE.md behind an approval gate. |
 | `skill-creator` | Skill evals and benchmarking with variance analysis. |
 
-- [ ] Enable all four in `~/.claude/settings.json`.
+- [x] Enable all four in `~/.claude/settings.json`. *(re-verified live: `hookify`, `session-report`,
+      `claude-md-management`, and `skill-creator` are all `true` under `enabledPlugins`.)*
 - [ ] **Caveat to hold honestly:** enabling is not adopting. 1-of-37 says platform capability does not become
       platform benefit automatically. Treat these as candidates to be *used*, and revisit in 30 days.
 
@@ -168,6 +190,19 @@ That is gate #4 born unwired, on the same day as the audit that was supposed to 
       this session ends. Re-check in 7+ days: confirm `~/.local/state/borg/memory-gate.log` has entries with
       no session/human triggering them, and that `$BORG_DIR/memory-gate-state.json` shows a `last_delivered_at`
       that nobody manually invoked. Only then does this item flip to `[x]` and Phase 3 unblock.)*
+      **Reconciled 2026-08-14 — this stays OPEN.** `~/.local/state/borg/memory-gate.log` currently holds two
+      distinct fires: `2026-08-12T23:47:46Z` (attended — delivered the first FAIL notification, transitioning
+      from `last_verdict=none`) and `2026-08-13T23:52:07Z` (unattended by the daily `StartInterval`, but
+      SUPPRESSED by the idempotency guard — "FAIL already delivered previously — not re-notifying"). Neither
+      is the proof this criterion needs: the first was attended, the second was unattended but did not
+      *deliver* anything new. Three open judgment calls for the owner, not resolved by this reconciliation:
+      (a) whether a verdict that persists in `~/.config/borg/memory-gate-verdict.json` and is surfaced at
+      `hooks/borg-link-down.sh:233-241` on every SessionStart counts as "delivery" on its own, independent of
+      the notification channel; (b) how to rule on the standing FAIL (ratio 0.048 vs. the pre-registered 0.2
+      threshold), including the honest counter-argument that the denominator (6 hits total) is too tiny to
+      trust the ratio either way; (c) the re-nag policy — today a persisting FAIL notifies exactly once ever,
+      so if the answer to (a) is "no," this gate may never fire the way 1.6 originally imagined without a
+      policy change.
 
 ---
 
@@ -225,12 +260,16 @@ Unwire in this order. Each step is independently revertible; do not batch them.
       cairn decommission's scope — still open)*
 - [x] `grep` over `.borg/knowledge/` answers the founding canonical query after cairn is gone.
 - [x] No cairn container is running; `cairn`/`cairn_test` databases dropped; export verified to survive.
-- [ ] Four platform plugins enabled. *(1.5 — still open, unrelated to the decommission)*
-- [ ] The auto-memory read instrument has produced ≥7 days of data **and a delivered verdict**. *(the
-      instrument is live and producing data — see `~/dev/cairn/PROJECT_PLAN.md` criterion 1 — but 7 days
-      hasn't elapsed yet and no delivered-verdict channel has been built)*
+- [x] Four platform plugins enabled. *(1.5 — shipped, see above.)*
+- [ ] The auto-memory read instrument has produced ≥7 days of data **and a delivered verdict**. *(Reconciled
+      2026-08-14. Two different clocks are in play here and must not be conflated. Hits-volume clock:
+      `~/.config/borg/memory-hits.log` holds **6 rows on 3 distinct days** — 2026-08-10 (×3), 2026-08-13 (×2),
+      2026-08-14 (×1) — a 5-calendar-day span with two gap days (08-11, 08-12), not "4 of 7 days." Delivery
+      clock: the gate's own daily fire count, tracked separately in 1.6 above; counted from its first fire
+      (2026-08-12), seven consecutive daily fires lands **2026-08-18**, not 08-17. Neither clock has completed;
+      still OPEN.)*
 - [ ] **One gate has fired unattended and delivered a verdict nobody had to remember.** *(not done — 1.6's
-      actual proof obligation, and Phase 3 stays gated until it is)*
+      actual proof obligation, and Phase 3 stays gated until it is; see the reconciled note under 1.6.)*
 
 ## Non-goals
 
