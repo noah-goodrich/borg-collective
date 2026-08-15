@@ -101,8 +101,45 @@ exit 1
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" != *"Error:"* ]] || false
     [[ "$output" == *"my-active-project"* ]] || false
+}
+
+# ── Fallback provenance (2026-08-10 directive: silent fallback is the core defect) ────────────
+
+@test "briefing: fallback with nonzero exit prints a reason line naming the exit code" {
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "Error: API error 401 Unauthorized" >&2
+exit 1
+EOF
+    run "$BORG_CMD" link --brief
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"narrative unavailable"* ]] || false
+    [[ "$output" == *"exited 1"* ]] || false
+    # The captured stderr text must actually surface, not be swallowed like the old /dev/null path.
+    [[ "$output" == *"API error 401 Unauthorized"* ]] || false
+}
+
+@test "briefing: fallback distinguishes the not-logged-in case from a generic exit" {
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "Not logged in · Please run /login"
+exit 0
+EOF
+    run "$BORG_CMD" link --brief
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"narrative unavailable"* ]] || false
+    [[ "$output" == *"not logged in"* ]] || false
+}
+
+@test "briefing: successful LLM output prints no fallback-reason line" {
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "Focus: my-active-project — waiting on design review"
+EOF
+    run "$BORG_CMD" link --brief
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"narrative unavailable"* ]] || false
 }
 
 # ── LLM briefing (claude succeeds) ────────────────────────────────────────────
@@ -121,6 +158,39 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"my-active-project"* ]] || false
     [[ "$output" == *"Focus:"* ]] || false
+}
+
+# ── Field-collapse regression (2026-08-10 directive defect 2) ─────────────────────────────────
+#
+# A project with summary=null and waiting_reason set. Before the \x1f delimiter fix, tab (IFS
+# whitespace) collapsed the empty summary field and shifted waiting_reason into its place — the
+# fallback line would print the waiting_reason string as if it were the summary. It must never
+# print as the summary, and project_path (last field) must remain populated so the checkpoint
+# block still fires.
+
+@test "briefing: empty summary + set waiting_reason never displays waiting_reason as the summary" {
+    local recent
+    recent=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "field-collapse-project": {
+      "path": "/tmp/field-collapse-project",
+      "status": "waiting",
+      "source": "cli",
+      "last_activity": "$recent",
+      "summary": null,
+      "waiting_reason": "Claude is waiting for your input"
+    }
+  }
+}
+EOF
+    run "$BORG_CMD" link --brief
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"field-collapse-project"* ]] || false
+    # The waiting_reason text must not appear on the fallback's summary line (indented 4 spaces,
+    # per fallback_text's `printf "  %-22s..."` header + `echo "    $summary"` body).
+    [[ "$output" != *"    Claude is waiting for your input"* ]] || false
 }
 
 # ── Empty registry ─────────────────────────────────────────────────────────────

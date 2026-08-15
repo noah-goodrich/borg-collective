@@ -738,6 +738,8 @@ cmd_next() {
         directive_count=$(echo "$directive_output" | head -1)
         if (( directive_count > 0 )); then
             echo -e "\n  ${CYAN}Directives:${NC} $directive_count pending for $name"
+            # tab-safe: slug (filename, never empty) is field 1 of 2; an empty title
+            # (field 2, last) cannot shift anything after it.
             echo "$directive_output" | tail -n +2 | head -3 | while IFS=$'\t' read -r slug title; do
                 [[ -z "$slug" ]] && continue
                 echo -e "    ${DIM}- $title${NC}"
@@ -790,6 +792,8 @@ cmd_reap() {
         info "Nothing to reap — all active/waiting sessions are live or recent."
         return 0
     fi
+    # tab-safe: name is field 1 of 2 (borg_reap_persist never emits an empty name); an empty
+    # `from` (field 2, last) cannot shift anything after it.
     while IFS=$'\t' read -r name from; do
         [[ -z "$name" ]] && continue
         info "Reaped ${BOLD}$name${NC} ($from → idle) — no live session"
@@ -832,6 +836,8 @@ cmd_reap_worktrees() {
     local repo wt reason
     for repo in "${repo_paths[@]}"; do
         [[ -d "$repo" ]] || continue
+        # tab-safe: wt (worktree path) is field 1 of 2 and never empty; reason (field 2,
+        # last, always one of two hardcoded strings) cannot shift anything after it.
         while IFS=$'\t' read -r wt reason; do
             [[ -z "$wt" ]] && continue
             info "Reaped worktree ${BOLD}${wt##*/}${NC} in ${repo##*/} (${reason})"
@@ -1028,19 +1034,6 @@ cmd_tidy() {
     fi
 }
 
-cmd_hail() {
-    local project="${1:-}"
-
-    # No arg → full briefing across all projects (same as borg init shows)
-    if [[ -z "$project" ]]; then
-        _borg_print_briefing
-        return
-    fi
-
-    # Specific project → detailed status
-    cmd_status "$project"
-}
-
 # Build orchestrator context string from registry + checkpoints.
 # Output goes to stdout; caller captures it.
 _borg_print_briefing() {
@@ -1093,9 +1086,15 @@ _borg_print_briefing() {
     fallback_text=""
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        IFS=$'\t' read -r proj_status last_activity summary waiting_reason project_path <<< \
+        # \x1f (unit separator), not tab: tab is IFS *whitespace*, so a run of consecutive tabs
+        # (an empty middle field, e.g. summary) collapses to ONE delimiter and shifts every field
+        # after it left. \x1f is a non-whitespace IFS char, so adjacent delimiters always produce
+        # an empty field instead of merging. Safe here because _borg_registry_write
+        # (lib/registry.zsh) strips control chars \000-\010,\013,\014,\016-\037 from every stored
+        # value, so \x1f (0x1F) can never appear inside project data.
+        IFS=$'\x1f' read -r proj_status last_activity summary waiting_reason project_path <<< \
             "$(echo "$registry" | jq -r --arg p "$name" \
-                '.projects[$p] | [.status // "unknown", .last_activity // "", .summary // "", .waiting_reason // "", .path // ""] | join("\t")')"
+                '.projects[$p] | [.status // "unknown", .last_activity // "", .summary // "", .waiting_reason // "", .path // ""] | join("\u001f")')"
         rel_time=$(_borg_relative_time "$last_activity")
 
         payload+="PROJECT: $name
@@ -1149,13 +1148,33 @@ EOF
     echo ""
     info "Building morning briefing..."
 
+    # Capture stderr to a file under $BORG_DIR instead of /dev/null (was silent — see
+    # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
+    # path being taken with NO indication of why is the defect this whole function exists to fix.
     local claude_rc=0
+    local claude_stderr_file="$BORG_DIR/briefing-stderr.log"
     briefing=$(_borg_timeout 20 claude -p "$briefing_prompt" \
-        --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>/dev/null) || claude_rc=$?
+        --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>"$claude_stderr_file") \
+        || claude_rc=$?
+    local claude_stderr=""
+    [[ -s "$claude_stderr_file" ]] && claude_stderr=$(<"$claude_stderr_file")
 
-    # Gate on exit code; also catch the edge case where claude exits 0 with an auth error
-    if [[ $claude_rc -ne 0 || "$briefing" == *"Not logged in"* ]]; then
+    # Provenance: distinguish WHY the fallback fired, at minimum timeout / not-logged-in / any
+    # other non-zero exit. `fallback_reason` is empty iff the narrative call actually succeeded.
+    local fallback_reason=""
+    if [[ $claude_rc -eq 124 ]]; then
+        fallback_reason="claude -p timed out after 20s"
         briefing=""
+    elif [[ "$briefing" == *"Not logged in"* ]]; then
+        # claude exits 0 on auth failure — the string match is the only signal.
+        fallback_reason="claude not logged in (headless CLI has no usable credentials on this machine)"
+        briefing=""
+    elif [[ $claude_rc -ne 0 ]]; then
+        fallback_reason="claude -p exited $claude_rc"
+        [[ -n "$claude_stderr" ]] && fallback_reason+=": ${claude_stderr}"
+        briefing=""
+    elif [[ -z "$briefing" ]]; then
+        fallback_reason="claude -p returned empty output"
     fi
 
     if [[ -n "$briefing" ]]; then
@@ -1163,6 +1182,10 @@ EOF
         echo "$briefing"
     else
         echo ""
+        if [[ -n "$fallback_reason" ]]; then
+            echo -e "  ${DIM}(narrative unavailable: $fallback_reason — showing registry fallback)${NC}"
+            echo ""
+        fi
         printf "%s" "$fallback_text"
     fi
 
@@ -1179,7 +1202,10 @@ EOF
             )) |
             sort_by(.value.last_activity // "0000") | reverse |
             .[] | [.key, .value.last_activity // ""] | join("\t")
-        ' 2>/dev/null | while IFS=$'\t' read -r name last_activity; do
+        ' 2>/dev/null | \
+            # tab-safe: name (.key) is field 1 of 2 and never empty; an empty last_activity
+            # (field 2, last) cannot shift anything after it.
+            while IFS=$'\t' read -r name last_activity; do
             rel_time=$(_borg_relative_time "$last_activity")
             echo -e "    ${DIM}$name  ($rel_time)${NC}"
         done
@@ -2026,8 +2052,10 @@ cmd_cortex_resume() {
     [[ -n "$entry" && "$entry" != "null" ]] || die "no pending wake matching '$target'"
 
     local pane_id project session window pane_index
-    IFS=$'\t' read -r pane_id project session window pane_index < <(
-        echo "$entry" | jq -r '[.pane_id,.project,.session,.window,.pane_index] | @tsv'
+    # \x1f, not @tsv/tab: see borg.zsh:_borg_print_briefing for why tab (IFS whitespace) is unsafe
+    # when a field can be empty — this is one of the sites the directive flagged as latent.
+    IFS=$'\x1f' read -r pane_id project session window pane_index < <(
+        echo "$entry" | jq -r '[.pane_id,.project,.session,.window,.pane_index] | join("\u001f")'
     )
 
     # Re-resolve pane_id if the recorded one is gone (tmux server restart).
@@ -2066,8 +2094,8 @@ cmd_nanoprobes() {
             (.agent_type // "?"),
             ((.summary // "") | gsub("\n"; " ") | .[0:80]),
             (.finished_at // "")
-        ] | @tsv
-    ' 2>/dev/null | while IFS=$'\t' read -r sid atype summary finished; do
+        ] | join("\u001f")
+    ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype summary finished; do
         printf "  %-10s %-18s %-80s %s\n" "$sid" "$atype" "$summary" "$finished"
     done
 }
@@ -2161,10 +2189,10 @@ cmd_spend() {
             | [ ((.ts // "")[0:10]),
                 (.project // "?"),
                 ($total | .*100 | round / 100),
-                ($mainpct | round) ] | @tsv
+                ($mainpct | round) ] | join("\u001f")
         ' 2>/dev/null \
         | head -n "$last" \
-        | while IFS=$'\t' read -r date proj total mainpct; do
+        | while IFS=$'\x1f' read -r date proj total mainpct; do
             printf "  %-10s  %-22s  \$%-8s  main %3s%%\n" "$date" "$proj" "$total" "$mainpct"
         done
     echo
@@ -2185,9 +2213,9 @@ cmd_spend() {
         | [ .project,
             (.total | .*100 | round / 100),
             (if .total > 0 then (.main / .total * 100 | round) else 0 end),
-            .n ] | @tsv
+            .n ] | join("\u001f")
     ' "$log" 2>/dev/null \
-        | while IFS=$'\t' read -r proj total mainpct n; do
+        | while IFS=$'\x1f' read -r proj total mainpct n; do
             printf "  %-22s  \$%-9s  main %3s%%  (%s sessions)\n" "$proj" "$total" "$mainpct" "$n"
         done
 
@@ -2222,9 +2250,9 @@ cmd_spend() {
             | group_by([.layer, .model])
             | map({ layer:.[0].layer, model:.[0].model, cost:(map(.cost) | add // 0) })
             | sort_by(-.cost)
-            | .[] | [ .layer, .model, (.cost | .*100 | round / 100) ] | @tsv
+            | .[] | [ .layer, .model, (.cost | .*100 | round / 100) ] | join("\u001f")
         ' "$log" 2>/dev/null \
-            | while IFS=$'\t' read -r layer model cost; do
+            | while IFS=$'\x1f' read -r layer model cost; do
                 printf "  %-10s  %-26s  \$%s\n" "$layer" "$model" "$cost"
             done
         echo
@@ -2267,8 +2295,8 @@ cmd_watch() {
                     (if .evidence_found == false then "⚠ " else "✓ " end) +
                         ((.summary // "") | gsub("\n"; " ") | .[0:60]),
                     (.finished_at // "")
-                ] | @tsv
-            ' 2>/dev/null | while IFS=$'\t' read -r sid atype summary finished; do
+                ] | join("\u001f")
+            ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype summary finished; do
                 printf "  %-10s %-18s %-62s %s\n" "$sid" "$atype" "$summary" "$finished"
             done
         else
@@ -2444,6 +2472,29 @@ cmd_doctor() {
     done
     echo
 
+    # Headless `claude -p` reachability — the narrative half of `borg link --brief`. This is what
+    # makes a dead LLM path a health-check finding instead of something noticed by reading thin
+    # output (docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md, defect
+    # 1). NOT a launchd agent, so REG/FRESH are n/a here; EXIT carries the actual claude exit code.
+    printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "CHECK" "REG" "EXIT" "FRESH" "STATUS"
+    printf '%0.s─' {1..70}; echo
+    local narrative_out narrative_rc=0 narrative_hint="" narrative_status="OK" narrative_color="$GREEN"
+    narrative_out=$(_borg_timeout 10 claude -p "say ok" --model claude-haiku-4-5-20251001 \
+        --no-session-persistence --bare 2>&1) || narrative_rc=$?
+    if [[ $narrative_rc -eq 124 ]]; then
+        narrative_status="WARN"; narrative_color="$YELLOW"
+        narrative_hint="claude -p timed out — 'borg link --brief' will fall back to the registry view"
+    elif [[ "$narrative_out" == *"Not logged in"* ]]; then
+        narrative_status="WARN"; narrative_color="$YELLOW"
+        narrative_hint="claude not logged in headless (Keychain-only OAuth token on macOS) — expected on some machines, not a bug to chase; 'borg link --brief' falls back to the registry view"
+    elif [[ $narrative_rc -ne 0 ]]; then
+        narrative_status="WARN"; narrative_color="$YELLOW"
+        narrative_hint="claude -p exited $narrative_rc — 'borg link --brief' will fall back to the registry view"
+    fi
+    printf " %-14s %-10s %-8s %-10s ${narrative_color}%s${NC}\n" "claude-cli" "n/a" "$narrative_rc" "n/a" "$narrative_status"
+    [[ -n "$narrative_hint" ]] && echo -e "   ${DIM}→ $narrative_hint${NC}"
+    echo
+
     # Clock skew: for each running drone container, compare its clock against the host's. A
     # skewed VM clock silently corrupts freshness/mtime checks elsewhere (this is how #98 hid) —
     # catching it here is cheap and proactive. Not a launchd agent, so it borrows the same table
@@ -2558,7 +2609,7 @@ cmd_help() {
     watch [interval]    Live-refresh project status + recent nanoprobes (default: 5s)
     reap                Persist idle to stale active/waiting sessions (no live window)
     reap-worktrees [p]  Remove stale borg-managed nanoprobe worktrees (all repos or one)
-    doctor              Verify the 4 launchd agents (registered/exit status/fresh output)
+    doctor              Verify the 4 launchd agents + headless claude -p reachability
     help                Show this message
 
   REMOVED (2026-08-10 — use 'link')
