@@ -80,6 +80,7 @@ Domain = ["core.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]
+branch = true
 omit = [
-    "**/tests/**",
+    "*/test_*.py",
 ]
