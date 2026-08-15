@@ -482,6 +482,141 @@ _seed_probe_dir() {
     grep -q "WARNING" "$BORG_USAGE_LOG"
 }
 
+# ─── Gap 1: week_pct >= 90 warns only, never sweeps (7-day window, directive) ─────────────────
+
+@test "week warning: week_pct >= threshold logs a distinct week-warning, ok row still written" {
+    _write_mock_claude "echo 'Current session: 10% used'; echo 'Current week (all models): 92% used'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(_row_field '.status')" = "ok" ]
+    [ "$(_row_field '.week_pct')" = "92" ]
+    grep -q "WARNING.*week_pct=92.*week warn threshold 90" "$BORG_USAGE_LOG"
+}
+
+@test "week warning: below the threshold logs no week-warning" {
+    _write_mock_claude "echo 'Current session: 10% used'; echo 'Current week (all models): 50% used'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "week warn threshold" "$BORG_USAGE_LOG"
+}
+
+@test "week warning: threshold is configurable via BORG_USAGE_WEEK_WARN_PCT" {
+    export BORG_USAGE_WEEK_WARN_PCT=50
+    _write_mock_claude "echo 'Current session: 10% used'; echo 'Current week (all models): 60% used'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "WARNING.*week_pct=60.*week warn threshold 50" "$BORG_USAGE_LOG"
+}
+
+@test "week warning: never triggers a sweep even when a sweep IS armed and session_pct is high too" {
+    _write_mock_sendkeys
+    _panes_env paneA
+    export BORG_USAGE_SWEEP_ENABLED=1
+    # session_pct (90) crosses the checkpoint threshold on its own -> a sweep IS expected here,
+    # but it must be attributable to session_pct alone, never to week_pct.
+    _write_mock_claude "echo 'Current session: 90% used · resets Jul 9 at 1:20am (America/Denver)'; echo 'Current week (all models): 95% used'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "week warn threshold" "$BORG_USAGE_LOG"
+    # Exactly one sweep worth of calls (2: text + Enter) — the week breach did not add a second.
+    run grep -c . "$SENDKEYS_SINK"
+    [ "$output" = "2" ]
+}
+
+# ─── Gap 2: alert after 3 consecutive UNKNOWN (status:"error") polls ──────────────────────────
+
+@test "consecutive UNKNOWN: no ALERT on poll 1 or 2, ALERT fires on the 3rd" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "ALERT: 3 consecutive UNKNOWN" "$BORG_USAGE_LOG"
+}
+
+@test "consecutive UNKNOWN: streak persists across invocations via guardian state" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "2" ]
+}
+
+@test "consecutive UNKNOWN: a successful poll resets the streak to 0" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    run "$SCRIPT" --once
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "0" ]
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+}
+
+@test "consecutive UNKNOWN: counts across mixed failure reasons (binary_not_found + parse_failed)" {
+    export BORG_USAGE_CLAUDE_BIN="definitely-not-a-real-binary-$$"
+    run "$SCRIPT" --once
+    [ "$status" -ne 0 ]
+    unset BORG_USAGE_CLAUDE_BIN
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "ALERT: 3 consecutive UNKNOWN" "$BORG_USAGE_LOG"
+}
+
+@test "consecutive UNKNOWN: idle/suspect polls neither extend nor reset the streak" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    run "$SCRIPT" --once
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "2" ]
+    export BORG_USAGE_PANE_CMD="true"
+    export BORG_USAGE_PROC_CMD="true"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(tail -n 1 "$BORG_USAGE_SAMPLES" | jq -r '.status')" = "idle" ]
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "2" ]
+}
+
+@test "consecutive UNKNOWN: alert count is configurable via BORG_USAGE_UNKNOWN_ALERT_COUNT" {
+    export BORG_USAGE_UNKNOWN_ALERT_COUNT=2
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "ALERT: 2 consecutive UNKNOWN" "$BORG_USAGE_LOG"
+}
+
+@test "guardian state: sweep write does not clobber the failure streak counter" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    run "$SCRIPT" --once
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "2" ]
+    _write_mock_sendkeys
+    _panes_env paneA
+    export BORG_USAGE_SWEEP_ENABLED=1
+    _mock_claude_at 90 "Jul 9 at 1:20am (America/Denver)"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # A successful poll resets the streak; the sweep-write path must still see & preserve that
+    # reset rather than resurrecting the pre-sweep counter from a stale in-memory copy.
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "0" ]
+    # resets_at parsing excludes the trailing "(tz)" clause (existing behaviour) — the window key
+    # is whatever that parse produced, not the raw fixture string.
+    [ "$(jq -r '.swept_window' "$BORG_USAGE_GUARDIAN_STATE")" = "Jul 9 at 1:20am" ]
+}
+
 # ─── new self-auditing contract tests ────────────────────────────────────────
 
 @test "contract: idle writes an idle row, never silence" {

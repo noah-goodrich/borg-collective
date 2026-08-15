@@ -48,6 +48,17 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bi
 BORG_USAGE_CHECKPOINT_PCT="${BORG_USAGE_CHECKPOINT_PCT:-85}"
 BORG_USAGE_HALT_PCT="${BORG_USAGE_HALT_PCT:-92}"
 
+# Gap 1 (directive: "week_pct >= 90 -> warn only. Do not sweep; a checkpoint does not help a
+# 7-day window."). This is a WARN-only knob — deliberately not wired into `_run_sweep` or the
+# halt signal anywhere in this file, so "never sweep the week window" is true by construction,
+# not by accident of a forgotten call site.
+BORG_USAGE_WEEK_WARN_PCT="${BORG_USAGE_WEEK_WARN_PCT:-90}"
+
+# Gap 2 (directive: "alert after 3 consecutive [UNKNOWN]"). A single failed poll is expected
+# noise (a transient claude_failed, one-off parse drift) and already gets its own WARNING/ERROR
+# line; this only escalates once it is a STREAK.
+BORG_USAGE_UNKNOWN_ALERT_COUNT="${BORG_USAGE_UNKNOWN_ALERT_COUNT:-3}"
+
 # Phase-2 checkpoint sweep. DEFAULT-OFF: the guardian ships inert until a human arms it, because the
 # 85% trigger rests on a single near-cap episode and must not be hard-tuned yet (directive's
 # data-readiness note). The threshold above (BORG_USAGE_CHECKPOINT_PCT) is the config knob; this
@@ -56,8 +67,9 @@ BORG_USAGE_SWEEP_ENABLED="${BORG_USAGE_SWEEP_ENABLED:-0}"
 BORG_USAGE_SWEEP_CMD_TEXT="${BORG_USAGE_SWEEP_CMD_TEXT:-/borg-link-up}"
 BORG_USAGE_SENDKEYS_DELAY="${BORG_USAGE_SENDKEYS_DELAY:-0.5}"
 
-# Idempotence state (sweep once per window). Distinct from the samples log; lives under the config
-# dir per the directive. tmp+rename writes only.
+# Guardian state (sweep-once-per-window idempotence + the consecutive-UNKNOWN streak below).
+# Distinct from the samples log; lives under the config dir per the directive. tmp+rename writes
+# only; both concerns merge onto the same object rather than overwriting each other's keys.
 BORG_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 GUARDIAN_STATE="${BORG_USAGE_GUARDIAN_STATE:-$BORG_CONFIG_DIR/usage-guardian.json}"
 
@@ -183,19 +195,77 @@ _guardian_get() {
     jq -r --arg k "$1" '.[$k] // ""' "$GUARDIAN_STATE" 2>/dev/null || printf ''
 }
 
-# Atomically record that the sweep fired for a window (tmp + rename).
-_guardian_set_swept() {
-    local window_key="$1" pct="$2" fired="$3" failed="$4"
+# Read the whole guardian state object, defaulting to "{}" when absent/unreadable/empty. Callers
+# merge onto this rather than overwriting wholesale, so two independent concerns sharing one state
+# file (the sweep's swept_window vs. the failure-streak counter below) never clobber each other.
+_guardian_read_all() {
+    local raw
+    if [[ -f "$GUARDIAN_STATE" ]]; then
+        raw=$(cat "$GUARDIAN_STATE" 2>/dev/null || printf '{}')
+        [[ -n "$raw" ]] || raw='{}'
+    else
+        raw='{}'
+    fi
+    printf '%s' "$raw"
+}
+
+# Write pre-built JSON content to the guardian state file, tmp + rename, never a partial write.
+_guardian_atomic_write() {
     mkdir -p "$(dirname "$GUARDIAN_STATE")"
     local tmp="$GUARDIAN_STATE.tmp.$$"
-    if jq -c -n --arg w "$window_key" --argjson pct "$pct" --arg ts "$ts" \
-        --argjson fired "$fired" --argjson failed "$failed" \
-        '{swept_window:$w, last_session_pct:$pct, last_swept_at:$ts, last_fired:$fired, last_failed:$failed}' \
-        > "$tmp" 2>/dev/null; then
+    if printf '%s' "$1" > "$tmp" 2>/dev/null; then
         mv "$tmp" "$GUARDIAN_STATE"
+        return 0
+    fi
+    rm -f "$tmp"
+    return 1
+}
+
+# Atomically record that the sweep fired for a window (tmp + rename), merged onto whatever else
+# is already in guardian state.
+_guardian_set_swept() {
+    local window_key="$1" pct="$2" fired="$3" failed="$4"
+    local merged
+    if merged=$(_guardian_read_all | jq -c --arg w "$window_key" --argjson pct "$pct" --arg ts "$ts" \
+            --argjson fired "$fired" --argjson failed "$failed" \
+            '. + {swept_window:$w, last_session_pct:$pct, last_swept_at:$ts, last_fired:$fired, last_failed:$failed}' \
+            2>/dev/null) && _guardian_atomic_write "$merged"; then
+        return 0
+    fi
+    log "WARNING: sweep: could not write guardian state at $GUARDIAN_STATE"
+    return 1
+}
+
+# ── Gap 2: consecutive-UNKNOWN streak ─────────────────────────────────────────
+# "UNKNOWN" is any poll that could not produce a trustworthy session_pct — the three status:"error"
+# reasons (binary_not_found, claude_failed, parse_failed). Idle/suspect are NOT unknown: no claude
+# call was even attempted, so they neither extend nor reset the streak.
+_guardian_record_error() {
+    local streak
+    streak=$(_guardian_read_all | jq -r '.consecutive_unknown // 0' 2>/dev/null) || streak=0
+    [[ "$streak" =~ ^[0-9]+$ ]] || streak=0
+    streak=$((streak + 1))
+    local merged
+    if merged=$(_guardian_read_all | jq -c --argjson n "$streak" --arg ts "$ts" \
+            '. + {consecutive_unknown:$n, last_unknown_at:$ts}' 2>/dev/null) \
+            && _guardian_atomic_write "$merged"; then
+        :
     else
-        rm -f "$tmp"
-        log "WARNING: sweep: could not write guardian state at $GUARDIAN_STATE"
+        log "WARNING: guardian: could not write state at $GUARDIAN_STATE"
+    fi
+    if (( streak >= BORG_USAGE_UNKNOWN_ALERT_COUNT )); then
+        log "ALERT: $streak consecutive UNKNOWN polls (no trustworthy session_pct reading in a while) — check the poller and the claude binary"
+    fi
+}
+
+# A successful (status:"ok") poll resets the streak.
+_guardian_record_ok() {
+    local merged
+    if merged=$(_guardian_read_all | jq -c '. + {consecutive_unknown:0}' 2>/dev/null) \
+            && _guardian_atomic_write "$merged"; then
+        :
+    else
+        log "WARNING: guardian: could not write state at $GUARDIAN_STATE"
     fi
 }
 
@@ -265,6 +335,7 @@ if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
     row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
         '{ts:$ts, status:"error", reason:"binary_not_found", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
     _append_sample "$row"
+    _guardian_record_error
     exit 1
 fi
 
@@ -305,6 +376,7 @@ if [[ "$claude_exit" -ne 0 ]]; then
     row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
         '{ts:$ts, status:"error", reason:"claude_failed", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
     _append_sample "$row"
+    _guardian_record_error
     exit 0
 fi
 
@@ -329,6 +401,7 @@ if [[ -z "$session_pct" ]] || ! [[ "$session_pct" =~ ^[0-9]+$ ]] || [[ "$session
     row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
         '{ts:$ts, status:"error", reason:"parse_failed", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
     _append_sample "$row"
+    _guardian_record_error
     exit 0
 fi
 
@@ -349,6 +422,14 @@ row=$(jq -c -n \
 
 _append_sample "$row"
 log "sample: session_pct=$session_pct week_pct=$week_pct resets_at=$resets_at"
+_guardian_record_ok
+
+# Gap 1: week_pct is a 7-day window — a checkpoint cannot help it, so this is WARN-only and
+# deliberately never calls _run_sweep or the halt path. Skipped when week_pct itself failed to
+# parse (the literal string "null" set above).
+if [[ "$week_pct" != "null" ]] && (( week_pct >= BORG_USAGE_WEEK_WARN_PCT )); then
+    log "WARNING: week_pct=$week_pct >= week warn threshold $BORG_USAGE_WEEK_WARN_PCT (7-day window — a checkpoint cannot help; observe-only, no sweep)"
+fi
 
 # Halt and checkpoint are independent thresholds — a 95% session needs BOTH the halt signal AND a
 # checkpoint sweep, so these are separate `if`s, not elif. The >=92 dispatch hard-stop veto is a
