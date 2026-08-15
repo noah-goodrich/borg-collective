@@ -212,12 +212,22 @@ def _cube_lines() -> list[str]:
     ]
 
 
-def _overview_directives_block(directives: list[dict]) -> list[str]:
+def _directives_lines(directives: list[dict], show_project: bool) -> list[str]:
+    """Shared by the overview (`show_project=True`, aggregate across projects) and deep-dive
+    (`show_project=False`, already scoped to one project) Directives blocks -- the header line and
+    bullet shape are byte-identical between the two call sites; only the `[project]` tag differs."""
     if not directives:
         return []
-    out = ["\n", f"  {CYAN}Directives:{NC} {len(directives)} pending\n"]
-    out.extend(f"    {DIM}- [{item['project']}] {item['title']}{NC}\n" for item in directives)
+    out = [f"  {CYAN}Directives:{NC} {len(directives)} pending\n"]
+    for item in directives:
+        prefix = f"[{item['project']}] " if show_project else ""
+        out.append(f"    {DIM}- {prefix}{item['title']}{NC}\n")
     return out
+
+
+def _overview_directives_block(directives: list[dict]) -> list[str]:
+    lines = _directives_lines(directives, show_project=True)
+    return ["\n", *lines] if lines else []
 
 
 def _ship_date_suffix(item: dict) -> str:
@@ -230,12 +240,21 @@ def _ship_date_suffix(item: dict) -> str:
     return f" ({ship_date})" if ship_date else ""
 
 
-def _overview_assimilated_block(assimilated: list[dict]) -> list[str]:
+def _assimilated_lines(assimilated: list[dict], show_project: bool) -> list[str]:
+    """Shared by the overview (`show_project=True`) and deep-dive (`show_project=False`) Recently
+    assimilated blocks -- see `_directives_lines` for the rationale."""
     if not assimilated:
         return []
-    out = ["\n", f"  {GREEN}Recently assimilated:{NC}\n"]
-    out.extend(f"    {DIM}- [{item['project']}] {item['title']}{_ship_date_suffix(item)}{NC}\n" for item in assimilated)
+    out = [f"  {GREEN}Recently assimilated:{NC}\n"]
+    for item in assimilated:
+        prefix = f"[{item['project']}] " if show_project else ""
+        out.append(f"    {DIM}- {prefix}{item['title']}{_ship_date_suffix(item)}{NC}\n")
     return out
+
+
+def _overview_assimilated_block(assimilated: list[dict]) -> list[str]:
+    lines = _assimilated_lines(assimilated, show_project=True)
+    return ["\n", *lines] if lines else []
 
 
 def _overview_capacity_block(capacity: dict) -> list[str]:
@@ -304,7 +323,7 @@ def overview(doc: dict) -> str:
 
 
 # JUSTIFICATION: transcribes borg.zsh:415-508 statement by statement for one golden-diffable function.
-def deep(doc: dict) -> str:  # pylint: disable=too-many-branches,too-many-locals
+def deep(doc: dict) -> str:  # pylint: disable=too-many-locals
     """The single-project deep dive, mirroring borg.zsh:415-508."""
     focus = doc.get("focus") or {}
     name = focus.get("name", "")
@@ -356,16 +375,12 @@ def deep(doc: dict) -> str:  # pylint: disable=too-many-branches,too-many-locals
     directives = focus.get("directives") or []
     if directives:
         out.append("\n")
-        out.append(f"  {CYAN}Directives:{NC} {len(directives)} pending\n")
-        for item in directives:
-            out.append(f"    {DIM}- {item['title']}{NC}\n")
+        out.extend(_directives_lines(directives, show_project=False))
 
     assimilated = focus.get("assimilated") or []
     if assimilated:
         out.append("\n")
-        out.append(f"  {GREEN}Recently assimilated:{NC}\n")
-        for item in assimilated:
-            out.append(f"    {DIM}- {item['title']}{_ship_date_suffix(item)}{NC}\n")
+        out.extend(_assimilated_lines(assimilated, show_project=False))
 
     out.append("\n")
     return "".join(out)

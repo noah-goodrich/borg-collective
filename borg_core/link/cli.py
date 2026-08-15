@@ -70,30 +70,50 @@ def _focus(project: str, registry: dict, now_epoch: int) -> dict | None:
     }
 
 
-def _document(project: str, show_all: bool) -> dict:
-    """Assemble the full `borg link` document for one invocation, consumed by both `--json` and the
-    three renderers in render.py.
+def _document(project: str, show_all: bool, mode: str) -> dict:
+    """Assemble the `borg link` document for one invocation, consumed by both `--json` and the three
+    renderers in render.py.
 
-    FIVE judgment calls: (i) `shell.now_epoch()` is called EXACTLY ONCE and threaded into
-    registry_with_state, format_iso, visible_projects, public_entry and cortex_pending -- a second
-    clock read would let a countdown and a relative time in one document describe different
-    instants; (ii) registry_with_state() is called exactly ONCE (it forks tmux and globs every
-    project's state.json; two calls give two snapshots and make the table, the order and the active
-    count disagree -- the bug shell.py's registry_with_state docstring says the port fixed);
-    (iii) `core.active_count` runs on the UNFILTERED overlaid registry, matching _borg_active_count
-    (borg.zsh:115), which never applied the archived filter; (iv) registry.json is read TWICE on
-    purpose -- once inside registry_with_state and once bare for the two collectors, because
-    borg.zsh:163 feeds them borg_registry_read (the RAW registry), not the state-overlaid one; do
-    not collapse it into one read; (v) `total_projects` is `len(overlaid.get("projects"))`, computed
-    from the UNFILTERED overlaid map -- NOT from `projects` (the --all-filtered map) or `order`. This
-    function stays mode-agnostic and READ-ONLY: drone.zsh:964 calls it once per tmux window inside
-    cmd_status's loop, and borg.zsh's fzf preview re-executes it synchronously on every cursor move.
+    Gathers the two per-registry aggregate collectors (`directives`/`assimilated`, each a
+    directory-glob-plus-markdown-read pass over EVERY project) and the single-project `focus` block
+    ONLY when the requesting mode's renderer actually reads them: `render.porcelain` reads only
+    `order`/`projects`; `render.deep` reads only `focus`; `--json` and the default `overview` read
+    everything. Skipping unread work here matters because `_document` is READ-ONLY but re-executed
+    per call site -- drone.zsh:964 calls it once per tmux window inside cmd_status's loop, and
+    borg.zsh's fzf preview re-executes it synchronously on every cursor move (`--porcelain`, the mode
+    that most benefits from skipping the aggregate collectors).
+
+    FIVE further judgment calls, unchanged from before this function became mode-aware: (i)
+    `shell.now_epoch()` is called EXACTLY ONCE and threaded into registry_with_state, format_iso,
+    visible_projects, public_entry and cortex_pending -- a second clock read would let a countdown
+    and a relative time in one document describe different instants; (ii) registry_with_state() is
+    called exactly ONCE (it forks tmux and globs every project's state.json; two calls give two
+    snapshots and make the table, the order and the active count disagree -- the bug shell.py's
+    registry_with_state docstring says the port fixed); (iii) `core.active_count` runs on the
+    UNFILTERED overlaid registry, matching _borg_active_count (borg.zsh:115), which never applied the
+    archived filter; (iv) when the aggregate collectors run, registry.json is read a SECOND time
+    (`raw`, bare, alongside the state-overlaid `overlaid`) on purpose, because borg.zsh:163 feeds them
+    borg_registry_read (the RAW registry), not the state-overlaid one; do not collapse it into one
+    read; (v) `total_projects` is `len(overlaid.get("projects"))`, computed from the UNFILTERED
+    overlaid map -- NOT from `projects` (the --all-filtered map) or `order`.
     """
     moment = shell.now_epoch()
     overlaid = shell.registry_with_state(now=moment)
-    raw = shell.read_registry()
     projects = core.visible_projects(overlaid, show_all, moment)
     order = core.order_projects(projects)
+
+    need_aggregate = mode in ("json", "overview")
+    need_focus = mode in ("json", "deep")
+
+    directives: list[dict] = []
+    assimilated: list[dict] = []
+    cortex_pending: list[dict] = []
+    if need_aggregate:
+        raw = shell.read_registry()
+        directives = shell.collect_all_directives(raw)
+        assimilated = shell.collect_all_assimilated(raw)
+        cortex_pending = shell.cortex_pending(now=moment)
+
     return core.assemble(
         generated_at=core.format_iso(moment),
         show_all=show_all,
@@ -101,10 +121,10 @@ def _document(project: str, show_all: bool) -> dict:
         capacity=core.capacity(core.active_count(overlaid), shell.max_active()),
         projects=projects,
         order=order,
-        directives=shell.collect_all_directives(raw),
-        assimilated=shell.collect_all_assimilated(raw),
-        cortex_pending=shell.cortex_pending(now=moment),
-        focus=_focus(project, overlaid, moment),
+        directives=directives,
+        assimilated=assimilated,
+        cortex_pending=cortex_pending,
+        focus=_focus(project, overlaid, moment) if need_focus else None,
     )
 
 
@@ -116,7 +136,7 @@ def _run(project: str, show_all: bool, mode: str) -> int:
     yields zero bytes on stdout, never a half-frame (every consumer here swallows failure: cmd_watch's
     `|| true`, drone status's `|| true`, fzf's preview pane).
     """
-    doc = _document(project, show_all)
+    doc = _document(project, show_all, mode)
     if mode == "json":
         print(jsonlib.dumps(doc))
         return 0

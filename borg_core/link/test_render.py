@@ -261,6 +261,30 @@ def test_deep_dive_renders_checkpoints_directives_and_assimilated():
     assert "line one" in out
 
 
+def test_directives_and_assimilated_lines_are_shared_between_overview_and_deep():
+    # AC2: the overview and deep-dive Directives/Recently-assimilated blocks used to be two separate,
+    # byte-identical-except-for-the-[project]-tag implementations. Fails before this dedup (no such
+    # functions existed); after, both call sites go through the same helper, parameterized only on
+    # `show_project`.
+    directives = [{"project": "a", "title": "One"}]
+    assimilated = [{"project": "a", "title": "Shipped", "ship_date": "2026-01-01"}]
+
+    overview_directives = render._directives_lines(directives, show_project=True)  # pylint: disable=protected-access
+    deep_directives = render._directives_lines(directives, show_project=False)  # pylint: disable=protected-access
+    assert overview_directives[0] == deep_directives[0]  # identical header line
+    assert "[a]" in overview_directives[1]
+    assert "[a]" not in deep_directives[1]
+
+    overview_assimilated = render._assimilated_lines(assimilated, show_project=True)  # pylint: disable=protected-access
+    deep_assimilated = render._assimilated_lines(assimilated, show_project=False)  # pylint: disable=protected-access
+    assert overview_assimilated[0] == deep_assimilated[0]  # identical header line
+    assert "[a]" in overview_assimilated[1]
+    assert "[a]" not in deep_assimilated[1]
+
+    assert render._overview_directives_block([]) == []  # pylint: disable=protected-access
+    assert render._overview_assimilated_block([]) == []  # pylint: disable=protected-access
+
+
 def test_render_reads_no_clock(monkeypatch):
     # render.py's stated purity contract: every relative_activity/countdown/generated_at is already
     # baked into the document by ONE shell.now_epoch() call in cli._document. A second clock read
