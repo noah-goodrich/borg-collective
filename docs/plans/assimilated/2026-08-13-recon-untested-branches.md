@@ -73,16 +73,25 @@ directive.
 
 ## Acceptance Criteria
 
-- [ ] **AC1** — A test drives `_collect_contradictions` through a non-empty `by_project` with a matching
+- [x] **AC1** — A test drives `_collect_contradictions` through a non-empty `by_project` with a matching
       checkpoint blocker, asserting the returned contradiction list is non-empty and shaped correctly.
   - Verify: `coverage run --branch -m pytest borg_core/recon/test_cli.py -q && coverage report -m
     borg_core/recon/cli.py` shows arc `48->50` no longer in `Missing` and lines 50-53 covered.
-- [ ] **AC2** — A test drives `_filter_by_project` with a non-empty `keep_names` that excludes at least one
+  - **Evidence**: `coverage report -m` for `borg_core/recon/cli.py` no longer lists arc `48->50` in
+    `Missing`.
+- [x] **AC2** — A test drives `_filter_by_project` with a non-empty `keep_names` that excludes at least one
       project present in `by_project`, asserting the excluded project is absent from the result and the
       included one survives unchanged.
   - Verify: `coverage report -m borg_core/recon/cli.py` shows lines 61-62 covered.
-- [ ] **AC3** — Regression: full suite stays green.
+  - **Evidence**: lines 61-62 are covered — absent from the `Missing` column.
+- [x] **AC3** — Regression: full suite stays green.
   - Verify: `coverage run --branch -m pytest -q` exits 0 with the same or higher pass count (346+).
+  - **Evidence**: 413 pytest passing, above the 346 floor.
+
+**Caveat**: `borg_core/recon/cli.py` now sits at exactly **90%** branch coverage with `133-142, 150-152, 156`
+still uncovered. This is within the directive's declared scope boundary — it explicitly excluded fixing
+further gaps beyond the two HIGH findings — but it leaves zero margin against the repo's 90% `--fail-under`
+floor.
 
 ## Scope Boundaries
 
@@ -116,3 +125,5 @@ Small — one focused session. Both HIGH fixes are additive tests against alread
 - **Contradiction detection touches `shell.read_checkpoint_blockers()`, which does real filesystem I/O.** Its
   own I/O boundary is already covered by `test_shell.py`; AC1 only needs to prove `_collect_contradictions`
   wires the (already-tested) pieces together correctly, not re-test the filesystem read.
+
+*Shipped: 2026-08-15 — PR #150 merged to main*

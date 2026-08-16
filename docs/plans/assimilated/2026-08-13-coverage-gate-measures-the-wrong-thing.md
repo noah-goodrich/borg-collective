@@ -78,20 +78,28 @@ branch, not by statement count inflated with self-grading test files.
 
 ## Acceptance Criteria
 
-- [ ] **AC1** — `[tool.coverage.run]` in `pyproject.toml` sets `omit = ["*/test_*.py"]` (replacing the
+- [x] **AC1** — `[tool.coverage.run]` in `pyproject.toml` sets `omit = ["*/test_*.py"]` (replacing the
       dead `**/tests/**` pattern) and adds `branch = true`.
   - Verify: `grep -n 'omit\|branch' pyproject.toml` shows both lines under `[tool.coverage.run]`.
-- [ ] **AC2** — With the new config, `coverage run -m pytest -q && coverage report -m` excludes every
+  - **Evidence**: `pyproject.toml:83` sets `branch = true`; `:84-86` sets `omit = ["*/test_*.py"]`.
+- [x] **AC2** — With the new config, `coverage run -m pytest -q && coverage report -m` excludes every
       `test_*.py` file from the `TOTAL` row and reports branch columns (`Branch`, `BrPart`).
   - Verify: run the two commands above; no `test_*.py` file appears in the report; the header row shows
     `Branch` and `BrPart` columns.
-- [ ] **AC3** — `make test` (or the direct equivalent — `coverage run -m pytest && coverage report -m
+  - **Evidence**: re-run confirms the coverage report lists production files only — no `test_*.py` rows —
+    with `Branch`/`BrPart` columns populated.
+- [x] **AC3** — `make test` (or the direct equivalent — `coverage run -m pytest && coverage report -m
       --fail-under=90`) still exits 0 with the new config, with the real production-only, branch-measured
       number visible in the report.
   - Verify: `coverage report -m --fail-under=90; echo $?` prints `0`; `TOTAL` row shows `924` statements (or
     the current production statement count if it has drifted) and a `Branch` column populated.
-- [ ] **AC4** — No other file changes. This is a one-file, two-line config fix.
+  - **Evidence**: exits 0. `TOTAL` row is now `1160` statements / `384` branches / `97%`, with the `Branch`
+    column populated — the criterion's literal `924` has been superseded by the production codebase's growth
+    since filing, per the criterion's own "or the current production statement count if it has drifted"
+    clause; the number is not silently swapped, it's stated explicitly here.
+- [x] **AC4** — No other file changes. This is a one-file, two-line config fix.
   - Verify: `git diff --stat` (against `main`) touches only `pyproject.toml`.
+  - **Evidence**: PR #145's diff touches `pyproject.toml` only.
 
 ## Scope Boundaries
 
@@ -120,3 +128,5 @@ Trivial — a two-line config change plus a verification run. Well under one ses
 - **Future drift**: if a package is added that doesn't follow the `test_*.py` colocation convention, `omit`
   would silently stop excluding it. No action needed now — flag it only if `borg_core`'s test-file naming
   convention ever changes.
+
+*Shipped: 2026-08-15 — PR #145 merged to main*
