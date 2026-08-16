@@ -11,8 +11,13 @@
     </array>
     <key>RunAtLoad</key>
     <true/>
+    <!-- StartInterval is the launchd WAKE cadence, not the probe cadence — waking the script is
+         cheap (no Claude session). The script itself gates the expensive part (claude -p
+         "/usage") behind BORG_USAGE_BASE_INTERVAL (120s baseline) / BORG_USAGE_FAST_INTERVAL
+         (60s at/above BORG_USAGE_FAST_PCT), so this being 60 does not double baseline probe
+         volume — see bin/borg-usage-watch's ADAPTIVE CADENCE section. -->
     <key>StartInterval</key>
-    <integer>120</integer>
+    <integer>60</integer>
     <!-- USER is REQUIRED: `claude -p "/usage"` prints nothing and exits 0 when USER is unset in
          the environment. launchd hands jobs a minimal env, so without this block the poller is
          permanently, silently blind. -->
