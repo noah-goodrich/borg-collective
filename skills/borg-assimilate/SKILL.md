@@ -172,6 +172,29 @@ When archiving PROJECT_PLAN.md:
 - Append an "Additional Work Shipped" section if significant work happened beyond the criteria
 - Delete PROJECT_PLAN.md from project root
 
+### Step 4c: Chained Auto-Promotion
+
+After PROJECT_PLAN.md has been archived (the previous step), check whether the next directive
+should promote itself automatically — reusing Step 0.75's own scan idiom, run after archival
+instead of before it.
+
+1. Scan `docs/plans/directives/*.md` for top-level candidates: files with **no** line matching
+   `^\*Parent plan:` (children of an in-flight plan are not top-level). Ignore
+   `docs/plans/assimilated/` and `docs/plans/severed/`.
+2. Check whether the plan that just shipped carries a `^\*Next: <slug>\*` line pointing at
+   another directive.
+3. Decide the outcome:
+   - **Zero candidates**: silent no-op. Say nothing further about Step 4c.
+   - **Exactly one candidate, or a `^\*Next: <slug>\*` pointer whose target file exists**: run
+     `borg start <slug>` immediately and report `✓ Auto-promoted <slug>`.
+   - **Two or more candidates and no resolved `^\*Next:*` signal**: ask one bounded question —
+     "N candidates, none chained: which one? [list]" — and stop. Do not guess.
+   - **A `^\*Next: <slug>\*` pointer whose target file does NOT exist**: treat it as absent and
+     fall through to the candidate-count branch above (do not crash, do not report an error for
+     the dangling pointer itself).
+4. This never fires on a directive's *first* promotion — only after an archival has just
+   happened, per this step's position in the flow.
+
 ## Rules
 
 - Do NOT add criteria not in the plan. The plan is the contract.
