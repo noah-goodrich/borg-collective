@@ -215,6 +215,14 @@ else
     BEFORE_COUNT=0
     [[ -f "$USAGE_SAMPLES" ]] && BEFORE_COUNT=$(wc -l < "$USAGE_SAMPLES" | tr -d ' ')
 
+    # Adaptive cadence (bin/borg-usage-watch) can legitimately skip a probe if the last sample is
+    # younger than its due interval — correct in steady state, but it would make THIS verification
+    # kickstart a false negative on every reinstall of an already-running poller. A launchd job's
+    # env comes only from the plist, never from this shell, so an env var can't reach the
+    # kickstarted process; a shared sentinel FILE is the one channel that crosses that boundary.
+    # The script deletes it after one forced probe.
+    touch "${XDG_STATE_HOME:-$HOME/.local/state}/borg/usage-watch.force-probe"
+
     info "  verifying usage-watch produces output (kickstart + poll up to 30s)..."
     launchctl kickstart -k "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
 

@@ -10,9 +10,20 @@
 # Samples land at $BORG_USAGE_SAMPLES (default ~/.local/state/borg/usage-samples.jsonl).
 # Log lives at $BORG_USAGE_LOG (default ~/.local/state/borg/usage-watch.log).
 #
+# ── ADAPTIVE CADENCE ──────────────────────────────────────────────────────────────
+# launchd wakes this script every 60s (see launchd/com.stillpoint-labs.borg.usage-watch.plist) —
+# cheap, no Claude session. Whether that wake turns into a real PROBE (`claude -p "/usage"`, the
+# expensive part) is decided here, script-side, by _probe_due: due every BORG_USAGE_BASE_INTERVAL
+# (120s) below BORG_USAGE_FAST_PCT, every BORG_USAGE_FAST_INTERVAL (60s) at/above it. An
+# invocation that is not due exits 0 immediately and writes NOTHING — no samples row, no guardian
+# state, no log line beyond the one "not due" note. This means gaps in the samples file at ~60s
+# spacing during quiet periods are EXPECTED, not silence — see the contract below for what still
+# counts as "the poller did not run."
+#
 # ── ROW SCHEMA (self-auditing contract) ──────────────────────────────────────────
-# EVERY poll appends exactly one JSONL row to $BORG_USAGE_SAMPLES. Silence in the samples
-# file has exactly one meaning: the poller did not run at all (e.g. launchd job disabled).
+# EVERY invocation that decides to PROBE appends exactly one JSONL row to $BORG_USAGE_SAMPLES.
+# Total silence for longer than BORG_USAGE_BASE_INTERVAL (no row AND no "not due" log line) has
+# exactly one meaning: the poller did not run at all (e.g. launchd job disabled).
 # All rows have `ts` (ISO8601 UTC) and `status`. `pane_count` (integer) is present on every
 # row.
 #
@@ -48,6 +59,17 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bi
 BORG_USAGE_CHECKPOINT_PCT="${BORG_USAGE_CHECKPOINT_PCT:-85}"
 BORG_USAGE_HALT_PCT="${BORG_USAGE_HALT_PCT:-92}"
 
+# Gap 1 (directive: "week_pct >= 90 -> warn only. Do not sweep; a checkpoint does not help a
+# 7-day window."). This is a WARN-only knob — deliberately not wired into `_run_sweep` or the
+# halt signal anywhere in this file, so "never sweep the week window" is true by construction,
+# not by accident of a forgotten call site.
+BORG_USAGE_WEEK_WARN_PCT="${BORG_USAGE_WEEK_WARN_PCT:-90}"
+
+# Gap 2 (directive: "alert after 3 consecutive [UNKNOWN]"). A single failed poll is expected
+# noise (a transient claude_failed, one-off parse drift) and already gets its own WARNING/ERROR
+# line; this only escalates once it is a STREAK.
+BORG_USAGE_UNKNOWN_ALERT_COUNT="${BORG_USAGE_UNKNOWN_ALERT_COUNT:-3}"
+
 # Phase-2 checkpoint sweep. DEFAULT-OFF: the guardian ships inert until a human arms it, because the
 # 85% trigger rests on a single near-cap episode and must not be hard-tuned yet (directive's
 # data-readiness note). The threshold above (BORG_USAGE_CHECKPOINT_PCT) is the config knob; this
@@ -56,14 +78,34 @@ BORG_USAGE_SWEEP_ENABLED="${BORG_USAGE_SWEEP_ENABLED:-0}"
 BORG_USAGE_SWEEP_CMD_TEXT="${BORG_USAGE_SWEEP_CMD_TEXT:-/borg-link-up}"
 BORG_USAGE_SENDKEYS_DELAY="${BORG_USAGE_SENDKEYS_DELAY:-0.5}"
 
-# Idempotence state (sweep once per window). Distinct from the samples log; lives under the config
-# dir per the directive. tmp+rename writes only.
+# Guardian state (sweep-once-per-window idempotence + the consecutive-UNKNOWN streak below).
+# Distinct from the samples log; lives under the config dir per the directive. tmp+rename writes
+# only; both concerns merge onto the same object rather than overwriting each other's keys.
 BORG_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 GUARDIAN_STATE="${BORG_USAGE_GUARDIAN_STATE:-$BORG_CONFIG_DIR/usage-guardian.json}"
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
 SAMPLES="${BORG_USAGE_SAMPLES:-$STATE_DIR/usage-samples.jsonl}"
 LOG="${BORG_USAGE_LOG:-$STATE_DIR/usage-watch.log}"
+
+# Gap 3 (adaptive cadence, directive: "StartInterval 120 dropping to 60 ... prefer script-managed
+# cadence, one plist"). The plist's StartInterval is 60 — cheap, no Claude session, no transcript.
+# The EXPENSIVE thing is the probe itself (`claude -p "/usage"`), so cadence is gated on that, here,
+# before any probe runs — not by varying the plist. Below BORG_USAGE_FAST_PCT the poller is due
+# every BORG_USAGE_BASE_INTERVAL (120s, matching the OLD StartInterval — baseline probe volume is
+# unchanged); at/above it, due every BORG_USAGE_FAST_INTERVAL (60s). See _probe_due below for the
+# fail-open contract on a missing/unparseable/future last-sample timestamp.
+BORG_USAGE_BASE_INTERVAL="${BORG_USAGE_BASE_INTERVAL:-120}"
+BORG_USAGE_FAST_PCT="${BORG_USAGE_FAST_PCT:-70}"
+BORG_USAGE_FAST_INTERVAL="${BORG_USAGE_FAST_INTERVAL:-60}"
+
+# One-shot bypass for the due-check: `install.sh` touches this sentinel immediately before
+# `launchctl kickstart`, so its "did the poller just produce output" health check still forces a
+# real probe even when the cadence gate would otherwise (correctly) skip it. A launchd job's
+# EnvironmentVariables come only from the plist, never from the shell that issued `kickstart`, so
+# an env var set by install.sh cannot reach the job — a shared sentinel FILE is the only channel
+# that works across that boundary. Consumed (deleted) on use, so it forces exactly one probe.
+FORCE_PROBE_FILE="${BORG_USAGE_FORCE_PROBE_FILE:-$STATE_DIR/usage-watch.force-probe}"
 
 CLAUDE_BIN="${BORG_USAGE_CLAUDE_BIN:-claude}"
 
@@ -95,6 +137,53 @@ log() {
     echo "$line" >> "$LOG"
     (( DEBUG )) && echo "$line" >&2
     return 0
+}
+
+# ISO-8601 UTC -> epoch, both date dialects (mirrors hooks/borg-dispatch-guard.sh's _iso_to_epoch).
+# Unparseable -> 0, and 0 is the caller's signal to fail OPEN (treat as due), never to skip.
+_iso_to_epoch() {
+    TZ=UTC date -j -f "%Y-%m-%dT%H:%M:%SZ" "$1" +%s 2>/dev/null \
+        || date -u -d "$1" +%s 2>/dev/null \
+        || echo 0
+}
+
+# Gap 3's due-check. Returns success (0) when a real probe should run, failure (1) when this
+# invocation should skip it. FAIL OPEN on every uncertainty — no samples file, an empty last line,
+# a missing/unparseable ts, or a future ts (clock skew) — because a due-check that silently never
+# fires again is exactly this poller's most-repeated failure mode (see the ROW SCHEMA history
+# above: USER unset, PATH missing .local/bin, output="" masking binary_not_found — every one of
+# those was "the poller looks fine but samples nothing," and this must not become a fifth).
+_probe_due() {
+    local now_epoch="$1"
+    [[ -f "$SAMPLES" ]] || return 0
+
+    local last
+    last=$(tail -n 1 "$SAMPLES" 2>/dev/null) || last=""
+    [[ -n "$last" ]] || return 0
+
+    local last_ts
+    last_ts=$(printf '%s' "$last" | jq -r '.ts // ""' 2>/dev/null) || last_ts=""
+    [[ -n "$last_ts" ]] || return 0
+
+    local last_epoch
+    last_epoch=$(_iso_to_epoch "$last_ts")
+    [[ "$last_epoch" -gt 0 ]] || return 0
+
+    local age=$(( now_epoch - last_epoch ))
+    # Negative age (future ts / clock skew) is suspicious, not a licence to skip forever -> due.
+    (( age < 0 )) && return 0
+
+    local last_status last_pct
+    last_status=$(printf '%s' "$last" | jq -r '.status // ""' 2>/dev/null) || last_status=""
+    last_pct=$(printf '%s' "$last" | jq -r \
+        'if (.session_pct|type) == "number" then (.session_pct|floor) else "" end' 2>/dev/null) || last_pct=""
+
+    local interval="$BORG_USAGE_BASE_INTERVAL"
+    if [[ "$last_status" == "ok" ]] && [[ "$last_pct" =~ ^[0-9]+$ ]] && (( last_pct >= BORG_USAGE_FAST_PCT )); then
+        interval="$BORG_USAGE_FAST_INTERVAL"
+    fi
+
+    (( age >= interval ))
 }
 
 # Count tmux panes running Claude Code.
@@ -183,19 +272,77 @@ _guardian_get() {
     jq -r --arg k "$1" '.[$k] // ""' "$GUARDIAN_STATE" 2>/dev/null || printf ''
 }
 
-# Atomically record that the sweep fired for a window (tmp + rename).
-_guardian_set_swept() {
-    local window_key="$1" pct="$2" fired="$3" failed="$4"
+# Read the whole guardian state object, defaulting to "{}" when absent/unreadable/empty. Callers
+# merge onto this rather than overwriting wholesale, so two independent concerns sharing one state
+# file (the sweep's swept_window vs. the failure-streak counter below) never clobber each other.
+_guardian_read_all() {
+    local raw
+    if [[ -f "$GUARDIAN_STATE" ]]; then
+        raw=$(cat "$GUARDIAN_STATE" 2>/dev/null || printf '{}')
+        [[ -n "$raw" ]] || raw='{}'
+    else
+        raw='{}'
+    fi
+    printf '%s' "$raw"
+}
+
+# Write pre-built JSON content to the guardian state file, tmp + rename, never a partial write.
+_guardian_atomic_write() {
     mkdir -p "$(dirname "$GUARDIAN_STATE")"
     local tmp="$GUARDIAN_STATE.tmp.$$"
-    if jq -c -n --arg w "$window_key" --argjson pct "$pct" --arg ts "$ts" \
-        --argjson fired "$fired" --argjson failed "$failed" \
-        '{swept_window:$w, last_session_pct:$pct, last_swept_at:$ts, last_fired:$fired, last_failed:$failed}' \
-        > "$tmp" 2>/dev/null; then
+    if printf '%s' "$1" > "$tmp" 2>/dev/null; then
         mv "$tmp" "$GUARDIAN_STATE"
+        return 0
+    fi
+    rm -f "$tmp"
+    return 1
+}
+
+# Atomically record that the sweep fired for a window (tmp + rename), merged onto whatever else
+# is already in guardian state.
+_guardian_set_swept() {
+    local window_key="$1" pct="$2" fired="$3" failed="$4"
+    local merged
+    if merged=$(_guardian_read_all | jq -c --arg w "$window_key" --argjson pct "$pct" --arg ts "$ts" \
+            --argjson fired "$fired" --argjson failed "$failed" \
+            '. + {swept_window:$w, last_session_pct:$pct, last_swept_at:$ts, last_fired:$fired, last_failed:$failed}' \
+            2>/dev/null) && _guardian_atomic_write "$merged"; then
+        return 0
+    fi
+    log "WARNING: sweep: could not write guardian state at $GUARDIAN_STATE"
+    return 1
+}
+
+# ── Gap 2: consecutive-UNKNOWN streak ─────────────────────────────────────────
+# "UNKNOWN" is any poll that could not produce a trustworthy session_pct — the three status:"error"
+# reasons (binary_not_found, claude_failed, parse_failed). Idle/suspect are NOT unknown: no claude
+# call was even attempted, so they neither extend nor reset the streak.
+_guardian_record_error() {
+    local streak
+    streak=$(_guardian_read_all | jq -r '.consecutive_unknown // 0' 2>/dev/null) || streak=0
+    [[ "$streak" =~ ^[0-9]+$ ]] || streak=0
+    streak=$((streak + 1))
+    local merged
+    if merged=$(_guardian_read_all | jq -c --argjson n "$streak" --arg ts "$ts" \
+            '. + {consecutive_unknown:$n, last_unknown_at:$ts}' 2>/dev/null) \
+            && _guardian_atomic_write "$merged"; then
+        :
     else
-        rm -f "$tmp"
-        log "WARNING: sweep: could not write guardian state at $GUARDIAN_STATE"
+        log "WARNING: guardian: could not write state at $GUARDIAN_STATE"
+    fi
+    if (( streak >= BORG_USAGE_UNKNOWN_ALERT_COUNT )); then
+        log "ALERT: $streak consecutive UNKNOWN polls (no trustworthy session_pct reading in a while) — check the poller and the claude binary"
+    fi
+}
+
+# A successful (status:"ok") poll resets the streak.
+_guardian_record_ok() {
+    local merged
+    if merged=$(_guardian_read_all | jq -c '. + {consecutive_unknown:0}' 2>/dev/null) \
+            && _guardian_atomic_write "$merged"; then
+        :
+    else
+        log "WARNING: guardian: could not write state at $GUARDIAN_STATE"
     fi
 }
 
@@ -236,7 +383,20 @@ _run_sweep() {
     return 0
 }
 
-ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+now_epoch="${BORG_USAGE_NOW_EPOCH:-$(date +%s)}"
+
+if [[ -f "$FORCE_PROBE_FILE" ]]; then
+    rm -f "$FORCE_PROBE_FILE"
+    log "cadence: forced probe (one-shot sentinel present) — bypassing due-check"
+elif ! _probe_due "$now_epoch"; then
+    log "cadence: not due yet — skipping probe (baseline ${BORG_USAGE_BASE_INTERVAL}s, fast ${BORG_USAGE_FAST_INTERVAL}s at >=${BORG_USAGE_FAST_PCT}%)"
+    exit 0
+fi
+
+# Derived from the same now_epoch the due-check used (not a fresh `date` call), so tests can drive
+# both consistently via BORG_USAGE_NOW_EPOCH. Two-dialect date, same pattern as elsewhere in this
+# file (macOS `-r`, GNU `-d @`).
+ts=$(date -u -r "$now_epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$now_epoch" +%Y-%m-%dT%H:%M:%SZ)
 pane_count=$(_claude_pane_count)
 [[ -z "$pane_count" ]] && pane_count=0
 
@@ -265,6 +425,7 @@ if ! command -v "$CLAUDE_BIN" >/dev/null 2>&1; then
     row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
         '{ts:$ts, status:"error", reason:"binary_not_found", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
     _append_sample "$row"
+    _guardian_record_error
     exit 1
 fi
 
@@ -305,6 +466,7 @@ if [[ "$claude_exit" -ne 0 ]]; then
     row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
         '{ts:$ts, status:"error", reason:"claude_failed", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
     _append_sample "$row"
+    _guardian_record_error
     exit 0
 fi
 
@@ -329,6 +491,7 @@ if [[ -z "$session_pct" ]] || ! [[ "$session_pct" =~ ^[0-9]+$ ]] || [[ "$session
     row=$(jq -c -n --arg ts "$ts" --argjson pane_count "$pane_count" \
         '{ts:$ts, status:"error", reason:"parse_failed", pane_count:$pane_count, session_pct:null, week_pct:null, resets_at:null}')
     _append_sample "$row"
+    _guardian_record_error
     exit 0
 fi
 
@@ -349,6 +512,14 @@ row=$(jq -c -n \
 
 _append_sample "$row"
 log "sample: session_pct=$session_pct week_pct=$week_pct resets_at=$resets_at"
+_guardian_record_ok
+
+# Gap 1: week_pct is a 7-day window — a checkpoint cannot help it, so this is WARN-only and
+# deliberately never calls _run_sweep or the halt path. Skipped when week_pct itself failed to
+# parse (the literal string "null" set above).
+if [[ "$week_pct" != "null" ]] && (( week_pct >= BORG_USAGE_WEEK_WARN_PCT )); then
+    log "WARNING: week_pct=$week_pct >= week warn threshold $BORG_USAGE_WEEK_WARN_PCT (7-day window — a checkpoint cannot help; observe-only, no sweep)"
+fi
 
 # Halt and checkpoint are independent thresholds — a 95% session needs BOTH the halt signal AND a
 # checkpoint sweep, so these are separate `if`s, not elif. The >=92 dispatch hard-stop veto is a

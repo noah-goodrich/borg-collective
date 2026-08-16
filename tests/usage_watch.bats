@@ -27,6 +27,19 @@ setup() {
     export BORG_USAGE_GUARDIAN_STATE="${BATS_TEST_TMPDIR}/usage-guardian.json"
     export SENDKEYS_SINK="${BATS_TEST_TMPDIR}/sendkeys.log"
     export BORG_USAGE_SENDKEYS_DELAY=0
+    # ─ Gap 3 (adaptive cadence) test scaffolding ─
+    # A fixed, test-controlled "now" so the due-check is deterministic instead of racing real wall
+    # clock time (back-to-back `run "$SCRIPT" --once` calls in one test would otherwise land under
+    # a second apart, which the due-check would correctly treat as "not due"). Tests with more than
+    # one poll call `_advance_epoch` between them to simulate real elapsed time.
+    export BORG_USAGE_NOW_EPOCH=1700000000
+}
+
+# Advance the test-controlled clock past both cadence intervals (120s baseline, 60s fast), so a
+# subsequent poll in the same test is always due regardless of the previous poll's session_pct.
+_advance_epoch() {
+    local delta="${1:-300}"
+    export BORG_USAGE_NOW_EPOCH=$(( BORG_USAGE_NOW_EPOCH + delta ))
 }
 
 # A mock for `tmux send-keys` that records every invocation's argv (one line per call) to
@@ -381,6 +394,7 @@ _seed_probe_dir() {
     export BORG_USAGE_SWEEP_ENABLED=1
     run "$SCRIPT" --once
     [ "$status" -eq 0 ]
+    _advance_epoch
     run "$SCRIPT" --once
     [ "$status" -eq 0 ]
     # One sweep = 2 send-keys calls (text + Enter) for the single pane, NOT 4.
@@ -396,6 +410,7 @@ _seed_probe_dir() {
     export BORG_USAGE_SWEEP_ENABLED=1
     run "$SCRIPT" --once
     [ "$status" -eq 0 ]
+    _advance_epoch
     # New window: different reset label.
     _mock_claude_at 90 "Jul 10 at 2:30am (America/Denver)"
     run "$SCRIPT" --once
@@ -460,6 +475,7 @@ _seed_probe_dir() {
     [ "$status" -eq 0 ]
     [ ! -f "$SENDKEYS_SINK" ] || [ ! -s "$SENDKEYS_SINK" ]
     # Because nothing was checkpointed, the window is NOT marked swept.
+    _advance_epoch
     run "$SCRIPT" --once
     [ "$status" -eq 0 ]
     # still no state consumed -> guardian state absent or without a swept_window
@@ -480,6 +496,269 @@ _seed_probe_dir() {
     session_pct=$(_row_field '.session_pct')
     [ "$session_pct" = "90" ]
     grep -q "WARNING" "$BORG_USAGE_LOG"
+}
+
+# ─── Gap 1: week_pct >= 90 warns only, never sweeps (7-day window, directive) ─────────────────
+
+@test "week warning: week_pct >= threshold logs a distinct week-warning, ok row still written" {
+    _write_mock_claude "echo 'Current session: 10% used'; echo 'Current week (all models): 92% used'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(_row_field '.status')" = "ok" ]
+    [ "$(_row_field '.week_pct')" = "92" ]
+    grep -q "WARNING.*week_pct=92.*week warn threshold 90" "$BORG_USAGE_LOG"
+}
+
+@test "week warning: below the threshold logs no week-warning" {
+    _write_mock_claude "echo 'Current session: 10% used'; echo 'Current week (all models): 50% used'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "week warn threshold" "$BORG_USAGE_LOG"
+}
+
+@test "week warning: threshold is configurable via BORG_USAGE_WEEK_WARN_PCT" {
+    export BORG_USAGE_WEEK_WARN_PCT=50
+    _write_mock_claude "echo 'Current session: 10% used'; echo 'Current week (all models): 60% used'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "WARNING.*week_pct=60.*week warn threshold 50" "$BORG_USAGE_LOG"
+}
+
+@test "week warning: never triggers a sweep even when a sweep IS armed and session_pct is high too" {
+    _write_mock_sendkeys
+    _panes_env paneA
+    export BORG_USAGE_SWEEP_ENABLED=1
+    # session_pct (90) crosses the checkpoint threshold on its own -> a sweep IS expected here,
+    # but it must be attributable to session_pct alone, never to week_pct.
+    _write_mock_claude "echo 'Current session: 90% used · resets Jul 9 at 1:20am (America/Denver)'; echo 'Current week (all models): 95% used'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "week warn threshold" "$BORG_USAGE_LOG"
+    # Exactly one sweep worth of calls (2: text + Enter) — the week breach did not add a second.
+    run grep -c . "$SENDKEYS_SINK"
+    [ "$output" = "2" ]
+}
+
+# ─── Gap 2: alert after 3 consecutive UNKNOWN (status:"error") polls ──────────────────────────
+
+@test "consecutive UNKNOWN: no ALERT on poll 1 or 2, ALERT fires on the 3rd" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+    _advance_epoch
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+    _advance_epoch
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "ALERT: 3 consecutive UNKNOWN" "$BORG_USAGE_LOG"
+}
+
+@test "consecutive UNKNOWN: streak persists across invocations via guardian state" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    _advance_epoch
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "2" ]
+}
+
+@test "consecutive UNKNOWN: a successful poll resets the streak to 0" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    _advance_epoch
+    run "$SCRIPT" --once
+    _advance_epoch
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "0" ]
+    _advance_epoch
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+}
+
+@test "consecutive UNKNOWN: counts across mixed failure reasons (binary_not_found + parse_failed)" {
+    export BORG_USAGE_CLAUDE_BIN="definitely-not-a-real-binary-$$"
+    run "$SCRIPT" --once
+    [ "$status" -ne 0 ]
+    unset BORG_USAGE_CLAUDE_BIN
+    _advance_epoch
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+    _advance_epoch
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "ALERT: 3 consecutive UNKNOWN" "$BORG_USAGE_LOG"
+}
+
+@test "consecutive UNKNOWN: idle/suspect polls neither extend nor reset the streak" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    _advance_epoch
+    run "$SCRIPT" --once
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "2" ]
+    _advance_epoch
+    export BORG_USAGE_PANE_CMD="true"
+    export BORG_USAGE_PROC_CMD="true"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(tail -n 1 "$BORG_USAGE_SAMPLES" | jq -r '.status')" = "idle" ]
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "2" ]
+}
+
+@test "consecutive UNKNOWN: alert count is configurable via BORG_USAGE_UNKNOWN_ALERT_COUNT" {
+    export BORG_USAGE_UNKNOWN_ALERT_COUNT=2
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    ! grep -q "ALERT" "$BORG_USAGE_LOG"
+    _advance_epoch
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    grep -q "ALERT: 2 consecutive UNKNOWN" "$BORG_USAGE_LOG"
+}
+
+@test "guardian state: sweep write does not clobber the failure streak counter" {
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    _advance_epoch
+    run "$SCRIPT" --once
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "2" ]
+    _advance_epoch
+    _write_mock_sendkeys
+    _panes_env paneA
+    export BORG_USAGE_SWEEP_ENABLED=1
+    _mock_claude_at 90 "Jul 9 at 1:20am (America/Denver)"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # A successful poll resets the streak; the sweep-write path must still see & preserve that
+    # reset rather than resurrecting the pre-sweep counter from a stale in-memory copy.
+    [ "$(jq -r '.consecutive_unknown' "$BORG_USAGE_GUARDIAN_STATE")" = "0" ]
+    # resets_at parsing excludes the trailing "(tz)" clause (existing behaviour) — the window key
+    # is whatever that parse produced, not the raw fixture string.
+    [ "$(jq -r '.swept_window' "$BORG_USAGE_GUARDIAN_STATE")" = "Jul 9 at 1:20am" ]
+}
+
+# ─── Gap 3: adaptive cadence (script-side due-check, one plist, StartInterval=60) ─────────────
+#
+# launchd wakes the script every 60s; whether that wake becomes a real probe is decided here.
+# Below BORG_USAGE_FAST_PCT (70): due every BORG_USAGE_BASE_INTERVAL (120s). At/above it: due
+# every BORG_USAGE_FAST_INTERVAL (60s). Every uncertainty on the READ side (missing file, garbage
+# last line, unparseable/missing ts, future ts) must fail OPEN -> due, never "skip forever".
+
+# Seed the samples file with exactly one row at a given age (seconds before BORG_USAGE_NOW_EPOCH),
+# status, and (optionally) session_pct — simulates "the last real poll happened this long ago."
+_seed_last_row() {
+    local age="$1" status="$2" pct="${3:-}"
+    local epoch=$(( BORG_USAGE_NOW_EPOCH - age ))
+    local ts
+    ts=$(date -u -r "$epoch" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@$epoch" +%Y-%m-%dT%H:%M:%SZ)
+    if [ -n "$pct" ]; then
+        jq -nc --arg ts "$ts" --arg s "$status" --argjson pct "$pct" \
+            '{ts:$ts, status:$s, pane_count:1, session_pct:$pct, week_pct:10, resets_at:"x"}' \
+            > "$BORG_USAGE_SAMPLES"
+    else
+        jq -nc --arg ts "$ts" --arg s "$status" \
+            '{ts:$ts, status:$s, pane_count:1, session_pct:null, week_pct:null, resets_at:null}' \
+            > "$BORG_USAGE_SAMPLES"
+    fi
+}
+
+@test "cadence: below-threshold sample 30s old is NOT due -> no probe, no new row" {
+    _seed_last_row 30 ok 10
+    local sentinel="${BATS_TEST_TMPDIR}/sentinel-invoked"
+    _write_mock_claude "touch '$sentinel'; cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ ! -f "$sentinel" ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "1" ]
+    grep -q "not due yet" "$BORG_USAGE_LOG"
+}
+
+@test "cadence: below-threshold sample 130s old IS due -> probes, appends a new row" {
+    _seed_last_row 130 ok 10
+    local sentinel="${BATS_TEST_TMPDIR}/sentinel-invoked"
+    _write_mock_claude "touch '$sentinel'; cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$sentinel" ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "2" ]
+}
+
+@test "cadence: above-threshold sample 50s old is NOT due yet (fast interval is 60s)" {
+    _seed_last_row 50 ok 80
+    local sentinel="${BATS_TEST_TMPDIR}/sentinel-invoked"
+    _write_mock_claude "touch '$sentinel'; cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ ! -f "$sentinel" ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "1" ]
+}
+
+@test "cadence: above-threshold sample 70s old IS due (fast interval, not baseline)" {
+    _seed_last_row 70 ok 80
+    local sentinel="${BATS_TEST_TMPDIR}/sentinel-invoked"
+    _write_mock_claude "touch '$sentinel'; cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$sentinel" ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "2" ]
+}
+
+@test "cadence: no samples file at all -> fail open, probes" {
+    rm -f "$BORG_USAGE_SAMPLES"
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "1" ]
+}
+
+@test "cadence: garbage/unparseable last line -> fail open, probes" {
+    printf 'not json at all\n' > "$BORG_USAGE_SAMPLES"
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "2" ]
+}
+
+@test "cadence: future-dated ts (clock skew) -> fail open, probes, does not wedge" {
+    _seed_last_row -300 ok 10   # negative age = 300s in the future relative to NOW_EPOCH
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "2" ]
+}
+
+@test "cadence: a skipped invocation writes NEITHER a samples row NOR any guardian state" {
+    _seed_last_row 30 ok 10
+    _write_mock_claude "cat '$FIXTURE'"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "1" ]
+    [ ! -f "$BORG_USAGE_GUARDIAN_STATE" ]
+}
+
+@test "cadence: FORCE_PROBE_FILE forces exactly one probe even when not due, then self-consumes" {
+    _seed_last_row 30 ok 10
+    _write_mock_claude "cat '$FIXTURE'"
+    export BORG_USAGE_FORCE_PROBE_FILE="${BATS_TEST_TMPDIR}/force-probe"
+    touch "$BORG_USAGE_FORCE_PROBE_FILE"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "2" ]
+    grep -q "forced probe" "$BORG_USAGE_LOG"
+    [ ! -f "$BORG_USAGE_FORCE_PROBE_FILE" ]
+    # Sentinel consumed -> the NEXT invocation goes back through the normal (still-not-due) gate.
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" = "2" ]
 }
 
 # ─── new self-auditing contract tests ────────────────────────────────────────
@@ -542,11 +821,13 @@ _seed_probe_dir() {
     run "$SCRIPT" --once
     [ "$status" -eq 0 ]
 
+    _advance_epoch
     export BORG_USAGE_PANE_CMD="echo claude"
     _write_mock_claude "cat '${FIXTURE}'"
     run "$SCRIPT" --once
     [ "$status" -eq 0 ]
 
+    _advance_epoch
     _write_mock_claude "echo garbage"
     run "$SCRIPT" --once
     [ "$status" -eq 0 ]
