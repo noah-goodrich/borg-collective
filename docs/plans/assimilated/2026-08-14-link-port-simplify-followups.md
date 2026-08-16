@@ -100,31 +100,42 @@ leave anything that turns out to have a live caller or a real behavioral depende
     changed) and moved the `typeset -a _link_py_args` declaration to the top of the function, shared by all
     three branches that build the array. `bats tests/cli_contract.bats` 121/121 green;
     `bats tests/*.bats` 686/686 green; `pytest -q` 413/413 green.
-- [ ] **AC2** — `render.py`'s Directives/Recently-assimilated blocks are shared between `deep()` and the
+- [x] **AC2** — `render.py`'s Directives/Recently-assimilated blocks are shared between `deep()` and the
       overview helpers (parameterize on the `[project]` tag); the useless `too-many-branches` pylint
       suppression on `deep()` is removed, `too-many-locals` stays.
   - Verify: `pytest borg_core/link/test_render.py -q` green; `pylint borg_core/link/render.py` clean (no new
     warnings from removing the suppression).
-- [ ] **AC3** — `_document` in `cli.py` either narrows what it gathers per-renderer, or (simpler, lower risk)
+  - **Evidence**: Directives/Recently-assimilated render blocks (`_overview_directives_block`,
+    `_overview_assimilated_block`) are shared between `deep()` and the overview.
+- [x] **AC3** — `_document` in `cli.py` either narrows what it gathers per-renderer, or (simpler, lower risk)
       the porcelain/deep call paths skip the unread work `_document` currently does unconditionally. Re-measure
       the directory-glob / markdown-read counts before and after on a representative registry.
   - Verify: `pytest borg_core/link/test_cli.py -q` green; before/after glob and read counts recorded in the PR.
-- [ ] **AC4** — `shell.py`'s `live_windows` delegates to (or is merged with) `registry/shell.py`'s
+  - **Evidence**: `_document` (`cli.py:73`) made mode-aware (`need_aggregate`, `need_focus`); porcelain and
+    deep went from **20 globs / 154 reads to 0 / 21**.
+- [x] **AC4** — `shell.py`'s `live_windows` delegates to (or is merged with) `registry/shell.py`'s
       `tmux_window_exists`, or the duplication is otherwise resolved so one function owns the tmux subprocess
       call; `read_assimilated` reads each file once, matching `collect_all_assimilated`'s pattern.
   - Verify: `pytest borg_core/link/test_shell.py borg_core/registry/test_shell.py -q` green.
-- [ ] **AC5** — `format_iso` / `epoch_to_iso` / the `recon/cli.py:71` inline collapse to one shared
+  - **Evidence**: `live_windows` merged into `registry.shell.list_tmux_windows` — no longer duplicated in
+    `link/shell.py`.
+- [x] **AC5** — `format_iso` / `epoch_to_iso` / the `recon/cli.py:71` inline collapse to one shared
       definition (a natural home is `borg_core/paths.py` or a new small shared time-utility module, following
       the precedent `paths.py`'s own docstring sets for exactly this situation).
   - Verify: `pytest borg_core/link/test_core.py borg_core/recon/test_core.py borg_core/recon/test_cli.py -q`
     green.
-- [ ] **AC6** — `reap_overlay`'s TSV-sentinel normalization in `core.py` is either deleted (if AC-verification
+  - **Evidence**: `format_iso` / `epoch_to_iso` / the `recon/cli.py` inline collapsed into
+    `borg_core/timefmt.py`.
+- [x] **AC6** — `reap_overlay`'s TSV-sentinel normalization in `core.py` is either deleted (if AC-verification
       confirms it changes no observable output) or a test is added that actually pins the branch it selects,
       so the line stops being untested dead weight either way.
   - Verify: `pytest borg_core/link/test_core.py -q` green; if deleted, confirm via `coverage run --branch`
     that no branch coverage regresses.
-- [ ] **AC7** — Regression: full suite stays green.
+  - **Evidence**: the inert TSV normalization was deleted; `core.py` now documents (`:244-249`) that
+    `reap_overlay` deliberately does not normalize the sentinel, with no observable-output change.
+- [x] **AC7** — Regression: full suite stays green.
   - Verify: `bats tests/*.bats` and `pytest -q` (or repo's combined test entrypoint) both exit 0.
+  - **Evidence**: 686 bats, 413 pytest, `pylint` 10.00/10, all four goldens byte-identical.
 
 ## Scope Boundaries
 
@@ -159,3 +170,5 @@ consolidations; none requires new design.
   independently owned per CLAUDE.md's per-project directive discipline** — keep the shared function's home
   genuinely neutral (`paths.py` or a new module) rather than importing one package's internals into the
   other.
+
+*Shipped: 2026-08-16 — PR #153 (AC2-AC7) and PR #155 (AC1) merged to main*

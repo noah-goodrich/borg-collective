@@ -25,7 +25,7 @@ four deployed-artifact targets against its repo source and reports drift. Strict
 only. A target present on disk but absent from the repo's copy manifest is not drift; it is normal and must
 not be flagged.
 
-## Scope — four targets (counts verified live in this worktree, 2026-08-14)
+## Scope — five targets (counts verified live in this worktree, 2026-08-14; plists target added 2026-08-16)
 
 | Target | Repo source | Deployed destination | Count | Copied by |
 |---|---|---|---|---|
@@ -33,10 +33,21 @@ not be flagged.
 | Hooks | `hooks/*.sh` | `~/.claude/hooks/*.sh` | **12** | `borg.zsh` around :1618-1623 |
 | Agents | `agents/*.md` | `~/.claude/agents/*.md` | **6** | `borg.zsh` around :1798-1805 |
 | Shared hook lib | `lib/*.sh` | `~/.claude/lib/*.sh` | **2** (`borg-hooks.sh`, `reaper.sh`) | `borg.zsh` around :1621-1622 |
+| launchd plists | `launchd/*.plist` | `~/Library/LaunchAgents/com.stillpoint-labs.borg.*.plist` | **5** | `install.sh` ONLY |
 
 The shared-lib row is the highest-value target in this set: `lib/borg-hooks.sh` is sourced at runtime by every
 installed hook (`borg-hooks.sh:doc` — shared bash helpers), so a stale deployed copy silently breaks every hook
 that calls into it, not just one.
+
+**Why plists were added as a fifth target**: `borg setup` deploys skills, hooks, agents, and libs — but not
+plists. Plists are installed only by `install.sh`, which calls `borg setup` at the end but is not itself
+re-run by `borg setup`. This is not hypothetical: on 2026-08-16, PR #152 changed `StartInterval` from 120 to
+60 in `launchd/com.stillpoint-labs.borg.usage-watch.plist`, while `/Users/noah/.local/bin/borg-usage-watch`
+is a symlink to source — so the new interval logic went live at merge, but the *installed* plist kept its
+old `StartInterval=120` until `install.sh` was re-run. Because the code's own baseline due-interval is also
+120s, a 120s wake cadence means jitter can make some wakes skip their due check entirely — intermittently
+halving the effective sample rate until `install.sh` ran. Caught by hand; nothing automated would have
+caught it, which is exactly the gap this directive exists to close.
 
 ## Constraints
 
@@ -70,6 +81,9 @@ that calls into it, not just one.
 - [ ] **AC4** — The check compares the 2 `lib/*.sh` files (repo → deployed) the same way, and the PR
       description calls out `lib/borg-hooks.sh` explicitly as the highest-value target.
   - Verify: same drift-and-revert test against the deployed `lib/borg-hooks.sh`.
+- [ ] **AC4b** — The check compares the 4 `launchd/*.plist` files (repo → deployed) the same way.
+  - Verify: same drift-and-revert test against a deployed plist; also confirm the 2026-08-16 PR #152 scenario
+    (a source change to `StartInterval` with no re-run of `install.sh`) is caught.
 - [ ] **AC5** — The plugin distribution leg calls `scripts/build-plugin.sh --dry-run` (or an equivalent
       programmatic entry point into the same diff logic) rather than reimplementing the skill diff.
   - Verify: `grep` the new check's source for a call into `build-plugin.sh`; confirm no duplicate `diff`-based
@@ -80,7 +94,7 @@ that calls into it, not just one.
     deployed-only artifacts appear in its output.
 - [ ] **AC7** — Regression: the check is read-only — it must not write to `~/.claude/` or the repo.
   - Verify: `git status` in the repo and a directory-mtime check on `~/.claude/skills`, `~/.claude/hooks`,
-    `~/.claude/agents`, `~/.claude/lib` are unchanged before/after a run.
+    `~/.claude/agents`, `~/.claude/lib`, and `~/Library/LaunchAgents` are unchanged before/after a run.
 
 ## Scope Boundaries
 
@@ -90,15 +104,16 @@ that calls into it, not just one.
   not just deferred.
 - NOT auto-remediating drift (no auto-copy-back). The check reports; a human or a separate `borg setup --sync`
   style command fixes.
-- NOT expanding to cover every file `borg setup` touches (e.g. `settings.json` patches, launchd plists) — the
-  four targets above are the ones with a clean repo-source/deployed-destination shape. Others can be filed as
-  their own follow-ups if this pattern proves useful.
+- NOT expanding to cover every file `borg setup` touches (e.g. `settings.json` patches) — the five targets
+  above (four from the original filing, plus launchd plists added 2026-08-16) are the ones with a clean
+  repo-source/deployed-destination shape. Others can be filed as their own follow-ups if this pattern proves
+  useful.
 - If done early: seed the ignore-list from a real run and get the owner's ratification, rather than expanding
   to more targets.
 
 ## Ship Definition
 
-PR against `main`. New check committed with a test exercising AC1-AC7's drift-and-revert cases. Owner has
+PR against `main`. New check committed with a test exercising AC1-AC7 and AC4b's drift-and-revert cases. Owner has
 reviewed one real run's output and ratified (or corrected) the deployed-only ignore-list before this ships as
 something other people rely on.
 
