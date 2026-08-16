@@ -318,6 +318,86 @@ def test_main_porcelain_and_deep_render_through_render_py(isolated_env, capsys):
     assert "Session ID:" in out
 
 
+def test_document_skips_the_aggregate_collectors_for_porcelain_and_deep(isolated_env, capsys, monkeypatch):
+    # AC3: `_document` used to gather directives/assimilated/cortex_pending unconditionally, even
+    # though render.porcelain reads only order/projects and render.deep reads only focus. Before this
+    # fix, both counters below would be >0 for every mode; after, porcelain and deep must skip the
+    # aggregate collectors entirely (0 calls), while json and overview still gather them.
+    path = _delta_workspace(isolated_env)
+    _write_registry(isolated_env, {"delta": {"path": path, "status": "idle"}})
+
+    calls = {"directives": 0, "assimilated": 0}
+    real_directives = shell.collect_all_directives
+    real_assimilated = shell.collect_all_assimilated
+
+    def counting_directives(registry):
+        calls["directives"] += 1
+        return real_directives(registry)
+
+    def counting_assimilated(registry, max_items=3):
+        calls["assimilated"] += 1
+        return real_assimilated(registry, max_items)
+
+    monkeypatch.setattr(shell, "collect_all_directives", counting_directives)
+    monkeypatch.setattr(shell, "collect_all_assimilated", counting_assimilated)
+
+    with pytest.raises(SystemExit):
+        cli.main(["--porcelain"])
+    capsys.readouterr()
+    assert calls == {"directives": 0, "assimilated": 0}
+
+    with pytest.raises(SystemExit):
+        cli.main(["--deep", "--", "delta"])
+    capsys.readouterr()
+    assert calls == {"directives": 0, "assimilated": 0}
+
+    with pytest.raises(SystemExit):
+        cli.main(["--json"])
+    capsys.readouterr()
+    assert calls == {"directives": 1, "assimilated": 1}
+
+    with pytest.raises(SystemExit):
+        cli.main([])
+    capsys.readouterr()
+    assert calls == {"directives": 2, "assimilated": 2}
+
+
+def test_document_still_gathers_focus_for_deep_and_json_but_not_porcelain_or_overview(
+    isolated_env, capsys, monkeypatch
+):
+    path = _delta_workspace(isolated_env)
+    _write_registry(isolated_env, {"delta": {"path": path, "status": "idle"}})
+
+    calls = {"n": 0}
+    real_focus = cli._focus  # pylint: disable=protected-access
+
+    def counting_focus(project, registry, now_epoch):
+        calls["n"] += 1
+        return real_focus(project, registry, now_epoch)
+
+    monkeypatch.setattr(cli, "_focus", counting_focus)
+
+    with pytest.raises(SystemExit):
+        cli.main(["--porcelain"])
+    capsys.readouterr()
+    assert calls["n"] == 0
+
+    with pytest.raises(SystemExit):
+        cli.main([])
+    capsys.readouterr()
+    assert calls["n"] == 0
+
+    with pytest.raises(SystemExit):
+        cli.main(["--deep", "--", "delta"])
+    capsys.readouterr()
+    assert calls["n"] == 1
+
+    with pytest.raises(SystemExit):
+        cli.main(["--json", "--", "delta"])
+    capsys.readouterr()
+    assert calls["n"] == 2
+
+
 def test_run_focus_finds_an_archived_project_even_without_all(isolated_env, capsys):
     path = _project_dir(isolated_env, "delta")
     _write_registry(isolated_env, {"delta": {"path": path, "status": "archived"}})

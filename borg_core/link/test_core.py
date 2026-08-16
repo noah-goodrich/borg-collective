@@ -603,6 +603,15 @@ def test_format_iso_round_trips_with_iso_to_epoch():
     assert core.iso_to_epoch(formatted) == epoch
 
 
+def test_format_iso_is_the_shared_timefmt_function():
+    # AC5: format_iso used to duplicate the same strftime shape as recon.core.epoch_to_iso and an
+    # inline literal in recon/cli.py. Fails before this dedup (a locally-defined function); after,
+    # this name is a re-export of the one shared definition in borg_core.timefmt.
+    from borg_core import timefmt  # noqa: PLC0415 -- test-local, mirrors module's own import
+
+    assert core.format_iso is timefmt.epoch_to_iso
+
+
 # Phase 3 entry gate, test 1: capacity's `active > limit` is strict, mirroring borg.zsh:408's
 # `(( active_count > BORG_MAX_ACTIVE ))`. Every prior exercise of core.capacity() passed 0 or a
 # non-boundary pair as the active count (e.g. `capacity(0, 3)` at :502/:529), which is mutation-blind
