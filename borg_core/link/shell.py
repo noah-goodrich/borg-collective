@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
@@ -51,30 +50,11 @@ def now_epoch() -> int:
     return int(time.time())
 
 
-def live_windows() -> list[str]:
-    """Names of the live tmux windows in borg's session, or [] when there is no session.
-
-    Mirrors _borg_live_windows -> borg_tmux_windows (lib/registry.zsh:200-203, lib/tmux.zsh:11-14).
-
-    DELIBERATE DEVIATION: collapses the shell's `borg_tmux_alive` (a `tmux has-session`) plus
-    `tmux list-windows` into ONE fork. Behavior-equivalent because tmux resolves a `-t` target the
-    same way for both subcommands (exact, then prefix, then fnmatch), so any session has-session
-    would find is the session list-windows finds. The inherited looseness comes along: with no
-    session literally named "borg", a session named "borg-anything" satisfies both.
-    """
-    try:
-        result = subprocess.run(
-            ["tmux", "list-windows", "-t", tmux_session_name(), "-F", "#W"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return []
-    if result.returncode != 0:
-        return []
-    # JUSTIFICATION: splitting a subprocess's own captured stdout text, not a cross-layer reach.
-    return result.stdout.splitlines()  # pylint: disable=clean-arch-demeter
+# Re-exported: mirrors _borg_live_windows -> borg_tmux_windows (lib/registry.zsh:200-203,
+# lib/tmux.zsh:11-14). Was its own byte-identical `tmux list-windows` fork; now the same definition
+# borg_core.registry.shell.tmux_window_exists uses, see that module's list_tmux_windows docstring
+# for the fork-collapsing rationale (borg_tmux_alive + tmux list-windows -> one fork).
+live_windows = registry_shell.list_tmux_windows
 
 
 def reap_threshold_hours() -> int | None:
@@ -246,14 +226,17 @@ def read_assimilated(project_path: str | None, max_items: int = 3) -> list[dict]
     files = _markdown_files(directory / "docs" / "plans" / "assimilated")
     entries = [{"filename": f.name, "path": str(f), "project": ""} for f in files]
     chosen = core.sort_assimilated(entries)[:max_items]
-    return [
-        {
-            "slug": core.slug_from_filename(e["filename"]),
-            "title": core.heading_title(_read_text(Path(e["path"]))),
-            "ship_date": core.ship_date(_read_text(Path(e["path"]))),
-        }
-        for e in chosen
-    ]
+    result = []
+    for e in chosen:
+        text = _read_text(Path(e["path"]))
+        result.append(
+            {
+                "slug": core.slug_from_filename(e["filename"]),
+                "title": core.heading_title(text),
+                "ship_date": core.ship_date(text),
+            }
+        )
+    return result
 
 
 def collect_all_directives(registry: dict) -> list[dict]:

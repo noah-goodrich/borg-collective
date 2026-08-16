@@ -133,6 +133,15 @@ def test_live_windows_uses_the_configured_session(isolated_env, monkeypatch):
     assert "custom" in seen["cmd"]
 
 
+def test_live_windows_is_the_registry_shells_tmux_window_lister():
+    # AC4: live_windows used to be its own byte-identical `tmux list-windows` fork; it now delegates
+    # to (is the exact same function object as) registry_shell.list_tmux_windows, the one definition
+    # tmux_window_exists also uses. Fails before this dedup (two distinct function objects).
+    from borg_core.registry import shell as registry_shell  # noqa: PLC0415 -- test-local, mirrors module's own import
+
+    assert shell.live_windows is registry_shell.list_tmux_windows
+
+
 # ── state.json ───────────────────────────────────────────────────────────────
 
 
@@ -287,6 +296,31 @@ def test_read_assimilated_is_filename_descending_and_capped(isolated_env):
     assert [e["title"] for e in result] == ["Shipped D", "Shipped C", "Shipped B"]
     assert result[0]["ship_date"] == "2026-03-04"
     assert result[0]["slug"] == "2026-03-04-d"
+
+
+def test_read_assimilated_reads_each_survivor_exactly_once(isolated_env, monkeypatch):
+    # AC4: read_assimilated used to call _read_text(Path(e["path"])) twice per survivor -- once for
+    # title, once for ship_date. Fails before this fix (2 reads/file); passes after (1 read/file).
+    path = _project(
+        isolated_env,
+        "p",
+        assimilated=[
+            ("2026-03-01-a.md", "# Shipped A\nShipped: 2026-03-01\n"),
+            ("2026-03-02-b.md", "# Shipped B\nShipped: 2026-03-02\n"),
+        ],
+    )
+    calls = {"n": 0}
+    real_read_text = shell._read_text  # pylint: disable=protected-access
+
+    def counting_read_text(p):
+        calls["n"] += 1
+        return real_read_text(p)
+
+    monkeypatch.setattr(shell, "_read_text", counting_read_text)
+    result = shell.read_assimilated(path)
+
+    assert len(result) == 2
+    assert calls["n"] == 2
 
 
 def test_collect_all_directives_prefixes_the_project_and_keeps_registry_order(isolated_env):

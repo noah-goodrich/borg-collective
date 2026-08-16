@@ -16,8 +16,8 @@ import json as jsonlib
 import os
 import sys
 import tempfile
-from datetime import datetime, timezone
 
+from borg_core import timefmt
 from borg_core.recon import core, shell
 
 
@@ -68,7 +68,7 @@ def _run_sweep(resolved_since: str, projects_file: str, adapters: list[tuple[str
     by_project = core.merge_by_project(tracks)
     sources_json = core.build_sources_summary(tracks)
     contradictions = _collect_contradictions(projects, by_project)
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    generated_at = timefmt.now_iso()
     return core.assemble(resolved_since, generated_at, sources_json, by_project, contradictions)
 
 

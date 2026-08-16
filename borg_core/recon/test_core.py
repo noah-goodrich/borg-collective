@@ -29,6 +29,15 @@ def test_epoch_to_iso():
     assert core.epoch_to_iso(1704171845) == "2024-01-02T05:04:05Z"
 
 
+def test_epoch_to_iso_is_the_shared_timefmt_function():
+    # AC5: this used to be a locally-defined function, byte-identical to borg_core.link.core's
+    # format_iso and an inline literal in recon/cli.py. Fails before this dedup; after, it re-exports
+    # the one shared definition.
+    from borg_core import timefmt  # noqa: PLC0415 -- test-local, mirrors module's own import
+
+    assert core.epoch_to_iso is timefmt.epoch_to_iso
+
+
 def test_resolve_since_explicit_wins():
     assert core.resolve_since("2025-01-02T03:04:05Z", 111, "marker", 222) == "2025-01-02T03:04:05Z"
 

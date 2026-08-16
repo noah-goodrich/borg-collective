@@ -14,8 +14,9 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timezone
 from typing import Any
+
+from borg_core import timefmt
 
 VALID_OWNERS = {"you", "agent", "unknown"}
 VALID_URGENCIES = {"now", "this_week", "fyi"}
@@ -23,10 +24,10 @@ REQUIRED_ITEM_STRING_FIELDS = ("project", "source", "ref", "title", "state", "ch
 
 _RESOLVED_STATE_RE = re.compile(r"resolv|close|merg|done|fixed|shipped|complete", re.IGNORECASE)
 
-
-def epoch_to_iso(epoch_seconds: int) -> str:
-    """Convert epoch seconds to a UTC ISO 8601 timestamp (mirrors _recon_epoch_to_iso)."""
-    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+# Re-exported: mirrors _recon_epoch_to_iso. The same shape as borg_core.link.core.format_iso and a
+# recon/cli.py inline; see borg_core/timefmt.py's module docstring for why the third copy was
+# consolidated there instead of re-derived here.
+epoch_to_iso = timefmt.epoch_to_iso
 
 
 def resolve_since(
