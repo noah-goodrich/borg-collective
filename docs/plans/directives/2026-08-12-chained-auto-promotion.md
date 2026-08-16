@@ -79,10 +79,24 @@ interrupt channel, not a new CLI verb, not a new background process.
       over count), and a dangling `*Next:*` pointer to a nonexistent slug (falls through to the count branch,
       does not crash).
   - Verify: `bats tests/promote_next.bats` exits 0 with at least 5 `@test` cases; `grep -c '@test.*dangling' tests/promote_next.bats` returns 1 or more.
-- [ ] **AC4** — viz-1 -> viz-2 -> viz-3 is wired as a real, working chain, not just described.
-  - Verify: `grep -c '^\*Next: viz-2-spine-generator\*' docs/plans/directives/2026-08-11-viz-1-awaiting-you-tier.md` = 1;
-    `grep -c '^\*Next: viz-3-cross-repo-chains\*' docs/plans/directives/2026-08-11-viz-2-spine-generator.md` = 1.
+- [ ] **AC4 — DEFERRED (owner ruling, 2026-08-15)** — viz-1 -> viz-2 -> viz-3 is wired as a real,
+      working chain, not just described.
+  - Verify (as originally written): `grep -c '^\*Next: viz-2-spine-generator\*'
+    docs/plans/directives/2026-08-11-viz-1-awaiting-you-tier.md` = 1; `grep -c '^\*Next:
+    viz-3-cross-repo-chains\*' docs/plans/directives/2026-08-11-viz-2-spine-generator.md` = 1.
     `attention-routing` gets no `*Next:*` — it's independent of the viz chain.
+  - **Why deferred**: AC4's verify grep looks for a short-form pointer
+    (`viz-2-spine-generator`), but `cmd_start` in `borg.zsh` (~:1970-1972) resolves a slug
+    **literally** against `docs/plans/directives/$slug.md` — the real file is
+    `2026-08-11-viz-2-spine-generator.md`. A short-form pointer matching this grep would make
+    `borg start` die with `no such directive`, i.e. AC4's grep passes exactly when the chain is
+    broken at runtime; a full-stem pointer that actually resolves makes the grep return 0. As
+    written, AC4 is unsatisfiable without shipping a permanently-red criterion. The owner ruled to
+    defer rather than amend the locked criterion in-session. The viz-1/viz-2/viz-3 directive files
+    are being worked by a separate concurrent agent and are outside this pass's file ownership, so
+    no `*Next:*` pointers were wired from here regardless. AC3's fixture suite
+    (`tests/promote_next.bats`) exercises the same chain-resolution and dangling-pointer logic
+    against synthetic fixtures instead, and carries the weight AC4 would have.
 - [ ] **AC5** — Step 4c reports its outcome as one of two fixed strings so behavior is greppable and stable
       across future edits.
   - Verify: `grep -c '✓ Auto-promoted\|candidates, none chained' skills/borg-assimilate/SKILL.md` returns 2.
