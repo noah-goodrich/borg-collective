@@ -2028,10 +2028,20 @@ EOF
 }
 
 # `fold -s -w 70` plus `sed '1!s/^/  /'` (borg.zsh:448) wraps a long summary and indents every
-# continuation line. The golden fixture's summary is 41 chars precisely so fold is a no-op there
-# (GNU and BSD fold disagree on break points, which would make a byte-exact golden platform-
-# dependent) — which left the wrap and the indent pinned by nothing at all. Asserted structurally
-# here so it holds on both userlands: more than one line, and every line after the first indented.
+# continuation line. The golden fixture's summary is 41 chars precisely so fold is a no-op there,
+# which left the wrap and the indent pinned by nothing at all.
+#
+# CORRECTED (see docs/plans/assimilated/2026-08-12-port-borg-link-to-the-python-core.md, A4): GNU
+# and BSD `fold -s` do NOT disagree on ASCII — measured 1000/1000 agreement, and `_fold_s`'s PR
+# #140 fix matches both. The real reason a byte-exact golden is the wrong tool here is that there
+# are three DIFFERENT counting algorithms in play, not two disagreeing vendors: `_fold_s` counts
+# codepoints, BSD `fold` counts display columns, GNU `fold` counts bytes (splitting a UTF-8
+# sequence mid-codepoint). They diverge on non-ASCII — an em dash, the single most likely
+# non-ASCII character in an LLM-written summary — so pinning wrap output byte-for-byte would work
+# today (this fixture is ASCII) but silently stop holding the moment a summary carries a non-ASCII
+# character, and would do so differently depending on the CI/dev-host userland. Asserted
+# structurally instead, so it holds regardless of which fold implementation runs it: more than one
+# line, and every line after the first indented.
 @test "contract: link <project> deep dive wraps and indents a summary longer than 70 columns" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"wordy":{"path":null,"source":"cli","status":"idle","summary":"This summary is deliberately far longer than seventy columns so that the fold pipeline has to break it across at least three separate rendered lines."}}}' \
