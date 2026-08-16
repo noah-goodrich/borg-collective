@@ -3,7 +3,7 @@
 *Filed: 2026-08-14*
 
 Independent finding from a `/simplify` pass over the just-completed `borg link` Python port (PR
-[#138](https://github.com/stillpoint-labs/borg-collective/pull/138)). None of these produce wrong output —
+[#138](https://github.com/noah-goodrich/borg-collective/pull/138)). None of these produce wrong output —
 that is exactly why they were deferred rather than fixed during the ship. Not a child of the (now-shipped,
 about-to-be-archived) link port plan; an independent follow-up.
 
