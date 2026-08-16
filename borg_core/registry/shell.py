@@ -168,12 +168,17 @@ def tmux_session_name() -> str:
     return os.environ.get("BORG_TMUX_SESSION", DEFAULT_TMUX_SESSION)
 
 
-def tmux_window_exists(name: str) -> bool:
-    """Whether a tmux window named `name` exists in borg's session.
+def list_tmux_windows() -> list[str]:
+    """Names of every live tmux window in borg's session, or [] when there is no session.
 
-    Mirrors borg_tmux_window_exists (which is borg_tmux_windows | grep -qx): if the session isn't
-    alive, tmux's own commands fail and this returns False, same as the zsh short-circuit via
-    borg_tmux_alive.
+    The ONE subprocess fork shared by `tmux_window_exists` (a membership check) below and
+    `borg_core.link.shell.live_windows` (which re-exports this function unchanged). Both used to run
+    their own byte-identical `tmux list-windows -t <session> -F "#W"` fork with the same
+    `(OSError, subprocess.SubprocessError)` guard; this is the one definition. tmux resolves a `-t`
+    target the same way for `has-session` and `list-windows` (exact, then prefix, then fnmatch), so
+    collapsing the shell's separate `borg_tmux_alive` check into this single fork is
+    behavior-equivalent -- the inherited looseness comes along too: a session named "borg-anything"
+    satisfies a `-t borg` lookup.
     """
     session = tmux_session_name()
     try:
@@ -184,8 +189,18 @@ def tmux_window_exists(name: str) -> bool:
             check=False,
         )
     except (OSError, subprocess.SubprocessError):
-        return False
+        return []
     if result.returncode != 0:
-        return False
+        return []
     # JUSTIFICATION: splitting a subprocess's own captured stdout text, not a cross-layer reach.
-    return name in result.stdout.splitlines()  # pylint: disable=clean-arch-demeter
+    return result.stdout.splitlines()  # pylint: disable=clean-arch-demeter
+
+
+def tmux_window_exists(name: str) -> bool:
+    """Whether a tmux window named `name` exists in borg's session.
+
+    Mirrors borg_tmux_window_exists (which is borg_tmux_windows | grep -qx): if the session isn't
+    alive, `list_tmux_windows` already returns [] the same way `tmux`'s own commands failing does,
+    same as the zsh short-circuit via borg_tmux_alive.
+    """
+    return name in list_tmux_windows()

@@ -20,6 +20,8 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+from borg_core import timefmt
+
 ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 REAPABLE_STATUSES = ("active", "waiting")
 DEFAULT_STATUS = "idle"
@@ -238,6 +240,14 @@ def reap_overlay(
     zsh rather than reproduced here -- see the `-qxF` comment at lib/registry.zsh:243. The two
     implementations therefore agree, which is the point: this is the chokepoint PROJECT_PLAN.md's
     Risks section names as the port's top divergence hazard.
+
+    DELIBERATELY does NOT normalize a `TSV_EMPTY_SENTINEL` ("-") `last_activity` to "" before calling
+    should_reap, unlike `resolve_window`'s use of the same sentinel two lines below. Verified
+    behaviorally inert: an un-normalized "-" is jq/Python truthy, so it skips should_reap's step-3
+    falsy-check REAP and instead fails `iso_to_epoch("-")`'s strict grammar, landing on the step-4
+    unparseable-input REAP -- same outcome, different branch. Normalizing added a line with no
+    observable effect on any caller; see `test_reap_overlay_maps_the_tsv_sentinel_in_last_activity`,
+    which pins the outcome (REAP) rather than the branch and stays green either way.
     """
     live = set(live_windows)
     projects = registry.get("projects") or {}
@@ -245,8 +255,6 @@ def reap_overlay(
     for name, entry in projects.items():
         status = entry.get("status", "")
         last_activity = entry.get("last_activity")
-        if last_activity == TSV_EMPTY_SENTINEL:
-            last_activity = ""
         is_live = resolve_window(name, entry) in live
         if should_reap(status, last_activity, is_live, now_epoch, threshold_hours):
             updated[name] = {**entry, "_reaped_from": status, "status": DEFAULT_STATUS}
@@ -414,12 +422,11 @@ def jq_interp(value: object) -> str:
     return str(value)
 
 
-def format_iso(epoch_seconds: int) -> str:
-    """UTC ISO-8601 for `epoch_seconds`, in the exact grammar iso_to_epoch parses back.
-
-    Uses the same ISO_FORMAT constant as the parser -- never re-hardcode the literal here.
-    """
-    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).strftime(ISO_FORMAT)
+# Re-exported: the same shape as borg_core.recon.core.epoch_to_iso and a recon/cli.py inline; see
+# borg_core/timefmt.py's module docstring for why the third copy was consolidated there instead of
+# re-derived here. Uses the same ISO_FORMAT constant as iso_to_epoch's parser -- never re-hardcode
+# the literal in this module.
+format_iso = timefmt.epoch_to_iso
 
 
 def project_sort_key(entry: dict) -> tuple[int, int, str]:
