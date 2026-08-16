@@ -12,7 +12,7 @@ matches the repo source it was copied from. Both existing pinning tests read rep
 `tests/skill_borg_link.bats:17` and `tests/bash_guard.bats:654`. Neither one opens the deployed copy.
 
 This is not hypothetical. During the `borg link` port a criterion was verified against the deployed skill,
-ticked as done, and invalidated 40 minutes later when [#139](https://github.com/stillpoint-labs/borg-collective/pull/139)
+ticked as done, and invalidated 40 minutes later when [#139](https://github.com/noah-goodrich/borg-collective/pull/139)
 edited the repo artifact that had already been "verified" — the deployed copy silently went stale between the
 check and the merge, and nothing caught it. The failure shape is generic: any of `borg setup`'s copy targets
 can drift from repo source the same way, for the same reason (a check ran once, source moved after).
