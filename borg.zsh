@@ -200,66 +200,12 @@ cmd_ls() {
         return 0
     fi
 
-    # Human-readable table
-    echo ""
-    echo -e "  ${DIM}_______________${NC}"
-    echo -e "  ${DIM}/|             /|${NC}      ${BOLD}THE BORG COLLECTIVE${NC}"
-    echo -e "  ${DIM}/ |            / |${NC}      ${DIM}resistance is futile${NC}"
-    echo -e "  ${DIM}  |___________|  |${NC}"
-    echo -e "  ${DIM}  |  |        |  |${NC}"
-    echo -e "  ${DIM}  |  |________|__|${NC}"
-    echo -e "  ${DIM}  | /         | /${NC}"
-    echo -e "  ${DIM}  |/          |/${NC}"
-    echo ""
-    printf "${BOLD} %-20s %-4s %-12s %-12s %s${NC}\n" "PROJECT" "SRC" "STATUS" "LAST ACTIVE" "SUMMARY"
-    printf '%0.s─' {1..90}; echo
-
-    local name entry source proj_status last summary display status_color src_badge summary_short last_display pinned pin_mark status_display
-    while IFS= read -r name; do
-        entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
-        source=$(echo "$entry"  | jq -r '.source // "cli"')
-        proj_status=$(echo "$entry"  | jq -r '.status // "unknown"')
-        last=$(echo "$entry"    | jq -r '.last_activity // ""')
-        summary=$(echo "$entry" | jq -r '.summary // "(no summary)"')
-        pinned=$(echo "$entry"  | jq -r '.pinned // false')
-        display=$(echo "$entry" | jq -r 'if .display_name and .display_name != "" then .display_name else "" end')
-        [[ -z "$display" ]] && display="$name"
-
-        [[ "$pinned" == "true" ]] && pin_mark="*" || pin_mark=" "
-
-        case "$proj_status" in
-            active)  status_color="$GREEN" ;;
-            waiting) status_color="$YELLOW" ;;
-            idle)    status_color="$DIM" ;;
-            *)       status_color="$NC" ;;
-        esac
-
-        status_display="$proj_status"
-        [[ "$proj_status" == "waiting" ]] && status_display="waiting <<<"
-
-        case "$source" in
-            desktop) src_badge="[D]" ;;
-            coco)    src_badge="[X]" ;;
-            *)       src_badge="[C]" ;;
-        esac
-
-        summary_short="${summary:0:50}"
-        [[ ${#summary} -gt 50 ]] && summary_short="${summary_short}..."
-
-        last_display=$(_borg_relative_time "$last")
-
-        printf "%s%-20s %-4s ${status_color}%-12s${NC} %-12s %s\n" \
-            "$pin_mark" "$display" "$src_badge" "$status_display" "$last_display" "$summary_short"
-    done <<< "$sorted_names"
-
-    # Capacity warning
-    local active_count
-    active_count=$(_borg_active_count)
-    if (( active_count > BORG_MAX_ACTIVE )); then
-        echo
-        warn "${BOLD}$active_count sessions need attention${NC} (limit: $BORG_MAX_ACTIVE)"
-    fi
-    echo
+    # Human-readable table: DELETED (docs/plans/directives/2026-08-14-link-port-simplify-followups.md
+    # AC1). cmd_ls's only caller in the repo is cmd_switch below, which always passes --porcelain
+    # and returns above. The bare `ls` CLI dispatch arm that used to reach this branch was itself
+    # removed 2026-08-10 (it now `die`s and points at `borg link`), so this fell truly unreachable
+    # -- confirmed by grep across the whole repo (borg.zsh, drone.zsh, tests/) turning up no other
+    # caller, not assumed.
 }
 
 cmd_status() {
@@ -2944,6 +2890,7 @@ _borg_py() {
 _borg_link_dispatch() {
     typeset _link_json=0 _link_porcelain=0 _link_brief=0 _link_refresh=0 _link_all=0
     typeset _link_project="" _link_arg
+    typeset -a _link_py_args
     for _link_arg in "$@"; do
         case "$_link_arg" in
             --json)        _link_json=1 ;;
@@ -2955,6 +2902,19 @@ _borg_link_dispatch() {
             *)             _link_project="$_link_arg" ;;  # last-wins, matching cmd_link
         esac
     done
+
+    # The refresh scan runs once here (was five call sites, one per dispatch arm) instead of once
+    # per branch below. The --json redirect (1>&2, so the scan's own chatter can't splice ahead of
+    # the JSON document on stdout -- see the fd-duping note that used to sit next to this call) is
+    # the only branch-dependent piece, so it stays keyed off _link_json rather than being lost in
+    # the hoist.
+    if (( _link_refresh )); then
+        if (( _link_json )); then
+            cmd_scan --llm 1>&2 || true
+        else
+            cmd_scan --llm
+        fi
+    fi
 
     if (( _link_json )); then
         # Diagnostics on the --json path go to STDERR. `warn` (borg.zsh:30) writes to STDOUT, and
@@ -2968,13 +2928,9 @@ _borg_link_dispatch() {
         # The desktop pre-pass runs ONLY for the overview shape (no project positional). The deep
         # dive never scans and never writes the registry; running it for `--json <project>` would
         # add a registry WRITE to a path that has always been read-only. Deliberate, not an oversight.
-        if (( _link_refresh )); then
-            cmd_scan --llm 1>&2 || true
-        fi
         if [[ -z "$_link_project" ]]; then
             borg_desktop_scan 1>&2 2>/dev/null || true
         fi
-        typeset -a _link_py_args
         _link_py_args=(--json)
         (( _link_all )) && _link_py_args+=(--all)
         [[ -n "$_link_project" ]] && _link_py_args+=(-- "$_link_project")
@@ -2983,14 +2939,12 @@ _borg_link_dispatch() {
     fi
 
     if (( _link_porcelain )); then
-        (( _link_refresh )) && cmd_scan --llm
         # Human arms keep the desktop pre-pass warning on STDOUT (today's behavior) -- do NOT reuse
         # the --json arm's `1>&2 2>/dev/null` redirect here; cli_contract.bats:2373-2377 STEP 1
         # asserts the human path really does splice the warning onto stdout.
         borg_desktop_scan 2>/dev/null || true
         # CRITICAL: do NOT forward the positional in porcelain mode. `link --porcelain nosuchproject`
         # exits 0 with the listing today; forwarding it would build a focus block and die instead.
-        typeset -a _link_py_args
         _link_py_args=(--porcelain)
         (( _link_all )) && _link_py_args+=(--all)
         _borg_py borg_core.link.cli "${_link_py_args[@]}"
@@ -2998,7 +2952,6 @@ _borg_link_dispatch() {
     fi
 
     if [[ -n "$_link_project" ]]; then
-        (( _link_refresh )) && cmd_scan --llm
         # The deep dive stays read-only and never scans -- no desktop pre-pass here, matching today.
         _borg_py borg_core.link.cli --deep -- "$_link_project"
         return 0
@@ -3006,15 +2959,12 @@ _borg_link_dispatch() {
 
     if (( _link_brief )); then
         # --brief stays zsh this pass; only its DISPATCH is relocated out of the deleted cmd_link.
-        (( _link_refresh )) && cmd_scan --llm
         borg_desktop_scan 2>/dev/null || true
         _borg_print_briefing
         return 0
     fi
 
-    (( _link_refresh )) && cmd_scan --llm
     borg_desktop_scan 2>/dev/null || true
-    typeset -a _link_py_args
     _link_py_args=()
     (( _link_all )) && _link_py_args+=(--all)
     _borg_py borg_core.link.cli "${_link_py_args[@]}"

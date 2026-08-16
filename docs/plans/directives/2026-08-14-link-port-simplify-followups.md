@@ -80,13 +80,26 @@ leave anything that turns out to have a live caller or a real behavioral depende
 
 ## Acceptance Criteria
 
-- [ ] **AC1** — `borg.zsh` `cmd_ls`'s human-table half is either deleted (if truly unreachable — confirm no
+- [x] **AC1** — `borg.zsh` `cmd_ls`'s human-table half is either deleted (if truly unreachable — confirm no
       caller outside `--porcelain` exists, including in `drone.zsh`) or given a real caller/test; the
       `--refresh` `cmd_scan --llm` call in `_borg_link_dispatch` runs once before the branch instead of five
       times; the `_link_py_args` preamble is factored into one place.
   - Verify: `bats tests/cli_contract.bats` stays green; `borg link`, `borg link --json`, `borg link
     --porcelain`, `borg link --refresh` all still behave identically (manual smoke, since these are zsh
     dispatch paths without direct unit coverage).
+  - **Evidence (2026-08-16)**: re-verified, did not assume. `grep -rn "cmd_ls" borg.zsh drone.zsh
+    tests/cli_contract.bats` finds exactly two live references — the definition (`borg.zsh:141`) and its
+    one caller, `cmd_switch:316` (`cmd_ls --porcelain | ...`), which always passes `--porcelain`. `drone.zsh`
+    has zero references. The bare `ls` CLI dispatch arm this directive's own note cited as reaching the
+    human branch turned out to be stale: `borg.zsh:3089-3090` shows `ls|status|hail|brief) die ...` — that
+    arm was already converted to a `die` stub by the 2026-08-10 alias removal, so no CLI path calls
+    `cmd_ls` without `--porcelain` any more. Confirmed truly unreachable; deleted the human-table body (was
+    `borg.zsh:203-262`), leaving a comment recording the evidence in place of the code. Hoisted the
+    `cmd_scan --llm` refresh call in `_borg_link_dispatch` to one call site before the branch (preserving
+    the `--json` arm's `1>&2` redirect via an `if (( _link_json ))` inside that single call, so no output
+    changed) and moved the `typeset -a _link_py_args` declaration to the top of the function, shared by all
+    three branches that build the array. `bats tests/cli_contract.bats` 121/121 green;
+    `bats tests/*.bats` 686/686 green; `pytest -q` 413/413 green.
 - [ ] **AC2** — `render.py`'s Directives/Recently-assimilated blocks are shared between `deep()` and the
       overview helpers (parameterize on the `[project]` tag); the useless `too-many-branches` pylint
       suppression on `deep()` is removed, `too-many-locals` stays.
