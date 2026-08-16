@@ -1372,11 +1372,13 @@ EOF
 #   - Modes that print a RAW timestamp (--porcelain, deep dive) use fixed ISO dates. The overview
 #     prints a RELATIVE time, so its fixture timestamps are computed at run time and land in stable
 #     buckets ("2h ago", "yesterday", "5d ago").
-#   - The deep dive's summary is kept under 70 chars so `fold -s -w 70` is a no-op; GNU and BSD fold
-#     do not agree on where to break, and this suite runs on both (ubuntu `test` + macos `contract`).
+#   - The deep dive's summary is kept under 70 chars so `fold -s -w 70` is a no-op; this leaves the
+#     wrap path itself unexercised by this golden (a known weakness, not a strength) — see the wrap
+#     assertion comment at ~:2030 for why wrap output is pinned structurally rather than byte-exact.
 #
-# REGENERATING GOLDENS: `BORG_UPDATE_GOLDEN=1 bats tests/cli_contract.bats`. Do NOT do this during
-# the port. Regenerating is how a parity harness silently becomes a screenshot of the new behavior.
+# REGENERATING GOLDENS: `BORG_UPDATE_GOLDEN=1 bats tests/cli_contract.bats`. Regeneration is
+# legitimate only when the output change is the deliberate, intended result of a change you made —
+# review the resulting diff line by line. Never regenerate to make a failure disappear.
 # ══════════════════════════════════════════════════════════════════════════════
 
 LINK_GOLDEN_DIR="${BATS_TEST_DIRNAME}/fixtures/link"
