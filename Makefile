@@ -66,7 +66,7 @@ test-viz:
 	@if [ -d merge-tree ]; then \
 		set -e; \
 		coverage run --source=merge-tree -m pytest merge-tree/ || test $$? -eq 5; \
-		coverage report -m --include='merge-tree/curate.py,merge-tree/render_graph.py,merge-tree/spine.py,merge-tree/gather.py,merge-tree/programs.py' --fail-under=85; \
+		coverage report -m --include='merge-tree/curate.py,merge-tree/render_graph.py,merge-tree/spine.py,merge-tree/gather.py,merge-tree/programs.py,merge-tree/backfill.py' --fail-under=85; \
 	else \
 		echo "merge-tree/ not present -- nothing to test"; \
 	fi
