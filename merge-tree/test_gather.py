@@ -8,8 +8,13 @@ from gather import (
     assemble,
     derive_stacked_edges,
     flatten_items,
+    merge_edges,
     repo_of,
 )
+
+
+def _edge(parent, child, kind="stacked", source="declared"):
+    return {"parent": parent, "child": child, "kind": kind, "source": source}
 
 
 def _pr(ref, head="", base="", repo=None, project="p"):
@@ -66,8 +71,14 @@ class TestStackedEdgeDerivation:
     def test_a_pr_based_on_another_prs_head_is_stacked_on_it(self):
         items = [_pr("r#1", head="feat/a", base="main"), _pr("r#2", head="feat/b", base="feat/a")]
         assert derive_stacked_edges(items) == [
-            {"parent": "r#1", "child": "r#2", "kind": "stacked"}
+            {"parent": "r#1", "child": "r#2", "kind": "stacked", "source": "derived"}
         ]
+
+    def test_derived_edges_are_labelled_as_derived(self):
+        # Provenance distinguishes an inference from branch topology (which a rebase can invalidate)
+        # from a declared dependency. Without it a wrong edge is not falsifiable.
+        items = [_pr("r#1", head="feat/a", base="main"), _pr("r#2", head="feat/b", base="feat/a")]
+        assert all(e["source"] == "derived" for e in derive_stacked_edges(items))
 
     def test_a_pr_based_on_main_produces_no_edge(self):
         # The overwhelmingly common case. Guessing here would fire on almost every PR.
@@ -89,8 +100,8 @@ class TestStackedEdgeDerivation:
             _pr("r#3", head="feat/c", base="feat/b"),
         ]
         assert derive_stacked_edges(items) == [
-            {"parent": "r#1", "child": "r#2", "kind": "stacked"},
-            {"parent": "r#2", "child": "r#3", "kind": "stacked"},
+            {"parent": "r#1", "child": "r#2", "kind": "stacked", "source": "derived"},
+            {"parent": "r#2", "child": "r#3", "kind": "stacked", "source": "derived"},
         ]
 
     def test_a_self_referencing_branch_produces_no_edge(self):
@@ -102,6 +113,49 @@ class TestStackedEdgeDerivation:
     def test_output_is_deterministic_regardless_of_input_order(self):
         a = [_pr("r#1", head="f/a", base="main"), _pr("r#2", head="f/b", base="f/a")]
         assert derive_stacked_edges(a) == derive_stacked_edges(list(reversed(a)))
+
+
+class TestMergeEdges:
+    def test_declared_and_derived_edges_both_survive(self):
+        derived = [_edge("r#1", "r#2", source="derived")]
+        declared = [_edge("a#1", "b#1")]
+        edges, overlap, conflicts = merge_edges(derived, declared)
+        assert len(edges) == 2 and overlap == 0 and conflicts == []
+
+    def test_declared_wins_a_duplicate_and_is_counted_as_overlap(self):
+        # Corroboration, not a problem: topology and the owner agree. But the surviving edge must be
+        # the declared one, because a manifest is intent and topology is only an inference.
+        derived = [_edge("r#1", "r#2", source="derived")]
+        edges, overlap, conflicts = merge_edges(derived, [_edge("r#1", "r#2")])
+        assert len(edges) == 1
+        assert edges[0]["source"] == "declared"
+        assert overlap == 1 and conflicts == []
+
+    def test_a_reversed_declaration_is_reported_as_a_conflict(self):
+        # Usually a rebase moved a base branch out from under the plan. Both directions cannot be
+        # true, so this must surface rather than quietly pick one.
+        derived = [_edge("r#2", "r#1", source="derived")]
+        edges, overlap, conflicts = merge_edges(derived, [_edge("r#1", "r#2")])
+        assert len(conflicts) == 1 and "topology says the reverse" in conflicts[0]
+        assert edges == [_edge("r#1", "r#2")]
+        assert overlap == 0
+
+    def test_edges_of_different_kinds_between_the_same_refs_coexist(self):
+        # `apex` and `stacked` mean different things; collapsing them would lose one.
+        derived = [_edge("r#1", "r#2", source="derived")]
+        edges, _, conflicts = merge_edges(derived, [_edge("r#1", "r#2", kind="apex")])
+        assert len(edges) == 2 and conflicts == []
+
+    def test_output_is_byte_stable_regardless_of_input_order(self):
+        derived = [_edge("r#2", "r#3", source="derived"), _edge("r#1", "r#2", source="derived")]
+        declared = [_edge("b#1", "c#1"), _edge("a#1", "b#1")]
+        assert merge_edges(derived, declared)[0] == merge_edges(
+            list(reversed(derived)), list(reversed(declared))
+        )[0]
+
+    def test_no_declared_edges_leaves_derived_untouched(self):
+        derived = [_edge("r#1", "r#2", source="derived")]
+        assert merge_edges(derived, [])[0] == derived
 
 
 class TestAssemble:
@@ -158,6 +212,53 @@ class TestAssemble:
     def test_an_empty_recon_document_yields_a_valid_empty_gather(self):
         got = assemble({})
         assert got["items"] == [] and got["edges"] == [] and got["meta"]["repos"] == []
+
+    def test_declared_edges_are_unioned_into_the_gather(self):
+        rec = _reconciled([_pr("a#1", repo="org/a"), _pr("b#1", repo="org/b")])
+        got = assemble(rec, [_edge("a#1", "b#1")])
+        assert got["edges"] == [_edge("a#1", "b#1")]
+        assert got["meta"]["edge_provenance"]["declared"] == 1
+
+    def test_a_declared_cross_repo_edge_makes_one_workstream_across_repos(self):
+        # The payoff, end to end. Two PRs in DIFFERENT repos with unrelated branches cannot be linked
+        # by topology, so without the declaration they are two singleton workstreams.
+        import spine
+
+        rec = _reconciled(
+            [
+                _pr("a#1", head="feat/a", base="main", repo="org/a", project="P"),
+                _pr("b#1", head="feat/z", base="main", repo="org/b", project="P"),
+            ]
+        )
+        assert len(spine.generate_skeleton(assemble(rec))["projects"][0]["workstreams"]) == 2
+
+        linked = spine.generate_skeleton(assemble(rec, [_edge("a#1", "b#1")]))
+        wss = linked["projects"][0]["workstreams"]
+        assert len(wss) == 1
+        assert sorted(wss[0]["items"]) == ["a#1", "b#1"]
+
+    def test_edge_endpoints_matching_no_item_are_counted_not_silently_dropped(self):
+        # A ref-normalization mismatch produces edges that render as nothing at all. Silence is the
+        # failure mode, so the count is the guard.
+        rec = _reconciled([_pr("a#1", repo="org/a")])
+        prov = assemble(rec, [_edge("a#1", "ghost#99")])["meta"]["edge_provenance"]
+        assert prov["dangling_endpoints"] == ["ghost#99"]
+
+    def test_a_declared_versus_derived_conflict_becomes_a_warn_health_row(self):
+        rec = _reconciled(
+            [
+                _pr("r#1", head="feat/a", base="main"),
+                _pr("r#2", head="feat/b", base="feat/a"),
+            ]
+        )
+        got = assemble(rec, [_edge("r#2", "r#1")])
+        warn = [h for h in got["meta"]["health"] if h["check"] == "edges:declared-vs-derived"]
+        assert len(warn) == 1 and warn[0]["status"] == "warn"
+
+    def test_no_conflict_means_no_extra_health_row(self):
+        rec = _reconciled([_pr("r#1", head="feat/a", base="main")])
+        checks = {h["check"] for h in assemble(rec)["meta"]["health"]}
+        assert "edges:declared-vs-derived" not in checks
 
 
 class TestMainCLI:
