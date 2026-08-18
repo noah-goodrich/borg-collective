@@ -99,6 +99,13 @@ def _validate_gate(gate: Any, label: str) -> list[str]:
             # A blocker with no pointer at its settlement is the defect this field exists to prevent:
             # it parks work for weeks while naming nothing that would unpark it.
             errors.append(f"{label}: gate.{field} is required")
+
+    # `blocked_by_ref` is the OPTIONAL machine-readable companion to the prose `blocked_by`. It must
+    # look like a ref, because its only job is to be an edge endpoint; prose here would produce a
+    # `blocks` edge pointing at nothing, which is the exact failure `blocked_by` stays prose to avoid.
+    ref = str(gate.get("blocked_by_ref") or "").strip()
+    if ref and "#" not in ref:
+        errors.append(f"{label}: gate.blocked_by_ref must be a ref (repo#num), got {ref}")
     return errors
 
 
@@ -165,6 +172,53 @@ def lanes(manifest: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     return {lane: [r for _, r in sorted(rs, key=lambda p: p[0])] for lane, rs in sorted(grouped.items())}
 
 
+def _edge(parent: str, child: str, kind: str) -> dict[str, Any]:
+    return {"parent": parent, "child": child, "kind": kind, "source": "declared"}
+
+
+def _stacked_edges(by_lane: dict[str, list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Consecutive rows within each lane. The only construct here that can span repos."""
+    edges = []
+    for rows in by_lane.values():
+        for parent, child in zip(rows, rows[1:]):
+            p, c = str(parent["ref"]).strip(), str(child["ref"]).strip()
+            if p != c:
+                edges.append(_edge(p, c, "stacked"))
+    return edges
+
+
+def _apex_edges(manifest: dict[str, Any], rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """One edge per row to the program's tracker, or none when the program has no apex."""
+    apex = manifest.get("apex")
+    apex_ref = str(apex.get("ref") or "").strip() if isinstance(apex, dict) else ""
+    if not apex_ref:
+        return []
+    return [
+        _edge(apex_ref, ref, "apex")
+        for ref in (str(r["ref"]).strip() for r in rows)
+        if ref != apex_ref
+    ]
+
+
+def _blocks_edges(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Dependencies from `gate.blocked_by_ref`.
+
+    `blocks` is a dependency BETWEEN workstreams, not evidence two items are the same workstream —
+    spine.py keeps it out of CHAIN_KINDS deliberately, because merging on it would collapse a blocker
+    into its own victim and lose the dependency entirely.
+    """
+    edges = []
+    for row in rows:
+        gate = row.get("gate")
+        if not isinstance(gate, dict):
+            continue
+        blocker = str(gate.get("blocked_by_ref") or "").strip()
+        child = str(row["ref"]).strip()
+        if blocker and blocker != child:
+            edges.append(_edge(blocker, child, "blocks"))
+    return edges
+
+
 def derive_edges(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """Declared edges from one manifest: `stacked` along each lane, `apex` to the tracker.
 
@@ -177,25 +231,8 @@ def derive_edges(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     pointing at a tracker that does not exist.
     """
     by_lane = lanes(manifest)
-    edges: list[dict[str, Any]] = []
-
-    for rows in by_lane.values():
-        for parent, child in zip(rows, rows[1:]):
-            p, c = str(parent["ref"]).strip(), str(child["ref"]).strip()
-            if p != c:
-                edges.append({"parent": p, "child": c, "kind": "stacked", "source": "declared"})
-
-    apex = manifest.get("apex")
-    apex_ref = str(apex.get("ref") or "").strip() if isinstance(apex, dict) else ""
-    if apex_ref:
-        for rows in by_lane.values():
-            for row in rows:
-                ref = str(row["ref"]).strip()
-                if ref != apex_ref:
-                    edges.append(
-                        {"parent": apex_ref, "child": ref, "kind": "apex", "source": "declared"}
-                    )
-
+    rows = [row for lane_rows in by_lane.values() for row in lane_rows]
+    edges = _stacked_edges(by_lane) + _apex_edges(manifest, rows) + _blocks_edges(rows)
     return sorted(edges, key=lambda e: (e["kind"], e["child"], e["parent"]))
 
 
