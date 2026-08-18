@@ -20,11 +20,16 @@ structurally impossible on real data.
 
 `stacked` edges ARE derivable, from branch topology: a stacked PR's base branch is its parent's head
 branch. The github adapter now emits `head_ref`/`base_ref` per item, and this module turns that into
-edges. `blocks` and `apex` edges are NOT derivable this way and remain unproduced — see
-"Not derived here" below.
+edges. But a base branch is a REPO-LOCAL name, so every derived edge is repo-local by construction —
+which means the cross-repo case, the entire point of the viz program, is not derivable at all.
+
+Those come from borg's own program manifests (`programs.py`, `<project>/.borg/programs/*.json`) as
+`declared` edges, unioned here. Every edge carries `source: "derived" | "declared"` so a wrong one is
+falsifiable, and a declared order contradicting branch topology is reported rather than resolved.
 
 Run with:
-  borg recon --json | python3 merge-tree/gather.py --out gather.raw.json
+  borg recon --json | python3 merge-tree/gather.py --out gather.raw.json \\
+      --programs-dir ~/dev/some-project --programs-dir ~/dev/another
 """
 
 from __future__ import annotations
@@ -35,6 +40,8 @@ import os
 import sys
 from datetime import datetime, timezone
 from typing import Any
+
+import programs
 
 STATE = os.environ.get("BORG_MERGE_TREE_DIR", os.path.expanduser("~/.local/state/borg/merge-tree"))
 
@@ -97,38 +104,123 @@ def derive_stacked_edges(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         parent = head_index.get((repo_of(it), base))
         if parent and parent != it["ref"]:
-            edges.append({"parent": parent, "child": str(it["ref"]), "kind": "stacked"})
+            # `source` is provenance, not decoration: it is what makes a wrong edge falsifiable.
+            # A `derived` edge is an inference from branch topology and can be stale (a rebase moves
+            # a base branch); a `declared` edge is someone's stated intent. Telling them apart is the
+            # difference between "the graph is wrong" and "the plan changed".
+            edges.append(
+                {"parent": parent, "child": str(it["ref"]), "kind": "stacked", "source": "derived"}
+            )
     return sorted(edges, key=lambda e: (e["child"], e["parent"]))
 
 
-def assemble(reconciled: dict[str, Any]) -> dict[str, Any]:
-    """Turn a reconciled recon document into the raw gather curate.py and spine.py consume."""
+def merge_edges(
+    derived: list[dict[str, Any]], declared: list[dict[str, Any]]
+) -> tuple[list[dict[str, Any]], int, list[str]]:
+    """Union derived and declared edges. Returns `(edges, overlap_count, conflicts)`.
+
+    DECLARED WINS a duplicate. Branch topology is an inference; a manifest row is the owner saying
+    what the order *is*. When they agree the edge is simply corroborated (counted as overlap, not a
+    problem).
+
+    A CONFLICT is the interesting case: declared says A -> B while topology says B -> A. One of them
+    is wrong — usually a rebase that moved a base branch out from under the plan, or a manifest that
+    was never updated. Reported rather than silently resolved, because picking a winner here would
+    hide exactly the drift the audit exists to surface.
+    """
+    by_key = {(e["kind"], e["parent"], e["child"]): e for e in derived}
+    overlap = 0
+    conflicts: list[str] = []
+
+    for edge in declared:
+        key = (edge["kind"], edge["parent"], edge["child"])
+        reversed_key = (edge["kind"], edge["child"], edge["parent"])
+        if key in by_key:
+            overlap += 1
+        elif reversed_key in by_key:
+            conflicts.append(
+                f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, "
+                f"topology says the reverse"
+            )
+            del by_key[reversed_key]
+        by_key[key] = edge
+
+    return (
+        sorted(by_key.values(), key=lambda e: (e["kind"], e["child"], e["parent"])),
+        overlap,
+        sorted(conflicts),
+    )
+
+
+def assemble(
+    reconciled: dict[str, Any], declared_edges: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Turn a reconciled recon document into the raw gather curate.py and spine.py consume.
+
+    `declared_edges` come from borg's program manifests (see programs.py) and carry the cross-repo
+    dependencies branch topology cannot express — a base branch is a repo-local name, so every derived
+    edge is repo-local by construction.
+    """
     items = flatten_items(reconciled)
     sources = reconciled.get("sources") or []
     repos = sorted({repo_of(it) for it in items if repo_of(it)})
     generated = str(reconciled.get("generated_at") or utc_now_iso())
 
+    machine = os.environ.get("BORG_MACHINE", "")
+    edges, overlap, conflicts = merge_edges(
+        derive_stacked_edges(items), declared_edges or []
+    )
+
+    health = [
+        {
+            "check": f"recon:{s.get('source', '?')}",
+            "machine": machine,
+            "status": "ok" if s.get("ok") else "down",
+            "detail": str(s.get("summary") or ""),
+            "checked_at": generated,
+        }
+        for s in sources
+    ]
+    if conflicts:
+        # Reuse the existing health panel rather than inventing a surface: it exists precisely so a
+        # degradation is visible at a glance instead of silently skewing the render.
+        health.append(
+            {
+                "check": "edges:declared-vs-derived",
+                "machine": machine,
+                "status": "warn",
+                "detail": "; ".join(conflicts),
+                "checked_at": generated,
+            }
+        )
+
+    # Endpoints that match no gathered item produce edges that vanish from the graph without raising.
+    # Counting them is the guard against a silent normalization mismatch between a manifest's refs and
+    # what the adapters actually emit.
+    refs = {str(it.get("ref")) for it in items}
+    dangling = sorted(
+        {ref for e in edges for ref in (e["parent"], e["child"]) if ref not in refs}
+    )
+
     return {
         "meta": {
             "gathered_at": generated,
-            "machine": os.environ.get("BORG_MACHINE", ""),
+            "machine": machine,
             "today": generated[:10],
             "repos": repos,
             # Carried through so the health panel keeps working: a source that failed must stay
             # visible rather than silently reducing the item count. Recon marks these `ok: false`.
-            "health": [
-                {
-                    "check": f"recon:{s.get('source', '?')}",
-                    "machine": os.environ.get("BORG_MACHINE", ""),
-                    "status": "ok" if s.get("ok") else "down",
-                    "detail": str(s.get("summary") or ""),
-                    "checked_at": generated,
-                }
-                for s in sources
-            ],
+            "health": health,
+            "edge_provenance": {
+                "derived": len([e for e in edges if e.get("source") == "derived"]),
+                "declared": len([e for e in edges if e.get("source") == "declared"]),
+                "overlap": overlap,
+                "conflicts": conflicts,
+                "dangling_endpoints": dangling,
+            },
         },
         "items": items,
-        "edges": derive_stacked_edges(items),
+        "edges": edges,
         # Not derived here — see the module docstring. `actions` are the renderer's command buttons
         # and are curation/judgment, not gathered facts.
         "actions": {},
@@ -139,6 +231,14 @@ def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     p.add_argument("--in", dest="src", default="-", help="recon --json document, or - for stdin")
     p.add_argument("--out", default=os.path.join(STATE, "gather.raw.json"))
+    p.add_argument(
+        "--programs-dir",
+        action="append",
+        default=[],
+        metavar="PROJECT_DIR",
+        help="project root to sweep for .borg/programs/*.json (repeatable). The caller resolves "
+        "registered project paths; this module stays free of registry/config dependencies.",
+    )
     args = p.parse_args()
 
     try:
@@ -148,22 +248,39 @@ def main() -> int:
         print(f"gather.py: cannot read a recon document: {exc}", file=sys.stderr)
         return 1
 
-    gather = assemble(reconciled)
+    manifests, warnings = programs.discover(args.programs_dir)
+    for warning in warnings:
+        # Named, never silent: an unnamed skip is indistinguishable from a file that was never there.
+        print(f"  MANIFEST SKIPPED {warning}", file=sys.stderr)
+
+    gather = assemble(reconciled, programs.edges_from(manifests))
     with open(args.out, "w") as fh:
         json.dump(gather, fh, indent=2, sort_keys=True)
         fh.write("\n")
 
     down = [h["check"] for h in gather["meta"]["health"] if h["status"] != "ok"]
+    prov = gather["meta"]["edge_provenance"]
     print(
         f"wrote {args.out}: {len(gather['items'])} items, "
-        f"{len(gather['edges'])} stacked edges, {len(gather['meta']['repos'])} repos"
+        f"{len(gather['edges'])} edges ({prov['derived']} derived, {prov['declared']} declared), "
+        f"{len(gather['meta']['repos'])} repos, {len(manifests)} programs"
     )
     if down:
         # A degraded source silently shrinking the item count is exactly the kind of plausible-wrong
         # output this session kept finding. Say it out loud.
         print(f"  DEGRADED SOURCES: {', '.join(down)}", file=sys.stderr)
+    for conflict in prov["conflicts"]:
+        print(f"  EDGE CONFLICT {conflict}", file=sys.stderr)
+    if prov["dangling_endpoints"]:
+        # These edges are in the graph but reference nothing gathered, so they render as nothing at
+        # all. Silent disappearance is the failure mode; a count is the guard.
+        print(
+            f"  {len(prov['dangling_endpoints'])} edge endpoint(s) match no gathered item: "
+            f"{', '.join(prov['dangling_endpoints'][:5])}",
+            file=sys.stderr,
+        )
     if not gather["edges"]:
-        print("  no stacked edges derived — every workstream will be a singleton", file=sys.stderr)
+        print("  no edges — every workstream will be a singleton", file=sys.stderr)
     return 0
 
 
