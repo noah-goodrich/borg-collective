@@ -131,32 +131,32 @@ def apex_of(members: list[str], edges: list[dict[str, Any]]) -> str:
     return roots[0] if roots else ""
 
 
-def blockers_for(members: list[str], edges: list[dict[str, Any]]) -> dict[str, str]:
-    """Map of member ref -> the ref that blocks it, from `blocks` edges. One blocker per row.
-
-    The manifest carries at most one `blocked_by_ref` per row, so a row with several recorded blockers
-    keeps the lexicographically smallest and the rest are reported as dropped by the caller — a silent
-    truncation would misrepresent how blocked the work is.
-    """
-    found: dict[str, list[str]] = {}
+def _blocker_index(members: list[str], edges: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Member ref -> every ref recorded as blocking it, sorted. The shared basis of the two below."""
     member_set = set(members)
+    found: dict[str, list[str]] = {}
     for e in edges:
         if e.get("kind") == "blocks" and e.get("child") in member_set and e.get("parent"):
             found.setdefault(str(e["child"]), []).append(str(e["parent"]))
-    return {child: sorted(refs)[0] for child, refs in found.items()}
+    return {child: sorted(refs) for child, refs in found.items()}
+
+
+def blockers_for(members: list[str], edges: list[dict[str, Any]]) -> dict[str, str]:
+    """Map of member ref -> the ref that blocks it. One blocker per row.
+
+    The manifest carries at most one `blocked_by_ref` per row, so a row with several recorded blockers
+    keeps the lexicographically smallest and the rest are reported by `dropped_blockers` — a silent
+    truncation would misrepresent how blocked the work is.
+    """
+    return {child: refs[0] for child, refs in _blocker_index(members, edges).items()}
 
 
 def dropped_blockers(members: list[str], edges: list[dict[str, Any]]) -> list[str]:
     """Blocks edges that cannot fit the one-blocker-per-row manifest shape."""
-    found: dict[str, list[str]] = {}
-    member_set = set(members)
-    for e in edges:
-        if e.get("kind") == "blocks" and e.get("child") in member_set and e.get("parent"):
-            found.setdefault(str(e["child"]), []).append(str(e["parent"]))
     return sorted(
         f"{child} also blocked by {other}"
-        for child, refs in found.items()
-        for other in sorted(refs)[1:]
+        for child, refs in _blocker_index(members, edges).items()
+        for other in refs[1:]
     )
 
 
