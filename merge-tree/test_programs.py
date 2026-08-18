@@ -174,6 +174,69 @@ class TestDeriveEdges:
         assert programs.derive_edges({"rows": []}) == []
 
 
+class TestBlocksEdges:
+    """`gate.blocked_by_ref` — the machine-readable companion to the prose `blocked_by`.
+
+    Without this the schema could express no `blocks` edge at all, which the backfill exposed: 14 of
+    the 72 recorded historical edges are `blocks`, and they are the least recoverable kind, since
+    `stacked` can be re-derived from topology while a dependency is pure judgment.
+    """
+
+    def _gate(self, ref=None, **over):
+        gate = {"blocked_by": "prose", "kind": "verification", "resolved_by": "it merges", **over}
+        if ref is not None:
+            gate["blocked_by_ref"] = ref
+        return gate
+
+    def test_a_blocked_by_ref_becomes_a_blocks_edge(self):
+        m = _manifest([_row("1", "r#2", gate=self._gate("r#9"))])
+        blocks = [e for e in programs.derive_edges(m) if e["kind"] == "blocks"]
+        assert blocks == [
+            {"parent": "r#9", "child": "r#2", "kind": "blocks", "source": "declared"}
+        ]
+
+    def test_a_blocks_edge_may_cross_repos(self):
+        m = _manifest([_row("1", "acme/warehouse#2", gate=self._gate("acme/platform#9"))])
+        blocks = [e for e in programs.derive_edges(m) if e["kind"] == "blocks"]
+        assert blocks[0]["parent"] == "acme/platform#9"
+
+    def test_prose_only_gate_yields_no_blocks_edge(self):
+        # PM4 still holds: prose is never guessed into an edge.
+        m = _manifest([_row("1", "r#2", gate=self._gate())])
+        assert [e for e in programs.derive_edges(m) if e["kind"] == "blocks"] == []
+
+    def test_a_self_blocking_ref_is_ignored(self):
+        m = _manifest([_row("1", "r#2", gate=self._gate("r#2"))])
+        assert [e for e in programs.derive_edges(m) if e["kind"] == "blocks"] == []
+
+    def test_a_non_ref_blocked_by_ref_is_rejected_by_validate(self):
+        # Prose here would produce a blocks edge pointing at nothing — the exact failure the prose
+        # field exists to avoid.
+        errors = programs.validate(_manifest([_row("1", "r#2", gate=self._gate("waiting on Kelly"))]))
+        assert any("blocked_by_ref must be a ref" in e for e in errors)
+
+    def test_blocked_by_ref_is_optional(self):
+        assert programs.validate(_manifest([_row("1", "r#2", gate=self._gate())])) == []
+
+    def test_a_blocks_edge_does_not_group_the_two_into_one_workstream(self):
+        # spine.py keeps `blocks` out of CHAIN_KINDS deliberately: merging a blocker into its victim
+        # would lose the dependency it records.
+        import spine
+
+        m = _manifest([_row("1", "r#2", gate=self._gate("r#9"))])
+        gather = {
+            "items": [
+                {"ref": "r#2", "project": "P", "state": "OPEN"},
+                {"ref": "r#9", "project": "P", "state": "OPEN"},
+            ],
+            "edges": programs.derive_edges(m),
+        }
+        wss = spine.generate_skeleton(gather)["projects"][0]["workstreams"]
+        assert len(wss) == 2
+        assert ["r#9"] in [w["items"] for w in wss]
+        assert any(w["blocked_by"] == ["r#9"] for w in wss)
+
+
 class TestUnmappedGates:
     def test_a_prose_blocker_is_reported_not_turned_into_an_edge(self):
         # PM4. "waiting on a colleague's review" names a real blocker with no ref. Guessing at one

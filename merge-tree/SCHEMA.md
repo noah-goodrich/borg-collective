@@ -238,6 +238,15 @@ here.
 - **`gate.blocked_by` is never turned into an edge.** It is prose — *"waiting on a colleague's review"* names a real
   blocker with no ref to point at. String-matching it would invent a dependency. These are counted and reported as
   `unmapped_gates` instead.
+- **`gate.blocked_by_ref`** (optional) → a `blocks` edge. This is the machine-readable companion to the prose field,
+  for when the blocker *is* a tracked item. It must contain `#`, because its only job is to be an edge endpoint;
+  prose here would produce an edge pointing at nothing, which is precisely what keeping `blocked_by` prose avoids.
+  `blocks` does **not** group — it is a dependency *between* workstreams, so merging on it would collapse a blocker
+  into its own victim and lose the dependency.
+
+Without `blocked_by_ref` the schema could express no dependency at all. The backfill made that concrete: **14 of the
+72 recorded historical edges are `blocks`**, and they are the least recoverable kind, since `stacked` can be
+re-derived from branch topology for anything still open while a dependency is pure judgment.
 
 ### `decision` vs `verification`
 
