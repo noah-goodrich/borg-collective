@@ -62,14 +62,20 @@ while IFS=$'\t' read -r PROJECT PPATH; do
     # Resolve owner/repo from the origin remote; skip non-github or remoteless repos.
     REMOTE="$(git -C "$PPATH" remote get-url origin 2>/dev/null || echo "")"
     case "$REMOTE" in *github.com*) : ;; *) continue ;; esac
-    REPO="$(printf '%s' "$REMOTE" | sed -E 's#(git@github.com:|https://github.com/)##; s#\.git$##')"
+    # Strip EVERYTHING up to and including the host, not just two known prefixes. A remote of the
+    # form https://x-access-token:<token>@github.com/owner/repo.git matches neither
+    # `git@github.com:` nor `https://github.com/`, so the old pattern left the URL -- CREDENTIAL AND
+    # ALL -- as $REPO, which then flowed into every item's `ref` and out into data.json, story.json
+    # and the rendered HTML. Found 2026-08-14 against a real remote carrying a live gho_ token.
+    # Also covers ssh:// and git:// forms.
+    REPO="$(printf '%s' "$REMOTE" | sed -E 's#^.*github\.com[:/]##; s#\.git$##')"
     [ -n "$REPO" ] || continue
     SWEPT=$((SWEPT + 1))
 
     # Pull PRs touched since the mark. Bounded (--limit) so a busy repo can't flood the sweep.
     PRS="$(gh pr list --repo "$REPO" --state all --limit 30 \
         --search "updated:>=$SINCE_DATE" \
-        --json number,title,state,isDraft,updatedAt,author,url 2>/dev/null || echo "[]")"
+        --json number,title,state,isDraft,updatedAt,author,url,headRefName,baseRefName 2>/dev/null || echo "[]")"
 
     MAPPED="$(printf '%s' "$PRS" | jq \
         --arg project "$PROJECT" --arg source "$SOURCE" --arg repo "$REPO" --arg me "$ME" '
@@ -86,7 +92,10 @@ while IFS=$'\t' read -r PROJECT PPATH; do
             urgency: (if (.state != "OPEN") then "fyi"
                       elif (.title | test("urgent|hotfix|revert|broken|p0|sev";"i")) then "now"
                       else "this_week" end),
-            one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]")
+            one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]"),
+            repo:     $repo,
+            head_ref: (.headRefName // ""),
+            base_ref: (.baseRefName // "")
         } ]' 2>/dev/null || echo "[]")"
 
     COMBINED="$(jq -s '.[0] + .[1]' "$ITEMS_FILE" <(printf '%s' "$MAPPED") 2>/dev/null || cat "$ITEMS_FILE")"
