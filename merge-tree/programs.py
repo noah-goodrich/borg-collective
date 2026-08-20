@@ -312,6 +312,36 @@ def discover(project_dirs: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
     return manifests, warnings
 
 
+def write_manifest(project_dir: str, program: str, manifest: dict[str, Any]) -> str:
+    """borg's native program writer — the ONLY code path that puts a file under a project's
+    `.borg/programs/`. PM6's coordinator delegates every write here rather than open()-ing the
+    path itself, so there is exactly one writer to keep atomic and validated.
+
+    Validate-all-then-fail before writing anything (PM1): a manifest with even one bad row is
+    rejected whole, never half-written. Raises `ValueError` on an invalid manifest; the caller
+    decides what to do with that (report and skip, in the coordinator's case).
+
+    Atomic write (tmp file + os.replace), mirroring the CLI's registry-write convention
+    (CLAUDE.md, "Registry writes are atomic") — a crash mid-write must never leave a truncated
+    manifest that `discover()` then reports as merely-malformed.
+    """
+    errors = validate(manifest)
+    if errors:
+        raise ValueError(f"{program}: invalid manifest — {'; '.join(errors)}")
+
+    directory = programs_dir(project_dir)
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"{program}.json")
+    tmp_path = f"{path}.tmp"
+    to_write = {k: v for k, v in manifest.items() if k != "_path"}
+    to_write.setdefault("program", program)
+    with open(tmp_path, "w") as fh:
+        json.dump(to_write, fh, indent=2, sort_keys=True)
+        fh.write("\n")
+    os.replace(tmp_path, path)
+    return path
+
+
 def edges_from(manifests: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """All declared edges across manifests, deduplicated and byte-stable.
 
