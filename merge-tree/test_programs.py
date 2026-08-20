@@ -11,6 +11,8 @@ import json
 import os
 import re
 
+import pytest
+
 import programs
 
 
@@ -331,6 +333,37 @@ class TestDiscover:
         assert len(manifests) == 2
 
 
+class TestWriteManifest:
+    """The one code path allowed to put a file under `.borg/programs/` (PM6's coordinator delegates
+    here rather than open()-ing the path itself)."""
+
+    def test_writes_a_valid_manifest(self, tmp_path):
+        path = programs.write_manifest(str(tmp_path), "prog-a", _manifest([_row("1", "r#1")]))
+        assert os.path.exists(path)
+        with open(path) as fh:
+            written = json.load(fh)
+        assert written["program"] == "prog-a"
+        assert written["rows"][0]["ref"] == "r#1"
+
+    def test_refuses_an_invalid_manifest_and_writes_nothing(self, tmp_path):
+        with pytest.raises(ValueError):
+            programs.write_manifest(str(tmp_path), "prog-a", _manifest([_row("1", "")]))
+        assert not os.path.exists(os.path.join(tmp_path, ".borg", "programs", "prog-a.json"))
+
+    def test_is_idempotent_and_atomic_on_rewrite(self, tmp_path):
+        m = _manifest([_row("1", "r#1")])
+        path = programs.write_manifest(str(tmp_path), "prog-a", m)
+        second = programs.write_manifest(str(tmp_path), "prog-a", m)
+        assert path == second
+        assert not os.path.exists(path + ".tmp")
+
+    def test_strips_the_discover_stamped_path_field(self, tmp_path):
+        manifests, _ = programs.discover([_write(tmp_path, "proj", "a.json", _manifest([_row("1", "r#1")]))])
+        rewritten = programs.write_manifest(str(tmp_path / "proj"), "a", manifests[0])
+        with open(rewritten) as fh:
+            assert "_path" not in json.load(fh)
+
+
 class TestIndependence:
     """PM8. borg must work identically on a machine that has never heard of any other plugin.
 
@@ -343,7 +376,12 @@ class TestIndependence:
 
     def _sources(self):
         here = os.path.dirname(__file__)
-        paths = [os.path.join(here, "programs.py"), os.path.join(here, "gather.py"), __file__]
+        paths = [
+            os.path.join(here, "programs.py"),
+            os.path.join(here, "gather.py"),
+            os.path.join(here, "coordinator.py"),
+            __file__,
+        ]
         fixtures = os.path.join(here, "fixtures", "programs")
         paths += [os.path.join(fixtures, n) for n in sorted(os.listdir(fixtures))]
         return paths
