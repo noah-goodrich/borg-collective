@@ -108,9 +108,7 @@ def derive_stacked_edges(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             # A `derived` edge is an inference from branch topology and can be stale (a rebase moves
             # a base branch); a `declared` edge is someone's stated intent. Telling them apart is the
             # difference between "the graph is wrong" and "the plan changed".
-            edges.append(
-                {"parent": parent, "child": str(it["ref"]), "kind": "stacked", "source": "derived"}
-            )
+            edges.append({"parent": parent, "child": str(it["ref"]), "kind": "stacked", "source": "derived"})
     return sorted(edges, key=lambda e: (e["child"], e["parent"]))
 
 
@@ -138,10 +136,7 @@ def merge_edges(
         if key in by_key:
             overlap += 1
         elif reversed_key in by_key:
-            conflicts.append(
-                f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, "
-                f"topology says the reverse"
-            )
+            conflicts.append(f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, topology says the reverse")
             del by_key[reversed_key]
         by_key[key] = edge
 
@@ -152,24 +147,64 @@ def merge_edges(
     )
 
 
+def apply_program_projects(items: list[dict[str, Any]], manifests: list[dict[str, Any]]) -> int:
+    """Re-key each manifest member's `project` to the program that declares it. Returns count changed.
+
+    WHY. spine.py groups by `items[].project` BEFORE computing connected components, and recon keys
+    `items_by_project` by REGISTERED PROJECT — one per repo. A declared edge that crosses repos therefore
+    also crosses projects, and the spine severs the chain at the project boundary: the cross-repo case the
+    manifest exists to express is exactly the case grouping destroys. Measured live (2026-08-20): the same
+    declared 4-repo program renders as 0 cross-repo workstreams without this and 2 with it.
+
+    A program IS the project for the work it declares — that is what declaring it means — so the manifest's
+    own `program` id is the grouping key for its members. Only members of a manifest are touched; every
+    other item keeps the project recon gave it.
+    """
+    by_ref: dict[str, str] = {}
+    for manifest in manifests:
+        program = str(manifest.get("program") or "").strip()
+        if not program:
+            continue
+        refs = [str(r.get("ref") or "").strip() for r in (manifest.get("rows") or []) if isinstance(r, dict)]
+        apex = manifest.get("apex")
+        apex_ref = str(apex.get("ref") or "").strip() if isinstance(apex, dict) else ""
+        if apex_ref:
+            refs.append(apex_ref)
+        for ref in refs:
+            # First manifest wins, deterministically: two programs claiming one item is a declaration
+            # conflict to surface, not something to resolve silently by iteration order.
+            if ref:
+                by_ref.setdefault(ref, program)
+
+    reassigned = 0
+    for item in items:
+        program = by_ref.get(str(item.get("ref") or ""))
+        if program and item.get("project") != program:
+            item["project"] = program
+            reassigned += 1
+    return reassigned
+
+
 def assemble(
-    reconciled: dict[str, Any], declared_edges: list[dict[str, Any]] | None = None
+    reconciled: dict[str, Any],
+    declared_edges: list[dict[str, Any]] | None = None,
+    manifests: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Turn a reconciled recon document into the raw gather curate.py and spine.py consume.
 
     `declared_edges` come from borg's program manifests (see programs.py) and carry the cross-repo
     dependencies branch topology cannot express — a base branch is a repo-local name, so every derived
-    edge is repo-local by construction.
+    edge is repo-local by construction. `manifests` (the same discovery's output) re-key their members'
+    `project` so the spine groups a declared program as one workstream instead of severing it per repo.
     """
     items = flatten_items(reconciled)
+    programs_applied = apply_program_projects(items, manifests or [])
     sources = reconciled.get("sources") or []
     repos = sorted({repo_of(it) for it in items if repo_of(it)})
     generated = str(reconciled.get("generated_at") or utc_now_iso())
 
     machine = os.environ.get("BORG_MACHINE", "")
-    edges, overlap, conflicts = merge_edges(
-        derive_stacked_edges(items), declared_edges or []
-    )
+    edges, overlap, conflicts = merge_edges(derive_stacked_edges(items), declared_edges or [])
 
     health = [
         {
@@ -198,9 +233,7 @@ def assemble(
     # Counting them is the guard against a silent normalization mismatch between a manifest's refs and
     # what the adapters actually emit.
     refs = {str(it.get("ref")) for it in items}
-    dangling = sorted(
-        {ref for e in edges for ref in (e["parent"], e["child"]) if ref not in refs}
-    )
+    dangling = sorted({ref for e in edges for ref in (e["parent"], e["child"]) if ref not in refs})
 
     return {
         "meta": {
@@ -211,6 +244,8 @@ def assemble(
             # Carried through so the health panel keeps working: a source that failed must stay
             # visible rather than silently reducing the item count. Recon marks these `ok: false`.
             "health": health,
+            # Countable, so a manifest whose refs match nothing is visible instead of silently inert.
+            "program_regrouped_items": programs_applied,
             "edge_provenance": {
                 "derived": len([e for e in edges if e.get("source") == "derived"]),
                 "declared": len([e for e in edges if e.get("source") == "declared"]),
@@ -253,7 +288,7 @@ def main() -> int:
         # Named, never silent: an unnamed skip is indistinguishable from a file that was never there.
         print(f"  MANIFEST SKIPPED {warning}", file=sys.stderr)
 
-    gather = assemble(reconciled, programs.edges_from(manifests))
+    gather = assemble(reconciled, programs.edges_from(manifests), manifests)
     with open(args.out, "w") as fh:
         json.dump(gather, fh, indent=2, sort_keys=True)
         fh.write("\n")
