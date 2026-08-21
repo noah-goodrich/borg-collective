@@ -149,6 +149,15 @@ def process_adapter_output(source: str, raw: str | None, rc: int) -> dict:
         return build_postprocess_failed_track(source)
 
 
+_ISO_TS = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+
+def _changed_ts(item: dict) -> str:
+    """The first ISO-8601 timestamp inside an item's prose `changed` field, or "" (sorts oldest)."""
+    match = _ISO_TS.search(str(item.get("changed") or ""))
+    return match.group(0) if match else ""
+
+
 def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
     """Drop cross-source duplicates of the same ref before the project merge.
 
@@ -158,11 +167,15 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
     only; linking a Jira `PROJ-123` to the `org/repo#45` it tracks is entity resolution and stays
     out of scope.
 
-    The newest `changed` wins (ISO strings compare lexically); ties keep the first track's item, and
-    track order is adapter discovery order, so the outcome is deterministic. Each track records how
-    many of its items lost as `deduped`. When the winner and a loser disagree on `state`, that is a
-    real contradiction between sources — emitted for the human, never resolved silently, same policy
-    as the checkpoint-vs-source detector.
+    The newest `changed` wins. `changed` is PROSE by contract (the github adapter emits
+    "updated <ISO>; state=..."), so the comparison extracts the first ISO-8601 timestamp from the
+    string — comparing the raw prose lexically would make the winner depend on each source's phrasing
+    prefix, not on time. Extracted timestamps compare lexically (ISO sorts); an item with no
+    timestamp in `changed` compares as oldest. Ties keep the first track's item, and track order is
+    adapter discovery order, so the outcome is deterministic. Each track records how many of its
+    items lost as `deduped`. When the winner and a loser disagree on `state`, that is a real
+    contradiction between sources — emitted for the human, never resolved silently, same policy as
+    the checkpoint-vs-source detector.
 
     Returns `(tracks, contradictions)` with each track's `items` filtered and `deduped` set.
     """
@@ -173,7 +186,7 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
             if not ref:
                 continue
             best = winners.get(ref)
-            if best is None or str(item.get("changed") or "") > str(best.get("changed") or ""):
+            if best is None or _changed_ts(item) > _changed_ts(best):
                 winners[ref] = item
 
     contradictions: list[dict] = []
@@ -199,7 +212,8 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
                         "kept_says": f"{winner.get('source')} reports state {winner.get('state')!r} (newer)",
                         "dropped_says": f"{item.get('source')} reports state {item.get('state')!r}",
                         "note": (
-                            "two sources disagree on this item's state — the newer report was kept, confirm which is right"
+                            "two sources disagree on this item's state — the newer report "
+                            "was kept, confirm which is right"
                         ),
                     }
                 )
