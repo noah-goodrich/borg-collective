@@ -296,6 +296,42 @@ class TestAssemble:
         statuses = {h["check"]: h["status"] for h in health}
         assert statuses == {"recon:github": "ok", "recon:jira": "down"}
 
+    def test_a_source_with_partial_drops_degrades_to_warn(self):
+        # Recon's `ok` only means the track ran; dropped items must not hide behind it.
+        rec = _reconciled(
+            [_pr("r#1")],
+            sources=[{"source": "tracker", "ok": True, "summary": "swept", "count": 2, "dropped": 1}],
+        )
+        row = assemble(rec)["meta"]["health"][0]
+        assert row["status"] == "warn"
+        assert "1 item(s) dropped as contract-invalid" in row["detail"]
+
+    def test_a_source_with_every_item_dropped_counts_as_down(self):
+        # Measured live 2026-08-21: a contract-invalid adapter had all 3 items dropped and still
+        # rendered `recon:tracker ok` here. All-dropped == contributed nothing == down.
+        rec = _reconciled(
+            [_pr("r#1")],
+            sources=[{"source": "tracker", "ok": True, "summary": "swept", "count": 0, "dropped": 3}],
+        )
+        row = assemble(rec)["meta"]["health"][0]
+        assert row["status"] == "down"
+        assert "3 item(s) dropped" in row["detail"]
+
+    def test_duplicate_refs_across_sources_raise_a_health_warning(self):
+        # Two sources reporting the same PR both survive recon's merge today; the duplicate inflates
+        # every downstream count. Until dedup lands in recon, gather must at least make it visible.
+        a = _pr("org/r#1", project="p")
+        b = dict(_pr("org/r#1", project="p"), source="tracker")
+        health = assemble(_reconciled([a, b]))["meta"]["health"]
+        dup = [h for h in health if h["check"] == "items:duplicate-refs"]
+        assert len(dup) == 1
+        assert dup[0]["status"] == "warn"
+        assert "org/r#1" in dup[0]["detail"]
+
+    def test_unique_refs_add_no_duplicate_health_row(self):
+        health = assemble(_reconciled([_pr("r#1"), _pr("r#2")]))["meta"]["health"]
+        assert not [h for h in health if h["check"] == "items:duplicate-refs"]
+
     def test_actions_is_empty_because_it_is_judgment_not_a_gathered_fact(self):
         assert assemble(_reconciled([_pr("r#1")]))["actions"] == {}
 
