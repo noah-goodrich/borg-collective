@@ -97,6 +97,24 @@ happen again without this directive.
 - [ ] AC7 The S6 inventory is enforced: adopted surfaces render the house grammar (goldens regenerated),
       superseded renderers severed, and every exemption is a line in this file, not an omission.
 
+## Review outcomes (2026-08-21, PR #159 work-machine review)
+
+- **Glyph set unified**: the mock's `✔ ● ○ ◌` everywhere (picture, glance strip, ANSI); the prototype's
+  ASCII `X O o` retires at productization. Column alignment is spec'd before goldens exist: fixed-width
+  columns computed from the longest ref, never proportional.
+- **Drift glyph required**: a node merged before its declared parent (live case: contract lane C6 open
+  under merged rows) renders a distinct marker + one drift line, so the picture never silently contradicts
+  itself.
+- **`--html` dropped from S2 v1** (zero measured consumers); md + ANSI only.
+- **S2 must state the window-vs-manifest contract**: declared members outside the recon sweep window render
+  `unknown` honestly with an "N members out of sweep window" banner in v1; widening/fetch-on-demand is a
+  recorded alternative. Without this, finished programs fade from the map within days (measured on the
+  work machine: 13 of 14 endpoints dangling on a 14-day window).
+- **Sequencing per review**: S1 + S4 first (S4 also answers the will-anyone-write-manifest-#3 question),
+  then S2, then S6 after the grammar survives a week of real use.
+- **Before any second adapter**: cross-source ref dedup and dropped>0 health propagation (recorded in the
+  deriver directive's scope boundary; owner to be decided when the first non-github adapter is scheduled).
+
 ## Non-Goals
 
 - Not the directive-state deriver (separate directive per the audit; S2 consumes it later).

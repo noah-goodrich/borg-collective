@@ -127,8 +127,9 @@ class TestApplyProgramProjects:
 
     def test_manifest_members_take_the_program_as_their_project(self):
         items = [_pr("a#1", repo="org/a", project="proj-a"), _pr("b#1", repo="org/b", project="proj-b")]
-        n = apply_program_projects(items, [self._manifest("auth", ["a#1", "b#1"])])
+        n, contested = apply_program_projects(items, [self._manifest("auth", ["a#1", "b#1"])])
         assert n == 2
+        assert contested == []
         assert {it["project"] for it in items} == {"auth"}
 
     def test_non_members_keep_the_project_recon_gave_them(self):
@@ -144,13 +145,43 @@ class TestApplyProgramProjects:
     def test_first_manifest_wins_a_contested_ref_deterministically(self):
         items = [_pr("a#1", project="p")]
         ms = [self._manifest("first", ["a#1"]), self._manifest("second", ["a#1"])]
-        apply_program_projects(items, ms)
+        _, contested = apply_program_projects(items, ms)
         assert items[0]["project"] == "first"
+        # The collision is REPORTED, not silently resolved (review #159 §2): the loser's claim
+        # surfaces for a human to settle.
+        assert contested == ["a#1: kept by first, also claimed by second"]
+
+    def test_a_contested_ref_reaches_the_health_panel_and_meta(self):
+        rec = _reconciled([_pr("a#1", repo="org/a", project="p")])
+        ms = [self._manifest("first", ["a#1"]), self._manifest("second", ["a#1"])]
+        got = assemble(rec, [], ms)
+        assert got["meta"]["program_contested_refs"] == ["a#1: kept by first, also claimed by second"]
+        warn = [h for h in got["meta"]["health"] if h["check"] == "programs:contested-refs"]
+        assert len(warn) == 1 and warn[0]["status"] == "warn"
 
     def test_no_manifests_changes_nothing(self):
         items = [_pr("a#1", project="p")]
-        assert apply_program_projects(items, []) == 0
+        assert apply_program_projects(items, []) == (0, [])
         assert items[0]["project"] == "p"
+
+    def test_the_home_project_keeps_its_undeclared_items_and_releases_the_declared_one(self):
+        # Review #159 §2: re-keying changes every project-scoped view. Deliberate — and explicit:
+        # the declared item LEAVES its home project's grouping; the home project's other work stays.
+        import spine
+
+        rec = _reconciled(
+            [
+                _pr("org/a#1", repo="org/a", project="home"),
+                _pr("org/a#2", repo="org/a", project="home"),
+                _pr("org/b#1", repo="org/b", project="other"),
+            ]
+        )
+        grouped = spine.generate_skeleton(assemble(rec, [], [self._manifest("prog", ["org/a#1"])]))
+        by_id = {p["id"]: p for p in grouped["projects"]}
+        home_items = sorted(i for w in by_id["home"]["workstreams"] for i in w["items"])
+        prog_items = sorted(i for w in by_id["prog"]["workstreams"] for i in w["items"])
+        assert home_items == ["org/a#2"]
+        assert prog_items == ["org/a#1"]
 
     def test_a_declared_cross_repo_program_survives_the_spine_as_one_workstream(self):
         # The end-to-end payoff, on the production project shape (one registry project per repo).

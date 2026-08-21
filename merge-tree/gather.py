@@ -147,20 +147,30 @@ def merge_edges(
     )
 
 
-def apply_program_projects(items: list[dict[str, Any]], manifests: list[dict[str, Any]]) -> int:
-    """Re-key each manifest member's `project` to the program that declares it. Returns count changed.
+def apply_program_projects(items: list[dict[str, Any]], manifests: list[dict[str, Any]]) -> tuple[int, list[str]]:
+    """Re-key each manifest member's `project` to the program that declares it.
 
-    WHY. spine.py groups by `items[].project` BEFORE computing connected components, and recon keys
-    `items_by_project` by REGISTERED PROJECT — one per repo. A declared edge that crosses repos therefore
-    also crosses projects, and the spine severs the chain at the project boundary: the cross-repo case the
-    manifest exists to express is exactly the case grouping destroys. Measured live (2026-08-20): the same
-    declared 4-repo program renders as 0 cross-repo workstreams without this and 2 with it.
+    Returns `(reassigned_count, contested)` — `contested` is one line per ref that more than one
+    program claims. The FIRST manifest (discovery order, deterministic) keeps the ref; the collision
+    is REPORTED, never silently resolved, same policy as merge_edges conflicts: two programs claiming
+    one item is a declaration conflict for a human, and hiding it would let the loser's chain quietly
+    lose a member.
 
-    A program IS the project for the work it declares — that is what declaring it means — so the manifest's
-    own `program` id is the grouping key for its members. Only members of a manifest are touched; every
-    other item keeps the project recon gave it.
+    WHY THIS EXISTS. spine.py groups by `items[].project` BEFORE computing connected components, and
+    recon keys `items_by_project` by REGISTERED PROJECT — one per repo. A declared edge that crosses
+    repos therefore also crosses projects, and the spine severs the chain at the project boundary: the
+    cross-repo case the manifest exists to express is exactly the case grouping destroys. Measured live
+    (2026-08-20): the same declared 4-repo program renders as 0 cross-repo workstreams without this and
+    2 with it.
+
+    A program IS the project for the work it declares — that is what declaring it means — so the
+    manifest's own `program` id is the grouping key for its members. Only members of a manifest are
+    touched; every other item keeps the project recon gave it. Declared-away items therefore LEAVE
+    their home project's grouping in every downstream view — deliberate: the program is where that
+    work's story lives now, and the home project's remaining items still group under the home project.
     """
     by_ref: dict[str, str] = {}
+    contested: list[str] = []
     for manifest in manifests:
         program = str(manifest.get("program") or "").strip()
         if not program:
@@ -171,10 +181,11 @@ def apply_program_projects(items: list[dict[str, Any]], manifests: list[dict[str
         if apex_ref:
             refs.append(apex_ref)
         for ref in refs:
-            # First manifest wins, deterministically: two programs claiming one item is a declaration
-            # conflict to surface, not something to resolve silently by iteration order.
-            if ref:
-                by_ref.setdefault(ref, program)
+            if not ref:
+                continue
+            holder = by_ref.setdefault(ref, program)
+            if holder != program:
+                contested.append(f"{ref}: kept by {holder}, also claimed by {program}")
 
     reassigned = 0
     for item in items:
@@ -182,7 +193,7 @@ def apply_program_projects(items: list[dict[str, Any]], manifests: list[dict[str
         if program and item.get("project") != program:
             item["project"] = program
             reassigned += 1
-    return reassigned
+    return reassigned, sorted(contested)
 
 
 def assemble(
@@ -198,7 +209,7 @@ def assemble(
     `project` so the spine groups a declared program as one workstream instead of severing it per repo.
     """
     items = flatten_items(reconciled)
-    programs_applied = apply_program_projects(items, manifests or [])
+    programs_applied, program_contested = apply_program_projects(items, manifests or [])
     sources = reconciled.get("sources") or []
     repos = sorted({repo_of(it) for it in items if repo_of(it)})
     generated = str(reconciled.get("generated_at") or utc_now_iso())
@@ -228,6 +239,18 @@ def assemble(
                 "checked_at": generated,
             }
         )
+    if program_contested:
+        # Same policy as edge conflicts: a ref claimed by two programs is a declaration conflict for a
+        # human to settle. First manifest kept it (deterministic); the loser must not vanish silently.
+        health.append(
+            {
+                "check": "programs:contested-refs",
+                "machine": machine,
+                "status": "warn",
+                "detail": "; ".join(program_contested),
+                "checked_at": generated,
+            }
+        )
 
     # Endpoints that match no gathered item produce edges that vanish from the graph without raising.
     # Counting them is the guard against a silent normalization mismatch between a manifest's refs and
@@ -246,6 +269,7 @@ def assemble(
             "health": health,
             # Countable, so a manifest whose refs match nothing is visible instead of silently inert.
             "program_regrouped_items": programs_applied,
+            "program_contested_refs": program_contested,
             "edge_provenance": {
                 "derived": len([e for e in edges if e.get("source") == "derived"]),
                 "declared": len([e for e in edges if e.get("source") == "declared"]),
@@ -306,6 +330,9 @@ def main() -> int:
         print(f"  DEGRADED SOURCES: {', '.join(down)}", file=sys.stderr)
     for conflict in prov["conflicts"]:
         print(f"  EDGE CONFLICT {conflict}", file=sys.stderr)
+    for contested in gather["meta"]["program_contested_refs"]:
+        # A ref two programs both declare. First manifest kept it; a human settles the claim.
+        print(f"  CONTESTED REF {contested}", file=sys.stderr)
     if prov["dangling_endpoints"]:
         # These edges are in the graph but reference nothing gathered, so they render as nothing at
         # all. Silent disappearance is the failure mode; a count is the guard.
