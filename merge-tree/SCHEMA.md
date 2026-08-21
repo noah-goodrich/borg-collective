@@ -228,6 +228,7 @@ here.
 | `rows[].lane` | no | parallel track; omit on every row for single-stack mode |
 | `rows[].gate` | no | why a row is parked; `kind` is closed to `decision` or `verification` |
 | `apex` | no | the program's tracker; omit entirely on a small single-ticket program |
+| `desc` | no | ONE plain sentence describing the program, rendered under its heading in every chain view; distinct from `note` (provenance/caveats, not rendered) |
 
 ### Derivation rules
 
@@ -247,6 +248,15 @@ here.
 Without `blocked_by_ref` the schema could express no dependency at all. The backfill made that concrete: **14 of the
 72 recorded historical edges are `blocks`**, and they are the least recoverable kind, since `stacked` can be
 re-derived from branch topology for anything still open while a dependency is pure judgment.
+
+### Planned: row-level `after: [refs]` (not yet implemented)
+
+Lanes express linear tracks only. The approved chain-map rendering treats every program as a topological
+grid (a linear chain is a one-column DAG), and true forks — one PR unblocking several that all go ready
+simultaneously — need declared parents: a row-level `after: [refs]` list. Derivation rule when it lands:
+explicit `after` overrides consecutive-row inference within the lane; READY = open AND every parent
+merged; all READY nodes are next simultaneously. Recorded here so a review of this contract evaluates the
+shape the consuming program needs, not just today's fields.
 
 ### `decision` vs `verification`
 

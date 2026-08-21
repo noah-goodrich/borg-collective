@@ -73,7 +73,11 @@ the proof.
 - Live numbers: 136 items swept, 15 edges (1 derived + 14 declared), 0 dangling endpoints across 13
   hand-typed refs — the "rows key on `ref`, no normalization" design validated itself.
 - Full adversarial review: 15-agent verify pass; every finding above survived a dedicated refutation
-  attempt. Ask the borg-collective session of 2026-08-18/20 for transcripts if needed.
+  attempt. The findings are documented above in enough detail to re-derive; each names its exact
+  input shape.
+- The historical 2026-07-30 `data.json` (72 edges / 430 items) backing the backfill findings does NOT
+  exist on the personal machine — it should exist on this (work) machine at
+  `~/.local/state/borg/merge-tree/data.json`, where findings 1-3 can be re-executed directly.
 
 
 ## Addendum 2026-08-20 — the communication program rides along
@@ -87,8 +91,9 @@ this branch for your review:
   drone is building K1-K3).
 - **Rendering decision — one visual grammar for every status surface**: the topological grid, picture
   first, always vertical; a linear chain is a one-column DAG. Node ids appear exactly twice so vim `*`
-  toggles picture <-> detail; refs are full `owner/repo#num` (self-addressing; a `gp` keymap opens the
-  PR — lives in dotfiles). See `docs/pr158-rider/rendered/chains.md` (live data through the unified
+  toggles picture <-> detail; refs are full `owner/repo#num` (self-addressing; the `gp` keymap lives at
+  noah-goodrich/dotfiles `nvim/lua/custom/plugins/overrides.lua:82` — cursor on a ref, gp opens the
+  PR; bare `#123` falls back to `gh pr view --web` in the buffer's repo). See `docs/pr158-rider/rendered/chains.md` (live data through the unified
   renderer) and `rendered/chains-dag-mock.md` (the fork/join treatment, approved).
 - **Runnable prototypes**: `docs/pr158-rider/prototypes/`. Regenerate: `borg recon --json --since <ISO>`
   piped to `merge-tree/gather.py --programs-dir <proj>`, then `build_chains.py` + `render_chains_md.py`.
@@ -98,3 +103,7 @@ this branch for your review:
   (lanes only express linear tracks).
 - **Known lag**: `render_chains_ansi.py` still renders the pre-grid rail form; the md renderer is the
   reference implementation of the spec.
+- **Path mapping**: where the directives reference `~/.local/state/borg/merge-tree/...`, the branch
+  copies are `docs/pr158-rider/rendered/` (chains.md, chains-dag-mock.md) and
+  `docs/pr158-rider/prototypes/`. `build_chains.py` is parameterized: point it at any gather JSON +
+  `manifests/`; the committed `chains.json` makes the render step standalone.

@@ -62,7 +62,23 @@ happen again without this directive.
   /style/highlights; Smart Brevity method unbranded, flattening-critique respected).
 - **S4 — promote the PoC manifests.** Add `!.borg/programs/` to `.gitignore` (and document the carve-out for
   consuming repos), then land the two hand-authored manifests (`ingle-t1-cutover`, `viz-program`) in their
-  owning repos so S2 has real declared edges on day one.
+  owning repos so S2 has real declared edges on day one. When S4 lands, re-file manifest-driven chain
+  position for `/pr-description` in claude-plugins (its plan deferred it on "no manifests exist yet").
+- **S6 — every status surface adopts or is exempted, by name.** (Added 2026-08-20 after the gap sweep;
+  Noah: "this new rendering would inform the way that all enquiries about status, de-briefings, borg-link,
+  etc" — that is the adopt decision for the big surfaces.) Inventory:
+
+  | Surface | Decision |
+  |---|---|
+  | `borg link` overview + deep (borg_core/link/render.py, /borg-link skill) | ADOPT: glance strip + derived status; goldens regenerated; engine and skill skeletons updated in one change |
+  | /borg-recon briefing skeleton | ADOPT: S3 contract + full refs |
+  | /borg-link-up checkpoint template | ADOPT: tl;dr at top, full refs (see deriver directive for the state-restatement shrink) |
+  | /borg-next, `borg next` CLI | ADOPT: full refs; S3 skip-threshold applies (short replies carry no tl;dr block) |
+  | orchestrator SessionStart overview, `borg watch`, `drone status`, `borg nanoprobes` | EXEMPT for now: operational glances, revisit after S1-S5 ship |
+  | merge-tree `render.py` + `render_graph.py` HTML | SUPERSEDED by `borg chains --html`; sever when S2 ships (zero consumers measured) |
+
+  Precedence rule: the S3 chat contract wins over any per-skill output skeleton; skills reference it
+  rather than restating format rules (single source: K2's portable spine in claude-plugins).
 
 ## Acceptance criteria
 
@@ -75,6 +91,11 @@ happen again without this directive.
 - [ ] AC4 `.gitignore` carve-out landed; `git check-ignore .borg/programs/x.json` fails (not ignored); both
       manifests committed in their repos.
 - [ ] AC5 Full bats suite and macOS contract leg green.
+- [ ] AC6 A fixture manifest using row-level `after: [refs]` renders the fork/join grid of the approved
+      mock (branch columns, join, READY-set announced together). Schema addition owned by S2, spec'd in
+      SCHEMA.md on the rider branch.
+- [ ] AC7 The S6 inventory is enforced: adopted surfaces render the house grammar (goldens regenerated),
+      superseded renderers severed, and every exemption is a line in this file, not an omission.
 
 ## Non-Goals
 
