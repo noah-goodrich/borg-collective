@@ -1,0 +1,301 @@
+{
+ "generated_at": "2026-08-20T10:09:17Z",
+ "programs": [
+  {
+   "program": "viz-program",
+   "desc": "Give borg a truthful, cross-repo picture of PR state so mornings start from derived fact instead of memory.",
+   "note": "Hand-authored from the viz directives and PR bodies. #158's own directive states 'PM1-PM10 depend only on gather.py (PR #149)'. Single lane; all refs verified present in the live recon gather.",
+   "lanes": [
+    {
+     "lane": "viz",
+     "nodes": [
+      {
+       "ref": "noah-goodrich/borg-collective#144",
+       "short": "borg-collective#144",
+       "repo": "noah-goodrich/borg-collective",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "feat(viz-2): give story.json a generator (S1/S2/S3/S5, S6 partial)",
+       "url": "https://github.com/noah-goodrich/borg-collective/pull/144",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "noah-goodrich/borg-collective#149",
+       "short": "borg-collective#149",
+       "repo": "noah-goodrich/borg-collective",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "fix(recon): credential leak in item refs + bridge recon to the raw gather (viz-2",
+       "url": "https://github.com/noah-goodrich/borg-collective/pull/149",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "noah-goodrich/borg-collective#158",
+       "short": "borg-collective#158",
+       "repo": "noah-goodrich/borg-collective",
+       "order": "1",
+       "state": "open",
+       "title": "feat(programs): borg-native declared edges + backfill from historical data.json",
+       "url": "https://github.com/noah-goodrich/borg-collective/pull/158",
+       "next": true,
+       "gate": {
+        "blocked_by": "held for the PM6/PM7 coordinator and a review against personal projects",
+        "kind": "decision",
+        "resolved_by": "review of noah-goodrich/borg-collective#158 against real projects"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "program": "ingle-t1-cutover",
+   "desc": "Move ingle onto the shared stillpoint database: freeze writes, load prod data, flip the schema, and guard every app with a schema contract.",
+   "note": "Hand-authored from PR titles + stillpoint#48's body, which names docs/plans/directives/2026-07-27-ingle-cutover.md Task 1. Two lanes: the T-numbered migration chain, and the schema-contract guard as it moved stillpoint -> ingle -> reveal -> troth. Every ref verified present in the live recon gather.",
+   "lanes": [
+    {
+     "lane": "cutover",
+     "nodes": [
+      {
+       "ref": "stillpoint-labs/stillpoint#37",
+       "short": "stillpoint#37",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "T0.6: ingle cutover contract migration (drop 12 columns + dead table)",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/37",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/stillpoint#33",
+       "short": "stillpoint#33",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "feat(migrations): T0.7 ingle cutover \u2014 additive member_meals + household_store_a",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/33",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/stillpoint#39",
+       "short": "stillpoint#39",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "feat(ingle-cutover): T1 prereqs \u2014 port ingle 0121 resolver fn + 0125 grant",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/39",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/stillpoint#40",
+       "short": "stillpoint#40",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "feat(ingle-cutover): T1 data-load script (build only \u2014 not yet run)",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/40",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/stillpoint#50",
+       "short": "stillpoint#50",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "feat(ingle-cutover): write-freeze companion scripts (freeze/unfreeze source)",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/50",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/stillpoint#48",
+       "short": "stillpoint#48",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "1",
+       "state": "draft",
+       "title": "draft(cutover): write-freeze design for the ingle T1 load",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/48",
+       "next": true,
+       "gate": {
+        "blocked_by": "stillpoint drone must sign off; design-only, no DB touched",
+        "kind": "decision",
+        "resolved_by": "stillpoint drone review + approval on stillpoint-labs/stillpoint#48"
+       }
+      },
+      {
+       "ref": "stillpoint-labs/stillpoint#58",
+       "short": "stillpoint#58",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "2",
+       "state": "merged",
+       "title": "chore(cutover): land the 3 already-applied ingle migrations + T1 cutover-run fix",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/58",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/ingle#330",
+       "short": "ingle#330",
+       "repo": "stillpoint-labs/ingle",
+       "order": "3",
+       "state": "merged",
+       "title": "feat(cutover): T4 schema-flip \u2014 query ingle schema (code only, no env)",
+       "url": "https://github.com/stillpoint-labs/ingle/pull/330",
+       "next": false,
+       "gate": null
+      }
+     ]
+    },
+    {
+     "lane": "contract",
+     "nodes": [
+      {
+       "ref": "stillpoint-labs/stillpoint#54",
+       "short": "stillpoint#54",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "C1",
+       "state": "merged",
+       "title": "feat(schema-contract): relocate ingle drift guard here, generalized across tenan",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/54",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/stillpoint#55",
+       "short": "stillpoint#55",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "C2",
+       "state": "merged",
+       "title": "feat(schema-contract): add reveal + troth contracts to the generalized guard",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/55",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/ingle#341",
+       "short": "ingle#341",
+       "repo": "stillpoint-labs/ingle",
+       "order": "C3",
+       "state": "merged",
+       "title": "feat(ci): guard the ingle <-> stillpoint schema-contract dual-source drift",
+       "url": "https://github.com/stillpoint-labs/ingle/pull/341",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/reveal#59",
+       "short": "reveal#59",
+       "repo": "stillpoint-labs/reveal",
+       "order": "C4",
+       "state": "merged",
+       "title": "docs(directives): file schema-contract guard handoff",
+       "url": "https://github.com/stillpoint-labs/reveal/pull/59",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/troth#83",
+       "short": "troth#83",
+       "repo": "stillpoint-labs/troth",
+       "order": "C5",
+       "state": "merged",
+       "title": "docs(directives): file schema-contract guard handoff",
+       "url": "https://github.com/stillpoint-labs/troth/pull/83",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "stillpoint-labs/stillpoint#57",
+       "short": "stillpoint#57",
+       "repo": "stillpoint-labs/stillpoint",
+       "order": "C6",
+       "state": "open",
+       "title": "feat(schema-contract): local runner + live-prod confirmation of auth trigger dri",
+       "url": "https://github.com/stillpoint-labs/stillpoint/pull/57",
+       "next": false,
+       "gate": {
+        "blocked_by": "needs a live-prod confirmation run against all four contracts",
+        "kind": "verification",
+        "resolved_by": "local runner executed against prod",
+        "outcomes": [
+         "all four agree -> merge",
+         "drift found -> fix the contract first"
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "unchained": [
+  {
+   "ref": "noah-goodrich/dotfiles#15",
+   "short": "dotfiles#15",
+   "repo": "noah-goodrich/dotfiles",
+   "state": "open",
+   "title": "feat(zsh): Snowflake PAT env aliases + devcontainer venv auto-activate",
+   "url": "https://github.com/noah-goodrich/dotfiles/pull/15",
+   "project": "dotfiles"
+  },
+  {
+   "ref": "stillpoint-labs/ingle#353",
+   "short": "ingle#353",
+   "repo": "stillpoint-labs/ingle",
+   "state": "open",
+   "title": "docs(directive): pantry expiry \u2014 defer the surface, ship the confirm sweep",
+   "url": "https://github.com/stillpoint-labs/ingle/pull/353",
+   "project": "ingle"
+  },
+  {
+   "ref": "stillpoint-labs/ingle#354",
+   "short": "ingle#354",
+   "repo": "stillpoint-labs/ingle",
+   "state": "open",
+   "title": "fix(pantry): remove the expiring_soon flag that has never once been true",
+   "url": "https://github.com/stillpoint-labs/ingle/pull/354",
+   "project": "ingle"
+  },
+  {
+   "ref": "stillpoint-labs/ingle#355",
+   "short": "ingle#355",
+   "repo": "stillpoint-labs/ingle",
+   "state": "open",
+   "title": "docs(directive): session findings register \u2014 2026-08-15/16",
+   "url": "https://github.com/stillpoint-labs/ingle/pull/355",
+   "project": "ingle"
+  },
+  {
+   "ref": "stillpoint-labs/reveal#58",
+   "short": "reveal#58",
+   "repo": "stillpoint-labs/reveal",
+   "state": "open",
+   "title": "docs(directive): CI self-hosted optimization plan (target ~2-3m)",
+   "url": "https://github.com/stillpoint-labs/reveal/pull/58",
+   "project": "reveal"
+  },
+  {
+   "ref": "stillpoint-labs/troth#64",
+   "short": "troth#64",
+   "repo": "stillpoint-labs/troth",
+   "state": "draft",
+   "title": "refactor(plaid): edge-safe syncPlaidItem + recurring-sync plan (G4)",
+   "url": "https://github.com/stillpoint-labs/troth/pull/64",
+   "project": "troth"
+  }
+ ],
+ "provenance": {
+  "conflicts": [],
+  "dangling_endpoints": [],
+  "declared": 14,
+  "derived": 1,
+  "overlap": 0
+ },
+ "open_total": 9
+}
