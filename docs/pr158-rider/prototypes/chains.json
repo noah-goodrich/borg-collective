@@ -2,55 +2,6 @@
  "generated_at": "2026-08-20T10:09:17Z",
  "programs": [
   {
-   "program": "viz-program",
-   "desc": "Give borg a truthful, cross-repo picture of PR state so mornings start from derived fact instead of memory.",
-   "note": "Hand-authored from the viz directives and PR bodies. #158's own directive states 'PM1-PM10 depend only on gather.py (PR #149)'. Single lane; all refs verified present in the live recon gather.",
-   "lanes": [
-    {
-     "lane": "viz",
-     "nodes": [
-      {
-       "ref": "noah-goodrich/borg-collective#144",
-       "short": "borg-collective#144",
-       "repo": "noah-goodrich/borg-collective",
-       "order": "\u2013",
-       "state": "merged",
-       "title": "feat(viz-2): give story.json a generator (S1/S2/S3/S5, S6 partial)",
-       "url": "https://github.com/noah-goodrich/borg-collective/pull/144",
-       "next": false,
-       "gate": null
-      },
-      {
-       "ref": "noah-goodrich/borg-collective#149",
-       "short": "borg-collective#149",
-       "repo": "noah-goodrich/borg-collective",
-       "order": "\u2013",
-       "state": "merged",
-       "title": "fix(recon): credential leak in item refs + bridge recon to the raw gather (viz-2",
-       "url": "https://github.com/noah-goodrich/borg-collective/pull/149",
-       "next": false,
-       "gate": null
-      },
-      {
-       "ref": "noah-goodrich/borg-collective#158",
-       "short": "borg-collective#158",
-       "repo": "noah-goodrich/borg-collective",
-       "order": "1",
-       "state": "open",
-       "title": "feat(programs): borg-native declared edges + backfill from historical data.json",
-       "url": "https://github.com/noah-goodrich/borg-collective/pull/158",
-       "next": true,
-       "gate": {
-        "blocked_by": "held for the PM6/PM7 coordinator and a review against personal projects",
-        "kind": "decision",
-        "resolved_by": "review of noah-goodrich/borg-collective#158 against real projects"
-       }
-      }
-     ]
-    }
-   ]
-  },
-  {
    "program": "ingle-t1-cutover",
    "desc": "Move ingle onto the shared stillpoint database: freeze writes, load prod data, flip the schema, and guard every app with a schema contract.",
    "note": "Hand-authored from PR titles + stillpoint#48's body, which names docs/plans/directives/2026-07-27-ingle-cutover.md Task 1. Two lanes: the T-numbered migration chain, and the schema-contract guard as it moved stillpoint -> ingle -> reveal -> troth. Every ref verified present in the live recon gather.",
@@ -227,6 +178,55 @@
          "all four agree -> merge",
          "drift found -> fix the contract first"
         ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "program": "viz-program",
+   "desc": "Give borg a truthful, cross-repo picture of PR state so mornings start from derived fact instead of memory.",
+   "note": "Hand-authored from the viz directives and PR bodies. #158's own directive states 'PM1-PM10 depend only on gather.py (PR #149)'. Single lane; all refs verified present in the live recon gather.",
+   "lanes": [
+    {
+     "lane": "viz",
+     "nodes": [
+      {
+       "ref": "noah-goodrich/borg-collective#144",
+       "short": "borg-collective#144",
+       "repo": "noah-goodrich/borg-collective",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "feat(viz-2): give story.json a generator (S1/S2/S3/S5, S6 partial)",
+       "url": "https://github.com/noah-goodrich/borg-collective/pull/144",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "noah-goodrich/borg-collective#149",
+       "short": "borg-collective#149",
+       "repo": "noah-goodrich/borg-collective",
+       "order": "\u2013",
+       "state": "merged",
+       "title": "fix(recon): credential leak in item refs + bridge recon to the raw gather (viz-2",
+       "url": "https://github.com/noah-goodrich/borg-collective/pull/149",
+       "next": false,
+       "gate": null
+      },
+      {
+       "ref": "noah-goodrich/borg-collective#158",
+       "short": "borg-collective#158",
+       "repo": "noah-goodrich/borg-collective",
+       "order": "1",
+       "state": "open",
+       "title": "feat(programs): borg-native declared edges + backfill from historical data.json",
+       "url": "https://github.com/noah-goodrich/borg-collective/pull/158",
+       "next": true,
+       "gate": {
+        "blocked_by": "held for the PM6/PM7 coordinator and a review against personal projects",
+        "kind": "decision",
+        "resolved_by": "review of noah-goodrich/borg-collective#158 against real projects"
        }
       }
      ]
