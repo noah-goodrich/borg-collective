@@ -2,15 +2,36 @@
   "program": "viz-program",
   "note": "Hand-authored from the viz directives and PR bodies. #158's own directive states 'PM1-PM10 depend only on gather.py (PR #149)'. Single lane; all refs verified present in the live recon gather.",
   "rows": [
-    {"order": "–", "ref": "noah-goodrich/borg-collective#144", "lane": "viz", "ticket": "",
-     "status": "merged", "why": "viz-2 S1/S2/S3/S5 — story.json gets a generator"},
-    {"order": "–", "ref": "noah-goodrich/borg-collective#149", "lane": "viz", "ticket": "",
-     "status": "merged", "why": "recon -> raw gather bridge; the producer PM1-PM10 depend on"},
-    {"order": "1", "ref": "noah-goodrich/borg-collective#158", "lane": "viz", "ticket": "",
-     "status": "stacked", "next": true,
-     "why": "declared cross-repo edges — the only channel that can produce them",
-     "gate": {"blocked_by": "held for the PM6/PM7 coordinator and a review against personal projects",
-              "kind": "decision",
-              "resolved_by": "review of noah-goodrich/borg-collective#158 against real projects"}}
-  ]
+    {
+      "order": "\u2013",
+      "ref": "noah-goodrich/borg-collective#144",
+      "lane": "viz",
+      "ticket": "",
+      "status": "merged",
+      "why": "viz-2 S1/S2/S3/S5 \u2014 story.json gets a generator"
+    },
+    {
+      "order": "\u2013",
+      "ref": "noah-goodrich/borg-collective#149",
+      "lane": "viz",
+      "ticket": "",
+      "status": "merged",
+      "why": "recon -> raw gather bridge; the producer PM1-PM10 depend on"
+    },
+    {
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#158",
+      "lane": "viz",
+      "ticket": "",
+      "status": "stacked",
+      "next": true,
+      "why": "declared cross-repo edges \u2014 the only channel that can produce them",
+      "gate": {
+        "blocked_by": "held for the PM6/PM7 coordinator and a review against personal projects",
+        "kind": "decision",
+        "resolved_by": "review of noah-goodrich/borg-collective#158 against real projects"
+      }
+    }
+  ],
+  "desc": "Give borg a truthful, cross-repo picture of PR state so mornings start from derived fact instead of memory."
 }

@@ -74,3 +74,27 @@ the proof.
   hand-typed refs — the "rows key on `ref`, no normalization" design validated itself.
 - Full adversarial review: 15-agent verify pass; every finding above survived a dedicated refutation
   attempt. Ask the borg-collective session of 2026-08-18/20 for transcripts if needed.
+
+
+## Addendum 2026-08-20 — the communication program rides along
+
+Since the original review, Noah accepted a communication program that this PR's edge data feeds. Added to
+this branch for your review:
+
+- **Directives at their real paths**: `docs/plans/directives/2026-08-20-communication-program.md`
+  (accepted, decisions locked) and `2026-08-20-comms-delivery-surfaces.md` (S1-S5). The claude-plugins
+  half is `docs/pr158-rider/claude-plugins-directive-copy.md` (canonical copy lives in that repo; its
+  drone is building K1-K3).
+- **Rendering decision — one visual grammar for every status surface**: the topological grid, picture
+  first, always vertical; a linear chain is a one-column DAG. Node ids appear exactly twice so vim `*`
+  toggles picture <-> detail; refs are full `owner/repo#num` (self-addressing; a `gp` keymap opens the
+  PR — lives in dotfiles). See `docs/pr158-rider/rendered/chains.md` (live data through the unified
+  renderer) and `rendered/chains-dag-mock.md` (the fork/join treatment, approved).
+- **Runnable prototypes**: `docs/pr158-rider/prototypes/`. Regenerate: `borg recon --json --since <ISO>`
+  piped to `merge-tree/gather.py --programs-dir <proj>`, then `build_chains.py` + `render_chains_md.py`.
+  Pass an ISO date; the relative form (`--since 30d`) silently returns zero items (known bug, unfixed).
+- **Manifests now carry `desc`** (one plain sentence, rendered under the program heading) — not yet in
+  SCHEMA.md; flag for the split-merge. Planned next field: row-level `after: [refs]` for true forks
+  (lanes only express linear tracks).
+- **Known lag**: `render_chains_ansi.py` still renders the pre-grid rail form; the md renderer is the
+  reference implementation of the spec.
