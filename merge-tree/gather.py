@@ -217,16 +217,27 @@ def assemble(
     machine = os.environ.get("BORG_MACHINE", "")
     edges, overlap, conflicts = merge_edges(derive_stacked_edges(items), declared_edges or [])
 
-    health = [
-        {
-            "check": f"recon:{s.get('source', '?')}",
-            "machine": machine,
-            "status": "ok" if s.get("ok") else "down",
-            "detail": str(s.get("summary") or ""),
-            "checked_at": generated,
-        }
-        for s in sources
-    ]
+    health = []
+    for s in sources:
+        dropped = int(s.get("dropped") or 0)
+        status = "ok" if s.get("ok") else "down"
+        detail = str(s.get("summary") or "")
+        if s.get("ok") and dropped:
+            # Recon's `ok` means the track RAN; items dropped as contract-invalid still leave it true.
+            # A consumer reading "ok" as "this source's items are here" is wrong exactly when it
+            # matters most: a source whose EVERY item was dropped has contributed nothing and must not
+            # read as healthy. Partial drops degrade; total drops count as down.
+            status = "warn" if int(s.get("count") or 0) else "down"
+            detail = f"{detail} ({dropped} item(s) dropped as contract-invalid)"
+        health.append(
+            {
+                "check": f"recon:{s.get('source', '?')}",
+                "machine": machine,
+                "status": status,
+                "detail": detail,
+                "checked_at": generated,
+            }
+        )
     if conflicts:
         # Reuse the existing health panel rather than inventing a surface: it exists precisely so a
         # degradation is visible at a glance instead of silently skewing the render.
@@ -248,6 +259,28 @@ def assemble(
                 "machine": machine,
                 "status": "warn",
                 "detail": "; ".join(program_contested),
+                "checked_at": generated,
+            }
+        )
+
+    # Two sources reporting the same ref both flow through recon's merge today, and a duplicated item
+    # inflates every downstream count (workstream sizes, READY sets) — measured live 2026-08-21 with a
+    # second adapter: one PR rendered twice inside one workstream. Dedup belongs in recon (identity is
+    # a source-merge concern); this counter is the guard that makes a bypass or regression visible here.
+    seen: dict[str, int] = {}
+    for it in items:
+        ref = str(it.get("ref") or "")
+        if ref:
+            seen[ref] = seen.get(ref, 0) + 1
+    duplicate_refs = sorted(r for r, n in seen.items() if n > 1)
+    if duplicate_refs:
+        health.append(
+            {
+                "check": "items:duplicate-refs",
+                "machine": machine,
+                "status": "warn",
+                "detail": f"{len(duplicate_refs)} ref(s) appear more than once across sources: "
+                + ", ".join(duplicate_refs[:5]),
                 "checked_at": generated,
             }
         )
