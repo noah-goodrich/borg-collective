@@ -19,9 +19,12 @@ happen again without this directive.
   `send-keys` calls (bundled Enter becomes a literal newline; see tmux memory). No nvim pane: split one
   (reuse `drone pane` logic). Exit nonzero only when tmux itself is absent.
   **HARD REQUIREMENT: resolve the window from `$TMUX_PANE` (the calling pane's own id), never from the
-  client's active window.** Proven failure 2026-08-20: the borg:5 drone asked tmux for "the current window",
-  got the window the USER was looking at (borg:4), and overwrote another session's nvim buffer. A bats test
-  must cover the two-sessions-two-windows case.
+  client's active window.** Mechanics (borg:5's second live hit, 2026-08-21, refined the spec): read the
+  caller's `$TMUX_PANE`, resolve its window id via `tmux display-message -p -t "$TMUX_PANE" '#{window_id}'`,
+  then search panes ONLY within that window. `tmux list-panes` with no `-t` and bare `display-message -p`
+  both report the CLIENT's active window — which is whatever the user is looking at, not where the caller
+  runs. Proven failure twice (2026-08-20 and 2026-08-21): the borg:5 drone resolved "current window", got
+  borg:4, and overwrote another session's nvim buffer.
 - **S2 — `borg chains`, terminal-first.** One data pipeline (recon since-mark → gather with declared edges,
   `--programs-dir` resolved from the registry, closing #158's known gap → chain JSON), three renderers in
   strict priority order:
@@ -99,6 +102,11 @@ happen again without this directive.
 
 - [ ] AC1 `borg show README.md 40` opens nvim in the side pane at line 40 from a bare window and from a
       window that already has an nvim pane; bats-tested against a scripted tmux session.
+- [ ] AC1b The hijack case, explicitly: in a scripted tmux session with TWO windows, each containing an
+      nvim pane, where the client's ACTIVE window differs from the calling pane's window, `borg show`
+      edits only the caller's window's nvim — asserted by checking the other window's buffer is untouched.
+      AC1's coverage cannot catch this (both its scenarios have one window); this is the test that fails
+      on client-active-window resolution and passes on `$TMUX_PANE` resolution.
 - [ ] AC2 `borg chains` produces the map from live recon with zero dangling endpoints on the shipped
       manifests; a fixture test drives recon-doc → HTML without network.
 - [ ] AC3 The chat-contract skill exists, is installed by `borg setup`, and its rules match the parent
