@@ -50,6 +50,17 @@ happen again without this directive.
   open AND every parent merged; all READY nodes are announced together.
   Approved mock (fork case): `~/.local/state/borg/merge-tree/chains-dag-mock.md`. True forks need one
   manifest addition: row-level `after: [refs]`, since lanes only express linear tracks.
+  **Out-of-window members (added 2026-08-21 from live multi-source testing).** Manifests are timeless;
+  recon is windowed — and the intersection decays. Measured: the 4-repo program that rendered 2 cross-repo
+  workstreams on 2026-08-20 had 13 of 14 declared endpoints dangling on a 14-day window one day later, with
+  13 nodes rendering `unknown`. S2's pipeline MUST resolve declared-but-out-of-window members explicitly:
+  after gather, diff declared endpoints against gathered refs and batch-fetch state for the missing
+  github-shaped refs (one `gh` call — the manifest is a closed list, so the lookup is bounded by manifest
+  size, not window age). Found-with-state renders normally; a 404 is a REAL dangling ref (typo or deleted)
+  and is reported loudly; non-github refs and offline runs fall back to `unknown` plus an explicit
+  "N members outside the sweep window" banner. A program whose every row is merged derives `done` and
+  renders collapsed to a single line. Never widen the recon window to compensate — that scales with program
+  age and drags in every repo's history; the targeted fetch scales with manifest size.
 - **S5 — self-addressing refs + editor keymap.** Generated docs never embed URLs in the reading flow; the
   ref itself is the address. The `gp` nvim keymap (shipped 2026-08-20 in dotfiles
   `nvim/lua/custom/plugins/overrides.lua`) opens `owner/repo#num` under the cursor in the browser, and bare
@@ -96,6 +107,9 @@ happen again without this directive.
       SCHEMA.md on the rider branch.
 - [ ] AC7 The S6 inventory is enforced: adopted surfaces render the house grammar (goldens regenerated),
       superseded renderers severed, and every exemption is a line in this file, not an omission.
+- [ ] AC8 A fixture drives a manifest whose members fall outside the recon window: fetched members render
+      with true state, a 404 ref is reported as dangling, the offline fallback renders the out-of-window
+      banner, and an all-merged program renders collapsed as done.
 
 ## Review outcomes (2026-08-21, PR #159 work-machine review)
 
