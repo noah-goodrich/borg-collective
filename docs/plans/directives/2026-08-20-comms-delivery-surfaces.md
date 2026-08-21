@@ -50,17 +50,21 @@ happen again without this directive.
   open AND every parent merged; all READY nodes are announced together.
   Approved mock (fork case): `~/.local/state/borg/merge-tree/chains-dag-mock.md`. True forks need one
   manifest addition: row-level `after: [refs]`, since lanes only express linear tracks.
-  **Out-of-window members (added 2026-08-21 from live multi-source testing).** Manifests are timeless;
-  recon is windowed — and the intersection decays. Measured: the 4-repo program that rendered 2 cross-repo
-  workstreams on 2026-08-20 had 13 of 14 declared endpoints dangling on a 14-day window one day later, with
-  13 nodes rendering `unknown`. S2's pipeline MUST resolve declared-but-out-of-window members explicitly:
-  after gather, diff declared endpoints against gathered refs and batch-fetch state for the missing
-  github-shaped refs (one `gh` call — the manifest is a closed list, so the lookup is bounded by manifest
-  size, not window age). Found-with-state renders normally; a 404 is a REAL dangling ref (typo or deleted)
-  and is reported loudly; non-github refs and offline runs fall back to `unknown` plus an explicit
-  "N members outside the sweep window" banner. A program whose every row is merged derives `done` and
-  renders collapsed to a single line. Never widen the recon window to compensate — that scales with program
-  age and drags in every repo's history; the targeted fetch scales with manifest size.
+  **Out-of-window members (added 2026-08-21 from live multi-source testing; staged 2026-08-21 to align
+  with the review-outcomes decision below).** Manifests are timeless; recon is windowed — and the
+  intersection decays. Measured: the 4-repo program that rendered 2 cross-repo workstreams on 2026-08-20
+  had 13 of 14 declared endpoints dangling on a 14-day window one day later, with 13 nodes rendering
+  `unknown`. The contract is STAGED:
+    - **v1 (ships with S2):** declared-but-out-of-window members render `unknown` honestly, under an
+      explicit "N members outside the sweep window" banner. No network in the render path.
+    - **S2-final (required before S6 adopts the chain map as a status surface of record):** after gather,
+      diff declared endpoints against gathered refs and batch-fetch state for the missing github-shaped
+      refs (one `gh` call — the manifest is a closed list, so the lookup is bounded by manifest size, not
+      window age). Found-with-state renders normally; a 404 is a REAL dangling ref (typo or deleted) and
+      is reported loudly; non-github refs and offline runs keep the v1 banner fallback. A program whose
+      every row is merged derives `done` and renders collapsed to a single line.
+  Never widen the recon window to compensate — that scales with program age and drags in every repo's
+  history; the targeted fetch scales with manifest size.
 - **S5 — self-addressing refs + editor keymap.** Generated docs never embed URLs in the reading flow; the
   ref itself is the address. The `gp` nvim keymap (shipped 2026-08-20 in dotfiles
   `nvim/lua/custom/plugins/overrides.lua`) opens `owner/repo#num` under the cursor in the browser, and bare
@@ -107,9 +111,11 @@ happen again without this directive.
       SCHEMA.md on the rider branch.
 - [ ] AC7 The S6 inventory is enforced: adopted surfaces render the house grammar (goldens regenerated),
       superseded renderers severed, and every exemption is a line in this file, not an omission.
-- [ ] AC8 A fixture drives a manifest whose members fall outside the recon window: fetched members render
-      with true state, a 404 ref is reported as dangling, the offline fallback renders the out-of-window
-      banner, and an all-merged program renders collapsed as done.
+- [ ] AC8 (v1) A fixture drives a manifest whose members fall outside the recon window: they render
+      `unknown` under the "N members outside the sweep window" banner, with no network in the render path.
+- [ ] AC9 (S2-final, gates S6 adoption) With the targeted fetch: fetched members render with true state, a
+      404 ref is reported as dangling, offline falls back to the AC8 banner, and an all-merged program
+      renders collapsed as done.
 
 ## Review outcomes (2026-08-21, PR #159 work-machine review)
 
@@ -120,10 +126,10 @@ happen again without this directive.
   under merged rows) renders a distinct marker + one drift line, so the picture never silently contradicts
   itself.
 - **`--html` dropped from S2 v1** (zero measured consumers); md + ANSI only.
-- **S2 must state the window-vs-manifest contract**: declared members outside the recon sweep window render
-  `unknown` honestly with an "N members out of sweep window" banner in v1; widening/fetch-on-demand is a
-  recorded alternative. Without this, finished programs fade from the map within days (measured on the
-  work machine: 13 of 14 endpoints dangling on a 14-day window).
+- **S2 must state the window-vs-manifest contract**: staged per the S2 spec above — `unknown` + banner in
+  v1, targeted batch-fetch as the S2-final contract required before S6 adoption; window-widening rejected.
+  Without this, finished programs fade from the map within days (measured on the work machine: 13 of 14
+  endpoints dangling on a 14-day window).
 - **Sequencing per review**: S1 + S4 first (S4 also answers the will-anyone-write-manifest-#3 question),
   then S2, then S6 after the grammar survives a week of real use.
 - **Before any second adapter**: cross-source ref dedup and dropped>0 health propagation (recorded in the
