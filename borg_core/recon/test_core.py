@@ -273,6 +273,30 @@ class TestDedupCrossSource:
         assert deduped[1]["items"] == []
         assert (deduped[0]["deduped"], deduped[1]["deduped"]) == (0, 1)
 
+    def test_prose_prefix_does_not_beat_a_newer_timestamp(self):
+        # `changed` is prose; the github adapter emits "updated <ISO>; ...". Raw lexical compare
+        # would let any prefix sorting above "2" win forever ("u" > "2"). The embedded timestamp
+        # must decide: here the bare-ISO source is NEWER and must win despite the github prefix.
+        tracks = [
+            _dup_track(
+                "github",
+                [_dup_item("r#1", "github", changed="updated 2026-01-01T00:00:00Z; state=open")],
+            ),
+            _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-01-02T00:00:00Z")]),
+        ]
+        deduped, _ = core.dedup_cross_source(tracks)
+        assert deduped[0]["items"] == []
+        assert [it["source"] for it in deduped[1]["items"]] == ["tracker"]
+
+    def test_items_with_no_timestamp_in_changed_lose_to_any_timestamped_report(self):
+        tracks = [
+            _dup_track("a", [_dup_item("r#1", "a", changed="recently, honest")]),
+            _dup_track("b", [_dup_item("r#1", "b", changed="2026-01-01T00:00:00Z")]),
+        ]
+        deduped, _ = core.dedup_cross_source(tracks)
+        assert [it["source"] for it in deduped[1]["items"]] == ["b"]
+        assert deduped[0]["deduped"] == 1
+
     def test_a_changed_tie_keeps_the_first_track_deterministically(self):
         # Track order is adapter discovery order; the outcome must not depend on dict luck.
         tracks = [
