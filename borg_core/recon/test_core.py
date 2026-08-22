@@ -346,6 +346,40 @@ class TestDedupCrossSource:
         assert len(deduped[0]["items"]) == 1 and len(deduped[1]["items"]) == 1
 
 
+def test_dedup_compares_across_utc_offsets_not_strings():
+    # Opus review finding 4: -07:00 17:30 IS newer than 23:00Z; string compare would invert it.
+    tracks = [
+        _dup_track("github", [_dup_item("r#1", "github", changed="updated 2026-08-21T23:00:00Z")]),
+        _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-08-21T17:30:00-07:00")]),
+    ]
+    deduped, _ = core.dedup_cross_source(tracks)
+    assert deduped[0]["items"] == []
+    assert [it["source"] for it in deduped[1]["items"]] == ["tracker"]
+
+
+def test_dedup_timestamp_without_offset_is_taken_as_utc():
+    tracks = [
+        _dup_track("a", [_dup_item("r#1", "a", changed="2026-08-21T10:00:00")]),
+        _dup_track("b", [_dup_item("r#1", "b", changed="2026-08-21T11:00:00Z")]),
+    ]
+    deduped, _ = core.dedup_cross_source(tracks)
+    assert [it["source"] for it in deduped[1]["items"]] == ["b"]
+
+
+def test_dedup_project_divergence_is_a_contradiction():
+    # Opus review finding 5: the loser's copy leaves its project bucket entirely — the
+    # --projects filter then drops the item silently unless this surfaces.
+    tracks = [
+        _dup_track("github", [_dup_item("r#1", "github", changed="2026-01-01T00:00:00Z", project="ingle")]),
+        _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-01-02T00:00:00Z", project="ontra-de")]),
+    ]
+    _, contradictions = core.dedup_cross_source(tracks)
+    projected = [c for c in contradictions if "different projects" in c["note"]]
+    assert len(projected) == 1
+    assert "ontra-de" in projected[0]["kept_says"]
+    assert "ingle" in projected[0]["dropped_says"]
+
+
 def test_render_digest_notes_deduped_items():
     doc = core.assemble(
         "since", "gen", [{"source": "s", "summary": "ok", "ok": True, "dropped": 0, "deduped": 2}], {}, []
