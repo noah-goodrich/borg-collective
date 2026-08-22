@@ -86,14 +86,17 @@ happen again without this directive.
   Noah: "this new rendering would inform the way that all enquiries about status, de-briefings, borg-link,
   etc" — that is the adopt decision for the big surfaces.) Inventory:
 
-  | Surface | Decision |
-  |---|---|
-  | `borg link` overview + deep (borg_core/link/render.py, /borg-link skill) | ADOPT: glance strip + derived status; goldens regenerated; engine and skill skeletons updated in one change |
-  | /borg-recon briefing skeleton | ADOPT: S3 contract + full refs |
-  | /borg-link-up checkpoint template | ADOPT: tl;dr at top, full refs (see deriver directive for the state-restatement shrink) |
-  | /borg-next, `borg next` CLI | ADOPT: full refs; S3 skip-threshold applies (short replies carry no tl;dr block) |
-  | orchestrator SessionStart overview, `borg watch`, `drone status`, `borg nanoprobes` | EXEMPT for now: operational glances, revisit after S1-S5 ship |
-  | merge-tree `render.py` + `render_graph.py` HTML | SUPERSEDED by `borg chains --html`; sever when S2 ships (zero consumers measured) |
+  - **`borg link` overview + deep** (borg_core/link/render.py, /borg-link skill) — ADOPT: glance strip +
+    derived status; goldens regenerated; engine and skill skeletons updated in one change.
+  - **/borg-recon briefing skeleton** — ADOPT: S3 contract + full refs.
+  - **/borg-link-up checkpoint template** — ADOPT: tl;dr at top, full refs (see deriver directive for the
+    state-restatement shrink).
+  - **/borg-next, `borg next` CLI** — ADOPT: full refs; S3 skip-threshold applies (short replies carry no
+    tl;dr block).
+  - **orchestrator SessionStart overview, `borg watch`, `drone status`, `borg nanoprobes`** — EXEMPT for now:
+    operational glances, revisit after S1-S5 ship.
+  - **merge-tree `render.py` + `render_graph.py` HTML** — SUPERSEDED by `borg chains --html`; sever when S2
+    ships (zero consumers measured).
 
   Precedence rule: the S3 chat contract wins over any per-skill output skeleton; skills reference it
   rather than restating format rules (single source: K2's portable spine in claude-plugins).
