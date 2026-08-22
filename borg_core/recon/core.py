@@ -14,7 +14,6 @@ reported more recently — set by dedup_cross_source, surfaced in the sources su
 
 from __future__ import annotations
 
-import datetime
 import json
 import re
 from typing import Any
@@ -152,29 +151,14 @@ def process_adapter_output(source: str, raw: str | None, rc: int) -> dict:
         return build_postprocess_failed_track(source)
 
 
-_ISO_TS = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?")
-
-
 def _changed_ts(item: dict) -> str:
-    """The first ISO-8601 timestamp in the prose `changed` field, normalized to UTC, or "" (oldest).
+    """The item's recency key: first ISO timestamp in the prose `changed` field, UTC-normalized.
 
-    Offset-aware: `2026-08-21T17:30:00-07:00` IS newer than `2026-08-21T23:00:00Z`, and nothing in
-    the Item contract requires UTC — comparing unnormalized strings would hand the win to whichever
-    source happens to phrase its zone. A timestamp with no offset is taken as UTC (the contract's
-    own examples are Z-suffixed), and an unparseable match sorts oldest rather than raising.
+    Offset-aware — `2026-08-21T17:30:00-07:00` IS newer than `2026-08-21T23:00:00Z`; an item with no
+    parseable timestamp sorts oldest. Mechanics live in `timefmt.iso_in_prose_to_utc` (Domain modules
+    are Demeter-strict; datetime handling is timefmt's charter).
     """
-    found = _ISO_TS.findall(str(item.get("changed") or ""))
-    if not found:
-        return ""
-    raw = found[0].replace("Z", "+00:00")
-    try:
-        parsed = datetime.datetime.fromisoformat(raw)
-    except ValueError:
-        return ""
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
-    # JUSTIFICATION: astimezone/isoformat on a locally-built datetime, not cross-layer reach.
-    return parsed.astimezone(datetime.timezone.utc).isoformat()  # pylint: disable=clean-arch-demeter
+    return timefmt.iso_in_prose_to_utc(str(item.get("changed") or ""))
 
 
 def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
