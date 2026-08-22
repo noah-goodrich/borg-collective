@@ -154,8 +154,8 @@ _ISO_TS = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
 
 def _changed_ts(item: dict) -> str:
     """The first ISO-8601 timestamp inside an item's prose `changed` field, or "" (sorts oldest)."""
-    match = _ISO_TS.search(str(item.get("changed") or ""))
-    return match.group(0) if match else ""
+    found = _ISO_TS.findall(str(item.get("changed") or ""))
+    return found[0] if found else ""
 
 
 def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
