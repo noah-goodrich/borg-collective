@@ -241,6 +241,21 @@ class TestMergeEdges:
         declared = [_edge("b#1", "c#1"), _edge("a#1", "b#1")]
         assert merge_edges(derived, declared)[0] == merge_edges(list(reversed(derived)), list(reversed(declared)))[0]
 
+    def test_a_declared_vs_declared_reversal_is_attributed_to_declarations(self):
+        # Opus review finding 9: with no derived edges, the old message blamed "topology" —
+        # a witness that does not exist. Two manifests contradicting each other are named as such.
+        declared = [_edge("x#1", "y#1"), _edge("y#1", "x#1")]
+        edges, _, conflicts = merge_edges([], declared)
+        assert len(edges) == 1
+        assert len(conflicts) == 1
+        assert "declared" in conflicts[0] and "topology" not in conflicts[0]
+
+    def test_a_declared_vs_derived_reversal_still_names_topology(self):
+        derived = [_edge("y#1", "x#1", source="derived")]
+        declared = [_edge("x#1", "y#1")]
+        _, _, conflicts = merge_edges(derived, declared)
+        assert len(conflicts) == 1 and "topology says the reverse" in conflicts[0]
+
     def test_no_declared_edges_leaves_derived_untouched(self):
         derived = [_edge("r#1", "r#2", source="derived")]
         assert merge_edges(derived, [])[0] == derived
@@ -385,6 +400,24 @@ class TestAssemble:
         rec = _reconciled([_pr("r#1", head="feat/a", base="main")])
         checks = {h["check"] for h in assemble(rec)["meta"]["health"]}
         assert "edges:declared-vs-derived" not in checks
+
+
+class TestUnmappedGatesReachTheGather:
+    def test_prose_only_gates_are_counted_in_meta(self):
+        # PM4's production caller (opus review finding 2): the count must reach an emitted doc.
+        m = {
+            "program": "p",
+            "rows": [
+                {"order": "1", "ref": "o/r#1",
+                 "gate": {"blocked_by": "waiting on Kelly", "kind": "decision", "resolved_by": "Kelly decides"}},
+            ],
+        }
+        got = assemble(_reconciled([_pr("o/r#1")]), [], [m])
+        gates = got["meta"]["unmapped_gates"]
+        assert len(gates) == 1 and gates[0]["ref"] == "o/r#1"
+
+    def test_no_manifests_means_an_empty_unmapped_list(self):
+        assert assemble(_reconciled([_pr("r#1")]))["meta"]["unmapped_gates"] == []
 
 
 class TestMainCLI:
