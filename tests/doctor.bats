@@ -267,3 +267,70 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"claude-cli"*"3"*"WARN"* ]] || false
 }
+
+# ─── SA1: dependency version floors ────────────────────────────────────────────
+
+@test "SA1: gh at or above the floor -> VERSION row OK, exit 0" {
+    cat > "$MOCK_BIN/docker" <<'MOCK2'
+#!/usr/bin/env bash
+exit 0
+MOCK2
+    chmod +x "$MOCK_BIN/docker"
+    cat > "$MOCK_BIN/claude" <<'MOCK2'
+#!/usr/bin/env bash
+echo ok
+MOCK2
+    chmod +x "$MOCK_BIN/claude"
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+echo "gh version 2.97.0 (2026-01-01)"
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"gh"*"2.97.0"*"OK"* ]] || false
+}
+
+@test "SA1: gh below the floor -> VERSION row FAIL, exit 1, CVE named" {
+    cat > "$MOCK_BIN/docker" <<'MOCK2'
+#!/usr/bin/env bash
+exit 0
+MOCK2
+    chmod +x "$MOCK_BIN/docker"
+    cat > "$MOCK_BIN/claude" <<'MOCK2'
+#!/usr/bin/env bash
+echo ok
+MOCK2
+    chmod +x "$MOCK_BIN/claude"
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+echo "gh version 2.96.0 (2026-07-02)"
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"gh"*"2.96.0"*"FAIL"* ]] || false
+    [[ "$output" == *"CVE-2026-64652"* ]] || false
+}
+
+@test "SA1: gh absent -> VERSION row WARN, not FAIL" {
+    cat > "$MOCK_BIN/docker" <<'MOCK2'
+#!/usr/bin/env bash
+exit 0
+MOCK2
+    chmod +x "$MOCK_BIN/docker"
+    cat > "$MOCK_BIN/claude" <<'MOCK2'
+#!/usr/bin/env bash
+echo ok
+MOCK2
+    chmod +x "$MOCK_BIN/claude"
+    rm -f "$MOCK_BIN/gh"
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+exit 127
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"absent"*"WARN"* ]] || false
+}

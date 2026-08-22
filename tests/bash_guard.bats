@@ -533,7 +533,10 @@ _assert_blocked() {
     _assert_approved
 }
 
-# ─── Per-binary intent: git/gh/docker/podman blanket-allow ────────────────────
+# ─── Per-binary intent: git/gh/docker/podman subcommand allowlists (SA2) ──────
+# The blanket allows are gone: RO subcommands pre-approve, everything else falls
+# through to the normal permission flow (prompts — NOT blocked). AC2 requires
+# both directions proven.
 
 @test "pre-approves git status" {
     _run_guard "git status"
@@ -545,27 +548,73 @@ _assert_blocked() {
     _assert_approved
 }
 
-@test "pre-approves all docker subcommands (user policy)" {
+@test "SA2: unclassified git subcommands fall through (commit, push)" {
+    _run_guard "git commit -m msg"
+    _assert_fallthrough
+    _run_guard "git push origin feature/x"
+    _assert_fallthrough
+}
+
+@test "SA2: git push --force to a feature branch falls through, not pre-approved" {
+    _run_guard "git push --force origin feature/x"
+    _assert_fallthrough
+}
+
+@test "SA2: pre-approves docker RO subcommands" {
     _run_guard "docker ps -a"
     _assert_approved
-    _run_guard "docker run --rm alpine echo hi"
+    _run_guard "docker inspect foo"
     _assert_approved
-    _run_guard "docker build -t foo ."
+    _run_guard "docker compose ps"
     _assert_approved
-}
-
-@test "pre-approves all podman subcommands (user policy)" {
     _run_guard "podman ps"
     _assert_approved
-    _run_guard "podman run --rm alpine echo hi"
+}
+
+@test "SA2: docker mutating subcommands fall through" {
+    _run_guard "docker rm -f mycontainer"
+    _assert_fallthrough
+    _run_guard "docker run --rm alpine echo hi"
+    _assert_fallthrough
+    _run_guard "docker build -t foo ."
+    _assert_fallthrough
+    _run_guard "podman system prune -f"
+    _assert_fallthrough
+}
+
+@test "SA2: pre-approves gh RO subcommands" {
+    _run_guard "gh pr view 42"
+    _assert_approved
+    _run_guard "gh pr list --state open"
+    _assert_approved
+    _run_guard "gh pr checks 42"
+    _assert_approved
+    _run_guard "gh run watch 123"
+    _assert_approved
+    _run_guard "gh auth status"
     _assert_approved
 }
 
-@test "pre-approves all gh subcommands (user policy)" {
+@test "SA2: gh mutating subcommands fall through" {
     _run_guard "gh pr create --title foo --body bar"
-    _assert_approved
+    _assert_fallthrough
+    _run_guard "gh pr merge 42 --admin"
+    _assert_fallthrough
+    _run_guard "gh repo delete owner/name --yes"
+    _assert_fallthrough
     _run_guard "gh release create v1.0.0"
+    _assert_fallthrough
+}
+
+@test "SA2: gh api GET-shaped pre-approves, write-shaped falls through" {
+    _run_guard "gh api repos/o/r/pulls/1"
     _assert_approved
+    _run_guard "gh api repos/o/r/issues -f title=x"
+    _assert_fallthrough
+    _run_guard "gh api -X DELETE repos/o/r"
+    _assert_fallthrough
+    _run_guard "gh api --method POST repos/o/r/issues"
+    _assert_fallthrough
 }
 
 # ─── Layer 2: container-aware install verb pre-approval ───────────────────────
