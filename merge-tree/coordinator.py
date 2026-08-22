@@ -93,7 +93,9 @@ def run_target(target_path: str, action: str, manifests: list[dict[str, Any]], t
     than raising. A broken shim must degrade the audit to "target unreachable", never crash the
     coordinator that is supposed to be watching for drift.
     """
-    payload = json.dumps({"manifests": manifests})
+    # `_path` is discover()'s internal stamp, not part of the documented stdin contract — and it
+    # carries machine-local absolute paths the target has no business seeing.
+    payload = json.dumps({"manifests": [{k: v for k, v in m.items() if k != "_path"} for m in manifests]})
     try:
         proc = subprocess.run(
             [target_path, action],
@@ -250,11 +252,22 @@ def recon_states_from(recon_items: list[dict[str, Any]]) -> dict[str, str]:
 
 
 def load_recon_items(path: str | None) -> list[dict[str, Any]]:
-    """Items for the reality check. Accepts either a raw items list or a full recon/gather doc."""
+    """Items for the reality check. Accepts either a raw items list or a full recon/gather doc.
+
+    Raises SystemExit with a named message on an unreadable or unparsable file — every other
+    failure path in this module names itself, and a raw traceback here would be the one exception.
+    """
     if not path:
         return []
-    raw = sys.stdin.read() if path == "-" else open(path).read()
-    doc = json.loads(raw)
+    try:
+        if path == "-":
+            raw = sys.stdin.read()
+        else:
+            with open(path) as fh:
+                raw = fh.read()
+        doc = json.loads(raw)
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"coordinator: cannot read recon items from {path}: {exc}") from exc
     if isinstance(doc, list):
         return doc
     if isinstance(doc, dict):
@@ -266,35 +279,44 @@ def load_recon_items(path: str | None) -> list[dict[str, Any]]:
     return []
 
 
-def sync_borg(manifests: list[dict[str, Any]], project_dirs: dict[str, str]) -> list[str]:
+def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
     """Rewrite each manifest through borg's OWN native writer (`programs.write_manifest`).
 
-    `project_dirs` maps a manifest's `program` name to the project root it belongs to — the
-    discover() pass already knows this via `_path`, so callers derive it from that rather than
-    re-asking. Idempotent: re-validates and rewrites atomically even when nothing changed, which is
-    the "side effect of an action the owner already takes" path the directive's risk section names
-    as the mitigation for the cairn hand-maintenance failure shape.
+    Returns `(written_paths, warnings)`. Each manifest is written back to ITS OWN project root,
+    derived from the `_path` discover() stamped onto it. The earlier design keyed a shared map by
+    `program` name — so two projects declaring the same program name collapsed to one entry, and
+    the loser's manifest was silently written into the OTHER project's `.borg/programs/` (the exact
+    multi-repo pattern S4 proposes: the same program manifest landed in each owning repo). Keying
+    per-manifest makes that overwrite structurally impossible; the duplicate-name condition itself
+    is still surfaced as a named warning because two same-named manifests will fight over edges
+    downstream, and only a human knows which is right. Idempotent: re-validates and rewrites
+    atomically even when nothing changed.
     """
-    written = []
+    written: list[str] = []
+    warnings: list[str] = []
+    seen: dict[str, str] = {}
     for manifest in manifests:
         program = str(manifest.get("program") or "")
-        project_dir = project_dirs.get(program)
-        if not project_dir:
+        project_dir = _project_dir_of(manifest)
+        if not program or not project_dir:
             continue
+        if program in seen and seen[program] != project_dir:
+            warnings.append(
+                f"program {program!r} is declared by two projects ({seen[program]} and "
+                f"{project_dir}) — both synced to their own homes, but they will contend downstream"
+            )
+        seen.setdefault(program, project_dir)
         written.append(programs.write_manifest(project_dir, program, manifest))
-    return written
+    return written, warnings
 
 
-def _project_dirs_from_paths(manifests: list[dict[str, Any]]) -> dict[str, str]:
-    """Recover each manifest's project root from the `_path` discover() stamped onto it."""
-    out = {}
-    for m in manifests:
-        path = str(m.get("_path") or "")
-        program = str(m.get("program") or "")
-        if path and program:
-            # path = <project_dir>/.borg/programs/<program>.json
-            out[program] = path.rsplit(os.sep + ".borg" + os.sep + "programs" + os.sep, 1)[0]
-    return out
+def _project_dir_of(manifest: dict[str, Any]) -> str:
+    """One manifest's project root from the `_path` discover() stamped onto it, or ""."""
+    path = str(manifest.get("_path") or "")
+    if not path:
+        return ""
+    # path = <project_dir>/.borg/programs/<program>.json
+    return path.rsplit(os.sep + ".borg" + os.sep + "programs" + os.sep, 1)[0]
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -340,11 +362,18 @@ def cmd_sync(args: argparse.Namespace) -> int:
     manifests, warnings = programs.discover(args.programs_dir)
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
-    if warnings:
-        print(f"sync: {len(warnings)} malformed manifest(s) — refusing to sync", file=sys.stderr)
+    # Refuse only on FILE-level warnings (a malformed manifest must never half-sync). Directory-level
+    # notes — a registry row whose project is absent on this machine — leave nothing to half-write,
+    # and refusing on them would make one stale registry entry veto the whole sync (PM9: the
+    # personal machine must work with a different project set).
+    fatal = [w for w in warnings if ".json" in w]
+    if fatal:
+        print(f"sync: {len(fatal)} malformed manifest(s) — refusing to sync", file=sys.stderr)
         return 1
 
-    written = sync_borg(manifests, _project_dirs_from_paths(manifests))
+    written, sync_warnings = sync_borg(manifests)
+    for w in sync_warnings:
+        print(f"  SYNC WARNING {w}", file=sys.stderr)
     print(f"sync: wrote {len(written)} manifest(s) through borg's native writer")
 
     search_dirs = sync_target_search_dirs()

@@ -136,7 +136,17 @@ def merge_edges(
         if key in by_key:
             overlap += 1
         elif reversed_key in by_key:
-            conflicts.append(f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, topology says the reverse")
+            # Attribute the conflict to what actually disagrees: a reversal of a DERIVED edge is
+            # plan-vs-topology, but a reversal of an earlier DECLARED edge is two manifests
+            # contradicting each other — blaming "topology" there invents a witness that does not
+            # exist (opus review finding 9). Either way the reversal is reported, never silent.
+            if by_key[reversed_key].get("source") == "declared":
+                conflicts.append(
+                    f"{edge['kind']}: declared {edge['parent']} -> {edge['child']} contradicts an "
+                    f"earlier declared {edge['child']} -> {edge['parent']} — the later declaration kept"
+                )
+            else:
+                conflicts.append(f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, topology says the reverse")
             del by_key[reversed_key]
         by_key[key] = edge
 
@@ -302,6 +312,13 @@ def assemble(
             "health": health,
             # Countable, so a manifest whose refs match nothing is visible instead of silently inert.
             "program_regrouped_items": programs_applied,
+            # PM4's production surface: prose-only gates (no blocked_by_ref) are real blockers the
+            # graph cannot express as edges. Counted here so they stay visible instead of silently
+            # absent — string-matching them into edges would invent dependencies.
+            "unmapped_gates": sorted(
+                (g for m in (manifests or []) for g in programs.unmapped_gates(m)),
+                key=lambda g: g["ref"],
+            ),
             "program_contested_refs": program_contested,
             "edge_provenance": {
                 "derived": len([e for e in edges if e.get("source") == "derived"]),

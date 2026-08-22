@@ -225,25 +225,41 @@ class TestLoadReconItems:
 
 
 class TestSyncBorg:
+    def _discovered(self, project_dir, program="prog-a"):
+        programs.write_manifest(str(project_dir), program, _manifest(program, [_row("1", "r#1")]))
+        manifests, _ = programs.discover([str(project_dir)])
+        return manifests
+
     def test_writes_each_manifest_via_the_native_writer(self, tmp_path):
-        project_dir = str(tmp_path / "proj")
-        manifests = [_manifest("prog-a", [_row("1", "r#1")])]
-        written = coordinator.sync_borg(manifests, {"prog-a": project_dir})
+        manifests = self._discovered(tmp_path / "proj")
+        written, warnings = coordinator.sync_borg(manifests)
         assert len(written) == 1
+        assert warnings == []
         assert os.path.exists(written[0])
 
-    def test_a_manifest_with_no_known_project_dir_is_skipped_not_raised(self):
+    def test_a_manifest_with_no_path_stamp_is_skipped_not_raised(self):
         manifests = [_manifest("prog-a", [_row("1", "r#1")])]
-        assert coordinator.sync_borg(manifests, {}) == []
+        assert coordinator.sync_borg(manifests) == ([], [])
+
+    def test_same_program_in_two_projects_writes_each_to_its_own_home(self, tmp_path):
+        # Opus review MERGE-BLOCKER: the old program-keyed map wrote the loser's manifest into
+        # the OTHER project's .borg/programs/. Each manifest must land in its own project root,
+        # and the duplicate-name condition is warned, not silently resolved.
+        dir_a, dir_b = tmp_path / "reveal", tmp_path / "ingle"
+        manifests = self._discovered(dir_a, "shared-prog") + self._discovered(dir_b, "shared-prog")
+        written, warnings = coordinator.sync_borg(manifests)
+        assert len(written) == 2
+        assert written[0].startswith(str(dir_a)) and written[1].startswith(str(dir_b))
+        assert len(warnings) == 1 and "shared-prog" in warnings[0]
 
 
-class TestProjectDirsFromPaths:
+class TestProjectDirOf:
     def test_recovers_project_root_from_the_discover_stamped_path(self, tmp_path):
         project_dir = str(tmp_path / "proj")
         path = programs.write_manifest(project_dir, "prog-a", _manifest("prog-a", [_row("1", "r#1")]))
         manifests, _ = programs.discover([project_dir])
         assert manifests[0]["_path"] == path
-        assert coordinator._project_dirs_from_paths(manifests) == {"prog-a": project_dir}
+        assert coordinator._project_dir_of(manifests[0]) == project_dir
 
 
 class _Args:
