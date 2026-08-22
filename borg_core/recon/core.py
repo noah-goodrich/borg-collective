@@ -149,6 +149,81 @@ def process_adapter_output(source: str, raw: str | None, rc: int) -> dict:
         return build_postprocess_failed_track(source)
 
 
+_ISO_TS = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+
+
+def _changed_ts(item: dict) -> str:
+    """The first ISO-8601 timestamp inside an item's prose `changed` field, or "" (sorts oldest)."""
+    found = _ISO_TS.findall(str(item.get("changed") or ""))
+    return found[0] if found else ""
+
+
+def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Drop cross-source duplicates of the same ref before the project merge.
+
+    Two sources reporting the same ref are the same artifact reported twice — both flowing through
+    inflates every downstream count (measured 2026-08-21: one PR rendered twice inside a single
+    spine workstream the day a second adapter existed). Identity here is the IDENTICAL ref string
+    only; linking a Jira `PROJ-123` to the `org/repo#45` it tracks is entity resolution and stays
+    out of scope.
+
+    The newest `changed` wins. `changed` is PROSE by contract (the github adapter emits
+    "updated <ISO>; state=..."), so the comparison extracts the first ISO-8601 timestamp from the
+    string — comparing the raw prose lexically would make the winner depend on each source's phrasing
+    prefix, not on time. Extracted timestamps compare lexically (ISO sorts); an item with no
+    timestamp in `changed` compares as oldest. Ties keep the first track's item, and track order is
+    adapter discovery order, so the outcome is deterministic. Each track records how many of its
+    items lost as `deduped`. When the winner and a loser disagree on `state`, that is a real
+    contradiction between sources — emitted for the human, never resolved silently, same policy as
+    the checkpoint-vs-source detector.
+
+    Returns `(tracks, contradictions)` with each track's `items` filtered and `deduped` set.
+    """
+    winners: dict[str, dict] = {}
+    for track in tracks:
+        for item in track.get("items", []):
+            ref = item.get("ref")
+            if not ref:
+                continue
+            best = winners.get(ref)
+            if best is None or _changed_ts(item) > _changed_ts(best):
+                winners[ref] = item
+
+    contradictions: list[dict] = []
+    deduped_tracks: list[dict] = []
+    for track in tracks:
+        kept: list[dict] = []
+        lost = 0
+        for item in track.get("items", []):
+            ref = item.get("ref")
+            winner = winners.get(ref) if ref else None
+            if winner is None or winner is item:
+                kept.append(item)
+                continue
+            lost += 1
+            if item.get("state") != winner.get("state"):
+                # The digest renders project/ref/note; the *_says keys carry the detail for the
+                # /borg-recon synthesis, named for what they are (this is source-vs-source, not the
+                # checkpoint-vs-source shape project_contradictions emits).
+                contradictions.append(
+                    {
+                        "project": winner.get("project"),
+                        "ref": ref,
+                        "kept_says": f"{winner.get('source')} reports state {winner.get('state')!r} (newer)",
+                        "dropped_says": f"{item.get('source')} reports state {item.get('state')!r}",
+                        "note": (
+                            "two sources disagree on this item's state — the newer report "
+                            "was kept, confirm which is right"
+                        ),
+                    }
+                )
+        result = dict(track)
+        result["items"] = kept
+        result["deduped"] = lost
+        deduped_tracks.append(result)
+    return deduped_tracks, contradictions
+
+
 def merge_by_project(tracks: list[dict]) -> dict[str, list[dict]]:
     """Merge all track item arrays into a flat item list grouped by project.
 
@@ -229,6 +304,7 @@ def build_sources_summary(tracks: list[dict]) -> list[dict]:
             "ok": track.get("ok", True),
             "count": len(track.get("items", [])),
             "dropped": track.get("dropped", 0),
+            "deduped": track.get("deduped", 0),
         }
         for track in tracks
     ]
@@ -269,6 +345,9 @@ def _render_sources_section(sources: list[dict]) -> list[str]:
         dropped = src.get("dropped") or 0
         if dropped > 0:
             line += f"  (dropped {dropped} malformed)"
+        deduped = src.get("deduped") or 0
+        if deduped > 0:
+            line += f"  (deduped {deduped} cross-source)"
         lines.append(line)
     lines.append("")
     return lines
