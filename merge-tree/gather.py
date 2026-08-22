@@ -108,9 +108,7 @@ def derive_stacked_edges(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             # A `derived` edge is an inference from branch topology and can be stale (a rebase moves
             # a base branch); a `declared` edge is someone's stated intent. Telling them apart is the
             # difference between "the graph is wrong" and "the plan changed".
-            edges.append(
-                {"parent": parent, "child": str(it["ref"]), "kind": "stacked", "source": "derived"}
-            )
+            edges.append({"parent": parent, "child": str(it["ref"]), "kind": "stacked", "source": "derived"})
     return sorted(edges, key=lambda e: (e["child"], e["parent"]))
 
 
@@ -138,10 +136,7 @@ def merge_edges(
         if key in by_key:
             overlap += 1
         elif reversed_key in by_key:
-            conflicts.append(
-                f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, "
-                f"topology says the reverse"
-            )
+            conflicts.append(f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, topology says the reverse")
             del by_key[reversed_key]
         by_key[key] = edge
 
@@ -152,35 +147,97 @@ def merge_edges(
     )
 
 
+def apply_program_projects(items: list[dict[str, Any]], manifests: list[dict[str, Any]]) -> tuple[int, list[str]]:
+    """Re-key each manifest member's `project` to the program that declares it.
+
+    Returns `(reassigned_count, contested)` — `contested` is one line per ref that more than one
+    program claims. The FIRST manifest (discovery order, deterministic) keeps the ref; the collision
+    is REPORTED, never silently resolved, same policy as merge_edges conflicts: two programs claiming
+    one item is a declaration conflict for a human, and hiding it would let the loser's chain quietly
+    lose a member.
+
+    WHY THIS EXISTS. spine.py groups by `items[].project` BEFORE computing connected components, and
+    recon keys `items_by_project` by REGISTERED PROJECT — one per repo. A declared edge that crosses
+    repos therefore also crosses projects, and the spine severs the chain at the project boundary: the
+    cross-repo case the manifest exists to express is exactly the case grouping destroys. Measured live
+    (2026-08-20): the same declared 4-repo program renders as 0 cross-repo workstreams without this and
+    2 with it.
+
+    A program IS the project for the work it declares — that is what declaring it means — so the
+    manifest's own `program` id is the grouping key for its members. Only members of a manifest are
+    touched; every other item keeps the project recon gave it. Declared-away items therefore LEAVE
+    their home project's grouping in every downstream view — deliberate: the program is where that
+    work's story lives now, and the home project's remaining items still group under the home project.
+    """
+    by_ref: dict[str, str] = {}
+    contested: list[str] = []
+    for manifest in manifests:
+        program = str(manifest.get("program") or "").strip()
+        if not program:
+            continue
+        refs = [str(r.get("ref") or "").strip() for r in (manifest.get("rows") or []) if isinstance(r, dict)]
+        apex = manifest.get("apex")
+        apex_ref = str(apex.get("ref") or "").strip() if isinstance(apex, dict) else ""
+        if apex_ref:
+            refs.append(apex_ref)
+        for ref in refs:
+            if not ref:
+                continue
+            holder = by_ref.setdefault(ref, program)
+            if holder != program:
+                contested.append(f"{ref}: kept by {holder}, also claimed by {program}")
+
+    reassigned = 0
+    for item in items:
+        program = by_ref.get(str(item.get("ref") or ""))
+        if program and item.get("project") != program:
+            item["project"] = program
+            reassigned += 1
+    return reassigned, sorted(contested)
+
+
 def assemble(
-    reconciled: dict[str, Any], declared_edges: list[dict[str, Any]] | None = None
+    reconciled: dict[str, Any],
+    declared_edges: list[dict[str, Any]] | None = None,
+    manifests: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Turn a reconciled recon document into the raw gather curate.py and spine.py consume.
 
     `declared_edges` come from borg's program manifests (see programs.py) and carry the cross-repo
     dependencies branch topology cannot express — a base branch is a repo-local name, so every derived
-    edge is repo-local by construction.
+    edge is repo-local by construction. `manifests` (the same discovery's output) re-key their members'
+    `project` so the spine groups a declared program as one workstream instead of severing it per repo.
     """
     items = flatten_items(reconciled)
+    programs_applied, program_contested = apply_program_projects(items, manifests or [])
     sources = reconciled.get("sources") or []
     repos = sorted({repo_of(it) for it in items if repo_of(it)})
     generated = str(reconciled.get("generated_at") or utc_now_iso())
 
     machine = os.environ.get("BORG_MACHINE", "")
-    edges, overlap, conflicts = merge_edges(
-        derive_stacked_edges(items), declared_edges or []
-    )
+    edges, overlap, conflicts = merge_edges(derive_stacked_edges(items), declared_edges or [])
 
-    health = [
-        {
-            "check": f"recon:{s.get('source', '?')}",
-            "machine": machine,
-            "status": "ok" if s.get("ok") else "down",
-            "detail": str(s.get("summary") or ""),
-            "checked_at": generated,
-        }
-        for s in sources
-    ]
+    health = []
+    for s in sources:
+        dropped = int(s.get("dropped") or 0)
+        status = "ok" if s.get("ok") else "down"
+        detail = str(s.get("summary") or "")
+        if s.get("ok") and dropped:
+            # Recon's `ok` means the track RAN; items dropped as contract-invalid still leave it true.
+            # A consumer reading "ok" as "this source's items are here" is wrong exactly when it
+            # matters most: a source whose EVERY item was dropped has contributed nothing and must not
+            # read as healthy. Partial drops degrade; total drops count as down.
+            status = "warn" if int(s.get("count") or 0) else "down"
+            detail = f"{detail} ({dropped} item(s) dropped as contract-invalid)"
+        health.append(
+            {
+                "check": f"recon:{s.get('source', '?')}",
+                "machine": machine,
+                "status": status,
+                "detail": detail,
+                "checked_at": generated,
+            }
+        )
     if conflicts:
         # Reuse the existing health panel rather than inventing a surface: it exists precisely so a
         # degradation is visible at a glance instead of silently skewing the render.
@@ -193,14 +250,46 @@ def assemble(
                 "checked_at": generated,
             }
         )
+    if program_contested:
+        # Same policy as edge conflicts: a ref claimed by two programs is a declaration conflict for a
+        # human to settle. First manifest kept it (deterministic); the loser must not vanish silently.
+        health.append(
+            {
+                "check": "programs:contested-refs",
+                "machine": machine,
+                "status": "warn",
+                "detail": "; ".join(program_contested),
+                "checked_at": generated,
+            }
+        )
+
+    # Two sources reporting the same ref both flow through recon's merge today, and a duplicated item
+    # inflates every downstream count (workstream sizes, READY sets) — measured live 2026-08-21 with a
+    # second adapter: one PR rendered twice inside one workstream. Dedup belongs in recon (identity is
+    # a source-merge concern); this counter is the guard that makes a bypass or regression visible here.
+    seen: dict[str, int] = {}
+    for it in items:
+        ref = str(it.get("ref") or "")
+        if ref:
+            seen[ref] = seen.get(ref, 0) + 1
+    duplicate_refs = sorted(r for r, n in seen.items() if n > 1)
+    if duplicate_refs:
+        health.append(
+            {
+                "check": "items:duplicate-refs",
+                "machine": machine,
+                "status": "warn",
+                "detail": f"{len(duplicate_refs)} ref(s) appear more than once across sources: "
+                + ", ".join(duplicate_refs[:5]),
+                "checked_at": generated,
+            }
+        )
 
     # Endpoints that match no gathered item produce edges that vanish from the graph without raising.
     # Counting them is the guard against a silent normalization mismatch between a manifest's refs and
     # what the adapters actually emit.
     refs = {str(it.get("ref")) for it in items}
-    dangling = sorted(
-        {ref for e in edges for ref in (e["parent"], e["child"]) if ref not in refs}
-    )
+    dangling = sorted({ref for e in edges for ref in (e["parent"], e["child"]) if ref not in refs})
 
     return {
         "meta": {
@@ -211,6 +300,9 @@ def assemble(
             # Carried through so the health panel keeps working: a source that failed must stay
             # visible rather than silently reducing the item count. Recon marks these `ok: false`.
             "health": health,
+            # Countable, so a manifest whose refs match nothing is visible instead of silently inert.
+            "program_regrouped_items": programs_applied,
+            "program_contested_refs": program_contested,
             "edge_provenance": {
                 "derived": len([e for e in edges if e.get("source") == "derived"]),
                 "declared": len([e for e in edges if e.get("source") == "declared"]),
@@ -253,7 +345,7 @@ def main() -> int:
         # Named, never silent: an unnamed skip is indistinguishable from a file that was never there.
         print(f"  MANIFEST SKIPPED {warning}", file=sys.stderr)
 
-    gather = assemble(reconciled, programs.edges_from(manifests))
+    gather = assemble(reconciled, programs.edges_from(manifests), manifests)
     with open(args.out, "w") as fh:
         json.dump(gather, fh, indent=2, sort_keys=True)
         fh.write("\n")
@@ -271,6 +363,9 @@ def main() -> int:
         print(f"  DEGRADED SOURCES: {', '.join(down)}", file=sys.stderr)
     for conflict in prov["conflicts"]:
         print(f"  EDGE CONFLICT {conflict}", file=sys.stderr)
+    for contested in gather["meta"]["program_contested_refs"]:
+        # A ref two programs both declare. First manifest kept it; a human settles the claim.
+        print(f"  CONTESTED REF {contested}", file=sys.stderr)
     if prov["dangling_endpoints"]:
         # These edges are in the graph but reference nothing gathered, so they render as nothing at
         # all. Silent disappearance is the failure mode; a count is the guard.
