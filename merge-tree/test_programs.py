@@ -1,6 +1,6 @@
 """Tests for programs.py — borg-native program manifests and the declared edges they carry.
 
-The load-bearing test in this file is `test_a_lane_spanning_three_repos_becomes_one_workstream`. Every
+The load-bearing test in this file is `test_a_lane_spanning_three_repos_yields_cross_repo_edges`. Every
 other edge source in the pipeline is repo-local by construction, so if that one passes vacuously the
 whole directive is unmet.
 """
@@ -268,6 +268,26 @@ class TestLooksLikeManifest:
         assert not programs.looks_like_manifest("string")
 
 
+    def test_non_dict_rows_are_validation_errors_not_silently_dropped(self):
+        # Opus review finding 8: {"rows": ["a#1", "b#1"]} used to load as a VALID manifest
+        # declaring nothing. A bare value in rows is a hand-authoring error, named per row.
+        errors = programs.validate({"program": "x", "rows": ["a#1", {"order": "1", "ref": "b#1"}]})
+        assert len(errors) == 1
+        assert "rows[0]" in errors[0] and "not an object" in errors[0]
+
+    def test_a_gate_with_a_ref_is_mapped_not_unmapped(self):
+        # Opus review finding 2: a gate carrying blocked_by_ref IS expressible as an edge and
+        # must not be counted as unmapped.
+        m = _manifest(
+            [
+                _row("1", "r#1", gate={"blocked_by": "depends on r#9", "blocked_by_ref": "o/r#9", "kind": "verification", "resolved_by": "r#9 merges"}),
+                _row("2", "r#2", gate={"blocked_by": "waiting on Kelly", "kind": "decision", "resolved_by": "Kelly decides"}),
+            ]
+        )
+        gates = programs.unmapped_gates(m)
+        assert [g["ref"] for g in gates] == ["r#2"]
+
+
 class TestDiscover:
     def test_loads_a_valid_manifest(self, tmp_path):
         p = _write(tmp_path, "proj", "a.json", _manifest([_row("1", "r#1")]))
@@ -279,8 +299,26 @@ class TestDiscover:
         (tmp_path / "empty").mkdir()
         assert programs.discover([str(tmp_path / "empty")]) == ([], [])
 
-    def test_a_nonexistent_project_dir_is_silent(self, tmp_path):
-        assert programs.discover([str(tmp_path / "gone")]) == ([], [])
+    def test_a_nonexistent_project_dir_warns_by_name(self, tmp_path):
+        # Opus review finding 7: a typo'd --programs-dir must not be indistinguishable from
+        # "no manifests". The project itself missing is named; only "project exists but has
+        # no .borg/programs" stays silent (the common case).
+        manifests, warnings = programs.discover([str(tmp_path / "gone")])
+        assert manifests == []
+        assert len(warnings) == 1 and "does not exist" in warnings[0]
+
+    def test_an_unreadable_programs_dir_warns_by_name(self, tmp_path):
+        import os as _os
+
+        pdir = tmp_path / "proj" / ".borg" / "programs"
+        pdir.mkdir(parents=True)
+        _os.chmod(pdir, 0o000)
+        try:
+            manifests, warnings = programs.discover([str(tmp_path / "proj")])
+        finally:
+            _os.chmod(pdir, 0o755)
+        assert manifests == []
+        assert len(warnings) == 1 and "unreadable" in warnings[0]
 
     def test_malformed_json_is_skipped_with_a_named_warning(self, tmp_path):
         # An unnamed skip is indistinguishable from a file that was never there.
@@ -418,8 +456,11 @@ class TestIndependence:
 
     def test_discovery_of_an_absent_project_is_not_an_error(self, tmp_path):
         # The personal-machine case: nothing configured, nothing present, still succeeds.
+        # A missing project dir WARNS by name (opus review finding 7) but never raises or
+        # fails — the warning is a discovery note, not an error.
         assert programs.discover([]) == ([], [])
-        assert programs.discover([str(tmp_path / "never-existed")]) == ([], [])
+        manifests, warnings = programs.discover([str(tmp_path / "never-existed")])
+        assert manifests == [] and len(warnings) == 1
 
 
 class TestEdgesFrom:

@@ -93,8 +93,9 @@ this branch for your review:
   first, always vertical; a linear chain is a one-column DAG. Node ids appear exactly twice so vim `*`
   toggles picture <-> detail; refs are full `owner/repo#num` (self-addressing; the `gp` keymap lives at
   noah-goodrich/dotfiles `nvim/lua/custom/plugins/overrides.lua:82` — cursor on a ref, gp opens the
-  PR; bare `#123` falls back to `gh pr view --web` in the buffer's repo). See `docs/pr158-rider/rendered/chains.md` (live data through the unified
-  renderer) and `rendered/chains-dag-mock.md` (the fork/join treatment, approved).
+  PR; bare `#123` falls back to `gh pr view --web` in the buffer's repo). See
+  `docs/pr158-rider/rendered/chains.md` (live data through the unified renderer) and
+  `rendered/chains-dag-mock.md` (the fork/join treatment, approved).
 - **Runnable prototypes**: `docs/pr158-rider/prototypes/`. Regenerate: `borg recon --json --since <ISO>`
   piped to `merge-tree/gather.py --programs-dir <proj>`, then `build_chains.py` + `render_chains_md.py`.
   Pass an ISO date; the relative form (`--since 30d`) silently returns zero items (known bug, unfixed).
