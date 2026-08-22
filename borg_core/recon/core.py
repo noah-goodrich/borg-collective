@@ -7,11 +7,14 @@ in shell.py, which calls into this module for the actual logic.
 
 Mirrors lib/recon.sh's Recon Contract v0:
   Item = {project, source, ref, title, state, changed, owner, action_needed, urgency, one_line}
-  Track = {source, summary, items, ok, dropped}
+  Track = {source, summary, items, ok, dropped, deduped}
+(`deduped` counts this track's items dropped as cross-source duplicates of a ref another track
+reported more recently — set by dedup_cross_source, surfaced in the sources summary and digest.)
 """
 
 from __future__ import annotations
 
+import datetime
 import json
 import re
 from typing import Any
@@ -149,13 +152,29 @@ def process_adapter_output(source: str, raw: str | None, rc: int) -> dict:
         return build_postprocess_failed_track(source)
 
 
-_ISO_TS = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}")
+_ISO_TS = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?")
 
 
 def _changed_ts(item: dict) -> str:
-    """The first ISO-8601 timestamp inside an item's prose `changed` field, or "" (sorts oldest)."""
+    """The first ISO-8601 timestamp in the prose `changed` field, normalized to UTC, or "" (oldest).
+
+    Offset-aware: `2026-08-21T17:30:00-07:00` IS newer than `2026-08-21T23:00:00Z`, and nothing in
+    the Item contract requires UTC — comparing unnormalized strings would hand the win to whichever
+    source happens to phrase its zone. A timestamp with no offset is taken as UTC (the contract's
+    own examples are Z-suffixed), and an unparseable match sorts oldest rather than raising.
+    """
     found = _ISO_TS.findall(str(item.get("changed") or ""))
-    return found[0] if found else ""
+    if not found:
+        return ""
+    raw = found[0].replace("Z", "+00:00")
+    try:
+        parsed = datetime.datetime.fromisoformat(raw)
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    # JUSTIFICATION: astimezone/isoformat on a locally-built datetime, not cross-layer reach.
+    return parsed.astimezone(datetime.timezone.utc).isoformat()  # pylint: disable=clean-arch-demeter
 
 
 def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -214,6 +233,25 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
                         "note": (
                             "two sources disagree on this item's state — the newer report "
                             "was kept, confirm which is right"
+                        ),
+                    }
+                )
+            if item.get("project") != winner.get("project"):
+                # A project divergence is worse than a state one: the loser's copy vanishes from its
+                # project's bucket entirely, so `--projects <loser's>` filters and per-project digests
+                # silently lose the item. Surfaced, never resolved — the sources disagree about which
+                # project owns this ref, and only a human knows.
+                contradictions.append(
+                    {
+                        "project": winner.get("project"),
+                        "ref": ref,
+                        "kept_says": (
+                            f"{winner.get('source')} files this under project {winner.get('project')!r} (newer)"
+                        ),
+                        "dropped_says": f"{item.get('source')} files this under project {item.get('project')!r}",
+                        "note": (
+                            "two sources file this item under different projects — it now appears "
+                            "only under the kept project; confirm which is right"
                         ),
                     }
                 )
