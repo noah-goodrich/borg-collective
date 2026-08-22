@@ -1,5 +1,5 @@
 {
-  "note": "Plan of record: docs/plans/directives/2026-08-18-program-manifests-as-borg-edge-source.md + the #159 review thread. Standalone, NOT part of this train: #161 (security-audit directive) and #162 (infoviz resume order) — docs-only, merge any time. backfill.py extraction from the merge unit is pending; findings 1-3 rework happens there.",
+  "note": "Plan of record: docs/plans/directives/2026-08-18-program-manifests-as-borg-edge-source.md + the #159 review thread. backfill.py extracted to hold/backfill-rework (278c484) per the agreed merge unit — findings 1-3 rework happens there. Standalone, NOT part of this train: #161 (security-audit directive). Cross-machine approval protocol: comment stamps `STACK-APPROVAL: <machine> APPROVES #<n> @ <head-sha>` (gh review --approve is blocked, both machines share one account).",
   "rows": [
     {"order": "–", "repo": "noah-goodrich/borg-collective", "number": 144,
      "desc": "viz-2 — story.json generator", "lane": "manifests", "status": "merged"},
@@ -8,22 +8,27 @@
     {"order": "M1", "repo": "noah-goodrich/borg-collective", "number": 159,
      "desc": "rider — spine regrouping fix + independent review + comms program", "lane": "manifests",
      "status": "review", "next": true,
-     "why": "the merge unit assembles here — review, then merge into feat/program-manifests"},
+     "why": "the merge unit assembles here — both machines stamp approval, then independent model review, then merge"},
     {"order": "M2", "repo": "noah-goodrich/borg-collective", "number": 158,
-     "desc": "borg-native declared edges + PM6/PM7 sync coordinator", "lane": "manifests",
+     "desc": "borg-native declared edges + PM6/PM7 sync coordinator (backfill extracted)", "lane": "manifests",
      "status": "stacked",
      "gate": {
-       "blocked_by": "#159 (the rider) merging into this branch, then backfill.py extraction from the merge unit",
-       "kind": "decision",
-       "resolved_by": "PR #159 review thread — the agreed merge unit (§3/§6.2 of the 2026-08-21 review comment)"
+       "blocked_by": "#159 merging into feat/program-manifests, then both-machine + independent-model approval",
+       "kind": "verification",
+       "resolved_by": "STACK-APPROVAL stamps on #158 and #159 from both machines + the independent reviewer's approval comment",
+       "outcomes": ["all approvals present -> merge M1 then M2 then R1 then D1", "findings raised -> fix on the owning branch, re-stamp, re-review"]
      }},
     {"order": "R1", "repo": "noah-goodrich/borg-collective", "number": 160,
      "desc": "recon cross-source ref dedup — gates the first employer adapter", "lane": "recon",
+     "status": "review"},
+    {"order": "D1", "repo": "noah-goodrich/borg-collective", "number": 162,
+     "desc": "infoviz program status + research resume order (docs only)", "lane": "docs",
      "status": "review"}
   ],
   "stamp": [
     {"repo": "noah-goodrich/borg-collective", "number": 159},
     {"repo": "noah-goodrich/borg-collective", "number": 158},
-    {"repo": "noah-goodrich/borg-collective", "number": 160}
+    {"repo": "noah-goodrich/borg-collective", "number": 160},
+    {"repo": "noah-goodrich/borg-collective", "number": 162}
   ]
 }
