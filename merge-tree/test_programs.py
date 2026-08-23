@@ -280,8 +280,21 @@ class TestLooksLikeManifest:
         # must not be counted as unmapped.
         m = _manifest(
             [
-                _row("1", "r#1", gate={"blocked_by": "depends on r#9", "blocked_by_ref": "o/r#9", "kind": "verification", "resolved_by": "r#9 merges"}),
-                _row("2", "r#2", gate={"blocked_by": "waiting on Kelly", "kind": "decision", "resolved_by": "Kelly decides"}),
+                _row(
+                    "1",
+                    "r#1",
+                    gate={
+                        "blocked_by": "depends on r#9",
+                        "blocked_by_ref": "o/r#9",
+                        "kind": "verification",
+                        "resolved_by": "r#9 merges",
+                    },
+                ),
+                _row(
+                    "2",
+                    "r#2",
+                    gate={"blocked_by": "waiting on Kelly", "kind": "decision", "resolved_by": "Kelly decides"},
+                ),
             ]
         )
         gates = programs.unmapped_gates(m)
@@ -309,6 +322,11 @@ class TestDiscover:
 
     def test_an_unreadable_programs_dir_warns_by_name(self, tmp_path):
         import os as _os
+
+        if _os.geteuid() == 0:
+            import pytest as _pytest
+
+            _pytest.skip("root ignores mode bits — chmod 000 cannot deny listdir (devcontainer case)")
 
         pdir = tmp_path / "proj" / ".borg" / "programs"
         pdir.mkdir(parents=True)
