@@ -11,11 +11,14 @@ it lets adapters stay dumb, curation stay re-runnable, and durable reasoning sur
 
 | Layer | Owner | Lifetime | Notes |
 |---|---|---|---|
-| PR / issue / Jira state | GitHub, Jira (via the recon fan-out, [borg#95](https://github.com/noah-goodrich/borg-collective/issues/95)) | Ephemeral — re-gathered every run | Source of truth for *what is true right now*. |
-| `data.json` | The gather + a curation pass | Disposable — rebuildable from scratch anytime | A curated **projection**, not a database. Never hand-edited. |
+| PR / issue / Jira state | GitHub, Jira via recon | Ephemeral — re-gathered per run | Source of truth for *now*. |
+| `data.json` | Gather + curation pass | Disposable, rebuildable | A curated **projection**, never hand-edited. |
 | `story.json` **skeleton** | `spine.py`, from the gather | Disposable | Grouping, membership, `blocked_by`, state. |
-| `story.json` **judgment** (`story.overlay.json`) | hand-maintained | Durable | `priority`, `summary`, `title`. |
-| Annotations (`annotations.local.json`) | hand- and tool-maintained, machine-local | Durable, machine-scoped | The *why* — rationale, decisions, action-outcome history. See "Annotations" below. |
+| `story.json` **judgment** | hand-maintained (`story.overlay.json`) | Durable | `priority`, `summary`, `title`. |
+| Annotations | hand/tool-maintained, machine-local | Durable, machine-scoped | The *why*. See "Annotations" below. |
+
+(Recon fan-out reference: [borg#95](https://github.com/noah-goodrich/borg-collective/issues/95).
+Annotations file: `annotations.local.json`.)
 
 `bucket` and `urgency` are **curation-derived**, not adapter-emitted — the recon adapters that populate `items[]`
 stay source-agnostic and dumb; all judgment about what's urgent or which bucket an item belongs in concentrates in
@@ -228,6 +231,7 @@ here.
 | `rows[].lane` | no | parallel track; omit on every row for single-stack mode |
 | `rows[].gate` | no | why a row is parked; `kind` is closed to `decision` or `verification` |
 | `apex` | no | the program's tracker; omit entirely on a small single-ticket program |
+| `desc` | no | ONE plain sentence, rendered under the program heading in chain views; `note` stays unrendered |
 
 ### Derivation rules
 
@@ -247,6 +251,15 @@ here.
 Without `blocked_by_ref` the schema could express no dependency at all. The backfill made that concrete: **14 of the
 72 recorded historical edges are `blocks`**, and they are the least recoverable kind, since `stacked` can be
 re-derived from branch topology for anything still open while a dependency is pure judgment.
+
+### Planned: row-level `after: [refs]` (not yet implemented)
+
+Lanes express linear tracks only. The approved chain-map rendering treats every program as a topological
+grid (a linear chain is a one-column DAG), and true forks — one PR unblocking several that all go ready
+simultaneously — need declared parents: a row-level `after: [refs]` list. Derivation rule when it lands:
+explicit `after` overrides consecutive-row inference within the lane; READY = open AND every parent
+merged; all READY nodes are next simultaneously. Recorded here so a review of this contract evaluates the
+shape the consuming program needs, not just today's fields.
 
 ### `decision` vs `verification`
 

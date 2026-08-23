@@ -187,8 +187,10 @@ three-way audit, the discovered-target interface, borg-authored fixtures and tes
 
 ## Ship Definition
 
-`borg recon --json | python3 merge-tree/gather.py` emits cross-repo `declared` edges from
-`.borg/programs/*.json` on live data; `make spine` groups a three-repo lane into **one workstream**;
+`borg recon --json | python3 merge-tree/gather.py --programs-dir <project>...` emits cross-repo `declared`
+edges from `.borg/programs/*.json` on live data (`borg program` is the registry-resolving caller; gather's
+own registry wiring lands with `borg chains`, per comms-delivery-surfaces S2); `make spine` groups a
+three-repo lane into **one workstream**;
 `borg program plan` reports drift across both copies and reality without writing; `borg program sync` writes borg's
 copy and dispatches the external one through the discovered target on the work machine, and cleanly skips that half
 on the personal machine; the suite passes with `ai-data-engineer` renamed off the filesystem.

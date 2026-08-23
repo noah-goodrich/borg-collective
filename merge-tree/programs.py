@@ -122,8 +122,14 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     errors = _validate_apex(manifest.get("apex"))
     seen: dict[str, int] = {}
 
-    for i, row in enumerate(_rows(manifest)):
+    # Iterate the RAW list, not _rows(): _rows filters non-dict entries for tolerant readers, but
+    # validation must report them — `"rows": ["a#1", "b#1"]` is a hand-authored typo that would
+    # otherwise load as a valid manifest declaring nothing (opus review finding 8).
+    for i, row in enumerate(manifest["rows"]):
         label = f"rows[{i}]"
+        if not isinstance(row, dict):
+            errors.append(f"{label}: not an object (got {type(row).__name__}) — a bare value declares nothing")
+            continue
         ref = str(row.get("ref") or "").strip()
         if not ref:
             errors.append(f"{label}: missing ref")
@@ -248,6 +254,10 @@ def unmapped_gates(manifest: dict[str, Any]) -> list[dict[str, str]]:
         gate = row.get("gate")
         if not isinstance(gate, dict):
             continue
+        if str(gate.get("blocked_by_ref") or "").strip():
+            # A gate with a ref IS expressible as an edge — edges_from emits it. Counting it here
+            # too would report mapped gates as unmapped (opus review finding 2).
+            continue
         blocked_by = str(gate.get("blocked_by") or "").strip()
         if blocked_by:
             out.append(
@@ -284,8 +294,17 @@ def discover(project_dirs: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
         directory = programs_dir(project_dir)
         try:
             names = sorted(n for n in os.listdir(directory) if n.endswith(".json"))
-        except OSError:
-            continue  # No programs for this project. The common case, not a problem.
+        except FileNotFoundError:
+            if not os.path.isdir(project_dir):
+                # A typo'd --programs-dir must not be indistinguishable from "no manifests"
+                # (opus review finding 7): the project itself is missing, name it.
+                warnings.append(f"{project_dir}: project directory does not exist")
+            continue  # project exists, no .borg/programs — the common case, not a problem
+        except OSError as exc:
+            # Unreadable (permissions, I/O) is never silent: zero edges from a real directory
+            # would look exactly like a correct empty sweep.
+            warnings.append(f"{directory}: unreadable ({exc})")
+            continue
 
         for name in names:
             path = os.path.join(directory, name)
@@ -312,7 +331,7 @@ def discover(project_dirs: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
     return manifests, warnings
 
 
-def write_manifest(project_dir: str, program: str, manifest: dict[str, Any]) -> str:
+def write_manifest(project_dir: str, program: str, manifest: dict[str, Any], filename: str = "") -> str:
     """borg's native program writer — the ONLY code path that puts a file under a project's
     `.borg/programs/`. PM6's coordinator delegates every write here rather than open()-ing the
     path itself, so there is exactly one writer to keep atomic and validated.
@@ -331,7 +350,11 @@ def write_manifest(project_dir: str, program: str, manifest: dict[str, Any]) -> 
 
     directory = programs_dir(project_dir)
     os.makedirs(directory, exist_ok=True)
-    path = os.path.join(directory, f"{program}.json")
+    # `filename` lets a caller rewrite an EXISTING file in place (the sync path): deriving the name
+    # from `program` would create a second file whenever a manifest's filename differs from its
+    # program id — two copies of one program that then diverge silently, which is the exact failure
+    # this coordinator exists to prevent. New manifests default to <program>.json.
+    path = os.path.join(directory, filename if filename else f"{program}.json")
     tmp_path = f"{path}.tmp"
     to_write = {k: v for k, v in manifest.items() if k != "_path"}
     to_write.setdefault("program", program)
