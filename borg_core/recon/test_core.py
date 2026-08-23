@@ -251,7 +251,140 @@ def test_assemble_builds_expected_shape():
 def test_build_sources_summary():
     tracks = [{"source": "s", "summary": "ok", "items": [VALID_ITEM], "dropped": 2}]
     result = core.build_sources_summary(tracks)
-    assert result == [{"source": "s", "summary": "ok", "ok": True, "count": 1, "dropped": 2}]
+    assert result == [{"source": "s", "summary": "ok", "ok": True, "count": 1, "dropped": 2, "deduped": 0}]
+
+
+def _dup_item(ref, source, changed="2026-01-01T00:00:00Z", state="open", project="p"):
+    return dict(VALID_ITEM, ref=ref, source=source, changed=changed, state=state, project=project)
+
+
+def _dup_track(source, items):
+    return {"source": source, "summary": "ok", "ok": True, "dropped": 0, "items": items}
+
+
+class TestDedupCrossSource:
+    def test_the_newer_report_of_a_shared_ref_wins(self):
+        tracks = [
+            _dup_track("github", [_dup_item("r#1", "github", changed="2026-01-02T00:00:00Z")]),
+            _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-01-01T00:00:00Z")]),
+        ]
+        deduped, _ = core.dedup_cross_source(tracks)
+        assert [it["source"] for it in deduped[0]["items"]] == ["github"]
+        assert deduped[1]["items"] == []
+        assert (deduped[0]["deduped"], deduped[1]["deduped"]) == (0, 1)
+
+    def test_prose_prefix_does_not_beat_a_newer_timestamp(self):
+        # `changed` is prose; the github adapter emits "updated <ISO>; ...". Raw lexical compare
+        # would let any prefix sorting above "2" win forever ("u" > "2"). The embedded timestamp
+        # must decide: here the bare-ISO source is NEWER and must win despite the github prefix.
+        tracks = [
+            _dup_track(
+                "github",
+                [_dup_item("r#1", "github", changed="updated 2026-01-01T00:00:00Z; state=open")],
+            ),
+            _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-01-02T00:00:00Z")]),
+        ]
+        deduped, _ = core.dedup_cross_source(tracks)
+        assert deduped[0]["items"] == []
+        assert [it["source"] for it in deduped[1]["items"]] == ["tracker"]
+
+    def test_items_with_no_timestamp_in_changed_lose_to_any_timestamped_report(self):
+        tracks = [
+            _dup_track("a", [_dup_item("r#1", "a", changed="recently, honest")]),
+            _dup_track("b", [_dup_item("r#1", "b", changed="2026-01-01T00:00:00Z")]),
+        ]
+        deduped, _ = core.dedup_cross_source(tracks)
+        assert [it["source"] for it in deduped[1]["items"]] == ["b"]
+        assert deduped[0]["deduped"] == 1
+
+    def test_a_changed_tie_keeps_the_first_track_deterministically(self):
+        # Track order is adapter discovery order; the outcome must not depend on dict luck.
+        tracks = [
+            _dup_track("a", [_dup_item("r#1", "a")]),
+            _dup_track("b", [_dup_item("r#1", "b")]),
+        ]
+        deduped, _ = core.dedup_cross_source(tracks)
+        assert [it["source"] for it in deduped[0]["items"]] == ["a"]
+        assert deduped[1]["deduped"] == 1
+
+    def test_a_state_disagreement_between_sources_is_a_contradiction(self):
+        tracks = [
+            _dup_track("github", [_dup_item("r#1", "github", changed="2026-01-02T00:00:00Z", state="merged")]),
+            _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-01-01T00:00:00Z", state="open")]),
+        ]
+        _, contradictions = core.dedup_cross_source(tracks)
+        assert len(contradictions) == 1
+        c = contradictions[0]
+        assert c["ref"] == "r#1"
+        assert "github" in c["kept_says"] and "merged" in c["kept_says"]
+        assert "tracker" in c["dropped_says"] and "open" in c["dropped_says"]
+
+    def test_agreeing_duplicates_dedupe_without_a_contradiction(self):
+        tracks = [
+            _dup_track("github", [_dup_item("r#1", "github", changed="2026-01-02T00:00:00Z")]),
+            _dup_track("tracker", [_dup_item("r#1", "tracker")]),
+        ]
+        deduped, contradictions = core.dedup_cross_source(tracks)
+        assert contradictions == []
+        assert deduped[1]["deduped"] == 1
+
+    def test_distinct_refs_pass_through_untouched(self):
+        tracks = [
+            _dup_track("github", [_dup_item("r#1", "github")]),
+            _dup_track("tracker", [_dup_item("PROJ-123", "tracker")]),
+        ]
+        deduped, contradictions = core.dedup_cross_source(tracks)
+        assert len(deduped[0]["items"]) == 1 and len(deduped[1]["items"]) == 1
+        assert (deduped[0]["deduped"], deduped[1]["deduped"]) == (0, 0)
+        assert contradictions == []
+
+    def test_items_without_a_ref_are_never_deduped(self):
+        no_ref = dict(VALID_ITEM, source="a")
+        no_ref.pop("ref")
+        tracks = [_dup_track("a", [no_ref]), _dup_track("b", [dict(no_ref, source="b")])]
+        deduped, _ = core.dedup_cross_source(tracks)
+        assert len(deduped[0]["items"]) == 1 and len(deduped[1]["items"]) == 1
+
+
+def test_dedup_compares_across_utc_offsets_not_strings():
+    # Opus review finding 4: -07:00 17:30 IS newer than 23:00Z; string compare would invert it.
+    tracks = [
+        _dup_track("github", [_dup_item("r#1", "github", changed="updated 2026-08-21T23:00:00Z")]),
+        _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-08-21T17:30:00-07:00")]),
+    ]
+    deduped, _ = core.dedup_cross_source(tracks)
+    assert deduped[0]["items"] == []
+    assert [it["source"] for it in deduped[1]["items"]] == ["tracker"]
+
+
+def test_dedup_timestamp_without_offset_is_taken_as_utc():
+    tracks = [
+        _dup_track("a", [_dup_item("r#1", "a", changed="2026-08-21T10:00:00")]),
+        _dup_track("b", [_dup_item("r#1", "b", changed="2026-08-21T11:00:00Z")]),
+    ]
+    deduped, _ = core.dedup_cross_source(tracks)
+    assert [it["source"] for it in deduped[1]["items"]] == ["b"]
+
+
+def test_dedup_project_divergence_is_a_contradiction():
+    # Opus review finding 5: the loser's copy leaves its project bucket entirely — the
+    # --projects filter then drops the item silently unless this surfaces.
+    tracks = [
+        _dup_track("github", [_dup_item("r#1", "github", changed="2026-01-01T00:00:00Z", project="ingle")]),
+        _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-01-02T00:00:00Z", project="acme-de")]),
+    ]
+    _, contradictions = core.dedup_cross_source(tracks)
+    projected = [c for c in contradictions if "different projects" in c["note"]]
+    assert len(projected) == 1
+    assert "acme-de" in projected[0]["kept_says"]
+    assert "ingle" in projected[0]["dropped_says"]
+
+
+def test_render_digest_notes_deduped_items():
+    doc = core.assemble(
+        "since", "gen", [{"source": "s", "summary": "ok", "ok": True, "dropped": 0, "deduped": 2}], {}, []
+    )
+    assert "(deduped 2 cross-source)" in core.render_digest(doc)
 
 
 def test_render_digest_quiet_sweep():
