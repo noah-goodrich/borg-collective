@@ -374,6 +374,14 @@ def cmd_plan(args: argparse.Namespace) -> int:
     findings = three_way_audit(borg_rows, target_report, recon_states)
 
     print(f"plan: {len(manifests)} program(s), {len(borg_rows)} row(s), {len(findings)} finding(s)")
+    if fatal:
+        # On STDOUT, beside the findings it taints (opus round 3, finding 2): a malformed manifest's
+        # rows never entered borg_rows, so any absent-from-borg finding may be a parse artifact, not
+        # drift — and the stderr-only caveat vanished the moment stdout was redirected to a report.
+        print(
+            f"  CAVEAT: {len(fatal)} malformed manifest(s) skipped — 'absent from borg's copy' "
+            f"findings may be parse artifacts, not drift; fix the manifest(s) first"
+        )
     for f in findings:
         print(f"  {f['kind']}: {f['ref']} — {f['copy_says']} / {f['reality_says']}")
     return 1 if fatal else 0
