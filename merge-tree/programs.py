@@ -331,7 +331,7 @@ def discover(project_dirs: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
     return manifests, warnings
 
 
-def write_manifest(project_dir: str, program: str, manifest: dict[str, Any]) -> str:
+def write_manifest(project_dir: str, program: str, manifest: dict[str, Any], filename: str = "") -> str:
     """borg's native program writer — the ONLY code path that puts a file under a project's
     `.borg/programs/`. PM6's coordinator delegates every write here rather than open()-ing the
     path itself, so there is exactly one writer to keep atomic and validated.
@@ -350,7 +350,11 @@ def write_manifest(project_dir: str, program: str, manifest: dict[str, Any]) -> 
 
     directory = programs_dir(project_dir)
     os.makedirs(directory, exist_ok=True)
-    path = os.path.join(directory, f"{program}.json")
+    # `filename` lets a caller rewrite an EXISTING file in place (the sync path): deriving the name
+    # from `program` would create a second file whenever a manifest's filename differs from its
+    # program id — two copies of one program that then diverge silently, which is the exact failure
+    # this coordinator exists to prevent. New manifests default to <program>.json.
+    path = os.path.join(directory, filename if filename else f"{program}.json")
     tmp_path = f"{path}.tmp"
     to_write = {k: v for k, v in manifest.items() if k != "_path"}
     to_write.setdefault("program", program)

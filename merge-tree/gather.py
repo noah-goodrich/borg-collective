@@ -146,7 +146,9 @@ def merge_edges(
                     f"earlier declared {edge['child']} -> {edge['parent']} — the later declaration kept"
                 )
             else:
-                conflicts.append(f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, topology says the reverse")
+                conflicts.append(
+                    f"{edge['kind']}: declared {edge['parent']} -> {edge['child']}, topology says the reverse"
+                )
             del by_key[reversed_key]
         by_key[key] = edge
 

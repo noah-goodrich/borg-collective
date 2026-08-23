@@ -2503,16 +2503,25 @@ cmd_program() {
     local action="${1:-list}"
     case "$action" in
         list|plan|sync) ;;
-        *) die "usage: borg program list|plan|sync [--programs-dir <path>]... [--recon <file>]" ;;
+        *) die "usage: borg program list|plan|sync [--programs-dir <path>]... ; plan also takes --recon <file>" ;;
     esac
-    shift
+    # Guarded: zsh hard-errors a bare `shift` at $#==0 (unlike bash), and set -e makes that fatal —
+    # which would kill the argless `borg program` the :-list default exists for.
+    (( $# )) && shift
 
     typeset -a _prog_args
     local _explicit_dirs=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --programs-dir) _prog_args+=(--programs-dir "$2"); _explicit_dirs=1; shift 2 ;;
-            --recon)        _prog_args+=(--recon "$2"); shift 2 ;;
+            --programs-dir)
+                [[ -n "${2:-}" ]] || die "borg program: --programs-dir needs a path"
+                _prog_args+=(--programs-dir "$2"); _explicit_dirs=1; shift 2 ;;
+            --recon)
+                # argparse registers --recon on the plan subparser only; failing here beats
+                # advertising a flag downstream then rejects.
+                [[ "$action" == "plan" ]] || die "borg program: --recon is only valid with 'plan'"
+                [[ -n "${2:-}" ]] || die "borg program: --recon needs a file (or -)"
+                _prog_args+=(--recon "$2"); shift 2 ;;
             *)              die "unknown flag '$1' for borg program" ;;
         esac
     done
