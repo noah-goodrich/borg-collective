@@ -1,6 +1,7 @@
 # Directive: Design-Doc and Brevity Skills
 
-*Filed: 2026-08-20 · Status: Proposed · Parent: borg-collective/docs/plans/directives/2026-08-20-communication-program.md*
+*Filed: 2026-08-20 · Status: Proposed*
+*Parent: borg-collective/docs/plans/directives/2026-08-20-communication-program.md*
 
 **tl;dr** — Every proposal, PR description, and long chat reply is shaped from scratch each time, so quality
 depends on the agent remembering how Noah reads. Ship three skills in the noah-writing-voice / research-tools
