@@ -2756,3 +2756,46 @@ _repo_norm() {
     run _repo_norm "ssh://git@github.com/owner/repo.git"
     [ "$output" = "owner/repo" ]
 }
+
+# ── guards: borg program arg handling (opus round-2 findings 3-5, round-3 finding 3) ──────────────
+# These bugs are the class only execution catches: zsh hard-errors a bare `shift` at $#==0 (bash
+# does not), and set -e turns that into a silent death. Same blind-spot shape as the BORG_REGISTRY
+# inheritance bug — reading the code proved nothing until a test ran it.
+
+@test "contract: argless 'borg program' reaches the list default instead of a shift crash" {
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    mkdir -p "$BATS_TEST_TMPDIR/proj"
+    run zsh -c "'$BORG' program"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"0 program(s)"* ]] || false
+}
+
+@test "contract: 'borg program list' sweeps a registry manifest end to end" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/programs"
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.borg/programs/auth.json"
+    run zsh -c "'$BORG' program list"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+}
+
+@test "contract: --recon outside plan dies named, not via argparse exit 2" {
+    echo '{"projects": {}}' > "$BORG_REGISTRY"
+    run zsh -c "'$BORG' program list --recon /tmp/x.json"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--recon is only valid with 'plan'"* ]] || false
+}
+
+@test "contract: a trailing valueless --programs-dir dies named, not via a shift crash" {
+    run zsh -c "'$BORG' program plan --programs-dir"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--programs-dir needs a path"* ]] || false
+    [[ "$output" != *"shift count"* ]] || false
+}
+
+@test "contract: an unknown program action prints usage including --recon" {
+    run zsh -c "'$BORG' program bogus"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"list|plan|sync"* ]] || false
+}
