@@ -213,11 +213,21 @@ def three_way_audit(
 
     for ref in sorted(set(borg_by_ref) - set(target_by_ref)):
         findings.append(
-            {"kind": "present_only_in_borg", "ref": ref, "copy_says": "in borg's copy", "reality_says": "absent from the target"}
+            {
+                "kind": "present_only_in_borg",
+                "ref": ref,
+                "copy_says": "in borg's copy",
+                "reality_says": "absent from the target",
+            }
         )
     for ref in sorted(set(target_by_ref) - set(borg_by_ref)):
         findings.append(
-            {"kind": "present_only_in_target", "ref": ref, "copy_says": "absent from borg's copy", "reality_says": "in the target"}
+            {
+                "kind": "present_only_in_target",
+                "ref": ref,
+                "copy_says": "absent from borg's copy",
+                "reality_says": "in the target",
+            }
         )
     for ref in sorted(set(borg_by_ref) & set(target_by_ref)):
         b, t = borg_by_ref[ref]["status"], target_by_ref[ref]["status"]
@@ -298,15 +308,23 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
     for manifest in manifests:
         program = str(manifest.get("program") or "")
         project_dir = _project_dir_of(manifest)
+        source_path = str(manifest.get("_path") or "")
         if not program or not project_dir:
             continue
-        if program in seen and seen[program] != project_dir:
+        if program in seen and seen[program] != source_path:
+            # Keyed by SOURCE FILE, not project dir (opus round 2, finding 1): two files in the SAME
+            # project declaring one program is just as real a contention as two projects — and the
+            # filename passthrough below is what stops the second one silently overwriting the first.
             warnings.append(
-                f"program {program!r} is declared by two projects ({seen[program]} and "
-                f"{project_dir}) — both synced to their own homes, but they will contend downstream"
+                f"program {program!r} is declared twice ({seen[program]} and {source_path}) — "
+                f"each file rewritten in place, but they will contend downstream"
             )
-        seen.setdefault(program, project_dir)
-        written.append(programs.write_manifest(project_dir, program, manifest))
+        seen.setdefault(program, source_path)
+        # Rewrite each manifest's OWN file (basename of _path), never a program-derived name: a
+        # manifest whose filename differs from its program id must not spawn a second copy.
+        written.append(
+            programs.write_manifest(project_dir, program, manifest, filename=os.path.basename(source_path))
+        )
     return written, warnings
 
 
@@ -334,10 +352,13 @@ def cmd_plan(args: argparse.Namespace) -> int:
     manifests, warnings = programs.discover(args.programs_dir)
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
-    if warnings:
-        # PM6: plan exits non-zero only on malformed input. A skipped manifest IS malformed input.
-        print(f"plan: {len(warnings)} malformed manifest(s) — see above", file=sys.stderr)
-        return 1
+    # PM6: plan exits non-zero only on malformed input — a skipped MANIFEST is malformed input, a
+    # directory-level note (absent project path in the registry sweep) is not. Either way the audit
+    # for every valid manifest still runs and prints (PM2: one bad manifest must not blank the
+    # spine); the file-level failure is reflected in the exit code AFTER the findings print.
+    fatal = [w for w in warnings if ".json" in w]
+    if fatal:
+        print(f"plan: {len(fatal)} malformed manifest(s) — see above", file=sys.stderr)
 
     borg_rows = flatten_rows(manifests)
     search_dirs = sync_target_search_dirs()
@@ -355,7 +376,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     print(f"plan: {len(manifests)} program(s), {len(borg_rows)} row(s), {len(findings)} finding(s)")
     for f in findings:
         print(f"  {f['kind']}: {f['ref']} — {f['copy_says']} / {f['reality_says']}")
-    return 0
+    return 1 if fatal else 0
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
@@ -408,7 +429,8 @@ def main() -> int:
                 "--recon",
                 default=None,
                 metavar="PATH",
-                help="a recon/gather JSON doc (or - for stdin) to check reality against; omit to skip the reality check",
+                help="a recon/gather JSON doc (or - for stdin) to check reality against; "
+                "omit to skip the reality check",
             )
         sp.set_defaults(fn=fn)
 
