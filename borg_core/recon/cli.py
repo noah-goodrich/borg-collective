@@ -65,9 +65,10 @@ def _filter_by_project(by_project: dict[str, list[dict]], keep_names: list[str] 
 def _run_sweep(resolved_since: str, projects_file: str, adapters: list[tuple[str, str]], projects: dict) -> dict:
     """Run the fan-out + reconcile pipeline and assemble the reconciled doc."""
     tracks = shell.fanout(resolved_since, projects_file, adapters)
+    tracks, source_contradictions = core.dedup_cross_source(tracks)
     by_project = core.merge_by_project(tracks)
     sources_json = core.build_sources_summary(tracks)
-    contradictions = _collect_contradictions(projects, by_project)
+    contradictions = source_contradictions + _collect_contradictions(projects, by_project)
     generated_at = timefmt.now_iso()
     return core.assemble(resolved_since, generated_at, sources_json, by_project, contradictions)
 
