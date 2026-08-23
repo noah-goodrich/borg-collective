@@ -13,7 +13,8 @@ viz-program        viz        X X >O                   noah-goodrich/borg-collec
 
 ## Program: ingle-t1-cutover
 
-Move ingle onto the shared stillpoint database: freeze writes, load prod data, flip the schema, and guard every app with a schema contract.
+Move ingle onto the shared stillpoint database: freeze writes, load prod data, flip the schema, and guard every app
+with a schema contract.
 
 Repos: stillpoint-labs/ingle  ·  stillpoint-labs/reveal  ·  stillpoint-labs/stillpoint  ·  stillpoint-labs/troth
 

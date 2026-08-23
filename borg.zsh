@@ -2582,12 +2582,13 @@ cmd_help() {
                           --projects a,b Limit to a subset of registered projects
                           --sources s,t  Limit to a subset of discovered adapters
                           --json         Emit the reconciled JSON (what /borg-recon consumes)
+                          --adapters     List discovered source adapters and exit
     program <action>    Program-manifest coordinator over <project>/.borg/programs/*.json
                           list           Every declared program across registered projects
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
                           --programs-dir <path>  Explicit roots (suppresses the registry sweep)
-                          --adapters     List discovered source adapters and exit
+                          --recon <file> (plan only) recon/gather JSON for the reality check
     scan                Discover projects from session history
     add [path]          Register a project (defaults to $PWD)
     rm <project>        Unregister a project
