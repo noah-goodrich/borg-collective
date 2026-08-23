@@ -261,6 +261,22 @@ class TestCurate:
         result = curate(raw)
         assert result["edges"] == [{"parent": "a#1", "child": "a#2", "kind": "stacked"}]
 
+    def test_edge_provenance_survives_curation(self):
+        # Opus review finding 3 / PM5: `source` was stripped here, so provenance never reached
+        # data.json or the renderers — a wrong edge was not falsifiable downstream.
+        raw = {
+            "items": [{"ref": "a#1"}],
+            "edges": [{"parent": "a#1", "child": "a#2", "kind": "stacked", "source": "declared"}],
+        }
+        assert curate(raw)["edges"][0]["source"] == "declared"
+
+    def test_an_edge_without_source_stays_without_one(self):
+        raw = {
+            "items": [{"ref": "a#1"}],
+            "edges": [{"parent": "a#1", "child": "a#2", "kind": "stacked"}],
+        }
+        assert "source" not in curate(raw)["edges"][0]
+
     def test_duplicate_edges_are_deduped(self):
         raw = {
             "items": [{"ref": "a#1"}],
