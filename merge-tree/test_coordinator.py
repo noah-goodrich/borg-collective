@@ -154,7 +154,10 @@ class TestThreeWayAudit:
         ]
 
     def test_present_only_in_one_copy_is_named_on_both_sides(self):
-        borg_rows = [{"program": "p", "ref": "r#1", "status": "stacked"}, {"program": "p", "ref": "r#2", "status": "stacked"}]
+        borg_rows = [
+            {"program": "p", "ref": "r#1", "status": "stacked"},
+            {"program": "p", "ref": "r#2", "status": "stacked"},
+        ]
         target_report = {"ok": True, "rows": [{"ref": "r#1", "status": "stacked"}, {"ref": "r#3", "status": "stacked"}]}
         findings = coordinator.three_way_audit(borg_rows, target_report, recon_states={})
         kinds = {(f["kind"], f["ref"]) for f in findings}
@@ -225,25 +228,74 @@ class TestLoadReconItems:
 
 
 class TestSyncBorg:
+    def _discovered(self, project_dir, program="prog-a"):
+        programs.write_manifest(str(project_dir), program, _manifest(program, [_row("1", "r#1")]))
+        manifests, _ = programs.discover([str(project_dir)])
+        return manifests
+
     def test_writes_each_manifest_via_the_native_writer(self, tmp_path):
-        project_dir = str(tmp_path / "proj")
-        manifests = [_manifest("prog-a", [_row("1", "r#1")])]
-        written = coordinator.sync_borg(manifests, {"prog-a": project_dir})
+        manifests = self._discovered(tmp_path / "proj")
+        written, warnings = coordinator.sync_borg(manifests)
         assert len(written) == 1
+        assert warnings == []
         assert os.path.exists(written[0])
 
-    def test_a_manifest_with_no_known_project_dir_is_skipped_not_raised(self):
+    def test_a_manifest_with_no_path_stamp_is_skipped_not_raised(self):
         manifests = [_manifest("prog-a", [_row("1", "r#1")])]
-        assert coordinator.sync_borg(manifests, {}) == []
+        assert coordinator.sync_borg(manifests) == ([], [])
+
+    def test_a_manifest_whose_filename_differs_from_its_program_rewrites_in_place(self, tmp_path):
+        # Opus round 2, finding 1: writing back via a program-derived name spawned a SECOND file
+        # (three-repo-program.json declaring program auth-hardening -> a new auth-hardening.json),
+        # two copies of one program that then diverge silently. Sync must rewrite the source file.
+        import json as _json
+
+        pdir = tmp_path / "proj" / ".borg" / "programs"
+        pdir.mkdir(parents=True)
+        m = _manifest("auth-hardening", [_row("1", "r#1")])
+        (pdir / "three-repo-program.json").write_text(_json.dumps(m))
+        manifests, _ = programs.discover([str(tmp_path / "proj")])
+        written, warnings = coordinator.sync_borg(manifests)
+        assert written == [str(pdir / "three-repo-program.json")]
+        assert sorted(f.name for f in pdir.iterdir()) == ["three-repo-program.json"]
+        assert warnings == []
+
+    def test_two_files_declaring_one_program_in_one_project_both_survive_with_a_warning(self, tmp_path):
+        # The same-project half of the blocker: b.json and z.json both declaring program "b" must
+        # not overwrite each other, and the contention is named.
+        import json as _json
+
+        pdir = tmp_path / "proj" / ".borg" / "programs"
+        pdir.mkdir(parents=True)
+        (pdir / "b.json").write_text(_json.dumps(_manifest("b", [_row("1", "r#1")])))
+        (pdir / "z.json").write_text(_json.dumps(_manifest("b", [_row("1", "r#2")])))
+        manifests, _ = programs.discover([str(tmp_path / "proj")])
+        written, warnings = coordinator.sync_borg(manifests)
+        assert len(written) == 2
+        assert sorted(f.name for f in pdir.iterdir()) == ["b.json", "z.json"]
+        assert _json.loads((pdir / "b.json").read_text())["rows"][0]["ref"] == "r#1"
+        assert _json.loads((pdir / "z.json").read_text())["rows"][0]["ref"] == "r#2"
+        assert len(warnings) == 1 and '"b"' in warnings[0].replace("'", '"')
+
+    def test_same_program_in_two_projects_writes_each_to_its_own_home(self, tmp_path):
+        # Opus review MERGE-BLOCKER: the old program-keyed map wrote the loser's manifest into
+        # the OTHER project's .borg/programs/. Each manifest must land in its own project root,
+        # and the duplicate-name condition is warned, not silently resolved.
+        dir_a, dir_b = tmp_path / "reveal", tmp_path / "ingle"
+        manifests = self._discovered(dir_a, "shared-prog") + self._discovered(dir_b, "shared-prog")
+        written, warnings = coordinator.sync_borg(manifests)
+        assert len(written) == 2
+        assert written[0].startswith(str(dir_a)) and written[1].startswith(str(dir_b))
+        assert len(warnings) == 1 and "shared-prog" in warnings[0]
 
 
-class TestProjectDirsFromPaths:
+class TestProjectDirOf:
     def test_recovers_project_root_from_the_discover_stamped_path(self, tmp_path):
         project_dir = str(tmp_path / "proj")
         path = programs.write_manifest(project_dir, "prog-a", _manifest("prog-a", [_row("1", "r#1")]))
         manifests, _ = programs.discover([project_dir])
         assert manifests[0]["_path"] == path
-        assert coordinator._project_dirs_from_paths(manifests) == {"prog-a": project_dir}
+        assert coordinator._project_dir_of(manifests[0]) == project_dir
 
 
 class _Args:
@@ -317,7 +369,9 @@ class TestCmdSync:
 
     def test_dispatches_to_a_discovered_target(self, tmp_path, capsys, monkeypatch):
         target_dir = _make_target(
-            tmp_path, "ok", '#!/bin/sh\ncat <<\'EOF\'\n{"ok": true, "rows": [{"ref": "r#1", "status": "merged"}]}\nEOF\n'
+            tmp_path,
+            "ok",
+            '#!/bin/sh\ncat <<\'EOF\'\n{"ok": true, "rows": [{"ref": "r#1", "status": "merged"}]}\nEOF\n',
         )
         monkeypatch.setenv(coordinator.ENV_VAR, target_dir)
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1")])
