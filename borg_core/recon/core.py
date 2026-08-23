@@ -176,9 +176,10 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
     prefix, not on time. Extracted timestamps compare lexically (ISO sorts); an item with no
     timestamp in `changed` compares as oldest. Ties keep the first track's item, and track order is
     adapter discovery order, so the outcome is deterministic. Each track records how many of its
-    items lost as `deduped`. When the winner and a loser disagree on `state`, that is a real
-    contradiction between sources — emitted for the human, never resolved silently, same policy as
-    the checkpoint-vs-source detector.
+    items lost as `deduped`. When the winner and a loser disagree on `state` — or on which
+    `project` owns the ref, which silently empties the loser's project bucket — that is a real
+    contradiction between sources, emitted for the human and never resolved silently, same policy
+    as the checkpoint-vs-source detector.
 
     Returns `(tracks, contradictions)` with each track's `items` filtered and `deduped` set.
     """
