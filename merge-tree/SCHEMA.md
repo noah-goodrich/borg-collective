@@ -11,11 +11,14 @@ it lets adapters stay dumb, curation stay re-runnable, and durable reasoning sur
 
 | Layer | Owner | Lifetime | Notes |
 |---|---|---|---|
-| PR / issue / Jira state | GitHub, Jira (via the recon fan-out, [borg#95](https://github.com/noah-goodrich/borg-collective/issues/95)) | Ephemeral — re-gathered every run | Source of truth for *what is true right now*. |
-| `data.json` | The gather + a curation pass | Disposable — rebuildable from scratch anytime | A curated **projection**, not a database. Never hand-edited. |
+| PR / issue / Jira state | GitHub, Jira via recon | Ephemeral — re-gathered per run | Source of truth for *now*. |
+| `data.json` | Gather + curation pass | Disposable, rebuildable | A curated **projection**, never hand-edited. |
 | `story.json` **skeleton** | `spine.py`, from the gather | Disposable | Grouping, membership, `blocked_by`, state. |
-| `story.json` **judgment** (`story.overlay.json`) | hand-maintained | Durable | `priority`, `summary`, `title`. |
-| Annotations (`annotations.local.json`) | hand- and tool-maintained, machine-local | Durable, machine-scoped | The *why* — rationale, decisions, action-outcome history. See "Annotations" below. |
+| `story.json` **judgment** | hand-maintained (`story.overlay.json`) | Durable | `priority`, `summary`, `title`. |
+| Annotations | hand/tool-maintained, machine-local | Durable, machine-scoped | The *why*. See "Annotations" below. |
+
+(Recon fan-out reference: [borg#95](https://github.com/noah-goodrich/borg-collective/issues/95).
+Annotations file: `annotations.local.json`.)
 
 `bucket` and `urgency` are **curation-derived**, not adapter-emitted — the recon adapters that populate `items[]`
 stay source-agnostic and dumb; all judgment about what's urgent or which bucket an item belongs in concentrates in
@@ -185,6 +188,105 @@ Every run reports four categories, because they fail differently:
   silently with blank prose is how `infrastructure#2564` stayed invisible.
 - `stale_projects` / `stale_workstreams` — judgment whose anchor is gone. Prose someone wrote that no longer
   attaches to anything, surfaced before it is lost.
+
+## Program manifests (`<project>/.borg/programs/*.json`) — borg's declared edges
+
+**This is borg's own contract, owned here.** It is not derived from, validated against, or dependent on any other
+tool's file format; borg must behave identically on a machine that has no other plugin installed.
+
+### Why it exists
+
+`gather.derive_stacked_edges` recovers `stacked` edges from branch topology — a stacked PR's base branch is its
+parent's head branch. But **a base branch is a repo-local name**, so every derived edge is repo-local by
+construction. The cross-*repo* case, which is the entire point of the graph, is not derivable from any mechanical
+signal: nothing in git or the GitHub API says `platform#834` must merge before `warehouse#302`. That ordering exists
+only in the head of whoever planned the program, so it has to be **declared**.
+
+### Shape
+
+```json
+{
+  "program": "auth-hardening",
+  "apex":    {"ref": "owner/repo#900", "label": "optional program name"},
+  "note":    "optional",
+  "rows": [
+    {"order": "I1", "ref": "owner/repo#834", "lane": "ingest", "ticket": "OPS-11",
+     "status": "stacked", "next": false, "why": "",
+     "gate": {"blocked_by": "what is holding it", "kind": "decision | verification",
+              "resolved_by": "the thing that settles it", "outcomes": ["optional"]}}
+  ]
+}
+```
+
+**Rows key on `ref`, not repo + number.** `ref` is already the one canonical key used everywhere in this schema, so
+keying rows the same way means declared edges need **no ref normalization** — which removes a silent-failure class:
+a wrong `Owner/repo` → `repo#num` transform yields edges whose endpoints match no item, so they vanish from the
+graph without raising. Any translation to an external system's field names belongs in that system's adapter, not
+here.
+
+| field | required | meaning |
+|---|---|---|
+| `rows[].ref` | yes | canonical item ref; must be unique within the manifest |
+| `rows[].order` | yes | declared merge position — `–` for a merged prerequisite, else `E1`/`I2`/`1` |
+| `rows[].lane` | no | parallel track; omit on every row for single-stack mode |
+| `rows[].gate` | no | why a row is parked; `kind` is closed to `decision` or `verification` |
+| `apex` | no | the program's tracker; omit entirely on a small single-ticket program |
+| `desc` | no | ONE plain sentence, rendered under the program heading in chain views; `note` stays unrendered |
+
+### Derivation rules
+
+- **Consecutive rows within a lane** → a `stacked` edge. This is the only construct here that can span repos.
+- **Every row** → an `apex` edge to `apex.ref`, when an apex exists. `apex` groups (chain edges group, blocking
+  edges do not), so a multi-lane program stays one workstream.
+- **Separate lanes never link.** Lane ids are prefixed precisely so cross-lane rows imply no total order.
+- **`gate.blocked_by` is never turned into an edge.** It is prose — *"waiting on a colleague's review"* names a real
+  blocker with no ref to point at. String-matching it would invent a dependency. These are counted and reported as
+  `unmapped_gates` instead.
+- **`gate.blocked_by_ref`** (optional) → a `blocks` edge. This is the machine-readable companion to the prose field,
+  for when the blocker *is* a tracked item. It must contain `#`, because its only job is to be an edge endpoint;
+  prose here would produce an edge pointing at nothing, which is precisely what keeping `blocked_by` prose avoids.
+  `blocks` does **not** group — it is a dependency *between* workstreams, so merging on it would collapse a blocker
+  into its own victim and lose the dependency.
+
+Without `blocked_by_ref` the schema could express no dependency at all. The backfill made that concrete: **14 of the
+72 recorded historical edges are `blocks`**, and they are the least recoverable kind, since `stacked` can be
+re-derived from branch topology for anything still open while a dependency is pure judgment.
+
+### Planned: row-level `after: [refs]` (not yet implemented)
+
+Lanes express linear tracks only. The approved chain-map rendering treats every program as a topological
+grid (a linear chain is a one-column DAG), and true forks — one PR unblocking several that all go ready
+simultaneously — need declared parents: a row-level `after: [refs]` list. Derivation rule when it lands:
+explicit `after` overrides consecutive-row inference within the lane; READY = open AND every parent
+merged; all READY nodes are next simultaneously. Recorded here so a review of this contract evaluates the
+shape the consuming program needs, not just today's fields.
+
+### `decision` vs `verification`
+
+`kind` is closed to two values because they route differently. A `decision` means a **human must choose**, so it is
+a blocker on a person. A `verification` means **someone must run something** — anyone can, so it is *never* a
+blocker on a person and must not be routed to the awaiting-you tier. Both `blocked_by` and `resolved_by` are
+mandatory: a blocker naming nothing that would unpark it is the defect the field exists to prevent.
+
+### Edge provenance
+
+Every edge in the gather now carries `source: "derived" | "declared"`, and `meta.edge_provenance` reports the
+counts plus two things that would otherwise fail silently:
+
+- **`conflicts`** — declared says A → B while topology says B → A. Usually a rebase moved a base branch out from
+  under the plan. Surfaced as a `warn` row in the existing health panel, never auto-resolved: picking a winner
+  would hide the drift.
+- **`dangling_endpoints`** — edge endpoints matching no gathered item. These render as *nothing at all*, so silent
+  disappearance is the failure mode and a count is the guard.
+
+On a duplicate, **declared wins**: topology is an inference, a manifest row is stated intent.
+
+### Validation
+
+`validate()` reports **every** problem in one pass, so a manifest is fixed in one edit rather than N runs, and
+callers must treat a non-empty result as fatal **before writing anything**. Discovery is non-fatal by contrast: a
+missing directory, malformed JSON, non-manifest JSON, or invalid manifest is skipped with a **named** warning —
+one bad file must never blank the spine, and an unnamed skip is indistinguishable from a file that was never there.
 
 ### Regenerating will not reproduce today's hand-authored spine
 
