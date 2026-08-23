@@ -10,6 +10,12 @@
 #             projects.json is the registry's `.projects` object: { "<name>": {"path": "...", ...} }
 #   stdout:   exactly one JSON object — {"source": "...", "summary": "<terse>", "items": [Item,...]}
 #   Item  =   {project, source, ref, title, state, changed, owner, action_needed, urgency, one_line}
+#             Field types are ENFORCED by the engine (borg_core/recon/core.py validate_item); an item
+#             violating any of them is silently dropped from the track (counted in `dropped`):
+#               project, source, ref, title, state, changed, one_line  — strings, all required
+#               owner          — exactly one of: "you" | "agent" | "unknown"
+#               urgency        — exactly one of: "now" | "this_week" | "fyi"
+#               action_needed  — JSON boolean (true/false), NOT a string
 #   exit 0 =  success (even for an empty sweep). Non-zero or malformed output = the engine records
 #             the track as failed and continues. NEVER emit raw dumps — only the structured object.
 #
