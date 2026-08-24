@@ -82,6 +82,23 @@ happen again without this directive.
   consuming repos), then land the two hand-authored manifests (`ingle-t1-cutover`, `viz-program`) in their
   owning repos so S2 has real declared edges on day one. When S4 lands, re-file manifest-driven chain
   position for `/pr-description` in claude-plugins (its plan deferred it on "no manifests exist yet").
+  **Program lifecycle (ratified 2026-08-24 with S4's landing):**
+  - *Naming*: the `program` field is the id AND the user-facing project id in every downstream view
+    (chain map, spine, borg link). Kebab-case slug, named for the outcome like a directive; filename
+    tracks the id. When a program is born from a plan, it defaults to the directive's slug.
+  - *Origination* (both hooks approved by Noah, 2026-08-24): `borg-plan` scaffolds a manifest in the
+    plan's repo when acceptance criteria declare cross-repo work — that repo becomes the program's home;
+    `/pr-description` maintains the home manifest at ship time wherever it lives, and offers creation
+    (homed in the PR's repo) when no program claims the PR. The scaffold runs a discovery sweep first
+    and refuses a name collision at birth. Manifests are per-PROGRAM, never per-PR: chain position is a
+    property of the set, and per-PR fragments would recreate the duplicate-write-path disease.
+  - *Close-out*: done is DERIVED (all rows merged → renders collapsed per the S2-final contract), never
+    hand-declared. Archival is PROPOSED by the coordinator/deriver and executed by a human: move the
+    file to `.borg/programs/archived/` (discovery sweeps only top-level `*.json`, so archived/ is
+    naturally invisible). Abandonment = the same move with a one-line note. Nothing auto-archives.
+  - *Verification*: `merge-tree/test_s4_manifests.py` (CI) gates every committed manifest; the on-demand
+    `evals/s4-k3/run.sh` proves cross-repo discovery, live refs, gather integration, and the
+    `/pr-description` manifest + fallback paths (K3/AC3 evidence).
 - **S6 — every status surface adopts or is exempted, by name.** (Added 2026-08-20 after the gap sweep;
   Noah: "this new rendering would inform the way that all enquiries about status, de-briefings, borg-link,
   etc" — that is the adopt decision for the big surfaces.) Inventory:
@@ -114,8 +131,11 @@ happen again without this directive.
       manifests; a fixture test drives recon-doc → HTML without network.
 - [ ] AC3 The chat-contract skill exists, is installed by `borg setup`, and its rules match the parent
       directive's reading-mechanics findings (tl;dr at bottom for chat, top for documents).
-- [ ] AC4 `.gitignore` carve-out landed; `git check-ignore .borg/programs/x.json` fails (not ignored); both
-      manifests committed in their repos.
+- [x] AC4 `.gitignore` carve-out landed; `git check-ignore .borg/programs/x.json` fails (not ignored); both
+      manifests committed in their repos. (2026-08-24 — gated by 8 CI tests in
+      `merge-tree/test_s4_manifests.py` + the 5-eval `evals/s4-k3/run.sh` all green, including the live
+      `/pr-description` run on stillpoint-labs/stillpoint#48 rendering chain position FROM the manifest
+      and the troth fallback run proving the discriminator: K3/AC3 evidence at `evals/s4-k3/out/`.)
 - [ ] AC5 Full bats suite and macOS contract leg green.
 - [ ] AC6 A fixture manifest using row-level `after: [refs]` renders the fork/join grid of the approved
       mock (branch columns, join, READY-set announced together). Schema addition owned by S2, spec'd in
