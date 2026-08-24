@@ -1951,20 +1951,30 @@ cmd_store_secret() {
         die "empty secret — aborting"
     fi
 
-    if ! security add-generic-password -s "$name" -a "$USER" -w "$_BORG_SECRET" -U; then
+    # SA5: never place the secret on argv (visible to `ps` for the write's duration).
+    # `security -w` with no value reads it interactively; feeding via stdin keeps it off
+    # the process table entirely.
+    if ! printf '%s\n%s\n' "$_BORG_SECRET" "$_BORG_SECRET" | \
+            security add-generic-password -s "$name" -a "$USER" -U -w 2>/dev/null; then
         unset _BORG_SECRET
         die "keychain write failed"
     fi
-    unset _BORG_SECRET
     info "stored $name in keychain"
 
     # ── 2. Verify ────────────────────────────────────────────────────────────
+    # SA5: reveal no secret bytes — the old path echoed a 10-char prefix, which lands in any
+    # scrollback/capture log. Length + name confirm the round-trip just as well.
     local _BORG_VERIFY
     if ! _BORG_VERIFY=$(security find-generic-password -s "$name" -a "$USER" -w 2>/dev/null); then
+        unset _BORG_SECRET
         die "verification failed — could not read back from keychain"
     fi
-    echo "  ${_BORG_VERIFY:0:10}..."
-    unset _BORG_VERIFY
+    if [[ "$_BORG_VERIFY" != "$_BORG_SECRET" ]]; then
+        unset _BORG_SECRET _BORG_VERIFY
+        die "verification failed — keychain returned a different value"
+    fi
+    echo "  verified: $name (${#_BORG_VERIFY} chars) round-trips from the keychain"
+    unset _BORG_SECRET _BORG_VERIFY
 
     # ── 3. Patch secrets.zsh ─────────────────────────────────────────────────
     _borg_patch_secrets_file "$name" "$secrets_file" \
@@ -2447,7 +2457,9 @@ cmd_doctor() {
     # columns: REG is whether we could reach the container's clock at all, EXIT carries the skew
     # in seconds (repurposed — there is no process exit code here), FRESH is n/a.
     local -a containers
-    containers=(${(f)"$(docker ps --filter 'label=dev.role=app' --format '{{.Names}}' 2>/dev/null)"})
+    # `|| true` because a machine with no docker binary must not kill doctor under set -e —
+    # the whole point of a health check is to keep reporting on the machines that are missing things.
+    containers=(${(f)"$(docker ps --filter 'label=dev.role=app' --format '{{.Names}}' 2>/dev/null || true)"})
     containers=(${containers:#})
 
     if (( ${#containers[@]} > 0 )); then
@@ -2490,7 +2502,54 @@ cmd_doctor() {
         echo
     fi
 
+    # Dependency version floors (SA1, 2026-08-21 security audit): a binary below a floor is a
+    # NAMED failure here instead of silent CVE exposure. Floors exist only where a specific
+    # advisory sets one — gh >= 2.97.0 closes CVE-2026-64652 (gh auth status leaks partial
+    # fine-grained PATs below it). Add a jq floor when a fixed release ships for
+    # CVE-2026-41256/39956; no fixed version exists as of 2026-08-22.
+    printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "VERSION" "HAVE" "FLOOR" "" "STATUS"
+    printf '%0.s─' {1..70}; echo
+    local -a version_floors=("gh|2.97.0|CVE-2026-64652: gh auth status leaks partial tokens below 2.97.0 — brew upgrade gh")
+    local floor_line v_bin v_floor v_why v_have
+    for floor_line in "${version_floors[@]}"; do
+        v_bin="${floor_line%%|*}"
+        local v_rest="${floor_line#*|}"
+        v_floor="${v_rest%%|*}"
+        v_why="${v_rest#*|}"
+        v_have=$(_borg_binary_version "$v_bin")
+        local v_status="OK" v_color="$GREEN" v_hint=""
+        if [[ -z "$v_have" ]]; then
+            v_status="WARN"; v_color="$YELLOW"; v_have="absent"
+            v_hint="$v_bin not found — floor not checkable on this machine"
+        elif ! _borg_version_ge "$v_have" "$v_floor"; then
+            v_status="FAIL"; v_color="$RED"; overall_exit=1
+            v_hint="$v_why"
+        fi
+        printf " %-14s %-10s %-8s %-10s ${v_color}%s${NC}\n" "$v_bin" "$v_have" "$v_floor" "" "$v_status"
+        [[ -n "$v_hint" ]] && echo -e "   ${DIM}→ $v_hint${NC}"
+    done
+    echo
+
     return $overall_exit
+}
+
+# First X.Y.Z-looking token of `<bin> --version`, or empty when the binary is absent.
+_borg_binary_version() {
+    local out
+    out=$(command "$1" --version 2>/dev/null | head -1) || return 0
+    echo "$out" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1
+}
+
+# Dotted-version compare: succeeds when $1 >= $2. Pure zsh, no sort -V dependency.
+_borg_version_ge() {
+    local -a have=(${(s:.:)1}) floor=(${(s:.:)2})
+    local i
+    for i in 1 2 3; do
+        local h="${have[$i]:-0}" f="${floor[$i]:-0}"
+        (( h > f )) && return 0
+        (( h < f )) && return 1
+    done
+    return 0
 }
 
 # ── program manifests (PM6) ────────────────────────────────────────────────────

@@ -330,17 +330,75 @@ is_segment_ro() {
                 case "$stash_sub" in list|show|""|-*) return 0 ;; esac
                 return 1 ;;
         esac
-        # User policy: all git commands allowed. Blanket approve any git we didn't
-        # already classify RO — Layer 1 handles the force-push-to-main exception.
-        return 0
+        # SA2 (2026-08-21 security audit): the old blanket approve made `git push --force`
+        # to a non-main branch prompt-free. Unclassified git subcommands (commit, push,
+        # rebase, merge, reset, ...) now fall through to the normal permission flow — they
+        # are NOT blocked, they just prompt like any other command. Layer 1 still
+        # hard-blocks force-push-to-main regardless.
+        return 1
     fi
 
-    # User policy: all docker/podman and all gh commands allowed.
+    # docker/podman: RO subcommands only. The old blanket approve made `docker rm -f` and
+    # `podman system prune` prompt-free (SA2). Parse past `=`-form global flags; a bare
+    # arg-taking global flag (-H host, --context x) lands on the flag's VALUE as "sub",
+    # which matches no case below and safely falls through.
     if [[ "$bin" == "docker" || "$bin" == "podman" || "$bin" == "docker-compose" ]]; then
-        return 0
+        local d_sub d_sub2
+        read -r d_sub d_sub2 _ <<< "$(echo "$rest" | awk '{
+            i=1
+            while (i <= NF && $i ~ /^-/) i++
+            printf "%s %s", $i, $(i+1)
+        }')"
+        [[ "$bin" == "docker-compose" ]] && { d_sub2="$d_sub"; d_sub="compose"; }
+        case "$d_sub" in
+            ps|images|logs|version|info|stats|top|port|history|events|search) return 0 ;;
+            inspect|diff|wait) return 0 ;;
+            compose)
+                case "$d_sub2" in ps|logs|config|version|ls|top|events|images) return 0 ;; esac
+                return 1 ;;
+            volume|network|image|container|system|context)
+                case "$d_sub2" in ls|list|inspect|df|show|logs|ps) return 0 ;; esac
+                return 1 ;;
+        esac
+        return 1
     fi
+
+    # gh: RO subcommands only. The old blanket approve made `gh repo delete` and
+    # `gh pr merge --admin` prompt-free (SA2). `gh api` is GET by default but any
+    # method/field/input flag turns it into a write, so those fall through.
     if [[ "$bin" == "gh" ]]; then
-        return 0
+        local gh_sub gh_sub2
+        read -r gh_sub gh_sub2 _ <<< "$rest"
+        case "$gh_sub" in
+            search) return 0 ;;
+            status) return 0 ;;
+            api)
+                echo " $rest " | grep -qE '[[:space:]](-X|--method|-f|-F|--field|--raw-field|--input)([[:space:]=]|$)' && return 1
+                return 0 ;;
+            pr)
+                case "$gh_sub2" in view|list|diff|checks|status) return 0 ;; esac
+                return 1 ;;
+            issue)
+                case "$gh_sub2" in view|list|status) return 0 ;; esac
+                return 1 ;;
+            run)
+                case "$gh_sub2" in view|list|watch) return 0 ;; esac
+                return 1 ;;
+            repo|release|workflow|gist|cache)
+                case "$gh_sub2" in view|list) return 0 ;; esac
+                return 1 ;;
+            label|variable|secret|ruleset)
+                case "$gh_sub2" in list) return 0 ;; esac
+                return 1 ;;
+            auth)
+                case "$gh_sub2" in status) return 0 ;; esac
+                return 1 ;;
+            stack)
+                case "$gh_sub2" in view) return 0 ;; esac
+                return 1 ;;
+            browse|version|help) return 0 ;;
+        esac
+        return 1
     fi
 
     # npm/pnpm/yarn RO subcommands
