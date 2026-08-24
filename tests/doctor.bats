@@ -18,6 +18,16 @@ setup() {
     # honors BORG_PATH_PREFIX for prepending — plain PATH exports from the test are discarded.
     export BORG_PATH_PREFIX="$MOCK_BIN"
 
+    # SA1 hermeticity: every test gets a floor-passing gh mock so the new VERSION section never
+    # reads the HOST gh — on any machine with gh < 2.97.0 the floor FAILs doctor (exit 1) and
+    # breaks unrelated tests (agents-section tests 124/127/128 did exactly that on a 2.96.0 host,
+    # green in CI only because the runner is newer). SA1 tests overwrite this mock per-case.
+    cat > "$MOCK_BIN/gh" <<GHMOCK
+#!/usr/bin/env bash
+echo "gh version 2.97.0 (2026-01-01)"
+GHMOCK
+    chmod +x "$MOCK_BIN/gh"
+
     export XDG_STATE_HOME="${BATS_TEST_TMPDIR}/state"
     export XDG_DATA_HOME="${BATS_TEST_TMPDIR}/data"
     mkdir -p "$XDG_STATE_HOME/borg" "$XDG_DATA_HOME/borg"
@@ -266,4 +276,71 @@ EOF
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
     [[ "$output" == *"claude-cli"*"3"*"WARN"* ]] || false
+}
+
+# ─── SA1: dependency version floors ────────────────────────────────────────────
+
+@test "SA1: gh at or above the floor -> VERSION row OK, exit 0" {
+    cat > "$MOCK_BIN/docker" <<'MOCK2'
+#!/usr/bin/env bash
+exit 0
+MOCK2
+    chmod +x "$MOCK_BIN/docker"
+    cat > "$MOCK_BIN/claude" <<'MOCK2'
+#!/usr/bin/env bash
+echo ok
+MOCK2
+    chmod +x "$MOCK_BIN/claude"
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+echo "gh version 2.97.0 (2026-01-01)"
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"gh"*"2.97.0"*"OK"* ]] || false
+}
+
+@test "SA1: gh below the floor -> VERSION row FAIL, exit 1, CVE named" {
+    cat > "$MOCK_BIN/docker" <<'MOCK2'
+#!/usr/bin/env bash
+exit 0
+MOCK2
+    chmod +x "$MOCK_BIN/docker"
+    cat > "$MOCK_BIN/claude" <<'MOCK2'
+#!/usr/bin/env bash
+echo ok
+MOCK2
+    chmod +x "$MOCK_BIN/claude"
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+echo "gh version 2.96.0 (2026-07-02)"
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"gh"*"2.96.0"*"FAIL"* ]] || false
+    [[ "$output" == *"CVE-2026-64652"* ]] || false
+}
+
+@test "SA1: gh absent -> VERSION row WARN, not FAIL" {
+    cat > "$MOCK_BIN/docker" <<'MOCK2'
+#!/usr/bin/env bash
+exit 0
+MOCK2
+    chmod +x "$MOCK_BIN/docker"
+    cat > "$MOCK_BIN/claude" <<'MOCK2'
+#!/usr/bin/env bash
+echo ok
+MOCK2
+    chmod +x "$MOCK_BIN/claude"
+    rm -f "$MOCK_BIN/gh"
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+exit 127
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"absent"*"WARN"* ]] || false
 }
