@@ -1951,20 +1951,30 @@ cmd_store_secret() {
         die "empty secret — aborting"
     fi
 
-    if ! security add-generic-password -s "$name" -a "$USER" -w "$_BORG_SECRET" -U; then
+    # SA5: never place the secret on argv (visible to `ps` for the write's duration).
+    # `security -w` with no value reads it interactively; feeding via stdin keeps it off
+    # the process table entirely.
+    if ! printf '%s\n%s\n' "$_BORG_SECRET" "$_BORG_SECRET" | \
+            security add-generic-password -s "$name" -a "$USER" -U -w 2>/dev/null; then
         unset _BORG_SECRET
         die "keychain write failed"
     fi
-    unset _BORG_SECRET
     info "stored $name in keychain"
 
     # ── 2. Verify ────────────────────────────────────────────────────────────
+    # SA5: reveal no secret bytes — the old path echoed a 10-char prefix, which lands in any
+    # scrollback/capture log. Length + name confirm the round-trip just as well.
     local _BORG_VERIFY
     if ! _BORG_VERIFY=$(security find-generic-password -s "$name" -a "$USER" -w 2>/dev/null); then
+        unset _BORG_SECRET
         die "verification failed — could not read back from keychain"
     fi
-    echo "  ${_BORG_VERIFY:0:10}..."
-    unset _BORG_VERIFY
+    if [[ "$_BORG_VERIFY" != "$_BORG_SECRET" ]]; then
+        unset _BORG_SECRET _BORG_VERIFY
+        die "verification failed — keychain returned a different value"
+    fi
+    echo "  verified: $name (${#_BORG_VERIFY} chars) round-trips from the keychain"
+    unset _BORG_SECRET _BORG_VERIFY
 
     # ── 3. Patch secrets.zsh ─────────────────────────────────────────────────
     _borg_patch_secrets_file "$name" "$secrets_file" \
@@ -2447,7 +2457,9 @@ cmd_doctor() {
     # columns: REG is whether we could reach the container's clock at all, EXIT carries the skew
     # in seconds (repurposed — there is no process exit code here), FRESH is n/a.
     local -a containers
-    containers=(${(f)"$(docker ps --filter 'label=dev.role=app' --format '{{.Names}}' 2>/dev/null)"})
+    # `|| true` because a machine with no docker binary must not kill doctor under set -e —
+    # the whole point of a health check is to keep reporting on the machines that are missing things.
+    containers=(${(f)"$(docker ps --filter 'label=dev.role=app' --format '{{.Names}}' 2>/dev/null || true)"})
     containers=(${containers:#})
 
     if (( ${#containers[@]} > 0 )); then
@@ -2490,7 +2502,100 @@ cmd_doctor() {
         echo
     fi
 
+    # Dependency version floors (SA1, 2026-08-21 security audit): a binary below a floor is a
+    # NAMED failure here instead of silent CVE exposure. Floors exist only where a specific
+    # advisory sets one — gh >= 2.97.0 closes CVE-2026-64652 (gh auth status leaks partial
+    # fine-grained PATs below it). Add a jq floor when a fixed release ships for
+    # CVE-2026-41256/39956; no fixed version exists as of 2026-08-22.
+    printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "VERSION" "HAVE" "FLOOR" "" "STATUS"
+    printf '%0.s─' {1..70}; echo
+    local -a version_floors=("gh|2.97.0|CVE-2026-64652: gh auth status leaks partial tokens below 2.97.0 — brew upgrade gh")
+    local floor_line v_bin v_floor v_why v_have
+    for floor_line in "${version_floors[@]}"; do
+        v_bin="${floor_line%%|*}"
+        local v_rest="${floor_line#*|}"
+        v_floor="${v_rest%%|*}"
+        v_why="${v_rest#*|}"
+        v_have=$(_borg_binary_version "$v_bin")
+        local v_status="OK" v_color="$GREEN" v_hint=""
+        if [[ -z "$v_have" ]]; then
+            v_status="WARN"; v_color="$YELLOW"; v_have="absent"
+            v_hint="$v_bin not found — floor not checkable on this machine"
+        elif ! _borg_version_ge "$v_have" "$v_floor"; then
+            v_status="FAIL"; v_color="$RED"; overall_exit=1
+            v_hint="$v_why"
+        fi
+        printf " %-14s %-10s %-8s %-10s ${v_color}%s${NC}\n" "$v_bin" "$v_have" "$v_floor" "" "$v_status"
+        [[ -n "$v_hint" ]] && echo -e "   ${DIM}→ $v_hint${NC}"
+    done
+    echo
+
     return $overall_exit
+}
+
+# First X.Y.Z-looking token of `<bin> --version`, or empty when the binary is absent.
+_borg_binary_version() {
+    local out
+    out=$(command "$1" --version 2>/dev/null | head -1) || return 0
+    echo "$out" | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1
+}
+
+# Dotted-version compare: succeeds when $1 >= $2. Pure zsh, no sort -V dependency.
+_borg_version_ge() {
+    local -a have=(${(s:.:)1}) floor=(${(s:.:)2})
+    local i
+    for i in 1 2 3; do
+        local h="${have[$i]:-0}" f="${floor[$i]:-0}"
+        (( h > f )) && return 0
+        (( h < f )) && return 1
+    done
+    return 0
+}
+
+# ── program manifests (PM6) ────────────────────────────────────────────────────
+# borg program list|plan|sync — the sync coordinator over <project>/.borg/programs/*.json.
+# The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
+# testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered project
+# path becomes a --programs-dir, so `borg program list` sweeps the whole collective. Explicit
+# --programs-dir args are passed through untouched and suppress the registry sweep.
+cmd_program() {
+    local action="${1:-list}"
+    case "$action" in
+        list|plan|sync) ;;
+        *) die "usage: borg program list|plan|sync [--programs-dir <path>]... ; plan also takes --recon <file>" ;;
+    esac
+    # Guarded: zsh hard-errors a bare `shift` at $#==0 (unlike bash), and set -e makes that fatal —
+    # which would kill the argless `borg program` the :-list default exists for.
+    (( $# )) && shift
+
+    typeset -a _prog_args
+    local _explicit_dirs=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --programs-dir)
+                [[ -n "${2:-}" ]] || die "borg program: --programs-dir needs a path"
+                _prog_args+=(--programs-dir "$2"); _explicit_dirs=1; shift 2 ;;
+            --recon)
+                # argparse registers --recon on the plan subparser only; failing here beats
+                # advertising a flag downstream then rejects.
+                [[ "$action" == "plan" ]] || die "borg program: --recon is only valid with 'plan'"
+                [[ -n "${2:-}" ]] || die "borg program: --recon needs a file (or -)"
+                _prog_args+=(--recon "$2"); shift 2 ;;
+            *)              die "unknown flag '$1' for borg program" ;;
+        esac
+    done
+
+    if (( ! _explicit_dirs )); then
+        [[ -f "$BORG_REGISTRY" ]] || die "no registry at $BORG_REGISTRY — run 'borg add <path>' first"
+        local _proj_path
+        while IFS= read -r _proj_path; do
+            [[ -n "$_proj_path" ]] && _prog_args+=(--programs-dir "$_proj_path")
+        done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY")
+        (( ${#_prog_args[@]} )) || die "registry has no project paths — run 'borg add <path>' first"
+    fi
+
+    PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
+        python3 "$BORG_HOME/merge-tree/coordinator.py" "$action" "${_prog_args[@]}"
 }
 
 cmd_version() {
@@ -2537,6 +2642,12 @@ cmd_help() {
                           --sources s,t  Limit to a subset of discovered adapters
                           --json         Emit the reconciled JSON (what /borg-recon consumes)
                           --adapters     List discovered source adapters and exit
+    program <action>    Program-manifest coordinator over <project>/.borg/programs/*.json
+                          list           Every declared program across registered projects
+                          plan           Read-only three-way drift audit (borg / target / recon)
+                          sync           Rewrite via borg's writer + dispatch to a sync target
+                          --programs-dir <path>  Explicit roots (suppresses the registry sweep)
+                          --recon <file> (plan only) recon/gather JSON for the reality check
     scan                Discover projects from session history
     add [path]          Register a project (defaults to $PWD)
     rm <project>        Unregister a project
@@ -3030,6 +3141,7 @@ case "${1:-help}" in
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
     doctor)         cmd_doctor "${@:2}" ;;
+    program)        cmd_program "${@:2}" ;;
     vinculum|vinc)  cmd_vinculum "${@:2}" ;;
     version|--version|-V) cmd_version ;;
     help|--help|-h) cmd_help ;;

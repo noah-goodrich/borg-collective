@@ -1,0 +1,18 @@
+{
+  "program": "auth-hardening",
+  "apex": {"ref": "acme/platform#900", "label": "auth hardening program"},
+  "note": "Synthetic fixture. Exercises the case branch topology cannot reach: one lane whose declared merge order spans three repos.",
+  "rows": [
+    {"order": "–", "ref": "acme/platform#801", "lane": "ingest", "ticket": "", "status": "merged"},
+    {"order": "I1", "ref": "acme/platform#834", "lane": "ingest", "ticket": "OPS-11", "status": "stacked",
+     "gate": {"blocked_by": "waiting on a colleague's review", "kind": "decision",
+              "resolved_by": "review lands on acme/platform#834"}},
+    {"order": "I2", "ref": "acme/warehouse#302", "lane": "ingest", "ticket": "OPS-12", "status": "review"},
+    {"order": "I3", "ref": "acme/pipelines#301", "lane": "ingest", "ticket": "OPS-12", "status": "stacked",
+     "next": true, "why": "unblocks the rest of the lane once #302 merges"},
+    {"order": "K1", "ref": "acme/warehouse#292", "lane": "keypair", "ticket": "OPS-20", "status": "review"},
+    {"order": "K2", "ref": "acme/warehouse#293", "lane": "keypair", "ticket": "OPS-20", "status": "stacked",
+     "gate": {"blocked_by": "needs a load test against staging", "kind": "verification",
+              "resolved_by": "staging load-test run", "outcomes": ["passes -> merge", "fails -> rework #292"]}}
+  ]
+}

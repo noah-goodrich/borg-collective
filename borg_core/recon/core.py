@@ -7,7 +7,9 @@ in shell.py, which calls into this module for the actual logic.
 
 Mirrors lib/recon.sh's Recon Contract v0:
   Item = {project, source, ref, title, state, changed, owner, action_needed, urgency, one_line}
-  Track = {source, summary, items, ok, dropped}
+  Track = {source, summary, items, ok, dropped, deduped}
+(`deduped` counts this track's items dropped as cross-source duplicates of a ref another track
+reported more recently — set by dedup_cross_source, surfaced in the sources summary and digest.)
 """
 
 from __future__ import annotations
@@ -149,6 +151,102 @@ def process_adapter_output(source: str, raw: str | None, rc: int) -> dict:
         return build_postprocess_failed_track(source)
 
 
+def _changed_ts(item: dict) -> str:
+    """The item's recency key: first ISO timestamp in the prose `changed` field, UTC-normalized.
+
+    Offset-aware — `2026-08-21T17:30:00-07:00` IS newer than `2026-08-21T23:00:00Z`; an item with no
+    parseable timestamp sorts oldest. Mechanics live in `timefmt.iso_in_prose_to_utc` (Domain modules
+    are Demeter-strict; datetime handling is timefmt's charter).
+    """
+    return timefmt.iso_in_prose_to_utc(str(item.get("changed") or ""))
+
+
+def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Drop cross-source duplicates of the same ref before the project merge.
+
+    Two sources reporting the same ref are the same artifact reported twice — both flowing through
+    inflates every downstream count (measured 2026-08-21: one PR rendered twice inside a single
+    spine workstream the day a second adapter existed). Identity here is the IDENTICAL ref string
+    only; linking a Jira `PROJ-123` to the `org/repo#45` it tracks is entity resolution and stays
+    out of scope.
+
+    The newest `changed` wins. `changed` is PROSE by contract (the github adapter emits
+    "updated <ISO>; state=..."), so the comparison extracts the first ISO-8601 timestamp from the
+    string — comparing the raw prose lexically would make the winner depend on each source's phrasing
+    prefix, not on time. Extracted timestamps compare lexically (ISO sorts); an item with no
+    timestamp in `changed` compares as oldest. Ties keep the first track's item, and track order is
+    adapter discovery order, so the outcome is deterministic. Each track records how many of its
+    items lost as `deduped`. When the winner and a loser disagree on `state` — or on which
+    `project` owns the ref, which silently empties the loser's project bucket — that is a real
+    contradiction between sources, emitted for the human and never resolved silently, same policy
+    as the checkpoint-vs-source detector.
+
+    Returns `(tracks, contradictions)` with each track's `items` filtered and `deduped` set.
+    """
+    winners: dict[str, dict] = {}
+    for track in tracks:
+        for item in track.get("items", []):
+            ref = item.get("ref")
+            if not ref:
+                continue
+            best = winners.get(ref)
+            if best is None or _changed_ts(item) > _changed_ts(best):
+                winners[ref] = item
+
+    contradictions: list[dict] = []
+    deduped_tracks: list[dict] = []
+    for track in tracks:
+        kept: list[dict] = []
+        lost = 0
+        for item in track.get("items", []):
+            ref = item.get("ref")
+            winner = winners.get(ref) if ref else None
+            if winner is None or winner is item:
+                kept.append(item)
+                continue
+            lost += 1
+            if item.get("state") != winner.get("state"):
+                # The digest renders project/ref/note; the *_says keys carry the detail for the
+                # /borg-recon synthesis, named for what they are (this is source-vs-source, not the
+                # checkpoint-vs-source shape project_contradictions emits).
+                contradictions.append(
+                    {
+                        "project": winner.get("project"),
+                        "ref": ref,
+                        "kept_says": f"{winner.get('source')} reports state {winner.get('state')!r} (newer)",
+                        "dropped_says": f"{item.get('source')} reports state {item.get('state')!r}",
+                        "note": (
+                            "two sources disagree on this item's state — the newer report "
+                            "was kept, confirm which is right"
+                        ),
+                    }
+                )
+            if item.get("project") != winner.get("project"):
+                # A project divergence is worse than a state one: the loser's copy vanishes from its
+                # project's bucket entirely, so `--projects <loser's>` filters and per-project digests
+                # silently lose the item. Surfaced, never resolved — the sources disagree about which
+                # project owns this ref, and only a human knows.
+                contradictions.append(
+                    {
+                        "project": winner.get("project"),
+                        "ref": ref,
+                        "kept_says": (
+                            f"{winner.get('source')} files this under project {winner.get('project')!r} (newer)"
+                        ),
+                        "dropped_says": f"{item.get('source')} files this under project {item.get('project')!r}",
+                        "note": (
+                            "two sources file this item under different projects — it now appears "
+                            "only under the kept project; confirm which is right"
+                        ),
+                    }
+                )
+        result = dict(track)
+        result["items"] = kept
+        result["deduped"] = lost
+        deduped_tracks.append(result)
+    return deduped_tracks, contradictions
+
+
 def merge_by_project(tracks: list[dict]) -> dict[str, list[dict]]:
     """Merge all track item arrays into a flat item list grouped by project.
 
@@ -229,6 +327,7 @@ def build_sources_summary(tracks: list[dict]) -> list[dict]:
             "ok": track.get("ok", True),
             "count": len(track.get("items", [])),
             "dropped": track.get("dropped", 0),
+            "deduped": track.get("deduped", 0),
         }
         for track in tracks
     ]
@@ -269,6 +368,9 @@ def _render_sources_section(sources: list[dict]) -> list[str]:
         dropped = src.get("dropped") or 0
         if dropped > 0:
             line += f"  (dropped {dropped} malformed)"
+        deduped = src.get("deduped") or 0
+        if deduped > 0:
+            line += f"  (deduped {deduped} cross-source)"
         lines.append(line)
     lines.append("")
     return lines
