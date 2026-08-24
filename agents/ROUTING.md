@@ -3,7 +3,7 @@
 **Principle: the expensive tier is opt-IN. Route to the cheapest tier that fits.**
 
 Every unspecified subagent inherits the **main session model**. On this machine the session default is
-**Opus 4.8** (`settings.json` → `model`). An unspecified subagent therefore inherits Opus 4.8, not a
+**Opus 5** (`opus[1m]`, `settings.json` → `model`). An unspecified subagent therefore inherits Opus 5, not a
 cheap tier — still pricier than pinning Haiku or Sonnet for mechanical or judgment-tier work. Use this
 matrix to pick the right tier before spawning rather than letting a stage silently inherit the default.
 
@@ -13,7 +13,7 @@ matrix to pick the right tier before spawning rather than letting a stage silent
 - the **`Workflow` tool** (`agent()` inside a workflow script — this path has NO default specialist and
   **inherits the session model unless you pass `model:`**). See "Model routing inside Workflow scripts"
   below. The workflow path is the one where an unpinned fan-out quietly runs the full session model
-  (Opus 4.8) at scale instead of a cheaper pinned tier.
+  (Opus 5) at scale instead of a cheaper pinned tier.
 
 ---
 
@@ -50,7 +50,7 @@ Is the task fully specified (no judgment calls)?
                     ├── YES → borg-reviewer (Sonnet/high)
                     └── NO  → is it a single-task with judgment?
                               ├── YES → borg-nanoprobe (Sonnet)
-                              └── NO  → claude/general-purpose (Opus 4.8 — LAST RESORT, also the
+                              └── NO  → claude/general-purpose (Opus 5 — LAST RESORT, also the
                                         inherited session default)
 ```
 
@@ -62,7 +62,7 @@ Is the task fully specified (no judgment calls)?
 |------------------|-------|--------|------------|---------------------------------------------------|
 | Haiku 4.5        | $1    | $5     | $0.10      | Mechanical / read-only tier.                      |
 | Sonnet 4.6       | $3    | $15    | $0.30      | Judgment / analysis / review tier.                |
-| **Opus 4.6+ (4.8)** | $5 | $25    | $0.50      | **Current session default** — the intended orchestrator tier, and what any unspecified subagent inherits. |
+| **Opus 4.6+ / 5** | $5 | $25    | $0.50      | **Current session default (Opus 5, 1M ctx)** — the intended orchestrator tier, and what any unspecified subagent inherits. |
 | Fable 5          | $10   | $50    | $1.00      | Most expensive; opt-in only, never the inherited default. |
 
 Two things matter here: **Opus dropped ~3x** at the 4.6 generation ($15/$75 → $5/$25), which is why it is
