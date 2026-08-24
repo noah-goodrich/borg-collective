@@ -10,7 +10,14 @@ description: >
 
 # Link Up — Session Checkpoint
 
-Flush the session state into a structured checkpoint. Use exactly these five sections:
+Flush the session state into a structured checkpoint.
+
+**Before section 1, the checkpoint MUST open with a tl;dr**: two lines, plain words — what the session
+was about and what happens next — because checkpoints are re-read at every SessionStart and shown
+head-first in `borg link`; the first lines a reader sees must be the point, not a section header.
+Use FULL `owner/repo#num` refs everywhere (self-addressing; the gp keymap opens them).
+
+Then use exactly these five sections:
 
 ## 1. Goal
 What was the original objective of this session? One sentence.

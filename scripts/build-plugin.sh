@@ -289,13 +289,20 @@ _info "Phase 3: Agents"
 AGENTS_SRC="$REPO_ROOT/agents"
 AGENTS_DST="$PLUGIN_DIR/agents"
 
-if [[ ! -f "$AGENTS_SRC/borg-nanoprobe.md" ]]; then
-    _warn "agents/borg-nanoprobe.md not found — skipping agents"
+if [[ ! -d "$AGENTS_SRC" ]]; then
+    _warn "agents/ not found — skipping agents"
 else
     if [[ "$DRY_RUN" -eq 0 ]]; then
         mkdir -p "$AGENTS_DST"
     fi
-    _copy_if_changed "$AGENTS_SRC/borg-nanoprobe.md" "$AGENTS_DST/borg-nanoprobe.md" "agents/borg-nanoprobe.md"
+    # ALL agent files, not a hardcoded one. The single-file version let ROUTING.md (and every roster
+    # agent) rot in the mirror for 4 weeks while borg-nanoprobe.md stayed fresh — the 2026-08-23
+    # install audit's Gap 1. The mirror copy is what borg-collective:ROUTING actually serves.
+    for _agent_file in "$AGENTS_SRC"/*.md; do
+        [[ -f "$_agent_file" ]] || continue
+        _agent_name="${_agent_file##*/}"
+        _copy_if_changed "$_agent_file" "$AGENTS_DST/$_agent_name" "agents/$_agent_name"
+    done
 fi
 
 # ── Phase 4: Regenerate hooks.json ───────────────────────────────────────────
