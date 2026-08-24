@@ -1725,57 +1725,37 @@ CONF
         info "Cortex Code CLI not found — skipping CoCo integration"
     fi
 
-    # ── 4. Install skills ─────────────────────────────────────────────────────
-    info "Installing skills..."
+    # ── 4. Skills + agents ship via the PLUGIN, not copies ────────────────────
+    # Per the ratified 80/20 split (docs/plans/assimilated/
+    # 2026-06-08-mechanism-layer-extraction-plugin-80-20-split.md, PR #41): the
+    # distributable plugin is the deployment vehicle for skills and agents; the
+    # ~/.claude copy loops that used to live here were the pre-plugin legacy path
+    # and produced double-loading (2026-08-23 install audit, Gap 3). The build in
+    # step 4a-ii below is the single-source mechanism. Cortex Code has no plugin
+    # system, so CoCo skills still install from $BORG_HOME/skills via `cortex
+    # skill add` (step 3) — that path is unaffected.
+    info "Skills + agents ship via the borg-collective plugin (built in step 4a-ii)"
 
-    # Migration (v0.8.6+): stamp .borg-managed into any existing skill dir whose name
-    # matches a current borg skill. This is a one-time migration so that skills installed
-    # before the ownership-marker convention are not incorrectly treated as unowned and
-    # removed on the first run of the stricter cleanup below.
+    # One-time migration sweep: remove the orphaned legacy copies so they stop
+    # double-loading alongside the plugin registrations. Skills: only dirs bearing
+    # the .borg-managed ownership marker — hand-authored neighbours (e.g. ducky/)
+    # are untouched. Agents: only files whose name matches a source-repo agent.
+    # Idempotent and safe to keep: on a machine that never ran the legacy loops,
+    # both sweeps match nothing.
     for existing in "$CLAUDE_SKILLS_DIR/"*/(N); do
-        [[ -d "$existing" ]] || continue
-        local _mname="${existing:t}"
-        if [[ -d "$BORG_HOME/skills/$_mname" && ! -f "$existing/.borg-managed" ]]; then
-            touch "$existing/.borg-managed"
-        fi
+        [[ -d "$existing" && -f "$existing/.borg-managed" ]] || continue
+        rm -rf "$existing"
+        info "  Removed legacy skill copy: ${existing:t} (now plugin-provided)"
     done
-
-    # Clean up stale skills (removed from source).
-    # Only removes dirs bearing the .borg-managed ownership marker — NEVER touches
-    # skills that borg did not install (e.g. hand-authored personal skills, plugin
-    # skills from other sources). Fixes: github.com/noah-goodrich/borg-collective/issues/64
-    for existing in "$CLAUDE_SKILLS_DIR/"*/(N); do
-        [[ -d "$existing" ]] || continue
-        [[ -f "$existing/.borg-managed" ]] || continue
-        local ename="${existing:t}"
-        [[ ! -d "$BORG_HOME/skills/$ename" ]] && rm -rf "$existing" && info "  Removed stale skill: $ename"
-    done
-
-    for skill_dir in "$BORG_HOME/skills/"*/(N); do
-        [[ -d "$skill_dir" ]] || continue
-        local name="${skill_dir:t}"
-        local target="$CLAUDE_SKILLS_DIR/$name"
-
-        # Copy (not symlink) so skills work inside devcontainers
-        rm -rf "$target"
-        cp -R "$skill_dir" "$target"
-        touch "$target/.borg-managed"
-        info "  $name"
-    done
-
-    # ── 4a. Install agents ───────────────────────────────────────────────────
-    # Subagent definitions live at ~/.claude/agents/ and are read by both Claude
-    # Code and Cortex Code. Copy (don't symlink) so devcontainers can resolve them
-    # via the bind-mounted ~/.claude.
     local CLAUDE_AGENTS_DIR="$CLAUDE_DIR/agents"
-    if [[ -d "$BORG_HOME/agents" ]]; then
-        info "Installing agents..."
-        mkdir -p "$CLAUDE_AGENTS_DIR"
+    if [[ -d "$CLAUDE_AGENTS_DIR" && -d "$BORG_HOME/agents" ]]; then
         for agent_file in "$BORG_HOME/agents/"*.md(N); do
             [[ -f "$agent_file" ]] || continue
             local aname="${agent_file:t}"
-            cp -f "$agent_file" "$CLAUDE_AGENTS_DIR/$aname"
-            info "  $aname"
+            if [[ -f "$CLAUDE_AGENTS_DIR/$aname" ]]; then
+                rm -f "$CLAUDE_AGENTS_DIR/$aname"
+                info "  Removed legacy agent copy: $aname (now plugin-provided)"
+            fi
         done
     fi
 
