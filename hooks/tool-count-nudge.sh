@@ -8,7 +8,11 @@ set -euo pipefail
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 SID=$(printf '%s' "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null || echo "unknown")
 
-COUNTER_FILE="/tmp/borg-tool-count-${SID}"
+# User-owned cache dir, not /tmp (SA4): a predictable path in world-writable /tmp is
+# symlink-plantable by any local user. Low stakes, but hygiene is free here.
+COUNTER_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/borg"
+mkdir -p "$COUNTER_DIR" 2>/dev/null || exit 0
+COUNTER_FILE="$COUNTER_DIR/tool-count-${SID}"
 COUNT=0
 [[ -f "$COUNTER_FILE" ]] && COUNT=$(cat "$COUNTER_FILE")
 COUNT=$((COUNT + 1))

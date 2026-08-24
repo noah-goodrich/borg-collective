@@ -1,2 +1,4 @@
-fastapi>=0.110
-uvicorn>=0.29
+# Pinned exact (SA6, 2026-08-21 security audit): this is the repo's only third-party runtime
+# surface, and floating floors made the app build unreproducible. Bump deliberately.
+fastapi==0.141.1
+uvicorn==0.52.4
