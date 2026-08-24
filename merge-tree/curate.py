@@ -174,7 +174,13 @@ def curate(raw: dict[str, Any]) -> dict[str, Any]:
             continue
         if e["parent"] in ref_set or e["child"] in ref_set:
             seen.add(key)
-            clean_edges.append({"parent": e["parent"], "child": e["child"], "kind": e.get("kind", "stacked")})
+            edge = {"parent": e["parent"], "child": e["child"], "kind": e.get("kind", "stacked")}
+            # Provenance survives curation (opus review finding 3 / PM5): stripping `source` here
+            # meant it never reached data.json or the renderers, so a wrong edge was not falsifiable
+            # downstream — the exact property the field exists to provide.
+            if e.get("source"):
+                edge["source"] = e["source"]
+            clean_edges.append(edge)
 
     # Actions: keep only those addressed to a known item ref.
     actions = OrderedDict()
