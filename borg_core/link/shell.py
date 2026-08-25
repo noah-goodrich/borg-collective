@@ -12,6 +12,34 @@ checkpoint readers.
 PHASE 1 SCOPE: leaves and the chokepoint. There is no cli.py and no document builder -- the `--json`
 seam is Phase 2 and the render flip is Phase 3 (PROJECT_PLAN.md).
 
+WHY THIS IMPORTS borg_core.recon.shell AND borg_core.manifest.shell (S3, the sweep fold): `link` is
+now the CONSUMER of both engines, and those arrows point the right way -- `recon` retires as a
+human-facing verb in S4, so a second fan-out here would be a copy of an engine that is on its way
+out. `recon.shell.fanout` is imported whole rather than reimplemented: it already owns bounded
+concurrency, the per-adapter deadline and the degrade-to-a-failed-track policy, and
+borg_core/proc.py's module docstring is the standing ruling that the third copy of a
+run/capture/degrade shape does not get written. Neither module is the Domain layer and both imported
+names are public, so no layering rule is crossed.
+
+NOTHING IN THE SWEEP PATH IS EVER FATAL, extending the policy borg_core/manifest/shell.py's header
+states. A missing `gh`, an unauthenticated `gh`, an offline host, a rate limit, a failed adapter
+track, an empty adapter search path, a repository with no origin, a malformed manifest, a
+non-numeric `BORG_RECON_*` value -- every one of them is a NAMED warning on the grid and a degraded
+grid, never an exception and never a blank grid with no explanation. Every consumer of `borg link`
+swallows failure (`cmd_watch`'s `|| true`, `drone status`'s `|| true`, fzf's preview pane), so an
+exception here is an invisible blank frame, and a silent empty grid is worse than a loud degraded
+one.
+
+THE FIRST FOUR OF THOSE WERE NOT ACTUALLY TRUE WHEN THIS PARAGRAPH WAS FIRST WRITTEN, which is the
+reason for the two mechanisms that now make them true. An adapter that cannot reach its source exits
+0 with a valid empty track, so `ok` alone could never see it: the adapter contract gained an explicit
+`skipped: true` and grid.track_status turned two outcomes into three (see its docstring for the
+end-to-end reproduction with an unauthenticated `gh`). And `borg_core/recon/shell.py`'s
+`int(os.environ.get(...))` readers, newly on this path, were hardened to the same empty/non-numeric
+guard the readers in this module use -- an exported-empty `BORG_RECON_MAX_TRACKS` took the whole
+command down with zero bytes on stdout. A contract paragraph that the code does not keep is worse
+than no paragraph, because the next reader cites it.
+
 WHY THIS IMPORTS borg_core.registry.shell: `borg_registry_read` is not a pure read. It mkdir's
 $BORG_DIR and creates registry.json containing {"projects":{}} when absent (lib/registry.zsh:18-23,
 38-41), and registry.shell.read_registry already reproduces that side effect plus the corrupt-JSON
@@ -24,11 +52,14 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
 
 from borg_core import paths
-from borg_core.link import core
+from borg_core.link import core, grid
+from borg_core.manifest import shell as manifest_shell
+from borg_core.recon import shell as recon_shell
 from borg_core.registry import shell as registry_shell
 
 # Re-exported so this package has its own surface, with one definition in borg_core/paths.py.
@@ -389,6 +420,158 @@ def read_plan(project_path: str | None) -> dict | None:
     text = _read_text(plan)
     met, total = core.plan_progress(text)
     return {"objective": core.plan_objective(text), "met": met, "total": total}
+
+
+# Re-exported so cli.py has ONE I/O module to talk to. `discover_registered` derives the repository
+# paths from the registry itself and must keep doing so -- see its docstring for why accepting a path
+# list here would move the derivation into a caller that a test would then supply.
+discover_manifests = manifest_shell.discover_registered
+repository_slug = manifest_shell.repository_slug
+
+# Seconds one adapter gets before it is SIGKILLed, when `link` is the caller. recon's own default is
+# 30 -- correct for a morning link-up a human deliberately waits on, absurd for the front door AC1
+# budgets at 2.7s. 10 is chosen against measurement, not taste: the batched-GraphQL adapter sweeps
+# one repository in 0.69s and all 14 in 2.30s, so 10 is >4x the slowest observed real sweep and still
+# well inside the point where a user concludes the command is hung.
+DEFAULT_SWEEP_TIMEOUT_SECONDS = 10
+
+
+def sweep_timeout() -> float:
+    """BORG_LINK_SWEEP_TIMEOUT as a number of seconds, defaulting to DEFAULT_SWEEP_TIMEOUT_SECONDS.
+
+    Unset OR EMPTY OR non-numeric takes the default, and none of those three is defensive padding.
+    `_borg_py` passes its whole config surface through by name, and an unset variable arrives as the
+    EMPTY STRING; `int("")` raises ValueError, which is exactly why the hardened spec forbids adding
+    any `BORG_RECON_*` name to that wrapper (`max_tracks`/`track_timeout` use a bare
+    `int(os.environ.get(...))` and would take down the whole invocation). This variable is written to
+    survive the wrapper, so it may be added to it without repeating that bug.
+    """
+    raw = os.environ.get("BORG_LINK_SWEEP_TIMEOUT")
+    if not raw:
+        return DEFAULT_SWEEP_TIMEOUT_SECONDS
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_SWEEP_TIMEOUT_SECONDS
+
+
+def sweep_window_days() -> int:
+    """BORG_LINK_SWEEP_WINDOW_DAYS as an int, defaulting to grid.DEFAULT_SWEEP_WINDOW_DAYS.
+
+    Same three-way guard as sweep_timeout, for the same reason: unset OR EMPTY OR non-numeric takes
+    the default, because `_borg_py` passes its whole config surface through by name and an unset
+    variable arrives as the EMPTY STRING. See grid.DEFAULT_SWEEP_WINDOW_DAYS for why link resolves
+    its own mark instead of reusing recon's since-ladder.
+    """
+    raw = os.environ.get("BORG_LINK_SWEEP_WINDOW_DAYS")
+    if not raw:
+        return grid.DEFAULT_SWEEP_WINDOW_DAYS
+    try:
+        return int(raw)
+    except ValueError:
+        return grid.DEFAULT_SWEEP_WINDOW_DAYS
+
+
+def _read_sweep_fixture(path: str) -> dict:
+    """A recorded sweep read off disk in place of running one. The B7 seam; see `sweep`.
+
+    Shaped `{"since": str, "tracks": [<track>, ...]}` -- `tracks` being EXACTLY what
+    recon.shell.fanout returns, one object per adapter with `source`, `summary`, `items` and `ok`.
+    Recording the fan-out's OUTPUT rather than the finished grid is the whole point: everything
+    downstream of the subprocess -- state extraction, the resolve ladder, level assignment, the
+    per-source summary -- still runs on production code. A fixture of the finished grid would test
+    that JSON round-trips.
+
+    An unreadable or malformed fixture degrades to a not-swept grid with a NAMED warning rather than
+    raising: a test harness that mistypes the path must see why, not see an empty grid it mistakes
+    for a correct one.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            doc = json.load(handle)
+    except (OSError, ValueError) as exc:
+        return grid.no_sweep([f"sweep: fixture {path} unreadable or invalid JSON ({exc})"])
+    if not isinstance(doc, dict):
+        return grid.no_sweep([f"sweep: fixture {path} is not an object -- ignored"])
+    tracks = doc.get("tracks")
+    return {
+        "swept": True,
+        "since": str(doc.get("since") or ""),
+        "tracks": tracks if isinstance(tracks, list) else [],
+        "warnings": [f"sweep: replayed from fixture {path} -- no adapter ran"],
+    }
+
+
+def sweep(projects: dict, now: int | None = None) -> dict:
+    """Run the recon fan-out over `projects` and return `{swept, since, tracks, warnings}`.
+
+    `projects` is the registry's `.projects` object ALREADY NARROWED TO THE SCOPED BREADTH by the
+    caller: one entry in repository scope, all of them in orchestrator scope. That narrowing is what
+    makes AC1's two latency figures different numbers rather than one, and it is the caller's job
+    because only the caller knows the scope.
+
+    THE MARK IS `link`'s OWN, NOT recon's, and that is the one thing about this function that must
+    not be "simplified" back. `recon.shell.resolve_since` resolves "what changed since I last
+    looked" -- newest checkpoint mtime, then the last-run marker, then 24h -- and BOTH of its top two
+    rungs vary with which projects are in scope and with how recently someone checkpointed. Reusing
+    it made the same ref resolve to two contradictory confident states depending on whether you asked
+    from inside a repository or from the workspace root, and made the WIDEST breadth get the
+    NARROWEST freshness window. grid.DEFAULT_SWEEP_WINDOW_DAYS carries the measurement and the
+    argument. `now` threads cli._document's single shared epoch in; None reads the clock, for a
+    caller that has no document.
+
+    TWO ENVIRONMENT SEAMS, one shipped and one reserved. Both are read HERE, in the shell tier, and
+    nowhere else -- core.py is pure and pylint enforces it.
+
+      BORG_LINK_SWEEP_FIXTURE -- path to a recorded `{"since": str, "tracks": [...]}` document.
+          When set, this function reads it INSTEAD of fanning out: zero subprocesses, no adapter
+          discovery, no `since` resolution, no `recon/last-run` write. It exists because
+          `_assert_link_golden` byte-diffs `borg link`'s output with `2>&1`, and a sweep folded into
+          the document makes every golden a snapshot of whatever GitHub returned that minute --
+          non-reproducible on the second run, and `BORG_UPDATE_GOLDEN=1` would freeze one machine's
+          network state as the oracle (the hardened spec's B7).
+
+      BORG_LINK_FETCH_FIXTURE -- RESERVED for AC3's targeted fetch and deliberately unimplemented
+          here. AC3 resolves refs a manifest declares but the sweep window missed; its fixture must
+          mirror this one exactly: a path to a recorded JSON document, read in this module, short-
+          circuiting BEFORE any subprocess, degrading to a named warning on a bad path. Shipping an
+          unused reader for it now would be dead code carried on a 90% coverage floor. The name is
+          recorded here so AC3 mirrors the seam instead of inventing a second, differently-shaped one.
+
+    `swept` MEANS AN ADAPTER ACTUALLY RAN (or a fixture stood in for one), not merely "--local was
+    absent". Zero discovered adapters returns swept=False with a warning naming the empty search
+    path, because a grid whose every state came from the manifest must not claim to have looked.
+    `since` is "" whenever `swept` is False, so the pair can never say "swept as of <a mark nobody
+    used>".
+
+    IT NEVER CALLS recon.shell.write_last_run_marker, and that omission is load-bearing. That marker
+    is the third rung of recon's own since-ladder; a `borg link` that advanced it would silently move
+    `borg recon`'s mark forward on every render, and recon would start missing everything that
+    changed between link runs. It is also a cache artifact, which AC1 forbids outright ("no cache,
+    ever -- a clean read every time").
+    """
+    fixture = os.environ.get("BORG_LINK_SWEEP_FIXTURE")
+    if fixture:
+        return _read_sweep_fixture(fixture)
+
+    adapters = recon_shell.discover_adapters()
+    if not adapters:
+        return grid.no_sweep(
+            [
+                "sweep: no recon adapters found on "
+                f"{recon_shell.adapter_search_path()} -- every state falls back to what the manifest declares"
+            ]
+        )
+
+    since = grid.sweep_since(now_epoch() if now is None else now, sweep_window_days())
+    with tempfile.TemporaryDirectory(prefix="borg-link.") as workdir:
+        projects_file = os.path.join(workdir, "projects.json")
+        try:
+            recon_shell.write_projects_file(projects, projects_file)
+        except (OSError, TypeError, ValueError) as exc:
+            return grid.no_sweep([f"sweep: could not stage the project list ({exc}) -- no adapter ran"])
+        tracks = recon_shell.fanout(since, projects_file, adapters, timeout=sweep_timeout())
+    return {"swept": True, "since": since, "tracks": tracks, "warnings": grid.track_warnings(tracks)}
 
 
 def cortex_wakes_path() -> Path:

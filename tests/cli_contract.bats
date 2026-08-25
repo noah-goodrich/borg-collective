@@ -1409,6 +1409,20 @@ _link_mock_tmux() {
 }
 
 # Byte-compare a `borg link` invocation against tests/fixtures/link/<name>.golden.
+#
+# WHAT KEEPS THESE REPRODUCIBLE NOW THAT `link` SWEEPS (B7). Two things, and only two:
+#   1. setup_temp_dirs points BORG_RECON_ADAPTER_PATH at an empty directory, so zero adapters are
+#      discovered, no `since` is resolved and no subprocess runs. Without it these four goldens
+#      would byte-capture whatever GitHub returned that minute — and `BORG_UPDATE_GOLDEN=1` would
+#      freeze one machine's network state as the oracle.
+#   2. render.py does not print any part of `grid`. The sweep lands in the DOCUMENT only, so the
+#      human output these goldens capture is byte-identical to what it was pre-S3.
+#
+# THE MOMENT (2) STOPS BEING TRUE — AC2's renderer is the step that breaks it — this helper must
+# export BORG_LINK_SWEEP_FIXTURE unconditionally, INCLUDING on the BORG_UPDATE_GOLDEN path, pointing
+# at a recorded `{"since": ..., "tracks": [...]}` document. The seam exists and is exercised in
+# borg_core/link/test_grid.py; it is deliberately not wired here yet, because a fixture nothing reads
+# is a fixture nobody maintains.
 _assert_link_golden() {
     local name="$1"; shift
     local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
@@ -2331,7 +2345,14 @@ EOF
 # path was never once executed under test. These two cases execute it.
 
 @test "contract: recon resolves the registry with no BORG_REGISTRY in the environment" {
-    run zsh -c "unset BORG_REGISTRY BORG_DIR; '$BORG' recon --sources deliberately-no-such-source"
+    # BORG_RECON_ADAPTER_PATH is unset here for the same reason the two #113 cases above unset it,
+    # and it is load-bearing for THIS assertion specifically. setup_temp_dirs now points that
+    # variable at an empty directory (B7, so `borg link`'s sweep never shells to `gh`), and
+    # `_select_adapters` dies with "no recon adapters found" BEFORE it can ever reach the
+    # "no adapters matched" branch this test asserts on. Without the unset the test fails on a
+    # message that has nothing to do with registry resolution.
+    run zsh -c \
+        "unset BORG_REGISTRY BORG_DIR BORG_RECON_ADAPTER_PATH; '$BORG' recon --sources deliberately-no-such-source"
     [ "$status" -ne 0 ]
     # Dying at adapter selection instead of the registry check is the proof it got that far.
     [[ "$output" != *"no registry at"* ]] || false

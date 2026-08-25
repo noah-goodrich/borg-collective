@@ -215,9 +215,18 @@ Unwire in this order. Each step is independently revertible; do not batch them.
       calls, repoint at `.borg/knowledge/` + `.borg/checkpoints/` via grep.
 - [x] **Host shim:** the 355-line `~/.config/dotfiles/zsh/bin/cairn`, plus the repo copy at `~/dev/cairn/cli/cairn`.
       *(dotfiles shim + `zsh/bin/cairn-extract` deleted; the cairn-repo CLI is moot — repo archived)*
-- [x] **Rebuild the plugin** (`scripts/build-plugin.sh`) — note the dry-run currently shows **5 hooks** would
-      change, i.e. there is pre-existing unrelated drift to review before shipping. *(rebuilt; reviewed
+- [x] **Rebuild the plugin** (`scripts/build-plugin.sh`). ~~Note the dry-run currently shows **5 hooks** would
+      change, i.e. there is pre-existing unrelated drift to review before shipping.~~ *(rebuilt; reviewed
       separately from the unwire diff per the plan's own scope boundary)*
+
+      **CORRECTION (2026-08-25): there was no drift. That reading was a tool bug, and this line recorded the
+      bug as a finding.** `scripts/build-plugin.sh` gated its `_embedded_lib` inlining on `DRY_RUN -eq 0`, so
+      `--dry-run` composed a lib-*less* candidate and then diffed it against the lib-*full* file already on
+      disk. All 5 lib-inlining hooks therefore reported "would update" on *every* invocation, unconditionally
+      and regardless of their contents — the number 5 is the count of hooks that inline the lib, not a count of
+      anything that changed. Fixed in the S3 commit of the one-front-door work: the inline is no longer gated,
+      so `--dry-run` composes the same bytes the real build writes and now reports all 12 hooks unchanged.
+      Nothing here needed reviewing, and no unrelated drift was ever shipped around.
 - [x] **Containers:** stop `cairn-api`, `cairn-api-dev` (a duplicate — ~384 MiB of pure waste),
       `cairn-cairn-app-1`. Reclaim ~2.6 GB of stale release tags.
 - [x] **Databases:** drop `cairn` and `cairn_test` from dev-postgres — **only after** Phase 0's export is

@@ -500,7 +500,7 @@ def test_visible_projects_strips_internal_keys_and_adds_relative_activity():
     assert public["relative_activity"] == "2h ago"
 
 
-def test_assemble_emits_the_twelve_keys_and_keeps_order_and_projects_in_lockstep():
+def test_assemble_emits_the_thirteen_keys_and_keeps_order_and_projects_in_lockstep():
     projects = {"a": {"status": "idle"}, "b": {"status": "idle"}}
     order = ["b", "a"]
     doc = core.assemble(
@@ -528,10 +528,16 @@ def test_assemble_emits_the_twelve_keys_and_keeps_order_and_projects_in_lockstep
         "cortex_pending",
         "focus",
         "scope",
+        "grid",
     ]
-    # `scope` is additive: a caller that does not pass it still gets the key, valued None, and the
-    # version deliberately stays 2 because nothing that existed before changed meaning.
+    # `scope` (S1) and `grid` (S3) are both additive: a caller that passes neither still gets both
+    # keys, valued None, and the version deliberately stays 2 because nothing that existed before
+    # them changed meaning. `.order`, `.projects` and `.focus` still cover the WHOLE registry in
+    # every scope -- the sweep narrows the GRID and nothing else. The bump belongs to whichever step
+    # first narrows a pre-existing key (AC2), and assemble's docstring records that the earlier
+    # forecast, which put it here with the sweep fold, was wrong.
     assert doc["scope"] is None
+    assert doc["grid"] is None
     assert doc["version"] == 2
     assert doc["total_projects"] == 2
     assert list(doc["projects"]) == doc["order"] == order
@@ -707,9 +713,7 @@ def test_scope_for_explicit_project_dominates_cwd():
     # B3, found independently by all three reviewers. `borg link ingle` from inside
     # borg-collective must scope to ingle -- otherwise it sweeps borg-collective and renders those
     # nodes under ingle's header. A wrong answer, not a missing one.
-    scope = core.scope_for(
-        "/Users/noah/dev/borg-collective", ROOT, PATHS, requested_project="ingle"
-    )
+    scope = core.scope_for("/Users/noah/dev/borg-collective", ROOT, PATHS, requested_project="ingle")
     assert scope["repository"] == "ingle"
 
 
@@ -722,9 +726,7 @@ def test_scope_for_explicit_project_dominates_even_from_the_orchestrator_root():
 def test_scope_for_unknown_requested_project_falls_through_to_cwd():
     # scope must not invent a repository the registry has never heard of; _focus raises
     # ProjectNotFound for this case and that is the single place the error belongs.
-    scope = core.scope_for(
-        "/Users/noah/dev/ingle", ROOT, PATHS, requested_project="nosuchproject"
-    )
+    scope = core.scope_for("/Users/noah/dev/ingle", ROOT, PATHS, requested_project="nosuchproject")
     assert scope["repository"] == "ingle"
 
 

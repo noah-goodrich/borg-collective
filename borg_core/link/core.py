@@ -13,6 +13,16 @@ primitives the deep dive and the four collectors share.
 PHASE 2 SCOPE: the human table's ordering (project_sort_key/order_projects) and the pure document
 assembler (assemble) now live here too. No renderer lives here yet -- the porcelain/overview/deep
 flip is still Phase 3 (see PROJECT_PLAN.md).
+
+S3 SCOPE: `assemble` gained the document's `grid` key, and that key is ALL this module knows about
+it. The grid itself -- the resolve ladder, the node table, the level assignment, the per-source
+receipt -- lives in the sibling module borg_core/link/grid.py, held to the identical Domain rules
+(pyproject's clean-arch module map names both files). It started here and pushed this module past
+pylint's 1000-line ceiling in one step, which was the honest signal that two questions had been
+stacked in one file: this one answers "what does the registry say about every project", grid.py
+answers "what does one project's manifest declare, and what is the live state of every ref it names".
+`assemble` takes the finished block as an opaque argument, so nothing here imports grid.py and there
+is no cycle.
 """
 
 from __future__ import annotations
@@ -582,6 +592,7 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
     cortex_pending,
     focus,
     scope=None,
+    grid=None,
 ) -> dict:
     """Assemble the `borg link --json` document from already-gathered data. Pure: no clock, no shell
     import, no os.environ.
@@ -606,11 +617,25 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
 
     `scope` (S1) is PURELY ADDITIVE and DOCUMENT_VERSION deliberately stays 2. Nothing that existed
     before this key changed meaning: `order`, `projects` and `focus` still cover the whole registry.
-    The version bump belongs with the step that actually narrows breadth (the sweep fold), because
-    that is the first release where a v2 consumer reading `.order` would be reading something
-    different from what it read before. Bumping on an added key would fire the `/borg-link` skill's
-    version-skew warning for a document it can still read perfectly. Defaults to None so every
-    pre-S1 caller -- including the existing test suite -- keeps working unchanged.
+    Bumping on an added key would fire the `/borg-link` skill's version-skew warning for a document
+    it can still read perfectly. Defaults to None so every pre-S1 caller -- including the existing
+    test suite -- keeps working unchanged.
+
+    CORRECTION (S3). The paragraph above used to end by FORECASTING that "the version bump belongs
+    with the step that actually narrows breadth (the sweep fold)". The sweep fold has now landed and
+    that forecast was wrong, so it is struck rather than left to mislead the next reader. `grid` is
+    additive on exactly the same terms as `scope`: the sweep narrows what the GRID covers, and
+    nothing else. `.order`, `.projects` and `.focus` still cover the WHOLE registry, byte for byte,
+    in every scope -- a v2 consumer reading them reads what it always read. DOCUMENT_VERSION STAYS 2.
+
+    What was actually deferred by not bumping here is AC2, which is where `.order` would narrow to
+    the scoped repository and where the goldens, drone.zsh:964's `grep -m1 'Status:'` and
+    borg.zsh:266's preview contract all break at once -- deliberately concentrated in one commit. If
+    a future step narrows any pre-existing key, THAT is the bump, and it costs four coupled edits in
+    skills/borg-link/SKILL.md (the `== 2` gate, the `> 2` skew branch, the "scope is context, not
+    content" claim, and the deep-dive jq whitelist, which drops any key not named in it).
+
+    `grid` (S3) defaults to None for the same reason `scope` does: every pre-S3 caller keeps working.
     """
     return {
         "version": DOCUMENT_VERSION,
@@ -625,4 +650,5 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
         "cortex_pending": cortex_pending,
         "focus": focus,
         "scope": scope,
+        "grid": grid,
     }

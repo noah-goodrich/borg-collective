@@ -4,8 +4,10 @@ Calling convention: in-process only, against real directories under `tmp_path`, 
 repositories built by `_git_repository` and real linked worktrees built by `_git_worktree`. Two
 things a real `git` cannot be persuaded to produce are driven by a stub `git` on PATH (`_stub_git`):
 a URL with trailing whitespace, which git config trims on read, and one that is not valid UTF-8.
-Only the timeout case monkeypatches subprocess, because it is the one failure a real `git` cannot be
-persuaded to produce quickly.
+NOTHING here monkeypatches subprocess any more: the timeout case used to, and that coupled it to
+borg_core/proc.py's internals rather than its contract, so it broke the moment run_capture moved to
+Popen + a new session + a temp-file sink. It now stands up a `git` that hangs and shortens
+GIT_TIMEOUT_SECONDS, which runs the real path -- including the kill -- in 200ms.
 
 THE ONE RULE THIS FILE EXISTS TO OBEY: a test that supplies the value production is supposed to
 DERIVE proves nothing. `borg recon` shipped completely non-functional because every one of its tests
@@ -35,7 +37,6 @@ import types
 
 import pytest
 
-from borg_core import proc
 from borg_core.manifest import core, shell
 
 
@@ -534,12 +535,20 @@ def test_repository_slug_is_empty_when_git_is_missing(tmp_path, monkeypatch):
 
 
 def test_repository_slug_is_empty_when_git_times_out(tmp_path, monkeypatch):
+    """A REAL `git` that hangs, against a REAL (shortened) deadline.
+
+    This used to raise TimeoutExpired out of a monkeypatched `proc.subprocess.run`, which asserted
+    proc.py's INTERNALS rather than its contract and broke when run_capture moved to Popen + a new
+    session + a temp-file sink. Standing up a hanging stub and shortening GIT_TIMEOUT_SECONDS runs
+    the whole real path -- including the kill -- for 200ms.
+    """
     repository = _git_repository(tmp_path, "r", "git@github.com:owner/repo.git")
-
-    def _timeout(*_args, **_kwargs):
-        raise subprocess.TimeoutExpired(cmd="git", timeout=shell.GIT_TIMEOUT_SECONDS)
-
-    monkeypatch.setattr(proc.subprocess, "run", _timeout)
+    hang_bin = tmp_path / "hang-bin"
+    hang_bin.mkdir(parents=True, exist_ok=True)
+    (hang_bin / "git").write_text("#!/bin/sh\nsleep 30\n", encoding="utf-8")
+    (hang_bin / "git").chmod(0o755)
+    monkeypatch.setenv("PATH", str(hang_bin) + os.pathsep + os.environ["PATH"])
+    monkeypatch.setattr(shell, "GIT_TIMEOUT_SECONDS", 0.2)
     assert shell.repository_slug(repository) == ""
 
 

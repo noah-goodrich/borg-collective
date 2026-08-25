@@ -2614,7 +2614,8 @@ cmd_help() {
     init                Launch orchestrator: morning briefing + Claude session
     claude              Resume orchestrator session (continue most recent)
     link [project]      Overview (no arg) or deep dive (with project)
-                          --brief   LLM narrative briefing
+                          --local   Skip the source sweep — registry + manifests only, no network
+                          --brief   LLM narrative briefing (registry-only; never sweeps)
                           --refresh Regenerate summaries
                           --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
@@ -3066,6 +3067,13 @@ _borg_link_dispatch() {
 
     if (( _link_brief )); then
         # --brief stays zsh this pass; only its DISPATCH is relocated out of the deleted cmd_link.
+        # IT NEVER REACHES borg_core.link.cli, SO IT NEVER SWEEPS. Post-S3 that makes `borg link`
+        # and `borg link --brief` two truth levels of one command -- the failure class AC1 exists to
+        # kill. Recorded rather than fixed, and stated in `borg help` so the difference is declared
+        # instead of discovered: routing the narrative through the Python document is a rewrite of
+        # _borg_print_briefing, which belongs to whichever step owns the briefing, not to the sweep
+        # fold. Do not "fix" it by adding --local here; --local would make it CHEAP and still leave
+        # it un-swept, which is the same lie with a smaller bill.
         borg_desktop_scan 2>/dev/null || true
         _borg_print_briefing
         return 0
