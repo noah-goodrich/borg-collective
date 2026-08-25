@@ -10,11 +10,10 @@ from __future__ import annotations
 import concurrent.futures
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
-from borg_core import paths
+from borg_core import paths, proc
 from borg_core.recon import core
 
 DEFAULT_MAX_TRACKS = 8
@@ -150,18 +149,20 @@ def run_adapter(source: str, adapter_path: str, since: str, projects_file: str) 
     Mirrors _recon_run_adapter: on any failure (non-zero exit, timeout, malformed output) returns
     a synthetic failed-track object so one bad source never aborts the sweep. Delegates all
     parsing/validation to core.process_adapter_output.
+
+    A NON-ZERO EXIT IS STILL AN ANSWER and its stdout is still read -- core.process_adapter_output
+    decides what the pair means. Only a process that could not run at all (missing binary, timeout)
+    becomes the synthetic failed track here. The run/capture/degrade half lives in
+    borg_core.proc.run_capture, which is where the same shape ended up for the third time.
     """
-    try:
-        proc = subprocess.run(
-            [adapter_path, "--since", since, "--projects", projects_file],
-            capture_output=True,
-            text=True,
-            timeout=track_timeout(),
-            check=False,
-        )
-        return core.process_adapter_output(source, proc.stdout, proc.returncode)
-    except (subprocess.TimeoutExpired, OSError):
+    captured = proc.run_capture(
+        [adapter_path, "--since", since, "--projects", projects_file],
+        timeout=track_timeout(),
+    )
+    if captured is None:
         return core.build_failed_track(source, -1)
+    returncode, stdout = captured
+    return core.process_adapter_output(source, stdout, returncode)
 
 
 def fanout(since: str, projects_file: str, adapters: list[tuple[str, str]]) -> list[dict]:
