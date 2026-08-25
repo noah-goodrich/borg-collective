@@ -263,7 +263,7 @@ cmd_switch() {
         fzf --query "$query" \
             --prompt "borg> " \
             --header "Switch to project (Enter=switch, Esc=cancel)" \
-            --preview "borg link {1}" \
+            --preview "borg link --local {1}" \
             --preview-window "right:45:wrap" \
             --delimiter '\t' \
             --with-nth 1,3,5 \
@@ -2219,7 +2219,10 @@ cmd_watch() {
         # overview shape, silently dropping the Desktop merge from every redraw. `2>/dev/null ||
         # true` is preserved VERBATIM -- `set -e` is active and an uncaught Python shape would
         # otherwise kill the polling loop.
-        _borg_link_dispatch 2>/dev/null || true
+        # --local: this is a `while true` redraw on a 5s interval. Of every `borg link` call site in
+        # the tree it is the one that must never acquire network cost -- a sweep here would run
+        # unattended, forever, on a timer nobody is watching.
+        _borg_link_dispatch --local 2>/dev/null || true
 
         printf '\n'
         printf '  \033[1mRECENT NANOPROBES\033[0m\n'
@@ -2955,6 +2958,7 @@ _borg_py() {
     BORG_MAX_ACTIVE="${BORG_MAX_ACTIVE:-3}" \
     BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}" \
     BORG_TMUX_SESSION="${BORG_TMUX_SESSION:-borg}" \
+    BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}" \
     BORG_CORTEX_WAKES="$BORG_CORTEX_WAKES" \
     BORG_NO_REAP="$BORG_NO_REAP" \
     PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
@@ -2979,7 +2983,7 @@ _borg_py() {
 # merges today's two layers, where the top arm intercepted `--json` first and cmd_link's own order
 # was porcelain > project > brief > overview.
 _borg_link_dispatch() {
-    typeset _link_json=0 _link_porcelain=0 _link_brief=0 _link_refresh=0 _link_all=0
+    typeset _link_json=0 _link_porcelain=0 _link_brief=0 _link_refresh=0 _link_all=0 _link_local=0
     typeset _link_project="" _link_arg
     typeset -a _link_py_args
     for _link_arg in "$@"; do
@@ -2989,10 +2993,15 @@ _borg_link_dispatch() {
             --brief|--llm) _link_brief=1 ;;
             --refresh)     _link_refresh=1 ;;
             --all)         _link_all=1 ;;
+            --local)       _link_local=1 ;;
             -*)            ;;                            # lenient, matching cmd_link's `-*) shift`
             *)             _link_project="$_link_arg" ;;  # last-wins, matching cmd_link
         esac
     done
+    # --local MUST be matched explicitly here and forwarded on every arm. The lenient `-*)` arm two
+    # lines up silently swallows unknown flags and exits 0 (pinned at cli_contract.bats:2183-2195),
+    # so a half-wired --local would fail OPEN -- the caller believes it opted down, the flag is
+    # eaten, and the expensive path runs anyway with nothing to show it happened.
 
     # The refresh scan runs once here (was five call sites, one per dispatch arm) instead of once
     # per branch below. The --json redirect (1>&2, so the scan's own chatter can't splice ahead of
@@ -3024,6 +3033,7 @@ _borg_link_dispatch() {
         fi
         _link_py_args=(--json)
         (( _link_all )) && _link_py_args+=(--all)
+        (( _link_local )) && _link_py_args+=(--local)
         [[ -n "$_link_project" ]] && _link_py_args+=(-- "$_link_project")
         _borg_py borg_core.link.cli "${_link_py_args[@]}"
         return 0
@@ -3038,13 +3048,19 @@ _borg_link_dispatch() {
         # exits 0 with the listing today; forwarding it would build a focus block and die instead.
         _link_py_args=(--porcelain)
         (( _link_all )) && _link_py_args+=(--all)
+        (( _link_local )) && _link_py_args+=(--local)
         _borg_py borg_core.link.cli "${_link_py_args[@]}"
         return 0
     fi
 
     if [[ -n "$_link_project" ]]; then
         # The deep dive stays read-only and never scans -- no desktop pre-pass here, matching today.
-        _borg_py borg_core.link.cli --deep -- "$_link_project"
+        # This is the fzf preview's arm (borg.zsh:266 `--preview "borg link {1}"` -> bare positional
+        # -> here), so it is re-executed on every cursor move. Treat it as a hot loop.
+        _link_py_args=(--deep)
+        (( _link_local )) && _link_py_args+=(--local)
+        _link_py_args+=(-- "$_link_project")
+        _borg_py borg_core.link.cli "${_link_py_args[@]}"
         return 0
     fi
 
@@ -3058,6 +3074,7 @@ _borg_link_dispatch() {
     borg_desktop_scan 2>/dev/null || true
     _link_py_args=()
     (( _link_all )) && _link_py_args+=(--all)
+    (( _link_local )) && _link_py_args+=(--local)
     _borg_py borg_core.link.cli "${_link_py_args[@]}"
 }
 

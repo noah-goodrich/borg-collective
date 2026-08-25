@@ -21,6 +21,7 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("BORG_CORTEX_WAKES", raising=False)
     monkeypatch.delenv("BORG_CORTEX_STATE", raising=False)
     monkeypatch.delenv("BORG_TMUX_SESSION", raising=False)
+    monkeypatch.delenv("BORG_ORCHESTRATOR_ROOT", raising=False)
     return tmp_path
 
 
@@ -521,3 +522,96 @@ def test_module_reads_no_environment_at_import_time():
     # whatever the first import happened to see.
     assert "BORG_REAP_STALE_HOURS" not in vars(shell)
     assert os.environ.get("BORG_REAP_STALE_HOURS") is None or True
+
+
+# --- orchestrator_root / cwd / resolved_project_paths (S1) -------------------------------------
+
+
+def test_orchestrator_root_defaults_to_dev_when_unset(isolated_env, monkeypatch):
+    # The wrapper-independent default. borg.zsh:23 assigns BORG_ORCHESTRATOR_ROOT WITHOUT export,
+    # so before S1 the Python child never saw it -- the exact inheritance hole that shipped
+    # `borg recon` non-functional. A module invoked directly has no _borg_py, so the default must
+    # also live here.
+    monkeypatch.delenv("BORG_ORCHESTRATOR_ROOT", raising=False)
+    assert shell.orchestrator_root() == os.path.realpath(os.path.expanduser("~/dev"))
+
+
+def test_orchestrator_root_treats_empty_as_unset(isolated_env, monkeypatch):
+    # _borg_py passes variables through as the EMPTY STRING when unset, so this must be
+    # truthiness-checked, not existence-checked -- the bug class that makes int("") raise.
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", "")
+    assert shell.orchestrator_root() == os.path.realpath(os.path.expanduser("~/dev"))
+
+
+def test_orchestrator_root_honors_an_explicit_value(isolated_env, monkeypatch, tmp_path):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(workspace))
+    assert shell.orchestrator_root() == os.path.realpath(str(workspace))
+
+
+def test_orchestrator_root_is_realpath_normalized(isolated_env, monkeypatch, tmp_path):
+    # THE CASE THAT ONLY BITES IN THE TEST SUITES: fixtures live under /tmp, which realpaths to
+    # /private/tmp on macOS. Comparing an unresolved root against a resolved cwd silently makes
+    # every repository look like the orchestrator.
+    real = tmp_path / "real-workspace"
+    real.mkdir()
+    link = tmp_path / "linked-workspace"
+    link.symlink_to(real)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(link))
+    assert shell.orchestrator_root() == os.path.realpath(str(real))
+
+
+def test_cwd_is_realpath_normalized(isolated_env, monkeypatch, tmp_path):
+    real = tmp_path / "real-repo"
+    real.mkdir()
+    link = tmp_path / "linked-repo"
+    link.symlink_to(real)
+    monkeypatch.chdir(link)
+    assert shell.cwd() == os.path.realpath(str(real))
+
+
+def test_resolved_project_paths_normalizes_and_preserves_blanks(isolated_env, tmp_path):
+    real = tmp_path / "real-repo"
+    real.mkdir()
+    link = tmp_path / "linked-repo"
+    link.symlink_to(real)
+    registry = {
+        "projects": {
+            "linked": {"path": str(link)},
+            "pathless": {"path": None},
+        }
+    }
+    resolved = dict(shell.resolved_project_paths(registry))
+    assert resolved["linked"] == os.path.realpath(str(real))
+    # jq's `//` semantics: a null path becomes "", and scope_for skips it rather than matching "/".
+    assert resolved["pathless"] == ""
+
+
+def test_resolved_project_paths_does_not_require_the_path_to_exist(isolated_env):
+    # realpath is lexical, not a stat. A registry entry pointing at a deleted directory must
+    # normalize quietly and simply fail to match -- never raise, never cost a stat per project on
+    # the one path that has to stay reflexive.
+    registry = {"projects": {"gone": {"path": "/nonexistent/deleted/repo"}}}
+    assert shell.resolved_project_paths(registry) == [("gone", "/nonexistent/deleted/repo")]
+
+
+def test_cwd_returns_empty_when_the_directory_was_deleted(isolated_env, monkeypatch, tmp_path):
+    # `drone down`, `borg reap-worktrees` and `git worktree remove` all delete directories a user
+    # may still be sitting in. Unguarded, os.getcwd() raises FileNotFoundError and cli.main's broad
+    # `except Exception` turns it into exit 1 with zero bytes on stdout -- in ALL FOUR modes, for a
+    # command that worked before this module ever read cwd.
+    doomed = tmp_path / "doomed"
+    doomed.mkdir()
+    monkeypatch.chdir(doomed)
+    doomed.rmdir()
+    assert shell.cwd() == ""
+
+
+def test_deleted_cwd_degrades_to_orchestrator_not_a_wrong_repository(isolated_env):
+    # "" must match no orchestrator root and prefix-match no registry path, so an unknowable
+    # location yields the BROADEST reading rather than an arbitrary one.
+    paths = [("alpha", "/Users/noah/dev/alpha")]
+    scope = core.scope_for("", "/Users/noah/dev", paths)
+    assert scope["kind"] == "orchestrator"
+    assert scope["repository"] is None

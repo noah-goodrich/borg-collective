@@ -2358,7 +2358,7 @@ EOF
 
     local var
     for var in BORG_DIR BORG_REGISTRY BORG_MAX_ACTIVE BORG_REAP_STALE_HOURS BORG_TMUX_SESSION \
-               BORG_CORTEX_WAKES PYTHONPATH; do
+               BORG_ORCHESTRATOR_ROOT BORG_CORTEX_WAKES PYTHONPATH; do
         run grep -c "^${var}=" "$ENVDUMP"
         [ "$status" -eq 0 ]
         [ "$output" -ge 1 ]
@@ -2535,7 +2535,7 @@ EOF
 
     local var
     for var in BORG_DIR BORG_REGISTRY BORG_MAX_ACTIVE BORG_REAP_STALE_HOURS BORG_TMUX_SESSION \
-               BORG_CORTEX_WAKES BORG_NO_REAP PYTHONPATH; do
+               BORG_ORCHESTRATOR_ROOT BORG_CORTEX_WAKES BORG_NO_REAP PYTHONPATH; do
         run grep -c "^${var}=" "$ENVDUMP"
         [ "$status" -eq 0 ]
         [ "$output" -ge 1 ]
@@ -2798,4 +2798,150 @@ _repo_norm() {
     run zsh -c "'$BORG' program bogus"
     [ "$status" -ne 0 ]
     [[ "$output" == *"list|plan|sync"* ]] || false
+}
+
+# ── scope + --local (S1) ─────────────────────────────────────────────────────
+#
+# Every case here traces to a defect the blind adversarial review found in the first-pass design of
+# the one-front-door work; see docs/plans/directives/2026-08-25-link-front-door-hardened-spec.md.
+
+_scope_two_repos() {
+    mkdir -p "${BATS_TEST_TMPDIR}/ws/alpha" "${BATS_TEST_TMPDIR}/ws/beta"
+    cat > "$BORG_REGISTRY" <<JSON
+{"projects": {
+  "alpha": {"path": "${BATS_TEST_TMPDIR}/ws/alpha", "status": "idle"},
+  "beta":  {"path": "${BATS_TEST_TMPDIR}/ws/beta",  "status": "idle"}
+}}
+JSON
+}
+
+@test "contract: _borg_py forwards BORG_ORCHESTRATOR_ROOT from a NON-exported config value" {
+    # THE INHERITANCE PROBE, and it must never put the variable in the environment.
+    #
+    # An earlier version of this test used `env BORG_ORCHESTRATOR_ROOT=... zsh "$BORG" ...` and was
+    # WORTHLESS: zsh preserves the export attribute across borg.zsh:23's bare reassignment
+    # (`FOO="${FOO:-default}"` keeps the export bit), so the child inherited the value whether or
+    # not _borg_py named it. Deleting the _borg_py line left that test green -- verified by
+    # mutation. It was the exact `test supplies the derived value` shape its own comment claimed to
+    # be avoiding, which is why this file now uses config.zsh instead.
+    #
+    # config.zsh is sourced at borg.zsh:41, AFTER line 23's default, and assigns a PLAIN shell
+    # variable with no export. The child therefore sees it ONLY if _borg_py forwards it by name.
+    # Set the root to the repository's own path, where forwarded and defaulted disagree:
+    #   forwarded  => cwd == root exactly    => "orchestrator"
+    #   dropped    => Python defaults ~/dev  => cwd prefix-matches the registry => "repository"
+    _scope_two_repos
+    echo "BORG_ORCHESTRATOR_ROOT=\"${BATS_TEST_TMPDIR}/ws/alpha\"" > "$BORG_DIR/config.zsh"
+    cd "${BATS_TEST_TMPDIR}/ws/alpha"
+    run zsh "$BORG" link --json
+    [ "$status" -eq 0 ]
+    run bash -c "printf '%s' '$output' | jq -r '.scope.kind'"
+    [ "$output" = "orchestrator" ]
+}
+
+@test "contract: link --json resolves scope to the repository containing cwd" {
+    _scope_two_repos
+    cd "${BATS_TEST_TMPDIR}/ws/beta"
+    run env BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/ws" zsh "$BORG" link --json
+    [ "$status" -eq 0 ]
+    run bash -c "printf '%s' '$output' | jq -r '.scope.kind + \":\" + .scope.repository'"
+    [ "$output" = "repository:beta" ]
+}
+
+@test "contract: an explicit project dominates cwd when resolving scope" {
+    # B3, found independently by all three reviewers. Standing in alpha and asking for beta must
+    # scope to BETA -- otherwise beta's header renders alpha's facts, a wrong answer not a missing
+    # one. Every scripted caller passes a name from a fixed cwd (drone.zsh:964, borg.zsh:266).
+    _scope_two_repos
+    cd "${BATS_TEST_TMPDIR}/ws/alpha"
+    run env BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/ws" zsh "$BORG" link --json beta
+    [ "$status" -eq 0 ]
+    run bash -c "printf '%s' '$output' | jq -r '.scope.repository + \"/\" + .focus.name'"
+    [ "$output" = "beta/beta" ]
+}
+
+@test "contract: --local reaches the document through the dispatcher" {
+    # The lenient `-*)` arm in _borg_link_dispatch silently swallows unknown flags and exits 0, so a
+    # half-wired --local fails OPEN: the caller believes it opted down and the expensive path runs
+    # anyway. This pins that the flag is actually matched and forwarded, not eaten.
+    _scope_two_repos
+    cd "${BATS_TEST_TMPDIR}/ws/alpha"
+    run env BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/ws" zsh "$BORG" link --json --local
+    [ "$status" -eq 0 ]
+    run bash -c "printf '%s' '$output' | jq -r '.scope.local'"
+    [ "$output" = "true" ]
+}
+
+@test "contract: --local defaults to false on the --json arm" {
+    _scope_two_repos
+    cd "${BATS_TEST_TMPDIR}/ws/alpha"
+    run env BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/ws" zsh "$BORG" link --json
+    run bash -c "printf '%s' '$output' | jq -r '.scope.local'"
+    [ "$output" = "false" ]
+}
+
+@test "contract: --local is forwarded on the DEEP and OVERVIEW arms, asserted on the child's argv" {
+    # The arms every hot call site actually uses, and the ones the document cannot prove:
+    #   fzf preview (borg.zsh:266) -> bare positional -> DEEP
+    #   drone status (drone.zsh:964) -> `borg link --local "$wname"` -> DEEP
+    #   cmd_watch (borg.zsh:2222) -> `_borg_link_dispatch --local` with no args -> OVERVIEW
+    #
+    # This MUST assert argv, not the emitted document. An earlier version ran `link --json --local
+    # beta` and claimed deep-arm coverage, but dispatch precedence is json > porcelain > deep, so it
+    # returned from the --json block and never executed the deep arm at all. Deleting the deep arm's
+    # forwarding line left the whole new test block green -- verified by mutation. render.deep reads
+    # only `focus`, so `link beta` and `link --local beta` are byte-identical on stdout too: no
+    # document-level or human-output assertion can ever pin this wire. Mock python3 and read "$@",
+    # the same idiom as the config-surface test above.
+    _scope_two_repos
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export ARGVDUMP="${BATS_TEST_TMPDIR}/child-argv.txt"
+    cat > "$MOCK_BIN/python3" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" > "$ARGVDUMP"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/python3"
+    cd "${BATS_TEST_TMPDIR}/ws/alpha"
+
+    run zsh "$BORG" link --local beta
+    [ "$status" -eq 0 ]
+    run cat "$ARGVDUMP"
+    [[ "$output" == *"--deep"* ]] || false
+    [[ "$output" == *"--local"* ]] || false
+    [[ "$output" == *"-- beta"* ]] || false
+
+    # ...and absent by default, so the assertion above is discriminating rather than always-true.
+    run zsh "$BORG" link beta
+    run cat "$ARGVDUMP"
+    [[ "$output" == *"--deep"* ]] || false
+    [[ "$output" != *"--local"* ]] || false
+
+    run zsh "$BORG" link --local
+    run cat "$ARGVDUMP"
+    [[ "$output" == *"--local"* ]] || false
+
+    run zsh "$BORG" link
+    run cat "$ARGVDUMP"
+    [[ "$output" != *"--local"* ]] || false
+}
+
+@test "contract: every hot borg-link call site opts down with --local" {
+    # B1/B2: the three call sites that re-execute `borg link` in a loop. The protection is asserted
+    # here rather than trusted to a comment, because the ONLY thing that made the first-pass design
+    # unsafe was a stale comment claiming the fzf preview was already protected.
+    #
+    #   borg.zsh:266   fzf --preview, re-executed on every cursor move (routes to --deep, NOT
+    #                  --porcelain; that inversion is exactly what the review caught)
+    #   borg.zsh:2222  cmd_watch's `while true` redraw on a 5s interval
+    #   drone.zsh:964  cmd_status's per-tmux-window loop
+    run grep -c -- '--preview "borg link --local {1}"' "$BORG"
+    [ "$output" -eq 1 ]
+
+    run grep -c -- '_borg_link_dispatch --local' "$BORG"
+    [ "$output" -eq 1 ]
+
+    run grep -c -- 'borg link --local "$wname"' "${BATS_TEST_DIRNAME}/../drone.zsh"
+    [ "$output" -eq 1 ]
 }

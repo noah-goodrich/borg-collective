@@ -500,7 +500,7 @@ def test_visible_projects_strips_internal_keys_and_adds_relative_activity():
     assert public["relative_activity"] == "2h ago"
 
 
-def test_assemble_emits_the_eleven_keys_and_keeps_order_and_projects_in_lockstep():
+def test_assemble_emits_the_twelve_keys_and_keeps_order_and_projects_in_lockstep():
     projects = {"a": {"status": "idle"}, "b": {"status": "idle"}}
     order = ["b", "a"]
     doc = core.assemble(
@@ -527,7 +527,11 @@ def test_assemble_emits_the_eleven_keys_and_keeps_order_and_projects_in_lockstep
         "assimilated",
         "cortex_pending",
         "focus",
+        "scope",
     ]
+    # `scope` is additive: a caller that does not pass it still gets the key, valued None, and the
+    # version deliberately stays 2 because nothing that existed before changed meaning.
+    assert doc["scope"] is None
     assert doc["version"] == 2
     assert doc["total_projects"] == 2
     assert list(doc["projects"]) == doc["order"] == order
@@ -632,3 +636,119 @@ def test_capacity_over_limit_boundary_is_strictly_greater_than(active, limit, ex
     assert result["over_limit"] is expected_over_limit
     assert result["active"] == active
     assert result["limit"] == limit
+
+
+# --- core.scope_for (S1) ---------------------------------------------------------------------
+#
+# Every case below traces to a defect the blind adversarial review found in the first-pass design;
+# see docs/plans/directives/2026-08-25-link-front-door-hardened-spec.md for the full list.
+
+PATHS = [
+    ("borg-collective", "/Users/noah/dev/borg-collective"),
+    ("ingle", "/Users/noah/dev/ingle"),
+    ("ingle-site", "/Users/noah/dev/ingle-site"),
+    ("nested", "/Users/noah/dev/ingle/packages/nested"),
+    ("pathless", ""),
+]
+ROOT = "/Users/noah/dev"
+
+
+def test_scope_for_exact_orchestrator_root_is_orchestrator():
+    scope = core.scope_for(ROOT, ROOT, PATHS)
+    assert scope == {"kind": "orchestrator", "repository": None, "local": False}
+
+
+def test_scope_for_cwd_inside_a_registered_repository_resolves_to_it():
+    scope = core.scope_for("/Users/noah/dev/ingle/src/deep", ROOT, PATHS)
+    assert scope["kind"] == "repository"
+    assert scope["repository"] == "ingle"
+
+
+def test_scope_for_repository_root_itself_resolves_to_that_repository():
+    scope = core.scope_for("/Users/noah/dev/ingle", ROOT, PATHS)
+    assert scope["repository"] == "ingle"
+
+
+def test_scope_for_nested_repository_wins_over_its_parent():
+    # Longest matching prefix, not first match: /dev/ingle/packages/nested is inside /dev/ingle,
+    # and the inner repository is the one you are standing in.
+    scope = core.scope_for("/Users/noah/dev/ingle/packages/nested/src", ROOT, PATHS)
+    assert scope["repository"] == "nested"
+
+
+def test_scope_for_prefix_match_respects_path_component_boundaries():
+    # THE BUG A RAW str.startswith WOULD SHIP: "/Users/noah/dev/ingle-site" starts with
+    # "/Users/noah/dev/ingle", so a string-prefix match resolves ingle-site's cwd to `ingle` and
+    # renders one repository's facts under another's name.
+    scope = core.scope_for("/Users/noah/dev/ingle-site/app", ROOT, PATHS)
+    assert scope["repository"] == "ingle-site"
+
+
+def test_scope_for_unregistered_cwd_falls_back_to_orchestrator():
+    scope = core.scope_for("/Users/noah/somewhere/else", ROOT, PATHS)
+    assert scope["kind"] == "orchestrator"
+    assert scope["repository"] is None
+
+
+def test_scope_for_subdirectory_of_orchestrator_root_is_not_the_orchestrator():
+    # The orchestrator test is EXACT equality, mirroring _borg_session_mode. An unregistered
+    # subdirectory of the workspace root is not the orchestrator session -- it is simply unscoped.
+    scope = core.scope_for("/Users/noah/dev/scratch", ROOT, PATHS)
+    assert scope["kind"] == "orchestrator"
+
+
+def test_scope_for_ignores_registry_entries_with_no_path():
+    # The ("pathless", "") entry must never match, and must never raise.
+    scope = core.scope_for("/Users/noah/dev/ingle", ROOT, PATHS)
+    assert scope["repository"] == "ingle"
+
+
+def test_scope_for_explicit_project_dominates_cwd():
+    # B3, found independently by all three reviewers. `borg link ingle` from inside
+    # borg-collective must scope to ingle -- otherwise it sweeps borg-collective and renders those
+    # nodes under ingle's header. A wrong answer, not a missing one.
+    scope = core.scope_for(
+        "/Users/noah/dev/borg-collective", ROOT, PATHS, requested_project="ingle"
+    )
+    assert scope["repository"] == "ingle"
+
+
+def test_scope_for_explicit_project_dominates_even_from_the_orchestrator_root():
+    scope = core.scope_for(ROOT, ROOT, PATHS, requested_project="ingle")
+    assert scope["kind"] == "repository"
+    assert scope["repository"] == "ingle"
+
+
+def test_scope_for_unknown_requested_project_falls_through_to_cwd():
+    # scope must not invent a repository the registry has never heard of; _focus raises
+    # ProjectNotFound for this case and that is the single place the error belongs.
+    scope = core.scope_for(
+        "/Users/noah/dev/ingle", ROOT, PATHS, requested_project="nosuchproject"
+    )
+    assert scope["repository"] == "ingle"
+
+
+def test_scope_for_records_local_without_changing_resolution():
+    swept = core.scope_for("/Users/noah/dev/ingle", ROOT, PATHS, local=False)
+    opted = core.scope_for("/Users/noah/dev/ingle", ROOT, PATHS, local=True)
+    assert opted["local"] is True
+    assert swept["local"] is False
+    assert opted["repository"] == swept["repository"] == "ingle"
+
+
+def test_scope_for_empty_registry_is_orchestrator():
+    assert core.scope_for("/Users/noah/dev/ingle", ROOT, [])["kind"] == "orchestrator"
+
+
+def test_scope_for_longest_prefix_wins_regardless_of_registry_order():
+    # Ordering independence: registry.json preserves JSON insertion order, so whether the nested
+    # repository happens to be registered before or after its parent is an accident of when someone
+    # ran `borg add`. Both orders must resolve to the inner repository.
+    inner_first = [
+        ("nested", "/Users/noah/dev/ingle/packages/nested"),
+        ("ingle", "/Users/noah/dev/ingle"),
+    ]
+    outer_first = list(reversed(inner_first))
+    cwd = "/Users/noah/dev/ingle/packages/nested/src"
+    assert core.scope_for(cwd, ROOT, inner_first)["repository"] == "nested"
+    assert core.scope_for(cwd, ROOT, outer_first)["repository"] == "nested"

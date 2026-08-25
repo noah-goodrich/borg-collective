@@ -90,6 +90,62 @@ def max_active() -> int:
         return core.DEFAULT_MAX_ACTIVE
 
 
+def orchestrator_root() -> str:
+    """BORG_ORCHESTRATOR_ROOT, realpath-normalized, defaulting to ~/dev (borg.zsh:23).
+
+    Defaults HERE as well as in _borg_py, and that duplication is deliberate. `_borg_py` applies the
+    default for every child it launches, but a module invoked directly (`python3 -m borg_core.link.cli`,
+    which is exactly what the test suite and any debugging session do) has no wrapper at all. This is
+    the same two-sided rule borg_core/paths.py follows, and its absence is precisely how `borg recon`
+    shipped non-functional: borg.zsh:23 assigns BORG_ORCHESTRATOR_ROOT bare, with no `export`, so the
+    Python child has never seen it. Unset OR EMPTY takes the default -- _borg_py passes variables
+    through as the empty string, so this must be truthiness-checked, not existence-checked.
+    """
+    raw = os.environ.get("BORG_ORCHESTRATOR_ROOT")
+    if not raw:
+        raw = os.path.expanduser("~/dev")
+    return os.path.realpath(raw)
+
+
+def cwd() -> str:
+    """The invoking directory realpath-normalized, or "" when it cannot be determined.
+
+    Normalized here, in the shell tier, so core.scope_for stays pure: symlink resolution is a
+    filesystem question, and /Users/noah/dev is itself commonly reached through one. Comparing an
+    unresolved cwd against a resolved registry path silently makes every repository look like the
+    orchestrator.
+
+    THE GUARD IS NOT DEFENSIVE PADDING. os.getcwd() raises FileNotFoundError when the invoking
+    directory has been deleted out from under a live shell -- routine here, because `drone down`,
+    `borg reap-worktrees` and `git worktree remove` all delete directories a user may still be
+    sitting in. Before this module read cwd at all, such an invocation succeeded; unguarded, it
+    would now die in ALL FOUR modes via cli.main's broad `except Exception`, with exit 1 and zero
+    bytes on stdout -- a clean, uninformative failure with no hint that the cwd is the cause, in a
+    command whose callers (cmd_watch, drone status, the fzf preview) all swallow errors.
+    "" degrades to orchestrator scope: it matches no orchestrator root and prefix-matches no
+    registry path, so an unknowable location yields the broadest reading rather than a wrong one.
+    """
+    try:
+        return os.path.realpath(os.getcwd())
+    except OSError:
+        return ""
+
+
+def resolved_project_paths(registry: dict) -> list[tuple[str, str]]:
+    """Every (name, path) pair from the registry with each non-empty path realpath-normalized.
+
+    The shell-tier half of core.scope_for: resolving symlinks is filesystem work, and BOTH sides of
+    the prefix comparison must be resolved identically or the match silently fails. Missing paths
+    stay "" (core.project_paths already applies jq's `//` semantics) and scope_for skips them.
+
+    os.path.realpath does NOT stat -- a registry entry pointing at a deleted directory normalizes
+    lexically and simply fails to match a live cwd, which is the correct outcome. No existence check
+    here: this runs on every invocation over the whole registry, and a stat per project would put
+    filesystem latency on the one path that has to stay reflexive.
+    """
+    return [(name, os.path.realpath(path) if path else "") for name, path in core.project_paths(registry)]
+
+
 def reap_disabled() -> bool:
     """Whether BORG_NO_REAP suppresses the overlay.
 
