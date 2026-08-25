@@ -241,6 +241,29 @@ EOF
     [[ "$output" == *"no projects file"* ]] || false
 }
 
+@test "adapter: a linked worktree is swept, a plain subdirectory is not" {
+    # `[ -e "$PPATH/.git" ]`, not `[ -d ]`. A linked worktree's .git is a FILE containing
+    # "gitdir: ...", and `git remote get-url origin` answers correctly inside one, so the old -d test
+    # skipped every `drone feature` checkout -- reveal-data-consistency is one in the live registry.
+    # Still a test and not nothing: `git remote get-url` run in a plain SUBDIRECTORY succeeds and
+    # returns the PARENT's remote, so dropping the check would sweep a subdirectory under its
+    # parent's slug. borg_core/manifest/shell.py:repository_slug carries the identical rule; the two
+    # must never diverge or `link` and `recon` disagree about which repositories exist.
+    _repo_with_remote alpha "git@github.com:owner/alpha.git"
+    git -C "$WORK/alpha" commit -q --allow-empty -m root
+    git -C "$WORK/alpha" worktree add -q -b feat "$WORK/alpha-feat"
+    mkdir -p "$WORK/alpha/packages"
+
+    [ -f "$WORK/alpha-feat/.git" ] || false
+    printf '{"wt":{"path":"%s/alpha-feat"},"sub":{"path":"%s/alpha/packages"}}' "$WORK" "$WORK" \
+        > "$WORK/projects.json"
+    _mock_gh "$(_one_pr_body)"
+
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$WORK/projects.json"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"swept 1 github repo(s)"* ]] || false
+}
+
 @test "adapter: a registry with no github repositories sweeps zero without calling gh" {
     mkdir -p "$WORK/nogit"
     printf '{"nogit":{"path":"%s/nogit"}}' "$WORK" > "$WORK/projects.json"
