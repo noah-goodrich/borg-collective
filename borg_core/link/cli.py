@@ -14,7 +14,7 @@ import json as jsonlib
 import sys
 from typing import NoReturn
 
-from borg_core.link import core, render, shell
+from borg_core.link import core, grid, render, shell
 
 
 class ProjectNotFound(Exception):
@@ -70,6 +70,52 @@ def _focus(project: str, registry: dict, now_epoch: int) -> dict | None:
     }
 
 
+def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
+    """The `grid` block: discover manifests globally, select them scoped, sweep at the scope's breadth.
+
+    THE ORDER OF THE THREE STEPS IS FIXED and each one's breadth is different, which is the whole of
+    the hardened spec's B6. Discovery globs EVERY registered repository (a local pass over ~14
+    directories, milliseconds) because a manifest declaring rows across four repositories lives under
+    exactly one of them. Selection then narrows on what a manifest DECLARES, using the scoped
+    repository's `owner/repo`. The sweep's breadth is narrower still -- one registry entry in
+    repository scope -- and that is the difference between AC1's 0.69s and its 2.30s.
+
+    THE SLUG COSTS A `git remote get-url`, and only in repository scope. That subprocess is why
+    `--local` still calls this function rather than skipping it: `--local` opts down from the NETWORK,
+    not from local truth. The fzf preview and `drone status` want the declared topology; what they
+    cannot afford is `gh`.
+
+    `--local` IS CHECKED HERE AND NOWHERE DEEPER. shell.sweep is never called on the opted-down path,
+    so no adapter is discovered, no `since` is resolved, no projects file is staged and no subprocess
+    of any kind is spawned -- an opt-down that still paid discovery would be a promise the flag does
+    not keep, and it is the promise borg.zsh:266's per-keypress preview is relying on.
+
+    `moment` IS THE DOCUMENT'S ONE EPOCH, threaded down so the sweep mark is cut from the same
+    instant as `generated_at` and every relative time. A second clock read here would let a document
+    state a `since` that does not correspond to its own `generated_at`.
+
+    KNOWN AND ACCEPTED COST, recorded rather than gated: this function is not mode-gated, so
+    `drone status` pays one `git remote get-url` per tmux window plus a `.borg/programs` listdir per
+    registered repository per window. Measured at 12 windows against a 14-repository registry that is
+    12 forks and ~168 listdirs for a table that greps one `Status:` line. It is bounded, it is local,
+    and the two obvious "fixes" are both worse: mode-gating the grid is what B1's rejected alternative
+    was rejected for (two modes of one command answering the same question with different data, and
+    `--json` MUST carry the grid for AC3's verification), and per-process memoization buys nothing for
+    a caller that forks a fresh process per window. AC2, which is the step that gives the renderer a
+    reason to read the grid, is the right place to revisit the shape of this loop.
+    """
+    manifests, warnings = shell.discover_manifests(registry)
+    directory = grid.repository_dir(registry, scope)
+    slug = shell.repository_slug(directory) if directory else ""
+    selected, select_warnings = grid.select_manifests(manifests, scope, slug)
+    sweep = (
+        grid.no_sweep(["sweep: --local -- states come from what each manifest declares, nothing was fetched"])
+        if local
+        else shell.sweep(grid.scoped_projects(registry, scope), now=moment)
+    )
+    return grid.build_grid(scope, slug, sweep, selected, warnings + select_warnings)
+
+
 def _document(project: str, show_all: bool, mode: str, local: bool = False) -> dict:
     """Assemble the `borg link` document for one invocation, consumed by both `--json` and the three
     renderers in render.py.
@@ -90,6 +136,16 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     cursor move is DEEP, and `deep` is therefore a hot loop, not a cold one. Any future work that
     puts network or sweep cost behind a mode must treat `deep` as hot and opt the preview down
     explicitly (borg.zsh:266 now passes `--local`), never assume mode gating protects it.
+
+    THE GRID IS DELIBERATELY NOT MODE-GATED (S3), unlike everything above. Skipping unread work is
+    the rule for `directives`/`assimilated`/`focus` because those are display sections a given
+    renderer either prints or does not. The grid is not a section, it is the DERIVED FACT the front
+    door exists to serve, and gating it by mode would reconstitute exactly what B1's rejected
+    alternative was rejected for: two modes of one command answering the same question with different
+    data. `--json` in particular must always carry it -- AC3's verification is an assertion over
+    `.grid.manifests[].nodes[].state` with no renderer involved. The cost of carrying it on a mode
+    that does not print it is bounded and known: a local directory glob, plus one `git remote get-url`
+    in repository scope, plus a sweep that `--local` removes at every hot call site.
 
     FIVE further judgment calls, unchanged from before this function became mode-aware: (i)
     `shell.now_epoch()` is called EXACTLY ONCE and threaded into registry_with_state, format_iso,
@@ -146,6 +202,7 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
         cortex_pending=cortex_pending,
         focus=_focus(project, overlaid, moment) if need_focus else None,
         scope=scope,
+        grid=_grid(overlaid, scope, local, moment),
     )
 
 
@@ -179,11 +236,18 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--porcelain", dest="porcelain", action="store_true")
     parser.add_argument("--deep", dest="deep", action="store_true")
     parser.add_argument("--all", dest="show_all", action="store_true")
-    # AC1's only opt-down. Inert in S1 -- it records intent in the document's `scope.local` and
-    # changes no behavior yet -- but it is wired at the hot call sites NOW (borg.zsh:266's fzf
-    # preview, drone.zsh:964's per-window loop) so the protection predates the cost it protects
-    # against. Landing the flag with the sweep instead would mean shipping one commit in which
-    # every cursor move in `borg switch` fires a network sweep.
+    # AC1's ONLY opt-down, and as of S3 it is no longer inert. It makes `_grid` call grid.no_sweep()
+    # instead of shell.sweep(), so no adapter is discovered, no `since` is resolved and NO SUBPROCESS
+    # of any kind is spawned -- the grid still renders, from what each manifest declares. It is the
+    # sole protection for every hot loop in the tree: borg.zsh:266's per-keypress fzf preview,
+    # borg.zsh:2225's 5s watch redraw, drone.zsh:964's per-tmux-window loop, bin/link-parity-harness's
+    # 34 invocations, and skills/borg-switch's widest-breadth `--all` call.
+    #
+    # THIS COMMENT USED TO SAY "changes no behavior yet". It was true in S1 and false the moment the
+    # sweep landed, and leaving it would have repeated the exact defect the hardened spec's B1 is:
+    # a stale comment about `borg link`'s cost, cited downstream as proof of a protection that was
+    # not there. Anyone reading this as dead plumbing and deleting a `--local` from a call site is
+    # removing a network sweep's only brake.
     parser.add_argument("--local", dest="local", action="store_true")
     return parser
 
