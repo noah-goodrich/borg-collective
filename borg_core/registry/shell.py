@@ -9,11 +9,10 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import time
 from pathlib import Path
 
-from borg_core import paths
+from borg_core import paths, proc
 from borg_core.registry import core
 
 DEFAULT_TMUX_SESSION = "borg"
@@ -179,21 +178,18 @@ def list_tmux_windows() -> list[str]:
     collapsing the shell's separate `borg_tmux_alive` check into this single fork is
     behavior-equivalent -- the inherited looseness comes along too: a session named "borg-anything"
     satisfies a `-t borg` lookup.
+
+    The run/capture/degrade half now lives in borg_core.proc.run_capture, which is where the same
+    shape ended up for the third time (recon's adapter runner and manifest's git reader are the other
+    two). The SENTINEL stays here: [] is this function's answer for "no session", and what an absent
+    result means is the caller's business, not the runner's.
     """
     session = tmux_session_name()
-    try:
-        result = subprocess.run(
-            ["tmux", "list-windows", "-t", session, "-F", "#W"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
+    captured = proc.run_capture(["tmux", "list-windows", "-t", session, "-F", "#W"])
+    if captured is None:
         return []
-    if result.returncode != 0:
-        return []
-    # JUSTIFICATION: splitting a subprocess's own captured stdout text, not a cross-layer reach.
-    return result.stdout.splitlines()  # pylint: disable=clean-arch-demeter
+    returncode, stdout = captured
+    return stdout.splitlines() if returncode == 0 else []
 
 
 def tmux_window_exists(name: str) -> bool:
