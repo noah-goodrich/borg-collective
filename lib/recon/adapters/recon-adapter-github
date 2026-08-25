@@ -9,6 +9,13 @@
 #   Invoked:  recon-adapter-<source> --since <ISO8601> --projects <projects.json path>
 #             projects.json is the registry's `.projects` object: { "<name>": {"path": "...", ...} }
 #   stdout:   exactly one JSON object — {"source": "...", "summary": "<terse>", "items": [Item,...]}
+#             OPTIONAL "skipped": true — "I could not look", as distinct from "I looked and there was
+#             nothing". An adapter that cannot reach its source (missing binary, unauthenticated,
+#             offline, rate-limited, nothing in scope to query) MUST set it, because the alternative
+#             is indistinguishable from a correct empty sweep: same exit 0, same empty items, same
+#             `ok: true`. The engine surfaces it as `status: "degraded"` plus a named warning
+#             (borg_core/link/grid.py:track_warnings), so a consumer can tell "nothing changed" from
+#             "GitHub was never reached" — which the `status` field alone could not.
 #   Item  =   {project, source, ref, title, state, changed, owner, action_needed, urgency, one_line}
 #             Field types are ENFORCED by the engine (borg_core/recon/core.py validate_item); an item
 #             violating any of them is silently dropped from the track (counted in `dropped`):
@@ -52,12 +59,22 @@ while [ "$#" -gt 0 ]; do
 done
 
 # Emit a terse, item-less track and exit cleanly. Used for every "can't sweep" path.
+#
+# `skipped: true` IS THE WHOLE POINT OF THIS FUNCTION, not decoration on it. Every caller below is a
+# case where the adapter could not reach GitHub — gh missing, unauthenticated, offline, rate-limited,
+# no projects file, nothing in scope — and every one of them exits 0 with an empty `items`, which is
+# byte-identical to a healthy sweep that found nothing. Without this flag the engine stamps
+# `status: "ok"`, emits no warning, and every node in the grid silently falls back to a hand-authored
+# manifest `status` while the document claims `swept: true`. Reproduced end to end before the flag
+# existed: an unauthenticated `gh` produced `swept: true`, `sources: [{status: "ok"}]`,
+# `warnings: []`, and an all-declared grid.
 emit_skip() {
-    jq -n --arg s "$SOURCE" --arg m "$1" '{source:$s, summary:$m, items:[]}'
+    jq -n --arg s "$SOURCE" --arg m "$1" '{source:$s, summary:$m, items:[], skipped:true}'
     exit 0
 }
 
-command -v jq >/dev/null 2>&1 || { printf '{"source":"github","summary":"jq missing","items":[]}\n'; exit 0; }
+command -v jq >/dev/null 2>&1 \
+    || { printf '{"source":"github","summary":"jq missing","items":[],"skipped":true}\n'; exit 0; }
 command -v gh >/dev/null 2>&1 || emit_skip "gh not installed — github track skipped"
 [ -n "$SINCE" ] || emit_skip "no --since provided — github track skipped"
 [ -n "$PROJECTS_FILE" ] && [ -f "$PROJECTS_FILE" ] || emit_skip "no projects file — github track skipped"
@@ -126,9 +143,12 @@ ALIAS_MAP="$(jq -R -s -c '
     | map({alias: ("r" + (.key|tostring)), project: (.value|split("\t")[0]), repo: (.value|split("\t")[1])})
 ' "$REPOS_FILE")"
 
+# SWEPT=0 IS A SKIP, NOT AN EMPTY ANSWER. Nothing in scope resolved to a github repository — no
+# origin, a non-github remote, or an empty project list — so this track looked at exactly zero
+# sources. Reporting that as a plain empty sweep is the same conflation emit_skip exists to prevent.
 if [ "$SWEPT" -eq 0 ]; then
-    jq -n --arg s "$SOURCE" --arg m "swept 0 github repo(s) since $SINCE_DATE — 0 PR item(s)" \
-        '{source:$s, summary:$m, items:[]}'
+    jq -n --arg s "$SOURCE" --arg m "no github repository in scope — nothing to sweep" \
+        '{source:$s, summary:$m, items:[], skipped:true}'
     exit 0
 fi
 

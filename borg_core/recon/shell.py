@@ -54,14 +54,52 @@ def adapter_search_path() -> str:
     return f"{borg_dir() / 'recon' / 'adapters'}:{lib_dir() / 'recon' / 'adapters'}"
 
 
+def _int_env(name: str, default: int) -> int:
+    """An integer configuration variable, where unset OR EMPTY OR non-numeric all take the default.
+
+    BOTH GUARDS ARE LOAD-BEARING AND NEITHER IS PADDING, and this function exists because the bare
+    `int(os.environ.get(name, default))` it replaces became a KILL PATH for `borg link` the moment
+    S3's sweep fold made `link` call `fanout`. `int("")` raises ValueError; that ValueError escapes
+    `fanout` -> `sweep` -> `_grid` -> `_document` and lands in link/cli.py's broad boundary, which
+    prints one line to stderr and exits 1 with ZERO BYTES ON STDOUT. Every consumer of `borg link`
+    swallows failure (`cmd_watch`'s `|| true`, `drone status`'s `|| true`, fzf's preview pane), so
+    the user sees a blank frame with no diagnosis anywhere -- and it takes only a user who once set
+    `BORG_RECON_MAX_TRACKS` to tune recon and later cleared it. MEASURED before this guard:
+    `BORG_RECON_MAX_TRACKS= borg link sierra` printed `▸ ERROR: invalid literal for int() with base
+    10: ''` and rendered no rows at all.
+
+    This is the exact shape CLAUDE.md's "Learned" records for `BORG_REAP_STALE_HOURS`, one layer
+    over, and it is why the hardened spec forbids adding any `BORG_RECON_*` name to `_borg_py` --
+    that wrapper passes unset variables through as the EMPTY STRING. With this guard the prohibition
+    is no longer load-bearing for these two names, but it is left standing: a variable that is safe
+    to export is not the same as a variable that should be.
+
+    A NON-POSITIVE VALUE IS NOT CLAMPED. `BORG_RECON_TRACK_TIMEOUT=0` means "no patience at all" and
+    borg_core/recon/test_shell.py already exercises it deliberately; silently promoting it to 30
+    would make an explicit zero mean its opposite. Callers that cannot accept zero say so themselves.
+    """
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 def max_tracks() -> int:
-    """Max concurrent recon tracks (bounded fan-out), mirroring _recon_max_tracks."""
-    return int(os.environ.get("BORG_RECON_MAX_TRACKS", DEFAULT_MAX_TRACKS))
+    """Max concurrent recon tracks (bounded fan-out), mirroring _recon_max_tracks.
+
+    Clamped to at least 1 AFTER _int_env, because this one value reaches
+    `ThreadPoolExecutor(max_workers=...)`, which raises on anything below 1 -- and that raise is the
+    same blank-frame kill path _int_env exists to close, just via a different exception.
+    """
+    return max(1, _int_env("BORG_RECON_MAX_TRACKS", DEFAULT_MAX_TRACKS))
 
 
 def track_timeout() -> int:
     """Per-adapter timeout in seconds, mirroring _recon_track_timeout."""
-    return int(os.environ.get("BORG_RECON_TRACK_TIMEOUT", DEFAULT_TRACK_TIMEOUT))
+    return _int_env("BORG_RECON_TRACK_TIMEOUT", DEFAULT_TRACK_TIMEOUT)
 
 
 def file_mtime(path: Path) -> int | None:
@@ -143,7 +181,7 @@ def discover_adapters() -> list[tuple[str, str]]:
     return core.dedup_adapters(candidates)
 
 
-def run_adapter(source: str, adapter_path: str, since: str, projects_file: str) -> dict:
+def run_adapter(source: str, adapter_path: str, since: str, projects_file: str, timeout: float | None = None) -> dict:
     """Run one adapter as a subprocess under a timeout and normalize its output.
 
     Mirrors _recon_run_adapter: on any failure (non-zero exit, timeout, malformed output) returns
@@ -154,10 +192,22 @@ def run_adapter(source: str, adapter_path: str, since: str, projects_file: str) 
     decides what the pair means. Only a process that could not run at all (missing binary, timeout)
     becomes the synthetic failed track here. The run/capture/degrade half lives in
     borg_core.proc.run_capture, which is where the same shape ended up for the third time.
+
+    `timeout` EXISTS FOR borg_core.link, which reuses this engine on a reflexive front door. recon's
+    own budget is 30s per adapter -- correct for a morning link-up a human is waiting on deliberately,
+    absurd for a command that must answer in ~2.7s. `None` resolves to track_timeout(), so every
+    existing recon call site (cli.py:67 passes three positionals, the suite four) is byte-identical.
+
+    RESOLVED HERE, NEVER FORWARDED AS None. borg_core/proc.py documents `timeout=None` as *no
+    timeout*; passing this parameter straight through would turn "use the default" into "run
+    forever", and the caller that most needs a ceiling is the one that would lose it. And the test is
+    `is None`, not truthiness: `timeout=0` must stay 0. A `timeout or track_timeout()` would promote
+    an explicit zero to 30 -- and zero is exactly the value test_shell.py already exercises through
+    BORG_RECON_TRACK_TIMEOUT.
     """
     captured = proc.run_capture(
         [adapter_path, "--since", since, "--projects", projects_file],
-        timeout=track_timeout(),
+        timeout=track_timeout() if timeout is None else timeout,
     )
     if captured is None:
         return core.build_failed_track(source, -1)
@@ -165,15 +215,40 @@ def run_adapter(source: str, adapter_path: str, since: str, projects_file: str) 
     return core.process_adapter_output(source, stdout, returncode)
 
 
-def fanout(since: str, projects_file: str, adapters: list[tuple[str, str]]) -> list[dict]:
-    """Fan out over adapters concurrently, bounded by max_tracks(). Mirrors _recon_fanout."""
+def fanout(since: str, projects_file: str, adapters: list[tuple[str, str]], timeout: float | None = None) -> list[dict]:
+    """Fan out over adapters concurrently, bounded by max_tracks(). Mirrors _recon_fanout.
+
+    Worst-case wall clock is `ceil(len(adapters) / max_tracks()) * timeout`: one batch at the default
+    width of 8, so 30s for recon and `timeout` for link. A machine with a ninth injected adapter
+    silently doubles that with no code change here -- which is the argument for passing a budget in
+    rather than letting the caller assume one batch.
+
+    THE FUTURE IS JOINED WITH NO TIMEOUT, AND THAT IS THE SAFETY PROPERTY, not an oversight. B4's
+    hazard is a worker abandoned mid-run: a timeout on `f.result()` returns while the worker is still
+    executing, and `concurrent.futures.thread`'s interpreter atexit hook then joins it anyway, so the
+    process prints its answer and sits. Here the bound is on the WORK -- run_adapter hands `timeout`
+    down to borg_core.proc.run_capture, which waits on the direct child's EXIT (not on pipe EOF) and,
+    on expiry, SIGKILLs the child's whole SESSION and reaps it. The worker therefore always exits,
+    the `with` block's shutdown(wait=True) always completes, and the atexit hook has nothing to join.
+    Do NOT add `timeout=` to `f.result()`; a shorter budget belongs in run_adapter and nowhere else.
+
+    THE TWO CLAIMS THIS PARAGRAPH USED TO MAKE WERE BOTH TOO STRONG, and the review that caught them
+    measured the gap rather than arguing it. It said `subprocess.run` "SIGKILLs and reaps the child",
+    which is true of exactly ONE pid -- the shipped github adapter runs `gh` in a command
+    substitution, so the network work is a grandchild that survived the deadline and was reparented
+    to init (six orphans measured across three invocations). And the re-measurement that pronounced
+    B4 absent used a `sleep 30` adapter that produces NO OUTPUT, which is not B4's shape at all;
+    B4's shape is output COMPLETE and the process still holding the pipe, which reproduces as a
+    full-budget stall AND a spurious failed track. Both are now fixed in borg_core/proc.py -- see its
+    module docstring for the measurements -- and neither was fixable from this function.
+    """
     if not adapters:
         return []
     # JUSTIFICATION: stdlib ThreadPoolExecutor construction, not a layering violation.
     with concurrent.futures.ThreadPoolExecutor(  # pylint: disable=clean-arch-demeter
         max_workers=max_tracks()
     ) as pool:
-        futures = [pool.submit(run_adapter, source, path, since, projects_file) for source, path in adapters]
+        futures = [pool.submit(run_adapter, source, path, since, projects_file, timeout) for source, path in adapters]
         return [f.result() for f in futures]
 
 

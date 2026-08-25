@@ -11,7 +11,25 @@ setup_temp_dirs() {
     export BORG_REGISTRY="$BORG_DIR/registry.json"
     export HOME="$BORG_TEST_HOME"
     export XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/config"
-    mkdir -p "$BORG_DIR" "$BORG_TEST_HOME/.claude/lib"
+
+    # NEUTRALIZED TO A REAL EMPTY DIRECTORY, NOT UNSET AND NOT "" (the hardened spec's B7).
+    # `borg link` folds the recon sweep into its document, so every `borg link` invocation in this
+    # suite -- 40-odd of them plus all four goldens -- would otherwise discover the shipped
+    # lib/recon/adapters/recon-adapter-github through borg_core/recon/shell.py's repo-root fallback
+    # and shell out to `gh`. Goldens would then byte-capture whatever GitHub returned that minute
+    # and the suite would need an authenticated network to be green.
+    #
+    # THE EMPTY STRING DOES NOT WORK. adapter_search_path() branches on `if override:`, so an
+    # exported-empty value is FALSY and falls straight back to the real adapter directories -- the
+    # neutralization would silently do nothing, which is the same trap CLAUDE.md records for
+    # BORG_REAP_STALE_HOURS. Only a real, existing, empty directory discovers zero adapters.
+    #
+    # THE ADAPTER-DISCOVERY REGRESSION GATE KEEPS ITS TEETH: cli_contract.bats's two #113 cases and
+    # its registry-resolution case all `unset BORG_RECON_ADAPTER_PATH` inside their own `zsh -c`,
+    # so they still exercise the real fallback this line hides from everyone else.
+    export BORG_RECON_ADAPTER_PATH="${BATS_TEST_TMPDIR}/no-adapters"
+
+    mkdir -p "$BORG_DIR" "$BORG_TEST_HOME/.claude/lib" "$BORG_RECON_ADAPTER_PATH"
     cp "$BORG_HOME/lib/borg-hooks.sh" "$BORG_TEST_HOME/.claude/lib/borg-hooks.sh"
     cp "$BORG_HOME/lib/reaper.sh" "$BORG_TEST_HOME/.claude/lib/reaper.sh"
 }

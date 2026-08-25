@@ -183,7 +183,11 @@ EOF
     _mock_gh "$(_one_pr_body)"
     run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"swept 0 github repo(s)"* ]] || false
+    # Nothing in scope resolved to a queryable repository, so the track reports itself SKIPPED rather
+    # than as an empty answer. `skipped` is the flag that lets `borg link` tell "I looked and there
+    # was nothing" from "I could not look" -- without it both are exit 0 with `items: []`.
+    run bash -c "printf '%s' '$output' | jq -r '[.summary, (.skipped|tostring), (.items|length|tostring)] | @tsv'"
+    [ "$output" = "$(printf 'no github repository in scope — nothing to sweep\ttrue\t0')" ]
 }
 
 # ── the degradation ladder: every path exits 0 with a structured object ──────
@@ -209,8 +213,12 @@ EOF
     run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
     [ "$status" -eq 0 ]
     [[ "$output" == *"github track skipped"* ]] || false
-    run bash -c "printf '%s' '$output' | jq -r '.items | length'"
-    [ "$output" = "0" ]
+    # AND IT SAYS SO IN A FIELD, not only in prose. Every emit_skip path exits 0 with a valid,
+    # empty track, so `ok` stays true downstream; before `skipped` existed, an unauthenticated `gh`
+    # produced a `borg link` document claiming a successful sweep with an empty warnings list and a
+    # grid whose every state came from a hand-authored manifest field.
+    run bash -c "printf '%s' '$output' | jq -r '[(.skipped|tostring), (.items|length|tostring)] | @tsv'"
+    [ "$output" = "$(printf 'true\t0')" ]
 }
 
 @test "adapter: unparseable gh output degrades instead of emitting a raw dump" {
@@ -278,7 +286,8 @@ EOF
 
     run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$WORK/projects.json"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"swept 0 github repo(s)"* ]] || false
+    run bash -c "printf '%s' '$output' | jq -r '[.summary, (.skipped|tostring)] | @tsv'"
+    [ "$output" = "$(printf 'no github repository in scope — nothing to sweep\ttrue')" ]
 
     run bash -c "wc -c < '$GH_CALLS' | tr -d ' '"
     [ "$output" = "0" ]

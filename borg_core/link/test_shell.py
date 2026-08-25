@@ -2,7 +2,6 @@
 
 import json
 import os
-import subprocess
 
 import pytest
 
@@ -97,41 +96,45 @@ def test_max_active_defaults_to_three_when_unset_or_empty_or_garbage(isolated_en
 # ── live_windows ─────────────────────────────────────────────────────────────
 
 
-def test_live_windows_splits_tmux_output(isolated_env, monkeypatch):
-    def fake_run(*_args, **_kwargs):
-        return subprocess.CompletedProcess([], 0, stdout="alpha\nbravo\n", stderr="")
+def _stub_tmux(monkeypatch, tmp_path, script: str):
+    """A REAL executable `tmux` on PATH, matching borg_core/registry/test_shell.py's convention.
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    These four cases used to monkeypatch `subprocess.run` inside borg_core.proc. That coupled them to
+    proc.py's INTERNALS rather than to its contract, and they broke the moment run_capture moved to
+    Popen + a new session + a temp-file sink -- the change that stops a timed-out adapter orphaning
+    its `gh` grandchild and stops a daemonizing adapter holding the read open for the full budget. A
+    stub binary exercises the same behaviour through the code production actually runs.
+    """
+    mock_bin = tmp_path / "mock-bin"
+    mock_bin.mkdir(exist_ok=True)
+    script_path = mock_bin / "tmux"
+    script_path.write_text(f"#!/usr/bin/env bash\n{script}\n")
+    script_path.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{mock_bin}{os.pathsep}{os.environ['PATH']}")
+    return mock_bin
+
+
+def test_live_windows_splits_tmux_output(isolated_env, monkeypatch, tmp_path):
+    _stub_tmux(monkeypatch, tmp_path, 'printf "alpha\\nbravo\\n"')
     assert shell.live_windows() == ["alpha", "bravo"]
 
 
-def test_live_windows_empty_on_nonzero_exit(isolated_env, monkeypatch):
-    def fake_run(*_args, **_kwargs):
-        return subprocess.CompletedProcess([], 1, stdout="", stderr="no server")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+def test_live_windows_empty_on_nonzero_exit(isolated_env, monkeypatch, tmp_path):
+    _stub_tmux(monkeypatch, tmp_path, 'echo "no server" >&2; exit 1')
     assert shell.live_windows() == []
 
 
-def test_live_windows_empty_when_tmux_is_missing(isolated_env, monkeypatch):
-    def fake_run(*_args, **_kwargs):
-        raise FileNotFoundError("tmux")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+def test_live_windows_empty_when_tmux_is_missing(isolated_env, monkeypatch, tmp_path):
+    monkeypatch.setenv("PATH", str(tmp_path / "no-such-bin"))
     assert shell.live_windows() == []
 
 
-def test_live_windows_uses_the_configured_session(isolated_env, monkeypatch):
-    seen = {}
-
-    def fake_run(cmd, **_kwargs):
-        seen["cmd"] = cmd
-        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
+def test_live_windows_uses_the_configured_session(isolated_env, monkeypatch, tmp_path):
+    seen = tmp_path / "tmux-argv.txt"
+    _stub_tmux(monkeypatch, tmp_path, f'printf "%s" "$*" > "{seen}"')
     monkeypatch.setenv("BORG_TMUX_SESSION", "custom")
-    monkeypatch.setattr(subprocess, "run", fake_run)
     shell.live_windows()
-    assert "custom" in seen["cmd"]
+    assert "custom" in seen.read_text()
 
 
 def test_live_windows_is_the_registry_shells_tmux_window_lister():
