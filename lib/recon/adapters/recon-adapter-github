@@ -74,7 +74,15 @@ trap 'rm -f "$REPOS_FILE"' EXIT
 # it costs nothing and it is what lets the network call be a single batch.
 while IFS=$'\t' read -r PROJECT PPATH; do
     [ -n "$PROJECT" ] && [ -n "$PPATH" ] || continue
-    [ -d "$PPATH/.git" ] || continue
+    # -e, NOT -d: a linked git worktree's .git is a FILE containing "gitdir: ...", and
+    # `git remote get-url origin` answers correctly inside one. The old -d test skipped every
+    # worktree, so `drone feature` checkouts (registered by `borg add` — reveal-data-consistency is
+    # one today) contributed no items at all. Still a test and not nothing: `git remote get-url`
+    # run in a plain SUBDIRECTORY of a repo succeeds and returns the PARENT's remote, which would
+    # give the subdirectory its parent's slug. borg_core/manifest/shell.py:repository_slug carries
+    # the identical rule and the two must never diverge — a fix on one side only makes `link` and
+    # `recon` disagree about which repositories exist.
+    [ -e "$PPATH/.git" ] || continue
 
     # Resolve owner/repo from the origin remote; skip non-github or remoteless repos.
     REMOTE="$(git -C "$PPATH" remote get-url origin 2>/dev/null || echo "")"
