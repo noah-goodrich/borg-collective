@@ -36,7 +36,7 @@ bash -c 'set -o pipefail; borg link --json | jq ".directives |=
 Deep dive:
 
 ```bash
-bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_at, capacity, total_projects, focus}"'
+bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_at, capacity, total_projects, scope, focus}"'
 ```
 
 One call serves both — `borg link --json <project>` returns the full overview document PLUS
@@ -100,6 +100,10 @@ one level deeper:
   the board has no summaries, say so once and suggest `borg link --refresh` on the host.
 - **Collapse, don't transcribe.** 121 directives across 9 projects is a number plus the top few
   titles, not a list.
+- **`scope` is context, not content.** `{kind: repository|orchestrator, repository, local}` records
+  which repository the invocation resolved to (from cwd, or from an explicit project name, which
+  wins). Today it does not narrow `order`/`projects` — it is informational, so never present it as
+  a filter that was applied. Worth one clause only when it contradicts what the user asked for.
 
 ## Step 3 — Synthesize
 

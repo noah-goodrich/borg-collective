@@ -70,7 +70,7 @@ def _focus(project: str, registry: dict, now_epoch: int) -> dict | None:
     }
 
 
-def _document(project: str, show_all: bool, mode: str) -> dict:
+def _document(project: str, show_all: bool, mode: str, local: bool = False) -> dict:
     """Assemble the `borg link` document for one invocation, consumed by both `--json` and the three
     renderers in render.py.
 
@@ -80,8 +80,16 @@ def _document(project: str, show_all: bool, mode: str) -> dict:
     `order`/`projects`; `render.deep` reads only `focus`; `--json` and the default `overview` read
     everything. Skipping unread work here matters because `_document` is READ-ONLY but re-executed
     per call site -- drone.zsh:964 calls it once per tmux window inside cmd_status's loop, and
-    borg.zsh's fzf preview re-executes it synchronously on every cursor move (`--porcelain`, the mode
-    that most benefits from skipping the aggregate collectors).
+    borg.zsh's fzf preview re-executes it synchronously on every cursor move.
+
+    CORRECTION (S1): an earlier version of this docstring said the fzf preview runs `--porcelain`.
+    It does not, and the error was load-bearing -- it was cited downstream as proof that the preview
+    was already protected from expensive work. borg.zsh:262 uses `cmd_ls --porcelain` to build the
+    picker's INPUT LIST, exactly once. borg.zsh:266 is `--preview "borg link {1}"`, and a bare
+    positional routes through _borg_link_dispatch to `--deep`. So the mode re-executed on every
+    cursor move is DEEP, and `deep` is therefore a hot loop, not a cold one. Any future work that
+    puts network or sweep cost behind a mode must treat `deep` as hot and opt the preview down
+    explicitly (borg.zsh:266 now passes `--local`), never assume mode gating protects it.
 
     FIVE further judgment calls, unchanged from before this function became mode-aware: (i)
     `shell.now_epoch()` is called EXACTLY ONCE and threaded into registry_with_state, format_iso,
@@ -101,6 +109,18 @@ def _document(project: str, show_all: bool, mode: str) -> dict:
     overlaid = shell.registry_with_state(now=moment)
     projects = core.visible_projects(overlaid, show_all, moment)
     order = core.order_projects(projects)
+
+    # Scope is computed from the UNFILTERED overlaid registry, not `projects`: --all is a display
+    # filter, and an archived repository is still the repository you are standing in. Resolving
+    # scope against the filtered map would make `borg link` inside an archived repository silently
+    # report orchestrator breadth.
+    scope = core.scope_for(
+        shell.cwd(),
+        shell.orchestrator_root(),
+        shell.resolved_project_paths(overlaid),
+        local=local,
+        requested_project=project,
+    )
 
     need_aggregate = mode in ("json", "overview")
     need_focus = mode in ("json", "deep")
@@ -125,10 +145,11 @@ def _document(project: str, show_all: bool, mode: str) -> dict:
         assimilated=assimilated,
         cortex_pending=cortex_pending,
         focus=_focus(project, overlaid, moment) if need_focus else None,
+        scope=scope,
     )
 
 
-def _run(project: str, show_all: bool, mode: str) -> int:
+def _run(project: str, show_all: bool, mode: str, local: bool = False) -> int:
     """Dispatch one `borg link` invocation; returns the process exit code.
 
     Mode precedence, strictly: json > porcelain > deep > overview. Renders to a SINGLE string and
@@ -136,7 +157,7 @@ def _run(project: str, show_all: bool, mode: str) -> int:
     yields zero bytes on stdout, never a half-frame (every consumer here swallows failure: cmd_watch's
     `|| true`, drone status's `|| true`, fzf's preview pane).
     """
-    doc = _document(project, show_all, mode)
+    doc = _document(project, show_all, mode, local)
     if mode == "json":
         print(jsonlib.dumps(doc))
         return 0
@@ -158,6 +179,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--porcelain", dest="porcelain", action="store_true")
     parser.add_argument("--deep", dest="deep", action="store_true")
     parser.add_argument("--all", dest="show_all", action="store_true")
+    # AC1's only opt-down. Inert in S1 -- it records intent in the document's `scope.local` and
+    # changes no behavior yet -- but it is wired at the hot call sites NOW (borg.zsh:266's fzf
+    # preview, drone.zsh:964's per-window loop) so the protection predates the cost it protects
+    # against. Landing the flag with the sweep instead would mean shipping one commit in which
+    # every cursor move in `borg switch` fires a network sweep.
+    parser.add_argument("--local", dest="local", action="store_true")
     return parser
 
 
@@ -192,7 +219,7 @@ def main(argv: list[str] | None = None) -> None:
     mode = _mode(args)
     die = _die_json if mode == "json" else _die_human
     try:
-        exit_code = _run(args.project, args.show_all, mode)
+        exit_code = _run(args.project, args.show_all, mode, args.local)
     except ProjectNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.
