@@ -47,6 +47,15 @@ setup() {
 # had happened, never that a swept state reached a node. `r0` is the alias the adapter assigns the
 # first (here, only) repository line, and `updatedAt` is generated at call time rather than hard-coded
 # so it can never drift outside the sweep window and turn this into a silent skip six months from now.
+#
+# IT BRANCHES ON THE QUERY BODY, because `borg link` now makes TWO different `gh` calls. The sweep
+# asks `r<N>: repository(...) { pullRequests(first: 30 ...) }`; AC3's targeted fetch asks
+# `n<N>: repository(...) { issueOrPullRequest(number: N) }`. A mock answering both with one blob
+# would hand the fetch a payload with no `nN` alias — so the fetch would resolve nothing while
+# LOOKING like it had been asked, and every case below would silently exercise the degrade path. The
+# fetch arm here answers NEITHER ref on purpose: this fixture's subject is the swept rung and the
+# declared fallback below it, and the fetch answering would delete the fallback's subject. The AC3
+# case further down is where the fetch answers.
 _sweepable_repo() {
     local dir="${BATS_TEST_TMPDIR}/ws/sierra"
     mkdir -p "$dir"
@@ -75,7 +84,12 @@ EOF
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$GH_TRACE"
 NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-cat <<JSON
+case "$*" in
+  *"issueOrPullRequest(number:"*)
+    printf '%s' '{"data":{"n0":{"issueOrPullRequest":null},"n1":{"issueOrPullRequest":null}}}'
+    ;;
+  *)
+    cat <<JSON
 {"data":{"viewer":{"login":"tester"},
  "r0":{"pullRequests":{"nodes":[
    {"number":1,"title":"the trunk PR","state":"MERGED","isDraft":false,"updatedAt":"$NOW",
@@ -83,10 +97,16 @@ cat <<JSON
     "author":{"login":"tester"}}
  ]}}}}
 JSON
+    ;;
+esac
 EOF
     chmod +x "$MOCK_BIN/gh"
 
     export BORG_RECON_ADAPTER_PATH="${BATS_TEST_DIRNAME}/../lib/recon/adapters"
+    # setup_temp_dirs neutralizes the fetch seam for the whole suite; this fixture is one of the two
+    # places that must restore the real path, exactly as it restores the real adapter directory. Left
+    # set, the mock `gh` above would never be asked the fetch query at all.
+    unset BORG_LINK_FETCH_FIXTURE
 }
 
 # ── B1: the opt-down, counted ─────────────────────────────────────────────────
@@ -182,6 +202,175 @@ EOF
     [ "$output" = "open" ]
 }
 
+# ── AC3: declared members outside the sweep resolve truthfully ────────────────
+#
+# ONE manifest declaring rows in TWO repositories, hosted by the one NOT in scope, with two rows the
+# declared rung cannot answer for.
+#
+# WHY sierra IS THE CWD AND tango HOSTS THE MANIFEST. Repository scope narrows the SWEEP to sierra's
+# registry entry alone (grid.scoped_projects), so testorg/tango#7 and #8 are outside the sweep BY
+# CONSTRUCTION — not by a time window that drifts, and not by the adapter's `first: 30` cap. A
+# window-based fixture would be a race; this one cannot be. It also preserves B6's shape: discovery
+# is global, selection is scoped.
+#
+# A ROW WITH NO `status` KEY VALIDATES CLEAN, and it is the whole discriminator. manifest.core's
+# _validate_row checks the ref, the `order` KEY, the gate and `after` — never `status`. So row 2 is
+# the one shape whose truthful state ONLY a fetch can supply: no manifest author can make it resolve,
+# which is what stops "zero unknown" from being satisfiable by editing the fixture.
+_ac3_two_repository_manifest() {
+    local sierra="${BATS_TEST_TMPDIR}/ws/sierra" tango="${BATS_TEST_TMPDIR}/ws/tango"
+    mkdir -p "$sierra" "$tango"
+    git init -q "$sierra"
+    git -C "$sierra" remote add origin "https://github.com/testorg/sierra.git"
+    git init -q "$tango"
+    git -C "$tango" remote add origin "https://github.com/testorg/tango.git"
+
+    mkdir -p "$tango/.borg/programs"
+    cat > "$tango/.borg/programs/cross-window.json" <<'EOF'
+{"program":"cross-window","rows":[
+  {"order":"1","ref":"testorg/sierra#1","status":"merged","why":"the sweep answers this one"},
+  {"order":"2","ref":"testorg/sierra#2","why":"no status key at all — only a fetch can answer"},
+  {"order":"3","ref":"testorg/tango#7","status":"stacked","why":"authoring vocabulary, not a state"},
+  {"order":"4","ref":"testorg/tango#8","status":"merged","why":"declared stale; the wire says open"}
+]}
+EOF
+
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{
+  "sierra":{"path":"$sierra","status":"idle","last_activity":"2026-08-01T00:00:00Z"},
+  "tango":{"path":"$tango","status":"idle","last_activity":"2026-08-01T00:00:00Z"}}}
+EOF
+
+    setup_mock_bin
+    # BORG_PATH_PREFIX, NOT just setup_mock_bin's PATH export. borg.zsh RESETS PATH outright
+    # (`PATH="${BORG_PATH_PREFIX:+$BORG_PATH_PREFIX:}$HOME/.local/bin:..."`), so a mock reachable only
+    # through the inherited PATH is invisible to every child borg forks — and the fetch would hit the
+    # developer's real authenticated `gh` while this case looked green.
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export GH_TRACE="${BATS_TEST_TMPDIR}/gh-trace.txt"
+    : > "$GH_TRACE"
+
+    # ONE MOCK, TWO QUERY SHAPES, DISCRIMINATED ON THE QUERY BODY. Answering both with one blob makes
+    # "the fetch resolved it" indistinguishable from "the sweep did", which is the whole question.
+    #
+    # THE ALIASES ASSUME declared_refs' SORT. manifest.core's declared_refs returns refs
+    # "deduplicated and sorted ... SORTED, not declaration order ... this is the input to a batched
+    # fetch whose result may be logged and diffed", so n0..n3 is sierra#1, sierra#2, tango#7, tango#8.
+    # That contract is what makes this mock deterministic; a fetch that stopped sorting would fail
+    # the state assertions rather than silently reordering.
+    #
+    # EXIT 1 WITH A FULLY USABLE `data` IS B5's MEASURED SHAPE, not a contrivance: verified live, a
+    # batch containing one bogus ref returns exit 1, `errors: [NOT_FOUND]`, and every valid sibling
+    # resolved. Code that reads returncode != 0 as total failure renders `unknown` for all four —
+    # exactly what AC3 forbids — and this is where it dies.
+    #
+    # n3 IS AN Issue, ON PURPOSE. `Issue.state` and `PullRequest.state` are different enums under one
+    # response name, so the query has to alias one of them; a build that dropped `issueState: state`
+    # would be rejected by the real GitHub for the WHOLE document, and this arm is the only place in
+    # the suite where an issue-shaped answer has to survive the parser.
+    cat > "$MOCK_BIN/gh" <<'MOCK'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$GH_TRACE"
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+case "$*" in
+  *"issueOrPullRequest(number:"*)
+    printf '%s' '{"data":{
+      "n0":{"issueOrPullRequest":{"__typename":"PullRequest","number":1,"title":"the trunk PR",
+            "state":"CLOSED","isDraft":false,"updatedAt":"2026-08-26T00:00:00Z"}},
+      "n1":{"issueOrPullRequest":{"__typename":"PullRequest","number":2,"title":"the second PR",
+            "state":"MERGED","isDraft":false,"updatedAt":"2026-08-26T00:00:00Z"}},
+      "n2":{"issueOrPullRequest":{"__typename":"PullRequest","number":7,"title":"tango seven",
+            "state":"OPEN","isDraft":false,"updatedAt":"2026-08-26T00:00:00Z"}},
+      "n3":{"issueOrPullRequest":{"__typename":"Issue","number":8,"title":"tango eight",
+            "issueState":"OPEN","updatedAt":"2026-08-26T00:00:00Z"}}},
+     "errors":[{"type":"NOT_FOUND","path":["n9"],"message":"Could not resolve to a PullRequest."}]}'
+    exit 1
+    ;;
+  *)
+    cat <<JSON
+{"data":{"viewer":{"login":"tester"},
+ "r0":{"pullRequests":{"nodes":[
+   {"number":1,"title":"the trunk PR","state":"MERGED","isDraft":false,"updatedAt":"$NOW",
+    "url":"https://github.com/testorg/sierra/pull/1","headRefName":"t","baseRefName":"main",
+    "author":{"login":"tester"}}
+ ]}}}}
+JSON
+    ;;
+esac
+MOCK
+    chmod +x "$MOCK_BIN/gh"
+
+    export BORG_RECON_ADAPTER_PATH="${BATS_TEST_DIRNAME}/../lib/recon/adapters"
+    unset BORG_LINK_FETCH_FIXTURE
+}
+
+@test "sweep: AC3 — a manifest spanning two repositories renders zero unknown nodes" {
+    _ac3_two_repository_manifest
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+
+    # ── THE CONTROL, FIRST, AND IT IS MOST OF THE CASE. "Zero unknown" is trivially satisfiable by
+    # the MANIFEST AUTHOR: declare every row `open` and the headline assertion below passes with the
+    # entire targeted fetch deleted. So the same fixture, the same cwd, one flag different, must
+    # still produce unknowns — exactly 2 of 4, the two rows no declaration can answer for.
+    local ctrl="${BATS_TEST_TMPDIR}/ac3-local.json"
+    bash -c "cd '$dir' && zsh '$BORG' link --json --local" > "$ctrl"
+    run jq -r '[.grid.manifests[].nodes[].state] | map(select(. == "unknown")) | length' "$ctrl"
+    [ "$output" -eq 2 ]
+    # --local opts down from the NETWORK, and the fetch is network, so it must not fire either.
+    [ ! -s "$GH_TRACE" ]
+
+    local doc="${BATS_TEST_TMPDIR}/ac3.json"
+    bash -c "cd '$dir' && zsh '$BORG' link --json" > "$doc"
+
+    # ── ANTI-DEGENERACY, BEFORE BELIEVING ANY `any()`. jq's `[] | any(. == "unknown")` is FALSE, so
+    # an empty grid — a slug that stopped resolving, a manifest that stopped validating, a selection
+    # that returned nothing — satisfies AC3's own verification while answering nothing at all. Pin
+    # the node count first, and pin that the manifest really does live in the OTHER repository.
+    run jq -r '[(.grid.declared|tostring), ([.grid.manifests[].nodes[]] | length | tostring)] | @tsv' "$doc"
+    [ "$output" = "$(printf '4\t4')" ]
+    run jq -r '[.grid.slug, (.grid.manifests[0].path | test("/ws/tango/"))] | @tsv' "$doc"
+    [ "$output" = "$(printf 'testorg/sierra\ttrue')" ]
+
+    # ── THE CLAIM, IN THE PLAN'S OWN WORDS.
+    run jq -r '[.grid.manifests[].nodes[].state] | any(. == "unknown")' "$doc"
+    [ "$output" = "false" ]
+
+    # ── AND WHERE EACH ANSWER CAME FROM, which `any(. == "unknown")` cannot see. A build that
+    # defaulted `unknown` to `open`, or widened DECLARABLE_STATES to swallow `stacked`, satisfies the
+    # line above and fails every column below.
+    run jq -r '.grid.manifests[0].nodes
+               | [ .["testorg/sierra#1"].state, .["testorg/sierra#1"].state_source,
+                   .["testorg/sierra#2"].state, .["testorg/sierra#2"].state_source,
+                   .["testorg/tango#7"].state,  .["testorg/tango#7"].state_source,
+                   .["testorg/tango#8"].state,  .["testorg/tango#8"].state_source ] | @tsv' "$doc"
+    [ "$output" = "$(printf 'merged\tswept\tmerged\tfetched\topen\tfetched\topen\tfetched')" ]
+    # sierra#1 pins the rung ORDER above the fetch: the fetch said CLOSED, the sweep said MERGED, and
+    #   merged/swept is the ONLY outcome consistent with swept > fetched.
+    # tango#8 pins the order BELOW it: declared merged, fetched open, and open/fetched is the ONLY
+    #   outcome consistent with fetched > declared. Together they trap the new rung on both sides.
+
+    # A node the fetch answered carries the PR's own title, which no manifest row has a field for.
+    run jq -r '.grid.manifests[0].nodes["testorg/tango#8"].title' "$doc"
+    [ "$output" = "tango eight" ]
+
+    # ── TWO gh CALLS PER RUN, NAMED AND EXACT. One batched sweep, one batched fetch — never one per
+    # ref and never one per repository. Cost is flat at 1 rate-limit point from 14 to 112 aliased
+    # nodes, so a per-ref loop is invisible to every other assertion here.
+    run bash -c "grep -c 'pullRequests(first:' '$GH_TRACE'"
+    [ "$output" -eq 1 ]
+    run bash -c "grep -c 'issueOrPullRequest(number:' '$GH_TRACE'"
+    [ "$output" -eq 1 ]
+
+    # ── THE LADDER'S OWN SCOREBOARD, and the receipt beside it. build_grid's docstring says the
+    # targeted fetch is what drives `unresolved` toward zero; make the number say it too rather than
+    # leaving it as prose. `fetch` is a SIBLING of `sources`, never a row inside it — a row would
+    # push `.grid.sources | length` to 2 and make the B9 latency gate below skip ITSELF.
+    run jq -r '[(.grid.unresolved|tostring), (.grid.sources|length|tostring),
+                (.grid.fetch.attempted|tostring), .grid.fetch.status,
+                (.grid.fetch.requested|tostring), (.grid.fetch.resolved|tostring)] | @tsv' "$doc"
+    [ "$output" = "$(printf '0\t1\ttrue\tok\t4\t4')" ]
+}
+
 # ── B2: drone status, the per-tmux-window loop ────────────────────────────────
 
 @test "sweep: drone status triggers zero adapter and zero gh subprocesses" {
@@ -266,6 +455,15 @@ EOF
     # And it really does suppress discovery, rather than merely looking empty.
     run zsh "$BORG" recon --adapters
     [[ "$output" != *"recon-adapter-github"* ]] || false
+
+    # THE FETCH SEAM'S HALF OF THE SAME GUARD. AC3's targeted fetch is NOT adapter-mediated —
+    # borg_core execs `gh` itself — so the empty adapter directory above does nothing for it, and a
+    # separate neutralization is what keeps a manifest fixture from reaching live GitHub. An empty
+    # string LOOKS neutralized and is not: start_fetch branches on `if fixture:`.
+    [ -n "${BORG_LINK_FETCH_FIXTURE:-}" ]
+    [ -f "$BORG_LINK_FETCH_FIXTURE" ]
+    run jq -r '.nodes | length' "$BORG_LINK_FETCH_FIXTURE"
+    [ "$output" = "0" ]
 }
 
 # ── AC1: --help answers without sweeping, and the lenient arm still sweeps ─────
@@ -411,9 +609,20 @@ for p in sys.argv[1:]:
     # setup_temp_dirs' empty adapter dir the sweep short-circuits before any subprocess, so a tree
     # diff there inspects a code path that never ran; and even with the real adapter, a run 2 that
     # short-circuited on an in-process memo and reprinted run 1's answer would leave the tree clean
-    # while doing no work. The count is EXACT, not `-ge 1`: one batched call PER RUN.
+    # while doing no work.
+    #
+    # THE COUNT IS EXACT, NEVER `-ge`, AND IT IS 4 BECAUSE EACH RUN MAKES EXACTLY TWO BATCHED CALLS:
+    # one `pullRequests(first: 30 ...)` sweep and one `issueOrPullRequest(number: ...)` targeted
+    # fetch. It was 2 before AC3 landed the fetch. Relaxing the comparison rather than changing the
+    # literal would destroy the only assertion in the tree that can see either call degenerating into
+    # a loop — one `gh` per repository, or one per declared ref — which the flat 1-rate-limit-point
+    # measurement makes otherwise invisible. Named per shape below so a regression says WHICH.
     run cat "$GH_TRACE"
-    [ "${#lines[@]}" -eq 2 ]
+    [ "${#lines[@]}" -eq 4 ]
+    run bash -c "grep -c 'pullRequests(first:' '$GH_TRACE'"
+    [ "$output" -eq 2 ]
+    run bash -c "grep -c 'issueOrPullRequest(number:' '$GH_TRACE'"
+    [ "$output" -eq 2 ]
 
     # ANTI-DEGENERACY GATE FOR THE SNAPSHOT ITSELF. Every assertion below is a comparison between
     # two snapshots, so a _fs_snapshot that emits nothing -- or emits a constant per file -- makes
@@ -490,8 +699,13 @@ for p in sys.argv[1:]:
     # and the adapter exits at its SWEPT=0 branch before it ever calls `gh`. Measured: 140ms, green,
     # and a complete lie about AC1. That is the `reference_test_supplies_derived_value` failure with a
     # stopwatch attached, so the guard below asserts a real sweep happened BEFORE anything is timed.
+    # BORG_LINK_FETCH_FIXTURE is unset alongside the rest for the same reason: under the harness's
+    # neutralized recording the targeted fetch replays an empty file in microseconds, so the gate
+    # would time a `borg link` that never made AC3's round trip at all — the same "measured 140ms,
+    # green, and a complete lie" failure the paragraph above describes, one seam over.
     export HOME="$REAL_HOME"
     unset XDG_CONFIG_HOME BORG_DIR BORG_REGISTRY BORG_RECON_ADAPTER_PATH BORG_PATH_PREFIX
+    unset BORG_LINK_FETCH_FIXTURE
 
     # A POSITIONAL, NOT THE BARE OVERVIEW, and that is a safety rule rather than a measurement one:
     # `--json` with no project runs borg_desktop_scan, which MERGES into the registry — here, the
@@ -501,11 +715,17 @@ for p in sys.argv[1:]:
     # suite and is safe only on apostrophe-free fixtures: this document carries real plan objectives
     # and checkpoint prose, and one apostrophe closes the shell quote and turns the guard into a
     # silent skip. It did, on the first run of this test.
+    # THE GUARD MUST COVER BOTH NETWORK PATHS, NOT JUST THE SWEEP. AC1 budgets the sweep AND AC3's
+    # targeted fetch together; a guard that only proved the sweep ran could still certify the 2.7s
+    # budget while timing a `borg link` that made no fetch round trip at all — exactly the failure
+    # this comment already claims to have closed, one seam over. `.grid.fetch.attempted` proves a
+    # fetch was tried; `.grid.fetch.requested > 0` proves it was tried against a REAL ref set,
+    # ruling out the "attempted but nothing to ask about" no-op the fixture-suite covers elsewhere.
     local doc="${BATS_TEST_TMPDIR}/perf.json"
     zsh "$BORG" link --json borg-collective > "$doc" 2>/dev/null || skip "no live borg registry here"
-    run jq -r '[.grid.swept, (.grid.sources | length)] | @tsv' "$doc"
+    run jq -r '[.grid.swept, (.grid.sources | length), .grid.fetch.attempted, (.grid.fetch.requested > 0)] | @tsv' "$doc"
     [ "$status" -eq 0 ]
-    [ "$output" = "$(printf 'true\t1')" ] || skip "nothing swept here — the gate would time an empty sweep"
+    [ "$output" = "$(printf 'true\t1\ttrue\ttrue')" ] || skip "nothing fetched here — the gate would time a link that skipped AC3"
 
     local -a samples=()
     local i start finish
