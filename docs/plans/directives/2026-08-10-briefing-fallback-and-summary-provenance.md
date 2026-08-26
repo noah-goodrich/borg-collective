@@ -179,9 +179,75 @@ Do not start this phase until Phases 1-3 are done. It is a data-model question (
 cleared on status change, be excluded from all human-facing output, or be replaced by the notification's
 `tool_name` where present) and it will be much easier to reason about once the display path is honest.
 
+## Phase 5 — `--brief` is now a second, un-swept truth level of `borg link` (filed 2026-08-26, NOT FIXED)
+
+*Filed by S4 of the one-front-door plan (`docs/plans/directives/2026-08-25-link-front-door-hardened-spec.md`).
+S4 is recording this gap, not closing it: the fix is a rewrite of `_borg_print_briefing`, which this
+directive owns.*
+
+S3 of that plan folded the recon fan-out into `borg link`, so every other shape of the command now answers
+from a live sweep of GitHub state joined onto the manifests. **`--brief` does not.** Its dispatch arm in
+`_borg_link_dispatch` calls `_borg_print_briefing` directly and never reaches `borg_core.link.cli`, so it
+never sweeps, never reads a manifest, and never sees a `grid`. Measured: zero `gh` subprocesses on the
+`--brief` path against one batched call on every other arm.
+
+That makes `borg link` and `borg link --brief` two different answers to the same question from the same
+command — which is precisely the failure class AC1 exists to eliminate ("one front door, always a clean
+read"). It is worse than the defects above, not milder: those make the briefing *look* wrong, this makes it
+*be stale* while looking authoritative. AC1's own scope call left it out because fixing it is a rewrite of
+`_borg_print_briefing` (~250 lines of zsh) that collides head-on with Phases 1-3 here, and doing it inside
+the sweep fold would have meant re-deciding the fallback semantics in the same commit as the network change.
+
+Two things are declared rather than hidden in the meantime: `borg help` states `--brief` is
+"registry-only; never sweeps", and the dispatch arm carries the same note in a comment.
+
+**Do NOT "fix" this by adding `--local` to the `--brief` arm.** `--local` would make the un-swept answer
+*cheap*; it would still be un-swept. That is the same lie with a smaller bill, and it would also make the
+gap harder to find, because the two arms would then agree about cost and disagree only about truth.
+
+The real fix belongs with Phase 1's decision: route the narrative through the Python document, so the
+briefing's input is the same `grid` the overview renders, and the LLM summarizes derived fact instead of
+registry `summary` strings. That subsumes Phase 3's provenance question — a swept `grid` has provenance per
+node (`swept` / `declared` / `unknown`) and does not need `summary` to be trustworthy.
+
+### 5b — `/borg-recon` is the SECOND un-folded human digest (filed 2026-08-26, NOT FIXED)
+
+`--brief` is not the only human surface that answers "what changed?" from outside `borg link`'s document.
+AC1 retired the `recon` VERB but deliberately kept the ENGINE, because `borg recon --json` has real machine
+consumers — and one of those consumers, `skills/borg-recon/SKILL.md`, is itself a **human-facing briefing**
+invoked as `/borg-recon`. So `borg help` now says recon retired because "there is nothing a human still
+needs it for", while a skill three lines below renders the by-project digest AC1 retired.
+
+It is a worse shape than `--brief` in one specific way: the two surfaces do not merely disagree, one of
+them **mutates state the other is asserted never to touch**.
+
+- `borg link` — window: a fixed 90 days (`grid.DEFAULT_SWEEP_WINDOW_DAYS`, overridable via
+  `BORG_LINK_SWEEP_WINDOW_DAYS`). Writes `$BORG_DIR/recon/last-run`: **never**, and that is pinned twice, by
+  `borg_core/link/test_grid.py` and by `tests/link_sweep.bats`'s AC1 cache case.
+- `/borg-recon` → `borg recon --json` — window: recon's since-ladder (explicit > newest checkpoint mtime > last-run
+  marker > 24h). Writes `$BORG_DIR/recon/last-run`: **yes, and it ADVANCES the marker.**
+
+So running `/borg-recon` changes what the NEXT `borg recon --json` sees, on a window `borg link` does not
+share. Two answers to one question, one with a persistent side effect on the other's inputs.
+
+**S4 declared this rather than fixing it**, matching the `--brief` scope call above: `borg help` and
+`docs/cheatsheet.md` no longer advertise `/borg-recon` as "the morning link-up" — both now title it
+"cross-source synthesis over `borg recon --json` (`borg link` is the front door)". The skill itself is
+unchanged and still works; only its billing as the default human entry point is gone.
+
+The fix is the same shape as Phase 5's: once `borg link`'s document is the single input, `/borg-recon`
+becomes a synthesis layer over THAT document (contradictions, Yours-vs-Mine, kickoff batch) rather than a
+parallel sweep with its own mark. Do that after Phase 5, not before — they share the routing decision.
+
 ## Acceptance criteria
 
 - [ ] `borg link --brief` prints an explicit reason line whenever it falls back to the non-LLM path
+- [ ] `borg link --brief` answers from the same swept document as `borg link` — no second truth level
+      (Phase 5; verify by a bats case counting `gh` subprocesses on the `--brief` path against the
+      overview's, in the `tests/link_sweep.bats` fixture where a sweep genuinely runs)
+- [ ] `/borg-recon` synthesizes `borg link`'s document rather than running its own sweep on its own mark
+      (Phase 5b; verify that a `/borg-recon` run leaves `$BORG_DIR/recon/last-run` unchanged, the mirror of
+      the AC1 cache case's existing assertion for `borg link`)
 - [ ] `borg doctor` reports headless `claude -p` reachability
 - [ ] A project with a null `summary` and a set `waiting_reason` never displays the `waiting_reason` as its
       summary — covered by a `tests/briefing.bats` case that exercises `link --brief`

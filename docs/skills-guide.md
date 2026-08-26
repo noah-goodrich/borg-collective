@@ -171,14 +171,23 @@ on 2026-08-08 — its corpus was exported to per-project `.borg/knowledge/*.md` 
 grep-reachable and needs no running service. Use when asking to search knowledge, find past
 decisions, or look something up.
 
-### /borg-recon — Morning Link-Up
+### /borg-recon — Cross-Source Synthesis
 
 **Activation**: Manual (`/borg-recon`)
 
-Fans out across pluggable source adapters since a mark, reconciles findings against each project's
-local `.borg` checkpoints, and synthesizes a prioritized, by-project briefing with Yours-vs-Mine
-action lists and a recommended parallel kickoff batch. Source-agnostic — adapters are injected,
-never hardcoded. Use for "morning link-up", "what changed", or "catch me up".
+**`borg link` is the front door.** The `recon` VERB retired 2026-08-26 — `borg link` sweeps every
+source itself, so "what's in flight?" is answered there. What survives is the machine surface
+(`borg recon --json`, `borg recon --adapters`), and this skill is the synthesis layer on top of it.
+
+Runs `borg recon --json` (the `--json` is mandatory; a bare `borg recon` exits 1 pointing at
+`borg link`), reconciles findings against each project's local `.borg` checkpoints, and synthesizes
+a prioritized, by-project briefing with Yours-vs-Mine action lists and a recommended parallel
+kickoff batch. Source-agnostic — adapters are injected, never hardcoded.
+
+Caveat, filed not fixed (see `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md`,
+Phase 5b): this skill sweeps on recon's own since-ladder and ADVANCES `$BORG_DIR/recon/last-run`,
+while `borg link` cuts a fixed 90-day window and never writes that marker. The two answer over
+different windows.
 
 ### /borg-verify — Pre-Merge Evaluator Gate
 

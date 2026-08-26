@@ -9,6 +9,13 @@
 #   Invoked:  recon-adapter-<source> --since <ISO8601> --projects <projects.json path>
 #             projects.json is the registry's `.projects` object: { "<name>": {"path": "...", ...} }
 #   stdout:   exactly one JSON object — {"source": "...", "summary": "<terse>", "items": [Item,...]}
+#             OPTIONAL "skipped": true — "I could not look", as distinct from "I looked and there was
+#             nothing". An adapter that cannot reach its source (missing binary, unauthenticated,
+#             offline, rate-limited, nothing in scope to query) MUST set it, because the alternative
+#             is indistinguishable from a correct empty sweep: same exit 0, same empty items, same
+#             `ok: true`. The engine surfaces it as `status: "degraded"` plus a named warning
+#             (borg_core/link/grid.py:track_warnings), so a consumer can tell "nothing changed" from
+#             "GitHub was never reached" — which the `status` field alone could not.
 #   Item  =   {project, source, ref, title, state, changed, owner, action_needed, urgency, one_line}
 #             Field types are ENFORCED by the engine (borg_core/recon/core.py validate_item); an item
 #             violating any of them is silently dropped from the track (counted in `dropped`):
@@ -19,9 +26,23 @@
 #   exit 0 =  success (even for an empty sweep). Non-zero or malformed output = the engine records
 #             the track as failed and continues. NEVER emit raw dumps — only the structured object.
 #
-# This adapter sweeps each project's GitHub repo for PRs updated since `since` via `gh`. It degrades
-# gracefully to an empty, explained track when gh is missing, unauthenticated, or a project has no
-# github remote — a source being unavailable must never break the fan-out.
+# This adapter sweeps every registered project's GitHub repo for PRs updated since `since`. It
+# degrades gracefully to an empty, explained track when gh is missing, unauthenticated, or a project
+# has no github remote — a source being unavailable must never break the fan-out.
+#
+# ONE BATCHED GraphQL CALL, NOT N REST CALLS. This adapter previously issued `gh pr list` once per
+# repository inside a serial `while read` loop, plus a `gh auth status` and a `gh api user` prelude.
+# Measured on a 14-repository registry that cost 12.6s — and it was the single largest latency in
+# borg, not the targeted-fetch work it was assumed to be. The whole sweep is now one aliased GraphQL
+# query. Measured on the same registry: 2.3s for all 14 repositories, 0.69s for one, and the GraphQL
+# rate-limit cost is 1 point whether the query carries 14 nodes or 112 — the call is effectively
+# O(1) in repository count, so there is no reason to chunk or paginate at any registry size we will
+# ever see.
+#
+# The two prelude calls are gone with it: `viewer { login }` rides along in the same query (replacing
+# `gh api user`, ~0.47s), and the `gh auth status` probe (~1.0s) is dropped because the one real call
+# already reports an auth failure — probing first only bought a prettier message for 1.0s of every
+# single sweep.
 
 set -euo pipefail
 
@@ -38,32 +59,47 @@ while [ "$#" -gt 0 ]; do
 done
 
 # Emit a terse, item-less track and exit cleanly. Used for every "can't sweep" path.
+#
+# `skipped: true` IS THE WHOLE POINT OF THIS FUNCTION, not decoration on it. Every caller below is a
+# case where the adapter could not reach GitHub — gh missing, unauthenticated, offline, rate-limited,
+# no projects file, nothing in scope — and every one of them exits 0 with an empty `items`, which is
+# byte-identical to a healthy sweep that found nothing. Without this flag the engine stamps
+# `status: "ok"`, emits no warning, and every node in the grid silently falls back to a hand-authored
+# manifest `status` while the document claims `swept: true`. Reproduced end to end before the flag
+# existed: an unauthenticated `gh` produced `swept: true`, `sources: [{status: "ok"}]`,
+# `warnings: []`, and an all-declared grid.
 emit_skip() {
-    jq -n --arg s "$SOURCE" --arg m "$1" '{source:$s, summary:$m, items:[]}'
+    jq -n --arg s "$SOURCE" --arg m "$1" '{source:$s, summary:$m, items:[], skipped:true}'
     exit 0
 }
 
-command -v jq >/dev/null 2>&1 || { printf '{"source":"github","summary":"jq missing","items":[]}\n'; exit 0; }
+command -v jq >/dev/null 2>&1 \
+    || { printf '{"source":"github","summary":"jq missing","items":[],"skipped":true}\n'; exit 0; }
 command -v gh >/dev/null 2>&1 || emit_skip "gh not installed — github track skipped"
 [ -n "$SINCE" ] || emit_skip "no --since provided — github track skipped"
 [ -n "$PROJECTS_FILE" ] && [ -f "$PROJECTS_FILE" ] || emit_skip "no projects file — github track skipped"
-gh auth status >/dev/null 2>&1 || emit_skip "gh not authenticated — github track skipped"
 
-# gh's search:updated wants a bare date; derive YYYY-MM-DD from the ISO `since`.
+# Date granularity is deliberate and preserved from the REST implementation, which filtered with
+# `--search "updated:>=YYYY-MM-DD"`. Comparing at date granularity keeps a PR updated earlier on the
+# mark's own day inside the sweep; tightening to full-ISO here would silently narrow every sweep.
 SINCE_DATE="${SINCE%%T*}"
 
-# Who is "you"? Compare PR author logins to the authenticated gh user to set the owner field.
-ME="$(gh api user -q .login 2>/dev/null || echo "")"
+REPOS_FILE="$(mktemp)"
+trap 'rm -f "$REPOS_FILE"' EXIT
 
-ITEMS_FILE="$(mktemp)"
-trap 'rm -f "$ITEMS_FILE"' EXIT
-printf '[]' > "$ITEMS_FILE"
-SWEPT=0
-
-# Iterate projects. Each line: "<project>\t<path>".
+# Iterate projects. Each line: "<project>\t<path>". Resolution stays LOCAL (git remotes on disk) —
+# it costs nothing and it is what lets the network call be a single batch.
 while IFS=$'\t' read -r PROJECT PPATH; do
     [ -n "$PROJECT" ] && [ -n "$PPATH" ] || continue
-    [ -d "$PPATH/.git" ] || continue
+    # -e, NOT -d: a linked git worktree's .git is a FILE containing "gitdir: ...", and
+    # `git remote get-url origin` answers correctly inside one. The old -d test skipped every
+    # worktree, so `drone feature` checkouts (registered by `borg add` — reveal-data-consistency is
+    # one today) contributed no items at all. Still a test and not nothing: `git remote get-url`
+    # run in a plain SUBDIRECTORY of a repo succeeds and returns the PARENT's remote, which would
+    # give the subdirectory its parent's slug. borg_core/manifest/shell.py:repository_slug carries
+    # the identical rule and the two must never diverge — a fix on one side only makes `link` and
+    # `recon` disagree about which repositories exist.
+    [ -e "$PPATH/.git" ] || continue
 
     # Resolve owner/repo from the origin remote; skip non-github or remoteless repos.
     REMOTE="$(git -C "$PPATH" remote get-url origin 2>/dev/null || echo "")"
@@ -76,39 +112,113 @@ while IFS=$'\t' read -r PROJECT PPATH; do
     # Also covers ssh:// and git:// forms.
     REPO="$(printf '%s' "$REMOTE" | sed -E 's#^.*github\.com[:/]##; s#\.git$##')"
     [ -n "$REPO" ] || continue
-    SWEPT=$((SWEPT + 1))
 
-    # Pull PRs touched since the mark. Bounded (--limit) so a busy repo can't flood the sweep.
-    PRS="$(gh pr list --repo "$REPO" --state all --limit 30 \
-        --search "updated:>=$SINCE_DATE" \
-        --json number,title,state,isDraft,updatedAt,author,url,headRefName,baseRefName 2>/dev/null || echo "[]")"
+    # Owner/name are interpolated into a GraphQL document, so they must be provably inert. GitHub
+    # allows only [A-Za-z0-9._-] in either part; anything else is a malformed remote, not a repo we
+    # can query. Rejecting here rather than escaping means no quote, brace or newline from a remote
+    # URL can ever reach the query body. Belt to the credential-stripping brace above.
+    case "$REPO" in
+        *[!A-Za-z0-9._/-]*) continue ;;   # any character outside GitHub's allowed set
+        */*/*)              continue ;;   # more than one slash is not owner/name
+        /* | */)            continue ;;   # leading or trailing slash
+        */*)                : ;;          # exactly owner/name — the only accepted shape
+        *)                  continue ;;   # no slash at all
+    esac
 
-    MAPPED="$(printf '%s' "$PRS" | jq \
-        --arg project "$PROJECT" --arg source "$SOURCE" --arg repo "$REPO" --arg me "$ME" '
-        [ .[] | {
-            project: $project,
-            source:  $source,
-            ref:     ($repo + "#" + (.number|tostring)),
-            title:   .title,
-            state:   (.state | ascii_downcase),
-            changed: ("updated " + .updatedAt + "; state=" + (.state|ascii_downcase)
-                      + (if .isDraft then "; draft" else "" end)),
-            owner:   (if ($me != "" and .author.login == $me) then "you" else "unknown" end),
-            action_needed: ((.state == "OPEN") and (.isDraft | not)),
-            urgency: (if (.state != "OPEN") then "fyi"
-                      elif (.title | test("urgent|hotfix|revert|broken|p0|sev";"i")) then "now"
-                      else "this_week" end),
-            one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]"),
-            repo:     $repo,
-            head_ref: (.headRefName // ""),
-            base_ref: (.baseRefName // "")
-        } ]' 2>/dev/null || echo "[]")"
-
-    COMBINED="$(jq -s '.[0] + .[1]' "$ITEMS_FILE" <(printf '%s' "$MAPPED") 2>/dev/null || cat "$ITEMS_FILE")"
-    printf '%s' "$COMBINED" > "$ITEMS_FILE"
+    printf '%s\t%s\n' "$PROJECT" "$REPO" >> "$REPOS_FILE"
 done < <(jq -r 'to_entries[] | [.key, (.value.path // "")] | @tsv' "$PROJECTS_FILE" 2>/dev/null)
 
-COUNT="$(jq 'length' "$ITEMS_FILE" 2>/dev/null || echo 0)"
+# `grep -c` PRINTS "0" and EXITS 1 on no matches, so `|| echo 0` would append a second line and make
+# SWEPT the two-line string "0\n0" -- which then fails `[ "$SWEPT" -eq 0 ]` with "integer expression
+# expected" under `set -e`. `|| true` keeps grep's own count and swallows only the exit status.
+SWEPT="$(grep -c . "$REPOS_FILE" 2>/dev/null || true)"
+SWEPT="${SWEPT:-0}"
+
+# Two projects may legitimately resolve to the SAME repository (a worktree registered alongside its
+# parent). The old implementation queried once per PROJECT and emitted items per project; aliasing by
+# project line index rather than by repo preserves that exactly, at no extra cost — duplicate nodes in
+# one GraphQL document are still one round trip and still one rate-limit point.
+ALIAS_MAP="$(jq -R -s -c '
+    split("\n") | map(select(length > 0)) | to_entries
+    | map({alias: ("r" + (.key|tostring)), project: (.value|split("\t")[0]), repo: (.value|split("\t")[1])})
+' "$REPOS_FILE")"
+
+# SWEPT=0 IS A SKIP, NOT AN EMPTY ANSWER. Nothing in scope resolved to a github repository — no
+# origin, a non-github remote, or an empty project list — so this track looked at exactly zero
+# sources. Reporting that as a plain empty sweep is the same conflation emit_skip exists to prevent.
+if [ "$SWEPT" -eq 0 ]; then
+    jq -n --arg s "$SOURCE" --arg m "no github repository in scope — nothing to sweep" \
+        '{source:$s, summary:$m, items:[], skipped:true}'
+    exit 0
+fi
+
+# Build the batched document: viewer once, then one aliased repository node per project.
+QUERY='query { viewer { login }'
+IDX=0
+while IFS=$'\t' read -r PROJECT REPO; do
+    [ -n "$REPO" ] || continue
+    OWNER="${REPO%%/*}"
+    NAME="${REPO#*/}"
+    QUERY="$QUERY r${IDX}: repository(owner: \"$OWNER\", name: \"$NAME\") {"
+    QUERY="$QUERY pullRequests(first: 30, orderBy: {field: UPDATED_AT, direction: DESC}) {"
+    QUERY="$QUERY nodes { number title state isDraft updatedAt url headRefName baseRefName author { login } } } }"
+    IDX=$((IDX + 1))
+done < "$REPOS_FILE"
+QUERY="$QUERY }"
+
+# `first: 30` mirrors the REST `--limit 30` bound, so a busy repo still cannot flood the sweep.
+#
+# ONE DELIBERATE BEHAVIOR CHANGE, and it is a fix. The REST implementation passed
+# `--search "updated:>=DATE" --limit 30` and took whatever order GitHub search returned, so on a
+# repository with more than 30 in-window PRs the truncation was ARBITRARY with respect to recency.
+# Verified against the live registry: borg-collective had 53 PRs in window; the old adapter kept two
+# updated 2026-08-13 while dropping two updated 2026-08-14. `orderBy: {field: UPDATED_AT, direction:
+# DESC}` makes the cap mean "the 30 most recently updated", which is the only defensible reading for
+# a "what changed since the mark" sweep. Per-project item counts are unchanged (verified identical
+# across all 13 repositories); only which items survive the cap on an over-30 repository differs.
+
+# DO NOT TREAT NON-ZERO EXIT AS TOTAL FAILURE. `gh api graphql` exits 1 whenever the response carries
+# an `errors[]` array, even when `data` is fully populated for every other node — verified against a
+# live batch containing one deleted PR: exit 1, `errors: [NOT_FOUND]`, and all valid siblings
+# resolved. Discarding stdout on a non-zero exit would throw away an entire good sweep because one
+# repository was renamed or made private, and would render the whole track failed. So: capture
+# stdout unconditionally, and decide on the PAYLOAD.
+RESPONSE="$(gh api graphql -f query="$QUERY" 2>/dev/null || true)"
+
+printf '%s' "$RESPONSE" | jq -e 'has("data") and (.data != null)' >/dev/null 2>&1 \
+    || emit_skip "gh graphql sweep failed (unauthenticated, offline, or rate-limited) — github track skipped"
+
+ME="$(printf '%s' "$RESPONSE" | jq -r '.data.viewer.login // ""' 2>/dev/null || echo "")"
+
+ITEMS="$(printf '%s' "$RESPONSE" | jq -c \
+    --argjson map "$ALIAS_MAP" --arg source "$SOURCE" --arg me "$ME" --arg since "$SINCE_DATE" '
+    [ .data as $d
+      | $map[]
+      | . as $m
+      | ($d[$m.alias] // null)
+      | select(. != null)
+      | .pullRequests.nodes[]
+      | select((.updatedAt | split("T")[0]) >= $since)
+      | {
+          project: $m.project,
+          source:  $source,
+          ref:     ($m.repo + "#" + (.number|tostring)),
+          title:   .title,
+          state:   (.state | ascii_downcase),
+          changed: ("updated " + .updatedAt + "; state=" + (.state|ascii_downcase)
+                    + (if .isDraft then "; draft" else "" end)),
+          owner:   (if ($me != "" and (.author.login // "") == $me) then "you" else "unknown" end),
+          action_needed: ((.state == "OPEN") and (.isDraft | not)),
+          urgency: (if (.state != "OPEN") then "fyi"
+                    elif (.title | test("urgent|hotfix|revert|broken|p0|sev";"i")) then "now"
+                    else "this_week" end),
+          one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]"),
+          repo:     $m.repo,
+          head_ref: (.headRefName // ""),
+          base_ref: (.baseRefName // "")
+        } ]' 2>/dev/null || echo "[]")"
+
+COUNT="$(printf '%s' "$ITEMS" | jq 'length' 2>/dev/null || echo 0)"
 SUMMARY="swept $SWEPT github repo(s) since $SINCE_DATE — $COUNT PR item(s)"
-jq -n --arg s "$SOURCE" --arg m "$SUMMARY" --slurpfile items "$ITEMS_FILE" \
-    '{source:$s, summary:$m, items:$items[0]}'
+jq -n --arg s "$SOURCE" --arg m "$SUMMARY" --argjson items "$ITEMS" \
+    '{source:$s, summary:$m, items:$items}'

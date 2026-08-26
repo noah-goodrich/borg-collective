@@ -26,6 +26,7 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("BORG_CORTEX_STATE", raising=False)
     monkeypatch.delenv("BORG_TMUX_SESSION", raising=False)
     monkeypatch.delenv("BORG_MAX_ACTIVE", raising=False)
+    monkeypatch.delenv("BORG_ORCHESTRATOR_ROOT", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("PATH", "/nonexistent-bin-dir")  # no real tmux on PATH
     monkeypatch.setattr(shell, "live_windows", lambda: [])
@@ -437,3 +438,96 @@ def test_main_parses_argv_including_a_dash_leading_project_and_wraps_a_corrupt_r
     assert exc_info.value.code == 1
     captured = capsys.readouterr()
     assert captured.err.count("\n") == 1
+
+
+# --- scope threading through _document (S1) ----------------------------------------------------
+
+
+def _scope_registry(root):
+    alpha = root / "alpha"
+    beta = root / "beta"
+    alpha.mkdir()
+    beta.mkdir()
+    registry_file = root / "borg-dir" / "registry.json"
+    registry_file.write_text(
+        json.dumps({"projects": {"alpha": {"path": str(alpha)}, "beta": {"path": str(beta)}}}),
+        encoding="utf-8",
+    )
+    return alpha, beta
+
+
+def test_document_emits_scope_resolved_from_cwd(isolated_env, monkeypatch):
+    alpha, _beta = _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(alpha)
+    doc = cli._document("", False, "json")
+    assert doc["scope"]["kind"] == "repository"
+    assert doc["scope"]["repository"] == "alpha"
+
+
+def test_document_scope_is_orchestrator_at_the_workspace_root(isolated_env, monkeypatch):
+    _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(isolated_env)
+    doc = cli._document("", False, "json")
+    assert doc["scope"]["kind"] == "orchestrator"
+    assert doc["scope"]["repository"] is None
+
+
+def test_document_explicit_project_dominates_cwd(isolated_env, monkeypatch):
+    # B3 end-to-end, through the real _document rather than the pure resolver: standing in alpha and
+    # asking for beta must scope to BETA. Resolving breadth from cwd here would render alpha's facts
+    # under beta's header -- and every scripted caller passes a name from a fixed cwd
+    # (drone.zsh:964's per-window loop, borg.zsh:266's fzf preview).
+    alpha, _beta = _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(alpha)
+    doc = cli._document("beta", False, "json")
+    assert doc["scope"]["repository"] == "beta"
+    assert doc["focus"]["name"] == "beta"
+
+
+def test_document_scope_records_local(isolated_env, monkeypatch):
+    alpha, _beta = _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(alpha)
+    assert cli._document("", False, "json", True)["scope"]["local"] is True
+    assert cli._document("", False, "json", False)["scope"]["local"] is False
+
+
+def test_local_flag_parses_and_defaults_off():
+    assert cli._build_parser().parse_args([]).local is False
+    assert cli._build_parser().parse_args(["--local"]).local is True
+
+
+def test_scope_is_present_in_every_mode(isolated_env, monkeypatch):
+    # porcelain and deep skip the aggregate collectors, but scope is not an aggregate -- it must be
+    # resolved for every mode, or the document's breadth claim depends on which renderer asked.
+    alpha, _beta = _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(alpha)
+    for mode in ("json", "overview", "porcelain"):
+        assert cli._document("", False, mode)["scope"]["repository"] == "alpha"
+    assert cli._document("alpha", False, "deep")["scope"]["repository"] == "alpha"
+
+
+def test_document_scope_survives_an_archived_repository(isolated_env, monkeypatch):
+    # --all is a DISPLAY filter; an archived repository is still the repository you are standing in.
+    # Resolving scope against the filtered map would silently report orchestrator breadth here.
+    # The visibility filter is `entry.get("status") != "archived"` (core.visible_projects) -- NOT an
+    # `archived: true` boolean. An earlier version of this test wrote the boolean, which archives
+    # nothing, so the entry stayed visible and the assertion could not distinguish scope-from-
+    # `overlaid` (correct) from scope-from-`projects` (the filtered map). Assert the filter really
+    # bit before asserting scope survived it.
+    alpha = isolated_env / "alpha"
+    alpha.mkdir()
+    (isolated_env / "borg-dir" / "registry.json").write_text(
+        json.dumps({"projects": {"alpha": {"path": str(alpha), "status": "archived"}}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(alpha)
+    doc = cli._document("", False, "json")
+    assert doc["order"] == []  # the filter bit: alpha is hidden from the display map
+    assert doc["total_projects"] == 1  # but it is still in the registry
+    assert doc["scope"]["repository"] == "alpha"  # and it is still where you are standing

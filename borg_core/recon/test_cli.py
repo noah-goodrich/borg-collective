@@ -117,6 +117,57 @@ def test_die_writes_to_stderr_and_exits(capsys):
     assert "boom" in capsys.readouterr().err
 
 
+# ── AC2: the retirement gate lives at main(), not _run() (2026-08-26) ────────
+# See docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md. All the tests above call
+# `_run()` directly with json_only=False, adapters=False -- exercising the registry/adapter-discovery
+# guards on purpose -- so a gate at main() cannot collide with any of them. These are the only cases
+# in this file that call main() at all.
+
+
+def test_main_bare_is_retired_and_names_borg_link(isolated_env):
+    """`python3 -m borg_core.recon.cli` with no flags is the retired human digest path (AC2)."""
+    with pytest.raises(SystemExit) as exc:
+        cli.main([])
+    assert exc.value.code != 0
+    message = str(exc.value.code)
+    assert "was retired" in message
+    assert "borg link" in message
+
+
+def test_main_json_reaches_the_engine_not_the_gate(isolated_env, capsys):
+    """--json must NOT be retired -- it is the machine surface AC1 preserved (survival control).
+
+    isolated_env's adapters dir is empty, so the engine's OWN "no recon adapters found" die is what
+    a healthy --json invocation produces here -- and it is the proof the gate was cleared and the
+    engine was reached at all, matching cli_contract.bats's "the recon MACHINE surface survives".
+    """
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--json"])
+    assert exc.value.code == 1
+    err = capsys.readouterr().err
+    assert "was retired" not in err
+    assert "no recon adapters found" in err
+
+
+def test_main_adapters_reaches_the_engine_not_the_gate(isolated_env, capsys):
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--adapters"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert "was retired" not in out
+    assert "No recon adapters found" in out
+
+
+def test_main_modifier_alone_does_not_open_the_gate(isolated_env):
+    """--since/--sources/--projects are modifiers, not modes -- see the zsh sibling test in
+    cli_contract.bats ("a recon modifier alone is not a machine flag") for why this needs its own
+    case rather than trusting --json/--adapters coverage alone."""
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["--sources", "github"])
+    assert exc.value.code != 0
+    assert "was retired" in str(exc.value.code)
+
+
 def _item(project, ref, state="open", owner="agent", urgency="fyi", action_needed=False):
     return {
         "project": project,

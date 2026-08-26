@@ -233,11 +233,18 @@ _build_self_contained_hook() {
             fi
         fi
 
-        # Replace 'source .../borg-hooks.sh' with the inlined lib
+        # Replace 'source .../borg-hooks.sh' with the inlined lib.
+        #
+        # NOT GATED ON DRY_RUN, and it used to be. $tmp is a mktemp scratch file that the dry-run
+        # branch below deletes without ever moving, so skipping the inline saved nothing — it only
+        # made the dry run compose DIFFERENT BYTES from the real build, then diff that lib-less
+        # candidate against a lib-full destination. Every one of the 5 lib-inlining hooks therefore
+        # reported "would update" on every invocation, unconditionally, whether or not anything had
+        # changed. That false positive was believed and recorded as real drift in
+        # docs/plans/directives/2026-08-08-cairn-decommission-and-unconditional-block.md. A --dry-run
+        # that cannot say "unchanged" is not a dry run; it is noise with a prefix.
         if [[ "$needs_lib" -eq 1 && "$line" =~ ^[[:space:]]*source.*borg-hooks\.sh ]]; then
-            if [[ "$DRY_RUN" -eq 0 ]]; then
-                _embedded_lib >> "$tmp"
-            fi
+            _embedded_lib >> "$tmp"
             continue
         fi
 

@@ -192,6 +192,8 @@ class Sandbox:
         self.borg_dir = self.config_home / "borg"
         self.borg_dir.mkdir(parents=True)
         (self.borg_dir / "desktop").mkdir(parents=True)
+        self.no_adapters = self.root / "no-adapters"
+        self.no_adapters.mkdir(parents=True)
         self.registry_source = registry_source
         self.reset()
 
@@ -206,6 +208,13 @@ class Sandbox:
         env["BORG_NO_REAP"] = "1"
         env.pop("BORG_REGISTRY", None)
         env.pop("BORG_DIR", None)
+        # BELT AND BRACES BESIDE run_link's --local. A REAL EMPTY DIRECTORY, never "": recon's
+        # adapter_search_path() branches on `if override:`, so an exported-empty value is falsy and
+        # falls back to the shipped adapter, i.e. the obvious neutralization silently does nothing.
+        # --local already suppresses the sweep; this keeps the sandbox hermetic if anyone adds a mode
+        # that forgets it, because the failure would otherwise be a differential against live GitHub
+        # state -- non-reproducible, and diffed byte-for-byte.
+        env["BORG_RECON_ADAPTER_PATH"] = str(self.no_adapters)
         return env
 
     def cleanup(self) -> None:
@@ -213,8 +222,23 @@ class Sandbox:
 
 
 def run_link(borg_zsh: Path, args: list[str], sandbox: Sandbox) -> str:
+    """One `borg link` invocation against one tree, always `--local`.
+
+    `--local` GOES HERE, AT THE ONE CHOKEPOINT, and not in the four `modes` entries below, so the
+    oracle leg and the current leg cannot drift apart. Three reasons it has to be here at all:
+
+      1. THIS LOOPS. `modes` is three fixed shapes plus one deep dive per registered project, run
+         against BOTH trees -- 34 invocations at 14 projects. Post-S3 the 17 on the current tree
+         would each be a full network sweep, and the deep dives would each sweep a DIFFERENT
+         repository, because S1's B3 rule resolves scope from the positional.
+      2. IT WOULD DESTROY THE DIFFERENTIAL. This byte-compares a never-swept zsh oracle against the
+         Python tree. A swept current leg produces UNEXPECTED diffs on every run, and different ones
+         each time -- exactly the non-reproducibility B7 identifies for the goldens.
+      3. IT IS FREE ON THE ORACLE SIDE. The pre-Phase-3 `cmd_link`'s flag loop is `-*) shift`, so the
+         oracle swallows `--local` silently and its output is byte-identical to before.
+    """
     sandbox.reset()
-    proc = _run([str(borg_zsh), "link", *args], cwd=str(borg_zsh.parent), env=sandbox.env())
+    proc = _run([str(borg_zsh), "link", "--local", *args], cwd=str(borg_zsh.parent), env=sandbox.env())
     return proc.stdout
 
 

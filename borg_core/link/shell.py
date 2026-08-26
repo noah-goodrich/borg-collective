@@ -12,6 +12,34 @@ checkpoint readers.
 PHASE 1 SCOPE: leaves and the chokepoint. There is no cli.py and no document builder -- the `--json`
 seam is Phase 2 and the render flip is Phase 3 (PROJECT_PLAN.md).
 
+WHY THIS IMPORTS borg_core.recon.shell AND borg_core.manifest.shell (S3, the sweep fold): `link` is
+now the CONSUMER of both engines, and those arrows point the right way -- `recon` retires as a
+human-facing verb in S4, so a second fan-out here would be a copy of an engine that is on its way
+out. `recon.shell.fanout` is imported whole rather than reimplemented: it already owns bounded
+concurrency, the per-adapter deadline and the degrade-to-a-failed-track policy, and
+borg_core/proc.py's module docstring is the standing ruling that the third copy of a
+run/capture/degrade shape does not get written. Neither module is the Domain layer and both imported
+names are public, so no layering rule is crossed.
+
+NOTHING IN THE SWEEP PATH IS EVER FATAL, extending the policy borg_core/manifest/shell.py's header
+states. A missing `gh`, an unauthenticated `gh`, an offline host, a rate limit, a failed adapter
+track, an empty adapter search path, a repository with no origin, a malformed manifest, a
+non-numeric `BORG_RECON_*` value -- every one of them is a NAMED warning on the grid and a degraded
+grid, never an exception and never a blank grid with no explanation. Every consumer of `borg link`
+swallows failure (`cmd_watch`'s `|| true`, `drone status`'s `|| true`, fzf's preview pane), so an
+exception here is an invisible blank frame, and a silent empty grid is worse than a loud degraded
+one.
+
+THE FIRST FOUR OF THOSE WERE NOT ACTUALLY TRUE WHEN THIS PARAGRAPH WAS FIRST WRITTEN, which is the
+reason for the two mechanisms that now make them true. An adapter that cannot reach its source exits
+0 with a valid empty track, so `ok` alone could never see it: the adapter contract gained an explicit
+`skipped: true` and grid.track_status turned two outcomes into three (see its docstring for the
+end-to-end reproduction with an unauthenticated `gh`). And `borg_core/recon/shell.py`'s
+`int(os.environ.get(...))` readers, newly on this path, were hardened to the same empty/non-numeric
+guard the readers in this module use -- an exported-empty `BORG_RECON_MAX_TRACKS` took the whole
+command down with zero bytes on stdout. A contract paragraph that the code does not keep is worse
+than no paragraph, because the next reader cites it.
+
 WHY THIS IMPORTS borg_core.registry.shell: `borg_registry_read` is not a pure read. It mkdir's
 $BORG_DIR and creates registry.json containing {"projects":{}} when absent (lib/registry.zsh:18-23,
 38-41), and registry.shell.read_registry already reproduces that side effect plus the corrupt-JSON
@@ -24,11 +52,14 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
 
-from borg_core import paths
-from borg_core.link import core
+from borg_core import paths, proc
+from borg_core.link import core, grid
+from borg_core.manifest import shell as manifest_shell
+from borg_core.recon import shell as recon_shell
 from borg_core.registry import shell as registry_shell
 
 # Re-exported so this package has its own surface, with one definition in borg_core/paths.py.
@@ -88,6 +119,62 @@ def max_active() -> int:
         return int(raw)
     except ValueError:
         return core.DEFAULT_MAX_ACTIVE
+
+
+def orchestrator_root() -> str:
+    """BORG_ORCHESTRATOR_ROOT, realpath-normalized, defaulting to ~/dev (borg.zsh:23).
+
+    Defaults HERE as well as in _borg_py, and that duplication is deliberate. `_borg_py` applies the
+    default for every child it launches, but a module invoked directly (`python3 -m borg_core.link.cli`,
+    which is exactly what the test suite and any debugging session do) has no wrapper at all. This is
+    the same two-sided rule borg_core/paths.py follows, and its absence is precisely how `borg recon`
+    shipped non-functional: borg.zsh:23 assigns BORG_ORCHESTRATOR_ROOT bare, with no `export`, so the
+    Python child has never seen it. Unset OR EMPTY takes the default -- _borg_py passes variables
+    through as the empty string, so this must be truthiness-checked, not existence-checked.
+    """
+    raw = os.environ.get("BORG_ORCHESTRATOR_ROOT")
+    if not raw:
+        raw = os.path.expanduser("~/dev")
+    return os.path.realpath(raw)
+
+
+def cwd() -> str:
+    """The invoking directory realpath-normalized, or "" when it cannot be determined.
+
+    Normalized here, in the shell tier, so core.scope_for stays pure: symlink resolution is a
+    filesystem question, and /Users/noah/dev is itself commonly reached through one. Comparing an
+    unresolved cwd against a resolved registry path silently makes every repository look like the
+    orchestrator.
+
+    THE GUARD IS NOT DEFENSIVE PADDING. os.getcwd() raises FileNotFoundError when the invoking
+    directory has been deleted out from under a live shell -- routine here, because `drone down`,
+    `borg reap-worktrees` and `git worktree remove` all delete directories a user may still be
+    sitting in. Before this module read cwd at all, such an invocation succeeded; unguarded, it
+    would now die in ALL FOUR modes via cli.main's broad `except Exception`, with exit 1 and zero
+    bytes on stdout -- a clean, uninformative failure with no hint that the cwd is the cause, in a
+    command whose callers (cmd_watch, drone status, the fzf preview) all swallow errors.
+    "" degrades to orchestrator scope: it matches no orchestrator root and prefix-matches no
+    registry path, so an unknowable location yields the broadest reading rather than a wrong one.
+    """
+    try:
+        return os.path.realpath(os.getcwd())
+    except OSError:
+        return ""
+
+
+def resolved_project_paths(registry: dict) -> list[tuple[str, str]]:
+    """Every (name, path) pair from the registry with each non-empty path realpath-normalized.
+
+    The shell-tier half of core.scope_for: resolving symlinks is filesystem work, and BOTH sides of
+    the prefix comparison must be resolved identically or the match silently fails. Missing paths
+    stay "" (core.project_paths already applies jq's `//` semantics) and scope_for skips them.
+
+    os.path.realpath does NOT stat -- a registry entry pointing at a deleted directory normalizes
+    lexically and simply fails to match a live cwd, which is the correct outcome. No existence check
+    here: this runs on every invocation over the whole registry, and a stat per project would put
+    filesystem latency on the one path that has to stay reflexive.
+    """
+    return [(name, os.path.realpath(path) if path else "") for name, path in core.project_paths(registry)]
 
 
 def reap_disabled() -> bool:
@@ -333,6 +420,327 @@ def read_plan(project_path: str | None) -> dict | None:
     text = _read_text(plan)
     met, total = core.plan_progress(text)
     return {"objective": core.plan_objective(text), "met": met, "total": total}
+
+
+# Re-exported so cli.py has ONE I/O module to talk to. `discover_registered` derives the repository
+# paths from the registry itself and must keep doing so -- see its docstring for why accepting a path
+# list here would move the derivation into a caller that a test would then supply.
+discover_manifests = manifest_shell.discover_registered
+repository_slug = manifest_shell.repository_slug
+
+# Seconds one adapter gets before it is SIGKILLed, when `link` is the caller. recon's own default is
+# 30 -- correct for a morning link-up a human deliberately waits on, absurd for the front door AC1
+# budgets at 2.7s. 10 is chosen against measurement, not taste: the batched-GraphQL adapter sweeps
+# one repository in 0.69s and all 14 in 2.30s, so 10 is >4x the slowest observed real sweep and still
+# well inside the point where a user concludes the command is hung.
+DEFAULT_SWEEP_TIMEOUT_SECONDS = 10
+
+
+def sweep_timeout() -> float:
+    """BORG_LINK_SWEEP_TIMEOUT as a number of seconds, defaulting to DEFAULT_SWEEP_TIMEOUT_SECONDS.
+
+    Unset OR EMPTY OR non-numeric takes the default, and none of those three is defensive padding.
+    `_borg_py` passes its whole config surface through by name, and an unset variable arrives as the
+    EMPTY STRING; `int("")` raises ValueError, which is exactly why the hardened spec forbids adding
+    any `BORG_RECON_*` name to that wrapper (`max_tracks`/`track_timeout` use a bare
+    `int(os.environ.get(...))` and would take down the whole invocation). This variable is written to
+    survive the wrapper, so it may be added to it without repeating that bug.
+    """
+    raw = os.environ.get("BORG_LINK_SWEEP_TIMEOUT")
+    if not raw:
+        return DEFAULT_SWEEP_TIMEOUT_SECONDS
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_SWEEP_TIMEOUT_SECONDS
+
+
+def sweep_window_days() -> int:
+    """BORG_LINK_SWEEP_WINDOW_DAYS as an int, defaulting to grid.DEFAULT_SWEEP_WINDOW_DAYS.
+
+    Same three-way guard as sweep_timeout, for the same reason: unset OR EMPTY OR non-numeric takes
+    the default, because `_borg_py` passes its whole config surface through by name and an unset
+    variable arrives as the EMPTY STRING. See grid.DEFAULT_SWEEP_WINDOW_DAYS for why link resolves
+    its own mark instead of reusing recon's since-ladder.
+    """
+    raw = os.environ.get("BORG_LINK_SWEEP_WINDOW_DAYS")
+    if not raw:
+        return grid.DEFAULT_SWEEP_WINDOW_DAYS
+    try:
+        return int(raw)
+    except ValueError:
+        return grid.DEFAULT_SWEEP_WINDOW_DAYS
+
+
+def _read_sweep_fixture(path: str) -> dict:
+    """A recorded sweep read off disk in place of running one. The B7 seam; see `sweep`.
+
+    Shaped `{"since": str, "tracks": [<track>, ...]}` -- `tracks` being EXACTLY what
+    recon.shell.fanout returns, one object per adapter with `source`, `summary`, `items` and `ok`.
+    Recording the fan-out's OUTPUT rather than the finished grid is the whole point: everything
+    downstream of the subprocess -- state extraction, the resolve ladder, level assignment, the
+    per-source summary -- still runs on production code. A fixture of the finished grid would test
+    that JSON round-trips.
+
+    An unreadable or malformed fixture degrades to a not-swept grid with a NAMED warning rather than
+    raising: a test harness that mistypes the path must see why, not see an empty grid it mistakes
+    for a correct one.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            doc = json.load(handle)
+    except (OSError, ValueError) as exc:
+        return grid.no_sweep([f"sweep: fixture {path} unreadable or invalid JSON ({exc})"])
+    if not isinstance(doc, dict):
+        return grid.no_sweep([f"sweep: fixture {path} is not an object -- ignored"])
+    tracks = doc.get("tracks")
+    return {
+        "swept": True,
+        "since": str(doc.get("since") or ""),
+        "tracks": tracks if isinstance(tracks, list) else [],
+        "warnings": [f"sweep: replayed from fixture {path} -- no adapter ran"],
+    }
+
+
+def sweep(projects: dict, now: int | None = None) -> dict:
+    """Run the recon fan-out over `projects` and return `{swept, since, tracks, warnings}`.
+
+    `projects` is the registry's `.projects` object ALREADY NARROWED TO THE SCOPED BREADTH by the
+    caller: one entry in repository scope, all of them in orchestrator scope. That narrowing is what
+    makes AC1's two latency figures different numbers rather than one, and it is the caller's job
+    because only the caller knows the scope.
+
+    THE MARK IS `link`'s OWN, NOT recon's, and that is the one thing about this function that must
+    not be "simplified" back. `recon.shell.resolve_since` resolves "what changed since I last
+    looked" -- newest checkpoint mtime, then the last-run marker, then 24h -- and BOTH of its top two
+    rungs vary with which projects are in scope and with how recently someone checkpointed. Reusing
+    it made the same ref resolve to two contradictory confident states depending on whether you asked
+    from inside a repository or from the workspace root, and made the WIDEST breadth get the
+    NARROWEST freshness window. grid.DEFAULT_SWEEP_WINDOW_DAYS carries the measurement and the
+    argument. `now` threads cli._document's single shared epoch in; None reads the clock, for a
+    caller that has no document.
+
+    TWO ENVIRONMENT SEAMS, one per network path. Both are read in this module, in the shell tier,
+    and nowhere else -- core.py and grid.py are pure and pylint enforces it. Each short-circuits
+    BEFORE any subprocess, each degrades to a NAMED warning on a bad path, and neither writes a
+    marker or resolves a `since`.
+
+      BORG_LINK_SWEEP_FIXTURE -- read HERE, first statement. A path to a recorded
+          `{"since": str, "tracks": [...]}` document. When set, this function reads it INSTEAD of
+          fanning out: zero subprocesses, no adapter discovery, no `since` resolution, no
+          `recon/last-run` write. It exists because `_assert_link_golden` byte-diffs `borg link`'s
+          output with `2>&1`, and a sweep folded into the document makes every golden a snapshot of
+          whatever GitHub returned that minute -- non-reproducible on the second run, and
+          `BORG_UPDATE_GOLDEN=1` would freeze one machine's network state as the oracle (the
+          hardened spec's B7).
+
+      BORG_LINK_FETCH_FIXTURE -- read in `start_fetch`, NOT here, and the difference is B4's doing:
+          the targeted fetch has to start BEFORE this function so its round trip overlaps the
+          fan-out, so it cannot live inside it. A path to a recorded `{"nodes": {ref: {...}}}`
+          document; see `_read_fetch_fixture` and grid.replayed_items for the shape and for why the
+          recording is of the ANSWERS rather than of a raw GraphQL body.
+
+    `swept` MEANS AN ADAPTER ACTUALLY RAN (or a fixture stood in for one), not merely "--local was
+    absent". Zero discovered adapters returns swept=False with a warning naming the empty search
+    path, because a grid whose every state came from the manifest must not claim to have looked.
+    `since` is "" whenever `swept` is False, so the pair can never say "swept as of <a mark nobody
+    used>".
+
+    IT NEVER CALLS recon.shell.write_last_run_marker, and that omission is load-bearing. That marker
+    is the third rung of recon's own since-ladder; a `borg link` that advanced it would silently move
+    `borg recon`'s mark forward on every render, and recon would start missing everything that
+    changed between link runs. It is also a cache artifact, which AC1 forbids outright ("no cache,
+    ever -- a clean read every time").
+    """
+    fixture = os.environ.get("BORG_LINK_SWEEP_FIXTURE")
+    if fixture:
+        return _read_sweep_fixture(fixture)
+
+    adapters = recon_shell.discover_adapters()
+    if not adapters:
+        return grid.no_sweep(
+            [
+                "sweep: no recon adapters found on "
+                f"{recon_shell.adapter_search_path()} -- every state falls back to what the manifest declares"
+            ]
+        )
+
+    since = grid.sweep_since(now_epoch() if now is None else now, sweep_window_days())
+    with tempfile.TemporaryDirectory(prefix="borg-link.") as workdir:
+        projects_file = os.path.join(workdir, "projects.json")
+        try:
+            recon_shell.write_projects_file(projects, projects_file)
+        except (OSError, TypeError, ValueError) as exc:
+            return grid.no_sweep([f"sweep: could not stage the project list ({exc}) -- no adapter ran"])
+        tracks = recon_shell.fanout(since, projects_file, adapters, timeout=sweep_timeout())
+    return {"swept": True, "since": since, "tracks": tracks, "warnings": grid.track_warnings(tracks)}
+
+
+# Seconds the targeted fetch gets from the moment it is STARTED -- not from the moment it is
+# collected. Chosen against measurement, like DEFAULT_SWEEP_TIMEOUT_SECONDS above: a standalone
+# batched fetch measures 0.72-0.94s at 14 aliased nodes and 2.11s at 200, and offline fails outright
+# in 0.056s, so 10 is ~10x the slowest observed real answer. It is the same number as the sweep's
+# budget by coincidence of measurement, not by coupling; the two are separate variables because the
+# two round trips have different shapes and either may need moving without the other.
+DEFAULT_FETCH_TIMEOUT_SECONDS = 10
+
+
+def fetch_timeout() -> float:
+    """BORG_LINK_FETCH_TIMEOUT as a number of seconds, defaulting to DEFAULT_FETCH_TIMEOUT_SECONDS.
+
+    Same three-way guard as sweep_timeout -- unset OR EMPTY OR non-numeric takes the default --
+    because `_borg_py` passes its whole config surface through by name and an unset variable arrives
+    as the EMPTY STRING. This name is deliberately NOT added to that wrapper (nothing in the zsh CLI
+    sets it), but it is written to survive it, so adding it later cannot reintroduce the `int("")`
+    bug the hardened spec forbids for the `BORG_RECON_*` readers.
+    """
+    raw = os.environ.get("BORG_LINK_FETCH_TIMEOUT")
+    if not raw:
+        return DEFAULT_FETCH_TIMEOUT_SECONDS
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_FETCH_TIMEOUT_SECONDS
+
+
+def _read_fetch_fixture(path: str, requested: int) -> dict:
+    """A recorded fetch read off disk in place of running one. The AC3 half of the B7 seam.
+
+    Shaped `{"nodes": {"<owner/repo#n>": {"state": str, "title": str}}}`. Mirrors
+    `_read_sweep_fixture`'s three degradation rungs exactly, with `fetch:` prefixes: unreadable or
+    invalid JSON is a named warning and no fetch; a root that is not an object is a named warning and
+    no fetch; a `nodes` of the wrong type is coerced to empty but STILL reports itself replayed,
+    which is the truthful reading of a recording that carries none.
+
+    A harness that mistypes the path must see WHY. The alternative -- a silent declared-only grid --
+    is the shape every silent-blindness incident in CLAUDE.md's "Learned" has in common.
+
+    `requested` IS THE CALLER'S FETCHABLE-REF COUNT, NEVER `len(items)`. The live path in
+    `finish_fetch` reports `requested = len(aliases)` -- the real ask -- so a recording answering
+    only some of the refs it was asked about must be measured against that same ask, not against
+    how many answers happen to be in the recording. `len(items)` here can never be less than
+    `len(items)` itself, so a fixture with holes was ALWAYS `status: "ok"` before this fix -- the
+    "recorded 2 of 4" case this function exists to let tests reproduce was unreachable.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            doc = json.load(handle)
+    except (OSError, ValueError) as exc:
+        return grid.no_fetch([f"fetch: fixture {path} unreadable or invalid JSON ({exc})"], requested)
+    if not isinstance(doc, dict):
+        return grid.no_fetch([f"fetch: fixture {path} is not an object -- ignored"], requested)
+    items = grid.replayed_items(doc.get("nodes"))
+    return grid.fetch_answered(items, requested, [f"fetch: replayed from fixture {path} -- no gh ran"])
+
+
+def start_fetch(refs: list[str]) -> dict:
+    """Start the targeted fetch for `refs` and return a PENDING handle. Never waits. See finish_fetch.
+
+    THE SPLIT IS THE WHOLE POINT (the hardened spec's B4). The fetch is one `gh api graphql` round
+    trip; started here, before cli._grid runs the adapter fan-out, and collected after it, the round
+    trip overlaps work that was going to happen anyway. Measured: a real 4-ref fetch against a 0.9s
+    stand-in for the fan-out collected at 0.910s -- fully absorbed.
+
+    NO ThreadPoolExecutor, AND NOT BECAUSE OF TASTE. B4 measured a pool worker running a 12s
+    subprocess under `.result(timeout=2)`: the output printed at 2.01s and the PROCESS did not exit
+    until 12.08s, because `concurrent.futures.thread`'s atexit hook joins the non-daemon worker at
+    interpreter shutdown and `shutdown(wait=False)` does not change that. Timing out the FUTURE never
+    cancels the WORK. Here no thread exists at all: proc.run_background hands back a pid, and
+    proc.collect either reaps it or kills its whole session.
+
+    THE SEAM IS READ FIRST, before anything that could fork. BORG_LINK_FETCH_FIXTURE consulted after
+    the Popen is not a seam. A bad path degrades to a named warning rather than to a live fetch.
+
+    NO REFS MEANS NO SUBPROCESS, and that one rule is what keeps ~46 existing bats link cases and
+    every fixture registry without a `.borg/programs` fork-free. Same for a ref set where nothing
+    survives grid._fetchable.
+
+    `deadline` IS MONOTONIC AND IS SET HERE, at the spawn, so the fan-out's elapsed time is charged
+    against the fetch's budget rather than added to it. A fixed `timeout=fetch_timeout()` handed to
+    collect would make a fan-out that already burned 9s into a 19s worst case on a command budgeted
+    at 2.7s -- and every test runs against a fast mock, so nothing would ever see it. It must not
+    reuse now_epoch(): that is the document's clock, `time.time()`, and it jumps.
+    """
+    # THE REAL ASK IS COMPUTED BEFORE THE SEAM IS CONSULTED, not after, so a fixture reader can
+    # report against the true fetchable-ref count instead of against however many answers happen
+    # to be in the recording. `fetch_query` never forks, so this does not compromise "the seam is
+    # read first, before anything that could fork" above.
+    query, aliases, warnings = grid.fetch_query(refs)
+    fixture = os.environ.get("BORG_LINK_FETCH_FIXTURE")
+    if fixture:
+        return {"done": _read_fetch_fixture(fixture, len(aliases))}
+    if not refs:
+        return {"done": grid.no_fetch()}
+    if not aliases:
+        return {"done": grid.no_fetch(warnings)}
+    budget = fetch_timeout()
+    handle = proc.run_background(["gh", "api", "graphql", "-f", f"query={query}"])
+    if handle is None:
+        return {
+            "done": grid.no_fetch(
+                warnings
+                + [
+                    f"fetch: gh is not installed -- {len(aliases)} declared ref(s)"
+                    " fall back to what the manifest declares"
+                ],
+                len(aliases),
+            )
+        }
+    return {
+        "handle": handle,
+        "deadline": time.monotonic() + budget,
+        "budget": budget,
+        "aliases": aliases,
+        "warnings": warnings,
+    }
+
+
+def finish_fetch(pending: dict) -> dict:
+    """Collect a `start_fetch` handle into a fetch result. Degrades; never raises.
+
+    ALWAYS PARSE STDOUT, WHATEVER THE EXIT STATUS (the hardened spec's B5). `gh api graphql` exits 1
+    whenever the response carries an `errors[]` array, even when `data` is fully populated for every
+    other alias -- verified live against a batch with one bogus repository and one bogus number: exit
+    1, both casualties in `errors[].path`, every valid sibling resolved. The returncode is not read
+    at all here; grid.fetch_payload_is_usable is the only failure test, and it is the same
+    `has("data") and (.data != null)` discriminator recon-adapter-github uses.
+
+    A DEADLINE MISS DEGRADES DOWN THE LADDER, loudly. proc.collect kills the whole session and
+    returns None; the refs fall back to their declared status and the timeout is NAMED, because a
+    quiet degrade produces a document byte-identical to one where the fetch answered and the refs
+    genuinely have no state.
+    """
+    done = pending.get("done")
+    if isinstance(done, dict):
+        return done
+    aliases = pending["aliases"]
+    requested = len(aliases)
+    warnings = list(pending["warnings"])
+    remaining = max(0.0, pending["deadline"] - time.monotonic())
+    answer = proc.collect(pending["handle"], timeout=remaining)
+    if answer is None:
+        return grid.fetch_failed(
+            warnings
+            + [
+                f"fetch: gh did not answer within {pending['budget']:g}s -- {requested} declared ref(s)"
+                " fall back to what the manifest declares"
+            ],
+            requested,
+        )
+    try:
+        payload = json.loads(answer[1])
+    except ValueError:
+        payload = None
+    if not grid.fetch_payload_is_usable(payload):
+        return grid.fetch_failed(
+            warnings
+            + [
+                "fetch: gh returned no usable answer (unauthenticated, offline, or rate-limited)"
+                f" -- {requested} declared ref(s) fall back to what the manifest declares"
+            ],
+            requested,
+        )
+    return grid.fetch_answered(grid.fetched_items(payload, aliases), requested, warnings)
 
 
 def cortex_wakes_path() -> Path:
