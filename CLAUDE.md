@@ -45,8 +45,10 @@ Two independent tools that compose:
 - Usage guardian: 85% checkpoint sweep (bin/borg-usage-watch) + `borg-dispatch-guard.sh`
   >=92% hard-stop veto on new Agent/Workflow dispatch — both fail-open, dispatch-guard is
   default-OFF (`BORG_USAGE_HALT_ENABLED=1` to arm)
-- Recon fan-out: `borg recon` / `/borg-recon` — pluggable source adapters, since-mark resolution,
-  checkpoint-vs-source contradiction detection
+- Recon fan-out: `borg recon --json` / `/borg-recon` — pluggable source adapters, since-mark
+  resolution, checkpoint-vs-source contradiction detection. **`recon` retired as a human verb
+  2026-08-26** (bare `borg recon` dies pointing at `borg link`); the engine and its two machine
+  flags (`--json`, `--adapters`) survive
 - `borg-sync` (lib/borg-sync.zsh): mtime-based file sync helpers shared by the CLI and hooks
 - Auto-memory read instrumentation: `borg-memory-read-log.sh` (PostToolUse/Read) logs every read
   of a Claude Code project-memory file to `$BORG_DIR/memory-hits.log`; `bin/memory-hits-report`
@@ -76,7 +78,8 @@ borg rm <project>        Unregister
 borg focus               Zoom current pane / project window
 borg pin / unpin         Pin (or unpin) a project to the top of borg link
 borg reap / reap-worktrees  Reap stale active/waiting statuses; clean stale nanoprobe worktrees
-borg recon               Fan out across source adapters, reconcile against local checkpoints
+borg recon --json        Machine surface only: reconciled sweep JSON (bare `recon` retired; use link)
+borg recon --adapters    List the source adapters discovered on this machine
 borg nanoprobes (np)     List recent ephemeral subagent runs
 borg nanoprobe-log <id>  Fetch the transcript/summary for a nanoprobe run
 borg spend               Summarize accurate token spend from ~/.claude/token-spend.jsonl
@@ -128,11 +131,15 @@ lib/
     secrets.zsh             `borg store-secret` idempotent secrets.zsh patcher
     drone-hooks.zsh         Host-side pre-up/post-down borg-hooks runner for drone
     reaper.sh               Shared staleness predicate (portable sh, hooks + zsh CLI)
-    recon.sh                Recon fan-out engine (portable sh): since-mark, adapters, merge
-    recon.zsh               zsh shim sourcing recon.sh into the borg CLI (mirrors reaper↔registry)
-    recon/                  Recon adapter scripts (e.g. recon-adapter-github)
+    recon/adapters/         Recon adapter scripts (e.g. recon-adapter-github)
     borg-hooks.sh           Shared bash helpers for hook scripts (sync, session-mode classifier)
     borg-sync.zsh           mtime-based file sync helpers for the zsh CLI (mirrors borg-hooks.sh)
+borg_core/                  Python core the CLI dispatches into (see Architecture Rules)
+    paths.py                Config-path resolution + defaults (the CLI's `_borg_py` mirror)
+    registry/               Registry read/write core, shell adapter, CLI entry
+    recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
+    manifest/               Reader for <project>/.borg/programs/*.json program manifests
+    link/                   `borg link` document build + renderer (core/grid/render/shell/cli)
 hooks/
     borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
     borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
@@ -263,11 +270,15 @@ docs/
   that says "Ask which JIRA ticket this work targets, then read it via `acli jira workitem view`
   and use its description as the plan source." On a personal machine, the file doesn't exist and
   `/borg-plan` behaves exactly as it always did.
-- **Recon fan-out (`borg recon` + `/borg-recon`)**: source-agnostic "morning link-up" primitive. The
-  engine (`lib/recon.sh`, portable sh, sourced by the zsh CLI via the `lib/recon.zsh` shim — same
-  split as `reaper.sh`↔`registry.zsh`) resolves a `since` mark (explicit > newest checkpoint mtime >
-  last-run marker > 24h), fans out concurrently+bounded over pluggable **adapters**, normalizes every
-  finding to an Item `{project,source,ref,title,state,changed,owner,action_needed,urgency,one_line}`,
+- **Recon fan-out (`borg recon --json` + `/borg-recon`)**: source-agnostic sweep primitive.
+  **Retired as a human verb 2026-08-26** — `borg link` folds the same fan-out into its own document,
+  so bare `borg recon` (and any invocation without `--json`/`--adapters`) dies with a pointer at
+  `borg link`. The gate is in `borg.zsh`'s `recon)` dispatch arm, NOT in `borg_core/recon/`: a
+  Python-side gate would break six pytest cases, one of which is recon's own registry-derivation
+  guard. The engine (`borg_core/recon/{core,shell,cli}.py`) resolves a `since` mark (explicit >
+  newest checkpoint mtime > last-run marker > 24h), fans out concurrently+bounded over pluggable
+  **adapters**, normalizes every finding to an Item
+  `{project,source,ref,title,state,changed,owner,action_needed,urgency,one_line}`,
   merges by project, and detects checkpoint-blocker-vs-resolved-source contradictions. An adapter is
   ANY executable named `recon-adapter-<source>` on `BORG_RECON_ADAPTER_PATH` (config dir shadows the
   repo dir) — dropping a file registers a source, no code change. Sources are NEVER hardcoded: Ontra

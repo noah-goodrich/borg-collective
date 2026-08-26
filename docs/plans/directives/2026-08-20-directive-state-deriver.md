@@ -56,6 +56,8 @@ Mechanize the audit rubric as a borg_core module and make `borg link` its consum
 - [ ] AC2 Tests drive the production derivation path (git/checkpoint reads), never fixture-supplied
       statuses — per `reference_test_supplies_derived_value`.
 - [ ] AC3 `borg link` overview and deep dive carry the derived status; goldens regenerated.
-- [ ] AC4 `borg recon --since 30d` sweeps correctly (pytest on the resolve path) or exits loudly.
+- [ ] AC4 `borg recon --json --since 30d` sweeps correctly (pytest on the resolve path) or exits loudly.
+      (`--json` since 2026-08-26: `recon` retired as a human verb, so `--since` alone now dies at the
+      dispatch arm. The pytest is on `resolve_since` and is unaffected; only the CLI example moved.)
 - [ ] AC5 D3 report proposes the correct archive move for a known shipped-unarchived fixture.
 - [ ] AC6 Full bats suite + macOS contract leg green.

@@ -47,7 +47,7 @@ borg init   # morning briefing + launch orchestrator session
 | `borg claude` | Resume orchestrator Claude session |
 | `borg link [project]` | **Primary overview.** No arg = dashboard; with a project = deep dive (checkpoint, plan) |
 | `borg switch [query]` | fzf picker → jump to project tmux window |
-| `borg recon` | Fan out across source adapters, reconcile against checkpoints, synthesize a briefing |
+| `borg recon --json` | Machine surface only: the reconciled sweep document. Human digest retired — use `borg link` |
 | `borg nanoprobes` (`np`) | List recent nanoprobe runs (subagents) |
 | `borg nanoprobe-log <id>` | Show transcript for a nanoprobe run |
 | `borg reap-worktrees [project]` | Remove stale borg-managed nanoprobe worktrees |
