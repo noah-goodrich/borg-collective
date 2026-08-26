@@ -341,8 +341,12 @@ I last looked?" across every registered project.
 directly. Running bare `borg recon` dies with a pointer at `borg link`. What survives is the
 **machine surface** — `borg recon --json` (consumed by the `/borg-recon` skill and
 `merge-tree/gather.py`) and `borg recon --adapters` — because the engine was never the thing AC1
-asked to remove. The gate lives in `borg.zsh`'s `recon)` dispatch arm, not in `borg_core/recon/`,
-so the Python engine stays directly callable and its own registry-resolution guards keep their teeth.
+asked to remove. The gate lives in `borg.zsh`'s `recon)` dispatch arm, not in `borg_core/recon/` —
+which is an **altitude compromise rather than a clean call**, filed as
+`docs/plans/directives/2026-08-26-recon-retirement-gate-altitude.md`. Two things follow from it while
+it stands: `python3 -m borg_core.recon.cli` reaches the retired human digest ungated, and
+`core.render_digest` is unreachable through `borg recon` yet still fully covered by tests that call
+`_run()` directly, so no gate notices it is stranded.
 
 - **Engine**: `borg_core/recon/{core,shell,cli}.py`. It resolves a `since` mark (explicit override >
   newest checkpoint mtime > last-run marker > 24h fallback), then fans out concurrently (bounded

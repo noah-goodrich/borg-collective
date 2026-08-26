@@ -7,6 +7,17 @@ fallback -- so a real (non-dev) install would hard-crash with ModuleNotFoundErro
 with every Python 3 interpreter, so this removes the unprovisioned runtime dependency entirely
 rather than papering over it with an install-time pip step. See the migration ledger
 (docs/plans/assimilated/2026-08-12-recon-migration-ledger.md) for the record of this deviation.
+
+THE HUMAN DIGEST PATH RETIRED 2026-08-26 AND THIS MODULE DOES NOT KNOW IT. `borg recon` retired as a
+human verb in AC1 of the one-front-door plan, gated in borg.zsh's `recon)` dispatch arm. That makes
+`json_only=False` unreachable through the shipped CLI, which strands `_run`'s `else:` branch and
+everything under it -- `core.render_digest` plus its five private helpers, roughly a fifth of
+core.py. NO GATE NOTICES: `test_run_digest_output` and the core suite call `_run()` directly, so
+coverage stays green on code no user can reach, and `render_digest`'s closing line still advertises
+the pre-retirement framing that the same commit rewrote in borg.zsh, docs/cheatsheet.md and
+docs/skills-guide.md. Both the misplaced gate and this stranded branch are filed together in
+docs/plans/directives/2026-08-26-recon-retirement-gate-altitude.md; moving the gate to `main()` is
+what makes the dead branch visible at the layer that owns it.
 """
 
 from __future__ import annotations
