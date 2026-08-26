@@ -12,6 +12,30 @@ setup_temp_dirs() {
     export HOME="$BORG_TEST_HOME"
     export XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/config"
 
+    # GIVE THE SANDBOX A GIT IDENTITY. HOME is redirected on the line above, so `~/.gitconfig` is
+    # gone by construction -- and recon_adapter_github.bats's case "adapter: a linked worktree is
+    # swept, a plain subdirectory is not" runs `git commit` (a linked worktree needs a commit to
+    # point at). This passes on macOS ONLY because git auto-derives an identity from getpwuid plus a
+    # resolvable hostname and commits anyway, with a warning -- measured, the author lands as
+    # `Noah <noah@MacBook-Pro-4.local>`. In a Linux container the hostname has no domain and git
+    # refuses outright: `fatal: unable to auto-detect email address (got 'root@<id>.(none)')`, rc=128.
+    # CI's ubuntu lane runs `bats tests/*.bats`, so this was silently broken there the whole time.
+    #
+    # ENV VARS, NOT A WRITTEN .gitconfig: the harness redirects BOTH HOME and XDG_CONFIG_HOME above,
+    # and git consults both, so a file means picking the right one and staying right as either
+    # redirect changes. Env vars beat every config layer with no path resolution to get wrong.
+    # GIT_CONFIG_NOSYSTEM=1 closes the one hole neither redirect covers: the system gitconfig
+    # (/opt/homebrew/etc/gitconfig, /etc/gitconfig) is read regardless of HOME/XDG_CONFIG_HOME.
+    # `.invalid` is RFC 2606 reserved, so the address can never resolve to anything real.
+    #
+    # SAME FAMILY as two CLAUDE.md Learned entries: the XDG_CONFIG_HOME leak in borg-link-down.sh,
+    # and "a shell variable is not an environment variable" for BORG_REGISTRY -- the sandbox being
+    # incomplete in a way the dev machine silently papers over, which is exactly why it stayed
+    # invisible where it was being tested.
+    export GIT_AUTHOR_NAME="borg tests"    GIT_AUTHOR_EMAIL="tests@borg.invalid"
+    export GIT_COMMITTER_NAME="borg tests" GIT_COMMITTER_EMAIL="tests@borg.invalid"
+    export GIT_CONFIG_NOSYSTEM=1
+
     # NEUTRALIZED TO A REAL EMPTY DIRECTORY, NOT UNSET AND NOT "" (the hardened spec's B7).
     # `borg link` folds the recon sweep into its document, so every `borg link` invocation in this
     # suite -- 40-odd of them plus all four goldens -- would otherwise discover the shipped
