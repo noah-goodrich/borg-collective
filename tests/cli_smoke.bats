@@ -71,8 +71,34 @@ setup() {
     [[ "$output" == *"borg link --refresh"* ]] || false
 }
 
+# PROBED THROUGH A SHAPE THAT ACTUALLY DISPATCHES, which it was not until 2026-08-26. This case ran
+# `borg link --help`, and until S4 `--help` fell into _borg_link_dispatch's lenient `-*)` arm, was
+# swallowed, and rendered the whole overview — so the invocation genuinely reached the registry, the
+# renderer and the document. S4 gave `--help` an explicit arm that returns at the TOP of the
+# function, which silently reduced this case to "the usage line does not say 'unknown command'".
+# Measured: replacing the entire overview arm with `die "overview deleted by mutation"` left this
+# case AND its cli_contract twin green.
+#
+# `--local` because a bare `borg link` sweeps every source over the network post-S3; a smoke test
+# must not need `gh`. The seeded registry is what makes the render non-trivial — against the empty
+# default the overview short-circuits to "No projects registered" and never builds a document.
 @test "borg link is still dispatched" {
+    printf '%s' '{"projects":{"smoke":{"path":null,"source":"cli","status":"idle","summary":"Smoke."}}}' \
+        > "$BORG_REGISTRY"
+
+    run "$BORG_CMD" link --local
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" == *"smoke"* ]] || false
+    [[ "$output" != *"unknown command"* ]] || false
+    [[ "$output" != *"was removed"* ]] || false
+}
+
+# The wording half, kept separate from the liveness half above so neither can stand in for the other.
+@test "borg link --help prints usage and never reads as a removed verb" {
     run "$BORG_CMD" link --help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"usage: borg link"* ]] || false
     [[ "$output" != *"unknown command"* ]] || false
     [[ "$output" != *"was removed"* ]] || false
 }

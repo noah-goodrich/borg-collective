@@ -13,7 +13,9 @@ borg next --switch           Recommend AND switch to that project
 borg switch                  fzf picker → jump to tmux window
 borg switch <name>           Jump directly (skips fzf)
 
-borg recon                   Fan out across source adapters, reconcile against checkpoints
+borg recon --json            Machine surface only: reconciled sweep JSON (/borg-recon, gather.py)
+borg recon --adapters        List the source adapters discovered on this machine
+                             The human digest retired 2026-08-26 — borg link sweeps now
 
 borg nanoprobes (np)         List recent nanoprobe (subagent) runs
 borg nanoprobe-log <id>      Show transcript for a nanoprobe run
@@ -55,7 +57,7 @@ drone status                 Show all drones
 /borg-link-up                Flush session state to <project>/.borg/checkpoints/<ts>.md
 /borg-next                   What project needs attention most urgently?
 /borg-switch                 Switch to a different project's tmux window
-/borg-recon                  Morning link-up: fan out + reconcile + briefing
+/borg-recon                  Cross-source synthesis over `borg recon --json` (`borg link` is the front door)
 /borg-verify                 Independent pre-merge evaluator gate (PASS/FAIL)
 /borg-resume                 Auto-resume a workflow paused by a session/usage limit
 /adhd-guardrails             Cognitive load guardrails (always active, auto)

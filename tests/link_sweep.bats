@@ -268,6 +268,172 @@ EOF
     [[ "$output" != *"recon-adapter-github"* ]] || false
 }
 
+# ── AC1: --help answers without sweeping, and the lenient arm still sweeps ─────
+
+@test "sweep: link --help spawns zero gh subprocesses, and an unknown flag still sweeps" {
+    # `--help` fell into _borg_link_dispatch's lenient `-*)` arm until S4, was swallowed, and
+    # rendered the swept overview -- 0.85s of network for a flag whose whole job is to print one
+    # line. It has an explicit arm now, above `-*)` and returning before anything else runs.
+    _sweepable_repo
+
+    run zsh "$BORG" link --help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"usage: borg link"* ]] || false
+    run cat "$GH_TRACE"
+    [ -z "$output" ]
+
+    # THE CONTROL, DOING TWO JOBS. It proves the fixture genuinely CAN reach `gh` -- without it the
+    # assertion above passes with the fix deleted -- AND it proves the fix did not arrive by
+    # teaching the lenient `-*)` arm to imply --local, which is the one repair the hardened spec
+    # forbids and the one no stdout assertion anywhere in the suite can detect (`link beta` and
+    # `link --local beta` are byte-identical on stdout; only a subprocess count sees the wire).
+    : > "$GH_TRACE"
+    run zsh "$BORG" link --totally-bogus
+    [ "$status" -eq 0 ]
+    run cat "$GH_TRACE"
+    [ -n "$output" ]
+    [[ "$output" == *"graphql"* ]] || false
+}
+
+# ── AC1: "No cache, ever — a clean read every time" ───────────────────────────
+
+# PATH + SIZE + INODE for every non-directory, PATH ONLY for directories.
+#
+# NOT mtime, and that is a measurement rather than a preference. Two consecutive `borg link` runs
+# finish inside the SAME SECOND, and BSD `stat -f %m` / `find -newer` are second-granular: a full
+# tmp-file-plus-rename rewrite of registry.json between the two runs is BYTE-INVISIBLE at that
+# resolution (measured: mtime identical, size identical, inode moved). The inode is the only field
+# that sees it.
+#
+# DIRECTORY SIZE AND MTIME ARE EXCLUDED because they are legitimately volatile: $BORG_DIR's size
+# moves as transient children come and go, and $TMPDIR's mtime bumps on every run from the
+# `borg-link.XXXXXXXX` workdir borg_core/link/shell.py creates and removes. A directory that held a
+# temp file for 200ms is not a cache; a file that SURVIVED the run is what this hunts.
+#
+# STATTED THROUGH python3, NOT `stat`, AND THAT IS A PORTABILITY BUG FIX RATHER THAN A STYLE CALL.
+# The first version used `stat -f 'FILE %N %z %i'`, which is BSD. `bats tests/*.bats` runs on
+# ubuntu-latest (.github/workflows/test.yml's `test` job) and this file is in it, while the macOS
+# lane runs cli_contract.bats ONLY -- so the one platform that executes this case is the one where
+# GNU coreutils reads `-f` as `--file-system`, swallows the format string as a file operand, and
+# prints a five-line FILESYSTEM report carrying `Blocks: Total/Free/Available`. Measured in
+# `docker run ubuntu:24.04`: zero lines match `^FILE `, the per-file blocks drift between two
+# snapshots of an untouched tree, and the case dies outright at `set -e`. Exactly #114
+# (cli_contract.bats's "guards #114" block) in a new place.
+#
+# A `stat -c ... || stat -f ...` chain -- borg.zsh's `_borg_file_mtime` idiom, GNU FIRST, never
+# BSD-first -- would also work. python3 wins because it is one process for the whole root instead of
+# one per file, and because borg already hard-depends on it (every `borg link` in this file forks
+# borg_core), so it cannot be absent where this test can run at all. `os.lstat`, not `os.stat`: a
+# symlink is a file that survived the run, and following it would report the target twice.
+#
+# The whole snapshot is `sort -u`'d at the end rather than per-`find`, because the roots below NEST
+# ($BORG_DIR is inside $XDG_CONFIG_HOME) and a duplicated line would show up twice in the exact-
+# equality diff at (2).
+_fs_snapshot() {
+    local out="$1"; shift
+    local root
+    : > "$out"
+    for root in "$@"; do
+        [ -e "$root" ] || continue
+        find "$root" -type d 2>/dev/null | sed 's|^|DIR |' >> "$out"
+        find "$root" ! -type d -exec python3 -c 'import os, sys
+for p in sys.argv[1:]:
+    try:
+        st = os.lstat(p)
+    except OSError:
+        continue
+    print("FILE", p, st.st_size, st.st_ino)' {} + 2>/dev/null >> "$out"
+    done
+    sort -u "$out" > "${out}.sorted" && mv "${out}.sorted" "$out"
+}
+
+@test "cache: two consecutive borg link runs write no cache artifact (AC1)" {
+    _sweepable_repo
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+
+    # The temp root is isolated so it is both OBSERVABLE and un-polluted by anything else on the
+    # machine. Honored by borg_core/link/shell.py's TemporaryDirectory. NOT honored by the adapter's
+    # own `mktemp` (lib/recon/adapters/recon-adapter-github) -- BSD mktemp with no template uses the
+    # darwin user temp dir regardless of $TMPDIR, so that file is outside this sandbox by
+    # construction. It is not a cache (nothing reads it back) and it is not in scope here.
+    export TMPDIR="${BATS_TEST_TMPDIR}/tmp"
+    mkdir -p "$TMPDIR"
+
+    # $XDG_DATA_HOME AND $XDG_CONFIG_HOME ARE ROOTS TOO, and neither is reachable transitively:
+    # setup() redirects XDG_DATA_HOME to a SIBLING of $HOME, and only $XDG_CONFIG_HOME/borg (=
+    # $BORG_DIR) was listed. `${XDG_DATA_HOME:-$HOME/.local/share}/borg` is where borg already puts
+    # data (install.sh's LOG_DIR, the vinculum store at borg.zsh:2699), so it is the conventional
+    # place a future `borg link` memo lands -- and until it was listed here, a cache written there
+    # left all four assertions below green. Measured: a `link-cache.json` write into
+    # $XDG_DATA_HOME/borg passed; the identical write into $BORG_DIR failed.
+    # $XDG_STATE_HOME and $XDG_CACHE_HOME need no entry: both are unset in this suite and default
+    # under the redirected $HOME, which IS a root.
+    local roots=( "$BORG_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$dir" "$TMPDIR" "$BORG_TEST_HOME" )
+
+    # THREE SNAPSHOTS, NOT TWO. A cache is by definition something run 1 WRITES and run 2 READS, so
+    # run 2 need not mutate anything: a single before/after pair collapses a cache into the same
+    # bucket as one-time initialization. s0->s1 catches a run-1-written cache; s1->s2 catches a
+    # per-run rewrite or an advancing mark.
+    _fs_snapshot "${BATS_TEST_TMPDIR}/s0.txt" "${roots[@]}"
+    bash -c "cd '$dir' && zsh '$BORG' link" > "${BATS_TEST_TMPDIR}/r1.out" 2>&1
+    _fs_snapshot "${BATS_TEST_TMPDIR}/s1.txt" "${roots[@]}"
+    bash -c "cd '$dir' && zsh '$BORG' link" > "${BATS_TEST_TMPDIR}/r2.out" 2>&1
+    _fs_snapshot "${BATS_TEST_TMPDIR}/s2.txt" "${roots[@]}"
+
+    # ANTI-VACUITY GATE, FIRST, and it is also the "a clean tree is not a clean read" gate. Under
+    # setup_temp_dirs' empty adapter dir the sweep short-circuits before any subprocess, so a tree
+    # diff there inspects a code path that never ran; and even with the real adapter, a run 2 that
+    # short-circuited on an in-process memo and reprinted run 1's answer would leave the tree clean
+    # while doing no work. The count is EXACT, not `-ge 1`: one batched call PER RUN.
+    run cat "$GH_TRACE"
+    [ "${#lines[@]}" -eq 2 ]
+
+    # ANTI-DEGENERACY GATE FOR THE SNAPSHOT ITSELF. Every assertion below is a comparison between
+    # two snapshots, so a _fs_snapshot that emits nothing -- or emits a constant per file -- makes
+    # all of them pass while seeing nothing. That is not hypothetical: it is precisely what the
+    # BSD-only `stat -f` did on the ubuntu lane that runs this file. Name one file that MUST be in
+    # the tree before run 1 and require it to carry a real size and a real inode.
+    run grep -cE "^FILE ${BORG_REGISTRY} [0-9]+ [0-9]+$" "${BATS_TEST_TMPDIR}/s0.txt"
+    [ "$output" = "1" ]
+
+    # (1) RUN 2 CHANGED NOTHING AT ALL.
+    run diff "${BATS_TEST_TMPDIR}/s1.txt" "${BATS_TEST_TMPDIR}/s2.txt"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+
+    # (2) RUN 1's OWN WRITES ARE EXACTLY ONE DIRECTORY, NAMED HERE ON PURPOSE. The single expected
+    # write is borg_desktop_init's `mkdir -p "$BORG_DIR/desktop"` (lib/desktop.zsh), reached from
+    # the overview arm's desktop pre-pass. That directory is an INBOX for Claude Desktop session
+    # reports written by another process; `borg link` only ever reads it. THE EQUALITY IS THE POINT
+    # -- an allowlist would let a second, unnamed artifact ride in beside it, and the obvious
+    # allowlist (`grep -v "$BORG_DIR"`) would exclude the one real cache in the tree.
+    run diff "${BATS_TEST_TMPDIR}/s0.txt" "${BATS_TEST_TMPDIR}/s1.txt"
+    [ "$status" -ne 0 ]
+    run bash -c "diff '${BATS_TEST_TMPDIR}/s0.txt' '${BATS_TEST_TMPDIR}/s1.txt' | grep '^[<>]'"
+    [ "$output" = "> DIR ${BORG_DIR}/desktop" ]
+
+    # (3) NO FILE WAS CREATED ANYWHERE, IN EITHER RUN. Stated separately from (2) because it is the
+    # claim AC1 actually makes, and it must not depend on the shape of a diff.
+    run bash -c "grep -c '^FILE ' '${BATS_TEST_TMPDIR}/s0.txt'"
+    local before_files="$output"
+    run bash -c "grep -c '^FILE ' '${BATS_TEST_TMPDIR}/s2.txt'"
+    [ "$output" = "$before_files" ]
+
+    # (4) THE ONE NAMED ARTIFACT, WITH ITS CONTROL. $BORG_DIR/recon/last-run is a real cache:
+    # recon's since-ladder reads it back and advances it on every sweep. `link` folds recon's
+    # fan-out in but must never write it -- borg_core/link/shell.py's sweep() says so in prose, and
+    # this is the executable half. S4 retires the recon VERB while keeping the ENGINE, so this is
+    # exactly one careless refactor (routing a digest through link, reusing recon.cli._sweep) away
+    # from becoming false.
+    [ ! -e "${BORG_DIR}/recon/last-run" ]
+
+    # THE CONTROL. Without it, `[ ! -e ... ]` is green on a machine where nothing could write it at
+    # all. `borg recon --json` runs the same adapters over the same registry and DOES persist the
+    # mark, so the assertion above is provably falsifiable. It runs LAST, after the GH_TRACE gate,
+    # because it adds a third `gh` call.
+    bash -c "cd '$dir' && zsh '$BORG' recon --json" >/dev/null 2>&1
+    [ -e "${BORG_DIR}/recon/last-run" ]
+}
+
 # ── B9: the latency the whole plan is budgeted against ────────────────────────
 
 @test "sweep: repository-scoped borg link holds its 2.7s median (BORG_LINK_PERF=1)" {

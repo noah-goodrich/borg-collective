@@ -2620,12 +2620,6 @@ cmd_help() {
                           --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
     switch [query]      fzf picker → jump to project tmux window
-    recon               Fan out across source adapters since a mark → reconciled by-project digest
-                          --since ISO    Override the mark (default: newest checkpoint mtime)
-                          --projects a,b Limit to a subset of registered projects
-                          --sources s,t  Limit to a subset of discovered adapters
-                          --json         Emit the reconciled JSON (what /borg-recon consumes)
-                          --adapters     List discovered source adapters and exit
     program <action>    Program-manifest coordinator over <project>/.borg/programs/*.json
                           list           Every declared program across registered projects
                           plan           Read-only three-way drift audit (borg / target / recon)
@@ -2653,9 +2647,13 @@ cmd_help() {
     doctor              Verify the 4 launchd agents + headless claude -p reachability
     help                Show this message
 
-  REMOVED (2026-08-10 — use 'link')
-    ls, status, hail, brief, briefing, refresh were aliases for 'link'.
-    Six names for one command; 'borg link' is now the only one.
+  REMOVED
+    2026-08-10 — ls, status, hail, brief, briefing, refresh were aliases for 'link'.
+                 Six names for one command; 'borg link' is now the only one.
+    2026-08-26 — recon retired as a human verb. 'borg link' sweeps every source itself, so
+                 there is nothing a human still needs it for. The ENGINE is not retired:
+                 'borg recon --json' and 'borg recon --adapters' are the machine surface
+                 /borg-recon and merge-tree/gather.py consume, and both still work.
 
   HOTKEY
     Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
@@ -2669,7 +2667,7 @@ cmd_help() {
     /borg-link              Same as 'borg link' — overview or deep dive
     /borg-next              Same as 'borg next' — what needs attention
     /borg-switch            Same as 'borg switch' — jump to project
-    /borg-recon             Morning link-up: fan-out recon + reconcile + Yours-vs-Mine action lists
+    /borg-recon             Cross-source synthesis over 'borg recon --json' ('borg link' is the front door)
     /adhd-guardrails        Compassionate constraints (always active)
 
   STATUS
@@ -2969,22 +2967,25 @@ _borg_py() {
 # reap_disabled() reads it with `bool(os.environ.get(...))`, so an exported-empty value is
 # correctly falsy -- unlike BORG_REAP_STALE_HOURS, which must arrive as its default because
 # `int("")` raises. This changes the environment of the existing recon/add/rm children too; that
-# is safe because nothing else in borg_core reads BORG_NO_REAP, and tests/cli_contract.bats:2275
-# asserts only the PRESENCE of a fixed list of names.
+# is safe because nothing else in borg_core reads BORG_NO_REAP, and cli_contract.bats's "the python3
+# dispatch wrapper hands borg's config surface to the child" asserts only the PRESENCE of a fixed
+# list of names. (Anchored by test name: line numbers in that file drift on every insertion.)
 
 # Phase 3 (A4+A5): the ONE dispatch point for every `borg link` shape. Collapses today's two parse
 # layers (the top-level case arm's `--json` intercept plus cmd_link's own flag loop) into ONE loop
 # with the SAME semantics. Does NOT `shift` -- the `link)` case arm strips the subcommand itself, so
 # cmd_watch can call this with no arguments at all.
 #
-# Flags recognised: --json, --porcelain, --brief|--llm (aliases), --refresh, --all. ANY other `-*`
-# is silently swallowed (no die, exit 0) -- pinned at cli_contract.bats:2183-2195; do NOT adopt
-# recon's die-on-unknown-flag behavior here. A bare word sets the project, LAST-WINS (`link a b`
-# deep-dives `b`). Precedence, strictly: json > porcelain > project(deep) > brief > overview -- this
-# merges today's two layers, where the top arm intercepted `--json` first and cmd_link's own order
-# was porcelain > project > brief > overview.
+# Flags recognised: --json, --porcelain, --brief|--llm (aliases), --refresh, --all, --local, and
+# -h|--help. ANY other `-*` is silently swallowed (no die, exit 0) -- pinned by the case named
+# "link tolerates an unknown flag and still renders the overview at exit 0" in cli_contract.bats;
+# do NOT adopt recon's die-on-unknown-flag behavior here. A bare word sets the project, LAST-WINS
+# (`link a b` deep-dives `b`). Precedence, strictly: help > json > porcelain > project(deep) >
+# brief > overview -- this merges today's two layers, where the top arm intercepted `--json` first
+# and cmd_link's own order was porcelain > project > brief > overview.
 _borg_link_dispatch() {
     typeset _link_json=0 _link_porcelain=0 _link_brief=0 _link_refresh=0 _link_all=0 _link_local=0
+    typeset _link_help=0
     typeset _link_project="" _link_arg
     typeset -a _link_py_args
     for _link_arg in "$@"; do
@@ -2995,14 +2996,45 @@ _borg_link_dispatch() {
             --refresh)     _link_refresh=1 ;;
             --all)         _link_all=1 ;;
             --local)       _link_local=1 ;;
+            -h|--help)     _link_help=1 ;;                # MUST precede `-*)`: zsh case is first-match
             -*)            ;;                            # lenient, matching cmd_link's `-*) shift`
             *)             _link_project="$_link_arg" ;;  # last-wins, matching cmd_link
         esac
     done
     # --local MUST be matched explicitly here and forwarded on every arm. The lenient `-*)` arm two
-    # lines up silently swallows unknown flags and exits 0 (pinned at cli_contract.bats:2183-2195),
-    # so a half-wired --local would fail OPEN -- the caller believes it opted down, the flag is
-    # eaten, and the expensive path runs anyway with nothing to show it happened.
+    # lines up silently swallows unknown flags and exits 0 (pinned by the unknown-flag case in
+    # cli_contract.bats), so a half-wired --local would fail OPEN -- the caller believes it opted
+    # down, the flag is eaten, and the expensive path runs anyway with nothing to show it happened.
+
+    # -h|--help is matched EXPLICITLY and answered before anything else runs. Until S4 it fell into
+    # the lenient `-*)` arm above, was swallowed, and rendered the ASCII-cube overview -- which
+    # post-S3 SWEEPS: measured 0.85s against 0.11s with --local, for a flag whose whole job is to
+    # print one line. `-h` needs the same arm because the top-level `help|--help|-h)` matches on $1
+    # only and `link)` forwards "${@:2}", so `borg link -h` reached the swallow too.
+    #
+    # NOT fixed by teaching `-*)` to imply --local. That arm's pinned property is that an unknown
+    # flag carries NO semantics, and a silent --local there is invisible to every stdout assertion
+    # in the suite (cli_contract.bats records by mutation that `link beta` and `link --local beta`
+    # are byte-identical on stdout). The defect was that --help rendered the overview AT ALL, not
+    # that it rendered it expensively.
+    #
+    # BEFORE the --refresh block below on purpose: `borg link --refresh --help` must not fire
+    # `cmd_scan --llm` -- a real `claude` invocation -- on its way to printing one usage line.
+    #
+    # `return 0`, never the `exit 0` the `recon)` case arm uses: this is a FUNCTION, and cmd_watch
+    # calls it in-process inside its refresh loop, where an `exit` would kill `borg watch`.
+    #
+    # The wording must not contain "unknown command" or "was removed": cli_smoke.bats's "borg link
+    # --help prints usage and never reads as a removed verb" asserts this exact output carries
+    # neither, so a helpful pointer at recon's retirement here turns that case red. That case is
+    # the WORDING half only -- the LIVENESS half ("borg link is still dispatched", and its
+    # cli_contract twin) was re-pointed at `borg link --local` when this arm landed, because an
+    # early `return` here means `--help` no longer reaches any dispatch arm to prove alive.
+    if (( _link_help )); then
+        echo "usage: borg link [project] [--local] [--all] [--refresh] [--brief|--llm] [--json] [--porcelain]"
+        echo "       --local skips the source sweep (registry + manifests only, no network)"
+        return 0
+    fi
 
     # The refresh scan runs once here (was five call sites, one per dispatch arm) instead of once
     # per branch below. The --json redirect (1>&2, so the scan's own chatter can't splice ahead of
@@ -3042,8 +3074,10 @@ _borg_link_dispatch() {
 
     if (( _link_porcelain )); then
         # Human arms keep the desktop pre-pass warning on STDOUT (today's behavior) -- do NOT reuse
-        # the --json arm's `1>&2 2>/dev/null` redirect here; cli_contract.bats:2373-2377 STEP 1
-        # asserts the human path really does splice the warning onto stdout.
+        # the --json arm's `1>&2 2>/dev/null` redirect here; STEP 1 of cli_contract.bats's "link
+        # --json stdout stays valid JSON when the registry write warning fires, and the focus path
+        # never triggers it" asserts the human path really does splice the warning onto stdout.
+        # (Anchored by test name: that file's line numbers drift on every insertion.)
         borg_desktop_scan 2>/dev/null || true
         # CRITICAL: do NOT forward the positional in porcelain mode. `link --porcelain nosuchproject`
         # exits 0 with the listing today; forwarding it would build a focus block and die instead.
@@ -3097,21 +3131,40 @@ case "${1:-help}" in
         # dispatch wrapper function for this arm, so `recon` is fully migrated per the migration
         # ledger -- see docs/plans/assimilated/2026-08-12-recon-migration-ledger.md. PYTHONPATH is
         # set explicitly rather than relying on cwd, since borg can be invoked from any directory.
+        #
+        # RETIRED 2026-08-26 AS A HUMAN VERB, ENGINE INTACT (AC1). `borg link` folds the same
+        # fan-out into its own document, so the human digest has no reason to exist -- but
+        # `--json` and `--adapters` have real machine consumers (skills/borg-recon/SKILL.md,
+        # merge-tree/gather.py, evals/s4-k3/run.sh) and AC1 never asked for the engine to die.
+        # So the gate lives HERE, in the dispatch, and NOT in borg_core/recon/cli.py: a Python-side
+        # guard breaks six pytest cases including test_cli.py's
+        # test_run_resolves_registry_from_borg_dir_when_env_override_absent, which is recon's own
+        # copy of the registry-derivation guard B8 exists to extend. Deleting that to make a
+        # Python-side gate pass would remove the exact protection this step is here to widen.
         shift
         typeset -a _recon_py_args
+        typeset _recon_machine=0
         while [[ $# -gt 0 ]]; do
             case "$1" in
                 --since)            _recon_py_args+=(--since "$2"); shift 2 ;;
                 --sources)          _recon_py_args+=(--sources "$2"); shift 2 ;;
                 --projects)         _recon_py_args+=(--projects "$2"); shift 2 ;;
-                --json)             _recon_py_args+=(--json); shift ;;
-                --adapters|--list)  _recon_py_args+=(--adapters); shift ;;
+                --json)             _recon_machine=1; _recon_py_args+=(--json); shift ;;
+                --adapters|--list)  _recon_machine=1; _recon_py_args+=(--adapters); shift ;;
                 -h|--help)
-                    echo "usage: borg recon [--since ISO] [--projects a,b] [--sources github,..] [--json] [--adapters]"
+                    echo "'borg recon' was retired as a human command — 'borg link' sweeps every source itself."
+                    echo "Run: borg link"
+                    echo "usage (machine surface only): borg recon --json [--since ISO] [--projects a,b] [--sources github,..]"
+                    echo "                              borg recon --adapters"
                     exit 0 ;;
                 *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
             esac
         done
+        # AFTER the parse loop, never before it: --json and --adapters are what set the machine
+        # flag, so a gate placed ahead of the loop kills them too -- a one-line diff that reads
+        # correctly and breaks every surviving consumer. --since/--projects/--sources are
+        # MODIFIERS, not modes, and deliberately do not open the gate on their own.
+        (( _recon_machine )) || die "'borg recon' was retired as a human command — 'borg link' sweeps every source itself. Run: borg link   (machine surface: 'borg recon --json', 'borg recon --adapters')"
         _borg_py borg_core.recon.cli "${_recon_py_args[@]}"
         ;;
     scan)     cmd_scan "${@:2}" ;;

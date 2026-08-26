@@ -29,9 +29,17 @@ can do vs. what an agent can be sent to do right now.
 borg recon --json
 ```
 
-Flags you may pass through when the user asks: `--since <ISO>` (default = newest checkpoint mtime),
-`--projects a,b` (subset), `--sources github,...` (subset). Run `borg recon --adapters` first if you
-need to see which sources exist on this machine — do NOT assume any specific source is present.
+**`--json` is REQUIRED, on every invocation.** `recon` retired as a human-facing verb on 2026-08-26
+(`borg link` sweeps every source itself now); only the MACHINE surface survives, and that is exactly
+`borg recon --json` and `borg recon --adapters`. Anything else — including a bare `borg recon` or a
+modifier on its own — exits 1 and points at `borg link`.
+
+So flags you may pass through when the user asks ALWAYS attach to `borg recon --json`:
+`--since <ISO>` (default = newest checkpoint mtime), `--projects a,b` (subset),
+`--sources github,...` (subset). "Catch me up since August 1" is
+`borg recon --json --since 2026-08-01T00:00:00Z`, never `borg recon --since 2026-08-01T00:00:00Z`.
+Run `borg recon --adapters` first if you need to see which sources exist on this machine — do NOT
+assume any specific source is present.
 
 The JSON you get back:
 

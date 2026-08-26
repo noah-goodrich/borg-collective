@@ -68,8 +68,11 @@ def _fold_s(text: str, width: int = 70) -> list[str]:
     `width` (the space stays on the emitted line); hard-break at exactly `width` when the window
     contains no space at all.
 
-    Pinned by cli_contract.bats:2048-2053: every continuation line must match `^  [^ ]` -- a
-    continuation must never begin with a space.
+    Pinned by cli_contract.bats's "link <project> deep dive wraps and indents a summary longer than
+    70 columns": every continuation line must match `^  [^ ]` -- a continuation must never begin
+    with a space. (Anchored by TEST NAME, not by line number. A 90-line insertion at the top of
+    cli_contract.bats silently invalidated every `cli_contract.bats:<N>` pointer in this tree once
+    already; names survive insertions.)
 
     GNU-vs-BSD, measured not assumed: a 1000-case randomized differential (varied word lengths,
     runs of spaces, leading/trailing spaces, words longer than the width, empty strings, widths
@@ -129,8 +132,8 @@ def _checkpoint_head_block(head: str) -> str:
 def porcelain(doc: dict) -> str:
     """`--porcelain`: one TSV row per visible project, no color, no padding, no header.
 
-    Empty or fully-filtered -> "" -- absolutely nothing, not even a trailing newline (pinned at
-    cli_contract.bats:1726).
+    Empty or fully-filtered -> "" -- absolutely nothing, not even a trailing newline (pinned by
+    cli_contract.bats's "link --porcelain prints nothing at all on an empty registry").
     """
     order = doc.get("order") or []
     projects = doc.get("projects") or {}
@@ -345,7 +348,8 @@ def deep(doc: dict) -> str:  # pylint: disable=too-many-locals
     if path != "null":
         out.append(_label("Path:", str(path)))
     # Exactly ONE line contains "Status:" and it ends in the status word: drone.zsh:964-965 greps
-    # this line and blanks its column silently otherwise (pinned at cli_contract.bats:2210-2219).
+    # this line and blanks its column silently otherwise (pinned by cli_contract.bats's
+    # "drone status can still extract Status: from the deep dive").
     out.append(_label("Status:", str(status)))
     out.append(_label("Last active:", str(last_activity)))
     out.append(_label("tmux window:", str(tmux_window)))
