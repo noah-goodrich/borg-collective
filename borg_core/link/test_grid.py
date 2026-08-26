@@ -2035,18 +2035,27 @@ def test_parents_and_children_carry_ordering_edges_only():
     column. `levels()` already refuses apex for the matching reason, and the two filters drifting is
     a picture that draws an edge the ranking never counted.
 
-    THE `blocks` HALF IS ASSERTED TOO, and it is what stops the inverse mutation from passing: an
+    THE `blocks` HALF IS ASSERTED TOO, and it is what stops the INVERSE mutation from passing: an
     implementation narrowed to `stacked` alone renders a declared blocker as no connector at all,
     which is a missing dependency rather than an invented one, and every apex assertion here would
     still be green.
+
+    THE GATE MUST BLOCK ON A NON-ADJACENT ROW, and the first version of this fixture got that wrong.
+    It gated row 2 on row 1, which are consecutive in the same lane -- so `_stacked_edges` emitted the
+    SAME `(o/r#1, o/r#2)` pair the `blocks` channel did, deduplication collapsed them, and narrowing
+    ORDERING_EDGE_KINDS to `("stacked",)` left every assertion green. The docstring claimed a mutation
+    the fixture could not catch, which is the "a check pointed at the wrong thing reads as a pass"
+    failure this suite exists to avoid. Row 3 gating on row 1 SKIPS row 2, so the blocks edge is a
+    pair no lane adjacency can supply.
     """
     manifest = {
         "program": "gated",
         "rows": [
             {"order": "1", "ref": "o/r#1"},
+            {"order": "2", "ref": "o/r#2"},
             {
-                "order": "2",
-                "ref": "o/r#2",
+                "order": "3",
+                "ref": "o/r#3",
                 "gate": {"kind": "decision", "blocked_by": "prose", "blocked_by_ref": "o/r#1", "resolved_by": "x"},
             },
         ],
@@ -2056,11 +2065,12 @@ def test_parents_and_children_carry_ordering_edges_only():
 
     assert nodes["o/tracker#9"]["children"] == []
     assert nodes["o/r#1"]["parents"] == []
-    assert nodes["o/r#2"]["parents"] == ["o/r#1"]
     assert "o/tracker#9" not in nodes["o/r#1"]["parents"]
-    assert "o/tracker#9" not in nodes["o/r#2"]["parents"]
-    # The lane edge and the blocks edge are the SAME pair here; deduplication means it appears once.
-    assert nodes["o/r#1"]["children"] == ["o/r#2"]
+    assert "o/tracker#9" not in nodes["o/r#3"]["parents"]
+    # The lane supplies r#2 -> r#3; ONLY the blocks channel can supply r#1 -> r#3. Narrowing
+    # ORDERING_EDGE_KINDS to ("stacked",) drops the second and turns this line red.
+    assert nodes["o/r#3"]["parents"] == ["o/r#1", "o/r#2"]
+    assert nodes["o/r#1"]["children"] == ["o/r#2", "o/r#3"]
 
 
 def test_a_manifest_block_carries_its_desc_and_repo_slugs():
