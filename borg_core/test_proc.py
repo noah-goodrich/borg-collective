@@ -70,8 +70,18 @@ def test_output_that_is_not_valid_utf8_degrades_instead_of_raising(tmp_path):
     mangled remote URL is the real case -- raised straight out through every caller and killed the
     whole invocation. `errors="replace"` makes it U+FFFD, which whatever validates the value then
     rejects on its own terms.
+
+    OCTAL `\\377`, NOT HEX `\\xff`. `_script` writes `#!/bin/sh`; on macOS `/bin/sh` is
+    bash-in-sh-mode, whose `printf` understands `\\xNN` hex escapes -- a bash-ism, not POSIX. On
+    Linux `/bin/sh` is dash, which does not: it emits the literal four characters `\\`, `x`, `f`,
+    `f` and never produces an invalid byte at all, so this test's premise (that the child emits
+    binary garbage) was false on Linux and it asserted on a string that was never binary -- the
+    macOS-only pass proved nothing about the `errors="replace"` path this test exists to cover.
+    `\\377` is POSIX octal and both shells' `printf` agree on it. Verified in
+    `debian:stable-slim`: `printf 'ok-\\xff-end'` prints the four literal characters; `printf
+    'ok-\\377-end'` prints the single byte 0xFF.
     """
-    argv = [_script(tmp_path, "binary", b"printf 'ok-\\xff-end'")]
+    argv = [_script(tmp_path, "binary", b"printf 'ok-\\377-end'")]
     result = proc.run_capture(argv)
     assert result is not None, "must not raise, and must not be swallowed as a spawn failure either"
     returncode, stdout = result
