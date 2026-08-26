@@ -36,17 +36,35 @@ bash -c 'set -o pipefail; borg link --json | jq ".directives |=
 Deep dive:
 
 ```bash
-bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_at, capacity, total_projects, focus}"'
+bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_at, capacity, total_projects, scope, grid, focus}"'
 ```
 
 One call serves both — `borg link --json <project>` returns the full overview document PLUS
 `focus`. Never make two calls for a deep dive.
 
+**`grid` is in the whitelist deliberately.** `borg link --json` sweeps its sources for live PR state
+— that is what the call costs, and dropping the only key the sweep produces would mean paying for a
+network round trip and then rendering the same deep dive as before it existed. Read it:
+
+- `.grid.warnings` is a plain list of sentences. If it is non-empty, say so in one line before the
+  briefing (e.g. "the GitHub sweep did not run: <first warning>"), then carry on with what the
+  manifest declares. Never render the grid as a table; AC2 owns the rendering.
+- `.grid.sources[].status` is `ok`, `degraded` or `failed`. `degraded` means a source was never
+  actually reached (missing/unauthenticated `gh`, offline, rate-limited) or had its items rejected —
+  treat the states below it as declared, not observed.
+- `.grid.unresolved` out of `.grid.declared` is how many refs NOBODY answered for — neither the
+  sweep nor the targeted fetch. A high ratio is not an error; those states came from the manifest.
+- `.grid.fetch` covers AC3's targeted fetch: `.attempted` (bool, whether a fetch was even tried),
+  `.status` (`ok`, `degraded`, `failed`, or `skipped`), `.requested` (refs asked about) and
+  `.resolved` (refs that came back with a usable answer). As with `.grid.sources[].status`,
+  `failed` and `degraded` mean the states below them are DECLARED rather than OBSERVED — treat
+  them the same way.
+
 **Why the jq.** The two pipes work differently. The overview pipe (`.directives |= (...)`) does not
 enumerate a field — it transforms one key in place, so anything the document gains later passes
 through untouched. It collapses the one uncapped array (directives, ~121 items live) from 27,298
-bytes raw to ~13,935. The deep-dive pipe (`{version, generated_at, capacity, total_projects,
-focus}`) is the opposite: an explicit top-level whitelist. It drops the 20-project `projects` map,
+bytes raw to ~13,935. The deep-dive pipe (`{version, generated_at, capacity, total_projects, scope,
+grid, focus}`) is the opposite: an explicit top-level whitelist. It drops the 20-project `projects` map,
 the full `order`, and the uncapped cross-project arrays the skeleton never reads, from 31,136 bytes
 raw to ~4,661 — an 85% cut — but a field the document gains later is invisible until this list is
 updated to include it. If `jq` is missing, drop the pipe and read the raw document.
@@ -100,6 +118,10 @@ one level deeper:
   the board has no summaries, say so once and suggest `borg link --refresh` on the host.
 - **Collapse, don't transcribe.** 121 directives across 9 projects is a number plus the top few
   titles, not a list.
+- **`scope` is context, not content.** `{kind: repository|orchestrator, repository, local}` records
+  which repository the invocation resolved to (from cwd, or from an explicit project name, which
+  wins). Today it does not narrow `order`/`projects` — it is informational, so never present it as
+  a filter that was applied. Worth one clause only when it contradicts what the user asked for.
 
 ## Step 3 — Synthesize
 

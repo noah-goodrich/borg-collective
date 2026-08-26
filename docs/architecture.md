@@ -73,13 +73,18 @@ writing: **12 hooks**, **~14 lib files**, **16 skills**, **6 agents** (5 special
         claude.zsh              Session discovery from ~/.claude/projects/
         coco.zsh                Session discovery from ~/.snowflake/cortex/projects/
         desktop.zsh             Claude Desktop session reader
-        recon.sh / recon.zsh    Recon fan-out engine (portable sh core + zsh CLI shim)
         recon/adapters/         Recon source adapters (recon-adapter-<source>)
         borg-hooks.sh           Shared bash helpers used by hooks (not sourced by borg.zsh)
         borg-sync.zsh           Skill/hook sync helpers
         drone-hooks.zsh         Project-side pre-up/post-down hook runner
         reaper.sh               Stale-worktree reaping (portable sh core for `borg reap-worktrees`)
         colors.zsh, secrets.zsh Output styling + secret handling helpers
+    borg_core/                  Python core; the zsh CLI dispatches into it via `_borg_py`
+        paths.py                Config-path resolution + defaults
+        registry/               Registry read/write core, shell adapter, CLI entry
+        recon/                  Recon fan-out engine (ported from the deleted lib/recon.sh)
+        manifest/               Reader for <project>/.borg/programs/*.json program manifests
+        link/                   `borg link` document build + renderer
     hooks/
         borg-link-down.sh       SessionStart → status=active + checkpoint injection
         borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
@@ -328,13 +333,30 @@ default constraint.
 
 ## Recon Fan-Out
 
-`borg recon` (and the `/borg-recon` skill) is a source-agnostic "morning link-up" primitive that
-answers "what happened everywhere since I last looked?" across every registered project.
+The recon fan-out is a source-agnostic sweep primitive that answers "what happened everywhere since
+I last looked?" across every registered project.
 
-- **Engine**: `lib/recon.sh` (portable `sh`, mirrors the `reaper.sh` ↔ `registry.zsh` split) is
-  sourced by the zsh CLI via `lib/recon.zsh`. It resolves a `since` mark (explicit override > newest
-  checkpoint mtime > last-run marker > 24h fallback), then fans out concurrently (bounded
-  parallelism) over pluggable **adapters**.
+**`recon` is not a human-facing verb.** It retired 2026-08-26 (AC1 of the one-front-door plan):
+`borg link` folds the same fan-out into its own document, so a human never needs to run the sweep
+directly. Running bare `borg recon` dies with a pointer at `borg link`. What survives is the
+**machine surface** — `borg recon --json` (consumed by the `/borg-recon` skill and
+`merge-tree/gather.py`) and `borg recon --adapters` — because the engine was never the thing AC1
+asked to remove. The gate lives in `borg_core/recon/cli.py::main()`, guarding the `_run()` call on
+`args.json_only or args.adapters` — the module that implements the command owns the invariant.
+`borg.zsh`'s `recon)` arm is a pure pass-through, plus the two things `argparse` does not do
+(the `--list` alias for `--adapters`, and dying on an unknown flag). `python3 -m borg_core.recon.cli`
+with no flags is gated identically to `borg recon` bare. `core.render_digest` is unreachable through
+either front door — no argv combination reaches `_run()` with `json_only=False, adapters=False` — but
+it is not dead code: it is the engine's own digest capability, still exercised directly by
+`test_run_digest_output` and the core suite. See
+`docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md` for the measurements behind
+the move.
+
+- **Engine**: `borg_core/recon/{core,shell,cli}.py`. It resolves a `since` mark (explicit override >
+  newest checkpoint mtime > last-run marker > 24h fallback), then fans out concurrently (bounded
+  parallelism) over pluggable **adapters**. (`borg link`'s fold does NOT reuse that ladder — it cuts
+  a fixed 90-day window so one ref cannot answer two ways in two scopes, and it never writes the
+  last-run marker.)
 - **Adapter contract**: any executable named `recon-adapter-<source>` found on
   `BORG_RECON_ADAPTER_PATH` registers a new source — no code change required. The config directory
   shadows the repo directory. This repo ships exactly one reference adapter,
