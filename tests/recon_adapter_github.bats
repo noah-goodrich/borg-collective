@@ -235,7 +235,30 @@ EOF
     local projects
     projects="$(_projects_json alpha)"
 
-    run env PATH="/usr/bin:/bin" "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$projects"
+    # `PATH="/usr/bin:/bin"` is NOT a valid way to hide a binary -- it assumes gh lives outside
+    # those two directories, which is true on macOS (Homebrew installs to /opt/homebrew/bin) and
+    # FALSE on GitHub's ubuntu runner, where `gh` ships preinstalled at /usr/bin/gh. That restricted
+    # PATH still finds it, so the adapter never takes the "gh not installed" branch and this
+    # assertion failed on every ubuntu CI run. Instead, build a bin dir containing symlinks to ONLY
+    # the binaries the adapter genuinely calls -- jq, git, grep, mktemp, sed (enumerated by reading
+    # lib/recon/adapters/recon-adapter-github; NOT gh) -- and point PATH at exactly that. Deriving
+    # the allowlist from the adapter's own source means a future adapter change that adds a binary
+    # this list is missing fails LOUDLY (the adapter errors for the wrong reason) instead of the
+    # test going green on a lie.
+    local isolated="${BATS_TEST_TMPDIR}/no-gh-bin"
+    mkdir -p "$isolated"
+    local tool
+    # `bash` is on this list even though the adapter never calls it directly: its shebang is
+    # `#!/usr/bin/env bash`, and the kernel execs /usr/bin/env by its fixed shebang path (no PATH
+    # search needed there), but env itself then has to find `bash` by searching THIS process's
+    # PATH -- the isolated one we are constructing. Omit it and every invocation dies at exit 127
+    # "command not found" before the adapter's own gh check ever runs, which is a pass for the
+    # wrong reason (missed exactly by the first run of this fix, caught by `bats`'s BW01 warning).
+    for tool in bash jq git grep mktemp sed; do
+        ln -s "$(command -v "$tool")" "$isolated/$tool"
+    done
+
+    run env PATH="$isolated" "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$projects"
     [ "$status" -eq 0 ]
     [[ "$output" == *"gh not installed"* ]] || false
 
