@@ -329,22 +329,43 @@ EOF
 # The whole snapshot is `sort -u`'d at the end rather than per-`find`, because the roots below NEST
 # ($BORG_DIR is inside $XDG_CONFIG_HOME) and a duplicated line would show up twice in the exact-
 # equality diff at (2).
+#
+# ONE `find` PER ROOT, NOT TWO, and python does the dir/file split. An earlier version pre-filtered
+# with `find -type d` and `find ! -type d`, walking every tree twice for a classification os.lstat
+# already has to make. The classification must stay lstat-based rather than os.walk-based: `find`
+# with no `-type` tests the LINK, so a symlink pointing at a directory is a non-directory here and
+# must land in the FILE branch. os.walk would put it in `dirnames` and silently change what this
+# helper reports. Emits on STDOUT so the caller redirects -- the out-param plus truncate plus
+# sort-to-temp plus `mv` was four moving parts for what is one pipeline.
+#
+# MEASURED, AND THERE IS MORE ON THE TABLE THAN THIS TOOK. At fixture scale the cost is the per-root
+# PROCESS TAX (~30ms of python3 startup, ~5.5ms per `find`), not the directory walk (~1ms). Dropping
+# the second `find` bought 194ms -> 144ms per snapshot (-26%). Collapsing to ONE python3 for ALL
+# roots -- os.walk, sorted in-process, no `find` and no `sort` at all -- was measured at 34ms (-82%),
+# about 480ms across the three snapshots this case takes. NOT taken here: os.walk puts a
+# symlink-to-directory in `dirnames`, so that form has to re-derive the lstat classification above by
+# hand or it silently reclassifies exactly the entry this helper is careful about. Worth doing when
+# something else brings someone into this file; not worth the trap on its own.
+#
+# $BORG_DIR is nested inside $XDG_CONFIG_HOME in the harness, so it contributes no unique lines today
+# and costs ~30ms per snapshot that `sort -u` then discards. It stays in the root list deliberately:
+# the nesting is a property of setup_temp_dirs, not of borg, and a harness change that unnests them
+# must not silently drop $BORG_DIR from what this case watches.
 _fs_snapshot() {
-    local out="$1"; shift
     local root
-    : > "$out"
     for root in "$@"; do
         [ -e "$root" ] || continue
-        find "$root" -type d 2>/dev/null | sed 's|^|DIR |' >> "$out"
-        find "$root" ! -type d -exec python3 -c 'import os, sys
+        find "$root" -exec python3 -c 'import os, stat, sys
 for p in sys.argv[1:]:
     try:
         st = os.lstat(p)
     except OSError:
         continue
-    print("FILE", p, st.st_size, st.st_ino)' {} + 2>/dev/null >> "$out"
-    done
-    sort -u "$out" > "${out}.sorted" && mv "${out}.sorted" "$out"
+    if stat.S_ISDIR(st.st_mode):
+        print("DIR", p)
+    else:
+        print("FILE", p, st.st_size, st.st_ino)' {} + 2>/dev/null
+    done | sort -u
 }
 
 @test "cache: two consecutive borg link runs write no cache artifact (AC1)" {
@@ -374,11 +395,17 @@ for p in sys.argv[1:]:
     # run 2 need not mutate anything: a single before/after pair collapses a cache into the same
     # bucket as one-time initialization. s0->s1 catches a run-1-written cache; s1->s2 catches a
     # per-run rewrite or an advancing mark.
-    _fs_snapshot "${BATS_TEST_TMPDIR}/s0.txt" "${roots[@]}"
-    bash -c "cd '$dir' && zsh '$BORG' link" > "${BATS_TEST_TMPDIR}/r1.out" 2>&1
-    _fs_snapshot "${BATS_TEST_TMPDIR}/s1.txt" "${roots[@]}"
-    bash -c "cd '$dir' && zsh '$BORG' link" > "${BATS_TEST_TMPDIR}/r2.out" 2>&1
-    _fs_snapshot "${BATS_TEST_TMPDIR}/s2.txt" "${roots[@]}"
+    # `run`, not a capture to r1.out/r2.out that nothing ever read -- two artifacts a reader greps
+    # for assuming they are evidence. The exit status was going unchecked too: a `borg link` that
+    # died would have been caught only indirectly, by the gh-call count below, and reported as the
+    # wrong failure.
+    _fs_snapshot "${roots[@]}" > "${BATS_TEST_TMPDIR}/s0.txt"
+    run bash -c "cd '$dir' && zsh '$BORG' link"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    _fs_snapshot "${roots[@]}" > "${BATS_TEST_TMPDIR}/s1.txt"
+    run bash -c "cd '$dir' && zsh '$BORG' link"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    _fs_snapshot "${roots[@]}" > "${BATS_TEST_TMPDIR}/s2.txt"
 
     # ANTI-VACUITY GATE, FIRST, and it is also the "a clean tree is not a clean read" gate. Under
     # setup_temp_dirs' empty adapter dir the sweep short-circuits before any subprocess, so a tree
@@ -406,13 +433,18 @@ for p in sys.argv[1:]:
     # reports written by another process; `borg link` only ever reads it. THE EQUALITY IS THE POINT
     # -- an allowlist would let a second, unnamed artifact ride in beside it, and the obvious
     # allowlist (`grep -v "$BORG_DIR"`) would exclude the one real cache in the tree.
-    run diff "${BATS_TEST_TMPDIR}/s0.txt" "${BATS_TEST_TMPDIR}/s1.txt"
-    [ "$status" -ne 0 ]
     run bash -c "diff '${BATS_TEST_TMPDIR}/s0.txt' '${BATS_TEST_TMPDIR}/s1.txt' | grep '^[<>]'"
     [ "$output" = "> DIR ${BORG_DIR}/desktop" ]
+    # (A bare `diff; [ "$status" -ne 0 ]` used to sit above this. It was entailed: an identical pair
+    # yields empty grep output, which already fails the exact-equality on the next line.)
 
-    # (3) NO FILE WAS CREATED ANYWHERE, IN EITHER RUN. Stated separately from (2) because it is the
-    # claim AC1 actually makes, and it must not depend on the shape of a diff.
+    # (3) NO FILE WAS CREATED ANYWHERE, IN EITHER RUN. This is the claim AC1 actually makes, stated
+    # in its own terms rather than inferred from a diff. BE HONEST ABOUT WHAT IT ADDS TODAY: it is
+    # ENTAILED by (1) and (2) as they currently stand -- s1 == s2 exactly, and the s0->s1 delta is
+    # exactly one DIR line, which together already force FILE parity across all three snapshots. It
+    # is kept as insurance against (2) being loosened later (an allowlist, a `grep -v`), which is the
+    # edit most likely to happen to this case. It is NOT independent evidence: it reads the same
+    # three snapshot files, so it cannot survive a regression in _fs_snapshot that (1) and (2) miss.
     run bash -c "grep -c '^FILE ' '${BATS_TEST_TMPDIR}/s0.txt'"
     local before_files="$output"
     run bash -c "grep -c '^FILE ' '${BATS_TEST_TMPDIR}/s2.txt'"

@@ -2971,6 +2971,25 @@ _borg_py() {
 # dispatch wrapper hands borg's config surface to the child" asserts only the PRESENCE of a fixed
 # list of names. (Anchored by test name: line numbers in that file drift on every insertion.)
 
+# ONE source for the recon retirement sentence. It is user-facing text with three consumers -- the
+# `recon --help` printer below, the gate's `die`, and cmd_help's REMOVED block -- and /simplify
+# caught all three already drifting in punctuation the day they landed. Nothing pins them in sync:
+# the bats cases match the SUBSTRINGS "was retired" and "borg link", never the full literal, so this
+# stays free to reword without touching a test. Defined here beside _borg_py for the same reason
+# that function is: inserting lines at the top of this file shifts every `borg.zsh:<N>` reference in
+# the tree, and nothing references a line below this point.
+_BORG_RECON_RETIRED_LEAD="'borg recon' was retired as a human command — 'borg link' sweeps every source itself."
+
+# The `--help` shape: full notice on STDOUT at exit 0, because a human who asked for help got it.
+# The gate's error path deliberately does NOT reuse this -- it needs `die`'s colored ERROR prefix and
+# exit 1, and it shares the lead sentence above rather than the whole block.
+_borg_recon_retired() {
+    echo "$_BORG_RECON_RETIRED_LEAD"
+    echo "Run: borg link"
+    echo "usage (machine surface only): borg recon --json [--since ISO] [--projects a,b] [--sources github,..]"
+    echo "                              borg recon --adapters"
+}
+
 # Phase 3 (A4+A5): the ONE dispatch point for every `borg link` shape. Collapses today's two parse
 # layers (the top-level case arm's `--json` intercept plus cmd_link's own flag loop) into ONE loop
 # with the SAME semantics. Does NOT `shift` -- the `link)` case arm strips the subcommand itself, so
@@ -3136,11 +3155,20 @@ case "${1:-help}" in
         # fan-out into its own document, so the human digest has no reason to exist -- but
         # `--json` and `--adapters` have real machine consumers (skills/borg-recon/SKILL.md,
         # merge-tree/gather.py, evals/s4-k3/run.sh) and AC1 never asked for the engine to die.
-        # So the gate lives HERE, in the dispatch, and NOT in borg_core/recon/cli.py: a Python-side
-        # guard breaks six pytest cases including test_cli.py's
-        # test_run_resolves_registry_from_borg_dir_when_env_override_absent, which is recon's own
-        # copy of the registry-derivation guard B8 exists to extend. Deleting that to make a
-        # Python-side gate pass would remove the exact protection this step is here to widen.
+        #
+        # THE GATE IS HERE RATHER THAN IN borg_core/recon/cli.py, AND THAT IS AN ALTITUDE
+        # COMPROMISE, NOT A CLEAN CALL. An earlier version of this comment justified the placement
+        # by claiming a Python-side guard "breaks six pytest cases". That is true only of a guard
+        # inserted INSIDE `_run()` -- which would indeed collide with
+        # test_run_resolves_registry_from_borg_dir_when_env_override_absent, recon's own copy of the
+        # registry-derivation guard B8 extends. It is FALSE at the `main()` boundary: all 11 cases
+        # in test_cli.py call `_run()` directly and NONE call `main()`, which already has
+        # `args.json_only` and `args.adapters` in scope at cli.py's `_run()` call. A gate there is
+        # free. Consequence of leaving it here: `python3 -m borg_core.recon.cli` with no flags still
+        # renders the retired digest, and the classification below duplicates what argparse already
+        # did. No consumer reaches the module directly, so this is an altitude defect rather than a
+        # live bug -- filed, with the measurements, as
+        # docs/plans/directives/2026-08-26-recon-retirement-gate-altitude.md.
         shift
         typeset -a _recon_py_args
         typeset _recon_machine=0
@@ -3151,12 +3179,7 @@ case "${1:-help}" in
                 --projects)         _recon_py_args+=(--projects "$2"); shift 2 ;;
                 --json)             _recon_machine=1; _recon_py_args+=(--json); shift ;;
                 --adapters|--list)  _recon_machine=1; _recon_py_args+=(--adapters); shift ;;
-                -h|--help)
-                    echo "'borg recon' was retired as a human command — 'borg link' sweeps every source itself."
-                    echo "Run: borg link"
-                    echo "usage (machine surface only): borg recon --json [--since ISO] [--projects a,b] [--sources github,..]"
-                    echo "                              borg recon --adapters"
-                    exit 0 ;;
+                -h|--help)          _borg_recon_retired; exit 0 ;;
                 *) die "borg recon: unknown flag '$1' (see borg recon --help)" ;;
             esac
         done
@@ -3164,7 +3187,11 @@ case "${1:-help}" in
         # flag, so a gate placed ahead of the loop kills them too -- a one-line diff that reads
         # correctly and breaks every surviving consumer. --since/--projects/--sources are
         # MODIFIERS, not modes, and deliberately do not open the gate on their own.
-        (( _recon_machine )) || die "'borg recon' was retired as a human command — 'borg link' sweeps every source itself. Run: borg link   (machine surface: 'borg recon --json', 'borg recon --adapters')"
+        #
+        # `_recon_machine` rather than scanning `_recon_py_args` for the two tokens after the fact:
+        # those tokens can legitimately appear as VALUES (`--sources --json`), so the derived form
+        # would be both longer and falsifiable.
+        (( _recon_machine )) || die "$_BORG_RECON_RETIRED_LEAD Run: borg link   (machine surface: 'borg recon --json', 'borg recon --adapters')"
         _borg_py borg_core.recon.cli "${_recon_py_args[@]}"
         ;;
     scan)     cmd_scan "${@:2}" ;;
