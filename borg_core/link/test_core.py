@@ -430,7 +430,9 @@ def test_jq_interp(value, expected):
 
 
 def _porcelain_projects():
-    """Mirrors tests/cli_contract.bats:1443-1465's _link_setup_porcelain fixture."""
+    """Mirrors tests/cli_contract.bats's `_link_registry_porcelain` fixture (reached from
+    `_link_setup_porcelain`). Anchored by helper NAME, not line number -- the numbers in this tree
+    were all invalidated once by a 90-line insertion at the top of that file."""
     return {
         "echo": {"status": "idle", "pinned": True, "last_activity": "2026-08-05T10:00:00Z"},
         "bravo": {"status": "waiting", "pinned": False, "last_activity": "2026-08-04T10:00:00Z"},

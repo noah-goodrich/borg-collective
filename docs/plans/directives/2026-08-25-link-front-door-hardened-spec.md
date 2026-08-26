@@ -130,11 +130,12 @@ Discovery is global; *selection* is scoped.
 
 ### B7 — Golden-file snapshots would bake in live network state.
 
-`_assert_link_golden` (`tests/cli_contract.bats:1412`) runs the CLI with `2>&1` and byte-diffs. Once the sweep lives in
-`_document`, goldens capture whatever GitHub returned that minute; `tests/test_helper/setup.bash` never neutralizes
-`BORG_RECON_ADAPTER_PATH`, and `cli_contract.bats:109` exists specifically to prove the real adapter *is* discovered
-under zsh. Goldens become non-reproducible on the second run, and `BORG_UPDATE_GOLDEN=1` would freeze one machine's
-network state as the oracle. `--local` is not a substitute — it skips the very resolve ladder AC3 builds.
+`_assert_link_golden` (the helper in `tests/cli_contract.bats`) runs the CLI with `2>&1` and byte-diffs. Once the sweep
+lives in `_document`, goldens capture whatever GitHub returned that minute; `tests/test_helper/setup.bash` never
+neutralizes `BORG_RECON_ADAPTER_PATH`, and the case *"contract: recon discovers the repo's shipped github adapter under
+zsh (#113)"* exists specifically to prove the real adapter *is* discovered under zsh. Goldens become non-reproducible
+on the second run, and `BORG_UPDATE_GOLDEN=1` would freeze one machine's network state as the oracle. `--local` is not
+a substitute — it skips the very resolve ladder AC3 builds.
 
 **Fix (binding):** define the stub **before** writing the renderer. An injectable seam read in the shell tier
 (`BORG_LINK_SWEEP_FIXTURE`, `BORG_LINK_FETCH_FIXTURE`, each a path to a recorded JSON document), set by the golden
@@ -143,16 +144,29 @@ harness, plus a bats case asserting no `gh` subprocess runs under it. Export a n
 
 ### B8 — The registry-resolution guard would lose its teeth while appearing preserved.
 
-`cli_contract.bats:2333` has force only because `recon/cli.py` `_die`s on a missing registry and on no-adapters-matched.
+*"contract: recon resolves the registry with no BORG_REGISTRY in the environment"* (in `cli_contract.bats`) has force
+only because `recon/cli.py` `_die`s on a missing registry and on no-adapters-matched.
 `borg link --json` has neither trap: `borg_core/registry/shell.py:34-37` **creates** `{"projects":{}}` when the file is
 absent. Re-pointing that test at `link` yields exit 0 and an empty document whether or not `_borg_py` forwarded
 `BORG_REGISTRY` — it can no longer distinguish "derived correctly" from "silently defaulted." That is precisely the
 `reference_test_supplies_derived_value` failure the test was written to prevent, and the shape that shipped
 `borg recon` dead.
 
-**Fix (binding):** seed a registry at the **derived default** path containing a uniquely-named project, run
-`zsh -c "unset BORG_REGISTRY BORG_DIR; borg link --json"`, and assert that project appears in `.order`. An auto-created
-empty registry then fails the assertion.
+**Fix (binding):** seed a registry at a path **no derivation can reach**, point `BORG_REGISTRY` at it from
+`$BORG_DIR/config.zsh` (sourced at `borg.zsh:41`, after every default is applied), run
+`zsh -c "unset BORG_REGISTRY BORG_DIR; borg link --json"`, and assert a uniquely-named project from that file appears
+in `.order`. Assert on the sentinel, never on exit status — a mis-resolved registry is auto-created empty and exits 0.
+
+**Amended 2026-08-26 (S4), after measurement.** This spec originally said *seed the **derived default** path*. That is
+worthless, and it is worth recording why, because it is the same failure this blocker exists to prevent: `borg.zsh:24`
+and `lib/registry.zsh:14-15` derive `BORG_DIR`/`BORG_REGISTRY` with the **same formula** `borg_core/paths.py` uses,
+from the **same environment** the `python3` child inherits. Seed the sentinel at the derived default and delete both
+forwarding lines from `_borg_py`, and the child re-derives the identical path, finds the sentinel, and the test stays
+green — a test that supplies the value production is supposed to derive. A plain, unexported shell variable set in
+`config.zsh` is the discriminator: the child sees it **only** if `_borg_py` names it. The `unset` is load-bearing for
+the same reason — `setup_temp_dirs` exports both names and zsh keeps the export attribute across a bare reassignment.
+Verified by mutation: deleting `BORG_REGISTRY="$BORG_REGISTRY"` from `_borg_py` turns the case red with an empty
+`.order`.
 
 ### B9 — The first-pass latency arithmetic was wrong, and this spec's is the corrected one.
 
@@ -178,7 +192,10 @@ an auth error on the one real call. Hold the result with a test, not a claim: an
   would need an `unknown` rendering path that AC3 then deletes, and every golden would regenerate twice. Writing the
   renderer against an already-truthful document means the token `unknown` never enters `render.py`.
 - **AC2 last** concentrates all consumer breakage in one commit: the goldens, `drone.zsh:964`'s `grep -m1 'Status:'`,
-  `borg.zsh:266`'s preview contract, and `cli_contract.bats:1726/2048/2210`. One regeneration, one review.
+  `borg.zsh:266`'s preview contract, and these three `cli_contract.bats` cases — *"link --porcelain prints nothing at
+  all on an empty registry"*, *"link \<project\> deep dive wraps and indents a summary longer than 70 columns"*, and
+  *"drone status can still extract Status: from the deep dive"*. One regeneration, one review.
+  (Anchored by name, not line: S4's insertions shifted every `cli_contract.bats:<N>` in this file by ~90 lines.)
 
 Within AC1: **S1** env bridge + scope resolution (carrying B3's positional-dominates rule) → **S2** manifest reader →
 **S3** adapter rewrite + sweep fold (carrying B1, B2, B6, B9) → **S4** verb retirement (carrying B8). S4 is last because

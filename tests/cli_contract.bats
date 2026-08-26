@@ -81,8 +81,23 @@ run_zsh_borg() {
     done
 }
 
+# PROBED THROUGH A SHAPE THAT ACTUALLY DISPATCHES. Until 2026-08-26 this ran `borg link --help`,
+# which fell into _borg_link_dispatch's lenient `-*)` arm and rendered the whole overview. S4 gave
+# `--help` an explicit arm that returns at the TOP of the function, so the same invocation now
+# touches no dispatch arm at all. Measured: replacing the entire overview arm with
+# `die "overview deleted by mutation"` left this case AND its cli_smoke twin green. `--local`
+# because a bare `borg link` sweeps the network post-S3; the seeded registry because the empty
+# default short-circuits to "No projects registered" before any document is built. The `--help`
+# WORDING is asserted separately, by the AC1 case further down this file.
 @test "contract: link is still dispatched and is not itself reported as removed" {
-    run_zsh_borg link --help
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+        > "$BORG_REGISTRY"
+
+    run_zsh_borg link --local
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" == *"solo"* ]] || false
     [[ "$output" != *"unknown command"* ]] || false
     [[ "$output" != *"was removed"* ]] || false
 }
@@ -99,6 +114,151 @@ run_zsh_borg() {
     [ "$status" -ne 0 ]
     [[ "$output" == *"borg refresh"* ]] || false
     [[ "$output" == *"borg link --refresh"* ]] || false
+}
+
+# ── AC1: `recon` retires as a human-facing verb, engine intact (2026-08-26) ───
+# The 2026-08-10 removals above deleted whole commands. This one is narrower and the difference is
+# the whole test: the HUMAN digest retires, the MACHINE surface survives, because `borg recon --json`
+# and `borg recon --adapters` have real consumers (skills/borg-recon/SKILL.md, merge-tree/gather.py,
+# evals/s4-k3/run.sh) that AC1 never asked to break.
+
+@test "contract: bare recon exits non-zero and points at 'borg link' (AC1)" {
+    run_zsh_borg recon
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"borg link"* ]] || false
+}
+
+@test "contract: a recon modifier alone is not a machine flag (AC1)" {
+    # --since/--projects/--sources modify a mode, they do not select one. Without this, moving the
+    # gate ahead of the parse loop -- or setting the machine flag from any recognised flag -- reads
+    # correctly and leaves the human digest reachable.
+    #
+    # ALL THREE MODIFIERS, DRIVEN OFF ONE LIST, so the case and its own comment cannot drift apart
+    # again. --sources was the one originally left out, and it was not a theoretical gap: adding
+    # `_recon_machine=1;` to borg.zsh's `--sources)` arm was measured to leave all 143 cases in this
+    # file GREEN while `borg recon --sources github` rendered the full retired human digest
+    # ("Recon sweep — since ...", 14 repos, exit 0) on a machine with real adapters.
+    local -a probes=(
+        "--since 2026-01-01T00:00:00Z"
+        "--projects nosuchproject"
+        "--sources github"
+    )
+    local probe
+    for probe in "${probes[@]}"; do
+        # Deliberately unquoted: each element is a flag plus its value, two argv words.
+        # shellcheck disable=SC2086
+        run_zsh_borg recon $probe
+        [ "$status" -ne 0 ] || { echo "modifier '$probe' reached the engine" >&2; false; }
+        [[ "$output" == *"borg link"* ]] || false
+        [[ "$output" == *"was retired"* ]] || false
+    done
+}
+
+@test "contract: the recon MACHINE surface survives the retirement (AC1)" {
+    # THE SURVIVAL CONTROL. Without it, "bare recon dies" is satisfied by deleting the verb
+    # outright, which is the one implementation of this change that breaks four other bats cases,
+    # the /borg-recon skill, and the merge-tree pipeline.
+    #
+    # ASSERT ON THE MESSAGE, NOT ON THE EXIT CODE, for --json: setup_temp_dirs neutralizes
+    # BORG_RECON_ADAPTER_PATH to an empty directory, so the ENGINE's own "no recon adapters found"
+    # die is what a healthy machine surface produces here — and it is the proof the engine was
+    # reached at all, because the retirement gate fires in borg.zsh before any Python runs and says
+    # something else entirely. (The two #113 cases above run --adapters with the real search path.)
+    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+
+    run_zsh_borg recon --json
+    [[ "$output" != *"was retired"* ]] || false
+    [[ "$output" == *"no recon adapters found"* ]] || false
+
+    run_zsh_borg recon --adapters
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"was retired"* ]] || false
+    [[ "$output" == *"No recon adapters found on:"* ]] || false
+}
+
+@test "contract: recon --help is the retirement's discoverability path, not a dead end (AC1)" {
+    # `--help` is the one shape a human who typed `borg recon` out of habit will try next, and after
+    # S4 it is NEW user-facing output with no other coverage: the three cases above run bare recon,
+    # a lone modifier, and the two machine flags. Drop the `-h|--help)` arm and `--help` falls to the
+    # `*)` catch-all, which prints "unknown flag '--help' (see borg recon --help)" -- an instruction
+    # to re-run the command that just failed -- at exit 1, with no mention of `borg link`. The whole
+    # suite stays green through that. The 2026-08-10 removal this retirement is modeled on is pinned
+    # by cli_smoke.bats for exactly this reason.
+    run_zsh_borg recon --help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"borg link"* ]] || false
+    [[ "$output" == *"--json"* ]] || false
+    [[ "$output" == *"--adapters"* ]] || false
+    [[ "$output" != *"unknown flag"* ]] || false
+
+    run_zsh_borg recon -h
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"borg link"* ]] || false
+}
+
+@test "contract: every runnable borg-recon line in the skill carries a machine flag (AC1)" {
+    # THE CONSUMER THE RETIREMENT SPARED, GATED. skills/borg-recon/SKILL.md is named in three
+    # comments in this change as the reason the engine survives, and it is the one file carrying a
+    # pass-through flag list. Before S4 it authorized `--since`/`--projects`/`--sources` as
+    # standalone flags; every one of those shapes now dies at exit 1, and the failure is invisible to
+    # every other test here because the skill is prose an agent reads at RUNTIME.
+    #
+    # FENCED CODE BLOCKS ONLY. The prose deliberately quotes the retired shapes as counter-examples
+    # ("never `borg recon --since ...`"), so a whole-file grep would be permanently red. The fenced
+    # blocks are what an agent copies.
+    run awk '/^```/{f=!f; next} f && /borg recon/' \
+        "${BATS_TEST_DIRNAME}/../skills/borg-recon/SKILL.md"
+    [ "$status" -eq 0 ]
+    # ANTI-VACUITY: a skill that stopped invoking the engine at all would otherwise pass.
+    [ "${#lines[@]}" -ge 1 ]
+    local l
+    for l in "${lines[@]}"; do
+        [[ "$l" == *"--json"* || "$l" == *"--adapters"* ]] \
+            || { echo "retired recon shape in SKILL.md: $l" >&2; false; }
+    done
+}
+
+# PROJECT_PLAN.md asks for this mechanically: "bats asserts `borg help` is net one command shorter
+# than at plan start."
+#
+# WHY 26, AND HOW TO RE-DERIVE IT. Plan start is `b984616^` (= 638b7c4), the parent of the commit
+# that landed PROJECT_PLAN.md. 638b7c4's own subject says "feat(S4): land the viz-program manifest"
+# — that is a DIFFERENT plan's S4; it is the plan-start ref by ancestry, not by name. Both it and
+# the pre-S4 HEAD render 27 COMMANDS entries:
+#     git show 638b7c4:borg.zsh | awk '/^  COMMANDS$/{f=1;next} f && /^  [A-Z]/{f=0} \
+#                                      f && /^    [a-z]/{n++} END{print n+0}'   # -> 27
+# S4 deletes exactly one entry (`recon`, plus its five 26-space continuation lines) and adds no
+# verb. 27 - 1 = 26. If this goes red, ask which entry moved, not what the number is.
+#
+# WHY A COUNT AND NOT A SUBSTRING. cli_smoke.bats records the exact trap from the 2026-08-10
+# removal: `[[ "$output" == *"ls"* ]]` stayed green afterwards because the REMOVED block still names
+# the removed commands. "recon" likewise still appears in `borg help` after S4 — in the REMOVED
+# block and in `program`'s `--recon <file>` line. Only a count discriminates.
+#
+# WHY THE SECTION SLICE. `borg help | grep -c '^    [a-z]'` over the WHOLE output is 32, not 27: the
+# REMOVED body and the four STATUS entries share the 4-space entry shape. The awk range is what
+# keeps this honest, and `^  [A-Z]` (any section header) rather than `^  REMOVED` is what keeps it
+# honest if the REMOVED heading is ever retitled again.
+@test "contract: borg help is net one command shorter than at plan start (AC1)" {
+    run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "26" ]
+}
+
+# The count alone reaches 26 if someone deletes `doctor` instead of `recon` — and four dispatch
+# verbs (color, image, focus, vinculum) have no COMMANDS entry, so a well-meaning "document these
+# while I'm here" edit cancels the arithmetic in the other direction. This names the entry.
+@test "contract: recon is gone from COMMANDS and named in REMOVED (AC1)" {
+    run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{print \$1}'"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *recon* ]] || false
+    [[ "$output" == *link* ]] || false
+    [[ "$output" == *doctor* ]] || false
+
+    run bash -c "zsh '$BORG' help | sed -n '/^  REMOVED/,/^  HOTKEY/p'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *recon* ]] || false
+    [[ "$output" == *"borg link"* ]] || false
 }
 
 # ── guards #113: zsh-only adapter discovery ──────────────────────────────────
@@ -2088,7 +2248,9 @@ EOF
 # across two lines. The golden fixture's leading `- [x]` is the only reason this never showed: a
 # fresh plan with nothing completed — the common case — hit it every time. borg.zsh:458 mangled
 # `criteria_total` the same way for a plan with no criteria at all. `core.plan_progress` returns
-# ints, so the port renders this on one line, matching A4's amended text (cli_contract.bats:2078).
+# ints, so the port renders this on one line, matching A4's amended text for the case below. (The
+# pointer here used to be a `cli_contract.bats:<N>` self-reference; it was stale, and every numeric
+# pointer at this file in the tree has since been re-anchored by @test name.)
 @test "contract: link <project> deep dive renders Progress on one line when no criteria are met" {
     _link_mock_tmux ""
     local d="${BATS_TEST_TMPDIR}/ws/nox"
@@ -2262,7 +2424,13 @@ EOF
 
 # cmd_link's `-*) shift` arm swallows ANY unknown flag and renders the overview at exit 0. A
 # recon-shaped arm that `die`s on unknown flags would be a user-facing behavior change, so this pins
-# the lenient behavior as the parity target. Both `--help` and a nonsense flag take the same path.
+# the lenient behavior as the parity target.
+#
+# `--help` USED TO BE ASSERTED HERE TOO, and its removal is a deliberate PRODUCT change, not a test
+# edited to go green: swallowing `--help` meant `borg link --help` rendered the swept overview
+# (0.85s of network) instead of a usage line. S4 gave it an explicit arm, so the two shapes no
+# longer take the same path. The lenient arm itself is byte-unchanged, and this case plus the
+# gh-trace control in link_sweep.bats are together what pin that it still carries NO semantics.
 @test "contract: link tolerates an unknown flag and still renders the overview at exit 0" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
@@ -2271,10 +2439,37 @@ EOF
     run_zsh_borg link --totally-bogus
     [ "$status" -eq 0 ]
     [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
+}
 
-    run_zsh_borg link --help
+# S4 / AC1. All three assertions are load-bearing:
+#   exit 0                       -- an implementation that `die`s also satisfies "no overview"
+#   contains "usage: borg link"  -- the house style borg.zsh's `recon)` -h arm already uses
+#   NOT "THE BORG COLLECTIVE"    -- rejects the overview AND a lazy reroute to cmd_help, which
+#                                   prints the SAME cube banner as borg_core/link/render.py. It
+#                                   also catches a missing `return`, which would print usage and
+#                                   then sweep and render anyway, still at exit 0.
+@test "contract: link --help and -h print usage instead of the overview (AC1)" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo."}}}' \
+        > "$BORG_REGISTRY"
+
+    local flag
+    for flag in --help -h; do
+        run_zsh_borg link "$flag"
+        [ "$status" -eq 0 ]
+        [[ "$output" == *"usage: borg link"* ]] || false
+        [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
+    done
+
+    # Help outranks every other arm, including the one that shells out to `claude`. The scan banner
+    # is what makes that falsifiable: move the help check below the --refresh block and
+    # `borg link --refresh --help` fires a real `cmd_scan --llm` before printing its one line, and
+    # both assertions above would still pass.
+    run_zsh_borg link --refresh --help
     [ "$status" -eq 0 ]
-    [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" == *"usage: borg link"* ]] || false
+    [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" != *"Scanning Claude session history"* ]] || false
 }
 
 # ── external consumers ───────────────────────────────────────────────────────
@@ -2351,12 +2546,63 @@ EOF
     # `_select_adapters` dies with "no recon adapters found" BEFORE it can ever reach the
     # "no adapters matched" branch this test asserts on. Without the unset the test fails on a
     # message that has nothing to do with registry resolution.
+    #
+    # `--json` IS REQUIRED, NOT DECORATION (S4). `recon` retired as a human verb, so the dispatch
+    # arm now `die`s before any Python runs unless a machine flag is present. Without `--json` this
+    # case would still be non-zero and still not say "no registry at" -- two of its three assertions
+    # would pass against a message that never reached the registry at all. `--json` changes nothing
+    # else: borg_core/recon/cli.py:_run checks the registry BEFORE _sweep/_select_adapters and only
+    # switches the RENDERER on json_only, so the guard's teeth are byte-identical. `--adapters` is
+    # NOT interchangeable here -- _run_list_adapters returns before the registry check, which is the
+    # exact escape hatch that let `borg recon` ship dead for a month.
+    #
+    # WHAT THIS CASE PROVES AND WHAT IT DOES NOT. It falsifies borg_core/paths.py losing its own
+    # BORG_REGISTRY/BORG_DIR/XDG fallback. It does NOT falsify `_borg_py` dropping the variable:
+    # borg.zsh:24 and lib/registry.zsh:14-15 derive the same path from the same inherited
+    # environment that borg_core/paths.py derives, so both sides land on the same file either way.
+    # The forwarding half needs a value no derivation can reach -- see the B8 case below.
     run zsh -c \
-        "unset BORG_REGISTRY BORG_DIR BORG_RECON_ADAPTER_PATH; '$BORG' recon --sources deliberately-no-such-source"
+        "unset BORG_REGISTRY BORG_DIR BORG_RECON_ADAPTER_PATH; '$BORG' recon --json --sources deliberately-no-such-source"
     [ "$status" -ne 0 ]
     # Dying at adapter selection instead of the registry check is the proof it got that far.
     [[ "$output" != *"no registry at"* ]] || false
     [[ "$output" == *"no adapters matched"* ]] || false
+}
+
+# The link-side half of the same guard (the hardened spec's B8). `borg link --json` has NEITHER trap
+# the recon case above relies on: borg_core/registry/shell.py:34-36 CREATES {"projects":{}} when the
+# file is absent, so a wrongly-resolved registry exits 0 with a structurally valid empty document
+# and zero diagnostics.
+#
+# WHY config.zsh AND NOT "SEED THE DERIVED DEFAULT". B8's literal instruction — seed a uniquely
+# named project at the derived default and run with both variables unset — is worthless here, and
+# that was measured rather than reasoned: borg.zsh:24 and lib/registry.zsh:14-15 derive
+# BORG_DIR/BORG_REGISTRY with the SAME formula borg_core/paths.py uses, from the SAME environment
+# the python3 child inherits, so deleting BOTH forwarding lines from _borg_py leaves the child
+# resolving the identical sandbox path and the test green. $BORG_DIR/config.zsh (sourced at
+# borg.zsh:41, after every default is applied) assigns a PLAIN, unexported shell variable that no
+# derivation can reproduce — the child sees it ONLY if _borg_py names it. Same idiom and the same
+# reason as the BORG_ORCHESTRATOR_ROOT probe further down this file.
+#
+# THE `unset` IS LOAD-BEARING. setup_temp_dirs EXPORTS both names and zsh keeps the export attribute
+# across a bare reassignment, so without it config.zsh's value lands in the ENVIRONMENT and the
+# child inherits the sentinel even with _borg_py gutted.
+#
+# ASSERT ON THE SENTINEL, NEVER ON STATUS. A mis-resolved registry is auto-created empty and exits
+# 0; only a uniquely-named project that cannot appear in an auto-created file discriminates.
+@test "contract: link --json resolves the registry through a value no derivation can reach (B8)" {
+    _link_mock_tmux ""
+    local alt="${BATS_TEST_TMPDIR}/elsewhere/registry.json"
+    mkdir -p "${BATS_TEST_TMPDIR}/elsewhere"
+    printf '%s' \
+        '{"projects":{"b8-sentinel-zarquon":{"path":null,"source":"cli","status":"idle","summary":"S."}}}' \
+        > "$alt"
+    printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
+    printf 'BORG_REGISTRY=%s\n' "$alt" > "$BORG_DIR/config.zsh"
+
+    run bash -c "zsh -c \"unset BORG_REGISTRY BORG_DIR; '$BORG' link --json\" | jq -r '.order[]'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"b8-sentinel-zarquon"* ]] || false
 }
 
 # Mocks python3 itself and dumps the child's environment, so this asserts what the CHILD receives
@@ -2373,7 +2619,15 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/python3"
 
-    run zsh "$BORG" rm some-project
+    # THE `unset` IS WHAT GIVES THE LOOP BELOW TEETH FOR BORG_DIR AND BORG_REGISTRY, and it was
+    # missing until S4. setup_temp_dirs EXPORTS both, and zsh keeps the export attribute across
+    # borg.zsh:24 / lib/registry.zsh:15's bare reassignment, so the child inherited both through
+    # the environment whether or not _borg_py named them -- vacuous for exactly the two names the
+    # hardened spec's B8 is about. Measured after this change: deleting `BORG_DIR="$BORG_DIR"` from
+    # _borg_py fails at `var=BORG_DIR count=0`; deleting `BORG_REGISTRY="$BORG_REGISTRY"` fails at
+    # `var=BORG_REGISTRY count=0`. The `env BORG_MAX_ACTIVE=7` sub-assertion at the bottom keeps
+    # its own inheritance and is deliberately left alone.
+    run zsh -c "unset BORG_DIR BORG_REGISTRY; '$BORG' rm some-project"
     [ "$status" -eq 0 ]
     [ -f "$ENVDUMP" ]
 
@@ -2695,7 +2949,8 @@ EOF
 
 # Check 3: positive non-vacuity. The only one of the three that proves the renderer actually MOVED
 # rather than being renamed, re-pointed, or left behind a surviving zsh fallback. Injects a python3
-# that exits non-zero via BORG_PATH_PREFIX (the same seam cli_contract.bats:724 uses) and asserts all
+# that exits non-zero via BORG_PATH_PREFIX (the same mock-binary seam used throughout this file — see
+# "watch dispatches into the live-refresh loop", which mocks tmux the same way) and asserts all
 # three human modes fail. On the pre-flip tree (zero python3 dependency in any human mode) this was
 # RED; it can only pass after a real flip with no zsh renderer left standing behind the dispatch.
 @test "contract: all three human link modes fail when python3 is unavailable" {
