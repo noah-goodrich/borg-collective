@@ -604,6 +604,43 @@ def select_manifests(manifests: list[dict], scope: dict, slug: str) -> tuple[lis
     return selected, []
 
 
+def _ordering_adjacency(refs: list[str], edges: list[dict]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
+    """`(parents, children)` over ORDERING edges only, both endpoints inside `refs`. AC2's wire input.
+
+    RESTATED, NOT IMPORTED, for the same reason `_grid_text` restates manifest.core's `_text`:
+    `manifest_core.ORDERING_EDGE_KINDS` is public, but the both-endpoints-inside / no-self-edge /
+    deduplicate rules live in `manifest_core._ordering_pairs`, and reading a foreign module's
+    underscore name is a clean-arch visibility failure rather than a style opinion.
+
+    BOTH COPIES MUST STAY IDENTICAL, and the failure if they drift is a picture that contradicts
+    itself rather than an exception. `levels()` ranks on `_ordering_pairs`' admitted set; a renderer
+    draws its connectors from THIS one. A pair admitted here and dropped there gives a node a parent
+    the ranking never counted -- so the edge is drawn from a node at the same level, or below, and the
+    grid asserts an ordering nothing declared. A pair dropped here and admitted there loses a
+    connector the levels still reserve a row for, leaving a node floating under a blank rail.
+
+    `apex` IS EXCLUDED because ORDERING_EDGE_KINDS excludes it, and that is the whole reason this
+    filters at all: an apex edge points from the tracker at EVERY row (manifest_core._apex_edges), so
+    carrying it would make the tracker the parent of the entire manifest and fan one node's connectors
+    across every column in the picture. `levels()` already refuses it for the matching reason -- it
+    would flatten the stack into one level under the tracker.
+    """
+    inside = set(refs)
+    parents: dict[str, list[str]] = {ref: [] for ref in refs}
+    children: dict[str, list[str]] = {ref: [] for ref in refs}
+    seen: set[tuple[str, str]] = set()
+    for edge in edges:
+        if not isinstance(edge, dict) or _grid_text(edge.get("kind")) not in manifest_core.ORDERING_EDGE_KINDS:
+            continue
+        parent, child = _grid_text(edge.get("parent")), _grid_text(edge.get("child"))
+        if parent not in inside or child not in inside or parent == child or (parent, child) in seen:
+            continue
+        seen.add((parent, child))
+        parents[child].append(parent)
+        children[parent].append(child)
+    return parents, children
+
+
 def _grid_nodes(
     manifest: dict, items: dict[str, dict], fetched: dict[str, dict]
 ) -> tuple[dict[str, dict], list[list[str]]]:
@@ -625,10 +662,30 @@ def _grid_nodes(
     IS the level. Storing the integer on the node too is redundant by construction and deliberately
     so: `drone status`-class consumers read one node and must not have to invert a list of lists to
     learn where it sits.
+
+    `seq` IS DECLARATION ORDER, AND IT IS WHAT KEEPS A RENDERED CHAIN IN ONE COLUMN. `levels()`
+    publishes within-level order as ASCENDING REF, which is deterministic but not meaningful: measured
+    on the live stillpoint/.borg/programs/ingle-t1-cutover.json (14 refs, 8 levels, 2 lanes), level 0
+    is [stillpoint#37 (cutover), stillpoint#54 (contract)] while levels 2 and 3 put contract first and
+    level 4 swaps back -- so a renderer placing nodes by within-level index crosses the two lanes four
+    times in an 8-row picture with no edge crossing anything. `seq` is the row's index in `lanes()`'
+    flattened order, which is the order a human declared, and it is the tie-break that reproduces the
+    approved mock's own column order.
+
+    A DECLARED REF THAT IS NOT A ROW STILL GETS A `seq`, and it is `len(rows)` -- past every real row.
+    `after` targets, `gate.blocked_by_ref` and `apex.ref` may all name work in another manifest
+    entirely (see the node-set paragraph above); they have no declared position here, so they sort
+    after everything that does and tie-break on ref. Defaulting them to 0 instead would seat a foreign
+    ref at the head of the declaration order and drag a chain's column with it.
+
+    `parents`/`children` ARE ORDERING EDGES ONLY; see _ordering_adjacency for the filter and for why a
+    drift between its rule and levels()' is a self-contradicting picture rather than an exception.
     """
     refs = manifest_core.declared_refs(manifest)
-    ranked = manifest_core.levels(refs, manifest_core.derive_edges(manifest))
+    edges = manifest_core.derive_edges(manifest)
+    ranked = manifest_core.levels(refs, edges)
     level_of = {ref: index for index, level in enumerate(ranked) for ref in level}
+    parents_of, children_of = _ordering_adjacency(refs, edges)
     # KEYED THROUGH _grid_text, NOT ON THE RAW STRING, and the difference is a silent data loss.
     # `declared_refs`, every edge builder and `ready_set` all key on manifest.core's `_text`
     # (`str(x or "").strip()`); `lanes()` hands back the RAW row dicts. Validation does not close the
@@ -638,9 +695,20 @@ def _grid_nodes(
     # next while reporting `unknown` -- with no warning anywhere, because nothing failed. Measured:
     # a two-row manifest where the parent carried one trailing space announced the startable child as
     # blocked. _grid_text's own docstring states the rule this line used to break.
-    rows = {
-        _grid_text(row.get("ref")): row for lane_rows in manifest_core.lanes(manifest).values() for row in lane_rows
-    }
+    declared_rows = [row for lane_rows in manifest_core.lanes(manifest).values() for row in lane_rows]
+    rows = {_grid_text(row.get("ref")): row for row in declared_rows}
+    # THE FALLBACK IS len(declared_rows), NOT 0 -- see the `seq` paragraph above. Computed once here
+    # rather than inside the loop so a non-row ref cannot accidentally be given a live row's index.
+    unrowed_seq = len(declared_rows)
+    seq_of = {_grid_text(row.get("ref")): index for index, row in enumerate(declared_rows)}
+
+    def _declared_order(ref: str) -> tuple[int, str]:
+        """The (seq, ref) key both adjacency lists sort on. ONE definition, so `parents` and
+        `children` can never be ordered by two different rules -- a renderer reads a node's parents to
+        place it and its children to draw out of it, and the two disagreeing puts a connector in a
+        column the node was never placed in."""
+        return (seq_of.get(ref, unrowed_seq), ref)
+
     gates = {gate["ref"]: gate for gate in manifest_core.gates(manifest)}
 
     nodes: dict[str, dict] = {}
@@ -666,8 +734,31 @@ def _grid_nodes(
             "next": bool(row.get("next")),
             "gate": gates.get(ref),
             "level": level_of.get(ref, 0),
+            "seq": seq_of.get(ref, unrowed_seq),
+            "parents": sorted(parents_of.get(ref, []), key=_declared_order),
+            "children": sorted(children_of.get(ref, []), key=_declared_order),
         }
     return nodes, ranked
+
+
+def _manifest_repos(manifest: dict) -> list[str]:
+    """Every `owner/repo` this manifest's ROWS name, deduplicated and sorted. AC2 renders it as the
+    "repos:" line under a project's heading.
+
+    OVER row_refs, NOT declared_refs, and it is the same rule select_for_repository scopes on
+    (manifest_core.row_refs' docstring carries the argument in full). The rows ARE the work; an apex is
+    a tracker and an `after`/`blocked_by_ref` entry is a pointer at work happening somewhere else.
+    Listing those would tell a reader this project spans a repository it merely references -- and
+    would do it under a heading that already claims the project, which is the wrong-answer-under-a-
+    confident-header class the front door exists to remove.
+
+    A ref parse_ref rejects contributes NOTHING rather than a blank entry: ref_slug returns "" for it,
+    and an empty string in a `·`-joined line renders as a stray separator with nothing beside it.
+    Validation already refuses such a ref at load (shell._load_manifest drops the whole file), so this
+    is a totality guard, not a live path.
+    """
+    slugs = (manifest_core.ref_slug(ref) for ref in manifest_core.row_refs(manifest))
+    return sorted({slug for slug in slugs if slug})
 
 
 def grid_manifest(manifest: dict, items: dict[str, dict], fetched: dict[str, dict]) -> dict:
@@ -705,6 +796,8 @@ def grid_manifest(manifest: dict, items: dict[str, dict], fetched: dict[str, dic
     return {
         "id": _grid_text(manifest.get("_id")),
         "path": _grid_text(manifest.get("_path")),
+        "desc": _grid_text(manifest.get("desc")),
+        "repos": _manifest_repos(manifest),
         "levels": ranked,
         "nodes": nodes,
         "gates": manifest_core.gates(manifest),
