@@ -29,7 +29,24 @@ setup_temp_dirs() {
     # so they still exercise the real fallback this line hides from everyone else.
     export BORG_RECON_ADAPTER_PATH="${BATS_TEST_TMPDIR}/no-adapters"
 
+    # AC3'S SECOND NETWORK SEAM, NEUTRALIZED ON THE SAME TERMS AND FOR THE SAME REASON.
+    # The sweep is neutralized above by starving ADAPTER DISCOVERY; the targeted fetch is not
+    # adapter-mediated -- borg_core execs `gh` itself -- so an empty adapter directory does nothing
+    # for it. Any case whose registry points at a directory holding `.borg/programs/*.json` would
+    # otherwise shell out to the real, authenticated `gh` on every non---local `borg link`.
+    #
+    # A REAL FILE, NEVER "". borg_core/link/shell.py's start_fetch branches on `if fixture:` exactly
+    # as sweep does, so an exported-empty value is FALSY and falls straight through to the live
+    # fetch -- neutralization that silently does nothing, the same trap the paragraph above documents
+    # for BORG_RECON_ADAPTER_PATH and CLAUDE.md records for BORG_REAP_STALE_HOURS.
+    #
+    # THE CASES THAT MEAN TO EXERCISE THE FETCH UNSET IT THEMSELVES: link_sweep.bats' _sweepable_repo
+    # and _ac3_two_repository_manifest, and the opt-in latency gate, which escapes the sandbox
+    # entirely.
+    export BORG_LINK_FETCH_FIXTURE="${BATS_TEST_TMPDIR}/no-fetch.json"
+
     mkdir -p "$BORG_DIR" "$BORG_TEST_HOME/.claude/lib" "$BORG_RECON_ADAPTER_PATH"
+    printf '{"nodes": {}}\n' > "$BORG_LINK_FETCH_FIXTURE"
     cp "$BORG_HOME/lib/borg-hooks.sh" "$BORG_TEST_HOME/.claude/lib/borg-hooks.sh"
     cp "$BORG_HOME/lib/reaper.sh" "$BORG_TEST_HOME/.claude/lib/reaper.sh"
 }

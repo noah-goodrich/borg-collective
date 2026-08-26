@@ -23,7 +23,10 @@ usage-watch sweep, the memory gate), and each time the suite was green. So:
 """
 
 import json
+import os
+import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -36,22 +39,43 @@ from borg_core.link import grid as link_grid
 # ── fixtures ──────────────────────────────────────────────────────────────────────────────────────
 
 
+# The neutralized fetch recording every case in this file replays unless it deliberately opts out.
+# Named here rather than inlined so a test that asserts on the resulting warning can spell the same
+# path the fixture wrote.
+NEUTRAL_FETCH_FIXTURE = "no-fetch.json"
+
+
 @pytest.fixture()
 def isolated(tmp_path, monkeypatch):
-    """A borg config home, an EMPTY adapter search path, and no inherited BORG_* configuration.
+    """A borg config home, an EMPTY adapter search path, a NEUTRALIZED fetch, and no inherited BORG_*.
 
     BORG_RECON_ADAPTER_PATH is neutralized to a real, existing, EMPTY DIRECTORY and not to "".
     recon.shell.adapter_search_path branches on `if override:`, so an exported-empty value is falsy
     and falls straight back to `<repo>/lib/recon/adapters` -- which on a developer's machine holds a
     working `recon-adapter-github`, so the "neutralized" suite would shell out to `gh`. Tests that
     want an adapter point this variable at a directory they populate themselves.
+
+    BORG_LINK_FETCH_FIXTURE IS THE SECOND NETWORK SEAM AND NEEDS ITS OWN NEUTRALIZATION, because
+    starving adapter discovery does nothing for it: AC3's targeted fetch is not adapter-mediated --
+    borg_core execs `gh` itself. `_four_repository_registry` declares four refs, so before this line
+    existed every `local=False` case in this file shelled out to the developer's real authenticated
+    `gh` and asked GitHub about `testorg/alpha#11`. Measured: `fetch: 4 of 4 declared ref(s) did not
+    resolve`, four aliases, one live round trip per test.
+
+    A REAL FILE, NEVER "". start_fetch branches on `if fixture:` exactly as sweep does, so an
+    exported-empty value is FALSY and falls straight through to the live fetch -- neutralization that
+    silently does nothing, the same trap the BORG_RECON_ADAPTER_PATH paragraph above documents. Tests
+    that want the real fetch delenv it and put their own `gh` on PATH.
     """
     borg_dir = tmp_path / "borg-dir"
     borg_dir.mkdir()
     empty_adapters = tmp_path / "no-adapters"
     empty_adapters.mkdir()
+    neutral_fetch = tmp_path / NEUTRAL_FETCH_FIXTURE
+    neutral_fetch.write_text(json.dumps({"nodes": {}}), encoding="utf-8")
     monkeypatch.setenv("BORG_DIR", str(borg_dir))
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(empty_adapters))
+    monkeypatch.setenv("BORG_LINK_FETCH_FIXTURE", str(neutral_fetch))
     for name in (
         "XDG_CONFIG_HOME",
         "BORG_REGISTRY",
@@ -68,30 +92,43 @@ def isolated(tmp_path, monkeypatch):
         "BORG_LINK_SWEEP_TIMEOUT",
         "BORG_LINK_SWEEP_WINDOW_DAYS",
         "BORG_LINK_SWEEP_FIXTURE",
-        "BORG_LINK_FETCH_FIXTURE",
+        "BORG_LINK_FETCH_TIMEOUT",
     ):
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr("borg_core.link.shell.live_windows", lambda: [])
     return tmp_path
 
 
+def _replayed_fetch_warning(root: Path) -> str:
+    """The exact warning `isolated`'s neutralized recording earns. A replay must say it was replayed."""
+    return f"fetch: replayed from fixture {root / NEUTRAL_FETCH_FIXTURE} -- no gh ran"
+
+
 @pytest.fixture()
 def record_forks(monkeypatch):
     """Record the argv of every subprocess borg_core runs, then run it for real.
 
-    borg_core.proc.run_capture is THE one fork site (borg_core/proc.py's docstring is the standing
-    ruling, and test_proc.py pins it mechanically), so wrapping it sees git, tmux and every adapter
-    without knowing what any of them are. Wrapping rather than stubbing is what makes the paired
-    control meaningful: the same probe proves the sweep DOES fork without `--local`.
+    borg_core.proc.run_background is THE one fork site -- it is the only place in the tree that
+    constructs a `subprocess.Popen`, borg_core/proc.py's docstring is the standing ruling, and
+    test_proc.py pins it mechanically. Wrapping it sees git, tmux, every adapter and AC3's targeted
+    `gh` fetch without knowing what any of them are. Wrapping rather than stubbing is what makes the
+    paired control meaningful: the same probe proves the sweep DOES fork without `--local`.
+
+    IT WRAPS `run_background` AND NOT `run_capture`, and that is a correction rather than a
+    preference. The fetch is start-now/collect-later and never passes through `run_capture`, so a
+    probe on that name alone would be BLIND to it -- `test_local_in_orchestrator_scope_forks_nothing
+    _at_all`'s `assert record_forks == []` would stay green with a fetch that ignored `--local`
+    entirely. Wrapping BOTH would double-count instead, because `run_capture` is now literally
+    `collect(run_background(argv), timeout)` and resolves that name as a module global at call time.
     """
     calls: list[list[str]] = []
-    real = proc.run_capture
+    real = proc.run_background
 
-    def spy(argv, timeout=None):
+    def spy(argv):
         calls.append(list(argv))
-        return real(argv, timeout=timeout)
+        return real(argv)
 
-    monkeypatch.setattr(proc, "run_capture", spy)
+    monkeypatch.setattr(proc, "run_background", spy)
     return calls
 
 
@@ -126,6 +163,67 @@ def _adapter(directory: Path, source: str, body: str) -> Path:
     path.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8")
     path.chmod(0o755)
     return path
+
+
+def _fake_gh(directory: Path, body: str) -> Path:
+    """A REAL executable `gh` on PATH. The fetch resolves argv[0] by name, so this IS the whole seam."""
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "gh"
+    path.write_text(f"#!/usr/bin/env bash\n{body}\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+# CAPTURED FROM A LIVE `gh api graphql` BATCH, NOT IMAGINED. Recorded 2026-08-26 against
+# stillpoint-labs/stillpoint plus one bogus repository and one bogus number: exit 1, `errors[]`
+# carrying two NOT_FOUNDs, and every valid sibling fully resolved. Aliases renumbered onto
+# _four_repository_registry's refs, which declared_refs sorts to
+# [alpha#11, bravo#22, charlie#33, delta#44] = n0..n3.
+#
+# BOTH NULL SHAPES RIDE IN IT AND BOTH ARE ROUTINE. A dead ISSUE OR PR nulls only the inner field
+# (`n1.issueOrPullRequest`); a repository that was renamed, deleted or made private nulls the WHOLE
+# ALIAS (`"n2": null`). `data[alias]["issueOrPullRequest"]` raises TypeError on the second, out of a
+# module whose header promises nothing in the grid path is ever fatal. A fixture hand-written from
+# the spec's prose would carry only the first.
+_B5_PAYLOAD = json.dumps(
+    {
+        "data": {
+            "n0": {
+                "issueOrPullRequest": {
+                    "__typename": "PullRequest",
+                    "number": 11,
+                    "title": "alpha eleven",
+                    "state": "MERGED",
+                    "isDraft": False,
+                    "updatedAt": "2026-08-26T00:00:00Z",
+                }
+            },
+            "n1": {"issueOrPullRequest": None},
+            "n2": None,
+            "n3": {
+                "issueOrPullRequest": {
+                    "__typename": "Issue",
+                    "number": 44,
+                    "title": "delta forty-four",
+                    "issueState": "OPEN",
+                    "updatedAt": "2026-08-26T00:00:00Z",
+                }
+            },
+        },
+        "errors": [
+            {
+                "type": "NOT_FOUND",
+                "path": ["n2"],
+                "message": "Could not resolve to a Repository with the name 'testorg/charlie'.",
+            },
+            {
+                "type": "NOT_FOUND",
+                "path": ["n1", "issueOrPullRequest"],
+                "message": "Could not resolve to an issue or pull request with the number of 22.",
+            },
+        ],
+    }
+)
 
 
 def _four_repository_registry(root: Path) -> dict:
@@ -222,27 +320,45 @@ def test_orchestrator_scope_selects_every_discovered_manifest(isolated, monkeypa
 # ── the opt-down ──────────────────────────────────────────────────────────────────────────────────
 
 
-def test_local_runs_no_adapter_while_the_same_call_without_it_does(isolated, monkeypatch, record_forks):
-    """--local yields swept=False and forks no adapter; WITHOUT it, the same call forks one.
+def test_local_runs_neither_network_path_while_the_same_call_without_it_runs_both(isolated, monkeypatch, record_forks):
+    """--local forks NEITHER the adapter NOR `gh`; WITHOUT it, the same call forks both.
 
     PAIRED ON PURPOSE. A bare "zero subprocesses under --local" assertion is green whenever the
     adapter search path happens to be empty -- which is the state every bats case now runs in -- so
     on its own it proves nothing about the flag. The control run is what gives it teeth: the same
-    fixture, the same cwd, the same registry, one flag different, and the adapter must run.
+    fixture, the same cwd, the same registry, one flag different, and both subprocesses must run.
+
+    BOTH SEAMS, IN ONE CASE, BECAUSE THE FETCH'S GUARD IS A SEPARATE LINE. `--local` gates the sweep
+    inside cli._grid's ternary, but the fetch has to START above that ternary for its round trip to
+    overlap, so it carries its own `if local` and nothing about the sweep's guard protects it. That
+    is the hardened spec's B1 in a new place: borg.zsh's fzf preview re-executes `borg link --local`
+    on every cursor move.
+
+    THE FETCH FIXTURE IS DELIBERATELY REMOVED HERE. `isolated` neutralizes it for the whole file, and
+    under that neutralization "the fetch did not fork" is vacuously true -- it would pass with the
+    guard deleted. A real, executable `gh` on PATH is what makes the assertion falsifiable.
     """
     dirs = _four_repository_registry(isolated)
     adapters = isolated / "adapters"
     adapter = _adapter(adapters, "probe", 'echo \'{"source":"probe","summary":"ok","items":[]}\'')
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
+    monkeypatch.delenv("BORG_LINK_FETCH_FIXTURE")
+    fake_gh = _fake_gh(isolated / "fakebin", f"printf '%s' '{_B5_PAYLOAD}'; exit 1")
+    monkeypatch.setenv("PATH", f"{fake_gh.parent}:{os.environ['PATH']}")
     monkeypatch.chdir(dirs["delta"])
 
     local_grid = cli._document("", False, "json", local=True)["grid"]
-    forked_under_local = [argv for argv in record_forks if str(adapter) in argv[0]]
+    forked_under_local = [argv for argv in record_forks if str(adapter) in argv[0] or argv[0] == "gh"]
 
     assert local_grid["swept"] is False
     assert local_grid["since"] == "", "a mark nobody swept against is a freshness claim that is not true"
     assert forked_under_local == []
+    assert local_grid["fetch"] == {"attempted": False, "status": "skipped", "requested": 0, "resolved": 0}
     assert any("--local" in w for w in local_grid["warnings"]), "the opt-down must say why nothing was fetched"
+    assert not any(w.startswith("fetch:") for w in local_grid["warnings"]), (
+        "the sweep's warning already says nothing was fetched; a second line is noise on the mode "
+        "fzf re-renders per keypress"
+    )
     # Manifests are still read: --local opts down from the NETWORK, not from local truth.
     assert [m["id"] for m in local_grid["manifests"]] == ["cross-repository"]
 
@@ -251,6 +367,9 @@ def test_local_runs_no_adapter_while_the_same_call_without_it_does(isolated, mon
 
     assert swept_grid["swept"] is True
     assert [argv[0] for argv in record_forks if str(adapter) in argv[0]] == [str(adapter)]
+    assert [argv[:3] for argv in record_forks if argv[0] == "gh"] == [["gh", "api", "graphql"]], (
+        "exactly one batched fetch per run -- never one per ref and never one per repository"
+    )
     assert [s["source"] for s in swept_grid["sources"]] == ["probe"]
 
 
@@ -287,14 +406,18 @@ def test_a_declared_status_outside_the_three_state_tokens_resolves_to_unknown():
 
     Promoting it would put `stacked` in the same field a renderer reads `merged` from, and every
     downstream state glyph would need a branch for a word that describes a position in a stack. The
-    honest answer is `unknown` until AC3's targeted fetch resolves the ref. `unknown` appearing in
-    S3's output is expected and correct -- AC3's own verification is specified to go red today.
+    honest answer is `unknown` when nobody has looked.
+
+    `unknown` IS STILL REACHABLE AFTER AC3 AND MUST STAY SO. The fetch resolves refs, it does not
+    abolish the rung: a `gh` that is missing, offline, unauthenticated or past its deadline leaves
+    the map empty, and a node whose declared status is `stacked` then has no answer at all. A build
+    that deleted the bottom rung would satisfy AC3's headline assertion by lying.
     """
-    assert link_grid.resolve_state("o/r#1", "stacked", {}) == ("unknown", "unknown")
-    assert link_grid.resolve_state("o/r#1", "merged", {}) == ("merged", "declared")
-    assert link_grid.resolve_state("o/r#1", "MERGED", {}) == ("merged", "declared")
-    assert link_grid.resolve_state("o/r#1", "", {}) == ("unknown", "unknown")
-    assert link_grid.resolve_state("o/r#1", None, {}) == ("unknown", "unknown")
+    assert link_grid.resolve_state("o/r#1", "stacked", {}, {}) == ("unknown", "unknown")
+    assert link_grid.resolve_state("o/r#1", "merged", {}, {}) == ("merged", "declared")
+    assert link_grid.resolve_state("o/r#1", "MERGED", {}, {}) == ("merged", "declared")
+    assert link_grid.resolve_state("o/r#1", "", {}, {}) == ("unknown", "unknown")
+    assert link_grid.resolve_state("o/r#1", None, {}, {}) == ("unknown", "unknown")
 
 
 def test_a_swept_state_beats_a_declared_one_and_is_taken_verbatim():
@@ -305,19 +428,59 @@ def test_a_swept_state_beats_a_declared_one_and_is_taken_verbatim():
     hand-typed in a schema-less field and is filtered. The asymmetry is the design.
     """
     items = {"o/r#1": {"ref": "o/r#1", "state": "merged"}, "o/r#2": {"ref": "o/r#2", "state": "in review"}}
-    assert link_grid.resolve_state("o/r#1", "stacked", items) == ("merged", "swept")
-    assert link_grid.resolve_state("o/r#2", "merged", items) == ("in review", "swept")
+    assert link_grid.resolve_state("o/r#1", "stacked", items, {}) == ("merged", "swept")
+    assert link_grid.resolve_state("o/r#2", "merged", items, {}) == ("in review", "swept")
+
+
+def test_the_fetched_rung_sits_between_swept_and_declared():
+    """AC3's rung, trapped on BOTH sides -- which `any(. == "unknown")` cannot do on its own.
+
+    ABOVE `declared`, because a hand-authored status can be months stale and a round trip cannot:
+    `o/r#3` is declared `merged` and the wire says `open`, and `open`/`fetched` is the only outcome
+    consistent with the rung being above.
+
+    BELOW `swept`, because the sweep and the fetch are two round trips at two instants, and the
+    sweep's answer is the one that also produced the item a renderer reads `title` and `changed`
+    from. `o/r#1` has both, and `merged`/`swept` is the only outcome consistent with the rung being
+    below. A `fetched` inserted in the wrong place fails exactly one of these two assertions.
+
+    AND THE FETCHED TOKEN IS VERBATIM, like the swept one and unlike the declared one: `o/r#4` comes
+    back `in review`, which is outside DECLARABLE_STATES, and filtering it would throw away the only
+    answer anyone has for exactly the reason resolve_state's docstring gives for the swept rung.
+    """
+    items = {"o/r#1": {"ref": "o/r#1", "state": "merged"}}
+    fetched = {
+        "o/r#1": {"ref": "o/r#1", "state": "closed"},
+        "o/r#2": {"ref": "o/r#2", "state": "merged"},
+        "o/r#3": {"ref": "o/r#3", "state": "open"},
+        "o/r#4": {"ref": "o/r#4", "state": "in review"},
+    }
+    assert link_grid.resolve_state("o/r#1", "open", items, fetched) == ("merged", "swept")
+    assert link_grid.resolve_state("o/r#2", "stacked", items, fetched) == ("merged", "fetched")
+    assert link_grid.resolve_state("o/r#3", "merged", items, fetched) == ("open", "fetched")
+    assert link_grid.resolve_state("o/r#4", "merged", items, fetched) == ("in review", "fetched")
+    # An entry the fetch could not answer for is absent from the map, not present-and-empty, so the
+    # rung below still runs. Both shapes are covered because replayed_items drops stateless nodes
+    # while a hand-edited map may not.
+    assert link_grid.resolve_state("o/r#5", "merged", items, fetched) == ("merged", "declared")
+    assert link_grid.resolve_state("o/r#6", "merged", items, {"o/r#6": {}}) == ("merged", "declared")
+    assert link_grid.resolve_state("o/r#7", "stacked", items, {"o/r#7": "not a dict"}) == ("unknown", "unknown")
 
 
 def test_refs_are_matched_exactly_with_no_normalization():
     """No case fold, no `.git` handling, no rewriting -- see manifest.core.parse_ref for the argument.
 
     A normalizing join never raises; it just produces a ref that matches no item, and the node renders
-    `unknown` forever. That silence is why this is pinned rather than trusted.
+    `unknown` forever. That silence is why this is pinned rather than trusted, and it binds the
+    FETCHED map exactly as it binds the swept one -- fetched_items keys on the ref the caller asked
+    with rather than on a slug rebuilt from parse_ref's parts, for this reason.
     """
     items = {"Owner/Repo#1": {"state": "merged"}}
-    assert link_grid.resolve_state("owner/repo#1", "stacked", items) == ("unknown", "unknown")
-    assert link_grid.resolve_state("Owner/Repo#1", "stacked", items) == ("merged", "swept")
+    assert link_grid.resolve_state("owner/repo#1", "stacked", items, {}) == ("unknown", "unknown")
+    assert link_grid.resolve_state("Owner/Repo#1", "stacked", items, {}) == ("merged", "swept")
+    fetched = {"Owner/Repo#2": {"state": "open"}}
+    assert link_grid.resolve_state("owner/repo#2", "stacked", {}, fetched) == ("unknown", "unknown")
+    assert link_grid.resolve_state("Owner/Repo#2", "stacked", {}, fetched) == ("open", "fetched")
 
 
 def test_the_declared_status_of_a_live_manifest_row_lands_in_the_document(isolated, monkeypatch):
@@ -840,29 +1003,138 @@ def test_repository_dir_rejects_jqs_null_sentinel():
     assert link_grid.repository_dir(registry, {"kind": "orchestrator", "repository": None}) == ""
 
 
-def test_the_fetch_fixture_name_is_reserved_and_deliberately_unimplemented():
-    """BORG_LINK_FETCH_FIXTURE is AC3's seam and must not exist yet.
+def test_the_fetch_fixture_short_circuits_before_any_gh_and_reaches_the_nodes(isolated, monkeypatch, record_forks):
+    """BORG_LINK_FETCH_FIXTURE stands in for the round trip: recorded states reach nodes, nothing forks.
 
-    Shipping an unused reader would be dead code carried on a 90% coverage floor. The name is
-    reserved in shell.sweep's docstring so AC3 mirrors this seam instead of inventing a second,
-    differently-shaped one -- and this asserts the contract is written down, since a reserved name
-    nobody can find is not reserved.
+    THIS REPLACES `test_the_fetch_fixture_name_is_reserved_and_deliberately_unimplemented`, and the
+    replacement is not optional. That tripwire asserted
+    `"BORG_LINK_FETCH_FIXTURE" not in link_shell.sweep.__code__.co_consts` -- it inspected `sweep`,
+    on the premise that the fetch's reader would land there. B4 forces the fetch to START BEFORE the
+    fan-out, so the reader lives in `start_fetch`, a DIFFERENT function, and the old assertion would
+    have stayed TRUE and silently vacuous rather than flipping red. Deleting it without a successor
+    would have removed the only mechanical check that the seam exists where its contract says.
 
-    IT POINTS AT `sweep`, WHICH IS WHERE THE SIBLING SEAM IS ACTUALLY READ (`os.environ.get` at the
-    top of that function), so when AC3 mirrors it exactly as the docstring directs, this goes red and
-    marks the transition. The first version of this test pointed at `_read_sweep_fixture` -- where
-    neither env-var name has ever appeared, so it could not have failed -- and paired it with
-    `assert <anything> or True`, which is unconditionally green. A gate against
-    `reference_test_supplies_derived_value`, itself unable to fail, in the file whose header docstring
-    is about exactly that.
+    A REAL `gh` IS ON PATH THROUGHOUT and writes a sentinel if it executes. Without that, "no fork"
+    is true because there was nothing to fork.
+    """
+    dirs = _four_repository_registry(isolated)
+    sentinel = isolated / "gh-ran"
+    fake_gh = _fake_gh(isolated / "fakebin", f'touch "{sentinel}"; printf \'{{"data":{{}}}}\'')
+    monkeypatch.setenv("PATH", f"{fake_gh.parent}:{os.environ['PATH']}")
+
+    fixture = isolated / "fetch.json"
+    fixture.write_text(
+        json.dumps(
+            {
+                "nodes": {
+                    "testorg/alpha#11": {"state": "CLOSED", "title": "recorded alpha"},
+                    "testorg/delta#44": {"state": "merged", "title": "recorded delta"},
+                    "testorg/charlie#33": {"title": "no state, so no answer"},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("BORG_LINK_FETCH_FIXTURE", str(fixture))
+    monkeypatch.chdir(dirs["delta"])
+
+    grid = cli._document("", False, "json", local=False)["grid"]
+    nodes = grid["manifests"][0]["nodes"]
+
+    assert not sentinel.exists(), "the fixture seam must short-circuit BEFORE any gh is exec'd"
+    assert [argv for argv in record_forks if argv[0] == "gh"] == []
+    # `stacked` is outside DECLARABLE_STATES, so before the rung existed this node rendered `unknown`.
+    assert (nodes["testorg/delta#44"]["state"], nodes["testorg/delta#44"]["state_source"]) == ("merged", "fetched")
+    assert nodes["testorg/delta#44"]["title"] == "recorded delta"
+    # A recorded state overrides a STALE declared one, and is lowercased on the way in so a node the
+    # fetch answered and a node the sweep answered carry the same token.
+    assert (nodes["testorg/alpha#11"]["state"], nodes["testorg/alpha#11"]["state_source"]) == ("closed", "fetched")
+    # A recorded entry with no usable state is dropped rather than half-merged, so the rung below
+    # still runs; and a ref the recording omits entirely keeps its declaration too.
+    assert nodes["testorg/charlie#33"]["state_source"] == "declared"
+    assert nodes["testorg/bravo#22"]["state_source"] == "declared"
+    # The recording answers 2 of the 4 declared refs (bravo has no entry at all; charlie's entry
+    # carries no usable state) -- so this must report `degraded` against the REAL declared count,
+    # not `ok` against however many answers happen to be in the recording. Before this fix,
+    # `_read_fetch_fixture` measured itself against `len(items)`, which can never be less than
+    # itself, so a holed recording was ALWAYS reported as a complete answer.
+    assert grid["fetch"] == {"attempted": True, "status": "degraded", "requested": 4, "resolved": 2}
+    assert any("replayed from fixture" in w for w in grid["warnings"]), "a replayed fetch must say it was replayed"
+    assert any("2 of 4 declared ref(s) did not resolve" in w for w in grid["warnings"]), (
+        "a replayed fetch with holes must say so, the same as a live one -- see"
+        " test_gh_exiting_non_zero_with_usable_data_still_resolves_every_valid_sibling"
+    )
+    # THE SUCCESSOR TO THE DELETED TRIPWIRE: the seam is read where the contract says it is, in the
+    # shell tier, in the function that starts the fetch -- not in `sweep`, and not in grid.py, which
+    # pylint holds to the Domain purity rules.
+    from borg_core.link import shell as link_shell  # noqa: PLC0415
+
+    assert "BORG_LINK_FETCH_FIXTURE" in link_shell.start_fetch.__code__.co_consts
+    assert "BORG_LINK_FETCH_FIXTURE" in link_shell.sweep.__doc__, "and sweep's docstring still points at it"
+
+
+def test_an_unreadable_fetch_fixture_warns_instead_of_raising(isolated, monkeypatch):
+    """Mirrors `test_an_unreadable_sweep_fixture_warns_instead_of_raising` exactly. A harness that
+    mistypes the path must see WHY, not see a declared-only grid it mistakes for a correct one."""
+    dirs = _four_repository_registry(isolated)
+    monkeypatch.setenv("BORG_LINK_FETCH_FIXTURE", str(isolated / "does-not-exist.json"))
+    monkeypatch.chdir(dirs["delta"])
+
+    grid = cli._document("", False, "json", local=False)["grid"]
+
+    assert grid["fetch"]["attempted"] is False
+    assert any(w.startswith("fetch: fixture ") and "unreadable or invalid JSON" in w for w in grid["warnings"])
+    assert [m["id"] for m in grid["manifests"]] == ["cross-repository"], "the grid still renders"
+
+
+@pytest.mark.parametrize(
+    "body,expected",
+    [
+        ('["a list, not an object"]', "is not an object"),
+        ('{"nodes": "not an object"}', "replayed from fixture"),
+    ],
+    ids=["non-object-root", "nodes-of-the-wrong-type"],
+)
+def test_a_wrongly_shaped_fetch_fixture_degrades_without_raising(isolated, monkeypatch, body, expected):
+    """The same three rungs `_read_sweep_fixture` has, in the same order, for the same reason.
+
+    A `nodes` of the wrong type is coerced to empty but STILL reports itself replayed -- the truthful
+    reading of a recording that carries no answers -- while a root that is not an object is a harness
+    defect and says so.
+    """
+    dirs = _four_repository_registry(isolated)
+    fixture = isolated / "fetch.json"
+    fixture.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("BORG_LINK_FETCH_FIXTURE", str(fixture))
+    monkeypatch.chdir(dirs["delta"])
+
+    grid = cli._document("", False, "json", local=False)["grid"]
+
+    assert any(expected in w for w in grid["warnings"])
+    assert grid["fetch"]["resolved"] == 0
+    assert [m["id"] for m in grid["manifests"]] == ["cross-repository"]
+
+
+def test_the_fetch_budget_is_configurable_and_survives_an_empty_value(isolated, monkeypatch):
+    """Same three-way guard as sweep_timeout, and it is not shared with it.
+
+    Unset OR EMPTY OR non-numeric takes the default, because `_borg_py` passes its whole config
+    surface through by name and an unset variable arrives as the EMPTY STRING -- `float("")` is the
+    ValueError that makes recon's readers unsafe to add to that wrapper. The two budgets are separate
+    variables because the sweep and the fetch are different round trips; moving one must not move the
+    other.
     """
     from borg_core.link import shell as link_shell  # noqa: PLC0415
 
-    assert "BORG_LINK_FETCH_FIXTURE" in link_shell.sweep.__doc__
-    assert "BORG_LINK_SWEEP_FIXTURE" in link_shell.sweep.__code__.co_consts, (
-        "the control: sweep IS where seams are read"
-    )
-    assert "BORG_LINK_FETCH_FIXTURE" not in link_shell.sweep.__code__.co_consts, "the reader must not exist yet"
+    assert link_shell.fetch_timeout() == link_shell.DEFAULT_FETCH_TIMEOUT_SECONDS
+    monkeypatch.setenv("BORG_LINK_FETCH_TIMEOUT", "2.5")
+    assert link_shell.fetch_timeout() == 2.5
+    assert link_shell.sweep_timeout() == link_shell.DEFAULT_SWEEP_TIMEOUT_SECONDS, "one budget must not move the other"
+    monkeypatch.setenv("BORG_LINK_FETCH_TIMEOUT", "")
+    assert link_shell.fetch_timeout() == link_shell.DEFAULT_FETCH_TIMEOUT_SECONDS
+    monkeypatch.setenv("BORG_LINK_FETCH_TIMEOUT", "shortly")
+    assert link_shell.fetch_timeout() == link_shell.DEFAULT_FETCH_TIMEOUT_SECONDS
+    assert isolated  # the fixture's env isolation is what makes the unset default meaningful
 
 
 # ── the production path, end to end: a real adapter's item reaching a node ────────────────────────
@@ -938,7 +1210,17 @@ def test_a_real_adapters_item_reaches_a_node_through_the_real_fanout(isolated, m
     assert node["state"] == "merged", "the state came off the wire, not out of the manifest"
     assert node["state_source"] == "swept"
     assert node["title"] == "the fourth PR", "a title exists only on the swept rung; a manifest row has no title"
-    assert grid["warnings"] == []
+    # THE SWEEP CONTRIBUTED NO WARNING, stated exactly rather than as `== []`. The first entry is
+    # the harness's OWN neutralized fetch replay (see `isolated`); the second is that same replay
+    # now correctly measured against the real declared-ref count (4) rather than against the
+    # recording's own item count (0) -- the neutral fixture answers none of the four, and after
+    # the fix that degrade is named instead of silently reported `ok`. Spelling both out exactly is
+    # what keeps this from being loosened to an `any()` that would stop noticing a sweep warning.
+    assert grid["warnings"] == [
+        _replayed_fetch_warning(isolated),
+        "fetch: 4 of 4 declared ref(s) did not resolve (deleted, renamed, or not visible)"
+        " -- they fall back to what the manifest declares",
+    ]
     # The declared `stacked` on this row is what it would have fallen back to. Its neighbour, which
     # the adapter said nothing about, still does -- that is the rung below, still working.
     assert grid["manifests"][0]["nodes"]["testorg/alpha#11"]["state_source"] == "declared"
@@ -956,7 +1238,9 @@ def test_the_adapter_receives_a_since_mark_and_it_is_the_one_link_resolved(isola
     dirs = _four_repository_registry(isolated)
     adapters = isolated / "adapters"
     seen = isolated / "argv-seen.txt"
-    _adapter(adapters, "probe", f'printf "%s\\n" "$*" > "{seen}"; echo \'{{"source":"probe","summary":"x","items":[]}}\'')
+    _adapter(
+        adapters, "probe", f'printf "%s\\n" "$*" > "{seen}"; echo \'{{"source":"probe","summary":"x","items":[]}}\''
+    )
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
     monkeypatch.chdir(dirs["delta"])
 
@@ -1179,6 +1463,482 @@ def test_a_hand_authored_ref_with_stray_whitespace_still_reaches_its_node(isolat
     assert nodes["testorg/india#11"]["state_source"] == "declared"
     assert nodes["testorg/india#11"]["lane"] == "main"
     assert nodes["testorg/india#11"]["why"] == "the trunk"
+
+
+# ── AC3: B5, the payload that arrives with a non-zero exit ────────────────────────────────────────
+
+
+def _gh_on_path(isolated, monkeypatch, body: str) -> Path:
+    """A real `gh` on PATH with the fetch seam OPEN. Both halves are required.
+
+    `isolated` neutralizes BORG_LINK_FETCH_FIXTURE for the whole file, so every case that means to
+    exercise the real fetch has to delenv it -- otherwise it replays an empty recording and asserts
+    nothing about the code path it names.
+    """
+    monkeypatch.delenv("BORG_LINK_FETCH_FIXTURE")
+    fake = _fake_gh(isolated / "fakebin", body)
+    monkeypatch.setenv("PATH", f"{fake.parent}:{os.environ['PATH']}")
+    return fake
+
+
+def test_gh_exiting_non_zero_with_usable_data_still_resolves_every_valid_sibling(isolated, monkeypatch):
+    """B5. `gh api graphql` exits 1 whenever the response carries errors[], even when `data` is fully
+    populated for every other alias.
+
+    Code that reads `returncode != 0` as total failure discards a good fetch over one dead ref and
+    renders exactly the `unknown` AC3 forbids. Measured live: a batch with one bogus repository and
+    one bogus number exited 1, printed its `Could not resolve...` lines to STDERR (which proc.py
+    already discards), and still carried both valid siblings in `data`.
+
+    THE TWO DEAD ALIASES ARE PER-NODE CASUALTIES, NOT A PER-QUERY FAILURE: each falls to the rung
+    below and neither touches its siblings. `errors[]` is never consulted for control flow.
+    """
+    dirs = _four_repository_registry(isolated)
+    _gh_on_path(isolated, monkeypatch, f"printf '%s' '{_B5_PAYLOAD}'; exit 1")
+    monkeypatch.chdir(dirs["delta"])
+
+    grid = cli._document("", False, "json", local=False)["grid"]
+    nodes = grid["manifests"][0]["nodes"]
+
+    assert (nodes["testorg/alpha#11"]["state"], nodes["testorg/alpha#11"]["state_source"]) == ("merged", "fetched")
+    # An ISSUE, whose state arrives under the `issueState:` alias the query is obliged to give it.
+    # Without that alias GitHub rejects the whole DOCUMENT and every node here would be lost.
+    assert (nodes["testorg/delta#44"]["state"], nodes["testorg/delta#44"]["state_source"]) == ("open", "fetched")
+    # The title arrives with the state, exactly as it does on the swept rung -- a manifest row has no
+    # title field at all, so this cannot have come from the declaration.
+    assert nodes["testorg/delta#44"]["title"] == "delta forty-four"
+    assert nodes["testorg/bravo#22"]["state_source"] == "declared", "a dead ref nulls its own inner field only"
+    assert nodes["testorg/charlie#33"]["state_source"] == "declared", "a dead repository nulls the whole alias"
+    assert grid["fetch"] == {"attempted": True, "status": "degraded", "requested": 4, "resolved": 2}
+    assert any("2 of 4 declared ref(s) did not resolve" in w for w in grid["warnings"]), (
+        "a fetch that came back with holes must say so; a quiet one is indistinguishable from a full answer"
+    )
+    assert grid["declared"] == 4 and grid["unresolved"] == 2
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "printf ''",
+        "printf 'not json at all'",
+        """printf '{"data":null,"errors":[{"type":"RATE_LIMITED"}]}'""",
+        """printf '{"message":"Bad credentials","status":"401"}'""",
+    ],
+    ids=["empty-stdout", "unparseable", "null-data", "bad-credentials"],
+)
+def test_only_an_unusable_payload_is_a_total_fetch_failure(isolated, monkeypatch, body):
+    """The other side of B5's rule, and `bad-credentials` is the one that ships silent.
+
+    Measured: an unauthenticated `gh` exits 1 with stdout `{"message":"Bad credentials",...}`, which
+    is VALID JSON with no `data` -- so "json.loads succeeded" is not success, and without the
+    `has("data") and (.data != null)` test zero refs merge, zero warnings emit, and the grid looks
+    exactly like a fetch that found nothing. Offline is the empty-stdout case, measured at 0.056s
+    with the message on stderr. Each must degrade to the declared rung with a NAMED warning rather
+    than to a confidently empty grid.
+    """
+    dirs = _four_repository_registry(isolated)
+    _gh_on_path(isolated, monkeypatch, f"{body}; exit 1")
+    monkeypatch.chdir(dirs["delta"])
+
+    grid = cli._document("", False, "json", local=False)["grid"]
+
+    assert grid["manifests"][0]["nodes"]["testorg/alpha#11"]["state_source"] == "declared"
+    assert grid["fetch"] == {"attempted": True, "status": "failed", "requested": 4, "resolved": 0}
+    assert any("no usable answer" in w for w in grid["warnings"]), grid["warnings"]
+    assert [m["id"] for m in grid["manifests"]] == ["cross-repository"], "the grid still renders"
+
+
+def test_a_missing_gh_is_a_named_warning_and_not_a_blank_grid(isolated, monkeypatch):
+    """`gh` absent is the modal state on a fresh machine and on CI. proc.run_background returns None,
+    which must read as "I could not look" rather than as "I looked and found nothing"."""
+    dirs = _four_repository_registry(isolated)
+    monkeypatch.delenv("BORG_LINK_FETCH_FIXTURE")
+    # A PATH with `git` on it and `gh` off it. Emptying PATH outright would also remove `git`, and
+    # then repository_slug returns "" and selection renders an EMPTY grid -- which passes the fetch
+    # assertions below for entirely the wrong reason.
+    no_gh_bin = isolated / "no-gh-bin"
+    no_gh_bin.mkdir()
+    (no_gh_bin / "git").symlink_to(shutil.which("git"))
+    monkeypatch.setenv("PATH", str(no_gh_bin))
+    monkeypatch.chdir(dirs["delta"])
+
+    grid = cli._document("", False, "json", local=True)["grid"]
+
+    assert grid["fetch"] == {"attempted": False, "status": "skipped", "requested": 0, "resolved": 0}
+    assert [m["id"] for m in grid["manifests"]] == ["cross-repository"]
+    # And with the network arm live, the same absence is NAMED rather than silent.
+    grid = cli._document("", False, "json", local=False)["grid"]
+    assert grid["fetch"] == {"attempted": False, "status": "skipped", "requested": 4, "resolved": 0}
+    assert any("gh is not installed" in w for w in grid["warnings"]), grid["warnings"]
+
+
+def test_a_manifest_declaring_no_ref_spawns_nothing_at_all(isolated, monkeypatch, record_forks):
+    """NO REFS MEANS NO SUBPROCESS, and this rule is what keeps every fixture registry fork-free.
+
+    A sandbox with no `.borg/programs` declares nothing, and a fetch that spawned `gh` anyway would
+    put a network round trip on ~46 existing bats link cases and on every `borg link` run in a
+    repository that has not adopted a manifest yet.
+    """
+    repository = _git_repository(isolated / "ws" / "juliet", "testorg/juliet")
+    _write_registry(isolated, {"juliet": {"path": repository, "status": "idle"}})
+    _gh_on_path(isolated, monkeypatch, "printf 'should never run'")
+    monkeypatch.chdir(repository)
+
+    grid = cli._document("", False, "json", local=False)["grid"]
+
+    assert [argv for argv in record_forks if argv[0] == "gh"] == []
+    assert grid["fetch"] == {"attempted": False, "status": "skipped", "requested": 0, "resolved": 0}
+    assert not any(w.startswith("fetch:") for w in grid["warnings"]), "nothing to ask about is not a degradation"
+
+
+# ── AC3: B4, the deadline is on the WORK and the process exits ────────────────────────────────────
+
+
+def _cli_subprocess(cwd, env_overrides, timeout=60):
+    """Run the REAL entrypoint in a REAL interpreter and time it TO EXIT. See the B4 case for why."""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("BORG_")}
+    env["PYTHONPATH"] = str(Path(cli.__file__).resolve().parents[2])
+    env.update(env_overrides)
+    started = time.monotonic()
+    done = subprocess.run(
+        [sys.executable, "-m", "borg_core.link.cli", "--json"],
+        cwd=str(cwd),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+    )
+    return done, time.monotonic() - started
+
+
+def test_a_hanging_gh_does_not_hold_the_process_open_past_the_fetch_deadline(isolated):
+    """B4, measured the ONLY way that can see it: total wall clock of a real interpreter, TO EXIT.
+
+    AN IN-PROCESS ASSERTION AROUND cli._document CANNOT CATCH THIS BUG and must never be mistaken for
+    a test of it. Reproduced on this machine: a ThreadPoolExecutor worker running `sleep 12` under
+    `.result(timeout=2)` with `shutdown(wait=False)` printed at 2.01s and the PROCESS exited at
+    12.085s. `concurrent.futures.thread`'s atexit hook joins the non-daemon worker at INTERPRETER
+    SHUTDOWN -- which never happens inside a pytest process, so an in-process elapsed check reads
+    2.01s and passes with the bug fully present. The deadline is therefore asserted on subprocess
+    exit, which is the atexit hook's other side.
+
+    30s of `gh` against a 1s budget: a correct build exits near 1s, an executor build near 30s. The
+    12s ceiling is the hardened spec's own number and sits between them with room on both sides, so
+    this is not a benchmark of the runner.
+
+    THE ADAPTER PATH IS STARVED ON PURPOSE so the only thing being timed is the fetch. What the sweep
+    does with a hung adapter is already pinned by
+    `test_a_hanging_adapter_is_killed_at_the_deadline_and_the_process_moves_on`.
+    """
+    dirs = _four_repository_registry(isolated)
+    fake_gh = _fake_gh(isolated / "fakebin", "sleep 30")
+
+    env = {
+        "PATH": f"{fake_gh.parent}:{os.environ['PATH']}",
+        "BORG_DIR": str(isolated / "borg-dir"),
+        "BORG_RECON_ADAPTER_PATH": str(isolated / "no-adapters"),
+        "BORG_LINK_FETCH_TIMEOUT": "1",
+    }
+    done, elapsed = _cli_subprocess(dirs["delta"], env)
+
+    assert elapsed < 12, (
+        f"the interpreter took {elapsed:.1f}s to EXIT against a 1s fetch budget and a 30s gh -- "
+        "the deadline is on the future rather than on the work (B4)"
+    )
+    assert done.returncode == 0, done.stderr
+    grid = json.loads(done.stdout)["grid"]
+    # DEGRADED DOWN THE LADDER, NOT BLANK: the declared rung still answers and the miss is NAMED. A
+    # build that swallowed the deadline would produce an all-unknown grid with zero warnings, which
+    # is the silent-blindness shape CLAUDE.md records three incidents of.
+    assert grid["manifests"][0]["nodes"]["testorg/alpha#11"]["state_source"] == "declared"
+    assert grid["fetch"]["status"] == "failed"
+    assert any("did not answer within 1s" in w for w in grid["warnings"]), grid["warnings"]
+
+
+def test_the_fetch_deadline_case_is_not_measuring_a_fetch_that_never_ran(isolated):
+    """THE CONTROL FOR B4. Identical fixture, a `gh` that answers instantly.
+
+    Without it the case above is green on a build where the fetch is never started at all -- same
+    elapsed, same `declared` fallback -- and only the outcome distinguishes them.
+    """
+    dirs = _four_repository_registry(isolated)
+    fake_gh = _fake_gh(isolated / "fakebin", f"printf '%s' '{_B5_PAYLOAD}'; exit 1")
+
+    env = {
+        "PATH": f"{fake_gh.parent}:{os.environ['PATH']}",
+        "BORG_DIR": str(isolated / "borg-dir"),
+        "BORG_RECON_ADAPTER_PATH": str(isolated / "no-adapters"),
+        "BORG_LINK_FETCH_TIMEOUT": "1",
+    }
+    done, elapsed = _cli_subprocess(dirs["delta"], env)
+
+    assert elapsed < 12
+    assert done.returncode == 0, done.stderr
+    grid = json.loads(done.stdout)["grid"]
+    assert grid["manifests"][0]["nodes"]["testorg/alpha#11"]["state_source"] == "fetched"
+    assert grid["fetch"]["resolved"] == 2
+
+
+def test_the_fetch_budget_is_charged_from_the_start_and_not_from_the_collect(isolated, monkeypatch):
+    """THE DEADLINE IS MONOTONIC AND SET AT THE SPAWN, so the fan-out's elapsed time is charged
+    AGAINST the fetch's budget rather than added to it.
+
+    A 2s adapter and a `gh` that never answers, under a 2s fetch budget. Charged from the start, the
+    deadline expires 2s after the spawn and the whole call returns at ~2s. Handed a fixed
+    `timeout=fetch_timeout()` at collect time instead -- which is the natural mistake, and which
+    changes no output whatsoever -- the two budgets stack and it returns at ~4s. On the real command
+    that is the difference between AC1's 2.7s and a front door that sits for the sweep's budget plus
+    the fetch's, and every OTHER case in this file runs against a fast mock where the two are
+    indistinguishable.
+
+    MEASURED WITH THE MUTATION APPLIED, which is the only reason this ceiling is trustworthy:
+    `remaining = pending["budget"]` produced 7.16s against a 3s fan-out and a 4s budget where the
+    correct arithmetic gives ~4s. Nothing in the suite noticed until this case existed.
+
+    IN-PROCESS IS SOUND HERE AND IS NOT FOR B4. What is being measured is arithmetic on the collect
+    deadline, which is complete before the call returns. B4's hazard is a non-daemon thread joined at
+    INTERPRETER SHUTDOWN, which never happens inside pytest -- that is why its case is a subprocess
+    timed to exit and this one is not.
+    """
+    dirs = _four_repository_registry(isolated)
+    adapters = isolated / "adapters"
+    _adapter(adapters, "probe", 'sleep 2; echo \'{"source":"probe","summary":"ok","items":[]}\'')
+    monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
+    _gh_on_path(isolated, monkeypatch, "sleep 30")
+    monkeypatch.setenv("BORG_LINK_FETCH_TIMEOUT", "2")
+    monkeypatch.chdir(dirs["delta"])
+
+    started = time.monotonic()
+    grid = cli._document("", False, "json", local=False)["grid"]
+    elapsed = time.monotonic() - started
+
+    assert [s["status"] for s in grid["sources"]] == ["ok"], "the adapter really did take its 2s"
+    assert grid["fetch"]["status"] == "failed", "and the fetch really did hit its deadline"
+    assert elapsed < 3.4, (
+        f"took {elapsed:.2f}s for a 2s fan-out under a 2s fetch budget -- the budget is being started "
+        "at the collect instead of at the spawn, so the two stack"
+    )
+
+
+def test_the_fetch_overlaps_the_fan_out_rather_than_adding_to_it(isolated, monkeypatch):
+    """The whole reason the run is split into start/collect: the round trip is absorbed, not added.
+
+    A `gh` that takes 1.5s and an adapter that takes 1.5s. Serialized that is >=3s; overlapped it is
+    ~1.5s. The 2.6s ceiling sits between them with room on both sides, so this is a structural
+    assertion rather than a benchmark -- and it is the one thing that would notice `start_fetch`
+    being quietly moved below the fan-out, which changes no output at all.
+    """
+    dirs = _four_repository_registry(isolated)
+    adapters = isolated / "adapters"
+    _adapter(adapters, "probe", 'sleep 1.5; echo \'{"source":"probe","summary":"ok","items":[]}\'')
+    monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
+    _gh_on_path(isolated, monkeypatch, f"sleep 1.5; printf '%s' '{_B5_PAYLOAD}'; exit 1")
+    monkeypatch.chdir(dirs["delta"])
+
+    started = time.monotonic()
+    grid = cli._document("", False, "json", local=False)["grid"]
+    elapsed = time.monotonic() - started
+
+    assert grid["fetch"]["resolved"] == 2, "the fetch really did answer, so there was something to overlap"
+    assert [s["status"] for s in grid["sources"]] == ["ok"], "and so did the adapter"
+    assert elapsed < 2.6, f"took {elapsed:.2f}s for two 1.5s round trips -- the fetch is serialized behind the sweep"
+
+
+# ── AC3: the query builder and the response parser, pure ─────────────────────────────────────────
+
+
+def test_the_query_asks_issueOrPullRequest_and_aliases_the_issue_state():
+    """Two properties of the document, each invisible until a manifest nobody has written yet.
+
+    `issueOrPullRequest` AND NOT `pullRequest`: `apex.ref` is a tracker ISSUE, manifest.core allows
+    one and declared_refs includes it. Both live manifests happen to have no apex, so a PR-only query
+    is green on every current fixture and renders `unknown` forever the first time a tracker is
+    declared.
+
+    `issueState: state` IS SPEC-CORRECTNESS RATHER THAN NECESSITY, and this docstring says so because
+    the opposite was asserted when the alias was specified. The claim was that GitHub rejects the
+    whole document without it (two different enums under one response name, which the spec's
+    SameResponseShape rule forbids). MEASURED LIVE against a batch carrying a real Issue and a real
+    PullRequest: GitHub accepts BOTH forms. The alias is kept because the query is spec-valid with it
+    and merely tolerated without it -- and fetched_items reads `state` first and `issueState` second,
+    so the parser is correct either way. This assertion pins the form; the parser's own case pins the
+    behaviour that would actually break.
+    """
+    query, aliases, warnings = link_grid.fetch_query(["o/r#1", "other/repo#12"])
+
+    assert warnings == []
+    assert aliases == {"n0": "o/r#1", "n1": "other/repo#12"}
+    assert 'n0: repository(owner: "o", name: "r") { issueOrPullRequest(number: 1)' in query
+    assert 'n1: repository(owner: "other", name: "repo") { issueOrPullRequest(number: 12)' in query
+    assert "issueState: state" in query
+    assert "pullRequests(first:" not in query, "that is the SWEEP's query; the two must stay distinguishable"
+    assert query.startswith("query { ") and query.endswith(" }")
+    # BYTE-IDENTICAL FOR THE SAME INPUT. declared_refs sorts, so a manifest with its rows reordered
+    # produces the same document -- which is what makes a recorded fixture or a diffed log worth
+    # anything, and what lets a mock `gh` map n0..nN back to refs deterministically.
+    assert link_grid.fetch_query(["o/r#1", "other/repo#12"])[0] == query
+
+
+def test_a_ref_that_cannot_go_into_the_query_is_excluded_and_named():
+    """A zero-padded number KILLS THE WHOLE BATCH, and the naive degrade misdiagnoses it.
+
+    Measured: `issueOrPullRequest(number: 0158)` returns
+    `{"errors":[{"message":"Expected NAME, actual: INT (\\"158\\")"}]}` with NO `data` key at all -- so
+    one padded ref anywhere in a selected manifest turns the fetch into total failure for every other
+    ref, and the caller then reports "gh returned no usable answer", which is a wrong diagnosis
+    rather than a missing one. `_REF_RE` accepts `#0158` and parse_ref returns the digits verbatim by
+    design, so the exclusion has to happen here.
+
+    A ref that is not `owner/repo#number` at all is the same class: parse_ref is the injection gate,
+    and anything it rejects must never reach the query body.
+    """
+    query, aliases, warnings = link_grid.fetch_query(["o/r#0158", "PROJ-123", "o/r#7", "a/b/c#1", "o/r#0"])
+
+    assert aliases == {"n0": "o/r#7", "n1": "o/r#0"}, "aliases are dense over the SURVIVORS, never sparse"
+    assert "0158" not in query and "PROJ-123" not in query
+    assert sorted(warnings) == sorted(
+        [
+            "fetch: ref o/r#0158 is not a fetchable owner/repo#number -- excluded from the fetch",
+            "fetch: ref PROJ-123 is not a fetchable owner/repo#number -- excluded from the fetch",
+            "fetch: ref a/b/c#1 is not a fetchable owner/repo#number -- excluded from the fetch",
+        ]
+    )
+    # Nothing fetchable means no query at all, so start_fetch has nothing to spawn.
+    assert link_grid.fetch_query(["PROJ-123"])[0] == ""
+    assert link_grid.fetch_query([]) == ("", {}, [])
+
+
+def test_a_ref_number_past_the_int_parse_limit_is_excluded_not_fatal():
+    """`int(number)` on a ref whose digit string exceeds Python's ~4300-digit integer-parse limit
+    raises ValueError, which would escape `_fetchable` and take down the module's "nothing in the
+    grid path is ever fatal" contract as a blank frame. It must take the same excluded-and-named
+    path a zero-padded ref already takes.
+    """
+    absurd = "9" * 5000
+    query, aliases, warnings = link_grid.fetch_query([f"o/r#{absurd}", "o/r#7"])
+
+    assert aliases == {"n0": "o/r#7"}
+    assert warnings == [f"fetch: ref o/r#{absurd} is not a fetchable owner/repo#number -- excluded from the fetch"]
+    assert absurd not in query
+
+
+def test_the_parser_survives_both_null_shapes_and_ignores_errors_for_control_flow():
+    """`data[alias]["issueOrPullRequest"]` raises TypeError on a null ALIAS, and that is routine.
+
+    A renamed, deleted or private repository nulls the whole alias; a dead issue or PR nulls only the
+    inner field. Both arrive per-node beside fully-resolved siblings. An exception here escapes a
+    module whose header promises nothing in the grid path is ever fatal, and cli.main's broad catch
+    turns it into exit 1 with zero bytes on stdout for every consumer that swallows failure.
+    """
+    payload = json.loads(_B5_PAYLOAD)
+    aliases = {"n0": "testorg/alpha#11", "n1": "testorg/bravo#22", "n2": "testorg/charlie#33", "n3": "testorg/delta#44"}
+
+    items = link_grid.fetched_items(payload, aliases)
+
+    assert sorted(items) == ["testorg/alpha#11", "testorg/delta#44"]
+    assert items["testorg/alpha#11"] == {"ref": "testorg/alpha#11", "state": "merged", "title": "alpha eleven"}
+    assert items["testorg/delta#44"]["state"] == "open", "an Issue's state arrives under the issueState alias"
+    # Exit status and errors[] are never consulted; a payload with no data at all is the only failure.
+    assert link_grid.fetch_payload_is_usable(payload) is True
+    assert link_grid.fetch_payload_is_usable({"data": {}}) is True
+    assert link_grid.fetch_payload_is_usable({"data": None, "errors": [{"type": "RATE_LIMITED"}]}) is False
+    assert link_grid.fetch_payload_is_usable({"message": "Bad credentials", "status": "401"}) is False
+    assert link_grid.fetch_payload_is_usable("not a dict") is False
+    assert link_grid.fetched_items({"data": "not an object"}, aliases) == {}
+    assert (
+        link_grid.fetched_items({"data": {"n0": {"issueOrPullRequest": {"title": "no state"}}}}, {"n0": "o/r#1"}) == {}
+    )
+
+
+def test_a_recording_with_unusable_entries_degrades_entry_by_entry():
+    """A hand-edited recording is a harness artifact, and one bad entry must not cost the others.
+
+    A blank key, a non-dict value and a value with no state each fall to the rung below rather than
+    putting an empty token in a node's `state` -- which would render as a state glyph for a state
+    nobody has.
+    """
+    assert link_grid.replayed_items(
+        {
+            "o/r#1": {"state": "OPEN", "title": "kept"},
+            "  ": {"state": "open"},
+            "o/r#2": "not a dict",
+            "o/r#3": {"title": "no state"},
+        }
+    ) == {"o/r#1": {"ref": "o/r#1", "state": "open", "title": "kept"}}
+    assert link_grid.replayed_items("not an object") == {}
+    assert link_grid.replayed_items(None) == {}
+
+
+def test_a_ref_set_with_nothing_fetchable_spawns_nothing_and_says_why(isolated, monkeypatch, record_forks):
+    """Every declared ref excluded means no query, and no query must mean no subprocess.
+
+    A manifest whose only ref is zero-padded would otherwise spawn `gh` with an empty document. The
+    exclusion is NAMED so the author can see which ref is unfetchable -- a silent drop looks exactly
+    like a ref the fetch simply could not resolve, which is a different and much less actionable
+    problem.
+    """
+    repository = _git_repository(isolated / "ws" / "kilo", "testorg/kilo")
+    _write_manifest(
+        repository,
+        "padded",
+        {"program": "padded", "rows": [{"order": "1", "ref": "testorg/kilo#007", "status": "stacked"}]},
+    )
+    _write_registry(isolated, {"kilo": {"path": repository, "status": "idle"}})
+    _gh_on_path(isolated, monkeypatch, "printf 'should never run'")
+    monkeypatch.chdir(repository)
+
+    grid = cli._document("", False, "json", local=False)["grid"]
+
+    assert [argv for argv in record_forks if argv[0] == "gh"] == []
+    assert grid["fetch"] == {"attempted": False, "status": "skipped", "requested": 0, "resolved": 0}
+    assert any("testorg/kilo#007 is not a fetchable" in w for w in grid["warnings"]), grid["warnings"]
+    assert grid["manifests"][0]["nodes"]["testorg/kilo#007"]["state_source"] == "unknown"
+
+
+def test_a_gh_that_never_answers_degrades_to_the_declared_rung_in_process(isolated, monkeypatch):
+    """The deadline's IN-PROCESS half. Its subprocess sibling is what actually proves B4.
+
+    `test_a_hanging_gh_does_not_hold_the_process_open_past_the_fetch_deadline` measures wall clock TO
+    EXIT, which is the only way to see a leaked non-daemon join -- but it runs in a child
+    interpreter, so nothing it executes is instrumented here. This case exists to put the degrade
+    ITSELF under the same coverage floor as every other rung: the refs fall back, the miss is named,
+    and the grid still renders.
+    """
+    dirs = _four_repository_registry(isolated)
+    _gh_on_path(isolated, monkeypatch, "sleep 30")
+    monkeypatch.setenv("BORG_LINK_FETCH_TIMEOUT", "0.4")
+    monkeypatch.chdir(dirs["delta"])
+
+    started = time.monotonic()
+    grid = cli._document("", False, "json", local=False)["grid"]
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 10, f"the 0.4s fetch budget did not reach the child ({elapsed:.1f}s)"
+    assert grid["fetch"] == {"attempted": True, "status": "failed", "requested": 4, "resolved": 0}
+    assert grid["manifests"][0]["nodes"]["testorg/alpha#11"]["state_source"] == "declared"
+    assert any("did not answer within 0.4s" in w for w in grid["warnings"]), grid["warnings"]
+
+
+def test_the_fetch_input_is_every_declared_ref_of_every_selected_manifest():
+    """declared_refs, not row_refs, unioned across SELECTED manifests, deduplicated and sorted.
+
+    An `after` entry and a `gate.blocked_by_ref` name work in another repository, which is precisely
+    what falls outside the sweep window -- narrowing the fetch to rows would leave exactly the refs
+    AC3 exists for unresolved. Sorting is what makes the alias numbering reproducible.
+    """
+    manifests = [
+        {
+            "rows": [
+                {"order": "2", "ref": "o/r#2", "after": ["o/r#1"]},
+                {"order": "1", "ref": "o/r#1", "gate": {"blocked_by_ref": "other/repo#9"}},
+            ],
+            "apex": {"ref": "o/r#100"},
+        },
+        {"rows": [{"order": "1", "ref": "o/r#2"}]},
+    ]
+    assert link_grid.selected_refs(manifests) == ["o/r#1", "o/r#100", "o/r#2", "other/repo#9"]
+    assert link_grid.selected_refs([]) == []
 
 
 def test_the_grid_carries_no_ready_set_and_no_duplicate_gate_list(isolated, monkeypatch):

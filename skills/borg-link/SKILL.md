@@ -52,8 +52,13 @@ network round trip and then rendering the same deep dive as before it existed. R
 - `.grid.sources[].status` is `ok`, `degraded` or `failed`. `degraded` means a source was never
   actually reached (missing/unauthenticated `gh`, offline, rate-limited) or had its items rejected —
   treat the states below it as declared, not observed.
-- `.grid.unresolved` out of `.grid.declared` is how many refs the sweep had no answer for. A high
-  ratio is not an error; those states came from the manifest.
+- `.grid.unresolved` out of `.grid.declared` is how many refs NOBODY answered for — neither the
+  sweep nor the targeted fetch. A high ratio is not an error; those states came from the manifest.
+- `.grid.fetch` covers AC3's targeted fetch: `.attempted` (bool, whether a fetch was even tried),
+  `.status` (`ok`, `degraded`, `failed`, or `skipped`), `.requested` (refs asked about) and
+  `.resolved` (refs that came back with a usable answer). As with `.grid.sources[].status`,
+  `failed` and `degraded` mean the states below them are DECLARED rather than OBSERVED — treat
+  them the same way.
 
 **Why the jq.** The two pipes work differently. The overview pipe (`.directives |= (...)`) does not
 enumerate a field — it transforms one key in place, so anything the document gains later passes

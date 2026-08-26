@@ -56,7 +56,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from borg_core import paths
+from borg_core import paths, proc
 from borg_core.link import core, grid
 from borg_core.manifest import shell as manifest_shell
 from borg_core.recon import shell as recon_shell
@@ -520,23 +520,25 @@ def sweep(projects: dict, now: int | None = None) -> dict:
     argument. `now` threads cli._document's single shared epoch in; None reads the clock, for a
     caller that has no document.
 
-    TWO ENVIRONMENT SEAMS, one shipped and one reserved. Both are read HERE, in the shell tier, and
-    nowhere else -- core.py is pure and pylint enforces it.
+    TWO ENVIRONMENT SEAMS, one per network path. Both are read in this module, in the shell tier,
+    and nowhere else -- core.py and grid.py are pure and pylint enforces it. Each short-circuits
+    BEFORE any subprocess, each degrades to a NAMED warning on a bad path, and neither writes a
+    marker or resolves a `since`.
 
-      BORG_LINK_SWEEP_FIXTURE -- path to a recorded `{"since": str, "tracks": [...]}` document.
-          When set, this function reads it INSTEAD of fanning out: zero subprocesses, no adapter
-          discovery, no `since` resolution, no `recon/last-run` write. It exists because
-          `_assert_link_golden` byte-diffs `borg link`'s output with `2>&1`, and a sweep folded into
-          the document makes every golden a snapshot of whatever GitHub returned that minute --
-          non-reproducible on the second run, and `BORG_UPDATE_GOLDEN=1` would freeze one machine's
-          network state as the oracle (the hardened spec's B7).
+      BORG_LINK_SWEEP_FIXTURE -- read HERE, first statement. A path to a recorded
+          `{"since": str, "tracks": [...]}` document. When set, this function reads it INSTEAD of
+          fanning out: zero subprocesses, no adapter discovery, no `since` resolution, no
+          `recon/last-run` write. It exists because `_assert_link_golden` byte-diffs `borg link`'s
+          output with `2>&1`, and a sweep folded into the document makes every golden a snapshot of
+          whatever GitHub returned that minute -- non-reproducible on the second run, and
+          `BORG_UPDATE_GOLDEN=1` would freeze one machine's network state as the oracle (the
+          hardened spec's B7).
 
-      BORG_LINK_FETCH_FIXTURE -- RESERVED for AC3's targeted fetch and deliberately unimplemented
-          here. AC3 resolves refs a manifest declares but the sweep window missed; its fixture must
-          mirror this one exactly: a path to a recorded JSON document, read in this module, short-
-          circuiting BEFORE any subprocess, degrading to a named warning on a bad path. Shipping an
-          unused reader for it now would be dead code carried on a 90% coverage floor. The name is
-          recorded here so AC3 mirrors the seam instead of inventing a second, differently-shaped one.
+      BORG_LINK_FETCH_FIXTURE -- read in `start_fetch`, NOT here, and the difference is B4's doing:
+          the targeted fetch has to start BEFORE this function so its round trip overlaps the
+          fan-out, so it cannot live inside it. A path to a recorded `{"nodes": {ref: {...}}}`
+          document; see `_read_fetch_fixture` and grid.replayed_items for the shape and for why the
+          recording is of the ANSWERS rather than of a raw GraphQL body.
 
     `swept` MEANS AN ADAPTER ACTUALLY RAN (or a fixture stood in for one), not merely "--local was
     absent". Zero discovered adapters returns swept=False with a warning naming the empty search
@@ -572,6 +574,173 @@ def sweep(projects: dict, now: int | None = None) -> dict:
             return grid.no_sweep([f"sweep: could not stage the project list ({exc}) -- no adapter ran"])
         tracks = recon_shell.fanout(since, projects_file, adapters, timeout=sweep_timeout())
     return {"swept": True, "since": since, "tracks": tracks, "warnings": grid.track_warnings(tracks)}
+
+
+# Seconds the targeted fetch gets from the moment it is STARTED -- not from the moment it is
+# collected. Chosen against measurement, like DEFAULT_SWEEP_TIMEOUT_SECONDS above: a standalone
+# batched fetch measures 0.72-0.94s at 14 aliased nodes and 2.11s at 200, and offline fails outright
+# in 0.056s, so 10 is ~10x the slowest observed real answer. It is the same number as the sweep's
+# budget by coincidence of measurement, not by coupling; the two are separate variables because the
+# two round trips have different shapes and either may need moving without the other.
+DEFAULT_FETCH_TIMEOUT_SECONDS = 10
+
+
+def fetch_timeout() -> float:
+    """BORG_LINK_FETCH_TIMEOUT as a number of seconds, defaulting to DEFAULT_FETCH_TIMEOUT_SECONDS.
+
+    Same three-way guard as sweep_timeout -- unset OR EMPTY OR non-numeric takes the default --
+    because `_borg_py` passes its whole config surface through by name and an unset variable arrives
+    as the EMPTY STRING. This name is deliberately NOT added to that wrapper (nothing in the zsh CLI
+    sets it), but it is written to survive it, so adding it later cannot reintroduce the `int("")`
+    bug the hardened spec forbids for the `BORG_RECON_*` readers.
+    """
+    raw = os.environ.get("BORG_LINK_FETCH_TIMEOUT")
+    if not raw:
+        return DEFAULT_FETCH_TIMEOUT_SECONDS
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_FETCH_TIMEOUT_SECONDS
+
+
+def _read_fetch_fixture(path: str, requested: int) -> dict:
+    """A recorded fetch read off disk in place of running one. The AC3 half of the B7 seam.
+
+    Shaped `{"nodes": {"<owner/repo#n>": {"state": str, "title": str}}}`. Mirrors
+    `_read_sweep_fixture`'s three degradation rungs exactly, with `fetch:` prefixes: unreadable or
+    invalid JSON is a named warning and no fetch; a root that is not an object is a named warning and
+    no fetch; a `nodes` of the wrong type is coerced to empty but STILL reports itself replayed,
+    which is the truthful reading of a recording that carries none.
+
+    A harness that mistypes the path must see WHY. The alternative -- a silent declared-only grid --
+    is the shape every silent-blindness incident in CLAUDE.md's "Learned" has in common.
+
+    `requested` IS THE CALLER'S FETCHABLE-REF COUNT, NEVER `len(items)`. The live path in
+    `finish_fetch` reports `requested = len(aliases)` -- the real ask -- so a recording answering
+    only some of the refs it was asked about must be measured against that same ask, not against
+    how many answers happen to be in the recording. `len(items)` here can never be less than
+    `len(items)` itself, so a fixture with holes was ALWAYS `status: "ok"` before this fix -- the
+    "recorded 2 of 4" case this function exists to let tests reproduce was unreachable.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            doc = json.load(handle)
+    except (OSError, ValueError) as exc:
+        return grid.no_fetch([f"fetch: fixture {path} unreadable or invalid JSON ({exc})"], requested)
+    if not isinstance(doc, dict):
+        return grid.no_fetch([f"fetch: fixture {path} is not an object -- ignored"], requested)
+    items = grid.replayed_items(doc.get("nodes"))
+    return grid.fetch_answered(items, requested, [f"fetch: replayed from fixture {path} -- no gh ran"])
+
+
+def start_fetch(refs: list[str]) -> dict:
+    """Start the targeted fetch for `refs` and return a PENDING handle. Never waits. See finish_fetch.
+
+    THE SPLIT IS THE WHOLE POINT (the hardened spec's B4). The fetch is one `gh api graphql` round
+    trip; started here, before cli._grid runs the adapter fan-out, and collected after it, the round
+    trip overlaps work that was going to happen anyway. Measured: a real 4-ref fetch against a 0.9s
+    stand-in for the fan-out collected at 0.910s -- fully absorbed.
+
+    NO ThreadPoolExecutor, AND NOT BECAUSE OF TASTE. B4 measured a pool worker running a 12s
+    subprocess under `.result(timeout=2)`: the output printed at 2.01s and the PROCESS did not exit
+    until 12.08s, because `concurrent.futures.thread`'s atexit hook joins the non-daemon worker at
+    interpreter shutdown and `shutdown(wait=False)` does not change that. Timing out the FUTURE never
+    cancels the WORK. Here no thread exists at all: proc.run_background hands back a pid, and
+    proc.collect either reaps it or kills its whole session.
+
+    THE SEAM IS READ FIRST, before anything that could fork. BORG_LINK_FETCH_FIXTURE consulted after
+    the Popen is not a seam. A bad path degrades to a named warning rather than to a live fetch.
+
+    NO REFS MEANS NO SUBPROCESS, and that one rule is what keeps ~46 existing bats link cases and
+    every fixture registry without a `.borg/programs` fork-free. Same for a ref set where nothing
+    survives grid._fetchable.
+
+    `deadline` IS MONOTONIC AND IS SET HERE, at the spawn, so the fan-out's elapsed time is charged
+    against the fetch's budget rather than added to it. A fixed `timeout=fetch_timeout()` handed to
+    collect would make a fan-out that already burned 9s into a 19s worst case on a command budgeted
+    at 2.7s -- and every test runs against a fast mock, so nothing would ever see it. It must not
+    reuse now_epoch(): that is the document's clock, `time.time()`, and it jumps.
+    """
+    # THE REAL ASK IS COMPUTED BEFORE THE SEAM IS CONSULTED, not after, so a fixture reader can
+    # report against the true fetchable-ref count instead of against however many answers happen
+    # to be in the recording. `fetch_query` never forks, so this does not compromise "the seam is
+    # read first, before anything that could fork" above.
+    query, aliases, warnings = grid.fetch_query(refs)
+    fixture = os.environ.get("BORG_LINK_FETCH_FIXTURE")
+    if fixture:
+        return {"done": _read_fetch_fixture(fixture, len(aliases))}
+    if not refs:
+        return {"done": grid.no_fetch()}
+    if not aliases:
+        return {"done": grid.no_fetch(warnings)}
+    budget = fetch_timeout()
+    handle = proc.run_background(["gh", "api", "graphql", "-f", f"query={query}"])
+    if handle is None:
+        return {
+            "done": grid.no_fetch(
+                warnings
+                + [
+                    f"fetch: gh is not installed -- {len(aliases)} declared ref(s)"
+                    " fall back to what the manifest declares"
+                ],
+                len(aliases),
+            )
+        }
+    return {
+        "handle": handle,
+        "deadline": time.monotonic() + budget,
+        "budget": budget,
+        "aliases": aliases,
+        "warnings": warnings,
+    }
+
+
+def finish_fetch(pending: dict) -> dict:
+    """Collect a `start_fetch` handle into a fetch result. Degrades; never raises.
+
+    ALWAYS PARSE STDOUT, WHATEVER THE EXIT STATUS (the hardened spec's B5). `gh api graphql` exits 1
+    whenever the response carries an `errors[]` array, even when `data` is fully populated for every
+    other alias -- verified live against a batch with one bogus repository and one bogus number: exit
+    1, both casualties in `errors[].path`, every valid sibling resolved. The returncode is not read
+    at all here; grid.fetch_payload_is_usable is the only failure test, and it is the same
+    `has("data") and (.data != null)` discriminator recon-adapter-github uses.
+
+    A DEADLINE MISS DEGRADES DOWN THE LADDER, loudly. proc.collect kills the whole session and
+    returns None; the refs fall back to their declared status and the timeout is NAMED, because a
+    quiet degrade produces a document byte-identical to one where the fetch answered and the refs
+    genuinely have no state.
+    """
+    done = pending.get("done")
+    if isinstance(done, dict):
+        return done
+    aliases = pending["aliases"]
+    requested = len(aliases)
+    warnings = list(pending["warnings"])
+    remaining = max(0.0, pending["deadline"] - time.monotonic())
+    answer = proc.collect(pending["handle"], timeout=remaining)
+    if answer is None:
+        return grid.fetch_failed(
+            warnings
+            + [
+                f"fetch: gh did not answer within {pending['budget']:g}s -- {requested} declared ref(s)"
+                " fall back to what the manifest declares"
+            ],
+            requested,
+        )
+    try:
+        payload = json.loads(answer[1])
+    except ValueError:
+        payload = None
+    if not grid.fetch_payload_is_usable(payload):
+        return grid.fetch_failed(
+            warnings
+            + [
+                "fetch: gh returned no usable answer (unauthenticated, offline, or rate-limited)"
+                f" -- {requested} declared ref(s) fall back to what the manifest declares"
+            ],
+            requested,
+        )
+    return grid.fetch_answered(grid.fetched_items(payload, aliases), requested, warnings)
 
 
 def cortex_wakes_path() -> Path:

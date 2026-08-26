@@ -85,10 +85,24 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
     not from local truth. The fzf preview and `drone status` want the declared topology; what they
     cannot afford is `gh`.
 
-    `--local` IS CHECKED HERE AND NOWHERE DEEPER. shell.sweep is never called on the opted-down path,
-    so no adapter is discovered, no `since` is resolved, no projects file is staged and no subprocess
-    of any kind is spawned -- an opt-down that still paid discovery would be a promise the flag does
-    not keep, and it is the promise borg.zsh:266's per-keypress preview is relying on.
+    `--local` IS CHECKED HERE AND NOWHERE DEEPER, and as of AC3 it is checked TWICE, once per network
+    path. shell.sweep is never called on the opted-down path, and neither is shell.start_fetch -- so
+    no adapter is discovered, no `since` is resolved, no projects file is staged, no `gh` is spawned
+    and no subprocess of any kind runs. An opt-down that still paid for one of the two would be a
+    promise the flag does not keep, and it is the promise borg.zsh:266's per-keypress preview, the 5s
+    `borg watch` redraw and drone.zsh's per-tmux-window loop are all relying on.
+
+    THE FETCH'S GUARD HAS TO BE ITS OWN, and this is the trap in the shape rather than an aside. The
+    fetch must START before the sweep for its round trip to overlap, so it sits ABOVE the sweep's
+    `local` ternary and is not covered by it. An implementer who inserts the start at the right line
+    without the guard makes `borg link --local` spawn `gh` on every cursor move -- which is the
+    hardened spec's B1, re-committed. tests/link_sweep.bats' first case ("borg link --local spawns
+    zero gh subprocesses, and the same call without it sweeps") is what notices.
+
+    THE FETCH IS UNCONDITIONAL OTHERWISE, over every ref every SELECTED manifest declares. It cannot
+    be narrowed to "refs the sweep missed" without waiting for the sweep, which is the serialization
+    the overlap exists to avoid; see grid.selected_refs for the measurement that makes narrowing
+    worthless anyway.
 
     `moment` IS THE DOCUMENT'S ONE EPOCH, threaded down so the sweep mark is cut from the same
     instant as `generated_at` and every relative time. A second clock read here would let a document
@@ -108,12 +122,19 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
     directory = grid.repository_dir(registry, scope)
     slug = shell.repository_slug(directory) if directory else ""
     selected, select_warnings = grid.select_manifests(manifests, scope, slug)
+    # STARTED HERE, COLLECTED BELOW, WITH THE BLOCKING FAN-OUT BETWEEN THEM. `selected` is the first
+    # line at which the ref set exists and the sweep is the next thing that blocks, so this is the
+    # only pair of lines where the overlap is free. The `--local` result carries no warning of its
+    # own: the sweep's already says "nothing was fetched", and two lines saying the same thing is
+    # noise on the mode fzf re-renders per keypress.
+    pending = None if local else shell.start_fetch(grid.selected_refs(selected))
     sweep = (
         grid.no_sweep(["sweep: --local -- states come from what each manifest declares, nothing was fetched"])
         if local
         else shell.sweep(grid.scoped_projects(registry, scope), now=moment)
     )
-    return grid.build_grid(scope, slug, sweep, selected, warnings + select_warnings)
+    fetch = grid.no_fetch() if pending is None else shell.finish_fetch(pending)
+    return grid.build_grid(scope, slug, sweep, fetch, selected, warnings + select_warnings)
 
 
 def _document(project: str, show_all: bool, mode: str, local: bool = False) -> dict:
