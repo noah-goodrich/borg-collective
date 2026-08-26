@@ -7,6 +7,19 @@ fallback -- so a real (non-dev) install would hard-crash with ModuleNotFoundErro
 with every Python 3 interpreter, so this removes the unprovisioned runtime dependency entirely
 rather than papering over it with an install-time pip step. See the migration ledger
 (docs/plans/assimilated/2026-08-12-recon-migration-ledger.md) for the record of this deviation.
+
+THE HUMAN DIGEST PATH RETIRED 2026-08-26. `borg recon` retired as a human verb in AC1 of the
+one-front-door plan; the retirement gate lives in `main()` below, guarding the `_run()` call on
+`args.json_only or args.adapters`. `main()` is the only caller that can reach `_run()` with both
+False -- no argv combination through the shipped CLI does, see `test_main_*` in test_cli.py.
+
+`_run`'s `else:` branch -- `core.render_digest` plus its five private helpers, roughly a fifth of
+core.py -- is consequently DEAD THROUGH THE FRONT DOOR ONLY, not dead code: it is the engine's own
+digest capability, still exercised directly by `test_run_digest_output` and the rest of the core
+suite, which call `_run()` (not `main()`) with `json_only=False` on purpose. No real consumer
+reaches it that way -- `/borg-recon`, `merge-tree/` and `evals/` all go through `borg recon --json`
+or `--adapters`. Filed with its measurements in
+docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md.
 """
 
 from __future__ import annotations
@@ -143,12 +156,28 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+_RECON_RETIRED_LEAD = "'borg recon' was retired as a human command — 'borg link' sweeps every source itself."
+
+
 def main(argv: list[str] | None = None) -> None:
     """Entrypoint for `python3 -m borg_core.recon.cli`.
 
     stdlib argparse only -- see the module docstring for why this isn't typer/click.
+
+    THE RETIREMENT GATE LIVES HERE, not in borg.zsh's `recon)` dispatch arm where S4 originally put
+    it (see docs/plans/directives/2026-08-26-recon-retirement-gate-altitude.md for the measurements).
+    `args.json_only`/`args.adapters` are already parsed at this point, and every test in
+    test_cli.py calls `_run()` directly -- none call `main()` -- so this guard collides with nothing.
+    A gate INSIDE `_run()` would be a different story: it would break
+    test_run_resolves_registry_from_borg_dir_when_env_override_absent and five siblings that call
+    `_run()` with json_only=False, adapters=False on purpose to exercise the registry/adapter-
+    discovery guards below. That placement is correctly rejected in the directive.
     """
     args = _build_parser().parse_args(argv)
+    if not (args.json_only or args.adapters):
+        raise SystemExit(
+            f"{_RECON_RETIRED_LEAD} Run: borg link   (machine surface: 'borg recon --json', 'borg recon --adapters')"
+        )
     exit_code = _run(args.since, args.sources, args.projects, args.json_only, args.adapters)
     raise SystemExit(exit_code)
 

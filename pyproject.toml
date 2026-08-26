@@ -75,8 +75,14 @@ color = "green"
 welcome_msg = "The Collective Lints"
 allowed_prefixes = ["borg_core", "__future__"]
 
+# `grid.py` is named here for the same reason `core.py` is: it is PURE domain logic (the manifest
+# grid and the swept > declared > unknown resolve ladder) and must stay that way -- no os, no
+# subprocess, no environment, no clock, no filesystem. It was extracted FROM borg_core/link/core.py
+# when S3's sweep fold pushed that module past pylint's 1000-line ceiling; adding the name here is
+# what keeps the extraction from being an escape from the Domain rules it used to sit under. Any
+# future pure-logic module split out of a core.py belongs on this list on the same terms.
 [tool.clean-arch.module_map]
-Domain = ["core.py"]
+Domain = ["core.py", "grid.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]

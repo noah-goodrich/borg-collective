@@ -13,6 +13,16 @@ primitives the deep dive and the four collectors share.
 PHASE 2 SCOPE: the human table's ordering (project_sort_key/order_projects) and the pure document
 assembler (assemble) now live here too. No renderer lives here yet -- the porcelain/overview/deep
 flip is still Phase 3 (see PROJECT_PLAN.md).
+
+S3 SCOPE: `assemble` gained the document's `grid` key, and that key is ALL this module knows about
+it. The grid itself -- the resolve ladder, the node table, the level assignment, the per-source
+receipt -- lives in the sibling module borg_core/link/grid.py, held to the identical Domain rules
+(pyproject's clean-arch module map names both files). It started here and pushed this module past
+pylint's 1000-line ceiling in one step, which was the honest signal that two questions had been
+stacked in one file: this one answers "what does the registry say about every project", grid.py
+answers "what does one project's manifest declare, and what is the live state of every ref it names".
+`assemble` takes the finished block as an opaque argument, so nothing here imports grid.py and there
+is no cycle.
 """
 
 from __future__ import annotations
@@ -284,6 +294,75 @@ def project_paths(registry: dict) -> list[tuple[str, str]]:
     return [(name, str(jq_default(entry.get("path"), ""))) for name, entry in projects.items()]
 
 
+def _path_components(path: str) -> list[str]:
+    """A normalized absolute path split into components, for boundary-safe prefix matching."""
+    return [part for part in path.split("/") if part]
+
+
+def scope_for(
+    cwd: str,
+    orchestrator_root: str,
+    project_paths_: list[tuple[str, str]],
+    local: bool = False,
+    requested_project: str = "",
+) -> dict:
+    """Resolve which repositories one `borg link` invocation covers.
+
+    Returns `{"kind": "repository"|"orchestrator", "repository": str|None, "local": bool}`.
+
+    THE EXPLICIT POSITIONAL DOMINATES CWD. `requested_project`, when non-empty and present in the
+    registry, sets the scope outright; cwd is consulted ONLY for the no-argument shape. Deriving
+    breadth from cwd alone is not a latency bug, it is a truthfulness bug: `borg link ingle` run from
+    inside borg-collective would sweep borg-collective and render those nodes under ingle's header --
+    one repository's facts presented as another's. Every scripted caller hits it, because they all
+    pass a name from a fixed cwd: drone.zsh:964 iterates tmux window names inside cmd_status's loop,
+    and borg.zsh:266's fzf preview renders `borg link {1}` for arbitrary {1} from the invoking cwd.
+    A requested project that is NOT in the registry deliberately falls through to cwd resolution
+    rather than being honored -- `_focus` raises ProjectNotFound for that case, and scope must not
+    invent a repository the registry has never heard of.
+
+    The orchestrator test is EXACT equality with `orchestrator_root`, mirroring `_borg_session_mode`
+    in lib/borg-hooks.sh -- a session whose cwd is exactly the workspace root is the orchestrator; a
+    subdirectory of it is not. Repository resolution then takes the registry entry whose `path` is
+    the LONGEST matching prefix of cwd, so a repository nested inside another resolves to the inner
+    one. Prefix matching is on path-component boundaries, never raw string prefixes: `/a/b-tools`
+    must not match a registry path of `/a/b`.
+
+    Pure -- takes strings and a list of (name, path) pairs, touches no filesystem and no environment.
+    `project_paths_` MUST arrive with every path already realpath-normalized, which is why it is a
+    pair list rather than the registry dict: both sides of the comparison have to be resolved the same
+    way, and resolving is filesystem work that cannot happen in the Domain layer. Normalizing only cwd
+    and comparing it against raw registry paths breaks on any symlinked path -- and does so first in
+    the test suites, where fixtures live under /tmp, which realpaths to /private/tmp on macOS. Every
+    such repository would silently resolve to `orchestrator`.
+    """
+    scope = {"kind": "orchestrator", "repository": None, "local": bool(local)}
+
+    if requested_project and any(name == requested_project for name, _ in project_paths_):
+        return {**scope, "kind": "repository", "repository": requested_project}
+
+    if cwd == orchestrator_root:
+        return scope
+
+    cwd_parts = _path_components(cwd)
+    best_name = None
+    best_depth = -1
+    for name, entry_path in project_paths_:
+        if not entry_path:
+            continue
+        parts = _path_components(entry_path)
+        if not parts or len(parts) > len(cwd_parts):
+            continue
+        if cwd_parts[: len(parts)] != parts:
+            continue
+        if len(parts) > best_depth:
+            best_name, best_depth = name, len(parts)
+
+    if best_name is None:
+        return scope
+    return {**scope, "kind": "repository", "repository": best_name}
+
+
 def heading_title(text: str) -> str:
     """A markdown file's title, mirroring `head -1 "$f" | sed 's/^#* *//'`.
 
@@ -512,6 +591,8 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
     assimilated,
     cortex_pending,
     focus,
+    scope=None,
+    grid=None,
 ) -> dict:
     """Assemble the `borg link --json` document from already-gathered data. Pure: no clock, no shell
     import, no os.environ.
@@ -533,6 +614,28 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
     different sentences for those two cases. Deriving the overview's "no projects at all" branch
     from `len(order)` is the single highest-probability Phase 3 bug: it renders correctly on nearly
     every fixture and silently inverts on a real registry with any archived project.
+
+    `scope` (S1) is PURELY ADDITIVE and DOCUMENT_VERSION deliberately stays 2. Nothing that existed
+    before this key changed meaning: `order`, `projects` and `focus` still cover the whole registry.
+    Bumping on an added key would fire the `/borg-link` skill's version-skew warning for a document
+    it can still read perfectly. Defaults to None so every pre-S1 caller -- including the existing
+    test suite -- keeps working unchanged.
+
+    CORRECTION (S3). The paragraph above used to end by FORECASTING that "the version bump belongs
+    with the step that actually narrows breadth (the sweep fold)". The sweep fold has now landed and
+    that forecast was wrong, so it is struck rather than left to mislead the next reader. `grid` is
+    additive on exactly the same terms as `scope`: the sweep narrows what the GRID covers, and
+    nothing else. `.order`, `.projects` and `.focus` still cover the WHOLE registry, byte for byte,
+    in every scope -- a v2 consumer reading them reads what it always read. DOCUMENT_VERSION STAYS 2.
+
+    What was actually deferred by not bumping here is AC2, which is where `.order` would narrow to
+    the scoped repository and where the goldens, drone.zsh:964's `grep -m1 'Status:'` and
+    borg.zsh:266's preview contract all break at once -- deliberately concentrated in one commit. If
+    a future step narrows any pre-existing key, THAT is the bump, and it costs four coupled edits in
+    skills/borg-link/SKILL.md (the `== 2` gate, the `> 2` skew branch, the "scope is context, not
+    content" claim, and the deep-dive jq whitelist, which drops any key not named in it).
+
+    `grid` (S3) defaults to None for the same reason `scope` does: every pre-S3 caller keeps working.
     """
     return {
         "version": DOCUMENT_VERSION,
@@ -546,4 +649,6 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
         "assimilated": assimilated,
         "cortex_pending": cortex_pending,
         "focus": focus,
+        "scope": scope,
+        "grid": grid,
     }
