@@ -154,6 +154,24 @@ run_zsh_borg() {
     done
 }
 
+@test "contract: bare module invocation agrees with 'borg recon' (AC2)" {
+    # The retirement gate lives in borg_core/recon/cli.py::main() now (S4 originally put it in
+    # borg.zsh's dispatch arm). This is the one bats case that reaches the module directly instead
+    # of going through the zsh wrapper, so it is the only guard that a fix at the zsh layer alone
+    # (leaving `python3 -m borg_core.recon.cli` ungated) would not catch.
+    # See docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md.
+    run_zsh_borg recon
+    local zsh_status="$status"
+    local zsh_output="$output"
+    [ "$zsh_status" -ne 0 ]
+    [[ "$zsh_output" == *"borg link"* ]] || false
+
+    run bash -c "PYTHONPATH='${BATS_TEST_DIRNAME}/..' python3 -m borg_core.recon.cli"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"borg link"* ]] || false
+    [[ "$output" == *"was retired"* ]] || false
+}
+
 @test "contract: the recon MACHINE surface survives the retirement (AC1)" {
     # THE SURVIVAL CONTROL. Without it, "bare recon dies" is satisfied by deleting the verb
     # outright, which is the one implementation of this change that breaks four other bats cases,

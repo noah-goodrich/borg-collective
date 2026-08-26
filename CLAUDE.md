@@ -273,12 +273,11 @@ docs/
 - **Recon fan-out (`borg recon --json` + `/borg-recon`)**: source-agnostic sweep primitive.
   **Retired as a human verb 2026-08-26** — `borg link` folds the same fan-out into its own document,
   so bare `borg recon` (and any invocation without `--json`/`--adapters`) dies with a pointer at
-  `borg link`. The gate is in `borg.zsh`'s `recon)` dispatch arm — an **altitude compromise, filed as
-  `docs/plans/directives/2026-08-26-recon-retirement-gate-altitude.md`**, not a clean call. The
-  original justification ("a Python-side gate would break six pytest cases") is true only of a gate
-  inside `_run()`; it is false at the `main()` boundary, where all 11 `test_cli.py` cases call
-  `_run()` directly and none reach `main()`. Consequence while it stands: `python3 -m
-  borg_core.recon.cli` is ungated, and the zsh arm duplicates a classification argparse already made.
+  `borg link`. The gate lives in `borg_core/recon/cli.py::main()`, guarding the `_run()` call on
+  `args.json_only or args.adapters` — the artifact that implements the command owns the invariant,
+  not its zsh caller. `borg.zsh`'s `recon)` arm is a pure pass-through plus the two things argparse
+  doesn't do (`--list` alias, unknown-flag `die`). See
+  `docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md` for why it moved there.
   The engine (`borg_core/recon/{core,shell,cli}.py`) resolves a `since` mark (explicit >
   newest checkpoint mtime > last-run marker > 24h), fans out concurrently+bounded over pluggable
   **adapters**, normalizes every finding to an Item

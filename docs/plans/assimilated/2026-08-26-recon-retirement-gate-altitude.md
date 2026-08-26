@@ -57,16 +57,26 @@ Keep the retirement sentence identical so the existing bats assertions (which ma
 
 ## Acceptance Criteria
 
-- [ ] **AC1 — The gate lives in `borg_core/recon/cli.py::main()`** and `borg.zsh` no longer carries `_recon_machine`.
+- [x] **AC1 — The gate lives in `borg_core/recon/cli.py::main()`** and `borg.zsh` no longer carries `_recon_machine`.
   - Verify: `grep -n _recon_machine borg.zsh` returns nothing; `make test` green at the 90% floor.
-- [ ] **AC2 — `python3 -m borg_core.recon.cli` with no flags is retired**, with the same sentence `borg recon` emits.
+- [x] **AC2 — `python3 -m borg_core.recon.cli` with no flags is retired**, with the same sentence `borg recon` emits.
   - Verify: a new pytest case asserts the module entry point exits non-zero and names `borg link`; a bats case asserts
     `borg recon` and the bare module invocation agree.
-- [ ] **AC3 — Every surviving machine shape still works**, proven rather than assumed.
+- [x] **AC3 — Every surviving machine shape still works**, proven rather than assumed.
   - Verify: existing bats cases for `borg recon --json`, `--adapters`, `--list`, and the modifier-with-`--json` shapes
     stay green with no edits; `bats tests/` green at or above 741.
-- [ ] **AC4 — The false rationale is gone from the tree**, not merely superseded.
+- [x] **AC4 — The false rationale is gone from the tree**, not merely superseded.
   - Verify: `grep -rn "breaks six pytest cases" borg.zsh` returns nothing.
+
+**Shipped 2026-08-26.** Gate moved to `borg_core/recon/cli.py::main()`; `borg.zsh`'s `recon)` arm is a pure
+pass-through plus the `--list` alias and unknown-flag `die`. New pytest cases `test_main_*` in `test_cli.py`
+prove the gate placement (mutation-tested: removing the guard flips them red for the right reason — the
+engine's own adapter-discovery `die` fires instead — restoring it flips them green). New bats case "bare module
+invocation agrees with 'borg recon' (AC2)" in `cli_contract.bats`. `core.render_digest` declared (not deleted)
+as an engine-only capability in `cli.py`'s module docstring; a mutation-tested pytest case in the AC2 block
+proves no argv reaches it through `main()`. `_BORG_RECON_RETIRED_LEAD` had one remaining consumer
+(`_borg_recon_retired`) once the zsh `die` path was removed, so it was inlined rather than kept as a
+single-consumer indirection.
 
 ## Ship Definition
 
