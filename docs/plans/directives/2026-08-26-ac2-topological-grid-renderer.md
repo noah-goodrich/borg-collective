@@ -211,6 +211,31 @@ column `k` in the span:
 
 - `up(k) = 1` iff some jogging segment has `from_col == k`
 - `down(k) = 1` iff some jogging segment has `to_col == k`
+
+> **AMENDED 2026-08-26 (S2), by measurement. THE TWO LINES ABOVE ARE WRONG — both strokes are counted over EVERY
+> segment crossing the boundary, straight ones included.** This section states the jogging-only rule and then, forty
+> lines down, states that it verified column 0 of the approved mock's fan-out as `up=1, down=1, right=1 → ├`. Both
+> cannot be true: at a fan-out, column 0's DOWNWARD stroke belongs to the STRAIGHT segment `n1→n2`, which a
+> jogging-only rule cannot see. Hand-executed against the mock before any code was written:
+>
+> | rule | fan-out `L0→L1` | join `L2→L3` |
+> |---|---|---|
+> | as written above (jogging only) | `└┬┐` ✗ | `└┬┘` ✗ |
+> | corrected (all crossing segments) | `├┬┐` ✓ | `└┼┘` ✓ |
+>
+> The mock says `├┬┐` and `└┼┘`. `borg_core/link/picture.py::rail_row` ships the corrected rule and reproduces all
+> eleven mock rows byte for byte. **`crossing(k)` is unaffected** — `involved` stays defined over JOGGING segments
+> only, which is what keeps a pass-through outside it.
+>
+> This is also why `picture-fork.expected` and `picture-crossing.expected` are hand-authored and excluded from
+> `BORG_UPDATE_GOLDEN`: had the fixture been generated from the first implementation, it would have frozen the wrong
+> rule as its own oracle, and the golden would have "proved" the mock was being reproduced while contradicting it.
+>
+> Two further corrections from the same pass, recorded so they are not cited later as specified behaviour:
+> P9's stated mutation ("drop the `crossing(k)` arm → `┼`") actually yields `─`; `┼` is what a *different* mutation
+> produces (widening `involved` to every segment). Both turn P9 red, and both are exercised. And §3's
+> `detail_block(node, node_id, nodes, ids)` orders neighbours by NODE ID — level then column — which is not the
+> `after`-list order §2.1's sample block shows.
 - `left(k) = 1` iff `k > min`, `right(k) = 1` iff `k < max`
 - **`crossing(k)`** iff `k not in involved` *and* some STRAIGHT segment crosses at `k`
 
