@@ -8,6 +8,10 @@
   [2m  | /         | /[0m
   [2m  |/          |/[0m
 
+[1m▸ IN FOCUS[0m
+  [2m— no repository in focus. cd into one, or run borg link <name>.[0m
+
+[1m▸ REPOSITORIES[0m  [2mthe collective · 7 repositories · 1 need attention[0m
 [1m PROJECT              SRC  STATUS       LAST ACTIVE  SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
 *echo                 [C]  [2midle        [0m 5d ago       Echo is pinned.
@@ -18,13 +22,20 @@
  alpha                [C]  [2midle        [0m 2h ago       Alpha carries a long summary so the fifty characte...
  foxtrot              [C]  [2midle        [0m 30m ago      Foxtrot ties alpha's bucket.
 
-  [0;36mDirectives:[0m 3 pending
+[1m▸ CHAINS[0m  [2m0 projects · 0 refs · 0 unresolved · not swept[0m
+  [2m— no project manifests in the registry yet. Run /borg-plan in any repository.[0m
+
+[1m▸ QUEUED[0m  [2m3 directives[0m
     [2m- [alpha] Alpha directive one[0m
     [2m- [alpha] Alpha directive two[0m
     [2m- [bravo] Bravo directive[0m
 
-  [0;32mRecently assimilated:[0m
+[1m▸ SHIPPED[0m
     [2m- [alpha] Alpha shipped new (2026-02-03)[0m
     [2m- [bravo] Bravo shipped (2026-02-02)[0m
     [2m- [alpha] Alpha shipped old (2026-02-01)[0m
+
+[1m▸ SIGNALS[0m
+  [2m— sweep: no recon adapters found on <TMP>/no-adapters -- every state falls back to what the manifest declares[0m
+  [2m— fetch: replayed from fixture <TMP>/no-fetch.json -- no gh ran[0m
 

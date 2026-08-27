@@ -1,0 +1,31 @@
+{
+  "program": "warehouse-rollout",
+  "desc": "Move the warehouse fleet onto the rotated keypair, one region at a time.",
+  "rows": [
+    {
+      "ref": "acme/warehouse#61",
+      "order": "1",
+      "why": "us-east region cutover"
+    },
+    {
+      "ref": "acme/warehouse#64",
+      "order": "2",
+      "why": "us-west region cutover",
+      "gate": {
+        "kind": "decision",
+        "blocked_by": "Kelly must sign off on the maintenance window",
+        "resolved_by": "scheduling call on Thursday"
+      }
+    },
+    {
+      "ref": "acme/warehouse#70",
+      "order": "3",
+      "why": "eu region cutover"
+    },
+    {
+      "ref": "acme/warehouse#72",
+      "order": "4",
+      "why": "ap region cutover — superseded by the fleet-wide script"
+    }
+  ]
+}

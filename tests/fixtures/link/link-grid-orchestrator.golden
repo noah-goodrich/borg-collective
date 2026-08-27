@@ -1,0 +1,154 @@
+
+  [2m_______________[0m
+  [2m/|             /|[0m      [1mTHE BORG COLLECTIVE[0m
+  [2m/ |            / |[0m      [2mresistance is futile[0m
+  [2m  |___________|  |[0m
+  [2m  |  |        |  |[0m
+  [2m  |  |________|__|[0m
+  [2m  | /         | /[0m
+  [2m  |/          |/[0m
+
+[1m▸ IN FOCUS[0m
+  [2m— no repository in focus. cd into one, or run borg link <name>.[0m
+
+[1m▸ REPOSITORIES[0m  [2mthe collective · 7 repositories · 2 need attention[0m
+[1m PROJECT              SRC  STATUS       LAST ACTIVE  SUMMARY[0m
+──────────────────────────────────────────────────────────────────────────────────────────
+*platform             [C]  [0;32mactive      [0m 2h ago       Scoped keypair auth rollout.
+ atlas                [C]  [1;33mwaiting <<< [0m 5d ago       Waiting on a schema decision.
+ warehouse            [D]  [1;33mwaiting <<< [0m yesterday    Key cutover blocked on the rollout run.
+ infra                [X]  [0;32mactive      [0m 3h ago       (no summary)
+ archive-tools        [C]  [2midle        [0m never        Nothing here since the fork.
+ relay                [C]  [2midle        [0m 2d ago       Relay has no summary yet.
+ ledger               [C]  [2midle        [0m 30m ago      Nightly close reconciliation.
+
+[1m▸ CHAINS[0m  [2m2 projects · 11 refs · 0 unresolved · swept 2026-05-28[0m
+
+  [1mauth-hardening[0m
+  [2mRotate every service onto scoped keypair auth, then flip enforcement on in one release.[0m
+  [2mrepos: acme/infra · acme/platform · acme/warehouse[0m
+  [2mglance:[0m [0;32m✔[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m
+
+    [0;32m✔[0m n1   ]8;;https://github.com/acme/platform/issues/400\platform#400]8;;\
+    [2m│[0m
+[2m    ├────────────────────┬────────────────────┐[0m
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+    [1;33m○[0m n2   ]8;;https://github.com/acme/platform/issues/420\platform#420]8;;\  [1;33m○[0m n3   ]8;;https://github.com/acme/warehouse/issues/87\warehouse#87]8;;\  [1;33m○[0m n4   ]8;;https://github.com/acme/infra/issues/12\infra#12]8;;\
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+    [1;33m○[0m n5   ]8;;https://github.com/acme/platform/issues/431\platform#431]8;;\  [1;33m○[0m n6   ]8;;https://github.com/acme/warehouse/issues/93\warehouse#93]8;;\  [2m│[0m
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+[2m    └────────────────────┼────────────────────┘[0m
+                         [2m│[0m
+                         [1;33m○[0m n7   ]8;;https://github.com/acme/infra/issues/77\infra#77]8;;\
+
+  [2mn1[0m    ]8;;https://github.com/acme/platform/issues/400\acme/platform#400]8;;\  [0;32mMERGED[0m
+      base migration
+      [2mwhy:[0m       base migration
+      [2munlocks:[0m   acme/platform#420 (open) · acme/warehouse#87 (open) · acme/infra#12 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn2[0m    ]8;;https://github.com/acme/platform/issues/420\acme/platform#420]8;;\  [1;33mOPEN[0m
+      chore(auth): Status: normalise the rollout report
+      [2mwhy:[0m       add auth scopes to the token service
+      [2mwaits on:[0m  acme/platform#400 (merged)
+      [2munlocks:[0m   acme/platform#431 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn3[0m    ]8;;https://github.com/acme/warehouse/issues/87\acme/warehouse#87]8;;\  [1;33mOPEN[0m
+      rotate the warehouse keypair
+      [2mwhy:[0m       rotate the warehouse keypair
+      [2mwaits on:[0m  acme/platform#400 (merged)
+      [2munlocks:[0m   acme/warehouse#93 (open)
+      [2mstate:[0m     from a targeted fetch
+
+  [2mn4[0m    ]8;;https://github.com/acme/infra/issues/12\acme/infra#12]8;;\  [1;33mOPEN[0m
+      inventory services still on password auth
+      [2mwhy:[0m       inventory services still on password auth
+      [2mwaits on:[0m  acme/platform#400 (merged)
+      [2munlocks:[0m   acme/infra#77 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn5[0m    ]8;;https://github.com/acme/platform/issues/431\acme/platform#431]8;;\  [1;33mOPEN[0m
+      enforce scopes on internal calls
+      [2mwhy:[0m       enforce scopes on internal calls
+      [2mwaits on:[0m  acme/platform#420 (open)
+      [2munlocks:[0m   acme/infra#77 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn6[0m    ]8;;https://github.com/acme/warehouse/issues/93\acme/warehouse#93]8;;\  [1;33mOPEN[0m
+      cut consumers over to the new key
+      [2mwhy:[0m       cut consumers over to the new key
+      [2mwaits on:[0m  acme/warehouse#87 (open)
+      [2munlocks:[0m   acme/infra#77 (open)
+      [2mstate:[0m     from a targeted fetch
+
+  [2mn7[0m    ]8;;https://github.com/acme/infra/issues/77\acme/infra#77]8;;\  [1;33mOPEN[0m  [2m(join: 3 parents)[0m
+      flip enforcement flag, all services
+      [2mwhy:[0m       flip enforcement flag, all services
+      [2mwaits on:[0m  acme/infra#12 (open) · acme/platform#431 (open) · acme/warehouse#93 (open)
+      [2munlocks:[0m   [2mnothing — end of the chain[0m
+      [0;36mgate:[0m      verification — staged rollout run must pass
+      [0;36munparked:[0m  canary deploy green for 24h
+      [2mstate:[0m     from the sweep
+
+  [1mwarehouse-rollout[0m
+  [2mMove the warehouse fleet onto the rotated keypair, one region at a time.[0m
+  [2mrepos: acme/warehouse[0m
+  [2mglance:[0m [0;32m✔[0m [1;33m○[0m [0;32m✔[0m [2m✗[0m
+
+    [0;32m✔[0m n8   ]8;;https://github.com/acme/warehouse/issues/61\warehouse#61]8;;\
+    [2m│[0m
+    [1;33m○[0m n9   ]8;;https://github.com/acme/warehouse/issues/64\warehouse#64]8;;\
+    [2m│[0m
+    [0;32m✔[0m[0;31m![0mn10  ]8;;https://github.com/acme/warehouse/issues/70\warehouse#70]8;;\
+    [2m│[0m
+    [2m✗[0m n11  ]8;;https://github.com/acme/warehouse/issues/72\warehouse#72]8;;\
+
+  [2mn8[0m    ]8;;https://github.com/acme/warehouse/issues/61\acme/warehouse#61]8;;\  [0;32mMERGED[0m
+      us-east region cutover
+      [2mwhy:[0m       us-east region cutover
+      [2munlocks:[0m   acme/warehouse#64 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn9[0m    ]8;;https://github.com/acme/warehouse/issues/64\acme/warehouse#64]8;;\  [1;33mOPEN[0m
+      us-west region cutover
+      [2mwhy:[0m       us-west region cutover
+      [2mwaits on:[0m  acme/warehouse#61 (merged)
+      [2munlocks:[0m   acme/warehouse#70 (merged)
+      [0;36mgate:[0m      decision — Kelly must sign off on the maintenance window
+      [0;36munparked:[0m  scheduling call on Thursday
+      [2mstate:[0m     from the sweep
+
+  [2mn10[0m   ]8;;https://github.com/acme/warehouse/issues/70\acme/warehouse#70]8;;\  [0;32mMERGED[0m
+      eu region cutover
+      [2mwhy:[0m       eu region cutover
+      [2mwaits on:[0m  acme/warehouse#64 (open)
+      [2munlocks:[0m   acme/warehouse#72 (closed)
+      [0;31mdrift:[0m     merged ahead of acme/warehouse#64 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn11[0m   ]8;;https://github.com/acme/warehouse/issues/72\acme/warehouse#72]8;;\  [2mCLOSED[0m
+      ap region cutover — superseded by the fleet-wide script
+      [2mwhy:[0m       ap region cutover — superseded by the fleet-wide script
+      [2mwaits on:[0m  acme/warehouse#70 (merged)
+      [2munlocks:[0m   [2mnothing — end of the chain[0m
+      [2mstate:[0m     from a targeted fetch
+
+[1m▸ QUEUED[0m  [2m5 directives[0m
+    [2m- [platform] Scope keypair rotation to the warehouse tier[0m
+    [2m- [platform] Retire password auth from the inventory service[0m
+    [2m- [warehouse] Schedule the eu maintenance window[0m
+    [2m- [ledger] Nightly close: move the reconciliation to the worker[0m
+    [2m- [atlas] Decide the tenant schema split[0m
+
+[1m▸ SHIPPED[0m
+    [2m- [platform] Base migration for scoped tokens (2026-08-20)[0m
+    [2m- [warehouse] Region cutover runbook (2026-08-18)[0m
+    [2m- [ledger] Close-of-day parity harness (2026-08-17)[0m
+
+[1m▸ SIGNALS[0m
+  [1m4 sessions need attention[0m (limit: 3)
+  [2m— sweep: replayed from fixture <TESTS>/fixtures/link/sweep-acme.json -- no adapter ran[0m
+  [2m— fetch: replayed from fixture <TESTS>/fixtures/link/fetch-acme.json -- no gh ran[0m
+  [2m— 11 of 11 declared refs resolved.[0m
+
