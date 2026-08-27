@@ -322,19 +322,29 @@ def _build_parser() -> argparse.ArgumentParser:
     # scope -- scope_for already resolves `borg link <project>` to {kind: repository}, so the one
     # document says everything the deep dive said, and keeping it as a MODE would be a third context
     # rendering the same data, which is exactly what "the contexts differ in breadth only" forbids.
-    # It stays in the parser because THREE COPIES OF THE DISPATCHER STILL PASS IT: borg.zsh's
-    # _borg_link_dispatch positional arm (the fzf preview's path), bin/link-parity-harness, and the
-    # stale byte-copy at ~/.claude/bin/link-parity-harness. Delete the argument and argparse exits 2
+    # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT, and it is the worst
+    # one to break: borg.zsh's `_borg_link_dispatch` positional arm (borg.zsh:3111), which IS the fzf
+    # preview's path, re-executed on every cursor move. Delete the argument and argparse exits 2
     # where `drone status` and the fzf preview both swallow the failure silently -- a blank pane and
     # a blank column, with nothing on stderr anyone would see.
+    #
+    # THE COUNT WAS CORRECTED IN AC2/S4. It used to say THREE copies, naming bin/link-parity-harness
+    # and the byte-copy at ~/.claude/bin/link-parity-harness alongside borg.zsh. Neither ever passed
+    # `--deep`: the harness looped a bare POSITIONAL (`modes.extend(("deep:" + p, [p]) ...)`), and
+    # `git log -S -- bin/link-parity-harness` finds the flag in no revision of that file. The two
+    # phantom copies were wrong from the commit that wrote them; S4 then retired the harness's render
+    # leg, so they are now gone twice over. The justification does not weaken by losing them -- one
+    # copy on the path that swallows the failure silently was always the entire argument.
     parser.add_argument("--deep", dest="deep", action="store_true")
     parser.add_argument("--all", dest="show_all", action="store_true")
     # AC1's ONLY opt-down, and as of S3 it is no longer inert. It makes `_grid` call grid.no_sweep()
     # instead of shell.sweep(), so no adapter is discovered, no `since` is resolved and NO SUBPROCESS
     # of any kind is spawned -- the grid still renders, from what each manifest declares. It is the
     # sole protection for every hot loop in the tree: borg.zsh:266's per-keypress fzf preview,
-    # borg.zsh:2225's 5s watch redraw, drone.zsh:964's per-tmux-window loop, bin/link-parity-harness's
-    # 34 invocations, and skills/borg-switch's widest-breadth `--all` call.
+    # borg.zsh:2225's 5s watch redraw, drone.zsh:964's per-tmux-window loop, and
+    # skills/borg-switch's widest-breadth `--all` call. (bin/link-parity-harness's 34 invocations
+    # were the fifth until AC2/S4 retired the render leg that made them; the surviving `primitives`
+    # leg spawns no `borg` subcommand at all.)
     #
     # THIS COMMENT USED TO SAY "changes no behavior yet". It was true in S1 and false the moment the
     # sweep landed, and leaving it would have repeated the exact defect the hardened spec's B1 is:
