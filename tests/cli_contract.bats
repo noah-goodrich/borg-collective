@@ -2033,16 +2033,29 @@ _link_grid_run() {
 # asserts what the spec was reaching for, and does it more directly: both replay warnings are present
 # by name (a mistyped path produces "unreadable or invalid JSON" instead), the fetch reports `ok`, and
 # NOTHING fell through to the bottom of the resolve ladder.
+#
+# AMENDED FOR AC4's PRECONDITION (2026-08-27). The predicate used to assert `unresolved == 0` and
+# `fetch.status == "ok"`. Both became FALSE BY DESIGN the moment the precondition's own requirement
+# landed: it says outright that "the AC2 fixtures cannot catch a regression here in either direction
+# — neither manifest declares a `status` on any row", so a row that declares one had to be added, and
+# a declared-only ref is by definition unresolved and by definition one the fetch could not answer.
+# `warehouse-rollout.json`'s `acme/warehouse#75` is that row and it is the ONLY one.
+#
+# So the numbers are pinned EXACTLY rather than loosened to `>= 0`, which would have retired the
+# tripwire while looking like a repair. A mistyped fixture path makes EVERY ref fall through, so an
+# exact `unresolved == <the deliberate count>` still catches it — and now also catches a second
+# accidental unresolved ref, which the old `== 0` could not distinguish from the first.
 _link_grid_tripwire() {
-    local probe="$1" name="$2"
-    jq -e '
+    local probe="$1" name="$2" expect_unresolved="${3:-0}"
+    jq -e --argjson unresolved "$expect_unresolved" '
         .grid.swept == true
         and .grid.since == "2026-05-28"
         and .grid.declared > 0
-        and .grid.unresolved == 0
-        and .grid.fetch.status == "ok"
+        and .grid.unresolved == $unresolved
+        and .grid.fetch.status == (if $unresolved == 0 then "ok" else "degraded" end)
         and .grid.fetch.requested > 0
         and .grid.fetch.resolved > 0
+        and (.grid.fetch.requested - .grid.fetch.resolved) <= $unresolved
         and ((.grid.warnings | map(select(startswith("sweep: replayed from fixture"))) | length) == 1)
         and ((.grid.warnings | map(select(startswith("fetch: replayed from fixture"))) | length) == 1)
     ' "$probe" > /dev/null || {
@@ -2062,7 +2075,15 @@ _assert_link_grid_golden() {
 
     local probe="${BATS_TEST_TMPDIR}/${name}.probe.json"
     _link_grid_run "$dir" "$probe" "$@" --json
-    _link_grid_tripwire "$probe" "$name"
+    # HOW MANY REFS ARE DELIBERATELY UNRESOLVED IN THIS SCOPE. `warehouse-rollout.json`'s
+    # `acme/warehouse#75` is the AC4-precondition row — declared `merged`, absent from both
+    # recordings — so it resolves `declared` and counts as unresolved wherever its manifest is
+    # SELECTED. Orchestrator scope selects both manifests; repository scope on `platform` selects
+    # only `auth-hardening`, whose rows all resolve. Kept beside the call rather than inside the
+    # tripwire so the number is visibly a property of the fixtures, not of the assertion.
+    local expect_unresolved=0
+    [ "$name" = "link-grid-orchestrator" ] && expect_unresolved=1
+    _link_grid_tripwire "$probe" "$name" "$expect_unresolved"
 
     local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
     _link_grid_run "$dir" "$raw" "$@"
@@ -2797,7 +2818,7 @@ EOF
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/probe.json" link --json
-    _link_grid_tripwire "${BATS_TEST_TMPDIR}/probe.json" "orchestrator-probe"
+    _link_grid_tripwire "${BATS_TEST_TMPDIR}/probe.json" "orchestrator-probe" 1
 
     run jq '[.grid.manifests[].nodes[] | select(.state_source == "swept")] | length' "${BATS_TEST_TMPDIR}/probe.json"
     [ "$output" = "8" ]
@@ -2862,7 +2883,11 @@ EOF
     # ...and the ids are contiguous from n1, globally across manifests.
     run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden' \
         | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
-    [ "$output" = "1 2 3 4 5 6 7 8 9 10 11 " ]
+    # n12 is `acme/warehouse#75`, the AC4-precondition row added to warehouse-rollout.json. The list
+    # is spelled out rather than counted so that a node QUIETLY VANISHING from the picture — which is
+    # what a renderer bug looks like from here — turns this red instead of shortening a number nobody
+    # reads.
+    [ "$output" = "1 2 3 4 5 6 7 8 9 10 11 12 " ]
 
     run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-repository.golden' \
         | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
