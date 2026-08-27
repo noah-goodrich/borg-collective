@@ -282,10 +282,13 @@ docs/
   `/borg-plan` behaves exactly as it always did.
 - **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
   `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
-  `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ SIGNALS` — with **no branch on scope,
-  mode or emptiness**. `render.overview` and `render.deep` are deleted, and `--deep` is parsed and
-  ignored (kept in the parser only because `borg.zsh:3111`, the fzf preview's path, still passes it
-  and argparse exiting 2 there is a blank pane with nothing on stderr). **Scope changes which ROWS
+  `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS` — with **no branch on
+  scope, mode or emptiness**. (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
+  reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
+  chose over reserving an always-empty slot in advance.) `render.overview` and `render.deep` are
+  deleted, and `--deep` is parsed and ignored (kept in the parser because `borg.zsh:3111`'s positional
+  arm — every `borg link <project>`, the fzf preview included — still passes it, and argparse exiting
+  2 there is a blank pane with nothing on stderr). **Scope changes which ROWS
   a section prints, never which sections exist** — the contexts differ in breadth only, so a reader
   who learns the page once has learned every invocation of it. Section headers are byte-identical
   in both contexts; `focus` now follows scope, so a bare `borg link` inside a repository renders
