@@ -1249,6 +1249,44 @@ shipped rather than what was planned.
 **Follow-ups filed, not built:** `drone.zsh:964` onto `--porcelain` + `awk`; emitting `isDraft` so `◌` becomes
 reachable; a `--json`-side width check so a future manifest cannot silently blow `PICTURE_BUDGET`.
 
+**AC4 PRECONDITION — the glyph must be gated on PROVENANCE before `ready` ships.** Not a follow-up, because AC4 makes
+it strictly worse rather than merely leaving it. Measured on the live
+`stillpoint/.borg/programs/ingle-t1-cutover.json` under `--local` (the fzf preview, `drone status`, `borg watch` — the
+hottest paths in the tree, and the ones that opt down from both network rungs by design):
+
+```
+state_source census:  declared 12 nodes (all "merged")   unknown 2 nodes
+glance strip today:   ✔ ✔ ✔ ✔ ✔ ✔ ✔ ✔ ✔ ✔ ○ ○ ✔ ✔
+```
+
+Twelve green merged checkmarks asserting a project is essentially done, entirely from a hand-typed `"status"` field
+that no sweep and no fetch ever saw. `state_word` compounds it: the detail heading stamps a confident `MERGED` on the
+same node, one line above `state: from the manifest (declared, may be stale)`.
+
+**Why AC4 and not AC2.** `manifest_core.ready_set` takes `{ref: state}` with PROVENANCE ALREADY ERASED —
+`grid_manifest`'s docstring makes that argument in full and defers `ready` for it. So the moment AC4 emits `ready`,
+a child whose parents are all *declared* merged becomes ready and `state_glyph`'s `●` branch — dead but tested since
+AC2 — renders **"start this now"** off the same hand-typed JSON. A stronger false claim than the `✔`, and it arrives
+in AC4's own commit. The gate therefore belongs with `ready`, not after it.
+
+**Why it is not urgent.** The DOCUMENT is not silent, only the glyph is: `▸ SIGNALS` already renders
+`— 14 of 14 declared refs unresolved — nobody looked` on that exact render (S3, `render._resolution_line`, pinned by
+`contract: link --local renders every node without naming the unresolved token`).
+
+**Options measured, with the live manifest rendered under each.** (i) A distinct glyph whenever
+`state_source not in RESOLVED_STATE_SOURCES` — honest and unmissable, but collapses all fourteen cells to one
+character and discards what the author declared. (ii) **Recommended:** keep the state glyph and mark provenance in
+the cell's SECOND slot (`✔?n1`, `○?n3`), reusing `DRIFT_MARK`'s position — contention with `!` measured at **0 nodes
+on both live manifests**, though the two can collide in principle and one must take precedence. (iii) Same glyph
+dimmed — rejected: invisible in a plain-text golden diff, which is the failure mode CLAUDE.md's "Learned" catalogues
+three times.
+
+**It is three places, not one line** — `state_glyph` (or `node_cell`), `_GLYPH_COLOR`, and `state_word`, which is
+keyed on the state token and keeps stamping `MERGED` even when the picture stops claiming it. **And the AC2 fixtures
+cannot catch a regression here in either direction:** neither `auth-hardening.json` nor `warehouse-rollout.json`
+declares a `status` on any row, so every node in both goldens resolves `swept` or `fetched` and all four candidate
+designs render BYTE-IDENTICALLY on them. Whichever option lands must add a row that declares one.
+
 ## 8. Residual risk, stated
 
 `PICTURE_BUDGET = 68` is asserted against two fixture manifests and measured against one golden. A future manifest whose
