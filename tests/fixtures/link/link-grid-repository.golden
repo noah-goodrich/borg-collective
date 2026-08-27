@@ -1,0 +1,114 @@
+
+  [2m_______________[0m
+  [2m/|             /|[0m      [1mTHE BORG COLLECTIVE[0m
+  [2m/ |            / |[0m      [2mresistance is futile[0m
+  [2m  |___________|  |[0m
+  [2m  |  |        |  |[0m
+  [2m  |  |________|__|[0m
+  [2m  | /         | /[0m
+  [2m  |/          |/[0m
+
+[1m▸ IN FOCUS[0m  [2mplatform[0m
+  [2mSource:[0m       cli
+  [2mPath:[0m         <TMP>/ws/platform
+  [2mStatus:[0m       active
+  [2mLast active:[0m  <TS>
+  [2mtmux window:[0m  platform
+  [2mSession ID:[0m   sess-platform-0007
+
+  [1mSummary[0m
+  Scoped keypair auth rollout.
+
+[1m▸ REPOSITORIES[0m  [2mthe collective · 7 repositories · 2 need attention[0m
+[1m PROJECT              SRC  STATUS       LAST ACTIVE  SUMMARY[0m
+──────────────────────────────────────────────────────────────────────────────────────────
+*platform             [C]  [0;32mactive      [0m 2h ago       Scoped keypair auth rollout. [0;36m◀[0m
+ atlas                [C]  [1;33mwaiting <<< [0m 5d ago       Waiting on a schema decision.
+ warehouse            [D]  [1;33mwaiting <<< [0m yesterday    Key cutover blocked on the rollout run.
+ infra                [X]  [0;32mactive      [0m 3h ago       (no summary)
+ archive-tools        [C]  [2midle        [0m never        Nothing here since the fork.
+ relay                [C]  [2midle        [0m 2d ago       Relay has no summary yet.
+ ledger               [C]  [2midle        [0m 30m ago      Nightly close reconciliation.
+
+[1m▸ CHAINS[0m  [2m1 project · 7 refs · 0 unresolved · swept 2026-05-28[0m
+
+  [1mauth-hardening[0m
+  [2mRotate every service onto scoped keypair auth, then flip enforcement on in one release.[0m
+  [2mrepos: acme/infra · acme/platform · acme/warehouse[0m
+  [2mglance:[0m [0;32m✔[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m
+
+    [0;32m✔[0m n1   ]8;;https://github.com/acme/platform/issues/400\platform#400]8;;\
+    [2m│[0m
+[2m    ├────────────────────┬────────────────────┐[0m
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+    [1;33m○[0m n2   ]8;;https://github.com/acme/platform/issues/420\platform#420]8;;\  [1;33m○[0m n3   ]8;;https://github.com/acme/warehouse/issues/87\warehouse#87]8;;\  [1;33m○[0m n4   ]8;;https://github.com/acme/infra/issues/12\infra#12]8;;\
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+    [1;33m○[0m n5   ]8;;https://github.com/acme/platform/issues/431\platform#431]8;;\  [1;33m○[0m n6   ]8;;https://github.com/acme/warehouse/issues/93\warehouse#93]8;;\  [2m│[0m
+    [2m│[0m                    [2m│[0m                    [2m│[0m
+[2m    └────────────────────┼────────────────────┘[0m
+                         [2m│[0m
+                         [1;33m○[0m n7   ]8;;https://github.com/acme/infra/issues/77\infra#77]8;;\
+
+  [2mn1[0m    ]8;;https://github.com/acme/platform/issues/400\acme/platform#400]8;;\  [0;32mMERGED[0m
+      base migration
+      [2mwhy:[0m       base migration
+      [2munlocks:[0m   acme/platform#420 (open) · acme/warehouse#87 (open) · acme/infra#12 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn2[0m    ]8;;https://github.com/acme/platform/issues/420\acme/platform#420]8;;\  [1;33mOPEN[0m
+      chore(auth): Status: normalise the rollout report
+      [2mwhy:[0m       add auth scopes to the token service
+      [2mwaits on:[0m  acme/platform#400 (merged)
+      [2munlocks:[0m   acme/platform#431 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn3[0m    ]8;;https://github.com/acme/warehouse/issues/87\acme/warehouse#87]8;;\  [1;33mOPEN[0m
+      rotate the warehouse keypair
+      [2mwhy:[0m       rotate the warehouse keypair
+      [2mwaits on:[0m  acme/platform#400 (merged)
+      [2munlocks:[0m   acme/warehouse#93 (open)
+      [2mstate:[0m     from a targeted fetch
+
+  [2mn4[0m    ]8;;https://github.com/acme/infra/issues/12\acme/infra#12]8;;\  [1;33mOPEN[0m
+      inventory services still on password auth
+      [2mwhy:[0m       inventory services still on password auth
+      [2mwaits on:[0m  acme/platform#400 (merged)
+      [2munlocks:[0m   acme/infra#77 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn5[0m    ]8;;https://github.com/acme/platform/issues/431\acme/platform#431]8;;\  [1;33mOPEN[0m
+      enforce scopes on internal calls
+      [2mwhy:[0m       enforce scopes on internal calls
+      [2mwaits on:[0m  acme/platform#420 (open)
+      [2munlocks:[0m   acme/infra#77 (open)
+      [2mstate:[0m     from the sweep
+
+  [2mn6[0m    ]8;;https://github.com/acme/warehouse/issues/93\acme/warehouse#93]8;;\  [1;33mOPEN[0m
+      cut consumers over to the new key
+      [2mwhy:[0m       cut consumers over to the new key
+      [2mwaits on:[0m  acme/warehouse#87 (open)
+      [2munlocks:[0m   acme/infra#77 (open)
+      [2mstate:[0m     from a targeted fetch
+
+  [2mn7[0m    ]8;;https://github.com/acme/infra/issues/77\acme/infra#77]8;;\  [1;33mOPEN[0m  [2m(join: 3 parents)[0m
+      flip enforcement flag, all services
+      [2mwhy:[0m       flip enforcement flag, all services
+      [2mwaits on:[0m  acme/infra#12 (open) · acme/platform#431 (open) · acme/warehouse#93 (open)
+      [2munlocks:[0m   [2mnothing — end of the chain[0m
+      [0;36mgate:[0m      verification — staged rollout run must pass
+      [0;36munparked:[0m  canary deploy green for 24h
+      [2mstate:[0m     from the sweep
+
+[1m▸ QUEUED[0m  [2m2 directives[0m
+    [2m- Scope keypair rotation to the warehouse tier[0m
+    [2m- Retire password auth from the inventory service[0m
+
+[1m▸ SHIPPED[0m
+    [2m- Base migration for scoped tokens (2026-08-20)[0m
+
+[1m▸ SIGNALS[0m
+  [1m4 sessions need attention[0m (limit: 3)
+  [2m— sweep: replayed from fixture <TESTS>/fixtures/link/sweep-acme.json -- no adapter ran[0m
+  [2m— fetch: replayed from fixture <TESTS>/fixtures/link/fetch-acme.json -- no gh ran[0m
+  [2m— 7 of 7 declared refs resolved.[0m
+

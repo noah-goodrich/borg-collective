@@ -59,6 +59,29 @@ network round trip and then rendering the same deep dive as before it existed. R
   `.resolved` (refs that came back with a usable answer). As with `.grid.sources[].status`,
   `failed` and `degraded` mean the states below them are DECLARED rather than OBSERVED — treat
   them the same way.
+- `.grid.manifests` is an **array** of manifest blocks, each carrying `id` (the manifest's slug),
+  `path`, `desc`, `repos`, `levels`, `nodes` and `gates`. AC2 added `desc`, `repos`, and three
+  topology keys per node:
+  - `desc` is the manifest author's own one-line statement of what the whole project is for. Prefer
+    it over inventing a summary out of row titles — it is their sentence, not yours.
+  - `repos` is the sorted, deduplicated `owner/repo` list the manifest's **rows** name — the work,
+    not everything it merely references (an apex or an `after:` pointer contributes nothing). Two or
+    more entries means the project spans repositories, which is usually the single most useful fact
+    about it and belongs in the one-line summary.
+  - `.nodes` is an **object keyed by ref**, not an array. Alongside `state`/`state_source`/`lane`/
+    `next`/`gate` each node now carries `level` (topological rank), `seq` (declaration order — the
+    row's index as the author wrote it; a declared ref that is not a row sorts past every real one),
+    and `parents`/`children` (ordering edges only, both endpoints inside the declared set, sorted by
+    `(seq, ref)`).
+  - **Use the topology for judgment, not for drawing, and never for readiness.** `parents`/
+    `children` tell you the shape — what a row waits on, what waits on it, whether the project is
+    one chain or a fork. They do NOT tell you what is ready to start: `state_source` is `declared`
+    (a hand-typed `"status"` field nobody verified) at least as often as it is swept or fetched, so
+    "every parent merged" can rest entirely on prose. Report what the manifest declares and name the
+    provenance. `ready` is deliberately absent from the wire for exactly this reason — do not
+    reconstruct it.
+  - Still never render a picture. `borg link` draws it, and the `n1`-style handles it prints are
+    generated at render time — they are not on the wire, so there is nothing to echo.
 
 **Why the jq.** The two pipes work differently. The overview pipe (`.directives |= (...)`) does not
 enumerate a field — it transforms one key in place, so anything the document gains later passes
@@ -118,10 +141,17 @@ one level deeper:
   the board has no summaries, say so once and suggest `borg link --refresh` on the host.
 - **Collapse, don't transcribe.** 121 directives across 9 projects is a number plus the top few
   titles, not a list.
-- **`scope` is context, not content.** `{kind: repository|orchestrator, repository, local}` records
-  which repository the invocation resolved to (from cwd, or from an explicit project name, which
-  wins). Today it does not narrow `order`/`projects` — it is informational, so never present it as
-  a filter that was applied. Worth one clause only when it contradicts what the user asked for.
+- **`scope` still does not narrow the aggregates — but AS OF AC2, `focus` FOLLOWS IT.**
+  `{kind: repository|orchestrator, repository, local}` records which repository the invocation
+  resolved to (from cwd, or from an explicit project name, which wins). `order` and `projects` are
+  still the whole board on every `--json` call, so never present scope as a filter that was applied
+  to them. What changed: a **bare** `borg link --json` run inside a repository now returns a `focus`
+  block for that repository, where before only an explicit project name produced one. Two
+  consequences — read `focus` on every call rather than only the ones you passed a name to, and when
+  `scope.kind` is `repository`, lead with that project before the board, because the invocation was
+  about it (this is what the human renderer does, and disagreeing with it is a contradiction the
+  user can see). `scope.repository` is the engine's own answer to the question the MARKER-WALK block
+  asks; agreement is the normal case, and a disagreement is worth one clause.
 
 ## Step 3 — Synthesize
 

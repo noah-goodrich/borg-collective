@@ -1,18 +1,23 @@
-"""Unit tests for borg_core.link.render -- the three pure human renderers.
+"""Unit tests for borg_core.link.render -- the one human document and the untouched porcelain TSV.
 
 These pin the sub-behaviours a byte-exact golden diff cannot localize: which branch fired, which
-default applied, where a fold broke. The four goldens under tests/fixtures/link/ remain the primary
-oracle (exercised end to end via tests/cli_contract.bats); these are the microscope.
+default applied, where a fold broke, which of three diagnoses a placeholder chose. The goldens under
+tests/fixtures/link/ remain the primary oracle (exercised end to end via tests/cli_contract.bats);
+these are the microscope.
 """
 
 import datetime
+import inspect
+import re
 import shutil
 import subprocess
 import time
 
 import pytest
 
-from borg_core.link import render
+from borg_core.link import cli, render
+from borg_core.link import grid as link_grid
+from borg_core.link.test_picture import fork_manifest, plain
 
 
 def _doc(**overrides) -> dict:
@@ -25,21 +30,170 @@ def _doc(**overrides) -> dict:
         "cortex_pending": [],
         "capacity": {"active": 0, "limit": 3, "over_limit": False},
         "focus": None,
+        "scope": {"kind": "orchestrator", "repository": None, "local": False},
+        "grid": {
+            "slug": "",
+            "scope_kind": "orchestrator",
+            "swept": False,
+            "since": "",
+            "sources": [],
+            "fetch": {"attempted": False, "status": "skipped", "requested": 0, "resolved": 0},
+            "manifests": [],
+            "declared": 0,
+            "unresolved": 0,
+            "warnings": [],
+        },
     }
     base.update(overrides)
     return base
 
 
-def test_overview_empty_registry_vs_all_archived_are_different_sentences():
-    empty = render.overview(_doc(total_projects=0))
+def _focus(**overrides) -> dict:
+    base: dict = {
+        "name": "p",
+        "entry": {"path": "null"},
+        "plan": None,
+        "checkpoints": [],
+        "checkpoint_head": "",
+        "directives": [],
+        "assimilated": [],
+    }
+    base.update(overrides)
+    return base
+
+
+def _repository_doc(**overrides) -> dict:
+    overrides.setdefault("focus", _focus())
+    overrides["scope"] = {"kind": "repository", "repository": "p", "local": False}
+    return _doc(**overrides)
+
+
+def _headers(rendered: str) -> list[str]:
+    """The ordered `▸ ` section TITLES in a rendering, ANSI stripped and shorn of their dim notes.
+
+    The note is separated from the title by two spaces and is context-dependent by design (a row
+    count, a sweep mark); the TITLE is what must be byte-identical in both contexts.
+    """
+    return [
+        line[len(render.SECTION_MARK) :].split("  ")[0]
+        for line in plain(rendered).split("\n")
+        if line.startswith(render.SECTION_MARK)
+    ]
+
+
+# ── R1/R2: one entry point, named once ────────────────────────────────────────────────────────────
+
+
+def test_render_exposes_exactly_one_human_entry_point():
+    """AC2's whole claim in one assertion. `overview` and `deep` are deleted, not deprecated: a
+    module that still exports them is a module a caller can still route around `document()` with,
+    and the two-modes-of-one-command failure comes back the first time somebody does."""
+    public = {
+        name
+        for name, value in vars(render).items()
+        if not name.startswith("_") and callable(value) and getattr(value, "__module__", "") == render.__name__
+    }
+    assert public == {"document", "porcelain"}
+
+
+def test_the_human_arm_names_render_document_exactly_once():
+    """Source-text, not behavioural, and deliberately so: a second `render.document(doc)` call in
+    `_run` would render identically and cost twice, and no output assertion can see it."""
+    source = inspect.getsource(cli._run)  # pylint: disable=protected-access
+    assert source.count("render.document(") == 1
+    assert "render.overview" not in source
+    assert "render.deep" not in source
+
+
+# ── R3/R4: the spine, and the empty-section rule that makes it assertable ──────────────────────────
+
+
+def test_every_section_renders_its_header_in_both_contexts():
+    """The invariant compares each context against the SECTIONS CONSTANT, never against the other
+    context: a header diff between two renderings goes green if both drift together."""
+    expected = [title for title, _ in render.SECTIONS if title]
+    assert expected == ["IN FOCUS", "REPOSITORIES", "CHAINS", "QUEUED", "SHIPPED", "SIGNALS"]
+    assert _headers(render.document(_doc())) == expected
+    assert _headers(render.document(_repository_doc())) == expected
+
+
+def test_an_empty_section_renders_exactly_one_placeholder_line():
+    """Exactly one, never zero (a header with nothing under it reads as broken) and never two."""
+    body_text = plain(render.document(_doc()))
+    body: dict[str, list[str]] = {}
+    current = None
+    for line in body_text.split("\n"):
+        if line.startswith(render.SECTION_MARK):
+            current = line[2:].split("  ")[0]
+            body[current] = []
+        elif current is not None and line.strip():
+            body[current].append(line)
+    for title in ("IN FOCUS", "CHAINS", "QUEUED", "SHIPPED", "SIGNALS"):
+        assert len(body[title]) == 1, f"{title} rendered {body[title]}"
+        assert body[title][0].startswith("  — "), body[title][0]
+    # REPOSITORIES on an empty registry is the same rule with the zsh original's own sentence.
+    assert body["REPOSITORIES"] == ["  — No projects registered. Run: borg scan"]
+
+
+# ── R5: three diagnoses, not one sentence ─────────────────────────────────────────────────────────
+
+
+# EVERY CASE HERE CARRIES A `scope_kind`, and the orchestrator one carries the EMPTY slug that
+# `grid.repository_dir` actually produces there rather than a plausible-looking one. Varying `slug`
+# alone -- which is how the spec states this ladder -- passes against a hand-built block while the
+# third arm is unreachable in production, because orchestrator scope has no slug by contract.
+_CHAINS_CASES = [
+    ({"scope_kind": "orchestrator", "slug": ""}, "no project manifests in the registry yet"),
+    ({"scope_kind": "repository", "slug": ""}, "no GitHub origin"),
+    ({"scope_kind": "repository", "slug": "acme/ledger"}, "no project manifest declares work in acme/ledger"),
+]
+
+
+@pytest.mark.parametrize("grid_overrides,expected", _CHAINS_CASES)
+def test_the_three_chains_placeholders_are_three_different_diagnoses(grid_overrides, expected):
+    """An empty CHAINS section is the MODAL case -- 13 of ~14 registered repositories have no
+    manifest -- so which of the three it is has to be readable off the page, not inferred."""
+    doc = _doc()
+    doc["grid"].update(grid_overrides)
+    assert expected in render.document(doc)
+
+
+def test_the_three_chains_placeholders_are_actually_distinct():
+    sentences = set()
+    for overrides, _ in _CHAINS_CASES:
+        doc = _doc()
+        doc["grid"].update(overrides)
+        sentences.add(render._grid_placeholder(doc["grid"]))  # pylint: disable=protected-access
+    assert len(sentences) == 3
+
+
+def test_orchestrator_scope_never_reaches_the_no_origin_diagnosis():
+    """The regression guard for the ladder's ORDER. `grid.repository_dir` returns "" for orchestrator
+    scope by contract, so a slug-first ladder answers "this directory has no GitHub origin" for
+    `borg link` run from the workspace root -- a diagnosis about a directory, on the one invocation
+    that is not about a directory."""
+    doc = _doc()
+    doc["grid"].update({"scope_kind": "orchestrator", "slug": ""})
+    out = render.document(doc)
+    assert "no GitHub origin" not in out
+    assert "no project manifests in the registry yet" in out
+
+
+# ── R6: the two sentences the empty-registry early returns used to print ───────────────────────────
+
+
+def test_empty_registry_and_all_archived_print_their_two_sentences():
+    """Adapted from the three assertions that used to sit on `render.overview`. The sentences are
+    verbatim; only the leading `▸` is gone, so `▸ ` stays an unambiguous section marker."""
+    empty = render.document(_doc(total_projects=0))
     assert "No projects registered. Run: borg scan" in empty
 
-    all_archived = render.overview(_doc(total_projects=2, order=[], projects={}))
+    all_archived = render.document(_doc(total_projects=2, order=[], projects={}))
     assert "No projects to show. Run: borg link --all" in all_archived
     assert "No projects registered" not in all_archived
 
 
-def test_overview_discovery_tip_gated_on_total_projects_not_len_order():
+def test_discovery_tip_gated_on_total_projects_not_len_order():
     # One visible + one archived: total_projects is 2 (unfiltered), so the tip must NOT appear even
     # though len(order) == 1.
     doc = _doc(
@@ -47,16 +201,140 @@ def test_overview_discovery_tip_gated_on_total_projects_not_len_order():
         order=["solo"],
         projects={"solo": {"source": "cli", "status": "idle", "relative_activity": "never"}},
     )
-    out = render.overview(doc)
+    out = render.document(doc)
     assert "Tip: run 'borg scan'" not in out
     assert "solo" in out
 
 
-def test_overview_lone_archived_prints_both_tip_and_all_filtered_sentence():
-    doc = _doc(total_projects=1, order=[], projects={})
-    out = render.overview(doc)
+def test_lone_archived_prints_both_tip_and_all_filtered_sentence():
+    out = render.document(_doc(total_projects=1, order=[], projects={}))
     assert "Tip: run 'borg scan'" in out
     assert "No projects to show. Run: borg link --all" in out
+
+
+# ── R7/R8: what scope narrows, and what it must not ───────────────────────────────────────────────
+
+
+def test_the_board_is_registry_wide_in_repository_scope():
+    """REPOSITORIES is the one section breadth does NOT touch. skills/borg-switch runs
+    `borg link --local --all` from a project session's cwd and reads the whole table out of it;
+    borg.zsh's 5s watch redraw does the same. Narrowing it makes both a one-row list."""
+    projects = {
+        "p": {"source": "cli", "status": "active", "relative_activity": "2h ago", "summary": "Mine."},
+        "other": {"source": "cli", "status": "idle", "relative_activity": "1d ago", "summary": "Theirs."},
+    }
+    doc = _repository_doc(total_projects=2, order=["p", "other"], projects=projects)
+    out = render.document(doc)
+    assert "other" in out
+    assert "Theirs." in out
+    # ...and the scoped row is MARKED rather than made the only row.
+    marked = [line for line in out.split("\n") if "◀" in line]
+    assert len(marked) == 1
+    assert marked[0].lstrip().startswith("p ")
+
+
+def test_queued_reads_focus_directives_in_repository_scope_and_the_aggregate_otherwise():
+    """The `[project]` tag follows the breadth: information in the orchestrator context, noise in
+    the repository's own."""
+    aggregate = [{"project": "other", "title": "Someone else's directive"}]
+    scoped = [{"title": "My directive"}]
+
+    repository = render.document(_repository_doc(directives=aggregate, focus=_focus(directives=scoped)))
+    assert "My directive" in repository
+    assert "Someone else's directive" not in repository
+    assert "[other]" not in repository
+
+    orchestrator = render.document(_doc(directives=aggregate))
+    assert "[other] Someone else's directive" in orchestrator
+
+
+def test_shipped_follows_the_same_breadth_rule_as_queued():
+    aggregate = [{"project": "other", "title": "Their ship", "ship_date": "2026-01-01"}]
+    scoped = [{"title": "My ship", "ship_date": "2026-02-02"}]
+
+    repository = render.document(_repository_doc(assimilated=aggregate, focus=_focus(assimilated=scoped)))
+    assert "My ship (2026-02-02)" in repository
+    assert "Their ship" not in repository
+
+    orchestrator = render.document(_doc(assimilated=aggregate))
+    assert "[other] Their ship (2026-01-01)" in orchestrator
+
+
+# ── the transcribed IN FOCUS card (was `deep`) ────────────────────────────────────────────────────
+
+
+def test_focus_path_line_omitted_entirely_when_path_is_the_string_null():
+    out = render.document(_repository_doc())
+    assert "Path:" not in out
+
+
+def test_status_line_appears_exactly_once_on_the_whole_page_and_ends_in_the_status_word():
+    """drone.zsh:964's `grep -m1 'Status:'` reads this line. The fixture below puts the literal
+    `Status:` inside a PR title in CHAINS as well, which is the poisoning shape a real sweep
+    produces -- IN FOCUS being section 2 is what keeps `-m1` landing on the right one."""
+    doc = _repository_doc(focus=_focus(entry={"path": "null", "status": "active"}))
+    doc["grid"]["manifests"] = [
+        {
+            "id": "m",
+            "desc": "",
+            "repos": [],
+            "levels": [["a/b#1"]],
+            "gates": [],
+            "nodes": {
+                "a/b#1": {
+                    "ref": "a/b#1",
+                    "title": "chore(auth): Status: normalise the rollout report",
+                    "state": "open",
+                    "state_source": "swept",
+                    "level": 0,
+                    "seq": 0,
+                    "parents": [],
+                    "children": [],
+                    "gate": None,
+                    "why": "",
+                }
+            },
+        }
+    ]
+    out = render.document(doc)
+    body_text = plain(out)
+    status_lines = [line for line in body_text.split("\n") if "Status:" in line]
+    assert len(status_lines) == 2  # the card's own line, plus the poisoned PR title below it
+    assert status_lines[0].startswith("  Status:")
+    assert status_lines[0].endswith("active")
+
+
+def test_objective_omitted_with_no_placeholder_when_empty():
+    doc = _repository_doc(focus=_focus(plan={"objective": "", "met": 0, "total": 2}))
+    out = render.document(doc)
+    assert "Objective:" not in out
+    assert "0/2 criteria met" in out
+
+
+def test_focus_renders_checkpoints_and_the_latest_head():
+    doc = _repository_doc(
+        focus=_focus(checkpoints=["2026-08-01.md"], checkpoint_head="line one\nline two"),
+    )
+    out = render.document(doc)
+    assert "2026-08-01.md" in out
+    assert "line one" in out
+
+
+def test_checkpoint_head_indents_blank_lines_to_two_spaces():
+    head = "# Checkpoint\n\nBody.\n"[:-1]  # mirrors shell.read_latest_checkpoint_head's join
+    out = render._checkpoint_head_block(head)  # pylint: disable=protected-access
+    lines = out.split("\n")
+    assert lines[1] == "  "
+
+
+def test_checkpoint_head_no_spurious_trailing_blank_for_a_short_checkpoint():
+    text = "# Checkpoint one\n\nBody one.\n"
+    head = "\n".join(text.split("\n")[:20])
+    out = render._checkpoint_head_block(head)  # pylint: disable=protected-access
+    assert out.count("\n") == 3
+
+
+# ── the untouched porcelain surface ───────────────────────────────────────────────────────────────
 
 
 def test_porcelain_empty_returns_exactly_empty_string():
@@ -75,15 +353,27 @@ def test_porcelain_cuts_at_80_with_no_ellipsis():
     assert "..." not in field
 
 
+def test_porcelain_carries_no_box_drawing_and_no_ansi():
+    """`--porcelain` is fzf's INPUT LIST, not a page. A `▸`, a box character or an SGR sequence in
+    this stream breaks `borg switch`'s `--delimiter '\\t' --with-nth 1,3,5` outright."""
+    doc = _doc(
+        order=["a"],
+        projects={"a": {"source": "cli", "status": "waiting", "last_activity": "x", "summary": "s"}},
+    )
+    row = render.porcelain(doc)
+    assert "\033" not in row
+    assert not set(row) & set("▸│─├┤┬┴┼┌┐└┘✔✗○●◌")
+
+
 @pytest.mark.parametrize("length,expect_ellipsis", [(49, False), (50, False), (51, True)])
-def test_overview_summary_truncation_boundary_and_ellipsis(length, expect_ellipsis):
+def test_board_summary_truncation_boundary_and_ellipsis(length, expect_ellipsis):
     summary = "x" * length
     doc = _doc(
         total_projects=1,
         order=["a"],
         projects={"a": {"source": "cli", "status": "idle", "relative_activity": "never", "summary": summary}},
     )
-    out = render.overview(doc)
+    out = render.document(doc)
     if expect_ellipsis:
         assert "x" * 50 + "..." in out
     else:
@@ -91,69 +381,278 @@ def test_overview_summary_truncation_boundary_and_ellipsis(length, expect_ellips
         assert "x" * length + "..." not in out
 
 
-def test_deep_path_line_omitted_entirely_when_path_is_the_string_null():
+def test_the_grid_state_token_is_never_the_registry_status_fallback():
+    """Q8's structural half on this side of the split: the literal appears here exactly ONCE -- the
+    named constant -- and picture.py imports `grid.STATE_SOURCE_UNKNOWN` rather than restating it,
+    so the two modules cannot drift. The five pre-existing jq-parity sites are call sites of the
+    constant, not copies of the string."""
+    source = inspect.getsource(render)
+    assert source.count('"unknown"') == 1
+    assert render._JQ_ABSENT_STATUS == "unknown"  # pylint: disable=protected-access
+
+
+# ── shared bullet loops, capacity, cortex ─────────────────────────────────────────────────────────
+
+
+def test_queued_and_shipped_share_one_bullet_loop_differing_only_by_the_project_tag():
+    """QUEUED and SHIPPED were two byte-identical-except-for-the-tag loops until AC2 took the last
+    difference out: the zsh original's per-block header lines are gone, and `_ship_date_suffix` reads
+    an ABSENT key as "" -- so a directive and a shipped plan render through the same call."""
+    directives = [{"project": "a", "title": "One"}]
+    assimilated = [{"project": "a", "title": "Shipped", "ship_date": "2026-01-01"}]
+
+    tagged = render._bullet_lines(directives, show_project=True)  # pylint: disable=protected-access
+    untagged = render._bullet_lines(directives, show_project=False)  # pylint: disable=protected-access
+    assert len(tagged) == len(untagged) == 1
+    assert "[a]" in tagged[0]
+    assert "[a]" not in untagged[0]
+    assert tagged[0].replace("[a] ", "") == untagged[0]
+
+    # A directive carries no ship date, and its bullet must not grow an empty "()" for the lack.
+    assert "(" not in plain(untagged[0])
+    shipped = render._bullet_lines(assimilated, show_project=False)  # pylint: disable=protected-access
+    assert plain(shipped[0]) == "    - Shipped (2026-01-01)\n"
+
+    # No `Directives:` / `Recently assimilated:` header survives -- the count lives on the section
+    # header's note, and printing it twice is what this asserts against.
+    joined = "".join(render._bullet_lines(directives + assimilated, True))  # pylint: disable=protected-access
+    assert "Directives:" not in joined
+    assert "assimilated" not in joined
+
+
+def test_board_row_variants_capacity_and_cortex_all_render():
     doc = _doc(
-        focus={
-            "name": "p",
-            "entry": {"path": "null"},
-            "plan": None,
-            "checkpoints": [],
-            "checkpoint_head": "",
-            "directives": [],
-            "assimilated": [],
-        }
+        total_projects=2,
+        order=["a", "b"],
+        projects={
+            "a": {"source": "desktop", "status": "active", "relative_activity": "2h ago", "summary": "s"},
+            "b": {"source": "coco", "status": "waiting", "relative_activity": "1h ago", "summary": "s"},
+        },
+        directives=[{"project": "a", "title": "Directive one"}],
+        assimilated=[{"project": "a", "title": "Shipped one", "ship_date": "2026-01-01"}],
+        cortex_pending=[{"project": "a", "reset_at": "x", "countdown": "1h 0m"}],
+        capacity={"active": 5, "limit": 3, "over_limit": True},
     )
-    out = render.deep(doc)
-    assert "Path:" not in out
+    out = render.document(doc)
+    assert "[D]" in out
+    assert "[X]" in out
+    assert "waiting <<<" in out
+    assert "Directive one" in out
+    assert "Shipped one" in out
+    assert "resumes in 1h 0m" in out
+    assert "sessions need attention" in out
+    # The capacity warning lost its `▸` so the section marker stays unambiguous.
+    assert "▸ 5 sessions" not in out
+    # "Need attention" on the board note is the WAITING count, not capacity.active.
+    assert "2 repositories · 1 need attention" in out
 
 
-def test_deep_status_line_appears_exactly_once_and_ends_in_the_status_word():
+def test_signals_reports_the_ladders_gap_as_a_sentence_never_a_token():
+    doc = _doc()
+    doc["grid"].update({"declared": 11, "unresolved": 3})
+    assert "3 of 11 declared refs unresolved — nobody looked" in render.document(doc)
+
+    doc = _doc()
+    doc["grid"].update({"declared": 7, "unresolved": 0})
+    assert "7 of 7 declared refs resolved." in render.document(doc)
+
+    # Nothing declared -> no line at all, rather than "0 of 0".
+    assert "declared refs" not in render.document(_doc())
+
+
+def _fork_block() -> dict:
+    """The approved mock's fork, all the way through grid_manifest -- a real block, not a hand-built
+    one, so CHAINS is exercised against the shape production actually assembles.
+
+    `_id` is stamped here because `manifest.shell._load_manifest` stamps it at LOAD time, not
+    validation time, and these tests never load from disk. Without it the block's `id` is "" and the
+    heading renders empty -- which is what the first run of these cases actually did.
+    """
+    manifest = fork_manifest()
+    manifest["_id"] = "auth-hardening"
+    return link_grid.grid_manifest(manifest, {}, {})
+
+
+def test_chains_renders_a_manifest_heading_its_description_and_its_repositories():
+    """MUTATION: drop the `desc` or `repos` line from `_manifest_lines`. Both are AC2 additions to
+    the wire (grid.py's `desc`/`repos`) and neither has any other consumer, so nothing else notices
+    if the renderer stops reading them."""
+    doc = _repository_doc()
+    doc["grid"]["manifests"] = [_fork_block()]
+    body_text = plain(render.document(doc))
+
+    assert "  auth-hardening" in body_text
+    assert "  Rotate every service onto scoped keypair auth" in body_text
+    assert "  repos: acme/infra · acme/platform · acme/warehouse" in body_text
+    # ...the picture, ...
+    assert "├────" in body_text
+    # ...and one detail block per node, in node-id order, each id appearing exactly twice.
+    ids = re.findall(r"\bn\d+\b", body_text)
+    assert sorted(set(ids), key=lambda s: int(s[1:])) == [f"n{i}" for i in range(1, 8)]
+    assert {ids.count(i) for i in set(ids)} == {2}
+
+
+def test_a_manifest_with_no_description_or_repositories_renders_neither_line():
+    """The blank-line failure the placeholder rule exists to prevent, one level down: an empty `desc`
+    must vanish, not render as an indented empty dim line."""
+    block = _fork_block()
+    block["desc"] = ""
+    block["repos"] = []
+    doc = _repository_doc()
+    doc["grid"]["manifests"] = [block]
+    body_text = plain(render.document(doc))
+
+    # Drop the header LINE (which carries the section note) before reading the body.
+    body = body_text.split("▸ CHAINS")[1].split("\n", 1)[1].split("▸ QUEUED")[0]
+    assert "repos:" not in body
+    # The heading is immediately followed by the glance strip -- no orphan blank between them.
+    lines = [line for line in body.split("\n") if line.strip()]
+    assert lines[0].strip() == "auth-hardening"
+    assert lines[1].strip().startswith("glance:")
+
+
+def test_signals_names_a_declared_cycle_rather_than_drawing_it():
+    """MUTATION: delete `_cycle_lines`. `manifest_core._rank_nodes` breaks a cycle by admitting the
+    smallest remaining ref rather than raising, so a cyclic manifest still ranks and still draws --
+    minus the edges that do not descend. Without this sentence the picture reads as acyclic and the
+    missing connector looks like a rendering bug."""
+    cyclic = {
+        "_id": "loop",
+        "rows": [
+            {"ref": "o/r#1", "order": "1", "after": ["o/r#2"]},
+            {"ref": "o/r#2", "order": "2", "after": ["o/r#1"]},
+        ],
+    }
+    block = link_grid.grid_manifest(cyclic, {}, {})
+    assert render.picture.back_edges(block), "the fixture must actually be cyclic"
+
+    doc = _repository_doc()
+    doc["grid"]["manifests"] = [block]
+    assert "loop: 1 declared edge forms a cycle and is not drawn" in render.document(doc)
+
+    # ...and the plural arm is a SEPARATE sentence, not a pluralized noun glued to a singular verb.
+    # TWO DISJOINT 2-CYCLES, not one longer cycle: `_rank_nodes` breaks a cycle by admitting the
+    # smallest remaining ref, so a 3-node loop still yields exactly ONE undrawable edge. Reaching two
+    # takes two independent loops.
+    bigger = link_grid.grid_manifest(
+        {
+            "_id": "twin-loops",
+            "rows": [
+                {"ref": "o/r#1", "order": "1", "after": ["o/r#2"]},
+                {"ref": "o/r#2", "order": "2", "after": ["o/r#1"]},
+                {"ref": "o/s#1", "order": "3", "after": ["o/s#2"]},
+                {"ref": "o/s#2", "order": "4", "after": ["o/s#1"]},
+            ],
+        },
+        {},
+        {},
+    )
+    assert len(render.picture.back_edges(bigger)) == 2
+    doc["grid"]["manifests"] = [bigger]
+    out = render.document(doc)
+    assert "declared edges form a cycle and are not drawn" in out
+    assert "edge forms" not in out
+
+    # An acyclic manifest says nothing at all.
+    clean = _repository_doc()
+    clean["grid"]["manifests"] = [_fork_block()]
+    assert "cycle" not in render.document(clean)
+
+
+def test_the_archived_status_arm_renders_a_bare_reset():
+    """`_status_color`'s `*)` arm reproduces borg.zsh:354's genuine double reset -- NC + text + NC.
+    It is the only board row shape `--all` can produce and no golden covers it in isolation."""
     doc = _doc(
-        focus={
-            "name": "p",
-            "entry": {"path": "null", "status": "active"},
-            "plan": None,
-            "checkpoints": [],
-            "checkpoint_head": "",
-            "directives": [],
-            "assimilated": [],
-        }
+        total_projects=1,
+        order=["gone"],
+        projects={"gone": {"source": "cli", "status": "archived", "relative_activity": "5d ago", "summary": "s"}},
+        show_all=True,
     )
-    out = render.deep(doc)
-    status_lines = [line for line in out.split("\n") if "Status:" in line]
-    assert len(status_lines) == 1
-    assert status_lines[0].endswith("active")
+    row = [line for line in render.document(doc).split("\n") if "gone" in line][0]
+    assert row.startswith(f" gone{' ' * 16} [C]  \x1b[0marchived")
 
 
-def test_deep_objective_omitted_with_no_placeholder_when_empty():
+def test_a_summary_past_seventy_columns_wraps_and_reindents_inside_the_card():
+    """The IN FOCUS card's `fold -s -w 70` + `sed '1!s/^/  /'` path. Pinned structurally rather than
+    byte-exact for the reason the bats case records: three counting algorithms are in play and they
+    diverge on non-ASCII."""
+    long_summary = (
+        "This summary is deliberately far longer than seventy columns so that the fold "
+        "pipeline has to break it across at least three separate rendered lines."
+    )
+    doc = _repository_doc(focus=_focus(entry={"path": "null", "summary": long_summary}))
+    body_text = plain(render.document(doc))
+    block = body_text.split("  Summary\n")[1].split("\n\n")[0].split("\n")
+    assert len(block) >= 2
+    for continuation in block[1:]:
+        assert continuation.startswith("  ") and not continuation.startswith("   ")
+
+
+def test_two_pending_wakes_for_one_project_render_the_first_not_the_last():
+    """`_cortex_countdowns` is first-wins, matching borg.zsh:374's awk join: a state file appended to
+    twice has an earlier wake, and the earlier one is the one that fires."""
     doc = _doc(
-        focus={
-            "name": "p",
-            "entry": {"path": "null"},
-            "plan": {"objective": "", "met": 0, "total": 2},
-            "checkpoints": [],
-            "checkpoint_head": "",
-            "directives": [],
-            "assimilated": [],
-        }
+        total_projects=1,
+        order=["a"],
+        projects={"a": {"source": "cli", "status": "idle", "relative_activity": "1h ago", "summary": "s"}},
+        cortex_pending=[
+            {"project": "a", "countdown": "0h 5m"},
+            {"project": "a", "countdown": "9h 9m"},
+        ],
     )
-    out = render.deep(doc)
-    assert "Objective:" not in out
-    assert "0/2 criteria met" in out
+    out = render.document(doc)
+    assert "resumes in 0h 5m" in out
+    assert "9h 9m" not in out
 
 
-def test_checkpoint_head_indents_blank_lines_to_two_spaces():
-    head = "# Checkpoint\n\nBody.\n"[:-1]  # mirrors shell.read_latest_checkpoint_head's join
-    out = render._checkpoint_head_block(head)  # pylint: disable=protected-access
-    lines = out.split("\n")
-    assert lines[1] == "  "
+def test_signals_surfaces_every_grid_warning():
+    doc = _doc()
+    doc["grid"]["warnings"] = ["sweep: adapter 'github' could not reach its source -- offline"]
+    out = render.document(doc)
+    assert "— sweep: adapter 'github' could not reach its source -- offline" in out
 
 
-def test_checkpoint_head_no_spurious_trailing_blank_for_a_short_checkpoint():
-    text = "# Checkpoint one\n\nBody one.\n"
-    head = "\n".join(text.split("\n")[:20])
-    out = render._checkpoint_head_block(head)  # pylint: disable=protected-access
-    assert out.count("\n") == 3
+def test_assimilated_omits_parens_when_ship_date_empty():
+    """Regression for the zsh-port bug: a missing "Shipped:" line produced ship_date="", and the
+    old f"({item['ship_date']})" rendered a bare, empty "()" after the title. A title that itself
+    ends in a parenthetical (e.g. "(C6)") must survive untouched -- only the DATE's own parens are
+    conditional, never a suffix stripped from the title."""
+    out = render.document(
+        _doc(
+            assimilated=[
+                {"project": "ingle", "title": "T-4 mutation gate", "ship_date": ""},
+                {"project": "borg-collective", "title": "recon migration ledger (C6)", "ship_date": "2026-08-12"},
+            ],
+        )
+    )
+    assert "[ingle] T-4 mutation gate\x1b[0m\n" in out
+    assert "()" not in out
+    assert "[borg-collective] recon migration ledger (C6) (2026-08-12)" in out
+
+    scoped = render.document(
+        _repository_doc(focus=_focus(assimilated=[{"slug": "s", "title": "Deep shipped (C6)", "ship_date": ""}]))
+    )
+    assert "Deep shipped (C6)\x1b[0m\n" in scoped
+    assert "()" not in scoped
+
+
+def test_render_reads_no_clock(monkeypatch):
+    # render.py's stated purity contract: every relative_activity/countdown/generated_at is already
+    # baked into the document by ONE shell.now_epoch() call in cli._document. A second clock read
+    # here would reintroduce the straddle the port removed.
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("render.py must not read the clock")
+
+    monkeypatch.setattr(time, "time", _boom)
+    monkeypatch.setattr(datetime, "datetime", type("Boom", (), {"now": _boom}))
+
+    doc = _repository_doc(
+        total_projects=1,
+        order=["p"],
+        projects={"p": {"source": "cli", "status": "idle", "relative_activity": "2h ago", "summary": "s"}},
+    )
+    render.porcelain(doc)
+    render.document(doc)
 
 
 class TestFoldS:
@@ -217,135 +716,3 @@ class TestFoldS:
         # stdout is directly comparable to `"\n".join(lines)` with no trailing-newline massaging.
         got = render._fold_s(text, width=width)  # pylint: disable=protected-access
         assert "\n".join(got) == proc.stdout
-
-
-def test_overview_directives_assimilated_capacity_and_cortex_row_all_render():
-    doc = _doc(
-        total_projects=2,
-        order=["a", "b"],
-        projects={
-            "a": {"source": "desktop", "status": "active", "relative_activity": "2h ago", "summary": "s"},
-            "b": {"source": "coco", "status": "waiting", "relative_activity": "1h ago", "summary": "s"},
-        },
-        directives=[{"project": "a", "title": "Directive one"}],
-        assimilated=[{"project": "a", "title": "Shipped one", "ship_date": "2026-01-01"}],
-        cortex_pending=[{"project": "a", "reset_at": "x", "countdown": "1h 0m"}],
-        capacity={"active": 5, "limit": 3, "over_limit": True},
-    )
-    out = render.overview(doc)
-    assert "[D]" in out
-    assert "[X]" in out
-    assert "waiting <<<" in out
-    assert "Directive one" in out
-    assert "Shipped one" in out
-    assert "resumes in 1h 0m" in out
-    assert "sessions need attention" in out
-
-
-def test_deep_dive_renders_checkpoints_directives_and_assimilated():
-    doc = _doc(
-        focus={
-            "name": "p",
-            "entry": {"path": "null", "status": "idle"},
-            "plan": None,
-            "checkpoints": ["2026-08-01.md"],
-            "checkpoint_head": "line one\nline two",
-            "directives": [{"slug": "s", "title": "Deep directive"}],
-            "assimilated": [{"slug": "s", "title": "Deep shipped", "ship_date": "2026-01-01"}],
-        }
-    )
-    out = render.deep(doc)
-    assert "2026-08-01.md" in out
-    assert "Deep directive" in out
-    assert "Deep shipped (2026-01-01)" in out
-    assert "line one" in out
-
-
-def test_directives_and_assimilated_lines_are_shared_between_overview_and_deep():
-    # AC2: the overview and deep-dive Directives/Recently-assimilated blocks used to be two separate,
-    # byte-identical-except-for-the-[project]-tag implementations. Fails before this dedup (no such
-    # functions existed); after, both call sites go through the same helper, parameterized only on
-    # `show_project`.
-    directives = [{"project": "a", "title": "One"}]
-    assimilated = [{"project": "a", "title": "Shipped", "ship_date": "2026-01-01"}]
-
-    overview_directives = render._directives_lines(directives, show_project=True)  # pylint: disable=protected-access
-    deep_directives = render._directives_lines(directives, show_project=False)  # pylint: disable=protected-access
-    assert overview_directives[0] == deep_directives[0]  # identical header line
-    assert "[a]" in overview_directives[1]
-    assert "[a]" not in deep_directives[1]
-
-    overview_assimilated = render._assimilated_lines(assimilated, show_project=True)  # pylint: disable=protected-access
-    deep_assimilated = render._assimilated_lines(assimilated, show_project=False)  # pylint: disable=protected-access
-    assert overview_assimilated[0] == deep_assimilated[0]  # identical header line
-    assert "[a]" in overview_assimilated[1]
-    assert "[a]" not in deep_assimilated[1]
-
-    assert render._overview_directives_block([]) == []  # pylint: disable=protected-access
-    assert render._overview_assimilated_block([]) == []  # pylint: disable=protected-access
-
-
-def test_render_reads_no_clock(monkeypatch):
-    # render.py's stated purity contract: every relative_activity/countdown/generated_at is already
-    # baked into the document by ONE shell.now_epoch() call in cli._document. A second clock read
-    # here would reintroduce the straddle the port removed.
-    def _boom(*_args, **_kwargs):
-        raise AssertionError("render.py must not read the clock")
-
-    monkeypatch.setattr(time, "time", _boom)
-    monkeypatch.setattr(datetime, "datetime", type("Boom", (), {"now": _boom}))
-
-    doc = _doc(
-        total_projects=1,
-        order=["a"],
-        projects={"a": {"source": "cli", "status": "idle", "relative_activity": "2h ago", "summary": "s"}},
-        focus={
-            "name": "a",
-            "entry": {"path": "null", "status": "idle"},
-            "plan": None,
-            "checkpoints": [],
-            "checkpoint_head": "",
-            "directives": [],
-            "assimilated": [],
-        },
-    )
-    render.porcelain(doc)
-    render.overview(doc)
-    render.deep(doc)
-
-
-def test_overview_assimilated_omits_parens_when_ship_date_empty():
-    # Regression for the zsh-port bug: a missing "Shipped:" line produced ship_date="", and the
-    # old f"({item['ship_date']})" rendered a bare, empty "()" after the title. A title that
-    # itself ends in a parenthetical (e.g. "(C6)") must survive untouched -- only the DATE's own
-    # parens are conditional, never a suffix stripped from the title.
-    doc = _doc(
-        total_projects=1,
-        order=["a"],
-        projects={"a": {"source": "cli", "status": "idle", "relative_activity": "2h ago", "summary": "s"}},
-        assimilated=[
-            {"project": "ingle", "title": "T-4 mutation gate", "ship_date": ""},
-            {"project": "borg-collective", "title": "recon migration ledger (C6)", "ship_date": "2026-08-12"},
-        ],
-    )
-    out = render.overview(doc)
-    assert "[ingle] T-4 mutation gate\x1b[0m\n" in out
-    assert "()" not in out
-    assert "[borg-collective] recon migration ledger (C6) (2026-08-12)" in out
-
-
-def test_deep_dive_assimilated_omits_parens_when_ship_date_empty():
-    doc = _doc(
-        focus={
-            "name": "p",
-            "entry": {"path": "null", "status": "idle"},
-            "plan": None,
-            "checkpoints": [],
-            "checkpoint_head": "",
-            "directives": [],
-            "assimilated": [{"slug": "s", "title": "Deep shipped (C6)", "ship_date": ""}],
-        }
-    )
-    out = render.deep(doc)
-    assert "Deep shipped (C6)\x1b[0m\n" in out
-    assert "()" not in out

@@ -1,0 +1,109 @@
+{
+  "since": "2026-05-28",
+  "tracks": [
+    {
+      "source": "github",
+      "ok": true,
+      "dropped": 0,
+      "summary": "8 PR item(s)",
+      "items": [
+        {
+          "project": "platform",
+          "source": "github",
+          "ref": "acme/platform#400",
+          "title": "base migration",
+          "state": "merged",
+          "changed": "2026-08-20T09:00:00Z",
+          "owner": "noah",
+          "action_needed": false,
+          "urgency": 1,
+          "one_line": "base migration merged"
+        },
+        {
+          "project": "platform",
+          "source": "github",
+          "ref": "acme/platform#420",
+          "title": "chore(auth): Status: normalise the rollout report",
+          "state": "open",
+          "changed": "2026-08-25T11:00:00Z",
+          "owner": "noah",
+          "action_needed": true,
+          "urgency": 2,
+          "one_line": "token service scopes in review"
+        },
+        {
+          "project": "platform",
+          "source": "github",
+          "ref": "acme/platform#431",
+          "title": "enforce scopes on internal calls",
+          "state": "open",
+          "changed": "2026-08-25T12:00:00Z",
+          "owner": "noah",
+          "action_needed": false,
+          "urgency": 2,
+          "one_line": "enforcement stacked on the token service"
+        },
+        {
+          "project": "infra",
+          "source": "github",
+          "ref": "acme/infra#12",
+          "title": "inventory services still on password auth",
+          "state": "open",
+          "changed": "2026-08-24T08:00:00Z",
+          "owner": "noah",
+          "action_needed": true,
+          "urgency": 2,
+          "one_line": "inventory sweep open"
+        },
+        {
+          "project": "infra",
+          "source": "github",
+          "ref": "acme/infra#77",
+          "title": "flip enforcement flag, all services",
+          "state": "open",
+          "changed": "2026-08-23T08:00:00Z",
+          "owner": "noah",
+          "action_needed": false,
+          "urgency": 3,
+          "one_line": "final flip, gated"
+        },
+        {
+          "project": "warehouse",
+          "source": "github",
+          "ref": "acme/warehouse#61",
+          "title": "us-east region cutover",
+          "state": "merged",
+          "changed": "2026-08-18T15:00:00Z",
+          "owner": "noah",
+          "action_needed": false,
+          "urgency": 1,
+          "one_line": "us-east done"
+        },
+        {
+          "project": "warehouse",
+          "source": "github",
+          "ref": "acme/warehouse#64",
+          "title": "us-west region cutover",
+          "state": "open",
+          "changed": "2026-08-22T15:00:00Z",
+          "owner": "noah",
+          "action_needed": true,
+          "urgency": 2,
+          "one_line": "us-west waiting on a maintenance window"
+        },
+        {
+          "project": "warehouse",
+          "source": "github",
+          "ref": "acme/warehouse#70",
+          "title": "eu region cutover",
+          "state": "merged",
+          "changed": "2026-08-24T15:00:00Z",
+          "owner": "noah",
+          "action_needed": false,
+          "urgency": 1,
+          "one_line": "eu merged ahead of us-west"
+        }
+      ]
+    }
+  ]
+}
