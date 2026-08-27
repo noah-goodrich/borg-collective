@@ -67,10 +67,14 @@ Two independent tools that compose:
 borg init                Launch orchestrator: morning briefing + Claude session
 borg / borg next         What needs attention? Switch to it.
 borg claude              Launch/resume orchestrator Claude session
-borg link [project]      Overview (no arg) or deep dive (with project)
-                           --brief   LLM narrative briefing
+borg link [project]      ONE document, seven sections, always the same spine (AC2)
+                           Scope widens or narrows it; it is never a different page
+                           --brief   LLM narrative briefing (still zsh, never sweeps)
                            --refresh Regenerate summaries
                            --all     Include archived projects
+                           --local   Opt down from the network sweep (hot loops only)
+                           --json / --porcelain  the two machine surfaces
+                           --deep    Parsed and IGNORED since AC2; kept for borg.zsh:3111
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
@@ -139,7 +143,13 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
     manifest/               Reader for <project>/.borg/programs/*.json program manifests
-    link/                   `borg link` document build + renderer (core/grid/render/shell/cli)
+    link/                   `borg link` document build + renderer
+        core.py             Registry/plan/checkpoint reads, scope resolution, relative time
+        grid.py             Manifests → the topology wire: levels, nodes, parents/children/seq
+        shell.py            The impure rungs: adapter sweep, targeted `gh` fetch, manifest load
+        picture.py          PURE topological picture — refs+edges in, ANSI rows out. No I/O.
+        render.py           `document()` + the seven-section SECTIONS spine; calls picture.py
+        cli.py              argparse, `_mode` (json|porcelain|human), BrokenPipeError, dispatch
 hooks/
     borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
     borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
@@ -270,6 +280,32 @@ docs/
   that says "Ask which JIRA ticket this work targets, then read it via `acli jira workitem view`
   and use its description as the plan source." On a personal machine, the file doesn't exist and
   `/borg-plan` behaves exactly as it always did.
+- **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
+  `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
+  `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ SIGNALS` — with **no branch on scope,
+  mode or emptiness**. `render.overview` and `render.deep` are deleted, and `--deep` is parsed and
+  ignored (kept in the parser only because `borg.zsh:3111`, the fzf preview's path, still passes it
+  and argparse exiting 2 there is a blank pane with nothing on stderr). **Scope changes which ROWS
+  a section prints, never which sections exist** — the contexts differ in breadth only, so a reader
+  who learns the page once has learned every invocation of it. Section headers are byte-identical
+  in both contexts; `focus` now follows scope, so a bare `borg link` inside a repository renders
+  `▸ IN FOCUS` for it. `DOCUMENT_VERSION` stays 2: breadth is applied in the renderer, so no
+  pre-existing JSON key narrowed and `skills/borg-link/SKILL.md`'s version gate is untouched.
+- **`picture.py` is pure; `render.py` is the page**: the topological picture (columns, connectors,
+  crossings, glyph seam, OSC-8 links, the `PICTURE_BUDGET` width) lives in `borg_core/link/picture.py`
+  and does **no I/O of any kind** — it imports only `re`, `link.grid` and `manifest.core`, takes refs
+  plus edges, and returns ANSI rows. `render.py` composes those rows into sections. The split is what
+  lets the picture be pinned against `picture-{fork,crossing}.expected`, two HAND-AUTHORED fixtures
+  that are never regenerated — an oracle that does not come from the implementation it checks. Keep
+  it that way: a subprocess or a file read in `picture.py` destroys that property.
+- **The `borg link` parity harness's `render` leg was retired 2026-08-27 (AC2/S4)**:
+  `bin/link-parity-harness render` byte-compared the current tree against the last zsh renderer at
+  `ad99612`. After AC2 that oracle renders a *different document*, so the comparison is
+  unreproducible by construction and would print the redesign back as one intended diff. `render`
+  survives as a recognized argparse token that exits 2 with the reason and points at the goldens
+  that replaced it — same "the artifact that implements the command owns the invariant" altitude as
+  the `borg recon` gate below. The `primitives` leg is untouched and still live: its shell originals
+  exist verbatim in the file, so it remains a real differential.
 - **Recon fan-out (`borg recon --json` + `/borg-recon`)**: source-agnostic sweep primitive.
   **Retired as a human verb 2026-08-26** — `borg link` folds the same fan-out into its own document,
   so bare `borg recon` (and any invocation without `--json`/`--adapters`) dies with a pointer at

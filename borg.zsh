@@ -264,7 +264,7 @@ cmd_switch() {
             --prompt "borg> " \
             --header "Switch to project (Enter=switch, Esc=cancel)" \
             --preview "borg link --local {1}" \
-            --preview-window "right:45:wrap" \
+            --preview-window "right:70:wrap" \
             --delimiter '\t' \
             --with-nth 1,3,5 \
             2>/dev/null) || return 0

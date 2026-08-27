@@ -1958,3 +1958,198 @@ def test_the_grid_carries_no_ready_set_and_no_duplicate_gate_list(isolated, monk
     assert "ready" not in manifest
     assert "unmapped_gates" not in manifest
     assert "gates" in manifest
+
+
+# ── AC2/S1: the topology keys the renderer reads ──────────────────────────────────────────────────
+#
+# THESE FOUR ARE THE WIRE CONTRACT FOR A RENDERER THAT DOES NOT EXIST YET, and that is deliberate
+# sequencing rather than speculative generality. AC2's picture is a pure function of `parents`,
+# `children` and `seq`; landing them first means the column algorithm can be written and tested
+# against an oracle that predates the renderer, and means the commit that regenerates every golden
+# adds no new derivation of its own. Each case names the mutation that turns it red, because the
+# carried-forward finding from 2026-08-26 is that a check pointed at the wrong thing reads as a pass.
+
+
+def _fork_manifest() -> dict:
+    """One fork whose DECLARATION order and REF order disagree at every branch point.
+
+    Built to discriminate, not to be realistic. `zzz#1` forks to `mmm#2` then `aaa#3`, which join at
+    `r#4`; declaration order is zzz, mmm, aaa, r while ascending-ref order is aaa, mmm, r, zzz. So
+    both `children` (of zzz#1) and `parents` (of r#4) come out in a DIFFERENT order under the two
+    rules, which is what makes G4's mutation observable. A fixture whose two orders agree -- which
+    both live manifests happen to be, one ref prefix at a time -- would pass either implementation.
+
+    Every child declares `after`, so `_stacked_edges` contributes nothing (each consecutive child is
+    in `declared_children`) and the edge set is exactly the four declared parents.
+    """
+    return {
+        "program": "fork",
+        "desc": "a fork whose declaration order and ref order disagree",
+        "rows": [
+            {"order": "1", "ref": "o/zzz#1", "lane": "L", "status": "merged"},
+            {"order": "2", "ref": "o/mmm#2", "lane": "L", "after": ["o/zzz#1"], "status": "open"},
+            {"order": "3", "ref": "o/aaa#3", "lane": "L", "after": ["o/zzz#1"], "status": "open"},
+            {"order": "4", "ref": "o/r#4", "lane": "L", "after": ["o/mmm#2", "o/aaa#3"], "status": "open"},
+        ],
+    }
+
+
+def test_every_node_carries_its_parents_children_and_seq(isolated, monkeypatch):
+    """G1. Through cli._document, not grid_manifest -- the production assembly path.
+
+    MUTATION: delete any one of the three keys from `_grid_nodes`' node dict.
+
+    Asserted over EVERY node rather than a sampled one, and `seq` is checked with `isinstance(..., int)`
+    rather than truthiness: the head of the declaration order carries `seq == 0`, so a truthiness test
+    would go green on a missing key for exactly the node a renderer places first.
+    """
+    dirs = _four_repository_registry(isolated)
+    monkeypatch.chdir(dirs["delta"])
+
+    manifest = cli._document("", False, "json", local=True)["grid"]["manifests"][0]
+    nodes = manifest["nodes"]
+    assert nodes, "the B6 fixture's manifest must have been selected"
+
+    for ref, node in nodes.items():
+        assert isinstance(node["seq"], int), ref
+        assert isinstance(node["parents"], list), ref
+        assert isinstance(node["children"], list), ref
+
+    # The fixture is a linear four-row chain in declared order, so seq IS file order and the edges
+    # are consecutive. Pinned as VALUES, not just as types -- a node carrying `parents: []` for every
+    # ref would satisfy the shape assertions above and render a grid with no connectors at all.
+    assert [nodes[ref]["seq"] for ref in sorted(nodes)] == [0, 1, 2, 3]
+    assert nodes["testorg/bravo#22"]["parents"] == ["testorg/alpha#11"]
+    assert nodes["testorg/bravo#22"]["children"] == ["testorg/charlie#33"]
+    assert nodes["testorg/alpha#11"]["parents"] == []
+    assert nodes["testorg/delta#44"]["children"] == []
+
+
+def test_parents_and_children_carry_ordering_edges_only():
+    """G2. `stacked` and `blocks` link; `apex` does NOT.
+
+    MUTATION: drop the `ORDERING_EDGE_KINDS` filter in `_ordering_adjacency` and admit every kind.
+
+    An apex edge points from the tracker at EVERY row (manifest_core._apex_edges), so admitting it
+    makes the tracker the parent of the whole manifest -- one node whose connectors fan across every
+    column. `levels()` already refuses apex for the matching reason, and the two filters drifting is
+    a picture that draws an edge the ranking never counted.
+
+    THE `blocks` HALF IS ASSERTED TOO, and it is what stops the INVERSE mutation from passing: an
+    implementation narrowed to `stacked` alone renders a declared blocker as no connector at all,
+    which is a missing dependency rather than an invented one, and every apex assertion here would
+    still be green.
+
+    THE GATE MUST BLOCK ON A NON-ADJACENT ROW, and the first version of this fixture got that wrong.
+    It gated row 2 on row 1, which are consecutive in the same lane -- so `_stacked_edges` emitted the
+    SAME `(o/r#1, o/r#2)` pair the `blocks` channel did, deduplication collapsed them, and narrowing
+    ORDERING_EDGE_KINDS to `("stacked",)` left every assertion green. The docstring claimed a mutation
+    the fixture could not catch, which is the "a check pointed at the wrong thing reads as a pass"
+    failure this suite exists to avoid. Row 3 gating on row 1 SKIPS row 2, so the blocks edge is a
+    pair no lane adjacency can supply.
+    """
+    manifest = {
+        "program": "gated",
+        "rows": [
+            {"order": "1", "ref": "o/r#1"},
+            {"order": "2", "ref": "o/r#2"},
+            {
+                "order": "3",
+                "ref": "o/r#3",
+                "gate": {"kind": "decision", "blocked_by": "prose", "blocked_by_ref": "o/r#1", "resolved_by": "x"},
+            },
+        ],
+        "apex": {"ref": "o/tracker#9"},
+    }
+    nodes = grid_manifest_nodes(manifest)
+
+    assert nodes["o/tracker#9"]["children"] == []
+    assert nodes["o/r#1"]["parents"] == []
+    assert "o/tracker#9" not in nodes["o/r#1"]["parents"]
+    assert "o/tracker#9" not in nodes["o/r#3"]["parents"]
+    # The lane supplies r#2 -> r#3; ONLY the blocks channel can supply r#1 -> r#3. Narrowing
+    # ORDERING_EDGE_KINDS to ("stacked",) drops the second and turns this line red.
+    assert nodes["o/r#3"]["parents"] == ["o/r#1", "o/r#2"]
+    assert nodes["o/r#1"]["children"] == ["o/r#2", "o/r#3"]
+
+
+def test_a_manifest_block_carries_its_desc_and_repo_slugs():
+    """G3. MUTATION: drop `desc` or `repos` from `grid_manifest`'s dict.
+
+    `repos` is over row_refs, NOT declared_refs, and the apex here is what proves it: `o/tracker#9`
+    lives in `o/tracker`, a repository this project does not span. Listing it would tell a reader the
+    project reaches a repository it merely files its tracker in -- under a heading that already claims
+    the project. Sorted and deduplicated, so two rows in one repository contribute one entry.
+    """
+    manifest = {
+        "program": "spanning",
+        "desc": "one sentence about the work",
+        "rows": [
+            {"order": "1", "ref": "beta/two#1"},
+            {"order": "2", "ref": "alpha/one#2"},
+            {"order": "3", "ref": "alpha/one#3"},
+        ],
+        "apex": {"ref": "o/tracker#9"},
+    }
+    block = link_grid.grid_manifest(manifest, {}, {})
+
+    assert block["desc"] == "one sentence about the work"
+    assert block["repos"] == ["alpha/one", "beta/two"]
+    assert "o/tracker" not in block["repos"]
+
+    # A manifest with no `desc` carries the key with an empty value rather than omitting it -- a
+    # renderer that has to test `in` before every read grows a branch per optional key.
+    assert link_grid.grid_manifest({"rows": [{"order": "1", "ref": "a/b#1"}]}, {}, {})["desc"] == ""
+
+
+def test_parents_and_children_are_sorted_by_seq_then_ref():
+    """G4. MUTATION: sort either adjacency list by `ref` alone (or leave it in edge order).
+
+    `levels()` publishes within-level order as ASCENDING REF, which is deterministic but carries no
+    meaning. Measured on the live stillpoint/.borg/programs/ingle-t1-cutover.json: the `contract` lane
+    holds seq 0-5 and `cutover` seq 6-13, but ascending ref interleaves them at four of eight levels.
+    A renderer placing nodes by ref order therefore crosses two lanes four times with no edge crossing
+    anything, which is why declaration order is the tie-break and why it is pinned here.
+    """
+    nodes = grid_manifest_nodes(_fork_manifest())
+
+    assert [nodes[ref]["seq"] for ref in ("o/zzz#1", "o/mmm#2", "o/aaa#3", "o/r#4")] == [0, 1, 2, 3]
+    # Declaration order: mmm before aaa. Ascending ref would give aaa before mmm.
+    assert nodes["o/zzz#1"]["children"] == ["o/mmm#2", "o/aaa#3"]
+    assert nodes["o/r#4"]["parents"] == ["o/mmm#2", "o/aaa#3"]
+
+
+def test_a_declared_ref_that_is_not_a_row_sorts_after_every_row():
+    """The `seq` fallback, which no other case reaches. MUTATION: default the fallback to 0.
+
+    An `after` target outside the manifest gets a node (declared_refs, not row_refs) but has no
+    declared position here. Seating it at 0 would put a foreign ref at the head of the declaration
+    order and drag the column of whatever chain it parents. `len(rows)` puts it past every real row;
+    two such refs tie there and break on ref, which is deterministic.
+    """
+    manifest = {
+        "program": "outside",
+        "rows": [
+            {"order": "1", "ref": "o/r#1"},
+            {"order": "2", "ref": "o/r#2", "after": ["far/away#7", "far/away#3"]},
+        ],
+    }
+    nodes = grid_manifest_nodes(manifest)
+
+    assert nodes["o/r#1"]["seq"] == 0
+    assert nodes["o/r#2"]["seq"] == 1
+    assert nodes["far/away#3"]["seq"] == 2
+    assert nodes["far/away#7"]["seq"] == 2
+    # Both foreign parents tie on seq, so the ref breaks it -- ascending, and stably.
+    assert nodes["o/r#2"]["parents"] == ["far/away#3", "far/away#7"]
+
+
+def grid_manifest_nodes(manifest: dict) -> dict:
+    """`grid_manifest(...)["nodes"]` with no sweep and no fetch -- the declared-only projection.
+
+    Defined at the bottom rather than beside the fixtures because it is a one-line reader, not a
+    fixture: it supplies nothing, derives nothing, and exists so four cases do not each repeat the
+    two empty maps that say "nobody looked".
+    """
+    nodes: dict = link_grid.grid_manifest(manifest, {}, {})["nodes"]
+    return nodes

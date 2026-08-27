@@ -1,26 +1,51 @@
-"""Pure renderers for the three human `borg link` shapes: porcelain, overview, deep.
+"""The one human renderer for `borg link`, plus the machine TSV `--porcelain` still serializes.
 
-Ports _borg_link_porcelain (borg.zsh:245-275), _borg_link_overview (borg.zsh:277-413) and
-_borg_link_deep (borg.zsh:415-508), byte for byte, transcribed statement by statement and validated
-against the four goldens under tests/fixtures/link/. The goldens are the oracle -- not this
-docstring, not the spec that produced this file.
+TWO PUBLIC CALLABLES, AND THAT IS THE WHOLE OF AC2's "one front door". `document(doc)` is the single
+human entry point: a fixed SEVEN-SECTION SPINE whose `▸` headers are byte-identical in every context,
+where `scope` narrows the ROW SET of the four scope-dependent sections and never the board, never the
+section list and never the order. `porcelain(doc)` is UNCHANGED byte for byte and is deliberately
+outside "everywhere" -- it is not a renderer, it is the TSV feeding fzf's input list
+(borg.zsh:262 builds the picker input with `cmd_ls --porcelain`, borg.zsh:264-269 consumes it with
+`--delimiter '\\t' --with-nth 1,3,5`), and box drawing in that stream breaks `borg switch` outright.
 
-UNCONDITIONALLY PURE, matching core.py's contract: no clock, no os.environ, no subprocess, no
-filesystem. Every function here takes the already-assembled `--json` document (cli.py._document())
-and returns ONE complete string, trailing newlines included. `generated_at`, every
-`relative_activity` and every cortex `countdown` already come from ONE shell.now_epoch() call
-threaded through cli._document; a second clock read here would reintroduce the straddle the port
-removed.
+`overview()` AND `deep()` ARE GONE. Their bodies survive, transcribed statement by statement, as
+`_board_section` and `_focus_section`; `_summary_block`, `_fold_s`, `_label`, `_overview_row` and
+every `_COL_*` width are the untouched parity surface underneath them. What used to be two modes of
+one command answering the same question with different data is now two ROW SETS of one document.
+
+IN FOCUS IS SECTION 2, ABOVE THE BOARD, AND THE ORDER IS LOAD-BEARING RATHER THAN AESTHETIC.
+drone.zsh:964 extracts a session's status with `borg link --local "$w" | grep -m1 'Status:'`. Post-AC2
+this page carries two classes of text the renderer does not control -- board summaries written by
+checkpoint debriefs, and pull request titles arriving off the wire -- and a PR literally titled
+`chore(auth): Status: normalise the rollout report` (which the golden fixture deliberately contains)
+would poison `grep -m1` and render a stranger's PR title as a session status. Putting IN FOCUS first
+makes the extraction correct BY CONSTRUCTION against all wire-sourced text, with no scrubbing rule a
+future field can escape. Two supporting invariants hold it up: the grid's vocabulary says `state:`
+and never `Status:`, and the board's column header stays `STATUS` (uppercase, colonless).
+
+EVERY SECTION ALWAYS RENDERS ITS HEADER. A section with no rows renders that header plus EXACTLY ONE
+dim placeholder line naming what would fill it and the one command that would -- which is the same
+rule that makes "the two contexts differ in breadth only" mechanically assertable, because the header
+list can then be compared against `SECTIONS` itself rather than against the other context's golden
+(a header diff between two goldens goes green if both drift together).
+
+UNCONDITIONALLY PURE, matching core.py's and picture.py's contract: no clock, no os.environ, no
+subprocess, no filesystem, no isatty. Every function here takes the already-assembled `--json`
+document (cli.py._document()) and returns ONE complete string, trailing newlines included.
+`generated_at`, every `relative_activity` and every cortex `countdown` already come from ONE
+shell.now_epoch() call threaded through cli._document; a second clock read here would reintroduce the
+straddle the port removed. ANSI is emitted UNCONDITIONALLY -- there is no isatty check anywhere in the
+link path (borg.zsh never added one) and adding one would fail every golden. Do not "fix" this.
 
 Every default goes through core.jq_default -- a bare `or` is a review-blocking defect (see
 jq_default's docstring for why: jq's `//` does not treat "" or 0 as absent).
 
 NON-REPRODUCED DEVIATION, no test impact (record in the PR body): zsh's `echo` builtin expands
 backslash escapes by default (`echo -e` is even more explicit about it), so every deep-dive line and
-every Directives/Assimilated/cube line currently interpolates data THROUGH escape expansion -- a
-directive title or summary containing a literal `\\n` or `\\t` is EXPANDED today. The overview table
-rows go through `printf %s` and are NOT expanded. Python's `print()` expands neither. No golden
-covers this; it is not reproduced here.
+every Directives/Assimilated/cube line USED to interpolate data THROUGH escape expansion -- a
+directive title or summary containing a literal `\\n` or `\\t` was EXPANDED. The overview table rows
+went through `printf %s` and were NOT. Python's `print()` expands neither. No golden covers this; it
+is not reproduced here.
 
 LOCALE COLLATION NOTE, matching core.sort_assimilated's docstring: any per-project or aggregate
 directive listing here inherits shell._markdown_files' codepoint-order glob, not zsh's/coreutils'
@@ -30,18 +55,10 @@ so it does not surprise anyone later.
 
 from __future__ import annotations
 
-from borg_core.link import core
+from typing import Callable
 
-GREEN = "\033[0;32m"
-YELLOW = "\033[1;33m"
-RED = "\033[0;31m"
-CYAN = "\033[0;36m"
-BOLD = "\033[1m"
-DIM = "\033[2m"
-NC = "\033[0m"
-
-# ANSI is emitted UNCONDITIONALLY -- there is no isatty check anywhere in the link path (borg.zsh
-# never added one) and adding one here would fail all four goldens. Do not "fix" this.
+from borg_core.link import core, picture
+from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 
 # Overview column widths, hoisted so the header line and every row format string share ONE source
 # of truth and cannot drift apart (borg.zsh:329, :371-372).
@@ -55,9 +72,26 @@ _COL_LAST_ACTIVE = 12
 # for the label text itself; the leading "  " is applied separately by _label below.
 _DEEP_LABEL_COL = 14
 
+# THE REGISTRY-STATUS jq FALLBACK, TRANSCRIBED FROM borg.zsh, AND EXPLICITLY NOT THE GRID'S STATE
+# TOKEN. `borg link`'s zsh original wrote a jq `.status //` fallback of this word in the porcelain
+# serializer and in both human renderers, for a REGISTRY status -- a different field, different question
+# from `grid.nodes[].state`. Naming it is what lets AC2's rule about the grid's unresolved token be
+# stated as a grep: this literal appears in this file exactly ONCE (here) and ZERO times in
+# picture.py, which imports `grid.STATE_SOURCE_UNKNOWN` wherever the grid's token must be compared so
+# the two modules cannot drift. Deleting these call sites is NOT a cleanup -- it changes the bytes
+# link-overview.golden, link-deep.golden and drone.zsh:964's Status column read.
+_JQ_ABSENT_STATUS = "unknown"
+
+# The one unambiguous section marker on the page. Nothing else in this file may emit `▸ ` at the
+# start of a line -- which is why the empty-registry and all-archived sentences below lost the
+# leading `{GREEN}▸{NC}` they carried in the zsh original, and why SIGNALS' capacity warning lost
+# its `{YELLOW}▸{NC}`. Both sentences are otherwise verbatim; every assertion on them anywhere in
+# this tree is a substring test, which is why that change is free.
+SECTION_MARK = "▸ "
+
 
 def _label(text: str, value: str, col: int = _DEEP_LABEL_COL) -> str:
-    """One `  {DIM}<label>{NC}<pad>value` deep-dive header line, padding computed as col - len(text)
+    """One `  {DIM}<label>{NC}<pad>value` IN FOCUS header line, padding computed as col - len(text)
     rather than six separately hand-counted space literals (borg.zsh:440-445)."""
     pad = " " * max(col - len(text), 1)
     return f"  {DIM}{text}{NC}{pad}{value}\n"
@@ -99,7 +133,7 @@ def _fold_s(text: str, width: int = 70) -> list[str]:
 
 
 def _summary_block(summary: str) -> str:
-    """The deep dive's unconditional Summary block (borg.zsh:447-448):
+    """IN FOCUS's unconditional Summary block (borg.zsh:447-448):
     `echo -e "  ${BOLD}Summary${NC}"` then `echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'`.
 
     The two leading spaces on the first line COUNT against the 70-column fold budget; lines 2..n are
@@ -134,6 +168,9 @@ def porcelain(doc: dict) -> str:
 
     Empty or fully-filtered -> "" -- absolutely nothing, not even a trailing newline (pinned by
     cli_contract.bats's "link --porcelain prints nothing at all on an empty registry").
+
+    UNCHANGED BY AC2, DELIBERATELY, and `tests/fixtures/link/link-porcelain.golden` must not move.
+    See the module docstring: this is fzf's input list, not a page.
     """
     order = doc.get("order") or []
     projects = doc.get("projects") or {}
@@ -141,7 +178,7 @@ def porcelain(doc: dict) -> str:
     for name in order:
         entry = projects[name]
         source = core.jq_default(entry.get("source"), "cli")
-        status = core.jq_default(entry.get("status"), "unknown")
+        status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
         last_activity = core.jq_default(entry.get("last_activity"), "")
         summary = core.jq_default(entry.get("summary"), "")
         summary = str(summary)[:80]
@@ -170,18 +207,26 @@ def _src_badge(source: str) -> str:
 
 
 def _overview_summary_cut(summary: str) -> str:
-    """The overview's 50-char cut WITH a literal `...` appended only when the ORIGINAL length is
+    """The board's 50-char cut WITH a literal `...` appended only when the ORIGINAL length is
     STRICTLY greater than 50 (an exactly-50-char summary gets none)."""
     cut = summary[:50]
     return f"{cut}..." if len(summary) > 50 else cut
 
 
-def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str]) -> str:
+def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str], mark: str = "") -> str:
+    """One board row, plus its cortex pause continuation when the project has a pending wake.
+
+    `mark` IS APPENDED INSIDE THE ROW'S OWN f-STRING and defaults to "", which keeps every byte of
+    this function identical for a caller that does not pass one. It exists so the scoped `◀` lands on
+    the ROW and never on the countdown continuation, without the caller having to split the returned
+    string back apart to find the boundary.
+    """
     source = str(core.jq_default(entry.get("source"), "cli"))
     # UNREACHABLE in practice: core.with_state already defaults a missing status to "idle"
     # (DEFAULT_STATUS, mirroring lib/registry.zsh:203) -- which is why the porcelain golden's
-    # `golf` row renders "idle" rather than "unknown". Reproduced anyway for parity with the jq.
-    status = str(core.jq_default(entry.get("status"), "unknown"))
+    # `golf` row renders "idle" rather than the absent-status fallback. Reproduced anyway for
+    # parity with the jq.
+    status = str(core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS))
     last_activity = str(core.jq_default(entry.get("relative_activity"), ""))
     summary_short = _overview_summary_cut(str(core.jq_default(entry.get("summary"), "(no summary)")))
     display = entry.get("display_name") or name
@@ -191,7 +236,7 @@ def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str]) -> 
     line = (
         f"{pin_mark}{display:<{_COL_PROJECT}} {_src_badge(source):<{_COL_SRC}} "
         f"{_status_color(status)}{status_display:<{_COL_STATUS}}{NC} "
-        f"{last_activity:<{_COL_LAST_ACTIVE}} {summary_short}\n"
+        f"{last_activity:<{_COL_LAST_ACTIVE}} {summary_short}{mark}\n"
     )
     countdown = cortex_by_project.get(name)
     if countdown:
@@ -200,7 +245,9 @@ def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str]) -> 
 
 
 def _cube_lines() -> list[str]:
-    """The cube art, verbatim (borg.zsh:319-328)."""
+    """The cube art, verbatim (borg.zsh:319-328). Ends with a bare newline, which is the blank line
+    separating the header section from `▸ IN FOCUS` -- see `_section`, which supplies that separator
+    for every OTHER section and therefore must not supply a second one here."""
     return [
         "\n",
         f"  {DIM}_______________{NC}\n",
@@ -215,24 +262,6 @@ def _cube_lines() -> list[str]:
     ]
 
 
-def _directives_lines(directives: list[dict], show_project: bool) -> list[str]:
-    """Shared by the overview (`show_project=True`, aggregate across projects) and deep-dive
-    (`show_project=False`, already scoped to one project) Directives blocks -- the header line and
-    bullet shape are byte-identical between the two call sites; only the `[project]` tag differs."""
-    if not directives:
-        return []
-    out = [f"  {CYAN}Directives:{NC} {len(directives)} pending\n"]
-    for item in directives:
-        prefix = f"[{item['project']}] " if show_project else ""
-        out.append(f"    {DIM}- {prefix}{item['title']}{NC}\n")
-    return out
-
-
-def _overview_directives_block(directives: list[dict]) -> list[str]:
-    lines = _directives_lines(directives, show_project=True)
-    return ["\n", *lines] if lines else []
-
-
 def _ship_date_suffix(item: dict) -> str:
     """ " (date)" when a ship date is present, else "" -- omit the parens entirely rather than
     render an empty "()". A missing/empty ship date is TSV_EMPTY_SENTINEL-shaped upstream (see
@@ -243,113 +272,104 @@ def _ship_date_suffix(item: dict) -> str:
     return f" ({ship_date})" if ship_date else ""
 
 
-def _assimilated_lines(assimilated: list[dict], show_project: bool) -> list[str]:
-    """Shared by the overview (`show_project=True`) and deep-dive (`show_project=False`) Recently
-    assimilated blocks -- see `_directives_lines` for the rationale."""
-    if not assimilated:
-        return []
-    out = [f"  {GREEN}Recently assimilated:{NC}\n"]
-    for item in assimilated:
+def _bullet_lines(items: list[dict], show_project: bool) -> list[str]:
+    """The bullet loop for QUEUED **and** SHIPPED. One function, because they are one line.
+
+    THEY WERE TWO UNTIL AC2 TOOK THE LAST DIFFERENCE OUT. The zsh original printed a distinct header
+    above each block (`Directives: N pending` / `Recently assimilated:`), which is what made two
+    functions defensible; the `▸ QUEUED` and `▸ SHIPPED` section headers and their notes replace
+    both, and what remained was two identical loops differing by one interpolation that is EMPTY on
+    a directive anyway -- `_ship_date_suffix` reads an absent key as "". Keeping them apart would
+    mean two places to change the bullet shape and one of them getting missed.
+
+    `show_project` follows the document's BREADTH, not the section: `[platform] Scope keypair
+    rotation` is information in the orchestrator context and noise in platform's own.
+    """
+    out = []
+    for item in items:
         prefix = f"[{item['project']}] " if show_project else ""
         out.append(f"    {DIM}- {prefix}{item['title']}{_ship_date_suffix(item)}{NC}\n")
     return out
 
 
-def _overview_assimilated_block(assimilated: list[dict]) -> list[str]:
-    lines = _assimilated_lines(assimilated, show_project=True)
-    return ["\n", *lines] if lines else []
+# ── the spine ─────────────────────────────────────────────────────────────────────────────────────
 
 
-def _overview_capacity_block(capacity: dict) -> list[str]:
-    if not capacity.get("over_limit"):
-        return []
-    return [
-        "\n",
-        f"{YELLOW}▸{NC} {BOLD}{capacity['active']} sessions need attention{NC} (limit: {capacity['limit']})\n",
-    ]
+def _placeholder(sentence: str) -> str:
+    """The ONE line an empty section renders under its header: what would fill it, and how.
 
-
-def overview(doc: dict) -> str:
-    """The default `borg link` overview: the discovery tip, the cube, the table, both aggregate
-    sections, and the capacity warning -- in the exact branch order of borg.zsh:286-413.
+    Exactly one, never zero and never two. Zero is the "reads as broken" failure the plan's own risk
+    section names -- a front door that prints a header and nothing under it looks like a bug rather
+    than an empty set. Two is a section quietly growing a second vocabulary for emptiness.
     """
-    total_projects = doc.get("total_projects", 0)
-    order = doc.get("order") or []
-    projects = doc.get("projects") or {}
-
-    # BRANCH 1 -- gated on the UNFILTERED count, NOT len(order). See core.assemble's docstring: an
-    # empty registry and an all-archived one both emit order=[]/projects={}, but must print two
-    # different sentences.
-    if total_projects == 0:
-        return f"{GREEN}▸{NC} No projects registered. Run: borg scan\n"
-
-    out = []
-    # BRANCH 2 -- the discovery tip, NOT mutually exclusive with branch 4 (a lone archived project
-    # can print both the tip and the all-filtered sentence).
-    if total_projects <= 1:
-        out.append(f"  {DIM}Tip: run 'borg scan' to discover projects from session history{NC}\n")
-
-    # BRANCH 3 -- the cube.
-    out.extend(_cube_lines())
-
-    # BRANCH 4 -- nothing survived the archived filter.
-    if not order:
-        out.append(f"{GREEN}▸{NC} No projects to show. Run: borg link --all\n")
-        return "".join(out)
-
-    # BRANCH 5 -- header + rule + rows.
-    out.append(
-        f"{BOLD} {'PROJECT':<{_COL_PROJECT}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
-        f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} SUMMARY{NC}\n"
-    )
-    out.append(("─" * 90) + "\n")
-
-    cortex_by_project: dict[str, str] = {}
-    for pending in doc.get("cortex_pending") or []:
-        project = pending.get("project")
-        if project not in cortex_by_project:
-            cortex_by_project[project] = pending.get("countdown", "")
-
-    for name in order:
-        out.append(_overview_row(name, projects[name], cortex_by_project))
-
-    # BRANCH 6 -- directives. BRANCH 7 -- recently assimilated (aggregate).
-    out.extend(_overview_directives_block(doc.get("directives") or []))
-    out.extend(_overview_assimilated_block(doc.get("assimilated") or []))
-
-    # BRANCH 8 -- capacity warning, strict >, already computed in core.capacity.
-    out.extend(_overview_capacity_block(doc.get("capacity") or {}))
-
-    # BRANCH 9 -- trailing bare newline; overview and deep both end "<last content line>\n\n".
-    out.append("\n")
-    return "".join(out)
+    return f"  {DIM}— {sentence}{NC}\n"
 
 
-# JUSTIFICATION: transcribes borg.zsh:415-508 statement by statement for one golden-diffable function.
-def deep(doc: dict) -> str:  # pylint: disable=too-many-locals
-    """The single-project deep dive, mirroring borg.zsh:415-508."""
+def _plural(count: int, singular: str, plural: str) -> str:
+    return f"{count} {singular if count == 1 else plural}"
+
+
+def _section(title: str, note: str, lines: list[str]) -> list[str]:
+    """One section: its `▸` header (plus an optional dim note), its body, and ONE trailing blank.
+
+    The empty-titled first entry is the page header -- the cube, which gets no `▸` line and supplies
+    its own trailing blank through `_cube_lines`. That is the only special case, and it is keyed on
+    the SECTIONS constant rather than on anything in the document, so `document()` below stays free
+    of any branch on scope, mode or emptiness.
+    """
+    if not title:
+        return lines
+    head = f"{BOLD}{SECTION_MARK}{title}{NC}"
+    if note:
+        head += f"  {DIM}{note}{NC}"
+    return [head + "\n", *lines, "\n"]
+
+
+def _header_section(doc: dict) -> tuple[str, list[str]]:
+    """The cube, and the discovery tip above it when the registry holds at most one project.
+
+    The tip is gated on the UNFILTERED `total_projects`, NOT on `len(order)` -- one visible project
+    plus one archived one is two, and must not print it (borg.zsh:286-290). It is also NOT mutually
+    exclusive with the board's all-archived placeholder: a lone archived project prints both.
+    """
+    lines: list[str] = []
+    if doc.get("total_projects", 0) <= 1:
+        lines.append(f"  {DIM}Tip: run 'borg scan' to discover projects from session history{NC}\n")
+    lines.extend(_cube_lines())
+    return "", lines
+
+
+# JUSTIFICATION: transcribes borg.zsh:415-508 statement by statement for one golden-diffable section.
+def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-many-locals
+    """IN FOCUS: the scoped repository's own card, transcribed from the retired `deep()`.
+
+    Its Directives and Recently-assimilated blocks are NOT here any more -- they are the QUEUED and
+    SHIPPED sections, which render the same rows under a header shared with the orchestrator context.
+    That is what "the two contexts differ in breadth only" means in practice: one row set moved out
+    from under a per-mode heading and into a section that exists in both.
+    """
     focus = doc.get("focus") or {}
+    if not focus:
+        return "", [_placeholder("no repository in focus. cd into one, or run borg link <name>.")]
+
     name = focus.get("name", "")
     entry = focus.get("entry") or {}
-
     source = core.jq_default(entry.get("source"), "cli")
     path = core.jq_default(entry.get("path"), "null")
-    status = core.jq_default(entry.get("status"), "unknown")
+    status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
     last_activity = core.jq_default(entry.get("last_activity"), "(never)")
     summary = str(core.jq_default(entry.get("summary"), "(no summary)"))
     session_id = core.jq_default(entry.get("claude_session_id"), "(unknown)")
     tmux_window = core.jq_default(entry.get("tmux_window"), "(none)")
 
-    out = [f"\n{BOLD}{name}{NC}\n"]
-    out.append(("─" * 40) + "\n")
-    out.append(_label("Source:", str(source)))
+    out = [_label("Source:", str(source))]
     # `Path:` is the ONLY conditional header line -- omitted entirely, not blanked, when path is
     # the sentinel string "null".
     if path != "null":
         out.append(_label("Path:", str(path)))
-    # Exactly ONE line contains "Status:" and it ends in the status word: drone.zsh:964-965 greps
-    # this line and blanks its column silently otherwise (pinned by cli_contract.bats's
-    # "drone status can still extract Status: from the deep dive").
+    # Exactly ONE line on the whole page contains "Status:", and this section is above every other
+    # source of text, so drone.zsh:964-965's `grep -m1` finds it before any PR title. See the module
+    # docstring for why that ordering is the invariant rather than a scrubbing rule.
     out.append(_label("Status:", str(status)))
     out.append(_label("Last active:", str(last_activity)))
     out.append(_label("tmux window:", str(tmux_window)))
@@ -376,15 +396,264 @@ def deep(doc: dict) -> str:  # pylint: disable=too-many-locals
         out.append(f"  {BOLD}Latest Checkpoint{NC}\n")
         out.append(_checkpoint_head_block(focus.get("checkpoint_head") or ""))
 
-    directives = focus.get("directives") or []
-    if directives:
-        out.append("\n")
-        out.extend(_directives_lines(directives, show_project=False))
+    return name, out
 
-    assimilated = focus.get("assimilated") or []
-    if assimilated:
-        out.append("\n")
-        out.extend(_assimilated_lines(assimilated, show_project=False))
+
+def _scoped_name(doc: dict) -> str:
+    """The repository this invocation is scoped to, or "" in orchestrator scope."""
+    return str((doc.get("scope") or {}).get("repository") or "")
+
+
+def _board_section(doc: dict) -> tuple[str, list[str]]:
+    """REPOSITORIES: every registered repository, in BOTH contexts. Transcribed from `overview()`.
+
+    DELIBERATELY SCOPE-INVARIANT, and this is the one section AC2's "breadth" rule does not touch.
+    Three consumers read it precisely for a cross-project list: skills/borg-switch/SKILL.md's
+    `borg link --local --all` (run from a project session's cwd), borg.zsh:2225's 5s `borg watch`
+    redraw, and the fzf preview's own orientation. Narrowing it to the scoped repository would turn
+    all three into a one-row table. `--all` remains the only control over which rows appear; the
+    scoped row is MARKED, with a trailing `◀`, rather than made the only row.
+    """
+    total_projects = doc.get("total_projects", 0)
+    order = doc.get("order") or []
+    projects = doc.get("projects") or {}
+
+    # Gated on the UNFILTERED count, NOT len(order). See core.assemble's docstring: an empty registry
+    # and an all-archived one both emit order=[]/projects={}, but must print two different sentences.
+    # Both sentences are the zsh original's verbatim, minus the leading `▸` -- every assertion on
+    # them in this tree is a substring test, which is what makes dropping the marker free.
+    if total_projects == 0:
+        return "", [_placeholder("No projects registered. Run: borg scan")]
+    if not order:
+        return "", [_placeholder("No projects to show. Run: borg link --all")]
+
+    # "Need attention" is the WAITING count, which is not `capacity.active`: capacity counts every
+    # session holding a slot (active AND waiting) against BORG_MAX_ACTIVE and belongs in SIGNALS,
+    # while this note answers "how many of these rows are blocked on me". The two are different
+    # numbers on the same registry and the goldens carry both.
+    waiting = sum(1 for name in order if str(core.jq_default(projects[name].get("status"), "")) == "waiting")
+    note = f"the collective · {_plural(len(order), 'repository', 'repositories')} · {waiting} need attention"
+
+    lines = [
+        f"{BOLD} {'PROJECT':<{_COL_PROJECT}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
+        f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} SUMMARY{NC}\n",
+        ("─" * 90) + "\n",
+    ]
+    countdowns = _cortex_countdowns(doc)
+    scoped = _scoped_name(doc)
+    for name in order:
+        mark = f" {CYAN}◀{NC}" if name == scoped else ""
+        lines.append(_overview_row(name, projects[name], countdowns, mark))
+    return note, lines
+
+
+def _cortex_countdowns(doc: dict) -> dict[str, str]:
+    """`{project: countdown}`, FIRST WAKE WINS, matching borg.zsh:374's awk join.
+
+    First-wins rather than last: two pending wakes for one project is a state file that was appended
+    to twice, and the earlier one is the one that fires.
+    """
+    countdowns: dict[str, str] = {}
+    for pending in doc.get("cortex_pending") or []:
+        project = pending.get("project")
+        if project not in countdowns:
+            countdowns[project] = pending.get("countdown", "")
+    return countdowns
+
+
+def _grid_placeholder(grid_block: dict) -> str:
+    """THREE DIFFERENT DIAGNOSES for an empty CHAINS section, read off the grid block's own
+    self-describing fields (`slug`, `scope_kind`, `manifests`) rather than guessed.
+
+    build_grid carries those fields precisely so "a consumer reading only this block can tell an
+    empty grid apart from an un-swept one apart from a wrong-repository one". Collapsing the three
+    into one sentence throws that away on the section where the modal repository -- 13 of ~14 of
+    them -- spends its entire life.
+
+    SCOPE IS TESTED BEFORE THE SLUG, AND THE OTHER ORDER MAKES THE THIRD ARM DEAD CODE. The AC2 spec
+    states this ladder slug-first; executed against the real document that is wrong, because
+    `grid.repository_dir` returns "" for orchestrator scope BY CONTRACT ("there is no single
+    repository to resolve a slug for") and so `slug` is unconditionally empty there. Slug-first
+    therefore answers "this directory has no GitHub origin" for `borg link` run from the workspace
+    root -- a diagnosis about a directory, on the one invocation that is not about a directory --
+    and the registry-wide sentence can never render. Found by reading the generated golden rather
+    than by a test, which is why `test_the_three_chains_placeholders_are_three_different_diagnoses`
+    now parameterizes `scope_kind` alongside `slug` instead of varying `slug` alone.
+    """
+    if grid_block.get("scope_kind") != "repository":
+        return "no project manifests in the registry yet. Run /borg-plan in any repository."
+    if not grid_block.get("slug"):
+        return "this directory has no GitHub origin — nothing to scope a chain to."
+    return f"no project manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."
+
+
+def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str, int]) -> list[str]:
+    """One project's CHAINS block: its heading, the picture, then one detail block per node.
+
+    THE DETAIL BLOCKS ARE IN NODE-ID ORDER, which is picture reading order (manifest, level, column)
+    and NOT the wire's `(seq, ref)`. A reader moving between the picture and the details must never
+    re-sort in their head; `picture.reading_order` is the one definition of that order and both the
+    glance strip and this loop go through it.
+    """
+    nodes = manifest_grid.get("nodes") or {}
+    out = ["\n", f"  {BOLD}{manifest_grid.get('id', '')}{NC}\n"]
+    desc = manifest_grid.get("desc") or ""
+    if desc:
+        out.append(f"  {DIM}{desc}{NC}\n")
+    repos = manifest_grid.get("repos") or []
+    if repos:
+        out.append(f"  {DIM}repos: {' · '.join(repos)}{NC}\n")
+    out.append(f"  {DIM}glance:{NC} {picture.glance_row(manifest_grid, ids)}\n")
 
     out.append("\n")
-    return "".join(out)
+    out.extend(f"{row}\n" for row in picture.picture(manifest_grid, ids, columns))
+
+    for ref in picture.reading_order(manifest_grid, ids):
+        out.append("\n")
+        out.extend(f"{line}\n" for line in picture.detail_block(nodes[ref], ids.get(ref, ""), nodes, ids))
+    return out
+
+
+def _grid_section(doc: dict) -> tuple[str, list[str]]:
+    """CHAINS: the declared cross-repository topology, one picture and one detail block set per
+    project, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
+
+    The note is UNCONDITIONAL, even when no manifest was selected: `0 projects · 0 refs · 0
+    unresolved · swept <mark>` is the honest reading of a repository with nothing declared, and it is
+    what separates that from a repository nobody swept.
+    """
+    grid_block = doc.get("grid") or {}
+    manifests = grid_block.get("manifests") or []
+    since = str(grid_block.get("since") or "")
+    freshness = f"swept {since}" if grid_block.get("swept") and since else "not swept"
+    note = (
+        f"{_plural(len(manifests), 'project', 'projects')}"
+        f" · {grid_block.get('declared', 0)} refs"
+        f" · {grid_block.get('unresolved', 0)} unresolved"
+        f" · {freshness}"
+    )
+    if not manifests:
+        return note, [_placeholder(_grid_placeholder(grid_block))]
+
+    columns_by_manifest = [picture.assign_columns(manifest) for manifest in manifests]
+    ids = picture.node_ids(manifests, columns_by_manifest)
+    lines: list[str] = []
+    for manifest, columns in zip(manifests, columns_by_manifest):
+        lines.extend(_manifest_lines(manifest, ids, columns))
+    return note, lines
+
+
+def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:
+    """`(rows, show_project)` for one scope-dependent list: the focused repository's in repository
+    scope, the registry-wide aggregate otherwise.
+
+    ONE FUNCTION KEYED ON THE FIELD NAME, because QUEUED and SHIPPED narrow by the identical rule and
+    two copies of it is two places for the breadth rule to drift.
+    """
+    if (doc.get("scope") or {}).get("kind") == "repository":
+        return (doc.get("focus") or {}).get(key) or [], False
+    return doc.get(key) or [], True
+
+
+def _queued_section(doc: dict) -> tuple[str, list[str]]:
+    """QUEUED: filed-but-not-started directives, at the document's breadth."""
+    directives, show_project = _scoped_rows(doc, "directives")
+    if not directives:
+        return "", [_placeholder("nothing queued. Run /borg-plan to file one.")]
+    return _plural(len(directives), "directive", "directives"), _bullet_lines(directives, show_project)
+
+
+def _shipped_section(doc: dict) -> tuple[str, list[str]]:
+    """SHIPPED: the most recently assimilated plans, at the document's breadth.
+
+    NO NOTE, unlike QUEUED's count: `shell.collect_all_assimilated` caps at three, so a count here
+    would read as a total and be one.
+    """
+    assimilated, show_project = _scoped_rows(doc, "assimilated")
+    if not assimilated:
+        return "", [_placeholder("nothing shipped yet.")]
+    return "", _bullet_lines(assimilated, show_project)
+
+
+def _resolution_line(grid_block: dict) -> list[str]:
+    """The ladder's gap as a SENTENCE, never as a token, and only when there is something declared.
+
+    `unresolved` counts declared refs whose state came from neither the sweep nor a targeted fetch.
+    Printing the count is what separates a grid nobody looked at from one that resolved completely --
+    the two are otherwise identical on the page, same `swept: true`, same mark.
+    """
+    declared = grid_block.get("declared", 0)
+    if not declared:
+        return []
+    unresolved = grid_block.get("unresolved", 0)
+    if unresolved:
+        return [_placeholder(f"{unresolved} of {declared} declared refs unresolved — nobody looked")]
+    return [_placeholder(f"{declared} of {declared} declared refs resolved.")]
+
+
+def _cycle_lines(grid_block: dict) -> list[str]:
+    """One sentence per project whose declared edges contain a cycle.
+
+    `manifest_core._rank_nodes` breaks a cycle by admitting the smallest remaining ref rather than
+    raising, so a cyclic manifest still ranks and still draws -- minus the edges that do not descend,
+    which `picture.back_edges` reports and nothing else would. Without this line the picture would
+    read as acyclic and the missing connector would look like a rendering bug.
+    """
+    lines = []
+    for manifest in grid_block.get("manifests") or []:
+        dropped = len(picture.back_edges(manifest))
+        if not dropped:
+            continue
+        # The WHOLE clause is pluralized, not just its noun: the singular needs "forms"/"is" and the
+        # plural "form"/"are", so a `_plural`-style helper on the noun alone produces "1 declared
+        # edge form a cycle and are not drawn".
+        clause = (
+            "1 declared edge forms a cycle and is not drawn"
+            if dropped == 1
+            else f"{dropped} declared edges form a cycle and are not drawn"
+        )
+        lines.append(_placeholder(f"{manifest.get('id', '')}: {clause}"))
+    return lines
+
+
+def _signals_section(doc: dict) -> tuple[str, list[str]]:
+    """SIGNALS: capacity, then every warning the document carried, then the ladder's own gap.
+
+    WARNINGS ARE NEVER SWALLOWED. build_grid's docstring makes the argument for carrying them; this
+    is where they surface. A document with a discovery, selection, sweep or fetch warning that
+    printed nothing would be the exact silent-blindness shape CLAUDE.md's "Learned" catalogues.
+    """
+    grid_block = doc.get("grid") or {}
+    capacity = doc.get("capacity") or {}
+    lines: list[str] = []
+    if capacity.get("over_limit"):
+        lines.append(f"  {BOLD}{capacity['active']} sessions need attention{NC} (limit: {capacity['limit']})\n")
+    lines.extend(_placeholder(warning) for warning in grid_block.get("warnings") or [])
+    lines.extend(_cycle_lines(grid_block))
+    lines.extend(_resolution_line(grid_block))
+    if not lines:
+        return "", [_placeholder("nothing to report.")]
+    return "", lines
+
+
+SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
+    ("", _header_section),  # the cube; no ▸ line
+    ("IN FOCUS", _focus_section),  # ABOVE the board -- the `Status:` invariant
+    ("REPOSITORIES", _board_section),  # registry-wide in BOTH contexts
+    ("CHAINS", _grid_section),
+    ("QUEUED", _queued_section),
+    ("SHIPPED", _shipped_section),
+    ("SIGNALS", _signals_section),
+)
+
+
+def document(doc: dict) -> str:
+    """THE ONE HUMAN ENTRY POINT. Iterates SECTIONS and joins; no branch on scope, mode or emptiness.
+
+    Every branch that used to pick a renderer now lives inside one section builder, which is what
+    makes the header list assertable against `SECTIONS` itself: extract the `▸ `-prefixed titles from
+    any rendering, in any context, and they equal `tuple(t for t, _ in SECTIONS if t)`. A builder that
+    returns nothing still renders its header plus one placeholder, so an empty section cannot silently
+    disappear and take the invariant with it.
+    """
+    return "".join(line for title, build in SECTIONS for line in _section(title, *build(doc)))

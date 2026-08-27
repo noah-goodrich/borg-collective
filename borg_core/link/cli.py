@@ -1,16 +1,18 @@
-"""stdlib argparse CLI entrypoint for `borg link` (Phase 3 of the `borg link` port).
+"""stdlib argparse CLI entrypoint for `borg link`.
 
-Serves all four modes: `--json` (Phase 2), `--porcelain`, `--deep` and the default overview (all
-Phase 3). Renders through render.py, which is a pure function of the document this module builds --
-unlike borg_core/recon/cli.py:71, the wall clock is read ONCE in the shell tier (shell.now_epoch())
-and threaded through every derived field; a second `datetime.now()` call in this file would be the
-exact layering smell borg_core/link/shell.py:44-52 names and refuses.
+THREE MODES, NOT FOUR: `--json`, `--porcelain`, and the one human document. `--deep` collapsed into
+repository scope in AC2 and is now parsed and ignored (see `_build_parser`). Renders through
+render.py, which is a pure function of the document this module builds -- unlike
+borg_core/recon/cli.py:71, the wall clock is read ONCE in the shell tier (shell.now_epoch()) and
+threaded through every derived field; a second `datetime.now()` call in this file would be the exact
+layering smell borg_core/link/shell.py:44-52 names and refuses.
 """
 
 from __future__ import annotations
 
 import argparse
 import json as jsonlib
+import os
 import sys
 from typing import NoReturn
 
@@ -137,26 +139,45 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
     return grid.build_grid(scope, slug, sweep, fetch, selected, warnings + select_warnings)
 
 
+def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
+    """The two per-registry aggregate collectors, or two empty lists when nothing will read them.
+
+    THE REGISTRY IS READ A SECOND TIME HERE, BARE, and that is deliberate rather than a missed
+    dedup: borg.zsh:163 feeds these two collectors `borg_registry_read` (the RAW registry), not the
+    state-overlaid one `_document` already holds. Collapsing the two reads changes which snapshot
+    the aggregates describe. Kept as its own function so `raw` cannot leak into `_document`, whose
+    locals are otherwise at pylint's ceiling.
+    """
+    if not wanted:
+        return [], []
+    raw = shell.read_registry()
+    return shell.collect_all_directives(raw), shell.collect_all_assimilated(raw)
+
+
 def _document(project: str, show_all: bool, mode: str, local: bool = False) -> dict:
-    """Assemble the `borg link` document for one invocation, consumed by both `--json` and the three
-    renderers in render.py.
+    """Assemble the `borg link` document for one invocation, consumed by `--json`, `--porcelain` and
+    the one human renderer.
 
-    Gathers the two per-registry aggregate collectors (`directives`/`assimilated`, each a
-    directory-glob-plus-markdown-read pass over EVERY project) and the single-project `focus` block
-    ONLY when the requesting mode's renderer actually reads them: `render.porcelain` reads only
-    `order`/`projects`; `render.deep` reads only `focus`; `--json` and the default `overview` read
-    everything. Skipping unread work here matters because `_document` is READ-ONLY but re-executed
-    per call site -- drone.zsh:964 calls it once per tmux window inside cmd_status's loop, and
-    borg.zsh's fzf preview re-executes it synchronously on every cursor move.
+    BREADTH IS APPLIED HERE AND NARROWED IN THE RENDERER, WHICH IS WHY `DOCUMENT_VERSION` STAYS 2.
+    core.assemble's docstring prices a version bump at the moment a PRE-EXISTING key narrows; under
+    AC2 none does. The `--json` wire is byte-compatible with v2 from any cwd (see `need_aggregate`
+    below), and what "scope" changes is which ROWS render.document prints, not what the document
+    carries.
 
-    CORRECTION (S1): an earlier version of this docstring said the fzf preview runs `--porcelain`.
-    It does not, and the error was load-bearing -- it was cited downstream as proof that the preview
-    was already protected from expensive work. borg.zsh:262 uses `cmd_ls --porcelain` to build the
-    picker's INPUT LIST, exactly once. borg.zsh:266 is `--preview "borg link {1}"`, and a bare
-    positional routes through _borg_link_dispatch to `--deep`. So the mode re-executed on every
-    cursor move is DEEP, and `deep` is therefore a hot loop, not a cold one. Any future work that
-    puts network or sweep cost behind a mode must treat `deep` as hot and opt the preview down
-    explicitly (borg.zsh:266 now passes `--local`), never assume mode gating protects it.
+    Skipping unread work still matters, because `_document` is READ-ONLY but re-executed per call
+    site: drone.zsh:964 calls it once per tmux window inside cmd_status's loop, and borg.zsh's fzf
+    preview re-executes it synchronously on every cursor move. Both of those pass a NAME, so both are
+    repository scope, so both skip the 14-project `directives`/`assimilated` glob exactly as the old
+    `deep` mode did -- net latency delta zero, plus one ~40-line file read (`cortex_pending`).
+
+    CORRECTION (S1), still true: an earlier version of this docstring said the fzf preview runs
+    `--porcelain`. It does not, and the error was load-bearing -- it was cited downstream as proof
+    that the preview was already protected from expensive work. borg.zsh:262 uses `cmd_ls
+    --porcelain` to build the picker's INPUT LIST, exactly once. borg.zsh:266 is `--preview "borg
+    link --local {1}"`, and a bare positional routes through _borg_link_dispatch. So the mode
+    re-executed on every cursor move is the HUMAN one, and it is a hot loop, not a cold one. Any
+    future work that puts network or sweep cost behind a mode must treat it as hot and opt the
+    preview down explicitly, never assume mode gating protects it.
 
     THE GRID IS DELIBERATELY NOT MODE-GATED (S3), unlike everything above. Skipping unread work is
     the rule for `directives`/`assimilated`/`focus` because those are display sections a given
@@ -176,10 +197,10 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     snapshots and make the table, the order and the active count disagree -- the bug shell.py's
     registry_with_state docstring says the port fixed); (iii) `core.active_count` runs on the
     UNFILTERED overlaid registry, matching _borg_active_count (borg.zsh:115), which never applied the
-    archived filter; (iv) when the aggregate collectors run, registry.json is read a SECOND time
-    (`raw`, bare, alongside the state-overlaid `overlaid`) on purpose, because borg.zsh:163 feeds them
-    borg_registry_read (the RAW registry), not the state-overlaid one; do not collapse it into one
-    read; (v) `total_projects` is `len(overlaid.get("projects"))`, computed from the UNFILTERED
+    archived filter; (iv) when the aggregate collectors run, registry.json is read a SECOND time --
+    bare, inside `_aggregates`, alongside the state-overlaid `overlaid` here -- on purpose, because
+    borg.zsh:163 feeds them borg_registry_read (the RAW registry), not the state-overlaid one; do not
+    collapse it into one read; (v) `total_projects` is `len(overlaid.get("projects"))`, from the UNFILTERED
     overlaid map -- NOT from `projects` (the --all-filtered map) or `order`.
     """
     moment = shell.now_epoch()
@@ -199,17 +220,39 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
         requested_project=project,
     )
 
-    need_aggregate = mode in ("json", "overview")
-    need_focus = mode in ("json", "deep")
+    # `bool(project) or ...` AND NOT A PURELY SCOPE-DERIVED TEST. scope_for honours a positional only
+    # when it is IN THE REGISTRY; an unregistered name deliberately falls through to cwd resolution
+    # and yields kind="orchestrator". Gating focus on scope alone therefore DELETES the
+    # ProjectNotFound path for `borg link ghost` from any cwd outside a registered repository -- exit
+    # 0 with a full board instead of exit 1. cli_contract.bats' "link <project> dies non-zero on a
+    # project that is not registered" and test_cli.py's three ProjectNotFound cases are the evidence,
+    # and they are untouched by AC2 on purpose.
+    need_focus = mode != "porcelain" and (bool(project) or scope["kind"] == "repository")
+    # COMPUTED ABOVE THE AGGREGATE BLOCK, and the hoist is load-bearing rather than tidy. `_focus`
+    # raises ProjectNotFound before anything else runs, which is what keeps a tmux window name that
+    # is not a registry key as cheap as it is today (drone.zsh:964 calls this once per window). Below
+    # the aggregates, that same miss would first pay a 14-project directives-and-assimilated glob.
+    #
+    # `project or scope["repository"]` IS THE FIX FOR THE MODAL HUMAN INVOCATION. `_focus`
+    # short-circuits on an empty positional, so passing `project` alone would make `cd <repo> &&
+    # borg link` -- no argument at all -- render the IN FOCUS placeholder, no `Status:` line, and
+    # empty QUEUED/SHIPPED for a repository with directives on disk. The golden harness renders
+    # repository context BOTH ways against the SAME golden so no future edit can un-fix it.
+    focus = _focus(project or scope.get("repository") or "", overlaid, moment) if need_focus else None
 
-    directives: list[dict] = []
-    assimilated: list[dict] = []
-    cortex_pending: list[dict] = []
-    if need_aggregate:
-        raw = shell.read_registry()
-        directives = shell.collect_all_directives(raw)
-        assimilated = shell.collect_all_assimilated(raw)
-        cortex_pending = shell.cortex_pending(now=moment)
+    # `--json` IS SCOPE-INDEPENDENT, and that is the actual precondition for not bumping
+    # DOCUMENT_VERSION. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |=
+    # (...)'`, and only borg-collective carries a `.borg-project` marker, so that call routes from
+    # INSIDE whatever repository the session is in. Scope-gating the aggregates would report
+    # "Queued: 0 directives" for the whole collective at `.version == 2` -- which SKILL.md maps to
+    # "CLI path. Never fall back." A wrong answer, not a missing one. Neither hot loop is `--json`.
+    need_aggregate = mode == "json" or (mode != "porcelain" and scope["kind"] == "orchestrator")
+
+    directives, assimilated = _aggregates(need_aggregate)
+    # NOT gated with the aggregates any more: the cortex pause row hangs off a BOARD row, and the
+    # board renders in both contexts. It is a single ~40-line file read (shell.cortex_pending), not a
+    # per-project glob, so it is priced with the render rather than with the aggregates.
+    cortex_pending = [] if mode == "porcelain" else shell.cortex_pending(now=moment)
 
     return core.assemble(
         generated_at=core.format_iso(moment),
@@ -221,32 +264,52 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
         directives=directives,
         assimilated=assimilated,
         cortex_pending=cortex_pending,
-        focus=_focus(project, overlaid, moment) if need_focus else None,
+        focus=focus,
         scope=scope,
         grid=_grid(overlaid, scope, local, moment),
     )
 
 
+def _emit(text: str) -> int:
+    """Print one already-complete string, and survive a consumer that stopped reading.
+
+    SIGPIPE IS CAUGHT HERE AND NEVER IN render.py, WHICH STAYS PURE. The seven-section document is
+    substantially larger than the deep dive it replaces and can exceed the 64KB pipe buffer, so
+    `borg link | grep -m1 Status:` -- grep exits on its first match -- can leave this `print` writing
+    into a closed pipe. Uncaught, CPython prints a BrokenPipeError traceback, and drone.zsh's status
+    table would merge it into a column. Redirecting the remaining stdout at devnull is the documented
+    idiom (Python's own `signal` HOWTO): closing or leaving it alone makes the interpreter emit
+    "Exception ignored in: <_io.TextIOWrapper ...>" at shutdown instead, which is the same leak by a
+    different route.
+    """
+    try:
+        print(text, end="")
+        # JUSTIFICATION: this process's own standard stream, not a caller-supplied collaborator.
+        sys.stdout.flush()  # pylint: disable=clean-arch-demeter
+    except BrokenPipeError:
+        # JUSTIFICATION: same stream, and this line is the documented CPython idiom verbatim.
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())  # pylint: disable=clean-arch-demeter
+    return 0
+
+
 def _run(project: str, show_all: bool, mode: str, local: bool = False) -> int:
     """Dispatch one `borg link` invocation; returns the process exit code.
 
-    Mode precedence, strictly: json > porcelain > deep > overview. Renders to a SINGLE string and
-    prints it ONCE -- never streams a renderer's output incrementally, so a mid-render exception
-    yields zero bytes on stdout, never a half-frame (every consumer here swallows failure: cmd_watch's
-    `|| true`, drone status's `|| true`, fzf's preview pane).
+    Mode precedence, strictly: json > porcelain > human. Renders to a SINGLE string and prints it
+    ONCE -- never streams a renderer's output incrementally, so a mid-render exception yields zero
+    bytes on stdout, never a half-frame (every consumer here swallows failure: cmd_watch's `|| true`,
+    drone status's `|| true`, fzf's preview pane).
+
+    ONE HUMAN ARM, ONE RENDERER CALL. `render.document` is named exactly once in this function, and
+    test_render.py asserts that on the source text: a second call site is how "one front door" decays
+    back into two modes of one command answering the same question with different data.
     """
     doc = _document(project, show_all, mode, local)
     if mode == "json":
-        print(jsonlib.dumps(doc))
-        return 0
+        return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
-        print(render.porcelain(doc), end="")
-        return 0
-    if mode == "deep":
-        print(render.deep(doc), end="")
-        return 0
-    print(render.overview(doc), end="")
-    return 0
+        return _emit(render.porcelain(doc))
+    return _emit(render.document(doc))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -255,14 +318,33 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("project", nargs="?", default="")
     parser.add_argument("--json", dest="json_only", action="store_true")
     parser.add_argument("--porcelain", dest="porcelain", action="store_true")
+    # PARSED AND IGNORED SINCE AC2, AND IT MUST STAY THAT WAY. `--deep` collapsed into repository
+    # scope -- scope_for already resolves `borg link <project>` to {kind: repository}, so the one
+    # document says everything the deep dive said, and keeping it as a MODE would be a third context
+    # rendering the same data, which is exactly what "the contexts differ in breadth only" forbids.
+    # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT, and it is the worst
+    # one to break: borg.zsh's `_borg_link_dispatch` positional arm (borg.zsh:3111), which IS the fzf
+    # preview's path, re-executed on every cursor move. Delete the argument and argparse exits 2
+    # where `drone status` and the fzf preview both swallow the failure silently -- a blank pane and
+    # a blank column, with nothing on stderr anyone would see.
+    #
+    # THE COUNT WAS CORRECTED IN AC2/S4. It used to say THREE copies, naming bin/link-parity-harness
+    # and the byte-copy at ~/.claude/bin/link-parity-harness alongside borg.zsh. Neither ever passed
+    # `--deep`: the harness looped a bare POSITIONAL (`modes.extend(("deep:" + p, [p]) ...)`), and
+    # `git log -S -- bin/link-parity-harness` finds the flag in no revision of that file. The two
+    # phantom copies were wrong from the commit that wrote them; S4 then retired the harness's render
+    # leg, so they are now gone twice over. The justification does not weaken by losing them -- one
+    # copy on the path that swallows the failure silently was always the entire argument.
     parser.add_argument("--deep", dest="deep", action="store_true")
     parser.add_argument("--all", dest="show_all", action="store_true")
     # AC1's ONLY opt-down, and as of S3 it is no longer inert. It makes `_grid` call grid.no_sweep()
     # instead of shell.sweep(), so no adapter is discovered, no `since` is resolved and NO SUBPROCESS
     # of any kind is spawned -- the grid still renders, from what each manifest declares. It is the
     # sole protection for every hot loop in the tree: borg.zsh:266's per-keypress fzf preview,
-    # borg.zsh:2225's 5s watch redraw, drone.zsh:964's per-tmux-window loop, bin/link-parity-harness's
-    # 34 invocations, and skills/borg-switch's widest-breadth `--all` call.
+    # borg.zsh:2225's 5s watch redraw, drone.zsh:964's per-tmux-window loop, and
+    # skills/borg-switch's widest-breadth `--all` call. (bin/link-parity-harness's 34 invocations
+    # were the fifth until AC2/S4 retired the render leg that made them; the surviving `primitives`
+    # leg spawns no `borg` subcommand at all.)
     #
     # THIS COMMENT USED TO SAY "changes no behavior yet". It was true in S1 and false the moment the
     # sweep landed, and leaving it would have repeated the exact defect the hardened spec's B1 is:
@@ -274,13 +356,13 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _mode(args: argparse.Namespace) -> str:
+    """THREE MODES, not four: `json`, `porcelain`, `human`. `args.deep` is deliberately not read --
+    see `_build_parser` for why the flag still exists."""
     if args.json_only:
         return "json"
     if args.porcelain:
         return "porcelain"
-    if args.deep:
-        return "deep"
-    return "overview"
+    return "human"
 
 
 def main(argv: list[str] | None = None) -> None:
