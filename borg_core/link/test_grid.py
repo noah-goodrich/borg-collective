@@ -1837,7 +1837,20 @@ def test_the_parser_survives_both_null_shapes_and_ignores_errors_for_control_flo
     items = link_grid.fetched_items(payload, aliases)
 
     assert sorted(items) == ["testorg/alpha#11", "testorg/delta#44"]
-    assert items["testorg/alpha#11"] == {"ref": "testorg/alpha#11", "state": "merged", "title": "alpha eleven"}
+    assert items["testorg/alpha#11"] == {
+        "ref": "testorg/alpha#11",
+        "state": "merged",
+        "title": "alpha eleven",
+        "draft": False,
+    }
+    # AC4/A8, the live-parser half. `isDraft` was selected by _FETCH_NODE since AC3 and DISCARDED
+    # here, which is why picture.GLYPH_DRAFT shipped dead-but-tested. MUTATION: drop the key from
+    # fetched_items -> `draft` is absent and every draft PR is announced as ready.
+    drafted = link_grid.fetched_items(
+        {"data": {"n0": {"issueOrPullRequest": {"state": "OPEN", "isDraft": True, "title": "wip"}}}},
+        {"n0": "o/r#9"},
+    )
+    assert drafted["o/r#9"]["draft"] is True
     assert items["testorg/delta#44"]["state"] == "open", "an Issue's state arrives under the issueState alias"
     # Exit status and errors[] are never consulted; a payload with no data at all is the only failure.
     assert link_grid.fetch_payload_is_usable(payload) is True
@@ -1865,9 +1878,22 @@ def test_a_recording_with_unusable_entries_degrades_entry_by_entry():
             "o/r#2": "not a dict",
             "o/r#3": {"title": "no state"},
         }
-    ) == {"o/r#1": {"ref": "o/r#1", "state": "open", "title": "kept"}}
+    ) == {"o/r#1": {"ref": "o/r#1", "state": "open", "title": "kept", "draft": False}}
     assert link_grid.replayed_items("not an object") == {}
     assert link_grid.replayed_items(None) == {}
+
+    # AC4/A8, the recording half. `isDraft` is carried, and ONLY a real boolean `true` sets it --
+    # a recording is hand-edited, so the string "true" is the shape that actually shows up and it
+    # must not light a glyph that claims live evidence. MUTATION: write `bool(node.get("isDraft"))`.
+    drafts = link_grid.replayed_items(
+        {
+            "o/r#1": {"state": "open", "isDraft": True},
+            "o/r#2": {"state": "open", "isDraft": "true"},
+            "o/r#3": {"state": "open", "isDraft": False},
+            "o/r#4": {"state": "open"},
+        }
+    )
+    assert [drafts[f"o/r#{n}"]["draft"] for n in (1, 2, 3, 4)] == [True, False, False, False]
 
 
 def test_a_ref_set_with_nothing_fetchable_spawns_nothing_and_says_why(isolated, monkeypatch, record_forks):
@@ -1941,23 +1967,122 @@ def test_the_fetch_input_is_every_declared_ref_of_every_selected_manifest():
     assert link_grid.selected_refs([]) == []
 
 
-def test_the_grid_carries_no_ready_set_and_no_duplicate_gate_list(isolated, monkeypatch):
-    """Two keys deliberately NOT on the wire; see grid_manifest's docstring for both arguments.
+def test_the_grid_carries_ready_but_still_no_duplicate_gate_list(isolated, monkeypatch):
+    """`ready` ARRIVED IN AC4; `unmapped_gates` is still deliberately absent.
 
-    `ready` is AC4's routing signal and cannot be computed honestly until AC3's `fetched` rung exists
-    -- from resolved states it announces hand-authored `merged` parents as satisfied, and from swept
-    states only it is permanently empty on the modal cross-repository manifest. `unmapped_gates` is a
-    pure projection of `gates`. Pinned so neither returns without the rung or the consumer that would
-    justify it.
+    This case used to assert `"ready" not in manifest`, pinning the deferral while AC3's `fetched`
+    rung did not exist. The rung exists, `ready_refs` builds its state map from resolved nodes only,
+    and the deferral is discharged -- so the assertion INVERTS rather than being deleted, which is
+    what keeps it a record of why the key was withheld for two ACs.
+
+    `unmapped_gates` stays off: it is a pure projection of `gates` minus one key, and emitting both
+    puts a near-byte-for-byte second copy of every gate on a wire `drone status` serializes once per
+    tmux window.
+
+    MUTATION: drop the `"ready"` key from grid_manifest -> the first assertion; add `unmapped_gates`
+    -> the third. Asserted under `--local`, which is the case that matters: nothing resolves there,
+    so `ready` must be present AND report `unlooked` rather than an empty list.
     """
     dirs = _four_repository_registry(isolated)
     monkeypatch.chdir(dirs["delta"])
 
     manifest = cli._document("", False, "json", local=True)["grid"]["manifests"][0]
 
-    assert "ready" not in manifest
+    assert "ready" in manifest
+    assert manifest["ready"]["state"] == link_grid.STATE_READY_UNLOOKED
+    assert manifest["ready"]["refs"] == []
     assert "unmapped_gates" not in manifest
     assert "gates" in manifest
+
+
+# ── AC4/S1: READY, and whether it is knowable ─────────────────────────────────────────────────────
+
+
+def _chain_manifest() -> dict:
+    """Parent `o/r#1`, child `o/r#2`, plus an independent draft `o/r#3`. The minimum shape that can
+    tell the three READY decisions apart."""
+    return {
+        "program": "chain",
+        "rows": [
+            {"ref": "o/r#1", "order": "1", "lane": "L", "status": "merged"},
+            {"ref": "o/r#2", "order": "2", "lane": "L", "after": ["o/r#1"], "status": "open"},
+            {"ref": "o/r#3", "order": "3", "lane": "M", "status": "open"},
+        ],
+    }
+
+
+def test_a_declared_merged_parent_does_not_make_its_child_ready():
+    """A1, and the whole reason AC4 had a precondition.
+
+    MUTATION: build `ready_refs`' state map from every node instead of the resolved ones. The child
+    then enters READY on the strength of a hand-typed `"status": "merged"` that no sweep and no fetch
+    ever saw, and `state_glyph` renders `●` -- "start this now" -- off it. Measured on the live
+    ingle-t1-cutover manifest, that is 12 of 14 nodes.
+    """
+    declared_only = link_grid.grid_manifest(_chain_manifest(), {}, {})
+    assert declared_only["nodes"]["o/r#1"]["state_source"] == link_grid.STATE_SOURCE_DECLARED
+    assert declared_only["ready"]["state"] == link_grid.STATE_READY_UNLOOKED
+    assert declared_only["ready"]["refs"] == []
+    assert declared_only["nodes"]["o/r#2"]["ready"] is False
+
+    # The SAME topology and the SAME states, resolved: now the child really is ready.
+    swept = {"o/r#1": {"state": "merged"}, "o/r#2": {"state": "open"}, "o/r#3": {"state": "open"}}
+    resolved = link_grid.grid_manifest(_chain_manifest(), swept, {})
+    assert resolved["ready"]["state"] == link_grid.STATE_READY_KNOWN
+    assert "o/r#2" in resolved["ready"]["refs"]
+    assert resolved["nodes"]["o/r#2"]["ready"] is True
+
+
+def test_nothing_ready_on_a_resolved_render_is_not_the_same_as_nobody_looking():
+    """A3 + A2. The two non-populated states are DIFFERENT SENTENCES.
+
+    MUTATION: return a bare list from `ready_refs`. Both cases below then read as `[]`, and a
+    `--local` reader is told their board is clear when the truth is that nothing on the page was
+    resolved -- the same trap SKILL.md records for `order: []` vs `total_projects`, and a direct
+    contradiction of the `N of N declared refs unresolved — nobody looked` line SIGNALS already
+    prints on that exact render.
+    """
+    # Resolved, and genuinely nothing is startable: every row has already merged, so nothing is open.
+    done = {"o/r#1": {"state": "merged"}, "o/r#2": {"state": "merged"}, "o/r#3": {"state": "merged"}}
+    known_empty = link_grid.grid_manifest(_chain_manifest(), done, {})
+    assert known_empty["ready"]["state"] == link_grid.STATE_READY_KNOWN
+    assert known_empty["ready"]["refs"] == []
+
+    # Resolved, and the CHILD is held back by a parent that has not merged -- while the two rows with
+    # no parent are ready. (An earlier draft of this case asserted only `o/r#3` here and was simply
+    # wrong: `o/r#1` is parentless and open, so it is ready by definition. Kept as an assertion
+    # rather than a comment so the distinction is executable.)
+    blocked = {"o/r#1": {"state": "open"}, "o/r#2": {"state": "open"}, "o/r#3": {"state": "open"}}
+    partial = link_grid.grid_manifest(_chain_manifest(), blocked, {})
+    assert partial["ready"]["refs"] == ["o/r#1", "o/r#3"]
+    assert partial["nodes"]["o/r#2"]["ready"] is False, "a child under an unmerged parent is not ready"
+
+    unlooked = link_grid.grid_manifest(_chain_manifest(), {}, {})
+    assert unlooked["ready"]["state"] == link_grid.STATE_READY_UNLOOKED
+    assert unlooked["ready"]["refs"] == []
+    # THE POINT OF THE CASE: these two carry an identical `refs`, and they are not the same fact.
+    assert known_empty["ready"]["refs"] == unlooked["ready"]["refs"] == []
+    assert known_empty["ready"]["state"] != unlooked["ready"]["state"]
+
+
+def test_a_draft_pull_request_is_never_ready():
+    """A8, the derivation half. MUTATION: drop the `draft` filter in `ready_refs`.
+
+    `ready_set` compares against STATE_OPEN and a draft PR IS open in every vocabulary the adapters
+    emit, so without the filter a draft is announced as startable. The filter lives in `ready_refs`
+    rather than in `ready_set` because draft-ness is not part of the state vocabulary that function
+    is written against -- its own docstring says a caller wanting to exclude drafts must do so on its
+    own signal.
+    """
+    fetched = {"o/r#3": {"state": "open", "draft": True}}
+    swept = {"o/r#1": {"state": "merged"}, "o/r#2": {"state": "open"}}
+    block = link_grid.grid_manifest(_chain_manifest(), swept, fetched)
+
+    assert block["nodes"]["o/r#3"]["draft"] is True
+    assert block["nodes"]["o/r#3"]["state"] == "open", "draft-ness is orthogonal to the state token"
+    assert "o/r#3" not in block["ready"]["refs"]
+    assert block["nodes"]["o/r#3"]["ready"] is False
+    assert "o/r#2" in block["ready"]["refs"], "the non-draft sibling is unaffected"
 
 
 # ── AC2/S1: the topology keys the renderer reads ──────────────────────────────────────────────────

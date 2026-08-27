@@ -57,8 +57,16 @@ STATE_SOURCE_UNKNOWN = "unknown"
 GRID_STATE_UNKNOWN = "unknown"
 
 # The `state_source` values that mean "somebody actually looked". `unresolved` counts everything
-# else; see build_grid.
+# else; see build_grid. `picture.resolved_provenance` reads this same tuple, so the marks in the
+# picture and the count in SIGNALS are two views of one fact rather than two derivations.
 RESOLVED_STATE_SOURCES = (STATE_SOURCE_SWEPT, STATE_SOURCE_FETCHED)
+
+# AC4. The READY set's two knowable states. `known` means every ref in `refs` is ready AND that the
+# absence of a ref is a real answer; `unlooked` means nothing on this page was resolved, so the set
+# is not empty -- it is unknown. See ready_refs for why the distinction is load-bearing rather than
+# decorative.
+STATE_READY_KNOWN = "known"
+STATE_READY_UNLOOKED = "unlooked"
 
 # The ONLY declared `status` values the ladder will promote to a state, and they are exactly the
 # github adapter's three tokens (borg_core/manifest/core.py:103-105). A manifest's `status` field is
@@ -448,7 +456,17 @@ def fetched_items(payload: dict, aliases: dict[str, str]) -> dict[str, dict]:
         state = _grid_text(answer.get("state")) or _grid_text(answer.get("issueState"))
         if not state:
             continue
-        items[ref] = {"ref": ref, "state": state.lower(), "title": _grid_text(answer.get("title"))}
+        items[ref] = {
+            "ref": ref,
+            "state": state.lower(),
+            "title": _grid_text(answer.get("title")),
+            # AC4. `isDraft` was SELECTED by _FETCH_NODE since AC3 and thrown away here, which is why
+            # `picture.GLYPH_DRAFT` shipped dead-but-tested. It is carried only on this rung: the
+            # sweep's adapter contract has three tokens and no draft-ness (recon-adapter-github:179),
+            # and a draft PR is `open` there. `is True` because a missing key, a JSON `false` and the
+            # STRING "true" must all read as not-draft -- the Python side of the jq `//` trap.
+            "draft": answer.get("isDraft") is True,
+        }
     return items
 
 
@@ -476,7 +494,14 @@ def replayed_items(nodes: object) -> dict[str, dict]:
             continue
         state = _grid_text(node.get("state"))
         if state:
-            items[key] = {"ref": key, "state": state.lower(), "title": _grid_text(node.get("title"))}
+            items[key] = {
+                "ref": key,
+                "state": state.lower(),
+                "title": _grid_text(node.get("title")),
+                # Mirrors fetched_items' key exactly. A recording that omits `isDraft` reads as
+                # not-draft, which is what every recording written before AC4 does.
+                "draft": node.get("isDraft") is True,
+            }
     return items
 
 
@@ -769,8 +794,50 @@ def _grid_nodes(
             "seq": seq_of.get(ref, unrowed_seq),
             "parents": parents_of.get(ref, []),
             "children": children_of.get(ref, []),
+            # AC4. Read off the FETCHED rung only (see fetched_items). Kept as a node field rather
+            # than folded into `state` because draft-ness is orthogonal to open/merged/closed: a
+            # draft PR is `open` in every vocabulary the adapters emit, and collapsing it into a
+            # fourth state token would make `ready_set` -- which compares against STATE_OPEN -- stop
+            # recognizing it as open at all.
+            "draft": bool(answer.get("draft")),
         }
     return nodes, ranked
+
+
+def ready_refs(manifest: dict, nodes: dict[str, dict]) -> dict:
+    """AC4's READY set, and WHETHER IT IS KNOWABLE. Three states, not a list-or-empty.
+
+    RESOLVED STATES ONLY, AND THAT IS THE WHOLE DECISION. `manifest_core.ready_set` takes
+    `{ref: state}` with provenance already erased -- its own docstring says a ref with no known state
+    is not a merged parent, but it cannot tell a swept `merged` from a hand-typed one. Feeding it
+    declared states puts a child under twelve hand-typed parents into READY and lights `●`
+    ("start this now") off a field nobody verified. That is the exact claim AC4's precondition was
+    filed to prevent, and it would arrive in AC4's own commit.
+
+    Measured on the live stillpoint/.borg/programs/ingle-t1-cutover.json: a real sweep resolves 14 of
+    14 (9 swept, 5 fetched); `--local` resolves 0 of 14. So PROVENANCE IS A FUNCTION OF `--local`, not
+    of manifest quality -- excluding declared states costs nothing on a swept render and empties the
+    set on a local one.
+
+    WHICH IS WHY THE RESULT CARRIES A `state`. An empty list and "nobody looked" are different facts,
+    and a renderer that prints both as "nothing is ready" tells a `--local` reader that their board is
+    clear when the truth is that no state on the page was resolved. Same trap `skills/borg-link
+    /SKILL.md` records for `order: []` vs `total_projects`, and `render._resolution_line` already
+    prints the honest sentence one section further down -- this makes NEXT agree with SIGNALS rather
+    than contradict it.
+
+    A DRAFT IS NEVER READY. `ready_set` compares against STATE_OPEN and a draft PR is `open`, so it
+    would otherwise be announced as startable; the filter is here rather than in `ready_set` because
+    draft-ness is not part of the state vocabulary that function is written against, which its own
+    docstring says outright ("a caller that wants to exclude drafts must do so on its own signal").
+    """
+    resolved = {
+        ref: node.get("state") for ref, node in nodes.items() if node.get("state_source") in RESOLVED_STATE_SOURCES
+    }
+    if not resolved:
+        return {"state": STATE_READY_UNLOOKED, "refs": []}
+    refs = [ref for ref in manifest_core.ready_set(manifest, resolved) if not nodes.get(ref, {}).get("draft")]
+    return {"state": STATE_READY_KNOWN, "refs": refs}
 
 
 def _manifest_repos(manifest: dict) -> list[str]:
@@ -808,23 +875,38 @@ def grid_manifest(manifest: dict, items: dict[str, dict], fetched: dict[str, dic
     and that this docstring already forbids from using it. Both live manifests are 100% prose gates,
     so the second copy is the first copy. AC2's renderer can derive the subset in one comprehension.
 
-    `ready` IS NOT CARRIED EITHER, and that is a deliberate deferral to AC4 rather than an omission.
-    Readiness is the routing signal -- "open AND every parent merged" -- and computing it here means
-    computing it from a state map that has had its PROVENANCE ERASED: `ready_set` takes
-    `{ref: state}`, so a hand-authored `"status": "merged"` and a live GitHub answer are the same
-    token to it. Two independent reviews reproduced the consequence: a manifest whose parent row is
-    declared merged and whose child is declared open puts the child in `ready`, on the strength of
-    two hand-typed fields and a sweep that never saw either ref -- which is precisely the "a merged
-    row keeps announcing itself as next" failure the STATE_SOURCE block above says the grid exists to
-    remove. The honest alternative (exclude declared-only refs) was no better before AC3: under
-    repository scope the sweep covers ONE repository, so on the modal cross-repository manifest every
-    parent outside it was `unknown` and `ready` was permanently empty. The `fetched` rung is what
-    makes the ladder trustworthy enough to compute readiness from, and it now exists -- but `ready`
-    stays AC4's, because the honest version has to decide what a `degraded` fetch means for a parent
-    it could not resolve, and that decision belongs with the consumer that reads the answer.
-    `manifest_core.ready_set` is untouched and still tested in its own suite.
+    `ready` IS NOW CARRIED, AND THE DEFERRAL IT WAS WAITING ON RESOLVED. Until AC4 this block said
+    `ready` was withheld because `ready_set` takes `{ref: state}` with PROVENANCE ERASED -- a
+    hand-authored `"status": "merged"` and a live GitHub answer are the same token to it, so a child
+    under two declared-merged parents would enter `ready` on the strength of a sweep that never saw
+    either ref. That argument was correct and it is now ANSWERED rather than abandoned: `ready_refs`
+    builds the state map from RESOLVED nodes only, so a declared state cannot reach `ready_set` at
+    all. The question the deferral named -- what a `degraded` fetch means for a parent nobody
+    resolved -- has the same answer: an unresolved parent is not a merged parent, exactly as
+    `ready_set`'s own docstring already required for `unknown`.
+
+    The old objection that this would make `ready` permanently empty was pre-AC3 and is now measured
+    rather than assumed: with the fetch rung live, the flagship manifest resolves 14 of 14 on a swept
+    render. It resolves 0 of 14 under `--local`, which is why the result carries a `state` instead of
+    being a bare list -- see ready_refs.
+
+    `manifest_core.ready_set` is still untouched and still tested in its own suite. Everything AC4
+    decided is about what is HANDED to it, which is the seam this paragraph identified in the first
+    place.
     """
     nodes, ranked = _grid_nodes(manifest, items, fetched)
+    ready = ready_refs(manifest, nodes)
+    # STAMPED ON THE NODE as well as listed on the block, because the two consumers ask different
+    # questions: `render._next_section` reads the LIST (it renders a set, in order), while
+    # `picture.state_glyph` reads the FLAG on one node it already holds. Deriving either from the
+    # other at the call site is the "two answers to one question" shape `level` was hoisted onto the
+    # node to avoid.
+    # NOT named `ready_set`: that is the name of the manifest_core function this module calls two
+    # frames down, and a local that shadows a callee's name in a file where both appear is how the
+    # next reader ends up debugging the wrong one.
+    ready_lookup = set(ready["refs"])
+    for ref, node in nodes.items():
+        node["ready"] = ref in ready_lookup
     return {
         "id": _grid_text(manifest.get("_id")),
         "path": _grid_text(manifest.get("_path")),
@@ -833,6 +915,7 @@ def grid_manifest(manifest: dict, items: dict[str, dict], fetched: dict[str, dic
         "levels": ranked,
         "nodes": nodes,
         "gates": manifest_core.gates(manifest),
+        "ready": ready,
     }
 
 

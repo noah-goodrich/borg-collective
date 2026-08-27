@@ -27,13 +27,13 @@
   [1mauth-hardening[0m
   [2mRotate every service onto scoped keypair auth, then flip enforcement on in one release.[0m
   [2mrepos: acme/infra · acme/platform · acme/warehouse[0m
-  [2mglance:[0m [0;32m✔[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m
+  [2mglance:[0m [0;32m✔[0m [1;33m●[0m [1;33m●[0m [1;33m●[0m [1;33m○[0m [1;33m○[0m [1;33m○[0m
 
     [0;32m✔[0m n1   ]8;;https://github.com/acme/platform/issues/400\platform#400]8;;\
     [2m│[0m
 [2m    ├────────────────────┬────────────────────┐[0m
     [2m│[0m                    [2m│[0m                    [2m│[0m
-    [1;33m○[0m n2   ]8;;https://github.com/acme/platform/issues/420\platform#420]8;;\  [1;33m○[0m n3   ]8;;https://github.com/acme/warehouse/issues/87\warehouse#87]8;;\  [1;33m○[0m n4   ]8;;https://github.com/acme/infra/issues/12\infra#12]8;;\
+    [1;33m●[0m n2   ]8;;https://github.com/acme/platform/issues/420\platform#420]8;;\  [1;33m●[0m n3   ]8;;https://github.com/acme/warehouse/issues/87\warehouse#87]8;;\  [1;33m●[0m n4   ]8;;https://github.com/acme/infra/issues/12\infra#12]8;;\
     [2m│[0m                    [2m│[0m                    [2m│[0m
     [1;33m○[0m n5   ]8;;https://github.com/acme/platform/issues/431\platform#431]8;;\  [1;33m○[0m n6   ]8;;https://github.com/acme/warehouse/issues/93\warehouse#93]8;;\  [2m│[0m
     [2m│[0m                    [2m│[0m                    [2m│[0m
@@ -94,11 +94,11 @@
   [1mwarehouse-rollout[0m
   [2mMove the warehouse fleet onto the rotated keypair, one region at a time.[0m
   [2mrepos: acme/warehouse[0m
-  [2mglance:[0m [0;32m✔[0m [1;33m○[0m [0;32m✔[0m [2m✗[0m [2m✔[0m
+  [2mglance:[0m [0;32m✔[0m [1;33m●[0m [0;32m✔[0m [2m✗[0m [2m✔[0m
 
     [0;32m✔[0m n8   ]8;;https://github.com/acme/warehouse/issues/61\warehouse#61]8;;\
     [2m│[0m
-    [1;33m○[0m n9   ]8;;https://github.com/acme/warehouse/issues/64\warehouse#64]8;;\
+    [1;33m●[0m n9   ]8;;https://github.com/acme/warehouse/issues/64\warehouse#64]8;;\
     [2m│[0m
     [0;32m✔[0m[0;31m![0mn10  ]8;;https://github.com/acme/warehouse/issues/70\warehouse#70]8;;\
     [2m│[0m
