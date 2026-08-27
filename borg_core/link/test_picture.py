@@ -32,16 +32,36 @@ def plain(text: str) -> str:
     return _ESCAPES.sub("", text)
 
 
+def swept(manifest: dict) -> dict[str, dict]:
+    """Every row's OWN declared state, handed back as though the sweep had answered it.
+
+    THE TOPOLOGY ORACLES NEED THIS AND IT IS NOT A CHEAT. `picture-fork.expected` and
+    `picture-crossing.expected` are hand-authored to pin the COLUMN ALGORITHM and the connector/rail
+    rules. Built with `{}, {}` every node resolves `declared` or `unknown`, so AC4's precondition
+    stamps `?` in the cell's second slot and both oracles fail for a reason that has nothing to do
+    with what they were authored to check. This holds the PROVENANCE axis constant so the TOPOLOGY
+    axis is what is being measured.
+
+    MIRRORS `status` RATHER THAN FLATTENING IT. An earlier version answered every ref `open`, which
+    resolved provenance and simultaneously destroyed the states the oracles encode -- `picture-fork
+    .expected`'s first cell is `✔`, because the mock's trunk row declares `status="merged"`. Echoing
+    each row's own token changes the SOURCE and nothing else, which is exactly the isolation wanted.
+
+    Provenance itself is measured directly, on its own fixtures, by the AC4-precondition cases below.
+    """
+    return {row["ref"]: {"state": row["status"]} for row in manifest.get("rows") or [] if row.get("status")}
+
+
 def render(manifest: dict) -> list[str]:
     """One manifest all the way to picture rows, escapes stripped. The whole pipeline, no CLI."""
-    block = link_grid.grid_manifest(manifest, {}, {})
+    block = link_grid.grid_manifest(manifest, swept(manifest), {})
     columns = picture.assign_columns(block)
     ids = picture.node_ids([block], [columns])
     return [plain(row) for row in picture.picture(block, ids, columns)]
 
 
 def columns_of(manifest: dict) -> dict[str, int]:
-    return picture.assign_columns(link_grid.grid_manifest(manifest, {}, {}))
+    return picture.assign_columns(link_grid.grid_manifest(manifest, swept(manifest), {}))
 
 
 def _row(order: int, ref: str, **extra) -> dict:
@@ -427,11 +447,18 @@ def test_a_state_token_nobody_recognizes_takes_the_default_arm():
     vocabulary (`resolve_state` passes a swept token through verbatim), and `stacked`, which the LIVE
     viz manifest declares on every row.
     """
+    # `state_source` IS SUPPLIED ON EVERY NODE HERE, and it is load-bearing rather than noise. AC4's
+    # precondition makes `state_word` return "" for unresolved provenance, so without a resolved
+    # source the `== ""` assertions below would pass for the WRONG REASON — proving the provenance
+    # gate fires, not that the token took the default arm — and the two `!= ""` assertions would fail.
+    # That is the "a check pointed at the wrong thing reads as a pass" trap this module's docstring
+    # names, arriving from one module over.
     for token in (link_grid.GRID_STATE_UNKNOWN, "in_progress", "stacked", "", None):
-        assert picture.state_glyph({"state": token}) == picture.GLYPH_OPEN
-        assert picture.state_word({"state": token}) == ""
-    assert picture.state_word({"state": "merged"}) == "MERGED"
-    assert picture.state_word({"state": "closed"}) == "CLOSED"
+        node = {"state": token, "state_source": link_grid.STATE_SOURCE_SWEPT}
+        assert picture.state_glyph(node) == picture.GLYPH_OPEN
+        assert picture.state_word(node) == ""
+    assert picture.state_word({"state": "merged", "state_source": link_grid.STATE_SOURCE_SWEPT}) == "MERGED"
+    assert picture.state_word({"state": "closed", "state_source": link_grid.STATE_SOURCE_FETCHED}) == "CLOSED"
 
 
 def test_the_state_sentence_names_a_condition_and_never_an_adapter():
@@ -664,7 +691,12 @@ def test_a_detail_block_carries_title_why_join_gate_and_unparked():
     three parents (so the join marker fires), a gate with both `blocked_by` and `resolved_by`, and a
     title that came off the wire rather than out of the manifest.
     """
-    block = link_grid.grid_manifest(fork_manifest(), {"acme/infra#77": {"title": "flip the flag"}}, {})
+    # Swept rather than `{}`: the `waits on:` line asserted at the bottom names each parent's state,
+    # and AC4's precondition drops that word for an unverified node. Provenance is held constant here
+    # for the same reason as in `swept()` above — this case measures the ORDER parents are listed in.
+    items = swept(fork_manifest())
+    items["acme/infra#77"] = {**items["acme/infra#77"], "title": "flip the flag"}
+    block = link_grid.grid_manifest(fork_manifest(), items, {})
     columns = picture.assign_columns(block)
     ids = picture.node_ids([block], [columns])
     node = block["nodes"]["acme/infra#77"]
@@ -758,9 +790,94 @@ def test_a_closed_node_is_distinguishable_from_a_merged_one():
     ABANDONED pull request renders identically to a shipped one -- a wrong answer on the command
     whose whole purpose is derived fact.
     """
-    assert picture.state_glyph({"state": "closed"}) == picture.GLYPH_CLOSED
+    # Both nodes carry a RESOLVED source so the colour assertion measures state and not provenance:
+    # AC4's precondition takes an unverified node to DIM whatever its state, which would make closed
+    # and merged agree here and turn a real regression green.
+    closed = {"state": "closed", "state_source": link_grid.STATE_SOURCE_SWEPT}
+    merged = {"state": "merged", "state_source": link_grid.STATE_SOURCE_SWEPT}
+    assert picture.state_glyph(closed) == picture.GLYPH_CLOSED
     assert picture.GLYPH_CLOSED not in (picture.GLYPH_MERGED, picture.GLYPH_OPEN, picture.GLYPH_READY)
-    assert picture.glyph_color({"state": "closed"}) != picture.glyph_color({"state": "merged"})
+    assert picture.glyph_color(closed) != picture.glyph_color(merged)
+
+
+# ── AC4 PRECONDITION: the glyph is gated on PROVENANCE ────────────────────────────────────────────
+# Measured on the live stillpoint/.borg/programs/ingle-t1-cutover.json: 12 nodes declared "merged",
+# 2 unknown, and a glance strip of twelve green checkmarks asserting a project is essentially done
+# entirely from a hand-typed field no sweep and no fetch ever saw. These cases pin all three sites
+# the precondition names, because fixing one and missing another leaves the page contradicting
+# itself -- which is precisely what `state_word` was doing before this change.
+
+
+def _sourced(state: str, source: str, **extra) -> dict:
+    node = {"ref": "o/a#1", "state": state, "state_source": source}
+    node.update(extra)
+    return node
+
+
+def test_an_unverified_state_never_renders_as_a_verified_one():
+    """The precondition in one case, across all three sites.
+
+    MUTATION: delete any one of the three guards -- `resolved_provenance` in `cell_mark`, the DIM
+    early return in `glyph_color`, or the `return ""` in `state_word`. Each turns one assertion red
+    on its own, which is the point: they are three separate false claims about the same node.
+    """
+    declared = _sourced("merged", link_grid.STATE_SOURCE_DECLARED)
+    swept_node = _sourced("merged", link_grid.STATE_SOURCE_SWEPT)
+
+    # Same glyph -- the author's declaration is preserved, not discarded. That is what makes this
+    # option (ii) rather than the rejected option (i), which collapsed every unverified cell to one
+    # character and threw away what the manifest said.
+    assert picture.state_glyph(declared) == picture.state_glyph(swept_node) == picture.GLYPH_MERGED
+
+    # ...and every other signal says "nobody checked this".
+    assert plain(picture.cell_mark(declared, drift=False)) == picture.PROVENANCE_MARK
+    assert plain(picture.cell_mark(swept_node, drift=False)) == " "
+    assert picture.glyph_color(declared) != picture.glyph_color(swept_node)
+    assert picture.state_word(declared) == ""
+    assert picture.state_word(swept_node) == "MERGED"
+
+
+def test_an_unknown_state_source_is_unverified_too():
+    """`unknown` is the bottom of the resolve ladder, not a fourth resolved rung.
+
+    MUTATION: write the predicate as `!= STATE_SOURCE_DECLARED`. That reads naturally and is wrong --
+    it would mark a hand-typed row and silently pass every ref nobody looked up at all, which is the
+    MAJORITY case on any `--local` render (the fzf preview and `drone status` both opt down from both
+    network rungs by design).
+    """
+    for source in (link_grid.STATE_SOURCE_DECLARED, link_grid.STATE_SOURCE_UNKNOWN, "", None):
+        assert not picture.resolved_provenance(_sourced("merged", source))
+    for source in link_grid.RESOLVED_STATE_SOURCES:
+        assert picture.resolved_provenance(_sourced("merged", source))
+
+
+def test_the_provenance_mark_beats_drift_when_both_apply():
+    """One slot, two claims. MUTATION: swap the two arms of `cell_mark`.
+
+    Contention was measured at 0 nodes on both live manifests, so no golden would catch the swap --
+    only this case does. `?` wins because drift is a claim about the relationship between TWO states:
+    if this node's own state was never verified, the contradiction is unverified too, and `!` is the
+    loudest mark on the page.
+    """
+    unverified_drift = _sourced("merged", link_grid.STATE_SOURCE_DECLARED)
+    verified_drift = _sourced("merged", link_grid.STATE_SOURCE_SWEPT)
+    assert plain(picture.cell_mark(unverified_drift, drift=True)) == picture.PROVENANCE_MARK
+    assert plain(picture.cell_mark(verified_drift, drift=True)) == picture.DRIFT_MARK
+    assert picture.PROVENANCE_MARK != picture.DRIFT_MARK
+
+
+def test_the_provenance_mark_survives_ansi_stripping():
+    """The mark must be visible in a PLAIN-TEXT golden diff, not only on a colour terminal.
+
+    MUTATION: implement the precondition as option (iii) -- dim the glyph and add no character. That
+    renders identically under `plain()`, so every golden stays byte-for-byte green while the page
+    quietly stops distinguishing verified from hand-typed. CLAUDE.md's "Learned" section catalogues
+    that failure shape three times; this is the case that refuses it here.
+    """
+    declared = _sourced("merged", link_grid.STATE_SOURCE_DECLARED)
+    cell = picture.node_cell(declared, "n1", "a#1", width=3, drift=False)
+    assert picture.PROVENANCE_MARK in plain(cell)
+    assert plain(cell).startswith(f"{picture.GLYPH_MERGED}{picture.PROVENANCE_MARK}n1")
 
 
 def test_an_empty_manifest_renders_nothing_rather_than_raising():

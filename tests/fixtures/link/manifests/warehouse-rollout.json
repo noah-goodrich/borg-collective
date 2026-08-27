@@ -26,6 +26,12 @@
       "ref": "acme/warehouse#72",
       "order": "4",
       "why": "ap region cutover — superseded by the fleet-wide script"
+    },
+    {
+      "ref": "acme/warehouse#75",
+      "order": "5",
+      "status": "merged",
+      "why": "sa region cutover — the AC4-precondition row: declared merged, verified by nobody"
     }
   ]
 }
