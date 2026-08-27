@@ -1167,9 +1167,28 @@ _document       focus computed ABOVE the aggregate block, from `project or scope
   the project up in the full overlaid registry (`cli.py:52-53`, deliberate). `_board_section` must use `.get` plus a
   placeholder row, never `projects[name]` the way `render.porcelain:142` does, or repository scope on an archived
   project raises `KeyError` into `cli.main`'s broad except. Add the case.
-- **`bin/link-parity-harness`** — the `render` leg is retired in this commit and the retirement is stated in the commit
-  body: its oracle is the pre-AC2 zsh renderer at `ad99612` and is unreproducible by construction. The `primitives` leg
-  stays green.
+- **`bin/link-parity-harness`** — the `render` leg is retired in S4 (not in S3's commit, see §7) and the retirement is
+  stated in that commit body: its oracle is the pre-AC2 zsh renderer at `ad99612` and is unreproducible by
+  construction. The `primitives` leg stays green.
+
+  > **AMENDED 2026-08-27 (S4), by execution. RETIRING THE LEG COSTS FOUR MORE FILES THAN THIS ROW AND §6 ADMIT.**
+  > `--oracle-ref` fed nothing but the render leg, so it goes with it — which turns `tests/link_parity_harness.bats`'s
+  > `[[ "$output" == *"--oracle-ref"* ]]` red. It now asserts `--registry` and gains a case pinning that `render` exits
+  > 2 with the reason. `render` stays a RECOGNIZED argparse token rather than being dropped from `choices`, at the
+  > altitude `docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md` settled for `borg recon`: the
+  > artifact that implements the command owns the invariant. That matters here specifically because
+  > `~/.claude/bin/link-parity-harness` is a byte-copy that keeps a working-looking render leg until `borg setup` next
+  > runs.
+  >
+  > **And it corrects a count that was already wrong.** Three comments — `borg_core/link/cli.py`,
+  > `borg_core/link/test_cli.py`'s C6, `tests/cli_contract.bats`'s B16 — justified keeping `--deep` in the parser with
+  > "three copies of the dispatcher still pass it", naming this harness and its byte-copy alongside `borg.zsh`. Neither
+  > harness copy ever passed `--deep`: it looped a bare positional, `modes.extend(("deep:" + p, [p]) ...)`, and
+  > `git log -S -- bin/link-parity-harness` finds the flag in no revision of the file. The claim was wrong from the
+  > commit that wrote it. `--deep` still stays — the one real copy is `borg.zsh:3111`, the fzf preview's path, where
+  > argparse exiting 2 is a blank pane with nothing on stderr anyone would see. **One copy on the silently-swallowing
+  > hot path was always the entire argument;** the count was decoration, and decoration that names two artifacts which
+  > do not do the thing is the same defect class as the hardened spec's B1.
 - **`borg link --deep` with no positional** — unreachable from `borg.zsh` (`_borg_link_dispatch` only passes `--deep`
   alongside a positional, `borg.zsh:3110-3117`); a user's `--deep` falls into the lenient `-*)` arm. Pinned by B16 in
   its reachable shape.
@@ -1204,10 +1223,14 @@ _document       focus computed ABOVE the aggregate block, from `project or scope
 | `pyproject.toml` | `[tool.clean-arch.module_map] Domain` gains `"picture.py"` |
 | `borg.zsh` | ONE line: `:267` `--preview-window "right:45:wrap"` → `"right:70:wrap"` |
 | `skills/borg-link/SKILL.md` | additive only: document `.grid` nodes' `parents`/`children`/`seq` and the manifest `desc`/`repos`; correct the "scope is context, not content" clause (`:121-124`) to say focus now follows scope. **No change to the `== 2` gate (`:87`), the `> 2` skew branch (`:88`), or the deep-dive whitelist (`:39`).** |
-| `bin/link-parity-harness` | retire the `render` leg; keep `primitives` |
+| `bin/link-parity-harness` | retire the `render` leg and `--oracle-ref`; keep `primitives`; `render` becomes a recognized token that exits 2 with the reason |
+| `tests/link_parity_harness.bats` | **AMENDED (S4)** — `--oracle-ref` no longer exists; assert `--registry`, and pin the `render` retirement |
+| `borg_core/link/cli.py` (comments) | **AMENDED (S4)** — the `--deep` "three copies" count and the `--local` hot-loop list, both corrected |
+| `borg_core/link/test_cli.py` (C6 docstring) | **AMENDED (S4)** — same count correction |
+| `tests/cli_contract.bats` (B16 comment) | **AMENDED (S4)** — same count correction; no assertion changes |
 | `CLAUDE.md` | `borg link`'s one-renderer description + the `render.py` / `picture.py` split |
 | `drone.zsh` | **DELIBERATELY UNCHANGED** — listed so the reviewer verifies the diff is empty; the `--porcelain` migration of `:964` is filed as a parented follow-up |
-| `tests/link_sweep.bats` | **UNCHANGED** — its call-site greps and the `drone status` zero-subprocess case still hold |
+| `tests/link_sweep.bats` | **UNCHANGED THROUGH S3** — the `drone status` zero-subprocess case still holds. **AMENDED (S4):** its two `bin/link-parity-harness` greps are RETIRED WITH THE CALL SITE THEY GUARDED, not weakened — see §7 |
 
 **`DOCUMENT_VERSION` stays 2.** Cost in `skills/borg-link/SKILL.md`: zero coupled edits — the four edits
 `core.py:631-636` prices a bump at (the `== 2` gate, the `> 2` skew branch, the "scope is context" claim, and the
@@ -1242,6 +1265,26 @@ plus the four named pre-existing bats cases must not be touched — that is the 
 **S4 — the parity retirement (breaks the harness's `render` leg, deliberately).** `bin/link-parity-harness` loses its
 `render` command; the `primitives` leg and `tests/link_sweep.bats:417`'s grep on `"link", "--local", *args` stay green.
 Separate from S3 so the deletion reads as *evidence replaced*, not *evidence dropped*.
+
+> **AMENDED 2026-08-27 (S4), by execution. THAT GREP CANNOT STAY GREEN — IT COUNTS THE EXACT LINE BEING DELETED.**
+> `"link", "--local", *args` occurs once in the whole tree, inside `run_link`, which is a render-leg-only helper. Retire
+> the leg and the count goes 1 → 0 and `tests/link_sweep.bats:417` turns red. The sibling assertion in the same case
+> — `grep -c 'BORG_RECON_ADAPTER_PATH.*no_adapters'`, which pins the harness sandbox's hermeticity — has the same fate
+> for the same reason: `Sandbox` exists only to host `run_link`.
+>
+> **Both are retired WITH the thing they guarded, which is the only honest reason to delete a tripwire.** The surviving
+> `primitives` leg invokes no `borg` subcommand at all — no `borg.zsh`, no sandbox, no adapter, no `gh`; it runs
+> `bash -c` one-liners and `python3 -c "from borg_core.link import core"` — so it is hermetic with respect to the
+> network *without being neutralized*, and there is no invocation left for a `--local` to be missing from. The case
+> keeps its name and its `skills/borg-switch` grep, which is still a real looping call site.
+>
+> **Deliberately NOT converted to `-eq 0` assertions.** That pins the OPPOSITE invariant — "this call site must never
+> come back" — and would fire on someone restoring a looping call site *correctly*, with `--local`, which is precisely
+> what the case exists to permit. An inverted tripwire is worse than a deleted one: it reads as coverage while
+> forbidding the repair.
+>
+> The reviewer's check for S4 is therefore **not** "`link_sweep.bats` is untouched" but: the `skills/borg-switch` grep
+> survives, no `@test` line in that file was removed or renamed, and `drone status` still counts zero subprocesses.
 
 **S5 — documentation.** `CLAUDE.md` and the additive `skills/borg-link/SKILL.md` edits. Last, so it describes what
 shipped rather than what was planned.
