@@ -412,6 +412,31 @@ jq -e '.grid.swept == true and .grid.since == "2026-05-28" and .grid.unresolved 
        and (.grid.fetch.resolved == .grid.fetch.requested) and (.grid.fetch.requested > 0)'
 ```
 
+> **AMENDED 2026-08-26 (S3), by execution. `.grid.fetch.resolved == .grid.fetch.requested` CANNOT HOLD IN BOTH
+> CONTEXTS and is not the property worth asserting.** `requested` is the SCOPED ask — 7 refs in repository scope, 11 in
+> orchestrator scope — while `resolved` is `len(items)` from the recording, which `shell._read_fetch_fixture` replays
+> WHOLE regardless of what was asked, so it is 11 either way. The predicate is therefore false in repository scope for
+> any recording that answers the full declared set, and trimming the recording to make it true would make
+> `fetch_answered` report `degraded` plus a spurious "N of M did not resolve" warning into both goldens.
+>
+> What shipped asserts what this was reaching for, and does it more directly — a mistyped path produces "unreadable or
+> invalid JSON" rather than "replayed from fixture", so naming both warnings catches it outright:
+>
+> ```bash
+> jq -e '.grid.swept == true and .grid.since == "2026-05-28"
+>        and .grid.declared > 0 and .grid.unresolved == 0
+>        and .grid.fetch.status == "ok"
+>        and .grid.fetch.requested > 0 and .grid.fetch.resolved > 0
+>        and ((.grid.warnings | map(select(startswith("sweep: replayed from fixture"))) | length) == 1)
+>        and ((.grid.warnings | map(select(startswith("fetch: replayed from fixture"))) | length) == 1)'
+> ```
+>
+> The fetch recording covers ALL ELEVEN declared refs rather than only the three the sweep omits, because that is what
+> an unconditional targeted fetch actually asks for (`cli._grid` starts it over `selected_refs`, before the sweep, so it
+> cannot be narrowed to "what the sweep missed"). The sweep still wins for the eight it answered — `resolve_state`'s
+> ladder is swept > fetched > declared — so eight nodes render `state: from the sweep` and three `from a targeted
+> fetch`, and a precedence inversion moves eight lines of both goldens.
+
 **One harness, both contexts, same fixtures.** `_link_build_grid_ws` git-inits two sandbox repos with real origins
 (`https://github.com/acme/platform.git`, `.../acme/warehouse.git`), copies the two fixture manifests into
 `<repo>/.borg/programs/`, writes a 7-project registry, mocks tmux, and exports
@@ -532,6 +557,21 @@ apart from an un-swept one apart from a wrong-repository one" (`grid.py:725-730`
   `— no project manifest declares work in acme/ledger. Run /borg-plan to scaffold one.`
 - orchestrator scope, no manifests anywhere →
   `— no project manifests in the registry yet. Run /borg-plan in any repository.`
+
+> **AMENDED 2026-08-26 (S3), by execution. THE LADDER MUST TEST SCOPE BEFORE SLUG; SLUG-FIRST MAKES THE THIRD ARM DEAD
+> CODE.** `grid.repository_dir` returns `""` for orchestrator scope BY CONTRACT — its docstring says so outright
+> ("there is no single repository to resolve a slug for") — so `slug` is unconditionally empty there and a slug-first
+> ladder answers *"this directory has no GitHub origin"* for `borg link` run from the workspace root: a diagnosis about
+> a directory, on the one invocation that is not about a directory. The registry-wide sentence can never render.
+>
+> The shipped order is `scope_kind != "repository"` → arm 3, then `not slug` → arm 1, then arm 2.
+>
+> **How it was found matters more than the fix.** The pytest case as specified varies `slug` alone against a
+> hand-BUILT grid block, so it passes on all three arms while one of them is unreachable in production — the
+> checkpoint's "a check pointed at the wrong thing does not fail, it reads as a pass", again. It was caught by READING
+> THE GENERATED GOLDEN, which showed the wrong sentence under `▸ CHAINS` in the orchestrator context. The case now
+> parameterizes `scope_kind` alongside `slug` and carries the empty slug orchestrator scope actually produces, and a
+> bats case renders the real document from the real cwd.
 
 A repository **with** a manifest renders the identical seven headers in the identical order; CHAINS carries a picture
 and detail blocks instead of one line.
@@ -1105,7 +1145,17 @@ _document       focus computed ABOVE the aggregate block, from `project or scope
 - **`parents`/`children` order** — sorted by `(seq, ref)`, not by `ref`. Stated in `grid.py`, pinned by G4, matched by
   §2's `waits on` / `unlocks` lines.
 - **`ID_WIDTH`** — fixed at 4, not derived, so a manifest's block is byte-identical whether the document holds 7 nodes
-  or 11. Overflows at `n1000`; recorded, not guarded.
+  or 11. Overflows at `n1000`; recorded, not guarded. **AMENDED (S3):** the DETAIL HEADING must pad to the same fixed
+  field, `ID_WIDTH + 2`. It shipped in S2 with four literal spaces, which is aligned for `n1`..`n9` and ragged from
+  `n10` on — invisible in every fixture with fewer than ten nodes, and visible the moment the two-manifest
+  orchestrator golden reached `n11`. Same class as the `_fill_rail`/`visible_len` defect S2's own `/simplify` caught:
+  a width computed one way in one place and hard-coded in another.
+- **Neighbour order in a detail block** — three orders exist and they disagree: the wire's `(seq, ref)`, the raw
+  `after` array as typed (what §2.1's sample block shows), and node-id order (what ships). They coincide for a
+  same-level fan-out and come apart only for a SKIP-LEVEL parent. Node-id order ships because the detail blocks are
+  laid out in id order, so any other order sends a reader backwards through the page. `picture._detail_refs`'s
+  docstring claimed node-id order reproduces §2.1's sample; **it does not**, and the claim has been replaced with the
+  three candidates and the reason.
 - **Node ids are global** — required so vim `*` finds exactly two hits across the whole document. A manifest at the same
   document position renders identical ids in both contexts, which is what §2.2's elision claims and case B1/B3 prove
   by construction. Ids are navigation handles, not vocabulary; the REF is the vocabulary and it is stable.
