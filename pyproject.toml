@@ -81,8 +81,16 @@ allowed_prefixes = ["borg_core", "__future__"]
 # when S3's sweep fold pushed that module past pylint's 1000-line ceiling; adding the name here is
 # what keeps the extraction from being an escape from the Domain rules it used to sit under. Any
 # future pure-logic module split out of a core.py belongs on this list on the same terms.
+#
+# `picture.py` (AC2) is here for exactly that reason, and the omission would be SILENT rather than
+# loud: clean_architecture_linter classifies a file by name against the inverted map and its import
+# check RETURNS EARLY on a file it cannot classify -- so an unlisted picture.py would get zero
+# enforcement while `make lint` stayed green at 10.00/10. It is the module whose entire subject is
+# width, which makes a terminal probe (`os.environ["COLUMNS"]`, an isatty check) the most tempting
+# impurity in the tree; borg_core/link/test_picture.py asserts the same property directly by AST walk
+# rather than trusting this line to be present.
 [tool.clean-arch.module_map]
-Domain = ["core.py", "grid.py"]
+Domain = ["core.py", "grid.py", "picture.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]

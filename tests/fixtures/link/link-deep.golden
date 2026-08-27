@@ -1,10 +1,19 @@
+  [2mTip: run 'borg scan' to discover projects from session history[0m
 
-[1mdelta[0m
-────────────────────────────────────────
+  [2m_______________[0m
+  [2m/|             /|[0m      [1mTHE BORG COLLECTIVE[0m
+  [2m/ |            / |[0m      [2mresistance is futile[0m
+  [2m  |___________|  |[0m
+  [2m  |  |        |  |[0m
+  [2m  |  |________|__|[0m
+  [2m  | /         | /[0m
+  [2m  |/          |/[0m
+
+[1m▸ IN FOCUS[0m  [2mdelta[0m
   [2mSource:[0m       cli
   [2mPath:[0m         <TMP>/ws/delta
   [2mStatus:[0m       active
-  [2mLast active:[0m  2026-08-03T10:00:00Z
+  [2mLast active:[0m  <TS>
   [2mtmux window:[0m  delta
   [2mSession ID:[0m   sess-delta-0001
 
@@ -42,10 +51,23 @@
   body line 19
   body line 20
 
-  [0;36mDirectives:[0m 2 pending
+[1m▸ REPOSITORIES[0m  [2mthe collective · 1 repository · 0 need attention[0m
+[1m PROJECT              SRC  STATUS       LAST ACTIVE  SUMMARY[0m
+──────────────────────────────────────────────────────────────────────────────────────────
+ delta                [C]  [0;32mactive      [0m 3h ago       Delta keeps the deep dive deterministic. [0;36m◀[0m
+
+[1m▸ CHAINS[0m  [2m0 projects · 0 refs · 0 unresolved · not swept[0m
+  [2m— this directory has no GitHub origin — nothing to scope a chain to.[0m
+
+[1m▸ QUEUED[0m  [2m2 directives[0m
     [2m- Delta directive one[0m
     [2m- Delta directive two[0m
 
-  [0;32mRecently assimilated:[0m
+[1m▸ SHIPPED[0m
     [2m- Delta shipped only (2026-03-01)[0m
+
+[1m▸ SIGNALS[0m
+  [2m— grid: no owner/repo resolved for 'delta' (no git origin, or not a checkout) -- no grid scoped[0m
+  [2m— sweep: no recon adapters found on <TMP>/no-adapters -- every state falls back to what the manifest declares[0m
+  [2m— fetch: replayed from fixture <TMP>/no-fetch.json -- no gh ran[0m
 
