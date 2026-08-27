@@ -1,0 +1,52 @@
+{
+  "program": "auth-hardening",
+  "desc": "Rotate every service onto scoped keypair auth, then flip enforcement on in one release.",
+  "rows": [
+    {
+      "ref": "acme/platform#400",
+      "order": "1",
+      "why": "base migration"
+    },
+    {
+      "ref": "acme/platform#420",
+      "order": "2",
+      "why": "add auth scopes to the token service",
+      "after": ["acme/platform#400"]
+    },
+    {
+      "ref": "acme/warehouse#87",
+      "order": "3",
+      "why": "rotate the warehouse keypair",
+      "after": ["acme/platform#400"]
+    },
+    {
+      "ref": "acme/infra#12",
+      "order": "4",
+      "why": "inventory services still on password auth",
+      "after": ["acme/platform#400"]
+    },
+    {
+      "ref": "acme/platform#431",
+      "order": "5",
+      "why": "enforce scopes on internal calls",
+      "after": ["acme/platform#420"]
+    },
+    {
+      "ref": "acme/warehouse#93",
+      "order": "6",
+      "why": "cut consumers over to the new key",
+      "after": ["acme/warehouse#87"]
+    },
+    {
+      "ref": "acme/infra#77",
+      "order": "7",
+      "why": "flip enforcement flag, all services",
+      "after": ["acme/platform#431", "acme/warehouse#93", "acme/infra#12"],
+      "gate": {
+        "kind": "verification",
+        "blocked_by": "staged rollout run must pass",
+        "resolved_by": "canary deploy green for 24h"
+      }
+    }
+  ]
+}

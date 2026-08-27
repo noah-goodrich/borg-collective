@@ -1596,16 +1596,35 @@ _link_mock_tmux() {
 #   2. render.py does not print any part of `grid`. The sweep lands in the DOCUMENT only, so the
 #      human output these goldens capture is byte-identical to what it was pre-S3.
 #
-# THE MOMENT (2) STOPS BEING TRUE — AC2's renderer is the step that breaks it — this helper must
-# export BORG_LINK_SWEEP_FIXTURE unconditionally, INCLUDING on the BORG_UPDATE_GOLDEN path, pointing
-# at a recorded `{"since": ..., "tracks": [...]}` document. The seam exists and is exercised in
-# borg_core/link/test_grid.py; it is deliberately not wired here yet, because a fixture nothing reads
-# is a fixture nobody maintains.
+# AC2 LANDED AND (2) IS NOW FALSE — render.document prints the grid. These four goldens keep working
+# on (1) ALONE, and deliberately so: none of their fixture registries carries a `.borg/programs`
+# directory, so `selected_refs` is empty, `start_fetch` returns before forking, and the only
+# sweep-derived text in them is the deterministic
+# `sweep: no recon adapters found on <TMP>/no-adapters` warning. That warning is the LIVE TRIPWIRE
+# for setup_temp_dirs' adapter neutralization, which is why the sweep fixture is NOT exported
+# globally here: doing so would replace it with a "replayed from fixture" line in every link test and
+# delete the only thing that notices if adapter discovery starts finding the developer's real
+# adapters. The manifest-bearing goldens have their own helper, `_assert_link_grid_golden`, which
+# exports both seams.
+#
+# THE SCRUB HAS THREE EXPRESSIONS, not one. `$BATS_TEST_TMPDIR` is a fresh random path per run and the
+# IN FOCUS card prints the project's path; `$BATS_TEST_DIRNAME` is this checkout's `tests/` directory
+# and reaches the page through the fixture-replay warnings, which name their fixture by ABSOLUTE
+# path. With only the first expression the grid goldens would be green on the authoring machine and
+# red everywhere else — the class of bug that is invisible precisely where it is being tested.
+#
+# The third normalizes the IN FOCUS card's RAW `Last active:` value, and it is addressed to that ONE
+# LINE rather than applied globally: `--porcelain` emits raw timestamps as its actual contract and
+# its golden must keep pinning them byte for byte. See `_link_registry_deep` for why a fixed fixture
+# date stopped being the deterministic choice the moment one page carried both the raw form and the
+# board's relative one.
 _assert_link_golden() {
     local name="$1"; shift
     local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
     zsh "$BORG" "$@" > "$raw" 2>&1
-    sed "s|${BATS_TEST_TMPDIR}|<TMP>|g" "$raw" > "$actual"
+    sed -e "s|${BATS_TEST_TMPDIR}|<TMP>|g" \
+        -e "s|${BATS_TEST_DIRNAME}|<TESTS>|g" \
+        -e '/Last active:/ s|[0-9-]\{10\}T[0-9:]\{8\}Z|<TS>|g' "$raw" > "$actual"
 
     if [ -n "${BORG_UPDATE_GOLDEN:-}" ]; then
         mkdir -p "$LINK_GOLDEN_DIR"
@@ -1793,8 +1812,16 @@ _link_build_deep_assim_ws() {
     touch -t 202603040000 "$d/docs/plans/assimilated/2026-03-04-delta-d.md"
 }
 
+# `last_activity` MOVED FROM A FIXED DATE TO A RUN-TIME ONE IN AC2, and the reason is that one
+# document now prints BOTH forms of it. Pre-AC2 the deep dive printed only the RAW timestamp, so a
+# fixed date was the deterministic choice; post-AC2 the same page also carries the board, whose
+# LAST ACTIVE column is relative -- and `core.relative_time`'s day bucket is `diff // 86400` with no
+# saturation, so a fixed date renders "24d ago" today and "25d ago" tomorrow. Run-time now, landing
+# in a stable bucket, with `_assert_link_golden` scrubbing the raw form. Either half alone leaves
+# this golden failing on a calendar.
 _link_registry_deep() {
-    local d="${BATS_TEST_TMPDIR}/ws/delta"
+    local d="${BATS_TEST_TMPDIR}/ws/delta" t_delta
+    t_delta=$(_link_iso_ago 10800)  # "3h ago"
     cat > "$BORG_REGISTRY" <<EOF
 {
   "projects": {
@@ -1802,7 +1829,7 @@ _link_registry_deep() {
       "path": "$d",
       "source": "cli",
       "status": "active",
-      "last_activity": "2026-08-03T10:00:00Z",
+      "last_activity": "$t_delta",
       "summary": "Delta keeps the deep dive deterministic.",
       "claude_session_id": "sess-delta-0001",
       "tmux_window": "delta"
@@ -1841,6 +1868,219 @@ _link_registry_busy() {
   }
 }
 EOF
+}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AC2 — the topological grid, in BOTH contexts, against two new goldens
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# ONE HARNESS, TWO CONTEXTS, THE SAME FIXTURES. That is what "the two contexts differ in breadth
+# only" has to mean to be checkable: the same workspace, the same manifests, the same recorded sweep
+# and fetch, rendered from a repository and from the workspace root, and the difference between the
+# two goldens is a row set — never a header, never an order, never a section.
+#
+# WHAT IS RECORDED AND WHY IT IS THE FAN-OUT'S OUTPUT RATHER THAN THE FINISHED GRID.
+# `sweep-acme.json` is `{"since", "tracks": [<recon track>]}` — exactly what recon.shell.fanout
+# returns — so the Item validator, the resolve ladder, level assignment and the per-source receipt
+# all still run on production code between the fixture and the page. A fixture of the finished grid
+# would prove that JSON round-trips. `fetch-acme.json` records the ANSWERS for the same reason;
+# see grid.replayed_items for why a raw GraphQL body would be the wrong depth.
+#
+# THE FETCH RECORDING COVERS ALL ELEVEN DECLARED REFS, not only the three the sweep omits, because
+# that is what an unconditional targeted fetch actually asks for (cli._grid starts it over
+# `selected_refs`, before the sweep, so it cannot be narrowed to "what the sweep missed"). The sweep
+# still wins for the eight it answered — `resolve_state`'s ladder is swept > fetched > declared — so
+# eight nodes read `state: from the sweep` and three read `from a targeted fetch`, and a precedence
+# inversion moves eight lines of both goldens.
+
+# Two sandbox repositories with REAL git origins, the two fixture manifests, and a seven-project
+# registry. Mirrors the shape a live machine has: a manifest declaring rows across three
+# repositories lives under exactly ONE of them, and a repository with a git origin and no manifest
+# (ledger) is the modal case — 13 of ~14 registered repositories.
+#
+# `infra` deliberately has NO git repository, so `borg link infra` exercises the first of the three
+# CHAINS diagnoses (no origin -> nothing to scope a chain to) without a fixture of its own.
+_link_build_grid_ws() {
+    local root="${BATS_TEST_TMPDIR}/ws" p
+    export BORG_ORCHESTRATOR_ROOT="$root"
+
+    for p in platform warehouse ledger; do
+        mkdir -p "$root/$p"
+        git -C "$root/$p" init -q >/dev/null 2>&1
+        git -C "$root/$p" remote add origin "https://github.com/acme/${p}.git" >/dev/null 2>&1
+    done
+    mkdir -p "$root/infra" "$root/atlas" "$root/relay" "$root/archive-tools"
+
+    mkdir -p "$root/platform/.borg/programs" "$root/warehouse/.borg/programs"
+    cp "${LINK_GOLDEN_DIR}/manifests/auth-hardening.json" "$root/platform/.borg/programs/"
+    cp "${LINK_GOLDEN_DIR}/manifests/warehouse-rollout.json" "$root/warehouse/.borg/programs/"
+
+    mkdir -p "$root/platform/docs/plans/directives" "$root/platform/docs/plans/assimilated" \
+             "$root/warehouse/docs/plans/directives" "$root/warehouse/docs/plans/assimilated" \
+             "$root/atlas/docs/plans/directives" \
+             "$root/ledger/docs/plans/directives" "$root/ledger/docs/plans/assimilated"
+
+    printf '# Scope keypair rotation to the warehouse tier\n' \
+        > "$root/platform/docs/plans/directives/2026-08-21-scope-keypair-rotation.md"
+    printf '# Retire password auth from the inventory service\n' \
+        > "$root/platform/docs/plans/directives/2026-08-22-retire-password-auth.md"
+    printf '# Schedule the eu maintenance window\n' \
+        > "$root/warehouse/docs/plans/directives/2026-08-23-schedule-eu-window.md"
+    printf '# Decide the tenant schema split\n' \
+        > "$root/atlas/docs/plans/directives/2026-08-24-tenant-schema-split.md"
+    printf '# Nightly close: move the reconciliation to the worker\n' \
+        > "$root/ledger/docs/plans/directives/2026-08-25-nightly-close-worker.md"
+
+    printf '# Base migration for scoped tokens\nShipped: 2026-08-20\n' \
+        > "$root/platform/docs/plans/assimilated/2026-08-20-base-migration.md"
+    printf '# Region cutover runbook\nShipped: 2026-08-18\n' \
+        > "$root/warehouse/docs/plans/assimilated/2026-08-18-region-cutover-runbook.md"
+    printf '# Close-of-day parity harness\nShipped: 2026-08-17\n' \
+        > "$root/ledger/docs/plans/assimilated/2026-08-17-close-of-day-parity.md"
+
+    _link_registry_grid
+}
+
+# The seven-repository registry the board renders in BOTH contexts.
+#
+# NO CORTEX PAUSE ROW HERE, deliberately. Its countdown is wall-clock derived and cannot be pinned in
+# a golden without pinning a timing race; it keeps its own structural case ("link overview renders a
+# cortex pause row under the paused project"). active+waiting is 4 against the default
+# BORG_MAX_ACTIVE=3, so the capacity warning DOES land in SIGNALS in both goldens — capacity is a
+# property of the registry, not of the scope, and rendering it in only one context would be the
+# breadth rule leaking into a section it does not govern.
+_link_registry_grid() {
+    local root="${BATS_TEST_TMPDIR}/ws"
+    local t_platform t_warehouse t_infra t_ledger t_atlas t_relay
+    t_platform=$(_link_iso_ago 7200)     # "2h ago"
+    t_warehouse=$(_link_iso_ago 93600)   # "yesterday"
+    t_infra=$(_link_iso_ago 10800)       # "3h ago"
+    t_ledger=$(_link_iso_ago 1800)       # "30m ago"
+    t_atlas=$(_link_iso_ago 432000)      # "5d ago"
+    t_relay=$(_link_iso_ago 172800)      # "2d ago"
+
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "platform": {"path": "$root/platform", "source": "cli", "status": "active", "pinned": true,
+                 "last_activity": "$t_platform", "tmux_window": "platform",
+                 "claude_session_id": "sess-platform-0007",
+                 "summary": "Scoped keypair auth rollout."},
+    "warehouse": {"path": "$root/warehouse", "source": "desktop", "status": "waiting",
+                  "last_activity": "$t_warehouse",
+                  "summary": "Key cutover blocked on the rollout run."},
+    "infra": {"path": "$root/infra", "source": "coco", "status": "active",
+              "last_activity": "$t_infra"},
+    "ledger": {"path": "$root/ledger", "source": "cli", "status": "idle",
+               "last_activity": "$t_ledger", "summary": "Nightly close reconciliation."},
+    "atlas": {"path": "$root/atlas", "source": "cli", "status": "waiting",
+              "last_activity": "$t_atlas", "summary": "Waiting on a schema decision."},
+    "relay": {"path": "$root/relay", "source": "cli", "status": "idle",
+              "last_activity": "$t_relay", "summary": "Relay has no summary yet."},
+    "archive-tools": {"path": "$root/archive-tools", "source": "cli", "status": "idle",
+                      "summary": "Nothing here since the fork."}
+  }
+}
+EOF
+}
+
+# The whole grid arrangement in one call, tmux mock included so it cannot be forgotten. The four
+# active/waiting projects need live windows or the reap overlay silently downgrades them to idle and
+# the board's status column — and the capacity count — stop describing the fixture.
+#
+# `gh` IS MOCKED WITH A TRACE, not hidden from PATH. Hiding a binary asserts that a code path could
+# not have run; a mock that APPENDS to $TRACE asserts that it did not. (Hiding is also the shape that
+# broke on ubuntu-latest once already: `PATH=/usr/bin:/bin` assumes `gh` lives outside those
+# directories, which is true on Homebrew and false on a GitHub runner.)
+_link_setup_grid() {
+    _link_mock_tmux $'platform\nwarehouse\ninfra\natlas'
+    cat > "$MOCK_BIN/gh" <<'EOF'
+#!/usr/bin/env bash
+echo "gh $*" >> "$TRACE"
+exit 1
+EOF
+    chmod +x "$MOCK_BIN/gh"
+    _link_build_grid_ws
+}
+
+# Point both network seams at their recordings. Exported UNCONDITIONALLY, including on the
+# BORG_UPDATE_GOLDEN path: a regeneration that ran a live sweep would freeze one machine's network
+# state as the oracle, which is the whole reason these seams exist.
+_link_grid_seams() {
+    export BORG_LINK_SWEEP_FIXTURE="${LINK_GOLDEN_DIR}/sweep-acme.json"
+    export BORG_LINK_FETCH_FIXTURE="${LINK_GOLDEN_DIR}/fetch-acme.json"
+}
+
+# `zsh borg <args...>` from `$1`, stdout+stderr merged into `$2`.
+_link_grid_run() {
+    local dir="$1" out="$2"; shift 2
+    ( cd "$dir" && zsh "$BORG" "$@" ) > "$out" 2>&1
+}
+
+# THE TRIPWIRE, AND IT RUNS BEFORE THE DIFF *AND* ON THE UPDATE PATH.
+#
+# A mistyped fixture path does not fail — `shell._read_sweep_fixture` degrades to a NAMED warning and
+# a not-swept grid, exactly as it should for a human — and the first `BORG_UPDATE_GOLDEN=1` run would
+# then freeze that degradation as the oracle. That is instance five of "a check pointed at the wrong
+# thing does not fail, it reads as a pass". So the grid goldens are only allowed to exist if the
+# document says the recordings actually replayed.
+#
+# DELIBERATE DEVIATION FROM THE AC2 SPEC, hand-executed rather than transcribed. The spec's predicate
+# is `.grid.fetch.resolved == .grid.fetch.requested`. That cannot hold in both contexts and is not
+# the property worth asserting: `requested` is the SCOPED ask (7 refs in repository scope, 11 in
+# orchestrator scope) while `resolved` counts the rows in the recording, which is 11 either way —
+# `_read_fetch_fixture` replays the whole file regardless of what was asked. The predicate below
+# asserts what the spec was reaching for, and does it more directly: both replay warnings are present
+# by name (a mistyped path produces "unreadable or invalid JSON" instead), the fetch reports `ok`, and
+# NOTHING fell through to the bottom of the resolve ladder.
+_link_grid_tripwire() {
+    local probe="$1" name="$2"
+    jq -e '
+        .grid.swept == true
+        and .grid.since == "2026-05-28"
+        and .grid.declared > 0
+        and .grid.unresolved == 0
+        and .grid.fetch.status == "ok"
+        and .grid.fetch.requested > 0
+        and .grid.fetch.resolved > 0
+        and ((.grid.warnings | map(select(startswith("sweep: replayed from fixture"))) | length) == 1)
+        and ((.grid.warnings | map(select(startswith("fetch: replayed from fixture"))) | length) == 1)
+    ' "$probe" > /dev/null || {
+        echo "grid golden ${name}: the seams did not replay — refusing to diff or regenerate" >&2
+        jq -c '{swept: .grid.swept, since: .grid.since, declared: .grid.declared,
+                unresolved: .grid.unresolved, fetch: .grid.fetch, warnings: .grid.warnings}' "$probe" >&2 \
+            || cat "$probe" >&2
+        false
+    }
+}
+
+# Byte-compare one manifest-bearing `borg link` invocation against its golden, from a chosen cwd.
+# Usage: _assert_link_grid_golden <golden-name> <cwd> <borg args...>
+_assert_link_grid_golden() {
+    local name="$1" dir="$2"; shift 2
+    _link_grid_seams
+
+    local probe="${BATS_TEST_TMPDIR}/${name}.probe.json"
+    _link_grid_run "$dir" "$probe" "$@" --json
+    _link_grid_tripwire "$probe" "$name"
+
+    local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
+    _link_grid_run "$dir" "$raw" "$@"
+    sed -e "s|${BATS_TEST_TMPDIR}|<TMP>|g" \
+        -e "s|${BATS_TEST_DIRNAME}|<TESTS>|g" \
+        -e '/Last active:/ s|[0-9-]\{10\}T[0-9:]\{8\}Z|<TS>|g' "$raw" > "$actual"
+
+    if [ -n "${BORG_UPDATE_GOLDEN:-}" ]; then
+        mkdir -p "$LINK_GOLDEN_DIR"
+        cp "$actual" "${LINK_GOLDEN_DIR}/${name}.golden"
+    fi
+
+    [ -f "${LINK_GOLDEN_DIR}/${name}.golden" ] || {
+        echo "missing golden: ${name}.golden (regenerate with BORG_UPDATE_GOLDEN=1)" >&2
+        false
+    }
+    run diff -u "${LINK_GOLDEN_DIR}/${name}.golden" "$actual"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
 }
 
 # ── mode 1/4: --porcelain ────────────────────────────────────────────────────
@@ -1930,7 +2170,14 @@ EOF
 }
 
 # cmd_link's flag loop (borg.zsh:220-229) resolves porcelain BEFORE the project branch, so
-# `--porcelain` wins over a project name; and the `*)` arm is last-wins, so `link a b` deep-dives b.
+# `--porcelain` wins over a project name; and the `*)` arm is last-wins, so `link a b` focuses b.
+#
+# THE SECOND HALF'S ASSERTION MOVED IN AC2, and the reason is the point of AC2 rather than a
+# concession to it. Pre-AC2 the deep dive rendered ONE project, so "alpha did not win" could be
+# asserted as "alpha's summary is nowhere on the page". Post-AC2 every page carries the whole board,
+# so alpha's summary is on it BY DESIGN and that assertion would now be asserting the board is
+# broken. What "last name wins" actually means is which repository is IN FOCUS, so that is what this
+# reads -- off the card, not off the page.
 @test "contract: link flag precedence — porcelain beats a project name, last project name wins" {
     _link_setup_porcelain
 
@@ -1939,9 +2186,11 @@ EOF
     [[ "$output" == *$'\t'* ]] || false
     [[ "$output" != *"Session ID:"* ]] || false
 
-    run_zsh_borg link alpha echo
+    run bash -c "zsh '$BORG' link alpha echo 2>&1 | sed \$'s/\033\\\\[[0-9;]*m//g' \
+        | sed -n '/^▸ IN FOCUS/,/^▸ REPOSITORIES/p'"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"echo"* ]] || false
+    [[ "$output" == "▸ IN FOCUS  echo"* ]] || false
+    [[ "$output" == *"Echo is pinned."* ]] || false
     [[ "$output" != *"Alpha porcelain summary"* ]] || false
 }
 
@@ -2397,6 +2646,341 @@ EOF
 # `borg link --llm` into the lenient `-*) shift` arm and render the overview instead, suite green.
 # Mocking `claude` on BORG_PATH_PREFIX is this file's established way past a real LLM call, so the
 # non-empty-registry path both names actually take is reachable.
+# ── the topological grid: B1–B16 ─────────────────────────────────────────────
+
+@test "contract: link renders the repository context byte-identically to its golden" {
+    _link_setup_grid
+    _assert_link_grid_golden link-grid-repository "${BATS_TEST_TMPDIR}/ws" link platform
+}
+
+# B2. THE SAME GOLDEN, TWICE, FROM TWO INVOCATION SHAPES. `cd <repo> && borg link` is the modal human
+# invocation and it is the one a scope-derived-but-argv-fed `_focus` silently breaks: the positional
+# leg keeps IN FOCUS, `Status:`, QUEUED and SHIPPED while the cwd leg loses all four, and a harness
+# that only ever renders the positional leg cannot see it. Diffing both against ONE file is what makes
+# the equality a property rather than a pair of independent snapshots.
+@test "contract: link renders the repository context identically from the positional and from the cwd" {
+    _link_setup_grid
+    _assert_link_grid_golden link-grid-repository "${BATS_TEST_TMPDIR}/ws" link platform
+    _assert_link_grid_golden link-grid-repository "${BATS_TEST_TMPDIR}/ws/platform" link
+}
+
+@test "contract: link renders the orchestrator context byte-identically to its golden" {
+    _link_setup_grid
+    _assert_link_grid_golden link-grid-orchestrator "${BATS_TEST_TMPDIR}/ws" link
+}
+
+# B4. THE INVARIANT IS AGAINST THE CONSTANT, NEVER AGAINST THE OTHER GOLDEN. Comparing the two
+# renderings' header lists to each other goes green if both drift together; comparing each to
+# `render.SECTIONS` cannot. This is the executable form of "the two contexts differ in breadth only".
+@test "contract: both link contexts render the same section headers in the same order" {
+    _link_setup_grid
+    _link_grid_seams
+
+    local expected
+    expected=$(PYTHONPATH="$BORG_HOME" python3 -c \
+        'from borg_core.link import render; print("\n".join(t for t, _ in render.SECTIONS if t))')
+    [ -n "$expected" ]
+
+    local ctx
+    for ctx in "${BATS_TEST_TMPDIR}/ws/platform:link" "${BATS_TEST_TMPDIR}/ws:link"; do
+        _link_grid_run "${ctx%%:*}" "${BATS_TEST_TMPDIR}/spine.raw" "${ctx##*:}"
+        run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${BATS_TEST_TMPDIR}/spine.raw' \
+            | grep '^▸ ' | sed 's/  .*//' | sed 's/^▸ //'"
+        [ "$output" = "$expected" ] || {
+            printf 'context %s rendered:\n%s\nexpected:\n%s\n' "$ctx" "$output" "$expected" >&2
+            false
+        }
+    done
+}
+
+# B5/B6. THE `Status:` INVARIANT, AND IT IS STRUCTURAL RATHER THAN LEXICAL. `sweep-acme.json`
+# deliberately carries a pull request titled `chore(auth): Status: normalise the rollout report`,
+# which is what a real sweep can hand the renderer at any moment. IN FOCUS being SECTION 2 — above
+# REPOSITORIES and above CHAINS — is what keeps `grep -m1` landing on the session status instead of
+# on a stranger's PR title. Move IN FOCUS below CHAINS and both halves go red.
+@test "contract: exactly one Status: line in repository context and none in orchestrator context" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/repo.txt" link platform
+    # The poisoned title really is on the page -- otherwise this case proves nothing.
+    run grep -c 'Status: normalise the rollout report' "${BATS_TEST_TMPDIR}/repo.txt"
+    [ "$output" = "1" ]
+    run grep -c 'Status:' "${BATS_TEST_TMPDIR}/repo.txt"
+    [ "$output" = "2" ]
+    # ...and the FIRST hit is the card's, not the PR's.
+    run bash -c "grep -m1 'Status:' '${BATS_TEST_TMPDIR}/repo.txt' | sed \$'s/\033\\\\[[0-9;]*m//g'"
+    [[ "$output" == "  Status:"*"active" ]] || false
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/orch.txt" link
+    run bash -c "grep -c '^  .Status:' '${BATS_TEST_TMPDIR}/orch.txt' || true"
+    [ "$output" = "0" ]
+}
+
+@test "contract: drone status extracts the session status, not a pull request title" {
+    _link_setup_grid
+    _link_grid_seams
+
+    run bash -c "cd '${BATS_TEST_TMPDIR}/ws' && zsh '$BORG' link --local platform 2>/dev/null \
+        | grep -m1 'Status:' | sed 's/.*Status:[[:space:]]*//' | tr -d '\n'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *active ]] || false
+    [[ "$output" != *"rollout report"* ]] || false
+}
+
+# B7. `scope_for` honours a positional only when it is IN THE REGISTRY, so `borg link ghost` from the
+# workspace root resolves to ORCHESTRATOR scope — the exact shape where a purely scope-derived
+# `need_focus` skips `_focus`, skips the raise, and exits 0 with a full board. `bool(project) or ...`
+# preserves it.
+#
+# B8 (the raise happening BEFORE any aggregate collector runs) is not observable from bats — nothing
+# the shell can see distinguishes "raised early" from "raised late". It lives in
+# borg_core/link/test_cli.py as `test_an_unregistered_positional_raises_before_any_aggregate_collector_runs`,
+# which monkeypatches both collectors to raise. Recorded here so the gap is a decision, not an
+# oversight.
+@test "contract: link <unregistered> dies non-zero from an orchestrator cwd too" {
+    _link_setup_grid
+    _link_grid_seams
+
+    run bash -c "cd '${BATS_TEST_TMPDIR}/ws' && zsh '$BORG' link ghost-project 2>&1"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"project 'ghost-project' not in registry"* ]] || false
+    [[ "$output" != *"▸ REPOSITORIES"* ]] || false
+}
+
+# B9. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |= (...)'`, and only
+# borg-collective carries a `.borg-project` marker — so that call routes from INSIDE whatever
+# repository the session is in. Scope-gating the aggregates would report zero directives for the whole
+# collective at `.version == 2`, which SKILL.md maps to "CLI path. Never fall back." A WRONG answer,
+# not a missing one, and it is why DOCUMENT_VERSION could stay 2.
+@test "contract: link --json carries every project's directives from inside a repository" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/root.json" link --json
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform" "${BATS_TEST_TMPDIR}/inside.json" link --json
+
+    run jq -r '.scope.kind' "${BATS_TEST_TMPDIR}/inside.json"
+    [ "$output" = "repository" ]
+    run jq -e '.version == 2' "${BATS_TEST_TMPDIR}/inside.json"
+    run jq -S '{directives, assimilated}' "${BATS_TEST_TMPDIR}/inside.json"
+    local inside="$output"
+    run jq -S '{directives, assimilated}' "${BATS_TEST_TMPDIR}/root.json"
+    [ "$output" = "$inside" ]
+    run jq '.directives | length' "${BATS_TEST_TMPDIR}/inside.json"
+    [ "$output" = "5" ]
+}
+
+# B10. REPOSITORIES is the one section breadth does not touch. skills/borg-switch/SKILL.md runs
+# exactly this from a project session's cwd and reads the whole table out of it; borg.zsh's 5s watch
+# redraw does the same. Applying the scope filter to the board turns both into a one-row list.
+@test "contract: borg link --local --all from inside a repository still lists every project" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform" "${BATS_TEST_TMPDIR}/board.txt" link --local --all
+    local p
+    for p in platform warehouse infra ledger atlas relay archive-tools; do
+        run grep -c -- "$p" "${BATS_TEST_TMPDIR}/board.txt"
+        [ "$output" != "0" ] || { echo "board lost $p" >&2; false; }
+    done
+    # ...and exactly one row carries the scoped marker.
+    run bash -c "grep -c '◀' '${BATS_TEST_TMPDIR}/board.txt'"
+    [ "$output" = "1" ]
+}
+
+# B11. The tripwire as a NAMED case, so a reader can see what the goldens are allowed to be cut from.
+# Mistype either fixture path and this is what turns red — today that degrades to a warning and the
+# first regeneration freezes the degradation as the oracle.
+@test "contract: the grid goldens replayed a populated sweep and a populated fetch" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/probe.json" link --json
+    _link_grid_tripwire "${BATS_TEST_TMPDIR}/probe.json" "orchestrator-probe"
+
+    run jq '[.grid.manifests[].nodes[] | select(.state_source == "swept")] | length' "${BATS_TEST_TMPDIR}/probe.json"
+    [ "$output" = "8" ]
+    run jq '[.grid.manifests[].nodes[] | select(.state_source == "fetched")] | length' "${BATS_TEST_TMPDIR}/probe.json"
+    [ "$output" = "3" ]
+    # A degraded seam would still satisfy a count; assert the sweep's own PAYLOAD arrived.
+    run jq -r '.grid.sources[0].source' "${BATS_TEST_TMPDIR}/probe.json"
+    [ "$output" = "github" ]
+}
+
+# B12. HIDING A BINARY ASSERTS A PATH COULD NOT RUN; A TRACED MOCK ASSERTS IT DID NOT. `gh` is on
+# PATH here and exits 1 if called, so removing the `if fixture:` short-circuit from `shell.sweep` or
+# `shell.start_fetch` turns this red rather than silently producing a different grid.
+@test "contract: the grid goldens spawn zero gh and zero adapter subprocesses" {
+    _link_setup_grid
+    _link_grid_seams
+    : > "$TRACE"
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/traced.txt" link
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/traced2.txt" link platform
+
+    run bash -c "grep -c '^gh ' '$TRACE' || true"
+    [ "$output" = "0" ]
+    # The adapter search path stays setup_temp_dirs' empty directory as belt and braces: with the
+    # sweep seam live, `discover_adapters` is never even reached.
+    run bash -c "ls -A '$BORG_RECON_ADAPTER_PATH' | wc -l | tr -d ' '"
+    [ "$output" = "0" ]
+    # ...and the render really did happen, so this is not passing on an empty run.
+    run grep -c '▸ CHAINS' "${BATS_TEST_TMPDIR}/traced.txt"
+    [ "$output" = "1" ]
+}
+
+# B13. The fixture-replay warnings name their fixture by ABSOLUTE path and those fixtures live under
+# `tests/`, NOT under $BATS_TEST_TMPDIR — so the single-expression scrub the four older goldens use
+# does not cover them. Without the `<TESTS>` expression both grid goldens are green only on the
+# machine that authored them.
+@test "contract: the grid goldens carry no absolute checkout path" {
+    local g
+    for g in link-grid-repository link-grid-orchestrator; do
+        [ -f "${LINK_GOLDEN_DIR}/${g}.golden" ]
+        run bash -c "grep -c '${BATS_TEST_DIRNAME}' '${LINK_GOLDEN_DIR}/${g}.golden' || true"
+        [ "$output" = "0" ] || { echo "$g leaks \$BATS_TEST_DIRNAME" >&2; false; }
+        run bash -c "grep -c '/Users/\\|/home/\\|/private/tmp' '${LINK_GOLDEN_DIR}/${g}.golden' || true"
+        [ "$output" = "0" ] || { echo "$g leaks an absolute path" >&2; false; }
+        # ...and the scrubbed placeholders really are there, so this is not green on an empty file.
+        run bash -c "grep -c '<TESTS>/fixtures/link/' '${LINK_GOLDEN_DIR}/${g}.golden'"
+        [ "$output" = "2" ]
+    done
+}
+
+# B14. Node ids are a JUMP TARGET: each appears exactly twice on the page — once in a picture cell,
+# once as a detail heading — so `*` in vim toggles between them with no plugin. Numbering per manifest
+# instead of globally puts four `n1`s on the orchestrator page and breaks the jump for both projects.
+@test "contract: every node id appears exactly twice in each grid golden" {
+    local g
+    for g in link-grid-repository link-grid-orchestrator; do
+        run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/${g}.golden' \
+            | grep -oE '\\bn[0-9]+\\b' | sort | uniq -c | awk '{print \$1}' | sort -u"
+        [ "$output" = "2" ] || { echo "$g node id counts: $output" >&2; false; }
+    done
+
+    # ...and the ids are contiguous from n1, globally across manifests.
+    run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden' \
+        | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
+    [ "$output" = "1 2 3 4 5 6 7 8 9 10 11 " ]
+
+    run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-repository.golden' \
+        | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
+    [ "$output" = "1 2 3 4 5 6 7 " ]
+}
+
+# B15. MEASURES THE GOLDEN, THEN PARSES THE CONFIG — never greps for a config string. A grep for
+# `right:70:wrap` asserts that somebody typed a number, not that the picture fits inside it. The
+# widest row is measured with `picture.visible_len`, the same primitive the renderer pads with, so a
+# hyperlinked or coloured cell counts as its VISIBLE width rather than its byte length.
+@test "contract: the fzf preview window is at least as wide as the widest picture row" {
+    local width pane
+    width=$(PYTHONPATH="$BORG_HOME" python3 -c '
+import sys
+from borg_core.link import picture
+
+# A picture row is INDENTED by picture.INDENT and its first visible character is a glyph or a box
+# character. The leading-indent test is load-bearing rather than belt-and-braces: the board`s
+# horizontal rule is 90 unindented U+2500s, and without it this measures THAT and reports a page
+# that blows the budget by 22 columns while every picture row fits.
+frame = set("✔✗○●◌│├┤┬┴┼┌┐└┘─")
+rows = []
+for line in open(sys.argv[1], encoding="utf-8").read().split("\n"):
+    plain = picture._SGR_RE.sub("", picture._OSC8_RE.sub("", line))
+    if plain.startswith(" " * picture.INDENT) and plain.strip()[:1] in frame:
+        rows.append(line)
+if not rows:
+    raise SystemExit("no picture rows matched")
+print(max(picture.visible_len(r) for r in rows))
+' "${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden")
+    [ "$width" -gt 0 ] || { echo "measured no picture rows at all" >&2; false; }
+    [ "$width" -le "$(PYTHONPATH="$BORG_HOME" python3 -c 'from borg_core.link import picture; print(picture.PICTURE_BUDGET)')" ]
+
+    pane=$(grep -o 'right:[0-9]*:wrap' "$BORG" | head -1 | cut -d: -f2)
+    [ -n "$pane" ] || { echo "could not parse --preview-window out of borg.zsh" >&2; false; }
+    [ "$width" -le "$((pane - 2))" ] || {
+        echo "widest picture row is ${width} columns, preview pane is ${pane}" >&2
+        false
+    }
+}
+
+# B16. `--deep` is parsed and IGNORED. It stays in the parser because three copies of the dispatcher
+# still pass it (borg.zsh's positional arm, bin/link-parity-harness, and the stale byte-copy at
+# ~/.claude/bin/link-parity-harness); delete the argument and argparse exits 2 where `drone status`
+# and the fzf preview both swallow the failure silently — a blank column and a blank pane.
+@test "contract: link --local --deep <p> and link --local <p> render byte-identically" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/with-deep.txt" link --local --deep platform
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/no-deep.txt" link --local platform
+
+    run diff -u "${BATS_TEST_TMPDIR}/no-deep.txt" "${BATS_TEST_TMPDIR}/with-deep.txt"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run grep -c '▸ IN FOCUS' "${BATS_TEST_TMPDIR}/with-deep.txt"
+    [ "$output" = "1" ]
+}
+
+# `--local` opts down from BOTH network rungs, so the grid still renders from what each manifest
+# DECLARES -- which for these fixtures is nothing, so every node reaches the renderer with the state
+# nobody resolved. That is the hottest path in the tree (per-keypress fzf preview, per-window
+# `drone status`) and the one a renderer that raised on an unrecognized token would take out.
+@test "contract: link --local renders every node without naming the unresolved token" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local platform
+    run grep -c 'platform#400' "${BATS_TEST_TMPDIR}/local.txt"
+    [ "$output" != "0" ]
+    run bash -c "grep -ci 'unknown' '${BATS_TEST_TMPDIR}/local.txt' || true"
+    [ "$output" = "0" ]
+    run grep -c 'nobody has an answer for this ref' "${BATS_TEST_TMPDIR}/local.txt"
+    [ "$output" = "7" ]
+    run grep -c 'declared refs unresolved' "${BATS_TEST_TMPDIR}/local.txt"
+    [ "$output" = "1" ]
+}
+
+# The MODAL repository: a git origin, no manifest. Six of its seven sections are strictly richer than
+# what `borg link <project>` showed before AC2 (which had no board and no chains at all), and the one
+# empty section carries a DIAGNOSIS rather than a blank frame.
+@test "contract: a repository with no manifest renders the same spine and names why CHAINS is empty" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.txt" link ledger
+    run grep -c '▸ ' "${BATS_TEST_TMPDIR}/ledger.txt"
+    [ "$output" = "6" ]
+    run grep -c 'no project manifest declares work in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
+    [ "$output" = "1" ]
+    run grep -c 'none declaring a row in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
+    [ "$output" = "1" ]
+
+    # ...and a directory with no git origin at all gets the OTHER diagnosis.
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/infra.txt" link infra
+    run grep -c 'no GitHub origin' "${BATS_TEST_TMPDIR}/infra.txt"
+    [ "$output" = "1" ]
+}
+
+# THE THIRD DIAGNOSIS, AND IT WAS DEAD CODE UNTIL THE GENERATED GOLDEN WAS READ. `repository_dir`
+# returns "" for orchestrator scope BY CONTRACT, so a ladder that tests the slug before the scope
+# answers "this directory has no GitHub origin" for `borg link` from the workspace root -- and the
+# registry-wide sentence never renders anywhere. A pytest case that varies only `slug` against a
+# hand-built grid block cannot see that; this runs the real document from the real cwd.
+@test "contract: an orchestrator context with no manifests anywhere names the registry, not a directory" {
+    _link_mock_tmux ""
+    local root="${BATS_TEST_TMPDIR}/ws"
+    mkdir -p "$root/solo"
+    export BORG_ORCHESTRATOR_ROOT="$root"
+    printf '{"projects":{"solo":{"path":"%s","source":"cli","status":"idle","summary":"No manifests here."}}}' \
+        "$root/solo" > "$BORG_REGISTRY"
+
+    _link_grid_run "$root" "${BATS_TEST_TMPDIR}/orch-empty.txt" link
+    run grep -c 'no project manifests in the registry yet' "${BATS_TEST_TMPDIR}/orch-empty.txt"
+    [ "$output" = "1" ]
+    run bash -c "grep -c 'no GitHub origin' '${BATS_TEST_TMPDIR}/orch-empty.txt' || true"
+    [ "$output" = "0" ]
+}
+
 @test "contract: link --brief and --llm both dispatch to the briefing path, not the overview" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"

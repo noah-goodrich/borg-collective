@@ -693,6 +693,25 @@ def test_a_detail_block_carries_title_why_join_gate_and_unparked():
     assert "gate:" in reduced and "unparked:" not in reduced
 
 
+def test_a_detail_heading_puts_its_ref_in_the_same_column_past_n9():
+    """MUTATION: replace the computed pad with four literal spaces -- aligned for n1..n9, ragged from
+    n10 on, and invisible in every fixture with fewer than ten nodes.
+
+    Found by reading a generated golden rather than by a test: the two-manifest orchestrator page
+    reaches n11 and its last four headings each sat one column right of the first seven. The
+    approved mock's own later render reaches n17.
+    """
+    block = link_grid.grid_manifest(fork_manifest(), {}, {})
+    node = block["nodes"]["acme/infra#77"]
+    columns = [
+        len(plain(picture.detail_block(node, nid, block["nodes"], {})[0]).split("acme/")[0])
+        for nid in ("n1", "n9", "n10", "n99", "n100", "n1000")
+    ]
+    assert len(set(columns)) == 1, dict(zip(("n1", "n9", "n10", "n99", "n100", "n1000"), columns))
+    # ...and the id itself is never swallowed: an id longer than the field still gets one separator.
+    assert plain(picture.detail_block(node, "n10000", block["nodes"], {})[0]).startswith("  n10000 acme/")
+
+
 def test_neighbour_lists_follow_picture_reading_order_not_the_wire_order():
     """MUTATION: drop the `ids` sort in `_detail_refs` and read the wire's `(seq, ref)` order.
 

@@ -6,6 +6,8 @@ json.loads and index keys -- never string-compare the serialized form.
 """
 
 import json
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -94,10 +96,10 @@ def test_run_emits_exactly_one_line_of_parseable_json_on_stdout(isolated_env, ca
     assert doc["version"] == 2
 
 
-def test_run_overview_mode_renders_the_human_table(isolated_env, capsys):
+def test_run_human_mode_renders_the_seven_section_document(isolated_env, capsys):
     _write_registry(isolated_env, {"solo": {"status": "idle", "last_activity": "2026-08-01T00:00:00Z"}})
 
-    exit_code = cli._run("", False, "overview")  # pylint: disable=protected-access
+    exit_code = cli._run("", False, "human")  # pylint: disable=protected-access
 
     assert exit_code == 0
     captured = capsys.readouterr()
@@ -319,11 +321,12 @@ def test_main_porcelain_and_deep_render_through_render_py(isolated_env, capsys):
     assert "Session ID:" in out
 
 
-def test_document_skips_the_aggregate_collectors_for_porcelain_and_deep(isolated_env, capsys, monkeypatch):
-    # AC3: `_document` used to gather directives/assimilated/cortex_pending unconditionally, even
-    # though render.porcelain reads only order/projects and render.deep reads only focus. Before this
-    # fix, both counters below would be >0 for every mode; after, porcelain and deep must skip the
-    # aggregate collectors entirely (0 calls), while json and overview still gather them.
+def test_repository_scope_calls_no_aggregate_collector_on_the_human_path(isolated_env, capsys, monkeypatch):
+    # C1. The two aggregate collectors are a directory-glob-plus-markdown-read pass over EVERY
+    # registered project, and both hot loops (drone.zsh's per-tmux-window status table, borg.zsh's
+    # per-keypress fzf preview) pass a NAME -- so both land in repository scope and must skip them
+    # exactly as the retired `deep` mode did. Mutating `need_aggregate` to `mode != "porcelain"`
+    # turns this red and puts a 14-project glob back into both.
     path = _delta_workspace(isolated_env)
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle"}})
 
@@ -363,7 +366,7 @@ def test_document_skips_the_aggregate_collectors_for_porcelain_and_deep(isolated
     assert calls == {"directives": 2, "assimilated": 2}
 
 
-def test_document_still_gathers_focus_for_deep_and_json_but_not_porcelain_or_overview(
+def test_focus_is_gathered_for_a_positional_and_for_repository_scope_but_never_for_porcelain(
     isolated_env, capsys, monkeypatch
 ):
     path = _delta_workspace(isolated_env)
@@ -509,6 +512,193 @@ def test_scope_is_present_in_every_mode(isolated_env, monkeypatch):
     for mode in ("json", "overview", "porcelain"):
         assert cli._document("", False, mode)["scope"]["repository"] == "alpha"
     assert cli._document("alpha", False, "deep")["scope"]["repository"] == "alpha"
+
+
+def test_json_carries_the_aggregates_in_every_scope(isolated_env, monkeypatch):
+    """C2. `--json` is SCOPE-INDEPENDENT, and that is the actual precondition for not bumping
+    DOCUMENT_VERSION. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |=
+    (...)'` from inside whatever repository the session happens to be in; scope-gating the
+    aggregates would report "Queued: 0 directives" for the whole collective at `.version == 2`,
+    which SKILL.md maps to "CLI path. Never fall back." A wrong answer, not a missing one.
+
+    Mutation: `need_aggregate = mode != "porcelain" and scope["kind"] == "orchestrator"`.
+    """
+    alpha, _beta = _scope_registry(isolated_env)
+    directives = alpha / "docs" / "plans" / "directives"
+    directives.mkdir(parents=True)
+    (directives / "2026-04-01-alpha-one.md").write_text("# Alpha directive one\n", encoding="utf-8")
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+
+    monkeypatch.chdir(isolated_env)
+    from_root = cli._document("", False, "json")  # pylint: disable=protected-access
+    monkeypatch.chdir(alpha)
+    from_inside = cli._document("", False, "json")  # pylint: disable=protected-access
+
+    assert from_root["scope"]["kind"] == "orchestrator"
+    assert from_inside["scope"]["kind"] == "repository"
+    assert from_inside["version"] == from_root["version"] == 2
+    assert [d["title"] for d in from_inside["directives"]] == ["Alpha directive one"]
+    assert from_inside["directives"] == from_root["directives"]
+
+
+def test_focus_follows_scope_when_no_positional_is_given(isolated_env, monkeypatch):
+    """C3. `cd <repo> && borg link` -- the modal human invocation -- must render the repository's own
+    card, its directives and its shipped plans. `_focus` short-circuits on an empty positional, so
+    passing `project` alone (rather than `project or scope["repository"]`) renders the IN FOCUS
+    placeholder, no `Status:` line, and empty QUEUED/SHIPPED for a repository with files on disk."""
+    alpha, _beta = _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(alpha)
+
+    doc = cli._document("", False, "human")  # pylint: disable=protected-access
+
+    assert doc["scope"]["repository"] == "alpha"
+    assert doc["focus"] is not None
+    assert doc["focus"]["name"] == "alpha"
+
+
+def test_an_unregistered_positional_raises_before_any_aggregate_collector_runs(isolated_env, monkeypatch):
+    """C4 + B8. `scope_for` honours a positional only when it is IN THE REGISTRY, so `borg link
+    ghost` from the workspace root resolves to ORCHESTRATOR scope -- which is exactly the shape
+    where a purely scope-derived `need_focus` would skip `_focus`, skip the raise, and exit 0 with a
+    full board instead of exit 1. `bool(project) or ...` preserves it.
+
+    The collectors are monkeypatched to RAISE rather than counted: `_focus` sits above them so a
+    miss costs nothing, and moving the assignment back below the aggregate block makes an unknown
+    tmux window name pay a 14-project glob before it fails.
+    """
+    _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(isolated_env)
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("an aggregate collector ran before the ProjectNotFound raise")
+
+    monkeypatch.setattr(shell, "collect_all_directives", _boom)
+    monkeypatch.setattr(shell, "collect_all_assimilated", _boom)
+
+    with pytest.raises(cli.ProjectNotFound) as exc_info:
+        cli._document("ghost", False, "human")  # pylint: disable=protected-access
+    assert exc_info.value.project == "ghost"
+
+
+def test_porcelain_computes_no_focus_no_aggregates_and_no_cortex_pending(isolated_env, monkeypatch):
+    """C5. `--porcelain` narrows nothing and computes nothing: it reads only `order`/`projects`.
+    `cortex_pending` is included here because AC2 un-gated it from the aggregates -- the pause row
+    hangs off a BOARD row, and the board renders in both human contexts but in no machine one."""
+    alpha, _beta = _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(alpha)  # repository scope, where focus WOULD otherwise be computed
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("porcelain computed work no TSV row reads")
+
+    monkeypatch.setattr(shell, "collect_all_directives", _boom)
+    monkeypatch.setattr(shell, "collect_all_assimilated", _boom)
+    monkeypatch.setattr(shell, "cortex_pending", _boom)
+    monkeypatch.setattr(cli, "_focus", _boom)
+
+    doc = cli._document("", False, "porcelain")  # pylint: disable=protected-access
+
+    assert doc["focus"] is None
+    assert doc["directives"] == []
+    assert doc["assimilated"] == []
+    assert doc["cortex_pending"] == []
+
+
+def test_cortex_pending_is_read_on_both_human_contexts(isolated_env, monkeypatch):
+    """The other half of C5: the board's cortex pause row must survive in REPOSITORY scope too, and
+    it would not if `cortex_pending` had stayed gated with the aggregates."""
+    alpha, _beta = _scope_registry(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    calls = {"n": 0}
+
+    def counting_pending(now=None):  # pylint: disable=unused-argument
+        calls["n"] += 1
+        return []
+
+    monkeypatch.setattr(shell, "cortex_pending", counting_pending)
+
+    monkeypatch.chdir(alpha)
+    cli._document("", False, "human")  # pylint: disable=protected-access
+    monkeypatch.chdir(isolated_env)
+    cli._document("", False, "human")  # pylint: disable=protected-access
+    assert calls["n"] == 2
+
+
+def test_deep_is_accepted_and_ignored(isolated_env, capsys):
+    """C6. `--deep` collapsed into repository scope but STAYS in the parser: three copies of the
+    dispatcher still pass it (borg.zsh's positional arm, bin/link-parity-harness, and the stale
+    byte-copy at ~/.claude/bin/link-parity-harness), and deleting the argument makes argparse exit 2
+    where `drone status` and the fzf preview both swallow the failure silently.
+
+    Mutation: drop the `parser.add_argument("--deep", ...)` line -> SystemExit(2), empty stdout.
+    """
+    args = cli._build_parser().parse_args(["--deep", "--", "delta"])  # pylint: disable=protected-access
+    assert args.deep is True
+    assert cli._mode(args) == "human"  # pylint: disable=protected-access
+
+    path = _project_dir(isolated_env, "delta")
+    _write_registry(isolated_env, {"delta": {"path": path, "status": "idle", "summary": "Delta."}})
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--deep", "--", "delta"])
+    assert exc_info.value.code == 0
+    with_deep = capsys.readouterr().out
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--", "delta"])
+    assert exc_info.value.code == 0
+    without_deep = capsys.readouterr().out
+
+    assert with_deep == without_deep
+    assert "▸ IN FOCUS" in with_deep
+
+
+def test_mode_collapses_to_three_values(isolated_env):  # pylint: disable=unused-argument
+    parser = cli._build_parser()  # pylint: disable=protected-access
+    assert cli._mode(parser.parse_args(["--json"])) == "json"  # pylint: disable=protected-access
+    assert cli._mode(parser.parse_args(["--porcelain"])) == "porcelain"  # pylint: disable=protected-access
+    assert cli._mode(parser.parse_args([])) == "human"  # pylint: disable=protected-access
+    # `--json` beats `--porcelain` beats everything; `--deep` never wins anything.
+    assert cli._mode(parser.parse_args(["--json", "--porcelain", "--deep"])) == "json"  # pylint: disable=protected-access
+    assert cli._mode(parser.parse_args(["--porcelain", "--deep"])) == "porcelain"  # pylint: disable=protected-access
+
+
+def test_focus_of_an_empty_project_is_none(isolated_env):  # pylint: disable=unused-argument
+    """`_focus`'s empty-positional guard became UNREACHABLE from `_document` in AC2: `need_focus` is
+    `bool(project) or scope["kind"] == "repository"`, and both arms guarantee a non-empty name by the
+    time `project or scope["repository"]` is evaluated. It stays because the function must be total
+    for any future caller, and it is covered DIRECTLY rather than left to look like a live path --
+    the same treatment `picture.link_ref` gives its unlinkable arm."""
+    assert cli._focus("", {"projects": {}}, 0) is None  # pylint: disable=protected-access
+
+
+def test_a_consumer_that_stops_reading_gets_no_traceback(monkeypatch):
+    """SIGPIPE, caught in `_emit` and NEVER in render.py, which stays pure. The seven-section
+    document is much larger than the deep dive it replaced and can exceed the 64KB pipe buffer, so
+    `borg link | grep -m1 Status:` can leave this writing into a closed pipe. Uncaught, CPython
+    prints a BrokenPipeError traceback that drone.zsh's status table would merge into a column."""
+    sink = os.open(os.devnull, os.O_WRONLY)
+
+    class ClosedPipe:
+        """Every write fails the way a pipe whose reader exited does; `fileno` is real so the
+        devnull redirect in the handler has something to dup2 onto."""
+
+        def write(self, _text):
+            raise BrokenPipeError(32, "Broken pipe")
+
+        def flush(self):
+            raise BrokenPipeError(32, "Broken pipe")
+
+        def fileno(self):
+            return sink
+
+    monkeypatch.setattr(sys, "stdout", ClosedPipe())
+    try:
+        assert cli._emit("x" * 100_000) == 0  # pylint: disable=protected-access
+    finally:
+        os.close(sink)
 
 
 def test_document_scope_survives_an_archived_repository(isolated_env, monkeypatch):
