@@ -155,6 +155,14 @@
     [2m- [warehouse] Region cutover runbook (2026-08-18)[0m
     [2m- [ledger] Close-of-day parity harness (2026-08-17)[0m
 
+[1m▸ NEXT[0m  [2m4 ready of 12[0m
+  [1myours[0m [2m— a decision only you can make[0m
+    [1;33m●[0m ]8;;https://github.com/acme/warehouse/issues/64\acme/warehouse#64]8;;\  [2mKelly must sign off on the maintenance window[0m
+  [1mmine[0m [2m— nothing is blocking these[0m
+    [1;33m●[0m ]8;;https://github.com/acme/warehouse/issues/87\acme/warehouse#87]8;;\
+    [1;33m●[0m ]8;;https://github.com/acme/infra/issues/12\acme/infra#12]8;;\
+    [1;33m●[0m ]8;;https://github.com/acme/platform/issues/420\acme/platform#420]8;;\
+
 [1m▸ SIGNALS[0m
   [1m4 sessions need attention[0m (limit: 3)
   [2m— sweep: replayed from fixture <TESTS>/fixtures/link/sweep-acme.json -- no adapter ran[0m
