@@ -80,6 +80,8 @@ GLYPH_CLOSED = "✗"
 # distinct marker + one drift line, so the picture never silently contradicts itself"), and the live
 # case that prompted it was the contract lane's C6 sitting open under merged rows.
 DRIFT_MARK = "!"
+# AC4 PRECONDITION. Shares DRIFT_MARK's slot -- see `cell_mark` for which wins when both apply.
+PROVENANCE_MARK = "?"
 
 INDENT = 4
 GUTTER = 2
@@ -222,6 +224,20 @@ def state_glyph(node: dict) -> str:
     return GLYPH_OPEN
 
 
+def resolved_provenance(node: dict) -> bool:
+    """Did ANYBODY actually look this state up, or is it a hand-typed field?
+
+    THE ONE PREDICATE ALL THREE PROVENANCE SITES READ, so the cell mark, the glyph colour and the
+    detail heading cannot disagree about whether a node was verified. Keyed on `grid`'s own
+    `RESOLVED_STATE_SOURCES` rather than a local tuple: `swept` and `fetched` were looked up,
+    `declared` and `unknown` were not, and if a fifth rung is ever added this follows it.
+
+    `grid.py:898` computes `unresolved` from the SAME tuple, so the `▸ SIGNALS` count and the marks
+    in the picture are two views of one fact rather than two derivations that can drift.
+    """
+    return node.get("state_source") in grid.RESOLVED_STATE_SOURCES
+
+
 # Colour keyed on the GLYPH rather than on the state, so the two can never disagree about which
 # node is which. A lookup for the same reason _BOX is one: a three-arm if/elif chain over
 # visually-similar constants is where `GLYPH_CLOSED` gets the merged colour and nothing notices.
@@ -229,8 +245,42 @@ _GLYPH_COLOR = {GLYPH_MERGED: GREEN, GLYPH_CLOSED: DIM, GLYPH_DRAFT: DIM}
 
 
 def glyph_color(node: dict) -> str:
-    """The SGR prefix for a node's glyph. Anything still in flight is YELLOW."""
+    """The SGR prefix for a node's glyph. Anything still in flight is YELLOW.
+
+    UNRESOLVED PROVENANCE TAKES THE COLOUR DOWN TO DIM, whatever the state says. A hand-typed
+    `"status": "merged"` rendered in the same GREEN as a swept one is the AC4 precondition's exact
+    complaint, measured on the live `ingle-t1-cutover` manifest: twelve green checkmarks asserting a
+    project is essentially done, from a field no sweep and no fetch ever saw.
+
+    THE COLOUR IS THE REINFORCEMENT, NOT THE SIGNAL. Option (iii) of the precondition — dim the glyph
+    and change nothing else — was rejected because a colour change is invisible in a plain-text
+    golden diff, which CLAUDE.md's "Learned" section catalogues three times. `cell_mark` below prints
+    a literal `?`, so the plain-text diff moves; this makes the screen agree with it.
+    """
+    if not resolved_provenance(node):
+        return DIM
     return _GLYPH_COLOR.get(state_glyph(node), YELLOW)
+
+
+def cell_mark(node: dict, drift: bool) -> str:
+    """The cell's SECOND slot: `?` unverified, `!` drift, or a space. Exactly one character.
+
+    ONE SLOT, TWO CLAIMS, AND `?` WINS. The precondition measured contention at 0 nodes on both live
+    manifests but noted the two can collide in principle, and the tie has to break somewhere. It
+    breaks toward `?` because DRIFT IS A CLAIM ABOUT TWO STATES: `drift_parents` fires when a merged
+    node sits under an open or closed parent. If this node's own state was never verified, the
+    contradiction is itself unverified, and `!` is the most confident mark on the page — RED, and
+    read as "something is actually wrong here". Printing it off two hand-typed fields would be a
+    stronger false claim than the `✔` this whole change exists to qualify.
+
+    Losing the `!` in that case costs nothing a reader needs: `?` already says do not trust this row,
+    and the detail block's `drift:` line still names the parents outright.
+    """
+    if not resolved_provenance(node):
+        return f"{YELLOW}{PROVENANCE_MARK}{NC}"
+    if drift:
+        return f"{RED}{DRIFT_MARK}{NC}"
+    return " "
 
 
 def state_word(node: dict) -> str:
@@ -242,6 +292,17 @@ def state_word(node: dict) -> str:
     `state_line` below already says the honest thing on its own line, so the heading stays empty
     rather than confidently wrong.
     """
+    # AC4 PRECONDITION, AND THIS IS THE SITE THE PRECONDITION NAMES AS THE COMPOUNDING ONE. Before
+    # this guard the heading stamped a confident `MERGED` one line above `state: from the manifest
+    # (declared, may be stale)` -- the page contradicting itself within two lines, with the loud half
+    # wrong. An unverified state gets no uppercase word at all; `state_line` immediately below says
+    # the honest thing, and the cell already carries `?`.
+    #
+    # "" AND NOT `MERGED (declared)`. The heading is prose a human scans, and a parenthetical is
+    # exactly what a scanning eye drops -- which would leave the same false claim in the same place
+    # with a footnote nobody read.
+    if not resolved_provenance(node):
+        return ""
     state = node.get("state")
     # grid.DECLARABLE_STATES rather than the triple spelled out again: a token a manifest may legally
     # declare is a token a heading may legally print, so if a fourth is ever added this follows it
@@ -565,7 +626,7 @@ def node_cell(node: dict, node_id: str, short: str, width: int, drift: bool) -> 
     string tens of bytes longer than what prints, so padding with `len()` on the wrapped string shifts
     every subsequent column right by the length of a URL -- invisible in a diff, obvious on screen.
     """
-    mark = f"{RED}{DRIFT_MARK}{NC}" if drift else " "
+    mark = cell_mark(node, drift)
     return (
         f"{glyph_color(node)}{state_glyph(node)}{NC}{mark}{node_id.ljust(ID_WIDTH)} "
         f"{link_ref(node['ref'], short)}{' ' * (width - len(short))}"
