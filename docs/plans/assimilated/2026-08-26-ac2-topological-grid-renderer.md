@@ -2,6 +2,33 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Parent directive: 2026-08-25-link-front-door-hardened-spec*
 *Filed: 2026-08-26*
+*Shipped: 2026-08-27 — PR [#165](https://github.com/noah-goodrich/borg-collective/pull/165) (S1–S5) merged to main*
+
+> **ASSIMILATION NOTE (2026-08-27).** Shipped whole across five commits: S1 the wire, S2 `picture.py`, S3
+> `render.document()` and the seven-section spine (three goldens regenerated, two created), S4 the parity retirement,
+> S5 the documentation. 762 bats / 0 failures, 896 pytest, coverage 99% against a 90% floor, five CI lanes green.
+>
+> **Four spec rules did not survive execution and were amended in place** rather than worked around — `cde4b55`
+> (the rail rule), `662f4ba` (three S3 rules), `94bdd12` (two S4 rules). Read those amendment blocks before treating
+> any rule in this file as the shipped behaviour. The transferable one: **the CHAINS ladder defect was caught by
+> reading the generated golden by eye, after every test was green** — the specified pytest case varied `slug` alone
+> against a hand-built block where all three arms are reachable, so neither it nor a hand-authored oracle could have
+> seen that one arm was dead by contract in another module.
+>
+> **Filed forward, not shipped:**
+> - `drone.zsh:964` onto `--porcelain` — `docs/plans/directives/2026-08-27-drone-status-off-the-human-document.md`
+> - the `--json`-side width check — `docs/plans/directives/2026-08-27-json-side-picture-width-check.md`
+> - emitting `isDraft` so `◌` becomes reachable — **folded into AC4** rather than filed separately: this file already
+>   calls it "a one-line AC4-or-later change", `_FETCH_NODE` already selects the field, and a draft PR must not be
+>   announced as READY, so it is an AC4 correctness concern rather than an independent one.
+>
+> **The AC4 PRECONDITION in §7 is the live obligation from this file** — the state glyph must be gated on provenance
+> before `ready` ships. It is not a follow-up: AC4 makes it strictly worse, because `ready_set` erases provenance and
+> AC4's own commit would render `●` ("start this now") off a hand-typed `"status"` field.
+>
+> **AC1 did NOT tick with AC2 and AC3.** Both its verify clauses pass, but `borg link --brief` still never reaches
+> `borg_core.link.cli`, so one verb has two truth levels — see `PROJECT_PLAN.md` and Phases 5/5b of
+> `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md`.
 
 **tl;dr** — `render.document(doc)` becomes the single human entry point: a fixed **seven-section spine** whose `▸`
 headers are byte-identical in both contexts, where `scope` narrows the ROW SET of the four scope-dependent sections and

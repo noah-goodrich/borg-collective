@@ -22,15 +22,31 @@ e2e/eval harness that keeps it honest.
       every time. `--local` is the only opt-down. `recon` retires as a human-facing verb; no new verbs are added.
   - Verify: bats asserts `borg help` is net one command shorter than at plan start, and that two consecutive
     `borg link` runs write no cache artifacts.
-- [ ] **AC2 — The topological grid is the renderer, everywhere.** Vertical, rows as levels with time flowing down,
+  - **Both verify clauses PASS** (`contract: borg help is net one command shorter than at plan start (AC1)`,
+    `cache: two consecutive borg link runs write no cache artifact (AC1)`), and the box stays UNTICKED anyway.
+    `borg link --brief` never reaches `borg_core.link.cli` (`borg.zsh:3118`) — it runs the zsh `_borg_print_briefing`
+    and never sweeps, so one verb still has two truth levels, which `cli.py` itself names as "the failure class AC1
+    exists to kill". Ticking on a passing verify clause while the stated goal is unmet is the wrong-answer-under-a-
+    confident-header failure this whole plan exists to remove. Blocker already filed with its measurement (zero `gh`
+    subprocesses on the `--brief` path against one batched call on every other arm):
+    `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5**, plus **Phase 5b** for
+    `/borg-recon`, the second un-folded human digest. AC1 ticks when those two fold, not before.
+- [x] **AC2 — The topological grid is the renderer, everywhere.** Vertical, rows as levels with time flowing down,
       columns as branches, box-drawing connectors, state glyphs, compact nodes with detail blocks below, ANSI to
       stdout by default with OSC-8 hyperlinks on refs. Repository and orchestrator contexts differ in breadth only —
       never layout, section order, or vocabulary.
   - Verify: golden-file snapshot test rendering both contexts from fixture manifests; one render entry point.
-- [ ] **AC3 — Declared members outside the sweep resolve truthfully.** Any ref declared in a manifest but outside the
+  - **MET** in [#165](https://github.com/noah-goodrich/borg-collective/pull/165). Both contexts pinned by
+    `_assert_link_grid_golden` against `link-grid-repository.golden` / `link-grid-orchestrator.golden`; `document()`
+    is the sole render entry point (`render.overview` and `render.deep` deleted). Known gap, carried into AC4:
+    neither fixture manifest declares a row `status`, so the goldens cannot catch a provenance-glyph regression in
+    either direction.
+- [x] **AC3 — Declared members outside the sweep resolve truthfully.** Any ref declared in a manifest but outside the
       current sweep window is targeted-fetched, never rendered `unknown`.
   - Verify: e2e case runs `borg link` inside one repository against a fixture manifest spanning several; asserts zero
     nodes render `unknown`.
+  - **MET** in [#164](https://github.com/noah-goodrich/borg-collective/pull/164):
+    `sweep: AC3 — a manifest spanning two repositories renders zero unknown nodes`.
 - [ ] **AC4 — Rows drive "next" and "yours vs mine."** Sourced from `rows[].next` and `gate.kind`, never re-derived.
       READY = open AND every parent merged, announced as a set. Adds row-level `after: [refs]` so forks are
       expressible (lanes only express linear tracks).
