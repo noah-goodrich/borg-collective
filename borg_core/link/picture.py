@@ -726,6 +726,19 @@ def picture(manifest_grid: dict, ids: dict[str, str], columns: dict[str, int]) -
     return rows
 
 
+def reading_order(manifest_grid: dict, ids: dict[str, str]) -> list[str]:
+    """One manifest's refs in the order an eye crosses its picture: top to bottom, then left to right.
+
+    THE ONE DEFINITION OF THAT ORDER, and it is public because `render.py` needs it too -- the glance
+    strip and the detail blocks under it must agree, or a reader moving between the picture and the
+    details re-sorts in their head. Node ids are assigned by `(manifest, level, column)` in
+    `node_ids`, so ordering by id IS reading order; deriving it a second time from levels and columns
+    would be a second rule for one question, which is the shape `_id_order`'s own comment records
+    going wrong once already.
+    """
+    return sorted(manifest_grid.get("nodes") or {}, key=lambda ref: _id_order(ref, ids))
+
+
 def glance_row(manifest_grid: dict, ids: dict[str, str]) -> str:
     """One glyph per node, in node-id order. The at-a-glance strip, with NO ids in it.
 
@@ -734,11 +747,9 @@ def glance_row(manifest_grid: dict, ids: dict[str, str]) -> str:
     rule that makes `*` a working jump key.
     """
     nodes = manifest_grid.get("nodes") or {}
-    # `_id_order`, not a second inline key. The inline version sorted an unnumbered ref FIRST (`n0`
-    # -> 0) where `_id_order` sorts it LAST, and it raised ValueError on any id that was not
-    # `n<digits>` -- two rules for one question, disagreeing at both ends.
-    ordered = sorted(nodes, key=lambda ref: _id_order(ref, ids))
-    return " ".join(f"{glyph_color(nodes[ref])}{state_glyph(nodes[ref])}{NC}" for ref in ordered)
+    return " ".join(
+        f"{glyph_color(nodes[ref])}{state_glyph(nodes[ref])}{NC}" for ref in reading_order(manifest_grid, ids)
+    )
 
 
 def _id_order(ref: str, ids: dict[str, str]) -> int:
@@ -752,16 +763,29 @@ def _id_order(ref: str, ids: dict[str, str]) -> int:
 
 
 def _detail_refs(refs: list[str], nodes: dict, ids: dict[str, str]) -> str:
-    """`ref (state)` for each of a node's neighbours, `·`-joined, IN PICTURE READING ORDER.
+    """`ref (state)` for each of a node's neighbours, `·`-joined, IN NODE-ID ORDER.
 
     NOT in the order `grid.py` put them on the wire, and the difference is worth the sort. The wire
     orders `parents`/`children` by `(seq, ref)` -- declaration order -- which is the key the COLUMN
-    assignment consults, but a node's final left-to-right position is its COLUMN, and the two come
-    apart at exactly the place a reader needs them not to: a join. The approved mock's three-parent
-    join sits under columns 0/1/2 reading `platform#431, warehouse#93, infra#12`, while declaration
-    order lists `infra#12` first. Ordering by node id -- which is assigned from (level, column) --
-    means the detail block names them in the order the picture shows them, so a reader moving between
-    the two is never re-sorting in their head.
+    assignment consults and which no reader of the finished page can see. Node ids are assigned from
+    `(manifest, level, column)`, so this lists neighbours in the order their DETAIL BLOCKS appear
+    further down the page: `waits on: ... n4-ish ref` then the ref n5 heads, and so on. A reader
+    walking a chain scrolls forward, never back.
+
+    THREE ORDERS EXIST HERE AND THEY DISAGREE, which is worth stating because the AC2 spec's own
+    sample block is one of them. For the mock's three-parent join the candidates are: declaration
+    order on the wire (`infra#12, platform#431, warehouse#93`, by row seq), the raw `after` array as
+    the manifest author typed it (`platform#431, warehouse#93, infra#12` -- what §2.1's sample shows,
+    and what the wire deliberately does not preserve), and node-id order (`infra#12, platform#431,
+    warehouse#93`, because infra#12 sits a level HIGHER and its id is therefore lower). The three
+    coincide for a same-level fan-out and come apart only for a SKIP-LEVEL parent.
+
+    Node-id order ships, and the reason is that the ids are the page's navigation handles: the detail
+    blocks are laid out in id order, so naming neighbours in any other order sends a reader backwards
+    through the page. Column order -- left-to-right along the rail, which is what §2.1's sample
+    happens to match -- was the alternative; it reads the PICTURE better and the DETAILS worse, and
+    only one of the two is a list of jump targets. Recorded rather than left implicit: an earlier
+    version of this docstring claimed node-id order reproduced §2.1's sample, and it does not.
     """
     parts = []
     for ref in sorted(refs, key=lambda r: _id_order(r, ids)):
@@ -793,7 +817,12 @@ def detail_block(node: dict, node_id: str, nodes: dict, ids: dict[str, str]) -> 
     children = node.get("children") or []
     drifted = drift_parents(node, nodes)
 
-    heading = f"  {DIM}{node_id}{NC}    {link_ref(ref, ref)}"
+    # PADDED TO A FIXED FIELD, not four literal spaces, for the same reason `node_cell` ljusts the id
+    # and `_label` computes `col - len(text)`: with a hard-coded run of spaces the ref column is
+    # aligned for n1..n9 and ragged from n10 on, and the approved mock's own later render reaches
+    # n17. Computed as `ID_WIDTH + 2` so a heading's ref sits two columns right of where the picture
+    # cell's does -- the detail block is indented one level less and the two must not collide.
+    heading = f"  {DIM}{node_id}{NC}{' ' * max(ID_WIDTH + 2 - len(node_id), 1)}{link_ref(ref, ref)}"
     if word:
         heading += f"  {glyph_color(node)}{word}{NC}"
     if len(parents) > 1:

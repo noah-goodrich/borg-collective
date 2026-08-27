@@ -1,0 +1,15 @@
+{
+  "nodes": {
+    "acme/platform#400": {"state": "MERGED", "title": "base migration"},
+    "acme/platform#420": {"state": "OPEN", "title": "chore(auth): Status: normalise the rollout report"},
+    "acme/platform#431": {"state": "OPEN", "title": "enforce scopes on internal calls"},
+    "acme/warehouse#87": {"state": "OPEN", "title": "rotate the warehouse keypair"},
+    "acme/warehouse#93": {"state": "OPEN", "title": "cut consumers over to the new key"},
+    "acme/infra#12": {"state": "OPEN", "title": "inventory services still on password auth"},
+    "acme/infra#77": {"state": "OPEN", "title": "flip enforcement flag, all services"},
+    "acme/warehouse#61": {"state": "MERGED", "title": "us-east region cutover"},
+    "acme/warehouse#64": {"state": "OPEN", "title": "us-west region cutover"},
+    "acme/warehouse#70": {"state": "MERGED", "title": "eu region cutover"},
+    "acme/warehouse#72": {"state": "CLOSED", "title": "ap region cutover — superseded by the fleet-wide script"}
+  }
+}
