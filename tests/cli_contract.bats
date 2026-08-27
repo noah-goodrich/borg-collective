@@ -2904,10 +2904,14 @@ print(max(picture.visible_len(r) for r in rows))
     }
 }
 
-# B16. `--deep` is parsed and IGNORED. It stays in the parser because three copies of the dispatcher
-# still pass it (borg.zsh's positional arm, bin/link-parity-harness, and the stale byte-copy at
-# ~/.claude/bin/link-parity-harness); delete the argument and argparse exits 2 where `drone status`
-# and the fzf preview both swallow the failure silently — a blank column and a blank pane.
+# B16. `--deep` is parsed and IGNORED. It stays in the parser because ONE live copy of the dispatcher
+# passes it — borg.zsh's positional arm at borg.zsh:3111, which is the fzf preview's path; delete the
+# argument and argparse exits 2 where `drone status` and the fzf preview both swallow the failure
+# silently — a blank column and a blank pane.
+#
+# Corrected in AC2/S4: this said THREE copies, also naming bin/link-parity-harness and its byte-copy
+# at ~/.claude/bin/. Neither ever passed `--deep` — the harness looped a bare positional — and S4
+# retired the leg that looped. One copy on a silently-swallowing hot path is the entire argument.
 @test "contract: link --local --deep <p> and link --local <p> render byte-identically" {
     _link_setup_grid
     _link_grid_seams

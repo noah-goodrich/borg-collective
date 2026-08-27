@@ -1,425 +1,98 @@
 #!/usr/bin/env python3
 """link-parity-harness — differential oracle for the `borg link` zsh->Python port.
 
-WHAT THIS PROVES
------------------
-During the ship review for the `borg link` port (docs/plans/PROJECT_PLAN.md), a reviewer ran the
-LAST zsh implementation of `borg link` (deleted in Phase 3) against the current Python port across
-all real projects in the owner's registry. 9 of 20 projects differed, and EVERY difference was one
-of three owner-signed-off deviations recorded in PROJECT_PLAN.md. That is the strongest evidence in
-the whole plan that the port preserves behavior -- and it existed nowhere as a rerunnable artifact
-until this script. The zsh renderers only exist in git history now, at commit ad99612 (the tree
-immediately before the Phase 3 render flip, eb81eab~1) -- there is no other way to reproduce this
-comparison once that commit falls out of anyone's local reflog expiry.
+THE `render` LEG IS RETIRED (AC2/S4, 2026-08-27). EVIDENCE REPLACED, NOT EVIDENCE DROPPED.
+-------------------------------------------------------------------------------------------
+This script used to run all four human `borg link` modes through BOTH the current tree and the LAST
+zsh implementation (extracted from `ad99612`, the tree immediately before the Phase 3 render flip)
+and classify every difference. That differential is now **unreproducible by construction**: AC2/S3
+deleted `render.overview` and `render.deep` and replaced all three human renderers with a single
+`render.document()` over a fixed seven-section spine. The oracle at `ad99612` renders the OLD
+document. Comparing the two would not measure port fidelity; it would print the AC2 redesign back as
+one enormous unexplained diff, every line of it intended.
 
-This script:
-  1. Extracts the ad99612 tree (`git archive`) into a scratch dir and confirms it still contains
-     the deleted renderers (_borg_link_porcelain, _borg_link_overview, _borg_link_deep).
-  2. Runs all four human `borg link` modes (overview, --porcelain, --all, and a deep dive per
-     project) through BOTH that tree's `borg.zsh` and the CURRENT tree's `borg.zsh` (which
-     dispatches to borg_core.link via `_borg_py`), against an isolated copy of a registry.
-  3. Normalizes relative-time text and the three known-expected deviations, then diffs what's left.
-  4. Classifies every remaining difference as EXPECTED (matches one of the three deviations below)
-     or UNEXPECTED. An unexpected difference is the entire point of this tool -- it means the port
-     drifted from the oracle in some way nobody signed off on.
+What the render leg proved -- that a human `borg link` render does not drift silently -- is now
+proved by artifacts that CAN be regenerated on demand, which the zsh oracle never could:
 
-It also runs (via `primitives`) differentials of the individual ported primitives against the exact
-shell one-liners they replace: core.heading_title, core.ship_date, core.plan_progress,
-core.plan_objective. `render._fold_s` vs `fold -s` is already covered by
-`test_matches_real_fold_s_binary` in borg_core/link/test_render.py -- NOT duplicated here.
+  - `tests/fixtures/link/link-overview.golden`, `link-overview-all.golden`, `link-deep.golden`
+    and `link-porcelain.golden`, asserted by `_assert_link_golden` in tests/cli_contract.bats.
+  - `link-grid-repository.golden` / `link-grid-orchestrator.golden` via `_assert_link_grid_golden`,
+    which pin the topological picture in both scopes.
+  - `picture-fork.expected` / `picture-crossing.expected` -- hand-authored, never regenerated, so
+    the picture has an oracle that does NOT come from the implementation it checks.
 
-THE THREE EXPECTED DEVIATIONS (all owner-signed-off, PROJECT_PLAN.md)
------------------------------------------------------------------------
-  1. `(NOm)` assimilated ordering -- zsh's per-project deep dive lists the three OLDEST assimilated
-     plans (`_borg_read_assimilated`'s glob reverses to oldest-first); Python lists newest-first.
-     Only the ORDER of the "Recently assimilated:" bullet block differs; the same lines are present
-     on both sides. Detected by sorting that block on both sides and comparing.
-  2. The empty `Progress: 0` / `0/N criteria met` two-line artifact -- zsh's
-     `criteria_done=$(grep -c '^- [x]' ... || echo 0)` captures BOTH grep's own printed "0" (grep
-     exits 1 but still prints a count) and the `|| echo 0` fallback, so `$criteria_done` becomes the
-     two-line string "0\n0" and the single `echo -e "Progress: $criteria_done/$criteria_total..."`
-     splits across two lines whenever nothing is checked off. Python renders one line.
-  3. The empty-`Shipped:` field-shift -- zsh's aggregate overview reads a TSV row with
-     `IFS=$'\t' read -r slug title ship_date aproject`. Tab is an IFS whitespace character, so zsh
-     COLLAPSES a run of tabs when a field (ship_date) is empty, shifting `aproject`'s value into
-     `ship_date`'s slot and leaving `aproject` empty. The render becomes
-     `- [] <title> (<project>)` instead of `- [<project>] <title>`. Python's port already renders
-     the corrected shape and omits the parens entirely when ship_date is empty (this was found
-     POST-MERGE against the real registry, is a fix not a regression, and is why "9 of 20 differ" is
-     the expected steady-state count, not zero).
+`ad99612` is not rewritten and is still reachable in history; nothing here stops a future reader from
+extracting that tree by hand. What is gone is the CLAIM that a byte-comparison against it means
+anything after S3.
 
-Anything that survives normalization is printed as a unified diff and marked UNEXPECTED, and the
-script exits non-zero.
+WHAT THIS SCRIPT STILL DOES
+----------------------------
+The `primitives` leg: differentials of the individual ported primitives against the exact shell
+one-liners they replace -- `core.heading_title`, `core.ship_date`, `core.plan_progress`,
+`core.plan_objective` -- over the real markdown reachable from the registry (PROJECT_PLAN.md and
+`docs/plans/assimilated/*.md` for every registered project). These primitives were ported from shell
+and their shell originals still exist verbatim in this file, so the comparison remains live and
+reproducible. `render._fold_s` vs `fold -s` is already covered by `test_matches_real_fold_s_binary`
+in borg_core/link/test_render.py -- NOT duplicated here.
 
-SANDBOX GOTCHAS BAKED IN (rediscover these once, never again)
------------------------------------------------------------------
-  - `XDG_CONFIG_HOME` must be overridden, not just `BORG_REGISTRY`. `borg.zsh:24` and
-    `lib/registry.zsh:14-15` recompute `BORG_DIR`/`BORG_REGISTRY` from `XDG_CONFIG_HOME` on every
-    invocation, so exporting `BORG_REGISTRY` alone is silently ignored and every command falls
-    through to the REAL registry. This script only ever sets `XDG_CONFIG_HOME` to a throwaway temp
-    dir and copies the registry snapshot into `$XDG_CONFIG_HOME/borg/registry.json` -- it never
-    writes to `~/.config/borg/registry.json`. The snapshot is re-copied fresh before every single
-    invocation so `borg_desktop_scan`'s registry merge (a real side effect on the overview/porcelain
-    paths) can never leak state from one comparison into the next.
-  - `BORG_NO_REAP=1` is set for every child. Without it, the reap overlay's status downgrades depend
-    on wall-clock time and live tmux window state, making two runs of the SAME implementation
-    disagree.
-  - Relative-time text ("3m ago" vs "1m ago") differs between two runs of the identical
-    implementation because real time elapses between the zsh call and the Python call. This script
-    does NOT pin the clock (no vendored `date`/`libfaketime`); instead it NORMALIZES every relative-
-    time token (`Nm ago`, `Nh ago`, `Nd ago`, `just now`, `yesterday`, and the `Nh Nm` cortex
-    countdown shape) to a fixed placeholder before diffing. This is a textual approximation, not a
-    proof of numeric equality -- a bucket-boundary flip (e.g. zsh runs at 59m59s, Python runs one
-    second later at 1h00m00s) would still show as a false UNEXPECTED diff. None have been observed
-    in practice; if one appears, check whether it is a boundary flip before treating it as a port
-    bug.
+THE ONE DEVIATION THAT STILL FIRES
+-----------------------------------
+`grep -c '^- [x]' ... || echo 0` captures BOTH grep's own printed "0" (grep exits 1 but still prints
+a count) and the `|| echo 0` fallback, so the shell value becomes the two-line string "0\\n0"
+whenever nothing is checked off. `core.plan_progress` is the deliberate fix and returns a plain int.
+Flagged EXPECTED iff the shell side is exactly that two-line shape and Python's value is its second
+line -- narrow on purpose, so a real regression cannot hide behind it.
+
+(Two further deviations -- the `(NOm)` assimilated ordering and the empty-`Shipped:` IFS-tab field
+shift -- were RENDER-level only. They are recorded in
+docs/plans/assimilated/2026-08-12-port-borg-link-to-the-python-core.md and retired with the leg that
+observed them.)
+
+READ-ONLY, ALWAYS
+------------------
+The primitives leg reads the real registry and the real plan files and writes to NEITHER. It runs no
+`borg` subcommand at all -- no `borg.zsh` invocation, no sandbox, no adapter, no `gh`, so it is
+hermetic with respect to the network without needing to be neutralized. `BORG_UPDATE_GOLDEN` is READ
+NOWHERE in this script; it is not a golden-file tool.
 
 USAGE
 -----
-    bin/link-parity-harness                    # both render + primitive differentials, real registry
-    bin/link-parity-harness render              # only the four-mode whole-command differential
-    bin/link-parity-harness primitives          # only the primitive-level differentials
-    bin/link-parity-harness render --registry PATH   # use a fixture registry instead of the real one
-    bin/link-parity-harness --oracle-ref REF    # override the zsh oracle commit (default: ad99612)
+    bin/link-parity-harness                    # the primitive differentials (the only leg left)
+    bin/link-parity-harness primitives          # same, named explicitly
+    bin/link-parity-harness --registry PATH     # use a fixture registry instead of the real one
+    bin/link-parity-harness render              # RETIRED -- exits 2 with the reason
     bin/link-parity-harness --help
 
-Exit code 0: every project/mode identical or fully explained by the three expected deviations.
-Exit code 1: at least one UNEXPECTED difference was found (see stdout for the diff).
-Exit code 2: setup failure (oracle extraction, missing renderers, missing registry, etc).
-
-`BORG_UPDATE_GOLDEN` is READ NOWHERE in this script. It is not a golden-file tool; it is a live
-differential against two running implementations, and it must never be run in any mode that writes
-to the owner's real `~/.config/borg/registry.json`.
+Exit code 0: every primitive differential matched or is the known deviation above.
+Exit code 1: at least one UNEXPECTED mismatch was found (see stdout).
+Exit code 2: setup failure (missing registry), or the retired `render` leg was requested.
 """
 
 from __future__ import annotations
 
 import argparse
-import difflib
 import json
 import os
-import re
-import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
-ORACLE_REF_DEFAULT = "ad99612"
-REQUIRED_ORACLE_FUNCTIONS = ("_borg_link_porcelain", "_borg_link_overview", "_borg_link_deep")
-MAX_SETUP_RETRIES = 3
-
-ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
-REL_TIME_RE = re.compile(r"\b\d+[mhd] ago\b|\bjust now\b|\byesterday\b")
-COUNTDOWN_RE = re.compile(r"\b\d+h \d+m\b")
-PROGRESS_TWO_LINE_RE = re.compile(r"(Progress:[^\n]*?)0\n(\d+)/(\d+) criteria met")
-SHIPPED_FIELD_SHIFT_RE = re.compile(r"- \[\] (.+?) \(([^()\n]+)\)")
-SHIPPED_EMPTY_PARENS_RE = re.compile(r"(- [^\n]+?) \(\)")
-
-
-def strip_ansi(text: str) -> str:
-    return ANSI_RE.sub("", text)
+RENDER_RETIRED_LEAD = (
+    "the 'render' leg was retired in AC2/S4 — its oracle is the pre-AC2 zsh renderer at ad99612, "
+    "and S3 replaced all three human renderers with render.document(), so the comparison is "
+    "unreproducible by construction."
+)
+RENDER_RETIRED_POINTER = (
+    "The evidence it carried now lives in the regenerable goldens: link-overview[-all].golden, "
+    "link-deep.golden, link-porcelain.golden (_assert_link_golden) and link-grid-*.golden "
+    "(_assert_link_grid_golden) in tests/cli_contract.bats. Run: bats tests/cli_contract.bats"
+)
 
 
-def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, check=False, **kwargs)
-
-
-def _retry(label: str, fn):
-    """Bounded retry per the harness's own termination rule: at most MAX_SETUP_RETRIES attempts."""
-    last_err = None
-    for attempt in range(1, MAX_SETUP_RETRIES + 1):
-        try:
-            return fn()
-        except Exception as exc:  # pylint: disable=broad-except
-            last_err = exc
-            print(f"link-parity-harness: {label} attempt {attempt}/{MAX_SETUP_RETRIES} failed: {exc}",
-                  file=sys.stderr)
-    print(f"link-parity-harness: STOP -- {label} failed {MAX_SETUP_RETRIES} times, not looping further.",
-          file=sys.stderr)
-    print(f"link-parity-harness: last error: {last_err}", file=sys.stderr)
-    sys.exit(2)
-
-
-# --------------------------------------------------------------------------------------------- #
-# Oracle extraction
-# --------------------------------------------------------------------------------------------- #
-
-def extract_oracle(repo_root: Path, oracle_ref: str, dest: Path) -> Path:
-    def _do():
-        dest.mkdir(parents=True, exist_ok=True)
-        archive = _run(["git", "-C", str(repo_root), "archive", oracle_ref])
-        if archive.returncode != 0:
-            raise RuntimeError(f"git archive {oracle_ref} failed: {archive.stderr.strip()}")
-        tar = subprocess.run(["tar", "-x", "-C", str(dest)], input=archive.stdout, text=True,
-                              capture_output=True, check=False)
-        if tar.returncode != 0:
-            raise RuntimeError(f"tar extraction failed: {tar.stderr.strip()}")
-        return dest
-
-    oracle_dir = _retry(f"extracting oracle tree {oracle_ref}", _do)
-    borg_zsh = oracle_dir / "borg.zsh"
-    if not borg_zsh.exists():
-        print(f"link-parity-harness: STOP -- {borg_zsh} does not exist after extraction", file=sys.stderr)
-        sys.exit(2)
-    borg_zsh.chmod(0o755)
-    text = borg_zsh.read_text()
-    missing = [fn for fn in REQUIRED_ORACLE_FUNCTIONS if not re.search(rf"^{re.escape(fn)}\(\)", text, re.M)]
-    if missing:
-        print(
-            f"link-parity-harness: STOP -- oracle ref {oracle_ref} is missing renderer(s) {missing}; "
-            "it is not the pre-Phase-3 tree. The zsh oracle only exists at ad99612 in git history -- "
-            "if this ref moved, find the commit immediately before the Phase 3 render flip (eb81eab).",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-    return oracle_dir
-
-
-# --------------------------------------------------------------------------------------------- #
-# Sandbox
-# --------------------------------------------------------------------------------------------- #
-
-class Sandbox:
-    """Owns a throwaway XDG_CONFIG_HOME so borg.zsh's BORG_DIR/BORG_REGISTRY never resolve to the
-    real ~/.config/borg. The registry snapshot is re-copied fresh before every invocation (see
-    module docstring) so a real side effect (borg_desktop_scan's registry merge) on one run can
-    never bleed into the next."""
-
-    def __init__(self, registry_source: Path):
-        self.root = Path(tempfile.mkdtemp(prefix="link-parity-sandbox-"))
-        self.config_home = self.root / "config"
-        self.borg_dir = self.config_home / "borg"
-        self.borg_dir.mkdir(parents=True)
-        (self.borg_dir / "desktop").mkdir(parents=True)
-        self.no_adapters = self.root / "no-adapters"
-        self.no_adapters.mkdir(parents=True)
-        self.registry_source = registry_source
-        self.reset()
-
-    def reset(self) -> None:
-        shutil.copy(self.registry_source, self.borg_dir / "registry.json")
-        for stale in self.borg_dir.glob("registry.json.tmp.*"):
-            stale.unlink()
-
-    def env(self) -> dict:
-        env = os.environ.copy()
-        env["XDG_CONFIG_HOME"] = str(self.config_home)
-        env["BORG_NO_REAP"] = "1"
-        env.pop("BORG_REGISTRY", None)
-        env.pop("BORG_DIR", None)
-        # BELT AND BRACES BESIDE run_link's --local. A REAL EMPTY DIRECTORY, never "": recon's
-        # adapter_search_path() branches on `if override:`, so an exported-empty value is falsy and
-        # falls back to the shipped adapter, i.e. the obvious neutralization silently does nothing.
-        # --local already suppresses the sweep; this keeps the sandbox hermetic if anyone adds a mode
-        # that forgets it, because the failure would otherwise be a differential against live GitHub
-        # state -- non-reproducible, and diffed byte-for-byte.
-        env["BORG_RECON_ADAPTER_PATH"] = str(self.no_adapters)
-        return env
-
-    def cleanup(self) -> None:
-        shutil.rmtree(self.root, ignore_errors=True)
-
-
-def run_link(borg_zsh: Path, args: list[str], sandbox: Sandbox) -> str:
-    """One `borg link` invocation against one tree, always `--local`.
-
-    `--local` GOES HERE, AT THE ONE CHOKEPOINT, and not in the four `modes` entries below, so the
-    oracle leg and the current leg cannot drift apart. Three reasons it has to be here at all:
-
-      1. THIS LOOPS. `modes` is three fixed shapes plus one deep dive per registered project, run
-         against BOTH trees -- 34 invocations at 14 projects. Post-S3 the 17 on the current tree
-         would each be a full network sweep, and the deep dives would each sweep a DIFFERENT
-         repository, because S1's B3 rule resolves scope from the positional.
-      2. IT WOULD DESTROY THE DIFFERENTIAL. This byte-compares a never-swept zsh oracle against the
-         Python tree. A swept current leg produces UNEXPECTED diffs on every run, and different ones
-         each time -- exactly the non-reproducibility B7 identifies for the goldens.
-      3. IT IS FREE ON THE ORACLE SIDE. The pre-Phase-3 `cmd_link`'s flag loop is `-*) shift`, so the
-         oracle swallows `--local` silently and its output is byte-identical to before.
-    """
-    sandbox.reset()
-    proc = _run([str(borg_zsh), "link", "--local", *args], cwd=str(borg_zsh.parent), env=sandbox.env())
-    return proc.stdout
-
-
-# --------------------------------------------------------------------------------------------- #
-# Normalization + classification
-# --------------------------------------------------------------------------------------------- #
-
-def normalize_relative_time(text: str) -> str:
-    text = REL_TIME_RE.sub("<REL>", text)
-    text = COUNTDOWN_RE.sub("<COUNTDOWN>", text)
-    return text
-
-
-def normalize_progress_two_line(text: str) -> tuple[str, bool]:
-    """Deviation 2: merge zsh's two-line 'Progress: 0' / '0/N criteria met' artifact into the
-    single-line shape Python renders, so a real fix elsewhere doesn't hide behind it."""
-    fired = bool(PROGRESS_TWO_LINE_RE.search(text))
-    merged = PROGRESS_TWO_LINE_RE.sub(lambda m: f"{m.group(1)}0/{m.group(3)} criteria met", text)
-    return merged, fired
-
-
-def normalize_shipped_field_shift(text: str) -> tuple[str, bool]:
-    """Deviation 3 (both shapes): the aggregate overview's IFS-tab-collapse field shift
-    ('- [] title (project)' -> '- [project] title', matching Python's corrected render) AND the
-    deep dive's plain empty-Shipped-date artifact ('- title ()' -> '- title', since the per-project
-    TSV has no project field to shift into and Python's `_ship_date_suffix` omits the parens
-    entirely whenever ship_date is empty, in both renderers alike). Same root cause -- an empty
-    `Shipped:` line -- two different surface shapes depending on how many TSV fields are present."""
-    fired = bool(SHIPPED_FIELD_SHIFT_RE.search(text)) or bool(SHIPPED_EMPTY_PARENS_RE.search(text))
-    text = SHIPPED_FIELD_SHIFT_RE.sub(lambda m: f"- [{m.group(2)}] {m.group(1)}", text)
-    text = SHIPPED_EMPTY_PARENS_RE.sub(lambda m: m.group(1), text)
-    return text, fired
-
-
-_ASSIMILATED_HEADING = "Recently assimilated:"
-
-
-def _find_assimilated_blocks(lines: list[str]) -> list[tuple[int, int]]:
-    """(start, end) line-index ranges of the bullet block directly under each 'Recently
-    assimilated:' heading in `lines`."""
-    blocks = []
-    i = 0
-    while i < len(lines):
-        if _ASSIMILATED_HEADING in lines[i]:
-            j = i + 1
-            start = j
-            while j < len(lines) and lines[j].strip() != "" and strip_ansi(lines[j]).lstrip().startswith("-"):
-                j += 1
-            blocks.append((start, j))
-            i = j
-        else:
-            i += 1
-    return blocks
-
-
-def normalize_assimilated_order(zsh_text: str, py_text: str) -> tuple[str, str, bool]:
-    """Deviation 1: zsh's per-project `(NOm)` glob shows the oldest 3 assimilated plans; Python
-    shows the newest 3. When a project has more than 3 assimilated plans these are genuinely
-    DIFFERENT subsets, not just a reordering of the same 3 -- so this collapses each paired
-    'Recently assimilated:' block to a placeholder on BOTH sides (rather than sorting, which only
-    catches a same-set reorder) and reports whether the two blocks actually differed. Blocks are
-    paired positionally: both sides render the same number of these headings, in the same order,
-    for a given mode/project, since only the RENDERING differs between the two implementations."""
-    zsh_lines = zsh_text.split("\n")
-    py_lines = py_text.split("\n")
-    zsh_blocks = _find_assimilated_blocks(zsh_lines)
-    py_blocks = _find_assimilated_blocks(py_lines)
-    fired = False
-    for (zs, ze), (ps, pe) in zip(zsh_blocks, py_blocks):
-        if zsh_lines[zs:ze] != py_lines[ps:pe]:
-            fired = True
-    # Replace back-to-front so earlier indices in the same list stay valid after a splice.
-    for zs, ze in reversed(zsh_blocks):
-        zsh_lines[zs:ze] = ["<ASSIMILATED-BLOCK>"]
-    for ps, pe in reversed(py_blocks):
-        py_lines[ps:pe] = ["<ASSIMILATED-BLOCK>"]
-    return "\n".join(zsh_lines), "\n".join(py_lines), fired
-
-
-def classify(zsh_raw: str, py_raw: str) -> dict:
-    """Compare one (zsh, python) output pair. Returns a dict describing the verdict."""
-    if zsh_raw == py_raw:
-        return {"verdict": "IDENTICAL", "deviations": [], "diff": ""}
-
-    zsh_norm = normalize_relative_time(zsh_raw)
-    py_norm = normalize_relative_time(py_raw)
-
-    zsh_norm, dev2 = normalize_progress_two_line(zsh_norm)
-    zsh_norm, dev3 = normalize_shipped_field_shift(zsh_norm)
-    zsh_norm, py_norm, dev1 = normalize_assimilated_order(zsh_norm, py_norm)
-
-    fired = []
-    if dev1:
-        fired.append("NOm-assimilated-ordering")
-    if dev2:
-        fired.append("progress-two-line")
-    if dev3:
-        fired.append("shipped-field-shift")
-
-    if zsh_norm == py_norm:
-        return {"verdict": "EXPECTED", "deviations": fired, "diff": ""}
-
-    diff = "\n".join(
-        difflib.unified_diff(
-            zsh_norm.split("\n"), py_norm.split("\n"), fromfile="zsh(normalized)", tofile="python(normalized)",
-            lineterm="",
-        )
-    )
-    return {"verdict": "UNEXPECTED", "deviations": fired, "diff": diff}
-
-
-# --------------------------------------------------------------------------------------------- #
-# Render differential
-# --------------------------------------------------------------------------------------------- #
-
-def cmd_render(repo_root: Path, oracle_ref: str, registry_path: Path) -> int:
-    tmp = Path(tempfile.mkdtemp(prefix="link-parity-oracle-"))
-    try:
-        oracle_dir = extract_oracle(repo_root, oracle_ref, tmp / "oracle")
-        oracle_zsh = oracle_dir / "borg.zsh"
-        current_zsh = repo_root / "borg.zsh"
-        if not current_zsh.exists():
-            print(f"link-parity-harness: STOP -- {current_zsh} does not exist", file=sys.stderr)
-            return 2
-
-        sandbox = Sandbox(registry_path)
-        try:
-            registry = json.loads(registry_path.read_text())
-        except Exception as exc:  # pylint: disable=broad-except
-            print(f"link-parity-harness: STOP -- could not parse registry {registry_path}: {exc}",
-                  file=sys.stderr)
-            return 2
-        projects = sorted((registry.get("projects") or {}).keys())
-        if not projects:
-            print(f"link-parity-harness: STOP -- registry {registry_path} has zero projects", file=sys.stderr)
-            return 2
-
-        modes: list[tuple[str, list[str]]] = [
-            ("overview", []),
-            ("porcelain", ["--porcelain"]),
-            ("overview --all", ["--all"]),
-        ]
-        modes.extend(("deep:" + p, [p]) for p in projects)
-
-        results = []
-        try:
-            for label, args in modes:
-                zsh_out = run_link(oracle_zsh, args, sandbox)
-                py_out = run_link(current_zsh, args, sandbox)
-                verdict = classify(zsh_out, py_out)
-                results.append((label, verdict))
-        finally:
-            sandbox.cleanup()
-
-        identical = [r for r in results if r[1]["verdict"] == "IDENTICAL"]
-        expected = [r for r in results if r[1]["verdict"] == "EXPECTED"]
-        unexpected = [r for r in results if r[1]["verdict"] == "UNEXPECTED"]
-
-        print(f"link-parity-harness: render differential -- oracle {oracle_ref}, {len(projects)} projects, "
-              f"{len(modes)} mode/project cases")
-        print(f"  identical:  {len(identical)}")
-        print(f"  expected:   {len(expected)}  (matches known deviation(s))")
-        print(f"  UNEXPECTED: {len(unexpected)}")
-        print()
-        for label, verdict in results:
-            if verdict["verdict"] == "IDENTICAL":
-                continue
-            tag = verdict["verdict"]
-            devs = ",".join(verdict["deviations"]) or "-"
-            print(f"  [{tag}] {label}  deviations={devs}")
-            if verdict["verdict"] == "UNEXPECTED":
-                print(verdict["diff"])
-                print()
-
-        if unexpected:
-            print("link-parity-harness: FAIL -- unexpected differences found (see above).", file=sys.stderr)
-            return 1
-        print("link-parity-harness: PASS -- every difference matches a known, signed-off deviation.")
-        return 0
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
+def _run(cmd: list[str]) -> subprocess.CompletedProcess:
+    """Every subprocess this script forks. `**kwargs` (cwd/env) went with the render leg's sandbox --
+    the primitives leg runs `bash -c` one-liners and `python3 -c` in the ambient environment."""
+    return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
 # --------------------------------------------------------------------------------------------- #
@@ -494,10 +167,10 @@ def cmd_primitives(repo_root: Path, registry_path: Path) -> int:
 
         py_met, py_total = _py_core(repo_root, "plan_progress", text)
         sh_met, sh_total = _shell_plan_progress(path)
-        # Deviation 2 at the primitive level: `grep -c ... || echo 0` prints the two-line "0\n0"
-        # artifact (see the module docstring) whenever nothing is checked off; core.plan_progress
-        # is the deliberate fix, returning a plain int. Expected iff shell's raw output is that
-        # two-line "0\n0" shape and Python's int is its second line.
+        # The one surviving deviation: `grep -c ... || echo 0` prints the two-line "0\n0" artifact
+        # (see the module docstring) whenever nothing is checked off; core.plan_progress is the
+        # deliberate fix, returning a plain int. Expected iff shell's raw output is that two-line
+        # "0\n0" shape and Python's int is its second line.
         progress_deviation = sh_met == "0\n0" and str(py_met) == "0"
         cases.append(("plan_progress", str(path), f"{py_met}/{py_total}", f"{sh_met}/{sh_total}",
                       progress_deviation))
@@ -557,18 +230,30 @@ def _default_registry_path() -> Path:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="link-parity-harness",
-        description="Differential oracle for the borg link zsh->Python port. See the module "
-        "docstring (top of this file) for the three known deviations and sandbox gotchas.",
+        description="Primitive-level differential for the borg link zsh->Python port. The whole-"
+        "command 'render' differential is RETIRED -- see the module docstring (top of this file).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("mode", nargs="?", choices=["render", "primitives", "all"], default="all")
-    parser.add_argument("--oracle-ref", default=ORACLE_REF_DEFAULT,
-                         help=f"zsh oracle commit (default: {ORACLE_REF_DEFAULT})")
+    parser.add_argument("mode", nargs="?", choices=["render", "primitives", "all"], default="all",
+                        help="'primitives' (default, and 'all' is its synonym); 'render' is RETIRED "
+                             "and exits 2 with the reason")
     parser.add_argument("--registry", type=Path, default=None,
-                         help="registry.json to use (default: the real registry at "
-                         "$XDG_CONFIG_HOME/borg/registry.json / ~/.config/borg/registry.json, "
-                         "READ-ONLY -- this script never writes to it)")
+                        help="registry.json to use (default: the real registry at "
+                        "$XDG_CONFIG_HOME/borg/registry.json / ~/.config/borg/registry.json, "
+                        "READ-ONLY -- this script never writes to it)")
     args = parser.parse_args(argv)
+
+    # THE RETIREMENT GATE LIVES HERE, in the artifact that implements the command, not in a caller --
+    # the same altitude the `borg recon` retirement settled on (borg_core/recon/cli.py::main, filed in
+    # docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md). `render` stays a
+    # RECOGNIZED token rather than being dropped from `choices` so that asking for it gets the reason
+    # the evidence moved, not argparse's "invalid choice". A stale byte-copy of this file may still
+    # ship a working render leg at ~/.claude/bin/link-parity-harness until `borg setup` next runs;
+    # that copy will lie, and this message is what the repo copy says instead.
+    if args.mode == "render":
+        print(f"link-parity-harness: STOP -- {RENDER_RETIRED_LEAD}", file=sys.stderr)
+        print(f"link-parity-harness: {RENDER_RETIRED_POINTER}", file=sys.stderr)
+        return 2
 
     repo_root = Path(__file__).resolve().parent.parent
     registry_path = args.registry or _default_registry_path()
@@ -576,14 +261,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"link-parity-harness: STOP -- no registry at {registry_path}", file=sys.stderr)
         return 2
 
-    exit_code = 0
-    if args.mode in ("render", "all"):
-        exit_code = max(exit_code, cmd_render(repo_root, args.oracle_ref, registry_path))
-    if args.mode in ("primitives", "all"):
-        if args.mode == "all":
-            print()
-        exit_code = max(exit_code, cmd_primitives(repo_root, registry_path))
-    return exit_code
+    return cmd_primitives(repo_root, registry_path)
 
 
 if __name__ == "__main__":

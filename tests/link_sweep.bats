@@ -415,31 +415,28 @@ EOF
 # ── B1/B2: the call sites, pinned by content rather than by line number ───────
 
 @test "sweep: every looping borg-link call site carries --local" {
-    # Line numbers drift; these greps do not. Each pattern is the whole invocation, so moving the
-    # call keeps the test green and DELETING the flag turns it red — which is the only failure mode
-    # that matters. The three hot sites are asserted in cli_contract.bats; these are the two the
-    # first audit missed, plus the deployed-copy hazard.
+    # Line numbers drift; this grep does not. The pattern is the whole invocation, so moving the call
+    # keeps the test green and DELETING the flag turns it red — which is the only failure mode that
+    # matters. The three hot sites are asserted in cli_contract.bats; this is the one the first audit
+    # missed.
     #
-    #   bin/link-parity-harness  runs 3 fixed modes + one deep dive per registered project against
-    #                            BOTH trees, so 34 invocations at 14 projects. It also byte-compares
-    #                            a never-swept zsh oracle against the Python tree: a swept current
-    #                            leg produces UNEXPECTED diffs on every run, and different ones each
-    #                            time. `--local` is pinned at run_link, the single chokepoint, so
-    #                            the two legs cannot drift.
     #   skills/borg-switch      buys the widest sweep in the system (`--all`) to produce a list of
     #                            names that comes straight off the registry.
-    run grep -c -- '"link", "--local", \*args' "${BATS_TEST_DIRNAME}/../bin/link-parity-harness"
-    [ "$output" -eq 1 ]
-
     run grep -c -- 'borg link --local --all' "${BATS_TEST_DIRNAME}/../skills/borg-switch/SKILL.md"
     [ "$output" -eq 1 ]
 
-    # The harness's sandbox must also be hermetic on its own, because `--local` living in one place
-    # is exactly one deletion away from being nowhere. A REAL empty directory, never "": recon's
-    # adapter_search_path branches on `if override:`, so an exported-empty value is falsy and falls
-    # back to the shipped adapter — the obvious neutralization silently does nothing.
-    run grep -c 'BORG_RECON_ADAPTER_PATH.*no_adapters' "${BATS_TEST_DIRNAME}/../bin/link-parity-harness"
-    [ "$output" -eq 1 ]
+    # AC2/S4 REMOVED THE SECOND CALL SITE ALTOGETHER, so its two guards went with it rather than
+    # being weakened or inverted. bin/link-parity-harness used to loop 3 fixed modes + one deep dive
+    # per registered project through BOTH trees (34 invocations at 14 projects), which is why
+    # `--local` was pinned at its `run_link` chokepoint and why its sandbox neutralized
+    # BORG_RECON_ADAPTER_PATH with a real empty directory. The `render` leg that did all of that is
+    # retired; the surviving `primitives` leg invokes no `borg` subcommand at all — no borg.zsh, no
+    # sandbox, no adapter, no `gh` — so it is hermetic without being neutralized, and there is no
+    # invocation left for a `--local` to be missing from. Retired WITH the thing it guarded.
+    #
+    # NOT replaced with a `-eq 0` assertion. That would pin the OPPOSITE invariant — "this call site
+    # must never come back" — and would fire on someone restoring a looping call site correctly,
+    # with `--local`, which is precisely the thing this test exists to permit.
 }
 
 @test "sweep: the test harness neutralizes the adapter path with a real directory, not an empty string" {

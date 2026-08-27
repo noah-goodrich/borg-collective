@@ -627,10 +627,15 @@ def test_cortex_pending_is_read_on_both_human_contexts(isolated_env, monkeypatch
 
 
 def test_deep_is_accepted_and_ignored(isolated_env, capsys):
-    """C6. `--deep` collapsed into repository scope but STAYS in the parser: three copies of the
-    dispatcher still pass it (borg.zsh's positional arm, bin/link-parity-harness, and the stale
-    byte-copy at ~/.claude/bin/link-parity-harness), and deleting the argument makes argparse exit 2
-    where `drone status` and the fzf preview both swallow the failure silently.
+    """C6. `--deep` collapsed into repository scope but STAYS in the parser: one live copy of the
+    dispatcher passes it -- borg.zsh's positional arm at borg.zsh:3111, which is the fzf preview's
+    path -- and deleting the argument makes argparse exit 2 where `drone status` and the fzf preview
+    both swallow the failure silently.
+
+    This docstring used to say THREE copies, counting bin/link-parity-harness and its byte-copy at
+    ~/.claude/bin/. Neither ever passed `--deep` (the harness looped a bare positional), and AC2/S4
+    retired the harness leg that looped at all. Corrected, not weakened: the surviving copy is the
+    one whose failure is invisible, which is the whole reason the flag is kept.
 
     Mutation: drop the `parser.add_argument("--deep", ...)` line -> SystemExit(2), empty stdout.
     """
