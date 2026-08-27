@@ -2,7 +2,7 @@
     │
     ├────────────────────┬────────────────────┐
     │                    │                    │
-    ○ n2   platform#420  ○ n3   warehouse#87  ○ n4   infra#12
+    ● n2   platform#420  ● n3   warehouse#87  ● n4   infra#12
     │                    │                    │
     ○ n5   platform#431  ○ n6   warehouse#93  │
     │                    │                    │
