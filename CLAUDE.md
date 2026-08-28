@@ -87,7 +87,6 @@ borg recon --adapters    List the source adapters discovered on this machine
 borg nanoprobes (np)     List recent ephemeral subagent runs
 borg nanoprobe-log <id>  Fetch the transcript/summary for a nanoprobe run
 borg spend               Summarize accurate token spend from ~/.claude/token-spend.jsonl
-borg watch               Live-tail registry/session activity
 borg doctor              Environment/dependency health check
 borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                            NOT launchd — plists are installed by install.sh only, which calls
@@ -113,7 +112,6 @@ drone toggle [project]   Toggle the optional 3rd side pane (2 ↔ 3 panes)
 drone pane <direction>   Split the active pane top|bottom|left|right (devcontainer-aware)
 drone scaffold --supabase|--supabase-shared <dir>  Generate a devcontainer + borg-hooks for Supabase
 drone link               Deep dive on current project (alias for borg link)
-drone status             Show all drones
 ```
 
 ### Hotkey

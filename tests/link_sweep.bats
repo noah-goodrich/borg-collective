@@ -371,47 +371,6 @@ MOCK
     [ "$output" = "$(printf '0\t1\ttrue\tok\t4\t4')" ]
 }
 
-# ── B2: drone status, the per-tmux-window loop ────────────────────────────────
-
-@test "sweep: drone status triggers zero adapter and zero gh subprocesses" {
-    # drone.zsh:964 shells to `borg link --local "$wname"` ONCE PER TMUX WINDOW, greping `Status:`
-    # out of each one and swallowing every failure with `2>/dev/null || true`. Post-sweep an
-    # unprotected loop there is N full network sweeps to render one status table, and the failures
-    # would be invisible. `borg` here is the REAL borg.zsh, so this exercises the actual dispatcher
-    # and the actual document build, not a stub.
-    _sweepable_repo
-
-    ln -sf "$BORG" "$MOCK_BIN/borg"
-    export BORG_DRONE_EXTRA_PATH="$MOCK_BIN"
-    export TRACE="${BATS_TEST_TMPDIR}/tmux-trace.log"
-    : > "$TRACE"
-    export TMUX_MOCK_HAS_SESSION=1
-    export TMUX_MOCK_WINDOWS="sierra"
-    cat > "$MOCK_BIN/tmux" <<'EOF'
-#!/usr/bin/env bash
-echo "tmux $*" >> "$TRACE"
-case "$1" in
-    has-session)   [ "${TMUX_MOCK_HAS_SESSION:-0}" = "1" ] && exit 0 || exit 1 ;;
-    list-windows)  printf '%s\n' "${TMUX_MOCK_WINDOWS:-}" ;;
-    show-option)   printf '%s\n' "${BATS_TEST_TMPDIR}/ws/sierra" ;;
-    *)             exit 0 ;;
-esac
-EOF
-    chmod +x "$MOCK_BIN/tmux"
-    cat > "$MOCK_BIN/docker" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-    chmod +x "$MOCK_BIN/docker"
-
-    run zsh "$DRONE" status
-    [ "$status" -eq 0 ]
-    [[ "$output" == *"sierra"* ]] || false
-
-    run cat "$GH_TRACE"
-    [ -z "$output" ]
-}
-
 # ── B1/B2: the call sites, pinned by content rather than by line number ───────
 
 @test "sweep: every looping borg-link call site carries --local" {

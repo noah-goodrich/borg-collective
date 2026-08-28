@@ -16,7 +16,6 @@
 #   drone fix [project|--all]    Restore standard 2-pane layout
 #   drone toggle [project]       Add/remove side pane (2-pane ↔ 3-pane)
 #   drone pane <direction>       Split active pane top|bottom|left|right
-#   drone status                 Show all active drones
 #   drone help                   Command reference
 
 set -e
@@ -928,53 +927,6 @@ cmd_pane() {
     info "$wname: new pane opened ($direction)"
 }
 
-# ── drone status ──────────────────────────────────────────────────────────────
-
-cmd_status() {
-    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
-        echo "No $SESSION tmux session running."
-        return
-    fi
-
-    local windows
-    windows=(${(f)"$(tmux list-windows -t "$SESSION" -F '#W')"})
-
-    printf "\n${BOLD}%-20s %-30s %-20s %s${NC}\n" "DRONE" "PATH" "CONTAINER" "STATUS"
-    printf '%0.s─' {1..80}; echo
-
-    for wname in $windows; do
-        if [[ "$wname" == "host" ]]; then
-            printf "  %-20s %s\n" "$wname" "(host shell)"
-            continue
-        fi
-
-        local pdir container container_status borg_status
-        pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || pdir="?"
-
-        container=$(get_project_container "$pdir" 2>/dev/null) || container=""
-        if [[ -n "$container" ]]; then
-            container_status=$(docker ps --format '{{.Status}}' --filter "name=$container" 2>/dev/null)
-        else
-            container_status="no container"
-        fi
-
-        borg_status=""
-        if command -v borg &>/dev/null; then
-            local raw
-            raw=$(borg link --local "$wname" 2>/dev/null) || true
-            borg_status=$(echo "$raw" | grep -m1 'Status:' | sed 's/.*Status:[[:space:]]*//' | tr -d '\n') || true
-            [[ -n "$borg_status" ]] && borg_status="claude:$borg_status"
-        fi
-
-        local cortex_launched
-        cortex_launched=$(tmux show-option -t "$SESSION:$wname" -v @cortex_launched 2>/dev/null) || cortex_launched=""
-        [[ "$cortex_launched" == "1" ]] && borg_status+=" cortex:launched"
-
-        printf "  %-20s %-30s %-20s %s\n" "$wname" "$pdir" "$container_status" "$borg_status"
-    done
-    echo
-}
-
 # ── drone scaffold --supabase ─────────────────────────────────────────────────
 
 # Generate a Supabase-ready devcontainer from templates/supabase/, substituting
@@ -1363,7 +1315,6 @@ cmd_help() {
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
     pane <direction>     Split active pane top|bottom|left|right (devcontainer-aware)
     scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase, --supabase-shared)
-    status               Show all active drones (containers + Claude status)
     help                 Show this message
 
   PROJECT RESOLUTION
@@ -1402,7 +1353,6 @@ case "${1:-}" in
     toggle)     cmd_toggle "${2:-}" ;;
     pane)       cmd_pane "${2:-}" ;;
     scaffold)   shift; cmd_scaffold "$@" ;;
-    status)     cmd_status ;;
     link)       exec borg link "${2:-${PWD##*/}}" "${@:3}" ;;
     help|-h)    cmd_help ;;
     *)          die "unknown command '${1}'. Run: drone help" ;;
