@@ -314,9 +314,12 @@ def scope_for(
     registry, sets the scope outright; cwd is consulted ONLY for the no-argument shape. Deriving
     breadth from cwd alone is not a latency bug, it is a truthfulness bug: `borg link ingle` run from
     inside borg-collective would sweep borg-collective and render those nodes under ingle's header --
-    one repository's facts presented as another's. Every scripted caller hits it, because they all
-    pass a name from a fixed cwd: drone.zsh:964 iterates tmux window names inside cmd_status's loop,
-    and borg.zsh:266's fzf preview renders `borg link {1}` for arbitrary {1} from the invoking cwd.
+    one repository's facts presented as another's. THE TWO SCRIPTED CALLERS THIS USED TO CITE ARE
+    GONE -- it named "drone.zsh:964 iterates tmux window names inside cmd_status's loop, and
+    borg.zsh:266's fzf preview renders `borg link {1}` for arbitrary {1} from the invoking cwd", and
+    both were retired 2026-08-27. The rule is not weakened by losing them: `drone link` still passes
+    `${PWD##*/}` from whatever cwd the window is in, and a human typing `borg link <other-project>`
+    is the case that matters most, because a wrong document is indistinguishable from a right one.
     A requested project that is NOT in the registry deliberately falls through to cwd resolution
     rather than being honored -- `_focus` raises ProjectNotFound for that case, and scope must not
     invent a repository the registry has never heard of.

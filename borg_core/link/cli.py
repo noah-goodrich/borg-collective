@@ -84,15 +84,19 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
 
     THE SLUG COSTS A `git remote get-url`, and only in repository scope. That subprocess is why
     `--local` still calls this function rather than skipping it: `--local` opts down from the NETWORK,
-    not from local truth. The fzf preview and `drone status` want the declared topology; what they
-    cannot afford is `gh`.
+    not from local truth. An opt-down caller still wants the declared topology; what it cannot afford
+    is `gh`. (This used to name the fzf preview and `drone status` as those callers. Both were retired
+    2026-08-27; `skills/borg-switch`'s `borg link --local --all` is the surviving automated one.)
 
     `--local` IS CHECKED HERE AND NOWHERE DEEPER, and as of AC3 it is checked TWICE, once per network
     path. shell.sweep is never called on the opted-down path, and neither is shell.start_fetch -- so
     no adapter is discovered, no `since` is resolved, no projects file is staged, no `gh` is spawned
     and no subprocess of any kind runs. An opt-down that still paid for one of the two would be a
-    promise the flag does not keep, and it is the promise borg.zsh:266's per-keypress preview, the 5s
-    `borg watch` redraw and drone.zsh's per-tmux-window loop are all relying on.
+    promise the flag does not keep. THE THREE HOT LOOPS THIS USED TO NAME ARE ALL GONE (borg.zsh:266's
+    per-keypress preview, a 5s `borg watch` redraw, drone.zsh's per-tmux-window loop) -- see
+    `_build_parser`'s `--local` comment for the retirements. The promise is now kept for
+    `skills/borg-switch`'s `borg link --local --all` and for anyone who types the flag: measured at
+    0.85s without it against 0.11s with (borg.zsh's `_borg_link_dispatch` records the same number).
 
     THE FETCH'S GUARD HAS TO BE ITS OWN, and this is the trap in the shape rather than an aside. The
     fetch must START before the sweep for its round trip to overlap, so it sits ABOVE the sweep's
@@ -110,15 +114,17 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
     instant as `generated_at` and every relative time. A second clock read here would let a document
     state a `since` that does not correspond to its own `generated_at`.
 
-    KNOWN AND ACCEPTED COST, recorded rather than gated: this function is not mode-gated, so
-    `drone status` pays one `git remote get-url` per tmux window plus a `.borg/programs` listdir per
-    registered repository per window. Measured at 12 windows against a 14-repository registry that is
-    12 forks and ~168 listdirs for a table that greps one `Status:` line. It is bounded, it is local,
-    and the two obvious "fixes" are both worse: mode-gating the grid is what B1's rejected alternative
-    was rejected for (two modes of one command answering the same question with different data, and
-    `--json` MUST carry the grid for AC3's verification), and per-process memoization buys nothing for
-    a caller that forks a fresh process per window. AC2, which is the step that gives the renderer a
-    reason to read the grid, is the right place to revisit the shape of this loop.
+    KNOWN AND ACCEPTED COST, recorded rather than gated: this function is not mode-gated, so every
+    invocation pays one `git remote get-url` in repository scope plus a `.borg/programs` listdir per
+    registered repository. THE MULTIPLIER THAT MADE THIS WORTH A PARAGRAPH IS GONE -- it used to read
+    "`drone status` pays [this] per tmux window ... measured at 12 windows against a 14-repository
+    registry, 12 forks and ~168 listdirs for a table that greps one `Status:` line", and `drone
+    status` exits 1 with "unknown command 'status'". Divide by the window count: one fork and ~14
+    listdirs, once, per typed command. It is bounded, it is local, and the two obvious "fixes" are
+    still both worse for reasons that never depended on the multiplier: mode-gating the grid is what
+    B1's rejected alternative was rejected for (two modes of one command answering the same question
+    with different data, and `--json` MUST carry the grid for AC3's verification), and per-process
+    memoization buys nothing for a process that renders one document and exits.
 
     `picture_width` IS STAMPED HERE AND NOT IN `grid.build_grid`, WHICH OWNS EVERY OTHER KEY IN THE
     BLOCK. build_grid cannot: `grid.py` is pure Domain and `picture.py` already imports `grid`, so
@@ -191,20 +197,24 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     below), and what "scope" changes is which ROWS render.document prints, not what the document
     carries.
 
-    Skipping unread work still matters, because `_document` is READ-ONLY but re-executed per call
-    site: drone.zsh:964 calls it once per tmux window inside cmd_status's loop, and borg.zsh's fzf
-    preview re-executes it synchronously on every cursor move. Both of those pass a NAME, so both are
-    repository scope, so both skip the 14-project `directives`/`assimilated` glob exactly as the old
-    `deep` mode did -- net latency delta zero, plus one ~40-line file read (`cortex_pending`).
+    Skipping unread work is still done here, but ITS ORIGINAL JUSTIFICATION HAS LAPSED AND NOTHING
+    REPLACES IT. This paragraph used to read "`_document` is READ-ONLY but re-executed per call site:
+    drone.zsh:964 calls it once per tmux window inside cmd_status's loop, and borg.zsh's fzf preview
+    re-executes it synchronously on every cursor move." Neither call site exists: `grep -n 'borg link'
+    drone.zsh` returns exactly one hit, `drone link`'s single `exec` pass-through, and
+    `grep -c -- '--preview' borg.zsh` is 0. There is no hot loop left in the tree, so the skip now
+    saves a 14-project `directives`/`assimilated` glob once per typed command. It is kept because it
+    is already written and costs nothing, NOT because a measured caller needs it -- do not cite it as
+    a latency protection without re-measuring first.
 
-    CORRECTION (S1), still true: an earlier version of this docstring said the fzf preview runs
-    `--porcelain`. It does not, and the error was load-bearing -- it was cited downstream as proof
-    that the preview was already protected from expensive work. borg.zsh:262 uses `cmd_ls
-    --porcelain` to build the picker's INPUT LIST, exactly once. borg.zsh:266 is `--preview "borg
-    link --local {1}"`, and a bare positional routes through _borg_link_dispatch. So the mode
-    re-executed on every cursor move is the HUMAN one, and it is a hot loop, not a cold one. Any
-    future work that puts network or sweep cost behind a mode must treat it as hot and opt the
-    preview down explicitly, never assume mode gating protects it.
+    THE S1 CORRECTION THAT USED TO SIT HERE IS RETIRED WITH ITS SUBJECT. It said an earlier docstring
+    wrongly claimed the fzf preview ran `--porcelain`, and that the real preview
+    (`--preview "borg link --local {1}"`) re-executed the HUMAN mode per keypress, so mode gating
+    protected nothing. The preview was retired 2026-08-27 and cli_contract.bats' B15 pins its absence
+    by grep. What survives is only borg.zsh:262's `cmd_ls --porcelain`, which builds `borg switch`'s
+    picker input list exactly once. THE TRANSFERABLE RULE OUTLIVES THE PREVIEW: never assume a mode
+    is cold because it looks expensive to invoke -- if network or sweep cost is put behind a mode,
+    measure the call sites, do not reason about them.
 
     THE GRID IS DELIBERATELY NOT MODE-GATED (S3), unlike everything above. Skipping unread work is
     the rule for `directives`/`assimilated`/`focus` because those are display sections a given
@@ -324,8 +334,11 @@ def _run(project: str, show_all: bool, mode: str, local: bool = False) -> int:
 
     Mode precedence, strictly: json > porcelain > human. Renders to a SINGLE string and prints it
     ONCE -- never streams a renderer's output incrementally, so a mid-render exception yields zero
-    bytes on stdout, never a half-frame (every consumer here swallows failure: cmd_watch's `|| true`,
-    drone status's `|| true`, fzf's preview pane).
+    bytes on stdout, never a half-frame. (The reason given here used to be "every consumer swallows
+    failure: cmd_watch's `|| true`, drone status's `|| true`, fzf's preview pane"; all three were
+    retired -- see shell.py's header. The all-or-nothing write stands on its own: a half-written page
+    read as a whole one is a wrong document, and `cli.main`'s `_die_*` can only promise a clean stderr
+    failure if stdout is still empty when the exception reaches it.)
 
     ONE HUMAN ARM, ONE RENDERER CALL. `render.document` is named exactly once in this function, and
     test_render.py asserts that on the source text: a second call site is how "one front door" decays
@@ -349,11 +362,20 @@ def _build_parser() -> argparse.ArgumentParser:
     # scope -- scope_for already resolves `borg link <project>` to {kind: repository}, so the one
     # document says everything the deep dive said, and keeping it as a MODE would be a third context
     # rendering the same data, which is exactly what "the contexts differ in breadth only" forbids.
-    # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT, and it is the worst
-    # one to break: borg.zsh's `_borg_link_dispatch` positional arm (borg.zsh:3111), which IS the fzf
-    # preview's path, re-executed on every cursor move. Delete the argument and argparse exits 2
-    # where `drone status` and the fzf preview both swallow the failure silently -- a blank pane and
-    # a blank column, with nothing on stderr anyone would see.
+    # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT: borg.zsh's
+    # `_borg_link_dispatch` positional arm -- the `if [[ -n "$_link_project" ]]` branch that sets
+    # `_link_py_args=(--deep)`. ANCHORED BY THE BRANCH, NOT PINNED TO A LINE: that fact has been filed
+    # as a stale-pin defect three times (this comment said borg.zsh:3111, which is inside the `recon)`
+    # retirement comment; CLAUDE.md's correction to :3064 landed on a comment line). Every `borg link
+    # <project>` and every `drone link` takes that arm, so deleting the argument makes argparse exit 2
+    # on the most common invocation of the command.
+    #
+    # THE STAKES USED TO BE STATED HIGHER AND ARE NOW LOWER. This said the arm "IS the fzf preview's
+    # path, re-executed on every cursor move", and that argparse would exit 2 "where `drone status`
+    # and the fzf preview both swallow the failure silently -- a blank pane and a blank column, with
+    # nothing on stderr". Both consumers were retired 2026-08-27, so the failure is no longer silent:
+    # it is exit 2 with argparse's usage text on a user's terminal. Loud, but still on every typed
+    # deep dive, which is reason enough to keep the argument.
     #
     # THE COUNT WAS CORRECTED IN AC2/S4. It used to say THREE copies, naming bin/link-parity-harness
     # and the byte-copy at ~/.claude/bin/link-parity-harness alongside borg.zsh. Neither ever passed
@@ -367,11 +389,18 @@ def _build_parser() -> argparse.ArgumentParser:
     # AC1's ONLY opt-down, and as of S3 it is no longer inert. It makes `_grid` call grid.no_sweep()
     # instead of shell.sweep(), so no adapter is discovered, no `since` is resolved and NO SUBPROCESS
     # of any kind is spawned -- the grid still renders, from what each manifest declares. It is the
-    # sole protection for every hot loop in the tree: borg.zsh:266's per-keypress fzf preview,
-    # borg.zsh:2225's 5s watch redraw, drone.zsh:964's per-tmux-window loop, and
-    # skills/borg-switch's widest-breadth `--all` call. (bin/link-parity-harness's 34 invocations
-    # were the fifth until AC2/S4 retired the render leg that made them; the surviving `primitives`
-    # leg spawns no `borg` subcommand at all.)
+    # ONE AUTOMATED CALLER LEFT, DOWN FROM FIVE, and the flag survives on it plus the typed case.
+    # This used to call `--local` "the sole protection for every hot loop in the tree" and name five:
+    # borg.zsh:266's per-keypress fzf preview, borg.zsh:2225's 5s watch redraw, drone.zsh:964's
+    # per-tmux-window loop, skills/borg-switch's widest-breadth `--all` call, and
+    # bin/link-parity-harness's 34 invocations. Four are gone -- `grep -c -- '--preview' borg.zsh` is
+    # 0, `watch` has no arm in the case dispatch, `grep -n 'borg link' drone.zsh` returns only `drone
+    # link`'s `exec`, and AC2/S4 retired the harness's render leg (the surviving `primitives` leg
+    # spawns no `borg` subcommand at all). THE SURVIVOR IS skills/borg-switch's `borg link --local
+    # --all`, where `--local` is mandatory and documented as such in that SKILL.md: `--all` is the
+    # widest breadth there is, and the picker only wants names off the registry. There is no hot loop
+    # behind the flag any more, so justify future work on the measured 0.85s/0.11s delta, not on a
+    # per-keypress redraw that no longer exists.
     #
     # THIS COMMENT USED TO SAY "changes no behavior yet". It was true in S1 and false the moment the
     # sweep landed, and leaving it would have repeated the exact defect the hardened spec's B1 is:

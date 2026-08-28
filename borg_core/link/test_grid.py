@@ -331,8 +331,11 @@ def test_local_runs_neither_network_path_while_the_same_call_without_it_runs_bot
     BOTH SEAMS, IN ONE CASE, BECAUSE THE FETCH'S GUARD IS A SEPARATE LINE. `--local` gates the sweep
     inside cli._grid's ternary, but the fetch has to START above that ternary for its round trip to
     overlap, so it carries its own `if local` and nothing about the sweep's guard protects it. That
-    is the hardened spec's B1 in a new place: borg.zsh's fzf preview re-executes `borg link --local`
-    on every cursor move.
+    is the hardened spec's B1 in a new place: a half-wired `--local` fails OPEN, spawning `gh` for a
+    caller that asked for no network. (The example used to be "borg.zsh's fzf preview re-executes
+    `borg link --local` on every cursor move"; that preview was retired 2026-08-27. The failure mode
+    does not need a hot loop -- `skills/borg-switch` runs `borg link --local --all` at the widest
+    breadth there is, and B1's whole point is that the caller cannot tell the flag was ignored.)
 
     THE FETCH FIXTURE IS DELIBERATELY REMOVED HERE. `isolated` neutralizes it for the whole file, and
     under that neutralization "the fetch did not fork" is vacuously true -- it would pass with the
@@ -639,9 +642,11 @@ def test_a_project_list_that_cannot_be_staged_warns_instead_of_raising(isolated,
 def test_a_failing_adapter_track_names_itself_and_the_grid_still_renders(isolated, monkeypatch):
     """A REAL adapter that exits non-zero with no output. One named warning, one full grid.
 
-    Every consumer of `borg link` swallows failure (`cmd_watch`'s `|| true`, `drone status`'s
-    `|| true`, fzf's preview pane), so an exception here is an invisible blank frame and a silent
-    empty grid is worse than a loud degraded one.
+    An exception on the sweep path costs the WHOLE document -- `_grid` completes before a byte is
+    rendered -- so one dead adapter would take out `▸ IN FOCUS`, `▸ QUEUED` and `▸ SHIPPED` too. A
+    named warning on a degraded grid keeps the other six sections. (The reason given here used to be
+    "every consumer of `borg link` swallows failure (`cmd_watch`'s `|| true`, `drone status`'s
+    `|| true`, fzf's preview pane)"; all three were retired 2026-08-27. See link/shell.py's header.)
     """
     dirs = _four_repository_registry(isolated)
     adapters = isolated / "adapters"
@@ -1976,8 +1981,9 @@ def test_the_grid_carries_ready_but_still_no_duplicate_gate_list(isolated, monke
     what keeps it a record of why the key was withheld for two ACs.
 
     `unmapped_gates` stays off: it is a pure projection of `gates` minus one key, and emitting both
-    puts a near-byte-for-byte second copy of every gate on a wire `drone status` serializes once per
-    tmux window.
+    puts a near-byte-for-byte second copy of every gate on the wire for a consumer that does not
+    exist. (The old clause "on a wire `drone status` serializes once per tmux window" is dropped --
+    that command was retired -- and the duplication argument never depended on it.)
 
     MUTATION: drop the `"ready"` key from grid_manifest -> the first assertion; add `unmapped_gates`
     -> the third. Asserted under `--local`, which is the case that matters: nothing resolves there,

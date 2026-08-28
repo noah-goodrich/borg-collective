@@ -107,7 +107,8 @@ rather than as sections:
 > above is the actual reproduction: the heading denied a blocker printed directly under it, on the single most
 > decision-relevant line of the front door. **The routing did not change** and must not; D2's rule is correct. The
 > heading now names the axis the routing actually splits on — whose hands the row needs — which is true of both
-> members. Pinned by `test_render.py::test_the_mine_heading_is_true_of_a_verification_gated_row_and_not_only_an_ungated_one`,
+> members. Pinned by
+> `test_render.py::test_the_mine_heading_is_true_of_a_verification_gated_row_and_not_only_an_ungated_one`,
 > and `tests/fixtures/link/manifests/auth-hardening.json`'s `acme/infra#12` now carries a `verification` gate so
 > both grid goldens render the populated form. Before that fixture row, every `mine` row in every golden was
 > ungated and the goldens were blind to this input entirely.
