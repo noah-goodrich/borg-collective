@@ -102,10 +102,22 @@ _FLATTEN_WS = str.maketrans({"\t": " ", "\n": " ", "\r": " "})
 
 def _flatten_summary(text: str) -> str:
     """Replace every registry-surviving whitespace control character in a registry `summary` with a
-    single space. ONE HELPER, THREE CONSUMERS, so a fourth inherits the defense instead of repeating
-    the bug.
+    single space.
 
-    THE SUMMARY FIELD HAS THREE CONSUMERS, NOT TWO, and each breaks differently on the same byte:
+    THE DEFENSE IS PER-CALL-SITE. NOTHING INHERITS IT. An earlier revision of this docstring said
+    "ONE HELPER, THREE CONSUMERS, so a fourth inherits the defense instead of repeating the bug."
+    That is false and it is the kind of false that stops a follow-up from being written: calling this
+    helper is OPT-IN at every site, so a fourth consumer that reads `entry["summary"]` directly
+    reintroduces the bug with every test in this tree green. No chokepoint routes the field through
+    here, and no test asserts that one does.
+
+    THE UNBUILT ALTERNATIVE, named so it can be filed rather than rediscovered: flatten ONCE at
+    document assembly (`cli._document`), so `summary` is already clean by the time any renderer sees
+    it and this helper becomes unreachable. That is a design change and is deliberately NOT made
+    here. Until it is, the honest statement is the one above -- three call sites, each defended
+    because it was edited to be.
+
+    THE THREE CALL SITES, and how each breaks on the same byte:
 
     * `_summary_block` -- IN FOCUS's fold. A raw control character emits a sub-line `_fold_s` never
       produced, which the re-indent loop therefore never indents, breaking its `^  [^ ]`
@@ -113,11 +125,9 @@ def _flatten_summary(text: str) -> str:
     * `_overview_summary_cut` -- the board's fixed-width table. `_overview_row` lays every column
       out with `:<{_COL_*}` padding; a `\\n` or a `\\r` splits one row into two and shears every
       column after it.
-    * `porcelain` -- the TSV that IS `borg switch`'s picker. `borg.zsh` builds the fzf input with
-      `cmd_ls --porcelain` and reads the choice back with `--delimiter '\\t' --with-nth 1,3,5` plus
-      `cut -f1`. A `\\n` in the last field ends the record early and makes the summary's tail a
-      SECOND record -- a phantom project offered in a list the user selects from -- and a `\\t`
-      shifts every field, so field 1 of the picked row is no longer a project name.
+    * `porcelain` -- `borg link --porcelain`'s TSV, which is parsed BY FIELD, so a `\\n` ends a
+      record early and a `\\t` shifts every field after it. NOT `borg switch`'s picker -- see
+      `porcelain`'s own docstring for that correction and for who actually feeds fzf.
 
     THE RENDERER OWNS THIS, NOT THE WRITER. Same altitude rule the `borg recon` retirement gate
     settled (CLAUDE.md; docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md): the
@@ -228,18 +238,38 @@ def porcelain(doc: dict) -> str:
     cli_contract.bats's "link --porcelain prints nothing at all on an empty registry").
 
     UNCHANGED BY AC2, DELIBERATELY, and `tests/fixtures/link/link-porcelain.golden` must not move.
-    See the module docstring: this is fzf's input list, not a page.
+    It is a machine surface, not a page.
 
-    THE THIRD CONSUMER OF `summary`, AND THE ONE WITH THE WORST FAILURE. F1 flattened the fold and a
-    later pass flattened the board, both on an argument -- the registry's scrub lets these characters
-    reach storage -- that applies just as much here, where the field is serialized into a TSV RECORD.
-    A `\\n` ends the record early and turns the summary's tail into a SECOND record whose field 1 is
-    prose, so `borg switch` offers a project that does not exist and `cut -f1` hands that prose to
-    `_borg_do_switch`; a `\\t` shifts every field right, so `--with-nth 1,3,5` shows the wrong
-    columns. That is a wrong row in a picker the user selects from, not a sheared line they can read
-    past -- which is why "porcelain is not a renderer" does not exempt it. Flattened BEFORE the
-    80-char cut, the same ordering the other two use and for the same reason: the budget must measure
-    the characters the field actually carries.
+    THIS FUNCTION DOES NOT FEED `borg switch`. RETRACTION, because the commit that added the flatten
+    below asserted the opposite in its message and in two docstrings, and it is wrong. Traced through
+    the call path rather than inferred: `cmd_switch` in `borg.zsh` builds the picker's stdin from
+    `cmd_ls --porcelain`, and `cmd_ls`'s porcelain branch is a SEPARATE ZSH IMPLEMENTATION -- it
+    reads the registry with its own `jq` calls, cuts with `${summary:0:80}`, and emits the record
+    with `printf '%s\\t%s\\t%s\\t%s\\t%s\\n'`. It never enters Python at all. So every consequence
+    that earlier text attributed to this function -- the phantom fzf row, `cut -f1` handing prose to
+    `_borg_do_switch` -- belongs to `cmd_ls --porcelain`, where it was live and where it is now fixed
+    (the flatten and the `printf '%s' | jq` correction in `cmd_ls`, pinned by cli_contract.bats's
+    "the picker feed stays one 5-field record per project through tab, newline and CR").
+
+    THE TWO IMPLEMENTATIONS ALREADY DIVERGE, which is why the mix-up was not harmless: on an empty
+    registry this function prints nothing while `cmd_ls --porcelain` prints a human "No projects
+    registered" sentence. Both behaviors are pinned, by the named case "link --porcelain prints
+    nothing at all on an empty registry".
+
+    STILL FLATTENED HERE, ON ITS OWN GROUNDS. `borg link --porcelain` is a TSV read BY FIELD: a
+    `\\n` in the last field ends the record early and a `\\t` shifts every field after it, and both
+    characters reach storage through `lib/registry.zsh`'s scrub. That argument stands without any
+    claim about fzf. Stated at its real strength, though: grepped across borg.zsh, drone.zsh,
+    hooks/, skills/ and bin/, this surface has NO runtime consumer in the repo today -- what pins its
+    five-field shape is cli_contract.bats, and the one proposed consumer (reading a `drone status`
+    column by position) lives in a SEVERED directive whose command was deleted. So the flatten here
+    protects a documented contract and its tests, not a user-visible break; the user-visible break
+    was in `cmd_ls --porcelain`. Flattened BEFORE the 80-char cut, the same ordering the other two
+    call sites use and for the same reason: the budget must measure the characters the field carries.
+
+    THE MODULE DOCSTRING ABOVE STILL CARRIES THE OLDER WORDING ("it is the TSV feeding fzf's input
+    list"). It predates the commit being retracted here and is out of this change's scope; it is
+    filed, not fixed, so that the correction lands in one deliberate edit rather than by drive-by.
     """
     order = doc.get("order") or []
     projects = doc.get("projects") or {}

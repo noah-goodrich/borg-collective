@@ -829,11 +829,17 @@ class TestOverviewSummaryCut:
         assert row.endswith("top bottom\n")
 
 
-# ── the summary field's THIRD consumer, and the character set all three share ─────────────────────
+# ── the summary field's THIRD call site, and the character set all three share ────────────────────
 # `_summary_block` is the fold's defense and `_overview_summary_cut` is the board's. `porcelain` is
-# the third and is the one with the worst failure -- it serializes `summary` into a TSV RECORD that
-# `borg switch` parses by field, so a control character does not shear a line the user reads past, it
-# invents a row the user can SELECT.
+# the third: it serializes `summary` into a TSV RECORD whose consumers parse it BY FIELD, so a
+# control character does not shear a line a reader skims past, it changes how many records there are
+# and which field is which.
+#
+# NOT `borg switch`. The commit that added these cases claimed this function feeds the fzf picker.
+# It does not -- `cmd_switch` pipes `cmd_ls --porcelain` into fzf, and that is a separate zsh
+# implementation in borg.zsh which never calls into Python. The picker's own defect is fixed there
+# and pinned by cli_contract.bats's "the picker feed stays one 5-field record per project through
+# tab, newline and CR". See `render.porcelain`'s docstring for the full retraction.
 #
 # The character set is read off `lib/registry.zsh`'s `_borg_registry_write` -- `tr -d
 # '\000-\010\013\014\016-\037'` deletes 0x00-0x08, 0x0B, 0x0C and 0x0E-0x1F, so 0x09, 0x0A and 0x0D
@@ -886,10 +892,11 @@ def test_porcelain_emits_exactly_one_record_per_project_for_every_surviving_cont
     """THE HONEST ASSERTION IS ON THE RECORD COUNT, and on the field count within the record.
 
     An assertion on the text alone ("the summary reads `top bottom`") passes on a build that emits
-    TWO rows, because the first row still ends where the assertion stops looking. What `borg switch`
-    actually consumes is a record per project and five tab-separated fields per record: an extra
-    record is a phantom project in the picker, and a shifted field is `cut -f1` returning prose
-    instead of a project name. Both are asserted here; neither is implied by the other.
+    TWO rows, because the first row still ends where the assertion stops looking. What a
+    field-parsing consumer of `borg link --porcelain` depends on is one record per project and five
+    tab-separated fields per record -- an extra record is a project that does not exist, and a
+    shifted field means column 3 is no longer the status. Both are asserted here; neither is implied
+    by the other.
     """
     doc = _doc(
         order=["alpha", "beta"],
