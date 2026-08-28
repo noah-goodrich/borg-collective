@@ -151,10 +151,29 @@ cmd_ls() {
     # Merge Desktop sessions into registry before listing
     borg_desktop_scan 2>/dev/null || true
 
+    # `printf '%s' "$json" | jq`, NEVER `echo "$json" | jq`, EVERYWHERE IN THIS FUNCTION.
+    # zsh's `echo` builtin expands backslash escapes by default (no BSD_ECHO), and a registry is
+    # FULL of them: jq escapes every control character it serializes, so a summary containing a real
+    # newline is stored as the two characters `\` `n`. `echo` turns that back into a raw 0x0A INSIDE
+    # a JSON string literal, which jq then refuses --
+    #   jq: parse error: Invalid string: control characters from U+0000 through U+001F must be escaped
+    # -- and because borg.zsh runs under `set -e`, the whole of cmd_ls dies at the FIRST such
+    # substitution. Measured, not assumed: with a `"summary": "top\nbottom"` in the registry,
+    # `cmd_ls --porcelain` exits 5 having printed nothing; forced past errexit it prints the human
+    # "No projects registered. Run: borg scan" line straight into fzf's stream, because the failed
+    # jq left `project_count` empty and zsh arithmetic reads empty as 0.
+    #
+    # THIS FAILS BEFORE THE RECORD IS EVER BUILT, so it is the first half of the picker defect and
+    # the flatten below is the second; fixing only the flatten fixes nothing observable.
+    # `printf '%s'` is the idiom lib/registry.zsh already uses for exactly this reason.
+    #
+    # THE SAME `echo "$json" | jq` SPELLING APPEARS ELSEWHERE IN THIS FILE (cmd_status, cmd_next,
+    # the reap/watch paths). Those are NOT touched here -- this round's scope is the picker feed --
+    # and they are filed, not fixed.
     local registry
     registry=$(borg_registry_with_state)
     local project_count
-    project_count=$(echo "$registry" | jq '.projects | length')
+    project_count=$(printf '%s' "$registry" | jq '.projects | length')
 
     if (( project_count == 0 )); then
         info "No projects registered. Run: borg scan"
@@ -167,7 +186,7 @@ cmd_ls() {
 
     # Sort by: pinned DESC, status priority (waiting>active>idle>archived), last_activity
     local sorted_names
-    sorted_names=$(echo "$registry" | jq -r '
+    sorted_names=$(printf '%s' "$registry" | jq -r '
         .projects | to_entries |
         map(.value.name = .key) |
         map(select(if .value.status == "archived" then '$show_all' == 1 else true end)) |
@@ -189,11 +208,33 @@ cmd_ls() {
     if (( porcelain )); then
         local name entry source proj_status last summary
         while IFS= read -r name; do
-            entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
-            source=$(echo "$entry" | jq -r '.source // "cli"')
-            proj_status=$(echo "$entry" | jq -r '.status // "unknown"')
-            last=$(echo "$entry"   | jq -r '.last_activity // ""')
-            summary=$(echo "$entry"| jq -r '.summary // ""')
+            entry=$(printf '%s' "$registry" | jq -c --arg p "$name" '.projects[$p]')
+            source=$(printf '%s' "$entry" | jq -r '.source // "cli"')
+            proj_status=$(printf '%s' "$entry" | jq -r '.status // "unknown"')
+            last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
+            summary=$(printf '%s' "$entry" | jq -r '.summary // ""')
+            # FLATTEN THE THREE CONTROL CHARACTERS THAT REACH A RECORD, BEFORE THE 80-CHAR CUT.
+            # `jq -r` prints the DECODED string, so once the parse above succeeds a summary's real
+            # 0x09/0x0A/0x0D arrive here intact. This is a TSV record read back by `cmd_switch` with
+            # `fzf --delimiter '\t' --with-nth 1,3,5` and then `cut -f1`: a 0x0A ends the record
+            # early and makes the summary's tail a SECOND selectable row whose field 1 is prose,
+            # which `cut -f1` hands to `_borg_do_switch` as a project name; a 0x09 shifts every
+            # field right, so --with-nth shows the wrong status and date.
+            #
+            # WHY EXACTLY THESE THREE, read off lib/registry.zsh's scrub rather than guessed:
+            # `_borg_registry_write` pipes through `tr -d '\000-\010\013\014\016-\037'`, deleting
+            # 0x00-0x08, 0x0B, 0x0C and 0x0E-0x1F. Verified by piping a byte-per-code probe through
+            # that exact `tr`: of the C0 whitespace only TAB, LF and CR survive to storage.
+            #
+            # BEFORE THE CUT, so the 80-char budget measures the characters the field carries. The
+            # replacement is one character for one, so an already-clean summary is byte-identical
+            # and no golden moves.
+            #
+            # LOCAL, NOT SHARED: grepped lib/*.zsh and lib/*.sh -- there is no existing flatten
+            # helper to reuse, and borg_core/link/render.py's `_flatten_summary` is a separate
+            # implementation on the other side of a process boundary. Introducing a chokepoint that
+            # both sides route through is a design change this round is not scoped for.
+            summary="${summary//[$'\t\n\r']/ }"
             summary="${summary:0:80}"
             printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$source" "$proj_status" "$last" "$summary"
         done <<< "$sorted_names"
