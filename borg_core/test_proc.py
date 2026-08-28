@@ -265,9 +265,11 @@ def test_a_collect_timeout_kills_the_whole_session_of_a_backgrounded_start(tmp_p
 def test_the_post_sigkill_reap_is_bounded_not_unbounded(tmp_path, monkeypatch):
     """The reap after SIGKILL must itself have a ceiling, or a child that does not die promptly
     blocks `collect` -- and therefore `borg link` -- indefinitely. It is the only unbounded wait on
-    either of the front door's two network paths, and every consumer swallows collect's failure
-    with `|| true` (cmd_watch, `drone status`, the fzf preview), so a hang here surfaces as a silent
-    stall, never an error.
+    either of the front door's two network paths, and a hang has no error path at all -- it is a
+    command that never returns. (This used to say "every consumer swallows collect's failure with
+    `|| true` (cmd_watch, `drone status`, the fzf preview), so a hang here surfaces as a silent
+    stall". All three were retired 2026-08-27; a hang is worse than a swallowed error either way,
+    which is why the ceiling stays.)
 
     A real child dies instantly under a real SIGKILL, so there is no way to make one actually
     refuse to report exit for this test. `child.wait` is monkeypatched instead to keep raising

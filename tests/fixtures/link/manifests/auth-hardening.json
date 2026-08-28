@@ -24,7 +24,12 @@
       "ref": "acme/infra#12",
       "order": "4",
       "why": "inventory services still on password auth",
-      "after": ["acme/platform#400"]
+      "after": ["acme/platform#400"],
+      "gate": {
+        "kind": "verification",
+        "blocked_by": "the inventory smoke suite has not been run against the staging fleet",
+        "resolved_by": "anyone runs the suite and it comes back green"
+      }
     },
     {
       "ref": "acme/platform#431",

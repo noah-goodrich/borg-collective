@@ -105,7 +105,7 @@ def _drop_invalid_rows(doc: dict, path: str, errors: list[str]) -> tuple[dict | 
     """A manifest with its failing rows removed, or `(None, warning)` when nothing can be salvaged.
 
     ONE BAD ROW MUST NOT COST THE FILE. Before this, any validation error dropped the whole manifest:
-    a single mistyped `gate.kind` in row 3 deleted rows 1..14 from the grid, and `▸ CHAINS` then
+    a single missing `gate.resolved_by` in row 3 deleted rows 1..14 from the grid, and `▸ CHAINS` then
     rendered its "no manifest declares work here" placeholder as though the repository simply had
     none. Measured on the AC2 fixtures at the time: 12 declared refs became 5. A reader could not
     distinguish *nothing declared* from *everything hidden by one typo*.

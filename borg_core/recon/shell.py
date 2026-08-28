@@ -61,9 +61,11 @@ def _int_env(name: str, default: int) -> int:
     `int(os.environ.get(name, default))` it replaces became a KILL PATH for `borg link` the moment
     S3's sweep fold made `link` call `fanout`. `int("")` raises ValueError; that ValueError escapes
     `fanout` -> `sweep` -> `_grid` -> `_document` and lands in link/cli.py's broad boundary, which
-    prints one line to stderr and exits 1 with ZERO BYTES ON STDOUT. Every consumer of `borg link`
-    swallows failure (`cmd_watch`'s `|| true`, `drone status`'s `|| true`, fzf's preview pane), so
-    the user sees a blank frame with no diagnosis anywhere -- and it takes only a user who once set
+    prints one line to stderr and exits 1 with ZERO BYTES ON STDOUT -- the whole document lost to one
+    environment variable. (This used to add that every consumer swallows failure -- "`cmd_watch`'s
+    `|| true`, `drone status`'s `|| true`, fzf's preview pane" -- so the user saw a blank frame with
+    no diagnosis. All three were retired 2026-08-27, so the one-line stderr IS now visible; the guard
+    stands on the document loss, not on the diagnosis being hidden.) It takes only a user who once set
     `BORG_RECON_MAX_TRACKS` to tune recon and later cleared it. MEASURED before this guard:
     `BORG_RECON_MAX_TRACKS= borg link sierra` printed `▸ ERROR: invalid literal for int() with base
     10: ''` and rendered no rows at all.

@@ -30,7 +30,7 @@
  relay                [C]  [2midle        [0m 2d ago       Relay has no summary yet.
  ledger               [C]  [2midle        [0m 30m ago      Nightly close reconciliation.
 
-[1m▸ CHAINS[0m  [2m1 project · 7 refs · 0 unresolved · swept 2026-05-28[0m
+[1m▸ CHAINS[0m  [2m1 project · 7 refs · 0 unresolved · swept back to 2026-05-28[0m
 
   [1mauth-hardening[0m
   [2mRotate every service onto scoped keypair auth, then flip enforcement on in one release.[0m
@@ -74,6 +74,8 @@
       [2mwhy:[0m       inventory services still on password auth
       [2mwaits on:[0m  acme/platform#400 (merged)
       [2munlocks:[0m   acme/infra#77 (open)
+      [0;36mgate:[0m      verification — the inventory smoke suite has not been run against the staging fleet
+      [0;36munparked:[0m  anyone runs the suite and it comes back green
       [2mstate:[0m     from the sweep
 
   [2mn5[0m    ]8;;https://github.com/acme/platform/issues/431\acme/platform#431]8;;\  [1;33mOPEN[0m
@@ -107,9 +109,9 @@
     [2m- Base migration for scoped tokens (2026-08-20)[0m
 
 [1m▸ NEXT[0m  [2m3 ready of 7[0m
-  [1mmine[0m [2m— nothing is blocking these[0m
+  [1mmine[0m [2m— no decision needed first, so anyone can pick these up[0m
     [1;33m●[0m ]8;;https://github.com/acme/warehouse/issues/87\acme/warehouse#87]8;;\
-    [1;33m●[0m ]8;;https://github.com/acme/infra/issues/12\acme/infra#12]8;;\
+    [1;33m●[0m ]8;;https://github.com/acme/infra/issues/12\acme/infra#12]8;;\  [2mthe inventory smoke suite has not been run against the staging fleet[0m
     [1;33m●[0m ]8;;https://github.com/acme/platform/issues/420\acme/platform#420]8;;\
 
 [1m▸ SIGNALS[0m

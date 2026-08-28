@@ -32,6 +32,17 @@
       "order": "5",
       "status": "merged",
       "why": "sa region cutover — the AC4-precondition row: declared merged, verified by nobody"
+    },
+    {
+      "ref": "acme/warehouse#78",
+      "order": "6",
+      "why": "rotate the vault keypair",
+      "after": ["acme/warehouse#70"],
+      "gate": {
+        "kind": "review",
+        "blocked_by": "the crypto review has not been booked",
+        "resolved_by": "security signs the review off"
+      }
     }
   ]
 }

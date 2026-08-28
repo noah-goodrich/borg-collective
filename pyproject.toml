@@ -89,8 +89,20 @@ allowed_prefixes = ["borg_core", "__future__"]
 # width, which makes a terminal probe (`os.environ["COLUMNS"]`, an isatty check) the most tempting
 # impurity in the tree; borg_core/link/test_picture.py asserts the same property directly by AST walk
 # rather than trusting this line to be present.
+#
+# `render.py` JOINED THE LIST WITH THE `--json`-SIDE WIDTH CHECK, and it was absent before that for
+# no reason anyone had written down. Its own docstring calls the module unconditionally pure and the
+# hand-authored picture oracles depend on that being true, but the linter classifies by BASENAME and
+# returns early on a file it cannot classify -- so `render.py` had ZERO import enforcement while
+# `make lint` printed 10.00/10, and its only purity guard was one clock monkeypatch. The width
+# check's acceptance criterion says "verified by the clean-architecture linter, not by eye", which
+# was not satisfiable for this module until the name was here. It imports only `typing` plus
+# `borg_core.link`, exactly like `grid.py`, so it passes as-is. borg_core/link/test_render.py mirrors
+# test_picture.py's AST walk for the same reason that one exists: W9004's allow-list already permits
+# `pathlib`, `json` and `datetime`, so the linter is the coarser of the two gates and neither
+# replaces the other.
 [tool.clean-arch.module_map]
-Domain = ["core.py", "grid.py", "picture.py"]
+Domain = ["core.py", "grid.py", "picture.py", "render.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]

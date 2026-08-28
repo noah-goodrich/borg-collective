@@ -5,14 +5,16 @@ bats-from-pytest. Capture with capsys, assert exits with pytest.raises(SystemExi
 json.loads and index keys -- never string-compare the serialized form.
 """
 
+import io
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
 import pytest
 
-from borg_core.link import cli, core, shell
+from borg_core.link import cli, core, picture, shell
 
 
 @pytest.fixture()
@@ -55,8 +57,13 @@ def _delta_workspace(root):
     (directory / "docs" / "plans" / "directives").mkdir(parents=True, exist_ok=True)
     (directory / "docs" / "plans" / "assimilated").mkdir(parents=True, exist_ok=True)
 
+    # A WRAPPED PARAGRAPH, matching the bats fixture: the objective is read as a paragraph and folded
+    # to the page, and a one-line fixture here would leave the pytest side blind to both.
     (directory / "PROJECT_PLAN.md").write_text(
-        "# Project Plan: Delta\n\n## Objective\n\nKeep it stable.\n\n## Acceptance Criteria\n\n"
+        "# Project Plan: Delta\n\n## Objective\n\n"
+        "Keep it stable, and keep the objective a wrapped paragraph\n"
+        "so this workspace exercises the same read the bats fixture does.\n\n"
+        "## Acceptance Criteria\n\n"
         "- [x] First criterion, already met.\n- [ ] Second criterion, outstanding.\n"
         "- [ ] Third criterion, outstanding.\n",
         encoding="utf-8",
@@ -94,6 +101,73 @@ def test_run_emits_exactly_one_line_of_parseable_json_on_stdout(isolated_env, ca
     assert captured.out.count("\n") == 1
     doc = json.loads(captured.out)
     assert doc["version"] == 2
+
+
+_LINK_FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "link"
+
+
+def _manifest_workspace(root, name="warehouse"):
+    """A registered repository carrying a SHIPPED fixture manifest under `.borg/programs/`.
+
+    The bytes are `tests/fixtures/link/manifests/warehouse-rollout.json`'s, not an inline copy: the
+    goldens pin the same file's rendered form, so a test that built its own rows could stay green
+    while the fixture the goldens measure moved underneath it.
+    """
+    programs = Path(_project_dir(root, name)) / ".borg" / "programs"
+    programs.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", programs)
+    return str(Path(_project_dir(root, name)))
+
+
+def test_json_publishes_the_measured_picture_width_on_the_grid_block(isolated_env, capsys, monkeypatch):
+    """The width-check directive's first AC: the widest picture row is OBSERVABLE WITHOUT ANSI.
+
+    MUTATION, APPLIED AND CONFIRMED RED: replace `picture.max_row_width(block["manifests"])` in
+    `cli._grid` with the literal `0`, or delete the stamp entirely. Either drops `picture_width` to
+    0/absent while the manifests on the very same block still rasterize to a 61-column picture, and
+    the equality below fails.
+
+    THE DOCUMENT MUST CARRY A PICTURE FOR THIS TO MEAN ANYTHING, which is why a repository holding a
+    real manifest is registered rather than an empty registry asserted at 0. An empty registry
+    supplies the condition that makes the derived value equal its own default -- the `borg recon`
+    failure this repo shipped for months -- so it is asserted at the END, as the empty case, and never
+    as the evidence that the measurement ran.
+
+    THE EXPECTED NUMBER IS NOT WRITTEN DOWN. It is re-derived from the manifests the document itself
+    published, so moving the fixture moves both sides together and the assertion never goes stale
+    against a number nobody re-measures. `tests/cli_contract.bats`'s companion case
+    ("grid.picture_width is the width of the widest picture row the same run rendered") is the half
+    that derives it INDEPENDENTLY, off the rendered ANSI page rather than off `max_row_width`.
+
+    NESTED UNDER `.grid` AND ASSERTED THERE. `skills/borg-link/SKILL.md` pipes the document through a
+    `jq` whitelist that selects `grid` wholesale; a top-level `picture_width` would be silently
+    dropped on the skill's own path while passing a naive top-level assertion here.
+    """
+    directory = _manifest_workspace(isolated_env)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    # cwd decides scope, and the worktree this suite runs in is a git repository -- which would make
+    # the invocation repository-scoped against borg-collective and select no manifest at all.
+    monkeypatch.chdir(isolated_env)
+
+    exit_code = cli._run("", False, "json", local=True)  # pylint: disable=protected-access
+
+    assert exit_code == 0
+    doc = json.loads(capsys.readouterr().out)
+    manifests = doc["grid"]["manifests"]
+    assert manifests, "no manifest reached the document; the assertion below would be vacuous"
+
+    width = doc["grid"]["picture_width"]
+    assert isinstance(width, int) and not isinstance(width, bool)
+    assert width == picture.max_row_width(manifests) > 0
+    assert doc["version"] == 2, "an additive key inside an additive block does not bump the version"
+
+    # ...and only now the empty case, which is a statement about the DEFAULT and not about the
+    # measurement: a repository with nothing declared has a picture zero columns wide, not an error.
+    capsys.readouterr()
+    _write_registry(isolated_env, {})
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    empty = json.loads(capsys.readouterr().out)["grid"]
+    assert empty["manifests"] == [] and empty["picture_width"] == 0
 
 
 def test_run_human_mode_renders_the_seven_section_document(isolated_env, capsys):
@@ -148,7 +222,13 @@ def test_run_focus_block_for_a_named_project(isolated_env, capsys):
     focus = doc["focus"]
     assert focus["name"] == "delta"
     assert focus["plan"] == {
-        "objective": "Keep it stable.",
+        # THE WHOLE WRAPPED PARAGRAPH, joined with single spaces, not its first physical line.
+        # `core.plan_objective` used to transcribe the shell's `head -1`, so a real objective --
+        # prose, hard-wrapped at 120 columns in this tree -- reached the wire as a fragment.
+        "objective": (
+            "Keep it stable, and keep the objective a wrapped paragraph "
+            "so this workspace exercises the same read the bats fixture does."
+        ),
         "met": 1,
         "total": 3,
     }
@@ -321,12 +401,125 @@ def test_main_porcelain_and_deep_render_through_render_py(isolated_env, capsys):
     assert "Session ID:" in out
 
 
+# ── --render-document: one document, two consumers ────────────────────────────────────────────────
+
+
+def test_render_document_prints_the_same_page_the_human_arm_would(isolated_env, capsys, monkeypatch):
+    """AC1's fold, stated as an equality rather than as a claim about call sites.
+
+    `borg link --brief` builds the document ONCE with `--json`, projects it into the narrative
+    prompt, and pipes THOSE SAME BYTES back through `--render-document` when the narrative fails. If
+    that round trip did not reproduce the human page byte for byte, the fallback would be a second
+    truth level inside one invocation -- which is the defect the fold exists to remove.
+
+    THE CLOCK IS PINNED FOR THE COMPARISON, and that is the point rather than a convenience: without
+    it the two builds below would legitimately differ in `generated_at` and every relative time, and
+    the equality would have to be weakened to a substring check that could not see a real
+    divergence. Pinning it is also what makes the failure mode visible -- the reason the fallback
+    must NOT rebuild is precisely that a rebuild reads the clock a second time.
+    """
+    path = _delta_workspace(isolated_env)
+    _write_registry(isolated_env, {"delta": {"path": path, "status": "idle", "summary": "Delta."}})
+    monkeypatch.setattr(shell, "now_epoch", lambda: 1_800_000_000)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--json"])
+    assert exc_info.value.code == 0
+    document_json = capsys.readouterr().out
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main([])
+    assert exc_info.value.code == 0
+    human_page = capsys.readouterr().out
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document_json))
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--render-document"])
+    assert exc_info.value.code == 0
+    rendered_from_json = capsys.readouterr().out
+
+    assert rendered_from_json == human_page
+    assert "THE BORG COLLECTIVE" in rendered_from_json
+
+
+def test_render_document_builds_nothing_of_its_own(isolated_env, capsys, monkeypatch):
+    """The whole reason the seam exists: no clock read, no registry read, no sweep, no manifest glob.
+
+    Asserted by making every one of those explode. A `--render-document` that quietly rebuilt would
+    be indistinguishable from this one on stdout -- it would print the same page -- and only
+    something that fails on contact can tell them apart.
+    """
+    _write_registry(isolated_env, {"solo": {"status": "idle", "last_activity": "2026-08-01T00:00:00Z"}})
+    with pytest.raises(SystemExit):
+        cli.main(["--json"])
+    document_json = capsys.readouterr().out
+
+    def _forbidden(*_args, **_kwargs):
+        raise AssertionError("--render-document must not build a document of its own")
+
+    monkeypatch.setattr(shell, "now_epoch", _forbidden)
+    monkeypatch.setattr(shell, "read_registry", _forbidden)
+    monkeypatch.setattr(shell, "registry_with_state", _forbidden)
+    monkeypatch.setattr(shell, "sweep", _forbidden)
+    monkeypatch.setattr(shell, "discover_manifests", _forbidden)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document_json))
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--render-document"])
+    assert exc_info.value.code == 0
+    assert "solo" in capsys.readouterr().out
+
+
+def test_render_document_dies_clean_on_malformed_stdin(isolated_env, capsys, monkeypatch):
+    """A truncated pipe must die through `main`'s one exception boundary, not as a traceback.
+
+    The caller is a zsh fallback path that has ALREADY had one thing fail; a Python traceback
+    spliced onto its stdout would be the second failure reported as the first.
+    """
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"version": 2, "projec'))
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--render-document"])
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "▸ ERROR:" in captured.err
+    assert "Traceback" not in captured.err
+
+
+@pytest.mark.parametrize("mode_flag", ["--json", "--porcelain"])
+def test_render_document_refuses_to_be_combined_with_a_mode(isolated_env, capsys, monkeypatch, mode_flag):
+    """`--render-document` is not a mode, so pairing it with one is refused rather than reconciled.
+
+    IT USED TO BE ANSWERED BY IGNORING HALF OF IT. `mode = _mode(args)` runs before the
+    `args.render_document` branch, so `--json --render-document` selected `_die_json` as the failure
+    formatter and then printed the human ANSI page on success -- a shape wart rather than a live bug
+    (borg.zsh's one caller passes `--render-document` alone), but the kind that becomes a bug the
+    first time somebody adds a second caller.
+
+    ARGPARSE'S OWN ERROR PATH, exit 2 with usage on stderr, NOT a `_die_*` exit 1: this is a malformed
+    invocation, not a failed one, and it must stay distinguishable from a corrupt document. Zero bytes
+    on stdout either way.
+    """
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"version": 2}'))
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main([mode_flag, "--render-document"])
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "--render-document is not a mode" in captured.err
+
+
 def test_repository_scope_calls_no_aggregate_collector_on_the_human_path(isolated_env, capsys, monkeypatch):
     # C1. The two aggregate collectors are a directory-glob-plus-markdown-read pass over EVERY
-    # registered project, and both hot loops (drone.zsh's per-tmux-window status table, borg.zsh's
-    # per-keypress fzf preview) pass a NAME -- so both land in repository scope and must skip them
+    # registered project, and a NAMED invocation lands in repository scope, which must skip them
     # exactly as the retired `deep` mode did. Mutating `need_aggregate` to `mode != "porcelain"`
-    # turns this red and puts a 14-project glob back into both.
+    # turns this red and puts a 14-project glob back on every `borg link <project>`.
+    # (This used to justify the skip by "both hot loops (drone.zsh's per-tmux-window status table,
+    # borg.zsh's per-keypress fzf preview) pass a NAME". Both were retired 2026-08-27, so the skip
+    # now saves the glob once per typed command rather than per keypress. What lapsed is the size of
+    # the prize, not the invariant -- the assertion is unchanged.)
     path = _delta_workspace(isolated_env)
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle"}})
 
@@ -480,8 +673,9 @@ def test_document_scope_is_orchestrator_at_the_workspace_root(isolated_env, monk
 def test_document_explicit_project_dominates_cwd(isolated_env, monkeypatch):
     # B3 end-to-end, through the real _document rather than the pure resolver: standing in alpha and
     # asking for beta must scope to BETA. Resolving breadth from cwd here would render alpha's facts
-    # under beta's header -- and every scripted caller passes a name from a fixed cwd
-    # (drone.zsh:964's per-window loop, borg.zsh:266's fzf preview).
+    # under beta's header, which is indistinguishable from a right one. `drone link` still passes
+    # `${PWD##*/}` from whatever cwd its window is in. (The two examples this used to give --
+    # "drone.zsh:964's per-window loop, borg.zsh:266's fzf preview" -- were retired 2026-08-27.)
     alpha, _beta = _scope_registry(isolated_env)
     monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
     monkeypatch.chdir(alpha)
@@ -628,14 +822,20 @@ def test_cortex_pending_is_read_on_both_human_contexts(isolated_env, monkeypatch
 
 def test_deep_is_accepted_and_ignored(isolated_env, capsys):
     """C6. `--deep` collapsed into repository scope but STAYS in the parser: one live copy of the
-    dispatcher passes it -- borg.zsh's positional arm at borg.zsh:3111, which is the fzf preview's
-    path -- and deleting the argument makes argparse exit 2 where `drone status` and the fzf preview
-    both swallow the failure silently.
+    dispatcher passes it -- borg.zsh's positional `link` arm, which you find by grepping
+    `_link_py_args=(--deep)` -- and deleting the argument makes argparse exit 2 on every
+    `borg link <project>` a human types and on every `drone link`.
 
-    This docstring used to say THREE copies, counting bin/link-parity-harness and its byte-copy at
+    ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This docstring, cli.py's twin comment
+    and two lines of CLAUDE.md all pinned `borg.zsh:3111`, which matched neither main nor the branch
+    that last edited them; a pin is invalidated by any insertion above it and nothing fails when it
+    goes stale. The same edit dropped "which is the fzf preview's path" -- `cmd_switch`'s `fzf` call
+    carries no `--preview` flag, so that justification described a loop that does not exist.
+
+    An earlier version also counted THREE copies, adding bin/link-parity-harness and its byte-copy at
     ~/.claude/bin/. Neither ever passed `--deep` (the harness looped a bare positional), and AC2/S4
     retired the harness leg that looped at all. Corrected, not weakened: the surviving copy is the
-    one whose failure is invisible, which is the whole reason the flag is kept.
+    one every reader of this command actually runs, which is the whole reason the flag is kept.
 
     Mutation: drop the `parser.add_argument("--deep", ...)` line -> SystemExit(2), empty stdout.
     """

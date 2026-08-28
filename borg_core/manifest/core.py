@@ -18,9 +18,11 @@ merge-tree/gather.py derives the viz graph from it). The differences, so the nex
 copy can see them: this side validates `after` and derives edges from it (the writer over there
 accepts an `after` of any shape and derives nothing from it, so its write gate is WEAKER than this
 read gate -- a manifest it happily writes can be rejected here), this side deduplicates edges within
-a manifest, this side requires every declared ref to be a FULL `owner/repo#num`, and this side does
-not use the retired "program" vocabulary in any name. Retiring one of the two copies is AC7's
-problem, not this module's.
+a manifest, this side requires every declared ref to be a FULL `owner/repo#num`, this side no longer
+closes `gate.kind` to GATE_KINDS (see _validate_gate: an unrecognized kind is a ROUTER concern here
+and a validation error over there, so this read gate is the WEAKER of the two on that one field --
+the only axis where the asymmetry runs that direction), and this side does not use the retired
+"program" vocabulary in any name. Retiring one of the two copies is AC7's problem, not this module's.
 
 WHY DECLARED EDGES EXIST AT ALL. Branch topology only ever links PRs inside ONE repository -- a base
 branch is a repository-local name -- so nothing mechanical says `stillpoint#48` must merge before
@@ -67,10 +69,21 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# Closed vocabulary, deliberately. `decision` means a human must *choose*; `verification` means
-# someone must *run* something. The distinction matters because a `verification` with declared
-# outcomes is never a blocker on a *person* -- anyone can run it -- so it must not be routed to the
-# awaiting-you tier the way a `decision` is.
+# THE ROUTER'S VOCABULARY, NOT THE VALIDATOR'S. `decision` means a human must *choose*;
+# `verification` means someone must *run* something. The distinction matters because a `verification`
+# with declared outcomes is never a blocker on a *person* -- anyone can run it -- so it must not be
+# routed to the awaiting-you tier the way a `decision` is.
+#
+# THE VALIDATOR NO LONGER CLOSES ON THIS SET. `_validate_gate` requires only that a gate NAME some
+# kind; a kind outside this set is a ROUTER concern and routes to `render._GROUP_UNSURE` rather than
+# costing the row. See `_validate_gate` for the argument.
+#
+# CONSEQUENCE, STATED SO THE NEXT READER DOES NOT DELETE IT AS DEAD: after that demotion this
+# constant has no production reader at all -- `render.py` never imports this module, it carries its
+# own `_GATE_ROUTING` table. The one live tie is
+# `test_render.py::test_the_router_covers_every_declared_gate_kind`, which asserts the router is
+# never BEHIND this declared vocabulary. That subset test is load-bearing for this constant's
+# continued existence; removing either leaves the other pointless.
 GATE_KINDS = {"decision", "verification"}
 
 # Rows whose `order` is one of these are merged pre-stack prerequisites: real ancestors of the chain
@@ -311,6 +324,26 @@ def _validate_gate(gate: Any, ref: str, label: str) -> list[str]:
 
     Takes the row's own `ref` for the same reason `_validate_after` does: the self-reference check
     cannot be made without it.
+
+    AN UNRECOGNIZED KIND IS THE ROUTER'S PROBLEM; AN ABSENT ONE IS A DEFECT. `kind` used to be closed
+    to `GATE_KINDS`, which meant a typo'd `review` was a row-scoped error and -- after
+    docs/plans/directives/2026-08-27-degrade-the-row-not-the-manifest.md made degradation row-level --
+    silently DELETED the row. That is strictly worse than the outcome the renderer already built for
+    it: `render._route` sends any kind it does not recognize to the `unsure` group, which names the
+    kind on the page. So the row loads, ranks, draws and routes, and the human sees the word they
+    mistyped instead of a gap.
+
+    EMPTY OR MISSING STAYS FATAL, and the two are different facts. `render._next_tally` reads
+    `kind = gate.get("kind") or ""` and `_route("")` returns `mine` BECAUSE AN UNGATED ROW IS MINE. A
+    demoted blank kind would land a GATED row under `mine`, whose heading (`render._GROUP_HEADINGS`
+    owns the wording) claims no decision is needed first -- which the router cannot know about a gate
+    that named no kind. That is the unfounded assertion `render._GROUP_UNSURE` exists to avoid, and
+    blank is less known still. Blank stays fatal so `_route("")` means "no gate", never "a gate that
+    named nothing"; `_text` collapses `None`, a missing key, `""` and `"   "` into that one case.
+
+    `blocked_by` and `resolved_by` stay REQUIRED and stay row-scoped errors. They are not vocabulary
+    questions -- a gate that names neither its blocker nor its settlement parks work while pointing at
+    nothing, and no renderer can route around that.
     """
     if gate is None:
         return []
@@ -318,9 +351,8 @@ def _validate_gate(gate: Any, ref: str, label: str) -> list[str]:
         return [f"{label}: gate must be an object"]
 
     errors = []
-    kind = _text(gate.get("kind"))
-    if kind not in GATE_KINDS:
-        errors.append(f"{label}: gate.kind must be one of {sorted(GATE_KINDS)}, got {kind or '(empty)'}")
+    if not _text(gate.get("kind")):
+        errors.append(f"{label}: gate.kind is required")
     for field in ("blocked_by", "resolved_by"):
         if not _text(gate.get(field)):
             # A blocker with no pointer at its settlement is the defect this field exists to prevent:
@@ -501,8 +533,9 @@ def partition_errors(errors: list[str]) -> tuple[set[int], list[str]]:
     partial answer -- there is no subset of the file you could keep and still be describing what the
     author wrote.
 
-    Returns indices as a SET because two errors routinely name one row (a bad `gate.kind` also trips
-    `gate.resolved_by is required`), and the caller wants rows to drop, not errors to count.
+    Returns indices as a SET because two errors routinely name one row (a gate declaring neither
+    `blocked_by` nor `resolved_by` trips both), and the caller wants rows to drop, not errors to
+    count.
     """
     bad_rows: set[int] = set()
     structural: list[str] = []
