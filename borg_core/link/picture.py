@@ -89,16 +89,20 @@ GUTTER = 2
 # column in the picture. The mock's own later render reaches n17 (chains.md), and `n999 ` still fits.
 ID_WIDTH = 4
 
-# The widest a picture row may be, in VISIBLE columns. 68 rather than 80 because the fzf preview pane
-# is the narrowest real consumer: borg.zsh:267 sizes it at 45 today and AC2/S3 widens it to 70, which
-# leaves two columns of slack for the pane's own border.
+# The widest a picture row may be, in VISIBLE columns. 68 rather than 80 came from the fzf preview
+# pane: AC2/S3 sized it at 70, leaving two columns of slack for the pane's own border. THAT PANE IS
+# GONE -- `borg switch`'s preview was retired on 2026-08-27 (zero typed invocations in six months),
+# and `grep -c -- '--preview-window' borg.zsh` is 0, which cli_contract.bats' B15 asserts. The number
+# stays 68 on its own merits: it is the bound every manifest that exists is measured against, and
+# raising it is an explicit non-goal of the width-check directive. A future consumer with a real
+# width constraint should be checked against ITS number, not have this one bent toward it.
 #
-# WHAT THIS BUYS AND WHAT IT DOES NOT. It is a CONSTANT checked against the fixture manifests, not a
-# terminal probe -- this module is pure, so it cannot measure the terminal, and AC2's non-goal list
-# keeps it that way. A future manifest whose short refs run long across three columns exceeds it and
-# nothing here notices; the `--json`-side width check that would notice is filed as a follow-up. The
-# honest boundary: this is a measurement over the shapes that exist today, not a proof over the
-# shapes that could.
+# WHAT THIS BUYS AND WHAT IT DOES NOT. It is a CONSTANT, not a terminal probe -- this module is pure,
+# so it cannot measure the terminal, and AC2's non-goal list keeps it that way. What it now HAS is a
+# runtime measurement to be compared against: `max_row_width` below computes the widest row of
+# whatever a caller holds, `link/cli.py` stamps it on the wire as `grid.picture_width`, and
+# `render._width_line` says so on the page. So "a future manifest exceeds it and nothing notices" --
+# the honest boundary AC2 recorded here -- is no longer true.
 PICTURE_BUDGET = 68
 
 # (up, right, down, left) -> the box character with exactly those four strokes. A LOOKUP, never a
@@ -144,6 +148,43 @@ def visible_len(text: str) -> int:
     off the wire -- lands in a detail block, which is never column-aligned against anything.
     """
     return len(_OSC8_RE.sub("", _SGR_RE.sub("", text)))
+
+
+def max_row_width(manifest_grids: list[dict]) -> int:
+    """The widest picture row a set of manifests rasterizes to, in VISIBLE columns. 0 for none.
+
+    THE MEASUREMENT `PICTURE_BUDGET` NEVER HAD. The budget above is a constant checked against the
+    fixture manifests; this is the same number computed over whatever a caller actually holds, so a
+    manifest a user writes tomorrow can be compared against it. It is deliberately not a check:
+    raising here would take out the two paths that swallow failure silently, and logging would end the
+    purity that makes `picture-fork.expected` and `picture-crossing.expected` meaningful as
+    hand-authored oracles. The COMPARISON lives at the impure boundary, `link/cli.py`, which stamps
+    the result onto `grid.picture_width` for `--json` and for `render._width_line`.
+
+    LIVES IN THIS MODULE ANYWAY, BESIDE `visible_len`, AND IMPORTS NOTHING NEW. It re-runs the caller
+    triple `render._grid_section` runs -- `assign_columns` -> `node_ids` -> `picture` -- because
+    measuring a row requires rasterizing it, and a copy of that triple anywhere else is a second
+    renderer that can disagree with the first about what a picture is. `visible_len` rather than
+    `len`: the rows carry SGR and OSC-8 bytes, so `len` overstates a hyperlinked row by the length of
+    a URL and would report every manifest over budget.
+
+    `node_ids` IS GLOBAL ACROSS THE LIST, so the whole list must be passed at once rather than folded
+    a manifest at a time -- ids widen the id column, and a per-manifest max would measure a narrower
+    picture than the one that renders.
+
+    `default=0` because an empty list, and a manifest with no levels, must both yield 0 rather than
+    raise: a repository with nothing declared has a picture zero columns wide, not an error.
+    """
+    columns_by_manifest = [assign_columns(manifest) for manifest in manifest_grids]
+    ids = node_ids(manifest_grids, columns_by_manifest)
+    return max(
+        (
+            visible_len(row)
+            for manifest, columns in zip(manifest_grids, columns_by_manifest)
+            for row in picture(manifest, ids, columns)
+        ),
+        default=0,
+    )
 
 
 # ── hyperlinks ────────────────────────────────────────────────────────────────────────────────────
