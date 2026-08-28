@@ -116,8 +116,9 @@ def record_forks(monkeypatch):
 
     IT WRAPS `run_background` AND NOT `run_capture`, and that is a correction rather than a
     preference. The fetch is start-now/collect-later and never passes through `run_capture`, so a
-    probe on that name alone would be BLIND to it -- `test_local_in_orchestrator_scope_forks_nothing
-    _at_all`'s `assert record_forks == []` would stay green with a fetch that ignored `--local`
+    probe on that name alone would be BLIND to it: the orchestrator leg of
+    `test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_repository` asserts
+    `record_forks == []`, and that would stay green with a fetch that ignored `--local`
     entirely. Wrapping BOTH would double-count instead, because `run_capture` is now literally
     `collect(run_background(argv), timeout)` and resolves that name as a module global at call time.
     """
@@ -376,19 +377,30 @@ def test_local_runs_neither_network_path_while_the_same_call_without_it_runs_bot
     assert [s["source"] for s in swept_grid["sources"]] == ["probe"]
 
 
-def test_local_in_orchestrator_scope_forks_nothing_at_all(isolated, monkeypatch, record_forks):
-    """The strongest form of the opt-down: not one fork of any kind.
+def test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_repository(isolated, monkeypatch, record_forks):
+    """The strongest form of the opt-down: not one fork of any kind -- and in repository scope, one.
 
     Repository scope still runs ONE `git remote get-url` to learn its own `owner/repo`, because
     manifest selection cannot happen without it -- `--local` opts down from the network, not from the
     filesystem. Orchestrator scope needs no slug, so the opted-down path there touches no subprocess
     whatsoever, which is what pins that nothing else crept into it.
 
+    THE REPOSITORY LEG IS ASSERTED AND NOT MERELY NARRATED, which is a correction. Its sentence sat
+    in this docstring with no assertion under it while CLAUDE.md cited the sentence as a gate --
+    deleting `manifest.shell.repository_slug`'s fork left the case green, because `record_forks == []`
+    only ever ran in orchestrator scope. The exact-argv assertion is the gate: it names the one
+    subprocess the opted-down repository path is allowed, so deleting the fork goes red (the slug
+    disappears) and adding a second one goes red too.
+
+    NEITHER LEG SEES `tmux list-windows`, and that is the fixture rather than the flag: `isolated`
+    stubs `shell.live_windows`, so the reap overlay's fork is out of frame in both scopes. In
+    production it runs in both and `--local` does not touch it -- `BORG_NO_REAP` is what removes it.
+
     A REAL, EXECUTABLE ADAPTER IS ON THE SEARCH PATH THROUGHOUT. Without it this assertion is
     vacuously true -- verified by mutation: with `--local` ignored entirely, an empty search path
     still forks nothing and the test stayed green. An assertion that cannot fail is not a gate.
     """
-    _four_repository_registry(isolated)
+    dirs = _four_repository_registry(isolated)
     adapters = isolated / "adapters"
     _adapter(adapters, "probe", 'echo \'{"source":"probe","summary":"ok","items":[]}\'')
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
@@ -399,6 +411,16 @@ def test_local_in_orchestrator_scope_forks_nothing_at_all(isolated, monkeypatch,
     cli._document("", False, "json", local=True)
 
     assert record_forks == []
+
+    record_forks.clear()
+    monkeypatch.chdir(dirs["delta"])
+
+    document = cli._document("", False, "json", local=True)
+
+    assert record_forks == [["git", "-C", dirs["delta"], "remote", "get-url", "origin"]]
+    assert [m["id"] for m in document["grid"]["manifests"]] == ["cross-repository"], (
+        "the slug is what selects; a leg that selected nothing would pass the fork assertion for the wrong reason"
+    )
 
 
 # ── the resolve ladder ────────────────────────────────────────────────────────────────────────────
