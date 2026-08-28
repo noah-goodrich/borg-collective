@@ -40,8 +40,11 @@ e2e/eval harness that keeps it honest.
     count on bare `link`; `sweep: link --local --brief spawns zero gh subprocesses, and --brief without it sweeps`
     proves the one opt-down is really forwarded; and four cases force each `fallback_reason` branch — timeout,
     not-logged-in, non-zero exit, empty output — and assert the document renders under each. `tests/briefing.bats`
-    now carries 15 cases: none deleted, three rewritten with the reason recorded in the file header, one kept with new
-    provenance, and three added by the remediation pass below.
+    covers the rest: none of its pre-fold cases were deleted, three were rewritten with the reason recorded in the
+    file header, one was kept with new provenance, and the remediation passes below added `--all` forwarding, the
+    repository-scope prompt breadth, and both no-page rungs (build and fallback render) being loud on **stderr** and
+    non-zero out. Deliberately not stated as a count — the count was wrong by three within a day of being written,
+    twice, in two files.
     `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5** is closed and its
     **Phase 3** subsumed. **Phase 5b** (`/borg-recon`, the second un-folded human digest) is a skill rather than a
     command, blocks neither verify clause nor the stated goal, and stays filed separately.

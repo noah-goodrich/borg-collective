@@ -3,12 +3,14 @@
 #
 # WHAT THE CASES HERE COVER: the narrative half of `--brief` and everything reached without a live
 # sweep — the fallback ladder's reason lines, the two short circuits (empty registry, all-archived),
-# the breadth of the projected prompt, `--all` forwarding, the xtrace guard, and `waiting_reason`
-# never rendering where a summary goes.
+# the breadth of the projected prompt, `--all` forwarding, the xtrace guard, `waiting_reason` never
+# rendering where a summary goes, and both of `_borg_print_briefing`'s no-page rungs (the document
+# failing to BUILD and the fallback page failing to RENDER) being loud on stderr and non-zero out.
 #
-# (Deliberately NOT a case count. The header said "of the 12 cases here" while the file held 15,
-# because a count is invalidated by every insertion and nothing fails when it goes stale — the same
-# reason the line pins in this repo are anchored by test name rather than by number.)
+# (Deliberately NOT a case count, here or anywhere downstream. This header once carried one, and it
+# was wrong by three within a day: a count is invalidated by every insertion and nothing fails when
+# it goes stale — the same reason line pins in this repo are anchored by test name rather than by
+# number. Say what the cases cover.)
 #
 # WHAT CHANGED HERE ON 2026-08-27, AND WHY NOTHING WAS SILENTLY DELETED. `--brief` no longer walks
 # the registry: it builds the ONE `borg link` document, projects it into the narrative prompt, and
@@ -529,20 +531,78 @@ EOF
     [[ "$output" == *"PROJECT: retired-project"* ]] || false
 }
 
-# ── A failed fallback render is loud, and is not exit 0 ───────────────────────
+# ── Both no-page rungs are loud, on STDERR, and are not exit 0 ────────────────
 #
-# THE FALLBACK IS THE PATH THAT GUARANTEES A PAGE, so `|| true` on its render was the one place left
-# where `borg link --brief` could print no page and still report success — exactly the silent-failure
-# shape docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists
-# to remove, reintroduced at the last rung of the ladder that implements it.
+# `_borg_print_briefing` has exactly two ways to return having printed no page: the document fails to
+# BUILD (`_borg_py ... --json` produces nothing) or the fallback page fails to RENDER
+# (`--render-document` fails). Both used to `warn` — which writes to STDOUT, see its definition beside
+# `info`/`die` at the top of borg.zsh — and return 0. That is the silent-failure shape
+# docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists to
+# remove, and the fallback rung reintroduced it at the last rung of the ladder that implements it.
 #
-# THE MOCK IS A PASS-THROUGH ON python3, FAILING ONLY `--render-document`: the document itself is
-# built by a `python3 -m borg_core.link.cli --json` child through the same wrapper, so hiding python3
-# outright would take the "Could not build the borg link document" branch far above and never reach
-# the code under test.
+# THE ASSERTIONS READ SEPARATED STREAMS, NOT `$output`, AND THAT IS THE POINT OF THIS BLOCK.
+# bats `run` MERGES fd2 into `$output`, so a case that asserts `[[ "$output" == *"Could not ..."* ]]`
+# passes identically whether the reason went to stdout or stderr: deleting `>&2` from borg.zsh left
+# all three suites green. The two cases below redirect the streams to separate files and assert on
+# each — the reason IS on stderr, and is NOT on stdout, which is the half that has teeth. Files
+# rather than `run --separate-stderr` so the pin does not depend on the bats version CI installs.
+# Same family as CLAUDE.md's "`cmd >> file 2>/dev/null` does NOT silence a redirect-open error" and
+# the zsh-EPIPE-under-`run` note: this repo keeps getting bitten by which stream a byte landed on.
 #
-# MUTATION THAT TURNS THIS RED, VERIFIED: restore `|| true` on the `--render-document` pipeline (and
-# drop the `return $render_rc`).
+# THE MOCKS ARE PASS-THROUGHS ON python3, each failing exactly ONE argument. Hiding python3 outright
+# would take the BUILD branch for both cases and the render case would never reach its own code.
+#
+# MUTATION THAT TURNS THESE RED, VERIFIED BOTH WAYS: (a) drop `>&2` from either `warn` — the stderr
+# assertion fails and the "not on stdout" assertion fails with it; (b) restore `|| true` / `return 0`
+# on either rung — the non-zero assertion fails.
+
+# Reads a command's streams into `$brief_stdout` / `$brief_stderr` / `$brief_status`, unmerged.
+# `run` is deliberately NOT used: its merge is exactly what these cases exist to defeat.
+_run_brief_separated() {
+    local out_file="${BATS_TEST_TMPDIR}/brief.out"
+    local err_file="${BATS_TEST_TMPDIR}/brief.err"
+    : > "$out_file"
+    : > "$err_file"
+    brief_status=0
+    "$BORG_CMD" "$@" > "$out_file" 2> "$err_file" || brief_status=$?
+    brief_stdout=$(cat "$out_file")
+    brief_stderr=$(cat "$err_file")
+}
+
+@test "briefing: a failed document build names its reason on stderr and exits non-zero" {
+    local real_python
+    real_python=$(command -v python3)
+    [ -n "$real_python" ]
+
+    cat > "$MOCK_BIN/python3" <<EOF
+#!/usr/bin/env bash
+for a in "\$@"; do
+    if [ "\$a" = "--json" ]; then
+        echo "MOCKED-BUILD-FAILURE" >&2
+        exit 9
+    fi
+done
+exec "$real_python" "\$@"
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    _run_brief_separated link --brief --local
+    [ "$brief_status" -eq 9 ] || {
+        printf 'expected exit 9, got %s\nSTDOUT:\n%s\nSTDERR:\n%s\n' \
+            "$brief_status" "$brief_stdout" "$brief_stderr" >&2
+        false
+    }
+    # THE CHANNEL, not just the text.
+    [[ "$brief_stderr" == *"Could not build the borg link document"* ]] || false
+    [[ "$brief_stdout" != *"Could not build the borg link document"* ]] || false
+    # The exit code and the child's own stderr both reach the reason line, the same contract the
+    # `claude -p exited N`, projection and render branches have.
+    [[ "$brief_stderr" == *"exit 9"* ]] || false
+    [[ "$brief_stderr" == *"MOCKED-BUILD-FAILURE"* ]] || false
+    # And nothing resembling a page was printed.
+    [[ "$brief_stdout" != *"THE BORG COLLECTIVE"* ]] || false
+}
+
 @test "briefing: a failed fallback render names its reason on stderr and exits non-zero" {
     local real_python
     real_python=$(command -v python3)
@@ -561,13 +621,20 @@ EOF
     chmod +x "$MOCK_BIN/python3"
 
     # The default claude mock exits 1, so the narrative fails and the fallback render is reached.
-    run "$BORG_CMD" link --brief --local
-    [ "$status" -ne 0 ] || { printf 'expected a non-zero exit:\n%s\n' "$output" >&2; false; }
-    [[ "$output" == *"Could not render the borg link document"* ]] || false
-    [[ "$output" == *"exit 7"* ]] || false
+    _run_brief_separated link --brief --local
+    [ "$brief_status" -eq 7 ] || {
+        printf 'expected exit 7, got %s\nSTDOUT:\n%s\nSTDERR:\n%s\n' \
+            "$brief_status" "$brief_stdout" "$brief_stderr" >&2
+        false
+    }
+    # THE CHANNEL, not just the text: stdout at this point IS the page, and a warning spliced into it
+    # is indistinguishable from content.
+    [[ "$brief_stderr" == *"Could not render the borg link document"* ]] || false
+    [[ "$brief_stdout" != *"Could not render the borg link document"* ]] || false
+    [[ "$brief_stderr" == *"exit 7"* ]] || false
     # The child's own stderr is the reason, the same contract the `claude -p exited N` and the
     # projection branches have.
-    [[ "$output" == *"MOCKED-RENDER-FAILURE"* ]] || false
+    [[ "$brief_stderr" == *"MOCKED-RENDER-FAILURE"* ]] || false
     # And the page really is absent — this is not a warning printed alongside a rendered document.
-    [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$brief_stdout" != *"THE BORG COLLECTIVE"* ]] || false
 }

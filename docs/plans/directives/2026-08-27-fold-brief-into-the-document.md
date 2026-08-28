@@ -102,10 +102,14 @@ which is the actual defect. Every field it reads is already on the document.
 - [x] A bats case forces each `fallback_reason` branch and asserts the document renders under each.
       Four, one per branch, in `tests/link_sweep.bats`: timeout (rc 124 via a mocked `timeout`), not-logged-in
       (exit 0 plus the string), non-zero exit (with its captured stderr still surfacing), and empty output.
-- [x] `tests/briefing.bats`'s 12 cases still pass or are consciously rewritten — none silently deleted.
-      Now 15: eight untouched, three rewritten with the reason recorded in the file header (the inactive header,
-      the xtrace guard, the field-collapse case), one kept with new provenance (the empty-registry hint), and three
-      added by the remediation pass below. The xtrace case was rewritten TWICE — see that section.
+- [x] `tests/briefing.bats`'s pre-fold cases still pass or are consciously rewritten — none silently deleted.
+      Most are untouched; three are rewritten with the reason recorded in the file header (the inactive header, the
+      xtrace guard, the field-collapse case), one is kept with new provenance (the empty-registry hint), and the
+      remediation passes below add `--all` forwarding, the repository-scope prompt breadth, and both no-page rungs.
+      The xtrace case was rewritten TWICE — see that section.
+      **NOT RECORDED AS A COUNT, DELIBERATELY.** This line said "Now 15" and `PROJECT_PLAN.md` said "carries 15
+      cases"; both were invalidated by the very commit that added the third remediation case, and nothing failed.
+      Same failure mode as a `file:NNN` pin. Derive it with `grep -c '^@test' tests/briefing.bats` if you need it.
 - [x] `PROJECT_PLAN.md`'s AC1 ticks, with the un-tick rationale replaced by the evidence that it now holds.
 
 ## Remediation pass (post-review, same branch)
@@ -143,6 +147,38 @@ before the `--render-document` branch, so `--json --render-document` picked the 
 the human page. The docstring now states the mode count as `_mode`'s return set, and the combination is REFUSED at the
 parser (exit 2, usage on stderr) rather than reconciled — refusing is the only answer that does not silently discard
 half of what the caller asked for, and `borg.zsh`'s one live caller passes `--render-document` alone.
+
+## Second remediation pass (round 4, same branch)
+
+A fourth review round found the previous round had fixed one of two identical rungs, and that the assertion certifying
+that fix could not see the thing it named.
+
+- **`_borg_print_briefing`'s BUILD rung was still `warn` + `return 0`.** Round 3 fixed the RENDER rung — reason on
+  stderr, non-zero out — and left its sibling, which fires when `_borg_py borg_core.link.cli --json` produces no
+  document at all. Reproduced with a `python3` stub exiting 9: `borg link --brief --local` printed "Could not build
+  the borg link document", the line survived `2>/dev/null` (so it was on fd1), and the command exited 0. That is
+  literally the state the same function's own `return` comment declares must never be reported as success. The two
+  rungs now behave identically: `warn ... >&2`, the child's captured stderr quoted in the reason, and the child's exit
+  status returned (1 when the child exited 0 having printed nothing). `cmd_init`'s deliberate `|| true` tolerance is
+  unchanged, and its comment now names both rungs.
+- **The `>&2` was unpinned, because bats `run` merges fd2 into `$output`.** The round-3 case asserted the channel in
+  its NAME and in three lines of borg.zsh reasoning, then read `$output` for every assertion. Deleting `>&2` left all
+  three suites at exit 0. Both rungs are now driven through a `_run_brief_separated` helper that redirects the two
+  streams to separate files and asserts on each — the reason IS on stderr and is NOT on stdout. Files rather than
+  `run --separate-stderr` so the pin does not depend on the bats version CI installs. Mutation verified both ways:
+  dropping either `>&2` turns the suite red (exit 1); restoring `return 0` on the build rung turns it red (exit 1).
+- **Two stale case counts, and the `--deep` line pin at four sites.** `PROJECT_PLAN.md` and this file both recorded
+  `tests/briefing.bats` as "15 cases" — invalidated by the very commit that added the third remediation case.
+  `CLAUDE.md` (twice), `borg_core/link/cli.py` and `borg_core/link/test_cli.py` all pinned the `--deep` caller at
+  `borg.zsh:3111`, which matched neither `main` nor this branch. Both are the same bug — a number that nothing
+  re-derives and nothing fails on. The counts are replaced by what the cases cover; the pins are replaced by the
+  anchor `_link_py_args=(--deep)`, which `grep` finds after any insertion.
+- **The `--deep` justification cited a loop that does not exist.** All four sites called the positional arm "the fzf
+  preview's arm ... re-executed on every cursor move". `cmd_switch`'s `fzf` call carries `--query`, `--prompt`,
+  `--header`, `--delimiter` and `--with-nth` and no `--preview` at all; `grep -- '--preview' borg.zsh` matches only
+  prose. Corrected where the pins were converted: the surviving justification — every `borg link <project>` a human
+  types, plus `drone link` — is stronger than the one it replaces. Other `borg.zsh:266`-as-fzf-preview references
+  elsewhere in the tree are untouched by this round and are filed rather than swept.
 
 ## What this changed beyond the criteria, recorded rather than hidden
 
