@@ -31,14 +31,17 @@ The measured headroom is real, and it is headroom over *today's* manifests, not 
 > headroom is 7 columns rather than 3. And the fzf preview pane row is gone entirely: the pane was retired the day
 > after this was filed by `2026-08-27-retire-unused-link-surfaces.md`, and `grep -c -- '--preview-window' borg.zsh`
 > is now 0. `PICTURE_BUDGET` stands on its own; there is no second number to check it against. Re-measure with
-> B15's own scan (`tests/cli_contract.bats`, "the fzf preview window is at least as wide as the widest picture
-> row") rather than trusting this table.
+> B15's own scan (`tests/cli_contract.bats`, "the widest picture row fits PICTURE_BUDGET and no preview-window
+> flag survives" — renamed 2026-08-28 from a title that still promised a pane comparison) rather than trusting
+> this table.
 
 Case B15 measures the widest golden row against `PICTURE_BUDGET`. P22 asserts both fixture manifests fit. Both are
 guards over authored fixtures. Neither sees a manifest a user writes tomorrow.
 
-The failure mode is not a crash. It is a picture that wraps in the fzf preview — the per-keypress hot path — turning a
-topology into visual noise at exactly the moment it is meant to be scanned.
+The failure mode is not a crash. It is a picture that wraps in the reader's terminal, turning a topology into visual
+noise at exactly the moment it is meant to be scanned. (As filed this said "wraps in the fzf preview — the
+per-keypress hot path". That pane was retired 2026-08-27; the wrap is still the failure, it just happens wherever the
+page is read.)
 
 ## Solution
 
@@ -65,9 +68,11 @@ Shape (1) is testable without a human; shape (2) is honest at the moment of fail
 
 ## Alternatives considered
 
-**Assert the budget inside `picture.py`.** Rejected — it would either raise on a real user manifest (taking out the fzf
-preview and `drone status`, the two paths that swallow failure silently) or need a logging side effect, and either one
-ends the purity that makes the hand-authored oracles meaningful.
+**Assert the budget inside `picture.py`.** Rejected — it would either raise on a real user manifest, taking out the
+page for a width problem, or need a logging side effect; and either one ends the purity that makes the hand-authored
+oracles meaningful. (As filed, the parenthetical named the fzf preview and `drone status` as "the two paths that
+swallow failure silently". Both were retired 2026-08-27. The rejection does not rest on them: raising inside a pure
+renderer is the objection.)
 
 **Add more fixture manifests.** Rejected as the primary fix: it widens the sample, it does not bound the shape. Worth
 doing anyway as a cheap complement.
@@ -105,9 +110,11 @@ doing anyway as a cheap complement.
   `_width_line` from `_signals_section`.
 
   > **CORRECTED 2026-08-28.** That last sentence used to read "*and* deleting the `cli._grid` stamp". False, and
-  > checked: deleting `cli.py`'s stamp line leaves `pytest borg_core/link/test_render.py` at 69 passed, because the
-  > case sets `doc["grid"]["picture_width"]` by hand and never calls `cli`. The stamp is pinned by the two cases
-  > named in the AC above. The test's own docstring carried the same false claim and is corrected in the same diff.
+  > checked by mutation: deleting `cli.py`'s stamp line leaves `pytest borg_core/link/test_render.py` **entirely
+  > green** — that module is blind to the stamp, because the case sets `doc["grid"]["picture_width"]` by hand and
+  > never calls `cli`. Only `test_cli.py` catches it. The pass COUNT is deliberately not recorded: it moves every
+  > time a case is added, and a stale count reads as a measurement. The stamp is pinned by the two cases named in
+  > the AC above. The test's own docstring carried the same false claim and is corrected in the same diff.
 
 - [x] `picture.py` and `render.py` import nothing new — verified by the clean-architecture linter, not by eye.
 

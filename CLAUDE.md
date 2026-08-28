@@ -26,10 +26,13 @@ Two independent tools that compose:
 
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
-  wider command surface below (recon, nanoprobes, spend, doctor, sync, focus, pin/unpin,
+  wider command surface below (recon, nanoprobes, spend, doctor, focus, pin/unpin,
   setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`).
-  **`watch` was listed here and is not a command.** It has no arm in the case dispatch and exits 1
-  with "unknown command"; removed from this list 2026-08-28. `borg help` is the surface of record.
+  **`watch` and `sync` were both listed here and NEITHER is a command.** Neither has an arm in
+  `borg.zsh`'s case dispatch, and both exit 1 with `unknown command`; removed 2026-08-28. (`sync`
+  survived the first removal pass because only `watch` was checked — the whole line has now been run
+  name-by-name against the dispatch, which is what a partial sweep costs. The only `cmd_sync` in the
+  tree belongs to `merge-tree/coordinator.py`, a different CLI.) `borg help` is the surface of record.
   **The `ls`/`status`/`hail`/`brief`/`briefing`/`refresh` aliases for `link` were removed
   2026-08-10** — six names for one command meant the docs, skills, and research all disagreed
   about what to call it. `borg link` is the only name.
@@ -299,10 +302,10 @@ docs/
   on a comment line. Every insertion above the arm moves the number; the branch condition does not
   move. Same rule `tests/cli_contract.bats` already ratified for its own pins. The "fzf preview
   included" clause dropped with this correction — it named a consumer retired 2026-08-27.)
-  **Scope changes which ROWS
-  a section prints, never which sections exist** — the contexts differ in breadth only, so a reader
-  who learns the page once has learned every invocation of it. Section headers are byte-identical
-  in both contexts; `focus` now follows scope, so a bare `borg link` inside a repository renders
+  **Scope changes which ROWS a section prints, never which sections exist** — the contexts differ in
+  breadth only, so a reader who learns the page once has learned every invocation of it. Section
+  headers are byte-identical in both contexts; `focus` now follows scope, so a bare `borg link`
+  inside a repository renders
   `▸ IN FOCUS` for it. `DOCUMENT_VERSION` stays 2: breadth is applied in the renderer, so no
   pre-existing JSON key narrowed and `skills/borg-link/SKILL.md`'s version gate is untouched.
 - **`picture.py` is pure; `render.py` is the page**: the topological picture (columns, connectors,
