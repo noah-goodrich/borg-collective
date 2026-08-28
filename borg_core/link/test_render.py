@@ -839,7 +839,8 @@ class TestOverviewSummaryCut:
 # It does not -- `cmd_switch` pipes `cmd_ls --porcelain` into fzf, and that is a separate zsh
 # implementation in borg.zsh which never calls into Python. The picker's own defect is fixed there
 # and pinned by cli_contract.bats's "the picker feed stays one 5-field record per project through
-# tab, newline and CR". See `render.porcelain`'s docstring for the full retraction.
+# tab and newline" -- a title narrowed from "tab, newline and CR" because its counting oracle cannot
+# kill a CR-only mutant. See `render.porcelain`'s docstring for the full retraction.
 #
 # The character set is read off `lib/registry.zsh`'s `_borg_registry_write` -- `tr -d
 # '\000-\010\013\014\016-\037'` deletes 0x00-0x08, 0x0B, 0x0C and 0x0E-0x1F, so 0x09, 0x0A and 0x0D
