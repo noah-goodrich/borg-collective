@@ -3,8 +3,8 @@
 *Parent directive: 2026-08-10-briefing-fallback-and-summary-provenance*
 *Filed: 2026-08-27*
 
-**tl;dr** — `borg link --brief` never reaches `borg_core.link.cli`. It re-derives its own view from the registry, never
-sweeps, and never sees a manifest — so one verb answers the same question two ways. Point the narrative at the
+**tl;dr** — `borg link --brief` never reaches `borg_core.link.cli`. It re-derives its own view from the registry,
+never sweeps, and never sees a manifest — so one verb answers the same question two ways. Point the narrative at the
 document `borg link` already builds, and delete the second derivation rather than fixing it.
 
 ## Why this exists
@@ -70,8 +70,8 @@ provenance per node, so the LLM can be told what was observed versus what somebo
 
 ## Alternatives considered
 
-**Leave it; `borg help` declares the difference.** Rejected — that is the current state, and a declared inconsistency is
-still an inconsistency. AC1's whole subject is that one command has one answer.
+**Leave it; `borg help` declares the difference.** Rejected — that is the current state, and a declared
+inconsistency is still an inconsistency. AC1's whole subject is that one command has one answer.
 
 **Delete `--brief`.** Considered seriously, on the same evidence that retired `borg watch`: shell history shows zero
 typed `borg link --brief` invocations. Rejected for now because unlike `watch`, `--brief` has a live consumer path
@@ -84,9 +84,113 @@ which is the actual defect. Every field it reads is already on the document.
 
 ## Acceptance criteria
 
-- [ ] `borg link --brief` spawns the same sweep as `borg link` — asserted by subprocess count, not by reading code.
-- [ ] The narrative prompt is built from the document; no second registry walk survives in `_borg_print_briefing`.
-- [ ] When the narrative fails, the human document renders, prefixed by the existing `fallback_reason` line.
-- [ ] A bats case forces each `fallback_reason` branch and asserts the document renders under each.
-- [ ] `tests/briefing.bats`'s 12 cases still pass or are consciously rewritten — none silently deleted.
-- [ ] `PROJECT_PLAN.md`'s AC1 ticks, with the un-tick rationale replaced by the evidence that it now holds.
+- [x] `borg link --brief` spawns the same sweep as `borg link` — asserted by subprocess count, not by reading code.
+      `tests/link_sweep.bats`: `sweep: link --brief sweeps exactly as link does, counted rather than read` — one
+      `pullRequests(first:` and one `issueOrPullRequest(number:` on each arm, counted side by side on one fixture,
+      with `sweep: link --local --brief spawns zero gh subprocesses, and --brief without it sweeps` as the opt-down's
+      own paired control.
+- [x] The narrative prompt is built from the document; no second registry walk survives in `_borg_print_briefing`.
+      One `_borg_py borg_core.link.cli --json`, one `jq` projection. The `borg_registry_with_state` read, the 30-day
+      active/inactive split, the per-project `jq` loop, the `\x1f` `read`, both `_borg_relative_time` calls and the
+      checkpoint `find` are deleted. (`_borg_relative_time` itself survives — `_borg_do_switch`, `cmd_next` and
+      `cmd_tidy` still call it.)
+- [x] When the narrative fails, the human document renders, prefixed by the existing `fallback_reason` line.
+      From the SAME bytes, through a new `--render-document` seam in `borg_core/link/cli.py` — never a rebuild.
+      `borg_core/link/test_cli.py::test_render_document_prints_the_same_page_the_human_arm_would` pins the equality;
+      `::test_render_document_builds_nothing_of_its_own` pins that it reads no clock, no registry, no sweep and no
+      manifest, by making each of those explode on contact.
+- [x] A bats case forces each `fallback_reason` branch and asserts the document renders under each.
+      Four, one per branch, in `tests/link_sweep.bats`: timeout (rc 124 via a mocked `timeout`), not-logged-in
+      (exit 0 plus the string), non-zero exit (with its captured stderr still surfacing), and empty output.
+- [x] `tests/briefing.bats`'s pre-fold cases still pass or are consciously rewritten — none silently deleted.
+      Most are untouched; three are rewritten with the reason recorded in the file header (the inactive header, the
+      xtrace guard, the field-collapse case), one is kept with new provenance (the empty-registry hint), and the
+      remediation passes below add `--all` forwarding, the repository-scope prompt breadth, and both no-page rungs.
+      The xtrace case was rewritten TWICE — see that section.
+      **NOT RECORDED AS A COUNT, DELIBERATELY.** This line said "Now 15" and `PROJECT_PLAN.md` said "carries 15
+      cases"; both were invalidated by the very commit that added the third remediation case, and nothing failed.
+      Same failure mode as a `file:NNN` pin. Derive it with `grep -c '^@test' tests/briefing.bats` if you need it.
+- [x] `PROJECT_PLAN.md`'s AC1 ticks, with the un-tick rationale replaced by the evidence that it now holds.
+
+## Remediation pass (post-review, same branch)
+
+An independent review passed the fold with defects. Four were real and are fixed here; all four are recorded because
+the first is the directive's own failure class committed by the directive's own implementation.
+
+- **The projection reintroduced two truth levels.** It read the TOP-LEVEL `.directives`/`.assimilated`, which
+  `cli.py`'s `need_aggregate = mode == "json" or ...` always fills with the registry-WIDE aggregate, while
+  `render._scoped_rows` narrows both to `doc.focus[key]` in repository scope. Measured on the author's registry from
+  inside a repository: the prompt got `SCOPE: repository — noah`, `QUEUED: 141 open directives` and three
+  collective-wide plan titles, while the fallback page rendered from THE SAME BYTES said "nothing queued" and "nothing
+  shipped yet". Fixed by binding breadth ONCE in the jq
+  (`$breadth = if scope.kind == "repository" then focus else document`) — `render._scoped_rows` transcribed, not a
+  second rule. Pinned by `tests/briefing.bats`'s "in repository scope the prompt's QUEUED/SHIPPED match the page's,
+  not the registry's", which asserts on the captured `claude -p` argument and carries an orchestrator-scope control.
+- **A jq failure shipped an empty prompt and still paid for `claude -p`.** `2>/dev/null) || payload=""` discarded both
+  jq's stderr and its exit status, so a projection broken against a future document shape sent `DOCUMENT:` followed by
+  nothing and printed whatever the model invented, with NO reason line — `fallback_reason` was only ever set on
+  `claude` failures. An empty `payload` from a non-empty `doc` is now a fallback with its own reason, jq's captured
+  stderr appended, and the `claude -p` fork is skipped entirely.
+- **The empty-registry short circuit keyed off the wrong field.** `core.assemble` sets `total_projects` from the
+  UNFILTERED project map on purpose (the page must tell an empty registry from an all-archived one). The deleted
+  registry walk excluded archived entries, so an all-archived registry used to print the scan hint; keying on
+  `total_projects` stopped it firing and billed a narrative for a board with zero rows. It keys off
+  `(.order | length)` now — the list the projection actually walks.
+- **The xtrace case was decoration after its first rewrite.** Re-pointing it at the new locals changed nothing,
+  because bats never runs with `set -x`: deleting the guard produced no trace and the case stayed green. It now drives
+  borg under `zsh -x` with an empty `PS4` — the exact condition the guard's comment names — and the mutation is
+  verified (7 leaked trace lines with `set +x` removed).
+
+Two shape warts in `borg_core/link/cli.py`, also from the review: `_build_parser`'s docstring said "all four modes"
+directly above `--deep`, which the module docstring and `_mode` both insist is not one; and `mode = _mode(args)` ran
+before the `--render-document` branch, so `--json --render-document` picked the JSON die formatter and then printed
+the human page. The docstring now states the mode count as `_mode`'s return set, and the combination is REFUSED at the
+parser (exit 2, usage on stderr) rather than reconciled — refusing is the only answer that does not silently discard
+half of what the caller asked for, and `borg.zsh`'s one live caller passes `--render-document` alone.
+
+## Second remediation pass (round 4, same branch)
+
+A fourth review round found the previous round had fixed one of two identical rungs, and that the assertion certifying
+that fix could not see the thing it named.
+
+- **`_borg_print_briefing`'s BUILD rung was still `warn` + `return 0`.** Round 3 fixed the RENDER rung — reason on
+  stderr, non-zero out — and left its sibling, which fires when `_borg_py borg_core.link.cli --json` produces no
+  document at all. Reproduced with a `python3` stub exiting 9: `borg link --brief --local` printed "Could not build
+  the borg link document", the line survived `2>/dev/null` (so it was on fd1), and the command exited 0. That is
+  literally the state the same function's own `return` comment declares must never be reported as success. The two
+  rungs now behave identically: `warn ... >&2`, the child's captured stderr quoted in the reason, and the child's exit
+  status returned (1 when the child exited 0 having printed nothing). `cmd_init`'s deliberate `|| true` tolerance is
+  unchanged, and its comment now names both rungs.
+- **The `>&2` was unpinned, because bats `run` merges fd2 into `$output`.** The round-3 case asserted the channel in
+  its NAME and in three lines of borg.zsh reasoning, then read `$output` for every assertion. Deleting `>&2` left all
+  three suites at exit 0. Both rungs are now driven through a `_run_brief_separated` helper that redirects the two
+  streams to separate files and asserts on each — the reason IS on stderr and is NOT on stdout. Files rather than
+  `run --separate-stderr` so the pin does not depend on the bats version CI installs. Mutation verified both ways:
+  dropping either `>&2` turns the suite red (exit 1); restoring `return 0` on the build rung turns it red (exit 1).
+- **Two stale case counts, and the `--deep` line pin at four sites.** `PROJECT_PLAN.md` and this file both recorded
+  `tests/briefing.bats` as "15 cases" — invalidated by the very commit that added the third remediation case.
+  `CLAUDE.md` (twice), `borg_core/link/cli.py` and `borg_core/link/test_cli.py` all pinned the `--deep` caller at
+  `borg.zsh:3111`, which matched neither `main` nor this branch. Both are the same bug — a number that nothing
+  re-derives and nothing fails on. The counts are replaced by what the cases cover; the pins are replaced by the
+  anchor `_link_py_args=(--deep)`, which `grep` finds after any insertion.
+- **The `--deep` justification cited a loop that does not exist.** All four sites called the positional arm "the fzf
+  preview's arm ... re-executed on every cursor move". `cmd_switch`'s `fzf` call carries `--query`, `--prompt`,
+  `--header`, `--delimiter` and `--with-nth` and no `--preview` at all; `grep -- '--preview' borg.zsh` matches only
+  prose. Corrected where the pins were converted: the surviving justification — every `borg link <project>` a human
+  types, plus `drone link` — is stronger than the one it replaces. Other `borg.zsh:266`-as-fzf-preview references
+  elsewhere in the tree are untouched by this round and are filed rather than swept.
+
+## What this changed beyond the criteria, recorded rather than hidden
+
+- **`borg init` now pays for a sweep.** `cmd_init` calls `_borg_print_briefing` with no arguments, so the morning
+  briefing builds an ORCHESTRATOR-breadth document — measured ~2.1s here against ~0.1s for the registry read it
+  replaced. That is the intended trade for a briefing that is actually current, but it is a real cost change.
+  `tests/cli_contract.bats`'s `contract: init builds the briefing from the document and still hands off to claude`
+  covers the path with a non-empty registry; the pre-existing init case only ever hit the empty-registry short
+  circuit and could not have seen a regression here.
+- **`cmd_init`'s `_borg_orchestrator_context` is a THIRD independent registry walk** (its own `jq` sort, its own
+  top-3 checkpoint reads) and this directive did not scope it. It is the obvious next fold; filing it beats absorbing
+  it silently.
+- **`borg link --brief <project>` still renders the deep dive**, unchanged: the positional arm precedes the brief arm
+  in `_borg_link_dispatch`'s documented precedence. `--brief` reaches repository scope via cwd, as every other arm
+  does. Left as-is deliberately — moving the arm would change a shipped precedence for no gain here.
