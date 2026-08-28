@@ -225,9 +225,32 @@ def _src_badge(source: str) -> str:
 
 def _overview_summary_cut(summary: str) -> str:
     """The board's 50-char cut WITH a literal `...` appended only when the ORIGINAL length is
-    STRICTLY greater than 50 (an exactly-50-char summary gets none)."""
-    cut = summary[:50]
-    return f"{cut}..." if len(summary) > 50 else cut
+    STRICTLY greater than 50 (an exactly-50-char summary gets none).
+
+    EMBEDDED NEWLINES ARE FLATTENED TO SPACES HERE, BEFORE THE CUT (F1, second renderer). The board
+    is a fixed-width table -- `_overview_row` lays every column out with `:<{_COL_*}` padding -- and
+    a fixed-width table cannot survive a newline: a raw `\\n` inside the first 50 characters splits
+    one row into two and shears every column after it, exactly the way an over-long project name
+    would. `_summary_block` defends the same invariant for the deep dive; the board is the second
+    renderer and owns its own.
+
+    FLATTEN BEFORE CUTTING, NOT AFTER -- the same ordering `_summary_block` uses, pinned there by
+    test_render.py::TestSummaryBlock::test_summary_block_flattens_newlines_before_folding_not_after.
+    Stated honestly: TODAY the two orderings are behaviourally identical, because the replacement is
+    one character for one character, so `flat[:50]` and `summary[:50].replace(...)` are the same
+    string and `len()` is the same number either way. Before-cut is nonetheless the correct
+    placement, because it is the one that stays correct if the replacement ever stops being
+    one-for-one (a future `"\\n" -> " | "`, say): the 50-char budget and the `> 50` ellipsis test
+    must measure DISPLAYED characters, and only the before-cut ordering guarantees that without a
+    second edit here. What IS pinned by test is the displayed-character property itself --
+    TestOverviewSummaryCut::test_cut_boundary_and_ellipsis_measure_displayed_characters.
+
+    Because the replacement is one-for-one, both the cut and the ellipsis test are unchanged for
+    newline-free input and no golden moves.
+    """
+    flat = summary.replace("\n", " ")
+    cut = flat[:50]
+    return f"{cut}..." if len(flat) > 50 else cut
 
 
 def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str], mark: str = "") -> str:
