@@ -5,9 +5,14 @@ human entry point: a fixed SEVEN-SECTION SPINE whose `▸` headers are byte-iden
 where `scope` narrows the ROW SET of the four scope-dependent sections and never the board, never the
 section list and never the order. `porcelain(doc)` is deliberately outside "everywhere" and its
 LAYOUT is unchanged (one control-character flatten aside, see its docstring) -- it is not a renderer,
-it is the TSV feeding fzf's input list
-(borg.zsh:262 builds the picker input with `cmd_ls --porcelain`, borg.zsh:264-269 consumes it with
-`--delimiter '\\t' --with-nth 1,3,5`), and box drawing in that stream breaks `borg switch` outright.
+it is `borg link --porcelain`'s machine TSV, read BY FIELD, and box drawing in that stream would
+break any consumer that splits it.
+
+IT DOES NOT FEED `borg switch`. This paragraph used to say it was "the TSV feeding fzf's input list"
+and cite the picker; that wording predates the retraction in `porcelain`'s own docstring and is
+corrected here rather than left filed. `cmd_switch` in `borg.zsh` builds the picker's stdin from
+`cmd_ls --porcelain`, a SEPARATE zsh implementation that never enters this module. Read
+`porcelain`'s docstring before re-deriving this.
 
 `overview()` AND `deep()` ARE GONE. Their bodies survive, transcribed statement by statement, as
 `_board_section` and `_focus_section`; `_summary_block`, `_fold_s`, `_label`, `_overview_row` and
@@ -249,7 +254,8 @@ def porcelain(doc: dict) -> str:
     that earlier text attributed to this function -- the phantom fzf row, `cut -f1` handing prose to
     `_borg_do_switch` -- belongs to `cmd_ls --porcelain`, where it was live and where it is now fixed
     (the flatten and the `printf '%s' | jq` correction in `cmd_ls`, pinned by cli_contract.bats's
-    "the picker feed stays one 5-field record per project through tab, newline and CR").
+    "the picker feed stays one 5-field record per project through tab and newline" -- a title
+    narrowed from "tab, newline and CR" because its counting oracle cannot kill a CR-only mutant).
 
     THE TWO IMPLEMENTATIONS ALREADY DIVERGE, which is why the mix-up was not harmless: on an empty
     registry this function prints nothing while `cmd_ls --porcelain` prints a human "No projects
@@ -267,9 +273,12 @@ def porcelain(doc: dict) -> str:
     was in `cmd_ls --porcelain`. Flattened BEFORE the 80-char cut, the same ordering the other two
     call sites use and for the same reason: the budget must measure the characters the field carries.
 
-    THE MODULE DOCSTRING ABOVE STILL CARRIES THE OLDER WORDING ("it is the TSV feeding fzf's input
-    list"). It predates the commit being retracted here and is out of this change's scope; it is
-    filed, not fixed, so that the correction lands in one deliberate edit rather than by drive-by.
+    THE RETRACTION NOW COVERS THE WHOLE FILE. It was previously made here and in `_flatten_summary`
+    only, which left the same false claim standing in TWO more docstrings -- the module docstring
+    ("it is the TSV feeding fzf's input list", explicitly filed rather than fixed) and
+    `_overview_summary_cut`'s ("`porcelain` for the picker", which the retracting commit itself
+    ADDED). Both are corrected. The enumeration that found them, and the one that must be re-run
+    before anyone claims the file is clean, is a grep of this file for `picker` and `switch`.
     """
     order = doc.get("order") or []
     projects = doc.get("projects") or {}
@@ -313,8 +322,10 @@ def _overview_summary_cut(summary: str) -> str:
     renderer). The board is a fixed-width table -- `_overview_row` lays every column out with
     `:<{_COL_*}` padding -- and a fixed-width table cannot survive one: a raw `\\n` or `\\r` inside
     the first 50 characters splits one row into two and shears every column after it, exactly the way
-    an over-long project name would. `_summary_block` defends the same invariant for the deep dive
-    and `porcelain` for the picker; all three call `_flatten_summary`, which enumerates the characters.
+    an over-long project name would. `_summary_block` defends the same invariant for IN FOCUS's fold
+    and `porcelain` for `borg link --porcelain`'s TSV -- NOT for `borg switch`'s picker, which is fed
+    by `cmd_ls --porcelain` in `borg.zsh` and never enters this module; see `porcelain`'s own
+    docstring for that retraction. All three call `_flatten_summary`, which enumerates the characters.
 
     FLATTEN BEFORE CUTTING, NOT AFTER -- the same ordering `_summary_block` uses, pinned there by
     test_render.py::TestSummaryBlock::test_summary_block_flattens_newlines_before_folding_not_after.

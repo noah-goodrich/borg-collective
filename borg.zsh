@@ -330,11 +330,32 @@ _borg_do_switch() {
 
     local entry
     entry=$(borg_registry_get_with_state "$project")
+    # `printf '%s' "$entry" | jq`, NEVER `echo "$entry" | jq` — the SAME defect cmd_ls carried, in
+    # the function cmd_switch hands its `cut -f1` selection to. zsh's `echo` expands backslash
+    # escapes, and jq stores a summary's real newline as the two characters `\` `n`; `echo` turns
+    # that back into a raw 0x0A inside a JSON string literal and jq refuses the document. Under
+    # borg.zsh's `set -e` this function then dies before it switches anything.
+    #
+    # MEASURED, not assumed, on one sandbox registry (XDG_CONFIG_HOME redirected) whose alpha entry
+    # carries `"summary": "top\nbottom"` and a `tmux_window`, with tmux stubbed via BORG_PATH_PREFIX:
+    #   zsh -c "set -- help; source borg.zsh; _borg_do_switch alpha"
+    # BEFORE: exit 5, NOTHING on stdout, `jq: parse error: Invalid string: control characters from
+    # U+0000 through U+001F must be escaped` on stderr — no brief, no switch.
+    # AFTER: exit 0, the brief prints (the summary's raw newline simply wraps it onto two lines,
+    # which the brief can carry — unlike a TSV record), and the window is selected. So fixing only
+    # cmd_ls shipped half a fix: a working picker whose selection crashed the switch.
+    #
+    # THE FALLBACK ARM IS STILL BROKEN AND THAT IS DELIBERATE. Drop the `tmux_window` from the same
+    # registry and this function now survives all four feeds below and reaches `warn` + `cmd_status`
+    # — which carries the identical `echo ... | jq` and dies there, exit 5. The same spelling also
+    # survives in cmd_scan, cmd_next, cmd_tidy, _borg_print_briefing, _borg_orchestrator_context and
+    # cmd_cortex_resume, and in lib/desktop.zsh's borg_desktop_scan. None of those are touched here
+    # — this round's scope is the picker's immediate consumer — and they are filed, not fixed.
     local tmux_window source summary last
-    tmux_window=$(echo "$entry" | jq -r '.tmux_window // ""')
-    source=$(echo "$entry" | jq -r '.source // "cli"')
-    summary=$(echo "$entry" | jq -r '.summary // ""')
-    last=$(echo "$entry" | jq -r '.last_activity // ""')
+    tmux_window=$(printf '%s' "$entry" | jq -r '.tmux_window // ""')
+    source=$(printf '%s' "$entry" | jq -r '.source // "cli"')
+    summary=$(printf '%s' "$entry" | jq -r '.summary // ""')
+    last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
 
     # If no registered window, try project name as window name
     if [[ -z "$tmux_window" || "$tmux_window" == "null" ]]; then
