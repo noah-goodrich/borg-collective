@@ -69,7 +69,9 @@ borg / borg next         What needs attention? Switch to it.
 borg claude              Launch/resume orchestrator Claude session
 borg link [project]      ONE document, seven sections, always the same spine (AC2)
                            Scope widens or narrows it; it is never a different page
-                           --brief   LLM narrative over the SAME document, same sweep (AC1)
+                             — except `--brief`, the one invocation that prints prose
+                           --brief   Same document, same sweep, PROSE not the seven
+                                     sections (AC1). Falls back to the real page.
                            --refresh Regenerate summaries
                            --all     Include archived projects
                            --local   Opt down from the network sweep (hot loops only)
@@ -306,13 +308,26 @@ docs/
   narrative fails pipes **those same bytes** back through `borg_core.link.cli --render-document`,
   a non-mode seam gated in `main()` above `_mode`. One sweep, one `generated_at`, two consumers. It
   used to be 177 lines of a second registry walk that never reached Python at all, which is why AC1
-  stayed unticked with both verify clauses passing. Three rules follow. (1) **Never re-derive here.**
+  stayed unticked with both verify clauses passing.
+  **It IS still a different page, and the AC2 line above is qualified rather than rescued.** The
+  narrative path prints prose: no cube, none of the seven `▸` sections. What the fold bought is that
+  the prose is now a *rendering of the same document* rather than of a second board, and that the
+  FALLBACK is the real page byte for byte. "Never a different page" holds for every invocation of
+  `borg link` except `--brief`'s success path; do not read the AC2 line as covering it.
+  Four rules follow. (1) **Never re-derive here.**
   A `borg_registry_with_state` call inside that function undoes the fold. (2) **Never rebuild for the
   fallback.** A second `--json` call would re-read the clock and re-sweep, so the page could disagree
   with the prompt it fell back from — two truth levels inside one invocation. (3) **The `claude -p`
   call stays in zsh.** `borg_core/proc.py` DEVNULLs stderr and returns `None` (not rc 124) on
   timeout, so moving it silently deletes the reason line's captured stderr and the timeout branch,
-  both of which `tests/briefing.bats` pins. Sweep parity is asserted by **subprocess count** in
+  both of which `tests/briefing.bats` pins. (4) **Every scope-dependent list on the wire goes through
+  the projection's `$breadth` binding**, which transcribes `render._scoped_rows`: `--json` always
+  carries the registry-WIDE `directives`/`assimilated` (`cli.py`'s `need_aggregate`), and the human
+  page narrows them to `focus` in repository scope — so a projection reading the top level
+  unconditionally puts a different QUEUED count in the prompt than on the page it falls back to.
+  That shipped once, measured at 141 aggregate directives against 0 focused, and is pinned by
+  `tests/briefing.bats`'s "in repository scope the prompt's QUEUED/SHIPPED match the page's".
+  Sweep parity is asserted by **subprocess count** in
   `tests/link_sweep.bats`, never by reading the arm.
 - **The `borg link` parity harness's `render` leg was retired 2026-08-27 (AC2/S4)**:
   `bin/link-parity-harness render` byte-compared the current tree against the last zsh renderer at

@@ -11,16 +11,19 @@
 #     counterpart in `render.SECTIONS` and are deliberately retired. The case now asserts the same
 #     underlying claim — a long-dormant project is still ON the page, with its relative time — which
 #     is the property the header existed to serve.
-#   - "no debug variable lines in output" — REWRITTEN. It named locals (`proj_status=`, `rel_time='`)
-#     that no longer exist, so it would have gone vacuously green. Re-pointed at the locals the
-#     rewritten function actually has, and the `setopt LOCAL_OPTIONS; set +x` it guards is still
-#     there.
+#   - "no debug variable lines in output" — REWRITTEN, THEN REWRITTEN AGAIN as "the xtrace guard
+#     keeps trace lines out of the briefing". The first rewrite re-pointed the names and left the
+#     case just as vacuous: bats never runs with xtrace on, so deleting the guard changed nothing.
+#     It now drives borg under `zsh -x` with an empty PS4 and the mutation is verified. See the
+#     case's own comment.
 #   - "empty summary + set waiting_reason never displays waiting_reason as the summary" — REWRITTEN.
 #     The \x1f field-shift defect it guarded is gone with the `read` loop (JSON cannot field-shift),
 #     but the SEMANTIC claim still has teeth: `waiting_reason` is on the wire and the board row must
 #     never print it as a summary. Re-pointed at the document.
 #   - "empty registry shows scan hint" — SAME ASSERTION, NEW ORIGIN. The hint now comes from the
-#     document's own `total_projects == 0` short circuit rather than a registry read.
+#     document's own `(.order | length) == 0` short circuit rather than a registry read. (It keyed
+#     off `total_projects` on the first pass, which is the UNFILTERED count and silently stopped
+#     firing for an all-archived registry; a paired case below covers that half.)
 # The `fallback_reason` ladder's four branches, and the document rendering under each, are pinned in
 # tests/link_sweep.bats where a sweep genuinely runs — see its "fallback" block. Asserting the
 # subprocess count here would be vacuous: setup_temp_dirs neutralizes both network seams.
@@ -101,21 +104,43 @@ EOF
     [[ "$output" =~ [0-9]{4,}d\ ago ]] || false
 }
 
-# REWRITTEN 2026-08-27. The `setopt LOCAL_OPTIONS; set +x` at the top of _borg_print_briefing is
-# still the subject; only the names changed. The old case named `proj_status=` / `rel_time='` /
-# `last_activity=`, which the fold deleted along with the per-project `read` loop — leaving a case
-# that could never fail again. These are the locals the rewritten function actually assigns, plus
-# the array it builds the Python argv in.
-@test "briefing: no debug variable lines in output" {
-    run "$BORG_CMD" link --brief
-    [ "$status" -eq 0 ]
-    # Should not contain shell variable assignment traces
-    [[ "$output" != *"entry='"* ]] || false
-    [[ "$output" != *"doc="* ]] || false
-    [[ "$output" != *"payload="* ]] || false
-    [[ "$output" != *"total="* ]] || false
-    [[ "$output" != *"_brief_py_args="* ]] || false
-    [[ "$output" != *"briefing_prompt="* ]] || false
+# REWRITTEN TWICE, AND THE FIRST REWRITE WAS STILL DECORATION. The subject is the
+# `setopt LOCAL_OPTIONS; set +x` at the top of _borg_print_briefing. The original case named locals
+# (`proj_status=`, `rel_time='`) that the 2026-08-27 fold deleted, so it could never fail again; the
+# first rewrite re-pointed it at the NEW locals but kept invoking borg the ordinary way — and bats
+# never runs with xtrace on, so deleting `set +x` produced no trace at all and the case stayed green
+# either way. New names, same vacuum.
+#
+# THE FIX IS THE INVOCATION, NOT THE NAMES: drive borg under `zsh -x` with an EMPTY PS4, which is
+# exactly the condition the guard's own comment describes ("trace output pollutes the briefing when
+# PS4 is empty" — with the default `+%N:%i> ` prefix a reader can at least tell trace from output).
+# `setopt LOCAL_OPTIONS` scopes the suppression to this function, so the rest of the script still
+# traces and the assertions below are specifically about the briefing's own locals.
+#
+# MUTATION THAT TURNS THIS RED, VERIFIED: delete the `set +x` line. Measured 7 matching trace lines
+# on the author's machine — `doc=`, `rows=`, `payload=`, `_brief_py_args=` all appear verbatim at
+# column 0.
+@test "briefing: the xtrace guard keeps trace lines out of the briefing" {
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "Focus: my-active-project — waiting on design review"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    local trace="${BATS_TEST_TMPDIR}/xtrace.log"
+    run env PS4= zsh -x "$BORG_CMD" link --brief --local
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    # The narrative really was reached, so the whole function body ran under the guard rather than
+    # returning early somewhere above it.
+    [[ "$output" == *"Focus: my-active-project"* ]] || false
+    printf '%s\n' "$output" > "$trace"
+
+    # ANCHORED AT COLUMN 0, via grep rather than a `[[ ]]` glob: with PS4 empty a trace line IS the
+    # bare assignment, while these same names appear mid-line inside the jq program text and the
+    # prompt, both of which are legitimately on stdout. `grep` exits 1 for "no lines selected", which
+    # is the passing case; a match exits 0 and prints the offending lines into the failure output.
+    run grep -nE '^(doc|payload|rows|_brief_py_args|briefing_prompt)=' "$trace"
+    [ "$status" -eq 1 ] || { printf 'xtrace leaked:\n%s\n' "$output" >&2; false; }
 }
 
 # ── Error message filtering ────────────────────────────────────────────────────
@@ -251,4 +276,175 @@ EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"borg scan"* ]] || false
+}
+
+# AN ALL-ARCHIVED REGISTRY IS THE OTHER HALF OF THE SAME SHORT CIRCUIT, and it is the half that
+# `total_projects` got wrong. `core.assemble` sets `total_projects` from the UNFILTERED project map
+# deliberately, so an all-archived registry reports `total_projects: 1` with `order: []` — the short
+# circuit did not fire, and `claude -p` was billed to narrate a board with no rows on it. The deleted
+# registry walk excluded archived entries from BOTH its lists, so this printed the scan hint before
+# the fold. `.order` is the list actually projected into the prompt, so it is the count that answers
+# the question the short circuit is asking.
+#
+# MUTATION THAT TURNS THIS RED: key the short circuit off `.total_projects // 0` again.
+@test "briefing: an all-archived registry short-circuits without an LLM call" {
+    export CLAUDE_TRACE="${BATS_TEST_TMPDIR}/claude-trace.log"
+    : > "$CLAUDE_TRACE"
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "called" >> "$CLAUDE_TRACE"
+echo "NARRATIVE-THAT-SHOULD-NOT-HAPPEN"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    cat > "$BORG_REGISTRY" <<'EOF'
+{
+  "projects": {
+    "retired-project": {
+      "path": "/tmp/retired-project",
+      "status": "archived",
+      "source": "cli",
+      "last_activity": "2020-01-01T00:00:00Z",
+      "summary": "Done with this one."
+    }
+  }
+}
+EOF
+
+    run "$BORG_CMD" link --brief
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    [[ "$output" == *"borg scan"* ]] || false
+    [[ "$output" != *"NARRATIVE-THAT-SHOULD-NOT-HAPPEN"* ]] || false
+    [ ! -s "$CLAUDE_TRACE" ]
+}
+
+# ── The prompt's breadth is the page's breadth ────────────────────────────────
+#
+# THE DEFECT THIS PINS, MEASURED BEFORE IT WAS FIXED: in repository scope the projection read the
+# TOP-LEVEL `.directives` / `.assimilated`, which `cli.py`'s `need_aggregate = mode == "json" or ...`
+# always fills with the registry-WIDE aggregate — while `render._scoped_rows` narrows QUEUED and
+# SHIPPED to `doc.focus[key]` for the same scope. On the author's real registry that was
+# "QUEUED: 141 open directives" plus three collective-wide plan titles in the prompt, against
+# "nothing queued" / "nothing shipped yet" on the fallback page rendered from THE SAME BYTES. One
+# invocation, two answers — which is the failure class the whole fold exists to remove.
+#
+# ASSERTED ON THE PROMPT, not on prose: the mock captures `claude -p`'s argument verbatim, so the
+# case reads the exact bytes the model would have been handed.
+#
+# MUTATION THAT TURNS THIS RED: change `$breadth.directives` / `$breadth.assimilated` back to
+# `$d.directives` / `$d.assimilated` in _borg_print_briefing's jq.
+@test "briefing: in repository scope the prompt's QUEUED/SHIPPED match the page's, not the registry's" {
+    local ws="${BATS_TEST_TMPDIR}/ws"
+    mkdir -p "$ws/alpha/docs/plans/directives" "$ws/alpha/docs/plans/assimilated" "$ws/beta"
+    echo "# Alpha's very own directive" > "$ws/alpha/docs/plans/directives/2026-08-01-alpha-only.md"
+    echo "# Alpha's very own shipped plan" > "$ws/alpha/docs/plans/assimilated/2026-07-01-alpha-shipped.md"
+
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "alpha": {
+      "path": "$ws/alpha",
+      "status": "idle",
+      "source": "cli",
+      "last_activity": "2026-08-01T00:00:00Z",
+      "summary": "Alpha."
+    },
+    "beta": {
+      "path": "$ws/beta",
+      "status": "idle",
+      "source": "cli",
+      "last_activity": "2026-08-02T00:00:00Z",
+      "summary": "Beta."
+    }
+  }
+}
+EOF
+
+    export PROMPT_FILE="${BATS_TEST_TMPDIR}/prompt.txt"
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "-p" ] && printf '%s' "$2" > "$PROMPT_FILE"
+echo "NARRATIVE"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    run bash -c "cd '$ws/beta' && '$BORG_CMD' link --brief --local"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+
+    run cat "$PROMPT_FILE"
+    [ "$status" -eq 0 ]
+    # The scope really is beta's — without this the QUEUED assertion below could pass for the wrong
+    # reason (an orchestrator-scope document that happens to have found no directives at all).
+    [[ "$output" == *"SCOPE: repository — beta"* ]] || false
+    [[ "$output" == *"QUEUED: 0 open directives"* ]] || false
+    [[ "$output" != *"SHIPPED RECENTLY:"* ]] || false
+    [[ "$output" != *"alpha-only"* ]] || false
+    [[ "$output" != *"alpha-shipped"* ]] || false
+
+    # THE CONTROL. The same registry, one directory up: orchestrator scope must still carry the
+    # aggregate, or the assertions above would be satisfied by a projection that dropped the two
+    # lists entirely.
+    run bash -c "cd '$ws' && '$BORG_CMD' link --brief --local"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$PROMPT_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SCOPE: orchestrator"* ]] || false
+    [[ "$output" == *"QUEUED: 1 open directives"* ]] || false
+    [[ "$output" == *"SHIPPED RECENTLY:"* ]] || false
+}
+
+# ── A broken projection is a fallback, never an empty prompt ──────────────────
+#
+# `payload=$(... | jq -r '...' 2>/dev/null) || payload=""` discarded jq's stderr AND its exit status,
+# so a projection that broke against a future document shape shipped a prompt reading `DOCUMENT:`
+# followed by nothing. The model then invented a briefing from an empty board and it printed with NO
+# reason line, because `fallback_reason` was only ever set on `claude` failures — a confident
+# narrative with no input, which is precisely the shape this directive exists to make impossible.
+#
+# THE MOCK IS A PASS-THROUGH, failing ONLY the projection. borg.zsh runs jq many times per
+# invocation (the `.order` short circuit immediately above it, for one), so hiding jq outright would
+# take the empty-registry branch and never reach the code under test.
+#
+# MUTATION THAT TURNS THIS RED: delete the `if [[ -z "$payload" ]]` block that sets
+# `fallback_reason` (restoring `2>/dev/null`), which lets the empty prompt reach `claude -p`.
+@test "briefing: a failed projection falls back to the document and never pays for claude" {
+    local real_jq
+    real_jq=$(command -v jq)
+    [ -n "$real_jq" ]
+
+    export CLAUDE_TRACE="${BATS_TEST_TMPDIR}/claude-trace.log"
+    : > "$CLAUDE_TRACE"
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "called" >> "$CLAUDE_TRACE"
+echo "NARRATIVE-FROM-AN-EMPTY-BOARD"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    cat > "$MOCK_BIN/jq" <<EOF
+#!/usr/bin/env bash
+for a in "\$@"; do
+    case "\$a" in
+        *"SCOPE: "*)
+            echo "jq: error: MOCKED-PROJECTION-FAILURE" >&2
+            exit 5
+            ;;
+    esac
+done
+exec "$real_jq" "\$@"
+EOF
+    chmod +x "$MOCK_BIN/jq"
+
+    run "$BORG_CMD" link --brief --local
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    [[ "$output" == *"narrative unavailable"* ]] || false
+    [[ "$output" == *"the document projection produced nothing"* ]] || false
+    # jq's own stderr reaches the reason line, the same contract the `claude -p exited N` branch has.
+    [[ "$output" == *"MOCKED-PROJECTION-FAILURE"* ]] || false
+    # The real page renders under it, from the document that was built before the projection ran.
+    [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" == *"my-active-project"* ]] || false
+    # And nothing was billed for a briefing with no input.
+    [[ "$output" != *"NARRATIVE-FROM-AN-EMPTY-BOARD"* ]] || false
+    [ ! -s "$CLAUDE_TRACE" ]
 }

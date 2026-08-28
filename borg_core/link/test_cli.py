@@ -408,6 +408,30 @@ def test_render_document_dies_clean_on_malformed_stdin(isolated_env, capsys, mon
     assert "Traceback" not in captured.err
 
 
+@pytest.mark.parametrize("mode_flag", ["--json", "--porcelain"])
+def test_render_document_refuses_to_be_combined_with_a_mode(isolated_env, capsys, monkeypatch, mode_flag):
+    """`--render-document` is not a mode, so pairing it with one is refused rather than reconciled.
+
+    IT USED TO BE ANSWERED BY IGNORING HALF OF IT. `mode = _mode(args)` runs before the
+    `args.render_document` branch, so `--json --render-document` selected `_die_json` as the failure
+    formatter and then printed the human ANSI page on success -- a shape wart rather than a live bug
+    (borg.zsh's one caller passes `--render-document` alone), but the kind that becomes a bug the
+    first time somebody adds a second caller.
+
+    ARGPARSE'S OWN ERROR PATH, exit 2 with usage on stderr, NOT a `_die_*` exit 1: this is a malformed
+    invocation, not a failed one, and it must stay distinguishable from a corrupt document. Zero bytes
+    on stdout either way.
+    """
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"version": 2}'))
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main([mode_flag, "--render-document"])
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "--render-document is not a mode" in captured.err
+
+
 def test_repository_scope_calls_no_aggregate_collector_on_the_human_path(isolated_env, capsys, monkeypatch):
     # C1. The two aggregate collectors are a directory-glob-plus-markdown-read pass over EVERY
     # registered project, and both hot loops (drone.zsh's per-tmux-window status table, borg.zsh's

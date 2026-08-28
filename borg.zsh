@@ -1010,7 +1010,8 @@ _borg_print_briefing() {
     setopt LOCAL_OPTIONS
     set +x
 
-    local doc payload total briefing_prompt briefing
+    local doc payload rows briefing_prompt briefing
+    local fallback_reason=""
     typeset -a _brief_py_args
     _brief_py_args=(--json)
     (( ${1:-0} )) && _brief_py_args+=(--all)
@@ -1027,11 +1028,21 @@ _borg_print_briefing() {
         return 0
     fi
 
-    # The empty-registry short circuit, keyed off the DOCUMENT's own count rather than a second
-    # registry read. Kept rather than folded away because it is the one case where there is nothing
-    # for a narrative to say, and paying `claude -p` to say it is pure waste.
-    total=$(printf '%s' "$doc" | jq -r '.total_projects // 0' 2>/dev/null) || total=0
-    if [[ -z "$total" || "$total" == "0" || "$total" == "null" ]]; then
+    # The nothing-to-say short circuit, keyed off the DOCUMENT rather than a second registry read.
+    # Kept rather than folded away because it is the one case where there is nothing for a narrative
+    # to say, and paying `claude -p` to say it is pure waste.
+    #
+    # `.order`, NOT `.total_projects`, AND THE DIFFERENCE IS A REAL REGISTRY STATE. `core.assemble`
+    # sets `total_projects` from the UNFILTERED project map ON PURPOSE (see its docstring: the page
+    # must distinguish an empty registry from an all-archived one, which both emit `order: []`).
+    # `.order` is the post-archived-filter list, and it is EXACTLY the list this function projects
+    # into the prompt below — so it is the only count that answers "is there anything to narrate".
+    # The deleted registry walk excluded archived entries too, so keying on `total_projects` silently
+    # changed behaviour for an all-archived registry: the short circuit stopped firing and the
+    # narrative paid for `claude -p` to describe a board with zero rows on it. `--all` puts archived
+    # rows back in `.order`, so it opts back into a narrative, which is what asking for them means.
+    rows=$(printf '%s' "$doc" | jq -r '(.order // []) | length' 2>/dev/null) || rows=0
+    if [[ -z "$rows" || "$rows" == "0" || "$rows" == "null" ]]; then
         info "No projects in registry. Run: borg scan"
         return 0
     fi
@@ -1053,8 +1064,27 @@ _borg_print_briefing() {
     # SKILL.md edits, and re-reading checkpoints here would reinstate the second derivation this
     # function just lost. The grid's per-node provenance is the replacement input, which is exactly
     # the trade the 2026-08-27 directive argues for.
+    #
+    # `$breadth` IS render._scoped_rows, TRANSCRIBED — NOT A SECOND RULE. QUEUED and SHIPPED are the
+    # only two scope-DEPENDENT lists on the wire, and `--json` always carries the registry-wide
+    # aggregate regardless of scope (cli.py's `need_aggregate = mode == "json" or ...`, deliberately,
+    # so skills/borg-link/SKILL.md's bare `--json | jq '.directives'` answers for the collective from
+    # inside any repository). The HUMAN page narrows them at render time instead:
+    # `render._scoped_rows` reads `doc.focus[key]` when `scope.kind == "repository"`. A projection
+    # that read the top-level aggregate unconditionally handed the prompt "QUEUED: 141 open
+    # directives" while the fallback page rendered from THOSE SAME BYTES said "nothing queued" —
+    # measured on the author's registry, 141/3 aggregate against 0/0 focused. One invocation, two
+    # answers: the exact failure class the fold exists to remove, reintroduced by the fold itself.
+    # Bind the breadth ONCE, here, and read every scope-dependent list off it; if a third such list
+    # ever lands on the wire, it goes through `$breadth` too rather than growing a rule of its own.
+    #
+    # jq's STDERR IS CAPTURED, NOT DISCARDED — see the empty-payload branch below for why. No
+    # explicit truncation of the file: `2>` on the command substitution opens it O_TRUNC, exactly as
+    # the `claude` call's own stderr capture does further down.
+    local jq_stderr_file="$BORG_DIR/briefing-projection-stderr.log"
     payload=$(printf '%s' "$doc" | jq -r '
         . as $d
+        | (if ($d.scope.kind // "") == "repository" then ($d.focus // {}) else $d end) as $breadth
         | [
             "SCOPE: \($d.scope.kind)"
               + (if (($d.scope.repository // "") | length) > 0 then " — \($d.scope.repository)" else "" end),
@@ -1072,9 +1102,9 @@ _borg_print_briefing() {
              then ["SWEEP WARNINGS — never describe a degraded sweep as a clean one:"]
                   + ($d.grid.warnings | map("  " + .))
              else [] end)
-          + ["QUEUED: \(($d.directives // []) | length) open directives"]
-          + (if (($d.assimilated // []) | length) > 0
-             then ["SHIPPED RECENTLY:"] + ($d.assimilated | map("  \(.title // .slug)"))
+          + ["QUEUED: \(($breadth.directives // []) | length) open directives"]
+          + (if (($breadth.assimilated // []) | length) > 0
+             then ["SHIPPED RECENTLY:"] + ($breadth.assimilated | map("  \(.title // .slug)"))
              else [] end)
           + ["", "PROJECTS (already in priority order — most urgent first; do not re-sort):"]
           + ($d.order | map(. as $n | $d.projects[$n] as $p |
@@ -1108,7 +1138,23 @@ _borg_print_briefing() {
                    "--- end checkpoint ---", ""]
              else [] end)
           | join("\n")
-    ' 2>/dev/null) || payload=""
+    ' 2>"$jq_stderr_file") || payload=""
+    local jq_stderr=""
+    [[ -s "$jq_stderr_file" ]] && jq_stderr=$(<"$jq_stderr_file")
+
+    # AN EMPTY PROJECTION IS A FALLBACK, NEVER A PROMPT. `doc` is non-empty and carries at least one
+    # board row by the short circuit above, so a `payload` of zero bytes can only mean the projection
+    # broke — a jq that is not installed, or a `$d.grid`/`$d.scope` shape the document no longer has.
+    # Shipping it anyway sent `claude -p` the literal string "DOCUMENT:" followed by nothing, and the
+    # model answered from an empty board: a confident narrative with no input, printed with NO reason
+    # line, because `fallback_reason` was only ever set on `claude` failures. Fail to the real page
+    # instead, and name the cause the same way every other branch of the ladder does — jq's own
+    # stderr, captured for exactly this, rather than the `2>/dev/null` that used to discard it
+    # alongside the exit status.
+    if [[ -z "$payload" ]]; then
+        fallback_reason="the document projection produced nothing"
+        [[ -n "$jq_stderr" ]] && fallback_reason+=": ${jq_stderr}"
+    fi
 
     IFS= read -r -d '' briefing_prompt <<EOF || true
 Generate a morning briefing for a developer. Output plain text for a terminal — no markdown, no headers, no bullet symbols.
@@ -1134,35 +1180,41 @@ $payload
 EOF
 
     echo ""
-    info "Building morning briefing..."
 
-    # Capture stderr to a file under $BORG_DIR instead of /dev/null (was silent — see
-    # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
-    # path being taken with NO indication of why is the defect this whole function exists to fix.
-    local claude_rc=0
-    local claude_stderr_file="$BORG_DIR/briefing-stderr.log"
-    briefing=$(_borg_timeout 20 claude -p "$briefing_prompt" \
-        --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>"$claude_stderr_file") \
-        || claude_rc=$?
-    local claude_stderr=""
-    [[ -s "$claude_stderr_file" ]] && claude_stderr=$(<"$claude_stderr_file")
+    # THE WHOLE NARRATIVE HALF IS SKIPPED WHEN THERE IS NOTHING TO NARRATE FROM. A projection failure
+    # is already a decided fallback; forking `claude -p` anyway would bill for a briefing built on an
+    # empty DOCUMENT block and then throw the answer away — or worse, print it.
+    briefing=""
+    if [[ -z "$fallback_reason" ]]; then
+        info "Building morning briefing..."
 
-    # Provenance: distinguish WHY the fallback fired, at minimum timeout / not-logged-in / any
-    # other non-zero exit. `fallback_reason` is empty iff the narrative call actually succeeded.
-    local fallback_reason=""
-    if [[ $claude_rc -eq 124 ]]; then
-        fallback_reason="claude -p timed out after 20s"
-        briefing=""
-    elif [[ "$briefing" == *"Not logged in"* ]]; then
-        # claude exits 0 on auth failure — the string match is the only signal.
-        fallback_reason="claude not logged in (headless CLI has no usable credentials on this machine)"
-        briefing=""
-    elif [[ $claude_rc -ne 0 ]]; then
-        fallback_reason="claude -p exited $claude_rc"
-        [[ -n "$claude_stderr" ]] && fallback_reason+=": ${claude_stderr}"
-        briefing=""
-    elif [[ -z "$briefing" ]]; then
-        fallback_reason="claude -p returned empty output"
+        # Capture stderr to a file under $BORG_DIR instead of /dev/null (was silent — see
+        # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
+        # path being taken with NO indication of why is the defect this whole function exists to fix.
+        local claude_rc=0
+        local claude_stderr_file="$BORG_DIR/briefing-stderr.log"
+        briefing=$(_borg_timeout 20 claude -p "$briefing_prompt" \
+            --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>"$claude_stderr_file") \
+            || claude_rc=$?
+        local claude_stderr=""
+        [[ -s "$claude_stderr_file" ]] && claude_stderr=$(<"$claude_stderr_file")
+
+        # Provenance: distinguish WHY the fallback fired, at minimum timeout / not-logged-in / any
+        # other non-zero exit. `fallback_reason` is empty iff the narrative call actually succeeded.
+        if [[ $claude_rc -eq 124 ]]; then
+            fallback_reason="claude -p timed out after 20s"
+            briefing=""
+        elif [[ "$briefing" == *"Not logged in"* ]]; then
+            # claude exits 0 on auth failure — the string match is the only signal.
+            fallback_reason="claude not logged in (headless CLI has no usable credentials on this machine)"
+            briefing=""
+        elif [[ $claude_rc -ne 0 ]]; then
+            fallback_reason="claude -p exited $claude_rc"
+            [[ -n "$claude_stderr" ]] && fallback_reason+=": ${claude_stderr}"
+            briefing=""
+        elif [[ -z "$briefing" ]]; then
+            fallback_reason="claude -p returned empty output"
+        fi
     fi
 
     if [[ -n "$briefing" ]]; then
@@ -2601,7 +2653,7 @@ cmd_help() {
     claude              Resume orchestrator session (continue most recent)
     link [project]      Overview (no arg) or deep dive (with project)
                           --local   Skip the source sweep — registry + manifests only, no network
-                          --brief   LLM narrative over the same document, same sweep
+                          --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
                           --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
