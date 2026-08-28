@@ -104,7 +104,9 @@ def test_prereq_orders_carries_the_exact_four_codepoints():
     assert "" in core.PREREQ_ORDERS
 
 
-def test_gate_kinds_is_closed_to_two_members():
+def test_gate_kinds_declares_exactly_two_members():
+    # DECLARED, not enforced: the validator no longer closes `gate.kind` to this set. It is the
+    # vocabulary `render._GATE_ROUTING` must never fall behind, asserted over there.
     assert core.GATE_KINDS == {"decision", "verification"}
 
 
@@ -138,7 +140,10 @@ def test_missing_rows_is_reported_and_stops_further_checks():
 
 def test_every_offending_row_is_reported_in_one_pass():
     # The whole point of returning a list: a manifest with three problems is fixed in one edit.
-    errors = core.validate(_manifest([_row("1", ""), {"ref": "o/r#2"}, _row("3", "o/r#3", gate={"kind": "nope"})]))
+    # Row 2's gate is EMPTY, not mistyped: an unrecognized `kind` is no longer a validation error at
+    # all (see test_an_unrecognized_gate_kind_is_the_routers_problem_not_the_validators), so a typo'd
+    # one here would have quietly stopped exercising the third defect.
+    errors = core.validate(_manifest([_row("1", ""), {"ref": "o/r#2"}, _row("3", "o/r#3", gate={})]))
     assert len(errors) >= 4
     assert any("rows[0]" in e for e in errors)
     assert any("rows[1]" in e and "order" in e for e in errors)
@@ -150,10 +155,30 @@ def test_a_duplicate_ref_is_rejected_and_names_the_earlier_index():
     assert any("duplicate ref o/r#1" in e and "rows[0]" in e for e in errors)
 
 
-def test_gate_kind_is_closed_to_decision_and_verification():
+def test_an_unrecognized_gate_kind_is_the_routers_problem_not_the_validators():
+    """MUTATION: restore `if kind not in GATE_KINDS: errors.append(...)`.
+
+    An unrecognized kind then becomes a row-scoped error again, `_drop_invalid_rows` DELETES the row,
+    and `render._GROUP_UNSURE` -- the group built to say "the router does not know this kind" --
+    becomes unreachable through the front door for the second time.
+    """
     for kind in ("decision", "verification"):
         assert core.validate(_manifest([_row("1", "o/r#1", gate=_gate(kind=kind))])) == []
-    assert core.validate(_manifest([_row("1", "o/r#1", gate=_gate(kind="blocked"))]))
+    assert core.validate(_manifest([_row("1", "o/r#1", gate=_gate(kind="review"))])) == []
+
+
+def test_a_gate_that_names_no_kind_is_still_a_defect():
+    """UNRECOGNIZED AND ABSENT ARE DIFFERENT FACTS, and only the second is a defect.
+
+    `render._route("")` returns `mine` ON THE STRENGTH OF THE ROW BEING UNGATED. A gate declaring a
+    blank kind would take that same branch, so a row that HAS a gate would be routed by the rule for
+    rows that do not -- and if the author meant a decision, that is the plan's own named risk (an
+    agent acting on a human's call) arriving with nothing mis-set. Empty stays fatal so that stays
+    impossible. Unrecognized is the OTHER fact and gets `unsure`, which names itself on the page.
+    """
+    for gate in ({"blocked_by": "prose", "resolved_by": "it merges"}, _gate(kind=""), _gate(kind="   ")):
+        errors = core.validate(_manifest([_row("1", "o/r#1", gate=gate)]))
+        assert any("gate.kind is required" in e for e in errors), gate
 
 
 def test_a_gate_must_name_what_settles_it():

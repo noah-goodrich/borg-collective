@@ -62,7 +62,10 @@ That is the whole reason defects 2 and 3 survived: nobody could see which code p
 ```zsh
 IFS=$'\t' read -r proj_status last_activity summary waiting_reason project_path <<< \
     "$(echo "$registry" | jq -r --arg p "$name" \
-        '.projects[$p] | [.status // "unknown", .last_activity // "", .summary // "", .waiting_reason // "", .path // ""] | join("\t")')"
+        '.projects[$p]
+         | [.status // "unknown", .last_activity // "", .summary // "",
+            .waiting_reason // "", .path // ""]
+         | join("\t")')"
 ```
 
 Tab is an **IFS whitespace** character. A run of IFS whitespace delimits as one field, so when `summary` is
@@ -179,7 +182,24 @@ Do not start this phase until Phases 1-3 are done. It is a data-model question (
 cleared on status change, be excluded from all human-facing output, or be replaced by the notification's
 `tool_name` where present) and it will be much easier to reason about once the display path is honest.
 
-## Phase 5 — `--brief` is now a second, un-swept truth level of `borg link` (filed 2026-08-26, NOT FIXED)
+## Phase 5 — `--brief` is now a second, un-swept truth level of `borg link` (filed 2026-08-26, **CLOSED 2026-08-27**)
+
+**CLOSED.** Fixed exactly as the last paragraph of this phase specifies: the narrative is now routed through the
+Python document. `_borg_print_briefing` builds it once with `_borg_py borg_core.link.cli --json`, projects that JSON
+into the prompt with one `jq`, and re-renders the same bytes through a new `--render-document` seam when the narrative
+is unavailable. The registry walk is deleted, not patched. Spec and rationale:
+`docs/plans/directives/2026-08-27-fold-brief-into-the-document.md`. Evidence is a subprocess count in
+`tests/link_sweep.bats` (`sweep: link --brief sweeps exactly as link does, counted rather than read`), which is the
+verification this directive's own acceptance criterion asked for.
+
+**Phase 3 is SUBSUMED, not skipped**, on this phase's own reasoning: the grid carries provenance per node, so the
+prompt now tells the model what was observed (`swept` / `fetched`) versus what somebody typed (`declared`), and
+`summary`'s trustworthiness stops being the question. **Phase 4 stays open** and is unaffected.
+
+**One acceptance criterion below is superseded rather than met** — see the note on the `--- latest_checkpoint ---`
+line. The rest of this section is left as filed, for the record of what the defect was.
+
+
 
 *Filed by S4 of the one-front-door plan (`docs/plans/directives/2026-08-25-link-front-door-hardened-spec.md`).
 S4 is recording this gap, not closing it: the fix is a rewrite of `_borg_print_briefing`, which this
@@ -241,17 +261,26 @@ parallel sweep with its own mark. Do that after Phase 5, not before — they sha
 
 ## Acceptance criteria
 
-- [ ] `borg link --brief` prints an explicit reason line whenever it falls back to the non-LLM path
-- [ ] `borg link --brief` answers from the same swept document as `borg link` — no second truth level
+- [x] `borg link --brief` prints an explicit reason line whenever it falls back to the non-LLM path
+- [x] `borg link --brief` answers from the same swept document as `borg link` — no second truth level
       (Phase 5; verify by a bats case counting `gh` subprocesses on the `--brief` path against the
       overview's, in the `tests/link_sweep.bats` fixture where a sweep genuinely runs)
+      — **MET 2026-08-27** by exactly that case, `sweep: link --brief sweeps exactly as link does, counted rather
+      than read`: one `pullRequests(first:` plus one `issueOrPullRequest(number:` on each arm, side by side on one
+      fixture. Four further cases force each `fallback_reason` branch and assert the document renders under each.
 - [ ] `/borg-recon` synthesizes `borg link`'s document rather than running its own sweep on its own mark
       (Phase 5b; verify that a `/borg-recon` run leaves `$BORG_DIR/recon/last-run` unchanged, the mirror of
       the AC1 cache case's existing assertion for `borg link`)
-- [ ] `borg doctor` reports headless `claude -p` reachability
-- [ ] A project with a null `summary` and a set `waiting_reason` never displays the `waiting_reason` as its
-      summary — covered by a `tests/briefing.bats` case that exercises `link --brief`
-- [ ] The LLM payload includes `--- latest_checkpoint ---` for every active project that has one on disk
+- [x] `borg doctor` reports headless `claude -p` reachability
+- [x] A project with a null `summary` and a set `waiting_reason` never displays the `waiting_reason` as its
+      summary — covered by a `tests/briefing.bats` case that exercises `link --brief` (re-pointed at the document
+      2026-08-27; the field-shift MECHANISM is gone with the `read` loop, the SEMANTIC claim is still asserted)
+- [~] The LLM payload includes `--- latest_checkpoint ---` for every active project that has one on disk
+      — **SUPERSEDED 2026-08-27, consciously.** The document carries `checkpoint_head` for the FOCUSED repository
+      only, so the folded payload does too. Widening the wire to a per-project head is a v2→v3 bump with four coupled
+      `skills/borg-link/SKILL.md` edits; re-reading checkpoints in zsh would reinstate the second derivation Phase 5
+      just deleted. The replacement input is the grid's per-node provenance and READY set, which is the trade this
+      phase's own closing paragraph argues for. Re-file it against the wire if the narrative measurably suffers.
 - [ ] No `IFS=$'\t' read` site in the repo can silently shift fields on an empty value
 - [ ] `borg ls` and `borg link` no longer surface a raw user greeting or a mid-sentence fragment as a summary
 - [ ] Full bats suite green
