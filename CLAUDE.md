@@ -76,7 +76,8 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                            --all     Include archived projects
                            --local   Opt down from the network sweep (hot loops only)
                            --json / --porcelain  the two machine surfaces
-                           --deep    Parsed and IGNORED since AC2; kept for borg.zsh:3111
+                           --deep    Parsed and IGNORED since AC2; kept for borg.zsh's positional
+                                     `link` arm, the one live caller (`_link_py_args=(--deep)`)
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
@@ -286,9 +287,11 @@ docs/
   scope, mode or emptiness**. (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
   reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
   chose over reserving an always-empty slot in advance.) `render.overview` and `render.deep` are
-  deleted, and `--deep` is parsed and ignored (kept in the parser because `borg.zsh:3111`'s positional
-  arm — every `borg link <project>`, the fzf preview included — still passes it, and argparse exiting
-  2 there is a blank pane with nothing on stderr). **Scope changes which ROWS
+  deleted, and `--deep` is parsed and ignored (kept in the parser because borg.zsh's positional `link`
+  arm — grep `_link_py_args=(--deep)`, the one live caller, serving every `borg link <project>` and
+  `drone link` — still passes it, and argparse exiting 2 there is a blank pane with nothing on stderr.
+  Line pins are deliberately absent: four sites all said `borg.zsh:3111`, which matched neither main
+  nor the branch that "corrected" it.) **Scope changes which ROWS
   a section prints, never which sections exist** — the contexts differ in breadth only, so a reader
   who learns the page once has learned every invocation of it. Section headers are byte-identical
   in both contexts; `focus` now follows scope, so a bare `borg link` inside a repository renders

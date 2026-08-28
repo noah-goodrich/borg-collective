@@ -361,10 +361,19 @@ def _build_parser() -> argparse.ArgumentParser:
     # document says everything the deep dive said, and keeping it as a MODE would be a third context
     # rendering the same data, which is exactly what "the contexts differ in breadth only" forbids.
     # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT, and it is the worst
-    # one to break: borg.zsh's `_borg_link_dispatch` positional arm (borg.zsh:3111), which IS the fzf
-    # preview's path, re-executed on every cursor move. Delete the argument and argparse exits 2
-    # where `drone status` and the fzf preview both swallow the failure silently -- a blank pane and
-    # a blank column, with nothing on stderr anyone would see.
+    # one to break: borg.zsh's `_borg_link_dispatch` positional arm -- grep `_link_py_args=(--deep)`,
+    # which is the ONLY match in the tree. That arm serves every `borg link <project>` a human types
+    # and every `drone link`, so deleting the argument makes argparse exit 2 on the most-typed
+    # invocation of the command.
+    #
+    # ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This comment, its twin in
+    # test_cli.py's `test_deep_is_accepted_and_ignored`, and two lines of CLAUDE.md all read
+    # `borg.zsh:3111`, a number that matched NEITHER main NOR the branch that last edited them -- and
+    # any insertion above the arm invalidates it again with nothing failing. `grep` for the assignment
+    # instead. The same edit dropped this comment's "which IS the fzf preview's path, re-executed on
+    # every cursor move": `cmd_switch`'s `fzf` call has no `--preview` flag at all, so that hot loop
+    # is not a weaker justification, it is a nonexistent one. The surviving justification is stronger
+    # anyway -- a human's own `borg link <project>` exiting 2.
     #
     # THE COUNT WAS CORRECTED IN AC2/S4. It used to say THREE copies, naming bin/link-parity-harness
     # and the byte-copy at ~/.claude/bin/link-parity-harness alongside borg.zsh. Neither ever passed
