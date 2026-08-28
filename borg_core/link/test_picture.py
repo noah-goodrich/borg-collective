@@ -571,8 +571,10 @@ def test_a_node_nobody_answered_for_still_renders_its_id_and_names_the_condition
 
     The structural test above passes just as well if the renderer builds the string by concatenation;
     this one passes only if the node survives to the page AND the sentence explains it. `--local`
-    (the fzf preview, `drone status`, `borg watch`) opts down from both network rungs, so this is the
-    hot path, not an edge case.
+    opts down from both network rungs, so every row is unresolved there -- the common case, not an
+    edge case. (The consumers named here -- "the fzf preview, `drone status`, `borg watch`" -- were
+    retired 2026-08-27; `skills/borg-switch`'s `borg link --local --all` is the surviving one, and it
+    is the widest breadth there is.)
     """
     node = {
         "ref": "o/r#1",
@@ -635,8 +637,9 @@ def test_every_picture_row_in_both_fixture_manifests_fits_the_budget():
     """P22. MUTATION: raise a fixture ref past PICTURE_BUDGET.
 
     The budget is a CONSTANT checked against fixtures, not a terminal probe -- this module is pure.
-    That is the honest boundary of the guarantee, and the `--json`-side check that would cover a
-    manifest nobody has written yet is filed as a follow-up rather than claimed here.
+    That is the honest boundary of the guarantee, and the manifest nobody has written yet is now
+    covered by `max_row_width` plus the `--json`-side check in `cli._grid` (the case below), rather
+    than left filed as a follow-up.
     """
     for manifest in (fork_manifest(), crossing_manifest()):
         block = link_grid.grid_manifest(manifest, {}, {})
@@ -644,6 +647,42 @@ def test_every_picture_row_in_both_fixture_manifests_fits_the_budget():
         ids = picture.node_ids([block], [columns])
         for row in picture.picture(block, ids, columns):
             assert picture.visible_len(row) <= picture.PICTURE_BUDGET, row
+
+
+def test_a_manifest_whose_refs_run_long_in_three_columns_exceeds_the_budget():
+    """P22b. The measurement P22 could not make: a shape nobody has authored yet.
+
+    MUTATION: measure `len(row)` instead of `visible_len(row)` inside `max_row_width`. Every row
+    carries SGR bytes, so the helper then reports every manifest -- including the two P22 proves fit
+    -- as over budget. The `fits` assertion below is what makes that mutation red rather than merely
+    conservative; the `> BUDGET` one alone would go green under it.
+
+    THE WIDTH IS PINNED AT 71, NOT ASSERTED AS "MORE THAN 68", so a silent change to the column pitch
+    is a reviewable diff rather than a number nobody re-derives. A fan-out row is
+    `INDENT + (N-1)*(pitch) + (W+7)` visible columns for N children of one parent; three children of
+    `acme/warehouse#1000` with 14-character short refs comes to 71, three over.
+    """
+    wide = link_grid.grid_manifest(
+        {
+            "program": "over-budget",
+            "rows": [
+                _row(1, "acme/warehouse#1000"),
+                _row(2, "acme/warehouse#1001", after=["acme/warehouse#1000"]),
+                _row(3, "acme/warehouse#1002", after=["acme/warehouse#1000"]),
+                _row(4, "acme/warehouse#1003", after=["acme/warehouse#1000"]),
+            ],
+        },
+        {},
+        {},
+    )
+    assert picture.max_row_width([wide]) == 71 > picture.PICTURE_BUDGET
+
+    # ...and the shapes that DO exist stay under it, so the helper is not a constant `True`.
+    fits = [link_grid.grid_manifest(m, {}, {}) for m in (fork_manifest(), crossing_manifest())]
+    assert 0 < picture.max_row_width(fits) <= picture.PICTURE_BUDGET
+
+    # An empty board has a picture zero columns wide, not an error.
+    assert picture.max_row_width([]) == 0
 
 
 def test_short_refs_fall_back_to_full_refs_when_two_owners_share_a_repo_name():
@@ -842,8 +881,9 @@ def test_an_unknown_state_source_is_unverified_too():
 
     MUTATION: write the predicate as `!= STATE_SOURCE_DECLARED`. That reads naturally and is wrong --
     it would mark a hand-typed row and silently pass every ref nobody looked up at all, which is the
-    MAJORITY case on any `--local` render (the fzf preview and `drone status` both opt down from both
-    network rungs by design).
+    MAJORITY case on any `--local` render, which opts down from both network rungs by design. (The
+    two callers named here, the fzf preview and `drone status`, were retired 2026-08-27; the
+    surviving one is `skills/borg-switch`'s `borg link --local --all`.)
     """
     for source in (link_grid.STATE_SOURCE_DECLARED, link_grid.STATE_SOURCE_UNKNOWN, "", None):
         assert not picture.resolved_provenance(_sourced("merged", source))

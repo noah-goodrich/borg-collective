@@ -229,7 +229,7 @@ here.
 | `rows[].ref` | yes | canonical item ref; must be unique within the manifest |
 | `rows[].order` | yes | declared merge position — `–` for a merged prerequisite, else `E1`/`I2`/`1` |
 | `rows[].lane` | no | parallel track; omit on every row for single-stack mode |
-| `rows[].gate` | no | why a row is parked; `kind` is closed to `decision` or `verification` |
+| `rows[].gate` | no | why a row is parked; `kind` is required — `decision`/`verification` are the routed two |
 | `apex` | no | the program's tracker; omit entirely on a small single-ticket program |
 | `desc` | no | ONE plain sentence, rendered under the program heading in chain views; `note` stays unrendered |
 
@@ -263,10 +263,17 @@ shape the consuming program needs, not just today's fields.
 
 ### `decision` vs `verification`
 
-`kind` is closed to two values because they route differently. A `decision` means a **human must choose**, so it is
+`kind` names two values because they route differently. A `decision` means a **human must choose**, so it is
 a blocker on a person. A `verification` means **someone must run something** — anyone can, so it is *never* a
 blocker on a person and must not be routed to the awaiting-you tier. Both `blocked_by` and `resolved_by` are
 mandatory: a blocker naming nothing that would unpark it is the defect the field exists to prevent.
+
+**The two readers disagree about whether the set is CLOSED, and deliberately.** `merge-tree/programs.py` still
+rejects a third value. `borg_core/manifest/core.py` no longer does: it requires only that a gate NAME some kind,
+because `borg link`'s `▸ NEXT` has a third group (`unsure`) that reports an unrecognized kind on the page instead
+of deleting the row that carried it. An ABSENT or blank `kind` is a defect on both sides. See
+`borg_core/manifest/core.py::_validate_gate` for the argument and the module docstring for the full divergence
+list.
 
 ### Edge provenance
 

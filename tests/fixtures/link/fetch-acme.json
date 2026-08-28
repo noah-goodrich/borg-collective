@@ -10,6 +10,7 @@
     "acme/warehouse#61": {"state": "MERGED", "title": "us-east region cutover"},
     "acme/warehouse#64": {"state": "OPEN", "title": "us-west region cutover"},
     "acme/warehouse#70": {"state": "MERGED", "title": "eu region cutover"},
-    "acme/warehouse#72": {"state": "CLOSED", "title": "ap region cutover — superseded by the fleet-wide script"}
+    "acme/warehouse#72": {"state": "CLOSED", "title": "ap region cutover — superseded by the fleet-wide script"},
+    "acme/warehouse#78": {"state": "OPEN", "title": "rotate the vault keypair"}
   }
 }

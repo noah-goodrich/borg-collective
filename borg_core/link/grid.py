@@ -240,8 +240,10 @@ def grid_sources(tracks: list[dict]) -> list[dict]:
     """One `{source, status, summary, count, dropped}` row per adapter. Never the raw items.
 
     The grid carries a per-source RECEIPT, not a dump: the items themselves are already projected
-    into `nodes`, and re-emitting them under `sources` would double every payload in a document that
-    `drone status` parses once per tmux window. What a consumer needs from this list is which sources
+    into `nodes`, and re-emitting them under `sources` would double every payload in the document.
+    (That clause used to end "in a document that `drone status` parses once per tmux window"; `drone
+    status` was retired -- it exits 1 with "unknown command 'status'" -- so the multiplier is gone and
+    the duplication is just duplication.) What a consumer needs from this list is which sources
     answered and how much they contributed -- enough to tell "nothing changed" from "GitHub was down".
 
     `status` IS THREE-VALUED (see track_status) AND `dropped` IS ON THE WIRE, because the two-valued
@@ -735,8 +737,9 @@ def _grid_nodes(
 
     `level` IS AN INDEX INTO `levels`, and `levels` is manifest_core.levels' output where the index
     IS the level. Storing the integer on the node too is redundant by construction and deliberately
-    so: `drone status`-class consumers read one node and must not have to invert a list of lists to
-    learn where it sits.
+    so: a consumer holding one node must not have to invert a list of lists to learn where it sits.
+    (This used to name `drone status`-class consumers. That command was retired; `picture.level_of`
+    is the live consumer that reads the field, and the argument is the same one.)
 
     `seq` IS DECLARATION ORDER, AND IT IS WHAT KEEPS A RENDERED CHAIN IN ONE COLUMN. `levels()`
     publishes within-level order as ASCENDING REF, which is deterministic but not meaningful: measured
@@ -871,8 +874,10 @@ def grid_manifest(manifest: dict, items: dict[str, dict], fetched: dict[str, dic
     `unmapped_gates` IS NOT CARRIED, and the paragraph above is the reason rather than an exception
     to it. It is a pure projection of `gates()` -- same order, filtered to `blocked_by and not
     blocked_by_ref`, minus one key -- so emitting both puts a near-byte-for-byte second copy of every
-    gate on a wire `drone status` serializes once per tmux window, for a consumer that does not exist
-    and that this docstring already forbids from using it. Both live manifests are 100% prose gates,
+    gate on the wire for a consumer that does not exist and that this docstring already forbids from
+    using it. (The clause "on a wire `drone status` serializes once per tmux window" is dropped: that
+    command was retired. The duplication argument never needed it.) Both live manifests are 100% prose
+    gates,
     so the second copy is the first copy. AC2's renderer can derive the subset in one comprehension.
 
     `ready` IS NOW CARRIED, AND THE DEFERRAL IT WAS WAITING ON RESOLVED. Until AC4 this block said
@@ -932,8 +937,11 @@ def build_grid(scope: dict, slug: str, sweep: dict, fetch: dict, manifests: list
 
     SELF-DESCRIBING ON PURPOSE. `slug`, `scope_kind`, `swept` and `since` are carried so a consumer
     reading only this block can tell an empty grid apart from an un-swept one apart from a
-    wrong-repository one, without cross-referencing `.scope`. `drone status` and the fzf preview both
-    read a fragment of this document out of context; a block that cannot explain itself becomes a
+    wrong-repository one, without cross-referencing `.scope`. (The named examples here -- "`drone
+    status` and the fzf preview both read a fragment of this document out of context" -- were retired
+    2026-08-27. `skills/borg-link/SKILL.md` is the live one: it pipes the document through a `jq`
+    whitelist and hands the result to an LLM, whose reading of `grid` is per-key and not guaranteed to
+    consult the `scope` the whitelist also carries.) A block that cannot explain itself becomes a
     blank frame with no diagnosis, which is the exact shape of every silent-blindness incident in
     CLAUDE.md's "Learned".
 

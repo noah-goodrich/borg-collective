@@ -26,14 +26,22 @@ Two independent tools that compose:
 
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
-  wider command surface below (recon, nanoprobes, spend, watch, doctor, sync, focus, pin/unpin,
+  wider command surface below (recon, nanoprobes, spend, doctor, focus, pin/unpin,
   setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`).
+  **`watch` and `sync` were both listed here and NEITHER is a command.** Neither has an arm in
+  `borg.zsh`'s case dispatch, and both exit 1 with `unknown command`; removed 2026-08-28. (`sync`
+  survived the first removal pass because only `watch` was checked — the whole line has now been run
+  name-by-name against the dispatch, which is what a partial sweep costs. The only `cmd_sync` in the
+  tree belongs to `merge-tree/coordinator.py`, a different CLI.) `borg help` is the surface of record.
   **The `ls`/`status`/`hail`/`brief`/`briefing`/`refresh` aliases for `link` were removed
   2026-08-10** — six names for one command meant the docs, skills, and research all disagreed
   about what to call it. `borg link` is the only name.
 - CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg link`
-- `drone` CLI: up, down, claude, sh, restart, rebuild, fix, status, feature, cortex, exec, toggle,
-  scaffold
+- `drone` CLI: up, down, claude, sh, restart, rebuild, fix, feature, cortex, exec, toggle, pane,
+  scaffold, link. **`status` was listed here and is not a command** — there is no `cmd_status` in
+  `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
+  command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
+  the surface of record.
 - Hooks (12): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
   bash-guard, borg-dispatch-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
@@ -74,7 +82,19 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                                      sections (AC1). Falls back to the real page.
                            --refresh Regenerate summaries
                            --all     Include archived projects
-                           --local   Opt down from the network sweep (hot loops only)
+                           --local   Opt down from the NETWORK sweep — no adapter, no `gh`. NOT
+                                     "no subprocess": repository scope still forks one
+                                     `git remote get-url origin` for the slug, because manifest
+                                     selection cannot happen without it. cli._grid states it in TWO
+                                     paragraphs, not one — "THE SLUG COSTS" and "`--local` IS
+                                     CHECKED HERE" — and test_grid's
+                                     test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_repository
+                                     asserts the exact argv (verified by mutation: delete the fork
+                                     and it goes red). The `tmux list-windows` every invocation pays
+                                     is unaffected by the flag; it is gated by the reap overlay, not
+                                     by the network. No hot loop is left behind it; the one
+                                     automated caller is skills/borg-switch's
+                                     `borg link --local --all`
                            --json / --porcelain  the two machine surfaces
                            --deep    Parsed and IGNORED since AC2; kept for borg.zsh's positional
                                      `link` arm, the one live caller (`_link_py_args=(--deep)`)
@@ -303,7 +323,20 @@ docs/
   plus edges, and returns ANSI rows. `render.py` composes those rows into sections. The split is what
   lets the picture be pinned against `picture-{fork,crossing}.expected`, two HAND-AUTHORED fixtures
   that are never regenerated — an oracle that does not come from the implementation it checks. Keep
-  it that way: a subprocess or a file read in `picture.py` destroys that property.
+  it that way: a subprocess or a file read in `picture.py` destroys that property. **Both modules are
+  now on `pyproject.toml`'s clean-arch Domain list** — `render.py` was added 2026-08-28 and was
+  unclassified before that, which meant zero import enforcement while `make lint` printed 10.00/10
+  (the checker returns early on a file it cannot classify). Each also has an AST import-walk test,
+  because W9004's allow-list permits `pathlib`, `json` and `datetime`, so the linter is the coarser
+  of the two gates.
+- **The picture's width is measured on the `--json` side, checked nowhere pure**: `PICTURE_BUDGET`
+  (68) is a constant, so `picture.max_row_width(manifests)` computes the widest row of whatever a
+  caller holds, `cli._grid` stamps it as `grid.picture_width`, and `render._width_line` prints one
+  `▸ SIGNALS` sentence when it is over. The comparison lives at the impure boundary on purpose:
+  raising inside `picture.py` would take out the paths that swallow failure silently, and logging
+  would end the purity the hand-authored oracles depend on. `grid.build_grid` cannot own the key —
+  `picture.py` already imports `grid`, so the reverse is a cycle. Measure with `visible_len`, never
+  `len`: the rows carry SGR and OSC-8 bytes.
 - **`--brief` is a presentation mode of the document, not a second path (AC1, 2026-08-27)**:
   `_borg_print_briefing` (borg.zsh) builds the `borg link` document ONCE — the same
   `_borg_py borg_core.link.cli --json` call every other dispatch arm makes, with `--all`/`--local`
