@@ -298,7 +298,20 @@ docs/
   plus edges, and returns ANSI rows. `render.py` composes those rows into sections. The split is what
   lets the picture be pinned against `picture-{fork,crossing}.expected`, two HAND-AUTHORED fixtures
   that are never regenerated — an oracle that does not come from the implementation it checks. Keep
-  it that way: a subprocess or a file read in `picture.py` destroys that property.
+  it that way: a subprocess or a file read in `picture.py` destroys that property. **Both modules are
+  now on `pyproject.toml`'s clean-arch Domain list** — `render.py` was added 2026-08-28 and was
+  unclassified before that, which meant zero import enforcement while `make lint` printed 10.00/10
+  (the checker returns early on a file it cannot classify). Each also has an AST import-walk test,
+  because W9004's allow-list permits `pathlib`, `json` and `datetime`, so the linter is the coarser
+  of the two gates.
+- **The picture's width is measured on the `--json` side, checked nowhere pure**: `PICTURE_BUDGET`
+  (68) is a constant, so `picture.max_row_width(manifests)` computes the widest row of whatever a
+  caller holds, `cli._grid` stamps it as `grid.picture_width`, and `render._width_line` prints one
+  `▸ SIGNALS` sentence when it is over. The comparison lives at the impure boundary on purpose:
+  raising inside `picture.py` would take out the paths that swallow failure silently, and logging
+  would end the purity the hand-authored oracles depend on. `grid.build_grid` cannot own the key —
+  `picture.py` already imports `grid`, so the reverse is a cycle. Measure with `visible_len`, never
+  `len`: the rows carry SGR and OSC-8 bytes.
 - **The `borg link` parity harness's `render` leg was retired 2026-08-27 (AC2/S4)**:
   `bin/link-parity-harness render` byte-compared the current tree against the last zsh renderer at
   `ad99612`. After AC2 that oracle renders a *different document*, so the comparison is

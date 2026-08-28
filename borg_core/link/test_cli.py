@@ -96,6 +96,32 @@ def test_run_emits_exactly_one_line_of_parseable_json_on_stdout(isolated_env, ca
     assert doc["version"] == 2
 
 
+def test_json_publishes_the_measured_picture_width_on_the_grid_block(isolated_env, capsys):
+    """The width-check directive's first AC: the widest picture row is OBSERVABLE WITHOUT ANSI.
+
+    MUTATION: delete the `block["picture_width"] = ...` line in `cli._grid`. The key vanishes from the
+    wire and this goes red without any human having to look at a rendered page — which is the whole
+    point of moving the measurement to the `--json` side rather than leaving it a constant checked
+    against two authored fixtures.
+
+    NESTED UNDER `.grid` AND ASSERTED THERE. `skills/borg-link/SKILL.md` pipes the document through a
+    `jq` whitelist that selects `grid` wholesale; a top-level `picture_width` would be silently
+    dropped on the skill's own path while passing a naive top-level assertion here.
+    """
+    _write_registry(isolated_env, {})
+
+    exit_code = cli._run("", False, "json")  # pylint: disable=protected-access
+
+    assert exit_code == 0
+    doc = json.loads(capsys.readouterr().out)
+    width = doc["grid"]["picture_width"]
+    assert isinstance(width, int) and not isinstance(width, bool)
+    # An empty registry declares nothing, so there is no picture: 0 rather than an error, and 0 rather
+    # than a default that would look identical to a measurement that never ran.
+    assert width == 0
+    assert doc["version"] == 2, "an additive key inside an additive block does not bump the version"
+
+
 def test_run_human_mode_renders_the_seven_section_document(isolated_env, capsys):
     _write_registry(isolated_env, {"solo": {"status": "idle", "last_activity": "2026-08-01T00:00:00Z"}})
 

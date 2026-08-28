@@ -16,7 +16,7 @@ import os
 import sys
 from typing import NoReturn
 
-from borg_core.link import core, grid, render, shell
+from borg_core.link import core, grid, picture, render, shell
 
 
 class ProjectNotFound(Exception):
@@ -119,6 +119,31 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
     `--json` MUST carry the grid for AC3's verification), and per-process memoization buys nothing for
     a caller that forks a fresh process per window. AC2, which is the step that gives the renderer a
     reason to read the grid, is the right place to revisit the shape of this loop.
+
+    `picture_width` IS STAMPED HERE AND NOT IN `grid.build_grid`, WHICH OWNS EVERY OTHER KEY IN THE
+    BLOCK. build_grid cannot: `grid.py` is pure Domain and `picture.py` already imports `grid`, so
+    `grid` importing `picture` is a hard cycle -- the exact one picture.py exists on the other side
+    of. This module is the impure boundary the width-check directive nominates, for the same reason it
+    owns BrokenPipeError. The measurement itself is `picture.max_row_width`, pure; only the decision
+    to publish it is here.
+
+    NESTED UNDER `grid`, NOT AT THE TOP LEVEL, and that is a wire fact rather than taste:
+    `skills/borg-link/SKILL.md` pipes the document through a `jq` whitelist that selects `grid`
+    wholesale, so a nested key rides through and a top-level one is silently dropped on the skill's
+    own path.
+
+    `DOCUMENT_VERSION` STAYS 2. Purely additive inside an additive block, no pre-existing key narrows
+    -- the same terms `scope`, `grid` and AC4's `ready`/`draft` took. Bumping would fire the skill's
+    version-skew warning for a document it can still read perfectly. AC4's amendment ("the wire is not
+    additive when a renderer is already reading the key it adds") is checked and clears: no renderer
+    read `picture_width` before this change, and `_width_line` is silent at and below the budget, so
+    no golden moves.
+
+    KNOWN AND ACCEPTED COST, recorded rather than memoized: on the human path the picture is now
+    rasterized twice -- once here for the width, once in `render._grid_section` for the rows. Both are
+    pure and in-memory over at most a dozen nodes, and the hot loops that would have made it matter
+    (the fzf preview, `borg watch`, `drone status`) were retired on 2026-08-27. A cache keyed on the
+    manifest list is more moving parts than the cost it removes.
     """
     manifests, warnings = shell.discover_manifests(registry)
     directory = grid.repository_dir(registry, scope)
@@ -136,7 +161,9 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
         else shell.sweep(grid.scoped_projects(registry, scope), now=moment)
     )
     fetch = grid.no_fetch() if pending is None else shell.finish_fetch(pending)
-    return grid.build_grid(scope, slug, sweep, fetch, selected, warnings + select_warnings)
+    block = grid.build_grid(scope, slug, sweep, fetch, selected, warnings + select_warnings)
+    block["picture_width"] = picture.max_row_width(block["manifests"])
+    return block
 
 
 def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
