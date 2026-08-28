@@ -61,7 +61,12 @@ def manifest_dir(repository_dir: str) -> str:
 
 
 def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
-    """One manifest file as `(manifest, warning)`. Exactly one of the two is ever meaningful.
+    """One manifest file as `(manifest, warning)`. BOTH can now be meaningful at once.
+
+    That is a contract change and it is the point: a manifest whose rows partly validate returns the
+    surviving rows AND a warning naming what was dropped (see `_drop_invalid_rows`). A caller must
+    therefore test the warning and the manifest INDEPENDENTLY -- `if manifest is None: append(warning)`
+    silently swallows the message on exactly the case it was added for.
 
     Three distinct skips, each NAMED: unreadable/malformed JSON, valid JSON that is not a manifest
     (a stray `settings.json` in the directory), and a manifest that fails validation, whose errors
@@ -85,12 +90,57 @@ def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
         return None, f"{path}: not a manifest (no rows list) -- skipped"
 
     errors = core.validate(doc)
+    warning = ""
     if errors:
-        return None, f"{path}: invalid manifest -- {'; '.join(errors)}"
+        doc, warning = _drop_invalid_rows(doc, path, errors)
+        if doc is None:
+            return None, warning
 
     doc["_id"] = str(doc.get("program") or "").strip() or os.path.splitext(name)[0]
     doc["_path"] = path
-    return doc, ""
+    return doc, warning
+
+
+def _drop_invalid_rows(doc: dict, path: str, errors: list[str]) -> tuple[dict | None, str]:
+    """A manifest with its failing rows removed, or `(None, warning)` when nothing can be salvaged.
+
+    ONE BAD ROW MUST NOT COST THE FILE. Before this, any validation error dropped the whole manifest:
+    a single mistyped `gate.kind` in row 3 deleted rows 1..14 from the grid, and `▸ CHAINS` then
+    rendered its "no manifest declares work here" placeholder as though the repository simply had
+    none. Measured on the AC2 fixtures at the time: 12 declared refs became 5. A reader could not
+    distinguish *nothing declared* from *everything hidden by one typo*.
+
+    THE FILE IS STILL DROPPED WHOLE in three cases, and each is a case with no partial answer:
+      * a STRUCTURAL error (`rows: missing or not a list`, `apex: ...`) -- it describes the container
+        or a sibling key, so there is no subset of rows that would make the file mean what its author
+        wrote;
+      * EVERY row failing -- there is no page to render and nothing is gained by pretending;
+      * survivors that STILL do not validate (below).
+
+    RE-VALIDATED AFTER THE DROP, and that is not belt-and-braces. Duplicate detection is
+    cross-row: `_validate_row` flags the SECOND occurrence of a ref and leaves the first alone, so
+    removing a row can legitimately clear an error on a row that was kept. Re-running is how the
+    contract "a loaded manifest is a valid manifest" survives -- every downstream consumer assumes it,
+    and none of them re-check.
+
+    The warning names the count and carries the validator's own messages verbatim: a reader has to be
+    able to tell "this project has 7 rows" from "this project has 8 rows and I am showing you 7".
+    """
+    bad_rows, structural = core.partition_errors(errors)
+    joined = "; ".join(errors)
+    rows = doc.get("rows") or []
+    if structural or not bad_rows:
+        return None, f"{path}: invalid manifest -- {joined}"
+
+    kept = [row for index, row in enumerate(rows) if index not in bad_rows]
+    if not kept:
+        return None, f"{path}: invalid manifest -- {joined}"
+
+    doc["rows"] = kept
+    residual = core.validate(doc)
+    if residual:
+        return None, f"{path}: invalid manifest -- {'; '.join(residual)}"
+    return doc, f"{path}: {len(bad_rows)} of {len(rows)} rows dropped -- {joined}"
 
 
 def _manifest_identity(manifest: dict) -> str:
@@ -161,8 +211,13 @@ def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
 
         for name in names:
             manifest, warning = _load_manifest(os.path.join(directory, name), name)
-            if manifest is None:
+            # A WARNING NOW ACCOMPANIES A LOADED MANIFEST, so this can no longer be `if manifest is
+            # None`. A partially-salvaged file returns BOTH -- the rows that validated and a warning
+            # naming the ones dropped -- and gating the append on the manifest being None would
+            # silently swallow exactly the message that explains why the picture is short.
+            if warning:
                 warnings.append(warning)
+            if manifest is None:
                 continue
             identity = _manifest_identity(manifest)
             if identity in bodies:

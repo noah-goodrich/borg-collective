@@ -709,3 +709,152 @@ def test_no_module_references_an_external_plugin_or_a_sibling_checkout():
                 if "/dev/" in literal.replace("/dev/null", ""):
                     offenders.append(f"{name}:{lineno} -> {literal}")
     assert offenders == [], f"independence violations: {offenders}"
+
+
+# ── row-level degradation: a bad row must not cost the file ───────────────────────────────────────
+#
+# Before this, ANY validation error dropped the whole manifest. Measured on the AC2 fixtures at the
+# time: one mistyped `gate.kind` took the orchestrator grid from 12 declared refs to 5 — seven rows
+# vanished from `▸ CHAINS` because of one word in one field, and the page kept its confident frame.
+# See docs/plans/directives/2026-08-27-degrade-the-row-not-the-manifest.md.
+
+_BAD_GATE = {"kind": "review", "blocked_by": "someone", "resolved_by": "someday"}
+
+
+def test_one_invalid_row_costs_the_row_and_not_the_file(tmp_path):
+    """MUTATION: restore `if errors: return None, ...` in `_load_manifest`.
+
+    The survivors load, rank and render; the warning names the count so a reader can tell "3 rows"
+    from "4 rows and I am showing you 3".
+    """
+    doc = _manifest(
+        [
+            _row("1", "o/r#1"),
+            _row("2", "o/r#2", gate=_BAD_GATE),
+            _row("3", "o/r#3"),
+            _row("4", "o/r#4"),
+        ]
+    )
+    p = _write_manifest(tmp_path, "repo", "a.json", doc)
+    manifests, warnings = shell.discover([p])
+
+    assert len(manifests) == 1, "the file survives"
+    refs = [r["ref"] for r in manifests[0]["rows"]]
+    assert refs == ["o/r#1", "o/r#3", "o/r#4"], "only the offending row is gone"
+
+    assert len(warnings) == 1
+    assert "1 of 4 rows dropped" in warnings[0]
+    assert "gate.kind must be one of" in warnings[0], "the validator's own message is carried verbatim"
+    assert "a.json" in warnings[0], "and the file is named"
+
+
+def test_a_warning_survives_alongside_a_loaded_manifest(tmp_path):
+    """The caller used to append the warning only when the manifest was None.
+
+    MUTATION: restore `if manifest is None: warnings.append(warning)`. The rows still drop, the
+    picture still goes short, and the one message explaining why is swallowed — a silent version of
+    the bug this whole directive exists to remove.
+    """
+    p = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", gate=_BAD_GATE)]))
+    manifests, warnings = shell.discover([p])
+    assert manifests and warnings, "BOTH, not one or the other"
+
+
+def test_a_manifest_whose_every_row_fails_is_still_dropped_whole(tmp_path):
+    """MUTATION: drop the `if not kept` guard — an empty manifest loads and renders a headed blank.
+
+    There is no page to render and nothing is gained by pretending. The message stays the original
+    `invalid manifest` one, not the row-drop one.
+    """
+    p = _write_manifest(
+        tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1", gate=_BAD_GATE), _row("2", "o/r#2", gate=_BAD_GATE)])
+    )
+    manifests, warnings = shell.discover([p])
+    assert manifests == []
+    assert "invalid manifest" in warnings[0]
+    assert "rows dropped" not in warnings[0]
+
+
+def test_a_structural_failure_still_drops_the_file(tmp_path):
+    """MUTATION: treat every error as row-scoped.
+
+    `apex: ...` describes a SIBLING KEY, not a row, so there is no subset of rows you could keep and
+    still be describing what the author wrote. This is the case a naive fix slips through: every row
+    here is FINE, so a row-index partition finds nothing to drop — and must not conclude from that
+    that the file is clean.
+
+    THE OTHER STRUCTURAL ERROR IS UNREACHABLE FROM HERE, which a first draft of this case got wrong
+    by parametrizing over it. `validate`'s `rows: missing or not a list` cannot fire through
+    `_load_manifest`, because `core.looks_like_manifest` already rejected the document one branch
+    earlier with `not a manifest (no rows list) -- skipped`. The branch is still right to exist —
+    `validate` is public and callable directly — it simply is not this function's problem, and
+    asserting it here would have pinned a path production never takes.
+    """
+    doc = {"rows": [{"order": "1", "ref": "o/r#1"}], "apex": {"ref": "nope"}}
+    p = _write_manifest(tmp_path, "repo", "a.json", doc)
+    manifests, warnings = shell.discover([p])
+    assert manifests == []
+    assert "apex:" in warnings[0]
+    assert "rows dropped" not in warnings[0]
+
+
+def test_a_non_manifest_is_rejected_before_validation_ever_runs(tmp_path):
+    """The branch the case above names as unreachable, pinned at its real altitude.
+
+    MUTATION: delete the `looks_like_manifest` guard. A stray `settings.json` in `.borg/programs/`
+    then reaches `validate` and reports `rows: missing or not a list` — a validation verdict on a
+    file that was never a manifest.
+    """
+    p = _write_manifest(tmp_path, "repo", "settings.json", {"theme": "dark"})
+    manifests, warnings = shell.discover([p])
+    assert manifests == []
+    assert "not a manifest (no rows list)" in warnings[0]
+
+
+def test_survivors_are_revalidated_so_a_loaded_manifest_is_always_valid(tmp_path):
+    """MUTATION: return `doc` without re-running `core.validate`.
+
+    Duplicate detection is CROSS-ROW — `_validate_row` flags the SECOND occurrence and leaves the
+    first alone — so dropping a row can clear an error on a row that was kept, and can also leave
+    one. Re-validating is how "a loaded manifest is a valid manifest" survives; every downstream
+    consumer assumes it and none of them re-check.
+
+    Here rows 1 and 2 duplicate `o/r#1`, so row 1 is flagged. Dropping it leaves rows 0 and 2, which
+    validate — and the surviving manifest must contain no duplicate.
+    """
+    p = _write_manifest(
+        tmp_path,
+        "repo",
+        "a.json",
+        _manifest([_row("1", "o/r#1"), _row("2", "o/r#1"), _row("3", "o/r#2")]),
+    )
+    manifests, warnings = shell.discover([p])
+    assert len(manifests) == 1
+    refs = [r["ref"] for r in manifests[0]["rows"]]
+    assert refs == ["o/r#1", "o/r#2"]
+    assert len(refs) == len(set(refs)), "no duplicate survives"
+    assert core.validate(manifests[0]) == [], "the loaded manifest validates"
+    assert "1 of 3 rows dropped" in warnings[0]
+
+
+def test_partition_errors_splits_row_scoped_from_structural():
+    """The format contract, asserted where the format lives.
+
+    MUTATION: match `rows[` without the index group, or anchor without `^`. Both break the
+    `rows[N].after[M]` form, which `_validate_after` produces and which carries no colon after the
+    bracket.
+    """
+    bad_rows, structural = core.partition_errors(
+        [
+            "rows[0]: missing order",
+            "rows[0]: gate.kind must be one of ['decision', 'verification'], got review",
+            "rows[3].after[1] must be a full ref (owner/repo#num), got nope",
+            "apex: ref must be a full ref (owner/repo#num), got nope",
+            "rows: missing or not a list",
+        ]
+    )
+    assert bad_rows == {0, 3}, "two errors on row 0 collapse to one row to drop"
+    assert structural == [
+        "apex: ref must be a full ref (owner/repo#num), got nope",
+        "rows: missing or not a list",
+    ]
