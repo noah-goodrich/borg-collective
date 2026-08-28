@@ -62,6 +62,20 @@ from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 
 # Overview column widths, hoisted so the header line and every row format string share ONE source
 # of truth and cannot drift apart (borg.zsh:329, :371-372).
+#
+# `_COL_PROJECT` IS A FLOOR, NOT A WIDTH, AND SAYING SO IS THE FIX. It was used as a minimum via
+# `{display:<{_COL_PROJECT}}` with no truncation anywhere, so a name longer than 20 pushed SRC,
+# STATUS, LAST ACTIVE and SUMMARY right by the overflow while the header line -- padded from the same
+# constant -- did NOT move, and stopped describing its own rows on EVERY render in both scopes. Two
+# registered projects trigger it today (`pytest-coverage-impact` 22, `reveal-data-consistency` 23).
+#
+# WIDENED RATHER THAN TRUNCATED, ON THE READER'S TERMS AND NOT A CONSUMER'S: truncation destroys the
+# one field on the row that is also an ARGUMENT (`pytest-coverage-impa…` is not typeable into `borg
+# link <name>`), while widening costs only geometry that varies with the row set, which every golden
+# absorbs by byte-comparing ONE invocation against its own file. NOTHING PARSES THIS BOARD -- checked, not asserted:
+# every hit `grep -rn 'borg link' drone.zsh borg.zsh lib/ hooks/ skills/` returns is prose, a `--json` read, `drone
+# link`'s `exec`, or skills/borg-switch's `borg link --local --all` -- THIS board's one automated reader, and it
+# wants a list of names, not a column. (A draft cited `drone status`'s `grep -m1 'Status:'` -- retired 2026-08-27.)
 _COL_PROJECT = 20
 _COL_SRC = 4
 _COL_STATUS = 12
@@ -149,6 +163,38 @@ def _summary_block(summary: str) -> str:
     return "".join(out)
 
 
+# Named so `_objective_lines` slices the folded first line at exactly the prefix it built.
+_OBJECTIVE_LABEL = "Objective:"
+
+
+def _objective_lines(objective: str) -> list[str]:
+    """The Active Plan objective, FOLDED the way `_summary_block` folds a summary.
+
+    IT USED TO PRINT RAW, which was half of a two-part defect: `core.plan_objective` read one
+    physical line of a wrapped paragraph, and this printed whatever it got with no fold at all,
+    unlike every other prose field on the page. Measured on this repo's own PROJECT_PLAN.md the
+    emitted line was 129 VISIBLE COLUMNS -- the widest row the document produces, wider than the
+    picture's own 68-column budget, in the section a reader looks at first.
+
+    THE PREFIXED STRING IS WHAT GETS FOLDED, at 70, through `_fold_s` -- byte for byte the
+    arrangement `_summary_block` uses, so the section's two prose blocks cannot wrap differently.
+    Continuations re-indent to two spaces, keeping the deep dive's `^  [^ ]` rule intact. The slice
+    is safe by construction: `_fold_s` breaks after the last space at or before 70, `"  Objective: "`
+    puts one at index 12, 12 < 70 -- so `rfind` never returns below 12 and the slice cannot bite into
+    the label. THAT ARGUMENT WAS ONLY HALF OF ONE: a first token of 57+ chars pushes the next space
+    past 70, leaving 12 the sole candidate, so the label line degenerates to `"  Objective: "` with
+    the objective on the continuation (measured: shares the line at 56, not at 57). Left as is --
+    not corruption, exactly what `fold -s -w 70` does with those bytes, and a 57-char unbroken token
+    is a URL, whose fix belongs in `core.plan_objective` rather than a carve-out in a folder pinned
+    to `fold`'s behaviour. Only the LABEL is coloured, so ANSI bytes never enter the width arithmetic.
+    """
+    prefix = f"  {_OBJECTIVE_LABEL} "
+    folded = _fold_s(prefix + objective, width=70)
+    out = [f"  {CYAN}{_OBJECTIVE_LABEL}{NC}{folded[0][len(prefix) - 1 :]}\n"]
+    out.extend(f"  {line}\n" for line in folded[1:])
+    return out
+
+
 def _checkpoint_head_block(head: str) -> str:
     """Indent every line of a checkpoint head to two spaces, INCLUDING blank ones (borg.zsh:476's
     `head -20 "$f" | sed 's/^/  /'`, whose `^` anchor matches an empty line too).
@@ -213,13 +259,36 @@ def _overview_summary_cut(summary: str) -> str:
     return f"{cut}..." if len(summary) > 50 else cut
 
 
-def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str], mark: str = "") -> str:
+def _board_display(name: str, entry: dict) -> str:
+    """The name a board row PRINTS: the registry's `display_name`, else the key. ONE definition,
+    because `_board_width` must measure exactly the string `_overview_row` pads -- measuring the key
+    while padding the display name reintroduces the header/row mismatch through a rename."""
+    return str(entry.get("display_name") or name)
+
+
+def _board_width(order: list[str], projects: dict) -> int:
+    """The PROJECT column's width for one render: `_COL_PROJECT`, or the longest name if longer.
+
+    THE FLOOR KEEPS THE COMMON CASE BYTE-STABLE -- every fixture name and the real registry's modal
+    case is under 20, so this returns 20 and no golden moves. See `_COL_PROJECT` for why widening
+    beats truncating.
+    """
+    return max([_COL_PROJECT, *(len(_board_display(name, projects.get(name) or {})) for name in order)])
+
+
+def _overview_row(
+    name: str, entry: dict, cortex_by_project: dict[str, str], mark: str = "", width: int = _COL_PROJECT
+) -> str:
     """One board row, plus its cortex pause continuation when the project has a pending wake.
 
     `mark` IS APPENDED INSIDE THE ROW'S OWN f-STRING and defaults to "", which keeps every byte of
     this function identical for a caller that does not pass one. It exists so the scoped `◀` lands on
     the ROW and never on the countdown continuation, without the caller having to split the returned
     string back apart to find the boundary.
+
+    `width` DEFAULTS TO THE FLOOR so a caller rendering one row alone still gets the ordinary shape;
+    `_board_section`, the only caller that can SEE every row, passes the measured one and pads the
+    header from that same number. Computed once, in one place, handed to both.
     """
     source = str(core.jq_default(entry.get("source"), "cli"))
     # UNREACHABLE in practice: core.with_state already defaults a missing status to "idle"
@@ -229,18 +298,23 @@ def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str], mar
     status = str(core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS))
     last_activity = str(core.jq_default(entry.get("relative_activity"), ""))
     summary_short = _overview_summary_cut(str(core.jq_default(entry.get("summary"), "(no summary)")))
-    display = entry.get("display_name") or name
+    display = _board_display(name, entry)
     pin_mark = "*" if entry.get("pinned") is True else " "
     status_display = "waiting <<<" if status == "waiting" else status
 
     line = (
-        f"{pin_mark}{display:<{_COL_PROJECT}} {_src_badge(source):<{_COL_SRC}} "
+        f"{pin_mark}{display:<{width}} {_src_badge(source):<{_COL_SRC}} "
         f"{_status_color(status)}{status_display:<{_COL_STATUS}}{NC} "
         f"{last_activity:<{_COL_LAST_ACTIVE}} {summary_short}{mark}\n"
     )
     countdown = cortex_by_project.get(name)
     if countdown:
-        line += f"                       {CYAN}⏸ resumes in {countdown}{NC}\n"
+        # DERIVED FROM `width`, NOT THE 23 SPACES THIS USED TO HARDCODE -- a literal correct for
+        # exactly one column width and silently wrong for every other, which is the two-sources-of-
+        # truth failure the `_COL_*` constants were hoisted to prevent. `1 + width + 2` reproduces 23
+        # byte for byte at the floor (pin-mark column, name field, the zsh original's hand-counted
+        # two-space lead-in), which is why no golden moves.
+        line += f"{' ' * (1 + width + 2)}{CYAN}⏸ resumes in {countdown}{NC}\n"
     return line
 
 
@@ -383,7 +457,7 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
         out.append(f"  {BOLD}Active Plan{NC}\n")
         objective = plan.get("objective") or ""
         if objective:
-            out.append(f"  {CYAN}Objective:{NC} {objective}\n")
+            out.extend(_objective_lines(objective))
         out.append(f"  {CYAN}Progress:{NC} {plan.get('met', 0)}/{plan.get('total', 0)} criteria met\n")
 
     checkpoints = focus.get("checkpoints") or []
@@ -408,11 +482,20 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     """REPOSITORIES: every registered repository, in BOTH contexts. Transcribed from `overview()`.
 
     DELIBERATELY SCOPE-INVARIANT, and this is the one section AC2's "breadth" rule does not touch.
-    Three consumers read it precisely for a cross-project list: skills/borg-switch/SKILL.md's
-    `borg link --local --all` (run from a project session's cwd), borg.zsh:2225's 5s `borg watch`
-    redraw, and the fzf preview's own orientation. Narrowing it to the scoped repository would turn
-    all three into a one-row table. `--all` remains the only control over which rows appear; the
-    scoped row is MARKED, with a trailing `◀`, rather than made the only row.
+
+    TWO OF THE THREE CONSUMERS THIS USED TO CITE NO LONGER EXIST, and the justification is restated
+    rather than re-invented around whatever is left. It named `borg.zsh:2225`'s 5s `borg watch`
+    redraw and "the fzf preview's own orientation": `watch` is not in the case dispatch and exits 1
+    with "unknown command", and `cmd_switch`'s fzf call has no `--preview` at all (B15 pins
+    `grep -c -- '--preview-window' borg.zsh` at 0) -- both retired 2026-08-27. ONE named consumer
+    survives, skills/borg-switch/SKILL.md's `borg link --local --all`, run from a project session's
+    cwd precisely to get a cross-project list; narrowing this section to the scoped repository would
+    hand it a one-row table.
+
+    The remaining reason is the one that was always underneath the consumer list: the page has
+    exactly one place that answers "what else is going on", and a reader who ran `borg link` inside
+    a repository has not asked to stop being able to see that. `--all` remains the only control over
+    which rows appear; the scoped row is MARKED with a trailing `◀` rather than made the only row.
     """
     total_projects = doc.get("total_projects", 0)
     order = doc.get("order") or []
@@ -434,8 +517,11 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     waiting = sum(1 for name in order if str(core.jq_default(projects[name].get("status"), "")) == "waiting")
     note = f"the collective · {_plural(len(order), 'repository', 'repositories')} · {waiting} need attention"
 
+    # MEASURED ONCE AND HANDED TO BOTH the header and every row, which is the only arrangement in
+    # which the header cannot stop describing its rows.
+    width = _board_width(order, projects)
     lines = [
-        f"{BOLD} {'PROJECT':<{_COL_PROJECT}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
+        f"{BOLD} {'PROJECT':<{width}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
         f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} SUMMARY{NC}\n",
         ("─" * 90) + "\n",
     ]
@@ -443,7 +529,7 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     scoped = _scoped_name(doc)
     for name in order:
         mark = f" {CYAN}◀{NC}" if name == scoped else ""
-        lines.append(_overview_row(name, projects[name], countdowns, mark))
+        lines.append(_overview_row(name, projects[name], countdowns, mark, width))
     return note, lines
 
 
@@ -519,13 +605,28 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     project, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
 
     The note is UNCONDITIONAL, even when no manifest was selected: `0 projects · 0 refs · 0
-    unresolved · swept <mark>` is the honest reading of a repository with nothing declared, and it is
-    what separates that from a repository nobody swept.
+    unresolved · swept back to <mark>` is the honest reading of a repository with nothing declared,
+    and it is what separates that from a repository nobody swept.
+
+    "swept back to <mark>", NOT "swept <mark>", AND THE THREE MISSING WORDS WERE A WRONG ANSWER.
+    `grid.since` is the sweep's WINDOW LOWER BOUND -- `grid.sweep_since(now, 90)` -- never the
+    instant anything was swept, so this line used to render a full ISO timestamp exactly ninety days
+    old with the current wall clock attached and a reader parsed it as "this data is three months
+    stale". Reproduced: at `NOW=2026-08-28T14:24:17Z` the page said `swept 2026-05-30T14:24:17Z`,
+    and three minutes later `swept 2026-05-30T14:21:00Z` -- the mark tracks `now`, exactly backwards
+    from what the sentence claimed. No golden could see it: `sweep-acme.json` pins a bare
+    `"since": "2026-05-28"` with no relationship to any clock, which reads harmlessly either way.
+
+    A WINDOW BOUND AND A SWEEP TIME ARE TWO DIFFERENT SENTENCES -- this project's recurring trap --
+    so the fix is to say which one this is, not to swap in the other. The sweep TIME is not reported
+    here and need not be: the sweep runs inside the same `cli._document` pass that stamps
+    `generated_at`, so "when was this swept" is already the page's own freshness, while "how far back
+    did it look" is a fact only this line carries.
     """
     grid_block = doc.get("grid") or {}
     manifests = grid_block.get("manifests") or []
     since = str(grid_block.get("since") or "")
-    freshness = f"swept {since}" if grid_block.get("swept") and since else "not swept"
+    freshness = f"swept back to {since}" if grid_block.get("swept") and since else "not swept"
     note = (
         f"{_plural(len(manifests), 'project', 'projects')}"
         f" · {grid_block.get('declared', 0)} refs"
@@ -554,9 +655,24 @@ _GROUP_UNSURE = "unsure"
 # `decision` blocks a PERSON; `verification` blocks nobody in particular because anyone can run it.
 # Those are manifest_core.gates' words and the only two kinds any manifest has ever declared.
 _GATE_ROUTING = {"decision": _GROUP_YOURS, "verification": _GROUP_MINE}
+# `mine` HAS TWO KINDS OF MEMBER AND THE HEADING MUST BE TRUE OF BOTH. It used to read "nothing is
+# blocking these", written for the UNGATED member and a FALSE STATEMENT about the other one: a
+# `verification` gate IS a blocker and `_next_row` prints its `blocked_by` on the very same line.
+# Reproduced live on the front door's single most decision-relevant line --
+# `mine — nothing is blocking these` directly above `stillpoint#57  needs a live-prod confirmation
+# run against all four contracts`.
+#
+# THE ROUTING IS NOT THE BUG AND DOES NOT MOVE. AC4's D2 is explicit that a `verification` goes to
+# `mine` -- "a `decision` blocks a PERSON, a `verification` blocks nobody in particular because anyone
+# can run it" -- so the axis this table splits on is WHOSE HANDS the row needs, never whether it is
+# blocked. The heading now says that axis out loud and is true of both members, and it is the exact
+# complement of `yours`, which is what makes the pair read as one question with two answers.
+#
+# NO EM DASH INSIDE A HEADING: `_next_section` renders `{group} — {heading}`, so a second one on the
+# line reads as the start of the row list.
 _GROUP_HEADINGS = {
     _GROUP_YOURS: "a decision only you can make",
-    _GROUP_MINE: "nothing is blocking these",
+    _GROUP_MINE: "no decision needed first, so anyone can pick these up",
 }
 
 
@@ -572,22 +688,31 @@ def _route(kind: str) -> str:
 
     AN UNGATED ROW IS `mine`. Nothing is blocking it, so nothing needs a human first.
 
-    `unsure` IS UNREACHABLE THROUGH THE FRONT DOOR TODAY, AND THAT IS A VALIDATOR FACT, NOT A
-    RENDERER ONE. `manifest_core.GATE_KINDS` is `{"decision", "verification"}` and validation rejects
-    anything else with `gate.kind must be one of [...]`, whereupon `shell._load_manifest` drops the
-    WHOLE FILE -- so a manifest carrying `kind: "review"` never reaches this function at all. Measured
-    by trying it: adding such a row to `auth-hardening.json` took the orchestrator grid from 12
-    declared refs to 5 and produced an `invalid manifest` warning instead of a routed row.
+    `unsure` IS REACHABLE THROUGH THE FRONT DOOR, and getting it there took two changes on this
+    docstring's own prediction. It used to say the group was unreachable because
+    `manifest_core.GATE_KINDS` closed `gate.kind` to `{"decision", "verification"}` and
+    `shell._load_manifest` dropped the WHOLE FILE on anything else. PR #173 replaced that with
+    row-level degradation, which left the group unreachable for a WORSE reason -- the one row carrying
+    the unrecognized kind was deleted and the rest of the file rendered as though it had never been
+    declared. So the validator was demoted: it now requires only that a gate NAME some kind, and an
+    unrecognized one arrives here and routes. `tests/fixtures/link/manifests/warehouse-rollout.json`
+    carries `acme/warehouse#78` (`kind: "review"`) so `link-grid-orchestrator.golden` pins the whole
+    path end to end, not just this function's unit test.
 
-    Kept anyway, dead-but-tested, on the same terms `GLYPH_DRAFT` was kept through AC2 and AC3: the
-    branch is one line, its unit tests are real, and the alternative is that the day someone widens
-    `GATE_KINDS` -- or the day a row-level degrade replaces the whole-file drop -- the router silently
-    defaults a kind it does not understand to one of the two real sides. That is the failure this
-    group exists to prevent, and it would arrive with nothing mis-set.
+    AN ABSENT OR BLANK KIND IS STILL A VALIDATION ERROR AND STILL COSTS ITS ROW, and that asymmetry is
+    what keeps this function honest: `_next_tally` passes `""` for an UNGATED row and the first branch
+    below reads it as `mine` on the strength of being UNGATED. A gate declaring a blank kind would
+    take that same branch, so a row that HAS a gate would be routed by the rule for rows that do not
+    -- and if that gate was a decision, `mine` is the plan's own named risk arriving with nothing
+    mis-set. `manifest_core._validate_gate` holds that line; do not demote it here.
 
-    THE OPEN QUESTION THIS RAISES IS NOT MINE TO CLOSE: a typo'd `kind` currently costs the entire
-    manifest, which is a far worse outcome than routing one row to `unsure`. Whether the validator
-    should degrade the ROW instead of dropping the FILE is filed, not decided here.
+    THE ROUTING TABLE IS ALLOWED TO BE NARROWER THAN `GATE_KINDS`, and the subset test is what keeps
+    that from being an accident rather than a decision. NOTHING HERE DEFAULTS TO A REAL SIDE any more
+    -- the `.get` below falls to `_GROUP_UNSURE`, which `_next_section` NAMES on the page -- so
+    widening `GATE_KINDS` without adding a `_GATE_ROUTING` entry is no longer the loud failure this
+    paragraph used to describe. It is the quiet one: a kind this project DECLARES it understands would
+    be reported to the reader as unroutable. `test_the_router_covers_every_declared_gate_kind` asserts
+    the subset for exactly that reason, and states it the same way.
     """
     if not kind:
         return _GROUP_MINE
@@ -684,7 +809,8 @@ def _next_section(doc: dict) -> tuple[str, list[str]]:
     `unsure` RENDERS ONLY WHEN NON-EMPTY, unlike the section itself. AC2's directive rejected giving
     yours-vs-mine an always-empty SECTION slot as the "reads as broken" failure; a GROUP is the
     version of that idea which is allowed, precisely because it can be absent without leaving a
-    header over nothing. Zero manifests in existence declare an unrecognized kind today.
+    header over nothing. Neither live manifest declares an unrecognized kind; the fixture
+    `warehouse-rollout.json` does, which is how the populated form stays pinned.
     """
     grid_block = doc.get("grid") or {}
     grouped, unsure_kinds, ready_total, unlooked = _next_tally(grid_block.get("manifests") or [])
@@ -794,6 +920,35 @@ def _cycle_lines(grid_block: dict) -> list[str]:
     return lines
 
 
+def _width_line(grid_block: dict) -> list[str]:
+    """The picture is wider than the budget, said once, from the number `cli._grid` measured.
+
+    READ OFF THE DOCUMENT, NEVER REMEASURED HERE. This module is unconditionally pure and
+    `picture.max_row_width` is pure too, so calling it would not break that -- it would be worse than
+    breaking it quietly. `grid.picture_width` is already published, and a second derivation of one
+    number is exactly how the printed sentence and `--json` come apart: the human would be told 71
+    while a consumer read 68, with nothing mis-set and no test able to see it. The document field is
+    the one truth and the renderer reads it.
+
+    SILENT AT AND BELOW THE BUDGET, so it can never become page furniture. Every manifest that exists
+    today measures well inside it (61 against 68 on both goldens), which is also why adding this line
+    moves no golden.
+
+    WHY IT IS A SIGNAL AND NOT A CRASH: a too-wide picture is not wrong, it is unreadable in a narrow
+    pane, and deciding what to elide is a design question the width-check directive names as a
+    non-goal. The reader gets told WHY the page looks wrong instead of just seeing it wrong.
+    """
+    width = grid_block.get("picture_width", 0)
+    if not width or width <= picture.PICTURE_BUDGET:
+        return []
+    return [
+        _placeholder(
+            f"picture is {width} columns wide — {picture.PICTURE_BUDGET} is the budget; "
+            "shorten a ref or split the manifest"
+        )
+    ]
+
+
 def _signals_section(doc: dict) -> tuple[str, list[str]]:
     """SIGNALS: capacity, then every warning the document carried, then the ladder's own gap.
 
@@ -808,6 +963,9 @@ def _signals_section(doc: dict) -> tuple[str, list[str]]:
         lines.append(f"  {BOLD}{capacity['active']} sessions need attention{NC} (limit: {capacity['limit']})\n")
     lines.extend(_placeholder(warning) for warning in grid_block.get("warnings") or [])
     lines.extend(_cycle_lines(grid_block))
+    # BEFORE the resolution line, deliberately: `_resolution_line` is the section's last word on a
+    # `--local` render and `test_the_last_word_on_a_local_page_is_that_nobody_looked` pins that.
+    lines.extend(_width_line(grid_block))
     lines.extend(_resolution_line(grid_block))
     if not lines:
         return "", [_placeholder("nothing to report.")]

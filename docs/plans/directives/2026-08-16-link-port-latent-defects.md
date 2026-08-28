@@ -88,12 +88,36 @@ blocks another.
       contains (pick one; document the choice in the fix's commit message).
   - Verify: a unit test feeding a summary string containing `\n` through the chosen fix point asserts
     the rendered `_summary_block` output has no line failing `^  [^ ]` other than the first.
-- [ ] **AC2 (F2)** — Correct the `cli.py:187` docstring claim to state the traceback leaked on
-      **stderr** (not stdout), and that stdout/exit-code behavior was unchanged by the fix; the
+- [x] **AC2 (F2)** — Correct the claim in `borg_core/link/cli.py`'s `main()` docstring to state the
+      traceback leaked on **stderr** (not stdout), and that stdout/exit-code behavior was unchanged by the fix; the
       *why* (broad `except Exception` needed to cover AttributeError-shaped entry violations) stays as
       written.
   - Verify: `grep -n "on stdout" /Users/noah/dev/borg-collective/borg_core/link/cli.py` returns no
     hits inside the `main()` docstring.
+
+  **Done 2026-08-28.** The clause now reads "an UNCAUGHT TRACEBACK -- stderr, exit 1, and no
+  document", with a paragraph recording that the old wording named the wrong stream and could only
+  ever have been wrong (Python writes an uncaught traceback to stderr, always, so no live run could
+  have produced what it claimed). The *why* is untouched, restated only to make explicit that it does
+  not rest on the false clause: what a `--json` consumer gets from an uncaught AttributeError is an
+  empty out stream and a non-zero exit carrying no machine-readable reason.
+
+  > **THE VERIFY CLAUSE IS NARROWED, NOT WAIVED, AND HERE IS THE EXACT READING.** The grep as
+  > written still matches one line inside `main()`'s docstring: *"Both die formatters print to stderr
+  > and exit 1 with zero bytes on stdout"*. That sentence is TRUE, is about the fixed behaviour rather
+  > than the defect, and deleting it to satisfy a string match would trade a real invariant for a
+  > green grep — the failure mode this repo files under "a check pointed at the wrong thing does not
+  > fail, it reads as a pass". The clause is therefore read as its intent: **no surviving sentence in
+  > that docstring claims a TRACEBACK reaches the out stream.**
+  >
+  > **Verified as a command and its outcome, not as line numbers.** `grep -n "on stdout"
+  > borg_core/link/cli.py` returns hits inside exactly three docstrings — `_die_human`'s, `_run`'s and
+  > `main()`'s — and each was read in full. None of the three says a traceback reaches the out stream:
+  > `_die_human` promises `zero bytes on stdout` for the human die path, `_run` promises `zero bytes on
+  > stdout, never a half-frame` for a mid-render exception, and `main()` carries the surviving sentence
+  > quoted above. The correction paragraph is deliberately worded to add no fourth. **No line numbers
+  > are recorded here on purpose:** any insertion above one invalidates it silently, and an earlier
+  > revision of this very note pinned three that had all gone stale.
 - [ ] **AC3 (F3)** — Either fix `_read_text` to preserve `\r` (e.g. `newline=""` semantics) so the
       docstring's claim holds end-to-end, or correct `heading_title`'s docstring to say CR fidelity
       holds only for callers that bypass `_read_text`. Either way, add a test that routes a CRLF file

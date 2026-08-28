@@ -314,9 +314,12 @@ def scope_for(
     registry, sets the scope outright; cwd is consulted ONLY for the no-argument shape. Deriving
     breadth from cwd alone is not a latency bug, it is a truthfulness bug: `borg link ingle` run from
     inside borg-collective would sweep borg-collective and render those nodes under ingle's header --
-    one repository's facts presented as another's. Every scripted caller hits it, because they all
-    pass a name from a fixed cwd: drone.zsh:964 iterates tmux window names inside cmd_status's loop,
-    and borg.zsh:266's fzf preview renders `borg link {1}` for arbitrary {1} from the invoking cwd.
+    one repository's facts presented as another's. THE TWO SCRIPTED CALLERS THIS USED TO CITE ARE
+    GONE -- it named "drone.zsh:964 iterates tmux window names inside cmd_status's loop, and
+    borg.zsh:266's fzf preview renders `borg link {1}` for arbitrary {1} from the invoking cwd", and
+    both were retired 2026-08-27. The rule is not weakened by losing them: `drone link` still passes
+    `${PWD##*/}` from whatever cwd the window is in, and a human typing `borg link <other-project>`
+    is the case that matters most, because a wrong document is indistinguishable from a right one.
     A requested project that is NOT in the registry deliberately falls through to cwd resolution
     rather than being honored -- `_focus` raises ProjectNotFound for that case, and scope must not
     invent a repository the registry has never heard of.
@@ -427,22 +430,58 @@ def sort_checkpoints(filenames: list[str], limit: int = 3) -> list[str]:
 
 
 def plan_objective(text: str) -> str:
-    """The Objective line from a PROJECT_PLAN.md, mirroring borg.zsh:455:
+    """The Objective PARAGRAPH from a PROJECT_PLAN.md, as one line.
+
+    THE `head -1` WAS A ONE-LINE READ OF A MULTI-LINE FACT. The shell original was
 
         grep -A2 "^## Objective" | grep -v "^## Objective" | grep -v "^$" | head -1
 
-    grep -A2 yields the heading plus the two lines after it; the filters drop the heading and blank
-    lines and take the first survivor. An objective that starts three or more lines below the heading
-    is therefore NOT found -- that is the shell's behavior and it is preserved.
+    and the port transcribed it faithfully, including the `head -1`. Objectives are prose and prose
+    is hard-wrapped at 120 columns in this tree -- borg-collective's OWN PROJECT_PLAN.md has a
+    three-line objective -- so the front door printed the first physical line of a sentence, ending
+    on a dangling comma, and silently dropped the rest. Truncating at a WRAP POINT is not a summary;
+    it is a different sentence with no marker saying so.
+
+    WHERE IT MAY START IS STILL THE SHELL'S RULE. `grep -A2` yields the heading plus two lines, so an
+    objective beginning three or more lines below the heading is NOT found. That constraint is about
+    finding the block and is preserved verbatim; the `head -1` was about how much of the block to
+    read, and that is what changes.
+
+    A PARAGRAPH ENDS AT A BLANK LINE OR AT THE NEXT HEADING, and the second arm is not padding: a
+    plan written without a blank line before `## Acceptance Criteria` would otherwise swallow the
+    heading into the objective, which is a worse wrong answer than the one being fixed. Joined with
+    single spaces, because the newlines are the author's WRAP, not the author's structure -- the
+    renderer folds it to the page's own width (`render._objective_lines`).
     """
     lines = text.split("\n")
     for index, line in enumerate(lines):
         if line.startswith("## Objective"):
-            for candidate in lines[index + 1 : index + 3]:
-                if candidate != "":
-                    return candidate
+            for offset in range(index + 1, min(index + 3, len(lines))):
+                if lines[offset] != "":
+                    return _paragraph_from(lines, offset)
             return ""
     return ""
+
+
+def _paragraph_from(lines: list[str], start: int) -> str:
+    """`lines[start:]` up to the first blank line or the first line beginning with `#`, joined with
+    single spaces.
+
+    THE `#` TEST IS NOT A HEADING PARSE, and this says so rather than implying one. It breaks on ANY
+    line whose first character is `#` -- a markdown heading, but equally a `#` line inside a fenced
+    code block. The failure that breadth can produce is a SHORT objective, never a wrong one, which
+    is why it is documented here rather than narrowed in code.
+
+    SPLIT OUT BECAUSE PYLINT MEASURED IT (R1702, 6 nested blocks against a ceiling of 5), and the
+    seam is the honest one: `plan_objective` above answers WHERE the objective starts -- the shell's
+    `grep -A2` window, preserved -- and this answers HOW MUCH of it to read.
+    """
+    paragraph = []
+    for candidate in lines[start:]:
+        if candidate == "" or candidate.startswith("#"):
+            break
+        paragraph.append(candidate.strip())
+    return " ".join(paragraph)
 
 
 def plan_progress(text: str) -> tuple[int, int]:
