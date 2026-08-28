@@ -1014,20 +1014,39 @@ _borg_print_briefing() {
     local fallback_reason=""
     # Non-zero ONLY when the fallback page itself failed to render; the narrative path never sets it.
     local render_rc=0
+    local build_rc=0
     typeset -a _brief_py_args
     _brief_py_args=(--json)
     (( ${1:-0} )) && _brief_py_args+=(--all)
     (( ${2:-0} )) && _brief_py_args+=(--local)
 
-    # `|| doc=""` IS MANDATORY, not defensive habit: borg.zsh runs under `set -e` (borg.zsh:19), a
-    # bare assignment from a command substitution inherits the child's exit status, and
-    # `cli._die_json` exits 1 on a corrupt registry — which would abort borg outright rather than
-    # report anything.
+    # A FAILED BUILD IS AS LOUD AS A FAILED RENDER, AND FOR THE SAME REASON. This branch used to
+    # `warn` (which writes to STDOUT — see its definition beside `info`/`die` at the top of this
+    # file) and `return 0`, so `borg link --brief` printed no page and reported success: the exact
+    # state the comment on this function's `return` declares must never be reported as success, and
+    # the silent-fallback shape docs/plans/directives/
+    # 2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists to remove. The render
+    # rung two screens down was fixed first; this is its sibling, and the two now behave
+    # identically: reason on STDERR, the child's own stderr quoted in it, non-zero out.
+    #
+    # `|| build_rc=$?` REPLACES `|| doc=""` AND STILL DOES ITS JOB. Catching the status is mandatory,
+    # not defensive habit: this file's top-of-script `set -e` (just above `BORG_VERSION=`) aborts
+    # borg outright on any uncaught non-zero, a bare assignment from a command substitution inherits
+    # the child's exit status, and `cli._die_json` exits 1 on a corrupt registry. The old
+    # `|| doc=""` caught it and threw it away; `|| build_rc=$?` catches it AND gives the reason line
+    # a number.
+    local build_stderr_file="$BORG_DIR/briefing-build-stderr.log"
     doc=""
-    doc=$(_borg_py borg_core.link.cli "${_brief_py_args[@]}") || doc=""
+    doc=$(_borg_py borg_core.link.cli "${_brief_py_args[@]}" 2>"$build_stderr_file") || build_rc=$?
     if [[ -z "$doc" ]]; then
-        warn "Could not build the borg link document — no briefing to give."
-        return 0
+        local build_stderr=""
+        [[ -s "$build_stderr_file" ]] && build_stderr=$(<"$build_stderr_file")
+        # A build that exits 0 and prints nothing is still a failure with no page; give it a status.
+        if (( build_rc == 0 )); then
+            build_rc=1
+        fi
+        warn "Could not build the borg link document (exit $build_rc)${build_stderr:+: $build_stderr} — no briefing to give." >&2
+        return $build_rc
     fi
 
     # The nothing-to-say short circuit, keyed off the DOCUMENT rather than a second registry read.
@@ -1335,8 +1354,9 @@ cmd_init() {
 
     # Print formatted briefing to terminal before launching orchestrator.
     #
-    # TOLERATED HERE, AND ONLY HERE. `_borg_print_briefing` now returns non-zero when the fallback
-    # page fails to render, and `borg link --brief` propagates that — the briefing IS that command's
+    # TOLERATED HERE, AND ONLY HERE. `_borg_print_briefing` now returns non-zero on both of its
+    # no-page rungs — the document failing to BUILD and the fallback page failing to RENDER — and
+    # `borg link --brief` propagates that status. The briefing IS that command's
     # product. For `borg init` the briefing is a preamble and the product is the orchestrator session
     # below, so a failed page must not stop the session from launching. This is not a silent swallow:
     # the function has already named the cause on stderr before returning, which is the whole of the
@@ -3177,8 +3197,16 @@ _borg_link_dispatch() {
 
     if [[ -n "$_link_project" ]]; then
         # The deep dive stays read-only and never scans -- no desktop pre-pass here, matching today.
-        # This is the fzf preview's arm (borg.zsh:266 `--preview "borg link {1}"` -> bare positional
-        # -> here), so it is re-executed on every cursor move. Treat it as a hot loop.
+        #
+        # CORRECTED 2026-08-28: this comment used to call this "the fzf preview's arm", citing a
+        # `--preview "borg link {1}"` in `cmd_switch`. There is no such flag: `cmd_switch`'s `fzf`
+        # invocation carries `--query`, `--prompt`, `--header`, `--delimiter` and `--with-nth`, and
+        # nothing else -- `grep -- '--preview' borg.zsh` matches only prose. The per-keypress hot
+        # loop that justification described does not exist. What is still true, and is the whole
+        # reason this arm matters, is that it is the ONLY live caller that passes `--deep`, and it
+        # serves EVERY `borg link <project>` a human types plus `drone link`, whose dispatch arm
+        # (`link)       exec borg link ...` in drone.zsh) forwards a bare positional straight here.
+        # Treat it as user-facing, not as a hot loop.
         _link_py_args=(--deep)
         (( _link_local )) && _link_py_args+=(--local)
         _link_py_args+=(-- "$_link_project")
