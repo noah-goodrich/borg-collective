@@ -82,6 +82,22 @@ network round trip and then rendering the same deep dive as before it existed. R
     reconstruct it.
   - Still never render a picture. `borg link` draws it, and the `n1`-style handles it prints are
     generated at render time — they are not on the wire, so there is nothing to echo.
+- **`.ready` is AC4's answer to "what can I pick up right now", and it is THREE-STATE.** Each manifest
+  block carries `{state: "known"|"unlooked", refs: [...]}`, and each node carries a matching `ready`
+  boolean plus a `draft` boolean.
+  - `state: "unlooked"` means **nothing on the page was resolved** — not that nothing is ready. It is
+    what every `--local` render returns. Say "nobody looked", never "nothing is ready"; the two are
+    different facts and `.grid.unresolved` will agree with you.
+  - `state: "known"` with an empty `refs` genuinely means nothing is startable right now.
+  - A ref in `refs` is open, every parent has merged, **and every one of those states was swept or
+    fetched** — a declared state can never put a ref here, which is the whole reason AC4 shipped a
+    provenance gate first. `draft` rows are excluded: a draft PR is `open` but not startable.
+- **Routing, when the user asks what's theirs.** Read `gates[].kind` off the same manifest block:
+  `decision` → **theirs** (a person must decide), `verification` → **the agent's** (anyone can run
+  it), **ungated → the agent's** (nothing is blocking it). Any other kind is deliberately *neither* —
+  report it as unrouted rather than guessing, and name the kind. Do not invent a fourth rule, and do
+  not treat `rows[].next` as membership: it is the author's emphasis for ordering among rows that are
+  already ready, never a reason to include one that isn't.
 
 **Why the jq.** The two pipes work differently. The overview pipe (`.directives |= (...)`) does not
 enumerate a field — it transforms one key in place, so anything the document gains later passes

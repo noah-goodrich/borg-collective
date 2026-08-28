@@ -15,7 +15,7 @@ import time
 
 import pytest
 
-from borg_core.link import cli, render
+from borg_core.link import cli, picture, render
 from borg_core.link import grid as link_grid
 from borg_core.link.test_picture import fork_manifest, plain
 
@@ -112,7 +112,12 @@ def test_every_section_renders_its_header_in_both_contexts():
     """The invariant compares each context against the SECTIONS CONSTANT, never against the other
     context: a header diff between two renderings goes green if both drift together."""
     expected = [title for title, _ in render.SECTIONS if title]
-    assert expected == ["IN FOCUS", "REPOSITORIES", "CHAINS", "QUEUED", "SHIPPED", "SIGNALS"]
+    # A9. EIGHT SECTIONS SINCE AC4. This list going red is the reviewable event AC2's directive chose
+    # over reserving an always-empty slot for yours-vs-mine ahead of time -- "a section that renders
+    # only a placeholder in every context for a whole release is the exact 'reads as broken' failure
+    # Q10 exists to prevent". NEXT sits below SHIPPED so the page reads history-then-future, and
+    # above SIGNALS so the honest "nobody looked" line is the last word on a `--local` render.
+    assert expected == ["IN FOCUS", "REPOSITORIES", "CHAINS", "QUEUED", "SHIPPED", "NEXT", "SIGNALS"]
     assert _headers(render.document(_doc())) == expected
     assert _headers(render.document(_repository_doc())) == expected
 
@@ -716,3 +721,184 @@ class TestFoldS:
         # stdout is directly comparable to `"\n".join(lines)` with no trailing-newline massaging.
         got = render._fold_s(text, width=width)  # pylint: disable=protected-access
         assert "\n".join(got) == proc.stdout
+
+
+# ── AC4: NEXT, and the yours / mine / unsure routing ──────────────────────────────────────────────
+
+
+def _ready_doc(refs, *, gates=(), nodes=None, state="known", declared=None) -> dict:
+    """A document carrying one manifest whose READY set is `refs`."""
+    node_map = dict(nodes or {})
+    for ref in refs:
+        node_map.setdefault(ref, {})
+    built = {ref: {"ref": ref, "state": "open", "state_source": "swept", **extra} for ref, extra in node_map.items()}
+    manifest = {
+        "id": "m",
+        "path": "",
+        "desc": "",
+        "repos": [],
+        "levels": [],
+        "nodes": built,
+        "gates": list(gates),
+        "ready": {"state": state, "refs": list(refs)},
+    }
+    block = dict(_doc()["grid"])
+    block.update({"manifests": [manifest], "declared": declared if declared is not None else len(built)})
+    return _doc(grid=block)
+
+
+def _next_body(doc: dict) -> list[str]:
+    """The plain-text `▸ NEXT` block, header included, up to the next section."""
+    out, inside = [], False
+    for line in plain(render.document(doc)).split("\n"):
+        if line.startswith(f"{render.SECTION_MARK}NEXT"):
+            inside = True
+        elif line.startswith(render.SECTION_MARK):
+            inside = False
+        if inside:
+            out.append(line)
+    return out
+
+
+def test_a_decision_gate_routes_to_yours_and_a_verification_to_mine():
+    """A4. MUTATION: swap the two entries in `_GATE_ROUTING`.
+
+    These are `manifest_core.gates`' own words -- a `decision` blocks a PERSON, a `verification`
+    blocks nobody in particular because anyone can run it -- and they are the only two kinds any
+    manifest has ever declared or that the validator will accept.
+    """
+    doc = _ready_doc(
+        ["o/r#1", "o/r#2"],
+        gates=[
+            {
+                "ref": "o/r#1",
+                "kind": "decision",
+                "blocked_by": "Kelly signs off",
+                "resolved_by": "",
+                "blocked_by_ref": "",
+            },
+            {
+                "ref": "o/r#2",
+                "kind": "verification",
+                "blocked_by": "the canary must pass",
+                "resolved_by": "",
+                "blocked_by_ref": "",
+            },
+        ],
+    )
+    body = "\n".join(_next_body(doc))
+    yours, mine = body.index("yours"), body.index("mine")
+    assert yours < body.index("o/r#1") < mine, "the decision sits under yours"
+    assert mine < body.index("o/r#2"), "the verification sits under mine"
+    assert "Kelly signs off" in body, "the gate's own sentence is what says WHY it is yours"
+
+
+def test_an_ungated_ready_row_is_mine():
+    """A5. MUTATION: make `_route("")` return `_GROUP_YOURS`.
+
+    Nothing is blocking the row, so nothing needs a human first. Owner's decision, and the one that
+    makes the section useful rather than a second inbox.
+    """
+    body = "\n".join(_next_body(_ready_doc(["o/r#9"])))
+    assert "mine" in body and "yours" not in body
+    assert "o/r#9" in body
+
+
+def test_an_unrecognized_gate_kind_routes_to_unsure_and_names_the_kind():
+    """A6. MUTATION: `_GATE_ROUTING.get(kind, _GROUP_MINE)` -- or `_GROUP_YOURS`; both are lies.
+
+    UNREACHABLE THROUGH THE FRONT DOOR AND TESTED ANYWAY. `manifest_core.GATE_KINDS` is
+    `{"decision", "verification"}` and validation drops the WHOLE manifest on anything else, so no
+    valid file produces this row -- measured, by putting `kind: "review"` in auth-hardening.json and
+    watching the orchestrator grid fall from 12 declared refs to 5. Same terms `GLYPH_DRAFT` was kept
+    on through two ACs: the branch is one line and the day `GATE_KINDS` widens, a default would send
+    a kind nobody understands to one of the two real sides with nothing mis-set.
+    """
+    doc = _ready_doc(
+        ["o/r#3"],
+        gates=[{"ref": "o/r#3", "kind": "review", "blocked_by": "", "resolved_by": "", "blocked_by_ref": ""}],
+    )
+    body = "\n".join(_next_body(doc))
+    assert "unsure" in body
+    assert '"review"' in body, "the reader is told WHICH kind failed to route"
+    assert "yours" not in body and "mine" not in body
+
+
+def test_the_unsure_group_is_absent_when_empty_but_the_section_is_not():
+    """A7. MUTATION: render the `unsure` heading unconditionally.
+
+    A GROUP may be absent; a SECTION may not. AC2's directive rejected reserving an always-empty
+    section slot for yours-vs-mine as the "reads as broken" failure, and this is the line between the
+    two ideas: NEXT always renders (with a placeholder when it has nothing), the groups inside it
+    only render when populated. Zero manifests in existence declare an unrecognized kind.
+    """
+    body = "\n".join(_next_body(_ready_doc(["o/r#9"])))
+    assert "unsure" not in body
+    assert f"{render.SECTION_MARK}NEXT" in body
+
+
+def test_nothing_ready_and_nobody_looking_are_different_sentences():
+    """A2/A3 at the RENDER level. MUTATION: drop the `unlooked` arm and print one placeholder.
+
+    The `--local` case is the one that matters: SIGNALS prints `N of N declared refs unresolved —
+    nobody looked` two lines below, so a NEXT that says "nothing is ready" makes the page contradict
+    itself inside one screen.
+    """
+    empty = "\n".join(_next_body(_ready_doc([], declared=3)))
+    unlooked = "\n".join(_next_body(_ready_doc([], state="unlooked", declared=3)))
+    assert "nothing is ready" in empty
+    assert "0 ready of 3" in empty
+    assert "nobody looked" in unlooked
+    assert "nothing is ready" not in unlooked
+    assert empty != unlooked
+
+
+def test_a_ready_row_carries_its_provenance_mark():
+    """A10. MUTATION: build the glyph locally instead of calling picture.
+
+    The `●` this section prints is the one AC4's precondition was filed to protect: off an
+    unresolved state it reads "start this now" from a hand-typed field. `ready_refs` makes that
+    unreachable by construction, and this is the belt to that braces -- if a declared node ever does
+    reach the list, it renders `●?` rather than a confident `●`.
+    """
+    declared = _ready_doc(["o/r#1"], nodes={"o/r#1": {"state_source": "declared"}})
+    swept = _ready_doc(["o/r#1"], nodes={"o/r#1": {"state_source": "swept"}})
+    assert picture.PROVENANCE_MARK in "\n".join(_next_body(declared))
+    assert picture.PROVENANCE_MARK not in "\n".join(_next_body(swept))
+
+
+def test_next_true_orders_within_a_group_and_never_grants_membership():
+    """`rows[].next` is EMPHASIS, not an override. MUTATION: let `next` add a row to READY.
+
+    AC4 names `rows[].next` as an input without saying what it does, and the two readings are not
+    close. As an override, a hand-typed flag would put a row into NEXT whose parent has not merged --
+    a hand-typed field beating a resolved one, which is the precondition's failure arriving through a
+    different door. As emphasis it costs nothing when stale.
+    """
+    doc = _ready_doc(["o/r#1", "o/r#2"], nodes={"o/r#2": {"next": True}})
+    rows = [line for line in _next_body(doc) if "o/r#" in line]
+    assert rows[0].strip().endswith("o/r#2"), "the flagged row leads its group despite sorting second"
+
+    # ...and a flagged row that is NOT ready stays out entirely.
+    absent = _ready_doc(["o/r#1"], nodes={"o/r#2": {"next": True}})
+    assert "o/r#2" not in "\n".join(_next_body(absent))
+
+
+def test_a_partly_unlooked_board_reports_both_halves():
+    """Orchestrator scope with one manifest resolved and one not. MUTATION: drop the `unlooked` note.
+
+    Reporting a bare `1 ready of 2` there understates the answer as confidently as reporting zero:
+    the reader is told what IS ready without being told that part of the board was never checked. The
+    `unlooked` sentence only WINS outright when nothing at all resolved -- with a real answer present,
+    it qualifies rather than replaces.
+    """
+    resolved = _ready_doc(["o/r#1"], declared=2)["grid"]["manifests"][0]
+    blind = dict(resolved)
+    blind["ready"] = {"state": "unlooked", "refs": []}
+    block = dict(_doc()["grid"])
+    block.update({"manifests": [resolved, blind], "declared": 2})
+
+    body = "\n".join(_next_body(_doc(grid=block)))
+    assert "1 ready of 2" in body
+    assert "nobody looked up" in body, "the un-checked half is named"
+    assert "o/r#1" in body, "and the real answer still renders"

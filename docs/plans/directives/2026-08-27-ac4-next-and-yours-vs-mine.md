@@ -185,6 +185,23 @@ adding them is part of this work rather than a follow-up.
 **S1 — the wire.** `ready_refs`, `ready`, `draft`, plus the fixture rows. Additive; goldens do not move because
 `render.py` prints none of it yet. A1/A2/A3/A8 land here.
 
+> **AMENDED 2026-08-27 (S1), by execution. "GOLDENS DO NOT MOVE" IS FALSE, AND `render.py` IS NOT WHAT MOVES THEM.**
+> `picture.state_glyph`'s `●` arm reads `node.get("ready")` and has shipped **dead but tested** since AC2. The moment
+> `grid.py` emits the field, every ready node's glyph changes from `○` to `●` — with zero edits to `render.py`, which
+> is the module this step's additivity claim was reasoning about. The wire is not additive when a renderer is already
+> reading the key it adds.
+>
+> **Both grid goldens therefore regenerate in S1, and again in S2 for the section.** The AC2 spec's
+> "regenerate exactly once" rule is not violated: it forbids repeated regeneration *within* a step, and each of these
+> is one predicted diff in one reviewed commit. The S1 diff is `○` → `●` and nothing else, on exactly the node set
+> AC2's own "golden blast radius" paragraph named in advance — `n2/n3/n4` in `link-grid-repository`, those plus `n9` in
+> `link-grid-orchestrator`. A diff containing anything more than those glyphs means S1 changed something it should not
+> have.
+>
+> **The two hand-authored `.expected` oracles move for the same reason and are hand-edited, not regenerated.**
+> `BORG_UPDATE_GOLDEN` does not write them by design. The rule applied by hand: a node whose every parent has merged
+> becomes `●`. In both files that is exactly the three second-level nodes under the merged trunk.
+
 **S2 — the section.** `_next_section`, the `SECTIONS` entry, A4–A7, A9, A10. **Both goldens regenerate, once.** The
 spine test goes red and is updated in the same diff, which is the reviewable event.
 
