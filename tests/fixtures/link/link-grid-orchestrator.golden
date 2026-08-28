@@ -22,7 +22,7 @@
  relay                [C]  [2midle        [0m 2d ago       Relay has no summary yet.
  ledger               [C]  [2midle        [0m 30m ago      Nightly close reconciliation.
 
-[1m▸ CHAINS[0m  [2m2 projects · 13 refs · 1 unresolved · swept 2026-05-28[0m
+[1m▸ CHAINS[0m  [2m2 projects · 13 refs · 1 unresolved · swept back to 2026-05-28[0m
 
   [1mauth-hardening[0m
   [2mRotate every service onto scoped keypair auth, then flip enforcement on in one release.[0m
