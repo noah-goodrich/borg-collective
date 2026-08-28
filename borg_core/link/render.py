@@ -62,6 +62,21 @@ from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 
 # Overview column widths, hoisted so the header line and every row format string share ONE source
 # of truth and cannot drift apart (borg.zsh:329, :371-372).
+#
+# `_COL_PROJECT` IS A FLOOR, NOT A WIDTH, AND SAYING SO IS THE FIX. It was used as a minimum via
+# `{display:<{_COL_PROJECT}}` with no truncation anywhere, so a name longer than 20 pushed SRC,
+# STATUS, LAST ACTIVE and SUMMARY right by the overflow while the header line -- padded from the same
+# constant -- did NOT move, and stopped describing its own rows on EVERY render in both scopes. Two
+# registered projects trigger it today (`pytest-coverage-impact` 22, `reveal-data-consistency` 23).
+#
+# WIDENED RATHER THAN TRUNCATED. Truncation keeps the geometry fixed and destroys the one field on
+# the row that is also an ARGUMENT -- the name is what you type into `borg link <name>`, and
+# `pytest-coverage-impa…` is not typeable. Widening instead costs geometry that depends on the row
+# set, so `borg link` and `borg link --all` can size this column differently when an archived project
+# has the longest name. Nothing parses the board positionally (drone.zsh:964 greps IN FOCUS's
+# `Status:`, `borg switch` reads `--porcelain`) and every golden byte-compares one invocation against
+# its own file, so that cost is cosmetic where the other is a lost identity. `_board_width` below is
+# the single place the choice is made.
 _COL_PROJECT = 20
 _COL_SRC = 4
 _COL_STATUS = 12
@@ -149,6 +164,33 @@ def _summary_block(summary: str) -> str:
     return "".join(out)
 
 
+# Named so `_objective_lines` slices the folded first line at exactly the prefix it built.
+_OBJECTIVE_LABEL = "Objective:"
+
+
+def _objective_lines(objective: str) -> list[str]:
+    """The Active Plan objective, FOLDED the way `_summary_block` folds a summary.
+
+    IT USED TO PRINT RAW, which was half of a two-part defect: `core.plan_objective` read one
+    physical line of a wrapped paragraph, and this printed whatever it got with no fold at all,
+    unlike every other prose field on the page. Measured on this repo's own PROJECT_PLAN.md the
+    emitted line was 129 VISIBLE COLUMNS -- the widest row the document produces, wider than the
+    picture's own 68-column budget, in the section a reader looks at first.
+
+    THE PREFIXED STRING IS WHAT GETS FOLDED, at 70, through `_fold_s` -- byte for byte the
+    arrangement `_summary_block` uses, so the section's two prose blocks cannot wrap differently.
+    Continuations re-indent to two spaces, keeping the deep dive's `^  [^ ]` rule intact. The slice
+    is safe by construction: `"  Objective: "` puts a space at column 12 and `_fold_s` breaks after
+    the last space at or before 70, so the first line always carries the whole prefix. Only the
+    LABEL is coloured, so ANSI bytes never enter the width arithmetic.
+    """
+    prefix = f"  {_OBJECTIVE_LABEL} "
+    folded = _fold_s(prefix + objective, width=70)
+    out = [f"  {CYAN}{_OBJECTIVE_LABEL}{NC}{folded[0][len(prefix) - 1 :]}\n"]
+    out.extend(f"  {line}\n" for line in folded[1:])
+    return out
+
+
 def _checkpoint_head_block(head: str) -> str:
     """Indent every line of a checkpoint head to two spaces, INCLUDING blank ones (borg.zsh:476's
     `head -20 "$f" | sed 's/^/  /'`, whose `^` anchor matches an empty line too).
@@ -213,13 +255,36 @@ def _overview_summary_cut(summary: str) -> str:
     return f"{cut}..." if len(summary) > 50 else cut
 
 
-def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str], mark: str = "") -> str:
+def _board_display(name: str, entry: dict) -> str:
+    """The name a board row PRINTS: the registry's `display_name`, else the key. ONE definition,
+    because `_board_width` must measure exactly the string `_overview_row` pads -- measuring the key
+    while padding the display name reintroduces the header/row mismatch through a rename."""
+    return str(entry.get("display_name") or name)
+
+
+def _board_width(order: list[str], projects: dict) -> int:
+    """The PROJECT column's width for one render: `_COL_PROJECT`, or the longest name if longer.
+
+    THE FLOOR KEEPS THE COMMON CASE BYTE-STABLE -- every fixture name and the real registry's modal
+    case is under 20, so this returns 20 and no golden moves. See `_COL_PROJECT` for why widening
+    beats truncating.
+    """
+    return max([_COL_PROJECT, *(len(_board_display(name, projects.get(name) or {})) for name in order)])
+
+
+def _overview_row(
+    name: str, entry: dict, cortex_by_project: dict[str, str], mark: str = "", width: int = _COL_PROJECT
+) -> str:
     """One board row, plus its cortex pause continuation when the project has a pending wake.
 
     `mark` IS APPENDED INSIDE THE ROW'S OWN f-STRING and defaults to "", which keeps every byte of
     this function identical for a caller that does not pass one. It exists so the scoped `◀` lands on
     the ROW and never on the countdown continuation, without the caller having to split the returned
     string back apart to find the boundary.
+
+    `width` DEFAULTS TO THE FLOOR so a caller rendering one row alone still gets the ordinary shape;
+    `_board_section`, the only caller that can SEE every row, passes the measured one and pads the
+    header from that same number. Computed once, in one place, handed to both.
     """
     source = str(core.jq_default(entry.get("source"), "cli"))
     # UNREACHABLE in practice: core.with_state already defaults a missing status to "idle"
@@ -229,18 +294,23 @@ def _overview_row(name: str, entry: dict, cortex_by_project: dict[str, str], mar
     status = str(core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS))
     last_activity = str(core.jq_default(entry.get("relative_activity"), ""))
     summary_short = _overview_summary_cut(str(core.jq_default(entry.get("summary"), "(no summary)")))
-    display = entry.get("display_name") or name
+    display = _board_display(name, entry)
     pin_mark = "*" if entry.get("pinned") is True else " "
     status_display = "waiting <<<" if status == "waiting" else status
 
     line = (
-        f"{pin_mark}{display:<{_COL_PROJECT}} {_src_badge(source):<{_COL_SRC}} "
+        f"{pin_mark}{display:<{width}} {_src_badge(source):<{_COL_SRC}} "
         f"{_status_color(status)}{status_display:<{_COL_STATUS}}{NC} "
         f"{last_activity:<{_COL_LAST_ACTIVE}} {summary_short}{mark}\n"
     )
     countdown = cortex_by_project.get(name)
     if countdown:
-        line += f"                       {CYAN}⏸ resumes in {countdown}{NC}\n"
+        # DERIVED FROM `width`, NOT THE 23 SPACES THIS USED TO HARDCODE -- a literal correct for
+        # exactly one column width and silently wrong for every other, which is the two-sources-of-
+        # truth failure the `_COL_*` constants were hoisted to prevent. `1 + width + 2` reproduces 23
+        # byte for byte at the floor (pin-mark column, name field, the zsh original's hand-counted
+        # two-space lead-in), which is why no golden moves.
+        line += f"{' ' * (1 + width + 2)}{CYAN}⏸ resumes in {countdown}{NC}\n"
     return line
 
 
@@ -383,7 +453,7 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
         out.append(f"  {BOLD}Active Plan{NC}\n")
         objective = plan.get("objective") or ""
         if objective:
-            out.append(f"  {CYAN}Objective:{NC} {objective}\n")
+            out.extend(_objective_lines(objective))
         out.append(f"  {CYAN}Progress:{NC} {plan.get('met', 0)}/{plan.get('total', 0)} criteria met\n")
 
     checkpoints = focus.get("checkpoints") or []
@@ -408,11 +478,19 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     """REPOSITORIES: every registered repository, in BOTH contexts. Transcribed from `overview()`.
 
     DELIBERATELY SCOPE-INVARIANT, and this is the one section AC2's "breadth" rule does not touch.
-    Three consumers read it precisely for a cross-project list: skills/borg-switch/SKILL.md's
-    `borg link --local --all` (run from a project session's cwd), borg.zsh:2225's 5s `borg watch`
-    redraw, and the fzf preview's own orientation. Narrowing it to the scoped repository would turn
-    all three into a one-row table. `--all` remains the only control over which rows appear; the
-    scoped row is MARKED, with a trailing `◀`, rather than made the only row.
+
+    TWO OF THE THREE CONSUMERS THIS USED TO CITE NO LONGER EXIST, and the justification is restated
+    rather than re-invented around whatever is left. It named `borg.zsh:2225`'s 5s `borg watch`
+    redraw and "the fzf preview's own orientation": `watch` is not in the case dispatch and exits 1
+    with "unknown command", and `cmd_switch`'s fzf call (borg.zsh:262-268) has no `--preview` at all
+    -- both were retired on 2026-08-27. ONE named consumer survives, skills/borg-switch/SKILL.md's
+    `borg link --local --all`, run from a project session's cwd precisely to get a cross-project
+    list; narrowing this section to the scoped repository would hand it a one-row table.
+
+    The remaining reason is the one that was always underneath the consumer list: the page has
+    exactly one place that answers "what else is going on", and a reader who ran `borg link` inside
+    a repository has not asked to stop being able to see that. `--all` remains the only control over
+    which rows appear; the scoped row is MARKED with a trailing `◀` rather than made the only row.
     """
     total_projects = doc.get("total_projects", 0)
     order = doc.get("order") or []
@@ -434,8 +512,11 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     waiting = sum(1 for name in order if str(core.jq_default(projects[name].get("status"), "")) == "waiting")
     note = f"the collective · {_plural(len(order), 'repository', 'repositories')} · {waiting} need attention"
 
+    # MEASURED ONCE AND HANDED TO BOTH the header and every row, which is the only arrangement in
+    # which the header cannot stop describing its rows.
+    width = _board_width(order, projects)
     lines = [
-        f"{BOLD} {'PROJECT':<{_COL_PROJECT}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
+        f"{BOLD} {'PROJECT':<{width}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
         f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} SUMMARY{NC}\n",
         ("─" * 90) + "\n",
     ]
@@ -443,7 +524,7 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     scoped = _scoped_name(doc)
     for name in order:
         mark = f" {CYAN}◀{NC}" if name == scoped else ""
-        lines.append(_overview_row(name, projects[name], countdowns, mark))
+        lines.append(_overview_row(name, projects[name], countdowns, mark, width))
     return note, lines
 
 
@@ -523,21 +604,19 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     and it is what separates that from a repository nobody swept.
 
     "swept back to <mark>", NOT "swept <mark>", AND THE THREE MISSING WORDS WERE A WRONG ANSWER.
-    `grid.since` is the sweep's WINDOW LOWER BOUND -- `grid.sweep_since(now, 90)`, i.e. `now - 90
-    days` -- and never the instant anything was swept. So this line used to render a full ISO
-    timestamp exactly ninety days old with the current wall clock attached, and a reader parsed
-    `swept 2026-05-30T14:24:17Z` as "this data is three months stale". Reproduced: at
-    `NOW=2026-08-28T14:24:17Z` the page said `swept 2026-05-30T14:24:17Z`, and three minutes later
-    it said `swept 2026-05-30T14:21:00Z` -- the mark tracks `now`, which is exactly backwards from
-    what the sentence claimed. The goldens could not see it, because
-    `tests/fixtures/link/sweep-acme.json` pins a bare `"since": "2026-05-28"` with no relationship
-    to any clock, and a bare date reads harmlessly either way.
+    `grid.since` is the sweep's WINDOW LOWER BOUND -- `grid.sweep_since(now, 90)` -- never the
+    instant anything was swept, so this line used to render a full ISO timestamp exactly ninety days
+    old with the current wall clock attached and a reader parsed it as "this data is three months
+    stale". Reproduced: at `NOW=2026-08-28T14:24:17Z` the page said `swept 2026-05-30T14:24:17Z`,
+    and three minutes later `swept 2026-05-30T14:21:00Z` -- the mark tracks `now`, exactly backwards
+    from what the sentence claimed. No golden could see it: `sweep-acme.json` pins a bare
+    `"since": "2026-05-28"` with no relationship to any clock, which reads harmlessly either way.
 
     A WINDOW BOUND AND A SWEEP TIME ARE TWO DIFFERENT SENTENCES -- this project's recurring trap --
-    so the fix is to say which one this is, not to swap in the other. The sweep time is not reported
-    here and does not need to be: the sweep runs inside the same `cli._document` pass that stamps
-    `generated_at`, so "when was this swept" is already answered by the page's own freshness, while
-    "how far back did it look" is a fact only this line carries.
+    so the fix is to say which one this is, not to swap in the other. The sweep TIME is not reported
+    here and need not be: the sweep runs inside the same `cli._document` pass that stamps
+    `generated_at`, so "when was this swept" is already the page's own freshness, while "how far back
+    did it look" is a fact only this line carries.
     """
     grid_block = doc.get("grid") or {}
     manifests = grid_block.get("manifests") or []
@@ -572,23 +651,20 @@ _GROUP_UNSURE = "unsure"
 # Those are manifest_core.gates' words and the only two kinds any manifest has ever declared.
 _GATE_ROUTING = {"decision": _GROUP_YOURS, "verification": _GROUP_MINE}
 # `mine` HAS TWO KINDS OF MEMBER AND THE HEADING MUST BE TRUE OF BOTH. It used to read "nothing is
-# blocking these", which was written for the UNGATED member and is a FALSE STATEMENT about the other
-# one: a `verification` gate IS a blocker, and `_next_row` prints its `blocked_by` on the very same
-# line. Reproduced live before this fix, on the front door's single most decision-relevant line:
-#
-#     mine — nothing is blocking these
-#       ● stillpoint-labs/stillpoint#57  needs a live-prod confirmation run against all four contracts
+# blocking these", written for the UNGATED member and a FALSE STATEMENT about the other one: a
+# `verification` gate IS a blocker and `_next_row` prints its `blocked_by` on the very same line.
+# Reproduced live on the front door's single most decision-relevant line --
+# `mine — nothing is blocking these` directly above `stillpoint#57  needs a live-prod confirmation
+# run against all four contracts`.
 #
 # THE ROUTING IS NOT THE BUG AND DOES NOT MOVE. AC4's D2 is explicit that a `verification` goes to
 # `mine` -- "a `decision` blocks a PERSON, a `verification` blocks nobody in particular because anyone
-# can run it" -- so the axis this table splits on is WHOSE HANDS the row needs, not whether it is
-# blocked. The heading now says that axis out loud, and it is true of both members: an ungated row
-# needs no decision and anyone can pick it up, and a verification-gated row blocks nobody in
-# particular because anyone can run it. It is also the exact complement of `yours`, which is what
-# makes the pair readable as one question with two answers.
+# can run it" -- so the axis this table splits on is WHOSE HANDS the row needs, never whether it is
+# blocked. The heading now says that axis out loud and is true of both members, and it is the exact
+# complement of `yours`, which is what makes the pair read as one question with two answers.
 #
-# NO EM DASH INSIDE A HEADING. `_next_section` renders these as `{group} — {heading}`, so a heading
-# carrying its own `—` prints two on one line and the second reads as the start of the row list.
+# NO EM DASH INSIDE A HEADING: `_next_section` renders `{group} — {heading}`, so a second one on the
+# line reads as the start of the row list.
 _GROUP_HEADINGS = {
     _GROUP_YOURS: "a decision only you can make",
     _GROUP_MINE: "no decision needed first, so anyone can pick these up",

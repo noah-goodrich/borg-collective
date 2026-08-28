@@ -323,6 +323,39 @@ def test_objective_omitted_with_no_placeholder_when_empty():
     assert "0/2 criteria met" in out
 
 
+def test_the_objective_folds_like_a_summary_instead_of_running_off_the_page():
+    """MUTATION: restore `out.append(f"  {CYAN}Objective:{NC} {objective}\\n")` in `_focus_section`.
+
+    IN FOCUS printed the objective RAW while `_summary_block`, three lines above it in the same
+    section, folded at 70. Measured against this repo's own PROJECT_PLAN.md the emitted line was 129
+    VISIBLE COLUMNS -- the widest row the document produces, and wider than the picture's own
+    68-column budget. Nothing caught it because every fixture objective is one short line.
+
+    ASSERTED AS A WIDTH BOUND, not as a set of expected break points: any honest fold satisfies it
+    and the raw print cannot. The whole objective must still be PRESENT, so folding may not become
+    truncating by another name.
+    """
+    objective = (
+        "Land the derived-fact surface behind one front door, so that every consumer reads the same "
+        "document, and no renderer re-derives a number the wire already published."
+    )
+    doc = _repository_doc(focus=_focus(plan={"objective": objective, "met": 1, "total": 2}))
+    body = plain(render.document(doc)).split("\n")
+
+    # The Active Plan block is `Objective:` then `Progress:`, so the objective owns every line
+    # between them -- one, before this fix; as many as the fold needs, after it.
+    start = next(i for i, line in enumerate(body) if line.startswith("  Objective:"))
+    end = next(i for i, line in enumerate(body) if line.startswith("  Progress:"))
+    block = body[start:end]
+
+    assert len(block) > 1, "an objective well past 70 columns must wrap at all"
+    for line in block:
+        assert len(line) <= 72, f"{len(line)} columns: {line}"
+        assert not line[2:3].isspace(), f"a continuation must never begin with a space: {line!r}"
+    # Reassembling the block must give the objective back -- folding, never truncating.
+    assert " ".join(part.strip() for part in block) == f"Objective: {objective}"
+
+
 def test_focus_renders_checkpoints_and_the_latest_head():
     doc = _repository_doc(
         focus=_focus(checkpoints=["2026-08-01.md"], checkpoint_head="line one\nline two"),
@@ -457,6 +490,53 @@ def test_board_row_variants_capacity_and_cortex_all_render():
     assert "▸ 5 sessions" not in out
     # "Need attention" on the board note is the WAITING count, not capacity.active.
     assert "2 repositories · 1 need attention" in out
+
+
+def test_the_board_header_still_describes_its_rows_when_a_name_overflows_the_column():
+    """MUTATION: pad the header and the rows from `_COL_PROJECT` again instead of `_board_width`.
+
+    `_COL_PROJECT` was used as a MINIMUM (`{display:<{_COL_PROJECT}}`) with no truncation anywhere,
+    so a name longer than 20 pushed SRC / STATUS / LAST ACTIVE / SUMMARY right by the overflow while
+    the header line, padded from the same constant, did not move. Every column label then sat over
+    the wrong column, on EVERY render in both scopes. Two registered projects trigger it today
+    (`pytest-coverage-impact` 22, `reveal-data-consistency` 23), which is why no fixture ever saw it:
+    every fixture name is short.
+
+    THE ASSERTION IS AN OFFSET, NOT A STRING. It finds where `SRC` starts on the header and where
+    each row's `[C]` badge starts, and requires them equal. That is the property "the header
+    describes its rows" stated in the only terms that can actually go red, and it holds for any
+    width rule that is internally consistent -- including a future truncating one.
+
+    THE DISPLAY NAME IS WHAT COUNTS, not the registry key: `_board_width` measures the same string
+    `_overview_row` pads, or a renamed project reintroduces the bug through the other door.
+    """
+    long_display = "reveal-data-consistency"  # 23 -- the longest name in the real registry today
+    assert len(long_display) > render._COL_PROJECT  # pylint: disable=protected-access
+    doc = _doc(
+        total_projects=2,
+        order=["a", "b"],
+        projects={
+            "a": {"source": "cli", "status": "idle", "relative_activity": "2h ago", "summary": "s"},
+            "b": {
+                "source": "cli",
+                "status": "idle",
+                "display_name": long_display,
+                "relative_activity": "1h ago",
+                "summary": "s",
+            },
+        },
+    )
+    board = [line for line in plain(render.document(doc)).split("\n") if " [C] " in line or " SRC " in line]
+    assert len(board) == 3, board
+
+    offsets = {line.index("SRC") if " SRC " in line else line.index("[C]") for line in board}
+    assert len(offsets) == 1, f"the header and its rows disagree about where SRC starts: {board}"
+    assert long_display in "\n".join(board), "the name is printed whole, never cut to fit"
+
+    # ...and the cortex continuation follows the SAME width rather than its own hardcoded indent.
+    doc["cortex_pending"] = [{"project": "b", "reset_at": "x", "countdown": "1h 0m"}]
+    paused = next(line for line in plain(render.document(doc)).split("\n") if "resumes in" in line)
+    assert paused.index("⏸") == 1 + len(long_display) + 2, paused
 
 
 def test_signals_reports_the_ladders_gap_as_a_sentence_never_a_token():

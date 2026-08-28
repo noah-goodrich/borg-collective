@@ -1652,6 +1652,13 @@ _link_build_overview_ws() {
         > "$root/alpha/docs/plans/assimilated/2026-02-03-alpha-new.md"
 }
 
+# `hotel`'s display_name is 26 CHARACTERS ON PURPOSE, past `render._COL_PROJECT`'s floor of 20. Every
+# name in every fixture used to be short, so no golden had ever rendered the overflow case -- and the
+# board's header, padded from the same constant the rows treated as a MINIMUM, silently stopped
+# describing its own columns for any name over 20. Two REAL registered projects trigger it today
+# (`pytest-coverage-impact` 22, `reveal-data-consistency` 23). This is the fixture that makes the
+# widened PROJECT column a golden fact rather than a unit-test one.
+#
 # Covers, in one render: the pin mark, the "waiting <<<" status decoration, all three source badges
 # ([C]/[X]/[D]), the "(no summary)" default, the 50-char summary cut WITH ellipsis, the display_name
 # override and its fallback, five relative-time buckets including "never", the idle+unpinned tie
@@ -1688,7 +1695,7 @@ _link_registry_overview() {
                 "last_activity": "$t_foxtrot", "summary": "Foxtrot ties alpha's bucket."},
     "golf": {"path": null, "source": "cli", "status": "idle",
              "summary": "Golf has never been active."},
-    "hotel": {"path": null, "source": "cli", "status": "idle", "display_name": "Hotel Renamed",
+    "hotel": {"path": null, "source": "cli", "status": "idle", "display_name": "hotel-renamed-and-then-some",
               "last_activity": "$t_hotel", "summary": "Hotel renders under its display_name."},
     "india": {"path": null, "source": "cli", "status": "archived",
               "last_activity": "$t_hotel", "summary": "India is archived."}
@@ -1715,12 +1722,21 @@ _link_build_deep_ws() {
     local d="${BATS_TEST_TMPDIR}/ws/delta" i
     mkdir -p "$d/.borg/checkpoints" "$d/docs/plans/directives" "$d/docs/plans/assimilated"
 
+    # THE OBJECTIVE IS A WRAPPED THREE-LINE PARAGRAPH, which is what a real one is: this tree
+    # hard-wraps prose at 120 columns and borg-collective's own PROJECT_PLAN.md has exactly this
+    # shape. It used to be one short line here, so the golden could not see either half of the defect
+    # that pairing hid -- `core.plan_objective` read only the FIRST physical line (the shell's
+    # `head -1`, transcribed), and `_focus_section` then printed whatever it got with no fold, unlike
+    # every other prose field in the section. The page emitted a 129-column line ending on a dangling
+    # comma. Now the golden pins the reassembled paragraph AND its fold.
     cat > "$d/PROJECT_PLAN.md" <<'EOF'
 # Project Plan: Delta
 
 ## Objective
 
-Keep the delta fixture stable so the deep dive renders identically on every run.
+Keep the delta fixture stable so the deep dive renders identically on every run,
+including the objective, which is deliberately a wrapped paragraph rather than one
+short line, so the fold is pinned by bytes and not only by a unit test.
 
 ## Acceptance Criteria
 
