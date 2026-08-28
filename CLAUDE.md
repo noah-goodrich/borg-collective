@@ -77,7 +77,9 @@ borg / borg next         What needs attention? Switch to it.
 borg claude              Launch/resume orchestrator Claude session
 borg link [project]      ONE document, seven sections, always the same spine (AC2)
                            Scope widens or narrows it; it is never a different page
-                           --brief   LLM narrative briefing (still zsh, never sweeps)
+                             — except `--brief`, the one invocation that prints prose
+                           --brief   Same document, same sweep, PROSE not the seven
+                                     sections (AC1). Falls back to the real page.
                            --refresh Regenerate summaries
                            --all     Include archived projects
                            --local   Opt down from the NETWORK sweep — no adapter, no `gh`. NOT
@@ -95,7 +97,7 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                                      `borg link --local --all`
                            --json / --porcelain  the two machine surfaces
                            --deep    Parsed and IGNORED since AC2; kept for borg.zsh's positional
-                                     `link` arm, the only caller that still passes it
+                                     `link` arm, the one live caller (`_link_py_args=(--deep)`)
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
@@ -305,19 +307,14 @@ docs/
   scope, mode or emptiness**. (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
   reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
   chose over reserving an always-empty slot in advance.) `render.overview` and `render.deep` are
-  deleted, and `--deep` is parsed and ignored (kept in the parser because borg.zsh's positional
-  `link` arm — the `if [[ -n "$_link_project" ]]` branch that sets `_link_py_args=(--deep)`, taken by
-  every `borg link <project>` and by `drone link` — still passes it, and argparse exiting 2 there is
-  a blank page with nothing on stderr. **Anchored by the arm, not pinned to a line number**, because
-  this one fact has now been filed as a stale-pin defect three times: `borg.zsh:3111` was inside the
-  `recon)` retirement comment and never passed `--deep`, and its correction to `borg.zsh:3064` landed
-  on a comment line. Every insertion above the arm moves the number; the branch condition does not
-  move. Same rule `tests/cli_contract.bats` already ratified for its own pins. The "fzf preview
-  included" clause dropped with this correction — it named a consumer retired 2026-08-27.)
-  **Scope changes which ROWS a section prints, never which sections exist** — the contexts differ in
-  breadth only, so a reader who learns the page once has learned every invocation of it. Section
-  headers are byte-identical in both contexts; `focus` now follows scope, so a bare `borg link`
-  inside a repository renders
+  deleted, and `--deep` is parsed and ignored (kept in the parser because borg.zsh's positional `link`
+  arm — grep `_link_py_args=(--deep)`, the one live caller, serving every `borg link <project>` and
+  `drone link` — still passes it, and argparse exiting 2 there is a blank pane with nothing on stderr.
+  Line pins are deliberately absent: four sites all said `borg.zsh:3111`, which matched neither main
+  nor the branch that "corrected" it.) **Scope changes which ROWS
+  a section prints, never which sections exist** — the contexts differ in breadth only, so a reader
+  who learns the page once has learned every invocation of it. Section headers are byte-identical
+  in both contexts; `focus` now follows scope, so a bare `borg link` inside a repository renders
   `▸ IN FOCUS` for it. `DOCUMENT_VERSION` stays 2: breadth is applied in the renderer, so no
   pre-existing JSON key narrowed and `skills/borg-link/SKILL.md`'s version gate is untouched.
 - **`picture.py` is pure; `render.py` is the page**: the topological picture (columns, connectors,
@@ -340,6 +337,43 @@ docs/
   would end the purity the hand-authored oracles depend on. `grid.build_grid` cannot own the key —
   `picture.py` already imports `grid`, so the reverse is a cycle. Measure with `visible_len`, never
   `len`: the rows carry SGR and OSC-8 bytes.
+- **`--brief` is a presentation mode of the document, not a second path (AC1, 2026-08-27)**:
+  `_borg_print_briefing` (borg.zsh) builds the `borg link` document ONCE — the same
+  `_borg_py borg_core.link.cli --json` call every other dispatch arm makes, with `--all`/`--local`
+  forwarded identically (`--local` pinned by subprocess count, `--all` by "--all puts archived
+  projects in the prompt, and its absence keeps them out") — projects that JSON into the narrative
+  prompt with one `jq`, and when the
+  narrative fails pipes **those same bytes** back through `borg_core.link.cli --render-document`,
+  a non-mode seam gated in `main()` above `_mode`. One sweep, one `generated_at`, two consumers. It
+  used to be 177 lines of a second registry walk that never reached Python at all, which is why AC1
+  stayed unticked with both verify clauses passing.
+  **It IS still a different page, and the AC2 line above is qualified rather than rescued.** The
+  narrative path prints prose: no cube, none of the seven `▸` sections. What the fold bought is that
+  the prose is now a *rendering of the same document* rather than of a second board, and that the
+  FALLBACK is the real page byte for byte. "Never a different page" holds for every invocation of
+  `borg link` except `--brief`'s success path; do not read the AC2 line as covering it.
+  Four rules follow. (1) **Never re-derive here.**
+  A `borg_registry_with_state` call inside that function undoes the fold. (2) **Never rebuild for the
+  fallback.** A second `--json` call would re-read the clock and re-sweep, so the page could disagree
+  with the prompt it fell back from — two truth levels inside one invocation. **Nor may that render
+  fail quietly**: a failed fallback page names the child's stderr on OUR stderr and returns non-zero,
+  which `borg link --brief` propagates — pinned by "a failed fallback render names its reason on
+  stderr and exits non-zero". (3) **The `claude -p` call stays in zsh.** `borg_core/proc.py` DEVNULLs
+  stderr and returns `None` (not rc 124) on timeout, so moving it silently deletes two pinned
+  contracts: the reason line's captured stderr, pinned by "fallback with nonzero exit prints a reason
+  line naming the exit code", and the timeout branch, pinned by "--brief renders the document when
+  claude times out" — which lives in the sweep suite, not the briefing one, because the timeout
+  branch is only reachable where a sweep genuinely runs. (Named by CASE rather than by file:line: the
+  two are in different suites and both files' numbers drift on every insertion.) (4) **Every
+  scope-dependent list on the wire goes through
+  the projection's `$breadth` binding**, which transcribes `render._scoped_rows`: `--json` always
+  carries the registry-WIDE `directives`/`assimilated` (`cli.py`'s `need_aggregate`), and the human
+  page narrows them to `focus` in repository scope — so a projection reading the top level
+  unconditionally puts a different QUEUED count in the prompt than on the page it falls back to.
+  That shipped once, measured at 141 aggregate directives against 0 focused, and is pinned by
+  `tests/briefing.bats`'s "in repository scope the prompt's QUEUED/SHIPPED match the page's".
+  Sweep parity is asserted by **subprocess count** in
+  `tests/link_sweep.bats`, never by reading the arm.
 - **The `borg link` parity harness's `render` leg was retired 2026-08-27 (AC2/S4)**:
   `bin/link-parity-harness render` byte-compared the current tree against the last zsh renderer at
   `ad99612`. After AC2 that oracle renders a *different document*, so the comparison is

@@ -6,6 +6,10 @@ render.py, which is a pure function of the document this module builds -- unlike
 borg_core/recon/cli.py:71, the wall clock is read ONCE in the shell tier (shell.now_epoch()) and
 threaded through every derived field; a second `datetime.now()` call in this file would be the exact
 layering smell borg_core/link/shell.py:44-52 names and refuses.
+
+`--render-document` IS NOT A FOURTH MODE. It builds no document at all -- it reads one that has
+already been built off stdin and prints it through the same `render.document`. See
+`_render_document_from_stdin` for why that seam exists and why it is not a branch inside `_run`.
 """
 
 from __future__ import annotations
@@ -357,8 +361,42 @@ def _run(project: str, show_all: bool, mode: str, local: bool = False) -> int:
     return _emit(render.document(doc))
 
 
+def _render_document_from_stdin(stream) -> int:
+    """Render an ALREADY-BUILT document, read as JSON from `stream`, through the one human renderer.
+
+    THIS IS NOT A FOURTH MODE, AND `_mode` DELIBERATELY DOES NOT KNOW ABOUT IT. The three modes each
+    BUILD a document and then choose a serializer; this entry point builds nothing. It exists so one
+    invocation of `borg link` can have exactly one document and two consumers, which is the whole of
+    the 2026-08-27 `--brief` fold: `_borg_print_briefing` (borg.zsh) captures `--json` once, projects
+    it into the narrative prompt, and pipes THAT SAME BYTES back through here when the narrative is
+    unavailable. Re-invoking the human arm instead would re-read the clock, re-sweep GitHub and
+    re-glob every manifest, so the page the user finally reads could disagree with the prompt it fell
+    back from -- two truth levels inside one invocation, which is the exact defect the fold removes.
+
+    A SEPARATE FUNCTION, NOT A SECOND BRANCH IN `_run`, and the separation is pinned rather than
+    stylistic: test_render.py asserts `inspect.getsource(cli._run).count("render.document(") == 1`,
+    because a second call site inside the dispatcher is how "one front door" decays back into two
+    modes of one command. The same reasoning is why this lives here and not in render.py --
+    test_render.py also asserts render's public callables are exactly {document, porcelain}, so the
+    seam belongs to the artifact that implements the command, not to the pure renderer. Same altitude
+    as borg_core/recon/cli.py::main's retirement gate.
+
+    Failures are NOT caught here. A truncated or non-JSON stdin raises, `main`'s single exception
+    boundary formats it with `_die_human`, and the caller sees `▸ ERROR:` on stderr with zero bytes
+    on stdout -- which is what every other malformed-input path in this module already does.
+    """
+    return _emit(render.document(jsonlib.load(stream)))
+
+
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the stdlib argparse parser for all four `borg link` modes."""
+    """Build the stdlib argparse parser: THREE modes (`json`, `porcelain`, `human`) plus four flags
+    that are not modes.
+
+    It used to say "all four modes", directly above `--deep`, whose own comment three lines down and
+    the module docstring at the top of this file both insist it is NOT one -- and `_mode` reads
+    exactly two flags. `--render-document` landing next to it made the miscount a live trap: a reader
+    counting flags would make it five. The mode count is `_mode`'s return set and nothing else.
+    """
     parser = argparse.ArgumentParser(prog="borg link", description="Emit the borg link document.")
     parser.add_argument("project", nargs="?", default="")
     parser.add_argument("--json", dest="json_only", action="store_true")
@@ -367,20 +405,24 @@ def _build_parser() -> argparse.ArgumentParser:
     # scope -- scope_for already resolves `borg link <project>` to {kind: repository}, so the one
     # document says everything the deep dive said, and keeping it as a MODE would be a third context
     # rendering the same data, which is exactly what "the contexts differ in breadth only" forbids.
-    # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT: borg.zsh's
-    # `_borg_link_dispatch` positional arm -- the `if [[ -n "$_link_project" ]]` branch that sets
-    # `_link_py_args=(--deep)`. ANCHORED BY THE BRANCH, NOT PINNED TO A LINE: that fact has been filed
-    # as a stale-pin defect three times (this comment said borg.zsh:3111, which is inside the `recon)`
-    # retirement comment; CLAUDE.md's correction to :3064 landed on a comment line). Every `borg link
-    # <project>` and every `drone link` takes that arm, so deleting the argument makes argparse exit 2
-    # on the most common invocation of the command.
+    # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT, and it is the worst
+    # one to break: borg.zsh's `_borg_link_dispatch` positional arm -- find it with
+    # `grep -n -- '_link_py_args=(--deep)' borg.zsh`, which returns exactly one line, the assignment
+    # itself. SCOPE THE GREP TO THAT FILE. Run tree-wide the same pattern returns seven hits, because
+    # the anchor conversion described below put the literal into six PROSE sites (this comment, its
+    # twin in test_cli.py, two lines of CLAUDE.md, and two directives under docs/plans/directives/);
+    # a reader who greps the tree and counts is reading commentary, not callers. That arm serves
+    # every `borg link <project>` a human types and every `drone link`, so deleting the argument
+    # makes argparse exit 2 on the most-typed invocation of the command.
     #
-    # THE STAKES USED TO BE STATED HIGHER AND ARE NOW LOWER. This said the arm "IS the fzf preview's
-    # path, re-executed on every cursor move", and that argparse would exit 2 "where `drone status`
-    # and the fzf preview both swallow the failure silently -- a blank pane and a blank column, with
-    # nothing on stderr". Both consumers were retired 2026-08-27, so the failure is no longer silent:
-    # it is exit 2 with argparse's usage text on a user's terminal. Loud, but still on every typed
-    # deep dive, which is reason enough to keep the argument.
+    # ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This comment, its twin in
+    # test_cli.py's `test_deep_is_accepted_and_ignored`, and two lines of CLAUDE.md all read
+    # `borg.zsh:3111`, a number that matched NEITHER main NOR the branch that last edited them -- and
+    # any insertion above the arm invalidates it again with nothing failing. `grep` for the assignment
+    # instead. The same edit dropped this comment's "which IS the fzf preview's path, re-executed on
+    # every cursor move": `cmd_switch`'s `fzf` call has no `--preview` flag at all, so that hot loop
+    # is not a weaker justification, it is a nonexistent one. The surviving justification is stronger
+    # anyway -- a human's own `borg link <project>` exiting 2.
     #
     # THE COUNT WAS CORRECTED IN AC2/S4. It used to say THREE copies, naming bin/link-parity-harness
     # and the byte-copy at ~/.claude/bin/link-parity-harness alongside borg.zsh. Neither ever passed
@@ -413,6 +455,11 @@ def _build_parser() -> argparse.ArgumentParser:
     # not there. Anyone reading this as dead plumbing and deleting a `--local` from a call site is
     # removing a network sweep's only brake.
     parser.add_argument("--local", dest="local", action="store_true")
+    # NOT A MODE. Reads a document off stdin and renders it; builds nothing, sweeps nothing, reads no
+    # clock. Its one caller is `_borg_print_briefing`'s fallback (borg.zsh), and `_render_document_from_stdin`
+    # carries the reasoning. It is gated in `main()` ABOVE `_run` rather than inside `_mode` so the
+    # three-mode invariant this file opens with stays literally true.
+    parser.add_argument("--render-document", dest="render_document", action="store_true")
     return parser
 
 
@@ -452,11 +499,27 @@ def main(argv: list[str] | None = None) -> None:
     This is the ONLY exception boundary in this module, placed here because `_run`/`main` is the
     only point that already knows the mode.
     """
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    # REJECTED AT THE PARSER, not reconciled downstream. `--render-document` is not a mode: it prints
+    # the human page from stdin whatever `--json`/`--porcelain` say. Combined with one of them, `mode`
+    # was still computed first, so `--json --render-document` selected the JSON die formatter and then
+    # emitted the human ANSI page -- a request answered by ignoring half of it. Making `die` follow
+    # the output instead would have kept the combination "working" while still ignoring the flag the
+    # caller passed; refusing is the only answer that does not silently discard user intent, and the
+    # one live caller (borg.zsh's `_borg_print_briefing` fallback) passes `--render-document` alone,
+    # so nothing on any shipped path reaches this. Not a mutually-exclusive argparse group: that would
+    # also forbid `--json --porcelain`, which is a LIVE combination resolved by `_mode`'s documented
+    # precedence.
+    if args.render_document and (args.json_only or args.porcelain):
+        parser.error("--render-document is not a mode; it cannot be combined with --json or --porcelain")
     mode = _mode(args)
     die = _die_json if mode == "json" else _die_human
     try:
-        exit_code = _run(args.project, args.show_all, mode, args.local)
+        if args.render_document:
+            exit_code = _render_document_from_stdin(sys.stdin)
+        else:
+            exit_code = _run(args.project, args.show_all, mode, args.local)
     except ProjectNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.
