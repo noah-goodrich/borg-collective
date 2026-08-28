@@ -717,8 +717,13 @@ def test_no_module_references_an_external_plugin_or_a_sibling_checkout():
 # time: one mistyped `gate.kind` took the orchestrator grid from 12 declared refs to 5 — seven rows
 # vanished from `▸ CHAINS` because of one word in one field, and the page kept its confident frame.
 # See docs/plans/directives/2026-08-27-degrade-the-row-not-the-manifest.md.
+#
+# THE DEFECT THESE CASES USE IS NO LONGER A MISTYPED `kind`, and the swap is the point of the follow-
+# up change: an unrecognized kind is now a ROUTER concern, so the row loads and routes to `unsure`
+# instead of being dropped. A gate that names no settlement has no such renderer-side answer, so it
+# is the defect that still costs its row — and it exercises the identical partition/drop path.
 
-_BAD_GATE = {"kind": "review", "blocked_by": "someone", "resolved_by": "someday"}
+_BAD_GATE = {"kind": "decision", "blocked_by": "someone"}
 
 
 def test_one_invalid_row_costs_the_row_and_not_the_file(tmp_path):
@@ -744,7 +749,7 @@ def test_one_invalid_row_costs_the_row_and_not_the_file(tmp_path):
 
     assert len(warnings) == 1
     assert "1 of 4 rows dropped" in warnings[0]
-    assert "gate.kind must be one of" in warnings[0], "the validator's own message is carried verbatim"
+    assert "gate.resolved_by is required" in warnings[0], "the validator's own message is carried verbatim"
     assert "a.json" in warnings[0], "and the file is named"
 
 
@@ -847,7 +852,7 @@ def test_partition_errors_splits_row_scoped_from_structural():
     bad_rows, structural = core.partition_errors(
         [
             "rows[0]: missing order",
-            "rows[0]: gate.kind must be one of ['decision', 'verification'], got review",
+            "rows[0]: gate.resolved_by is required",
             "rows[3].after[1] must be a full ref (owner/repo#num), got nope",
             "apex: ref must be a full ref (owner/repo#num), got nope",
             "rows: missing or not a list",

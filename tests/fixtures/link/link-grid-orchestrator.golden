@@ -22,7 +22,7 @@
  relay                [C]  [2midle        [0m 2d ago       Relay has no summary yet.
  ledger               [C]  [2midle        [0m 30m ago      Nightly close reconciliation.
 
-[1m▸ CHAINS[0m  [2m2 projects · 12 refs · 1 unresolved · swept 2026-05-28[0m
+[1m▸ CHAINS[0m  [2m2 projects · 13 refs · 1 unresolved · swept 2026-05-28[0m
 
   [1mauth-hardening[0m
   [2mRotate every service onto scoped keypair auth, then flip enforcement on in one release.[0m
@@ -94,7 +94,7 @@
   [1mwarehouse-rollout[0m
   [2mMove the warehouse fleet onto the rotated keypair, one region at a time.[0m
   [2mrepos: acme/warehouse[0m
-  [2mglance:[0m [0;32m✔[0m [1;33m●[0m [0;32m✔[0m [2m✗[0m [2m✔[0m
+  [2mglance:[0m [0;32m✔[0m [1;33m●[0m [0;32m✔[0m [2m✗[0m [1;33m●[0m [2m✔[0m
 
     [0;32m✔[0m n8   ]8;;https://github.com/acme/warehouse/issues/61\warehouse#61]8;;\
     [2m│[0m
@@ -102,9 +102,11 @@
     [2m│[0m
     [0;32m✔[0m[0;31m![0mn10  ]8;;https://github.com/acme/warehouse/issues/70\warehouse#70]8;;\
     [2m│[0m
-    [2m✗[0m n11  ]8;;https://github.com/acme/warehouse/issues/72\warehouse#72]8;;\
+[2m    ├────────────────────┐[0m
+    [2m│[0m                    [2m│[0m
+    [2m✗[0m n11  ]8;;https://github.com/acme/warehouse/issues/72\warehouse#72]8;;\  [1;33m●[0m n12  ]8;;https://github.com/acme/warehouse/issues/78\warehouse#78]8;;\
     [2m│[0m
-    [2m✔[0m[1;33m?[0mn12  ]8;;https://github.com/acme/warehouse/issues/75\warehouse#75]8;;\
+    [2m✔[0m[1;33m?[0mn13  ]8;;https://github.com/acme/warehouse/issues/75\warehouse#75]8;;\
 
   [2mn8[0m    ]8;;https://github.com/acme/warehouse/issues/61\acme/warehouse#61]8;;\  [0;32mMERGED[0m
       us-east region cutover
@@ -125,7 +127,7 @@
       eu region cutover
       [2mwhy:[0m       eu region cutover
       [2mwaits on:[0m  acme/warehouse#64 (open)
-      [2munlocks:[0m   acme/warehouse#72 (closed)
+      [2munlocks:[0m   acme/warehouse#72 (closed) · acme/warehouse#78 (open)
       [0;31mdrift:[0m     merged ahead of acme/warehouse#64 (open)
       [2mstate:[0m     from the sweep
 
@@ -136,7 +138,16 @@
       [2munlocks:[0m   acme/warehouse#75
       [2mstate:[0m     from a targeted fetch
 
-  [2mn12[0m   ]8;;https://github.com/acme/warehouse/issues/75\acme/warehouse#75]8;;\
+  [2mn12[0m   ]8;;https://github.com/acme/warehouse/issues/78\acme/warehouse#78]8;;\  [1;33mOPEN[0m
+      rotate the vault keypair
+      [2mwhy:[0m       rotate the vault keypair
+      [2mwaits on:[0m  acme/warehouse#70 (merged)
+      [2munlocks:[0m   [2mnothing — end of the chain[0m
+      [0;36mgate:[0m      review — the crypto review has not been booked
+      [0;36munparked:[0m  security signs the review off
+      [2mstate:[0m     from a targeted fetch
+
+  [2mn13[0m   ]8;;https://github.com/acme/warehouse/issues/75\acme/warehouse#75]8;;\
       [2mwhy:[0m       sa region cutover — the AC4-precondition row: declared merged, verified by nobody
       [2mwaits on:[0m  acme/warehouse#72 (closed)
       [2munlocks:[0m   [2mnothing — end of the chain[0m
@@ -155,18 +166,20 @@
     [2m- [warehouse] Region cutover runbook (2026-08-18)[0m
     [2m- [ledger] Close-of-day parity harness (2026-08-17)[0m
 
-[1m▸ NEXT[0m  [2m4 ready of 12[0m
+[1m▸ NEXT[0m  [2m5 ready of 13[0m
   [1myours[0m [2m— a decision only you can make[0m
     [1;33m●[0m ]8;;https://github.com/acme/warehouse/issues/64\acme/warehouse#64]8;;\  [2mKelly must sign off on the maintenance window[0m
   [1mmine[0m [2m— nothing is blocking these[0m
     [1;33m●[0m ]8;;https://github.com/acme/warehouse/issues/87\acme/warehouse#87]8;;\
     [1;33m●[0m ]8;;https://github.com/acme/infra/issues/12\acme/infra#12]8;;\
     [1;33m●[0m ]8;;https://github.com/acme/platform/issues/420\acme/platform#420]8;;\
+  [1munsure[0m [2m— the gate says "review", which does not route[0m
+    [1;33m●[0m ]8;;https://github.com/acme/warehouse/issues/78\acme/warehouse#78]8;;\  [2mthe crypto review has not been booked[0m
 
 [1m▸ SIGNALS[0m
   [1m4 sessions need attention[0m (limit: 3)
   [2m— sweep: replayed from fixture <TESTS>/fixtures/link/sweep-acme.json -- no adapter ran[0m
   [2m— fetch: replayed from fixture <TESTS>/fixtures/link/fetch-acme.json -- no gh ran[0m
-  [2m— fetch: 1 of 12 declared ref(s) did not resolve (deleted, renamed, or not visible) -- they fall back to what the manifest declares[0m
-  [2m— 1 of 12 declared refs unresolved — nobody looked[0m
+  [2m— fetch: 1 of 13 declared ref(s) did not resolve (deleted, renamed, or not visible) -- they fall back to what the manifest declares[0m
+  [2m— 1 of 13 declared refs unresolved — nobody looked[0m
 
