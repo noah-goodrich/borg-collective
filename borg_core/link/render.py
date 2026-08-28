@@ -69,14 +69,13 @@ from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 # constant -- did NOT move, and stopped describing its own rows on EVERY render in both scopes. Two
 # registered projects trigger it today (`pytest-coverage-impact` 22, `reveal-data-consistency` 23).
 #
-# WIDENED RATHER THAN TRUNCATED. Truncation keeps the geometry fixed and destroys the one field on
-# the row that is also an ARGUMENT -- the name is what you type into `borg link <name>`, and
-# `pytest-coverage-impa…` is not typeable. Widening instead costs geometry that depends on the row
-# set, so `borg link` and `borg link --all` can size this column differently when an archived project
-# has the longest name. Nothing parses the board positionally (drone.zsh:964 greps IN FOCUS's
-# `Status:`, `borg switch` reads `--porcelain`) and every golden byte-compares one invocation against
-# its own file, so that cost is cosmetic where the other is a lost identity. `_board_width` below is
-# the single place the choice is made.
+# WIDENED RATHER THAN TRUNCATED, ON THE READER'S TERMS AND NOT A CONSUMER'S: truncation destroys the
+# one field on the row that is also an ARGUMENT (`pytest-coverage-impa…` is not typeable into `borg
+# link <name>`), while widening costs only geometry that varies with the row set, which every golden
+# absorbs by byte-comparing ONE invocation against its own file. NOTHING PARSES THIS BOARD -- checked,
+# not asserted: a draft here cited `drone status`'s `grep -m1 'Status:'`, retired 2026-08-27 in this
+# branch's stale-consumer sweep, and `grep -rn 'borg link'` over drone.zsh, borg.zsh, lib/, hooks/ and
+# skills/ finds only `--json` readers, `drone link`'s `exec`, and `borg switch`'s `cmd_ls --porcelain`.
 _COL_PROJECT = 20
 _COL_SRC = 4
 _COL_STATUS = 12
@@ -487,10 +486,11 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     TWO OF THE THREE CONSUMERS THIS USED TO CITE NO LONGER EXIST, and the justification is restated
     rather than re-invented around whatever is left. It named `borg.zsh:2225`'s 5s `borg watch`
     redraw and "the fzf preview's own orientation": `watch` is not in the case dispatch and exits 1
-    with "unknown command", and `cmd_switch`'s fzf call (borg.zsh:262-268) has no `--preview` at all
-    -- both were retired on 2026-08-27. ONE named consumer survives, skills/borg-switch/SKILL.md's
-    `borg link --local --all`, run from a project session's cwd precisely to get a cross-project
-    list; narrowing this section to the scoped repository would hand it a one-row table.
+    with "unknown command", and `cmd_switch`'s fzf call has no `--preview` at all (B15 pins
+    `grep -c -- '--preview-window' borg.zsh` at 0) -- both retired 2026-08-27. ONE named consumer
+    survives, skills/borg-switch/SKILL.md's `borg link --local --all`, run from a project session's
+    cwd precisely to get a cross-project list; narrowing this section to the scoped repository would
+    hand it a one-row table.
 
     The remaining reason is the one that was always underneath the consumer list: the page has
     exactly one place that answers "what else is going on", and a reader who ran `borg link` inside
