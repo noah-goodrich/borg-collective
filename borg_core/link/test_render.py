@@ -6,6 +6,7 @@ tests/fixtures/link/ remain the primary oracle (exercised end to end via tests/c
 these are the microscope.
 """
 
+import ast
 import datetime
 import inspect
 import json
@@ -14,6 +15,7 @@ import re
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 
@@ -45,6 +47,7 @@ def _doc(**overrides) -> dict:
             "manifests": [],
             "declared": 0,
             "unresolved": 0,
+            "picture_width": 0,
             "warnings": [],
         },
     }
@@ -469,6 +472,31 @@ def test_signals_reports_the_ladders_gap_as_a_sentence_never_a_token():
     assert "declared refs" not in render.document(_doc())
 
 
+def test_signals_says_the_picture_blew_its_budget_rather_than_just_looking_wrong():
+    """The width-check directive's own case. MUTATION: drop `_width_line` from `_signals_section`.
+
+    The page then renders a picture that wraps in any pane narrower than it, with SIGNALS reporting
+    "nothing to report." — the failure is visible and unexplained, which is the whole complaint the
+    directive was filed on. A second mutation this covers: delete the `block["picture_width"] = ...`
+    stamp in `cli._grid`; the key defaults to 0 and the line goes permanently silent.
+
+    READ, NEVER REMEASURED. The width arrives as a published integer on the grid block, so this case
+    sets the field rather than building a wide manifest: a renderer that rasterized the picture to
+    check would pass a test that built one and still be free to disagree with `--json`.
+    """
+    doc = _doc()
+    doc["grid"]["picture_width"] = 71
+    out = plain(render.document(doc))
+    assert "picture is 71 columns wide" in out
+    assert f"{picture.PICTURE_BUDGET} is the budget" in out
+
+    # ...and SILENT at and below the budget, so it can never become permanent page furniture. 0 is
+    # the case that matters most: every fixture and both live manifests sit well under the budget.
+    for width in (0, 1, picture.PICTURE_BUDGET):
+        doc["grid"]["picture_width"] = width
+        assert "columns wide" not in plain(render.document(doc))
+
+
 def _fork_block() -> dict:
     """The approved mock's fork, all the way through grid_manifest -- a real block, not a hand-built
     one, so CHAINS is exercised against the shape production actually assembles.
@@ -643,6 +671,35 @@ def test_assimilated_omits_parens_when_ship_date_empty():
     )
     assert "Deep shipped (C6)\x1b[0m\n" in scoped
     assert "()" not in scoped
+
+
+def test_render_imports_no_impure_module():
+    """The import-level half of render.py's purity contract, mirroring test_picture.py's P20.
+
+    MUTATION: measure the width inside `_width_line` by calling `os.get_terminal_size()`, or read the
+    picture back off disk. Either turns this red at the import, before any assertion about output.
+
+    THE CLOCK TEST BELOW WAS THE ONLY GUARD THIS MODULE HAD, and a monkeypatch on `time`/`datetime`
+    catches exactly one impurity. `render.py` was also absent from pyproject's clean-arch Domain map
+    until the `--json`-side width check added it, and the linter RETURNS EARLY on a file it cannot
+    classify — so for three ACs this module was asserted pure by its own docstring and by nothing
+    executable. Both gates now exist and neither is redundant: W9004's allow-list already permits
+    `pathlib`, `json` and `datetime`, so the linter would not catch `from pathlib import Path` and
+    this walk would.
+    """
+    tree = ast.parse(Path(render.__file__).read_text(encoding="utf-8"))
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    assert not imported & {"os", "subprocess", "time", "datetime", "pathlib", "shutil", "socket"}
+
+    called = {n.func.id for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "open" not in called
+    attributes = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert "isatty" not in attributes
 
 
 def test_render_reads_no_clock(monkeypatch):

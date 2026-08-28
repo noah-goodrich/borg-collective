@@ -16,19 +16,26 @@ Filed verbatim from AC2's own §8 residual-risk section, which states the bounda
 > [...] the picture's width is a compile-time constant because `render.py` is unconditionally pure, and the guard is a
 > measurement over the shapes that exist today, not a proof over the shapes that could.
 
-The measured headroom is real but thin, and it is headroom over *today's* manifests, not a bound:
+The measured headroom is real, and it is headroom over *today's* manifests, not a bound:
 
 | manifest | widest picture row |
 |---|---|
-| fixture (`auth-hardening` + `warehouse-rollout`) | 65 columns |
+| `link-grid-orchestrator.golden` | 61 columns |
+| `link-grid-repository.golden` | 61 |
 | live `ingle-t1-cutover` | 46 |
 | live `viz-program` | 30 |
 | **budget** | **68** |
-| fzf preview pane (`borg.zsh:267`, `right:70:wrap`) | 70 |
 
-Case B15 measures the widest golden row and compares it to the number parsed out of `borg.zsh:267`. P22 raises a
-fixture ref past the budget and asserts it fails. Both are guards over authored fixtures. Neither sees a manifest a
-user writes tomorrow.
+> **AMENDED 2026-08-28, when built.** Two rows of the original table were stale by the time this was implemented.
+> The filed figure of 65 for the fixtures re-measures at 61 (AC4's fixture and glyph changes moved it), so the
+> headroom is 7 columns rather than 3. And the fzf preview pane row is gone entirely: the pane was retired the day
+> after this was filed by `2026-08-27-retire-unused-link-surfaces.md`, and `grep -c -- '--preview-window' borg.zsh`
+> is now 0. `PICTURE_BUDGET` stands on its own; there is no second number to check it against. Re-measure with
+> B15's own scan (`tests/cli_contract.bats`, "the fzf preview window is at least as wide as the widest picture
+> row") rather than trusting this table.
+
+Case B15 measures the widest golden row against `PICTURE_BUDGET`. P22 asserts both fixture manifests fit. Both are
+guards over authored fixtures. Neither sees a manifest a user writes tomorrow.
 
 The failure mode is not a crash. It is a picture that wraps in the fzf preview — the per-keypress hot path — turning a
 topology into visual noise at exactly the moment it is meant to be scanned.
@@ -67,8 +74,36 @@ doing anyway as a cheap complement.
 
 ## Acceptance criteria
 
-- [ ] The widest picture row is computed on the `--json`/`cli.py` side and is observable without reading ANSI output.
-- [ ] A pytest case builds a manifest that exceeds `PICTURE_BUDGET` and asserts the check fires; the mutation that
+- [x] The widest picture row is computed on the `--json`/`cli.py` side and is observable without reading ANSI output.
+
+  `picture.max_row_width` (pure) is called once in `cli._grid` and stamped as `grid.picture_width`, nested rather
+  than top-level because `skills/borg-link/SKILL.md`'s `jq` whitelist selects `grid` wholesale and would silently
+  drop a top-level key. Asserted on the wire by
+  `test_cli.py::test_json_publishes_the_measured_picture_width_on_the_grid_block`.
+
+- [x] A pytest case builds a manifest that exceeds `PICTURE_BUDGET` and asserts the check fires; the mutation that
       turns it red is deleting the check.
-- [ ] `picture.py` and `render.py` import nothing new — verified by the clean-architecture linter, not by eye.
-- [ ] `PICTURE_BUDGET` is still `68` and `borg.zsh:267` is still `right:70:wrap`.
+
+  Two cases, one per half. `test_picture.py::test_a_manifest_whose_refs_run_long_in_three_columns_exceeds_the_budget`
+  builds the over-budget shape (three children of one parent, 14-character short refs → 71 columns, pinned at 71 so
+  a pitch change is reviewable) and also asserts the shapes that exist today still fit, so measuring `len()` instead
+  of `visible_len()` goes red rather than merely conservative.
+  `test_render.py::test_signals_says_the_picture_blew_its_budget_rather_than_just_looking_wrong` covers deleting
+  `_width_line` from `_signals_section` *and* deleting the `cli._grid` stamp.
+
+- [x] `picture.py` and `render.py` import nothing new — verified by the clean-architecture linter, not by eye.
+
+  **This one was not satisfiable as filed and required a fix.** `picture.py` was enforced; `render.py` was not
+  classified by the linter at all (absent from `pyproject.toml`'s `[tool.clean-arch.module_map]`, and the checker
+  returns early on an unclassified file), so it had zero import enforcement while `make lint` printed 10.00/10.
+  `render.py` is now on the Domain list — verified by probe: a file named `render.py` importing `os` and
+  `subprocess` produces two W9004s and pylint exit 4, where before the change it produced none. Because W9004's
+  allow-list already permits `pathlib`, `json` and `datetime`, `test_render.py::test_render_imports_no_impure_module`
+  adds the AST walk that mirrors `test_picture.py`'s P20. Neither gate replaces the other.
+
+- [x] `PICTURE_BUDGET` is still `68`, and B15 still asserts the golden against it with no second number.
+
+  **Restated: the second clause as filed named a line that no longer exists.** `borg.zsh:267` is
+  `--with-nth 1,3,5`; the fzf preview and its `--preview-window right:70:wrap` were retired on 2026-08-27 and B15
+  already asserts their absence. `PICTURE_BUDGET` is unchanged at 68, and this change does not raise it (a
+  non-goal).

@@ -800,6 +800,35 @@ def _cycle_lines(grid_block: dict) -> list[str]:
     return lines
 
 
+def _width_line(grid_block: dict) -> list[str]:
+    """The picture is wider than the budget, said once, from the number `cli._grid` measured.
+
+    READ OFF THE DOCUMENT, NEVER REMEASURED HERE. This module is unconditionally pure and
+    `picture.max_row_width` is pure too, so calling it would not break that -- it would be worse than
+    breaking it quietly. `grid.picture_width` is already published, and a second derivation of one
+    number is exactly how the printed sentence and `--json` come apart: the human would be told 71
+    while a consumer read 68, with nothing mis-set and no test able to see it. The document field is
+    the one truth and the renderer reads it.
+
+    SILENT AT AND BELOW THE BUDGET, so it can never become page furniture. Every manifest that exists
+    today measures well inside it (61 against 68 on both goldens), which is also why adding this line
+    moves no golden.
+
+    WHY IT IS A SIGNAL AND NOT A CRASH: a too-wide picture is not wrong, it is unreadable in a narrow
+    pane, and deciding what to elide is a design question the width-check directive names as a
+    non-goal. The reader gets told WHY the page looks wrong instead of just seeing it wrong.
+    """
+    width = grid_block.get("picture_width", 0)
+    if not width or width <= picture.PICTURE_BUDGET:
+        return []
+    return [
+        _placeholder(
+            f"picture is {width} columns wide — {picture.PICTURE_BUDGET} is the budget; "
+            "shorten a ref or split the manifest"
+        )
+    ]
+
+
 def _signals_section(doc: dict) -> tuple[str, list[str]]:
     """SIGNALS: capacity, then every warning the document carried, then the ladder's own gap.
 
@@ -814,6 +843,9 @@ def _signals_section(doc: dict) -> tuple[str, list[str]]:
         lines.append(f"  {BOLD}{capacity['active']} sessions need attention{NC} (limit: {capacity['limit']})\n")
     lines.extend(_placeholder(warning) for warning in grid_block.get("warnings") or [])
     lines.extend(_cycle_lines(grid_block))
+    # BEFORE the resolution line, deliberately: `_resolution_line` is the section's last word on a
+    # `--local` render and `test_the_last_word_on_a_local_page_is_that_nobody_looked` pins that.
+    lines.extend(_width_line(grid_block))
     lines.extend(_resolution_line(grid_block))
     if not lines:
         return "", [_placeholder("nothing to report.")]

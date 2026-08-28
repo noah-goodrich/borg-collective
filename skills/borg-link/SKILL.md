@@ -59,6 +59,11 @@ network round trip and then rendering the same deep dive as before it existed. R
   `.resolved` (refs that came back with a usable answer). As with `.grid.sources[].status`,
   `failed` and `degraded` mean the states below them are DECLARED rather than OBSERVED — treat
   them the same way.
+- `.grid.picture_width` is the widest `▸ CHAINS` picture row this document would draw, in VISIBLE
+  columns (SGR and OSC-8 bytes excluded). Compare it to `PICTURE_BUDGET` (68). Over budget means the
+  topology will wrap in a narrow pane and should be reported as a manifest problem — a ref is long
+  or a level is too wide — not as a rendering bug. The human page says the same thing in
+  `▸ SIGNALS`; this is the machine-readable half, so you never have to measure ANSI output.
 - `.grid.manifests` is an **array** of manifest blocks, each carrying `id` (the manifest's slug),
   `path`, `desc`, `repos`, `levels`, `nodes` and `gates`. AC2 added `desc`, `repos`, and three
   topology keys per node:
