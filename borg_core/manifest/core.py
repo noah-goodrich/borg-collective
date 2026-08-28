@@ -461,7 +461,29 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     return errors
 
 
-_ROW_ERROR_RE = re.compile(r"^rows\[(\d+)\]")
+_ROW_ERROR_PREFIX = "rows["
+
+
+def _row_error_index(error: str) -> int | None:
+    """The row index a validation message is scoped to, or None when it is not row-scoped.
+
+    STRING OPS RATHER THAN A REGEX, and not for speed. The obvious `re.match(r"^rows\\[(\\d+)\\]")`
+    form needs `int(match.group(1))`, which the clean-architecture plugin rejects as a Demeter chain
+    (W9006) -- caught by CI, where the plugin runs, and not by the local pylint. Splitting it into
+    two statements to appease the rule would leave a regex whose entire job is to extract one integer
+    from a prefix this module itself writes. `partition` says the same thing in less.
+
+    Reads BOTH label forms `_validate_row` produces: `rows[N]: ...` and `_validate_after`'s
+    `rows[N].after[M] ...`, which carries no colon after the bracket. Anything whose bracket contents
+    are not a plain integer is treated as NOT row-scoped, which fails safe -- an unparseable label
+    keeps the whole file rather than dropping a row nobody identified.
+    """
+    if not error.startswith(_ROW_ERROR_PREFIX):
+        return None
+    digits, closed, _ = error[len(_ROW_ERROR_PREFIX) :].partition("]")
+    if not closed or not digits.isdigit():
+        return None
+    return int(digits)
 
 
 def partition_errors(errors: list[str]) -> tuple[set[int], list[str]]:
@@ -485,11 +507,11 @@ def partition_errors(errors: list[str]) -> tuple[set[int], list[str]]:
     bad_rows: set[int] = set()
     structural: list[str] = []
     for error in errors:
-        match = _ROW_ERROR_RE.match(error)
-        if match:
-            bad_rows.add(int(match.group(1)))
-        else:
+        index = _row_error_index(error)
+        if index is None:
             structural.append(error)
+        else:
+            bad_rows.add(index)
     return bad_rows, structural
 
 
