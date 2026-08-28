@@ -83,8 +83,12 @@ network round trip and then rendering the same deep dive as before it existed. R
     one chain or a fork. They do NOT tell you what is ready to start: `state_source` is `declared`
     (a hand-typed `"status"` field nobody verified) at least as often as it is swept or fetched, so
     "every parent merged" can rest entirely on prose. Report what the manifest declares and name the
-    provenance. `ready` is deliberately absent from the wire for exactly this reason — do not
-    reconstruct it.
+    provenance. **Never derive readiness yourself from `parents`/`children`** — read `.ready`, two
+    bullets down, which AC4 put on the wire for exactly this reason and which already applies the
+    provenance gate. (This used to read "`ready` is deliberately absent from the wire … do not
+    reconstruct it". That was true until AC4 shipped `ready`, and because it is phrased as a
+    PROHIBITION an agent reading top-down suppressed the entire `.ready` answer before reaching the
+    bullet that documents it.)
   - Still never render a picture. `borg link` draws it, and the `n1`-style handles it prints are
     generated at render time — they are not on the wire, so there is nothing to echo.
 - **`.ready` is AC4's answer to "what can I pick up right now", and it is THREE-STATE.** Each manifest

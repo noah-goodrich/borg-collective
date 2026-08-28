@@ -3058,8 +3058,13 @@ _borg_link_dispatch() {
 
     if [[ -n "$_link_project" ]]; then
         # The deep dive stays read-only and never scans -- no desktop pre-pass here, matching today.
-        # This is the fzf preview's arm (borg.zsh:266 `--preview "borg link {1}"` -> bare positional
-        # -> here), so it is re-executed on every cursor move. Treat it as a hot loop.
+        # THE ARM EVERY `borg link <project>` TAKES, `drone link` included. It used to be described
+        # as the fzf preview's arm -- borg.zsh:266, a preview flag running `borg link {1}` -- and so
+        # as a hot loop re-executed on every cursor move. THAT PREVIEW IS GONE, retired 2026-08-27;
+        # cmd_switch's fzf call above has no preview flag at all and cli_contract.bats' B15 asserts
+        # that by grep. So this is one invocation per typed command, not a hot loop. It is still the
+        # ONLY live caller passing `--deep`, which is the whole reason the flag stays parsed (B16).
+        # (Do not write the preview-window flag's literal spelling in this file: B15 greps for it.)
         _link_py_args=(--deep)
         (( _link_local )) && _link_py_args+=(--local)
         _link_py_args+=(-- "$_link_project")

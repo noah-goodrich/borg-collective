@@ -100,8 +100,11 @@ hand-edited afterwards, and AC5 has not shipped, so nothing writes manifests but
   > row survives loading and routes to `unsure`. `GATE_KINDS` was NOT widened (this directive's
   > non-goal holds); it is now the declared vocabulary the router must never fall behind, and nothing
   > else. An EMPTY or MISSING `kind` stays a validation error and still costs its row: `_route("")`
-  > means "no gate" and returns `mine`, so a blank kind would render under `mine — nothing is blocking
-  > these` on a line that also prints its own `blocked_by`. `gate.blocked_by` and `gate.resolved_by`
+  > means "no gate" and returns `mine`, so a row that HAS a gate would be routed by the rule for rows
+  > that do not — and if the author meant a decision, `mine` is the plan's own named risk arriving
+  > with nothing mis-set. (This clause used to justify itself by quoting `mine`'s heading, *"nothing
+  > is blocking these"*. That heading was itself false about `verification` gates and was corrected on
+  > 2026-08-28; the reason above never rested on it.) `gate.blocked_by` and `gate.resolved_by`
   > stay required and stay fatal. `tests/fixtures/link/manifests/warehouse-rollout.json` gained
   > `acme/warehouse#78` (`kind: "review"`) so the group is pinned end to end by
   > `link-grid-orchestrator.golden` and by

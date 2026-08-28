@@ -26,8 +26,10 @@ Two independent tools that compose:
 
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
-  wider command surface below (recon, nanoprobes, spend, watch, doctor, sync, focus, pin/unpin,
+  wider command surface below (recon, nanoprobes, spend, doctor, sync, focus, pin/unpin,
   setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`).
+  **`watch` was listed here and is not a command.** It has no arm in the case dispatch and exits 1
+  with "unknown command"; removed from this list 2026-08-28. `borg help` is the surface of record.
   **The `ls`/`status`/`hail`/`brief`/`briefing`/`refresh` aliases for `link` were removed
   2026-08-10** — six names for one command meant the docs, skills, and research all disagreed
   about what to call it. `borg link` is the only name.
@@ -74,7 +76,7 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                            --all     Include archived projects
                            --local   Opt down from the network sweep (hot loops only)
                            --json / --porcelain  the two machine surfaces
-                           --deep    Parsed and IGNORED since AC2; kept for borg.zsh:3111
+                           --deep    Parsed and IGNORED since AC2; kept for borg.zsh:3059-3068
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
@@ -284,9 +286,12 @@ docs/
   scope, mode or emptiness**. (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
   reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
   chose over reserving an always-empty slot in advance.) `render.overview` and `render.deep` are
-  deleted, and `--deep` is parsed and ignored (kept in the parser because `borg.zsh:3111`'s positional
-  arm — every `borg link <project>`, the fzf preview included — still passes it, and argparse exiting
-  2 there is a blank pane with nothing on stderr). **Scope changes which ROWS
+  deleted, and `--deep` is parsed and ignored (kept in the parser because `borg.zsh:3059-3068`'s
+  positional arm — every `borg link <project>`, `drone link` included — still passes it at
+  `borg.zsh:3064`, and argparse exiting 2 there is a blank page with nothing on stderr. The old
+  pointer here, `borg.zsh:3111`, is inside the `recon)` retirement comment and never passed `--deep`;
+  the "fzf preview included" clause named a consumer retired 2026-08-27. Both corrected
+  2026-08-28.) **Scope changes which ROWS
   a section prints, never which sections exist** — the contexts differ in breadth only, so a reader
   who learns the page once has learned every invocation of it. Section headers are byte-identical
   in both contexts; `focus` now follows scope, so a bare `borg link` inside a repository renders
