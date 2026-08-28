@@ -16,6 +16,7 @@
     {
       "ref": "acme/warehouse#87",
       "order": "3",
+      "next": true,
       "why": "rotate the warehouse keypair",
       "after": ["acme/platform#400"]
     },

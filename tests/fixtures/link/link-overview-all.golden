@@ -36,6 +36,9 @@
     [2m- [bravo] Bravo shipped (2026-02-02)[0m
     [2m- [alpha] Alpha shipped old (2026-02-01)[0m
 
+[1m▸ NEXT[0m  [2m0 ready of 0[0m
+  [2m— nothing is ready right now.[0m
+
 [1m▸ SIGNALS[0m
   [2m— sweep: no recon adapters found on <TMP>/no-adapters -- every state falls back to what the manifest declares[0m
   [2m— fetch: replayed from fixture <TMP>/no-fetch.json -- no gh ran[0m

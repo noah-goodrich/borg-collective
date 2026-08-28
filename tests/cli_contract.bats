@@ -2910,9 +2910,19 @@ from borg_core.link import picture
 # that blows the budget by 22 columns while every picture row fits.
 frame = set("✔✗○●◌│├┤┬┴┼┌┐└┘─")
 rows = []
+# SCOPED TO THE CHAINS SECTION, and that scoping arrived with AC4 rather than being belt-and-braces.
+# `▸ NEXT` renders indented rows whose first visible character is a state glyph -- the exact
+# heuristic below -- but they carry FULL refs, not the picture`s short ones, so measuring them
+# reported the page as blowing PICTURE_BUDGET while every actual picture row fit. The old scan
+# measured "any indented glyph-leading line anywhere on the page", which was only ever a proxy for
+# "a picture row" and stopped being one the moment a second section printed a glyph.
+inside = False
 for line in open(sys.argv[1], encoding="utf-8").read().split("\n"):
     plain = picture._SGR_RE.sub("", picture._OSC8_RE.sub("", line))
-    if plain.startswith(" " * picture.INDENT) and plain.strip()[:1] in frame:
+    if plain.startswith("▸ "):
+        inside = plain.startswith("▸ CHAINS")
+        continue
+    if inside and plain.startswith(" " * picture.INDENT) and plain.strip()[:1] in frame:
         rows.append(line)
 if not rows:
     raise SystemExit("no picture rows matched")
@@ -2977,8 +2987,9 @@ print(max(picture.visible_len(r) for r in rows))
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.txt" link ledger
+    # SEVEN `▸` HEADERS SINCE AC4 (the eighth section is the header block, which carries no `▸` line).
     run grep -c '▸ ' "${BATS_TEST_TMPDIR}/ledger.txt"
-    [ "$output" = "6" ]
+    [ "$output" = "7" ]
     run grep -c 'no project manifest declares work in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
     [ "$output" = "1" ]
     run grep -c 'none declaring a row in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
