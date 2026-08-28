@@ -571,8 +571,10 @@ def test_a_node_nobody_answered_for_still_renders_its_id_and_names_the_condition
 
     The structural test above passes just as well if the renderer builds the string by concatenation;
     this one passes only if the node survives to the page AND the sentence explains it. `--local`
-    (the fzf preview, `drone status`, `borg watch`) opts down from both network rungs, so this is the
-    hot path, not an edge case.
+    opts down from both network rungs, so every row is unresolved there -- the common case, not an
+    edge case. (The consumers named here -- "the fzf preview, `drone status`, `borg watch`" -- were
+    retired 2026-08-27; `skills/borg-switch`'s `borg link --local --all` is the surviving one, and it
+    is the widest breadth there is.)
     """
     node = {
         "ref": "o/r#1",
@@ -879,8 +881,9 @@ def test_an_unknown_state_source_is_unverified_too():
 
     MUTATION: write the predicate as `!= STATE_SOURCE_DECLARED`. That reads naturally and is wrong --
     it would mark a hand-typed row and silently pass every ref nobody looked up at all, which is the
-    MAJORITY case on any `--local` render (the fzf preview and `drone status` both opt down from both
-    network rungs by design).
+    MAJORITY case on any `--local` render, which opts down from both network rungs by design. (The
+    two callers named here, the fzf preview and `drone status`, were retired 2026-08-27; the
+    surviving one is `skills/borg-switch`'s `borg link --local --all`.)
     """
     for source in (link_grid.STATE_SOURCE_DECLARED, link_grid.STATE_SOURCE_UNKNOWN, "", None):
         assert not picture.resolved_provenance(_sourced("merged", source))
