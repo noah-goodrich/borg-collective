@@ -211,8 +211,8 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     wrongly claimed the fzf preview ran `--porcelain`, and that the real preview
     (`--preview "borg link --local {1}"`) re-executed the HUMAN mode per keypress, so mode gating
     protected nothing. The preview was retired 2026-08-27 and cli_contract.bats' B15 pins its absence
-    by grep. What survives is only borg.zsh:262's `cmd_ls --porcelain`, which builds `borg switch`'s
-    picker input list exactly once. THE TRANSFERABLE RULE OUTLIVES THE PREVIEW: never assume a mode
+    by grep. What survives is only `cmd_switch`'s own `cmd_ls --porcelain | fzf` pipe, which builds
+    `borg switch`'s picker input list exactly once. THE TRANSFERABLE RULE OUTLIVES THE PREVIEW: never assume a mode
     is cold because it looks expensive to invoke -- if network or sweep cost is put behind a mode,
     measure the call sites, do not reason about them.
 

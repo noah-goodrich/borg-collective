@@ -80,7 +80,9 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                            --brief   LLM narrative briefing (still zsh, never sweeps)
                            --refresh Regenerate summaries
                            --all     Include archived projects
-                           --local   Opt down from the network sweep (hot loops only)
+                           --local   Opt down from the network sweep — no adapter, no `gh`, no
+                                     subprocess. No hot loop is left behind it; the one automated
+                                     caller is skills/borg-switch's `borg link --local --all`
                            --json / --porcelain  the two machine surfaces
                            --deep    Parsed and IGNORED since AC2; kept for borg.zsh's positional
                                      `link` arm, the only caller that still passes it
