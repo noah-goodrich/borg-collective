@@ -78,8 +78,21 @@ doing anyway as a cheap complement.
 
   `picture.max_row_width` (pure) is called once in `cli._grid` and stamped as `grid.picture_width`, nested rather
   than top-level because `skills/borg-link/SKILL.md`'s `jq` whitelist selects `grid` wholesale and would silently
-  drop a top-level key. Asserted on the wire by
-  `test_cli.py::test_json_publishes_the_measured_picture_width_on_the_grid_block`.
+  drop a top-level key.
+
+  > **RE-DERIVED 2026-08-28 AFTER REVIEW. This was ticked on a test that could not see the stamp at all.** The
+  > evidence originally cited — `test_cli.py::test_json_publishes_the_measured_picture_width_on_the_grid_block` —
+  > wrote an EMPTY registry and asserted `picture_width == 0`, i.e. it supplied the condition that makes the derived
+  > value equal its own default. A reviewer replaced `picture.max_row_width(block["manifests"])` with the literal
+  > `0` and measured `make test` at 925 passed / exit 0 and `bats tests/` at exit 0. That is verbatim the `borg recon`
+  > failure in CLAUDE.md's Learned section, on the AC that filed it.
+  >
+  > The tick now stands on two cases that derive the number from a document that HAS a picture, and never write it
+  > down: the pytest case registers a repository carrying the shipped `warehouse-rollout.json` and asserts
+  > `grid.picture_width == picture.max_row_width(doc["grid"]["manifests"]) > 0`; `tests/cli_contract.bats`'s B15b
+  > ("grid.picture_width is the width of the widest picture row the same run rendered") derives it a SECOND,
+  > independent way — scanning the ANSI page the same invocation printed — and compares the two. Both mutations
+  > (`= 0`, and deleting the stamp) were applied and confirmed red in both gates.
 
 - [x] A pytest case builds a manifest that exceeds `PICTURE_BUDGET` and asserts the check fires; the mutation that
       turns it red is deleting the check.
@@ -89,7 +102,12 @@ doing anyway as a cheap complement.
   a pitch change is reviewable) and also asserts the shapes that exist today still fit, so measuring `len()` instead
   of `visible_len()` goes red rather than merely conservative.
   `test_render.py::test_signals_says_the_picture_blew_its_budget_rather_than_just_looking_wrong` covers deleting
-  `_width_line` from `_signals_section` *and* deleting the `cli._grid` stamp.
+  `_width_line` from `_signals_section`.
+
+  > **CORRECTED 2026-08-28.** That last sentence used to read "*and* deleting the `cli._grid` stamp". False, and
+  > checked: deleting `cli.py`'s stamp line leaves `pytest borg_core/link/test_render.py` at 69 passed, because the
+  > case sets `doc["grid"]["picture_width"]` by hand and never calls `cli`. The stamp is pinned by the two cases
+  > named in the AC above. The test's own docstring carried the same false claim and is corrected in the same diff.
 
 - [x] `picture.py` and `render.py` import nothing new — verified by the clean-architecture linter, not by eye.
 

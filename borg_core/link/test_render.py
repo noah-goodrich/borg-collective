@@ -477,12 +477,22 @@ def test_signals_says_the_picture_blew_its_budget_rather_than_just_looking_wrong
 
     The page then renders a picture that wraps in any pane narrower than it, with SIGNALS reporting
     "nothing to report." — the failure is visible and unexplained, which is the whole complaint the
-    directive was filed on. A second mutation this covers: delete the `block["picture_width"] = ...`
-    stamp in `cli._grid`; the key defaults to 0 and the line goes permanently silent.
+    directive was filed on.
 
-    READ, NEVER REMEASURED. The width arrives as a published integer on the grid block, so this case
-    sets the field rather than building a wide manifest: a renderer that rasterized the picture to
-    check would pass a test that built one and still be free to disagree with `--json`.
+    WHAT THIS CASE DOES *NOT* COVER, corrected after a reviewer checked the claim it used to make.
+    It said this also killed "delete the `block["picture_width"] = ...` stamp in `cli._grid`". It does
+    not, and cannot: it sets the field by hand, so deleting the stamp leaves this module at 69 passed
+    — measured, by deleting the line. That mutation is killed by
+    `test_cli.py::test_json_publishes_the_measured_picture_width_on_the_grid_block`, which measures
+    over a REGISTERED fixture repository rather than an empty registry, and by `cli_contract.bats`'s
+    B15b ("grid.picture_width is the width of the widest picture row the same run rendered"). Neither
+    existed when the claim was written, which is how a shipped feature came to be entirely unpinned
+    behind three green tests.
+
+    READ, NEVER REMEASURED, and that is why setting the field by hand is right HERE. The width
+    arrives as a published integer on the grid block; a renderer that rasterized the picture itself
+    would pass a test that built a wide manifest and still be free to disagree with `--json`. Pinning
+    the STAMP is the other two cases' job, deliberately, because this one is about the SENTENCE.
     """
     doc = _doc()
     doc["grid"]["picture_width"] = 71

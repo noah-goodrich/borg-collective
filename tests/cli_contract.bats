@@ -2842,13 +2842,14 @@ EOF
     [ "$output" = "1 2 3 4 5 6 7 " ]
 }
 
-# B15. MEASURES THE GOLDEN, THEN PARSES THE CONFIG — never greps for a config string. A grep for
-# `right:70:wrap` asserts that somebody typed a number, not that the picture fits inside it. The
-# widest row is measured with `picture.visible_len`, the same primitive the renderer pads with, so a
-# hyperlinked or coloured cell counts as its VISIBLE width rather than its byte length.
-@test "contract: the fzf preview window is at least as wide as the widest picture row" {
-    local width pane
-    width=$(PYTHONPATH="$BORG_HOME" python3 -c '
+# The widest `▸ CHAINS` picture row on a rendered page, in VISIBLE columns, printed to stdout.
+#
+# ONE COPY, TWO CALLERS (B15 and B15b), because the two cases must be measuring the same thing: B15
+# compares the measurement to `PICTURE_BUDGET` and B15b compares it to the number the `--json` side
+# published for the same render. A second transcription of this scan is a second definition of "a
+# picture row", and the two cases would then be able to disagree about which rows they measured.
+_link_widest_picture_row() {
+    PYTHONPATH="$BORG_HOME" python3 -c '
 import sys
 from borg_core.link import picture
 
@@ -2875,9 +2876,22 @@ for line in open(sys.argv[1], encoding="utf-8").read().split("\n"):
 if not rows:
     raise SystemExit("no picture rows matched")
 print(max(picture.visible_len(r) for r in rows))
-' "${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden")
+' "$1"
+}
+
+_link_picture_budget() {
+    PYTHONPATH="$BORG_HOME" python3 -c 'from borg_core.link import picture; print(picture.PICTURE_BUDGET)'
+}
+
+# B15. MEASURES THE GOLDEN, THEN PARSES THE CONFIG — never greps for a config string. A grep for
+# `right:70:wrap` asserts that somebody typed a number, not that the picture fits inside it. The
+# widest row is measured with `picture.visible_len`, the same primitive the renderer pads with, so a
+# hyperlinked or coloured cell counts as its VISIBLE width rather than its byte length.
+@test "contract: the fzf preview window is at least as wide as the widest picture row" {
+    local width
+    width=$(_link_widest_picture_row "${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden")
     [ "$width" -gt 0 ] || { echo "measured no picture rows at all" >&2; false; }
-    [ "$width" -le "$(PYTHONPATH="$BORG_HOME" python3 -c 'from borg_core.link import picture; print(picture.PICTURE_BUDGET)')" ]
+    [ "$width" -le "$(_link_picture_budget)" ]
 
     # THE PANE COMPARISON IS GONE BECAUSE THE PANE IS. `borg switch`'s fzf preview was retired on
     # 2026-08-27 (zero typed invocations in six months), taking `--preview-window right:70:wrap` with
@@ -2888,6 +2902,44 @@ print(max(picture.visible_len(r) for r in rows))
     # constraint should assert against ITS number here, not resurrect the deleted one.
     run grep -c -- '--preview-window' "$BORG"
     [ "$output" -eq 0 ]
+}
+
+# B15b. THE WIDTH-CHECK DIRECTIVE'S FIRST AC, ASSERTED AS A DIFFERENTIAL RATHER THAN AS A NUMBER.
+#
+# `cli._grid` stamps `grid.picture_width` from `picture.max_row_width`. Every pytest case around that
+# stamp either supplies the condition that makes the derived value equal its default (an EMPTY
+# registry asserted at 0), sets the field by hand (`test_render`), or exercises `max_row_width` as a
+# pure function with no `cli` in the picture (`test_picture`) — so the whole feature could be replaced
+# by the literal `0` with `make test` and `bats tests/` both green. Measured, before this case
+# existed: it was.
+#
+# So this case derives the SAME NUMBER TWO INDEPENDENT WAYS from ONE fixture arrangement and compares
+# them: the `--json` side's published integer, and a scan of the ANSI page the human render produced.
+# Neither derivation reads the other. 61 is not written down anywhere here; moving a fixture ref moves
+# both sides together, which is the property the directive asked for ("a `grid.picture_width` integer
+# on the document, which `--json` consumers AND A BATS CASE can both assert against `PICTURE_BUDGET`")
+# without leaving a hand-copied constant that nobody re-measures.
+#
+# MUTATIONS, both applied and confirmed red: `block["picture_width"] = 0` (published 0, measured 61),
+# and deleting the stamp entirely (`jq` yields `null`, which is not the measured width either).
+@test "contract: grid.picture_width is the width of the widest picture row the same run rendered" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/width.json" link --json
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/width.txt" link
+
+    local measured published
+    measured=$(_link_widest_picture_row "${BATS_TEST_TMPDIR}/width.txt")
+    published=$(jq -r '.grid.picture_width' "${BATS_TEST_TMPDIR}/width.json")
+
+    # The page must actually HAVE a picture, or both sides agree on nothing and the case is decoration.
+    [ "$measured" -gt 0 ] || { echo "the rendered page carried no picture rows" >&2; false; }
+    [ "$published" = "$measured" ] || {
+        echo "grid.picture_width=${published} but the rendered page's widest CHAINS row is ${measured}" >&2
+        false
+    }
+    [ "$published" -le "$(_link_picture_budget)" ]
 }
 
 # B16. `--deep` is parsed and IGNORED. It stays in the parser because ONE live copy of the dispatcher

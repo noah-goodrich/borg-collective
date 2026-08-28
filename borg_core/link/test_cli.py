@@ -7,12 +7,13 @@ json.loads and index keys -- never string-compare the serialized form.
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
 import pytest
 
-from borg_core.link import cli, core, shell
+from borg_core.link import cli, core, picture, shell
 
 
 @pytest.fixture()
@@ -96,30 +97,71 @@ def test_run_emits_exactly_one_line_of_parseable_json_on_stdout(isolated_env, ca
     assert doc["version"] == 2
 
 
-def test_json_publishes_the_measured_picture_width_on_the_grid_block(isolated_env, capsys):
+_LINK_FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "link"
+
+
+def _manifest_workspace(root, name="warehouse"):
+    """A registered repository carrying a SHIPPED fixture manifest under `.borg/programs/`.
+
+    The bytes are `tests/fixtures/link/manifests/warehouse-rollout.json`'s, not an inline copy: the
+    goldens pin the same file's rendered form, so a test that built its own rows could stay green
+    while the fixture the goldens measure moved underneath it.
+    """
+    programs = Path(_project_dir(root, name)) / ".borg" / "programs"
+    programs.mkdir(parents=True, exist_ok=True)
+    shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", programs)
+    return str(Path(_project_dir(root, name)))
+
+
+def test_json_publishes_the_measured_picture_width_on_the_grid_block(isolated_env, capsys, monkeypatch):
     """The width-check directive's first AC: the widest picture row is OBSERVABLE WITHOUT ANSI.
 
-    MUTATION: delete the `block["picture_width"] = ...` line in `cli._grid`. The key vanishes from the
-    wire and this goes red without any human having to look at a rendered page — which is the whole
-    point of moving the measurement to the `--json` side rather than leaving it a constant checked
-    against two authored fixtures.
+    MUTATION, APPLIED AND CONFIRMED RED: replace `picture.max_row_width(block["manifests"])` in
+    `cli._grid` with the literal `0`, or delete the stamp entirely. Either drops `picture_width` to
+    0/absent while the manifests on the very same block still rasterize to a 61-column picture, and
+    the equality below fails.
+
+    THE DOCUMENT MUST CARRY A PICTURE FOR THIS TO MEAN ANYTHING, which is why a repository holding a
+    real manifest is registered rather than an empty registry asserted at 0. An empty registry
+    supplies the condition that makes the derived value equal its own default -- the `borg recon`
+    failure this repo shipped for months -- so it is asserted at the END, as the empty case, and never
+    as the evidence that the measurement ran.
+
+    THE EXPECTED NUMBER IS NOT WRITTEN DOWN. It is re-derived from the manifests the document itself
+    published, so moving the fixture moves both sides together and the assertion never goes stale
+    against a number nobody re-measures. `tests/cli_contract.bats`'s companion case
+    ("grid.picture_width is the width of the widest picture row the same run rendered") is the half
+    that derives it INDEPENDENTLY, off the rendered ANSI page rather than off `max_row_width`.
 
     NESTED UNDER `.grid` AND ASSERTED THERE. `skills/borg-link/SKILL.md` pipes the document through a
     `jq` whitelist that selects `grid` wholesale; a top-level `picture_width` would be silently
     dropped on the skill's own path while passing a naive top-level assertion here.
     """
-    _write_registry(isolated_env, {})
+    directory = _manifest_workspace(isolated_env)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    # cwd decides scope, and the worktree this suite runs in is a git repository -- which would make
+    # the invocation repository-scoped against borg-collective and select no manifest at all.
+    monkeypatch.chdir(isolated_env)
 
-    exit_code = cli._run("", False, "json")  # pylint: disable=protected-access
+    exit_code = cli._run("", False, "json", local=True)  # pylint: disable=protected-access
 
     assert exit_code == 0
     doc = json.loads(capsys.readouterr().out)
+    manifests = doc["grid"]["manifests"]
+    assert manifests, "no manifest reached the document; the assertion below would be vacuous"
+
     width = doc["grid"]["picture_width"]
     assert isinstance(width, int) and not isinstance(width, bool)
-    # An empty registry declares nothing, so there is no picture: 0 rather than an error, and 0 rather
-    # than a default that would look identical to a measurement that never ran.
-    assert width == 0
+    assert width == picture.max_row_width(manifests) > 0
     assert doc["version"] == 2, "an additive key inside an additive block does not bump the version"
+
+    # ...and only now the empty case, which is a statement about the DEFAULT and not about the
+    # measurement: a repository with nothing declared has a picture zero columns wide, not an error.
+    capsys.readouterr()
+    _write_registry(isolated_env, {})
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    empty = json.loads(capsys.readouterr().out)["grid"]
+    assert empty["manifests"] == [] and empty["picture_width"] == 0
 
 
 def test_run_human_mode_renders_the_seven_section_document(isolated_env, capsys):
