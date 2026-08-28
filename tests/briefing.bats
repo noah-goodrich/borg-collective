@@ -1,5 +1,29 @@
 #!/usr/bin/env bats
 # Tests for _borg_print_briefing via the `borg link --brief` subcommand.
+#
+# WHAT CHANGED HERE ON 2026-08-27, AND WHY NOTHING WAS SILENTLY DELETED. `--brief` no longer walks
+# the registry: it builds the ONE `borg link` document, projects it into the narrative prompt, and
+# renders THAT SAME DOCUMENT when the narrative is unavailable (docs/plans/directives/
+# 2026-08-27-fold-brief-into-the-document.md). Of the 12 cases here, eight are untouched, three are
+# consciously rewritten and one keeps its assertion with new provenance:
+#   - "inactive projects appear under inactive header" — REWRITTEN. The "Inactive (>30 days):" block
+#     and the 30-day active/inactive split were `_borg_print_briefing`'s own; they have no
+#     counterpart in `render.SECTIONS` and are deliberately retired. The case now asserts the same
+#     underlying claim — a long-dormant project is still ON the page, with its relative time — which
+#     is the property the header existed to serve.
+#   - "no debug variable lines in output" — REWRITTEN. It named locals (`proj_status=`, `rel_time='`)
+#     that no longer exist, so it would have gone vacuously green. Re-pointed at the locals the
+#     rewritten function actually has, and the `setopt LOCAL_OPTIONS; set +x` it guards is still
+#     there.
+#   - "empty summary + set waiting_reason never displays waiting_reason as the summary" — REWRITTEN.
+#     The \x1f field-shift defect it guarded is gone with the `read` loop (JSON cannot field-shift),
+#     but the SEMANTIC claim still has teeth: `waiting_reason` is on the wire and the board row must
+#     never print it as a summary. Re-pointed at the document.
+#   - "empty registry shows scan hint" — SAME ASSERTION, NEW ORIGIN. The hint now comes from the
+#     document's own `total_projects == 0` short circuit rather than a registry read.
+# The `fallback_reason` ladder's four branches, and the document rendering under each, are pinned in
+# tests/link_sweep.bats where a sweep genuinely runs — see its "fallback" block. Asserting the
+# subprocess count here would be vacuous: setup_temp_dirs neutralizes both network seams.
 
 load test_helper/setup
 
@@ -60,21 +84,38 @@ EOF
     [[ "$output" == *"waiting"* ]] || false
 }
 
-@test "briefing: inactive projects appear under inactive header" {
+# REWRITTEN 2026-08-27. Was: asserts an "Inactive (>30 days):" header. That header, and the 30-day
+# split that fed it, belonged to the deleted registry walk and have no counterpart in the document's
+# seven-section spine — the board shows every non-archived project with its relative time and lets
+# the reader see dormancy rather than bucketing it. The claim worth keeping is that a project last
+# touched in 2020 is still ON the page and still says how long ago that was, which is what a reader
+# used the header for.
+@test "briefing: a long-dormant project still renders, with how long ago it was touched" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Inactive"* ]] || false
     [[ "$output" == *"old-project"* ]] || false
+    # `relative_activity` off the wire, not a zsh recomputation. core.relative_time's last bucket is
+    # "<N>d ago" with no year branch, and 2020-01-01 is four digits of days back from any date this
+    # suite can run on — so a four-or-more-digit day count is the assertion that the dormant row
+    # carries a real age rather than "never" or a blank.
+    [[ "$output" =~ [0-9]{4,}d\ ago ]] || false
 }
 
+# REWRITTEN 2026-08-27. The `setopt LOCAL_OPTIONS; set +x` at the top of _borg_print_briefing is
+# still the subject; only the names changed. The old case named `proj_status=` / `rel_time='` /
+# `last_activity=`, which the fold deleted along with the per-project `read` loop — leaving a case
+# that could never fail again. These are the locals the rewritten function actually assigns, plus
+# the array it builds the Python argv in.
 @test "briefing: no debug variable lines in output" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     # Should not contain shell variable assignment traces
     [[ "$output" != *"entry='"* ]] || false
-    [[ "$output" != *"proj_status="* ]] || false
-    [[ "$output" != *"last_activity="* ]] || false
-    [[ "$output" != *"rel_time='"* ]] || false
+    [[ "$output" != *"doc="* ]] || false
+    [[ "$output" != *"payload="* ]] || false
+    [[ "$output" != *"total="* ]] || false
+    [[ "$output" != *"_brief_py_args="* ]] || false
+    [[ "$output" != *"briefing_prompt="* ]] || false
 }
 
 # ── Error message filtering ────────────────────────────────────────────────────
@@ -160,13 +201,17 @@ EOF
     [[ "$output" == *"Focus:"* ]] || false
 }
 
-# ── Field-collapse regression (2026-08-10 directive defect 2) ─────────────────────────────────
+# ── waiting_reason is never a summary (2026-08-10 directive defect 2, re-pointed) ─────────────
 #
-# A project with summary=null and waiting_reason set. Before the \x1f delimiter fix, tab (IFS
-# whitespace) collapsed the empty summary field and shifted waiting_reason into its place — the
-# fallback line would print the waiting_reason string as if it were the summary. It must never
-# print as the summary, and project_path (last field) must remain populated so the checkpoint
-# block still fires.
+# ORIGINALLY a field-collapse regression: with a tab delimiter, an empty summary shifted
+# waiting_reason into its place and the fallback printed a blocker string as if it were work done.
+# The \x1f delimiter fixed it, and the 2026-08-27 fold deleted the `read` loop entirely — JSON has
+# no field-shift failure mode, so the MECHANISM this case guarded is gone.
+#
+# KEPT ANYWAY, RE-POINTED AT THE DOCUMENT, because the SEMANTIC claim is a shipped acceptance
+# criterion and is still live: `waiting_reason` rides the wire (`.projects[].waiting_reason`) and the
+# board row must never render it where a summary goes. Retiring the case with the delimiter would
+# have dropped that guarantee silently.
 
 @test "briefing: empty summary + set waiting_reason never displays waiting_reason as the summary" {
     local recent
@@ -188,12 +233,18 @@ EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"field-collapse-project"* ]] || false
-    # The waiting_reason text must not appear on the fallback's summary line (indented 4 spaces,
-    # per fallback_text's `printf "  %-22s..."` header + `echo "    $summary"` body).
-    [[ "$output" != *"    Claude is waiting for your input"* ]] || false
+    # The board row prints name / status / relative time and NOTHING from waiting_reason —
+    # render._overview_row never reads that field. A substring match on the reason text is the
+    # assertion regardless of which renderer produced the page.
+    [[ "$output" != *"Claude is waiting for your input"* ]] || false
 }
 
 # ── Empty registry ─────────────────────────────────────────────────────────────
+#
+# SAME ASSERTION, NEW ORIGIN (2026-08-27). The hint used to come from a registry read that found no
+# active and no inactive names; it now comes from the DOCUMENT's own `total_projects == 0`, which is
+# why the short circuit survived the fold at all: it is the one case where there is nothing for a
+# narrative to say and paying `claude -p` to say it is waste.
 
 @test "briefing: empty registry shows scan hint" {
     echo '{"projects":{}}' > "$BORG_REGISTRY"

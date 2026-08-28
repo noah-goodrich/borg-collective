@@ -5,6 +5,7 @@ bats-from-pytest. Capture with capsys, assert exits with pytest.raises(SystemExi
 json.loads and index keys -- never string-compare the serialized form.
 """
 
+import io
 import json
 import os
 import sys
@@ -319,6 +320,92 @@ def test_main_porcelain_and_deep_render_through_render_py(isolated_env, capsys):
     assert exc_info.value.code == 0
     out = capsys.readouterr().out
     assert "Session ID:" in out
+
+
+# ── --render-document: one document, two consumers ────────────────────────────────────────────────
+
+
+def test_render_document_prints_the_same_page_the_human_arm_would(isolated_env, capsys, monkeypatch):
+    """AC1's fold, stated as an equality rather than as a claim about call sites.
+
+    `borg link --brief` builds the document ONCE with `--json`, projects it into the narrative
+    prompt, and pipes THOSE SAME BYTES back through `--render-document` when the narrative fails. If
+    that round trip did not reproduce the human page byte for byte, the fallback would be a second
+    truth level inside one invocation -- which is the defect the fold exists to remove.
+
+    THE CLOCK IS PINNED FOR THE COMPARISON, and that is the point rather than a convenience: without
+    it the two builds below would legitimately differ in `generated_at` and every relative time, and
+    the equality would have to be weakened to a substring check that could not see a real
+    divergence. Pinning it is also what makes the failure mode visible -- the reason the fallback
+    must NOT rebuild is precisely that a rebuild reads the clock a second time.
+    """
+    path = _delta_workspace(isolated_env)
+    _write_registry(isolated_env, {"delta": {"path": path, "status": "idle", "summary": "Delta."}})
+    monkeypatch.setattr(shell, "now_epoch", lambda: 1_800_000_000)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--json"])
+    assert exc_info.value.code == 0
+    document_json = capsys.readouterr().out
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main([])
+    assert exc_info.value.code == 0
+    human_page = capsys.readouterr().out
+
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document_json))
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--render-document"])
+    assert exc_info.value.code == 0
+    rendered_from_json = capsys.readouterr().out
+
+    assert rendered_from_json == human_page
+    assert "THE BORG COLLECTIVE" in rendered_from_json
+
+
+def test_render_document_builds_nothing_of_its_own(isolated_env, capsys, monkeypatch):
+    """The whole reason the seam exists: no clock read, no registry read, no sweep, no manifest glob.
+
+    Asserted by making every one of those explode. A `--render-document` that quietly rebuilt would
+    be indistinguishable from this one on stdout -- it would print the same page -- and only
+    something that fails on contact can tell them apart.
+    """
+    _write_registry(isolated_env, {"solo": {"status": "idle", "last_activity": "2026-08-01T00:00:00Z"}})
+    with pytest.raises(SystemExit):
+        cli.main(["--json"])
+    document_json = capsys.readouterr().out
+
+    def _forbidden(*_args, **_kwargs):
+        raise AssertionError("--render-document must not build a document of its own")
+
+    monkeypatch.setattr(shell, "now_epoch", _forbidden)
+    monkeypatch.setattr(shell, "read_registry", _forbidden)
+    monkeypatch.setattr(shell, "registry_with_state", _forbidden)
+    monkeypatch.setattr(shell, "sweep", _forbidden)
+    monkeypatch.setattr(shell, "discover_manifests", _forbidden)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document_json))
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--render-document"])
+    assert exc_info.value.code == 0
+    assert "solo" in capsys.readouterr().out
+
+
+def test_render_document_dies_clean_on_malformed_stdin(isolated_env, capsys, monkeypatch):
+    """A truncated pipe must die through `main`'s one exception boundary, not as a traceback.
+
+    The caller is a zsh fallback path that has ALREADY had one thing fail; a Python traceback
+    spliced onto its stdout would be the second failure reported as the first.
+    """
+    monkeypatch.setattr(sys, "stdin", io.StringIO('{"version": 2, "projec'))
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["--render-document"])
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "▸ ERROR:" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_repository_scope_calls_no_aggregate_collector_on_the_human_path(isolated_env, capsys, monkeypatch):
