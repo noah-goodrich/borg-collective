@@ -83,12 +83,16 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                            --local   Opt down from the NETWORK sweep — no adapter, no `gh`. NOT
                                      "no subprocess": repository scope still forks one
                                      `git remote get-url origin` for the slug, because manifest
-                                     selection cannot happen without it (cli._grid's "THE SLUG
-                                     COSTS" paragraph says so twice; test_grid's "Repository scope
-                                     still runs ONE `git remote get-url`" pins it), and the
-                                     `tmux list-windows` every invocation pays is unaffected by the
-                                     flag. No hot loop is left behind it; the one automated caller
-                                     is skills/borg-switch's `borg link --local --all`
+                                     selection cannot happen without it. cli._grid states it in TWO
+                                     paragraphs, not one — "THE SLUG COSTS" and "`--local` IS
+                                     CHECKED HERE" — and test_grid's
+                                     test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_repository
+                                     asserts the exact argv (verified by mutation: delete the fork
+                                     and it goes red). The `tmux list-windows` every invocation pays
+                                     is unaffected by the flag; it is gated by the reap overlay, not
+                                     by the network. No hot loop is left behind it; the one
+                                     automated caller is skills/borg-switch's
+                                     `borg link --local --all`
                            --json / --porcelain  the two machine surfaces
                            --deep    Parsed and IGNORED since AC2; kept for borg.zsh's positional
                                      `link` arm, the only caller that still passes it
