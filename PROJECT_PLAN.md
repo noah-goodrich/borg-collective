@@ -17,20 +17,55 @@ e2e/eval harness that keeps it honest.
 
 ## Acceptance Criteria
 
-- [ ] **AC1 — One front door, context-scoped, always a clean read.** In a repository, `link` sweeps that repository
+- [x] **AC1 — One front door, context-scoped, always a clean read.** In a repository, `link` sweeps that repository
       (~2.7s measured); in the orchestrator, it sweeps all (~12.5s measured, 13 repos). No cache, ever — a clean read
       every time. `--local` is the only opt-down. `recon` retires as a human-facing verb; no new verbs are added.
   - Verify: bats asserts `borg help` is net one command shorter than at plan start, and that two consecutive
     `borg link` runs write no cache artifacts.
-  - **Both verify clauses PASS** (`contract: borg help is net one command shorter than at plan start (AC1)`,
-    `cache: two consecutive borg link runs write no cache artifact (AC1)`), and the box stays UNTICKED anyway.
-    `borg link --brief` never reaches `borg_core.link.cli` (`borg.zsh:3118`) — it runs the zsh `_borg_print_briefing`
-    and never sweeps, so one verb still has two truth levels, which `cli.py` itself names as "the failure class AC1
-    exists to kill". Ticking on a passing verify clause while the stated goal is unmet is the wrong-answer-under-a-
-    confident-header failure this whole plan exists to remove. Blocker already filed with its measurement (zero `gh`
-    subprocesses on the `--brief` path against one batched call on every other arm):
-    `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5**, plus **Phase 5b** for
-    `/borg-recon`, the second un-folded human digest. AC1 ticks when those two fold, not before.
+  - **MET.** Both verify clauses pass (`contract: borg help is net one command shorter than at plan start (AC1)`,
+    `cache: two consecutive borg link runs write no cache artifact (AC1)`) — and, unlike before, the stated goal holds
+    too. The box was deliberately held unticked while `borg link --brief` answered from somewhere else: it returned
+    from `_borg_link_dispatch` before any Python ran, so it never swept — measured at **zero `gh` subprocesses against
+    every other arm's two** (one `pullRequests` sweep plus AC3's one `issueOrPullRequest` fetch). That fold shipped on
+    branch `feat/fold-brief-into-the-document`, per
+    `docs/plans/directives/2026-08-27-fold-brief-into-the-document.md`. `--brief` is now a presentation mode of the
+    same document: it builds it ONCE via `_borg_py borg_core.link.cli --json`, projects that JSON into the narrative
+    prompt, and re-renders those same bytes through the new `--render-document` seam when the narrative is
+    unavailable. One sweep, one clock read, two consumers — and no hand-rolled fallback table left to drift from the
+    real page, because the fallback IS the real page.
+  - Evidence is a subprocess count, never a reading of the code (`tests/link_sweep.bats`, the one suite that restores
+    the real adapter and the real fetch seam `setup_temp_dirs` neutralizes everywhere else):
+    `sweep: link --brief sweeps exactly as link does, counted rather than read` asserts exactly one
+    `pullRequests(first:` and one `issueOrPullRequest(number:` on the `--brief` arm, side by side with an identical
+    count on bare `link`; `sweep: link --local --brief spawns zero gh subprocesses, and --brief without it sweeps`
+    proves the one opt-down is really forwarded; and four cases force each `fallback_reason` branch — timeout,
+    not-logged-in, non-zero exit, empty output — and assert the document renders under each. `tests/briefing.bats`
+    covers the rest: none of its pre-fold cases were deleted, three were rewritten with the reason recorded in the
+    file header, one was kept with new provenance, and the remediation passes below added `--all` forwarding, the
+    repository-scope prompt breadth, and both no-page rungs (build and fallback render) being loud on **stderr** and
+    non-zero out. Deliberately not stated as a count — the count was wrong by three within a day of being written,
+    twice, in two files.
+    `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5** is closed and its
+    **Phase 3** subsumed. **Phase 5b** (`/borg-recon`, the second un-folded human digest) is a skill rather than a
+    command, blocks neither verify clause nor the stated goal, and stays filed separately.
+  - **The first fold reintroduced the defect once, inside itself, and the tick is only honest with the remediation
+    included.** The narrative projection read the TOP-LEVEL `.directives`/`.assimilated`, which `--json` always fills
+    with the registry-wide aggregate, while the fallback page rendered from THE SAME BYTES narrows both to `focus` in
+    repository scope. Measured on the author's registry: the prompt said `QUEUED: 141 open directives` plus three
+    collective-wide plan titles while the page printed underneath it said "nothing queued" and "nothing shipped yet".
+    One invocation, two answers — AC1's own failure class. The projection now binds breadth ONCE
+    (`$breadth = if scope.kind == "repository" then focus else document`), transcribing `render._scoped_rows` rather
+    than inventing a second rule, and `tests/briefing.bats`'s "in repository scope the prompt's QUEUED/SHIPPED match
+    the page's, not the registry's" asserts it on the captured `claude -p` argument with an orchestrator-scope control
+    beside it. Two smaller holes closed with it: a failed `jq` projection used to ship an empty `DOCUMENT:` block to
+    `claude -p` and print the invented narrative with no reason line (it now takes the fallback with its own
+    `fallback_reason`, jq's stderr included), and the empty-registry short circuit keyed off `total_projects`, which
+    `core.assemble` fills from the UNFILTERED map — so an all-archived registry stopped short-circuiting and paid
+    for a narrative about a board with no rows. It keys off `.order` now, the list actually projected.
+  - **`--brief` is still the one invocation that prints something other than the seven sections**, and AC2's "never a
+    different page" is qualified in CLAUDE.md rather than left to read as covering it. The narrative path prints prose:
+    no cube, no `▸` headers. What AC1 claims, and what is tested, is that the prose is a rendering of the SAME
+    document at the SAME sweep, and that the fallback is the real page byte for byte.
 - [x] **AC2 — The topological grid is the renderer, everywhere.** Vertical, rows as levels with time flowing down,
       columns as branches, box-drawing connectors, state glyphs, compact nodes with detail blocks below, ANSI to
       stdout by default with OSC-8 hyperlinks on refs. Repository and orchestrator contexts differ in breadth only —

@@ -978,184 +978,311 @@ cmd_tidy() {
     fi
 }
 
-# Build orchestrator context string from registry + checkpoints.
-# Output goes to stdout; caller captures it.
+# The narrative half of `borg link --brief`, and of `borg init`'s morning briefing.
+#
+# THIS FUNCTION BUILDS NO VIEW OF ITS OWN. It builds the ONE `borg link` document — the same
+# `_borg_py borg_core.link.cli --json` every other dispatch arm builds — projects that JSON into the
+# LLM prompt, and renders THOSE SAME BYTES through THAT SAME renderer when the narrative is
+# unavailable. One invocation, one sweep, one clock read, two consumers.
+#
+# WHAT THIS REPLACED, AND WHY IT IS NOT COMING BACK (2026-08-27 directive "Fold `--brief` onto the
+# document"): 177 lines that re-derived a board from `borg_registry_with_state` — its own 30-day
+# active/inactive split, its own waiting-first sort, one `jq` per project for `status` /
+# `last_activity` / `summary` / `waiting_reason` / `path`, its own `_borg_relative_time` call, its own
+# `find .borg/checkpoints | sort -r | head -1`, and a hand-rolled fallback table. Every one of those
+# fields is already on the document, computed once, with the staleness overlay applied. The second
+# derivation WAS the defect: `borg link` and `borg link --brief` were two truth levels of one
+# command, and `--brief` never reached the Python tier at all, so it could not see a sweep, a
+# manifest, a gate or a ready set. If you find yourself reaching for `borg_registry_with_state` in
+# here, the fold has been undone.
+#
+# ARGS: $1 = --all (0/1), $2 = --local (0/1), forwarded exactly as every other arm forwards them.
+# `borg init` passes neither, so the morning briefing is orchestrator-breadth and SWEPT — a real cost
+# change from the registry-only read it used to do, and the intended one.
+#
+# THE `claude -p` CALL STAYS IN zsh, AND THAT IS A CONSTRAINT RATHER THAN INERTIA. borg_core/proc.py
+# is borg_core's only sanctioned fork; it hard-wires `stderr=subprocess.DEVNULL` and returns None
+# (not rc 124) on timeout. Moving this invocation into Python would silently delete two shipped
+# contracts — the reason line that names the exit code AND the captured stderr text it carries, and
+# the timeout branch below. Only the PROMPT INPUT and the FALLBACK PAGE moved.
 _borg_print_briefing() {
     # Suppress xtrace — trace output pollutes the briefing when PS4 is empty.
     setopt LOCAL_OPTIONS
     set +x
 
-    local registry cutoff active_names inactive_names payload name
-    local proj_status last_activity summary waiting_reason rel_time project_path
-    local checkpoint_file briefing_prompt briefing fallback_text fields
+    local doc payload rows briefing_prompt briefing
+    local fallback_reason=""
+    # Non-zero ONLY when the fallback page itself failed to render; the narrative path never sets it.
+    local render_rc=0
+    local build_rc=0
+    typeset -a _brief_py_args
+    _brief_py_args=(--json)
+    (( ${1:-0} )) && _brief_py_args+=(--all)
+    (( ${2:-0} )) && _brief_py_args+=(--local)
 
-    registry=$(borg_registry_with_state)
+    # A FAILED BUILD IS AS LOUD AS A FAILED RENDER, AND FOR THE SAME REASON. This branch used to
+    # `warn` (which writes to STDOUT — see its definition beside `info`/`die` at the top of this
+    # file) and `return 0`, so `borg link --brief` printed no page and reported success: the exact
+    # state the comment on this function's `return` declares must never be reported as success, and
+    # the silent-fallback shape docs/plans/directives/
+    # 2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists to remove. The render
+    # rung two screens down was fixed first; this is its sibling, and the two now behave
+    # identically: reason on STDERR, the child's own stderr quoted in it, non-zero out.
+    #
+    # `|| build_rc=$?` REPLACES `|| doc=""` AND STILL DOES ITS JOB. Catching the status is mandatory,
+    # not defensive habit: this file's top-of-script `set -e` (just above `BORG_VERSION=`) aborts
+    # borg outright on any uncaught non-zero, a bare assignment from a command substitution inherits
+    # the child's exit status, and `cli._die_json` exits 1 on a corrupt registry. The old
+    # `|| doc=""` caught it and threw it away; `|| build_rc=$?` catches it AND gives the reason line
+    # a number.
+    local build_stderr_file="$BORG_DIR/briefing-build-stderr.log"
+    doc=""
+    doc=$(_borg_py borg_core.link.cli "${_brief_py_args[@]}" 2>"$build_stderr_file") || build_rc=$?
+    if [[ -z "$doc" ]]; then
+        local build_stderr=""
+        [[ -s "$build_stderr_file" ]] && build_stderr=$(<"$build_stderr_file")
+        # A build that exits 0 and prints nothing is still a failure with no page; give it a status.
+        if (( build_rc == 0 )); then
+            build_rc=1
+        fi
+        warn "Could not build the borg link document (exit $build_rc)${build_stderr:+: $build_stderr} — no briefing to give." >&2
+        return $build_rc
+    fi
 
-    cutoff=$(date -u -v-30d +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -d "30 days ago" +"%Y-%m-%dT%H:%M:%SZ")
-
-    # Active: status=waiting (any age) OR last_activity within 30 days AND not archived
-    # Sort: waiting first (oldest first = longest neglected), then by last_activity descending
-    active_names=$(echo "$registry" | jq -r --arg cutoff "$cutoff" '
-        (
-            [.projects | to_entries[] |
-             select(.value.status == "waiting" and .value.status != "archived")] |
-            sort_by(.value.last_activity // "0000")
-        ) + (
-            [.projects | to_entries[] |
-             select(.value.status != "waiting" and .value.status != "archived" and
-                    (.value.last_activity != null and .value.last_activity >= $cutoff))] |
-            sort_by(.value.last_activity // "0000") | reverse
-        ) | .[].key
-    ' 2>/dev/null || true)
-
-    # Inactive: not archived, last_activity older than 30 days (or null), not waiting
-    inactive_names=$(echo "$registry" | jq -r --arg cutoff "$cutoff" '
-        .projects | to_entries |
-        map(select(
-            .value.status != "archived" and
-            .value.status != "waiting" and
-            (.value.last_activity == null or .value.last_activity < $cutoff)
-        )) |
-        sort_by(.value.last_activity // "0000") | reverse |
-        .[].key
-    ' 2>/dev/null || true)
-
-    if [[ -z "$active_names" && -z "$inactive_names" ]]; then
+    # The nothing-to-say short circuit, keyed off the DOCUMENT rather than a second registry read.
+    # Kept rather than folded away because it is the one case where there is nothing for a narrative
+    # to say, and paying `claude -p` to say it is pure waste.
+    #
+    # `.order`, NOT `.total_projects`, AND THE DIFFERENCE IS A REAL REGISTRY STATE. `core.assemble`
+    # sets `total_projects` from the UNFILTERED project map ON PURPOSE (see its docstring: the page
+    # must distinguish an empty registry from an all-archived one, which both emit `order: []`).
+    # `.order` is the post-archived-filter list, and it is EXACTLY the list this function projects
+    # into the prompt below — so it is the only count that answers "is there anything to narrate".
+    # The deleted registry walk excluded archived entries too, so keying on `total_projects` silently
+    # changed behaviour for an all-archived registry: the short circuit stopped firing and the
+    # narrative paid for `claude -p` to describe a board with zero rows on it. `--all` puts archived
+    # rows back in `.order`, so it opts back into a narrative, which is what asking for them means.
+    rows=$(printf '%s' "$doc" | jq -r '(.order // []) | length' 2>/dev/null) || rows=0
+    if [[ -z "$rows" || "$rows" == "0" || "$rows" == "null" ]]; then
         info "No projects in registry. Run: borg scan"
         return 0
     fi
 
-    # Build LLM payload + fallback text in one pass (1 jq call per project)
-    payload=""
-    fallback_text=""
-    while IFS= read -r name; do
-        [[ -z "$name" ]] && continue
-        # \x1f (unit separator), not tab: tab is IFS *whitespace*, so a run of consecutive tabs
-        # (an empty middle field, e.g. summary) collapses to ONE delimiter and shifts every field
-        # after it left. \x1f is a non-whitespace IFS char, so adjacent delimiters always produce
-        # an empty field instead of merging. Safe here because _borg_registry_write
-        # (lib/registry.zsh) strips control chars \000-\010,\013,\014,\016-\037 from every stored
-        # value, so \x1f (0x1F) can never appear inside project data.
-        IFS=$'\x1f' read -r proj_status last_activity summary waiting_reason project_path <<< \
-            "$(echo "$registry" | jq -r --arg p "$name" \
-                '.projects[$p] | [.status // "unknown", .last_activity // "", .summary // "", .waiting_reason // "", .path // ""] | join("\u001f")')"
-        rel_time=$(_borg_relative_time "$last_activity")
+    # ONE jq over the whole document, never one per project — and no `read` loop, so the \x1f
+    # delimiter this function used to need is gone with it: JSON cannot field-shift an empty summary
+    # into the next column. The projection is deliberately NARROWER than the document (~40KB raw,
+    # 141 directive rows on the author's machine): it carries the board rows in `.order` (already
+    # sorted, and the model is told not to re-sort), the sweep's provenance, `.grid.warnings`, each
+    # manifest's READY set and gates, and the focused repository's checkpoint head.
+    #
+    # `.grid.warnings` IS NOT GARNISH. It is where every sweep, fetch and discovery failure surfaces,
+    # and a prompt built without it lets the narrative describe a degraded sweep as a clean one —
+    # the wrong-answer-under-a-confident-header failure this plan exists to remove.
+    #
+    # THE ONE INPUT THIS NARROWS, consciously: the old payload carried 1500 bytes of the newest
+    # checkpoint for EVERY active project; the document carries `checkpoint_head` for the FOCUSED
+    # repository only. Widening the wire to a per-project head is a v2→v3 bump with four coupled
+    # SKILL.md edits, and re-reading checkpoints here would reinstate the second derivation this
+    # function just lost. The grid's per-node provenance is the replacement input, which is exactly
+    # the trade the 2026-08-27 directive argues for.
+    #
+    # `$breadth` IS render._scoped_rows, TRANSCRIBED — NOT A SECOND RULE. QUEUED and SHIPPED are the
+    # only two scope-DEPENDENT lists on the wire, and `--json` always carries the registry-wide
+    # aggregate regardless of scope (cli.py's `need_aggregate = mode == "json" or ...`, deliberately,
+    # so skills/borg-link/SKILL.md's bare `--json | jq '.directives'` answers for the collective from
+    # inside any repository). The HUMAN page narrows them at render time instead:
+    # `render._scoped_rows` reads `doc.focus[key]` when `scope.kind == "repository"`. A projection
+    # that read the top-level aggregate unconditionally handed the prompt "QUEUED: 141 open
+    # directives" while the fallback page rendered from THOSE SAME BYTES said "nothing queued" —
+    # measured on the author's registry, 141/3 aggregate against 0/0 focused. One invocation, two
+    # answers: the exact failure class the fold exists to remove, reintroduced by the fold itself.
+    # Bind the breadth ONCE, here, and read every scope-dependent list off it; if a third such list
+    # ever lands on the wire, it goes through `$breadth` too rather than growing a rule of its own.
+    #
+    # jq's STDERR IS CAPTURED, NOT DISCARDED — see the empty-payload branch below for why. No
+    # explicit truncation of the file: `2>` on the command substitution opens it O_TRUNC, exactly as
+    # the `claude` call's own stderr capture does further down.
+    local jq_stderr_file="$BORG_DIR/briefing-projection-stderr.log"
+    payload=$(printf '%s' "$doc" | jq -r '
+        . as $d
+        | (if ($d.scope.kind // "") == "repository" then ($d.focus // {}) else $d end) as $breadth
+        | [
+            "SCOPE: \($d.scope.kind)"
+              + (if (($d.scope.repository // "") | length) > 0 then " — \($d.scope.repository)" else "" end),
+            "CAPACITY: \($d.capacity.active) active of \($d.capacity.limit)"
+              + (if $d.capacity.over_limit then " (OVER LIMIT)" else "" end),
+            "SWEEP: " + (if $d.grid.swept
+                         then "sources swept since \($d.grid.since)"
+                         else "NOT swept — every state below is what a manifest declares, not what was observed" end),
+            "DECLARED REFS: \($d.grid.declared) declared, \($d.grid.unresolved) still unresolved"
+          ]
+          + (if (($d.grid.sources // []) | length) > 0
+             then ["SOURCES:"] + ($d.grid.sources | map("  \(.source): \(.status), \(.count) items"))
+             else [] end)
+          + (if (($d.grid.warnings // []) | length) > 0
+             then ["SWEEP WARNINGS — never describe a degraded sweep as a clean one:"]
+                  + ($d.grid.warnings | map("  " + .))
+             else [] end)
+          + ["QUEUED: \(($breadth.directives // []) | length) open directives"]
+          + (if (($breadth.assimilated // []) | length) > 0
+             then ["SHIPPED RECENTLY:"] + ($breadth.assimilated | map("  \(.title // .slug)"))
+             else [] end)
+          + ["", "PROJECTS (already in priority order — most urgent first; do not re-sort):"]
+          + ($d.order | map(. as $n | $d.projects[$n] as $p |
+              (["PROJECT: \($n)",
+                "status: \($p.status // "unknown")",
+                "last_active: \($p.relative_activity // "never")",
+                "summary: \($p.summary // "")"]
+               + (if (($p.waiting_reason // "") | length) > 0
+                  then ["waiting_reason: \($p.waiting_reason)"] else [] end)
+               + (if (($p.summary // "") | length) == 0
+                  then ["note: no summary on record — describe this one by state only, invent nothing"]
+                  else [] end)
+               + (if $n == ($d.scope.repository // "")
+                  then ["note: this is the repository the user is standing in"] else [] end)
+               + [""])
+              | join("\n")))
+          + (($d.grid.manifests // []) | map(. as $m |
+              (["PROJECT MANIFEST: \($m.id) — \($m.desc // "")"]
+               + (if ($m.ready.state // "unlooked") == "known"
+                  then (if (($m.ready.refs // []) | length) > 0
+                        then ($m.ready.refs | map(. as $r | $m.nodes[$r] as $node |
+                                "  READY: \($r) — \($node.why // "") [\($node.state // "?"), \($node.state_source // "?")]"))
+                        else ["  READY: nothing in this manifest is ready right now"] end)
+                  else ["  READY: unlooked — the sweep did not resolve enough to say"] end)
+               + (($m.gates // []) | map("  GATE (\(.kind)) at \(.ref)"
+                    + (if ((.blocked_by // "") | length) > 0 then " — blocked by: \(.blocked_by)" else "" end)))
+               + [""])
+              | join("\n")))
+          + (if $d.focus != null and ((($d.focus.checkpoint_head // "") | length) > 0)
+             then ["--- latest checkpoint for \($d.focus.name) ---", $d.focus.checkpoint_head,
+                   "--- end checkpoint ---", ""]
+             else [] end)
+          | join("\n")
+    ' 2>"$jq_stderr_file") || payload=""
+    local jq_stderr=""
+    [[ -s "$jq_stderr_file" ]] && jq_stderr=$(<"$jq_stderr_file")
 
-        payload+="PROJECT: $name
-status: $proj_status
-last_active: $rel_time
-summary: $summary"
-        [[ -n "$waiting_reason" && "$waiting_reason" != "null" ]] && \
-            payload+="
-waiting_reason: $waiting_reason"
-
-        checkpoint_file=""
-        if [[ -n "$project_path" && -d "$project_path/.borg/checkpoints" ]]; then
-            checkpoint_file=$(find "$project_path/.borg/checkpoints" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r | head -1 || true)
-        fi
-        if [[ -n "$checkpoint_file" && -f "$checkpoint_file" ]]; then
-            payload+="
---- latest_checkpoint (${checkpoint_file##*/}) ---
-$(head -c 1500 "$checkpoint_file")
---- end checkpoint ---"
-        fi
-        payload+="
-
-"
-
-        # Pre-build fallback so we don't re-parse on failure
-        fallback_text+="$(printf "  %-22s [%s, %s]\n" "$name" "$proj_status" "$rel_time")"
-        if [[ -n "$summary" && "$summary" != "null" && "$summary" != "(no summary)" ]]; then
-            fallback_text+=$'\n'"$(echo "    $summary" | fold -s -w 76 | sed '1!s/^/    /')"
-        fi
-        fallback_text+=$'\n'
-    done <<< "$active_names"
+    # AN EMPTY PROJECTION IS A FALLBACK, NEVER A PROMPT. `doc` is non-empty and carries at least one
+    # board row by the short circuit above, so a `payload` of zero bytes can only mean the projection
+    # broke — a jq that is not installed, or a `$d.grid`/`$d.scope` shape the document no longer has.
+    # Shipping it anyway sent `claude -p` the literal string "DOCUMENT:" followed by nothing, and the
+    # model answered from an empty board: a confident narrative with no input, printed with NO reason
+    # line, because `fallback_reason` was only ever set on `claude` failures. Fail to the real page
+    # instead, and name the cause the same way every other branch of the ladder does — jq's own
+    # stderr, captured for exactly this, rather than the `2>/dev/null` that used to discard it
+    # alongside the exit status.
+    if [[ -z "$payload" ]]; then
+        fallback_reason="the document projection produced nothing"
+        [[ -n "$jq_stderr" ]] && fallback_reason+=": ${jq_stderr}"
+    fi
 
     IFS= read -r -d '' briefing_prompt <<EOF || true
 Generate a morning briefing for a developer. Output plain text for a terminal — no markdown, no headers, no bullet symbols.
 
 For each project write exactly these lines (omit Blocked line if not waiting):
   <name>  [<status>, <relative_time>]
-    Last: <one sentence — what was accomplished. Use latest checkpoint Accomplished if available, else summary>
-    Next: <one sentence — most important next action. Use latest checkpoint "Next Session" if available>
+    Last: <one sentence — what was accomplished. Use the latest checkpoint if there is one, else summary>
+    Next: <one sentence — most important next action. Prefer a READY ref from a project manifest>
     Blocked: <waiting_reason>  ← only if status is waiting
 
 After all projects, add one blank line then:
   Focus: <project_name> — <one sentence why it needs attention first>
 
-Sort: waiting projects first, then by most recent activity. Keep each line under 80 chars.
+The projects below are already in priority order — keep it. Keep each line under 80 chars.
 
-PROJECTS:
+PROVENANCE. Every state below carries its source. A node marked "declared" was typed into a manifest
+by a human; one marked "swept" or "fetched" was observed on GitHub during this run. Never present a
+declared state as an observed one. If SWEEP says NOT swept, or any SWEEP WARNING is present, say so
+in one clause rather than describing the picture as current.
+
+DOCUMENT:
 $payload
 EOF
 
     echo ""
-    info "Building morning briefing..."
 
-    # Capture stderr to a file under $BORG_DIR instead of /dev/null (was silent — see
-    # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
-    # path being taken with NO indication of why is the defect this whole function exists to fix.
-    local claude_rc=0
-    local claude_stderr_file="$BORG_DIR/briefing-stderr.log"
-    briefing=$(_borg_timeout 20 claude -p "$briefing_prompt" \
-        --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>"$claude_stderr_file") \
-        || claude_rc=$?
-    local claude_stderr=""
-    [[ -s "$claude_stderr_file" ]] && claude_stderr=$(<"$claude_stderr_file")
+    # THE WHOLE NARRATIVE HALF IS SKIPPED WHEN THERE IS NOTHING TO NARRATE FROM. A projection failure
+    # is already a decided fallback; forking `claude -p` anyway would bill for a briefing built on an
+    # empty DOCUMENT block and then throw the answer away — or worse, print it.
+    briefing=""
+    if [[ -z "$fallback_reason" ]]; then
+        info "Building morning briefing..."
 
-    # Provenance: distinguish WHY the fallback fired, at minimum timeout / not-logged-in / any
-    # other non-zero exit. `fallback_reason` is empty iff the narrative call actually succeeded.
-    local fallback_reason=""
-    if [[ $claude_rc -eq 124 ]]; then
-        fallback_reason="claude -p timed out after 20s"
-        briefing=""
-    elif [[ "$briefing" == *"Not logged in"* ]]; then
-        # claude exits 0 on auth failure — the string match is the only signal.
-        fallback_reason="claude not logged in (headless CLI has no usable credentials on this machine)"
-        briefing=""
-    elif [[ $claude_rc -ne 0 ]]; then
-        fallback_reason="claude -p exited $claude_rc"
-        [[ -n "$claude_stderr" ]] && fallback_reason+=": ${claude_stderr}"
-        briefing=""
-    elif [[ -z "$briefing" ]]; then
-        fallback_reason="claude -p returned empty output"
+        # Capture stderr to a file under $BORG_DIR instead of /dev/null (was silent — see
+        # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
+        # path being taken with NO indication of why is the defect this whole function exists to fix.
+        local claude_rc=0
+        local claude_stderr_file="$BORG_DIR/briefing-stderr.log"
+        briefing=$(_borg_timeout 20 claude -p "$briefing_prompt" \
+            --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>"$claude_stderr_file") \
+            || claude_rc=$?
+        local claude_stderr=""
+        [[ -s "$claude_stderr_file" ]] && claude_stderr=$(<"$claude_stderr_file")
+
+        # Provenance: distinguish WHY the fallback fired, at minimum timeout / not-logged-in / any
+        # other non-zero exit. `fallback_reason` is empty iff the narrative call actually succeeded.
+        if [[ $claude_rc -eq 124 ]]; then
+            fallback_reason="claude -p timed out after 20s"
+            briefing=""
+        elif [[ "$briefing" == *"Not logged in"* ]]; then
+            # claude exits 0 on auth failure — the string match is the only signal.
+            fallback_reason="claude not logged in (headless CLI has no usable credentials on this machine)"
+            briefing=""
+        elif [[ $claude_rc -ne 0 ]]; then
+            fallback_reason="claude -p exited $claude_rc"
+            [[ -n "$claude_stderr" ]] && fallback_reason+=": ${claude_stderr}"
+            briefing=""
+        elif [[ -z "$briefing" ]]; then
+            fallback_reason="claude -p returned empty output"
+        fi
     fi
 
     if [[ -n "$briefing" ]]; then
         echo ""
         echo "$briefing"
     else
+        # THE FALLBACK IS THE DOCUMENT ITSELF, re-rendered from the SAME BYTES the prompt above was
+        # built from -- never a rebuild. A second `_borg_py borg_core.link.cli` here would read the
+        # clock again, sweep GitHub again and glob every manifest again, so the page the user finally
+        # reads could carry a different `generated_at`, a different sweep mark and a different set of
+        # PR states than the narrative that just failed. That is two truth levels inside ONE
+        # invocation -- the exact defect the fold exists to remove, re-created one layer down.
+        #
+        # It also deletes the drift risk outright: there is no hand-rolled fallback table left to
+        # diverge from the real page, because the fallback IS the real page.
+        #
+        # A FAILED FALLBACK RENDER IS THE LOUDEST FAILURE IN THIS FUNCTION, NOT THE QUIETEST. This
+        # line used to end in `|| true`, which meant the ONE path that guarantees the user always
+        # gets a page could print nothing and still exit 0 — the silent-fallback shape
+        # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1
+        # exists to remove ("make the failure loud"), reintroduced at the last step of the ladder
+        # that implements it. Every branch above names its cause; so does this one. The reason line
+        # is redirected to STDERR because `warn` itself writes to STDOUT (see its definition beside
+        # `info`/`die` at the top of this file) and at this point stdout is the page — a warning
+        # spliced into it is indistinguishable from content.
+        # `cli._render_document_from_stdin` deliberately catches nothing, so `main`'s single
+        # exception boundary has already put `▸ ERROR: ...` on the child's stderr — that text is the
+        # reason, captured the same way the `claude -p` and `jq` branches capture theirs.
         echo ""
         if [[ -n "$fallback_reason" ]]; then
-            echo -e "  ${DIM}(narrative unavailable: $fallback_reason — showing registry fallback)${NC}"
+            echo -e "  ${DIM}(narrative unavailable: $fallback_reason — showing the borg link document)${NC}"
             echo ""
         fi
-        printf "%s" "$fallback_text"
-    fi
-
-    # Inactive list (compact, single jq call)
-    if [[ -n "$inactive_names" ]]; then
-        echo ""
-        echo -e "  ${DIM}Inactive (>30 days):${NC}"
-        echo "$registry" | jq -r --arg cutoff "$cutoff" '
-            .projects | to_entries |
-            map(select(
-                .value.status != "archived" and
-                .value.status != "waiting" and
-                (.value.last_activity == null or .value.last_activity < $cutoff)
-            )) |
-            sort_by(.value.last_activity // "0000") | reverse |
-            .[] | [.key, .value.last_activity // ""] | join("\t")
-        ' 2>/dev/null | \
-            # tab-safe: name (.key) is field 1 of 2 and never empty; an empty last_activity
-            # (field 2, last) cannot shift anything after it.
-            while IFS=$'\t' read -r name last_activity; do
-            rel_time=$(_borg_relative_time "$last_activity")
-            echo -e "    ${DIM}$name  ($rel_time)${NC}"
-        done
-        echo -e "  ${DIM}Run 'borg link <name>' for details.${NC}"
+        local render_stderr_file="$BORG_DIR/briefing-render-stderr.log"
+        printf '%s' "$doc" | _borg_py borg_core.link.cli --render-document 2>"$render_stderr_file" \
+            || render_rc=$?
+        if (( render_rc != 0 )); then
+            local render_stderr=""
+            [[ -s "$render_stderr_file" ]] && render_stderr=$(<"$render_stderr_file")
+            warn "Could not render the borg link document (exit $render_rc)${render_stderr:+: $render_stderr}" >&2
+        fi
     fi
     echo ""
+    # THE EXIT CODE CARRIES IT TOO. A caller that pipes or scripts `borg link --brief` cannot see the
+    # stderr line; a non-zero status is the only signal it can act on, and "exited 0 having printed
+    # no page" is precisely the state that must not be reported as success.
+    return $render_rc
 }
 
 _borg_orchestrator_context() {
@@ -1225,8 +1352,16 @@ cmd_init() {
     # Merge Desktop sessions before building briefing
     borg_desktop_scan 2>/dev/null || true
 
-    # Print formatted briefing to terminal before launching orchestrator
-    _borg_print_briefing
+    # Print formatted briefing to terminal before launching orchestrator.
+    #
+    # TOLERATED HERE, AND ONLY HERE. `_borg_print_briefing` now returns non-zero on both of its
+    # no-page rungs — the document failing to BUILD and the fallback page failing to RENDER — and
+    # `borg link --brief` propagates that status. The briefing IS that command's
+    # product. For `borg init` the briefing is a preamble and the product is the orchestrator session
+    # below, so a failed page must not stop the session from launching. This is not a silent swallow:
+    # the function has already named the cause on stderr before returning, which is the whole of the
+    # 2026-08-10 directive's "make the failure loud". Dropping only the status is the deliberate part.
+    _borg_print_briefing || true
 
     local context
     context=$(_borg_orchestrator_context)
@@ -1986,8 +2121,12 @@ cmd_cortex_resume() {
     [[ -n "$entry" && "$entry" != "null" ]] || die "no pending wake matching '$target'"
 
     local pane_id project session window pane_index
-    # \x1f, not @tsv/tab: see borg.zsh:_borg_print_briefing for why tab (IFS whitespace) is unsafe
-    # when a field can be empty — this is one of the sites the directive flagged as latent.
+    # \x1f, not @tsv/tab: tab is IFS *whitespace*, so a run of consecutive tabs (an empty middle
+    # field) collapses to ONE delimiter and shifts every field after it left. \x1f is a
+    # non-whitespace IFS char, so adjacent delimiters always produce an empty field instead of
+    # merging. This is the last site of the pattern — _borg_print_briefing carried the original
+    # rationale until the 2026-08-27 fold deleted its `read` loop, so the reasoning lives here now
+    # rather than as a cross-reference to a function that no longer demonstrates it.
     IFS=$'\x1f' read -r pane_id project session window pane_index < <(
         echo "$entry" | jq -r '[.pane_id,.project,.session,.window,.pane_index] | join("\u001f")'
     )
@@ -2373,13 +2512,13 @@ cmd_doctor() {
         --no-session-persistence --bare 2>&1) || narrative_rc=$?
     if [[ $narrative_rc -eq 124 ]]; then
         narrative_status="WARN"; narrative_color="$YELLOW"
-        narrative_hint="claude -p timed out — 'borg link --brief' will fall back to the registry view"
+        narrative_hint="claude -p timed out — 'borg link --brief' will fall back to the borg link document"
     elif [[ "$narrative_out" == *"Not logged in"* ]]; then
         narrative_status="WARN"; narrative_color="$YELLOW"
-        narrative_hint="claude not logged in headless (Keychain-only OAuth token on macOS) — expected on some machines, not a bug to chase; 'borg link --brief' falls back to the registry view"
+        narrative_hint="claude not logged in headless (Keychain-only OAuth token on macOS) — expected on some machines, not a bug to chase; 'borg link --brief' falls back to the borg link document"
     elif [[ $narrative_rc -ne 0 ]]; then
         narrative_status="WARN"; narrative_color="$YELLOW"
-        narrative_hint="claude -p exited $narrative_rc — 'borg link --brief' will fall back to the registry view"
+        narrative_hint="claude -p exited $narrative_rc — 'borg link --brief' will fall back to the borg link document"
     fi
     printf " %-14s %-10s %-8s %-10s ${narrative_color}%s${NC}\n" "claude-cli" "n/a" "$narrative_rc" "n/a" "$narrative_status"
     [[ -n "$narrative_hint" ]] && echo -e "   ${DIM}→ $narrative_hint${NC}"
@@ -2566,7 +2705,7 @@ cmd_help() {
     claude              Resume orchestrator session (continue most recent)
     link [project]      Overview (no arg) or deep dive (with project)
                           --local   Skip the source sweep — registry + manifests only, no network
-                          --brief   LLM narrative briefing (registry-only; never sweeps)
+                          --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
                           --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
@@ -3058,8 +3197,16 @@ _borg_link_dispatch() {
 
     if [[ -n "$_link_project" ]]; then
         # The deep dive stays read-only and never scans -- no desktop pre-pass here, matching today.
-        # This is the fzf preview's arm (borg.zsh:266 `--preview "borg link {1}"` -> bare positional
-        # -> here), so it is re-executed on every cursor move. Treat it as a hot loop.
+        #
+        # CORRECTED 2026-08-28: this comment used to call this "the fzf preview's arm", citing a
+        # `--preview "borg link {1}"` in `cmd_switch`. There is no such flag: `cmd_switch`'s `fzf`
+        # invocation carries `--query`, `--prompt`, `--header`, `--delimiter` and `--with-nth`, and
+        # nothing else -- `grep -- '--preview' borg.zsh` matches only prose. The per-keypress hot
+        # loop that justification described does not exist. What is still true, and is the whole
+        # reason this arm matters, is that it is the ONLY live caller that passes `--deep`, and it
+        # serves EVERY `borg link <project>` a human types plus `drone link`, whose dispatch arm
+        # (`link)       exec borg link ...` in drone.zsh) forwards a bare positional straight here.
+        # Treat it as user-facing, not as a hot loop.
         _link_py_args=(--deep)
         (( _link_local )) && _link_py_args+=(--local)
         _link_py_args+=(-- "$_link_project")
@@ -3068,17 +3215,35 @@ _borg_link_dispatch() {
     fi
 
     if (( _link_brief )); then
-        # --brief stays zsh this pass; only its DISPATCH is relocated out of the deleted cmd_link.
-        # IT NEVER REACHES borg_core.link.cli, SO IT NEVER SWEEPS. Post-S3 that makes `borg link`
-        # and `borg link --brief` two truth levels of one command -- the failure class AC1 exists to
-        # kill. Recorded rather than fixed, and stated in `borg help` so the difference is declared
-        # instead of discovered: routing the narrative through the Python document is a rewrite of
-        # _borg_print_briefing, which belongs to whichever step owns the briefing, not to the sweep
-        # fold. Do not "fix" it by adding --local here; --local would make it CHEAP and still leave
-        # it un-swept, which is the same lie with a smaller bill.
+        # --brief IS A PRESENTATION MODE OF THE DOCUMENT, not a second path (2026-08-27 directive
+        # "Fold `--brief` onto the document"). _borg_print_briefing makes the SAME
+        # `_borg_py borg_core.link.cli --json` call every arm above makes, projects that JSON into
+        # the narrative prompt, and renders THOSE SAME BYTES when the narrative is unavailable. One
+        # sweep, one clock read, two consumers. This arm used to return before any Python ran at all,
+        # which made `borg link` and `borg link --brief` two truth levels of one command -- the
+        # failure class AC1 exists to kill -- and it is why AC1 stayed unticked with both of its
+        # verify clauses passing.
+        #
+        # --all and --local are forwarded exactly as every other arm forwards them, and NOTHING ELSE
+        # IS. Do not add a --local of this arm's own: the directive names and rejects it -- it would
+        # make the answer cheap and still leave it un-swept, which is the same lie with a smaller
+        # bill, and harder to find because the two arms would then agree about cost and disagree only
+        # about truth.
+        #
+        # `borg_desktop_scan` STAYS ITS OWN STATEMENT, above the call and never folded into it: it
+        # reaches `warn`, which writes to STDOUT (see its `echo -e` definition beside `info`/`die` at
+        # the top of this file — no `>&2` on it), and inside the `$(...)` that captures the document
+        # that line would splice ahead of the JSON and kill `jq`.
         borg_desktop_scan 2>/dev/null || true
-        _borg_print_briefing
-        return 0
+        # THE BRIEFING'S STATUS IS THIS ARM'S STATUS. `_borg_print_briefing` returns non-zero on BOTH
+        # of its no-page rungs — the document failing to BUILD ("Could not build the borg link
+        # document") and the fallback page failing to RENDER ("Could not render the borg link
+        # document") — and in either case the user got no page, which `borg link --brief` must not
+        # report as success. Captured explicitly rather than left to `set -e` so the propagation is
+        # visible at the call site.
+        local _brief_rc=0
+        _borg_print_briefing "$_link_all" "$_link_local" || _brief_rc=$?
+        return $_brief_rc
     fi
 
     borg_desktop_scan 2>/dev/null || true

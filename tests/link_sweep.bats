@@ -697,3 +697,167 @@ for p in sys.argv[1:]:
     echo "samples(ms): ${samples[*]}  median=${median}ms" >&3
     [ "$median" -le 2700 ]
 }
+
+# ── AC1: --brief is a presentation mode of the document, counted ───────────────
+#
+# THE MEASUREMENT THAT KEPT AC1 UNTICKED. Before the 2026-08-27 fold, `borg link --brief` returned
+# from _borg_link_dispatch before any Python ran: ZERO gh subprocesses against every other arm's two.
+# One verb, two truth levels. These cases assert the fold by COUNTING FORKS, never by reading the
+# arm — a comment claiming the arm sweeps is exactly the evidence this file exists to refuse.
+#
+# THEY LIVE HERE AND NOT IN tests/briefing.bats ON PURPOSE. setup_temp_dirs neutralizes BOTH network
+# seams (an empty adapter dir and an empty fetch fixture), so a gh-count assertion over there is
+# vacuously green and would pass with the whole fold reverted. `_sweepable_repo` restores both.
+
+@test "sweep: link --brief sweeps exactly as link does, counted rather than read" {
+    _sweepable_repo
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+
+    # Fails, so the fallback branch runs too — proving the DOCUMENT path is reached end to end and
+    # not merely built and thrown away.
+    cat > "$MOCK_BIN/claude" <<'MOCK'
+#!/usr/bin/env bash
+exit 1
+MOCK
+    chmod +x "$MOCK_BIN/claude"
+
+    : > "$GH_TRACE"
+    run bash -c "cd '$dir' && zsh '$BORG' link --brief"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    # EXACT, NEVER -ge, for the same reason the cache case above is exact: a per-repository or
+    # per-ref loop is invisible to a `-ge` comparison and to every stdout assertion in the tree.
+    run cat "$GH_TRACE"
+    [ "${#lines[@]}" -eq 2 ]
+    run bash -c "grep -c 'pullRequests(first:' '$GH_TRACE'"
+    [ "$output" -eq 1 ]
+    run bash -c "grep -c 'issueOrPullRequest(number:' '$GH_TRACE'"
+    [ "$output" -eq 1 ]
+
+    # THE CONTROL. Same fixture, same cwd, one flag different. "--brief made two gh calls" means
+    # nothing without "and so does the arm it is supposed to match": the claim is PARITY, and only a
+    # side-by-side count can state it.
+    : > "$GH_TRACE"
+    run bash -c "cd '$dir' && zsh '$BORG' link"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$GH_TRACE"
+    [ "${#lines[@]}" -eq 2 ]
+    run bash -c "grep -c 'pullRequests(first:' '$GH_TRACE'"
+    [ "$output" -eq 1 ]
+    run bash -c "grep -c 'issueOrPullRequest(number:' '$GH_TRACE'"
+    [ "$output" -eq 1 ]
+}
+
+@test "sweep: link --local --brief spawns zero gh subprocesses, and --brief without it sweeps" {
+    # --local has to be FORWARDED by the --brief arm, and a half-wired forward fails OPEN: the
+    # lenient `-*)` arm in _borg_link_dispatch swallows unrecognised flags at exit 0, so the caller
+    # believes it opted down and pays for the sweep anyway with nothing on stdout to show it.
+    _sweepable_repo
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+    cat > "$MOCK_BIN/claude" <<'MOCK'
+#!/usr/bin/env bash
+exit 1
+MOCK
+    chmod +x "$MOCK_BIN/claude"
+
+    : > "$GH_TRACE"
+    run bash -c "cd '$dir' && zsh '$BORG' link --local --brief"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$GH_TRACE"
+    [ -z "$output" ]
+
+    : > "$GH_TRACE"
+    run bash -c "cd '$dir' && zsh '$BORG' link --brief"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$GH_TRACE"
+    [ -n "$output" ]
+    [[ "$output" == *"graphql"* ]] || false
+}
+
+# ── AC1: every fallback_reason branch renders the document ────────────────────
+#
+# FOUR BRANCHES, FOUR CASES, ONE CLAIM EACH: the reason line still names WHY, and what follows it is
+# now the real `borg link` page rather than a hand-rolled table that could drift from it. Run with
+# --local so the LADDER is what is under test and no network is; sweep parity is counted above.
+#
+# `_assert_brief_fallback_document` is the shared assertion. It checks the cube AND a section header
+# AND the registered repository's name, because any one alone is weak — the cube alone would pass on
+# a page whose body failed to render, and a bare name match would pass on the deleted registry table.
+_assert_brief_fallback_document() {
+    [[ "$output" == *"narrative unavailable"* ]] || false
+    [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" == *"REPOSITORIES"* ]] || false
+    [[ "$output" == *"sierra"* ]] || false
+}
+
+@test "sweep: --brief renders the document when claude times out" {
+    _sweepable_repo
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+    # MOCK `timeout`, NOT A 20-SECOND SLEEP. _borg_timeout shells out to `timeout $secs "$@"`, so a
+    # 124 from this mock is the same signal a real expiry produces, in milliseconds instead of 20
+    # seconds — and it works on a runner where `timeout` is absent, where _borg_timeout would
+    # otherwise fall through and exec claude directly, never reaching this branch at all.
+    cat > "$MOCK_BIN/timeout" <<'MOCK'
+#!/usr/bin/env bash
+exit 124
+MOCK
+    chmod +x "$MOCK_BIN/timeout"
+
+    run bash -c "cd '$dir' && zsh '$BORG' link --local --brief"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    [[ "$output" == *"timed out after 20s"* ]] || false
+    _assert_brief_fallback_document
+}
+
+@test "sweep: --brief renders the document when claude is not logged in" {
+    _sweepable_repo
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+    # EXITS 0. The auth failure is invisible in the exit status, which is why the string match is
+    # this branch's only signal and why it must sit ABOVE the rc test in the ladder.
+    cat > "$MOCK_BIN/claude" <<'MOCK'
+#!/usr/bin/env bash
+echo "Not logged in · Please run /login"
+exit 0
+MOCK
+    chmod +x "$MOCK_BIN/claude"
+
+    run bash -c "cd '$dir' && zsh '$BORG' link --local --brief"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    [[ "$output" == *"not logged in"* ]] || false
+    # The raw provider string must not reach the page; only borg's own lowercase paraphrase does.
+    [[ "$output" != *"Not logged in"* ]] || false
+    _assert_brief_fallback_document
+}
+
+@test "sweep: --brief renders the document when claude exits non-zero" {
+    _sweepable_repo
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+    cat > "$MOCK_BIN/claude" <<'MOCK'
+#!/usr/bin/env bash
+echo "Error: API error 401 Unauthorized" >&2
+exit 1
+MOCK
+    chmod +x "$MOCK_BIN/claude"
+
+    run bash -c "cd '$dir' && zsh '$BORG' link --local --brief"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    [[ "$output" == *"exited 1"* ]] || false
+    # The captured stderr still reaches stdout — the contract that keeps the `claude -p` call in zsh
+    # rather than behind borg_core/proc.py, which DEVNULLs stderr and could never satisfy it.
+    [[ "$output" == *"API error 401 Unauthorized"* ]] || false
+    _assert_brief_fallback_document
+}
+
+@test "sweep: --brief renders the document when claude returns empty output" {
+    _sweepable_repo
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+    cat > "$MOCK_BIN/claude" <<'MOCK'
+#!/usr/bin/env bash
+exit 0
+MOCK
+    chmod +x "$MOCK_BIN/claude"
+
+    run bash -c "cd '$dir' && zsh '$BORG' link --local --brief"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    [[ "$output" == *"returned empty output"* ]] || false
+    _assert_brief_fallback_document
+}
