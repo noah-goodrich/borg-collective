@@ -572,22 +572,27 @@ def _route(kind: str) -> str:
 
     AN UNGATED ROW IS `mine`. Nothing is blocking it, so nothing needs a human first.
 
-    `unsure` IS UNREACHABLE THROUGH THE FRONT DOOR TODAY, AND THAT IS A VALIDATOR FACT, NOT A
-    RENDERER ONE. `manifest_core.GATE_KINDS` is `{"decision", "verification"}` and validation rejects
-    anything else with `gate.kind must be one of [...]`, whereupon `shell._load_manifest` drops the
-    WHOLE FILE -- so a manifest carrying `kind: "review"` never reaches this function at all. Measured
-    by trying it: adding such a row to `auth-hardening.json` took the orchestrator grid from 12
-    declared refs to 5 and produced an `invalid manifest` warning instead of a routed row.
+    `unsure` IS REACHABLE THROUGH THE FRONT DOOR, and getting it there took two changes on this
+    docstring's own prediction. It used to say the group was unreachable because
+    `manifest_core.GATE_KINDS` closed `gate.kind` to `{"decision", "verification"}` and
+    `shell._load_manifest` dropped the WHOLE FILE on anything else. PR #173 replaced that with
+    row-level degradation, which left the group unreachable for a WORSE reason -- the one row carrying
+    the unrecognized kind was deleted and the rest of the file rendered as though it had never been
+    declared. So the validator was demoted: it now requires only that a gate NAME some kind, and an
+    unrecognized one arrives here and routes. `tests/fixtures/link/manifests/warehouse-rollout.json`
+    carries `acme/warehouse#78` (`kind: "review"`) so `link-grid-orchestrator.golden` pins the whole
+    path end to end, not just this function's unit test.
 
-    Kept anyway, dead-but-tested, on the same terms `GLYPH_DRAFT` was kept through AC2 and AC3: the
-    branch is one line, its unit tests are real, and the alternative is that the day someone widens
-    `GATE_KINDS` -- or the day a row-level degrade replaces the whole-file drop -- the router silently
-    defaults a kind it does not understand to one of the two real sides. That is the failure this
-    group exists to prevent, and it would arrive with nothing mis-set.
+    AN ABSENT OR BLANK KIND IS STILL A VALIDATION ERROR AND STILL COSTS ITS ROW, and that asymmetry is
+    what keeps this function honest: `_next_tally` passes `""` for an UNGATED row and the first branch
+    below reads it as `mine`. A gate declaring a blank kind would take that same branch and render
+    under `mine — nothing is blocking these` while `_next_row` prints its `blocked_by` sentence on the
+    same line. `manifest_core._validate_gate` holds that line; do not demote it here.
 
-    THE OPEN QUESTION THIS RAISES IS NOT MINE TO CLOSE: a typo'd `kind` currently costs the entire
-    manifest, which is a far worse outcome than routing one row to `unsure`. Whether the validator
-    should degrade the ROW instead of dropping the FILE is filed, not decided here.
+    The routing table stays the narrower thing: widening `GATE_KINDS` without adding a
+    `_GATE_ROUTING` entry would silently default a kind the router does not understand to one of the
+    two real sides, which is the failure this group exists to prevent. That is why
+    `test_the_router_covers_every_declared_gate_kind` asserts the subset rather than trusting review.
     """
     if not kind:
         return _GROUP_MINE
@@ -684,7 +689,8 @@ def _next_section(doc: dict) -> tuple[str, list[str]]:
     `unsure` RENDERS ONLY WHEN NON-EMPTY, unlike the section itself. AC2's directive rejected giving
     yours-vs-mine an always-empty SECTION slot as the "reads as broken" failure; a GROUP is the
     version of that idea which is allowed, precisely because it can be absent without leaving a
-    header over nothing. Zero manifests in existence declare an unrecognized kind today.
+    header over nothing. Neither live manifest declares an unrecognized kind; the fixture
+    `warehouse-rollout.json` does, which is how the populated form stays pinned.
     """
     grid_block = doc.get("grid") or {}
     grouped, unsure_kinds, ready_total, unlooked = _next_tally(grid_block.get("manifests") or [])

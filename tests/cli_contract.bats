@@ -2765,8 +2765,11 @@ EOF
 
     run jq '[.grid.manifests[].nodes[] | select(.state_source == "swept")] | length' "${BATS_TEST_TMPDIR}/probe.json"
     [ "$output" = "8" ]
+    # FOUR since `acme/warehouse#78` joined warehouse-rollout.json: it is the unrecognized-`gate.kind`
+    # row that makes `▸ NEXT`'s `unsure` group reachable, and its state lives in the FETCH recording
+    # rather than the sweep one, which is the seam that keeps sweep-acme.json byte-stable.
     run jq '[.grid.manifests[].nodes[] | select(.state_source == "fetched")] | length' "${BATS_TEST_TMPDIR}/probe.json"
-    [ "$output" = "3" ]
+    [ "$output" = "4" ]
     # A degraded seam would still satisfy a count; assert the sweep's own PAYLOAD arrived.
     run jq -r '.grid.sources[0].source' "${BATS_TEST_TMPDIR}/probe.json"
     [ "$output" = "github" ]
@@ -2826,11 +2829,13 @@ EOF
     # ...and the ids are contiguous from n1, globally across manifests.
     run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden' \
         | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
-    # n12 is `acme/warehouse#75`, the AC4-precondition row added to warehouse-rollout.json. The list
-    # is spelled out rather than counted so that a node QUIETLY VANISHING from the picture — which is
-    # what a renderer bug looks like from here — turns this red instead of shortening a number nobody
-    # reads.
-    [ "$output" = "1 2 3 4 5 6 7 8 9 10 11 12 " ]
+    # n12 is `acme/warehouse#78`, the unrecognized-`gate.kind` row that makes `▸ NEXT`'s `unsure`
+    # group reachable through the real loader; n13 is `acme/warehouse#75`, the AC4-precondition row.
+    # #78 sorts ahead of #75 because it forks off the merged `#70` rather than continuing the lane, so
+    # it ranks one level earlier. The list is spelled out rather than counted so that a node QUIETLY
+    # VANISHING from the picture — which is what a renderer bug looks like from here — turns this red
+    # instead of shortening a number nobody reads.
+    [ "$output" = "1 2 3 4 5 6 7 8 9 10 11 12 13 " ]
 
     run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-repository.golden' \
         | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
