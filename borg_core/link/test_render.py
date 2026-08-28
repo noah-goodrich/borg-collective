@@ -507,6 +507,47 @@ def test_signals_says_the_picture_blew_its_budget_rather_than_just_looking_wrong
         assert "columns wide" not in plain(render.document(doc))
 
 
+def test_chains_names_the_sweep_window_bound_rather_than_claiming_it_is_the_sweep_time():
+    """MUTATION: restore `freshness = f"swept {since}"` in `_grid_section`.
+
+    `grid.since` is `grid.sweep_since(now, DEFAULT_SWEEP_WINDOW_DAYS)` -- the window's LOWER BOUND,
+    `now - 90 days` -- and the note used to interpolate it after the bare word "swept". On a real
+    render that printed a full ISO timestamp exactly ninety days old with the current wall clock
+    attached, and a human read `swept 2026-05-30T14:24:17Z` as "this data is three months stale".
+    Freshness is the entire premise of the front door and this is the one line that reports it.
+
+    IT DERIVES THE MARK THE WAY PRODUCTION DOES INSTEAD OF PINNING A DATE, which is the whole reason
+    the goldens missed this: `tests/fixtures/link/sweep-acme.json` pins a bare `"since": "2026-05-28"`
+    with no relationship to any clock, and a bare date reads harmlessly under either wording. The
+    mark here comes out of `sweep_since` itself, so it has the SHAPE and the OFFSET the bug is made
+    of -- asserted below, so the case cannot go quiet if `sweep_since` stops being relative.
+    """
+    moment = 1787000000
+    mark = link_grid.sweep_since(moment, link_grid.DEFAULT_SWEEP_WINDOW_DAYS)
+    assert mark != link_grid.format_iso(moment), "the mark is a WINDOW BOUND, never the sweep instant"
+    assert mark.endswith("Z") and "T" in mark, "and it is a full timestamp, which is what misreads"
+
+    block = dict(_doc()["grid"])
+    block.update({"swept": True, "since": mark})
+    note = next(
+        line
+        for line in plain(render.document(_doc(grid=block))).split("\n")
+        if line.startswith(f"{render.SECTION_MARK}CHAINS")
+    )
+
+    assert f"swept back to {mark}" in note, note
+    assert f"swept {mark}" not in note, f"the note reports a window bound as if it were a sweep time: {note}"
+
+    # ...and an un-swept grid still says so, rather than naming a bound nobody swept against.
+    block.update({"swept": False, "since": ""})
+    unswept = next(
+        line
+        for line in plain(render.document(_doc(grid=block))).split("\n")
+        if line.startswith(f"{render.SECTION_MARK}CHAINS")
+    )
+    assert "not swept" in unswept and "back to" not in unswept
+
+
 def _fork_block() -> dict:
     """The approved mock's fork, all the way through grid_manifest -- a real block, not a hand-built
     one, so CHAINS is exercised against the shape production actually assembles.
