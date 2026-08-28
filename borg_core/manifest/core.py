@@ -461,6 +461,60 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     return errors
 
 
+_ROW_ERROR_PREFIX = "rows["
+
+
+def _row_error_index(error: str) -> int | None:
+    """The row index a validation message is scoped to, or None when it is not row-scoped.
+
+    STRING OPS RATHER THAN A REGEX, and not for speed. The obvious `re.match(r"^rows\\[(\\d+)\\]")`
+    form needs `int(match.group(1))`, which the clean-architecture plugin rejects as a Demeter chain
+    (W9006) -- caught by CI, where the plugin runs, and not by the local pylint. Splitting it into
+    two statements to appease the rule would leave a regex whose entire job is to extract one integer
+    from a prefix this module itself writes. `partition` says the same thing in less.
+
+    Reads BOTH label forms `_validate_row` produces: `rows[N]: ...` and `_validate_after`'s
+    `rows[N].after[M] ...`, which carries no colon after the bracket. Anything whose bracket contents
+    are not a plain integer is treated as NOT row-scoped, which fails safe -- an unparseable label
+    keeps the whole file rather than dropping a row nobody identified.
+    """
+    if not error.startswith(_ROW_ERROR_PREFIX):
+        return None
+    digits, closed, _ = error[len(_ROW_ERROR_PREFIX) :].partition("]")
+    if not closed or not digits.isdigit():
+        return None
+    return int(digits)
+
+
+def partition_errors(errors: list[str]) -> tuple[set[int], list[str]]:
+    """Split `validate`'s output into `(row indices at fault, errors that are not row-scoped)`.
+
+    LIVES HERE, NEXT TO THE FORMAT IT PARSES. `_validate_row` builds every row-scoped message from
+    `label = f"rows[{index}]"` -- both the `rows[N]: ...` form and `_validate_after`'s
+    `rows[N].after[M] ...` form -- and a caller that wants to drop a bad ROW rather than a whole FILE
+    has to know which errors are which. Putting the regex in `shell.py` would make the message format
+    an undeclared cross-module contract, which is the shape that breaks silently the first time
+    someone rewords an error string.
+
+    STRUCTURAL ERRORS ARE EVERYTHING ELSE, and they are correctly not row-scoped: `rows: missing or
+    not a list` describes the container, and `apex: ...` describes a sibling key. Neither has a
+    partial answer -- there is no subset of the file you could keep and still be describing what the
+    author wrote.
+
+    Returns indices as a SET because two errors routinely name one row (a bad `gate.kind` also trips
+    `gate.resolved_by is required`), and the caller wants rows to drop, not errors to count.
+    """
+    bad_rows: set[int] = set()
+    structural: list[str] = []
+    for error in errors:
+        index = _row_error_index(error)
+        if index is None:
+            structural.append(error)
+        else:
+            bad_rows.add(index)
+    return bad_rows, structural
+
+
 def _sort_key(row: dict[str, Any], index: int) -> tuple[int, int, int]:
     """Sort rows within a lane by declared merge order.
 
