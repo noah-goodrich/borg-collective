@@ -865,6 +865,48 @@ def test_a_decision_gate_routes_to_yours_and_a_verification_to_mine():
     assert "Kelly signs off" in body, "the gate's own sentence is what says WHY it is yours"
 
 
+def test_the_mine_heading_is_true_of_a_verification_gated_row_and_not_only_an_ungated_one():
+    """MUTATION: restore `_GROUP_HEADINGS[_GROUP_MINE] = "nothing is blocking these"`.
+
+    THE HEADING WAS WRITTEN FOR ONE OF THE GROUP'S TWO MEMBERS AND WAS FALSE ABOUT THE OTHER. AC4's
+    D2 puts BOTH the ungated rows and the `verification`-gated ones in `mine`; "nothing is blocking
+    these" is true of the first kind and a flat contradiction of the second, because `_next_row`
+    prints that gate's own `blocked_by` on the same line. Reproduced live against
+    `ingle-t1-cutover` before the fix:
+
+        mine — nothing is blocking these
+          ● stillpoint-labs/stillpoint#57  needs a live-prod confirmation run against all four ...
+
+    The routing is NOT what changed and must not: a `verification` blocks nobody in particular
+    because anyone can run it, which is the axis the table splits on.
+
+    THE ASSERTION IS THE CONTRADICTION ITSELF, not the new wording. It pins that a blocker sentence
+    and the word "blocking" cannot both be in the group's own heading-plus-rows, which stays true
+    through any future rewording that is honest and goes red for any that is not.
+    """
+    doc = _ready_doc(
+        ["o/r#2"],
+        gates=[
+            {
+                "ref": "o/r#2",
+                "kind": "verification",
+                "blocked_by": "the canary must be green for 24h",
+                "resolved_by": "anyone runs it",
+                "blocked_by_ref": "",
+            },
+        ],
+    )
+    body = "\n".join(_next_body(doc))
+    heading = next(line for line in body.split("\n") if line.strip().startswith("mine"))
+
+    assert "the canary must be green for 24h" in body, "the row states its blocker"
+    assert "blocking" not in heading, f"the heading denies the blocker printed under it: {heading!r}"
+    assert "nothing is blocking" not in body
+
+    # ...and the heading still has to say something, rather than being emptied to dodge the check.
+    assert len(heading.split("—", 1)[1].strip()) > 10, heading
+
+
 def test_an_ungated_ready_row_is_mine():
     """A5. MUTATION: make `_route("")` return `_GROUP_YOURS`.
 

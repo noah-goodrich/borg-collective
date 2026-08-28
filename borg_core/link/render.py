@@ -554,9 +554,27 @@ _GROUP_UNSURE = "unsure"
 # `decision` blocks a PERSON; `verification` blocks nobody in particular because anyone can run it.
 # Those are manifest_core.gates' words and the only two kinds any manifest has ever declared.
 _GATE_ROUTING = {"decision": _GROUP_YOURS, "verification": _GROUP_MINE}
+# `mine` HAS TWO KINDS OF MEMBER AND THE HEADING MUST BE TRUE OF BOTH. It used to read "nothing is
+# blocking these", which was written for the UNGATED member and is a FALSE STATEMENT about the other
+# one: a `verification` gate IS a blocker, and `_next_row` prints its `blocked_by` on the very same
+# line. Reproduced live before this fix, on the front door's single most decision-relevant line:
+#
+#     mine — nothing is blocking these
+#       ● stillpoint-labs/stillpoint#57  needs a live-prod confirmation run against all four contracts
+#
+# THE ROUTING IS NOT THE BUG AND DOES NOT MOVE. AC4's D2 is explicit that a `verification` goes to
+# `mine` -- "a `decision` blocks a PERSON, a `verification` blocks nobody in particular because anyone
+# can run it" -- so the axis this table splits on is WHOSE HANDS the row needs, not whether it is
+# blocked. The heading now says that axis out loud, and it is true of both members: an ungated row
+# needs no decision and anyone can pick it up, and a verification-gated row blocks nobody in
+# particular because anyone can run it. It is also the exact complement of `yours`, which is what
+# makes the pair readable as one question with two answers.
+#
+# NO EM DASH INSIDE A HEADING. `_next_section` renders these as `{group} — {heading}`, so a heading
+# carrying its own `—` prints two on one line and the second reads as the start of the row list.
 _GROUP_HEADINGS = {
     _GROUP_YOURS: "a decision only you can make",
-    _GROUP_MINE: "nothing is blocking these",
+    _GROUP_MINE: "no decision needed first, so anyone can pick these up",
 }
 
 
@@ -585,14 +603,18 @@ def _route(kind: str) -> str:
 
     AN ABSENT OR BLANK KIND IS STILL A VALIDATION ERROR AND STILL COSTS ITS ROW, and that asymmetry is
     what keeps this function honest: `_next_tally` passes `""` for an UNGATED row and the first branch
-    below reads it as `mine`. A gate declaring a blank kind would take that same branch and render
-    under `mine — nothing is blocking these` while `_next_row` prints its `blocked_by` sentence on the
-    same line. `manifest_core._validate_gate` holds that line; do not demote it here.
+    below reads it as `mine` on the strength of being UNGATED. A gate declaring a blank kind would
+    take that same branch, so a row that HAS a gate would be routed by the rule for rows that do not
+    -- and if that gate was a decision, `mine` is the plan's own named risk arriving with nothing
+    mis-set. `manifest_core._validate_gate` holds that line; do not demote it here.
 
-    The routing table stays the narrower thing: widening `GATE_KINDS` without adding a
-    `_GATE_ROUTING` entry would silently default a kind the router does not understand to one of the
-    two real sides, which is the failure this group exists to prevent. That is why
-    `test_the_router_covers_every_declared_gate_kind` asserts the subset rather than trusting review.
+    THE ROUTING TABLE IS ALLOWED TO BE NARROWER THAN `GATE_KINDS`, and the subset test is what keeps
+    that from being an accident rather than a decision. NOTHING HERE DEFAULTS TO A REAL SIDE any more
+    -- the `.get` below falls to `_GROUP_UNSURE`, which `_next_section` NAMES on the page -- so
+    widening `GATE_KINDS` without adding a `_GATE_ROUTING` entry is no longer the loud failure this
+    paragraph used to describe. It is the quiet one: a kind this project DECLARES it understands would
+    be reported to the reader as unroutable. `test_the_router_covers_every_declared_gate_kind` asserts
+    the subset for exactly that reason, and states it the same way.
     """
     if not kind:
         return _GROUP_MINE
