@@ -519,13 +519,30 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     project, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
 
     The note is UNCONDITIONAL, even when no manifest was selected: `0 projects · 0 refs · 0
-    unresolved · swept <mark>` is the honest reading of a repository with nothing declared, and it is
-    what separates that from a repository nobody swept.
+    unresolved · swept back to <mark>` is the honest reading of a repository with nothing declared,
+    and it is what separates that from a repository nobody swept.
+
+    "swept back to <mark>", NOT "swept <mark>", AND THE THREE MISSING WORDS WERE A WRONG ANSWER.
+    `grid.since` is the sweep's WINDOW LOWER BOUND -- `grid.sweep_since(now, 90)`, i.e. `now - 90
+    days` -- and never the instant anything was swept. So this line used to render a full ISO
+    timestamp exactly ninety days old with the current wall clock attached, and a reader parsed
+    `swept 2026-05-30T14:24:17Z` as "this data is three months stale". Reproduced: at
+    `NOW=2026-08-28T14:24:17Z` the page said `swept 2026-05-30T14:24:17Z`, and three minutes later
+    it said `swept 2026-05-30T14:21:00Z` -- the mark tracks `now`, which is exactly backwards from
+    what the sentence claimed. The goldens could not see it, because
+    `tests/fixtures/link/sweep-acme.json` pins a bare `"since": "2026-05-28"` with no relationship
+    to any clock, and a bare date reads harmlessly either way.
+
+    A WINDOW BOUND AND A SWEEP TIME ARE TWO DIFFERENT SENTENCES -- this project's recurring trap --
+    so the fix is to say which one this is, not to swap in the other. The sweep time is not reported
+    here and does not need to be: the sweep runs inside the same `cli._document` pass that stamps
+    `generated_at`, so "when was this swept" is already answered by the page's own freshness, while
+    "how far back did it look" is a fact only this line carries.
     """
     grid_block = doc.get("grid") or {}
     manifests = grid_block.get("manifests") or []
     since = str(grid_block.get("since") or "")
-    freshness = f"swept {since}" if grid_block.get("swept") and since else "not swept"
+    freshness = f"swept back to {since}" if grid_block.get("swept") and since else "not swept"
     note = (
         f"{_plural(len(manifests), 'project', 'projects')}"
         f" · {grid_block.get('declared', 0)} refs"
