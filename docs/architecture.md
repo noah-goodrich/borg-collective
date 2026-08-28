@@ -257,7 +257,9 @@ Hooks are registered in `~/.claude/settings.json`:
 ```json
 {
   "hooks": {
-    "SessionStart": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-down.sh"}]}],
+    "SessionStart": [
+      {"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-down.sh"}]}
+    ],
     "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-up.sh"}]}],
     "Notification": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-notify.sh"}]}],
     "PreToolUse": [
