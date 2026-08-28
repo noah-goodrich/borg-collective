@@ -138,9 +138,26 @@ def _summary_block(summary: str) -> str:
 
     The two leading spaces on the first line COUNT against the 70-column fold budget; lines 2..n are
     re-indented to two spaces (NOT folded with the indent already applied).
+
+    EMBEDDED NEWLINES ARE FLATTENED TO SPACES HERE, IN THE RENDERER, NOT AT THE WRITER (F1). The
+    `^  [^ ]` continuation contract is this function's OWN invariant, so this is where it is
+    defended -- the same altitude rule the `borg recon` retirement gate settled (see CLAUDE.md and
+    docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md: the artifact that
+    implements the command owns the invariant, not its caller). Normalizing only in
+    summarize.summarize_llm -- whose `result.stdout.strip()[:500]` leaves interior newlines intact,
+    unlike the heuristic path's `step[:200].replace("\\n", " ")` -- would fix today's single known
+    writer and leave the contract undefended against the next one. And the LLM is not the only
+    possible source: lib/registry.zsh's `_borg_registry_write` strips control characters
+    `\\000-\\010,\\013,\\014,\\016-\\037`, a set that does NOT include 0x0A, so a newline reaches
+    storage intact and a hand-edited registry can produce one with no LLM involved at all. A raw
+    `\\n` inside the string would otherwise emit a sub-line `_fold_s` never produced and the
+    re-indent loop therefore never indents.
+
+    Replacement is one-for-one, so the fold budget is unchanged for newline-free input and no
+    golden moves.
     """
     out = [f"  {BOLD}Summary{NC}\n"]
-    folded = _fold_s("  " + summary, width=70)
+    folded = _fold_s("  " + summary.replace("\n", " "), width=70)
     for i, line in enumerate(folded):
         if i == 0:
             out.append(f"{line}\n")

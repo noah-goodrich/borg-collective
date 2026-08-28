@@ -83,33 +83,90 @@ blocks another.
 
 ## Acceptance Criteria
 
-- [ ] **AC1 (F1)** — `summarize_llm` normalizes internal newlines the same way the heuristic path
+- [x] **AC1 (F1)** — `summarize_llm` normalizes internal newlines the same way the heuristic path
       does before returning, or `_summary_block` is made newline-safe regardless of what its input
       contains (pick one; document the choice in the fix's commit message).
   - Verify: a unit test feeding a summary string containing `\n` through the chosen fix point asserts
     the rendered `_summary_block` output has no line failing `^  [^ ]` other than the first.
+  - **DECISION — fix `_summary_block`, NOT `summarize_llm`.** `^  [^ ]` is `_summary_block`'s OWN
+    invariant, and this repo already ratified where an invariant lives: see the `borg recon`
+    retirement gate (`docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md`) — the
+    artifact that implements the command owns the invariant, not its caller. Normalizing only in the
+    writer fixes today's single known writer and leaves the contract undefended against the next
+    one. It also would not be sufficient: `lib/registry.zsh`'s `_borg_registry_write` scrubs control
+    chars `\000-\010,\013,\014,\016-\037`, a set that EXCLUDES 0x0A, so a newline reaches storage
+    intact and a hand-edited registry can produce one with no LLM involved at all.
+  - **Evidence it holds:** `borg_core/link/render.py::_summary_block` now folds
+    `"  " + summary.replace("\n", " ")`. `TestSummaryBlock::test_summary_block_flattens_an_embedded_newline`
+    feeds `"first half\nsecond half"` and asserts every line after the header matches `^  [^ ]`;
+    `..._flattens_newlines_before_folding_not_after` asserts a `\n` and a `" "` yield byte-identical
+    blocks, so the fold budget is unchanged and no golden moved (`bats tests/` exit 0). MUTATION
+    VERIFIED: reverting the fold argument to `"  " + summary` produced `2 failed, 3 passed` on
+    `pytest borg_core/link/test_render.py -q -k summary_block`.
 - [ ] **AC2 (F2)** — Correct the `cli.py:187` docstring claim to state the traceback leaked on
       **stderr** (not stdout), and that stdout/exit-code behavior was unchanged by the fix; the
       *why* (broad `except Exception` needed to cover AttributeError-shaped entry violations) stays as
       written.
   - Verify: `grep -n "on stdout" /Users/noah/dev/borg-collective/borg_core/link/cli.py` returns no
     hits inside the `main()` docstring.
-- [ ] **AC3 (F3)** — Either fix `_read_text` to preserve `\r` (e.g. `newline=""` semantics) so the
+- [x] **AC3 (F3)** — Either fix `_read_text` to preserve `\r` (e.g. `newline=""` semantics) so the
       docstring's claim holds end-to-end, or correct `heading_title`'s docstring to say CR fidelity
       holds only for callers that bypass `_read_text`. Either way, add a test that routes a CRLF file
       through `_read_text` → `heading_title` (not an in-memory literal) and asserts the actual,
       current behavior.
   - Verify: `pytest borg_core/link/test_shell.py borg_core/link/test_core.py -q` includes a new test
     exercising `_read_text` on a real CRLF fixture file, and it passes.
-- [ ] **AC4 (F4)** — Decide and pin dot-prefixed-file behavior for `_markdown_files`: either filter
+  - **DECISION — correct the docstring; leave `_read_text` alone.** This directive's own Risks
+    section says to confirm no live directive or assimilated-plan file is CRLF before flipping
+    `_read_text`. Confirmed: `grep -rlI $'\r' --include='*.md' /Users/noah/dev/borg-collective`
+    returns ZERO files. That cuts AGAINST flipping — the fidelity has no consumer, and preserving
+    `\r` end to end would newly inject a trailing CR into rendered headings the day someone commits
+    a CRLF file. That is a real rendering bug traded for a port-era parity claim whose port is
+    finished.
+  - **Evidence it holds:** `core.heading_title`'s docstring now states that the trailing `\r`
+    survives only for callers that hand it text directly, and that `shell._read_text`'s
+    `Path.read_text` applies universal-newline translation first, so the real read path yields a
+    CR-free title. `test_shell.test_heading_title_of_a_real_crlf_file_on_disk_has_no_carriage_return`
+    writes `b"# Title\r\nbody\r\n"` with `write_bytes`, byte-asserts the CRLF actually survived to
+    disk (otherwise the fixture proves nothing), routes it through `_read_text` → `heading_title`,
+    and asserts `"\r" not in text` and `== "Title"` — while re-asserting `"# Title\r\nbody"` still
+    gives `"Title\r"` in memory. `pytest borg_core/link/test_shell.py borg_core/link/test_core.py -q`
+    exits 0. MUTATION VERIFIED: adding `newline=""` to `_read_text` (the alternative fix direction)
+    turned this test red, so it genuinely exercises the read path rather than passing vacuously.
+- [x] **AC4 (F4)** — Decide and pin dot-prefixed-file behavior for `_markdown_files`: either filter
       them out (matching zsh's default) or explicitly document why they are now included.
   - Verify: a test creates a dot-prefixed `.md` file in a temp directives/assimilated directory and
     asserts the pinned behavior (present or absent) from `read_directives`/`read_assimilated`.
-- [ ] **AC5 (F5)** — Add a direct unit test for `_summary_block` covering at least: single-line
+  - **DECISION — filter them out, matching zsh.** The port widened the glob silently:
+    `pathlib.Path.glob` has no dotfile-hiding behavior, zsh's `*.md(N)` does (GLOB_DOTS is off
+    unless set; `(N)` only suppresses the no-match error). Restoring zsh's answer is the
+    port-parity contract, and dot-prefixed files are conventionally hidden scratch state — this
+    repo carries an untracked `docs/research/.gate-armed` of exactly that shape, and a `.draft.md`
+    surfacing in QUEUED would be wrong. No-op on current data:
+    `find /Users/noah/dev -path '*/docs/plans/*' -name '.*.md'` returns nothing, so nothing can
+    regress.
+  - **Evidence it holds:** `shell._markdown_files` now filters `p.name.startswith(".")` before
+    sorting. `test_shell.test_markdown_glob_excludes_dot_prefixed_files_like_the_zsh_glob` puts
+    `.draft.md` beside `real.md` in directives and `.2026-03-02-b.md` beside `2026-03-01-a.md` in
+    assimilated, and asserts the exact slug and title lists from `read_directives`/`read_assimilated`
+    contain only the visible files. MUTATION VERIFIED: dropping the filter turned it red
+    (`1 failed, 74 deselected`). The pre-existing
+    `test_markdown_glob_includes_directories_like_the_zsh_glob` still passes, so the no-`is_file()`
+    parity is untouched.
+- [x] **AC5 (F5)** — Add a direct unit test for `_summary_block` covering at least: single-line
       summary, multi-line-after-folding summary (re-indent applied to lines 2..n only), and empty
       string.
   - Verify: `pytest borg_core/link/test_render.py -q -k summary_block` collects and passes at least
     one new test.
+  - **Evidence it holds:** `borg_core/link/test_render.py::TestSummaryBlock` collects five tests
+    under `-k summary_block` (`5 passed, 66 deselected`, exit 0): the single-line block asserted
+    byte-exactly against `  {BOLD}Summary{NC}\n  a short summary\n`; a 40+1+40-char summary that
+    folds at column 43, asserting line 1 keeps the indent the FOLD INPUT already carried (not
+    double-indented) while line 2 is the one the re-indent loop produces; the empty string, pinning
+    the bare `"  "` line as the one line on the page that legitimately fails `^  [^ ]`; and the two
+    AC1 newline cases. MUTATION VERIFIED: changing the re-indent branch from `f"  {line}\n"` to
+    `f"{line}\n"` turned `test_summary_block_reindents_lines_two_onward_only` red — the composition,
+    not just `_fold_s`, is now covered.
 
 ## Scope Boundaries
 

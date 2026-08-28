@@ -724,6 +724,60 @@ class TestFoldS:
         assert "\n".join(got) == proc.stdout
 
 
+# ── F1/F5: _summary_block, the COMPOSITION of _fold_s with the re-indent loop ─────────────────────
+# TestFoldS above covers the folding primitive alone, including a differential against the real
+# `fold -s` binary. What the renderer's `^  [^ ]` continuation contract actually rests on is the
+# composition -- fold, then re-indent lines 2..n -- and until this class it was unverified.
+
+_CONTINUATION_CONTRACT = re.compile(r"^  [^ ]")
+
+
+class TestSummaryBlock:
+    def test_summary_block_single_line_is_header_plus_one_indented_line(self):
+        out = render._summary_block("a short summary")  # pylint: disable=protected-access
+        assert out == f"  {picture.BOLD}Summary{picture.NC}\n  a short summary\n"
+
+    def test_summary_block_reindents_lines_two_onward_only(self):
+        # 82 chars once the two-space prefix is applied, so `fold -s -w 70` breaks after the space
+        # at column 43 and the tail arrives from _fold_s with NO indent of its own.
+        summary = "w" * 40 + " " + "x" * 40
+        out = render._summary_block(summary)  # pylint: disable=protected-access
+        lines = out.split("\n")[:-1]
+        assert lines[0] == f"  {picture.BOLD}Summary{picture.NC}"
+        # Line 1 carries the indent the FOLD INPUT already had -- it must not be indented twice.
+        assert lines[1] == "  " + "w" * 40 + " "
+        # Line 2 is the one the re-indent loop is responsible for.
+        assert lines[2] == "  " + "x" * 40
+        assert len(lines) == 3
+        assert all(_CONTINUATION_CONTRACT.match(line) for line in lines)
+
+    def test_summary_block_empty_string_pins_the_bare_indent_line(self):
+        # The one line on the page that legitimately fails `^  [^ ]`: with nothing to fold, zsh's
+        # `echo -e "  " | fold -s -w 70 | sed '1!s/^/  /'` emits the bare two-space line and so does
+        # this. Pinned so a future "strip trailing whitespace" cleanup is a visible decision.
+        out = render._summary_block("")  # pylint: disable=protected-access
+        assert out == f"  {picture.BOLD}Summary{picture.NC}\n  \n"
+
+    def test_summary_block_flattens_an_embedded_newline(self):
+        # F1. summarize.summarize_llm returns `result.stdout.strip()[:500]`, and .strip() does not
+        # touch INTERIOR newlines the way the heuristic path's `.replace("\n", " ")` does; nor does
+        # lib/registry.zsh's control-char scrub, whose ranges exclude 0x0A. Un-normalized, the raw
+        # \n emits a sub-line _fold_s never produced and the re-indent loop therefore never indents.
+        out = render._summary_block("first half\nsecond half")  # pylint: disable=protected-access
+        lines = out.split("\n")[:-1]
+        assert all(_CONTINUATION_CONTRACT.match(line) for line in lines[1:]), lines
+        assert lines[1] == "  first half second half"
+        assert len(lines) == 2
+
+    def test_summary_block_flattens_newlines_before_folding_not_after(self):
+        # The flatten is one-for-one, so a newline occupies a space's worth of the 70-column budget
+        # and the break lands exactly where an equivalent space would put it -- i.e. no golden moves.
+        summary = "w" * 40 + "\n" + "x" * 40
+        with_newline = render._summary_block(summary)  # pylint: disable=protected-access
+        with_space = render._summary_block(summary.replace("\n", " "))  # pylint: disable=protected-access
+        assert with_newline == with_space
+
+
 # ── AC4: NEXT, and the yours / mine / unsure routing ──────────────────────────────────────────────
 
 
