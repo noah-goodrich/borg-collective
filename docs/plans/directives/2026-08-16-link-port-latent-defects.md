@@ -103,6 +103,18 @@ blocks another.
     blocks, so the fold budget is unchanged and no golden moved (`bats tests/` exit 0). MUTATION
     VERIFIED: reverting the fold argument to `"  " + summary` produced `2 failed, 3 passed` on
     `pytest borg_core/link/test_render.py -q -k summary_block`.
+  - **SCOPE CORRECTION — the board is a SECOND renderer and it needed the same defense.** The first
+    pass fixed `_summary_block`, which is the DEEP DIVE's renderer. `_overview_summary_cut` — the
+    board's — did `summary[:50]` with no newline handling, so a `\n` inside the first 50 characters
+    split one board row into two and sheared the fixed-width table exactly the way an over-long
+    project name would. Same defect, same writer, second renderer. `_overview_summary_cut` now
+    flattens BEFORE cutting, so the 50-char budget and the strictly-greater-than-50 ellipsis test
+    both measure displayed characters. **Evidence:** `TestOverviewSummaryCut` — four cases covering
+    the flatten, the boundary/ellipsis property, the no-golden-moves equivalence against the same
+    string written with a space, and an end-to-end `_overview_row` assertion that one entry yields
+    one line. MUTATION VERIFIED: reverting to `flat = summary` produced `4 failed` on
+    `pytest borg_core/link/test_render.py -q -k OverviewSummaryCut`; `bats tests/` exit 0 confirms
+    no golden moved.
 - [ ] **AC2 (F2)** — Correct the `cli.py:187` docstring claim to state the traceback leaked on
       **stderr** (not stdout), and that stdout/exit-code behavior was unchanged by the fix; the
       *why* (broad `except Exception` needed to cover AttributeError-shaped entry violations) stays as

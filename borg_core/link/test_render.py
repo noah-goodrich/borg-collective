@@ -738,8 +738,11 @@ class TestSummaryBlock:
         assert out == f"  {picture.BOLD}Summary{picture.NC}\n  a short summary\n"
 
     def test_summary_block_reindents_lines_two_onward_only(self):
-        # 82 chars once the two-space prefix is applied, so `fold -s -w 70` breaks after the space
-        # at column 43 and the tail arrives from _fold_s with NO indent of its own.
+        # A two-word summary, each word long enough that the pair plus the two-space prefix
+        # overruns the 70-column budget while either word alone fits: `fold -s -w 70` therefore
+        # breaks at the single space, and the tail arrives from _fold_s with NO indent of its own.
+        # (Shape, not arithmetic -- a character count in a comment rots the moment the fixture or
+        # the width changes, and nothing fails when it does.)
         summary = "w" * 40 + " " + "x" * 40
         out = render._summary_block(summary)  # pylint: disable=protected-access
         lines = out.split("\n")[:-1]
@@ -776,6 +779,54 @@ class TestSummaryBlock:
         with_newline = render._summary_block(summary)  # pylint: disable=protected-access
         with_space = render._summary_block(summary.replace("\n", " "))  # pylint: disable=protected-access
         assert with_newline == with_space
+
+
+# ── F1, second renderer: _overview_summary_cut, the BOARD's newline defense ───────────────────────
+# _summary_block above is the DEEP DIVE's renderer. The board has its own, and it is the more
+# fragile of the two: _overview_row lays every column out with fixed `:<{_COL_*}` padding, so a
+# newline reaching the cut does not merely break an indent contract, it splits one row into two and
+# shears every column after it.
+
+
+class TestOverviewSummaryCut:
+    def test_cut_flattens_an_embedded_newline(self):
+        # Same writer as F1's deep-dive case: summarize.summarize_llm's `result.stdout.strip()[:500]`
+        # leaves interior newlines intact, and lib/registry.zsh's control-char scrub excludes 0x0A.
+        out = render._overview_summary_cut("first half\nsecond half")  # pylint: disable=protected-access
+        assert "\n" not in out
+        assert out == "first half second half"
+
+    def test_cut_boundary_and_ellipsis_measure_displayed_characters(self):
+        # What the flatten-before-cut ordering is FOR. Both halves of the contract -- the 50-char
+        # boundary and the strictly-greater-than-50 ellipsis -- have to be decided on the string the
+        # reader sees, not on the raw one. Two summaries whose ONLY newline sits at the boundary:
+        # one that fills the budget exactly (no ellipsis) and one that overruns it (ellipsis).
+        # Not an ordering assertion -- with a one-for-one replacement the two orderings are the same
+        # string. This pins the property the ordering exists to protect, which is the part a future
+        # non-one-for-one replacement could break.
+        exact = render._overview_summary_cut("a" * 49 + "\n")  # pylint: disable=protected-access
+        assert exact == "a" * 49 + " "
+        over = render._overview_summary_cut("a" * 50 + "\n" + "b")  # pylint: disable=protected-access
+        assert over == "a" * 50 + "..."
+
+    def test_cut_matches_the_equivalent_space_so_no_golden_moves(self):
+        # The replacement is one-for-one, so both the 50-char cut and the strictly-greater-than-50
+        # ellipsis test land identically to the same string written with a space. This is the claim
+        # that no fixture golden moves.
+        summary = "w" * 30 + "\n" + "x" * 30
+        with_newline = render._overview_summary_cut(summary)  # pylint: disable=protected-access
+        with_space = render._overview_summary_cut(summary.replace("\n", " "))  # pylint: disable=protected-access
+        assert with_newline == with_space
+
+    def test_cut_keeps_the_row_on_one_line_end_to_end(self):
+        # The defect stated at the altitude the reader sees it: one registry entry, one board row.
+        row = render._overview_row(  # pylint: disable=protected-access
+            "alpha",
+            {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": "top\nbottom"},
+            {},
+        )
+        assert row.count("\n") == 1
+        assert row.endswith("top bottom\n")
 
 
 # ── AC4: NEXT, and the yours / mine / unsure routing ──────────────────────────────────────────────
