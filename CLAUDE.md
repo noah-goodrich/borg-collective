@@ -304,7 +304,9 @@ docs/
 - **`--brief` is a presentation mode of the document, not a second path (AC1, 2026-08-27)**:
   `_borg_print_briefing` (borg.zsh) builds the `borg link` document ONCE — the same
   `_borg_py borg_core.link.cli --json` call every other dispatch arm makes, with `--all`/`--local`
-  forwarded identically — projects that JSON into the narrative prompt with one `jq`, and when the
+  forwarded identically (`--local` pinned by subprocess count, `--all` by "--all puts archived
+  projects in the prompt, and its absence keeps them out") — projects that JSON into the narrative
+  prompt with one `jq`, and when the
   narrative fails pipes **those same bytes** back through `borg_core.link.cli --render-document`,
   a non-mode seam gated in `main()` above `_mode`. One sweep, one `generated_at`, two consumers. It
   used to be 177 lines of a second registry walk that never reached Python at all, which is why AC1
@@ -317,10 +319,17 @@ docs/
   Four rules follow. (1) **Never re-derive here.**
   A `borg_registry_with_state` call inside that function undoes the fold. (2) **Never rebuild for the
   fallback.** A second `--json` call would re-read the clock and re-sweep, so the page could disagree
-  with the prompt it fell back from — two truth levels inside one invocation. (3) **The `claude -p`
-  call stays in zsh.** `borg_core/proc.py` DEVNULLs stderr and returns `None` (not rc 124) on
-  timeout, so moving it silently deletes the reason line's captured stderr and the timeout branch,
-  both of which `tests/briefing.bats` pins. (4) **Every scope-dependent list on the wire goes through
+  with the prompt it fell back from — two truth levels inside one invocation. **Nor may that render
+  fail quietly**: a failed fallback page names the child's stderr on OUR stderr and returns non-zero,
+  which `borg link --brief` propagates — pinned by "a failed fallback render names its reason on
+  stderr and exits non-zero". (3) **The `claude -p` call stays in zsh.** `borg_core/proc.py` DEVNULLs
+  stderr and returns `None` (not rc 124) on timeout, so moving it silently deletes two pinned
+  contracts: the reason line's captured stderr, pinned by "fallback with nonzero exit prints a reason
+  line naming the exit code", and the timeout branch, pinned by "--brief renders the document when
+  claude times out" — which lives in the sweep suite, not the briefing one, because the timeout
+  branch is only reachable where a sweep genuinely runs. (Named by CASE rather than by file:line: the
+  two are in different suites and both files' numbers drift on every insertion.) (4) **Every
+  scope-dependent list on the wire goes through
   the projection's `$breadth` binding**, which transcribes `render._scoped_rows`: `--json` always
   carries the registry-WIDE `directives`/`assimilated` (`cli.py`'s `need_aggregate`), and the human
   page narrows them to `focus` in repository scope — so a projection reading the top level

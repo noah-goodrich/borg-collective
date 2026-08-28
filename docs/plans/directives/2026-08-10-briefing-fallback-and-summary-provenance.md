@@ -62,7 +62,10 @@ That is the whole reason defects 2 and 3 survived: nobody could see which code p
 ```zsh
 IFS=$'\t' read -r proj_status last_activity summary waiting_reason project_path <<< \
     "$(echo "$registry" | jq -r --arg p "$name" \
-        '.projects[$p] | [.status // "unknown", .last_activity // "", .summary // "", .waiting_reason // "", .path // ""] | join("\t")')"
+        '.projects[$p]
+         | [.status // "unknown", .last_activity // "", .summary // "",
+            .waiting_reason // "", .path // ""]
+         | join("\t")')"
 ```
 
 Tab is an **IFS whitespace** character. A run of IFS whitespace delimits as one field, so when `summary` is

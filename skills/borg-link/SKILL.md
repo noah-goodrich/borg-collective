@@ -36,7 +36,8 @@ bash -c 'set -o pipefail; borg link --json | jq ".directives |=
 Deep dive:
 
 ```bash
-bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_at, capacity, total_projects, scope, grid, focus}"'
+bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_at, capacity,
+  total_projects, scope, grid, focus}"'
 ```
 
 One call serves both — `borg link --json <project>` returns the full overview document PLUS

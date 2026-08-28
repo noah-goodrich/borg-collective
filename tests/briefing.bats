@@ -1,11 +1,20 @@
 #!/usr/bin/env bats
 # Tests for _borg_print_briefing via the `borg link --brief` subcommand.
 #
+# WHAT THE CASES HERE COVER: the narrative half of `--brief` and everything reached without a live
+# sweep — the fallback ladder's reason lines, the two short circuits (empty registry, all-archived),
+# the breadth of the projected prompt, `--all` forwarding, the xtrace guard, and `waiting_reason`
+# never rendering where a summary goes.
+#
+# (Deliberately NOT a case count. The header said "of the 12 cases here" while the file held 15,
+# because a count is invalidated by every insertion and nothing fails when it goes stale — the same
+# reason the line pins in this repo are anchored by test name rather than by number.)
+#
 # WHAT CHANGED HERE ON 2026-08-27, AND WHY NOTHING WAS SILENTLY DELETED. `--brief` no longer walks
 # the registry: it builds the ONE `borg link` document, projects it into the narrative prompt, and
 # renders THAT SAME DOCUMENT when the narrative is unavailable (docs/plans/directives/
-# 2026-08-27-fold-brief-into-the-document.md). Of the 12 cases here, eight are untouched, three are
-# consciously rewritten and one keeps its assertion with new provenance:
+# 2026-08-27-fold-brief-into-the-document.md). Most cases are untouched; three are consciously
+# rewritten and one keeps its assertion with new provenance:
 #   - "inactive projects appear under inactive header" — REWRITTEN. The "Inactive (>30 days):" block
 #     and the 30-day active/inactive split were `_borg_print_briefing`'s own; they have no
 #     counterpart in `render.SECTIONS` and are deliberately retired. The case now asserts the same
@@ -267,9 +276,15 @@ EOF
 # ── Empty registry ─────────────────────────────────────────────────────────────
 #
 # SAME ASSERTION, NEW ORIGIN (2026-08-27). The hint used to come from a registry read that found no
-# active and no inactive names; it now comes from the DOCUMENT's own `total_projects == 0`, which is
-# why the short circuit survived the fold at all: it is the one case where there is nothing for a
-# narrative to say and paying `claude -p` to say it is waste.
+# active and no inactive names; it now comes from the DOCUMENT's own
+# `(.order // []) | length == 0`, which is why the short circuit survived the fold at all: it is the
+# one case where there is nothing for a narrative to say and paying `claude -p` to say it is waste.
+#
+# `.order`, NOT `.total_projects` — this comment named the latter for one round and was describing
+# code that had already been changed. `core.assemble` fills `total_projects` from the UNFILTERED
+# project map on purpose, so it counts archived rows the page never shows; `.order` is the
+# post-archived-filter list, and it is exactly the list the projection below feeds to the prompt. The
+# paired all-archived case is where the difference bites, and it carries the argument in full.
 
 @test "briefing: empty registry shows scan hint" {
     echo '{"projects":{}}' > "$BORG_REGISTRY"
@@ -447,4 +462,112 @@ EOF
     # And nothing was billed for a briefing with no input.
     [[ "$output" != *"NARRATIVE-FROM-AN-EMPTY-BOARD"* ]] || false
     [ ! -s "$CLAUDE_TRACE" ]
+}
+
+# ── `--all` reaches the document build ────────────────────────────────────────
+#
+# UNPINNED UNTIL 2026-08-28, AND THAT IS THE POINT. `_borg_print_briefing`'s whole forwarding
+# contract is two lines (`--all`, `--local`); `--local` is pinned by subprocess count in
+# tests/link_sweep.bats, but `--all` had NOTHING. Deleting `(( ${1:-0} )) && _brief_py_args+=(--all)`
+# left briefing.bats, link_sweep.bats and cli_contract.bats all green with the flag gone, so
+# `borg link --brief --all` would have silently degraded to `borg link --brief` — the same
+# capability-nothing-asserts shape as `borg recon` shipping dead (CLAUDE.md, "Learned").
+#
+# ASSERTED ON THE PROJECTED PROMPT, WITH ITS OWN CONTROL. The mock captures `claude -p`'s argument
+# verbatim, so the case reads the bytes the document actually produced. An archived project is the
+# only observable `--all` has: it is the sole thing the flag adds to `.order`. The no-flag leg is
+# what makes the assertion honest — without it, "retired-project appears" would also pass for a
+# build that ignored archiving altogether.
+#
+# MUTATION THAT TURNS THIS RED, VERIFIED: delete the `--all` line from `_borg_print_briefing`.
+@test "briefing: --all puts archived projects in the prompt, and its absence keeps them out" {
+    export PROMPT_FILE="${BATS_TEST_TMPDIR}/prompt.txt"
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "-p" ] && printf '%s' "$2" > "$PROMPT_FILE"
+echo "NARRATIVE"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    cat > "$BORG_REGISTRY" <<'EOF'
+{
+  "projects": {
+    "live-project": {
+      "path": "/tmp/live-project",
+      "status": "idle",
+      "source": "cli",
+      "last_activity": "2026-08-01T00:00:00Z",
+      "summary": "Still going."
+    },
+    "retired-project": {
+      "path": "/tmp/retired-project",
+      "status": "archived",
+      "source": "cli",
+      "last_activity": "2026-07-01T00:00:00Z",
+      "summary": "Done with this one."
+    }
+  }
+}
+EOF
+
+    # THE CONTROL: no --all, so the archived row is off the wire and out of the prompt.
+    run "$BORG_CMD" link --brief --local
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$PROMPT_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"PROJECT: live-project"* ]] || false
+    [[ "$output" != *"PROJECT: retired-project"* ]] || false
+
+    # THE FLAG: same registry, same command, one flag — the archived row is now on the board the
+    # narrative is asked to describe.
+    : > "$PROMPT_FILE"
+    run "$BORG_CMD" link --brief --all --local
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$PROMPT_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"PROJECT: live-project"* ]] || false
+    [[ "$output" == *"PROJECT: retired-project"* ]] || false
+}
+
+# ── A failed fallback render is loud, and is not exit 0 ───────────────────────
+#
+# THE FALLBACK IS THE PATH THAT GUARANTEES A PAGE, so `|| true` on its render was the one place left
+# where `borg link --brief` could print no page and still report success — exactly the silent-failure
+# shape docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists
+# to remove, reintroduced at the last rung of the ladder that implements it.
+#
+# THE MOCK IS A PASS-THROUGH ON python3, FAILING ONLY `--render-document`: the document itself is
+# built by a `python3 -m borg_core.link.cli --json` child through the same wrapper, so hiding python3
+# outright would take the "Could not build the borg link document" branch far above and never reach
+# the code under test.
+#
+# MUTATION THAT TURNS THIS RED, VERIFIED: restore `|| true` on the `--render-document` pipeline (and
+# drop the `return $render_rc`).
+@test "briefing: a failed fallback render names its reason on stderr and exits non-zero" {
+    local real_python
+    real_python=$(command -v python3)
+    [ -n "$real_python" ]
+
+    cat > "$MOCK_BIN/python3" <<EOF
+#!/usr/bin/env bash
+for a in "\$@"; do
+    if [ "\$a" = "--render-document" ]; then
+        echo "MOCKED-RENDER-FAILURE" >&2
+        exit 7
+    fi
+done
+exec "$real_python" "\$@"
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    # The default claude mock exits 1, so the narrative fails and the fallback render is reached.
+    run "$BORG_CMD" link --brief --local
+    [ "$status" -ne 0 ] || { printf 'expected a non-zero exit:\n%s\n' "$output" >&2; false; }
+    [[ "$output" == *"Could not render the borg link document"* ]] || false
+    [[ "$output" == *"exit 7"* ]] || false
+    # The child's own stderr is the reason, the same contract the `claude -p exited N` and the
+    # projection branches have.
+    [[ "$output" == *"MOCKED-RENDER-FAILURE"* ]] || false
+    # And the page really is absent — this is not a warning printed alongside a rendered document.
+    [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
 }

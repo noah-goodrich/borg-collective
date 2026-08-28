@@ -1012,6 +1012,8 @@ _borg_print_briefing() {
 
     local doc payload rows briefing_prompt briefing
     local fallback_reason=""
+    # Non-zero ONLY when the fallback page itself failed to render; the narrative path never sets it.
+    local render_rc=0
     typeset -a _brief_py_args
     _brief_py_args=(--json)
     (( ${1:-0} )) && _brief_py_args+=(--all)
@@ -1229,16 +1231,39 @@ EOF
         # invocation -- the exact defect the fold exists to remove, re-created one layer down.
         #
         # It also deletes the drift risk outright: there is no hand-rolled fallback table left to
-        # diverge from the real page, because the fallback IS the real page. `|| true` because a
-        # renderer failure must not take borg down after the narrative already failed.
+        # diverge from the real page, because the fallback IS the real page.
+        #
+        # A FAILED FALLBACK RENDER IS THE LOUDEST FAILURE IN THIS FUNCTION, NOT THE QUIETEST. This
+        # line used to end in `|| true`, which meant the ONE path that guarantees the user always
+        # gets a page could print nothing and still exit 0 — the silent-fallback shape
+        # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1
+        # exists to remove ("make the failure loud"), reintroduced at the last step of the ladder
+        # that implements it. Every branch above names its cause; so does this one. The reason line
+        # is redirected to STDERR because `warn` itself writes to STDOUT (see its definition beside
+        # `info`/`die` at the top of this file) and at this point stdout is the page — a warning
+        # spliced into it is indistinguishable from content.
+        # `cli._render_document_from_stdin` deliberately catches nothing, so `main`'s single
+        # exception boundary has already put `▸ ERROR: ...` on the child's stderr — that text is the
+        # reason, captured the same way the `claude -p` and `jq` branches capture theirs.
         echo ""
         if [[ -n "$fallback_reason" ]]; then
             echo -e "  ${DIM}(narrative unavailable: $fallback_reason — showing the borg link document)${NC}"
             echo ""
         fi
-        printf '%s' "$doc" | _borg_py borg_core.link.cli --render-document || true
+        local render_stderr_file="$BORG_DIR/briefing-render-stderr.log"
+        printf '%s' "$doc" | _borg_py borg_core.link.cli --render-document 2>"$render_stderr_file" \
+            || render_rc=$?
+        if (( render_rc != 0 )); then
+            local render_stderr=""
+            [[ -s "$render_stderr_file" ]] && render_stderr=$(<"$render_stderr_file")
+            warn "Could not render the borg link document (exit $render_rc)${render_stderr:+: $render_stderr}" >&2
+        fi
     fi
     echo ""
+    # THE EXIT CODE CARRIES IT TOO. A caller that pipes or scripts `borg link --brief` cannot see the
+    # stderr line; a non-zero status is the only signal it can act on, and "exited 0 having printed
+    # no page" is precisely the state that must not be reported as success.
+    return $render_rc
 }
 
 _borg_orchestrator_context() {
@@ -1308,8 +1333,15 @@ cmd_init() {
     # Merge Desktop sessions before building briefing
     borg_desktop_scan 2>/dev/null || true
 
-    # Print formatted briefing to terminal before launching orchestrator
-    _borg_print_briefing
+    # Print formatted briefing to terminal before launching orchestrator.
+    #
+    # TOLERATED HERE, AND ONLY HERE. `_borg_print_briefing` now returns non-zero when the fallback
+    # page fails to render, and `borg link --brief` propagates that — the briefing IS that command's
+    # product. For `borg init` the briefing is a preamble and the product is the orchestrator session
+    # below, so a failed page must not stop the session from launching. This is not a silent swallow:
+    # the function has already named the cause on stderr before returning, which is the whole of the
+    # 2026-08-10 directive's "make the failure loud". Dropping only the status is the deliberate part.
+    _borg_print_briefing || true
 
     local context
     context=$(_borg_orchestrator_context)
@@ -3174,8 +3206,13 @@ _borg_link_dispatch() {
         # reaches `warn`, which writes to STDOUT (borg.zsh:30), and inside the `$(...)` that captures
         # the document that line would splice ahead of the JSON and kill `jq`.
         borg_desktop_scan 2>/dev/null || true
-        _borg_print_briefing "$_link_all" "$_link_local"
-        return 0
+        # THE BRIEFING'S STATUS IS THIS ARM'S STATUS. `_borg_print_briefing` returns non-zero for
+        # exactly one condition — the fallback page failed to render, so the user got no page — and
+        # `borg link --brief` must not report that as success. Captured explicitly rather than left
+        # to `set -e` so the propagation is visible at the call site.
+        local _brief_rc=0
+        _borg_print_briefing "$_link_all" "$_link_local" || _brief_rc=$?
+        return $_brief_rc
     fi
 
     borg_desktop_scan 2>/dev/null || true
