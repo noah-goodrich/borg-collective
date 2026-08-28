@@ -361,10 +361,14 @@ def _build_parser() -> argparse.ArgumentParser:
     # document says everything the deep dive said, and keeping it as a MODE would be a third context
     # rendering the same data, which is exactly what "the contexts differ in breadth only" forbids.
     # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT, and it is the worst
-    # one to break: borg.zsh's `_borg_link_dispatch` positional arm -- grep `_link_py_args=(--deep)`,
-    # which is the ONLY match in the tree. That arm serves every `borg link <project>` a human types
-    # and every `drone link`, so deleting the argument makes argparse exit 2 on the most-typed
-    # invocation of the command.
+    # one to break: borg.zsh's `_borg_link_dispatch` positional arm -- find it with
+    # `grep -n -- '_link_py_args=(--deep)' borg.zsh`, which returns exactly one line, the assignment
+    # itself. SCOPE THE GREP TO THAT FILE. Run tree-wide the same pattern returns seven hits, because
+    # the anchor conversion described below put the literal into six PROSE sites (this comment, its
+    # twin in test_cli.py, two lines of CLAUDE.md, and two directives under docs/plans/directives/);
+    # a reader who greps the tree and counts is reading commentary, not callers. That arm serves
+    # every `borg link <project>` a human types and every `drone link`, so deleting the argument
+    # makes argparse exit 2 on the most-typed invocation of the command.
     #
     # ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This comment, its twin in
     # test_cli.py's `test_deep_is_accepted_and_ignored`, and two lines of CLAUDE.md all read
