@@ -72,10 +72,10 @@ from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 # WIDENED RATHER THAN TRUNCATED, ON THE READER'S TERMS AND NOT A CONSUMER'S: truncation destroys the
 # one field on the row that is also an ARGUMENT (`pytest-coverage-impa…` is not typeable into `borg
 # link <name>`), while widening costs only geometry that varies with the row set, which every golden
-# absorbs by byte-comparing ONE invocation against its own file. NOTHING PARSES THIS BOARD -- checked,
-# not asserted: a draft here cited `drone status`'s `grep -m1 'Status:'`, retired 2026-08-27 in this
-# branch's stale-consumer sweep, and `grep -rn 'borg link'` over drone.zsh, borg.zsh, lib/, hooks/ and
-# skills/ finds only `--json` readers, `drone link`'s `exec`, and `borg switch`'s `cmd_ls --porcelain`.
+# absorbs by byte-comparing ONE invocation against its own file. NOTHING PARSES THIS BOARD -- checked, not asserted:
+# every hit `grep -rn 'borg link' drone.zsh borg.zsh lib/ hooks/ skills/` returns is prose, a `--json` read, `drone
+# link`'s `exec`, or skills/borg-switch's `borg link --local --all` -- THIS board's one automated reader, and it
+# wants a list of names, not a column. (A draft cited `drone status`'s `grep -m1 'Status:'` -- retired 2026-08-27.)
 _COL_PROJECT = 20
 _COL_SRC = 4
 _COL_STATUS = 12
