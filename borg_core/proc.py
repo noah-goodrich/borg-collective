@@ -174,9 +174,11 @@ def collect(handle: Running | None, timeout: float | None = None) -> tuple[int, 
             _kill_session(child.pid)
             # BOUNDED REAP: the child is already SIGKILLed and in its own session, so an
             # unbounded wait() here is the only unbounded wait on either of `borg link`'s
-            # network paths -- every consumer (cmd_watch, `drone status`, the fzf preview)
-            # swallows failure with `|| true`, so a hang here surfaces as a silent stall,
-            # never an error. Abandoning the reap after this ceiling leaks at most one
+            # network paths, and a hang has no error path at all -- it is a command that
+            # never returns. (The reason used to be "every consumer (cmd_watch, `drone
+            # status`, the fzf preview) swallows failure with `|| true`"; all three were
+            # retired 2026-08-27. A hang is worse than a swallowed error either way, which
+            # is why the ceiling stays.) Abandoning the reap after this ceiling leaks at most one
             # short-lived zombie the interpreter reaps at exit.
             try:
                 child.wait(timeout=2)
