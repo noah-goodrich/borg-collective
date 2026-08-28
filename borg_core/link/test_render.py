@@ -829,6 +829,93 @@ class TestOverviewSummaryCut:
         assert row.endswith("top bottom\n")
 
 
+# ── the summary field's THIRD consumer, and the character set all three share ─────────────────────
+# `_summary_block` is the fold's defense and `_overview_summary_cut` is the board's. `porcelain` is
+# the third and is the one with the worst failure -- it serializes `summary` into a TSV RECORD that
+# `borg switch` parses by field, so a control character does not shear a line the user reads past, it
+# invents a row the user can SELECT.
+#
+# The character set is read off `lib/registry.zsh`'s `_borg_registry_write` -- `tr -d
+# '\000-\010\013\014\016-\037'` deletes 0x00-0x08, 0x0B, 0x0C and 0x0E-0x1F, so 0x09, 0x0A and 0x0D
+# all reach storage. Parameterized rather than hand-listed per test, so widening the set is one edit.
+
+_SURVIVING_WS = ["\t", "\n", "\r"]
+
+
+@pytest.mark.parametrize("scrubbed", ["\x00", "\x08", "\x0b", "\x0c", "\x0e", "\x1f"])
+def test_the_registry_scrub_set_is_enumerated_from_the_scrub_not_assumed(scrubbed):
+    """A guard on the PREMISE, not on the renderer: every character the `tr -d` range deletes is one
+    `_flatten_summary` deliberately does NOT handle, because it cannot arrive. If someone narrows the
+    scrub in lib/registry.zsh they must revisit this list; if someone widens `_FLATTEN_WS` past the
+    survivors they will find this test explaining why the extra characters were out of scope."""
+    assert render._flatten_summary(scrubbed) == scrubbed  # pylint: disable=protected-access
+
+
+@pytest.mark.parametrize("ch", _SURVIVING_WS)
+def test_flatten_summary_maps_every_surviving_whitespace_control_to_one_space(ch):
+    assert render._flatten_summary(f"a{ch}b") == "a b"  # pylint: disable=protected-access
+
+
+@pytest.mark.parametrize("ch", _SURVIVING_WS)
+def test_summary_block_flattens_every_surviving_control_not_just_newline(ch):
+    # Consumer 1. A `\t` inside the fold input also breaks `^  [^ ]` reasoning -- `fold -s` counts a
+    # tab as one column while a terminal expands it -- and a `\r` returns the cursor to column zero,
+    # erasing the indent the re-indent loop just applied.
+    out = render._summary_block(f"first half{ch}second half")  # pylint: disable=protected-access
+    lines = out.split("\n")[:-1]
+    assert len(lines) == 2, lines
+    assert lines[1] == "  first half second half"
+    # The block's own newlines are structure; a tab or a CR anywhere in it is leaked payload.
+    assert "\t" not in out and "\r" not in out
+
+
+@pytest.mark.parametrize("ch", _SURVIVING_WS)
+def test_board_row_stays_one_line_for_every_surviving_control(ch):
+    # Consumer 2, stated at the altitude the reader sees it: one registry entry, one board row.
+    row = render._overview_row(  # pylint: disable=protected-access
+        "alpha",
+        {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": f"top{ch}bottom"},
+        {},
+    )
+    assert row.count("\n") == 1
+    assert row.endswith("top bottom\n")
+
+
+@pytest.mark.parametrize("ch", _SURVIVING_WS)
+def test_porcelain_emits_exactly_one_record_per_project_for_every_surviving_control(ch):
+    """THE HONEST ASSERTION IS ON THE RECORD COUNT, and on the field count within the record.
+
+    An assertion on the text alone ("the summary reads `top bottom`") passes on a build that emits
+    TWO rows, because the first row still ends where the assertion stops looking. What `borg switch`
+    actually consumes is a record per project and five tab-separated fields per record: an extra
+    record is a phantom project in the picker, and a shifted field is `cut -f1` returning prose
+    instead of a project name. Both are asserted here; neither is implied by the other.
+    """
+    doc = _doc(
+        order=["alpha", "beta"],
+        projects={
+            "alpha": {"source": "cli", "status": "idle", "last_activity": "1h", "summary": f"top{ch}bottom"},
+            "beta": {"source": "cli", "status": "idle", "last_activity": "2h", "summary": "plain"},
+        },
+    )
+    out = render.porcelain(doc)
+    records = out.splitlines()
+    assert len(records) == 2, records
+    assert [record.split("\t")[0] for record in records] == ["alpha", "beta"]
+    assert all(len(record.split("\t")) == 5 for record in records), records
+    assert records[0].split("\t")[4] == "top bottom"
+
+
+def test_porcelain_flattens_before_the_80_char_cut():
+    # Same ordering the other two consumers use. The replacement is one-for-one so the two orderings
+    # agree today; what is pinned is that the 80-char budget measures the characters the field
+    # actually carries, which is the half a future non-one-for-one replacement could break.
+    summary = "w" * 40 + "\t" + "x" * 60
+    doc = _doc(order=["a"], projects={"a": {"source": "cli", "status": "idle", "summary": summary}})
+    field = render.porcelain(doc).split("\t")[4].rstrip("\n")
+    assert field == ("w" * 40 + " " + "x" * 60)[:80]
+
+
 # ── AC4: NEXT, and the yours / mine / unsure routing ──────────────────────────────────────────────
 
 

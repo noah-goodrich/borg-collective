@@ -3,8 +3,9 @@
 TWO PUBLIC CALLABLES, AND THAT IS THE WHOLE OF AC2's "one front door". `document(doc)` is the single
 human entry point: a fixed SEVEN-SECTION SPINE whose `▸` headers are byte-identical in every context,
 where `scope` narrows the ROW SET of the four scope-dependent sections and never the board, never the
-section list and never the order. `porcelain(doc)` is UNCHANGED byte for byte and is deliberately
-outside "everywhere" -- it is not a renderer, it is the TSV feeding fzf's input list
+section list and never the order. `porcelain(doc)` is deliberately outside "everywhere" and its
+LAYOUT is unchanged (one control-character flatten aside, see its docstring) -- it is not a renderer,
+it is the TSV feeding fzf's input list
 (borg.zsh:262 builds the picker input with `cmd_ls --porcelain`, borg.zsh:264-269 consumes it with
 `--delimiter '\\t' --with-nth 1,3,5`), and box drawing in that stream breaks `borg switch` outright.
 
@@ -89,6 +90,54 @@ _JQ_ABSENT_STATUS = "unknown"
 # this tree is a substring test, which is why that change is free.
 SECTION_MARK = "▸ "
 
+# THE WHITESPACE CONTROL CHARACTERS THAT SURVIVE `lib/registry.zsh`'s SCRUB, ENUMERATED FROM THE
+# SCRUB ITSELF rather than assumed: `_borg_registry_write` pipes through `tr -d
+# '\000-\010\013\014\016-\037'`, which deletes 0x00-0x08, 0x0B (vertical tab), 0x0C (form feed) and
+# 0x0E-0x1F. Everything else reaches storage intact -- and of what remains, exactly three are
+# whitespace that a renderer must not emit raw: 0x09 TAB, 0x0A LF, 0x0D CR. So the writer-side
+# argument F1 made about newlines is true of all three, and the earlier defense was one character
+# short at each end of it.
+_FLATTEN_WS = str.maketrans({"\t": " ", "\n": " ", "\r": " "})
+
+
+def _flatten_summary(text: str) -> str:
+    """Replace every registry-surviving whitespace control character in a registry `summary` with a
+    single space. ONE HELPER, THREE CONSUMERS, so a fourth inherits the defense instead of repeating
+    the bug.
+
+    THE SUMMARY FIELD HAS THREE CONSUMERS, NOT TWO, and each breaks differently on the same byte:
+
+    * `_summary_block` -- IN FOCUS's fold. A raw control character emits a sub-line `_fold_s` never
+      produced, which the re-indent loop therefore never indents, breaking its `^  [^ ]`
+      continuation contract.
+    * `_overview_summary_cut` -- the board's fixed-width table. `_overview_row` lays every column
+      out with `:<{_COL_*}` padding; a `\\n` or a `\\r` splits one row into two and shears every
+      column after it.
+    * `porcelain` -- the TSV that IS `borg switch`'s picker. `borg.zsh` builds the fzf input with
+      `cmd_ls --porcelain` and reads the choice back with `--delimiter '\\t' --with-nth 1,3,5` plus
+      `cut -f1`. A `\\n` in the last field ends the record early and makes the summary's tail a
+      SECOND record -- a phantom project offered in a list the user selects from -- and a `\\t`
+      shifts every field, so field 1 of the picked row is no longer a project name.
+
+    THE RENDERER OWNS THIS, NOT THE WRITER. Same altitude rule the `borg recon` retirement gate
+    settled (CLAUDE.md; docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md): the
+    artifact that implements the contract owns its invariant. Normalizing in `summarize.summarize_llm`
+    -- whose `result.stdout.strip()[:500]` leaves interior control characters intact, unlike the
+    heuristic path's `step[:200].replace("\\n", " ")` -- would fix today's one known writer and leave
+    all three contracts undefended against the next. And the LLM is not the only possible source: the
+    scrub above lets all three characters through, so a hand-edited registry produces one with no LLM
+    involved at all.
+
+    Replacement is ONE CHARACTER FOR ONE, so every width budget downstream (the 70-column fold, the
+    50-char board cut and its `> 50` ellipsis, porcelain's 80-char cut) is unchanged for input that
+    was already clean, and no golden moves.
+
+    PRIVATE ON PURPOSE. `test_render_exposes_exactly_one_human_entry_point` asserts this module's
+    public surface is exactly `{document, porcelain}` -- AC2's "one front door" -- so a shared helper
+    here has to carry the underscore or it reads as a third entry point callers may route through.
+    """
+    return text.translate(_FLATTEN_WS)
+
 
 def _label(text: str, value: str, col: int = _DEEP_LABEL_COL) -> str:
     """One `  {DIM}<label>{NC}<pad>value` IN FOCUS header line, padding computed as col - len(text)
@@ -139,25 +188,17 @@ def _summary_block(summary: str) -> str:
     The two leading spaces on the first line COUNT against the 70-column fold budget; lines 2..n are
     re-indented to two spaces (NOT folded with the indent already applied).
 
-    EMBEDDED NEWLINES ARE FLATTENED TO SPACES HERE, IN THE RENDERER, NOT AT THE WRITER (F1). The
-    `^  [^ ]` continuation contract is this function's OWN invariant, so this is where it is
-    defended -- the same altitude rule the `borg recon` retirement gate settled (see CLAUDE.md and
-    docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md: the artifact that
-    implements the command owns the invariant, not its caller). Normalizing only in
-    summarize.summarize_llm -- whose `result.stdout.strip()[:500]` leaves interior newlines intact,
-    unlike the heuristic path's `step[:200].replace("\\n", " ")` -- would fix today's single known
-    writer and leave the contract undefended against the next one. And the LLM is not the only
-    possible source: lib/registry.zsh's `_borg_registry_write` strips control characters
-    `\\000-\\010,\\013,\\014,\\016-\\037`, a set that does NOT include 0x0A, so a newline reaches
-    storage intact and a hand-edited registry can produce one with no LLM involved at all. A raw
-    `\\n` inside the string would otherwise emit a sub-line `_fold_s` never produced and the
-    re-indent loop therefore never indents.
+    EMBEDDED WHITESPACE CONTROL CHARACTERS ARE FLATTENED TO SPACES HERE, IN THE RENDERER, NOT AT THE
+    WRITER (F1). The `^  [^ ]` continuation contract is this function's OWN invariant, so this is
+    where it is defended; `_flatten_summary`'s docstring carries the altitude argument and the
+    enumeration of which characters survive the registry's scrub. A raw one inside the string would
+    otherwise emit a sub-line `_fold_s` never produced and the re-indent loop therefore never indents.
 
-    Replacement is one-for-one, so the fold budget is unchanged for newline-free input and no
+    Replacement is one-for-one, so the fold budget is unchanged for already-clean input and no
     golden moves.
     """
     out = [f"  {BOLD}Summary{NC}\n"]
-    folded = _fold_s("  " + summary.replace("\n", " "), width=70)
+    folded = _fold_s("  " + _flatten_summary(summary), width=70)
     for i, line in enumerate(folded):
         if i == 0:
             out.append(f"{line}\n")
@@ -188,6 +229,17 @@ def porcelain(doc: dict) -> str:
 
     UNCHANGED BY AC2, DELIBERATELY, and `tests/fixtures/link/link-porcelain.golden` must not move.
     See the module docstring: this is fzf's input list, not a page.
+
+    THE THIRD CONSUMER OF `summary`, AND THE ONE WITH THE WORST FAILURE. F1 flattened the fold and a
+    later pass flattened the board, both on an argument -- the registry's scrub lets these characters
+    reach storage -- that applies just as much here, where the field is serialized into a TSV RECORD.
+    A `\\n` ends the record early and turns the summary's tail into a SECOND record whose field 1 is
+    prose, so `borg switch` offers a project that does not exist and `cut -f1` hands that prose to
+    `_borg_do_switch`; a `\\t` shifts every field right, so `--with-nth 1,3,5` shows the wrong
+    columns. That is a wrong row in a picker the user selects from, not a sheared line they can read
+    past -- which is why "porcelain is not a renderer" does not exempt it. Flattened BEFORE the
+    80-char cut, the same ordering the other two use and for the same reason: the budget must measure
+    the characters the field actually carries.
     """
     order = doc.get("order") or []
     projects = doc.get("projects") or {}
@@ -198,7 +250,7 @@ def porcelain(doc: dict) -> str:
         status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
         last_activity = core.jq_default(entry.get("last_activity"), "")
         summary = core.jq_default(entry.get("summary"), "")
-        summary = str(summary)[:80]
+        summary = _flatten_summary(str(summary))[:80]
         rows.append(f"{name}\t{source}\t{status}\t{last_activity}\t{summary}\n")
     return "".join(rows)
 
@@ -227,12 +279,12 @@ def _overview_summary_cut(summary: str) -> str:
     """The board's 50-char cut WITH a literal `...` appended only when the ORIGINAL length is
     STRICTLY greater than 50 (an exactly-50-char summary gets none).
 
-    EMBEDDED NEWLINES ARE FLATTENED TO SPACES HERE, BEFORE THE CUT (F1, second renderer). The board
-    is a fixed-width table -- `_overview_row` lays every column out with `:<{_COL_*}` padding -- and
-    a fixed-width table cannot survive a newline: a raw `\\n` inside the first 50 characters splits
-    one row into two and shears every column after it, exactly the way an over-long project name
-    would. `_summary_block` defends the same invariant for the deep dive; the board is the second
-    renderer and owns its own.
+    EMBEDDED WHITESPACE CONTROL CHARACTERS ARE FLATTENED TO SPACES HERE, BEFORE THE CUT (F1, second
+    renderer). The board is a fixed-width table -- `_overview_row` lays every column out with
+    `:<{_COL_*}` padding -- and a fixed-width table cannot survive one: a raw `\\n` or `\\r` inside
+    the first 50 characters splits one row into two and shears every column after it, exactly the way
+    an over-long project name would. `_summary_block` defends the same invariant for the deep dive
+    and `porcelain` for the picker; all three call `_flatten_summary`, which enumerates the characters.
 
     FLATTEN BEFORE CUTTING, NOT AFTER -- the same ordering `_summary_block` uses, pinned there by
     test_render.py::TestSummaryBlock::test_summary_block_flattens_newlines_before_folding_not_after.
@@ -246,9 +298,9 @@ def _overview_summary_cut(summary: str) -> str:
     TestOverviewSummaryCut::test_cut_boundary_and_ellipsis_measure_displayed_characters.
 
     Because the replacement is one-for-one, both the cut and the ellipsis test are unchanged for
-    newline-free input and no golden moves.
+    already-clean input and no golden moves.
     """
-    flat = summary.replace("\n", " ")
+    flat = _flatten_summary(summary)
     cut = flat[:50]
     return f"{cut}..." if len(flat) > 50 else cut
 
