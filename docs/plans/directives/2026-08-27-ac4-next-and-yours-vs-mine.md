@@ -3,8 +3,8 @@
 *Parent directive: 2026-08-26-ac2-topological-grid-renderer*
 *Filed: 2026-08-27*
 
-**tl;dr** — `borg link` gains one section, `▸ NEXT`, inserted between SHIPPED and SIGNALS. It renders the READY set —
-open rows whose every parent has merged — split into three labelled groups: **yours** (a person must decide),
+**tl;dr** — `borg link` gains one section, `▸ NEXT`, inserted between SHIPPED and SIGNALS. It renders the READY
+set — open rows whose every parent has merged — split into three labelled groups: **yours** (a person must decide),
 **mine** (anyone, including an agent, can run it) and **unsure** (the gate names a kind nobody recognizes). READY is
 **three-state**: a populated set, an empty set, and *nobody looked* are three different sentences.
 
@@ -37,15 +37,17 @@ section is three-state:
 - **unknown — nobody looked** — no state on this page was resolved.
 
 An empty set and an unchecked set are different facts. Collapsing them is the same failure
-`skills/borg-link/SKILL.md` already names for `order: []` versus `total_projects`: *"Those are two different sentences
-and getting them backwards is the known trap."* `▸ SIGNALS` already prints `14 of 14 declared refs unresolved — nobody
-looked` on exactly this render; `▸ NEXT` must agree with it rather than contradict it with a blank.
+`skills/borg-link/SKILL.md` already names for `order: []` versus `total_projects`: *"Those are two different
+sentences and getting them backwards is the known trap."* `▸ SIGNALS` already prints `14 of 14 declared refs
+unresolved — nobody looked` on exactly this render; `▸ NEXT` must agree with it rather than contradict it with a
+blank.
 
 ### D2 — routing, including a third list
 
 `manifest_core.gates`' docstring already states the rule and this spec adopts it unchanged: *a `decision` blocks a
-PERSON, a `verification` blocks nobody in particular because anyone can run it.* Across **every manifest that exists** —
-`ingle-t1-cutover`, `viz-program`, `auth-hardening`, `warehouse-rollout` — those are the only two kinds ever written.
+PERSON, a `verification` blocks nobody in particular because anyone can run it.* Across **every manifest that
+exists** — `ingle-t1-cutover`, `viz-program`, `auth-hardening`, `warehouse-rollout` — those are the only two kinds
+ever written.
 
 | group | rule |
 |---|---|
@@ -54,8 +56,8 @@ PERSON, a `verification` blocks nobody in particular because anyone can run it.*
 | **unsure** | ready, gated by a kind that is neither |
 
 **An unrecognized kind gets its own group rather than a default side.** Owner's call, and it is the right one: the
-plan's own named risk is "a mis-set gate routing a human decision to an agent", and BOTH defaults are lies — routing it
-to *mine* risks an agent acting on a decision, routing it to *yours* silently asserts the author meant a decision. A
+plan's own named risk is "a mis-set gate routing a human decision to an agent", and BOTH defaults are lies — routing
+it to *mine* risks an agent acting on a decision, routing it to *yours* silently asserts the author meant a decision. A
 third group says the true thing, which is that the router does not know. This is the third time this project has landed
 on the same rule: an unknown is a state, not a default (cf. `?` for unverified provenance in AC4's precondition, and
 *empty* vs *nobody looked* in D1 above).
@@ -81,8 +83,8 @@ yours-vs-mine so its diff is a pure append. A section that renders only a placeh
 release is the exact 'reads as broken' failure Q10 exists to prevent."*
 
 `unsure` is `0` on every manifest that exists. As its own section it would render empty on every page for the whole
-release — precisely what was rejected. As a **group inside `▸ NEXT`** it simply does not appear until something lands
-in it.
+release — precisely what was rejected. As a **group inside `▸ NEXT`** it simply does not appear until something
+lands in it.
 
 **The spine goes 7 → 8 and `SECTIONS` gains one entry.** The spine test goes red, deliberately, and that red is the
 reviewable event. Headers stay byte-identical in both contexts, which is the AC2 invariant this must not break.
@@ -127,8 +129,9 @@ The two non-populated states:
 ▸ NEXT  unknown — nobody looked (run without --local to resolve)
 ```
 
-**The glyph is `●` and it is provenance-marked like every other cell** (`●?`), reusing AC4's precondition. `ready` is
-exactly the field whose `●` branch the precondition was filed to protect: the moment this ships, a `●` off hand-typed
+**The glyph is `●` and it is provenance-marked like every other cell** (`●?`), reusing AC4's precondition. `ready`
+is exactly the field whose `●` branch the precondition was filed to protect: the moment this ships, a `●` off
+hand-typed
 parents would read "start this now". D1 makes that unreachable by construction — `ready_set` never sees a declared
 state — and the mark is the belt to that braces.
 
@@ -199,14 +202,16 @@ adding them is part of this work rather than a follow-up.
 
 > **AMENDED 2026-08-27 (S1), by execution. "GOLDENS DO NOT MOVE" IS FALSE, AND `render.py` IS NOT WHAT MOVES THEM.**
 > `picture.state_glyph`'s `●` arm reads `node.get("ready")` and has shipped **dead but tested** since AC2. The moment
-> `grid.py` emits the field, every ready node's glyph changes from `○` to `●` — with zero edits to `render.py`, which
+> `grid.py` emits the field, every ready node's glyph changes from `○` to `●` — with zero edits to `render.py`,
+> which
 > is the module this step's additivity claim was reasoning about. The wire is not additive when a renderer is already
 > reading the key it adds.
 >
 > **Both grid goldens therefore regenerate in S1, and again in S2 for the section.** The AC2 spec's
 > "regenerate exactly once" rule is not violated: it forbids repeated regeneration *within* a step, and each of these
 > is one predicted diff in one reviewed commit. The S1 diff is `○` → `●` and nothing else, on exactly the node set
-> AC2's own "golden blast radius" paragraph named in advance — `n2/n3/n4` in `link-grid-repository`, those plus `n9` in
+> AC2's own "golden blast radius" paragraph named in advance — `n2/n3/n4` in `link-grid-repository`, those plus `n9`
+> in
 > `link-grid-orchestrator`. A diff containing anything more than those glyphs means S1 changed something it should not
 > have.
 >

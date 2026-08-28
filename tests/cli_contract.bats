@@ -759,7 +759,7 @@ EOF
     [ "$output" -ge 1 ]
 }
 
-# ── reporting / read-only: nanoprobes, nanoprobe-log, spend, watch, doctor, reap, ────────────────
+# ── reporting / read-only: nanoprobes, nanoprobe-log, spend, doctor, reap, ───────────────────────
 # ── reap-worktrees, vinculum ──────────────────────────────────────────────────────────────────────
 
 @test "contract: nanoprobes reports cleanly when agents.jsonl is absent" {
@@ -2096,17 +2096,25 @@ _assert_link_grid_golden() {
     [[ "$output" == *"alpha"*"delta"* ]] || false
 }
 
-# EXTERNAL CONSUMER (borg.zsh:689), stated precisely: cmd_switch's fzf call has TWO producers, and
-# only one of them is `link`. The listing piped into fzf comes from `cmd_ls --porcelain`
-# (borg.zsh:685) — a separate duplicate implementation that PROJECT_PLAN.md's scope boundaries keep
-# in zsh — while `--preview "borg link {1}"` (borg.zsh:689) is the deep dive. So this pins both
-# halves against the producer that actually feeds each: the 5-field/`--with-nth 1,3,5` shape against
-# cmd_ls, and name-in-column-1-is-a-valid-deep-dive-argument against link.
+# EXTERNAL CONSUMER, stated precisely. `cmd_switch`'s fzf call reads exactly ONE producer: the
+# listing piped into fzf comes from `cmd_ls --porcelain` — a separate duplicate implementation that
+# PROJECT_PLAN.md's scope boundaries keep in zsh. That half is live, and it is what the
+# 5-field/`--with-nth 1,3,5` assertion below pins.
+#
+# THE OTHER HALF'S STATED REASON HAS LAPSED, SAID PLAINLY RATHER THAN PAPERED OVER. This block used
+# to call fzf's `--preview "borg link {1}"` the second producer and justify the `link --porcelain`
+# assertions by it. That preview flag was retired on 2026-08-27; `cmd_switch` now passes no preview
+# flag at all, so no fzf keystroke reaches `borg link` any more. What those assertions still pin is
+# narrower and is not an fzf fact: `link --porcelain` emits the SAME 5-field row shape `cmd_ls` does,
+# and a column-1 name is still an argument `borg link <project>` renders. NO REPLACEMENT CONSUMER IS
+# NAMED HERE, because there is not one to name — inventing a live justification for a check whose
+# reason retired is how the previous sentence stayed wrong for a month.
 #
 # The two producers ALREADY diverge, which is why asserting the field shape against `link
-# --porcelain` alone would have been asserting it in the wrong place: on an empty registry
-# _borg_link_porcelain prints nothing (borg.zsh:264) while cmd_ls prints the human "No projects
-# registered" line straight into the fzf stream (borg.zsh:528-531, before its porcelain branch).
+# --porcelain` alone would have been asserting it in the wrong place: on an empty registry the
+# porcelain surface prints nothing while `cmd_ls` prints the human "No projects registered" line
+# straight into the fzf stream — its `project_count == 0` guard returns before the porcelain branch
+# is ever consulted.
 @test "contract: the fzf picker's two producers each keep their half of the contract" {
     _link_setup_porcelain
 
@@ -2903,7 +2911,7 @@ _link_picture_budget() {
 # `right:70:wrap` asserts that somebody typed a number, not that the picture fits inside it. The
 # widest row is measured with `picture.visible_len`, the same primitive the renderer pads with, so a
 # hyperlinked or coloured cell counts as its VISIBLE width rather than its byte length.
-@test "contract: the fzf preview window is at least as wide as the widest picture row" {
+@test "contract: the widest picture row fits PICTURE_BUDGET and no preview-window flag survives" {
     local width
     width=$(_link_widest_picture_row "${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden")
     [ "$width" -gt 0 ] || { echo "measured no picture rows at all" >&2; false; }
@@ -2982,8 +2990,14 @@ _link_picture_budget() {
 
 # `--local` opts down from BOTH network rungs, so the grid still renders from what each manifest
 # DECLARES -- which for these fixtures is nothing, so every node reaches the renderer with the state
-# nobody resolved. That is the hottest path in the tree (per-keypress fzf preview, per-window
-# `drone status`) and the one a renderer that raised on an unrecognized token would take out.
+# nobody resolved. A renderer that raised on an unrecognized token would take that path out.
+#
+# WHICH PATH, CORRECTED. This used to justify itself as "the hottest path in the tree (per-keypress
+# fzf preview, per-window `drone status`)". BOTH of those consumers were retired on 2026-08-27, so
+# that reason is dead and is NOT being swapped for an equally grand invented one. The `--local`
+# caller that survives is `skills/borg-switch/SKILL.md`, which runs `borg link --local --all` before
+# a switch prompt precisely so it never pays for a sweep. Unresolved-state rendering therefore still
+# has a live consumer — an ordinary one, not a per-keypress one.
 @test "contract: link --local renders every node without naming the unresolved token" {
     _link_setup_grid
     _link_grid_seams
@@ -3590,7 +3604,8 @@ EOF
 # Check 3: positive non-vacuity. The only one of the three that proves the renderer actually MOVED
 # rather than being renamed, re-pointed, or left behind a surviving zsh fallback. Injects a python3
 # that exits non-zero via BORG_PATH_PREFIX (the same mock-binary seam used throughout this file — see
-# "watch dispatches into the live-refresh loop", which mocks tmux the same way) and asserts all
+# "next on an empty registry says all clear and exits 0", which mocks tmux the same way; the case
+# this used to cite, "watch dispatches into the live-refresh loop", went away with `cmd_watch`) and asserts all
 # three human modes fail. On the pre-flip tree (zero python3 dependency in any human mode) this was
 # RED; it can only pass after a real flip with no zsh renderer left standing behind the dispatch.
 @test "contract: all three human link modes fail when python3 is unavailable" {
@@ -3797,16 +3812,22 @@ JSON
 }
 
 @test "contract: --local is forwarded on the DEEP and OVERVIEW arms, asserted on the child's argv" {
-    # The arms every hot call site actually uses, and the ones the document cannot prove:
-    #   fzf preview (borg.zsh:266) -> bare positional -> DEEP
-    #   drone status (drone.zsh:964) -> `borg link --local "$wname"` -> DEEP
-    #   cmd_watch (borg.zsh:2222) -> `_borg_link_dispatch --local` with no args -> OVERVIEW
+    # The two arms this pins, and who still reaches them. ALL THREE CALL SITES THIS COMMENT USED TO
+    # NAME — the fzf preview, `drone status` and `cmd_watch` — were retired on 2026-08-27, and they
+    # are not being replaced with invented ones; these are the consumers that actually survive:
+    #   bare positional -> DEEP. Every `borg link <project>` routes through borg.zsh's positional
+    #     arm — the same arm B16 keeps `--deep` in the parser for.
+    #   `--local`, no project -> OVERVIEW. `skills/borg-switch/SKILL.md` runs `borg link --local
+    #     --all` before a switch prompt, and says in as many words that `--local` is mandatory there.
+    # The wire matters regardless of who is on it: a `--local` the dispatcher drops fails OPEN — the
+    # caller believes it opted out of the network and silently pays for the sweep anyway.
     #
     # This MUST assert argv, not the emitted document. An earlier version ran `link --json --local
     # beta` and claimed deep-arm coverage, but dispatch precedence is json > porcelain > deep, so it
     # returned from the --json block and never executed the deep arm at all. Deleting the deep arm's
-    # forwarding line left the whole new test block green -- verified by mutation. render.deep reads
-    # only `focus`, so `link beta` and `link --local beta` are byte-identical on stdout too: no
+    # forwarding line left the whole new test block green -- verified by mutation. The human renderer
+    # reads only `focus` here (`render.deep`, named in the original wording, was deleted by AC2), so
+    # `link beta` and `link --local beta` are byte-identical on stdout too: no
     # document-level or human-output assertion can ever pin this wire. Mock python3 and read "$@",
     # the same idiom as the config-surface test above.
     _scope_two_repos
