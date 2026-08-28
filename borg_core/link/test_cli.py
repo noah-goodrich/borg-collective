@@ -402,10 +402,13 @@ def test_main_porcelain_and_deep_render_through_render_py(isolated_env, capsys):
 
 def test_repository_scope_calls_no_aggregate_collector_on_the_human_path(isolated_env, capsys, monkeypatch):
     # C1. The two aggregate collectors are a directory-glob-plus-markdown-read pass over EVERY
-    # registered project, and both hot loops (drone.zsh's per-tmux-window status table, borg.zsh's
-    # per-keypress fzf preview) pass a NAME -- so both land in repository scope and must skip them
+    # registered project, and a NAMED invocation lands in repository scope, which must skip them
     # exactly as the retired `deep` mode did. Mutating `need_aggregate` to `mode != "porcelain"`
-    # turns this red and puts a 14-project glob back into both.
+    # turns this red and puts a 14-project glob back on every `borg link <project>`.
+    # (This used to justify the skip by "both hot loops (drone.zsh's per-tmux-window status table,
+    # borg.zsh's per-keypress fzf preview) pass a NAME". Both were retired 2026-08-27, so the skip
+    # now saves the glob once per typed command rather than per keypress. What lapsed is the size of
+    # the prize, not the invariant -- the assertion is unchanged.)
     path = _delta_workspace(isolated_env)
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle"}})
 
@@ -559,8 +562,9 @@ def test_document_scope_is_orchestrator_at_the_workspace_root(isolated_env, monk
 def test_document_explicit_project_dominates_cwd(isolated_env, monkeypatch):
     # B3 end-to-end, through the real _document rather than the pure resolver: standing in alpha and
     # asking for beta must scope to BETA. Resolving breadth from cwd here would render alpha's facts
-    # under beta's header -- and every scripted caller passes a name from a fixed cwd
-    # (drone.zsh:964's per-window loop, borg.zsh:266's fzf preview).
+    # under beta's header, which is indistinguishable from a right one. `drone link` still passes
+    # `${PWD##*/}` from whatever cwd its window is in. (The two examples this used to give --
+    # "drone.zsh:964's per-window loop, borg.zsh:266's fzf preview" -- were retired 2026-08-27.)
     alpha, _beta = _scope_registry(isolated_env)
     monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
     monkeypatch.chdir(alpha)
@@ -707,14 +711,23 @@ def test_cortex_pending_is_read_on_both_human_contexts(isolated_env, monkeypatch
 
 def test_deep_is_accepted_and_ignored(isolated_env, capsys):
     """C6. `--deep` collapsed into repository scope but STAYS in the parser: one live copy of the
-    dispatcher passes it -- borg.zsh's positional arm at borg.zsh:3111, which is the fzf preview's
-    path -- and deleting the argument makes argparse exit 2 where `drone status` and the fzf preview
-    both swallow the failure silently.
+    dispatcher passes it -- borg.zsh's positional `link` arm, the `if [[ -n "$_link_project" ]]`
+    branch that sets `_link_py_args=(--deep)`. Every `borg link <project>` and every `drone link`
+    takes it, so deleting the argument makes argparse exit 2 on the command's commonest invocation.
 
-    This docstring used to say THREE copies, counting bin/link-parity-harness and its byte-copy at
+    ANCHORED BY THE BRANCH, NOT PINNED TO A LINE. This docstring said borg.zsh:3111, which is inside
+    the `recon)` retirement comment; the correction filed in CLAUDE.md then landed on :3064, a
+    comment line. Three wrong pins on one fact. The branch condition survives insertions; the number
+    does not.
+
+    IT ALSO USED TO SAY THE FAILURE WOULD BE SILENT -- "argparse exit 2 where `drone status` and the
+    fzf preview both swallow the failure". Both were retired 2026-08-27, so the failure is now loud:
+    exit 2 with argparse's usage on the user's terminal. Loud, but on every typed deep dive, which is
+    reason enough to keep the argument.
+
+    An earlier version also counted THREE copies, adding bin/link-parity-harness and its byte-copy at
     ~/.claude/bin/. Neither ever passed `--deep` (the harness looped a bare positional), and AC2/S4
-    retired the harness leg that looped at all. Corrected, not weakened: the surviving copy is the
-    one whose failure is invisible, which is the whole reason the flag is kept.
+    retired the harness leg that looped at all.
 
     Mutation: drop the `parser.add_argument("--deep", ...)` line -> SystemExit(2), empty stdout.
     """

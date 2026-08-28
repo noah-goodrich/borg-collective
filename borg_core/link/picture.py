@@ -243,10 +243,13 @@ def state_glyph(node: dict) -> str:
     THE DEFAULT ARM IS THE POINT. A dict lookup keyed on state would raise KeyError on the live
     viz manifest, whose rows declare `"status": "stacked"` -- a position in a stack, not a PR state --
     and on any injected Jira or Slack adapter's vocabulary, which resolve_state passes through
-    verbatim. It would also raise on the grid's own unresolved token, which reaches this function
-    several times a second on the hottest paths in the tree (`--local` opts down from both network
-    rungs, and the fzf preview re-renders per keypress). A renderer that raised there would take out
-    the preview pane and `drone status` at once.
+    verbatim. It would also raise on the grid's own unresolved token, which is the MAJORITY case on
+    any `--local` render, since opting down from both network rungs leaves every row unresolved by
+    construction. (This used to add "which reaches this function several times a second on the hottest
+    paths in the tree ... a renderer that raised there would take out the preview pane and `drone
+    status` at once". Both consumers were retired 2026-08-27; the frequency argument is gone and the
+    totality argument is untouched -- `skills/borg-switch`'s `borg link --local --all` still renders
+    an all-unresolved grid on every invocation, and one KeyError there is the whole document.)
 
     `is True` RATHER THAN TRUTHINESS on both optional fields, which is the Python-side shape of the
     jq `//` trap CLAUDE.md records: a missing key and a JSON `false` must read identically, and the
@@ -400,8 +403,8 @@ def level_of(manifest_grid: dict) -> dict[str, int]:
     """`{ref: level}`, READ OFF THE NODE, never re-derived by inverting `levels`.
 
     `grid._grid_nodes` stamps `level` on every node and its docstring states the reason outright:
-    the integer is there "so `drone status`-class consumers read one node and must not have to invert
-    a list of lists to learn where it sits". This module is such a consumer. Inverting `levels` here
+    the integer is there so "a consumer holding one node must not have to invert a list of lists to
+    learn where it sits". This module is that consumer. Inverting `levels` here
     would be a second derivation of a published field -- cheap, but it is the shape where two answers
     to one question drift apart, and it was being built five times per manifest per render.
     """

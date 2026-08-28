@@ -34,8 +34,11 @@ Two independent tools that compose:
   2026-08-10** — six names for one command meant the docs, skills, and research all disagreed
   about what to call it. `borg link` is the only name.
 - CoCo (Cortex Code CLI) integration: session discovery, `[X]` badge in `borg link`
-- `drone` CLI: up, down, claude, sh, restart, rebuild, fix, status, feature, cortex, exec, toggle,
-  scaffold
+- `drone` CLI: up, down, claude, sh, restart, rebuild, fix, feature, cortex, exec, toggle, pane,
+  scaffold, link. **`status` was listed here and is not a command** — there is no `cmd_status` in
+  `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
+  command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
+  the surface of record.
 - Hooks (12): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
   bash-guard, borg-dispatch-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
@@ -76,7 +79,8 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                            --all     Include archived projects
                            --local   Opt down from the network sweep (hot loops only)
                            --json / --porcelain  the two machine surfaces
-                           --deep    Parsed and IGNORED since AC2; kept for borg.zsh:3059-3068
+                           --deep    Parsed and IGNORED since AC2; kept for borg.zsh's positional
+                                     `link` arm, the only caller that still passes it
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
 borg add [path]          Register a project
@@ -286,12 +290,16 @@ docs/
   scope, mode or emptiness**. (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
   reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
   chose over reserving an always-empty slot in advance.) `render.overview` and `render.deep` are
-  deleted, and `--deep` is parsed and ignored (kept in the parser because `borg.zsh:3059-3068`'s
-  positional arm — every `borg link <project>`, `drone link` included — still passes it at
-  `borg.zsh:3064`, and argparse exiting 2 there is a blank page with nothing on stderr. The old
-  pointer here, `borg.zsh:3111`, is inside the `recon)` retirement comment and never passed `--deep`;
-  the "fzf preview included" clause named a consumer retired 2026-08-27. Both corrected
-  2026-08-28.) **Scope changes which ROWS
+  deleted, and `--deep` is parsed and ignored (kept in the parser because borg.zsh's positional
+  `link` arm — the `if [[ -n "$_link_project" ]]` branch that sets `_link_py_args=(--deep)`, taken by
+  every `borg link <project>` and by `drone link` — still passes it, and argparse exiting 2 there is
+  a blank page with nothing on stderr. **Anchored by the arm, not pinned to a line number**, because
+  this one fact has now been filed as a stale-pin defect three times: `borg.zsh:3111` was inside the
+  `recon)` retirement comment and never passed `--deep`, and its correction to `borg.zsh:3064` landed
+  on a comment line. Every insertion above the arm moves the number; the branch condition does not
+  move. Same rule `tests/cli_contract.bats` already ratified for its own pins. The "fzf preview
+  included" clause dropped with this correction — it named a consumer retired 2026-08-27.)
+  **Scope changes which ROWS
   a section prints, never which sections exist** — the contexts differ in breadth only, so a reader
   who learns the page once has learned every invocation of it. Section headers are byte-identical
   in both contexts; `focus` now follows scope, so a bare `borg link` inside a repository renders

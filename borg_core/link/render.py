@@ -180,9 +180,14 @@ def _objective_lines(objective: str) -> list[str]:
     THE PREFIXED STRING IS WHAT GETS FOLDED, at 70, through `_fold_s` -- byte for byte the
     arrangement `_summary_block` uses, so the section's two prose blocks cannot wrap differently.
     Continuations re-indent to two spaces, keeping the deep dive's `^  [^ ]` rule intact. The slice
-    is safe by construction: `"  Objective: "` puts a space at column 12 and `_fold_s` breaks after
-    the last space at or before 70, so the first line always carries the whole prefix. Only the
-    LABEL is coloured, so ANSI bytes never enter the width arithmetic.
+    is safe by construction: `_fold_s` breaks after the last space at or before 70, `"  Objective: "`
+    puts one at index 12, 12 < 70 -- so `rfind` never returns below 12 and the slice cannot bite into
+    the label. THAT ARGUMENT WAS ONLY HALF OF ONE: a first token of 57+ chars pushes the next space
+    past 70, leaving 12 the sole candidate, so the label line degenerates to `"  Objective: "` with
+    the objective on the continuation (measured: shares the line at 56, not at 57). Left as is --
+    not corruption, exactly what `fold -s -w 70` does with those bytes, and a 57-char unbroken token
+    is a URL, whose fix belongs in `core.plan_objective` rather than a carve-out in a folder pinned
+    to `fold`'s behaviour. Only the LABEL is coloured, so ANSI bytes never enter the width arithmetic.
     """
     prefix = f"  {_OBJECTIVE_LABEL} "
     folded = _fold_s(prefix + objective, width=70)

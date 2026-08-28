@@ -561,8 +561,11 @@ def test_signals_says_the_picture_blew_its_budget_rather_than_just_looking_wrong
 
     WHAT THIS CASE DOES *NOT* COVER, corrected after a reviewer checked the claim it used to make.
     It said this also killed "delete the `block["picture_width"] = ...` stamp in `cli._grid`". It does
-    not, and cannot: it sets the field by hand, so deleting the stamp leaves this module at 69 passed
-    — measured, by deleting the line. That mutation is killed by
+    not, and cannot: it sets the field by hand, so THIS WHOLE MODULE IS BLIND TO THE STAMP — measured
+    by replacing that line in cli._grid with `pass` and re-running, which leaves test_render.py fully
+    green and turns test_cli.py red. (No pass-count is written down here on purpose: this file gains
+    cases every AC, and the last recorded number, 69, was already stale by four when a reviewer
+    checked it. Re-run the mutation; do not trust a transcribed total.) That mutation is killed by
     `test_cli.py::test_json_publishes_the_measured_picture_width_on_the_grid_block`, which measures
     over a REGISTERED fixture repository rather than an empty registry, and by `cli_contract.bats`'s
     B15b ("grid.picture_width is the width of the widest picture row the same run rendered"). Neither
