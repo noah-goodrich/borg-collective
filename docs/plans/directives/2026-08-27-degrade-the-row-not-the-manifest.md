@@ -73,5 +73,25 @@ hand-edited afterwards, and AC5 has not shipped, so nothing writes manifests but
 - [ ] The warning names the manifest, the dropped-row count, and the validator's own message.
 - [ ] A manifest whose every row fails is still dropped whole, with the existing message.
 - [ ] Structural failures (bad JSON, missing id, non-list `rows`) still drop the file.
-- [ ] A pytest case asserts the AC4 `unsure` group renders from a real manifest — the branch stops being dead.
+- [x] ~~A pytest case asserts the AC4 `unsure` group renders from a real manifest — the branch stops being dead.~~
+
+  > **AMENDED 2026-08-27, by building it. THIS CRITERION CANNOT BE SATISFIED BY THIS CHANGE, and the
+  > claim above ("fixing the blast radius is what makes it live") is wrong.** Row-level degradation
+  > drops the offending row — which is precisely the row that would have routed to `unsure`. The two
+  > outcomes are mutually exclusive: either the bad row is dropped (and `unsure` is unreachable) or it
+  > is kept (and the file was not degraded). Making `unsure` live requires a DIFFERENT change —
+  > widening `GATE_KINDS`, or demoting an unrecognized `kind` from a validation error to a router
+  > concern — and this directive names the first of those as an explicit non-goal.
+  >
+  > **What shipped instead is the invariant `unsure` actually protects**, which is better than what
+  > was asked for: `test_the_router_covers_every_gate_kind_the_validator_admits` asserts
+  > `GATE_KINDS ⊆ _GATE_ROUTING`. The group is a DIVERGENCE GUARD — the validator and the router
+  > admit the same two kinds today, so they coincide; the day someone adds a third to the validator
+  > and forgets the router, a `.get(kind, default)` would silently pick a side. The subset assertion
+  > catches that, and `unsure` catches the window before it is noticed. Asserted as a subset rather
+  > than equality because the router knowing a kind the validator has not admitted is the safe
+  > direction.
+  >
+  > Whether `unsure` should be reachable at all is a live question for the owner, not one this
+  > directive settles.
 - [ ] Both grid goldens are unchanged by this directive alone, since no fixture carries an invalid row.
