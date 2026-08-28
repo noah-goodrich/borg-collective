@@ -2,6 +2,18 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Parent directive: 2026-08-26-ac2-topological-grid-renderer*
 *Filed: 2026-08-27*
+*Severed: 2026-08-27 — CLOSED BY DELETION, not by work.*
+
+> **`drone status` no longer exists.** This directive proposed moving its status column off the human
+> `borg link` document and onto `--porcelain`, because the `grep -m1 'Status:'` scrape was correct only
+> by an ordering accident. `2026-08-27-retire-unused-link-surfaces.md` removed the command outright —
+> zero typed invocations in six months of shell history — so there is no call site left to harden.
+>
+> **Kept rather than deleted, because the ANALYSIS outlives the command.** If a status table is ever
+> rebuilt, the argument here is the specification for how to read state: by field position off a
+> machine surface, never by text search over a page that carries PR titles and free-text summaries.
+> `tests/fixtures/link/sweep-acme.json` still ships the adversarial title
+> (`"chore(auth): Status: normalise the rollout report"`) that defeats the scrape.
 
 **tl;dr** — `drone.zsh:964` builds its status column by grepping `Status:` out of the *human* `borg link` document,
 once per tmux window. It is correct today only because AC2 put `▸ IN FOCUS` above every wire-sourced line — an ordering

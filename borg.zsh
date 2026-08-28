@@ -263,8 +263,6 @@ cmd_switch() {
         fzf --query "$query" \
             --prompt "borg> " \
             --header "Switch to project (Enter=switch, Esc=cancel)" \
-            --preview "borg link --local {1}" \
-            --preview-window "right:70:wrap" \
             --delimiter '\t' \
             --with-nth 1,3,5 \
             2>/dev/null) || return 0
@@ -2199,54 +2197,6 @@ cmd_spend() {
     echo -e "${DIM}Numbers reflect THIS MACHINE only — token-spend.jsonl carries no host field.${NC}"
 }
 
-cmd_watch() {
-    local interval=5
-    if [[ "${1:-}" =~ ^[0-9]+$ ]]; then
-        interval="$1"
-    fi
-
-    local _log="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
-
-    while true; do
-        tput clear 2>/dev/null || printf '\033[2J\033[H'
-
-        printf '  \033[1m⬛ BORG WATCH\033[0m  (refreshing every %ss)  %s\n' \
-            "$interval" "$(date '+%H:%M:%S')"
-        printf '%0.s─' {1..70}; printf '\n'
-
-        # Rewired to _borg_link_dispatch, NOT `_borg_py borg_core.link.cli` directly: the direct
-        # call would skip the borg_desktop_scan pre-pass that _borg_link_dispatch preserves for the
-        # overview shape, silently dropping the Desktop merge from every redraw. `2>/dev/null ||
-        # true` is preserved VERBATIM -- `set -e` is active and an uncaught Python shape would
-        # otherwise kill the polling loop.
-        # --local: this is a `while true` redraw on a 5s interval. Of every `borg link` call site in
-        # the tree it is the one that must never acquire network cost -- a sweep here would run
-        # unattended, forever, on a timer nobody is watching.
-        _borg_link_dispatch --local 2>/dev/null || true
-
-        printf '\n'
-        printf '  \033[1mRECENT NANOPROBES\033[0m\n'
-        if [[ -s "$_log" ]]; then
-            _borg_reverse_lines "$_log" | head -5 | jq -r '
-                [
-                    (.id // "")[0:8],
-                    (.agent_type // "?"),
-                    (if .evidence_found == false then "⚠ " else "✓ " end) +
-                        ((.summary // "") | gsub("\n"; " ") | .[0:60]),
-                    (.finished_at // "")
-                ] | join("\u001f")
-            ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype summary finished; do
-                printf "  %-10s %-18s %-62s %s\n" "$sid" "$atype" "$summary" "$finished"
-            done
-        else
-            printf '  \033[2mNo nanoprobes recorded yet.\033[0m\n'
-        fi
-
-        printf '\n\033[2m  Ctrl-C to exit\033[0m\n'
-        sleep "$interval"
-    done
-}
-
 # Print a file's mtime as a unix timestamp. `stat -c %Y` is GNU (Linux, and CI); `stat -f %m` is
 # BSD (macOS). Return nonzero when neither works so callers can distinguish "cannot tell" from
 # "very old" — collapsing those two is how a stat failure becomes a false staleness report.
@@ -2284,9 +2234,10 @@ _borg_iso_to_epoch() {
 #
 # BSD FIRST, and the order is load-bearing for a reason that is not correctness. borg runs on macOS;
 # putting `tac` first meant every macOS render paid a failed fork+exec before falling back. That is
-# invisible almost everywhere, but `cmd_watch` re-renders inside a 50ms polling loop, and the
-# GNU-first ordering was enough to make its contract test fail on the CI macOS runner. Fast path
-# belongs on the platform the tool actually runs on. Matches _borg_iso_to_epoch's ordering too.
+# invisible almost everywhere, but the now-retired `cmd_watch` re-rendered inside a 50ms polling
+# loop, and the GNU-first ordering was enough to make its contract test fail on the CI macOS
+# runner. The polling caller is gone; the ordering stays, because macOS is still the platform
+# borg runs on and a failed fork+exec per render is still waste. Matches _borg_iso_to_epoch too.
 _borg_reverse_lines() {
     tail -r "$1" 2>/dev/null || tac "$1" 2>/dev/null
 }
@@ -2641,7 +2592,6 @@ cmd_help() {
     nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     spend               Main-vs-subagent spend split + trend (this machine; --project/--by-model/--last)
-    watch [interval]    Live-refresh project status + recent nanoprobes (default: 5s)
     reap                Persist idle to stale active/waiting sessions (no live window)
     reap-worktrees [p]  Remove stale borg-managed nanoprobe worktrees (all repos or one)
     doctor              Verify the 4 launchd agents + headless claude -p reachability
@@ -2990,7 +2940,7 @@ _borg_recon_retired() {
 # Phase 3 (A4+A5): the ONE dispatch point for every `borg link` shape. Collapses today's two parse
 # layers (the top-level case arm's `--json` intercept plus cmd_link's own flag loop) into ONE loop
 # with the SAME semantics. Does NOT `shift` -- the `link)` case arm strips the subcommand itself, so
-# cmd_watch can call this with no arguments at all.
+# a caller can invoke this with no arguments at all.
 #
 # Flags recognised: --json, --porcelain, --brief|--llm (aliases), --refresh, --all, --local, and
 # -h|--help. ANY other `-*` is silently swallowed (no die, exit 0) -- pinned by the case named
@@ -3037,8 +2987,10 @@ _borg_link_dispatch() {
     # BEFORE the --refresh block below on purpose: `borg link --refresh --help` must not fire
     # `cmd_scan --llm` -- a real `claude` invocation -- on its way to printing one usage line.
     #
-    # `return 0`, never the `exit 0` the `recon)` case arm uses: this is a FUNCTION, and cmd_watch
-    # calls it in-process inside its refresh loop, where an `exit` would kill `borg watch`.
+    # `return 0`, never the `exit 0` the `recon)` case arm uses: this is a FUNCTION, and an
+    # in-process caller would be killed outright by an `exit`. `cmd_watch` was that caller until
+    # AC4-era retirement; the rule outlives it, because `return` is right for EVERY in-process
+    # caller and `exit` is right for none.
     #
     # The wording must not contain "unknown command" or "was removed": cli_smoke.bats's "borg link
     # --help prints usage and never reads as a removed verb" asserts this exact output carries
@@ -3201,7 +3153,6 @@ case "${1:-help}" in
     nanoprobes|np)  cmd_nanoprobes "${@:2}" ;;
     nanoprobe-log)  cmd_nanoprobe_log "${@:2}" ;;
     spend)          cmd_spend "${@:2}" ;;
-    watch)          cmd_watch "${@:2}" ;;
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
     doctor)         cmd_doctor "${@:2}" ;;
