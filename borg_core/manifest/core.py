@@ -461,6 +461,38 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     return errors
 
 
+_ROW_ERROR_RE = re.compile(r"^rows\[(\d+)\]")
+
+
+def partition_errors(errors: list[str]) -> tuple[set[int], list[str]]:
+    """Split `validate`'s output into `(row indices at fault, errors that are not row-scoped)`.
+
+    LIVES HERE, NEXT TO THE FORMAT IT PARSES. `_validate_row` builds every row-scoped message from
+    `label = f"rows[{index}]"` -- both the `rows[N]: ...` form and `_validate_after`'s
+    `rows[N].after[M] ...` form -- and a caller that wants to drop a bad ROW rather than a whole FILE
+    has to know which errors are which. Putting the regex in `shell.py` would make the message format
+    an undeclared cross-module contract, which is the shape that breaks silently the first time
+    someone rewords an error string.
+
+    STRUCTURAL ERRORS ARE EVERYTHING ELSE, and they are correctly not row-scoped: `rows: missing or
+    not a list` describes the container, and `apex: ...` describes a sibling key. Neither has a
+    partial answer -- there is no subset of the file you could keep and still be describing what the
+    author wrote.
+
+    Returns indices as a SET because two errors routinely name one row (a bad `gate.kind` also trips
+    `gate.resolved_by is required`), and the caller wants rows to drop, not errors to count.
+    """
+    bad_rows: set[int] = set()
+    structural: list[str] = []
+    for error in errors:
+        match = _ROW_ERROR_RE.match(error)
+        if match:
+            bad_rows.add(int(match.group(1)))
+        else:
+            structural.append(error)
+    return bad_rows, structural
+
+
 def _sort_key(row: dict[str, Any], index: int) -> tuple[int, int, int]:
     """Sort rows within a lane by declared merge order.
 
