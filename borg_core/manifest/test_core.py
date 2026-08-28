@@ -170,9 +170,11 @@ def test_an_unrecognized_gate_kind_is_the_routers_problem_not_the_validators():
 def test_a_gate_that_names_no_kind_is_still_a_defect():
     """UNRECOGNIZED AND ABSENT ARE DIFFERENT FACTS, and only the second is a defect.
 
-    `render._route("")` returns `mine` because an UNGATED row is mine. A gate declaring a blank kind
-    would therefore render under `mine — nothing is blocking these` while the same line carries its
-    own `blocked_by` sentence. Empty stays fatal so that contradiction stays impossible.
+    `render._route("")` returns `mine` ON THE STRENGTH OF THE ROW BEING UNGATED. A gate declaring a
+    blank kind would take that same branch, so a row that HAS a gate would be routed by the rule for
+    rows that do not -- and if the author meant a decision, that is the plan's own named risk (an
+    agent acting on a human's call) arriving with nothing mis-set. Empty stays fatal so that stays
+    impossible. Unrecognized is the OTHER fact and gets `unsure`, which names itself on the page.
     """
     for gate in ({"blocked_by": "prose", "resolved_by": "it merges"}, _gate(kind=""), _gate(kind="   ")):
         errors = core.validate(_manifest([_row("1", "o/r#1", gate=gate)]))
