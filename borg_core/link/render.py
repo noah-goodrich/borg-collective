@@ -57,7 +57,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from borg_core.link import core, picture
+from borg_core.link import core, grid, picture
 from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 
 # Overview column widths, hoisted so the header line and every row format string share ONE source
@@ -543,6 +543,184 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     return note, lines
 
 
+# AC4's routing, and it reads `gate.kind` off the wire rather than re-deriving anything.
+# `manifest_core.gates` is the total source: `unmapped_gates` deliberately EXCLUDES gates carrying a
+# `blocked_by_ref`, so reaching for it here would silently drop exactly the decisions that were
+# careful enough to name their blocker -- which is the plan's own named risk, arrived at with nothing
+# mis-set.
+_GROUP_YOURS = "yours"
+_GROUP_MINE = "mine"
+_GROUP_UNSURE = "unsure"
+# `decision` blocks a PERSON; `verification` blocks nobody in particular because anyone can run it.
+# Those are manifest_core.gates' words and the only two kinds any manifest has ever declared.
+_GATE_ROUTING = {"decision": _GROUP_YOURS, "verification": _GROUP_MINE}
+_GROUP_HEADINGS = {
+    _GROUP_YOURS: "a decision only you can make",
+    _GROUP_MINE: "nothing is blocking these",
+}
+
+
+def _route(kind: str) -> str:
+    """Which group one ready row belongs to, from its gate's `kind`. Ungated callers pass "".
+
+    AN UNRECOGNIZED KIND GETS ITS OWN GROUP RATHER THAN A DEFAULT SIDE, and that is the owner's call
+    recorded in the AC4 spec. BOTH defaults are lies: routing it to `mine` risks an agent acting on a
+    decision (the plan's named risk), and routing it to `yours` silently asserts the author meant a
+    decision when the router has no idea. A third group says the true thing. Third time this project
+    has landed on the same rule -- an unknown is a state, not a default; cf. `?` for unverified
+    provenance and `unlooked` for an unresolvable READY set.
+
+    AN UNGATED ROW IS `mine`. Nothing is blocking it, so nothing needs a human first.
+
+    `unsure` IS UNREACHABLE THROUGH THE FRONT DOOR TODAY, AND THAT IS A VALIDATOR FACT, NOT A
+    RENDERER ONE. `manifest_core.GATE_KINDS` is `{"decision", "verification"}` and validation rejects
+    anything else with `gate.kind must be one of [...]`, whereupon `shell._load_manifest` drops the
+    WHOLE FILE -- so a manifest carrying `kind: "review"` never reaches this function at all. Measured
+    by trying it: adding such a row to `auth-hardening.json` took the orchestrator grid from 12
+    declared refs to 5 and produced an `invalid manifest` warning instead of a routed row.
+
+    Kept anyway, dead-but-tested, on the same terms `GLYPH_DRAFT` was kept through AC2 and AC3: the
+    branch is one line, its unit tests are real, and the alternative is that the day someone widens
+    `GATE_KINDS` -- or the day a row-level degrade replaces the whole-file drop -- the router silently
+    defaults a kind it does not understand to one of the two real sides. That is the failure this
+    group exists to prevent, and it would arrive with nothing mis-set.
+
+    THE OPEN QUESTION THIS RAISES IS NOT MINE TO CLOSE: a typo'd `kind` currently costs the entire
+    manifest, which is a far worse outcome than routing one row to `unsure`. Whether the validator
+    should degrade the ROW instead of dropping the FILE is filed, not decided here.
+    """
+    if not kind:
+        return _GROUP_MINE
+    return _GATE_ROUTING.get(kind, _GROUP_UNSURE)
+
+
+def _next_row(node: dict, gate: dict) -> str:
+    """One ready row: state glyph, provenance mark, the linked FULL ref, and the gate's sentence.
+
+    NO NODE ID, AND THAT IS LOAD-BEARING. Ids appear EXACTLY TWICE on a page by design -- once in a
+    picture cell, once as a detail heading -- so `*` in vim toggles between them with no plugin, and
+    `contract: every node id appears exactly twice in each grid golden` enforces it. Printing `n12`
+    here would make it three and turn that case red for a real reason. The ref IS the vocabulary
+    (grid_manifest's docstring: "ids are navigation handles, not vocabulary"), so this prints the
+    full ref and a reader jumps by ref.
+
+    The glyph is `picture`'s, not a local copy, so a ready row here and the same node in the picture
+    cannot disagree -- including its provenance mark, which is why AC4's precondition shipped first.
+    """
+    ref = node.get("ref", "")
+    glyph = f"{picture.glyph_color(node)}{picture.state_glyph(node)}{NC}{picture.cell_mark(node, drift=False)}"
+    line = f"    {glyph}{picture.link_ref(ref, ref)}"
+    blocked_by = (gate or {}).get("blocked_by") or ""
+    if blocked_by:
+        line += f"  {DIM}{blocked_by}{NC}"
+    return line + "\n"
+
+
+def _next_tally(manifests: list[dict]) -> tuple[dict[str, list[str]], list[str], int, bool]:
+    """One walk over every manifest: `(grouped rows, unrecognized kinds, ready count, unlooked)`.
+
+    IT DOES NOT COUNT THE DENOMINATOR. `grid.declared` is already on the wire and `_grid_section`'s
+    note already prints it, so recomputing `len(nodes)` here would be a second derivation of a
+    published number -- the shape `level` was hoisted onto the node to avoid, and the shape that lets
+    CHAINS and NEXT disagree about how many refs a page has.
+
+    SPLIT OUT OF `_next_section` BECAUSE RUFF MEASURED IT, not for taste -- the combined function
+    came in at complexity 11 against a ceiling of 10. The seam is the honest one anyway: this is the
+    DERIVATION (walk, route, count) and `_next_section` is the PRESENTATION (which sentence, which
+    headings), and the three non-populated outcomes are decisions about presentation.
+
+    A manifest whose READY set is `unlooked` contributes its node count and nothing else. It is
+    skipped rather than treated as empty, so one unresolved manifest in orchestrator scope cannot
+    silently subtract from a sibling's real answer.
+    """
+    grouped: dict[str, list[str]] = {_GROUP_YOURS: [], _GROUP_MINE: [], _GROUP_UNSURE: []}
+    unsure_kinds: list[str] = []
+    ready_total = 0
+    unlooked = False
+
+    for manifest in manifests:
+        nodes = manifest.get("nodes") or {}
+        ready = manifest.get("ready") or {}
+        if ready.get("state") == grid.STATE_READY_UNLOOKED:
+            unlooked = True
+            continue
+        gates = {gate["ref"]: gate for gate in manifest.get("gates") or []}
+        # `rows[].next` ORDERS WITHIN A GROUP; IT DOES NOT GRANT MEMBERSHIP. AC4 names it as an input
+        # alongside `gate.kind` without saying what it does, and the two readings are not close: as
+        # an override it would put a row the author flagged into NEXT even when a parent has not
+        # merged, which is a hand-typed field beating a resolved one -- the exact inversion AC4's
+        # precondition exists to prevent, arriving through a different door. As emphasis it lets the
+        # author say "start with this one" among rows that are ALREADY ready, which costs nothing if
+        # the flag is stale. Sorted stably, so rows with no flag keep declaration order.
+        # KEY BUILT EAGERLY, NOT AS A CLOSURE. `key=lambda ref: ... nodes.get(ref) ...` captures a
+        # loop variable (pylint W0640) -- harmless here because the sort is consumed inside the same
+        # iteration, but the local pylint rated it 10.00/10 while CI's flagged it, so the version that
+        # is right is the one that fails the build. The tuple sorts False before True, and
+        # `ready_set` already returned its refs sorted, so alphabetical order survives inside each
+        # half.
+        refs = [
+            ref for _, ref in sorted((not (nodes.get(ref) or {}).get("next"), ref) for ref in ready.get("refs") or [])
+        ]
+        for ref in refs:
+            gate = gates.get(ref) or {}
+            kind = gate.get("kind") or ""
+            group = _route(kind)
+            if group == _GROUP_UNSURE:
+                unsure_kinds.append(kind)
+            grouped[group].append(_next_row(nodes.get(ref) or {}, gate))
+            ready_total += 1
+    return grouped, unsure_kinds, ready_total, unlooked
+
+
+def _next_section(doc: dict) -> tuple[str, list[str]]:
+    """NEXT: what can actually be picked up right now, split into yours / mine / unsure.
+
+    THREE-STATE, NOT LIST-OR-EMPTY. `grid.ready_refs` returns `unlooked` when nothing on the page was
+    resolved, and this renders that as its own sentence rather than as "nothing is ready". A
+    `--local` reader whose board is entirely declared would otherwise be told they are clear, one
+    section above SIGNALS saying `N of N declared refs unresolved — nobody looked`. The document must
+    not contradict itself between two adjacent sections.
+
+    `unsure` RENDERS ONLY WHEN NON-EMPTY, unlike the section itself. AC2's directive rejected giving
+    yours-vs-mine an always-empty SECTION slot as the "reads as broken" failure; a GROUP is the
+    version of that idea which is allowed, precisely because it can be absent without leaving a
+    header over nothing. Zero manifests in existence declare an unrecognized kind today.
+    """
+    grid_block = doc.get("grid") or {}
+    grouped, unsure_kinds, ready_total, unlooked = _next_tally(grid_block.get("manifests") or [])
+    declared_total = grid_block.get("declared", 0)
+
+    # UNLOOKED WINS OVER A POPULATED SET when both are present, which happens only in orchestrator
+    # scope with one manifest resolved and another not. Reporting `2 ready` there would understate
+    # the answer as confidently as reporting zero: the honest note names both halves.
+    # "nobody looked" AND NEVER THE WORD `unknown`, which is the grid's internal bottom-of-the-ladder
+    # TOKEN. `contract: link --local renders every node without naming the unresolved token` asserts
+    # it appears zero times on a human page, and it is right to: a reader seeing `unknown` cannot tell
+    # whether it is a fact about the pull request or a fact about the sweep. `picture._STATE_SENTENCE`
+    # makes the same choice one section up.
+    if unlooked and not ready_total:
+        return "nobody looked", [_placeholder("no state on this page was resolved; run without --local.")]
+    note = f"{ready_total} ready of {declared_total}"
+    if unlooked:
+        note += " — and some refs nobody looked up"
+    if not ready_total:
+        return note, [_placeholder("nothing is ready right now.")]
+
+    lines: list[str] = []
+    for group in (_GROUP_YOURS, _GROUP_MINE, _GROUP_UNSURE):
+        rows = grouped[group]
+        if not rows:
+            continue
+        if group == _GROUP_UNSURE:
+            kinds = ", ".join(f'"{kind}"' for kind in sorted(set(unsure_kinds)) if kind) or "nothing"
+            heading = f"the gate says {kinds}, which does not route"
+        else:
+            heading = _GROUP_HEADINGS[group]
+        lines.append(f"  {BOLD}{group}{NC} {DIM}— {heading}{NC}\n")
+        lines.extend(rows)
+    return note, lines
+
+
 def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:
     """`(rows, show_project)` for one scope-dependent list: the focused repository's in repository
     scope, the registry-wide aggregate otherwise.
@@ -643,6 +821,11 @@ SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
     ("CHAINS", _grid_section),
     ("QUEUED", _queued_section),
     ("SHIPPED", _shipped_section),
+    # AC4. EIGHT SECTIONS NOW, and the insertion point is deliberate: NEXT reads the same grid CHAINS
+    # draws, and sits below SHIPPED so the page reads history-then-future. Placing it here rather
+    # than reserving an always-empty slot in AC2 is what that directive chose, so that the spine test
+    # going red is a reviewable event rather than a diff nobody sees.
+    ("NEXT", _next_section),
     ("SIGNALS", _signals_section),
 )
 
