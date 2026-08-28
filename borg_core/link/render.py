@@ -652,7 +652,15 @@ def _next_tally(manifests: list[dict]) -> tuple[dict[str, list[str]], list[str],
         # precondition exists to prevent, arriving through a different door. As emphasis it lets the
         # author say "start with this one" among rows that are ALREADY ready, which costs nothing if
         # the flag is stale. Sorted stably, so rows with no flag keep declaration order.
-        refs = sorted(ready.get("refs") or [], key=lambda ref: not (nodes.get(ref) or {}).get("next"))
+        # KEY BUILT EAGERLY, NOT AS A CLOSURE. `key=lambda ref: ... nodes.get(ref) ...` captures a
+        # loop variable (pylint W0640) -- harmless here because the sort is consumed inside the same
+        # iteration, but the local pylint rated it 10.00/10 while CI's flagged it, so the version that
+        # is right is the one that fails the build. The tuple sorts False before True, and
+        # `ready_set` already returned its refs sorted, so alphabetical order survives inside each
+        # half.
+        refs = [
+            ref for _, ref in sorted((not (nodes.get(ref) or {}).get("next"), ref) for ref in ready.get("refs") or [])
+        ]
         for ref in refs:
             gate = gates.get(ref) or {}
             kind = gate.get("kind") or ""
