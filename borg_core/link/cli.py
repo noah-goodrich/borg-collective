@@ -90,11 +90,16 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
 
     `--local` IS CHECKED HERE AND NOWHERE DEEPER, and as of AC3 it is checked TWICE, once per network
     path. shell.sweep is never called on the opted-down path, and neither is shell.start_fetch -- so
-    no adapter is discovered, no `since` is resolved, no projects file is staged, no `gh` is spawned
-    and no subprocess of any kind runs. An opt-down that still paid for one of the two would be a
-    promise the flag does not keep. THE THREE HOT LOOPS THIS USED TO NAME ARE ALL GONE (borg.zsh:266's
-    per-keypress preview, a 5s `borg watch` redraw, drone.zsh's per-tmux-window loop) -- see
-    `_build_parser`'s `--local` comment for the retirements. The promise is now kept for
+    no adapter is discovered, no `since` is resolved, no projects file is staged and no `gh` is
+    spawned. NOT "no subprocess": the paragraph above's `git remote get-url` still forks in
+    repository scope, and the reap overlay's `tmux list-windows` still forks in either scope
+    (shell.registry_with_state gates that one on `apply_reap and not reap_disabled()` -- BORG_NO_REAP
+    removes it, `--local` does not). Measured live from a registered repository: `--local` forks
+    exactly those two, and the same call without it adds `gh api graphql` plus the adapter. An
+    opt-down that still paid for one of the two NETWORK paths would be a promise the flag does not
+    keep. THE THREE HOT LOOPS THIS USED TO NAME ARE ALL GONE (borg.zsh:266's per-keypress preview, a
+    5s `borg watch` redraw, drone.zsh's per-tmux-window loop) -- see `_build_parser`'s `--local`
+    comment for the retirements. The promise is now kept for
     `skills/borg-switch`'s `borg link --local --all` and for anyone who types the flag: measured at
     0.85s without it against 0.11s with (borg.zsh's `_borg_link_dispatch` records the same number).
 
