@@ -367,8 +367,22 @@ def heading_title(text: str) -> str:
     """A markdown file's title, mirroring `head -1 "$f" | sed 's/^#* *//'`.
 
     Splits on "\\n" only -- NOT str.splitlines(), which also breaks on \\r, \\x0b, \\x0c and U+2028,
-    none of which `head -1` treats as a line ending. A trailing \\r from a CRLF file is preserved,
-    exactly as sed leaves it.
+    none of which `head -1` treats as a line ending. A trailing \\r therefore SURVIVES this function,
+    exactly as sed leaves it -- BUT ONLY FOR CALLERS THAT HAND IT TEXT DIRECTLY.
+
+    THE REAL READ PATH NEVER DELIVERS ONE, and this docstring used to claim otherwise (F3).
+    shell._read_text calls `Path.read_text(encoding="utf-8", errors="replace")`, whose
+    universal-newline translation has already turned \\r\\n into \\n before this function is
+    called, so a CRLF file on disk yields a CR-FREE title. Pinned end-to-end, on a real CRLF
+    fixture rather than an in-memory literal, by
+    test_shell.test_heading_title_of_a_real_crlf_file_on_disk_has_no_carriage_return.
+
+    That gap was closed by correcting the claim, not by making _read_text preserve \\r, and the
+    choice was measured rather than assumed: `grep -rlI $'\\r' --include='*.md'` over this repo
+    returns ZERO files, so the "fidelity" has no consumer today. Preserving the CR end to end would
+    buy a port-era parity claim whose port is finished, at the price of newly injecting a trailing
+    CR into every rendered heading the day someone commits a CRLF file -- a real rendering bug
+    traded for a dead one.
     """
     first = text.split("\n", 1)[0]
     return _HEADING_PREFIX.sub("", first)
