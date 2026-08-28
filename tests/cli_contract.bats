@@ -2156,7 +2156,9 @@ _assert_link_grid_golden() {
 # THE STDERR ASSERTION IS LOAD-BEARING and is kept out of `$output`: bats `run` merges stderr in, so
 # a jq diagnostic would otherwise splice into the very stream being counted. Captured to files.
 #
-# WHAT THE THREE CHARACTERS EACH ACTUALLY PROVE, stated honestly rather than implied by the title.
+# WHAT THE THREE CHARACTERS EACH ACTUALLY PROVE. The title used to say "through tab, newline and CR"
+# and this paragraph then had to contradict it; the title now names only the two the oracle can kill,
+# so the two agree and the paragraph below is the detail rather than the correction.
 # Mutation-verified against two separate mutants, each of which this case kills on its own:
 #   - restore `echo "$json" | jq` -> cmd_ls exits 5, zero records, jq diagnostic on stderr;
 #   - drop the flatten -> FOUR records (a phantom `bottom` row) and a 6-field `bravo` row.
@@ -2181,7 +2183,7 @@ _link_registry_control_chars() {
 EOF
 }
 
-@test "contract: the picker feed stays one 5-field record per project through tab, newline and CR" {
+@test "contract: the picker feed stays one 5-field record per project through tab and newline" {
     _link_mock_tmux ""
     _link_registry_control_chars
 
