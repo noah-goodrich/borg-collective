@@ -17,6 +17,7 @@ import pytest
 
 from borg_core.link import cli, picture, render
 from borg_core.link import grid as link_grid
+from borg_core.manifest import core as manifest_core
 from borg_core.link.test_picture import fork_manifest, plain
 
 
@@ -902,3 +903,25 @@ def test_a_partly_unlooked_board_reports_both_halves():
     assert "1 ready of 2" in body
     assert "nobody looked up" in body, "the un-checked half is named"
     assert "o/r#1" in body, "and the real answer still renders"
+
+
+def test_the_router_covers_every_gate_kind_the_validator_admits():
+    """`unsure` is a DIVERGENCE GUARD, and this is the case that gives it a job.
+
+    MUTATION: add a third member to `manifest_core.GATE_KINDS` without adding it to `_GATE_ROUTING`.
+
+    The group cannot be reached through the front door today and that is not an oversight: the
+    validator admits exactly `{decision, verification}` and the router routes exactly those two, so
+    the sets coincide. What `unsure` protects against is the window where they STOP coinciding — a
+    kind added to the validator and forgotten in the router would otherwise fall to whichever side a
+    `.get(kind, default)` named, silently, with nothing mis-set.
+
+    So the real invariant is not "unsure renders" (it should not, yet) but "the router is never
+    behind the validator". Asserted as a subset rather than equality: the router is allowed to know
+    about a kind the validator has not admitted yet, which is the safe direction.
+    """
+    routed = set(render._GATE_ROUTING)  # pylint: disable=protected-access
+    assert set(manifest_core.GATE_KINDS) <= routed, (
+        "a gate kind the validator admits but the router does not route would fall to a default side"
+    )
+    assert render._route("review") == render._GROUP_UNSURE  # pylint: disable=protected-access
