@@ -156,10 +156,14 @@ def max_row_width(manifest_grids: list[dict]) -> int:
     THE MEASUREMENT `PICTURE_BUDGET` NEVER HAD. The budget above is a constant checked against the
     fixture manifests; this is the same number computed over whatever a caller actually holds, so a
     manifest a user writes tomorrow can be compared against it. It is deliberately not a check:
-    raising here would take out the two paths that swallow failure silently, and logging would end the
-    purity that makes `picture-fork.expected` and `picture-crossing.expected` meaningful as
-    hand-authored oracles. The COMPARISON lives at the impure boundary, `link/cli.py`, which stamps
-    the result onto `grid.picture_width` for `--json` and for `render._width_line`.
+    raising inside a PURE RENDERER takes out the whole page for a width problem, which is not a
+    correctness failure, and logging would end the purity that makes `picture-fork.expected` and
+    `picture-crossing.expected` meaningful as hand-authored oracles. (The width-check directive's
+    rejected alternative once put this on "the two paths that swallow failure silently" -- `drone
+    status` and the fzf preview. Both were retired 2026-08-27, and the directive already records the
+    correction: the objection never rested on them.) The COMPARISON lives at the impure boundary,
+    `link/cli.py`, which stamps the result onto `grid.picture_width` for `--json` and for
+    `render._width_line`.
 
     LIVES IN THIS MODULE ANYWAY, BESIDE `visible_len`, AND IMPORTS NOTHING NEW. It re-runs the caller
     triple `render._grid_section` runs -- `assign_columns` -> `node_ids` -> `picture` -- because

@@ -128,7 +128,9 @@ doing anyway as a cheap complement.
 
 - [x] `PICTURE_BUDGET` is still `68`, and B15 still asserts the golden against it with no second number.
 
-  **Restated: the second clause as filed named a line that no longer exists.** `borg.zsh:267` is
-  `--with-nth 1,3,5`; the fzf preview and its `--preview-window right:70:wrap` were retired on 2026-08-27 and B15
-  already asserts their absence. `PICTURE_BUDGET` is unchanged at 68, and this change does not raise it (a
+  **Restated: the second clause as filed pinned a line that no longer holds what it named.** It pointed at
+  `cmd_switch`'s `--preview-window right:70:wrap` as the second number; the fzf preview and that flag were retired on
+  2026-08-27, and B15 (`contract: the widest picture row fits PICTURE_BUDGET and no preview-window flag survives`)
+  now asserts the absence with `grep -c -- '--preview-window' borg.zsh` instead of comparing against it. What is left
+  in that fzf call is `--with-nth 1,3,5`. `PICTURE_BUDGET` is unchanged at 68, and this change does not raise it (a
   non-goal).
