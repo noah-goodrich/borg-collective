@@ -3,8 +3,8 @@
 *Parent directive: 2026-08-10-briefing-fallback-and-summary-provenance*
 *Filed: 2026-08-27*
 
-**tl;dr** — `borg link --brief` never reaches `borg_core.link.cli`. It re-derives its own view from the registry, never
-sweeps, and never sees a manifest — so one verb answers the same question two ways. Point the narrative at the
+**tl;dr** — `borg link --brief` never reaches `borg_core.link.cli`. It re-derives its own view from the registry,
+never sweeps, and never sees a manifest — so one verb answers the same question two ways. Point the narrative at the
 document `borg link` already builds, and delete the second derivation rather than fixing it.
 
 ## Why this exists
@@ -70,8 +70,8 @@ provenance per node, so the LLM can be told what was observed versus what somebo
 
 ## Alternatives considered
 
-**Leave it; `borg help` declares the difference.** Rejected — that is the current state, and a declared inconsistency is
-still an inconsistency. AC1's whole subject is that one command has one answer.
+**Leave it; `borg help` declares the difference.** Rejected — that is the current state, and a declared
+inconsistency is still an inconsistency. AC1's whole subject is that one command has one answer.
 
 **Delete `--brief`.** Considered seriously, on the same evidence that retired `borg watch`: shell history shows zero
 typed `borg link --brief` invocations. Rejected for now because unlike `watch`, `--brief` has a live consumer path
