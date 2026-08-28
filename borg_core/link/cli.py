@@ -405,7 +405,16 @@ def main(argv: list[str] | None = None) -> None:
     borg_core/registry/shell.py already wraps JSONDecodeError in ValueError, so corrupt JSON was
     never the uncovered case; a narrow `except (ValueError, OSError)` on the `--json` path left every
     entry-shape violation (null entry, list entry, string entry, non-dict `projects`, non-dict
-    registry root) to fall through as a raw traceback on stdout -- verified live before this fix.
+    registry root) to fall through as an UNCAUGHT TRACEBACK -- stderr, exit 1, and no document.
+
+    THAT CLAUSE USED TO NAME THE WRONG STREAM -- it said the traceback landed on the OUT stream,
+    "verified live before this fix" -- and it could only ever have been wrong: Python writes an
+    uncaught traceback to STDERR, always, so no live run could have produced what it claimed. Filed
+    as F2 of `docs/plans/directives/2026-08-16-link-port-latent-defects.md`, corrected here. The
+    justification for the broad `except` does not depend on it and is untouched: what a `--json`
+    consumer gets from an uncaught AttributeError is an EMPTY out stream and a non-zero exit carrying
+    no machine-readable reason, and `_die_json` exists to make that a parseable failure instead.
+
     This is the ONLY exception boundary in this module, placed here because `_run`/`main` is the
     only point that already knows the mode.
     """
