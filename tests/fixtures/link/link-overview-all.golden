@@ -12,16 +12,16 @@
   [2m— no repository in focus. cd into one, or run borg link <name>.[0m
 
 [1m▸ REPOSITORIES[0m  [2mthe collective · 8 repositories · 1 need attention[0m
-[1m PROJECT              SRC  STATUS       LAST ACTIVE  SUMMARY[0m
+[1m PROJECT                     SRC  STATUS       LAST ACTIVE  SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
-*echo                 [C]  [2midle        [0m 5d ago       Echo is pinned.
- bravo                [D]  [1;33mwaiting <<< [0m yesterday    Bravo is waiting.
- charlie              [X]  [0;32mactive      [0m 3h ago       (no summary)
- golf                 [C]  [2midle        [0m never        Golf has never been active.
- Hotel Renamed        [C]  [2midle        [0m 2d ago       Hotel renders under its display_name.
- alpha                [C]  [2midle        [0m 2h ago       Alpha carries a long summary so the fifty characte...
- foxtrot              [C]  [2midle        [0m 30m ago      Foxtrot ties alpha's bucket.
- india                [C]  [0marchived    [0m 2d ago       India is archived.
+*echo                        [C]  [2midle        [0m 5d ago       Echo is pinned.
+ bravo                       [D]  [1;33mwaiting <<< [0m yesterday    Bravo is waiting.
+ charlie                     [X]  [0;32mactive      [0m 3h ago       (no summary)
+ golf                        [C]  [2midle        [0m never        Golf has never been active.
+ hotel-renamed-and-then-some [C]  [2midle        [0m 2d ago       Hotel renders under its display_name.
+ alpha                       [C]  [2midle        [0m 2h ago       Alpha carries a long summary so the fifty characte...
+ foxtrot                     [C]  [2midle        [0m 30m ago      Foxtrot ties alpha's bucket.
+ india                       [C]  [0marchived    [0m 2d ago       India is archived.
 
 [1m▸ CHAINS[0m  [2m0 projects · 0 refs · 0 unresolved · not swept[0m
   [2m— no project manifests in the registry yet. Run /borg-plan in any repository.[0m

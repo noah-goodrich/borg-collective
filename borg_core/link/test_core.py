@@ -403,6 +403,42 @@ def test_plan_objective_absent_heading():
     assert core.plan_objective("# X\n\nno heading here") == ""
 
 
+def test_plan_objective_reads_the_whole_wrapped_paragraph_not_its_first_physical_line():
+    """MUTATION: restore the shell's `head -1` -- `return lines[offset]` instead of the join.
+
+    OBJECTIVES ARE PROSE AND THIS TREE HARD-WRAPS PROSE AT 120 COLUMNS, so a real objective is
+    several physical lines of ONE sentence. borg-collective's own PROJECT_PLAN.md is exactly this
+    shape, and the front door printed line one -- ending on a dangling comma -- and dropped the rest
+    with no marker saying it had. Truncating at a WRAP POINT is not a summary; it is a different
+    sentence. Every fixture objective was a single short line, which is why nothing saw it.
+
+    The wrap is reassembled with single spaces because a newline inside a paragraph is the author's
+    WRAP, not the author's structure. The renderer folds it to the page's width.
+    """
+    wrapped = (
+        "# P\n\n## Objective\n\n"
+        "Land the derived-fact surface behind one front door,\n"
+        "so that every consumer reads the same document,\n"
+        "and no renderer re-derives a published number.\n\n"
+        "## Acceptance Criteria\n\n- [ ] one\n"
+    )
+    assert core.plan_objective(wrapped) == (
+        "Land the derived-fact surface behind one front door, so that every consumer reads the same "
+        "document, and no renderer re-derives a published number."
+    )
+
+
+def test_plan_objective_stops_at_the_next_heading_when_no_blank_line_separates_them():
+    """MUTATION: drop the `startswith("#")` arm and break on a blank line only.
+
+    A plan written without a blank line before its next heading would then read
+    `## Acceptance Criteria` INTO the objective -- a worse wrong answer than the truncation this
+    change fixes, and one a paragraph-reading implementation invites where a `head -1` could not.
+    """
+    text = "## Objective\n\nShip the thing.\n## Acceptance Criteria\n\n- [ ] one\n"
+    assert core.plan_objective(text) == "Ship the thing."
+
+
 def test_plan_progress_counts_met_and_total():
     assert core.plan_progress(PLAN) == (1, 3)
 

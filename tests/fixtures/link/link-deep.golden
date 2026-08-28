@@ -21,7 +21,10 @@
   Delta keeps the deep dive deterministic.
 
   [1mActive Plan[0m
-  [0;36mObjective:[0m Keep the delta fixture stable so the deep dive renders identically on every run.
+  [0;36mObjective:[0m Keep the delta fixture stable so the deep dive renders 
+  identically on every run, including the objective, which is 
+  deliberately a wrapped paragraph rather than one short line, so the 
+  fold is pinned by bytes and not only by a unit test.
   [0;36mProgress:[0m 1/3 criteria met
 
   [1mRecent Checkpoints[0m
