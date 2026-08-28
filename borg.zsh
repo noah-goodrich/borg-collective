@@ -3231,13 +3231,16 @@ _borg_link_dispatch() {
         # about truth.
         #
         # `borg_desktop_scan` STAYS ITS OWN STATEMENT, above the call and never folded into it: it
-        # reaches `warn`, which writes to STDOUT (borg.zsh:30), and inside the `$(...)` that captures
-        # the document that line would splice ahead of the JSON and kill `jq`.
+        # reaches `warn`, which writes to STDOUT (see its `echo -e` definition beside `info`/`die` at
+        # the top of this file — no `>&2` on it), and inside the `$(...)` that captures the document
+        # that line would splice ahead of the JSON and kill `jq`.
         borg_desktop_scan 2>/dev/null || true
-        # THE BRIEFING'S STATUS IS THIS ARM'S STATUS. `_borg_print_briefing` returns non-zero for
-        # exactly one condition — the fallback page failed to render, so the user got no page — and
-        # `borg link --brief` must not report that as success. Captured explicitly rather than left
-        # to `set -e` so the propagation is visible at the call site.
+        # THE BRIEFING'S STATUS IS THIS ARM'S STATUS. `_borg_print_briefing` returns non-zero on BOTH
+        # of its no-page rungs — the document failing to BUILD ("Could not build the borg link
+        # document") and the fallback page failing to RENDER ("Could not render the borg link
+        # document") — and in either case the user got no page, which `borg link --brief` must not
+        # report as success. Captured explicitly rather than left to `set -e` so the propagation is
+        # visible at the call site.
         local _brief_rc=0
         _borg_print_briefing "$_link_all" "$_link_local" || _brief_rc=$?
         return $_brief_rc

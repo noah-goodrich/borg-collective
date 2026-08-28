@@ -1229,6 +1229,79 @@ EOF
     [ "$output" -ge 1 ]
 }
 
+
+# THE TOLERANCE ITSELF, PINNED. `cmd_init` calls `_borg_print_briefing || true`, and until this case
+# existed that `|| true` was load-bearing and unmeasured: deleting it left the ENTIRE bats suite
+# green, because every other init case supplies a briefing that SUCCEEDS. The 2026-08-27 fold made the
+# omission newly dangerous — `_borg_print_briefing` now forks `borg link --json` and returns the
+# child's status on a failed BUILD, and borg.zsh's top-of-script `set -e` turns any uncaught non-zero
+# into an abort. Without the tolerance a broken document build stops `borg init` before it ever
+# reaches the orchestrator session, which is the product; the briefing is only its preamble.
+#
+# MUTATION, VERIFIED BOTH WAYS: delete `|| true` from `cmd_init`'s `_borg_print_briefing` call and
+# this case goes red (init exits 9 and never runs `claude --name borg-orchestrator`); restore it and
+# it goes green. Nothing else in the suite moves either way.
+#
+# THE MOCK IS A PASS-THROUGH ON python3 THAT FAILS ONLY `--json`, the same shape briefing.bats uses
+# for "a failed document build names its reason on stderr and exits non-zero". `borg init`'s ONLY
+# python3 fork is that build (`borg_desktop_scan` and `_borg_orchestrator_context` are jq), so the
+# pass-through is belt-and-braces rather than load-bearing — but it keeps the failure aimed at the
+# one rung under test if a future init step forks python3 for something else.
+#
+# BOTH HALVES ARE LOAD-BEARING. The stderr reason proves the build really failed (an init that
+# silently produced a briefing would satisfy the handoff assertion alone), and the handoff assertion
+# proves the failure did not stop the session.
+@test "contract: init survives a failed document build and still hands off to claude" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export TRACE="${BATS_TEST_TMPDIR}/trace.log"
+    : > "$TRACE"
+    export TMUX_MOCK_HAS_SESSION=1
+    _mock_tmux
+
+    export TMUX="/tmp/tmux-mock/default,1234,0"
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/orchestrator-root"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
+        > "$BORG_REGISTRY"
+
+    local real_python
+    real_python=$(command -v python3)
+    [ -n "$real_python" ]
+    cat > "$MOCK_BIN/python3" <<EOF
+#!/usr/bin/env bash
+for a in "\$@"; do
+    if [ "\$a" = "--json" ]; then
+        echo "MOCKED-INIT-BUILD-FAILURE" >&2
+        exit 9
+    fi
+done
+exec "$real_python" "\$@"
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    cat > "$MOCK_BIN/claude" <<EOF
+#!/usr/bin/env bash
+echo "claude \$*" >> "$TRACE"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    run_zsh_borg init
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    # The build really did fail, and said so — `run` merges fd2, so this reads the stderr reason.
+    [[ "$output" == *"Could not build the borg link document"* ]] || false
+    [[ "$output" == *"MOCKED-INIT-BUILD-FAILURE"* ]] || false
+    # The narrative is never reached: the build rung returns before `claude -p`.
+    run grep -c "claude -p" "$TRACE"
+    [ "$output" -eq 0 ]
+    # And init still completes its actual job.
+    run grep -c "claude --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+}
+
 @test "contract: claude resumes the orchestrator session via claude --continue when invoked outside tmux" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
@@ -3057,7 +3130,13 @@ EOF
 #
 # IT SURVIVED THE 2026-08-27 FOLD, WITH A NEW SOURCE. The sentence used to come from a registry read
 # that found neither an active nor an inactive name; it now comes from the DOCUMENT's own
-# `total_projects == 0`. It is deliberately NOT folded into the fallback page: an empty registry is
+# `(.order // []) | length`, and NOT from `total_projects` — a deliberate correction, not a spelling.
+# `core.assemble` fills `total_projects` from the UNFILTERED project map on purpose (the page must be
+# able to tell an empty registry from an all-archived one, and both emit `order: []`), so keying the
+# short circuit on it stops it firing for an all-archived registry and pays `claude -p` to narrate a
+# board with zero rows. `.order` is the post-archived-filter list, and it is exactly the list
+# `_borg_print_briefing` projects into the prompt — the only count that answers "is there anything to
+# narrate". It is deliberately NOT folded into the fallback page: an empty registry is
 # the one case where a narrative has nothing to say, so paying `claude -p` to say it is pure waste.
 # The negative assertion is what proves the short circuit fires — the fallback renders the cube.
 @test "contract: link --brief on an empty registry returns early without an LLM call" {
