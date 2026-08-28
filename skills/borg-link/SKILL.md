@@ -60,6 +60,11 @@ network round trip and then rendering the same deep dive as before it existed. R
   `.resolved` (refs that came back with a usable answer). As with `.grid.sources[].status`,
   `failed` and `degraded` mean the states below them are DECLARED rather than OBSERVED — treat
   them the same way.
+- `.grid.picture_width` is the widest `▸ CHAINS` picture row this document would draw, in VISIBLE
+  columns (SGR and OSC-8 bytes excluded). Compare it to `PICTURE_BUDGET` (68). Over budget means the
+  topology will wrap in a narrow pane and should be reported as a manifest problem — a ref is long
+  or a level is too wide — not as a rendering bug. The human page says the same thing in
+  `▸ SIGNALS`; this is the machine-readable half, so you never have to measure ANSI output.
 - `.grid.manifests` is an **array** of manifest blocks, each carrying `id` (the manifest's slug),
   `path`, `desc`, `repos`, `levels`, `nodes` and `gates`. AC2 added `desc`, `repos`, and three
   topology keys per node:
@@ -79,8 +84,12 @@ network round trip and then rendering the same deep dive as before it existed. R
     one chain or a fork. They do NOT tell you what is ready to start: `state_source` is `declared`
     (a hand-typed `"status"` field nobody verified) at least as often as it is swept or fetched, so
     "every parent merged" can rest entirely on prose. Report what the manifest declares and name the
-    provenance. `ready` is deliberately absent from the wire for exactly this reason — do not
-    reconstruct it.
+    provenance. **Never derive readiness yourself from `parents`/`children`** — read `.ready`, two
+    bullets down, which AC4 put on the wire for exactly this reason and which already applies the
+    provenance gate. (This used to read "`ready` is deliberately absent from the wire … do not
+    reconstruct it". That was true until AC4 shipped `ready`, and because it is phrased as a
+    PROHIBITION an agent reading top-down suppressed the entire `.ready` answer before reaching the
+    bullet that documents it.)
   - Still never render a picture. `borg link` draws it, and the `n1`-style handles it prints are
     generated at render time — they are not on the wire, so there is nothing to echo.
 - **`.ready` is AC4's answer to "what can I pick up right now", and it is THREE-STATE.** Each manifest

@@ -25,10 +25,24 @@ NOTHING IN THE SWEEP PATH IS EVER FATAL, extending the policy borg_core/manifest
 states. A missing `gh`, an unauthenticated `gh`, an offline host, a rate limit, a failed adapter
 track, an empty adapter search path, a repository with no origin, a malformed manifest, a
 non-numeric `BORG_RECON_*` value -- every one of them is a NAMED warning on the grid and a degraded
-grid, never an exception and never a blank grid with no explanation. Every consumer of `borg link`
-swallows failure (`cmd_watch`'s `|| true`, `drone status`'s `|| true`, fzf's preview pane), so an
-exception here is an invisible blank frame, and a silent empty grid is worse than a loud degraded
-one.
+grid, never an exception and never a blank grid with no explanation.
+
+THE REASON THIS PARAGRAPH USED TO GIVE HAS LAPSED, AND THE POLICY STILL HOLDS ON A DIFFERENT ONE.
+It used to say "every consumer of `borg link` swallows failure (`cmd_watch`'s `|| true`, `drone
+status`'s `|| true`, fzf's preview pane), so an exception here is an invisible blank frame." All
+three of those consumers are gone: `cmd_watch` has no arm in borg.zsh's case dispatch, `drone
+status` exits 1 with "unknown command 'status'", and `borg switch`'s preview was retired 2026-08-27
+(`grep -c -- '--preview' borg.zsh` is 0). The surviving callers -- a typed `borg link`, `drone
+link`'s `exec`, and the `borg-link` skill -- all propagate the exit code, so nothing swallows
+anything any more and "invisible blank frame" is no longer the failure mode.
+
+WHAT IS STILL TRUE, and it is not the same argument: an exception raised on the sweep path costs the
+WHOLE DOCUMENT, not just the grid. `_grid` runs inside `cli._document`, which completes before a
+single byte is rendered, so `cli.main`'s broad `except` turns a rate-limited `gh` or one malformed
+manifest into exit 1 with zero bytes on stdout -- losing `▸ IN FOCUS`, `▸ QUEUED`, `▸ SHIPPED` and
+every other section that needed no network at all. Degrading a row and naming the warning keeps the
+other six sections. That reason holds regardless of who calls the command, which is why it is the
+one written down here now.
 
 THE FIRST FOUR OF THOSE WERE NOT ACTUALLY TRUE WHEN THIS PARAGRAPH WAS FIRST WRITTEN, which is the
 reason for the two mechanisms that now make them true. An adapter that cannot reach its source exits
@@ -151,8 +165,11 @@ def cwd() -> str:
     `borg reap-worktrees` and `git worktree remove` all delete directories a user may still be
     sitting in. Before this module read cwd at all, such an invocation succeeded; unguarded, it
     would now die in ALL FOUR modes via cli.main's broad `except Exception`, with exit 1 and zero
-    bytes on stdout -- a clean, uninformative failure with no hint that the cwd is the cause, in a
-    command whose callers (cmd_watch, drone status, the fzf preview) all swallow errors.
+    bytes on stdout -- a clean, uninformative failure with no hint that the cwd is the cause. (This
+    used to add "in a command whose callers (cmd_watch, drone status, the fzf preview) all swallow
+    errors". Those three consumers were retired -- see this module's header -- and the guard does not
+    need them: `os.getcwd()` raising is not a user error, and the modes that never consult scope have
+    no business dying for it.)
     "" degrades to orchestrator scope: it matches no orchestrator root and prefix-matches no
     registry path, so an unknowable location yields the broadest reading rather than a wrong one.
     """

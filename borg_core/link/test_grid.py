@@ -116,8 +116,9 @@ def record_forks(monkeypatch):
 
     IT WRAPS `run_background` AND NOT `run_capture`, and that is a correction rather than a
     preference. The fetch is start-now/collect-later and never passes through `run_capture`, so a
-    probe on that name alone would be BLIND to it -- `test_local_in_orchestrator_scope_forks_nothing
-    _at_all`'s `assert record_forks == []` would stay green with a fetch that ignored `--local`
+    probe on that name alone would be BLIND to it: the orchestrator leg of
+    `test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_repository` asserts
+    `record_forks == []`, and that would stay green with a fetch that ignored `--local`
     entirely. Wrapping BOTH would double-count instead, because `run_capture` is now literally
     `collect(run_background(argv), timeout)` and resolves that name as a module global at call time.
     """
@@ -331,8 +332,11 @@ def test_local_runs_neither_network_path_while_the_same_call_without_it_runs_bot
     BOTH SEAMS, IN ONE CASE, BECAUSE THE FETCH'S GUARD IS A SEPARATE LINE. `--local` gates the sweep
     inside cli._grid's ternary, but the fetch has to START above that ternary for its round trip to
     overlap, so it carries its own `if local` and nothing about the sweep's guard protects it. That
-    is the hardened spec's B1 in a new place: borg.zsh's fzf preview re-executes `borg link --local`
-    on every cursor move.
+    is the hardened spec's B1 in a new place: a half-wired `--local` fails OPEN, spawning `gh` for a
+    caller that asked for no network. (The example used to be "borg.zsh's fzf preview re-executes
+    `borg link --local` on every cursor move"; that preview was retired 2026-08-27. The failure mode
+    does not need a hot loop -- `skills/borg-switch` runs `borg link --local --all` at the widest
+    breadth there is, and B1's whole point is that the caller cannot tell the flag was ignored.)
 
     THE FETCH FIXTURE IS DELIBERATELY REMOVED HERE. `isolated` neutralizes it for the whole file, and
     under that neutralization "the fetch did not fork" is vacuously true -- it would pass with the
@@ -373,19 +377,30 @@ def test_local_runs_neither_network_path_while_the_same_call_without_it_runs_bot
     assert [s["source"] for s in swept_grid["sources"]] == ["probe"]
 
 
-def test_local_in_orchestrator_scope_forks_nothing_at_all(isolated, monkeypatch, record_forks):
-    """The strongest form of the opt-down: not one fork of any kind.
+def test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_repository(isolated, monkeypatch, record_forks):
+    """The strongest form of the opt-down: not one fork of any kind -- and in repository scope, one.
 
     Repository scope still runs ONE `git remote get-url` to learn its own `owner/repo`, because
     manifest selection cannot happen without it -- `--local` opts down from the network, not from the
     filesystem. Orchestrator scope needs no slug, so the opted-down path there touches no subprocess
     whatsoever, which is what pins that nothing else crept into it.
 
+    THE REPOSITORY LEG IS ASSERTED AND NOT MERELY NARRATED, which is a correction. Its sentence sat
+    in this docstring with no assertion under it while CLAUDE.md cited the sentence as a gate --
+    deleting `manifest.shell.repository_slug`'s fork left the case green, because `record_forks == []`
+    only ever ran in orchestrator scope. The exact-argv assertion is the gate: it names the one
+    subprocess the opted-down repository path is allowed, so deleting the fork goes red (the slug
+    disappears) and adding a second one goes red too.
+
+    NEITHER LEG SEES `tmux list-windows`, and that is the fixture rather than the flag: `isolated`
+    stubs `shell.live_windows`, so the reap overlay's fork is out of frame in both scopes. In
+    production it runs in both and `--local` does not touch it -- `BORG_NO_REAP` is what removes it.
+
     A REAL, EXECUTABLE ADAPTER IS ON THE SEARCH PATH THROUGHOUT. Without it this assertion is
     vacuously true -- verified by mutation: with `--local` ignored entirely, an empty search path
     still forks nothing and the test stayed green. An assertion that cannot fail is not a gate.
     """
-    _four_repository_registry(isolated)
+    dirs = _four_repository_registry(isolated)
     adapters = isolated / "adapters"
     _adapter(adapters, "probe", 'echo \'{"source":"probe","summary":"ok","items":[]}\'')
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
@@ -396,6 +411,16 @@ def test_local_in_orchestrator_scope_forks_nothing_at_all(isolated, monkeypatch,
     cli._document("", False, "json", local=True)
 
     assert record_forks == []
+
+    record_forks.clear()
+    monkeypatch.chdir(dirs["delta"])
+
+    document = cli._document("", False, "json", local=True)
+
+    assert record_forks == [["git", "-C", dirs["delta"], "remote", "get-url", "origin"]]
+    assert [m["id"] for m in document["grid"]["manifests"]] == ["cross-repository"], (
+        "the slug is what selects; a leg that selected nothing would pass the fork assertion for the wrong reason"
+    )
 
 
 # ── the resolve ladder ────────────────────────────────────────────────────────────────────────────
@@ -639,9 +664,11 @@ def test_a_project_list_that_cannot_be_staged_warns_instead_of_raising(isolated,
 def test_a_failing_adapter_track_names_itself_and_the_grid_still_renders(isolated, monkeypatch):
     """A REAL adapter that exits non-zero with no output. One named warning, one full grid.
 
-    Every consumer of `borg link` swallows failure (`cmd_watch`'s `|| true`, `drone status`'s
-    `|| true`, fzf's preview pane), so an exception here is an invisible blank frame and a silent
-    empty grid is worse than a loud degraded one.
+    An exception on the sweep path costs the WHOLE document -- `_grid` completes before a byte is
+    rendered -- so one dead adapter would take out `▸ IN FOCUS`, `▸ QUEUED` and `▸ SHIPPED` too. A
+    named warning on a degraded grid keeps the other six sections. (The reason given here used to be
+    "every consumer of `borg link` swallows failure (`cmd_watch`'s `|| true`, `drone status`'s
+    `|| true`, fzf's preview pane)"; all three were retired 2026-08-27. See link/shell.py's header.)
     """
     dirs = _four_repository_registry(isolated)
     adapters = isolated / "adapters"
@@ -1976,8 +2003,9 @@ def test_the_grid_carries_ready_but_still_no_duplicate_gate_list(isolated, monke
     what keeps it a record of why the key was withheld for two ACs.
 
     `unmapped_gates` stays off: it is a pure projection of `gates` minus one key, and emitting both
-    puts a near-byte-for-byte second copy of every gate on a wire `drone status` serializes once per
-    tmux window.
+    puts a near-byte-for-byte second copy of every gate on the wire for a consumer that does not
+    exist. (The old clause "on a wire `drone status` serializes once per tmux window" is dropped --
+    that command was retired -- and the duplication argument never depended on it.)
 
     MUTATION: drop the `"ready"` key from grid_manifest -> the first assertion; add `unmapped_gates`
     -> the third. Asserted under `--local`, which is the case that matters: nothing resolves there,

@@ -759,7 +759,7 @@ EOF
     [ "$output" -ge 1 ]
 }
 
-# ── reporting / read-only: nanoprobes, nanoprobe-log, spend, watch, doctor, reap, ────────────────
+# ── reporting / read-only: nanoprobes, nanoprobe-log, spend, doctor, reap, ───────────────────────
 # ── reap-worktrees, vinculum ──────────────────────────────────────────────────────────────────────
 
 @test "contract: nanoprobes reports cleanly when agents.jsonl is absent" {
@@ -1772,6 +1772,13 @@ _link_build_overview_ws() {
         > "$root/alpha/docs/plans/assimilated/2026-02-03-alpha-new.md"
 }
 
+# `hotel`'s display_name is 26 CHARACTERS ON PURPOSE, past `render._COL_PROJECT`'s floor of 20. Every
+# name in every fixture used to be short, so no golden had ever rendered the overflow case -- and the
+# board's header, padded from the same constant the rows treated as a MINIMUM, silently stopped
+# describing its own columns for any name over 20. Two REAL registered projects trigger it today
+# (`pytest-coverage-impact` 22, `reveal-data-consistency` 23). This is the fixture that makes the
+# widened PROJECT column a golden fact rather than a unit-test one.
+#
 # Covers, in one render: the pin mark, the "waiting <<<" status decoration, all three source badges
 # ([C]/[X]/[D]), the "(no summary)" default, the 50-char summary cut WITH ellipsis, the display_name
 # override and its fallback, five relative-time buckets including "never", the idle+unpinned tie
@@ -1808,7 +1815,7 @@ _link_registry_overview() {
                 "last_activity": "$t_foxtrot", "summary": "Foxtrot ties alpha's bucket."},
     "golf": {"path": null, "source": "cli", "status": "idle",
              "summary": "Golf has never been active."},
-    "hotel": {"path": null, "source": "cli", "status": "idle", "display_name": "Hotel Renamed",
+    "hotel": {"path": null, "source": "cli", "status": "idle", "display_name": "hotel-renamed-and-then-some",
               "last_activity": "$t_hotel", "summary": "Hotel renders under its display_name."},
     "india": {"path": null, "source": "cli", "status": "archived",
               "last_activity": "$t_hotel", "summary": "India is archived."}
@@ -1835,12 +1842,21 @@ _link_build_deep_ws() {
     local d="${BATS_TEST_TMPDIR}/ws/delta" i
     mkdir -p "$d/.borg/checkpoints" "$d/docs/plans/directives" "$d/docs/plans/assimilated"
 
+    # THE OBJECTIVE IS A WRAPPED THREE-LINE PARAGRAPH, which is what a real one is: this tree
+    # hard-wraps prose at 120 columns and borg-collective's own PROJECT_PLAN.md has exactly this
+    # shape. It used to be one short line here, so the golden could not see either half of the defect
+    # that pairing hid -- `core.plan_objective` read only the FIRST physical line (the shell's
+    # `head -1`, transcribed), and `_focus_section` then printed whatever it got with no fold, unlike
+    # every other prose field in the section. The page emitted a 129-column line ending on a dangling
+    # comma. Now the golden pins the reassembled paragraph AND its fold.
     cat > "$d/PROJECT_PLAN.md" <<'EOF'
 # Project Plan: Delta
 
 ## Objective
 
-Keep the delta fixture stable so the deep dive renders identically on every run.
+Keep the delta fixture stable so the deep dive renders identically on every run,
+including the objective, which is deliberately a wrapped paragraph rather than one
+short line, so the fold is pinned by bytes and not only by a unit test.
 
 ## Acceptance Criteria
 
@@ -2200,17 +2216,25 @@ _assert_link_grid_golden() {
     [[ "$output" == *"alpha"*"delta"* ]] || false
 }
 
-# EXTERNAL CONSUMER (borg.zsh:689), stated precisely: cmd_switch's fzf call has TWO producers, and
-# only one of them is `link`. The listing piped into fzf comes from `cmd_ls --porcelain`
-# (borg.zsh:685) — a separate duplicate implementation that PROJECT_PLAN.md's scope boundaries keep
-# in zsh — while `--preview "borg link {1}"` (borg.zsh:689) is the deep dive. So this pins both
-# halves against the producer that actually feeds each: the 5-field/`--with-nth 1,3,5` shape against
-# cmd_ls, and name-in-column-1-is-a-valid-deep-dive-argument against link.
+# EXTERNAL CONSUMER, stated precisely. `cmd_switch`'s fzf call reads exactly ONE producer: the
+# listing piped into fzf comes from `cmd_ls --porcelain` — a separate duplicate implementation that
+# PROJECT_PLAN.md's scope boundaries keep in zsh. That half is live, and it is what the
+# 5-field/`--with-nth 1,3,5` assertion below pins.
+#
+# THE OTHER HALF'S STATED REASON HAS LAPSED, SAID PLAINLY RATHER THAN PAPERED OVER. This block used
+# to call fzf's `--preview "borg link {1}"` the second producer and justify the `link --porcelain`
+# assertions by it. That preview flag was retired on 2026-08-27; `cmd_switch` now passes no preview
+# flag at all, so no fzf keystroke reaches `borg link` any more. What those assertions still pin is
+# narrower and is not an fzf fact: `link --porcelain` emits the SAME 5-field row shape `cmd_ls` does,
+# and a column-1 name is still an argument `borg link <project>` renders. NO REPLACEMENT CONSUMER IS
+# NAMED HERE, because there is not one to name — inventing a live justification for a check whose
+# reason retired is how the previous sentence stayed wrong for a month.
 #
 # The two producers ALREADY diverge, which is why asserting the field shape against `link
-# --porcelain` alone would have been asserting it in the wrong place: on an empty registry
-# _borg_link_porcelain prints nothing (borg.zsh:264) while cmd_ls prints the human "No projects
-# registered" line straight into the fzf stream (borg.zsh:528-531, before its porcelain branch).
+# --porcelain` alone would have been asserting it in the wrong place: on an empty registry the
+# porcelain surface prints nothing while `cmd_ls` prints the human "No projects registered" line
+# straight into the fzf stream — its `project_count == 0` guard returns before the porcelain branch
+# is ever consulted.
 @test "contract: the fzf picker's two producers each keep their half of the contract" {
     _link_setup_porcelain
 
@@ -2888,8 +2912,11 @@ EOF
 
     run jq '[.grid.manifests[].nodes[] | select(.state_source == "swept")] | length' "${BATS_TEST_TMPDIR}/probe.json"
     [ "$output" = "8" ]
+    # FOUR since `acme/warehouse#78` joined warehouse-rollout.json: it is the unrecognized-`gate.kind`
+    # row that makes `▸ NEXT`'s `unsure` group reachable, and its state lives in the FETCH recording
+    # rather than the sweep one, which is the seam that keeps sweep-acme.json byte-stable.
     run jq '[.grid.manifests[].nodes[] | select(.state_source == "fetched")] | length' "${BATS_TEST_TMPDIR}/probe.json"
-    [ "$output" = "3" ]
+    [ "$output" = "4" ]
     # A degraded seam would still satisfy a count; assert the sweep's own PAYLOAD arrived.
     run jq -r '.grid.sources[0].source' "${BATS_TEST_TMPDIR}/probe.json"
     [ "$output" = "github" ]
@@ -2949,24 +2976,27 @@ EOF
     # ...and the ids are contiguous from n1, globally across manifests.
     run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden' \
         | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
-    # n12 is `acme/warehouse#75`, the AC4-precondition row added to warehouse-rollout.json. The list
-    # is spelled out rather than counted so that a node QUIETLY VANISHING from the picture — which is
-    # what a renderer bug looks like from here — turns this red instead of shortening a number nobody
-    # reads.
-    [ "$output" = "1 2 3 4 5 6 7 8 9 10 11 12 " ]
+    # n12 is `acme/warehouse#78`, the unrecognized-`gate.kind` row that makes `▸ NEXT`'s `unsure`
+    # group reachable through the real loader; n13 is `acme/warehouse#75`, the AC4-precondition row.
+    # #78 sorts ahead of #75 because it forks off the merged `#70` rather than continuing the lane, so
+    # it ranks one level earlier. The list is spelled out rather than counted so that a node QUIETLY
+    # VANISHING from the picture — which is what a renderer bug looks like from here — turns this red
+    # instead of shortening a number nobody reads.
+    [ "$output" = "1 2 3 4 5 6 7 8 9 10 11 12 13 " ]
 
     run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-repository.golden' \
         | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
     [ "$output" = "1 2 3 4 5 6 7 " ]
 }
 
-# B15. MEASURES THE GOLDEN, THEN PARSES THE CONFIG — never greps for a config string. A grep for
-# `right:70:wrap` asserts that somebody typed a number, not that the picture fits inside it. The
-# widest row is measured with `picture.visible_len`, the same primitive the renderer pads with, so a
-# hyperlinked or coloured cell counts as its VISIBLE width rather than its byte length.
-@test "contract: the fzf preview window is at least as wide as the widest picture row" {
-    local width pane
-    width=$(PYTHONPATH="$BORG_HOME" python3 -c '
+# The widest `▸ CHAINS` picture row on a rendered page, in VISIBLE columns, printed to stdout.
+#
+# ONE COPY, TWO CALLERS (B15 and B15b), because the two cases must be measuring the same thing: B15
+# compares the measurement to `PICTURE_BUDGET` and B15b compares it to the number the `--json` side
+# published for the same render. A second transcription of this scan is a second definition of "a
+# picture row", and the two cases would then be able to disagree about which rows they measured.
+_link_widest_picture_row() {
+    PYTHONPATH="$BORG_HOME" python3 -c '
 import sys
 from borg_core.link import picture
 
@@ -2993,9 +3023,22 @@ for line in open(sys.argv[1], encoding="utf-8").read().split("\n"):
 if not rows:
     raise SystemExit("no picture rows matched")
 print(max(picture.visible_len(r) for r in rows))
-' "${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden")
+' "$1"
+}
+
+_link_picture_budget() {
+    PYTHONPATH="$BORG_HOME" python3 -c 'from borg_core.link import picture; print(picture.PICTURE_BUDGET)'
+}
+
+# B15. MEASURES THE GOLDEN, THEN PARSES THE CONFIG — never greps for a config string. A grep for
+# `right:70:wrap` asserts that somebody typed a number, not that the picture fits inside it. The
+# widest row is measured with `picture.visible_len`, the same primitive the renderer pads with, so a
+# hyperlinked or coloured cell counts as its VISIBLE width rather than its byte length.
+@test "contract: the widest picture row fits PICTURE_BUDGET and no preview-window flag survives" {
+    local width
+    width=$(_link_widest_picture_row "${LINK_GOLDEN_DIR}/link-grid-orchestrator.golden")
     [ "$width" -gt 0 ] || { echo "measured no picture rows at all" >&2; false; }
-    [ "$width" -le "$(PYTHONPATH="$BORG_HOME" python3 -c 'from borg_core.link import picture; print(picture.PICTURE_BUDGET)')" ]
+    [ "$width" -le "$(_link_picture_budget)" ]
 
     # THE PANE COMPARISON IS GONE BECAUSE THE PANE IS. `borg switch`'s fzf preview was retired on
     # 2026-08-27 (zero typed invocations in six months), taking `--preview-window right:70:wrap` with
@@ -3006,6 +3049,44 @@ print(max(picture.visible_len(r) for r in rows))
     # constraint should assert against ITS number here, not resurrect the deleted one.
     run grep -c -- '--preview-window' "$BORG"
     [ "$output" -eq 0 ]
+}
+
+# B15b. THE WIDTH-CHECK DIRECTIVE'S FIRST AC, ASSERTED AS A DIFFERENTIAL RATHER THAN AS A NUMBER.
+#
+# `cli._grid` stamps `grid.picture_width` from `picture.max_row_width`. Every pytest case around that
+# stamp either supplies the condition that makes the derived value equal its default (an EMPTY
+# registry asserted at 0), sets the field by hand (`test_render`), or exercises `max_row_width` as a
+# pure function with no `cli` in the picture (`test_picture`) — so the whole feature could be replaced
+# by the literal `0` with `make test` and `bats tests/` both green. Measured, before this case
+# existed: it was.
+#
+# So this case derives the SAME NUMBER TWO INDEPENDENT WAYS from ONE fixture arrangement and compares
+# them: the `--json` side's published integer, and a scan of the ANSI page the human render produced.
+# Neither derivation reads the other. 61 is not written down anywhere here; moving a fixture ref moves
+# both sides together, which is the property the directive asked for ("a `grid.picture_width` integer
+# on the document, which `--json` consumers AND A BATS CASE can both assert against `PICTURE_BUDGET`")
+# without leaving a hand-copied constant that nobody re-measures.
+#
+# MUTATIONS, both applied and confirmed red: `block["picture_width"] = 0` (published 0, measured 61),
+# and deleting the stamp entirely (`jq` yields `null`, which is not the measured width either).
+@test "contract: grid.picture_width is the width of the widest picture row the same run rendered" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/width.json" link --json
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/width.txt" link
+
+    local measured published
+    measured=$(_link_widest_picture_row "${BATS_TEST_TMPDIR}/width.txt")
+    published=$(jq -r '.grid.picture_width' "${BATS_TEST_TMPDIR}/width.json")
+
+    # The page must actually HAVE a picture, or both sides agree on nothing and the case is decoration.
+    [ "$measured" -gt 0 ] || { echo "the rendered page carried no picture rows" >&2; false; }
+    [ "$published" = "$measured" ] || {
+        echo "grid.picture_width=${published} but the rendered page's widest CHAINS row is ${measured}" >&2
+        false
+    }
+    [ "$published" -le "$(_link_picture_budget)" ]
 }
 
 # B16. `--deep` is parsed and IGNORED. It stays in the parser because ONE live copy of the dispatcher
@@ -3032,8 +3113,14 @@ print(max(picture.visible_len(r) for r in rows))
 
 # `--local` opts down from BOTH network rungs, so the grid still renders from what each manifest
 # DECLARES -- which for these fixtures is nothing, so every node reaches the renderer with the state
-# nobody resolved. That is the hottest path in the tree (per-keypress fzf preview, per-window
-# `drone status`) and the one a renderer that raised on an unrecognized token would take out.
+# nobody resolved. A renderer that raised on an unrecognized token would take that path out.
+#
+# WHICH PATH, CORRECTED. This used to justify itself as "the hottest path in the tree (per-keypress
+# fzf preview, per-window `drone status`)". BOTH of those consumers were retired on 2026-08-27, so
+# that reason is dead and is NOT being swapped for an equally grand invented one. The `--local`
+# caller that survives is `skills/borg-switch/SKILL.md`, which runs `borg link --local --all` before
+# a switch prompt precisely so it never pays for a sweep. Unresolved-state rendering therefore still
+# has a live consumer — an ordinary one, not a per-keypress one.
 @test "contract: link --local renders every node without naming the unresolved token" {
     _link_setup_grid
     _link_grid_seams
@@ -3657,7 +3744,8 @@ EOF
 # Check 3: positive non-vacuity. The only one of the three that proves the renderer actually MOVED
 # rather than being renamed, re-pointed, or left behind a surviving zsh fallback. Injects a python3
 # that exits non-zero via BORG_PATH_PREFIX (the same mock-binary seam used throughout this file — see
-# "watch dispatches into the live-refresh loop", which mocks tmux the same way) and asserts all
+# "next on an empty registry says all clear and exits 0", which mocks tmux the same way; the case
+# this used to cite, "watch dispatches into the live-refresh loop", went away with `cmd_watch`) and asserts all
 # three human modes fail. On the pre-flip tree (zero python3 dependency in any human mode) this was
 # RED; it can only pass after a real flip with no zsh renderer left standing behind the dispatch.
 @test "contract: all three human link modes fail when python3 is unavailable" {
@@ -3864,16 +3952,22 @@ JSON
 }
 
 @test "contract: --local is forwarded on the DEEP and OVERVIEW arms, asserted on the child's argv" {
-    # The arms every hot call site actually uses, and the ones the document cannot prove:
-    #   fzf preview (borg.zsh:266) -> bare positional -> DEEP
-    #   drone status (drone.zsh:964) -> `borg link --local "$wname"` -> DEEP
-    #   cmd_watch (borg.zsh:2222) -> `_borg_link_dispatch --local` with no args -> OVERVIEW
+    # The two arms this pins, and who still reaches them. ALL THREE CALL SITES THIS COMMENT USED TO
+    # NAME — the fzf preview, `drone status` and `cmd_watch` — were retired on 2026-08-27, and they
+    # are not being replaced with invented ones; these are the consumers that actually survive:
+    #   bare positional -> DEEP. Every `borg link <project>` routes through borg.zsh's positional
+    #     arm — the same arm B16 keeps `--deep` in the parser for.
+    #   `--local`, no project -> OVERVIEW. `skills/borg-switch/SKILL.md` runs `borg link --local
+    #     --all` before a switch prompt, and says in as many words that `--local` is mandatory there.
+    # The wire matters regardless of who is on it: a `--local` the dispatcher drops fails OPEN — the
+    # caller believes it opted out of the network and silently pays for the sweep anyway.
     #
     # This MUST assert argv, not the emitted document. An earlier version ran `link --json --local
     # beta` and claimed deep-arm coverage, but dispatch precedence is json > porcelain > deep, so it
     # returned from the --json block and never executed the deep arm at all. Deleting the deep arm's
-    # forwarding line left the whole new test block green -- verified by mutation. render.deep reads
-    # only `focus`, so `link beta` and `link --local beta` are byte-identical on stdout too: no
+    # forwarding line left the whole new test block green -- verified by mutation. The human renderer
+    # reads only `focus` here (`render.deep`, named in the original wording, was deleted by AC2), so
+    # `link beta` and `link --local beta` are byte-identical on stdout too: no
     # document-level or human-output assertion can ever pin this wire. Mock python3 and read "$@",
     # the same idiom as the config-surface test above.
     _scope_two_repos

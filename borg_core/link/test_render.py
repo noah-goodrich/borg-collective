@@ -6,18 +6,23 @@ tests/fixtures/link/ remain the primary oracle (exercised end to end via tests/c
 these are the microscope.
 """
 
+import ast
 import datetime
 import inspect
+import json
+import os
 import re
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
 import pytest
 
 from borg_core.link import cli, picture, render
 from borg_core.link import grid as link_grid
 from borg_core.manifest import core as manifest_core
+from borg_core.manifest import shell as manifest_shell
 from borg_core.link.test_picture import fork_manifest, plain
 
 
@@ -42,6 +47,7 @@ def _doc(**overrides) -> dict:
             "manifests": [],
             "declared": 0,
             "unresolved": 0,
+            "picture_width": 0,
             "warnings": [],
         },
     }
@@ -317,6 +323,39 @@ def test_objective_omitted_with_no_placeholder_when_empty():
     assert "0/2 criteria met" in out
 
 
+def test_the_objective_folds_like_a_summary_instead_of_running_off_the_page():
+    """MUTATION: restore `out.append(f"  {CYAN}Objective:{NC} {objective}\\n")` in `_focus_section`.
+
+    IN FOCUS printed the objective RAW while `_summary_block`, three lines above it in the same
+    section, folded at 70. Measured against this repo's own PROJECT_PLAN.md the emitted line was 129
+    VISIBLE COLUMNS -- the widest row the document produces, and wider than the picture's own
+    68-column budget. Nothing caught it because every fixture objective is one short line.
+
+    ASSERTED AS A WIDTH BOUND, not as a set of expected break points: any honest fold satisfies it
+    and the raw print cannot. The whole objective must still be PRESENT, so folding may not become
+    truncating by another name.
+    """
+    objective = (
+        "Land the derived-fact surface behind one front door, so that every consumer reads the same "
+        "document, and no renderer re-derives a number the wire already published."
+    )
+    doc = _repository_doc(focus=_focus(plan={"objective": objective, "met": 1, "total": 2}))
+    body = plain(render.document(doc)).split("\n")
+
+    # The Active Plan block is `Objective:` then `Progress:`, so the objective owns every line
+    # between them -- one, before this fix; as many as the fold needs, after it.
+    start = next(i for i, line in enumerate(body) if line.startswith("  Objective:"))
+    end = next(i for i, line in enumerate(body) if line.startswith("  Progress:"))
+    block = body[start:end]
+
+    assert len(block) > 1, "an objective well past 70 columns must wrap at all"
+    for line in block:
+        assert len(line) <= 72, f"{len(line)} columns: {line}"
+        assert not line[2:3].isspace(), f"a continuation must never begin with a space: {line!r}"
+    # Reassembling the block must give the objective back -- folding, never truncating.
+    assert " ".join(part.strip() for part in block) == f"Objective: {objective}"
+
+
 def test_focus_renders_checkpoints_and_the_latest_head():
     doc = _repository_doc(
         focus=_focus(checkpoints=["2026-08-01.md"], checkpoint_head="line one\nline two"),
@@ -453,6 +492,53 @@ def test_board_row_variants_capacity_and_cortex_all_render():
     assert "2 repositories · 1 need attention" in out
 
 
+def test_the_board_header_still_describes_its_rows_when_a_name_overflows_the_column():
+    """MUTATION: pad the header and the rows from `_COL_PROJECT` again instead of `_board_width`.
+
+    `_COL_PROJECT` was used as a MINIMUM (`{display:<{_COL_PROJECT}}`) with no truncation anywhere,
+    so a name longer than 20 pushed SRC / STATUS / LAST ACTIVE / SUMMARY right by the overflow while
+    the header line, padded from the same constant, did not move. Every column label then sat over
+    the wrong column, on EVERY render in both scopes. Two registered projects trigger it today
+    (`pytest-coverage-impact` 22, `reveal-data-consistency` 23), which is why no fixture ever saw it:
+    every fixture name is short.
+
+    THE ASSERTION IS AN OFFSET, NOT A STRING. It finds where `SRC` starts on the header and where
+    each row's `[C]` badge starts, and requires them equal. That is the property "the header
+    describes its rows" stated in the only terms that can actually go red, and it holds for any
+    width rule that is internally consistent -- including a future truncating one.
+
+    THE DISPLAY NAME IS WHAT COUNTS, not the registry key: `_board_width` measures the same string
+    `_overview_row` pads, or a renamed project reintroduces the bug through the other door.
+    """
+    long_display = "reveal-data-consistency"  # 23 -- the longest name in the real registry today
+    assert len(long_display) > render._COL_PROJECT  # pylint: disable=protected-access
+    doc = _doc(
+        total_projects=2,
+        order=["a", "b"],
+        projects={
+            "a": {"source": "cli", "status": "idle", "relative_activity": "2h ago", "summary": "s"},
+            "b": {
+                "source": "cli",
+                "status": "idle",
+                "display_name": long_display,
+                "relative_activity": "1h ago",
+                "summary": "s",
+            },
+        },
+    )
+    board = [line for line in plain(render.document(doc)).split("\n") if " [C] " in line or " SRC " in line]
+    assert len(board) == 3, board
+
+    offsets = {line.index("SRC") if " SRC " in line else line.index("[C]") for line in board}
+    assert len(offsets) == 1, f"the header and its rows disagree about where SRC starts: {board}"
+    assert long_display in "\n".join(board), "the name is printed whole, never cut to fit"
+
+    # ...and the cortex continuation follows the SAME width rather than its own hardcoded indent.
+    doc["cortex_pending"] = [{"project": "b", "reset_at": "x", "countdown": "1h 0m"}]
+    paused = next(line for line in plain(render.document(doc)).split("\n") if "resumes in" in line)
+    assert paused.index("⏸") == 1 + len(long_display) + 2, paused
+
+
 def test_signals_reports_the_ladders_gap_as_a_sentence_never_a_token():
     doc = _doc()
     doc["grid"].update({"declared": 11, "unresolved": 3})
@@ -464,6 +550,85 @@ def test_signals_reports_the_ladders_gap_as_a_sentence_never_a_token():
 
     # Nothing declared -> no line at all, rather than "0 of 0".
     assert "declared refs" not in render.document(_doc())
+
+
+def test_signals_says_the_picture_blew_its_budget_rather_than_just_looking_wrong():
+    """The width-check directive's own case. MUTATION: drop `_width_line` from `_signals_section`.
+
+    The page then renders a picture that wraps in any pane narrower than it, with SIGNALS reporting
+    "nothing to report." — the failure is visible and unexplained, which is the whole complaint the
+    directive was filed on.
+
+    WHAT THIS CASE DOES *NOT* COVER, corrected after a reviewer checked the claim it used to make.
+    It said this also killed "delete the `block["picture_width"] = ...` stamp in `cli._grid`". It does
+    not, and cannot: it sets the field by hand, so THIS WHOLE MODULE IS BLIND TO THE STAMP — measured
+    by replacing that line in cli._grid with `pass` and re-running, which leaves test_render.py fully
+    green and turns test_cli.py red. (No pass-count is written down here on purpose: this file gains
+    cases every AC, and the last recorded number, 69, was already stale by four when a reviewer
+    checked it. Re-run the mutation; do not trust a transcribed total.) That mutation is killed by
+    `test_cli.py::test_json_publishes_the_measured_picture_width_on_the_grid_block`, which measures
+    over a REGISTERED fixture repository rather than an empty registry, and by `cli_contract.bats`'s
+    B15b ("grid.picture_width is the width of the widest picture row the same run rendered"). Neither
+    existed when the claim was written, which is how a shipped feature came to be entirely unpinned
+    behind three green tests.
+
+    READ, NEVER REMEASURED, and that is why setting the field by hand is right HERE. The width
+    arrives as a published integer on the grid block; a renderer that rasterized the picture itself
+    would pass a test that built a wide manifest and still be free to disagree with `--json`. Pinning
+    the STAMP is the other two cases' job, deliberately, because this one is about the SENTENCE.
+    """
+    doc = _doc()
+    doc["grid"]["picture_width"] = 71
+    out = plain(render.document(doc))
+    assert "picture is 71 columns wide" in out
+    assert f"{picture.PICTURE_BUDGET} is the budget" in out
+
+    # ...and SILENT at and below the budget, so it can never become permanent page furniture. 0 is
+    # the case that matters most: every fixture and both live manifests sit well under the budget.
+    for width in (0, 1, picture.PICTURE_BUDGET):
+        doc["grid"]["picture_width"] = width
+        assert "columns wide" not in plain(render.document(doc))
+
+
+def test_chains_names_the_sweep_window_bound_rather_than_claiming_it_is_the_sweep_time():
+    """MUTATION: restore `freshness = f"swept {since}"` in `_grid_section`.
+
+    `grid.since` is `grid.sweep_since(now, DEFAULT_SWEEP_WINDOW_DAYS)` -- the window's LOWER BOUND,
+    `now - 90 days` -- and the note used to interpolate it after the bare word "swept". On a real
+    render that printed a full ISO timestamp exactly ninety days old with the current wall clock
+    attached, and a human read `swept 2026-05-30T14:24:17Z` as "this data is three months stale".
+    Freshness is the entire premise of the front door and this is the one line that reports it.
+
+    IT DERIVES THE MARK THE WAY PRODUCTION DOES INSTEAD OF PINNING A DATE, which is the whole reason
+    the goldens missed this: `tests/fixtures/link/sweep-acme.json` pins a bare `"since": "2026-05-28"`
+    with no relationship to any clock, and a bare date reads harmlessly under either wording. The
+    mark here comes out of `sweep_since` itself, so it has the SHAPE and the OFFSET the bug is made
+    of -- asserted below, so the case cannot go quiet if `sweep_since` stops being relative.
+    """
+    moment = 1787000000
+    mark = link_grid.sweep_since(moment, link_grid.DEFAULT_SWEEP_WINDOW_DAYS)
+    assert mark != link_grid.format_iso(moment), "the mark is a WINDOW BOUND, never the sweep instant"
+    assert mark.endswith("Z") and "T" in mark, "and it is a full timestamp, which is what misreads"
+
+    block = dict(_doc()["grid"])
+    block.update({"swept": True, "since": mark})
+    note = next(
+        line
+        for line in plain(render.document(_doc(grid=block))).split("\n")
+        if line.startswith(f"{render.SECTION_MARK}CHAINS")
+    )
+
+    assert f"swept back to {mark}" in note, note
+    assert f"swept {mark}" not in note, f"the note reports a window bound as if it were a sweep time: {note}"
+
+    # ...and an un-swept grid still says so, rather than naming a bound nobody swept against.
+    block.update({"swept": False, "since": ""})
+    unswept = next(
+        line
+        for line in plain(render.document(_doc(grid=block))).split("\n")
+        if line.startswith(f"{render.SECTION_MARK}CHAINS")
+    )
+    assert "not swept" in unswept and "back to" not in unswept
 
 
 def _fork_block() -> dict:
@@ -642,6 +807,35 @@ def test_assimilated_omits_parens_when_ship_date_empty():
     assert "()" not in scoped
 
 
+def test_render_imports_no_impure_module():
+    """The import-level half of render.py's purity contract, mirroring test_picture.py's P20.
+
+    MUTATION: measure the width inside `_width_line` by calling `os.get_terminal_size()`, or read the
+    picture back off disk. Either turns this red at the import, before any assertion about output.
+
+    THE CLOCK TEST BELOW WAS THE ONLY GUARD THIS MODULE HAD, and a monkeypatch on `time`/`datetime`
+    catches exactly one impurity. `render.py` was also absent from pyproject's clean-arch Domain map
+    until the `--json`-side width check added it, and the linter RETURNS EARLY on a file it cannot
+    classify — so for three ACs this module was asserted pure by its own docstring and by nothing
+    executable. Both gates now exist and neither is redundant: W9004's allow-list already permits
+    `pathlib`, `json` and `datetime`, so the linter would not catch `from pathlib import Path` and
+    this walk would.
+    """
+    tree = ast.parse(Path(render.__file__).read_text(encoding="utf-8"))
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module.split(".")[0])
+    assert not imported & {"os", "subprocess", "time", "datetime", "pathlib", "shutil", "socket"}
+
+    called = {n.func.id for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "open" not in called
+    attributes = {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    assert "isatty" not in attributes
+
+
 def test_render_reads_no_clock(monkeypatch):
     # render.py's stated purity contract: every relative_activity/countdown/generated_at is already
     # baked into the document by ONE shell.now_epoch() call in cli._document. A second clock read
@@ -765,8 +959,9 @@ def test_a_decision_gate_routes_to_yours_and_a_verification_to_mine():
     """A4. MUTATION: swap the two entries in `_GATE_ROUTING`.
 
     These are `manifest_core.gates`' own words -- a `decision` blocks a PERSON, a `verification`
-    blocks nobody in particular because anyone can run it -- and they are the only two kinds any
-    manifest has ever declared or that the validator will accept.
+    blocks nobody in particular because anyone can run it -- and they are the only two kinds either
+    LIVE manifest declares. They are no longer the only two the validator accepts; see
+    `test_an_unrecognized_kind_reaches_unsure_through_the_real_loader`.
     """
     doc = _ready_doc(
         ["o/r#1", "o/r#2"],
@@ -794,6 +989,48 @@ def test_a_decision_gate_routes_to_yours_and_a_verification_to_mine():
     assert "Kelly signs off" in body, "the gate's own sentence is what says WHY it is yours"
 
 
+def test_the_mine_heading_is_true_of_a_verification_gated_row_and_not_only_an_ungated_one():
+    """MUTATION: restore `_GROUP_HEADINGS[_GROUP_MINE] = "nothing is blocking these"`.
+
+    THE HEADING WAS WRITTEN FOR ONE OF THE GROUP'S TWO MEMBERS AND WAS FALSE ABOUT THE OTHER. AC4's
+    D2 puts BOTH the ungated rows and the `verification`-gated ones in `mine`; "nothing is blocking
+    these" is true of the first kind and a flat contradiction of the second, because `_next_row`
+    prints that gate's own `blocked_by` on the same line. Reproduced live against
+    `ingle-t1-cutover` before the fix:
+
+        mine — nothing is blocking these
+          ● stillpoint-labs/stillpoint#57  needs a live-prod confirmation run against all four ...
+
+    The routing is NOT what changed and must not: a `verification` blocks nobody in particular
+    because anyone can run it, which is the axis the table splits on.
+
+    THE ASSERTION IS THE CONTRADICTION ITSELF, not the new wording. It pins that a blocker sentence
+    and the word "blocking" cannot both be in the group's own heading-plus-rows, which stays true
+    through any future rewording that is honest and goes red for any that is not.
+    """
+    doc = _ready_doc(
+        ["o/r#2"],
+        gates=[
+            {
+                "ref": "o/r#2",
+                "kind": "verification",
+                "blocked_by": "the canary must be green for 24h",
+                "resolved_by": "anyone runs it",
+                "blocked_by_ref": "",
+            },
+        ],
+    )
+    body = "\n".join(_next_body(doc))
+    heading = next(line for line in body.split("\n") if line.strip().startswith("mine"))
+
+    assert "the canary must be green for 24h" in body, "the row states its blocker"
+    assert "blocking" not in heading, f"the heading denies the blocker printed under it: {heading!r}"
+    assert "nothing is blocking" not in body
+
+    # ...and the heading still has to say something, rather than being emptied to dodge the check.
+    assert len(heading.split("—", 1)[1].strip()) > 10, heading
+
+
 def test_an_ungated_ready_row_is_mine():
     """A5. MUTATION: make `_route("")` return `_GROUP_YOURS`.
 
@@ -808,12 +1045,13 @@ def test_an_ungated_ready_row_is_mine():
 def test_an_unrecognized_gate_kind_routes_to_unsure_and_names_the_kind():
     """A6. MUTATION: `_GATE_ROUTING.get(kind, _GROUP_MINE)` -- or `_GROUP_YOURS`; both are lies.
 
-    UNREACHABLE THROUGH THE FRONT DOOR AND TESTED ANYWAY. `manifest_core.GATE_KINDS` is
-    `{"decision", "verification"}` and validation drops the WHOLE manifest on anything else, so no
-    valid file produces this row -- measured, by putting `kind: "review"` in auth-hardening.json and
-    watching the orchestrator grid fall from 12 declared refs to 5. Same terms `GLYPH_DRAFT` was kept
-    on through two ACs: the branch is one line and the day `GATE_KINDS` widens, a default would send
-    a kind nobody understands to one of the two real sides with nothing mis-set.
+    THE UNIT HALF. This case hands `_next_tally` a gate dict directly, so it pins the routing and the
+    heading without going near the loader. It used to be the ONLY half, because the validator closed
+    `gate.kind` to `manifest_core.GATE_KINDS` and a manifest carrying `kind: "review"` was first
+    dropped whole and later (PR #173) degraded down to nothing but that row. Both are fixed: an
+    unrecognized kind is now a router concern. The end-to-end half is
+    `test_an_unrecognized_kind_reaches_unsure_through_the_real_loader` below, over the same fixture
+    row `link-grid-orchestrator.golden` pins.
     """
     doc = _ready_doc(
         ["o/r#3"],
@@ -825,13 +1063,58 @@ def test_an_unrecognized_gate_kind_routes_to_unsure_and_names_the_kind():
     assert "yours" not in body and "mine" not in body
 
 
+_LINK_FIXTURES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "tests", "fixtures", "link")
+
+
+def test_an_unrecognized_kind_reaches_unsure_through_the_real_loader(tmp_path):
+    """A6 THROUGH THE FRONT DOOR. MUTATION: restore `if kind not in GATE_KINDS` in `_validate_gate`.
+
+    THE CASE ABOVE HANDS `_next_tally` A GATE DICT; this one starts from the shipped fixture FILE and
+    goes through `manifest_shell.discover` -- validate, `_drop_invalid_rows`, `gates()`, `ready_refs`,
+    `_route`. That distinction is the whole point: for two ACs `unsure` was reachable only by handing
+    the router a string. First the validator closed `gate.kind` to `GATE_KINDS` and
+    `shell._load_manifest` dropped the WHOLE FILE; then PR #173 made degradation row-level, which
+    deleted only the offending row -- quieter, and strictly worse, because the page then rendered as
+    though the row had never been declared.
+
+    READS `tests/fixtures/link/` DIRECTLY rather than building a manifest inline, and that is
+    deliberate: `link-grid-orchestrator.golden` pins this same row's rendered form, and the two
+    oracles must be reading the same bytes. A test that built its own `kind: "review"` row would stay
+    green if someone reverted the fixture, leaving the golden as the only guard on a row whose whole
+    job is to be the guard.
+    """
+    # `discover` takes REPOSITORY roots and globs `<root>/.borg/programs/`, so the shipped fixture is
+    # copied into that layout rather than read in place -- the bytes under test are still the
+    # fixture's.
+    programs = tmp_path / "warehouse" / ".borg" / "programs"
+    programs.mkdir(parents=True)
+    shutil.copy(os.path.join(_LINK_FIXTURES, "manifests", "warehouse-rollout.json"), str(programs))
+
+    manifests, warnings = manifest_shell.discover([str(tmp_path / "warehouse")])
+    assert warnings == [], "an unrecognized kind is not a defect, so nothing is degraded away"
+    assert "acme/warehouse#78" in [row["ref"] for row in manifests[0]["rows"]], "the row SURVIVES loading"
+
+    with open(os.path.join(_LINK_FIXTURES, "fetch-acme.json"), encoding="utf-8") as handle:
+        recording = json.load(handle)
+    fetched = {ref: {"state": node["state"].lower()} for ref, node in recording["nodes"].items()}
+
+    block = link_grid.grid_manifest(manifests[0], {}, fetched)
+    grid_block = dict(_doc()["grid"])
+    grid_block.update({"manifests": [block], "declared": len(block["nodes"])})
+    body = "\n".join(_next_body(_doc(grid=grid_block)))
+
+    assert "unsure" in body, "the group built to say 'the router does not know' actually populates"
+    assert '"review"' in body, "and the human is told WHICH kind failed to route"
+    assert "acme/warehouse#78" in body
+
+
 def test_the_unsure_group_is_absent_when_empty_but_the_section_is_not():
     """A7. MUTATION: render the `unsure` heading unconditionally.
 
     A GROUP may be absent; a SECTION may not. AC2's directive rejected reserving an always-empty
     section slot for yours-vs-mine as the "reads as broken" failure, and this is the line between the
     two ideas: NEXT always renders (with a placeholder when it has nothing), the groups inside it
-    only render when populated. Zero manifests in existence declare an unrecognized kind.
+    only render when populated. Neither live manifest declares an unrecognized kind.
     """
     body = "\n".join(_next_body(_ready_doc(["o/r#9"])))
     assert "unsure" not in body
@@ -905,20 +1188,20 @@ def test_a_partly_unlooked_board_reports_both_halves():
     assert "o/r#1" in body, "and the real answer still renders"
 
 
-def test_the_router_covers_every_gate_kind_the_validator_admits():
+def test_the_router_covers_every_declared_gate_kind():
     """`unsure` is a DIVERGENCE GUARD, and this is the case that gives it a job.
 
     MUTATION: add a third member to `manifest_core.GATE_KINDS` without adding it to `_GATE_ROUTING`.
 
-    The group cannot be reached through the front door today and that is not an oversight: the
-    validator admits exactly `{decision, verification}` and the router routes exactly those two, so
-    the sets coincide. What `unsure` protects against is the window where they STOP coinciding — a
-    kind added to the validator and forgotten in the router would otherwise fall to whichever side a
-    `.get(kind, default)` named, silently, with nothing mis-set.
+    `GATE_KINDS` no longer gates validation — any non-empty kind loads now — so it is purely the
+    DECLARED vocabulary, the set of kinds this project says it understands. The invariant is that the
+    router is never BEHIND that declaration: a kind added to the declared set and forgotten in
+    `_GATE_ROUTING` would fall to `unsure` and be reported as unroutable when it is in fact a kind we
+    claim to know, which is a quieter wrong answer than the one `unsure` exists to prevent.
 
-    So the real invariant is not "unsure renders" (it should not, yet) but "the router is never
-    behind the validator". Asserted as a subset rather than equality: the router is allowed to know
-    about a kind the validator has not admitted yet, which is the safe direction.
+    Asserted as a subset rather than equality: the router is allowed to know about a kind the
+    declaration has not caught up to, which is the safe direction. This is also the ONLY live tie
+    between `GATE_KINDS` and any production code — see the constant's own comment.
     """
     routed = set(render._GATE_ROUTING)  # pylint: disable=protected-access
     assert set(manifest_core.GATE_KINDS) <= routed, (
