@@ -56,8 +56,13 @@ def _delta_workspace(root):
     (directory / "docs" / "plans" / "directives").mkdir(parents=True, exist_ok=True)
     (directory / "docs" / "plans" / "assimilated").mkdir(parents=True, exist_ok=True)
 
+    # A WRAPPED PARAGRAPH, matching the bats fixture: the objective is read as a paragraph and folded
+    # to the page, and a one-line fixture here would leave the pytest side blind to both.
     (directory / "PROJECT_PLAN.md").write_text(
-        "# Project Plan: Delta\n\n## Objective\n\nKeep it stable.\n\n## Acceptance Criteria\n\n"
+        "# Project Plan: Delta\n\n## Objective\n\n"
+        "Keep it stable, and keep the objective a wrapped paragraph\n"
+        "so this workspace exercises the same read the bats fixture does.\n\n"
+        "## Acceptance Criteria\n\n"
         "- [x] First criterion, already met.\n- [ ] Second criterion, outstanding.\n"
         "- [ ] Third criterion, outstanding.\n",
         encoding="utf-8",
@@ -216,7 +221,13 @@ def test_run_focus_block_for_a_named_project(isolated_env, capsys):
     focus = doc["focus"]
     assert focus["name"] == "delta"
     assert focus["plan"] == {
-        "objective": "Keep it stable.",
+        # THE WHOLE WRAPPED PARAGRAPH, joined with single spaces, not its first physical line.
+        # `core.plan_objective` used to transcribe the shell's `head -1`, so a real objective --
+        # prose, hard-wrapped at 120 columns in this tree -- reached the wire as a fragment.
+        "objective": (
+            "Keep it stable, and keep the objective a wrapped paragraph "
+            "so this workspace exercises the same read the bats fixture does."
+        ),
         "met": 1,
         "total": 3,
     }
