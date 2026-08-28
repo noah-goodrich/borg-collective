@@ -84,9 +84,40 @@ which is the actual defect. Every field it reads is already on the document.
 
 ## Acceptance criteria
 
-- [ ] `borg link --brief` spawns the same sweep as `borg link` — asserted by subprocess count, not by reading code.
-- [ ] The narrative prompt is built from the document; no second registry walk survives in `_borg_print_briefing`.
-- [ ] When the narrative fails, the human document renders, prefixed by the existing `fallback_reason` line.
-- [ ] A bats case forces each `fallback_reason` branch and asserts the document renders under each.
-- [ ] `tests/briefing.bats`'s 12 cases still pass or are consciously rewritten — none silently deleted.
-- [ ] `PROJECT_PLAN.md`'s AC1 ticks, with the un-tick rationale replaced by the evidence that it now holds.
+- [x] `borg link --brief` spawns the same sweep as `borg link` — asserted by subprocess count, not by reading code.
+      `tests/link_sweep.bats`: `sweep: link --brief sweeps exactly as link does, counted rather than read` — one
+      `pullRequests(first:` and one `issueOrPullRequest(number:` on each arm, counted side by side on one fixture,
+      with `sweep: link --local --brief spawns zero gh subprocesses, and --brief without it sweeps` as the opt-down's
+      own paired control.
+- [x] The narrative prompt is built from the document; no second registry walk survives in `_borg_print_briefing`.
+      One `_borg_py borg_core.link.cli --json`, one `jq` projection. The `borg_registry_with_state` read, the 30-day
+      active/inactive split, the per-project `jq` loop, the `\x1f` `read`, both `_borg_relative_time` calls and the
+      checkpoint `find` are deleted. (`_borg_relative_time` itself survives — `_borg_do_switch`, `cmd_next` and
+      `cmd_tidy` still call it.)
+- [x] When the narrative fails, the human document renders, prefixed by the existing `fallback_reason` line.
+      From the SAME bytes, through a new `--render-document` seam in `borg_core/link/cli.py` — never a rebuild.
+      `borg_core/link/test_cli.py::test_render_document_prints_the_same_page_the_human_arm_would` pins the equality;
+      `::test_render_document_builds_nothing_of_its_own` pins that it reads no clock, no registry, no sweep and no
+      manifest, by making each of those explode on contact.
+- [x] A bats case forces each `fallback_reason` branch and asserts the document renders under each.
+      Four, one per branch, in `tests/link_sweep.bats`: timeout (rc 124 via a mocked `timeout`), not-logged-in
+      (exit 0 plus the string), non-zero exit (with its captured stderr still surfacing), and empty output.
+- [x] `tests/briefing.bats`'s 12 cases still pass or are consciously rewritten — none silently deleted.
+      Still 12: eight untouched, three rewritten with the reason recorded in the file header (the inactive header,
+      the xtrace-locals guard, the field-collapse case), one kept with new provenance (the empty-registry hint).
+- [x] `PROJECT_PLAN.md`'s AC1 ticks, with the un-tick rationale replaced by the evidence that it now holds.
+
+## What this changed beyond the criteria, recorded rather than hidden
+
+- **`borg init` now pays for a sweep.** `cmd_init` calls `_borg_print_briefing` with no arguments, so the morning
+  briefing builds an ORCHESTRATOR-breadth document — measured ~2.1s here against ~0.1s for the registry read it
+  replaced. That is the intended trade for a briefing that is actually current, but it is a real cost change.
+  `tests/cli_contract.bats`'s `contract: init builds the briefing from the document and still hands off to claude`
+  covers the path with a non-empty registry; the pre-existing init case only ever hit the empty-registry short
+  circuit and could not have seen a regression here.
+- **`cmd_init`'s `_borg_orchestrator_context` is a THIRD independent registry walk** (its own `jq` sort, its own
+  top-3 checkpoint reads) and this directive did not scope it. It is the obvious next fold; filing it beats absorbing
+  it silently.
+- **`borg link --brief <project>` still renders the deep dive**, unchanged: the positional arm precedes the brief arm
+  in `_borg_link_dispatch`'s documented precedence. `--brief` reaches repository scope via cwd, as every other arm
+  does. Left as-is deliberately — moving the arm would change a shipped precedence for no gain here.

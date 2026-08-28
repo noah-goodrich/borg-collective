@@ -1182,6 +1182,53 @@ EOF
     [ "$output" -ge 1 ]
 }
 
+
+# THE NON-EMPTY-REGISTRY HALF OF THE SAME CALL PATH, and it is new with the 2026-08-27 `--brief`
+# fold. The case above deliberately uses an EMPTY registry so it never reaches `claude -p`; that made
+# it blind to the one thing the fold changed under `borg init` — `_borg_print_briefing` now builds
+# the `borg link` document (a `python3 -m borg_core.link.cli --json` fork at ORCHESTRATOR breadth)
+# before it ever prompts. A regression there fails `borg init` at its first step, and every
+# assertion in the empty-registry case would stay green.
+#
+# ONE MOCK, TWO CALLS, DISTINGUISHED BY $1. `cmd_init` invokes `claude` twice: `-p` for the briefing
+# narrative and `--name borg-orchestrator ...` for the handoff. The marker rides only on the `-p`
+# arm so "the narrative reached stdout" cannot be satisfied by the handoff.
+@test "contract: init builds the briefing from the document and still hands off to claude" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export TRACE="${BATS_TEST_TMPDIR}/trace.log"
+    : > "$TRACE"
+    export TMUX_MOCK_HAS_SESSION=1
+    _mock_tmux
+
+    export TMUX="/tmp/tmux-mock/default,1234,0"
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/orchestrator-root"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
+        > "$BORG_REGISTRY"
+
+    cat > "$MOCK_BIN/claude" <<EOF
+#!/usr/bin/env bash
+echo "claude \$*" >> "$TRACE"
+[ "\$1" = "-p" ] && echo "INIT-NARRATIVE-FROM-MOCKED-CLAUDE"
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    run_zsh_borg init
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    [[ "$output" == *"INIT-NARRATIVE-FROM-MOCKED-CLAUDE"* ]] || false
+    # The prompt really was built from a document, not from a registry walk: the briefing dies before
+    # `claude -p` if the `--json` build fails, so reaching the marker at all proves the fork worked.
+    run grep -c "claude -p" "$TRACE"
+    [ "$output" -ge 1 ]
+    # And init still completes its actual job.
+    run grep -c "claude --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+}
+
 @test "contract: claude resumes the orchestrator session via claude --continue when invoked outside tmux" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
@@ -2611,9 +2658,12 @@ EOF
 
 # ── mode 4/4: --brief ────────────────────────────────────────────────────────
 
-# --brief stays in zsh this pass (PROJECT_PLAN scope boundary: _borg_print_briefing is contested
-# ground with the briefing-fallback directive). What the port MUST preserve is the DISPATCH: the
-# --brief arm of cmd_link reaches _borg_print_briefing rather than falling through to the overview.
+# The `claude -p` INVOCATION stays in zsh (borg_core/proc.py DEVNULLs stderr and returns None rather
+# than rc 124 on timeout, which would delete two shipped contracts). Everything else about this arm
+# folded onto the document on 2026-08-27: it builds the same `--json` document every other arm
+# builds, projects it into the prompt, and renders that same document on failure. What these cases
+# preserve is the DISPATCH: the --brief arm reaches _borg_print_briefing rather than falling through
+# to the overview, under BOTH of its names.
 #
 # The empty-registry early return alone was not enough to prove that. It only exercises a function
 # the plan puts out of scope, and it left `--llm` — the second name for this arm (borg.zsh:223,
@@ -2987,6 +3037,11 @@ EOF
     printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":"Solo.","last_activity":"2026-08-01T10:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
+    # THE NEGATIVE HALF IS LOAD-BEARING AND CONDITIONAL ON THE MOCK SUCCEEDING. Since the 2026-08-27
+    # fold, `--brief`'s FALLBACK renders the full document, cube and all — so "no THE BORG COLLECTIVE"
+    # asserts that the narrative arm was taken, not that the document is unreachable. That is exactly
+    # what this case is for (dispatch, not layout), but a mock edited to exit non-zero would flip the
+    # meaning silently rather than fail. Keep `exit 0` above.
     run_zsh_borg link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"BRIEFING-FROM-MOCKED-CLAUDE"* ]] || false
@@ -2998,7 +3053,13 @@ EOF
     [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
 }
 
-# The empty-registry early return is a separate branch of the same arm: it must NOT reach `claude`.
+# The empty-registry short circuit is a separate branch of the same arm: it must NOT reach `claude`.
+#
+# IT SURVIVED THE 2026-08-27 FOLD, WITH A NEW SOURCE. The sentence used to come from a registry read
+# that found neither an active nor an inactive name; it now comes from the DOCUMENT's own
+# `total_projects == 0`. It is deliberately NOT folded into the fallback page: an empty registry is
+# the one case where a narrative has nothing to say, so paying `claude -p` to say it is pure waste.
+# The negative assertion is what proves the short circuit fires — the fallback renders the cube.
 @test "contract: link --brief on an empty registry returns early without an LLM call" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"

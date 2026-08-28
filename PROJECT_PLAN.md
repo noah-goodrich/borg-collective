@@ -17,20 +17,33 @@ e2e/eval harness that keeps it honest.
 
 ## Acceptance Criteria
 
-- [ ] **AC1 — One front door, context-scoped, always a clean read.** In a repository, `link` sweeps that repository
+- [x] **AC1 — One front door, context-scoped, always a clean read.** In a repository, `link` sweeps that repository
       (~2.7s measured); in the orchestrator, it sweeps all (~12.5s measured, 13 repos). No cache, ever — a clean read
       every time. `--local` is the only opt-down. `recon` retires as a human-facing verb; no new verbs are added.
   - Verify: bats asserts `borg help` is net one command shorter than at plan start, and that two consecutive
     `borg link` runs write no cache artifacts.
-  - **Both verify clauses PASS** (`contract: borg help is net one command shorter than at plan start (AC1)`,
-    `cache: two consecutive borg link runs write no cache artifact (AC1)`), and the box stays UNTICKED anyway.
-    `borg link --brief` never reaches `borg_core.link.cli` (`borg.zsh:3118`) — it runs the zsh `_borg_print_briefing`
-    and never sweeps, so one verb still has two truth levels, which `cli.py` itself names as "the failure class AC1
-    exists to kill". Ticking on a passing verify clause while the stated goal is unmet is the wrong-answer-under-a-
-    confident-header failure this whole plan exists to remove. Blocker already filed with its measurement (zero `gh`
-    subprocesses on the `--brief` path against one batched call on every other arm):
-    `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5**, plus **Phase 5b** for
-    `/borg-recon`, the second un-folded human digest. AC1 ticks when those two fold, not before.
+  - **MET.** Both verify clauses pass (`contract: borg help is net one command shorter than at plan start (AC1)`,
+    `cache: two consecutive borg link runs write no cache artifact (AC1)`) — and, unlike before, the stated goal holds
+    too. The box was deliberately held unticked while `borg link --brief` answered from somewhere else: it returned
+    from `_borg_link_dispatch` before any Python ran, so it never swept — measured at **zero `gh` subprocesses against
+    every other arm's two** (one `pullRequests` sweep plus AC3's one `issueOrPullRequest` fetch). That fold shipped on
+    branch `feat/fold-brief-into-the-document`, per
+    `docs/plans/directives/2026-08-27-fold-brief-into-the-document.md`. `--brief` is now a presentation mode of the
+    same document: it builds it ONCE via `_borg_py borg_core.link.cli --json`, projects that JSON into the narrative
+    prompt, and re-renders those same bytes through the new `--render-document` seam when the narrative is
+    unavailable. One sweep, one clock read, two consumers — and no hand-rolled fallback table left to drift from the
+    real page, because the fallback IS the real page.
+  - Evidence is a subprocess count, never a reading of the code (`tests/link_sweep.bats`, the one suite that restores
+    the real adapter and the real fetch seam `setup_temp_dirs` neutralizes everywhere else):
+    `sweep: link --brief sweeps exactly as link does, counted rather than read` asserts exactly one
+    `pullRequests(first:` and one `issueOrPullRequest(number:` on the `--brief` arm, side by side with an identical
+    count on bare `link`; `sweep: link --local --brief spawns zero gh subprocesses, and --brief without it sweeps`
+    proves the one opt-down is really forwarded; and four cases force each `fallback_reason` branch — timeout,
+    not-logged-in, non-zero exit, empty output — and assert the document renders under each. `tests/briefing.bats`
+    still carries 12 cases: eight untouched, three consciously rewritten, one kept with new provenance, none deleted.
+    `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5** is closed and its
+    **Phase 3** subsumed. **Phase 5b** (`/borg-recon`, the second un-folded human digest) is a skill rather than a
+    command, blocks neither verify clause nor the stated goal, and stays filed separately.
 - [x] **AC2 — The topological grid is the renderer, everywhere.** Vertical, rows as levels with time flowing down,
       columns as branches, box-drawing connectors, state glyphs, compact nodes with detail blocks below, ANSI to
       stdout by default with OSC-8 hyperlinks on refs. Repository and orchestrator contexts differ in breadth only —
