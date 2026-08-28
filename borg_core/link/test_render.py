@@ -8,6 +8,8 @@ these are the microscope.
 
 import datetime
 import inspect
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -18,6 +20,7 @@ import pytest
 from borg_core.link import cli, picture, render
 from borg_core.link import grid as link_grid
 from borg_core.manifest import core as manifest_core
+from borg_core.manifest import shell as manifest_shell
 from borg_core.link.test_picture import fork_manifest, plain
 
 
@@ -765,8 +768,9 @@ def test_a_decision_gate_routes_to_yours_and_a_verification_to_mine():
     """A4. MUTATION: swap the two entries in `_GATE_ROUTING`.
 
     These are `manifest_core.gates`' own words -- a `decision` blocks a PERSON, a `verification`
-    blocks nobody in particular because anyone can run it -- and they are the only two kinds any
-    manifest has ever declared or that the validator will accept.
+    blocks nobody in particular because anyone can run it -- and they are the only two kinds either
+    LIVE manifest declares. They are no longer the only two the validator accepts; see
+    `test_an_unrecognized_kind_reaches_unsure_through_the_real_loader`.
     """
     doc = _ready_doc(
         ["o/r#1", "o/r#2"],
@@ -808,12 +812,13 @@ def test_an_ungated_ready_row_is_mine():
 def test_an_unrecognized_gate_kind_routes_to_unsure_and_names_the_kind():
     """A6. MUTATION: `_GATE_ROUTING.get(kind, _GROUP_MINE)` -- or `_GROUP_YOURS`; both are lies.
 
-    UNREACHABLE THROUGH THE FRONT DOOR AND TESTED ANYWAY. `manifest_core.GATE_KINDS` is
-    `{"decision", "verification"}` and validation drops the WHOLE manifest on anything else, so no
-    valid file produces this row -- measured, by putting `kind: "review"` in auth-hardening.json and
-    watching the orchestrator grid fall from 12 declared refs to 5. Same terms `GLYPH_DRAFT` was kept
-    on through two ACs: the branch is one line and the day `GATE_KINDS` widens, a default would send
-    a kind nobody understands to one of the two real sides with nothing mis-set.
+    THE UNIT HALF. This case hands `_next_tally` a gate dict directly, so it pins the routing and the
+    heading without going near the loader. It used to be the ONLY half, because the validator closed
+    `gate.kind` to `manifest_core.GATE_KINDS` and a manifest carrying `kind: "review"` was first
+    dropped whole and later (PR #173) degraded down to nothing but that row. Both are fixed: an
+    unrecognized kind is now a router concern. The end-to-end half is
+    `test_an_unrecognized_kind_reaches_unsure_through_the_real_loader` below, over the same fixture
+    row `link-grid-orchestrator.golden` pins.
     """
     doc = _ready_doc(
         ["o/r#3"],
@@ -825,13 +830,58 @@ def test_an_unrecognized_gate_kind_routes_to_unsure_and_names_the_kind():
     assert "yours" not in body and "mine" not in body
 
 
+_LINK_FIXTURES = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "tests", "fixtures", "link")
+
+
+def test_an_unrecognized_kind_reaches_unsure_through_the_real_loader(tmp_path):
+    """A6 THROUGH THE FRONT DOOR. MUTATION: restore `if kind not in GATE_KINDS` in `_validate_gate`.
+
+    THE CASE ABOVE HANDS `_next_tally` A GATE DICT; this one starts from the shipped fixture FILE and
+    goes through `manifest_shell.discover` -- validate, `_drop_invalid_rows`, `gates()`, `ready_refs`,
+    `_route`. That distinction is the whole point: for two ACs `unsure` was reachable only by handing
+    the router a string. First the validator closed `gate.kind` to `GATE_KINDS` and
+    `shell._load_manifest` dropped the WHOLE FILE; then PR #173 made degradation row-level, which
+    deleted only the offending row -- quieter, and strictly worse, because the page then rendered as
+    though the row had never been declared.
+
+    READS `tests/fixtures/link/` DIRECTLY rather than building a manifest inline, and that is
+    deliberate: `link-grid-orchestrator.golden` pins this same row's rendered form, and the two
+    oracles must be reading the same bytes. A test that built its own `kind: "review"` row would stay
+    green if someone reverted the fixture, leaving the golden as the only guard on a row whose whole
+    job is to be the guard.
+    """
+    # `discover` takes REPOSITORY roots and globs `<root>/.borg/programs/`, so the shipped fixture is
+    # copied into that layout rather than read in place -- the bytes under test are still the
+    # fixture's.
+    programs = tmp_path / "warehouse" / ".borg" / "programs"
+    programs.mkdir(parents=True)
+    shutil.copy(os.path.join(_LINK_FIXTURES, "manifests", "warehouse-rollout.json"), str(programs))
+
+    manifests, warnings = manifest_shell.discover([str(tmp_path / "warehouse")])
+    assert warnings == [], "an unrecognized kind is not a defect, so nothing is degraded away"
+    assert "acme/warehouse#78" in [row["ref"] for row in manifests[0]["rows"]], "the row SURVIVES loading"
+
+    with open(os.path.join(_LINK_FIXTURES, "fetch-acme.json"), encoding="utf-8") as handle:
+        recording = json.load(handle)
+    fetched = {ref: {"state": node["state"].lower()} for ref, node in recording["nodes"].items()}
+
+    block = link_grid.grid_manifest(manifests[0], {}, fetched)
+    grid_block = dict(_doc()["grid"])
+    grid_block.update({"manifests": [block], "declared": len(block["nodes"])})
+    body = "\n".join(_next_body(_doc(grid=grid_block)))
+
+    assert "unsure" in body, "the group built to say 'the router does not know' actually populates"
+    assert '"review"' in body, "and the human is told WHICH kind failed to route"
+    assert "acme/warehouse#78" in body
+
+
 def test_the_unsure_group_is_absent_when_empty_but_the_section_is_not():
     """A7. MUTATION: render the `unsure` heading unconditionally.
 
     A GROUP may be absent; a SECTION may not. AC2's directive rejected reserving an always-empty
     section slot for yours-vs-mine as the "reads as broken" failure, and this is the line between the
     two ideas: NEXT always renders (with a placeholder when it has nothing), the groups inside it
-    only render when populated. Zero manifests in existence declare an unrecognized kind.
+    only render when populated. Neither live manifest declares an unrecognized kind.
     """
     body = "\n".join(_next_body(_ready_doc(["o/r#9"])))
     assert "unsure" not in body
@@ -905,20 +955,20 @@ def test_a_partly_unlooked_board_reports_both_halves():
     assert "o/r#1" in body, "and the real answer still renders"
 
 
-def test_the_router_covers_every_gate_kind_the_validator_admits():
+def test_the_router_covers_every_declared_gate_kind():
     """`unsure` is a DIVERGENCE GUARD, and this is the case that gives it a job.
 
     MUTATION: add a third member to `manifest_core.GATE_KINDS` without adding it to `_GATE_ROUTING`.
 
-    The group cannot be reached through the front door today and that is not an oversight: the
-    validator admits exactly `{decision, verification}` and the router routes exactly those two, so
-    the sets coincide. What `unsure` protects against is the window where they STOP coinciding — a
-    kind added to the validator and forgotten in the router would otherwise fall to whichever side a
-    `.get(kind, default)` named, silently, with nothing mis-set.
+    `GATE_KINDS` no longer gates validation — any non-empty kind loads now — so it is purely the
+    DECLARED vocabulary, the set of kinds this project says it understands. The invariant is that the
+    router is never BEHIND that declaration: a kind added to the declared set and forgotten in
+    `_GATE_ROUTING` would fall to `unsure` and be reported as unroutable when it is in fact a kind we
+    claim to know, which is a quieter wrong answer than the one `unsure` exists to prevent.
 
-    So the real invariant is not "unsure renders" (it should not, yet) but "the router is never
-    behind the validator". Asserted as a subset rather than equality: the router is allowed to know
-    about a kind the validator has not admitted yet, which is the safe direction.
+    Asserted as a subset rather than equality: the router is allowed to know about a kind the
+    declaration has not caught up to, which is the safe direction. This is also the ONLY live tie
+    between `GATE_KINDS` and any production code — see the constant's own comment.
     """
     routed = set(render._GATE_ROUTING)  # pylint: disable=protected-access
     assert set(manifest_core.GATE_KINDS) <= routed, (

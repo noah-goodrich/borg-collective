@@ -94,4 +94,18 @@ hand-edited afterwards, and AC5 has not shipped, so nothing writes manifests but
   >
   > Whether `unsure` should be reachable at all is a live question for the owner, not one this
   > directive settles.
+  >
+  > **CLOSED 2026-08-28. The owner took the second option this amendment named** — demote an
+  > UNRECOGNIZED, NON-EMPTY `gate.kind` from a row-scoped validation error to a router concern, so the
+  > row survives loading and routes to `unsure`. `GATE_KINDS` was NOT widened (this directive's
+  > non-goal holds); it is now the declared vocabulary the router must never fall behind, and nothing
+  > else. An EMPTY or MISSING `kind` stays a validation error and still costs its row: `_route("")`
+  > means "no gate" and returns `mine`, so a blank kind would render under `mine — nothing is blocking
+  > these` on a line that also prints its own `blocked_by`. `gate.blocked_by` and `gate.resolved_by`
+  > stay required and stay fatal. `tests/fixtures/link/manifests/warehouse-rollout.json` gained
+  > `acme/warehouse#78` (`kind: "review"`) so the group is pinned end to end by
+  > `link-grid-orchestrator.golden` and by
+  > `test_an_unrecognized_kind_reaches_unsure_through_the_real_loader`, not just by a unit test that
+  > hands `_route` a string. The subset guard survives under its corrected name,
+  > `test_the_router_covers_every_declared_gate_kind`.
 - [ ] Both grid goldens are unchanged by this directive alone, since no fixture carries an invalid row.
