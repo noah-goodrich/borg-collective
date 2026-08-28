@@ -103,9 +103,46 @@ which is the actual defect. Every field it reads is already on the document.
       Four, one per branch, in `tests/link_sweep.bats`: timeout (rc 124 via a mocked `timeout`), not-logged-in
       (exit 0 plus the string), non-zero exit (with its captured stderr still surfacing), and empty output.
 - [x] `tests/briefing.bats`'s 12 cases still pass or are consciously rewritten — none silently deleted.
-      Still 12: eight untouched, three rewritten with the reason recorded in the file header (the inactive header,
-      the xtrace-locals guard, the field-collapse case), one kept with new provenance (the empty-registry hint).
+      Now 15: eight untouched, three rewritten with the reason recorded in the file header (the inactive header,
+      the xtrace guard, the field-collapse case), one kept with new provenance (the empty-registry hint), and three
+      added by the remediation pass below. The xtrace case was rewritten TWICE — see that section.
 - [x] `PROJECT_PLAN.md`'s AC1 ticks, with the un-tick rationale replaced by the evidence that it now holds.
+
+## Remediation pass (post-review, same branch)
+
+An independent review passed the fold with defects. Four were real and are fixed here; all four are recorded because
+the first is the directive's own failure class committed by the directive's own implementation.
+
+- **The projection reintroduced two truth levels.** It read the TOP-LEVEL `.directives`/`.assimilated`, which
+  `cli.py`'s `need_aggregate = mode == "json" or ...` always fills with the registry-WIDE aggregate, while
+  `render._scoped_rows` narrows both to `doc.focus[key]` in repository scope. Measured on the author's registry from
+  inside a repository: the prompt got `SCOPE: repository — noah`, `QUEUED: 141 open directives` and three
+  collective-wide plan titles, while the fallback page rendered from THE SAME BYTES said "nothing queued" and "nothing
+  shipped yet". Fixed by binding breadth ONCE in the jq
+  (`$breadth = if scope.kind == "repository" then focus else document`) — `render._scoped_rows` transcribed, not a
+  second rule. Pinned by `tests/briefing.bats`'s "in repository scope the prompt's QUEUED/SHIPPED match the page's,
+  not the registry's", which asserts on the captured `claude -p` argument and carries an orchestrator-scope control.
+- **A jq failure shipped an empty prompt and still paid for `claude -p`.** `2>/dev/null) || payload=""` discarded both
+  jq's stderr and its exit status, so a projection broken against a future document shape sent `DOCUMENT:` followed by
+  nothing and printed whatever the model invented, with NO reason line — `fallback_reason` was only ever set on
+  `claude` failures. An empty `payload` from a non-empty `doc` is now a fallback with its own reason, jq's captured
+  stderr appended, and the `claude -p` fork is skipped entirely.
+- **The empty-registry short circuit keyed off the wrong field.** `core.assemble` sets `total_projects` from the
+  UNFILTERED project map on purpose (the page must tell an empty registry from an all-archived one). The deleted
+  registry walk excluded archived entries, so an all-archived registry used to print the scan hint; keying on
+  `total_projects` stopped it firing and billed a narrative for a board with zero rows. It keys off
+  `(.order | length)` now — the list the projection actually walks.
+- **The xtrace case was decoration after its first rewrite.** Re-pointing it at the new locals changed nothing,
+  because bats never runs with `set -x`: deleting the guard produced no trace and the case stayed green. It now drives
+  borg under `zsh -x` with an empty `PS4` — the exact condition the guard's comment names — and the mutation is
+  verified (7 leaked trace lines with `set +x` removed).
+
+Two shape warts in `borg_core/link/cli.py`, also from the review: `_build_parser`'s docstring said "all four modes"
+directly above `--deep`, which the module docstring and `_mode` both insist is not one; and `mode = _mode(args)` ran
+before the `--render-document` branch, so `--json --render-document` picked the JSON die formatter and then printed
+the human page. The docstring now states the mode count as `_mode`'s return set, and the combination is REFUSED at the
+parser (exit 2, usage on stderr) rather than reconciled — refusing is the only answer that does not silently discard
+half of what the caller asked for, and `borg.zsh`'s one live caller passes `--render-document` alone.
 
 ## What this changed beyond the criteria, recorded rather than hidden
 

@@ -344,7 +344,14 @@ def _render_document_from_stdin(stream) -> int:
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the stdlib argparse parser for all four `borg link` modes."""
+    """Build the stdlib argparse parser: THREE modes (`json`, `porcelain`, `human`) plus four flags
+    that are not modes.
+
+    It used to say "all four modes", directly above `--deep`, whose own comment three lines down and
+    the module docstring at the top of this file both insist it is NOT one -- and `_mode` reads
+    exactly two flags. `--render-document` landing next to it made the miscount a live trap: a reader
+    counting flags would make it five. The mode count is `_mode`'s return set and nothing else.
+    """
     parser = argparse.ArgumentParser(prog="borg link", description="Emit the borg link document.")
     parser.add_argument("project", nargs="?", default="")
     parser.add_argument("--json", dest="json_only", action="store_true")
@@ -418,7 +425,20 @@ def main(argv: list[str] | None = None) -> None:
     This is the ONLY exception boundary in this module, placed here because `_run`/`main` is the
     only point that already knows the mode.
     """
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+    # REJECTED AT THE PARSER, not reconciled downstream. `--render-document` is not a mode: it prints
+    # the human page from stdin whatever `--json`/`--porcelain` say. Combined with one of them, `mode`
+    # was still computed first, so `--json --render-document` selected the JSON die formatter and then
+    # emitted the human ANSI page -- a request answered by ignoring half of it. Making `die` follow
+    # the output instead would have kept the combination "working" while still ignoring the flag the
+    # caller passed; refusing is the only answer that does not silently discard user intent, and the
+    # one live caller (borg.zsh's `_borg_print_briefing` fallback) passes `--render-document` alone,
+    # so nothing on any shipped path reaches this. Not a mutually-exclusive argparse group: that would
+    # also forbid `--json --porcelain`, which is a LIVE combination resolved by `_mode`'s documented
+    # precedence.
+    if args.render_document and (args.json_only or args.porcelain):
+        parser.error("--render-document is not a mode; it cannot be combined with --json or --porcelain")
     mode = _mode(args)
     die = _die_json if mode == "json" else _die_human
     try:

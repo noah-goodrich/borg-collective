@@ -40,10 +40,29 @@ e2e/eval harness that keeps it honest.
     count on bare `link`; `sweep: link --local --brief spawns zero gh subprocesses, and --brief without it sweeps`
     proves the one opt-down is really forwarded; and four cases force each `fallback_reason` branch — timeout,
     not-logged-in, non-zero exit, empty output — and assert the document renders under each. `tests/briefing.bats`
-    still carries 12 cases: eight untouched, three consciously rewritten, one kept with new provenance, none deleted.
+    now carries 15 cases: none deleted, three rewritten with the reason recorded in the file header, one kept with new
+    provenance, and three added by the remediation pass below.
     `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5** is closed and its
     **Phase 3** subsumed. **Phase 5b** (`/borg-recon`, the second un-folded human digest) is a skill rather than a
     command, blocks neither verify clause nor the stated goal, and stays filed separately.
+  - **The first fold reintroduced the defect once, inside itself, and the tick is only honest with the remediation
+    included.** The narrative projection read the TOP-LEVEL `.directives`/`.assimilated`, which `--json` always fills
+    with the registry-wide aggregate, while the fallback page rendered from THE SAME BYTES narrows both to `focus` in
+    repository scope. Measured on the author's registry: the prompt said `QUEUED: 141 open directives` plus three
+    collective-wide plan titles while the page printed underneath it said "nothing queued" and "nothing shipped yet".
+    One invocation, two answers — AC1's own failure class. The projection now binds breadth ONCE
+    (`$breadth = if scope.kind == "repository" then focus else document`), transcribing `render._scoped_rows` rather
+    than inventing a second rule, and `tests/briefing.bats`'s "in repository scope the prompt's QUEUED/SHIPPED match
+    the page's, not the registry's" asserts it on the captured `claude -p` argument with an orchestrator-scope control
+    beside it. Two smaller holes closed with it: a failed `jq` projection used to ship an empty `DOCUMENT:` block to
+    `claude -p` and print the invented narrative with no reason line (it now takes the fallback with its own
+    `fallback_reason`, jq's stderr included), and the empty-registry short circuit keyed off `total_projects`, which
+    `core.assemble` fills from the UNFILTERED map — so an all-archived registry stopped short-circuiting and paid
+    for a narrative about a board with no rows. It keys off `.order` now, the list actually projected.
+  - **`--brief` is still the one invocation that prints something other than the seven sections**, and AC2's "never a
+    different page" is qualified in CLAUDE.md rather than left to read as covering it. The narrative path prints prose:
+    no cube, no `▸` headers. What AC1 claims, and what is tested, is that the prose is a rendering of the SAME
+    document at the SAME sweep, and that the fallback is the real page byte for byte.
 - [x] **AC2 — The topological grid is the renderer, everywhere.** Vertical, rows as levels with time flowing down,
       columns as branches, box-drawing connectors, state glyphs, compact nodes with detail blocks below, ANSI to
       stdout by default with OSC-8 hyperlinks on refs. Repository and orchestrator contexts differ in breadth only —
