@@ -258,9 +258,14 @@ run_zsh_borg() {
 # keeps this honest, and `^  [A-Z]` (any section header) rather than `^  REMOVED` is what keeps it
 # honest if the REMOVED heading is ever retitled again.
 @test "contract: borg help is net one command shorter than at plan start (AC1)" {
+    # 25 SINCE THE 2026-08-27 RETIREMENT, and the criterion is still satisfied: AC1 asks for "net one
+    # command shorter than at plan start", which is a FLOOR on shrinkage, not a target to hit exactly.
+    # 27 at plan start, -1 for `recon` (S4), -1 for `watch`
+    # (2026-08-27-retire-unused-link-surfaces.md: zero typed invocations in six months of shell
+    # history). No verb has been added at any point. If this goes red, ask which entry moved.
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
     [ "$status" -eq 0 ]
-    [ "$output" = "26" ]
+    [ "$output" = "25" ]
 }
 
 # The count alone reaches 26 if someone deletes `doctor` instead of `recon` — and four dispatch
@@ -874,57 +879,6 @@ EOF
     [ "$status" -eq 0 ]
     [[ "$output" == *"Spend — main vs subagent split"* ]] || false
     [[ "$output" == *"THIS MACHINE only"* ]] || false
-}
-
-# cmd_watch (borg.zsh:2690) has no --once flag — it is a hardcoded `while true; do ...; sleep
-# "$interval"; done`. `run_zsh_borg` / bats `run` block until the command exits, so it CANNOT be used
-# here — it would hang the suite, and no `timeout`/`gtimeout` binary is assumed present on the target
-# machines. Instead: background the real invocation with a generous interval so the loop cannot reach
-# a second `sleep` cycle during the test, poll the redirected output file with a bounded, short-
-# interval loop (no blind long sleep), then kill+wait unconditionally. Worst-case orphaned-child
-# lifetime if `kill` somehow failed to land is bounded by the interval itself (30s) — short and
-# self-cleaning, never a real hang. tmux is mocked because cmd_watch calls cmd_link ->
-# borg_registry_with_state -> borg_reap_overlay -> _borg_live_windows -> the real `tmux` binary,
-# unconditionally, even against an empty registry.
-#
-# THE POLL MUST WAIT FOR A COMPLETE FRAME, NOT FOR THE FIRST BYTE. This test failed 3/3 on the
-# 2026-08-12 baseline and intermittently thereafter for a reason that had nothing to do with the code
-# under test: `[ ! -s "$outfile" ]` goes false the moment the `BORG WATCH` header lands (borg.zsh:2646),
-# but the assertions below also require `cmd_link`'s body (:2650) and the `RECENT NANOPROBES` section
-# (:2653) — and `cmd_link` shells out to jq/tmux many times, so on a loaded runner the kill lands
-# mid-frame and the later sections never get written. The wait condition has to be the LAST line a
-# frame emits (`Ctrl-C to exit`, :2670); anything earlier is a race the assertions can lose. The
-# ceiling is raised to 200 (10s) to give a slow runner room to finish one frame, and the interval to
-# 30s so that ceiling still cannot reach a second frame — the invariant the paragraph above depends on.
-
-@test "contract: watch dispatches into the live-refresh loop and renders under zsh (background+kill)" {
-    setup_mock_bin
-    export BORG_PATH_PREFIX="$MOCK_BIN"
-    cat > "$MOCK_BIN/tmux" <<'EOF'
-#!/usr/bin/env bash
-exit 1
-EOF
-    chmod +x "$MOCK_BIN/tmux"
-
-    local outfile="${BATS_TEST_TMPDIR}/watch.out"
-    zsh "$BORG" watch 30 > "$outfile" 2>&1 &
-    local pid=$!
-
-    local waited=0
-    while ! grep -q "Ctrl-C to exit" "$outfile" 2>/dev/null && [ "$waited" -lt 200 ]; do
-        sleep 0.05
-        waited=$((waited + 1))
-    done
-
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-
-    [ -s "$outfile" ]
-    local watch_output
-    watch_output="$(cat "$outfile")"
-    [[ "$watch_output" == *"BORG WATCH"* ]] || false
-    [[ "$watch_output" == *"RECENT NANOPROBES"* ]] || false
-    [[ "$watch_output" == *"No projects registered"* ]] || false
 }
 
 # cmd_doctor already has extensive coverage of its own launchd/freshness logic in tests/doctor.bats
@@ -2738,17 +2692,6 @@ EOF
     [ "$output" = "0" ]
 }
 
-@test "contract: drone status extracts the session status, not a pull request title" {
-    _link_setup_grid
-    _link_grid_seams
-
-    run bash -c "cd '${BATS_TEST_TMPDIR}/ws' && zsh '$BORG' link --local platform 2>/dev/null \
-        | grep -m1 'Status:' | sed 's/.*Status:[[:space:]]*//' | tr -d '\n'"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *active ]] || false
-    [[ "$output" != *"rollout report"* ]] || false
-}
-
 # B7. `scope_for` honours a positional only when it is IN THE REGISTRY, so `borg link ghost` from the
 # workspace root resolves to ORCHESTRATOR scope — the exact shape where a purely scope-derived
 # `need_focus` skips `_focus`, skips the raise, and exits 0 with a full board. `bool(project) or ...`
@@ -2931,18 +2874,22 @@ print(max(picture.visible_len(r) for r in rows))
     [ "$width" -gt 0 ] || { echo "measured no picture rows at all" >&2; false; }
     [ "$width" -le "$(PYTHONPATH="$BORG_HOME" python3 -c 'from borg_core.link import picture; print(picture.PICTURE_BUDGET)')" ]
 
-    pane=$(grep -o 'right:[0-9]*:wrap' "$BORG" | head -1 | cut -d: -f2)
-    [ -n "$pane" ] || { echo "could not parse --preview-window out of borg.zsh" >&2; false; }
-    [ "$width" -le "$((pane - 2))" ] || {
-        echo "widest picture row is ${width} columns, preview pane is ${pane}" >&2
-        false
-    }
+    # THE PANE COMPARISON IS GONE BECAUSE THE PANE IS. `borg switch`'s fzf preview was retired on
+    # 2026-08-27 (zero typed invocations in six months), taking `--preview-window right:70:wrap` with
+    # it, so there is no longer a second number to check against. PICTURE_BUDGET is now the whole
+    # bound — which is what `docs/plans/directives/2026-08-27-retire-unused-link-surfaces.md` requires
+    # of the retirement: it must not silently take out the only executable check that the picture fits
+    # anything. The budget stays 68 on its own merits; a future consumer that reintroduces a width
+    # constraint should assert against ITS number here, not resurrect the deleted one.
+    run grep -c -- '--preview-window' "$BORG"
+    [ "$output" -eq 0 ]
 }
 
 # B16. `--deep` is parsed and IGNORED. It stays in the parser because ONE live copy of the dispatcher
-# passes it — borg.zsh's positional arm at borg.zsh:3111, which is the fzf preview's path; delete the
-# argument and argparse exits 2 where `drone status` and the fzf preview both swallow the failure
-# silently — a blank column and a blank pane.
+# passes it — borg.zsh's positional arm, which every `borg link <project>` routes through; delete the
+# argument and argparse exits 2 wherever a caller swallows failure silently. The fzf preview and
+# `drone status` were the two such callers named here until both were retired on 2026-08-27; the arm
+# they shared is still live and still passes the flag.
 #
 # Corrected in AC2/S4: this said THREE copies, also naming bin/link-parity-harness and its byte-copy
 # at ~/.claude/bin/. Neither ever passed `--deep` — the harness looped a bare positional — and S4
@@ -3112,30 +3059,6 @@ EOF
     [[ "$output" == *"usage: borg link"* ]] || false
     [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
     [[ "$output" != *"Scanning Claude session history"* ]] || false
-}
-
-# ── external consumers ───────────────────────────────────────────────────────
-
-# EXTERNAL CONSUMER (drone.zsh:964): `drone status` greps `Status:` out of the HUMAN deep dive and
-# shows it as the `claude:<status>` column. That text format is an undeclared cross-CLI API with no
-# test anywhere — break it and the column silently blanks. This runs drone's exact extraction
-# pipeline against real `borg link` output.
-#
-# NOTE ON WHAT IS PINNED. borg.zsh emits color unconditionally (no isatty check), so the value drone
-# actually captures today is a reset escape plus padding plus the status — `sed 's/.*Status:...'`
-# stops at the ESC. Asserting those exact bytes would freeze an ANSI leak into the contract, so this
-# asserts what drone's column depends on: the value ENDS in the status, and the deep dive emits
-# exactly one `Status:` line for `grep -m1` to find. (An earlier `${#lines[@]} -eq 1` check here was
-# vacuous — the pipeline's own `tr -d '\n'` guaranteed it.)
-@test "contract: drone status can still extract Status: from the deep dive" {
-    _link_setup_deep
-
-    run bash -c "zsh '$BORG' link delta 2>/dev/null | grep -m1 'Status:' | sed 's/.*Status:[[:space:]]*//' | tr -d '\n'"
-    [ "$status" -eq 0 ]
-    [[ "$output" == *active ]] || false
-
-    run bash -c "zsh '$BORG' link delta 2>/dev/null | grep -c 'Status:'"
-    [ "$output" = "1" ]
 }
 
 # EXTERNAL CONSUMER (drone.zsh:1405): `drone link` is `exec borg link "${2:-${PWD##*/}}"`. It resolves
@@ -3571,17 +3494,19 @@ EOF
 
 # Check 2: runtime absence via `whence -w`, which catches a helper relocated into lib/*.zsh (sourced
 # by glob) or defined via eval -- grep on borg.zsh alone cannot see either. The SAME test asserts the
-# positive half: _borg_read_directives, cmd_ls and cmd_watch must SURVIVE (cmd_next:1106 still calls
+# positive half: _borg_read_directives and cmd_ls must SURVIVE (cmd_next:1106 still calls
 # _borg_read_directives). Verified on the pre-flip tree to print "STILL DEFINED" for 9/9; this must be
-# green only after a real deletion.
+# green only after a real deletion. `cmd_watch` MOVED from the survivor list to the deleted one on
+# 2026-08-27 — zero typed invocations in six months, see
+# docs/plans/directives/2026-08-27-retire-unused-link-surfaces.md.
 @test "contract: the nine deleted link helpers are undefined at runtime, and their survivors are not" {
     run zsh -c "set -- help; source '$BORG_HOME/borg.zsh' >/dev/null 2>&1
         for f in cmd_link _borg_link_porcelain _borg_link_overview _borg_link_deep \
                  _borg_cortex_pending _borg_cortex_countdown _borg_collect_all_directives \
-                 _borg_collect_all_assimilated _borg_read_assimilated; do
+                 _borg_collect_all_assimilated _borg_read_assimilated cmd_watch; do
             whence -w \$f >/dev/null 2>&1 && { print -r -- \"STILL DEFINED: \$f\"; exit 1; }
         done
-        for f in _borg_read_directives cmd_ls cmd_watch; do
+        for f in _borg_read_directives cmd_ls; do
             whence -w \$f >/dev/null 2>&1 || { print -r -- \"MISSING: \$f\"; exit 1; }
         done
         exit 0"
@@ -3843,23 +3768,4 @@ EOF
     run zsh "$BORG" link
     run cat "$ARGVDUMP"
     [[ "$output" != *"--local"* ]] || false
-}
-
-@test "contract: every hot borg-link call site opts down with --local" {
-    # B1/B2: the three call sites that re-execute `borg link` in a loop. The protection is asserted
-    # here rather than trusted to a comment, because the ONLY thing that made the first-pass design
-    # unsafe was a stale comment claiming the fzf preview was already protected.
-    #
-    #   borg.zsh:266   fzf --preview, re-executed on every cursor move (routes to --deep, NOT
-    #                  --porcelain; that inversion is exactly what the review caught)
-    #   borg.zsh:2222  cmd_watch's `while true` redraw on a 5s interval
-    #   drone.zsh:964  cmd_status's per-tmux-window loop
-    run grep -c -- '--preview "borg link --local {1}"' "$BORG"
-    [ "$output" -eq 1 ]
-
-    run grep -c -- '_borg_link_dispatch --local' "$BORG"
-    [ "$output" -eq 1 ]
-
-    run grep -c -- 'borg link --local "$wname"' "${BATS_TEST_DIRNAME}/../drone.zsh"
-    [ "$output" -eq 1 ]
 }
