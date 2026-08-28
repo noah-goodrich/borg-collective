@@ -97,9 +97,20 @@ rather than as sections:
 
   yours — a decision only you can make
     ● n12  stillpoint#48   Kelly must sign off on the maintenance window
-  mine — nothing is blocking these
-    ● n11  stillpoint#57
+  mine — no decision needed first, so anyone can pick these up
+    ● n11  stillpoint#57   needs a live-prod confirmation run against all four contracts
 ```
+
+> **`mine`'s HEADING WAS CORRECTED 2026-08-28.** As shipped it read *"nothing is blocking these"*, which was
+> written for the ungated half of the group and is a false statement about the other half — D2 below routes
+> `verification` gates here too, and `_next_row` prints the gate's `blocked_by` on the same line. The live render
+> above is the actual reproduction: the heading denied a blocker printed directly under it, on the single most
+> decision-relevant line of the front door. **The routing did not change** and must not; D2's rule is correct. The
+> heading now names the axis the routing actually splits on — whose hands the row needs — which is true of both
+> members. Pinned by `test_render.py::test_the_mine_heading_is_true_of_a_verification_gated_row_and_not_only_an_ungated_one`,
+> and `tests/fixtures/link/manifests/auth-hardening.json`'s `acme/infra#12` now carries a `verification` gate so
+> both grid goldens render the populated form. Before that fixture row, every `mine` row in every golden was
+> ungated and the goldens were blind to this input entirely.
 
 `unsure` renders only when non-empty, and names the kind it could not route:
 
