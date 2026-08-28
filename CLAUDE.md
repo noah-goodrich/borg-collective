@@ -69,7 +69,7 @@ borg / borg next         What needs attention? Switch to it.
 borg claude              Launch/resume orchestrator Claude session
 borg link [project]      ONE document, seven sections, always the same spine (AC2)
                            Scope widens or narrows it; it is never a different page
-                           --brief   LLM narrative briefing (still zsh, never sweeps)
+                           --brief   LLM narrative over the SAME document, same sweep (AC1)
                            --refresh Regenerate summaries
                            --all     Include archived projects
                            --local   Opt down from the network sweep (hot loops only)
@@ -299,6 +299,21 @@ docs/
   lets the picture be pinned against `picture-{fork,crossing}.expected`, two HAND-AUTHORED fixtures
   that are never regenerated — an oracle that does not come from the implementation it checks. Keep
   it that way: a subprocess or a file read in `picture.py` destroys that property.
+- **`--brief` is a presentation mode of the document, not a second path (AC1, 2026-08-27)**:
+  `_borg_print_briefing` (borg.zsh) builds the `borg link` document ONCE — the same
+  `_borg_py borg_core.link.cli --json` call every other dispatch arm makes, with `--all`/`--local`
+  forwarded identically — projects that JSON into the narrative prompt with one `jq`, and when the
+  narrative fails pipes **those same bytes** back through `borg_core.link.cli --render-document`,
+  a non-mode seam gated in `main()` above `_mode`. One sweep, one `generated_at`, two consumers. It
+  used to be 177 lines of a second registry walk that never reached Python at all, which is why AC1
+  stayed unticked with both verify clauses passing. Three rules follow. (1) **Never re-derive here.**
+  A `borg_registry_with_state` call inside that function undoes the fold. (2) **Never rebuild for the
+  fallback.** A second `--json` call would re-read the clock and re-sweep, so the page could disagree
+  with the prompt it fell back from — two truth levels inside one invocation. (3) **The `claude -p`
+  call stays in zsh.** `borg_core/proc.py` DEVNULLs stderr and returns `None` (not rc 124) on
+  timeout, so moving it silently deletes the reason line's captured stderr and the timeout branch,
+  both of which `tests/briefing.bats` pins. Sweep parity is asserted by **subprocess count** in
+  `tests/link_sweep.bats`, never by reading the arm.
 - **The `borg link` parity harness's `render` leg was retired 2026-08-27 (AC2/S4)**:
   `bin/link-parity-harness render` byte-compared the current tree against the last zsh renderer at
   `ad99612`. After AC2 that oracle renders a *different document*, so the comparison is

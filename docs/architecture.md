@@ -441,5 +441,5 @@ directory names.
 | jq | Yes | Registry JSON CRUD |
 | fzf | Yes | Fuzzy picker for `borg switch` |
 | tmux | Yes | Session multiplexing |
-| claude | Optional | Orchestrator session, `borg link --brief` narrative briefing |
+| claude | Optional | Orchestrator session, `borg link --brief` narrative over the link document |
 | Docker | Optional | Devcontainer support |

@@ -130,9 +130,12 @@ Bash: dir="$PWD"; while [[ "$dir" != "/" ]]; do
   (`total_projects` is missing, so the empty-registry vs all-archived branch cannot be rendered
   correctly). Do NOT fall back on a version mismatch.
 
-**Flags that are NOT in the JSON path.** `--brief` (LLM narrative) and `--refresh` (regenerate
-summaries) are still zsh and host-only. If the user asks for either, tell them to run
-`borg link --brief` / `borg link --refresh` from the host — do not attempt them yourself.
+**Flags that are still host-only.** `--refresh` (regenerate summaries) is zsh. `--brief` is now a
+presentation mode of THIS SAME DOCUMENT — it makes the same `--json` call, hands the result to
+`claude -p` for a narrative, and re-renders the document when that fails — but the `claude -p` half
+keeps it host-only. If the user asks for either, tell them to run `borg link --brief` /
+`borg link --refresh` from the host. You already have the document; you never need `--brief` to
+narrate it.
 
 **`--all`.** `borg link --json --all` includes archived projects. Needed only when the user asks
 *which* projects are archived; the count alone is `total_projects - (.order | length)`.

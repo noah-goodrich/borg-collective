@@ -17,7 +17,7 @@ Each row maps a major observable behaviour to the BATS suite(s) that exercise it
 | Nanoprobe worktree reaper (`borg reap-worktrees`) | `reap_worktrees.bats` (stale predicate, age-expired, merged-branch, uncommitted-changes guard) |
 | Session reaper (`_borg_should_reap` / `borg_reap_overlay`) | `reap.bats` (keep/reap predicates, overlay filter) |
 | Registry CRUD | `registry.bats`, `state.bats` |
-| Morning briefing (`borg link --brief`) | `briefing.bats` |
+| Morning briefing (`borg link --brief`) | `briefing.bats` (narrative + fallback content); `link_sweep.bats` (sweep parity by subprocess count; document renders under each `fallback_reason`) |
 | cairn integration | `cairn.bats` |
 | Claude session discovery | `claude.bats` |
 | Drone lifecycle hooks (pre-up / post-down) | `drone_hooks.bats` |
