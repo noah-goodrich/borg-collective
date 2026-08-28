@@ -464,7 +464,13 @@ def plan_objective(text: str) -> str:
 
 
 def _paragraph_from(lines: list[str], start: int) -> str:
-    """`lines[start:]` up to the first blank line or heading, joined with single spaces.
+    """`lines[start:]` up to the first blank line or the first line beginning with `#`, joined with
+    single spaces.
+
+    THE `#` TEST IS NOT A HEADING PARSE, and this says so rather than implying one. It breaks on ANY
+    line whose first character is `#` -- a markdown heading, but equally a `#` line inside a fenced
+    code block. The failure that breadth can produce is a SHORT objective, never a wrong one, which
+    is why it is documented here rather than narrowed in code.
 
     SPLIT OUT BECAUSE PYLINT MEASURED IT (R1702, 6 nested blocks against a ceiling of 5), and the
     seam is the honest one: `plan_objective` above answers WHERE the objective starts -- the shell's

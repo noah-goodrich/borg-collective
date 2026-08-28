@@ -88,8 +88,8 @@ blocks another.
       contains (pick one; document the choice in the fix's commit message).
   - Verify: a unit test feeding a summary string containing `\n` through the chosen fix point asserts
     the rendered `_summary_block` output has no line failing `^  [^ ]` other than the first.
-- [x] **AC2 (F2)** — Correct the `cli.py:187` docstring claim to state the traceback leaked on
-      **stderr** (not stdout), and that stdout/exit-code behavior was unchanged by the fix; the
+- [x] **AC2 (F2)** — Correct the claim in `borg_core/link/cli.py`'s `main()` docstring to state the
+      traceback leaked on **stderr** (not stdout), and that stdout/exit-code behavior was unchanged by the fix; the
       *why* (broad `except Exception` needed to cover AttributeError-shaped entry violations) stays as
       written.
   - Verify: `grep -n "on stdout" /Users/noah/dev/borg-collective/borg_core/link/cli.py` returns no
@@ -108,9 +108,16 @@ blocks another.
   > than the defect, and deleting it to satisfy a string match would trade a real invariant for a
   > green grep — the failure mode this repo files under "a check pointed at the wrong thing does not
   > fail, it reads as a pass". The clause is therefore read as its intent: **no surviving sentence in
-  > that docstring claims a TRACEBACK reaches the out stream.** Verified by reading every hit the
-  > grep returns for the whole file — `cli.py:45`, `:327`, `:400`, three after this change and three
-  > before — and the correction paragraph is deliberately worded to add none.
+  > that docstring claims a TRACEBACK reaches the out stream.**
+  >
+  > **Verified as a command and its outcome, not as line numbers.** `grep -n "on stdout"
+  > borg_core/link/cli.py` returns hits inside exactly three docstrings — `_die_human`'s, `_run`'s and
+  > `main()`'s — and each was read in full. None of the three says a traceback reaches the out stream:
+  > `_die_human` promises `zero bytes on stdout` for the human die path, `_run` promises `zero bytes on
+  > stdout, never a half-frame` for a mid-render exception, and `main()` carries the surviving sentence
+  > quoted above. The correction paragraph is deliberately worded to add no fourth. **No line numbers
+  > are recorded here on purpose:** any insertion above one invalidates it silently, and an earlier
+  > revision of this very note pinned three that had all gone stale.
 - [ ] **AC3 (F3)** — Either fix `_read_text` to preserve `\r` (e.g. `newline=""` semantics) so the
       docstring's claim holds end-to-end, or correct `heading_title`'s docstring to say CR fidelity
       holds only for callers that bypass `_read_text`. Either way, add a test that routes a CRLF file

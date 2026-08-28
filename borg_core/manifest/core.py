@@ -334,12 +334,12 @@ def _validate_gate(gate: Any, ref: str, label: str) -> list[str]:
     mistyped instead of a gap.
 
     EMPTY OR MISSING STAYS FATAL, and the two are different facts. `render._next_tally` reads
-    `kind = gate.get("kind") or ""` and `_route("")` returns `mine` BECAUSE AN UNGATED ROW IS MINE. If
-    a blank kind were also demoted, a row that HAS a gate would render under `mine — nothing is
-    blocking these` while `render._next_row` appends that same gate's `blocked_by` sentence to the
-    line: the document would contradict itself inside one line. Keeping blank fatal is what preserves
-    the invariant that `_route("")` means "no gate", never "a gate that named nothing". `_text`
-    collapses `None`, a missing key, `""` and `"   "` to `""`, so absent and blank land here together.
+    `kind = gate.get("kind") or ""` and `_route("")` returns `mine` BECAUSE AN UNGATED ROW IS MINE. A
+    demoted blank kind would land a GATED row under `mine`, whose heading (`render._GROUP_HEADINGS`
+    owns the wording) claims no decision is needed first -- which the router cannot know about a gate
+    that named no kind. That is the unfounded assertion `render._GROUP_UNSURE` exists to avoid, and
+    blank is less known still. Blank stays fatal so `_route("")` means "no gate", never "a gate that
+    named nothing"; `_text` collapses `None`, a missing key, `""` and `"   "` into that one case.
 
     `blocked_by` and `resolved_by` stay REQUIRED and stay row-scoped errors. They are not vocabulary
     questions -- a gate that names neither its blocker nor its settlement parks work while pointing at

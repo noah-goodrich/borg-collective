@@ -18,9 +18,9 @@ after:   declared  5 refs   + warning: invalid manifest -- rows[2]: gate.kind mu
                               ['decision', 'verification'], got review; rows[2]: gate.resolved_by is required
 ```
 
-**Seven rows disappeared from `▸ CHAINS` because of one word in one field.** The document is not silent — the warning
-renders — but the failure mode is exactly backwards from what a front door should do: the page keeps its confident
-frame and quietly stops containing most of the project.
+**Seven rows disappeared from `▸ CHAINS` because of one word in one field.** The document is not silent — the
+warning renders — but the failure mode is exactly backwards from what a front door should do: the page keeps its
+confident frame and quietly stops containing most of the project.
 
 This is the same class as the defects AC2 and AC4 kept turning up, arriving from the validator side: the check is
 correct about the row and wrong about the blast radius, and nothing about the rendered page tells a reader that the
