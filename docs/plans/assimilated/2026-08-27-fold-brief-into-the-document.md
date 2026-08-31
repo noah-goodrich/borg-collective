@@ -2,6 +2,17 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Parent directive: 2026-08-10-briefing-fallback-and-summary-provenance*
 *Filed: 2026-08-27*
+*Shipped: 2026-08-27 — PR [#174](https://github.com/noah-goodrich/borg-collective/pull/174) (the fold and both
+remediation passes) and PR [#172](https://github.com/noah-goodrich/borg-collective/pull/172) (the AC1 tick) merged to
+main*
+
+> **ASSIMILATION NOTE (2026-08-31).** All six acceptance criteria were ticked with evidence in-branch and are
+> re-verified here against `main`: `_borg_print_briefing` makes one `_borg_py borg_core.link.cli --json` call and one
+> `jq` projection (`awk '/^_borg_print_briefing\(\)/,/^}/' borg.zsh | grep -c 'borg_registry_with_state'` is 0), the
+> fallback re-renders those same bytes through `--render-document`, and both no-page rungs return the child's exit
+> status. The two facts this directive established are now load-bearing elsewhere and are recorded in `CLAUDE.md`:
+> `--brief`'s SUCCESS path is still prose rather than the seven-section page, and the AC2 "never a different page"
+> line is qualified by it rather than rescued.
 
 **tl;dr** — `borg link --brief` never reaches `borg_core.link.cli`. It re-derives its own view from the registry,
 never sweeps, and never sees a manifest — so one verb answers the same question two ways. Point the narrative at the
