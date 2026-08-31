@@ -2,6 +2,16 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Parent directive: 2026-08-26-ac2-topological-grid-renderer*
 *Filed: 2026-08-27*
+*Shipped: 2026-08-28 — PR [#175](https://github.com/noah-goodrich/borg-collective/pull/175) merged to main*
+
+> **ASSIMILATION NOTE (2026-08-31).** All four criteria ticked, and two of them were re-derived after a review found
+> the first tick standing on a test that could not see the stamp — that correction is recorded inline and is the
+> reason this file is worth keeping. Re-verified against `main`: `picture.max_row_width` is stamped by `cli._grid` as
+> `grid.picture_width`, `render._width_line` prints the `▸ SIGNALS` sentence, and `render.py` is on
+> `pyproject.toml`'s clean-arch Domain list (it was unclassified, and therefore unenforced, before this shipped).
+> **One thing this directive did NOT settle and left in the tree**: the `68` came from a 70-column fzf preview pane
+> that was retired the day after filing, so the number now stands on nothing but the manifests measured against it.
+> Filed as `docs/plans/directives/2026-08-31-picture-budget-and-the-ghost-preview.md`.
 
 **tl;dr** — `PICTURE_BUDGET = 68` is a compile-time constant asserted against two fixture manifests and measured
 against one golden. A manifest whose short refs run long in three columns exceeds it, and nothing notices until a human
