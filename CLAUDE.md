@@ -8,6 +8,22 @@ Cross-session knowledge persists via user-authored checkpoints (`.borg/checkpoin
 Code's own project-memory system — see "Cairn decommission" under Learned for why a separate
 knowledge-graph service was retired.
 
+## Repository Boundary
+
+This repo is **public and employer-agnostic.** borg is built to run on a work machine at whatever company the
+operator happens to work for, so nothing here names or assumes one. Employer-specific sources (Slack/Jira/Notion
+adapters) are injected at runtime via `BORG_RECON_ADAPTER_PATH`, and employer data stays machine-local under
+`~/.local/state/borg/` — never in this repo, never in a commit. Where a doc here says "employer", that is
+deliberate; substitute your own.
+
+What this repo **does** archive is borg's own record: the major research, design decisions, and directives for the
+project itself, under `docs/research/`, `docs/infoviz/`, and `docs/plans/` (`directives/` → `assimilated/` →
+`severed/`). That archive is why the docs tree is large, and it is meant to be read rather than pruned.
+
+What this repo does **not** hold is borg's output. Assets borg produces *for* another project — skills, plans,
+checkpoints, manifests — live in that project's own repository. borg writes them there; it does not collect them
+back here.
+
 ## Architecture
 
 ```

@@ -96,7 +96,7 @@ reconciliation judgment as a decision. Nothing in the primitive hard-depends on 
 - [x] The cairn hook is fail-quiet (no-op, returns 0) when cairn is absent.
 - [x] `tests/recon.bats` covers since-resolution, discovery/dedup, validation, fan-out isolation,
       item-dropping, merge, blocker extraction, contradiction detection, and the cairn no-op.
-- [ ] employer source adapters (Slack/Jira/Notion) — explicitly OUT of scope here; a separate layer.
+- [ ] Employer source adapters (Slack/Jira/Notion) — explicitly OUT of scope here; a separate layer.
 
 ## Key design decisions / trade-offs
 
