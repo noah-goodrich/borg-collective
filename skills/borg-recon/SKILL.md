@@ -117,7 +117,7 @@ Keep the batch bounded (≤ 5). State the ceiling; never open-ended.
 
 ## Guardrails
 
-- Source-agnostic: never hardcode a source. employer sources (Slack/Jira/Notion) are a separate layer —
+- Source-agnostic: never hardcode a source. Employer sources (Slack/Jira/Notion) are a separate layer —
   if their adapters are not on this machine, they simply do not appear. That is correct, not a bug.
 - No raw dumps. Every line is a synthesized, plain-language takeaway, not a paste of API output.
 - Read-only by default. The kickoff batch prepares; it never merges, deploys, or writes to a source.
