@@ -2,6 +2,25 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Parent directive: 2026-08-26-ac2-topological-grid-renderer*
 *Filed: 2026-08-27*
+*Shipped: 2026-08-27 — PR [#167](https://github.com/noah-goodrich/borg-collective/pull/167) (the provenance-glyph
+precondition) and PR [#169](https://github.com/noah-goodrich/borg-collective/pull/169) (S1 the wire, S2 the section,
+S3 the docs) merged to main; the `mine` heading correction landed in PR
+[#175](https://github.com/noah-goodrich/borg-collective/pull/175)*
+
+> **ASSIMILATION NOTE (2026-08-31).** This directive is a binding implementation spec and carries no checkbox list,
+> so it is archived against §5's file table and §6's sequencing rather than against ticks. Every row is present on
+> `main`: `grid.ready_refs` and the `ready`/`draft` node keys, `render._next_section` plus `_route`/`_next_row`/
+> `_next_tally`, and `SECTIONS` at eight entries with `("NEXT", _next_section)` between SHIPPED and SIGNALS. The
+> three-state rendering is pinned by name (`nobody looked`, `nothing is ready`), the routing by
+> `test_the_router_covers_every_declared_gate_kind`, and `unsure` end to end by
+> `test_an_unrecognized_kind_reaches_unsure_through_the_real_loader`.
+>
+> **§7's first residual risk resolved in the opposite direction from the one it predicted.** `unsure` shipped with
+> zero live instances and the honest move was to delete it after a year — instead the owner made it REACHABLE on
+> 2026-08-28 by demoting an unrecognized `gate.kind` from a validation error to a router concern (see
+> `2026-08-27-degrade-the-row-not-the-manifest.md`'s closing amendment). §7's second risk lapsed rather than
+> resolved: two of the three `--local` surfaces were retired by
+> `2026-08-27-retire-unused-link-surfaces.md`, exactly as that paragraph anticipated.
 
 **tl;dr** — `borg link` gains one section, `▸ NEXT`, inserted between SHIPPED and SIGNALS. It renders the READY
 set — open rows whose every parent has merged — split into three labelled groups: **yours** (a person must decide),
