@@ -287,15 +287,25 @@ def registry_with_state(apply_reap: bool = True, now: int | None = None) -> dict
 
 
 def _markdown_files(directory: Path) -> list[Path]:
-    """*.md under `directory`, name-ascending, or [] if it is not a directory.
+    """*.md under `directory`, name-ascending, DOT-PREFIXED NAMES EXCLUDED, or [] if not a directory.
 
     No is_file() filter: zsh's `*.md(N)` matches directories too, and _read_text returning "" on the
     resulting OSError reproduces `head -1 <dir>` failing to an empty title.
+
+    THE DOTFILE FILTER IS THE PORT'S PARITY CONTRACT, NOT A NEW POLICY (F4). `pathlib.Path.glob` has
+    no dotfile-hiding behavior, so `*.md` matches `.draft.md`; zsh's original `*.md(N)` does not --
+    GLOB_DOTS is off unless explicitly set and `(N)` only suppresses the no-match error, it adds
+    nothing. The port silently widened the glob, which is an unreviewed behavior change rather than
+    a decision; this restores zsh's answer. Dot-prefixed files are conventionally hidden scratch
+    state (this repo carries an untracked `docs/research/.gate-armed` of exactly that shape), and a
+    `.draft.md` surfacing in QUEUED would be wrong. Measured no-op on current data:
+    `find ~/dev -path '*/docs/plans/*' -name '.*.md'` returns nothing, so nothing can regress.
     """
     if not directory.is_dir():
         return []
     # JUSTIFICATION: a filesystem glob on a stdlib Path, not a cross-layer reach.
-    return sorted(directory.glob("*.md"), key=lambda p: p.name)  # pylint: disable=clean-arch-demeter
+    found = directory.glob("*.md")  # pylint: disable=clean-arch-demeter
+    return sorted((p for p in found if not p.name.startswith(".")), key=lambda p: p.name)
 
 
 def read_directives(project_path: str | None) -> list[dict]:

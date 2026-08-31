@@ -918,6 +918,206 @@ class TestFoldS:
         assert "\n".join(got) == proc.stdout
 
 
+# ── F1/F5: _summary_block, the COMPOSITION of _fold_s with the re-indent loop ─────────────────────
+# TestFoldS above covers the folding primitive alone, including a differential against the real
+# `fold -s` binary. What the renderer's `^  [^ ]` continuation contract actually rests on is the
+# composition -- fold, then re-indent lines 2..n -- and until this class it was unverified.
+
+_CONTINUATION_CONTRACT = re.compile(r"^  [^ ]")
+
+
+class TestSummaryBlock:
+    def test_summary_block_single_line_is_header_plus_one_indented_line(self):
+        out = render._summary_block("a short summary")  # pylint: disable=protected-access
+        assert out == f"  {picture.BOLD}Summary{picture.NC}\n  a short summary\n"
+
+    def test_summary_block_reindents_lines_two_onward_only(self):
+        # A two-word summary, each word long enough that the pair plus the two-space prefix
+        # overruns the 70-column budget while either word alone fits: `fold -s -w 70` therefore
+        # breaks at the single space, and the tail arrives from _fold_s with NO indent of its own.
+        # (Shape, not arithmetic -- a character count in a comment rots the moment the fixture or
+        # the width changes, and nothing fails when it does.)
+        summary = "w" * 40 + " " + "x" * 40
+        out = render._summary_block(summary)  # pylint: disable=protected-access
+        lines = out.split("\n")[:-1]
+        assert lines[0] == f"  {picture.BOLD}Summary{picture.NC}"
+        # Line 1 carries the indent the FOLD INPUT already had -- it must not be indented twice.
+        assert lines[1] == "  " + "w" * 40 + " "
+        # Line 2 is the one the re-indent loop is responsible for.
+        assert lines[2] == "  " + "x" * 40
+        assert len(lines) == 3
+        assert all(_CONTINUATION_CONTRACT.match(line) for line in lines)
+
+    def test_summary_block_empty_string_pins_the_bare_indent_line(self):
+        # The one line on the page that legitimately fails `^  [^ ]`: with nothing to fold, zsh's
+        # `echo -e "  " | fold -s -w 70 | sed '1!s/^/  /'` emits the bare two-space line and so does
+        # this. Pinned so a future "strip trailing whitespace" cleanup is a visible decision.
+        out = render._summary_block("")  # pylint: disable=protected-access
+        assert out == f"  {picture.BOLD}Summary{picture.NC}\n  \n"
+
+    def test_summary_block_flattens_an_embedded_newline(self):
+        # F1. summarize.summarize_llm returns `result.stdout.strip()[:500]`, and .strip() does not
+        # touch INTERIOR newlines the way the heuristic path's `.replace("\n", " ")` does; nor does
+        # lib/registry.zsh's control-char scrub, whose ranges exclude 0x0A. Un-normalized, the raw
+        # \n emits a sub-line _fold_s never produced and the re-indent loop therefore never indents.
+        out = render._summary_block("first half\nsecond half")  # pylint: disable=protected-access
+        lines = out.split("\n")[:-1]
+        assert all(_CONTINUATION_CONTRACT.match(line) for line in lines[1:]), lines
+        assert lines[1] == "  first half second half"
+        assert len(lines) == 2
+
+    def test_summary_block_flattens_newlines_before_folding_not_after(self):
+        # The flatten is one-for-one, so a newline occupies a space's worth of the 70-column budget
+        # and the break lands exactly where an equivalent space would put it -- i.e. no golden moves.
+        summary = "w" * 40 + "\n" + "x" * 40
+        with_newline = render._summary_block(summary)  # pylint: disable=protected-access
+        with_space = render._summary_block(summary.replace("\n", " "))  # pylint: disable=protected-access
+        assert with_newline == with_space
+
+
+# ── F1, second renderer: _overview_summary_cut, the BOARD's newline defense ───────────────────────
+# _summary_block above is the DEEP DIVE's renderer. The board has its own, and it is the more
+# fragile of the two: _overview_row lays every column out with fixed `:<{_COL_*}` padding, so a
+# newline reaching the cut does not merely break an indent contract, it splits one row into two and
+# shears every column after it.
+
+
+class TestOverviewSummaryCut:
+    def test_cut_flattens_an_embedded_newline(self):
+        # Same writer as F1's deep-dive case: summarize.summarize_llm's `result.stdout.strip()[:500]`
+        # leaves interior newlines intact, and lib/registry.zsh's control-char scrub excludes 0x0A.
+        out = render._overview_summary_cut("first half\nsecond half")  # pylint: disable=protected-access
+        assert "\n" not in out
+        assert out == "first half second half"
+
+    def test_cut_boundary_and_ellipsis_measure_displayed_characters(self):
+        # What the flatten-before-cut ordering is FOR. Both halves of the contract -- the 50-char
+        # boundary and the strictly-greater-than-50 ellipsis -- have to be decided on the string the
+        # reader sees, not on the raw one. Two summaries whose ONLY newline sits at the boundary:
+        # one that fills the budget exactly (no ellipsis) and one that overruns it (ellipsis).
+        # Not an ordering assertion -- with a one-for-one replacement the two orderings are the same
+        # string. This pins the property the ordering exists to protect, which is the part a future
+        # non-one-for-one replacement could break.
+        exact = render._overview_summary_cut("a" * 49 + "\n")  # pylint: disable=protected-access
+        assert exact == "a" * 49 + " "
+        over = render._overview_summary_cut("a" * 50 + "\n" + "b")  # pylint: disable=protected-access
+        assert over == "a" * 50 + "..."
+
+    def test_cut_matches_the_equivalent_space_so_no_golden_moves(self):
+        # The replacement is one-for-one, so both the 50-char cut and the strictly-greater-than-50
+        # ellipsis test land identically to the same string written with a space. This is the claim
+        # that no fixture golden moves.
+        summary = "w" * 30 + "\n" + "x" * 30
+        with_newline = render._overview_summary_cut(summary)  # pylint: disable=protected-access
+        with_space = render._overview_summary_cut(summary.replace("\n", " "))  # pylint: disable=protected-access
+        assert with_newline == with_space
+
+    def test_cut_keeps_the_row_on_one_line_end_to_end(self):
+        # The defect stated at the altitude the reader sees it: one registry entry, one board row.
+        row = render._overview_row(  # pylint: disable=protected-access
+            "alpha",
+            {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": "top\nbottom"},
+            {},
+        )
+        assert row.count("\n") == 1
+        assert row.endswith("top bottom\n")
+
+
+# ── the summary field's THIRD call site, and the character set all three share ────────────────────
+# `_summary_block` is the fold's defense and `_overview_summary_cut` is the board's. `porcelain` is
+# the third: it serializes `summary` into a TSV RECORD whose consumers parse it BY FIELD, so a
+# control character does not shear a line a reader skims past, it changes how many records there are
+# and which field is which.
+#
+# NOT `borg switch`. The commit that added these cases claimed this function feeds the fzf picker.
+# It does not -- `cmd_switch` pipes `cmd_ls --porcelain` into fzf, and that is a separate zsh
+# implementation in borg.zsh which never calls into Python. The picker's own defect is fixed there
+# and pinned by cli_contract.bats's "the picker feed stays one 5-field record per project through
+# tab and newline" -- a title narrowed from "tab, newline and CR" because its counting oracle cannot
+# kill a CR-only mutant. See `render.porcelain`'s docstring for the full retraction.
+#
+# The character set is read off `lib/registry.zsh`'s `_borg_registry_write` -- `tr -d
+# '\000-\010\013\014\016-\037'` deletes 0x00-0x08, 0x0B, 0x0C and 0x0E-0x1F, so 0x09, 0x0A and 0x0D
+# all reach storage. Parameterized rather than hand-listed per test, so widening the set is one edit.
+
+_SURVIVING_WS = ["\t", "\n", "\r"]
+
+
+@pytest.mark.parametrize("scrubbed", ["\x00", "\x08", "\x0b", "\x0c", "\x0e", "\x1f"])
+def test_the_registry_scrub_set_is_enumerated_from_the_scrub_not_assumed(scrubbed):
+    """A guard on the PREMISE, not on the renderer: every character the `tr -d` range deletes is one
+    `_flatten_summary` deliberately does NOT handle, because it cannot arrive. If someone narrows the
+    scrub in lib/registry.zsh they must revisit this list; if someone widens `_FLATTEN_WS` past the
+    survivors they will find this test explaining why the extra characters were out of scope."""
+    assert render._flatten_summary(scrubbed) == scrubbed  # pylint: disable=protected-access
+
+
+@pytest.mark.parametrize("ch", _SURVIVING_WS)
+def test_flatten_summary_maps_every_surviving_whitespace_control_to_one_space(ch):
+    assert render._flatten_summary(f"a{ch}b") == "a b"  # pylint: disable=protected-access
+
+
+@pytest.mark.parametrize("ch", _SURVIVING_WS)
+def test_summary_block_flattens_every_surviving_control_not_just_newline(ch):
+    # Consumer 1. A `\t` inside the fold input also breaks `^  [^ ]` reasoning -- `fold -s` counts a
+    # tab as one column while a terminal expands it -- and a `\r` returns the cursor to column zero,
+    # erasing the indent the re-indent loop just applied.
+    out = render._summary_block(f"first half{ch}second half")  # pylint: disable=protected-access
+    lines = out.split("\n")[:-1]
+    assert len(lines) == 2, lines
+    assert lines[1] == "  first half second half"
+    # The block's own newlines are structure; a tab or a CR anywhere in it is leaked payload.
+    assert "\t" not in out and "\r" not in out
+
+
+@pytest.mark.parametrize("ch", _SURVIVING_WS)
+def test_board_row_stays_one_line_for_every_surviving_control(ch):
+    # Consumer 2, stated at the altitude the reader sees it: one registry entry, one board row.
+    row = render._overview_row(  # pylint: disable=protected-access
+        "alpha",
+        {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": f"top{ch}bottom"},
+        {},
+    )
+    assert row.count("\n") == 1
+    assert row.endswith("top bottom\n")
+
+
+@pytest.mark.parametrize("ch", _SURVIVING_WS)
+def test_porcelain_emits_exactly_one_record_per_project_for_every_surviving_control(ch):
+    """THE HONEST ASSERTION IS ON THE RECORD COUNT, and on the field count within the record.
+
+    An assertion on the text alone ("the summary reads `top bottom`") passes on a build that emits
+    TWO rows, because the first row still ends where the assertion stops looking. What a
+    field-parsing consumer of `borg link --porcelain` depends on is one record per project and five
+    tab-separated fields per record -- an extra record is a project that does not exist, and a
+    shifted field means column 3 is no longer the status. Both are asserted here; neither is implied
+    by the other.
+    """
+    doc = _doc(
+        order=["alpha", "beta"],
+        projects={
+            "alpha": {"source": "cli", "status": "idle", "last_activity": "1h", "summary": f"top{ch}bottom"},
+            "beta": {"source": "cli", "status": "idle", "last_activity": "2h", "summary": "plain"},
+        },
+    )
+    out = render.porcelain(doc)
+    records = out.splitlines()
+    assert len(records) == 2, records
+    assert [record.split("\t")[0] for record in records] == ["alpha", "beta"]
+    assert all(len(record.split("\t")) == 5 for record in records), records
+    assert records[0].split("\t")[4] == "top bottom"
+
+
+def test_porcelain_flattens_before_the_80_char_cut():
+    # Same ordering the other two consumers use. The replacement is one-for-one so the two orderings
+    # agree today; what is pinned is that the 80-char budget measures the characters the field
+    # actually carries, which is the half a future non-one-for-one replacement could break.
+    summary = "w" * 40 + "\t" + "x" * 60
+    doc = _doc(order=["a"], projects={"a": {"source": "cli", "status": "idle", "summary": summary}})
+    field = render.porcelain(doc).split("\t")[4].rstrip("\n")
+    assert field == ("w" * 40 + " " + "x" * 60)[:80]
+
+
 # ── AC4: NEXT, and the yours / mine / unsure routing ──────────────────────────────────────────────
 
 

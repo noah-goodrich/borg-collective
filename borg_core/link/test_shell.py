@@ -519,6 +519,43 @@ def test_markdown_glob_includes_directories_like_the_zsh_glob(isolated_env):
     assert titles == ["", "Real"]
 
 
+def test_markdown_glob_excludes_dot_prefixed_files_like_the_zsh_glob(isolated_env):
+    # F4: pathlib's glob has no dotfile-hiding behavior, so `*.md` matched `.draft.md` while zsh's
+    # `*.md(N)` never did -- an unreviewed widening from the port. Pinned to zsh's answer: hidden.
+    path = _project(
+        isolated_env,
+        "p",
+        directives=[("real.md", "# Real\n"), (".draft.md", "# Hidden Draft\n")],
+        assimilated=[
+            ("2026-03-01-a.md", "# Shipped A\nShipped: 2026-03-01\n"),
+            (".2026-03-02-b.md", "# Hidden Ship\nShipped: 2026-03-02\n"),
+        ],
+    )
+    assert [d["slug"] for d in shell.read_directives(path)] == ["real"]
+    assert [d["title"] for d in shell.read_directives(path)] == ["Real"]
+    assert [e["slug"] for e in shell.read_assimilated(path)] == ["2026-03-01-a"]
+    assert [e["title"] for e in shell.read_assimilated(path)] == ["Shipped A"]
+
+
+def test_heading_title_of_a_real_crlf_file_on_disk_has_no_carriage_return(isolated_env):
+    # F3: routes a REAL CRLF file through the REAL read path (_read_text -> heading_title). The
+    # existing test_core case hands core.heading_title the in-memory literal "# Title\r\nbody",
+    # which bypasses _read_text entirely -- which is precisely why the docstring's old end-to-end
+    # "a trailing \r from a CRLF file is preserved" claim was untested by construction.
+    target = isolated_env / "crlf.md"
+    target.write_bytes(b"# Title\r\nbody\r\n")
+    # The fixture proves nothing unless the CRLF genuinely survived to disk.
+    assert target.read_bytes() == b"# Title\r\nbody\r\n"
+
+    text = shell._read_text(target)  # pylint: disable=protected-access
+
+    # Path.read_text applies universal-newline translation, so the CR is gone before core sees it.
+    assert "\r" not in text
+    assert core.heading_title(text) == "Title"
+    # And the in-memory path is unchanged: CR fidelity holds only for callers that bypass _read_text.
+    assert core.heading_title("# Title\r\nbody") == "Title\r"
+
+
 def test_module_reads_no_environment_at_import_time():
     # A guard against config being captured at import rather than at call time -- the shell reads
     # ${BORG_REAP_STALE_HOURS:-12} on every call, and a module-level constant would silently freeze

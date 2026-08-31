@@ -2274,6 +2274,85 @@ _assert_link_grid_golden() {
     [[ "$output" == *"Session ID:"* ]] || false
 }
 
+# THE PICKER FEED VS THE THREE CONTROL CHARACTERS THAT REACH A REGISTRY.
+#
+# `lib/registry.zsh`'s `_borg_registry_write` scrubs with `tr -d '\000-\010\013\014\016-\037'`,
+# which deletes 0x00-0x08, 0x0B, 0x0C and 0x0E-0x1F. Read off that range rather than assumed --
+# and verified by piping a byte-per-code probe through the same `tr` -- exactly three C0 whitespace
+# characters survive to storage: 0x09 TAB, 0x0A LF, 0x0D CR. jq escapes each of them when it
+# serializes, so they sit in the file as the two-character sequences `\t`, `\n`, `\r`.
+#
+# TWO INDEPENDENT DEFECTS SIT BETWEEN THAT FILE AND fzf's STDIN, and this case covers both because
+# only the pair together is observable:
+#
+#   1. zsh's `echo` expands backslash escapes, so `echo "$registry" | jq` re-injects a RAW control
+#      character into a JSON string literal and jq refuses the document. Under borg.zsh's `set -e`
+#      cmd_ls then dies mid-function: measured, exit 5 with an EMPTY picker list.
+#   2. Past that, `jq -r` hands back the DECODED string, so a 0x0A ends the TSV record early (a
+#      second, selectable row whose field 1 is prose, which `cut -f1` passes to `_borg_do_switch`
+#      as a project name) and a 0x09 shifts every field right under `--with-nth 1,3,5`.
+#
+# ASSERTED ON COUNTS, NOT TEXT, deliberately. A text assertion (`[[ $output == *"top bottom"* ]]`)
+# passes on a build that emits TWO rows, because the first row still ends where the assertion stops
+# looking -- the phantom row is invisible to it. Record count and field count are the properties
+# the picker actually depends on.
+#
+# THE STDERR ASSERTION IS LOAD-BEARING and is kept out of `$output`: bats `run` merges stderr in, so
+# a jq diagnostic would otherwise splice into the very stream being counted. Captured to files.
+#
+# WHAT THE THREE CHARACTERS EACH ACTUALLY PROVE. The title used to say "through tab, newline and CR"
+# and this paragraph then had to contradict it; the title now names only the two the oracle can kill,
+# so the two agree and the paragraph below is the detail rather than the correction.
+# Mutation-verified against two separate mutants, each of which this case kills on its own:
+#   - restore `echo "$json" | jq` -> cmd_ls exits 5, zero records, jq diagnostic on stderr;
+#   - drop the flatten -> FOUR records (a phantom `bottom` row) and a 6-field `bravo` row.
+# But those deaths come from 0x0A and 0x09 SPECIFICALLY. `wc -l`, `cut` and `awk -F'\t'` all split on
+# 0x0A and 0x09 and on NOTHING ELSE, so a CR-only mutant -- one that flattened tab and newline but
+# left 0x0D alone -- would still yield 3 records of 5 fields and this oracle would go green. The
+# `charlie` row is here because CR survives the scrub and corrupts how the terminal DRAWS the picker
+# row, not because the counting oracle can see it. Do not read this case as evidence that the CR arm
+# of the flatten is pinned; it is not, and a test that could pin it would have to assert on rendering.
+_link_registry_control_chars() {
+    cat > "$BORG_REGISTRY" <<'EOF'
+{
+  "projects": {
+    "alpha": {"path": null, "source": "cli", "status": "idle",
+              "last_activity": "2026-08-01T10:00:00Z", "summary": "top\nbottom"},
+    "bravo": {"path": null, "source": "cli", "status": "idle",
+              "last_activity": "2026-08-02T10:00:00Z", "summary": "left\tright"},
+    "charlie": {"path": null, "source": "cli", "status": "idle",
+                "last_activity": "2026-08-03T10:00:00Z", "summary": "car\rret"}
+  }
+}
+EOF
+}
+
+@test "contract: the picker feed stays one 5-field record per project through tab and newline" {
+    _link_mock_tmux ""
+    _link_registry_control_chars
+
+    local out="${BATS_TEST_TMPDIR}/picker.tsv"
+    local err="${BATS_TEST_TMPDIR}/picker.err"
+
+    run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_ls --porcelain\" \
+        > '$out' 2> '$err'"
+    [ "$status" -eq 0 ] || { printf 'cmd_ls exited %s\n' "$status" >&2; cat "$err" >&2; false; }
+    [ ! -s "$err" ] || { printf -- '--- unexpected stderr ---\n' >&2; cat "$err" >&2; false; }
+
+    # ONE RECORD PER PROJECT. Three projects in, three lines out — no phantom row, and no truncated
+    # list from a mid-function errexit death.
+    run bash -c "wc -l < '$out' | tr -d ' '"
+    [ "$status" -eq 0 ]
+    [ "$output" = "3" ] || { printf -- '--- picker feed, octal-escaped ---\n' >&2; od -c "$out" >&2; false; }
+
+    # FIVE FIELDS ON EVERY RECORD. `sort -u` collapses to one value only when every row agrees, so a
+    # shifted field on any single row shows up as a second line here. awk and sort both drain to EOF,
+    # so nothing closes the pipe early (the EPIPE trap documented on the case above).
+    run bash -c "awk -F'\t' '{print NF}' < '$out' | sort -u"
+    [ "$status" -eq 0 ]
+    [ "$output" = "5" ] || { printf -- '--- picker feed, octal-escaped ---\n' >&2; od -c "$out" >&2; false; }
+}
+
 # The empty-registry divergence noted above, pinned so the port cannot quietly adopt cmd_ls's
 # behavior (which would push a human sentence into fzf's stream) or drop the silent-exit contract.
 @test "contract: link --porcelain prints nothing at all on an empty registry" {
