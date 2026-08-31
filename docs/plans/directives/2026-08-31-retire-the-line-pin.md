@@ -27,8 +27,8 @@ all pointing at is one `grep` away: `_link_py_args=(--deep)`.
 `drone.zsh:964` was cited as "`cmd_status`'s per-tmux-window loop". `drone.zsh` has no `cmd_status` at all any more,
 and the file is 1359 lines. Every one of those citations is a sentence a reader is invited to verify and cannot.
 
-**The scale, measured.** Excluding `docs/plans/` and `.borg/`, live source and test files carry **157 occurrences of
-110 distinct `file:NNN` pins**:
+**The scale, measured.** Excluding `docs/plans/` and `.borg/`, live source and test files carry **157 lines bearing
+110 distinct `file:NNN` pins** (the `-o` form below prints 170 matches, since a line may carry more than one):
 
 ```zsh
 grep -rEo '[a-zA-Z_/.-]+\.(zsh|py|bats|sh):[0-9]+' \
