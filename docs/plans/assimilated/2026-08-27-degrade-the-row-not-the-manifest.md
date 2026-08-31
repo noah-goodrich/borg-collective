@@ -1,6 +1,14 @@
 # Directive: A bad row must not cost the whole manifest
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Filed: 2026-08-27*
+*Shipped: 2026-08-27 — PR [#173](https://github.com/noah-goodrich/borg-collective/pull/173) merged to main
+(spec: PR [#170](https://github.com/noah-goodrich/borg-collective/pull/170)); the fifth criterion's replacement
+landed in PR [#175](https://github.com/noah-goodrich/borg-collective/pull/175)*
+
+> **ASSIMILATION NOTE (2026-08-31). The five remaining boxes were ticked at archive time, not at ship time.** The
+> work landed in PR [#173](https://github.com/noah-goodrich/borg-collective/pull/173); only the fifth criterion —
+> the one that was AMENDED in place because it could not be satisfied — was ever marked. Each tick below names the
+> pytest case that carries it and the mutation that turns that case red, both taken from the case's own docstring.
 
 **tl;dr** — One invalid field anywhere in a manifest makes `shell._load_manifest` drop the entire file, so a typo in
 row 3 silently deletes rows 1 through 14 from the grid. Degrade the ROW instead: keep what validates, report what did
@@ -69,10 +77,28 @@ hand-edited afterwards, and AC5 has not shipped, so nothing writes manifests but
 
 ## Acceptance criteria
 
-- [ ] A manifest with one invalid row renders every other row; `declared` counts the survivors.
-- [ ] The warning names the manifest, the dropped-row count, and the validator's own message.
-- [ ] A manifest whose every row fails is still dropped whole, with the existing message.
-- [ ] Structural failures (bad JSON, missing id, non-list `rows`) still drop the file.
+- [x] A manifest with one invalid row renders every other row; `declared` counts the survivors.
+      `manifest/test_shell.py::test_one_invalid_row_costs_the_row_and_not_the_file` writes four rows with one bad
+      gate and asserts the surviving refs are exactly `["o/r#1", "o/r#3", "o/r#4"]`. MUTATION named in its own
+      docstring: restore `if errors: return None, ...` in `_load_manifest`.
+- [x] The warning names the manifest, the dropped-row count, and the validator's own message.
+      `shell.py` builds `f"{path}: {len(bad_rows)} of {len(rows)} rows dropped -- {joined}"`, and the same case
+      asserts all three parts independently (`"1 of 4 rows dropped"`, `"gate.resolved_by is required"` carried
+      verbatim, and `"a.json"`). A SECOND case,
+      `test_a_warning_survives_alongside_a_loaded_manifest`, pins the contract change the caller had to learn: the
+      discovery loop used to append the warning only when the manifest was `None`, which would have swallowed
+      exactly the message that explains why the picture is short.
+- [x] A manifest whose every row fails is still dropped whole, with the existing message.
+      `test_a_manifest_whose_every_row_fails_is_still_dropped_whole` asserts `manifests == []`, that the message is
+      still the original `invalid manifest` one, and — the half that keeps it honest — that `"rows dropped"` is
+      NOT in it. MUTATION: drop the `if not kept` guard.
+- [x] Structural failures (bad JSON, missing id, non-list `rows`) still drop the file.
+      `test_a_structural_failure_still_drops_the_file` uses `apex:`, which is the reachable structural case and the
+      one a naive fix slips through: every row validates, so a row-index partition finds nothing to drop and must
+      not conclude from that that the file is clean. The case's docstring records that a first draft parametrized
+      over `rows: not a list` and was pinning a path production never takes — `core.looks_like_manifest` rejects
+      that document one branch earlier. **So this criterion is met for the two reachable members of its list and
+      the third is unreachable through `_load_manifest`**, which is stated rather than quietly counted as covered.
 - [x] ~~A pytest case asserts the AC4 `unsure` group renders from a real manifest — the branch stops being dead.~~
 
   > **AMENDED 2026-08-27, by building it. THIS CRITERION CANNOT BE SATISFIED BY THIS CHANGE, and the
@@ -111,4 +137,10 @@ hand-edited afterwards, and AC5 has not shipped, so nothing writes manifests but
   > `test_an_unrecognized_kind_reaches_unsure_through_the_real_loader`, not just by a unit test that
   > hands `_route` a string. The subset guard survives under its corrected name,
   > `test_the_router_covers_every_declared_gate_kind`.
-- [ ] Both grid goldens are unchanged by this directive alone, since no fixture carries an invalid row.
+- [x] Both grid goldens are unchanged by this directive alone, since no fixture carries an invalid row.
+      Checked rather than assumed at ship time — PR [#173](https://github.com/noah-goodrich/borg-collective/pull/173)
+      touches five files and no golden is among them (`git show --stat f9ee6e5`).
+      **"BY THIS DIRECTIVE ALONE" IS DOING REAL WORK IN THAT SENTENCE, so read it exactly.** The goldens DID move
+      later, on 2026-08-28: `warehouse-rollout.json` gained `acme/warehouse#78` with `kind: "review"` so the
+      `unsure` group is pinned end to end. That is the closing amendment above, a different change in a different
+      PR, and it does not falsify this criterion.
