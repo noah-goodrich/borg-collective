@@ -1,6 +1,7 @@
 # Directive: Hardened Implementation Spec for the One-Front-Door `link`
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Filed: 2026-08-25*
+*Shipped: 2026-08-31 — B1–B9 all landed across PRs [#164](https://github.com/noah-goodrich/borg-collective/pull/164), [#165](https://github.com/noah-goodrich/borg-collective/pull/165), [#169](https://github.com/noah-goodrich/borg-collective/pull/169), [#175](https://github.com/noah-goodrich/borg-collective/pull/175) and [#176](https://github.com/noah-goodrich/borg-collective/pull/176); AC1/AC2/AC3/AC4 all MET. Archived as bookkeeping, not as new work.*
 
 **tl;dr** — The plan's top risk (AC3's targeted fetch costing the 2.7s reflexive budget) is retired by measurement: the
 fetch costs **87ms marginal**, not 770ms, once folded into the sweep query. The real cost was never AC3 — it was
