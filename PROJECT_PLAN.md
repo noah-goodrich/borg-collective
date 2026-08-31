@@ -82,10 +82,61 @@ e2e/eval harness that keeps it honest.
     nodes render `unknown`.
   - **MET** in [#164](https://github.com/noah-goodrich/borg-collective/pull/164):
     `sweep: AC3 — a manifest spanning two repositories renders zero unknown nodes`.
-- [ ] **AC4 — Rows drive "next" and "yours vs mine."** Sourced from `rows[].next` and `gate.kind`, never re-derived.
+- [x] **AC4 — Rows drive "next" and "yours vs mine."** Sourced from `rows[].next` and `gate.kind`, never re-derived.
       READY = open AND every parent merged, announced as a set. Adds row-level `after: [refs]` so forks are
       expressible (lanes only express linear tracks).
   - Verify: pytest over the derivation against fixture manifests including a fork case and a negative case.
+  - **MET.** Implementation shipped in [#169](https://github.com/noah-goodrich/borg-collective/pull/169); the box was
+    held unticked because the `unsure` group was UNREACHABLE THROUGH THE FRONT DOOR — `manifest_core.GATE_KINDS` closed
+    `gate.kind`, so a row whose kind did not route was refused at load and the router only ever saw an unrecognized kind
+    from a unit test handing it a string. [#175](https://github.com/noah-goodrich/borg-collective/pull/175) demoted the
+    validator: a gate must NAME some kind, an unrecognized one is the router's concern, and an EMPTY one is still a
+    row-scoped error (`_route("")` must keep meaning "no gate", never "a gate that named nothing").
+  - **Never re-derived, by construction rather than by discipline.** `render.py` imports only `link.{core,grid,picture}`
+    — never `manifest.core` — so it cannot call `ready_set` or rebuild the gate list. `_next_tally` reads
+    `manifests[].ready.refs`, `manifests[].gates` and each node's `next`, all stamped by `grid.grid_manifest`;
+    `grid.ready_refs` is the single derivation and it feeds `manifest_core.ready_set` RESOLVED states only, so a
+    hand-typed `status: "merged"` can never light `●`. Pinned by
+    `test_grid.py::test_a_declared_merged_parent_does_not_make_its_child_ready` and
+    `::test_the_grid_carries_ready_but_still_no_duplicate_gate_list`.
+  - **THREE-STATE, and the three are distinguishable.**
+    `test_grid.py::test_nothing_ready_on_a_resolved_render_is_not_the_same_as_nobody_looking` asserts that the
+    `known-empty` and `unlooked` results carry an identical `refs == []` and different `state`;
+    `test_render.py::test_nothing_ready_and_nobody_looking_are_different_sentences` asserts the two render as different
+    sentences, and `::test_a_partly_unlooked_board_reports_both_halves` covers the mixed orchestrator case where a real
+    answer and an unlooked manifest coexist.
+  - **Fork case and negative case, the verify clause's own two words.** Fork:
+    `manifest/test_core.py::test_an_intra_lane_fork_announces_both_children_ready_at_once` — rows 1,2,3 in ONE lane
+    where row 3 declares `after: [row 1]`, and READY announces BOTH children at once
+    (`::test_a_fork_announces_both_children_at_once` is the cross-lane twin,
+    `::test_after_overrides_lane_adjacency_so_an_intra_lane_fork_is_a_fork` and
+    `::test_an_intra_lane_fork_puts_both_children_on_one_level` are the edge and level halves). Negative:
+    `::test_the_same_lane_without_after_is_still_a_chain` — the identical lane with no `after` stays a chain and
+    announces ONE row, so the fork is caused by `after` and not by the lane shape; joined by
+    `::test_an_after_that_supplies_no_usable_parent_leaves_the_row_on_its_lane` (four unusable shapes),
+    `test_grid.py::test_a_draft_pull_request_is_never_ready`, and
+    `test_render.py::test_next_true_orders_within_a_group_and_never_grants_membership`, which pins `rows[].next` as
+    EMPHASIS — it orders within a group and a flagged row that is not READY stays out entirely.
+  - **`unsure` reaches the page END TO END, not just `_route`.**
+    `test_render.py::test_an_unrecognized_kind_reaches_unsure_through_the_real_loader` starts from the shipped bytes of
+    `tests/fixtures/link/manifests/warehouse-rollout.json` (`acme/warehouse#78`, `kind: "review"`), copies them into a
+    `.borg/programs/` layout and runs `manifest_shell.discover` → validate → `gates()` → `ready_refs` → `_route` →
+    `_next_section`: no warning, the row SURVIVES loading, and the group names the kind. The bats golden pins the same
+    row's rendered form — `unsure — the gate says "review", which does not route` over `acme/warehouse#78` in
+    `link-grid-orchestrator.golden`. Both were confirmed by MUTATION: restoring `kind not in GATE_KINDS` in
+    `_validate_gate` fails the pytest (`1 of 6 rows dropped`) and turns `contract: link renders the orchestrator context
+    byte-identically to its golden` red at the replay tripwire.
+  - The fixture goldens carry the fork too — `auth-hardening.json`'s three-way fork off `acme/platform#400` renders as
+    `3 ready of 7` in `link-grid-repository.golden` with `#420`, `warehouse#87` and `infra#12` announced together, which
+    is READY-as-a-set over `after` on a real page. **AC2's carried gap is closed with it**: `warehouse-rollout.json`'s
+    `acme/warehouse#75` now declares `status: "merged"`, so the goldens finally have a declared-only row and can catch a
+    provenance-glyph regression in either direction; `_link_grid_tripwire` pins the resulting unresolved count exactly
+    rather than loosening it.
+  - Commands run on this tree: `python3 -m pytest borg_core/manifest/test_core.py -k "fork or after or ready_set"`,
+    `python3 -m pytest borg_core/link/test_grid.py -k "ready or draft"`,
+    `python3 -m pytest borg_core/link/test_render.py -k "route or unsure or ungated or next_true or nobody"`,
+    `bats tests/cli_contract.bats -f "renders the orchestrator context byte-identically"`, plus the three gates
+    `make test`, `make lint`, `bats tests/` — all exit 0.
 - [ ] **AC5 — Lifecycle skills author project manifests by default.** `/borg-plan` scaffolds a manifest,
       `/borg-link-up` updates row status, `/borg-assimilate` closes rows. None of it opt-in.
   - Verify: eval cases run each skill headless against a fixture repository and grade the emitted manifest; each
