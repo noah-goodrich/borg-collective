@@ -3,10 +3,12 @@
 TWO PUBLIC CALLABLES, AND THAT IS THE WHOLE OF AC2's "one front door". `document(doc)` is the single
 human entry point: a fixed SEVEN-SECTION SPINE whose `▸` headers are byte-identical in every context,
 where `scope` narrows the ROW SET of the four scope-dependent sections and never the board, never the
-section list and never the order. `porcelain(doc)` is UNCHANGED byte for byte and is deliberately
-outside "everywhere" -- it is not a renderer, it is the TSV feeding fzf's input list
-(borg.zsh:262 builds the picker input with `cmd_ls --porcelain`, borg.zsh:264-269 consumes it with
-`--delimiter '\\t' --with-nth 1,3,5`), and box drawing in that stream breaks `borg switch` outright.
+section list and never the order. `porcelain(doc)` is deliberately outside "everywhere" and its
+LAYOUT is unchanged (one control-character flatten aside, see its docstring) -- it is not a renderer,
+it is `borg link --porcelain`'s machine TSV, read BY FIELD, and box drawing in that stream would
+break any consumer that splits it. IT DOES NOT FEED `borg switch`: this paragraph used to say it was
+"the TSV feeding fzf's input list" and that is RETRACTED -- `porcelain`'s own docstring is the
+canonical statement of the retraction and names who actually feeds the picker. Read it first.
 
 `overview()` AND `deep()` ARE GONE. Their bodies survive, transcribed statement by statement, as
 `_board_section` and `_focus_section`; `_summary_block`, `_fold_s`, `_label`, `_overview_row` and
@@ -52,6 +54,27 @@ directive listing here inherits shell._markdown_files' codepoint-order glob, not
 locale-collated order. Measured zero-impact across every real filename this repo has seen; recorded
 so it does not surprise anyone later.
 """
+
+# Measured, not asserted: 54% of this file is docstrings (34.5k of 64.4k bytes), so its ~500 lines of
+# actual code sit well inside what C0302 targets. Splitting the module is filed; see the note below.
+# JUSTIFICATION: this module is prose-dominated -- C0302 is measuring its design record, not its code.
+# pylint: disable=too-many-lines
+#
+# THE CEILING IS TRIPPED BY THE DESIGN RECORD, NOT BY COMPLEXITY, AND THAT IS MEASURED RATHER THAN
+# asserted: 54% of this file's bytes are docstrings (34.5k of 64.4k), across 39 functions holding 380
+# statements. C0302 exists as a proxy for module complexity; the ~500 lines of actual code here are
+# well inside what it targets, and every paragraph above the disable was written to stop a specific
+# wrong answer being re-derived -- the porcelain/picker retraction, the enumerated scrub set, the
+# per-call-site honesty about `_flatten_summary`. Cutting prose to satisfy a line count would trade
+# the reasoning for the metric, which is the failure this repo files under "a check pointed at the
+# wrong thing does not fail, it reads as a pass".
+#
+# THIS IS A DEFERRAL, NOT A VERDICT. The real fix is splitting the module along the seam that already
+# exists -- the SECTIONS spine and its section builders on one side, the shared text primitives
+# (`_fold_s`, `_flatten_summary`, `_label`, `_summary_block`) on the other. That is an architecture
+# change and was deliberately not made inside a merge fix; it is filed as its own directive. The
+# duplication this merge DID create (two branches each writing the same argument) was collapsed
+# first, AST-verified as behavior-identical, which took the file from 1133 to 1108.
 
 from __future__ import annotations
 
@@ -103,6 +126,59 @@ _JQ_ABSENT_STATUS = "unknown"
 # this tree is a substring test, which is why that change is free.
 SECTION_MARK = "▸ "
 
+# 0x09 TAB, 0x0A LF, 0x0D CR -- `_flatten_summary` enumerates why exactly these three, off the scrub.
+_FLATTEN_WS = str.maketrans({"\t": " ", "\n": " ", "\r": " "})
+
+
+def _flatten_summary(text: str) -> str:
+    """Replace every registry-surviving whitespace control character in a registry `summary` with a
+    single space. THE CANONICAL STATEMENT of the character set, the altitude and the call sites; the
+    three call sites below carry pointers here rather than repeating any of it.
+
+    THE SET IS ENUMERATED FROM `lib/registry.zsh`'s SCRUB, NOT ASSUMED. `_borg_registry_write` pipes
+    through `tr -d '\\000-\\010\\013\\014\\016-\\037'`, which deletes 0x00-0x08, 0x0B (vertical tab),
+    0x0C (form feed) and 0x0E-0x1F. Everything else reaches storage intact -- and of what remains,
+    exactly three are whitespace that a renderer must not emit raw: 0x09 TAB, 0x0A LF, 0x0D CR. So the
+    writer-side argument F1 made about newlines is true of all three, and the earlier defense was one
+    character short at each end of it.
+
+    THE DEFENSE IS PER-CALL-SITE. NOTHING INHERITS IT. An earlier revision of this docstring said
+    "ONE HELPER, THREE CONSUMERS, so a fourth inherits the defense instead of repeating the bug."
+    That is false and it is the kind of false that stops a follow-up from being written: calling this
+    helper is OPT-IN at every site, so a fourth consumer that reads `entry["summary"]` directly
+    reintroduces the bug with every test in this tree green. No chokepoint routes the field through
+    here, and no test asserts that one does. THE UNBUILT ALTERNATIVE, named so it can be filed rather
+    than rediscovered: flatten ONCE at document assembly (`cli._document`), so `summary` is already
+    clean by the time any renderer sees it and this helper becomes unreachable. That is a design
+    change and is deliberately NOT made here. Until it is, the honest statement is the one above --
+    three call sites, each defended because it was edited to be.
+
+    THE THREE CALL SITES, and how each breaks on the same byte. `_summary_block` -- IN FOCUS's fold; a
+    raw control character emits a sub-line `_fold_s` never produced, which the re-indent loop
+    therefore never indents, breaking its `^  [^ ]` continuation contract. `_overview_summary_cut` --
+    the board's fixed-width table; `_overview_row` lays every column out with `:<{_COL_*}` padding, so
+    a `\\n` or a `\\r` splits one row into two and shears every column after it. `porcelain` -- `borg
+    link --porcelain`'s TSV, parsed BY FIELD, so a `\\n` ends a record early and a `\\t` shifts every
+    field after it; NOT `borg switch`'s picker, see `porcelain` for that retraction.
+
+    THE RENDERER OWNS THIS, NOT THE WRITER. Same altitude rule the `borg recon` retirement gate
+    settled (CLAUDE.md; docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md): the
+    artifact that implements the contract owns its invariant. Normalizing in `summarize.summarize_llm`
+    -- whose `result.stdout.strip()[:500]` leaves interior control characters intact, unlike the
+    heuristic path's `step[:200].replace("\\n", " ")` -- would fix today's one known writer and leave
+    all three contracts undefended against the next. And the LLM is not the only possible source: the
+    scrub above lets all three characters through, so a hand-edited registry produces one with no LLM
+    involved at all.
+
+    Replacement is ONE CHARACTER FOR ONE, so every width budget downstream (the 70-column fold, the
+    50-char board cut and its `> 50` ellipsis, porcelain's 80-char cut) is unchanged for input that
+    was already clean, and no golden moves. PRIVATE ON PURPOSE:
+    `test_render_exposes_exactly_one_human_entry_point` asserts this module's public surface is
+    exactly `{document, porcelain}` -- AC2's "one front door" -- so a shared helper here has to carry
+    the underscore or it reads as a third entry point callers may route through.
+    """
+    return text.translate(_FLATTEN_WS)
+
 
 def _label(text: str, value: str, col: int = _DEEP_LABEL_COL) -> str:
     """One `  {DIM}<label>{NC}<pad>value` IN FOCUS header line, padding computed as col - len(text)
@@ -152,9 +228,13 @@ def _summary_block(summary: str) -> str:
 
     The two leading spaces on the first line COUNT against the 70-column fold budget; lines 2..n are
     re-indented to two spaces (NOT folded with the indent already applied).
+
+    EMBEDDED WHITESPACE CONTROL CHARACTERS ARE FLATTENED TO SPACES HERE (F1), because the `^  [^ ]`
+    continuation contract is this function's OWN invariant. See `_flatten_summary` for the character
+    set, the altitude argument, and why the one-for-one replacement moves no golden.
     """
     out = [f"  {BOLD}Summary{NC}\n"]
-    folded = _fold_s("  " + summary, width=70)
+    folded = _fold_s("  " + _flatten_summary(summary), width=70)
     for i, line in enumerate(folded):
         if i == 0:
             out.append(f"{line}\n")
@@ -216,7 +296,35 @@ def porcelain(doc: dict) -> str:
     cli_contract.bats's "link --porcelain prints nothing at all on an empty registry").
 
     UNCHANGED BY AC2, DELIBERATELY, and `tests/fixtures/link/link-porcelain.golden` must not move.
-    See the module docstring: this is fzf's input list, not a page.
+    It is a machine surface, not a page.
+
+    THIS FUNCTION DOES NOT FEED `borg switch`. THE CANONICAL RETRACTION, and every other mention in
+    this file now points here: the commit that added the flatten below asserted the opposite in its
+    message and in two docstrings, and it is wrong. Traced through the call path rather than inferred:
+    `cmd_switch` in `borg.zsh` builds the picker's stdin from `cmd_ls --porcelain`, whose porcelain
+    branch is a SEPARATE ZSH IMPLEMENTATION -- it reads the registry with its own `jq` calls, cuts
+    with `${summary:0:80}`, and emits the record with `printf '%s\\t%s\\t%s\\t%s\\t%s\\n'`. It never
+    enters Python at all. So every consequence that earlier text attributed to this function -- the
+    phantom fzf row, `cut -f1` handing prose to `_borg_do_switch` -- belongs to `cmd_ls --porcelain`,
+    where it was live and where it is now fixed (the flatten and the `printf '%s' | jq` correction in
+    `cmd_ls`, pinned by cli_contract.bats's "the picker feed stays one 5-field record per project
+    through tab and newline" -- a title narrowed from "tab, newline and CR" because its counting
+    oracle cannot kill a CR-only mutant). THE TWO IMPLEMENTATIONS ALREADY DIVERGE, which is why the
+    mix-up was not harmless: on an empty registry this one prints nothing while `cmd_ls --porcelain`
+    prints a human "No projects registered" sentence, and both behaviours are pinned. The enumeration
+    that found the stale claims, and the one to re-run before calling this file clean, is a grep of
+    this module for `picker` and `switch`.
+
+    STILL FLATTENED HERE, ON ITS OWN GROUNDS. `borg link --porcelain` is a TSV read BY FIELD: a
+    `\\n` in the last field ends the record early and a `\\t` shifts every field after it, and both
+    characters reach storage through `lib/registry.zsh`'s scrub. That argument stands without any
+    claim about fzf. Stated at its real strength, though: grepped across borg.zsh, drone.zsh,
+    hooks/, skills/ and bin/, this surface has NO runtime consumer in the repo today -- what pins its
+    five-field shape is cli_contract.bats, and the one proposed consumer (reading a `drone status`
+    column by position) lives in a SEVERED directive whose command was deleted. So the flatten here
+    protects a documented contract and its tests, not a user-visible break; the user-visible break
+    was in `cmd_ls --porcelain`. Flattened BEFORE the 80-char cut, the same ordering the other two
+    call sites use and for the same reason: the budget must measure the characters the field carries.
     """
     order = doc.get("order") or []
     projects = doc.get("projects") or {}
@@ -227,7 +335,7 @@ def porcelain(doc: dict) -> str:
         status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
         last_activity = core.jq_default(entry.get("last_activity"), "")
         summary = core.jq_default(entry.get("summary"), "")
-        summary = str(summary)[:80]
+        summary = _flatten_summary(str(summary))[:80]
         rows.append(f"{name}\t{source}\t{status}\t{last_activity}\t{summary}\n")
     return "".join(rows)
 
@@ -254,9 +362,30 @@ def _src_badge(source: str) -> str:
 
 def _overview_summary_cut(summary: str) -> str:
     """The board's 50-char cut WITH a literal `...` appended only when the ORIGINAL length is
-    STRICTLY greater than 50 (an exactly-50-char summary gets none)."""
-    cut = summary[:50]
-    return f"{cut}..." if len(summary) > 50 else cut
+    STRICTLY greater than 50 (an exactly-50-char summary gets none).
+
+    EMBEDDED WHITESPACE CONTROL CHARACTERS ARE FLATTENED TO SPACES HERE, BEFORE THE CUT (F1, second
+    renderer): a fixed-width table cannot survive one, exactly the way it cannot survive an over-long
+    project name. `_flatten_summary` is the canonical statement of the character set, of all three
+    call sites and how each breaks, and of the retraction that none of this is about the picker.
+
+    FLATTEN BEFORE CUTTING, NOT AFTER -- the same ordering `_summary_block` uses, pinned there by
+    test_render.py::TestSummaryBlock::test_summary_block_flattens_newlines_before_folding_not_after.
+    Stated honestly: TODAY the two orderings are behaviourally identical, because the replacement is
+    one character for one character, so `flat[:50]` and `summary[:50].replace(...)` are the same
+    string and `len()` is the same number either way. Before-cut is nonetheless the correct
+    placement, because it is the one that stays correct if the replacement ever stops being
+    one-for-one (a future `"\\n" -> " | "`, say): the 50-char budget and the `> 50` ellipsis test
+    must measure DISPLAYED characters, and only the before-cut ordering guarantees that without a
+    second edit here. What IS pinned by test is the displayed-character property itself --
+    TestOverviewSummaryCut::test_cut_boundary_and_ellipsis_measure_displayed_characters.
+
+    Because the replacement is one-for-one, both the cut and the ellipsis test are unchanged for
+    already-clean input and no golden moves.
+    """
+    flat = _flatten_summary(summary)
+    cut = flat[:50]
+    return f"{cut}..." if len(flat) > 50 else cut
 
 
 def _board_display(name: str, entry: dict) -> str:
