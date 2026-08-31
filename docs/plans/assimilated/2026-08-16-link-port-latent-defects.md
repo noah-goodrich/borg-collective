@@ -1,6 +1,17 @@
 # Directive: Five Latent Defects From the `borg link` Python Port, Filed Late
 
 *Filed: 2026-08-16*
+*Shipped: 2026-08-28 — PR [#176](https://github.com/noah-goodrich/borg-collective/pull/176), AC1–AC5, merged to
+main*
+
+> **ASSIMILATION NOTE (2026-08-31).** All five ACs ticked with a decision, evidence and a named mutation each; AC1
+> additionally shipped a scope correction (the BOARD's `_overview_summary_cut` had the same defect as the deep dive's
+> `_summary_block`) and AC2's verify clause was narrowed to its intent rather than waived, with the reading recorded
+> inline. Two things the same PR deferred rather than absorbed, both now filed:
+> `docs/plans/directives/2026-08-31-render-split-along-the-sections-seam.md` (the module-level
+> `# pylint: disable=too-many-lines` it added) and
+> `docs/plans/directives/2026-08-31-flatten-the-summary-once-at-assembly.md` (the flatten is opt-in at each call
+> site, which is why the same bug had to be found and fixed three times in one day).
 
 ## Why this exists
 

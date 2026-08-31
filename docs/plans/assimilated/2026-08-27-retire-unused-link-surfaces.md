@@ -1,6 +1,18 @@
 # Directive: Retire `borg watch`, `drone status`, and `borg switch`'s preview pane
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Filed: 2026-08-27*
+*Shipped: 2026-08-27 — PR [#171](https://github.com/noah-goodrich/borg-collective/pull/171) merged to main
+(spec: PR [#168](https://github.com/noah-goodrich/borg-collective/pull/168))*
+
+> **ASSIMILATION NOTE (2026-08-31). The six boxes below were ticked at archive time, not at ship time**, which is
+> why this file sat in `docs/plans/directives/` for four days after the work landed and kept `borg link` reporting
+> finished work as queued. Each tick names the command that re-derives it, so none of them rests on this note.
+>
+> **What the deletion left behind, and did not clean up.** Three shipped surfaces still advertise `drone status` as
+> a live command — `README.md`'s command table, `docs/cheatsheet.md`, and `install.sh`'s post-install banner — and
+> `PICTURE_BUDGET = 68` now stands on a pane that no longer exists. Both are filed as
+> `docs/plans/directives/2026-08-31-picture-budget-and-the-ghost-preview.md` rather than swept in here, because the
+> second one is a design question (is 68 still the right number?) and not a comment fix.
 
 **tl;dr** — Three `borg link` consumers have zero typed invocations in six months of shell history, and between them
 they justify the `--local` opt-down's urgency, a `grep` against the human document, and a whole filed directive. Delete
@@ -102,10 +114,33 @@ cannot see — but `borg switch` itself scored 0, and the preview cannot run wit
 
 ## Acceptance criteria
 
-- [ ] `cmd_watch`, `drone`'s `cmd_status`, and the two `--preview*` lines are gone; `whence -w cmd_watch` fails.
-- [ ] `borg switch` still lists projects and still switches tmux windows.
-- [ ] `PICTURE_BUDGET` still has an executable upper bound that is not the deleted pane width.
-- [ ] `2026-08-27-drone-status-off-the-human-document.md` is in `docs/plans/severed/` with a line saying deletion
-      closed it.
-- [ ] `--deep` is still in the parser and B16 is still green.
-- [ ] Both suites green; `borg help` and `CLAUDE.md` no longer advertise the three surfaces.
+- [x] `cmd_watch`, `drone`'s `cmd_status`, and the two `--preview*` lines are gone; `whence -w cmd_watch` fails.
+      Verified as commands, not by eye: `grep -n '^cmd_watch' borg.zsh` and `grep -n 'cmd_status' drone.zsh` both
+      return nothing, `grep -c -- '--preview-window' borg.zsh` is 0, and the four surviving `--preview` matches in
+      the tree are prose that says the flag is gone. `whence -w` is asserted by the bats case
+      `contract: the nine deleted link helpers are undefined at runtime, and their survivors are not`, which moved
+      `cmd_watch` from its survivor list into its deleted list — a real assertion that goes red on a resurrection,
+      exactly as the correction above required.
+- [x] `borg switch` still lists projects and still switches tmux windows.
+      `cmd_switch` survives with its picker (`cmd_ls --porcelain | fzf --query --prompt --header --delimiter
+      --with-nth`) and is covered by `contract: switch with a query matching exactly one registered project switches
+      via tmux directly` and `contract: switch falls through to fzf and returns cleanly when no project matches`.
+- [x] `PICTURE_BUDGET` still has an executable upper bound that is not the deleted pane width.
+      `contract: the widest picture row fits PICTURE_BUDGET and no preview-window flag survives` (B15) measures the
+      widest golden row against `PICTURE_BUDGET` read out of `picture.py`, and asserts `grep -c --
+      '--preview-window' borg.zsh` is 0 rather than comparing against it. B15b then checks the same measurement
+      against the `--json` side's `grid.picture_width`.
+      **The bound is now executable and unjustified, and that is a real cost of this directive** — see the
+      assimilation note above and the follow-up it names.
+- [x] `2026-08-27-drone-status-off-the-human-document.md` is in `docs/plans/severed/` with a line saying deletion
+      closed it. It is (`ls docs/plans/severed/`), and it was moved there in the same PR.
+- [x] `--deep` is still in the parser and B16 is still green.
+      `grep -n '_link_py_args=(--deep)' borg.zsh` finds the one live caller — the anchor that replaced this
+      directive's own `borg.zsh:266`-era line pins — and B16 still pins the parse-and-ignore contract.
+- [x] Both suites green; `borg help` and `CLAUDE.md` no longer advertise the three surfaces.
+      `borg help` carries neither `watch` nor a `drone status` row and names both under its `REMOVED` block;
+      `CLAUDE.md` records the removal under both command tables. Gate exit codes for this archive pass are in the
+      commit message.
+      **Not fully swept, stated rather than claimed:** `README.md`, `docs/cheatsheet.md` and `install.sh` still list
+      `drone status`. The criterion as written named `borg help` and `CLAUDE.md` and those two are clean; the three
+      surfaces it did not name are filed, not fixed.
