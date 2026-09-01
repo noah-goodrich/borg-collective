@@ -1014,3 +1014,62 @@ def test_declared_body_is_the_one_definition_of_derived(tmp_path):
     # is how the old writer came to remove `_path` and persist `_id`.
     body = core.declared_body({"rows": [], "_path": "/x", "_id": "y", "desc": "kept"})
     assert body == {"rows": [], "desc": "kept"}
+
+
+# ── refused_manifest_paths ───────────────────────────────────────────────────
+
+
+def test_refused_paths_names_both_whole_file_refusals(tmp_path):
+    # The two shapes that mean "a file here looks like a manifest and could not be used".
+    repository = _write_manifest(tmp_path, "repo", "broken.json", {"rows": [{"order": "1"}]})
+    (tmp_path / "repo" / ".borg" / "programs" / "garbage.json").write_text("{not json", encoding="utf-8")
+    _, warnings = shell.discover([repository])
+
+    refused = shell.refused_manifest_paths(warnings)
+    assert sorted(os.path.basename(p) for p in refused) == ["broken.json", "garbage.json"]
+
+
+def test_a_stray_non_manifest_is_not_a_refusal(tmp_path):
+    # `not a manifest (no rows list)` describes a stray settings.json sitting in the directory, not a
+    # manifest that failed. Counting it would make CHAINS claim a broken manifest that does not exist.
+    directory = tmp_path / "repo" / ".borg" / "programs"
+    directory.mkdir(parents=True)
+    (directory / "settings.json").write_text('{"theme": "dark"}', encoding="utf-8")
+    _, warnings = shell.discover([str(tmp_path / "repo")])
+
+    assert warnings, "precondition: the stray file is still warned about"
+    assert shell.refused_manifest_paths(warnings) == []
+
+
+def test_refused_paths_narrows_to_one_repository(tmp_path):
+    # Warnings are registry-WIDE. A manifest refused in another repository must not change what this
+    # repository's page says about itself.
+    mine = _write_manifest(tmp_path, "mine", "broken.json", {"rows": [{"order": "1"}]})
+    _write_manifest(tmp_path, "theirs", "broken.json", {"rows": [{"order": "1"}]})
+    _, warnings = shell.discover([mine, str(tmp_path / "theirs")])
+
+    assert len(shell.refused_manifest_paths(warnings)) == 2
+    narrowed = shell.refused_manifest_paths(warnings, mine)
+    assert len(narrowed) == 1 and narrowed[0].startswith(mine)
+
+
+def test_narrowing_does_not_match_a_sibling_by_prefix(tmp_path):
+    # `<root>/repo` must not swallow `<root>/repo-two`. The separator is why `under` is joined with
+    # os.path.join(under, "") rather than tested with a bare startswith.
+    _write_manifest(tmp_path, "repo", "ok.json", _manifest([_row("1", "o/r#1")]))
+    two = _write_manifest(tmp_path, "repo-two", "broken.json", {"rows": [{"order": "1"}]})
+    _, warnings = shell.discover([str(tmp_path / "repo"), two])
+
+    assert shell.refused_manifest_paths(warnings, str(tmp_path / "repo")) == []
+    assert len(shell.refused_manifest_paths(warnings, two)) == 1
+
+
+def test_a_partially_dropped_manifest_is_not_a_refusal(tmp_path):
+    # It DID load. Counting it would make CHAINS print "could not be read" above a rendered chain.
+    doc = _manifest([_row("1", "o/r#1"), _row("2", "shorthand#2")])
+    repository = _write_manifest(tmp_path, "repo", "partial.json", doc)
+    manifests, warnings = shell.discover([repository])
+
+    assert len(manifests) == 1, "precondition: the file loaded with its good row"
+    assert "rows dropped" in warnings[0]
+    assert shell.refused_manifest_paths(warnings) == []

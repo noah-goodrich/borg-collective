@@ -152,6 +152,43 @@ def _drop_invalid_rows(doc: dict, path: str, errors: list[str]) -> tuple[dict | 
     return doc, f"{path}: {len(bad_rows)} of {len(rows)} rows dropped -- {joined}"
 
 
+# The two warning shapes that mean "a file here looks like a manifest and could not be used": the
+# unreadable/invalid-JSON skip in `_load_manifest` and every `invalid manifest` arm of
+# `_drop_invalid_rows`. Not the `not a manifest (no rows list)` skip, which describes a stray
+# `settings.json` sitting in the directory rather than a manifest that failed, and not the
+# `N of M rows dropped` arm, which is a manifest that DID load.
+_REFUSAL_MARKERS = (": invalid manifest -- ", ": unreadable or invalid JSON (")
+
+
+def refused_manifest_paths(warnings: list[str], under: str = "") -> list[str]:
+    """The manifest paths a discovery pass refused, optionally narrowed to one repository.
+
+    LIVES HERE, NEXT TO THE FORMAT IT PARSES, for the reason `core.partition_errors` gives about its
+    own: `_load_manifest` and `_drop_invalid_rows` build these strings a dozen lines up, and a
+    consumer that wants the paths back has to know the shape. Putting the parse in `link/render.py`
+    would make the message format an undeclared cross-package contract -- the shape that breaks
+    silently the first time someone rewords an error string. Reword one here and this moves with it.
+
+    WHY A STRING PARSE AT ALL, rather than `discover` returning the paths structurally: `discover`'s
+    `(manifests, warnings)` contract is consumed by the CLI, the coordinator and the grid, and
+    widening it to carry a third value ripples through all three for one placeholder sentence. The
+    format has exactly one producer, in this file, and one consumer, through this function.
+
+    `under` narrows to one repository directory because warnings are registry-WIDE -- `discover_
+    registered` sweeps every registered path -- and a manifest refused in some other repository must
+    not change what THIS repository's page says about itself.
+    """
+    prefix = os.path.join(under, "") if under else ""
+    found = []
+    for warning in warnings:
+        for marker in _REFUSAL_MARKERS:
+            head, sep, _ = warning.partition(marker)
+            if sep and (not prefix or head.startswith(prefix)):
+                found.append(head)
+                break
+    return found
+
+
 def _manifest_identity(manifest: dict) -> str:
     """A manifest's content identity: its declared body with every derived `_` key removed.
 

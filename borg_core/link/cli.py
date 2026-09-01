@@ -178,6 +178,13 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
     fetch = grid.no_fetch() if pending is None else shell.finish_fetch(pending)
     block = grid.build_grid(scope, slug, sweep, fetch, selected, warnings + select_warnings)
     block["picture_width"] = picture.max_row_width(block["manifests"])
+    # STAMPED HERE, LIKE `picture_width` DIRECTLY ABOVE, and for the same reason: `build_grid` is
+    # handed the SELECTED manifests, and a refused file is by definition not among them -- the only
+    # surviving trace is its warning. `directory` is the repository this invocation resolved to, and
+    # narrowing by it is what stops a broken manifest in some other registered repository changing
+    # what this page says about itself. Empty in orchestrator scope, where the ladder's first arm
+    # answers before this is read.
+    block["refused"] = len(shell.refused_manifest_paths(warnings, directory))
     return block
 
 
