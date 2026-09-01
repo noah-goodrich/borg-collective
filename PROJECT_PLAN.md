@@ -12,8 +12,11 @@ e2e/eval harness that keeps it honest.
 - **Repository** — a git repo. What a drone opens on by default. Currently miscalled "project" throughout the code.
 - **Project** — a set of related requirements, PRs, and work spanning one or more repositories. Previously and
   incorrectly called a "program."
-- **"Program" is retired.** It does not appear in new code, output, skills, help text, or documentation. The
-  repository-side internal rename (`project` → `repository`) is deferred to a parented directive; see AC7.
+- **"Program" is retired.** It does not appear in new code, output, skills, help text, or documentation —
+  with one ratified exception: the REMOVED tombstone in `borg help`, which names a retired verb precisely so a
+  user who types it gets a pointer instead of `unknown command`. See AC7 decision (1). The verb itself becomes
+  `borg chain`, not `borg project`; see AC7 decision (2). The repository-side internal rename
+  (`project` → `repository`) is deferred to a parented directive; see AC7.
 
 ## Acceptance Criteria
 
@@ -149,15 +152,43 @@ e2e/eval harness that keeps it honest.
 - [ ] **AC7 — "Program" is gone, and nothing breaks.** Eliminated from user-facing surfaces, skills, help text, and
       `merge-tree/`. The repository-side rename is filed as a parented directive, not executed. Suites green and
       coverage holds its floor.
-  - Verify: `grep -ri program` over help text, skills, and `merge-tree/` returns nothing; the directive file exists
-    with a `*Parent plan:*` line; `make test` green at `--fail-under=90`; `bats tests/` green.
+  - Verify: `grep -ri program` over the COMMANDS section of `borg help`, over `skills/`, and over `merge-tree/`
+    returns nothing; the directive file exists with a `*Parent plan:*` line; `make test` green at `--fail-under=90`;
+    `bats tests/` green.
+  - **Three decisions ratified 2026-08-31**, after the original verify clause was found unsatisfiable as written.
+  - **(1) The REMOVED block is excluded from the grep, and the clause above says so.** The original read
+    "`grep -ri program` over help text" and could never pass: this repo retires a verb by moving it to a REMOVED
+    tombstone in `borg help`, which is test-enforced —
+    `contract: recon is gone from COMMANDS and named in REMOVED (AC1)` asserts `recon` is absent from COMMANDS *and*
+    present in the REMOVED block. Retiring `program` correctly therefore puts the word back into help text. The
+    tombstone exists so a user typing a dead verb gets a pointer rather than `unknown command`, which is worth more
+    than a literal grep. Scoping the grep to COMMANDS keeps the intent — the retired word is off the live command
+    surface — without demanding the convention be broken for one verb.
+  - **(2) `borg program` becomes `borg chain`, not `borg project`.** The Vocabulary maps program → project, but AC7
+    defers the `project` → `repository` rename, and `cmd_program` reads `jq -r '.projects[].path'` where `project`
+    means *repository*. `borg project` would ship a verb whose name means workstream and whose body means
+    repository. `chain` sidesteps both senses and matches what `borg link` already prints in `▸ CHAINS`. It is also
+    a RENAME, not a deletion: `contract: borg help is net one command shorter than at plan start (AC1)` asserts the
+    COMMANDS count is exactly `25`, so deleting the verb turns it red, while renaming leaves the count intact. Four
+    contract tests invoke the verb by name and move with it.
+  - **(3) `merge-tree/programs.py` is RETIRED into `borg_core/manifest/`, not renamed.** `core.py`'s own docstring
+    says "Retiring one of the two copies is AC7's problem, not this module's." The two have diverged — the
+    merge-tree write gate is weaker on `after`, the borg_core read gate is weaker on `gate.kind`, so a manifest the
+    writer accepts can be silently unreadable by the reader. Renaming preserves that. Retiring erases the
+    occurrences instead of relabelling them, and it is a prerequisite for the `borg reconcile` work filed in
+    `docs/plans/directives/2026-08-31-shim-architecture-for-borg-and-employer-plugins.md`: shipping an automated
+    writer on top of an unresolved reader/writer disagreement runs that risk on every timer tick rather than only
+    when someone hand-edits. Measured cost: 292 occurrences across 44 tracked files, and 343 tests covering
+    `programs.py` at 98% and `coordinator.py` at 95% move with it.
 
 ## Scope Boundaries
 
 - NOT building: S1 `borg show`, and the `--md` / `--html` output modes. ANSI-to-stdout only. Conscious call — `--md`
   exists to hand a document to nvim, which needs S1, which is a new verb, and the terminal already answers
   "what's in flight."
-- NOT building: the `project` → `repository` internal rename. AC7 files it; ~500 occurrences across 57+ files plus
+- NOT building: the `project` → `repository` internal rename. AC7 files it — filed 2026-08-31 as
+  `docs/plans/directives/2026-08-31-project-to-repository-rename.md`, which RE-MEASURED the scope at **3142
+  occurrences across 97 of 139 tracked code files**, not the ~500 across 57+ estimated here. Plus
   the registry schema key and `.borg-project` markers.
 - NOT building: infoviz Track 6 as a blocker. The one reading with teeth here is Ghoniem et al. (past ~20 vertices,
   matrices beat node-link except on path-finding); live manifests are 3 and 14 rows on a path-finding task, so the
