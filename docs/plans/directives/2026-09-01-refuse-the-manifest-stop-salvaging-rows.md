@@ -76,9 +76,13 @@ it**, so the reversal cannot ship a state where files are refused and the page s
 - **A refusal is louder than a drop, and that is the point** — but it means one bad hand-edit removes a chain from the
   page entirely until fixed. Acceptable only because the fourth diagnosis makes the reason unmissable. If that arm
   regresses, this decision regresses with it; they are one change in two commits.
-- **`make test-viz`'s fixtures assume salvage.** 53 shorthand refs in `merge-tree/test_coordinator.py` are invalid
-  under `core.validate` today. Per expand→migrate→contract they must be migrated **before** the read path
-  tightens — the same prerequisite the retirement's step 4 already names, now load-bearing for two changes, not one.
+- **`make test-viz`'s fixtures assume salvage.** **57** shorthand ref occurrences (on 53 lines) in
+  `merge-tree/test_coordinator.py` are invalid under `core.validate`. Per expand→migrate→contract they must be
+  migrated **before** the read path tightens — the retirement's step 4, now load-bearing for two changes, not one.
+  The rewrite must be **whole-file with a uniform owner**, not targeted at `_row(...)`: 41 of the 57 are join keys in
+  recon state maps and target reports, and rewriting the row ref while leaving its state-map key turns the join into
+  a silent no-match. A uniform prefix also preserves the lexicographic sort `coordinator.py:138` depends on, which
+  per-repo owners would reorder.
 - **The temptation when fixtures go red is to weaken the validator**, which is exactly how two validators came to
   disagree. Migrating the data is the only sanctioned fix.
 

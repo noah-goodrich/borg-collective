@@ -428,9 +428,15 @@ docs/
   to end exactly that). "Additive first" is also why a port lands as a NEW path before any caller is
   repointed: `borg_core/manifest/shell.write_manifest` shipped 2026-09-01 accepting the strict
   validator while `coordinator.py` and `gather.py` still used the old one — that commit was the
-  expand phase, and repointing them is the contract phase, which may not happen until the 53
-  shorthand refs in `merge-tree/test_coordinator.py` and `warehouse-rollout.json`'s `kind: "review"`
-  have been migrated to satisfy the stricter rules.
+  expand phase, and repointing them is the contract phase, which may not happen until the **57**
+  shorthand ref occurrences in `merge-tree/test_coordinator.py` have been migrated to satisfy the
+  stricter rules. **Migrate only what the SURVIVING validator rejects.** An artifact that fails only
+  the validator being deleted needs no migration at all — it is resolved by the contraction. The
+  first draft of this rule listed `warehouse-rollout.json`'s `kind: "review"` as a prerequisite; it
+  is clean under `core.validate` and fails only merge-tree's `GATE_KINDS` closure, which borg_core
+  removed on purpose. "Migrating" it would have meant rewriting data BACKWARD to satisfy a dying
+  rule, and five oracles pin that literal string. Direction matters: expand→migrate→contract governs
+  data the new rules reject, not data the old ones did.
 
 ## Style Rules
 
