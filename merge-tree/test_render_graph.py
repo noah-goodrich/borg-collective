@@ -47,13 +47,23 @@ class TestRepoOfRef:
         monkeypatch.setattr(rg, "by_ref", {"a#1": {}})
         assert rg.repo_of_ref("a#1") == "a"
 
-    def test_de_prefixed_ref_maps_to_jira(self, monkeypatch):
+    def test_any_jira_style_key_maps_to_jira(self, monkeypatch):
+        # Generic on purpose. This used to be a hardcoded startswith() against two specific project
+        # prefixes, which put an employer identifier in source; the prefix is not ours to know.
         monkeypatch.setattr(rg, "by_ref", {})
         assert rg.repo_of_ref("PROJ-1234") == "jira"
 
-    def test_dev_prefixed_ref_maps_to_jira(self, monkeypatch):
+    def test_a_second_unrelated_key_prefix_also_maps_to_jira(self, monkeypatch):
+        # The pair is the point: one prefix passing could still be a hardcoded match.
         monkeypatch.setattr(rg, "by_ref", {})
         assert rg.repo_of_ref("DEV-99") == "jira"
+
+    def test_a_hyphenated_word_that_is_not_a_key_is_not_jira(self, monkeypatch):
+        # The negative that keeps the regex honest: lowercase, and no trailing number, so a repo or
+        # branch name carrying a hyphen must not be swallowed as an issue key.
+        monkeypatch.setattr(rg, "by_ref", {})
+        assert rg.repo_of_ref("some-branch-name") == "some-branch-name"
+        assert rg.repo_of_ref("RELEASE-NOTES") == "RELEASE-NOTES"
 
     def test_space_separated_ref_splits_on_space(self, monkeypatch):
         monkeypatch.setattr(rg, "by_ref", {})
