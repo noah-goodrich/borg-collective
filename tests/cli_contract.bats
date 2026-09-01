@@ -263,6 +263,12 @@ run_zsh_borg() {
     # 27 at plan start, -1 for `recon` (S4), -1 for `watch`
     # (2026-08-27-retire-unused-link-surfaces.md: zero typed invocations in six months of shell
     # history). No verb has been added at any point. If this goes red, ask which entry moved.
+    #
+    # STILL 25 AFTER 2026-08-31 (AC7). `program` became `chain` — a RENAME, so the count is unchanged
+    # by construction. That was the deciding reason not to delete the verb: deletion yields 24 and
+    # turns this red, which then invites re-deriving the constant instead of asking what moved. The
+    # old name lives on as a die-arm in the dispatch and a REMOVED tombstone, and neither is inside
+    # the COMMANDS slice this awk counts.
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
     [ "$status" -eq 0 ]
     [ "$output" = "25" ]
@@ -3912,42 +3918,53 @@ _repo_norm() {
 # does not), and set -e turns that into a silent death. Same blind-spot shape as the BORG_REGISTRY
 # inheritance bug — reading the code proved nothing until a test ran it.
 
-@test "contract: argless 'borg program' reaches the list default instead of a shift crash" {
+@test "contract: argless 'borg chain' reaches the list default instead of a shift crash" {
     echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     mkdir -p "$BATS_TEST_TMPDIR/proj"
-    run zsh -c "'$BORG' program"
+    run zsh -c "'$BORG' chain"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"0 program(s)"* ]] || false
+    [[ "$output" == *"0 chain(s)"* ]] || false
 }
 
-@test "contract: 'borg program list' sweeps a registry manifest end to end" {
+@test "contract: 'borg chain list' sweeps a registry manifest end to end" {
     mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/programs"
     echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
     echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
         > "$BATS_TEST_TMPDIR/proj/.borg/programs/auth.json"
-    run zsh -c "'$BORG' program list"
+    run zsh -c "'$BORG' chain list"
     [ "$status" -eq 0 ]
     [[ "$output" == *"auth: 1 row(s)"* ]] || false
 }
 
 @test "contract: --recon outside plan dies named, not via argparse exit 2" {
     echo '{"projects": {}}' > "$BORG_REGISTRY"
-    run zsh -c "'$BORG' program list --recon /tmp/x.json"
+    run zsh -c "'$BORG' chain list --recon /tmp/x.json"
     [ "$status" -ne 0 ]
     [[ "$output" == *"--recon is only valid with 'plan'"* ]] || false
 }
 
 @test "contract: a trailing valueless --programs-dir dies named, not via a shift crash" {
-    run zsh -c "'$BORG' program plan --programs-dir"
+    run zsh -c "'$BORG' chain plan --programs-dir"
     [ "$status" -ne 0 ]
     [[ "$output" == *"--programs-dir needs a path"* ]] || false
     [[ "$output" != *"shift count"* ]] || false
 }
 
-@test "contract: an unknown program action prints usage including --recon" {
-    run zsh -c "'$BORG' program bogus"
+@test "contract: an unknown chain action prints usage including --recon" {
+    run zsh -c "'$BORG' chain bogus"
     [ "$status" -ne 0 ]
     [[ "$output" == *"list|plan|sync"* ]] || false
+}
+
+# The rename is only safe if the old name still answers. A user with `borg program` in muscle memory
+# or in a script must get a pointer, not `unknown command` — and the pointer must carry the args, or
+# it sends them back to a bare verb they then have to re-type.
+@test "contract: 'borg program' is renamed, not removed, and forwards its args (AC7)" {
+    run zsh -c "'$BORG' program list"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"renamed to 'borg chain'"* ]] || false
+    [[ "$output" == *"Run: borg chain list"* ]] || false
+    [[ "$output" != *"unknown command"* ]] || false
 }
 
 # ── scope + --local (S1) ─────────────────────────────────────────────────────

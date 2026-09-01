@@ -2687,36 +2687,42 @@ _borg_version_ge() {
     return 0
 }
 
-# ── program manifests (PM6) ────────────────────────────────────────────────────
-# borg program list|plan|sync — the sync coordinator over <project>/.borg/programs/*.json.
+# ── chain manifests (PM6) ──────────────────────────────────────────────────────
+# borg chain list|plan|sync — the sync coordinator over <project>/.borg/programs/*.json.
 # The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
 # testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered project
-# path becomes a --programs-dir, so `borg program list` sweeps the whole collective. Explicit
+# path becomes a --programs-dir, so `borg chain list` sweeps the whole collective. Explicit
 # --programs-dir args are passed through untouched and suppress the registry sweep.
-cmd_program() {
+#
+# Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: cmd_chain resolves
+# roots by reading `.projects[].path` from the registry, where "project" means REPOSITORY — so that
+# name would mean one thing and do another until the deferred project→repository rename lands. The
+# --programs-dir and --recon TOKENS are coordinator.py's argparse flags and are deliberately
+# untouched here; they move with the merge-tree retirement, not with the verb.
+cmd_chain() {
     local action="${1:-list}"
     case "$action" in
         list|plan|sync) ;;
-        *) die "usage: borg program list|plan|sync [--programs-dir <path>]... ; plan also takes --recon <file>" ;;
+        *) die "usage: borg chain list|plan|sync [--programs-dir <path>]... ; plan also takes --recon <file>" ;;
     esac
     # Guarded: zsh hard-errors a bare `shift` at $#==0 (unlike bash), and set -e makes that fatal —
-    # which would kill the argless `borg program` the :-list default exists for.
+    # which would kill the argless `borg chain` the :-list default exists for.
     (( $# )) && shift
 
-    typeset -a _prog_args
+    typeset -a _chain_args
     local _explicit_dirs=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --programs-dir)
-                [[ -n "${2:-}" ]] || die "borg program: --programs-dir needs a path"
-                _prog_args+=(--programs-dir "$2"); _explicit_dirs=1; shift 2 ;;
+                [[ -n "${2:-}" ]] || die "borg chain: --programs-dir needs a path"
+                _chain_args+=(--programs-dir "$2"); _explicit_dirs=1; shift 2 ;;
             --recon)
                 # argparse registers --recon on the plan subparser only; failing here beats
                 # advertising a flag downstream then rejects.
-                [[ "$action" == "plan" ]] || die "borg program: --recon is only valid with 'plan'"
-                [[ -n "${2:-}" ]] || die "borg program: --recon needs a file (or -)"
-                _prog_args+=(--recon "$2"); shift 2 ;;
-            *)              die "unknown flag '$1' for borg program" ;;
+                [[ "$action" == "plan" ]] || die "borg chain: --recon is only valid with 'plan'"
+                [[ -n "${2:-}" ]] || die "borg chain: --recon needs a file (or -)"
+                _chain_args+=(--recon "$2"); shift 2 ;;
+            *)              die "unknown flag '$1' for borg chain" ;;
         esac
     done
 
@@ -2724,13 +2730,13 @@ cmd_program() {
         [[ -f "$BORG_REGISTRY" ]] || die "no registry at $BORG_REGISTRY — run 'borg add <path>' first"
         local _proj_path
         while IFS= read -r _proj_path; do
-            [[ -n "$_proj_path" ]] && _prog_args+=(--programs-dir "$_proj_path")
+            [[ -n "$_proj_path" ]] && _chain_args+=(--programs-dir "$_proj_path")
         done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY")
-        (( ${#_prog_args[@]} )) || die "registry has no project paths — run 'borg add <path>' first"
+        (( ${#_chain_args[@]} )) || die "registry has no project paths — run 'borg add <path>' first"
     fi
 
     PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 "$BORG_HOME/merge-tree/coordinator.py" "$action" "${_prog_args[@]}"
+        python3 "$BORG_HOME/merge-tree/coordinator.py" "$action" "${_chain_args[@]}"
 }
 
 cmd_version() {
@@ -2772,8 +2778,8 @@ cmd_help() {
                           --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
     switch [query]      fzf picker → jump to project tmux window
-    program <action>    Program-manifest coordinator over <project>/.borg/programs/*.json
-                          list           Every declared program across registered projects
+    chain <action>      Manifest coordinator over <project>/.borg/programs/*.json
+                          list           Every declared chain across registered projects
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
                           --programs-dir <path>  Explicit roots (suppresses the registry sweep)
@@ -2805,6 +2811,8 @@ cmd_help() {
                  there is nothing a human still needs it for. The ENGINE is not retired:
                  'borg recon --json' and 'borg recon --adapters' are the machine surface
                  /borg-recon and merge-tree/gather.py consume, and both still work.
+    2026-08-31 — program renamed to chain. Same command, same actions, same flags; the word
+                 "program" is retired in favour of "chain". Run: borg chain
 
   HOTKEY
     Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
@@ -3383,7 +3391,7 @@ case "${1:-help}" in
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
     doctor)         cmd_doctor "${@:2}" ;;
-    program)        cmd_program "${@:2}" ;;
+    chain)          cmd_chain "${@:2}" ;;
     vinculum|vinc)  cmd_vinculum "${@:2}" ;;
     version|--version|-V) cmd_version ;;
     help|--help|-h) cmd_help ;;
@@ -3394,5 +3402,7 @@ case "${1:-help}" in
         die "'borg ${1}' was removed — it was an alias for 'link'. Run: borg link" ;;
     briefing) die "'borg briefing' was removed. Run: borg link --brief" ;;
     refresh)  die "'borg refresh' was removed. Run: borg link --refresh" ;;
+    # Renamed 2026-08-31 (AC7): same command under a non-retired name.
+    program)  die "'borg program' was renamed to 'borg chain'. Run: borg chain ${*:2}" ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac
