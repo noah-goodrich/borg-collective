@@ -94,6 +94,12 @@ from borg_core.manifest import refs as _refs
 # module ever matched on it, and aliasing it here would have meant a protected-access bypass for a
 # name with no callers. Two docstrings mention it by name; both are prose, not imports.
 parse_ref = _refs.parse_ref
+ref_kind = _refs.ref_kind
+is_tracked = _refs.is_tracked
+GITHUB = _refs.GITHUB
+JIRA = _refs.JIRA
+LINK = _refs.LINK
+TRACKED_REF_KINDS = _refs.TRACKED_REF_KINDS
 ref_slug = _refs.ref_slug
 slug_from_remote = _refs.slug_from_remote
 suggest_full_ref = _refs.suggest_full_ref
@@ -373,14 +379,27 @@ def _validate_after(row: dict[str, Any], ref: str, label: str) -> list[str]:
 def _row_ref_error(ref: str, label: str) -> str:
     """What is wrong with a row's own `ref`, or "" when nothing is.
 
-    A row's ref is the key everything else hangs off -- edges, declared_refs, the state lookup, the
-    repository scoping -- so it is held to parse_ref exactly like every other declared ref. See the
-    module docstring for why a shorthand `ingle#12` is a defect and not a convenience.
+    THREE VOCABULARIES, NOT ONE (2026-09-01). A row may name a GitHub pull request, a Jira issue, or a
+    link (Notion, a Google Doc, an uploaded asset). `refs.ref_kind` decides which; "" means the string
+    is none of them and is a defect. Before this the only legal ref was `owner/repo#num`, which was
+    inherited rather than decided -- and retiring merge-tree, whose validator accepted any non-empty
+    string, would have made that narrowing permanent on the deletion commit.
+
+    THE RULE DID NOT GET LOOSER, IT GOT TYPED. Each kind is anchored, so the mistake this check exists
+    to catch is still caught: `ingle#12` is a GitHub ref missing its owner, matches no kind, and is
+    reported -- with `suggest_full_ref` handing back the exact token when the author already named
+    this repository. Accepting anything non-empty is what let that typo resolve against nothing.
+
+    The message names all three vocabularies rather than only GitHub's, because an author who wrote
+    `docs/spec.md` needs to know a bare path is not a link, not be told about `owner/repo#num`.
     """
     if not ref:
         return f"{label}: missing ref"
-    if parse_ref(ref) is None:
-        return f"{label}: ref must be a full ref (owner/repo#num), got {ref}"
+    if not _refs.ref_kind(ref):
+        return (
+            f"{label}: ref must be a GitHub ref (owner/repo#num), a Jira key (PROJ-123) "
+            f"or an http(s) link, got {ref}"
+        )
     return ""
 
 

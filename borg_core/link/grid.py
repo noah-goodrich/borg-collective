@@ -394,7 +394,14 @@ def fetch_query(refs: list[str]) -> tuple[str, dict[str, str], list[str]]:
     for ref in refs:
         parts = _fetchable(ref)
         if parts is None:
-            warnings.append(f"fetch: ref {ref} is not a fetchable owner/repo#number -- excluded from the fetch")
+            # A jira or link row is OUT OF A GITHUB QUERY'S SCOPE, not broken: warning would add a
+            # `▸ SIGNALS` line per doc row on every render, which teaches the reader to skip the
+            # section. Still warned: a GITHUB-kind ref that is unfetchable anyway (a padded number
+            # takes the whole batch down), and a ref of NO known kind, which is a defect that should
+            # never have validated. `ref_kind` decides -- testing `"/" in ref` would re-derive the
+            # vocabulary in a second place.
+            if manifest_core.ref_kind(ref) not in (manifest_core.JIRA, manifest_core.LINK):
+                warnings.append(f"fetch: ref {ref} is not a fetchable owner/repo#number -- excluded from the fetch")
             continue
         alias = f"n{len(aliases)}"
         aliases[alias] = ref
