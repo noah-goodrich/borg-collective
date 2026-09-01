@@ -309,7 +309,7 @@ class TestCmdList:
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1")])
         assert coordinator.cmd_list(_Args([d])) == 0
         out = capsys.readouterr().out
-        assert "a: 1 row(s)" in out and "1 program(s), 0 skipped" in out
+        assert "a: 1 row(s)" in out and "1 chain(s), 0 skipped" in out
 
     def test_names_a_skipped_manifest_but_still_succeeds(self, tmp_path, capsys):
         d = tmp_path / "proj" / ".borg" / "programs"
@@ -336,7 +336,7 @@ class TestCmdPlan:
         assert rc == 0
         out, err = capsys.readouterr()
         assert "no publish target found" in err
-        assert "plan: 1 program(s), 1 row(s)" in out
+        assert "plan: 1 chain(s), 1 row(s)" in out
         # PM7: plan is read-only — running it must not add or change any file under the project.
         assert sorted((tmp_path / "proj").rglob("*")) == before
 
@@ -394,7 +394,7 @@ class TestMain:
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1")])
         monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--programs-dir", d])
         assert coordinator.main() == 0
-        assert "1 program(s), 0 skipped" in capsys.readouterr().out
+        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
 
     def test_requires_a_subcommand(self, monkeypatch):
         monkeypatch.setattr("sys.argv", ["coordinator.py"])
