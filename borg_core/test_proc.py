@@ -218,20 +218,38 @@ def test_a_sink_that_cannot_be_created_is_None_rather_than_an_exception(tmp_path
 def test_the_work_runs_between_the_start_and_the_collect(tmp_path):
     """THE WHOLE REASON THE PAIR EXISTS: the child's time overlaps the caller's, it does not add to it.
 
-    Two 0.6s scripts. Started together and collected together they finish in ~0.6s; run one after the
-    other they take ~1.2s. The 1.0s ceiling sits between the two with room on both sides, so this is
-    a structural assertion rather than a benchmark of the runner. `borg link` uses exactly this shape
-    to absorb AC3's `gh` round trip into the adapter fan-out it was going to pay for anyway.
+    ASSERTED BY SIBLING VISIBILITY, NOT BY WALL CLOCK, and the difference is the difference between a
+    structural assertion and a benchmark of whatever else the machine is doing. Each child drops a
+    marker, sleeps, then reports whether it can see the other's. Run concurrently both are already on
+    disk, so both report `saw-sibling`. Run serially the FIRST cannot possibly see the second's marker
+    -- it has not started -- so it reports `alone` and this fails. No duration appears anywhere.
+
+    THIS REPLACED AN `elapsed < 1.0` CEILING OVER TWO 0.6s CHILDREN, and the replacement is not the
+    forbidden move of widening a threshold after seeing an inconvenient number -- it deletes the
+    threshold. That ceiling measured the RUNNER: it passed on an idle machine and failed under load,
+    and it failed 2 of 2 runs once the suite reached 991 tests, having failed intermittently at 980
+    and rarely at 966. A test whose verdict tracks the size of the suite around it is not reporting on
+    the code under test. The docstring already claimed to be "a structural assertion rather than a
+    benchmark of the runner"; now it is one.
+
+    `borg link` uses exactly this shape to absorb AC3's `gh` round trip into the adapter fan-out it
+    was going to pay for anyway.
     """
-    first = proc.run_background([_script(tmp_path, "one", b"sleep 0.6; printf 'first'")])
-    second = proc.run_background([_script(tmp_path, "two", b"sleep 0.6; printf 'second'")])
+    marks = tmp_path / "marks"
+    marks.mkdir()
+    # `sleep` must span the sibling's START, not its finish -- both children write their marker
+    # before sleeping, so 0.3s of overlap is enough and the test costs half what the old one did.
+    def _sees(me, them):
+        return (
+            f"touch '{marks}/{me}'; sleep 0.3; "
+            f"if [ -e '{marks}/{them}' ]; then printf 'saw-sibling'; else printf 'alone'; fi"
+        ).encode()
 
-    started = time.monotonic()
-    assert proc.collect(first, timeout=5) == (0, "first")
-    assert proc.collect(second, timeout=5) == (0, "second")
-    elapsed = time.monotonic() - started
+    first = proc.run_background([_script(tmp_path, "one", _sees("one", "two"))])
+    second = proc.run_background([_script(tmp_path, "two", _sees("two", "one"))])
 
-    assert elapsed < 1.0, f"collected in {elapsed:.2f}s -- the two children ran serially, not concurrently"
+    assert proc.collect(first, timeout=30) == (0, "saw-sibling"), "the first child ran to completion before the second started"
+    assert proc.collect(second, timeout=30) == (0, "saw-sibling")
 
 
 def test_a_collect_timeout_kills_the_whole_session_of_a_backgrounded_start(tmp_path):
