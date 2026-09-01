@@ -164,7 +164,7 @@ answer: a standalone PR is a workstream of one.
 
 ### The overlay's stable keys
 
-Projects key on the **slug** of the gather's project name (`"WHP - Keypair migration"` → `sfp-keypair-migration`);
+Projects key on the **slug** of the gather's project name (`"WHP - Keypair migration"` → `whp-keypair-migration`);
 `slugify` is idempotent so re-slugging never drifts. Workstreams key on their **lexicographically smallest member
 ref**.
 
