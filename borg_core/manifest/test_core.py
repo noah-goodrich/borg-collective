@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from borg_core.manifest import core
+from borg_core.manifest import core, refs
 
 
 def _manifest(rows, apex=None):
@@ -235,10 +235,10 @@ def test_the_fixture_is_valid():
 
 @pytest.mark.parametrize(
     "ref",
-    ["ingle#12", "PROJ-123", "o/r", "o/r#", "o/r#abc", "a/b/c#1", "/r#1", "o/#1", "o r/x#1"],
+    ["ingle#12", "o/r", "o/r#", "o/r#abc", "a/b/c#1", "/r#1", "o/#1", "o r/x#1",
+     "docs/spec.md", "proj-123", "notion.so/x", "ftp://h/x", "https://has space/x"],
     ids=[
         "repo-shorthand",
-        "jira-key",
         "no-number",
         "empty-number",
         "non-numeric",
@@ -246,16 +246,71 @@ def test_the_fixture_is_valid():
         "leading-slash",
         "empty-name",
         "space-in-owner",
+        "bare-path",
+        "lowercase-jira",
+        "scheme-less-url",
+        "wrong-scheme",
+        "url-with-space",
     ],
 )
-def test_a_row_ref_that_is_not_a_full_ref_is_rejected(ref):
+def test_a_row_ref_matching_no_known_vocabulary_is_rejected(ref):
     # `ingle#12` is the one a model authoring a manifest headless (AC5) actually writes, and it used
     # to validate CLEAN: it then loads through discovery and produces a node parse_ref cannot build
     # (so AC3's targeted fetch renders it `unknown`, which AC3 forbids) and ref_slug cannot scope
     # (so the row is invisible in its own repository's grid). parse_ref's contract is that a
     # non-conforming ref is a defect to SURFACE; validate is the surfacing point.
+    #
+    # WIDENED 2026-09-01 WITHOUT LOOSENING. Rows may now name a Jira key or a link as well as a
+    # GitHub PR, so `PROJ-123` moved OUT of this list and into the positive test below. Everything
+    # else stayed, and five near-misses were added -- each is a plausible thing an author types that
+    # is ALMOST one of the three vocabularies. They are the whole reason `ref_kind` anchors every
+    # pattern instead of accepting any non-empty string, which is what merge-tree did.
     errors = core.validate(_manifest([_row("1", ref)]))
-    assert any("must be a full ref" in e for e in errors), errors
+    assert any("ref must be a" in e for e in errors), errors
+
+
+@pytest.mark.parametrize(
+    "ref,kind",
+    [
+        ("o/r#1", "github"),
+        ("PROJ-123", "jira"),
+        ("DE-1706", "jira"),
+        ("https://notion.so/a-page", "link"),
+        ("https://docs.google.com/document/d/x", "link"),
+    ],
+)
+def test_a_row_may_name_a_github_pr_a_jira_key_or_a_link(ref, kind):
+    """The three vocabularies a chain row may use, and the kind each classifies as.
+
+    Chains describe projects, and a project is not only its pull requests -- it has a ticket that
+    asked for it and a document that explains it. The rest of borg was already source-agnostic (a
+    recon Item carries `{source, ref}` and adapters are discovered by filename), so GitHub-only was
+    the outlier here, not a rule anyone chose.
+    """
+    assert core.validate(_manifest([_row("1", ref)])) == []
+    assert refs.ref_kind(ref) == kind
+
+
+def test_the_three_kinds_are_mutually_exclusive():
+    """`ref_kind`'s ladder returns on the first match, so overlapping patterns would make its ORDER
+    load-bearing and invisible. Asserted rather than left as a comment in the docstring."""
+    import re as _re  # noqa: PLC0415  -- local to this assertion, not module surface
+
+    patterns = {"github": refs._REF_RE, "jira": refs._JIRA_RE, "link": refs._LINK_RE}
+    samples = ["o/r#1", "PROJ-123", "https://notion.so/x", "DE-1706", "https://a.b/c#1"]
+    for sample in samples:
+        matched = [name for name, rx in patterns.items() if rx.match(sample)]
+        assert len(matched) == 1, f"{sample!r} matched {matched}"
+    assert isinstance(patterns["jira"], _re.Pattern)
+
+
+def test_a_link_is_a_reference_and_never_blocks():
+    """The split that keeps `ready` meaningful. A GitHub PR and a Jira issue have resolvable state, so
+    they can gate other rows. A Google Doc has none -- if a doc counted as a blocker, every chain
+    carrying its own spec would be permanently unready."""
+    assert refs.is_tracked("o/r#1") and refs.is_tracked("OPS-11")
+    assert not refs.is_tracked("https://notion.so/x")
+    assert refs.TRACKED_REF_KINDS == (refs.GITHUB, refs.JIRA)
 
 
 def test_a_padded_row_ref_is_accepted_because_text_strips_it_first():

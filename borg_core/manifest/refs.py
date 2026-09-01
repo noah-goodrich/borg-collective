@@ -174,3 +174,71 @@ def suggest_full_ref(ref: str, slug: str) -> str:
     if not owner or repo != stem:
         return ""
     return f"{slug}#{number}"
+
+
+# ── ref kinds ────────────────────────────────────────────────────────────────
+#
+# A chain row names a thing. Until 2026-09-01 that thing could only be a GitHub pull request, and
+# nobody decided that -- it was inherited from the port. The old merge-tree validator accepted ANY
+# non-empty string, so retiring it while `core.validate` required `owner/repo#num` would have
+# narrowed the manifest permanently, and silently, on the deletion commit.
+#
+# THE REST OF BORG WAS ALREADY SOURCE-AGNOSTIC. A recon Item is `{project, source, ref, ...}` with
+# `source` first-class and `ref` an opaque string, and adapters are discovered by filename
+# (`recon-adapter-<source>`) so a machine with a Jira adapter installed already sweeps Jira. The
+# GitHub-only rule here was the outlier, not merge-tree's looseness.
+
+GITHUB = "github"
+JIRA = "jira"
+LINK = "link"
+
+# TRACKED kinds have resolvable state and can therefore BLOCK. Reference kinds are context attached
+# to a chain -- the doc that explains it -- and must never block, or nothing is ever ready: a Google
+# Doc has no "merged" to wait for. This tuple is the one definition of that split; `core` reads it
+# rather than testing kinds by name, so adding a source is one entry here plus a pattern below.
+TRACKED_REF_KINDS = (GITHUB, JIRA)
+
+# `PROJ-123`. Deliberately UPPERCASE-only and anchored: Jira keys are uppercase by convention and
+# lowercasing the test would swallow `docs-4` and every other hyphen-digit string an author might
+# type by mistake, which is the class of typo the strict GitHub rule exists to catch.
+_JIRA_RE = re.compile(r"^[A-Z][A-Z0-9]*-[0-9]+\Z")
+
+# A link is any http(s) URL with no whitespace. Notion pages, Google Docs and uploaded assets all
+# arrive as one. NOT validated further -- borg cannot tell a live Notion page from a dead one, and
+# pretending to would be the "repaired-but-wrong" failure `parse_ref` already argues against.
+_LINK_RE = re.compile(r"^https?://\S+\Z")
+
+
+def ref_kind(ref: Any) -> str:
+    """Which vocabulary a ref belongs to: `github`, `jira`, `link`, or "" when it is none of them.
+
+    "" IS THE DEFECT ANSWER AND IT IS THE POINT OF CLASSIFYING AT ALL. Accepting anything non-empty --
+    what merge-tree did -- means `borg-collective#191` (a GitHub ref missing its owner) is as valid as
+    a Notion URL, so the single most common authoring mistake sails through and the row silently
+    resolves against nothing. Every kind here is anchored, so a string that is ALMOST a GitHub ref
+    matches nothing and is reported, with `suggest_full_ref` supplying the token to fix it.
+
+    ORDER IS IRRELEVANT because the three patterns cannot overlap: a GitHub ref needs `/` and `#`, a
+    Jira key permits neither, and a link starts with a scheme no bare ref can carry. Asserted in
+    `test_the_three_kinds_are_mutually_exclusive` rather than left as a comment.
+    """
+    text = _text(ref)
+    if _REF_RE.match(text):
+        return GITHUB
+    if _JIRA_RE.match(text):
+        return JIRA
+    if _LINK_RE.match(text):
+        return LINK
+    return ""
+
+
+def is_tracked(ref: Any) -> bool:
+    """True when this ref names work whose state borg can resolve, and which may therefore block.
+
+    The predicate the topology asks. A reference row (`link`) answers False: it renders on the chain
+    and orders nothing. A `jira` row answers True even on a machine with no Jira adapter installed --
+    it IS trackable work, it just has no observed state there, and `state_source` stays `declared`,
+    which the readiness gate already excludes. Conflating "unresolved here" with "not work" would make
+    a chain's shape depend on which adapters a machine happens to have.
+    """
+    return ref_kind(ref) in TRACKED_REF_KINDS

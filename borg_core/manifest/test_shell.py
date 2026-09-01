@@ -664,6 +664,12 @@ def test_module_reads_no_environment_or_clock_at_import_time():
     assert set(_module_level_dotted_names("core.py")) == {
         "re.compile",
         "_refs.parse_ref",
+        "_refs.ref_kind",
+        "_refs.is_tracked",
+        "_refs.GITHUB",
+        "_refs.JIRA",
+        "_refs.LINK",
+        "_refs.TRACKED_REF_KINDS",
         "_refs.ref_slug",
         "_refs.slug_from_remote",
         "_refs.suggest_full_ref",
