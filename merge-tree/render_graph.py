@@ -30,6 +30,7 @@ import argparse
 import html
 import json
 import os
+import re
 
 STATE = os.environ.get("BORG_MERGE_TREE_DIR", os.path.expanduser("~/.local/state/borg/merge-tree"))
 
@@ -129,6 +130,11 @@ by_ref = {it["ref"]: it for it in items}
 projects = story.get("projects", []) or []
 
 
+# A Jira issue key is PROJECT-123. Matched generically rather than against a hardcoded list of
+# project prefixes: the prefix is an employer-specific identifier and does not belong in source.
+_JIRA_KEY = re.compile(r"^[A-Z][A-Z0-9]+-\d+$")
+
+
 def repo_of_ref(ref):
     """Best-effort repo name for a ref: joined item's repo, else parsed from the ref string."""
     it = by_ref.get(ref)
@@ -136,7 +142,7 @@ def repo_of_ref(ref):
         return it["repo"]
     if "#" in ref:
         return ref.split("#", 1)[0]
-    if ref.startswith("DE-") or ref.startswith("DEV-"):
+    if _JIRA_KEY.match(ref):
         return "jira"
     if " " in ref:
         return ref.split(" ", 1)[0]
@@ -634,7 +640,7 @@ function openPanel(ref){
     var ib=document.getElementById('isoBtn');if(ib)ib.addEventListener('click',function(){openIsolate(ref);});
     [].forEach.call(body.querySelectorAll('.eref'),function(e){e.addEventListener('click',function(){openPanel(e.dataset.ref);});});
   }else{
-    var tag=ref.indexOf('DE-')===0?'jira (not gathered)':'local / untracked';
+    var tag=/^[A-Z][A-Z0-9]+-\d+$/.test(ref)?'jira (not gathered)':'local / untracked';
     var ws=workstreamOf(ref);
     body.innerHTML='<h3>'+esc(ref)+'</h3>'
       +'<div class="row"><b>ref</b><span class="mono">'+esc(ref)+'</span></div>'
@@ -676,7 +682,7 @@ function mkNode(ref,pos){var it=BYREF[ref];var cls=['gn'];
   else cls.push('missing');
   var g=document.createElementNS(SVGNS,'g');g.setAttribute('class',cls.join(' '));
   g.setAttribute('transform','translate('+pos.x+','+pos.y+')');g.dataset.ref=ref;
-  var repo=it?(it.repo||''):(ref.indexOf('DE-')===0?'jira (not gathered)':'untracked');
+  var repo=it?(it.repo||''):(/^[A-Z][A-Z0-9]+-\d+$/.test(ref)?'jira (not gathered)':'untracked');
   var title=it?(it.title||''):'';
   g.innerHTML='<rect width="'+NW+'" height="'+NH+'" rx="7"></rect>'
     +'<text class="gref" x="10" y="18">'+esc(ref)+'</text>'
