@@ -32,7 +32,7 @@ def _item(ref, project="p", state="OPEN", blocked=False):
 
 class TestSlugify:
     def test_prose_project_name_becomes_a_stable_slug(self):
-        assert slugify("GRP - Project alpha") == "gpx-project-alpha"
+        assert slugify("GRP - Project alpha") == "grp-project-alpha"
 
     def test_collapses_runs_of_separators_and_trims(self):
         assert slugify("dbt - models & pipelines (misc)") == "dbt-models-pipelines-misc"
@@ -154,7 +154,7 @@ class TestSkeletonFromRealFixture:
     def test_gather_name_is_retained_as_provenance(self):
         spine = generate_skeleton(_gather())
         by_id = {pr["id"]: pr for pr in spine["projects"]}
-        assert by_id["gpx-project-alpha"]["gather_name"] == "GRP - Project alpha"
+        assert by_id["grp-project-alpha"]["gather_name"] == "GRP - Project alpha"
 
 
 class TestOverlayRoundTrip:
@@ -163,7 +163,7 @@ class TestOverlayRoundTrip:
     def _overlay(self):
         return {
             "projects": {
-                "gpx-project-alpha": {
+                "grp-project-alpha": {
                     "name": "Keypair Migration",
                     "priority": 1,
                     "summary": "Hand-written prose that must survive.",
@@ -180,7 +180,7 @@ class TestOverlayRoundTrip:
 
     def test_judgment_is_applied_onto_the_skeleton(self):
         spine = apply_overlay(generate_skeleton(_gather()), self._overlay())
-        pr = next(p for p in spine["projects"] if p["id"] == "gpx-project-alpha")
+        pr = next(p for p in spine["projects"] if p["id"] == "grp-project-alpha")
         assert pr["name"] == "Keypair Migration"
         assert pr["priority"] == 1
         assert pr["summary"] == "Hand-written prose that must survive."
@@ -194,7 +194,7 @@ class TestOverlayRoundTrip:
         second = apply_overlay(generate_skeleton(_gather()), overlay)
         def summary_of(spine):
             return next(
-                p["summary"] for p in spine["projects"] if p["id"] == "gpx-project-alpha"
+                p["summary"] for p in spine["projects"] if p["id"] == "grp-project-alpha"
             )
 
         assert summary_of(first) == summary_of(second) == "Hand-written prose that must survive."
@@ -202,9 +202,9 @@ class TestOverlayRoundTrip:
     def test_skeleton_wins_on_structure_even_when_the_overlay_is_stale(self):
         # The overlay must never be able to resurrect a workstream the gather no longer supports.
         overlay = self._overlay()
-        overlay["projects"]["gpx-project-alpha"]["workstreams"]["ghost#1"] = {"title": "Gone"}
+        overlay["projects"]["grp-project-alpha"]["workstreams"]["ghost#1"] = {"title": "Gone"}
         spine = apply_overlay(generate_skeleton(_gather()), overlay)
-        pr = next(p for p in spine["projects"] if p["id"] == "gpx-project-alpha")
+        pr = next(p for p in spine["projects"] if p["id"] == "grp-project-alpha")
         assert "ghost#1" not in [w["key"] for w in pr["workstreams"]]
 
     def test_missing_overlay_yields_blank_judgment_not_a_crash(self):
@@ -214,13 +214,13 @@ class TestOverlayRoundTrip:
 
     def test_unprioritised_projects_sort_last_but_remain_present(self):
         spine = apply_overlay(generate_skeleton(_gather()), self._overlay())
-        assert spine["projects"][0]["id"] == "gpx-project-alpha"
+        assert spine["projects"][0]["id"] == "grp-project-alpha"
         assert len(spine["projects"]) == 7, "an unprioritised project was dropped"
 
     def test_name_falls_back_to_the_gather_name_when_unjudged(self):
         spine = apply_overlay(generate_skeleton(_gather()), {})
         by_id = {p["id"]: p for p in spine["projects"]}
-        assert by_id["gpx-project-delta"]["name"] == "GRP - Project delta"
+        assert by_id["grp-project-delta"]["name"] == "GRP - Project delta"
 
 
 class TestSeparateAging:
@@ -241,14 +241,14 @@ class TestSeparateAging:
         # distinguishable from a genuinely fresh spine.
         overlay = {
             "projects": {
-                "gpx-project-delta": {
+                "grp-project-delta": {
                     "summary": "written a while ago",
                     "summary_authored_at": "2026-07-28T16:15:00Z",
                 }
             }
         }
         spine = apply_overlay(generate_skeleton(_gather()), overlay)
-        pr = next(p for p in spine["projects"] if p["id"] == "gpx-project-delta")
+        pr = next(p for p in spine["projects"] if p["id"] == "grp-project-delta")
         assert pr["summary_authored_at"] < spine["meta"]["generated_at"]
 
 
@@ -258,15 +258,15 @@ class TestOrphanDetection:
     def test_projects_the_overlay_has_never_seen_are_reported(self):
         skeleton = generate_skeleton(_gather())
         orphans = find_orphans(skeleton, {})
-        assert "gpx-project-alpha" in orphans["unknown_projects"]
+        assert "grp-project-alpha" in orphans["unknown_projects"]
         assert len(orphans["unknown_projects"]) == 7
 
     def test_a_new_workstream_inside_a_known_project_is_reported(self):
         skeleton = generate_skeleton(_gather())
-        overlay = {"projects": {"gpx-project-delta": {"workstreams": {}}}}
+        overlay = {"projects": {"grp-project-delta": {"workstreams": {}}}}
         orphans = find_orphans(skeleton, overlay)
-        assert any(o.startswith("gpx-project-delta/") for o in orphans["unknown_workstreams"])
-        assert "gpx-project-delta" not in orphans["unknown_projects"]
+        assert any(o.startswith("grp-project-delta/") for o in orphans["unknown_workstreams"])
+        assert "grp-project-delta" not in orphans["unknown_projects"]
 
     def test_judgment_whose_anchor_is_gone_is_reported_as_stale(self):
         skeleton = generate_skeleton(_gather())
@@ -275,8 +275,8 @@ class TestOrphanDetection:
 
     def test_stale_workstream_judgment_is_reported(self):
         skeleton = generate_skeleton(_gather())
-        overlay = {"projects": {"gpx-project-delta": {"workstreams": {"ghost#1": {"title": "Gone"}}}}}
-        assert "gpx-project-delta/ghost#1" in find_orphans(skeleton, overlay)["stale_workstreams"]
+        overlay = {"projects": {"grp-project-delta": {"workstreams": {"ghost#1": {"title": "Gone"}}}}}
+        assert "grp-project-delta/ghost#1" in find_orphans(skeleton, overlay)["stale_workstreams"]
 
     def test_a_fully_judged_spine_reports_no_orphans(self):
         skeleton = generate_skeleton(_gather())
