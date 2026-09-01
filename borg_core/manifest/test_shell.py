@@ -863,3 +863,154 @@ def test_partition_errors_splits_row_scoped_from_structural():
         "apex: ref must be a full ref (owner/repo#num), got nope",
         "rows: missing or not a list",
     ]
+
+
+# ── write_manifest ───────────────────────────────────────────────────────────
+#
+# The writer is the ONE fatal path in shell.py. These cases pin the asymmetry the module docstring
+# argues for: a read degrades and names what it dropped, a write refuses whole and hands back why.
+
+
+def test_a_written_manifest_round_trips_through_the_reader(tmp_path):
+    # The asymmetry core.py's docstring named -- "a manifest the writer accepts can be silently
+    # unreadable by the reader" -- is what the port exists to end. Anything written loads back with
+    # no warning and no dropped row.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    doc = _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", lane="viz")])
+    path = shell.write_manifest(repository, doc, "chain")
+
+    assert path == os.path.join(repository, ".borg", "programs", "chain.json")
+    manifests, warnings = shell.discover([repository])
+    assert warnings == []
+    assert len(manifests) == 1
+    assert [r["ref"] for r in manifests[0]["rows"]] == ["o/r#1", "o/r#2"]
+
+
+def test_the_writer_persists_no_derived_key(tmp_path):
+    # The old writer stripped exactly `_path`, so every synced file gained a permanent `_id` that
+    # nothing reads and nothing rejects. Feed the writer a document straight off the READER, which
+    # stamps both, and assert neither survives.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    loaded, _ = shell.discover([repository])
+    assert "_path" in loaded[0] and "_id" in loaded[0], "precondition: the reader stamps both"
+
+    rewritten = shell.write_manifest(repository, loaded[0], "chain")
+    on_disk = json.loads(open(rewritten, encoding="utf-8").read())
+    assert [k for k in on_disk if k.startswith("_")] == []
+
+
+def test_the_writer_never_injects_the_retired_word(tmp_path):
+    # AC7. The writer this replaces did `to_write.setdefault("program", program)`, three files from
+    # a loader that refuses to synthesize it. The commit that retires the word must not ship a
+    # writer that keeps writing it.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "named-chain")
+    assert "program" not in json.loads(open(path, encoding="utf-8").read())
+
+
+def test_a_declared_program_key_is_preserved_not_invented(tmp_path):
+    # The complement of the case above, and the reason it is `declared_body` rather than a blocklist:
+    # a file that ALREADY carries the word on disk keeps it. Reading a retired word is unavoidable;
+    # synthesizing one is not, and silently deleting the author's key would be a third wrong answer.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    doc = {**_manifest([_row("1", "o/r#1")]), "program": "declared-id"}
+    path = shell.write_manifest(repository, doc, "chain")
+    assert json.loads(open(path, encoding="utf-8").read())["program"] == "declared-id"
+
+
+def test_an_invalid_manifest_is_refused_whole_and_writes_nothing(tmp_path):
+    # Validate-all-then-fail. A partial write is worse than a refusal: it is wrong on disk forever.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    doc = _manifest([_row("1", "o/r#1"), _row("2", "shorthand#2")])
+
+    with pytest.raises(shell.InvalidManifest) as caught:
+        shell.write_manifest(repository, doc, "chain")
+
+    assert "rows[1]" in str(caught.value)
+    assert not os.path.exists(os.path.join(repository, ".borg", "programs", "chain.json"))
+
+
+def test_a_refused_write_leaves_no_temp_file(tmp_path):
+    # A fixed `<path>.tmp` name races and can orphan litter inside a git-tracked directory.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "ok")
+    with pytest.raises(shell.InvalidManifest):
+        shell.write_manifest(repository, _manifest([_row("1", "bad#1")]), "nope")
+
+    directory = os.path.join(repository, ".borg", "programs")
+    assert sorted(os.listdir(directory)) == ["ok.json"]
+
+
+def test_a_shorthand_ref_naming_this_repository_is_suggested_not_repaired(tmp_path):
+    # The common defect: a model writing `repo#12` for a PR in the repository it is standing in. The
+    # message carries the exact token to substitute; the DOCUMENT is never rewritten, because a
+    # repaired-but-wrong slug resolves against nothing and vanishes from the graph silently.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/noah-goodrich/repo.git")
+    with pytest.raises(shell.InvalidManifest) as caught:
+        shell.write_manifest(repository, _manifest([_row("1", "repo#12")]), "chain")
+
+    assert "did you mean noah-goodrich/repo#12?" in str(caught.value)
+    assert not os.path.exists(os.path.join(repository, ".borg", "programs", "chain.json"))
+
+
+def test_a_shorthand_ref_naming_another_repository_gets_no_guess(tmp_path):
+    # A manifest's whole purpose is naming PRs in OTHER repositories, so "the containing repository"
+    # is the least reliable guess available. Offered only when the author already named the repo.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/noah-goodrich/repo.git")
+    with pytest.raises(shell.InvalidManifest) as caught:
+        shell.write_manifest(repository, _manifest([_row("1", "stillpoint#4")]), "chain")
+
+    assert "did you mean" not in str(caught.value)
+
+
+def test_the_refusal_carries_one_reason_per_error(tmp_path):
+    # `errors` is the unjoined list because the CLI seam prints one reason per line. Re-splitting a
+    # joined string is how a message format becomes an undeclared contract.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    doc = _manifest([_row("1", "bad#1"), {"ref": "o/r#2"}])
+    with pytest.raises(shell.InvalidManifest) as caught:
+        shell.write_manifest(repository, doc, "chain")
+
+    assert len(caught.value.errors) == 2
+    assert isinstance(caught.value, ValueError), "callers already catching ValueError keep working"
+
+
+def test_the_name_is_basenamed_so_a_slash_cannot_escape_the_directory(tmp_path):
+    # Path discipline lives in the writer, not at every call site: the old writer took the caller's
+    # filename verbatim, and a caller passing a manifest's declared id (which may contain a slash)
+    # could write outside the directory.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "../../escape")
+    assert path == os.path.join(repository, ".borg", "programs", "escape.json")
+
+
+def test_a_name_that_already_ends_in_json_is_not_doubled(tmp_path):
+    # `add-row` passes a stem; a rewrite passes an existing basename. Both land on one path.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    stem = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    full = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain.json")
+    assert stem == full
+
+
+def test_a_non_ascii_order_survives_the_round_trip_unescaped(tmp_path):
+    # `core.PREREQ_ORDERS` treats U+2013 as a declared order and the live corpus contains it.
+    # Escaping it to – rewrites bytes in a tracked file on a sync that changed nothing.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    path = shell.write_manifest(repository, _manifest([_row("–", "o/r#1")]), "chain")
+    assert "–" in open(path, encoding="utf-8").read()
+    assert "\\u2013" not in open(path, encoding="utf-8").read()
+
+
+def test_write_creates_the_manifest_directory_when_absent(tmp_path):
+    repository = _git_repository(tmp_path, "fresh", remote="https://github.com/o/r.git")
+    assert not os.path.isdir(os.path.join(repository, ".borg", "programs"))
+    shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    assert os.path.isdir(os.path.join(repository, ".borg", "programs"))
+
+
+def test_declared_body_is_the_one_definition_of_derived(tmp_path):
+    # Reader and writer must agree on which keys are derived. Two hand-written copies of this strip
+    # is how the old writer came to remove `_path` and persist `_id`.
+    body = core.declared_body({"rows": [], "_path": "/x", "_id": "y", "desc": "kept"})
+    assert body == {"rows": [], "desc": "kept"}
