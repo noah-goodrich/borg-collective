@@ -21,17 +21,26 @@ top-level home (the borg_core/paths.py precedent) that BOTH readers call, which 
 `[]` after a registry-shape change would sweep nothing and say nothing -- and that is closed here by
 warning when a non-empty registry yields no usable path.
 
-NOTHING HERE IS EVER FATAL. A missing directory, an unreadable one, malformed JSON, non-manifest
+NO READ HERE IS EVER FATAL. A missing directory, an unreadable one, malformed JSON, non-manifest
 JSON, an invalid manifest, a missing git, a non-repository directory, a registry of the wrong shape,
 a remote URL that is not even valid UTF-8 -- every one of them is a NAMED warning or an empty string
 and a skip. One bad file must never blank the grid, and an unnamed skip is indistinguishable from a
 file that was never there.
+
+THE ONE WRITE HERE IS THE OPPOSITE, deliberately. `write_manifest` raises `InvalidManifest` and
+writes nothing. The rule above is not a house style, it is a consequence of what a read is for: a
+reader serves a page about N manifests and must not let one file blank the other N-1, and the person
+who could fix the file is not necessarily present. A writer serves ONE document whose author is
+standing right there, and a document that is wrong on the way in is wrong on disk until someone
+notices. Degrading a write means silently storing less than the author declared -- so writes refuse
+whole and hand the reasons back. Do not "make this consistent" by softening the writer.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import tempfile
 from typing import Any
 
 from borg_core import proc
@@ -155,8 +164,12 @@ def _manifest_identity(manifest: dict) -> str:
     Keyed on the body rather than on the declared id because the id is not unique either (both copies
     declare the same one) and because two files that are byte-equal as JSON ARE the same declaration:
     rendering it twice is wrong whatever it is called.
+
+    The strip is `core.declared_body`, shared with `write_manifest`, so "which keys are derived" has
+    ONE answer for the reader and the writer both. It was written out by hand here before the writer
+    existed; two hand-written copies is how the old writer came to strip `_path` and persist `_id`.
     """
-    return json.dumps({k: v for k, v in manifest.items() if not k.startswith("_")}, sort_keys=True)
+    return json.dumps(core.declared_body(manifest), sort_keys=True)
 
 
 def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
@@ -346,3 +359,85 @@ def repository_slug(repository_dir: str) -> str:
     if not os.path.exists(os.path.join(repository_dir, ".git")):
         return ""
     return core.slug_from_remote(_git_origin_url(repository_dir))
+
+
+class InvalidManifest(ValueError):
+    """A write was refused because the document does not validate. Carries the reasons.
+
+    A ValueError subclass rather than a new root, so a caller that already catches ValueError around
+    a write keeps working, and one that wants to tell "this manifest is wrong" apart from "the disk
+    is wrong" can. `errors` is `core.validate`'s list, unjoined, because the CLI seam prints one
+    reason per line and re-splitting a joined string is how a message format becomes a contract.
+    """
+
+    def __init__(self, message: str, errors: list[str]) -> None:
+        super().__init__(message)
+        self.errors = errors
+
+
+def _write_refusal(name: str, errors: list[str], slug: str) -> InvalidManifest:
+    """The exception a refused write raises, with a `did you mean` on every fixable ref.
+
+    The suggestion is appended to the REASON, never applied to the document -- see
+    `core.suggest_full_ref`. It exists because the overwhelmingly common defect is an author (now
+    usually a model) writing `repo#12` for a PR in the repository it is standing in, and the fix is
+    one token it cannot guess from the error text alone.
+    """
+    detailed = []
+    for error in errors:
+        _, _, got = error.partition("got ")
+        suggestion = core.suggest_full_ref(got.strip(), slug) if got else ""
+        detailed.append(f"{error} -- did you mean {suggestion}?" if suggestion else error)
+    return InvalidManifest(f"{name}: invalid manifest -- {'; '.join(detailed)}", detailed)
+
+
+def write_manifest(repository_dir: str, manifest: dict, name: str) -> str:
+    """Write a manifest to `<repository>/.borg/programs/<name>.json`. The ONLY writer.
+
+    THE ONE PLACE THIS MODULE'S "nothing here is ever fatal" RULE DOES NOT APPLY, and the asymmetry
+    is the point. A reader that dies on one bad file blanks the whole grid, so reads degrade: a bad
+    row is dropped, named in a warning, and the surviving rows still render. A WRITE has the opposite
+    failure mode -- a document that is wrong on the way in is wrong on disk forever, and the author
+    is standing right there able to fix it. So this validates all, then refuses whole: `InvalidManifest`
+    before anything is opened, never a partial file. Callers surface the reasons; they do not salvage.
+
+    NO `program` BACKFILL. The writer this replaces did `to_write.setdefault("program", program)`,
+    which meant the commit retiring that word shipped a writer that kept writing it, three files from
+    a loader that explicitly refuses to synthesize it. What goes to disk is exactly
+    `core.declared_body(manifest)` -- the author's keys, no `_path`, no `_id`.
+
+    `name` IS A FILE STEM AND IS BASENAMED HERE, not by the caller. The old writer took the caller's
+    `filename` verbatim, so path discipline lived at every call site and a caller passing a manifest's
+    declared id -- which may contain a slash -- could write outside the directory. `.json` is appended
+    when absent so both `add-row` (passing a stem) and a rewrite (passing an existing basename) land
+    on one path.
+
+    ATOMIC VIA `mkstemp` IN THE TARGET DIRECTORY, not a fixed `<path>.tmp`. Two syncs racing on one
+    fixed name interleave their writes and can orphan a temp file inside a git-tracked directory;
+    `mkstemp` gives each writer a private name, and `os.replace` within one filesystem is atomic.
+    The temp file is removed if the replace never happens, so a failed write leaves no litter.
+
+    `ensure_ascii=False` because the corpus contains real en-dashes (`core.PREREQ_ORDERS` treats
+    U+2013 as a declared order) and escaping them to `\\u2013` rewrites bytes in a tracked file on a
+    sync that changed nothing. `sort_keys=True` is kept from the old writer: a deterministic key order
+    is what makes "the sync changed nothing" visible as an empty diff.
+    """
+    errors = core.validate(manifest)
+    if errors:
+        raise _write_refusal(name, errors, repository_slug(repository_dir))
+
+    directory = manifest_dir(repository_dir)
+    os.makedirs(directory, exist_ok=True)
+    stem = os.path.basename(name)
+    path = os.path.join(directory, stem if stem.endswith(".json") else f"{stem}.json")
+
+    handle, tmp_path = tempfile.mkstemp(dir=directory, prefix=".write-", suffix=".json.tmp")
+    try:
+        with os.fdopen(handle, "w", encoding="utf-8") as fh:
+            json.dump(core.declared_body(manifest), fh, indent=2, sort_keys=True, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp_path, path)
+    except OSError:
+        os.unlink(tmp_path)
+        raise
+    return path
