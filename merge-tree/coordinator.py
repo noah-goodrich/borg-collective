@@ -316,7 +316,7 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
             # project declaring one program is just as real a contention as two projects — and the
             # filename passthrough below is what stops the second one silently overwriting the first.
             warnings.append(
-                f"program {program!r} is declared twice ({seen[program]} and {source_path}) — "
+                f"chain {program!r} is declared twice ({seen[program]} and {source_path}) — "
                 f"each file rewritten in place, but they will contend downstream"
             )
         seen.setdefault(program, source_path)
@@ -344,7 +344,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     for m in sorted(manifests, key=lambda m: str(m.get("program"))):
         rows = programs._rows(m)
         print(f"{m.get('program')}: {len(rows)} row(s)")
-    print(f"{len(manifests)} program(s), {len(warnings)} skipped")
+    print(f"{len(manifests)} chain(s), {len(warnings)} skipped")
     return 0
 
 
@@ -373,7 +373,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     recon_states = recon_states_from(load_recon_items(args.recon))
     findings = three_way_audit(borg_rows, target_report, recon_states)
 
-    print(f"plan: {len(manifests)} program(s), {len(borg_rows)} row(s), {len(findings)} finding(s)")
+    print(f"plan: {len(manifests)} chain(s), {len(borg_rows)} row(s), {len(findings)} finding(s)")
     if fatal:
         # On STDOUT, beside the findings it taints (opus round 3, finding 2): a malformed manifest's
         # rows never entered borg_rows, so any absent-from-borg finding may be a parse artifact, not
