@@ -418,6 +418,19 @@ docs/
 - Logic goes in a testable core. Shell is a wrapper. New modules ship with tests in the same commit.
 - Prior decisions live in `.borg/checkpoints/`, `.borg/knowledge/`, and `docs/plans/assimilated/` —
   grep them before assuming something is undocumented.
+- **Schema evolution is ALWAYS expand → migrate → contract, everywhere, no exceptions.** Add the new
+  form and accept both; migrate every existing instance; only then remove the old form or tighten the
+  validator. Never the other order. Done this way a schema change cannot produce a regression,
+  because no artifact is ever read by rules it was not written to satisfy — which is the whole reason
+  it is a rule and not a preference. The tell that it was skipped: existing, untouched data suddenly
+  failing validation with no write in between. When that happens the temptation is to weaken the
+  validator, and weakening it is how two validators come to disagree in the first place (AC7 exists
+  to end exactly that). "Additive first" is also why a port lands as a NEW path before any caller is
+  repointed: `borg_core/manifest/shell.write_manifest` shipped 2026-09-01 accepting the strict
+  validator while `coordinator.py` and `gather.py` still used the old one — that commit was the
+  expand phase, and repointing them is the contract phase, which may not happen until the 53
+  shorthand refs in `merge-tree/test_coordinator.py` and `warehouse-rollout.json`'s `kind: "review"`
+  have been migrated to satisfy the stricter rules.
 
 ## Style Rules
 
