@@ -454,6 +454,7 @@ def read_plan(project_path: str | None) -> dict | None:
 # list here would move the derivation into a caller that a test would then supply.
 discover_manifests = manifest_shell.discover_registered
 repository_slug = manifest_shell.repository_slug
+refused_manifest_paths = manifest_shell.refused_manifest_paths
 
 # Seconds one adapter gets before it is SIGKILLed, when `link` is the caller. recon's own default is
 # 30 -- correct for a morning link-up a human deliberately waits on, absurd for the front door AC1

@@ -926,3 +926,49 @@ def test_document_scope_survives_an_archived_repository(isolated_env, monkeypatc
     assert doc["order"] == []  # the filter bit: alpha is hidden from the display map
     assert doc["total_projects"] == 1  # but it is still in the registry
     assert doc["scope"]["repository"] == "alpha"  # and it is still where you are standing
+
+
+def test_json_publishes_a_refused_count_on_the_grid_block(isolated_env, capsys, monkeypatch):
+    """The fourth CHAINS diagnosis is only as good as the key it reads.
+
+    MUTATION, APPLIED AND CONFIRMED RED: replace the `shell.refused_manifest_paths(...)` stamp in
+    `cli._grid` with the literal `0`. Without this case the whole arm survives that mutation --
+    `test_render.py` proves the sentence renders when the key is set, and nothing proves anything
+    ever sets it. That is the exact shape of a check pointed at the wrong thing.
+
+    THE MANIFEST IS BROKEN ON DISK RATHER THAN THE COUNT BEING INJECTED, because the value under test
+    is the round trip: a real file that `discover` refuses, whose warning survives the trip through
+    `refused_manifest_paths`, narrowed to the resolved directory. Injecting the number would assert
+    that the renderer can read a key this test just wrote.
+
+    A REFUSED MANIFEST PUBLISHES NO NODES, which is what makes `refused` load-bearing: `declared`
+    stays 0 and `manifests` stays empty, so nothing else on the block distinguishes "broken" from
+    "absent".
+    """
+    directory = _project_dir(isolated_env, "warehouse")
+    programs = Path(directory) / ".borg" / "programs"
+    programs.mkdir(parents=True, exist_ok=True)
+    # One row, missing `order` -- structurally a manifest, refused whole by `validate`.
+    (programs / "broken.json").write_text(json.dumps({"rows": [{"ref": "acme/ledger#1"}]}), encoding="utf-8")
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+
+    exit_code = cli._run("", False, "json", local=True)  # pylint: disable=protected-access
+
+    assert exit_code == 0
+    grid_block = json.loads(capsys.readouterr().out)["grid"]
+    assert grid_block["refused"] == 1
+    assert grid_block["manifests"] == [], "precondition: a refused manifest publishes no nodes"
+    assert any("broken.json" in warning for warning in grid_block["warnings"])
+
+
+def test_a_registry_of_readable_manifests_publishes_refused_zero(isolated_env, capsys, monkeypatch):
+    """The negative half. Without it, a stamp that hardcoded `1` would pass the case above."""
+    directory = _manifest_workspace(isolated_env)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    grid_block = json.loads(capsys.readouterr().out)["grid"]
+    assert grid_block["manifests"], "precondition: a manifest did load"
+    assert grid_block["refused"] == 0

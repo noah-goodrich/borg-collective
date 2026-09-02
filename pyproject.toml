@@ -102,7 +102,7 @@ allowed_prefixes = ["borg_core", "__future__"]
 # `pathlib`, `json` and `datetime`, so the linter is the coarser of the two gates and neither
 # replaces the other.
 [tool.clean-arch.module_map]
-Domain = ["core.py", "grid.py", "picture.py", "render.py"]
+Domain = ["core.py", "errors.py", "grid.py", "picture.py", "refs.py", "render.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]

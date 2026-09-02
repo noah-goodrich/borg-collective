@@ -677,8 +677,27 @@ def _cortex_countdowns(doc: dict) -> dict[str, str]:
 
 
 def _grid_placeholder(grid_block: dict) -> str:
-    """THREE DIFFERENT DIAGNOSES for an empty CHAINS section, read off the grid block's own
-    self-describing fields (`slug`, `scope_kind`, `manifests`) rather than guessed.
+    """FOUR DIFFERENT DIAGNOSES for an empty CHAINS section, read off the grid block's own
+    self-describing fields (`refused`, `slug`, `scope_kind`, `manifests`) rather than guessed.
+
+    REFUSED IS TESTED FIRST, BEFORE SCOPE, and that order is the whole point of the arm. A manifest
+    that failed to load is not among `manifests` -- it was refused whole -- so every later arm
+    reports on a repository that looks manifest-less and says so: `borg link` in a repository whose
+    only manifest has one bad row rendered "no project manifests in the registry yet. Run /borg-plan
+    in any repository." That sentence is not merely unhelpful, it is FALSE, and it points the reader
+    at scaffolding a second manifest beside the broken one. The `▸ SIGNALS` warning naming the real
+    reason is a dim line at the bottom of the page; this section is where the reader is looking.
+    `2026-08-27-degrade-the-row-not-the-manifest` fixed exactly this shape for the PARTIAL case (12
+    declared refs became 5, and CHAINS read as though the repository simply had none) and could not
+    reach the whole-file case, because a whole-file refusal leaves nothing to degrade.
+
+    ITS SENTENCE NAMES NO PLACE, and that is what lets it sit above the scope arm. `refused` is
+    counted for whatever scope resolved -- one repository's directory in repository scope, the whole
+    registry in orchestrator scope -- so a wording like "manifests are HERE but could not be read"
+    would be false on the orchestrator page, and moving the arm below scope to dodge that would let
+    the registry-wide sentence claim "no project manifests in the registry yet" while three of them
+    sit on disk unreadable. Saying only that they could not be read is true in both, which is why the
+    arm can stay where correctness wants it.
 
     build_grid carries those fields precisely so "a consumer reading only this block can tell an
     empty grid apart from an un-swept one apart from a wrong-repository one". Collapsing the three
@@ -692,9 +711,15 @@ def _grid_placeholder(grid_block: dict) -> str:
     therefore answers "this directory has no GitHub origin" for `borg link` run from the workspace
     root -- a diagnosis about a directory, on the one invocation that is not about a directory --
     and the registry-wide sentence can never render. Found by reading the generated golden rather
-    than by a test, which is why `test_the_three_chains_placeholders_are_three_different_diagnoses`
+    than by a test, which is why `test_the_four_chains_placeholders_are_four_different_diagnoses`
     now parameterizes `scope_kind` alongside `slug` instead of varying `slug` alone.
     """
+    refused = grid_block.get("refused") or 0
+    if refused:
+        return (
+            f"{_plural(refused, 'manifest', 'manifests')} could not be read — "
+            "see the reasons below, then fix and re-run."
+        )
     if grid_block.get("scope_kind") != "repository":
         return "no project manifests in the registry yet. Run /borg-plan in any repository."
     if not grid_block.get("slug"):
