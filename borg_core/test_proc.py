@@ -237,6 +237,7 @@ def test_the_work_runs_between_the_start_and_the_collect(tmp_path):
     """
     marks = tmp_path / "marks"
     marks.mkdir()
+
     # `sleep` must span the sibling's START, not its finish -- both children write their marker
     # before sleeping, so 0.3s of overlap is enough and the test costs half what the old one did.
     def _sees(me, them):
@@ -248,7 +249,9 @@ def test_the_work_runs_between_the_start_and_the_collect(tmp_path):
     first = proc.run_background([_script(tmp_path, "one", _sees("one", "two"))])
     second = proc.run_background([_script(tmp_path, "two", _sees("two", "one"))])
 
-    assert proc.collect(first, timeout=30) == (0, "saw-sibling"), "the first child ran to completion before the second started"
+    assert proc.collect(first, timeout=30) == (0, "saw-sibling"), (
+        "the first child ran to completion before the second started"
+    )
     assert proc.collect(second, timeout=30) == (0, "saw-sibling")
 
 

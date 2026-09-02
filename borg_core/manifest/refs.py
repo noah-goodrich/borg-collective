@@ -20,10 +20,25 @@ import re
 from typing import Any
 
 
-def _text(value: Any) -> str:
-    """Local copy of core's coercion. See core._text -- importing it would make this module depend on
-    the one that depends on it."""
+def text(value: Any) -> str:
+    """The module-wide coercion for every declared string field: `str(x or "").strip()`.
+
+    THE ONE DEFINITION, and it lives here rather than in core.py because core imports refs and not the
+    other way round -- the leaf owns it and `core._text` is an alias. It was briefly duplicated when
+    refs.py was split out, on the reasoning that importing core would cycle; true, but the move needed
+    was the opposite direction, and two copies of a coercion whose subtleties are documented on only
+    one of them is how they drift.
+
+    Load-bearing beyond tidiness: a ref that reaches an edge endpoint stripped but reaches
+    declared_refs unstripped would be TWO different keys, so the targeted fetch would resolve one
+    string while the graph keys on another. Note the inherited numeric trap: an integer 0 becomes ""
+    (and therefore sorts as a prerequisite) while 1 becomes "1". No live manifest uses numeric orders;
+    "fixing" it to `str(x, "")` would also change None handling, so it is left as the port found it.
+    """
     return str(value or "").strip()
+
+
+_text = text
 
 # A full ref, and nothing looser. Owner and name use GitHub's per-part character class, mirroring the
 # adapter's accept test at recon-adapter-github:96-101; the number is literal digits.
@@ -53,6 +68,7 @@ _GIT_SUFFIX_RE = re.compile(r"\.git\Z")
 # way, because a newline is outside the class no matter where it sits.
 _SLUG_CHARS_RE = re.compile(r"^[A-Za-z0-9._/-]+\Z")
 
+
 def parse_ref(ref: Any) -> tuple[str, str, str] | None:
     """Split a full `owner/repo#number` ref into its parts, or None when it is not that shape.
 
@@ -78,7 +94,6 @@ def parse_ref(ref: Any) -> tuple[str, str, str] | None:
     return (match.group(1), match.group(2), match.group(3))  # pylint: disable=clean-arch-demeter
 
 
-
 def ref_slug(ref: Any) -> str:
     """The `owner/repo` half of a full ref, or "" when the ref is not a full ref.
 
@@ -88,7 +103,6 @@ def ref_slug(ref: Any) -> str:
     """
     parts = parse_ref(ref)
     return f"{parts[0]}/{parts[1]}" if parts else ""
-
 
 
 def slug_from_remote(remote: str) -> str:
@@ -137,7 +151,6 @@ def slug_from_remote(remote: str) -> str:
     if slug.count("/") != 1 or slug.startswith("/") or slug.endswith("/"):
         return ""
     return slug
-
 
 
 def suggest_full_ref(ref: str, slug: str) -> str:
@@ -198,6 +211,14 @@ LINK = "link"
 # rather than testing kinds by name, so adding a source is one entry here plus a pattern below.
 TRACKED_REF_KINDS = (GITHUB, JIRA)
 
+# The complement, and NOT simply "everything else" -- that distinction is load-bearing. `ref_kind`
+# has a fourth answer, "", meaning the string matches no vocabulary at all, and an unrecognized ref
+# is a DEFECT rather than a document. Treating it as a reference would make it stop blocking, which
+# is the "unknown is not merged" rule `ready_set` exists to hold: a malformed `after: ["#149"]` must
+# wedge its row visibly, not quietly unblock it. So the reference set is enumerated, never derived
+# by negation.
+REFERENCE_REF_KINDS = (LINK,)
+
 # `PROJ-123`. Deliberately UPPERCASE-only and anchored: Jira keys are uppercase by convention and
 # lowercasing the test would swallow `docs-4` and every other hyphen-digit string an author might
 # type by mistake, which is the class of typo the strict GitHub rule exists to catch.
@@ -222,14 +243,41 @@ def ref_kind(ref: Any) -> str:
     Jira key permits neither, and a link starts with a scheme no bare ref can carry. Asserted in
     `test_the_three_kinds_are_mutually_exclusive` rather than left as a comment.
     """
-    text = _text(ref)
-    if _REF_RE.match(text):
+    candidate = _text(ref)
+    if _REF_RE.match(candidate):
         return GITHUB
-    if _JIRA_RE.match(text):
+    if _JIRA_RE.match(candidate):
         return JIRA
-    if _LINK_RE.match(text):
+    if _LINK_RE.match(candidate):
         return LINK
     return ""
+
+
+def is_reference(ref: Any) -> bool:
+    """True when this ref is context attached to a chain rather than work the chain waits on.
+
+    The predicate with teeth: `ready_set` skips a parent that answers True, and `grid.fetch_query`
+    stays silent about one instead of reporting it as an unfetchable defect. Both need "is this
+    deliberately not GitHub work", which is NOT `not is_tracked(...)` -- that is also True for a ref
+    of no known kind, and those must keep blocking and keep warning.
+    """
+    return ref_kind(ref) in REFERENCE_REF_KINDS
+
+
+def expects_github(ref: Any) -> bool:
+    """True when a GitHub fetch failing to resolve this ref is worth reporting.
+
+    THE FETCH'S QUESTION IS NOT `is_reference`, and the difference is jira. A jira key is TRACKED --
+    it is real work with real state -- and it is still none of a GitHub GraphQL query's business, so
+    its absence from that query is not a degradation and must not print a `▸ SIGNALS` line on every
+    render. What IS worth reporting is a ref that claims to be a GitHub ref and cannot be fetched
+    anyway (a zero-padded number takes the whole batch down), and a ref of NO known kind, which is a
+    defect that should never have validated and must not be swallowed twice.
+
+    So: github or unknown. Named for the question rather than for the set, because `not is_reference`
+    and `is_tracked` are each wrong here by one kind and both would read as if they were right.
+    """
+    return ref_kind(ref) in ("", GITHUB)
 
 
 def is_tracked(ref: Any) -> bool:

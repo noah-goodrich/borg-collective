@@ -399,8 +399,10 @@ def fetch_query(refs: list[str]) -> tuple[str, dict[str, str], list[str]]:
             # section. Still warned: a GITHUB-kind ref that is unfetchable anyway (a padded number
             # takes the whole batch down), and a ref of NO known kind, which is a defect that should
             # never have validated. `ref_kind` decides -- testing `"/" in ref` would re-derive the
-            # vocabulary in a second place.
-            if manifest_core.ref_kind(ref) not in (manifest_core.JIRA, manifest_core.LINK):
+            # vocabulary in a second place. `expects_github` is github-or-unknown: `is_reference`
+            # would start warning about every jira row, and `not is_tracked` would go silent on a
+            # defect. Each is wrong here by exactly one kind.
+            if manifest_core.expects_github(ref):
                 warnings.append(f"fetch: ref {ref} is not a fetchable owner/repo#number -- excluded from the fetch")
             continue
         alias = f"n{len(aliases)}"

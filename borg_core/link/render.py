@@ -711,7 +711,7 @@ def _grid_placeholder(grid_block: dict) -> str:
     therefore answers "this directory has no GitHub origin" for `borg link` run from the workspace
     root -- a diagnosis about a directory, on the one invocation that is not about a directory --
     and the registry-wide sentence can never render. Found by reading the generated golden rather
-    than by a test, which is why `test_the_three_chains_placeholders_are_three_different_diagnoses`
+    than by a test, which is why `test_the_four_chains_placeholders_are_four_different_diagnoses`
     now parameterizes `scope_kind` alongside `slug` instead of varying `slug` alone.
     """
     refused = grid_block.get("refused") or 0

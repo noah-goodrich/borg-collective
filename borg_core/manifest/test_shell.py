@@ -37,7 +37,7 @@ import types
 
 import pytest
 
-from borg_core.manifest import core, refs, shell
+from borg_core.manifest import core, errors, refs, shell
 
 
 def _manifest(rows, apex=None):
@@ -124,7 +124,7 @@ def test_manifest_dir_is_the_one_location():
 
 
 def test_no_public_name_in_the_package_carries_the_retired_word():
-    for module in (core, refs, shell):
+    for module in (core, errors, refs, shell):
         offenders = [name for name in vars(module) if not name.startswith("_") and "program" in name.lower()]
         assert offenders == [], f"{module.__name__}: {offenders}"
 
@@ -653,27 +653,15 @@ def test_module_reads_no_environment_or_clock_at_import_time():
     scope. Parsing the source catches the read wherever the value is bound.
     """
     forbidden = ("os.environ", "os.getenv", "time.time", "time.monotonic", "datetime.now")
-    for module_name in ("shell.py", "core.py", "refs.py"):
+    for module_name in ("shell.py", "core.py", "refs.py", "errors.py"):
         offenders = [n for n in _module_level_dotted_names(module_name) if n in forbidden]
         assert offenders == [], f"{module_name} reads {offenders} at import time"
-    # core.py's module-scope dotted names: `re.compile` for the one regex that did NOT move
-    # (`_ORDER_DIGITS`, which is about ordering and not about refs), plus the `_refs.*` re-export
-    # aliases. An attribute read on an already-imported PURE module is not what this test guards
-    # against, but the set is asserted EXACTLY rather than filtered, so a genuinely new module-scope
-    # read has to be looked at and added here deliberately.
-    assert set(_module_level_dotted_names("core.py")) == {
-        "re.compile",
-        "_refs.parse_ref",
-        "_refs.ref_kind",
-        "_refs.is_tracked",
-        "_refs.GITHUB",
-        "_refs.JIRA",
-        "_refs.LINK",
-        "_refs.TRACKED_REF_KINDS",
-        "_refs.ref_slug",
-        "_refs.slug_from_remote",
-        "_refs.suggest_full_ref",
-    }
+    # core.py's module-scope dotted names are `re.compile` for the one regex that did NOT move
+    # (`_ORDER_DIGITS`, about ordering rather than refs) and nothing else. The ref re-exports use an
+    # `import ... as ...` form precisely so they do not land here: an `x = _refs.x` assignment is an
+    # attribute read, and this assertion was growing a list of re-export names in a test about
+    # clocks. If a name appears below, it is a real new module-scope read and wants looking at.
+    assert set(_module_level_dotted_names("core.py")) == {"re.compile"}
     assert set(_module_level_dotted_names("refs.py")) == {"re.compile"}
     assert not [name for name in vars(shell) if name.startswith("BORG_")]
     assert "time" not in vars(shell)
@@ -714,7 +702,7 @@ def test_no_module_references_an_external_plugin_or_a_sibling_checkout():
     here = os.path.dirname(os.path.abspath(__file__))
     forbidden = ("ai-data-engineer", "stacked-pr-program", "stamp_stack")
     offenders = []
-    for name in ("core.py", "refs.py", "shell.py", "__init__.py"):
+    for name in ("core.py", "errors.py", "refs.py", "shell.py", "__init__.py"):
         with open(os.path.join(here, name), encoding="utf-8") as handle:
             body = handle.read()
         offenders += [f"{name}: {token}" for token in forbidden if token in body]
