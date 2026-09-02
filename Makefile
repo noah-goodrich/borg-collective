@@ -1,4 +1,4 @@
-.PHONY: clean test lint format test-viz lint-viz format-viz spine
+.PHONY: clean test lint format test-viz lint-viz format-viz spine eval eval-live
 
 # TWO Python surfaces, deliberately separate — do not merge them.
 #
@@ -92,3 +92,37 @@ format-viz:
 # on prose, and anything unjudged is reported rather than silently rendered blank.
 spine:
 	python3 merge-tree/spine.py
+
+# ── AC6: the eval harness ────────────────────────────────────────────────────────────────────────
+# `make eval` IS THE SAFE ONE. It forwards --skip-model, so it runs only the cases that need no
+# headless model run. The full sweep, which spends money and needs an authenticated `gh`, is opt-in
+# as `make eval-live`. That way round is deliberate: the target a CI clause names must not be the
+# one that reaches the network, or CI acquires a network dependency by default and the offline
+# guarantee becomes a matter of remembering a flag.
+#
+# AC6's verify clause named `make eval --skip-model`, which exits 2 whatever this file contains:
+# make's getopt consumes any leading-dash word anywhere in argv before a goal is built, so the word
+# never reaches a recipe. A make VARIABLE is the only form that does. EVAL_ARGS stays as the
+# extension point because each harness takes its own flags.
+#
+# The loop AGGREGATES rather than aborting. Every harness runs, failures are recorded, and the
+# target exits non-zero at the end -- `set -e` would report only the first failing harness, which
+# is the same argument that keeps run.sh on PASS/FAIL counters instead of `set -e`.
+#
+# `found`, not `[ -d evals ]`: the guard has to be on the GLOB. With no nullglob, a directory that
+# exists but holds no run.sh passes a directory test and then hands the literal pattern to bash.
+EVAL_ARGS ?= --skip-model
+
+eval:
+	@failed=0; found=0; \
+	for r in evals/*/run.sh; do \
+		[ -e "$$r" ] || continue; \
+		found=1; \
+		echo "== $$r $(EVAL_ARGS)"; \
+		bash "$$r" $(EVAL_ARGS) || failed=1; \
+	done; \
+	if [ "$$found" -eq 0 ]; then echo "no evals/*/run.sh present -- nothing to eval"; fi; \
+	test "$$failed" -eq 0
+
+eval-live:
+	@$(MAKE) --no-print-directory eval EVAL_ARGS=
