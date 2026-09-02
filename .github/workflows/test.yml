@@ -26,8 +26,12 @@ jobs:
       # has declined zsh support since 2016; forcing `-s bash` is documented as giving false safety
       # on precisely the word-splitting class that caused #113), so .zsh is intentionally excluded
       # rather than checked misleadingly.
-      - name: Lint portable sh (hooks + lib)
-        run: shellcheck hooks/*.sh lib/*.sh
+      # evals/*/run.sh joined the gate 2026-09-02. It was the one script a CI job would execute
+      # that no linter checked, and it had been dead on arrival for its whole life -- a hardcoded
+      # /Users/noah prefix, and no `set -e`, so the failing prologue was invisible and every case
+      # reported FAIL for never having run. Verified rc=0 over hooks + lib + evals before landing.
+      - name: Lint portable sh (hooks + lib + evals)
+        run: shellcheck hooks/*.sh lib/*.sh evals/*/run.sh
 
   test:
     runs-on: ubuntu-latest
