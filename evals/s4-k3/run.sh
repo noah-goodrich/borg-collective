@@ -45,8 +45,11 @@ STILLPOINT="${BORG_EVAL_STILLPOINT:-}"
 TROTH="${BORG_EVAL_TROTH:-}"
 
 # Guard before the `rm -rf` below: a mis-derived or mis-overridden REPO must not be able to point
-# the cleanup at an arbitrary directory. This script is the one file REPO is guaranteed to contain.
-if [ ! -f "$REPO/evals/s4-k3/run.sh" ]; then
+# the cleanup at an arbitrary directory. `borg.zsh` is the marker because it is TRACKED and sits at
+# the root -- it knows nothing about where this harness lives, so moving the harness cannot break
+# the guard. Not `.borg-project`, which looks like the obvious repository marker and is gitignored:
+# it does not exist in a fresh CI checkout, so the guard would abort every CI run.
+if [ ! -f "$REPO/borg.zsh" ]; then
     echo "ERROR: REPO does not look like the borg-collective checkout: $REPO" >&2
     exit 2
 fi
@@ -77,11 +80,6 @@ REPOS=("$REPO")
 if [ -n "$STILLPOINT" ] && [ -d "$STILLPOINT" ]; then
     REPOS+=("$STILLPOINT")
 fi
-PROGRAMS_DIR_ARGS=()
-for _r in "${REPOS[@]}"; do
-    PROGRAMS_DIR_ARGS+=(--programs-dir "$_r")
-done
-
 PASS=0; FAIL=0; SKIPPED=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
@@ -154,11 +152,15 @@ if [ "${#REPOS[@]}" -lt 2 ]; then
 elif ! command -v borg >/dev/null 2>&1; then
     skip "E3 gather: borg is not on PATH"
 else
+    programs_dir_args=()
+    for repository in "${REPOS[@]}"; do
+        programs_dir_args+=(--programs-dir "$repository")
+    done
     # `&&`, not `;`. With a semicolon the assertion ran even when gather.py had failed, reading
     # whatever e3-gather.json a previous run left behind — a false PASS over stale evidence.
     E3=$(cd "$REPO/merge-tree" && borg recon --json --since 2026-08-01T00:00:00Z 2>/dev/null | \
          python3 gather.py --in - --out "$OUT/e3-gather.json" \
-           "${PROGRAMS_DIR_ARGS[@]}" 2>"$OUT/e3-stderr.txt" && \
+           "${programs_dir_args[@]}" 2>"$OUT/e3-stderr.txt" && \
          python3 -c "
 import json
 g = json.load(open('$OUT/e3-gather.json'))
