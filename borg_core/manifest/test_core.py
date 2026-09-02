@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from borg_core.manifest import core
+from borg_core.manifest import core, refs
 
 
 def _manifest(rows, apex=None):
@@ -235,10 +235,23 @@ def test_the_fixture_is_valid():
 
 @pytest.mark.parametrize(
     "ref",
-    ["ingle#12", "PROJ-123", "o/r", "o/r#", "o/r#abc", "a/b/c#1", "/r#1", "o/#1", "o r/x#1"],
+    [
+        "ingle#12",
+        "o/r",
+        "o/r#",
+        "o/r#abc",
+        "a/b/c#1",
+        "/r#1",
+        "o/#1",
+        "o r/x#1",
+        "docs/spec.md",
+        "proj-123",
+        "notion.so/x",
+        "ftp://h/x",
+        "https://has space/x",
+    ],
     ids=[
         "repo-shorthand",
-        "jira-key",
         "no-number",
         "empty-number",
         "non-numeric",
@@ -246,16 +259,113 @@ def test_the_fixture_is_valid():
         "leading-slash",
         "empty-name",
         "space-in-owner",
+        "bare-path",
+        "lowercase-jira",
+        "scheme-less-url",
+        "wrong-scheme",
+        "url-with-space",
     ],
 )
-def test_a_row_ref_that_is_not_a_full_ref_is_rejected(ref):
+def test_a_row_ref_matching_no_known_vocabulary_is_rejected(ref):
     # `ingle#12` is the one a model authoring a manifest headless (AC5) actually writes, and it used
     # to validate CLEAN: it then loads through discovery and produces a node parse_ref cannot build
     # (so AC3's targeted fetch renders it `unknown`, which AC3 forbids) and ref_slug cannot scope
     # (so the row is invisible in its own repository's grid). parse_ref's contract is that a
     # non-conforming ref is a defect to SURFACE; validate is the surfacing point.
+    #
+    # WIDENED 2026-09-01 WITHOUT LOOSENING. Rows may now name a Jira key or a link as well as a
+    # GitHub PR, so `PROJ-123` moved OUT of this list and into the positive test below. Everything
+    # else stayed, and five near-misses were added -- each is a plausible thing an author types that
+    # is ALMOST one of the three vocabularies. They are the whole reason `ref_kind` anchors every
+    # pattern instead of accepting any non-empty string, which is what merge-tree did.
     errors = core.validate(_manifest([_row("1", ref)]))
-    assert any("must be a full ref" in e for e in errors), errors
+    assert any("ref must be a" in e for e in errors), errors
+
+
+@pytest.mark.parametrize(
+    "ref,kind",
+    [
+        ("o/r#1", "github"),
+        ("PROJ-123", "jira"),
+        ("A1-2", "jira"),  # a digit in the project part, which PROJ-123 does not cover
+        ("https://notion.so/a-page", "link"),
+        ("http://internal/doc", "link"),  # the `s?` alternation, otherwise untested
+    ],
+)
+def test_a_row_may_name_a_github_pr_a_jira_key_or_a_link(ref, kind):
+    """The three vocabularies a chain row may use, and the kind each classifies as.
+
+    Chains describe projects, and a project is not only its pull requests -- it has a ticket that
+    asked for it and a document that explains it. The rest of borg was already source-agnostic (a
+    recon Item carries `{source, ref}` and adapters are discovered by filename), so GitHub-only was
+    the outlier here, not a rule anyone chose.
+    """
+    assert core.validate(_manifest([_row("1", ref)])) == []
+    assert refs.ref_kind(ref) == kind
+
+
+def test_the_three_kinds_are_mutually_exclusive():
+    """`ref_kind`'s ladder returns on the first match, so overlapping patterns would make its ORDER
+    load-bearing and invisible. Asserted rather than left as a comment in the docstring."""
+    patterns = {"github": refs._REF_RE, "jira": refs._JIRA_RE, "link": refs._LINK_RE}
+    samples = ["o/r#1", "PROJ-123", "https://notion.so/x", "DE-1706", "https://a.b/c#1"]
+    for sample in samples:
+        matched = [name for name, rx in patterns.items() if rx.match(sample)]
+        assert len(matched) == 1, f"{sample!r} matched {matched}"
+
+
+def test_a_link_row_does_not_block_the_row_after_it():
+    """The split that keeps `ready` meaningful, asserted THROUGH ready_set rather than on the predicate.
+
+    The first version of this test asserted only `is_tracked`'s return value, which made it a test of
+    a boolean that nothing consumed -- `is_tracked` had zero production callers and a link row DID
+    block. Measured then: this exact manifest returned `[]`. A test named for an invariant its body
+    never exercises is the family CLAUDE.md files under "when a test supplies the value the production
+    path is supposed to derive, it proves nothing about production".
+
+    MUTATION: drop the `is_tracked` guard from ready_set's parent loop and this goes red.
+    """
+    chain = _manifest([_row("1", "https://notion.so/the-spec"), _row("2", "o/r#5"), _row("3", "o/r#6")])
+    assert core.validate(chain) == [], "a link row is a legal row"
+    assert core.ready_set(chain, {"o/r#5": "open", "o/r#6": "open"}) == ["o/r#5"]
+
+    # The negative pair: a TRACKED parent in the same position DOES block, so the line above is not
+    # passing because ready_set ignores parents generally.
+    tracked = _manifest([_row("1", "o/r#4"), _row("2", "o/r#5"), _row("3", "o/r#6")])
+    assert core.ready_set(tracked, {"o/r#4": "open", "o/r#5": "open", "o/r#6": "open"}) == ["o/r#4"]
+
+
+def test_a_link_row_is_never_itself_announced_as_ready():
+    """A document is not work you can pick up, and no guard is needed to get that: `states` is built
+    from the github sweep and the targeted fetch, so a link is never IN it, and the `!= STATE_OPEN`
+    test excludes it. Asserted with the realistic empty-state input rather than by injecting a state
+    no producer can emit -- a test that supplies the value production derives proves nothing."""
+    chain = _manifest([_row("1", "https://notion.so/spec"), _row("2", "o/r#5")])
+    assert core.ready_set(chain, {"o/r#5": "open"}) == ["o/r#5"]
+
+
+def test_an_unrecognized_parent_still_blocks_because_unknown_is_not_merged():
+    """The boundary of the skip above, and the reason it is `is_reference` rather than `not
+    is_tracked`. A malformed `after: ["#149"]` matches no vocabulary -- it is a defect, not a
+    document -- and must keep wedging its row visibly. Skipping every non-tracked parent would
+    silently announce the row as startable, inverting ready_set's "unknown is not merged" rule.
+
+    MUTATION: swap `not is_reference(...)` for `is_tracked(...)` in ready_set and this goes red.
+    """
+    wedged = _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", after=["#149"])])
+    assert core.ready_set(wedged, {"o/r#1": "merged", "o/r#2": "open"}) == []
+
+
+def test_the_tracked_and_reference_sets_are_enumerated_not_complementary():
+    """Three answers, not two. `""` (no known vocabulary) is neither tracked NOR a reference, which is
+    what lets ready_set skip documents while still blocking on defects."""
+    assert refs.is_tracked("o/r#1") and refs.is_tracked("OPS-11")
+    assert not refs.is_tracked("https://notion.so/x")
+    assert refs.is_reference("https://notion.so/x")
+    assert not refs.is_reference("o/r#1") and not refs.is_reference("OPS-11")
+    assert not refs.is_tracked("#149") and not refs.is_reference("#149"), "a defect is neither"
+    assert refs.TRACKED_REF_KINDS == (refs.GITHUB, refs.JIRA)
+    assert refs.REFERENCE_REF_KINDS == (refs.LINK,)
 
 
 def test_a_padded_row_ref_is_accepted_because_text_strips_it_first():

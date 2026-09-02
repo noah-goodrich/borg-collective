@@ -1824,13 +1824,21 @@ def test_a_ref_that_cannot_go_into_the_query_is_excluded_and_named():
 
     assert aliases == {"n0": "o/r#7", "n1": "o/r#0"}, "aliases are dense over the SURVIVORS, never sparse"
     assert "0158" not in query and "PROJ-123" not in query
+    # `PROJ-123` IS EXCLUDED SILENTLY AND THE SILENCE IS ASSERTED. Since 2026-09-01 it is a valid
+    # Jira row, not a malformed GitHub one, so its absence from a GITHUB query is correct rather than
+    # a degradation -- warning would put a line in `▸ SIGNALS` on every render of every chain that
+    # carries a ticket or a doc, which is how a reader learns to skip the section. The other two
+    # still warn for opposite reasons: `o/r#0158` IS github-kind and would take the whole batch down,
+    # and `a/b/c#1` matches no vocabulary at all, so it is a defect that should never have validated
+    # and must not be hidden twice.
     assert sorted(warnings) == sorted(
         [
             "fetch: ref o/r#0158 is not a fetchable owner/repo#number -- excluded from the fetch",
-            "fetch: ref PROJ-123 is not a fetchable owner/repo#number -- excluded from the fetch",
             "fetch: ref a/b/c#1 is not a fetchable owner/repo#number -- excluded from the fetch",
         ]
     )
+    assert not any("PROJ-123" in w for w in warnings), "a valid jira row is not a fetch problem"
+    assert not any("notion" in w for w in link_grid.fetch_query(["https://notion.so/x"])[2])
     # Nothing fetchable means no query at all, so start_fetch has nothing to spawn.
     assert link_grid.fetch_query(["PROJ-123"])[0] == ""
     assert link_grid.fetch_query([]) == ("", {}, [])

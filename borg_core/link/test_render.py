@@ -158,25 +158,71 @@ _CHAINS_CASES = [
     ({"scope_kind": "orchestrator", "slug": ""}, "no project manifests in the registry yet"),
     ({"scope_kind": "repository", "slug": ""}, "no GitHub origin"),
     ({"scope_kind": "repository", "slug": "acme/ledger"}, "no project manifest declares work in acme/ledger"),
+    # FOURTH ARM, and it carries a slug precisely so it cannot pass by falling through to an earlier
+    # one: a refused manifest in a fully-resolved repository is the case every other arm reports as
+    # manifest-less.
+    ({"scope_kind": "repository", "slug": "acme/ledger", "refused": 1}, "1 manifest could not be read"),
 ]
 
 
 @pytest.mark.parametrize("grid_overrides,expected", _CHAINS_CASES)
-def test_the_three_chains_placeholders_are_three_different_diagnoses(grid_overrides, expected):
+def test_the_four_chains_placeholders_are_four_different_diagnoses(grid_overrides, expected):
     """An empty CHAINS section is the MODAL case -- 13 of ~14 registered repositories have no
-    manifest -- so which of the three it is has to be readable off the page, not inferred."""
+    manifest -- so which of the four it is has to be readable off the page, not inferred."""
     doc = _doc()
     doc["grid"].update(grid_overrides)
     assert expected in render.document(doc)
 
 
-def test_the_three_chains_placeholders_are_actually_distinct():
+def test_the_four_chains_placeholders_are_actually_distinct():
     sentences = set()
     for overrides, _ in _CHAINS_CASES:
         doc = _doc()
         doc["grid"].update(overrides)
         sentences.add(render._grid_placeholder(doc["grid"]))  # pylint: disable=protected-access
-    assert len(sentences) == 3
+    assert len(sentences) == 4
+
+
+def test_a_refused_manifest_is_not_reported_as_no_manifest_at_all():
+    """The arm's whole reason to exist, stated as the sentence it must NOT print.
+
+    A repository whose only manifest was refused used to render "no project manifests in the registry
+    yet. Run /borg-plan in any repository." -- false, and it points the reader at scaffolding a second
+    manifest beside the broken one. Asserting the absence rather than only the presence is what stops
+    a future reordering of the ladder from silently restoring the old answer.
+    """
+    doc = _doc()
+    doc["grid"].update({"scope_kind": "repository", "slug": "acme/ledger", "refused": 2})
+    page = render.document(doc)
+    assert "2 manifests could not be read" in page
+    assert "no project manifests in the registry yet" not in page
+    assert "no project manifest declares work in acme/ledger" not in page
+
+
+def test_a_refused_count_of_zero_falls_through_to_the_older_arms():
+    """`refused` is an ordinary absent-or-zero key, not a tristate. A block that never carried it --
+    every `--json` document written before this arm existed -- must read exactly as it did."""
+    doc = _doc()
+    doc["grid"].update({"scope_kind": "repository", "slug": "acme/ledger", "refused": 0})
+    assert "no project manifest declares work in acme/ledger" in render.document(doc)
+    doc_without = _doc()
+    doc_without["grid"].update({"scope_kind": "repository", "slug": "acme/ledger"})
+    assert render.document(doc_without) == render.document(doc)
+
+
+def test_the_refused_arm_outranks_the_registry_wide_sentence():
+    """PINS THE LADDER'S ORDER at the one place it is observable.
+
+    `refused` is counted for whatever scope resolved -- the whole registry in orchestrator scope --
+    so an orchestrator page with unreadable manifests on disk must not print "no project manifests in
+    the registry yet". Every other placeholder case is repository-scoped, so without this the arm
+    could be moved below the scope check and no test would notice.
+    """
+    doc = _doc()
+    doc["grid"].update({"scope_kind": "orchestrator", "slug": "", "refused": 3})
+    page = render.document(doc)
+    assert "3 manifests could not be read" in page
+    assert "no project manifests in the registry yet" not in page
 
 
 def test_orchestrator_scope_never_reaches_the_no_origin_diagnosis():

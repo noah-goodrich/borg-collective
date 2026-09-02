@@ -43,8 +43,17 @@ manufacture edges pointing at nothing. Those gates are counted and reported by u
 instead. The only machine-readable blocker channel is `gate.blocked_by_ref`, and validate requires it
 to parse as a full ref precisely so it can never become prose by accident.
 
-EVERY DECLARED REF MUST BE A FULL `owner/repo#number`, and validate is where that is surfaced.
-`rows[].ref`, `gate.blocked_by_ref`, every `after` entry and `apex.ref` all go through parse_ref.
+EVERY DECLARED REF IS HELD TO A VOCABULARY, and validate is where that is surfaced. The vocabulary is
+NOT the same at all four sites, and the asymmetry is deliberate rather than an oversight:
+
+  * `rows[].ref` accepts three kinds -- a GitHub PR, a Jira key, or an http(s) link (`refs.ref_kind`).
+    A chain describes a project, and a project has the ticket that asked for it and the document that
+    explains it, not only its pull requests.
+  * `apex.ref`, `gate.blocked_by_ref` and every `after` entry still require a full `owner/repo#number`
+    (parse_ref). These are EDGE ENDPOINTS, and an edge means "this merges before that" -- a question
+    only a ref with resolvable merge state can answer. So a Jira row can be declared but cannot yet be
+    another row's prerequisite. Deliberate MVP boundary, stated so nobody "fixes" it by widening the
+    endpoints without first deciding what an edge into a document would mean.
 A shorthand like `ingle#12` used to validate clean, load through discovery, and produce a node that
 AC3's targeted fetch cannot build (it renders `unknown`, which AC3 forbids) and that ref_slug cannot
 scope to any repository (so the row is invisible in its own repository's grid). parse_ref's contract
@@ -64,10 +73,70 @@ hardened spec's B6). Discovery is GLOBAL (shell.discover_registered); *selection
 (select_for_repository below).
 """
 
+# THE C0302 DISABLE THAT USED TO SIT HERE IS GONE, AND THE SPLIT IS WHY. This module crossed the
+# 1000-line ceiling on 2026-09-01 when the writer's two pure helpers landed at 999, and carried a
+# measured disable for exactly one commit. The note under it said: "If it needs to grow again, SPLIT
+# IT rather than extending this note: the seam is already visible -- the ref vocabulary (`parse_ref`,
+# `ref_slug`, `slug_from_remote`, `suggest_full_ref`, and their regexes) is a self-contained ~120
+# lines that the validator, the selector and the topology all merely consume."
+#
+# It needed to grow again the same day, so the split happened rather than the note growing. The ref
+# vocabulary is `refs.py`; this file is back under the ceiling at ~930 lines and needs no exemption.
+# Every public name from it is re-exported above, so `core.parse_ref` and `refs.parse_ref` are the
+# same object and no caller moved.
+#
+# The general lesson, which is why this paragraph survives the disable it replaces: a suppression
+# with an expiry condition written next to it is the only kind that gets removed. An unconditional
+# one is permanent by default.
+
 from __future__ import annotations
 
 import re
 from typing import Any
+
+from borg_core.manifest import refs as _refs
+from borg_core.manifest.errors import (
+    _GOT_MARKER,
+    offending_value,
+    partition_errors,
+)
+from borg_core.manifest.refs import (
+    expects_github,
+    is_reference,
+    parse_ref,
+    ref_kind,
+    ref_slug,
+    slug_from_remote,
+    suggest_full_ref,
+    text as _text,
+)
+
+# Declared, not aliased: `__all__` tells ruff (F401) and pylint these are deliberate public surface
+# rather than unused imports. The `X as X` spelling satisfies ruff but pylint rejects it (C0414).
+__all__ = [
+    "expects_github",
+    "is_reference",
+    "offending_value",
+    "parse_ref",
+    "partition_errors",
+    "ref_kind",
+    "ref_slug",
+    "slug_from_remote",
+    "suggest_full_ref",
+]
+
+# RE-EXPORTED, NOT REIMPLEMENTED. The ref vocabulary moved to refs.py when this module crossed
+# C0302's ceiling; these mean no caller, test or golden moved with it, and `core.parse_ref` IS
+# `refs.parse_ref` -- no second definition to drift.
+#
+# IMPORTED, NOT ASSIGNED. `x = _refs.x` is a module-scope ATTRIBUTE READ, so every alias landed in
+# `test_module_reads_no_environment_or_clock_at_import_time`'s exact-set assertion -- a test about
+# clocks accumulating re-export names. An import produces no `ast.Attribute` node.
+#
+# ONLY NAMES WITH CALLERS (counted: 13, 7, 8, 2, 1, 1). The kind constants and `is_tracked` have zero
+# consumers through `core.` and are reached as `refs.X`. `_REF_RE` is private to refs.py, so aliasing
+# it would be a protected-access bypass for a name nothing outside that module matches on.
+
 
 # THE ROUTER'S VOCABULARY, NOT THE VALIDATOR'S. `decision` means a human must *choose*;
 # `verification` means someone must *run* something. The distinction matters because a `verification`
@@ -123,35 +192,8 @@ STATE_CLOSED = "closed"
 # This mirrors merge-tree/render_graph.py:662, which filters its rank sweep to the same two kinds.
 ORDERING_EDGE_KINDS = ("stacked", "blocks")
 
-# A full ref, and nothing looser. Owner and name use GitHub's per-part character class, mirroring the
-# adapter's accept test at recon-adapter-github:96-101; the number is literal digits.
-#
-# `\Z`, NOT `$`: Python's `$` also matches immediately BEFORE a trailing newline, so `"o/r#1\n"` would
-# parse and report a slug for a string that can never equal any item's ref. `\Z` is end-of-string and
-# nothing else.
-_REF_RE = re.compile(r"^([A-Za-z0-9._-]+)/([A-Za-z0-9._-]+)#([0-9]+)\Z")
 
 _ORDER_DIGITS = re.compile(r"(\d+)")
-
-# Everything up to and including the LAST `github.com` followed by `:` or `/`, then one trailing
-# `.git`. Both mirror recon-adapter-github:88's `sed -E 's#^.*github\.com[:/]##; s#\.git$##'`, and
-# the greedy `.*` is the load-bearing half: a remote of the form
-# `https://x-access-token:<token>@github.com/owner/repo.git` matches neither `git@github.com:` nor
-# `https://github.com/`, so a two-prefix pattern would leave the URL -- CREDENTIAL AND ALL -- as the
-# slug, which then flows into every ref. That leaked a live token in the adapter, found 2026-08-14.
-_HOST_PREFIX_RE = re.compile(r"^.*github\.com[:/]")
-_GIT_SUFFIX_RE = re.compile(r"\.git\Z")
-
-# GitHub's per-part character class plus the single `/` separator, mirroring
-# recon-adapter-github:96's `*[!A-Za-z0-9._/-]*` reject test.
-#
-# `\Z`, NOT `$`: Python's `$` also matches immediately BEFORE a trailing newline, so `"owner/repo\n"`
-# would pass a character-class test that the shell's `case` glob rejects, and the newline would ride
-# into every ref built from the slug. Defense in depth rather than the only guard --
-# shell._git_origin_url already strips trailing newlines -- and it is what keeps this correct if that
-# strip is ever moved or dropped. An EMBEDDED newline (a remote with several URLs) is rejected either
-# way, because a newline is outside the class no matter where it sits.
-_SLUG_CHARS_RE = re.compile(r"^[A-Za-z0-9._/-]+\Z")
 
 
 def _rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -160,17 +202,9 @@ def _rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
 
 
-def _text(value: Any) -> str:
-    """The module-wide coercion for every declared string field: `str(x or "").strip()`.
-
-    One definition rather than the same expression written twenty times, and load-bearing beyond
-    tidiness: a ref that reaches an edge endpoint stripped but reaches declared_refs unstripped would
-    be TWO different keys, so the targeted fetch would resolve one string while the graph keys on
-    another. Note the inherited numeric trap: an integer 0 becomes "" (and therefore sorts as a
-    prerequisite) while 1 becomes "1". No live manifest uses numeric orders; "fixing" it to
-    `str(x, "")` would also change None handling, so it is left as the port found it.
-    """
-    return str(value or "").strip()
+# `_text` is imported as refs.text above -- one definition, in the leaf that owns the vocabulary. See
+# its docstring for the stripping contract and the inherited integer-0 trap. The private spelling is
+# kept because thirty call sites in this module use it.
 
 
 def looks_like_manifest(doc: Any) -> bool:
@@ -184,88 +218,26 @@ def looks_like_manifest(doc: Any) -> bool:
     return isinstance(doc, dict) and isinstance(doc.get("rows"), list)
 
 
-def parse_ref(ref: Any) -> tuple[str, str, str] | None:
-    """Split a full `owner/repo#number` ref into its parts, or None when it is not that shape.
+def declared_body(manifest: dict[str, Any]) -> dict[str, Any]:
+    """A manifest's declared body: every key the AUTHOR wrote, and no key this package derived.
 
-    RETURN SHAPE: a 3-tuple of STRINGS -- `(owner, name, number)`. `stillpoint-labs/ingle#42` yields
-    `("stillpoint-labs", "ingle", "42")`. Every element is an exact substring of the input, so
-    `f"{owner}/{name}"` reconstructs the slug byte-identically and `number` keeps its literal digits
-    (`o/r#007` -> `"007"`, never `7`). None -- not a half-parsed tuple -- for a bare `repo#12`, a Jira
-    key like `PROJ-123`, an empty string, `o/r#abc`, `a/b/c#1`, or a padded `" o/r#1 "`.
+    ONE definition of "derived", used by both directions of the round trip. `_manifest_identity`
+    needs it to compare two copies of one declaration; `shell.write_manifest` needs it so a document
+    that came out of `_load_manifest` -- which stamps `_path` AND `_id` -- can go back to disk
+    without persisting either. Those two had to agree and did not: the writer this replaces stripped
+    exactly `_path`, so every synced file gained a permanent `"_id"` that nothing rejects and nothing
+    reads. The only symptom was a `git diff` on a tracked directory.
 
-    IT MUST NOT NORMALIZE, and the whitespace case is the tell. borg_core/recon/core.py:186-194
-    deduplicates cross-source items by using the RAW `item["ref"]` string as a dict key -- no case
-    fold, no strip, no `.git` handling, no entity resolution -- and states the policy outright at
-    :170-172. So `Owner/Repo#12` and `owner/repo#12` are two different items TODAY. A parse that
-    folded case, or that stripped padding into a "clean" slug, would report a slug for a ref that can
-    never match any item, and the edge built from it would vanish from the graph silently instead of
-    raising. Rejecting is the only safe answer: a non-conforming ref is a manifest defect to surface,
-    not a string to repair.
+    PREFIX RULE, NOT A NAME LIST. A list would have to be updated in this file every time the loader
+    learns to stamp something, and the failure mode of forgetting is silent persistence of the new
+    key. `_`-prefixed means derived, everywhere in this package, and `manifest_dir`'s docstring
+    already relies on that convention holding.
+
+    Note `merge-tree/coordinator.py:98` does this same strip by hand to build the payload for an
+    out-of-repo sync shim, and is NOT yet routed here -- it still names `_path` alone. Repointing it
+    is the retirement's job; until then that shim receives an `_id` this writer no longer writes.
     """
-    match = _REF_RE.match(ref) if isinstance(ref, str) else None
-    if match is None:
-        return None
-    # JUSTIFICATION: reading the groups of a Match this function just produced, not a foreign object.
-    return (match.group(1), match.group(2), match.group(3))  # pylint: disable=clean-arch-demeter
-
-
-def ref_slug(ref: Any) -> str:
-    """The `owner/repo` half of a full ref, or "" when the ref is not a full ref.
-
-    Never a prefix match on the raw string: `stillpoint-labs/stillpoint-web#1` starts with
-    `stillpoint-labs/stillpoint`, so a prefix test would attribute a web-repository manifest to the
-    `stillpoint` repository. See select_for_repository, which exists to be exactly that strict.
-    """
-    parts = parse_ref(ref)
-    return f"{parts[0]}/{parts[1]}" if parts else ""
-
-
-def slug_from_remote(remote: str) -> str:
-    """The `owner/repo` a git origin URL names, or "" when it is not exactly one GitHub repository.
-
-    PURE, and here rather than in shell.py on purpose: this is a string->string rule table with no
-    I/O in it, and while it lived beside the subprocess every one of its ~17 cases -- including the
-    credentialed URL that pins the 2026-08-14 token leak -- could only be asserted by spawning
-    `git init` + `git remote add` + `git remote get-url`. shell.repository_slug supplies the URL;
-    this decides what it means.
-
-    MIRRORS lib/recon/adapters/recon-adapter-github:81-101 RULE FOR RULE, because the refs a manifest
-    declares are the refs that adapter emits (`ref: ($m.repo + "#" + (.number|tostring))` at :177)
-    and a slug derived by any other rule would match nothing:
-
-      :81  the URL must name the GitHub host.
-      :88  strip everything through the last `github.com[:/]`, then one trailing `.git`.
-      :89  an empty result is rejected.
-      :96  reject any character outside `[A-Za-z0-9._/-]`; owner and name are interpolated into a
-           GraphQL document, so they are validated rather than escaped -- reject, never repair.
-      :97-101  reject more than one slash, a leading or trailing slash, or no slash at all. Exactly
-           `owner/name` is the only accepted shape.
-
-    THE HOST TEST IS NOT REDUNDANT with the character class, which is why it has its own cases: a
-    relative remote like `../sibling` or `mirrors/repo.git` survives every other rule here (`.`, `/`
-    and `-` are all inside GitHub's class and the shape is exactly one slash), so without the host
-    test it would be reported as a real slug and select whatever manifest happens to declare
-    `mirrors/repo#N`.
-
-    CASE IS PRESERVED. Nothing here lowercases: the accepted slug flows verbatim into refs, and
-    borg_core/recon/core.py:186-194 dedups on the exact string, so folding case would produce a slug
-    matching no item.
-
-    RECORDED DIVERGENCE in an unreachable corner: the adapter's host test is the shell glob
-    `*github.com*`, where `.` matches ANY character, so `githubXcom/o` passes it. This uses a literal
-    substring test. The two agree everywhere it matters, because the strip at :88 requires a literal
-    `github.com` and anything that reached it without one is rejected by the character-class or
-    slash-shape tests -- the sole survivor being a bare relative remote like `githubXcom/o`, which is
-    not a GitHub repository and which this correctly refuses.
-    """
-    if "github.com" not in remote:
-        return ""
-    slug = _GIT_SUFFIX_RE.sub("", _HOST_PREFIX_RE.sub("", remote))
-    if not slug or not _SLUG_CHARS_RE.match(slug):
-        return ""
-    if slug.count("/") != 1 or slug.startswith("/") or slug.endswith("/"):
-        return ""
-    return slug
+    return {k: v for k, v in manifest.items() if not k.startswith("_")}
 
 
 def _validate_apex(apex: Any) -> list[str]:
@@ -285,7 +257,7 @@ def _validate_apex(apex: Any) -> list[str]:
     if parse_ref(ref) is None:
         # Same rule as every other declared ref: declared_refs feeds AC3's targeted fetch, and a
         # shorthand apex would render `unknown` forever. See the module docstring.
-        return [f"apex: ref must be a full ref (owner/repo#num), got {ref}"]
+        return [f"apex: ref must be a full ref (owner/repo#num){_GOT_MARKER}{ref}"]
     return []
 
 
@@ -313,7 +285,7 @@ def _blocked_by_ref_error(gate: dict[str, Any], ref: str, label: str) -> str:
     if not value:
         return ""
     if parse_ref(value) is None:
-        return f"{label}: gate.blocked_by_ref must be a full ref (owner/repo#num), got {value}"
+        return f"{label}: gate.blocked_by_ref must be a full ref (owner/repo#num){_GOT_MARKER}{value}"
     if value == ref:
         return f"{label}: gate.blocked_by_ref names its own ref {value}"
     return ""
@@ -373,7 +345,7 @@ def _after_entry_error(entry: Any, ref: str, label: str) -> str:
     reason-per-return is easier to extend anyway.
     """
     if not isinstance(entry, str):
-        return f"{label} must be a ref string, got {type(entry).__name__}"
+        return f"{label} must be a ref string{_GOT_MARKER}{type(entry).__name__}"
     value = entry.strip()
     if not value:
         return f"{label} is empty"
@@ -382,7 +354,7 @@ def _after_entry_error(entry: Any, ref: str, label: str) -> str:
         # which becomes a `stacked` edge whose parent is that literal string -- a parent no state
         # lookup can ever resolve, so the row leaves ready_set permanently while the query built
         # from declared_refs goes looking for prose.
-        return f"{label} must be a full ref (owner/repo#num), got {value}"
+        return f"{label} must be a full ref (owner/repo#num){_GOT_MARKER}{value}"
     if value == ref:
         return f"{label} names its own ref {value}"
     return ""
@@ -430,14 +402,27 @@ def _validate_after(row: dict[str, Any], ref: str, label: str) -> list[str]:
 def _row_ref_error(ref: str, label: str) -> str:
     """What is wrong with a row's own `ref`, or "" when nothing is.
 
-    A row's ref is the key everything else hangs off -- edges, declared_refs, the state lookup, the
-    repository scoping -- so it is held to parse_ref exactly like every other declared ref. See the
-    module docstring for why a shorthand `ingle#12` is a defect and not a convenience.
+    THREE VOCABULARIES, NOT ONE (2026-09-01). A row may name a GitHub pull request, a Jira issue, or a
+    link (Notion, a Google Doc, an uploaded asset). `refs.ref_kind` decides which; "" means the string
+    is none of them and is a defect. Before this the only legal ref was `owner/repo#num`, which was
+    inherited rather than decided -- and retiring merge-tree, whose validator accepted any non-empty
+    string, would have made that narrowing permanent on the deletion commit.
+
+    THE RULE DID NOT GET LOOSER, IT GOT TYPED. Each kind is anchored, so the mistake this check exists
+    to catch is still caught: `ingle#12` is a GitHub ref missing its owner, matches no kind, and is
+    reported -- with `suggest_full_ref` handing back the exact token when the author already named
+    this repository. Accepting anything non-empty is what let that typo resolve against nothing.
+
+    The message names all three vocabularies rather than only GitHub's, because an author who wrote
+    `docs/spec.md` needs to know a bare path is not a link, not be told about `owner/repo#num`.
     """
     if not ref:
         return f"{label}: missing ref"
-    if parse_ref(ref) is None:
-        return f"{label}: ref must be a full ref (owner/repo#num), got {ref}"
+    if not _refs.ref_kind(ref):
+        return (
+            f"{label}: ref must be a GitHub ref (owner/repo#num), a Jira key (PROJ-123) "
+            f"or an http(s) link{_GOT_MARKER}{ref}"
+        )
     return ""
 
 
@@ -491,61 +476,6 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     for i, row in enumerate(manifest["rows"]):
         errors.extend(_validate_row(row, i, seen))
     return errors
-
-
-_ROW_ERROR_PREFIX = "rows["
-
-
-def _row_error_index(error: str) -> int | None:
-    """The row index a validation message is scoped to, or None when it is not row-scoped.
-
-    STRING OPS RATHER THAN A REGEX, and not for speed. The obvious `re.match(r"^rows\\[(\\d+)\\]")`
-    form needs `int(match.group(1))`, which the clean-architecture plugin rejects as a Demeter chain
-    (W9006) -- caught by CI, where the plugin runs, and not by the local pylint. Splitting it into
-    two statements to appease the rule would leave a regex whose entire job is to extract one integer
-    from a prefix this module itself writes. `partition` says the same thing in less.
-
-    Reads BOTH label forms `_validate_row` produces: `rows[N]: ...` and `_validate_after`'s
-    `rows[N].after[M] ...`, which carries no colon after the bracket. Anything whose bracket contents
-    are not a plain integer is treated as NOT row-scoped, which fails safe -- an unparseable label
-    keeps the whole file rather than dropping a row nobody identified.
-    """
-    if not error.startswith(_ROW_ERROR_PREFIX):
-        return None
-    digits, closed, _ = error[len(_ROW_ERROR_PREFIX) :].partition("]")
-    if not closed or not digits.isdigit():
-        return None
-    return int(digits)
-
-
-def partition_errors(errors: list[str]) -> tuple[set[int], list[str]]:
-    """Split `validate`'s output into `(row indices at fault, errors that are not row-scoped)`.
-
-    LIVES HERE, NEXT TO THE FORMAT IT PARSES. `_validate_row` builds every row-scoped message from
-    `label = f"rows[{index}]"` -- both the `rows[N]: ...` form and `_validate_after`'s
-    `rows[N].after[M] ...` form -- and a caller that wants to drop a bad ROW rather than a whole FILE
-    has to know which errors are which. Putting the regex in `shell.py` would make the message format
-    an undeclared cross-module contract, which is the shape that breaks silently the first time
-    someone rewords an error string.
-
-    STRUCTURAL ERRORS ARE EVERYTHING ELSE, and they are correctly not row-scoped: `rows: missing or
-    not a list` describes the container, and `apex: ...` describes a sibling key. Neither has a
-    partial answer -- there is no subset of the file you could keep and still be describing what the
-    author wrote.
-
-    Returns indices as a SET because two errors routinely name one row (a gate declaring neither
-    `blocked_by` nor `resolved_by` trips both), and the caller wants rows to drop, not errors to
-    count.
-    """
-    bad_rows: set[int] = set()
-    structural: list[str] = []
-    for error in errors:
-        index = _row_error_index(error)
-        if index is None:
-            structural.append(error)
-        else:
-            bad_rows.add(index)
-    return bad_rows, structural
 
 
 def _sort_key(row: dict[str, Any], index: int) -> tuple[int, int, int]:
@@ -982,10 +912,24 @@ def ready_set(manifest: dict[str, Any], states: dict[str, Any]) -> list[str]:
     A PARENT OUTSIDE THIS MANIFEST is still a parent. `after` and `blocked_by_ref` may both name refs
     no row declares, and those are valid input, not errors. Such a parent is looked up in `states`
     exactly like any other: known-merged unblocks the row, anything else (including absent) does not.
+
+    A REFERENCE PARENT IS SKIPPED, AND THIS IS THE ONLY PLACE THE TRACKED/REFERENCE SPLIT HAS TEETH.
+    A `link` row (a Notion page, a Google Doc, an uploaded asset) has no resolvable state, so
+    `_state_of` returns unknown for it forever and the `all(... == STATE_MERGED)` test below would be
+    permanently False -- meaning a chain that puts its own spec document in a lane would report
+    NOTHING ready, for as long as the document exists. Measured before this line was added: a
+    three-row chain with a Notion link at order 1 returned `[]`; removing the link row returned the
+    PR. The predicate is `refs.is_reference`, NOT `not is_tracked`: the latter is also true of a ref
+    of no known kind, and a malformed `after: ["#149"]` must keep wedging its row rather than quietly
+    unblocking it -- that is this function's own "unknown is not merged" rule, and skipping unknowns
+    would invert it. Adding a source is a change in refs.py alone.
+
+    THE ROW ITSELF NEEDS NO GUARD. An untracked ref has no state, so the `!= STATE_OPEN` test above
+    already excludes it from being announced as ready -- a document is not work you can pick up.
     """
     parents: dict[str, list[str]] = {}
     for edge in derive_edges(manifest):
-        if edge["kind"] in ORDERING_EDGE_KINDS:
+        if edge["kind"] in ORDERING_EDGE_KINDS and not _refs.is_reference(edge["parent"]):
             parents.setdefault(edge["child"], []).append(edge["parent"])
 
     ready = []
