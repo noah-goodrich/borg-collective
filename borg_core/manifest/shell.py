@@ -93,7 +93,7 @@ def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
         with open(path, encoding="utf-8") as handle:
             doc = json.load(handle)
     except (OSError, ValueError) as exc:
-        return None, f"{path}: unreadable or invalid JSON ({exc})"
+        return None, f"{path}{_UNREADABLE}{exc})"
 
     if not core.looks_like_manifest(doc):
         return None, f"{path}: not a manifest (no rows list) -- skipped"
@@ -139,16 +139,16 @@ def _drop_invalid_rows(doc: dict, path: str, errors: list[str]) -> tuple[dict | 
     joined = "; ".join(errors)
     rows = doc.get("rows") or []
     if structural or not bad_rows:
-        return None, f"{path}: invalid manifest -- {joined}"
+        return None, _invalid_manifest(path, errors)
 
     kept = [row for index, row in enumerate(rows) if index not in bad_rows]
     if not kept:
-        return None, f"{path}: invalid manifest -- {joined}"
+        return None, _invalid_manifest(path, errors)
 
     doc["rows"] = kept
     residual = core.validate(doc)
     if residual:
-        return None, f"{path}: invalid manifest -- {'; '.join(residual)}"
+        return None, _invalid_manifest(path, residual)
     return doc, f"{path}: {len(bad_rows)} of {len(rows)} rows dropped -- {joined}"
 
 
@@ -157,7 +157,21 @@ def _drop_invalid_rows(doc: dict, path: str, errors: list[str]) -> tuple[dict | 
 # `_drop_invalid_rows`. Not the `not a manifest (no rows list)` skip, which describes a stray
 # `settings.json` sitting in the directory rather than a manifest that failed, and not the
 # `N of M rows dropped` arm, which is a manifest that DID load.
-_REFUSAL_MARKERS = (": invalid manifest -- ", ": unreadable or invalid JSON (")
+_INVALID_MANIFEST = ": invalid manifest -- "
+_UNREADABLE = ": unreadable or invalid JSON ("
+_REFUSAL_MARKERS = (_INVALID_MANIFEST, _UNREADABLE)
+
+
+def _invalid_manifest(where: str, reasons: list[str]) -> str:
+    """The one producer of the refusal message `refused_manifest_paths` parses.
+
+    There were four hand-written copies of this f-string and a fifth literal in the marker tuple, in
+    one file, while `refused_manifest_paths`'s docstring claimed "exactly one producer". Reword any
+    copy and the CHAINS placeholder silently reverts to the false "no project manifests in the
+    registry yet", with nothing red -- the tests build their warnings through `discover`, so both
+    sides move together.
+    """
+    return f"{where}{_INVALID_MANIFEST}{'; '.join(reasons)}"
 
 
 def refused_manifest_paths(warnings: list[str], under: str = "") -> list[str]:
@@ -415,6 +429,12 @@ class InvalidManifest(ValueError):
 def _write_refusal(name: str, errors: list[str], slug: str) -> InvalidManifest:
     """The exception a refused write raises, with a `did you mean` on every fixable ref.
 
+    The offending value comes back through `core.offending_value`, which owns the `, got ` token
+    beside the six messages that write it -- hand-parsing it here made the format an undeclared
+    cross-module contract that a reword would silently break. The `if got` and `.strip()` guards the
+    hand-rolled version carried were both dead: `suggest_full_ref("")` already answers "", and every
+    producer interpolates an already-stripped value.
+
     The suggestion is appended to the REASON, never applied to the document -- see
     `core.suggest_full_ref`. It exists because the overwhelmingly common defect is an author (now
     usually a model) writing `repo#12` for a PR in the repository it is standing in, and the fix is
@@ -422,10 +442,9 @@ def _write_refusal(name: str, errors: list[str], slug: str) -> InvalidManifest:
     """
     detailed = []
     for error in errors:
-        _, _, got = error.partition("got ")
-        suggestion = core.suggest_full_ref(got.strip(), slug) if got else ""
+        suggestion = core.suggest_full_ref(core.offending_value(error), slug)
         detailed.append(f"{error} -- did you mean {suggestion}?" if suggestion else error)
-    return InvalidManifest(f"{name}: invalid manifest -- {'; '.join(detailed)}", detailed)
+    return InvalidManifest(_invalid_manifest(name, detailed), detailed)
 
 
 def write_manifest(repository_dir: str, manifest: dict, name: str) -> str:
@@ -461,7 +480,12 @@ def write_manifest(repository_dir: str, manifest: dict, name: str) -> str:
     """
     errors = core.validate(manifest)
     if errors:
-        raise _write_refusal(name, errors, repository_slug(repository_dir))
+        # THE SLUG IS RESOLVED ONLY WHEN A SUGGESTION IS POSSIBLE. `repository_slug` forks
+        # `git remote get-url` -- measured at 46.8ms -- and `_write_refusal` uses it only for errors
+        # carrying an offending value. A manifest rejected for `missing order`, `rows: not a list` or
+        # a duplicate ref pays that fork for nothing.
+        suggestible = any(core.offending_value(error) for error in errors)
+        raise _write_refusal(name, errors, repository_slug(repository_dir) if suggestible else "")
 
     directory = manifest_dir(repository_dir)
     os.makedirs(directory, exist_ok=True)

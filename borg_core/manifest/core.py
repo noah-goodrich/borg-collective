@@ -43,8 +43,17 @@ manufacture edges pointing at nothing. Those gates are counted and reported by u
 instead. The only machine-readable blocker channel is `gate.blocked_by_ref`, and validate requires it
 to parse as a full ref precisely so it can never become prose by accident.
 
-EVERY DECLARED REF MUST BE A FULL `owner/repo#number`, and validate is where that is surfaced.
-`rows[].ref`, `gate.blocked_by_ref`, every `after` entry and `apex.ref` all go through parse_ref.
+EVERY DECLARED REF IS HELD TO A VOCABULARY, and validate is where that is surfaced. The vocabulary is
+NOT the same at all four sites, and the asymmetry is deliberate rather than an oversight:
+
+  * `rows[].ref` accepts three kinds -- a GitHub PR, a Jira key, or an http(s) link (`refs.ref_kind`).
+    A chain describes a project, and a project has the ticket that asked for it and the document that
+    explains it, not only its pull requests.
+  * `apex.ref`, `gate.blocked_by_ref` and every `after` entry still require a full `owner/repo#number`
+    (parse_ref). These are EDGE ENDPOINTS, and an edge means "this merges before that" -- a question
+    only a ref with resolvable merge state can answer. So a Jira row can be declared but cannot yet be
+    another row's prerequisite. Deliberate MVP boundary, stated so nobody "fixes" it by widening the
+    endpoints without first deciding what an edge into a document would mean.
 A shorthand like `ingle#12` used to validate clean, load through discovery, and produce a node that
 AC3's targeted fetch cannot build (it renders `unknown`, which AC3 forbids) and that ref_slug cannot
 scope to any repository (so the row is invisible in its own repository's grid). parse_ref's contract
@@ -86,23 +95,47 @@ import re
 from typing import Any
 
 from borg_core.manifest import refs as _refs
+from borg_core.manifest.errors import (
+    _GOT_MARKER,
+    offending_value,
+    partition_errors,
+)
+from borg_core.manifest.refs import (
+    expects_github,
+    is_reference,
+    parse_ref,
+    ref_kind,
+    ref_slug,
+    slug_from_remote,
+    suggest_full_ref,
+    text as _text,
+)
+
+# Declared, not aliased: `__all__` tells ruff (F401) and pylint these are deliberate public surface
+# rather than unused imports. The `X as X` spelling satisfies ruff but pylint rejects it (C0414).
+__all__ = [
+    "expects_github",
+    "is_reference",
+    "offending_value",
+    "parse_ref",
+    "partition_errors",
+    "ref_kind",
+    "ref_slug",
+    "slug_from_remote",
+    "suggest_full_ref",
+]
 
 # RE-EXPORTED, NOT REIMPLEMENTED. The ref vocabulary moved to refs.py when this module crossed
-# C0302's ceiling; these aliases mean no caller, test or golden had to move with it. `core.parse_ref`
-# and `refs.parse_ref` are the SAME object -- there is no second definition to drift.
-# `_REF_RE` itself is deliberately NOT re-exported: it is private to refs.py, nothing outside that
-# module ever matched on it, and aliasing it here would have meant a protected-access bypass for a
-# name with no callers. Two docstrings mention it by name; both are prose, not imports.
-parse_ref = _refs.parse_ref
-ref_kind = _refs.ref_kind
-is_tracked = _refs.is_tracked
-GITHUB = _refs.GITHUB
-JIRA = _refs.JIRA
-LINK = _refs.LINK
-TRACKED_REF_KINDS = _refs.TRACKED_REF_KINDS
-ref_slug = _refs.ref_slug
-slug_from_remote = _refs.slug_from_remote
-suggest_full_ref = _refs.suggest_full_ref
+# C0302's ceiling; these mean no caller, test or golden moved with it, and `core.parse_ref` IS
+# `refs.parse_ref` -- no second definition to drift.
+#
+# IMPORTED, NOT ASSIGNED. `x = _refs.x` is a module-scope ATTRIBUTE READ, so every alias landed in
+# `test_module_reads_no_environment_or_clock_at_import_time`'s exact-set assertion -- a test about
+# clocks accumulating re-export names. An import produces no `ast.Attribute` node.
+#
+# ONLY NAMES WITH CALLERS (counted: 13, 7, 8, 2, 1, 1). The kind constants and `is_tracked` have zero
+# consumers through `core.` and are reached as `refs.X`. `_REF_RE` is private to refs.py, so aliasing
+# it would be a protected-access bypass for a name nothing outside that module matches on.
 
 
 # THE ROUTER'S VOCABULARY, NOT THE VALIDATOR'S. `decision` means a human must *choose*;
@@ -163,25 +196,15 @@ ORDERING_EDGE_KINDS = ("stacked", "blocks")
 _ORDER_DIGITS = re.compile(r"(\d+)")
 
 
-
-
 def _rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """The manifest's rows, or an empty list. Never raises on a malformed value."""
     rows = manifest.get("rows")
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
 
 
-def _text(value: Any) -> str:
-    """The module-wide coercion for every declared string field: `str(x or "").strip()`.
-
-    One definition rather than the same expression written twenty times, and load-bearing beyond
-    tidiness: a ref that reaches an edge endpoint stripped but reaches declared_refs unstripped would
-    be TWO different keys, so the targeted fetch would resolve one string while the graph keys on
-    another. Note the inherited numeric trap: an integer 0 becomes "" (and therefore sorts as a
-    prerequisite) while 1 becomes "1". No live manifest uses numeric orders; "fixing" it to
-    `str(x, "")` would also change None handling, so it is left as the port found it.
-    """
-    return str(value or "").strip()
+# `_text` is imported as refs.text above -- one definition, in the leaf that owns the vocabulary. See
+# its docstring for the stripping contract and the inherited integer-0 trap. The private spelling is
+# kept because thirty call sites in this module use it.
 
 
 def looks_like_manifest(doc: Any) -> bool:
@@ -234,7 +257,7 @@ def _validate_apex(apex: Any) -> list[str]:
     if parse_ref(ref) is None:
         # Same rule as every other declared ref: declared_refs feeds AC3's targeted fetch, and a
         # shorthand apex would render `unknown` forever. See the module docstring.
-        return [f"apex: ref must be a full ref (owner/repo#num), got {ref}"]
+        return [f"apex: ref must be a full ref (owner/repo#num){_GOT_MARKER}{ref}"]
     return []
 
 
@@ -262,7 +285,7 @@ def _blocked_by_ref_error(gate: dict[str, Any], ref: str, label: str) -> str:
     if not value:
         return ""
     if parse_ref(value) is None:
-        return f"{label}: gate.blocked_by_ref must be a full ref (owner/repo#num), got {value}"
+        return f"{label}: gate.blocked_by_ref must be a full ref (owner/repo#num){_GOT_MARKER}{value}"
     if value == ref:
         return f"{label}: gate.blocked_by_ref names its own ref {value}"
     return ""
@@ -322,7 +345,7 @@ def _after_entry_error(entry: Any, ref: str, label: str) -> str:
     reason-per-return is easier to extend anyway.
     """
     if not isinstance(entry, str):
-        return f"{label} must be a ref string, got {type(entry).__name__}"
+        return f"{label} must be a ref string{_GOT_MARKER}{type(entry).__name__}"
     value = entry.strip()
     if not value:
         return f"{label} is empty"
@@ -331,7 +354,7 @@ def _after_entry_error(entry: Any, ref: str, label: str) -> str:
         # which becomes a `stacked` edge whose parent is that literal string -- a parent no state
         # lookup can ever resolve, so the row leaves ready_set permanently while the query built
         # from declared_refs goes looking for prose.
-        return f"{label} must be a full ref (owner/repo#num), got {value}"
+        return f"{label} must be a full ref (owner/repo#num){_GOT_MARKER}{value}"
     if value == ref:
         return f"{label} names its own ref {value}"
     return ""
@@ -398,7 +421,7 @@ def _row_ref_error(ref: str, label: str) -> str:
     if not _refs.ref_kind(ref):
         return (
             f"{label}: ref must be a GitHub ref (owner/repo#num), a Jira key (PROJ-123) "
-            f"or an http(s) link, got {ref}"
+            f"or an http(s) link{_GOT_MARKER}{ref}"
         )
     return ""
 
@@ -453,61 +476,6 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     for i, row in enumerate(manifest["rows"]):
         errors.extend(_validate_row(row, i, seen))
     return errors
-
-
-_ROW_ERROR_PREFIX = "rows["
-
-
-def _row_error_index(error: str) -> int | None:
-    """The row index a validation message is scoped to, or None when it is not row-scoped.
-
-    STRING OPS RATHER THAN A REGEX, and not for speed. The obvious `re.match(r"^rows\\[(\\d+)\\]")`
-    form needs `int(match.group(1))`, which the clean-architecture plugin rejects as a Demeter chain
-    (W9006) -- caught by CI, where the plugin runs, and not by the local pylint. Splitting it into
-    two statements to appease the rule would leave a regex whose entire job is to extract one integer
-    from a prefix this module itself writes. `partition` says the same thing in less.
-
-    Reads BOTH label forms `_validate_row` produces: `rows[N]: ...` and `_validate_after`'s
-    `rows[N].after[M] ...`, which carries no colon after the bracket. Anything whose bracket contents
-    are not a plain integer is treated as NOT row-scoped, which fails safe -- an unparseable label
-    keeps the whole file rather than dropping a row nobody identified.
-    """
-    if not error.startswith(_ROW_ERROR_PREFIX):
-        return None
-    digits, closed, _ = error[len(_ROW_ERROR_PREFIX) :].partition("]")
-    if not closed or not digits.isdigit():
-        return None
-    return int(digits)
-
-
-def partition_errors(errors: list[str]) -> tuple[set[int], list[str]]:
-    """Split `validate`'s output into `(row indices at fault, errors that are not row-scoped)`.
-
-    LIVES HERE, NEXT TO THE FORMAT IT PARSES. `_validate_row` builds every row-scoped message from
-    `label = f"rows[{index}]"` -- both the `rows[N]: ...` form and `_validate_after`'s
-    `rows[N].after[M] ...` form -- and a caller that wants to drop a bad ROW rather than a whole FILE
-    has to know which errors are which. Putting the regex in `shell.py` would make the message format
-    an undeclared cross-module contract, which is the shape that breaks silently the first time
-    someone rewords an error string.
-
-    STRUCTURAL ERRORS ARE EVERYTHING ELSE, and they are correctly not row-scoped: `rows: missing or
-    not a list` describes the container, and `apex: ...` describes a sibling key. Neither has a
-    partial answer -- there is no subset of the file you could keep and still be describing what the
-    author wrote.
-
-    Returns indices as a SET because two errors routinely name one row (a gate declaring neither
-    `blocked_by` nor `resolved_by` trips both), and the caller wants rows to drop, not errors to
-    count.
-    """
-    bad_rows: set[int] = set()
-    structural: list[str] = []
-    for error in errors:
-        index = _row_error_index(error)
-        if index is None:
-            structural.append(error)
-        else:
-            bad_rows.add(index)
-    return bad_rows, structural
 
 
 def _sort_key(row: dict[str, Any], index: int) -> tuple[int, int, int]:
@@ -944,10 +912,24 @@ def ready_set(manifest: dict[str, Any], states: dict[str, Any]) -> list[str]:
     A PARENT OUTSIDE THIS MANIFEST is still a parent. `after` and `blocked_by_ref` may both name refs
     no row declares, and those are valid input, not errors. Such a parent is looked up in `states`
     exactly like any other: known-merged unblocks the row, anything else (including absent) does not.
+
+    A REFERENCE PARENT IS SKIPPED, AND THIS IS THE ONLY PLACE THE TRACKED/REFERENCE SPLIT HAS TEETH.
+    A `link` row (a Notion page, a Google Doc, an uploaded asset) has no resolvable state, so
+    `_state_of` returns unknown for it forever and the `all(... == STATE_MERGED)` test below would be
+    permanently False -- meaning a chain that puts its own spec document in a lane would report
+    NOTHING ready, for as long as the document exists. Measured before this line was added: a
+    three-row chain with a Notion link at order 1 returned `[]`; removing the link row returned the
+    PR. The predicate is `refs.is_reference`, NOT `not is_tracked`: the latter is also true of a ref
+    of no known kind, and a malformed `after: ["#149"]` must keep wedging its row rather than quietly
+    unblocking it -- that is this function's own "unknown is not merged" rule, and skipping unknowns
+    would invert it. Adding a source is a change in refs.py alone.
+
+    THE ROW ITSELF NEEDS NO GUARD. An untracked ref has no state, so the `!= STATE_OPEN` test above
+    already excludes it from being announced as ready -- a document is not work you can pick up.
     """
     parents: dict[str, list[str]] = {}
     for edge in derive_edges(manifest):
-        if edge["kind"] in ORDERING_EDGE_KINDS:
+        if edge["kind"] in ORDERING_EDGE_KINDS and not _refs.is_reference(edge["parent"]):
             parents.setdefault(edge["child"], []).append(edge["parent"])
 
     ready = []
