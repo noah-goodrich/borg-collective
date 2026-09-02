@@ -246,10 +246,17 @@ def test_manifest_load_order_within_a_repository_is_sorted_by_filename(tmp_path)
 
 
 def test_multiple_repositories_are_all_swept(tmp_path):
+    # WARNINGS ARE ASSERTED HERE, not discarded. A clean multi-repository sweep is the whole of what
+    # evals/s4-k3/run.sh's E1 checked before it was deleted 2026-09-02, and E1 asserted the
+    # conjunction -- both manifests AND `warnings == []`. This case had the count but threw the
+    # warnings away as `manifests, _`, so the eval was not in fact redundant until the conjunct
+    # landed here. Two temp directories, no git and no network, which is why this is the right home
+    # for it and a second real repository on disk never was.
     a = _write_manifest(tmp_path, "a", "x.json", _manifest([_row("1", "o/a#1")]))
     b = _write_manifest(tmp_path, "b", "y.json", _manifest([_row("1", "o/b#1")]))
-    manifests, _ = shell.discover([a, b])
+    manifests, warnings = shell.discover([a, b])
     assert len(manifests) == 2
+    assert warnings == []
 
 
 def test_discovering_nothing_is_not_an_error(tmp_path):
