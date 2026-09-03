@@ -94,11 +94,20 @@ spine:
 	python3 merge-tree/spine.py
 
 # ── AC6: the eval harness ────────────────────────────────────────────────────────────────────────
-# `make eval` IS THE SAFE ONE. It forwards --skip-model, so it runs only the cases that need no
-# headless model run. The full sweep, which spends money and needs an authenticated `gh`, is opt-in
-# as `make eval-live`. That way round is deliberate: the target a CI clause names must not be the
-# one that reaches the network, or CI acquires a network dependency by default and the offline
-# guarantee becomes a matter of remembering a flag.
+# `make eval` IS THE SAFE ONE, AND SAFE NOW MEANS OFFLINE RATHER THAN MERELY MODEL-FREE. It forwards
+# both --skip-model and --skip-network, so it runs only the cases that need neither a headless model
+# run nor the wire. The full sweep, which spends money and needs an authenticated `gh`, is opt-in as
+# `make eval-live`, which clears EVAL_ARGS as it always did. That way round is deliberate: the
+# target a CI clause names must not be the one that reaches the network, or CI acquires a network
+# dependency by default and the offline guarantee becomes a matter of remembering a flag.
+#
+# --skip-network IS THE HALF THAT WAS MISSING, and its absence made the sentence above false of the
+# very target it describes. --skip-model alone still left E2 shelling one `gh pr view` per declared
+# ref and E3 fanning `borg recon` over the github adapter, so with `gh` authenticated and the wire
+# down `make eval` exited non-zero and named three manifest rows as unresolved — a transport failure
+# reported as a data defect, which is the conflation E2's own comment forbids for the 401 case. The
+# safe/live split is therefore offline-vs-everything; "model-free" was never the property the CI
+# clause needed.
 #
 # AC6's verify clause named `make eval --skip-model`, which exits 2 whatever this file contains:
 # make's getopt consumes any leading-dash word anywhere in argv before a goal is built, so the word
@@ -111,17 +120,82 @@ spine:
 #
 # `found`, not `[ -d evals ]`: the guard has to be on the GLOB. With no nullglob, a directory that
 # exists but holds no run.sh passes a directory test and then hands the literal pattern to bash.
-EVAL_ARGS ?= --skip-model
+#
+# THE SELECTION FLOOR: `found` at 0 is a FAILURE, not a no-op. This recipe used to print "nothing to
+# eval" and then run `test "$failed" -eq 0`, so a tree where the glob selected no harness reported
+# exactly the shape of a tree whose every harness ran and found nothing wrong. That is the recorded
+# reason AC6's "deterministic cases green in CI" sat at zero members across three checkpoints with
+# nobody noticing -- there is no reading of green that means "selected nothing", and a target whose
+# entire job is to run the harnesses has failed at that job when it runs none. The reason goes to
+# STDERR, where whoever is reading a red gate's log will find it, and it sets `failed` rather than
+# exiting, so the aggregate-don't-abort design above governs this failure like any other. The other
+# floor -- a harness that WAS selected, ran, and executed no case -- deliberately is not here:
+# run.sh owns it, on the usual principle that the artifact implementing a command owns its
+# invariant.
+#
+# EVAL_ARGS IS VALIDATED BEFORE IT IS FORWARDED, because a documented extension point must not also
+# be a channel for a green run that ran nothing. Two rejections, both word-by-word over the value.
+# ("Forwarded", not "spliced": splicing is precisely what this recipe stopped doing, for the reason
+# the environment paragraph below gives.)
+#
+# `-h` and `--help` AS WHOLE WORDS. The harness's own flag loop honours them: it prints usage and
+# exits 0 before a single counter increments or any execution floor runs, so `make eval
+# EVAL_ARGS=--help` reported SUCCESS for a run that verified nothing -- the same fact the selection
+# floor below exists to catch, arriving through the front door instead of through an empty glob.
+# Matched as whole words and never as a substring, or a future `--with-hooks` would be refused for
+# containing an `h` sequence nobody meant to type.
+#
+# ANY WORD CONTAINING A SHELL METACHARACTER. Unquoted word splitting is how one variable carries
+# several flags, so the expansion cannot simply be quoted -- that would make EVAL_ARGS a single
+# argument and break the multi-flag default above. A `;` in the value therefore used to terminate
+# `bash "$r" ...` and detach the harness's exit status from `|| failed=1`, leaving `failed` a report
+# on whatever ran last.
+#
+# THE VALUE REACHES THE RECIPE THROUGH THE ENVIRONMENT (`export EVAL_ARGS`, read as `$$EVAL_ARGS`)
+# AND NOT AS SPLICED RECIPE TEXT, which is what makes the check above reachable at all. With
+# `$(EVAL_ARGS)` written into the recipe, make substitutes before /bin/sh parses, so a value holding
+# a `;` broke the VALIDATOR'S OWN `for` statement: `make eval EVAL_ARGS='--bogus; true'` died on a
+# shell syntax error before any word was inspected, non-zero but unnamed, which is precisely the
+# "green run that ran nothing" shape one layer up. Measured on this change, not theorised. Through
+# the environment the value is data the whole way: word splitting still yields the several flags,
+# a metacharacter is an ordinary character inside a word, and the rejection can name it.
+#
+# WHAT THE `$` REJECTION DOES NOT COVER, because nothing in a recipe can: make expands `$(...)` and
+# `${...}` in a command-line assignment while parsing it, long before this recipe exists, so
+# `make eval EVAL_ARGS='--x$(id)'` arrives here already collapsed to `--x` (an undefined make
+# variable, hence empty). The check therefore governs a `$` that SURVIVES to the shell, not make's
+# own expansion. That is safe rather than merely unreachable: the collapsed word is not a flag the
+# harness knows, so run.sh's own `*) unknown flag` arm exits 2 and the run is red -- measured. The
+# failure mode this whole block exists to prevent is a GREEN run that ran nothing, and make's
+# expansion cannot produce one.
+EVAL_ARGS ?= --skip-model --skip-network
+export EVAL_ARGS
 
 eval:
-	@failed=0; found=0; \
+	@bad_arg=''; \
+	for a in $$EVAL_ARGS; do \
+		case "$$a" in \
+			-h|--help) \
+				bad_arg="$$a exits the harness before its counters and floors run";; \
+			*';'*|*'&'*|*'|'*|*'`'*|*'$$'*|*'('*|*')'*|*'<'*|*'>'*|*'"'*|*"'"*|*'\'*) \
+				bad_arg="$$a contains a shell metacharacter";; \
+		esac; \
+	done; \
+	if [ -n "$$bad_arg" ]; then \
+		echo "refusing EVAL_ARGS: $$bad_arg" >&2; \
+		exit 1; \
+	fi; \
+	failed=0; found=0; \
 	for r in evals/*/run.sh; do \
 		[ -e "$$r" ] || continue; \
 		found=1; \
-		echo "== $$r $(EVAL_ARGS)"; \
-		bash "$$r" $(EVAL_ARGS) || failed=1; \
+		echo "== $$r $$EVAL_ARGS"; \
+		bash "$$r" $$EVAL_ARGS || failed=1; \
 	done; \
-	if [ "$$found" -eq 0 ]; then echo "no evals/*/run.sh present -- nothing to eval"; fi; \
+	if [ "$$found" -eq 0 ]; then \
+		echo "no evals/*/run.sh present -- nothing was selected, so nothing was eval'd" >&2; \
+		failed=1; \
+	fi; \
 	test "$$failed" -eq 0
 
 eval-live:
