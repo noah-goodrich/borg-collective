@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# THE ORACLE FOR AC6'S FLOORS — EVERY ONE OF THEM, EACH IN A POSITIVE/NEGATIVE PAIR. Seven floors
+# THE ORACLE FOR AC6'S FLOORS — EVERY ONE OF THEM, EACH IN A POSITIVE/NEGATIVE PAIR. Six floors
 # live across two artifacts at three altitudes:
 #
 #   Makefile `eval`   SELECTION     a glob that selects no harness is a FAILURE, not a no-op
@@ -34,7 +34,7 @@
 # half-covered version of this file then asserted the general principle while naming oracles for
 # half the floors. So a new floor lands WITH its pair, or it lands unobserved.
 #
-# TWELVE CASES. Each floor is checked in the firing direction AND in the direction that proves it
+# TEN CASES. Each floor is checked in the firing direction AND in the direction that proves it
 # discriminates, because a floor asserted only firing passes just as well for an artifact that
 # always fails:
 #    1  selection FIRES      -- no `evals/` at all, plus the subtler shape the recipe argues about:
@@ -46,16 +46,28 @@
 #    5  global HOLDS         -- the same offline invocation, with an interpreter it can use
 #    6  network mode FIRES   -- `--skip-model` only (so the sweep IS requested) with `gh` hidden
 #    7  network mode HOLDS   -- the same invocation against a stub `gh` and one declared ref
-#    8  model mode FIRES     -- `--skip-network` only with `claude` hidden
-#    9  model mode HOLDS     -- the same invocation against a stub `claude` and a manifest-less repo
-#   10  E2a count            -- a selection one short of the authored minimum fails naming the
+#    8  E2a count            -- a selection one short of the authored minimum fails naming the
 #                               shortfall; the full count exits 0
-#   11  E2a outcome          -- a full selection with one test collected-but-skipped fails naming
+#    9  E2a outcome          -- a full selection with one test collected-but-skipped fails naming
 #                               it; the same sandbox without the marker exits 0
-#   12  $REPO checkout guard -- a $REPO with no tracked root marker is refused BY NAME and a canary
+#   10  $REPO checkout guard -- a $REPO with no tracked root marker is refused BY NAME and a canary
 #                               planted where `$OUT` would be SURVIVES; the same invocation against
 #                               a $REPO that does carry the marker gets past the guard and deletes
 #                               that canary
+#
+# IT WAS THIRTEEN CASES COVERING SEVEN FLOORS UNTIL 2026-09-03, and BOTH numbers were wrong in
+# opposite directions, which is worth recording rather than quietly correcting. The file said
+# TWELVE while `bats` printed `1..13`: a thirteenth case (the guarded array expansion) had landed
+# without updating this header, PROJECT_PLAN.md's two assertions, or the three other places in this
+# file that counted. That is the doc-vs-tree drift this repository keeps re-learning, and it is why
+# the count now sits in exactly one place per artifact.
+#
+# Then the model-mode pair (old 8 and 9) and the array case (old 13) were REMOVED, because the
+# floor and the idiom they oracle both left this tree with E4/E5 on 2026-09-03 -- see the tombstone
+# in `evals/s4-k3/run.sh`. Removing a case whose subject is gone is not a coverage loss; keeping it
+# would have been a permanent red asserting a floor no longer capable of firing. The array-expansion
+# invariant is NOT dropped, it MOVED: `claude-plugins/evals/pr-description/floor-tests.sh` owns it
+# now, in the harness that still expands an optional prefix. Six floors remain here.
 #
 # WHY THE MODE FLOORS HAD NO ORACLE FOR AS LONG AS THEY DIDN'T. Every automated caller invokes the
 # harness in OFFLINE mode (`--skip-model --skip-network`) -- that is what `make eval` forwards and
@@ -113,7 +125,7 @@
 # `bats tests/*.bats` picks this file up by existing, so no new CI job is added: `make eval` is not,
 # and must not become, a sixth job -- the harness's one always-runnable case is a pytest selection
 # the `python` job already collects. But that job installed `zsh jq fzf` and nothing else, and SEVEN
-# of the twelve cases below cannot run without an importable pytest. They used to `skip` for it, and
+# of the ten cases below cannot run without an importable pytest. They used to `skip` for it, and
 # bats prints `ok` for a skip: the one lane that gates these floors reported 11/11 GREEN having
 # executed FOUR cases, so deleting either mode-floor block, the count floor or the outcome floor
 # turned nothing red in CI. Reproduced in a CI-shaped sandbox (`rsync -a --exclude .venv --exclude
@@ -801,119 +813,7 @@ STUB
     [ "$harnesses" -gt 0 ]
 }
 
-# ── 8. the model-mode floor fires ────────────────────────────────────────────────────────────────
-# `--skip-network` ALONE, the mirror of case 6 and unreachable from every gate for the same reason.
-# The refutation of the NETWORK reason is the load-bearing half here: it is what proves the two
-# floors are independently wired to their own flag, rather than one condition that fires whenever
-# any flag is missing.
-@test "evals/*/run.sh: the model-mode floor fires when the sweep is asked for and claude is absent" {
-    local allow python sandbox harness harnesses=0
-    python="$(_python_with_pytest)"
-    allow="$(_allowlist_bin)"
-    sandbox="$(_eval_sandbox_repo)"
-    _refute_resolvable "$allow" "${_EVAL_HIDDEN_NETWORK[@]}" "${_EVAL_HIDDEN_OFFLINE[@]}"
-
-    for harness in "$BORG_HOME"/evals/*/run.sh; do
-        if [ ! -e "$harness" ]; then
-            continue
-        fi
-        harnesses=$((harnesses + 1))
-        _run_harness "$allow" "$sandbox" "$python" "" "" "$harness" --skip-network
-        [ "$status" -ne 0 ]
-        [[ "$output" == *"the model sweep was requested but no model case executed"* ]] || false
-        [[ "$output" != *"nothing was verified"* ]] || false
-        [[ "$output" != *"the network sweep was requested"* ]] || false
-        # WHY nothing executed, named: the model cases skipped for the input this case hid, not for
-        # some unrelated collapse that also happens to leave the counter at zero.
-        [[ "$output" == *"claude is not on PATH"* ]] || false
-        [[ "$output" == *"PASS"* ]] || false
-    done
-
-    [ "$harnesses" -gt 0 ]
-}
-
-# ── 9. the model-mode floor discriminates ────────────────────────────────────────────────────────
-# The negative for case 8. It runs E5, the fallback case, whose entire input set is "a `claude` on
-# PATH and a directory with no manifest in it" -- both of which a bats temp dir supplies exactly as
-# well as a real repository does, which is E5's own comment's point.
-#
-# E4 IS NOT REACHABLE HERMETICALLY AND IS NOT FAKED. It hardcodes a worktree at
-# `/tmp/s4-eval-stillpoint`, `git fetch`es a named branch from `origin`, and copies a specific
-# manifest out of the second repository; driving it would mean writing outside BATS_TEST_TMPDIR at a
-# fixed path two concurrent runs would collide on. It skips here for the input it genuinely lacks,
-# which is the correct behaviour and is asserted. The floor is PER MODE and not per case -- the
-# harness's counters say so in their own declaration -- so one executed model case is exactly what
-# satisfies it, and E5 is that case.
-#
-# `gtimeout` IS DELIBERATELY NOT STUBBED, AND THAT IS THIS CASE'S SECOND SUBJECT. The harness builds
-# `TIMEOUT=()` when no `gtimeout` exists, and bash before 4.4 -- the 3.2 that macOS ships, the machine
-# of record -- treats an empty array expansion under `set -u` as an unbound variable and kills the
-# subshell. Expanded bare, E5 died with `TIMEOUT[@]: unbound variable` before its redirect opened, so
-# the following grep read a missing file and the case reported FAIL for a reason unrelated to what it
-# asserts. The harness now expands the guarded `${TIMEOUT[@]+"${TIMEOUT[@]}"}` form, and leaving
-# `gtimeout` absent is what makes THIS case execute the empty branch that used to crash: revert either
-# expansion site to the bare form and this case goes red on bash 3.2.
-#
-# An earlier draft stubbed `gtimeout` to force the POPULATED branch, on the reasoning that it made the
-# case deterministic rather than bash-version-dependent. It did -- and it also meant the branch that
-# actually crashed was executed by nothing in the tree, so the guard could be "simplified" back with
-# all twelve cases green. That stub's own comment said to delete it once the harness stopped expanding
-# an unguarded empty array. The harness stopped; this is the deletion.
-#
-# This oracle only bites where the bug exists, i.e. bash < 4.4, so it guards the developer's machine
-# and the local `bats tests/*.bats` run, NOT the ubuntu lane, where the bare form is legal. Case 12b
-# carries the platform-independent half as a static assertion for exactly that reason; neither
-# replaces the other.
-@test "evals/*/run.sh: the model-mode floor holds when a model case can execute" {
-    local allow python sandbox stubs troth harness harnesses=0
-    python="$(_python_with_pytest)"
-    allow="$(_allowlist_bin)"
-    sandbox="$(_eval_sandbox_repo)"
-    stubs="$(_stub_dir)"
-    troth="${BATS_TEST_TMPDIR}/manifest-less-repo"
-    mkdir -p "$troth"
-    _refute_resolvable "$allow" "${_EVAL_HIDDEN_NETWORK[@]}" "${_EVAL_HIDDEN_OFFLINE[@]}"
-
-    # E5 greps its stdout for the fallback sentence, so that sentence is the whole stub. Matched on
-    # the ARGV the harness passes rather than answering anything: a stub that replied to every
-    # invocation would keep this case green after a change that stopped asking for /pr-description.
-    _stub_bin "$stubs" claude <<'STUB'
-#!/bin/sh
-case "$*" in
-    *"/pr-description"*) echo "No manifest declared." ;;
-    *) echo "unexpected claude invocation: $*" >&2; exit 3 ;;
-esac
-STUB
-    # NO `gtimeout` STUB, and none is coming -- see this case's header. Its absence is what drives the
-    # harness's empty-array branch, which is the branch that crashed on bash 3.2. Refuting it here
-    # rather than assuming it: `gtimeout` is on the hidden list, so a runner that happens to carry one
-    # cannot silently move this case onto the populated branch and take the coverage away again.
-    _refute_resolvable "$stubs:$allow" gtimeout timeout
-    _assert_stubbed "$stubs:$allow" "$stubs" claude
-
-    for harness in "$BORG_HOME"/evals/*/run.sh; do
-        if [ ! -e "$harness" ]; then
-            continue
-        fi
-        harnesses=$((harnesses + 1))
-        _run_harness "$stubs:$allow" "$sandbox" "$python" "" "$troth" "$harness" --skip-network
-        [ "$status" -eq 0 ]
-        [[ "$output" != *"the model sweep was requested"* ]] || false
-        # A MODEL CASE REALLY RAN. The stub was found (so no "not on PATH" skip), it was asked for
-        # the right thing (so no "unexpected" line), and the case reported its own PASS label --
-        # which exit 0 alone would not distinguish from a deleted floor over a fully skipped sweep.
-        [[ "$output" == *"E5 fallback line present"* ]] || false
-        [[ "$output" != *"claude is not on PATH"* ]] || false
-        [[ "$output" != *"unexpected claude invocation"* ]] || false
-        # E4's absent input is reported as absent, not as wrong -- the distinction the harness's
-        # header is built around, and the reason this case can be green with no second repository.
-        [[ "$output" == *"E4 chain position: needs the second repository"* ]] || false
-    done
-
-    [ "$harnesses" -gt 0 ]
-}
-
-# ── 10. the E2a count floor has an oracle, in both directions ────────────────────────────────────
+# ── 8. the E2a count floor has an oracle, in both directions ────────────────────────────────────
 # THE FLOOR THAT CATCHES A GATE SILENTLY EMPTIED RATHER THAN BROKEN. `-k e2a` is a contract with the
 # test NAMES, and both ways of breaking it land on this one floor: rename ALL of them and the
 # collected count is 0, which the floor reports as `selected 0 of N authored` without ever running
@@ -968,7 +868,7 @@ STUB
     [ "$harnesses" -gt 0 ]
 }
 
-# ── 11. the E2a executed-outcome floor has an oracle, in both directions ─────────────────────────
+# ── 9. the E2a executed-outcome floor has an oracle, in both directions ─────────────────────────
 # THE FLOOR THE COUNT FLOOR CANNOT COVER, and the one the exit code is blind to. A selection can
 # meet the minimum, pytest can exit 0, and the tests can still not have RUN: a `skip` marker, a
 # collection-time short-circuit, an `xfail` -- all collected, none executed as a pass, rc 0
@@ -1016,7 +916,7 @@ STUB
     [ "$harnesses" -gt 0 ]
 }
 
-# ── 12. the checkout guard in front of `rm -rf "$OUT"`, in both directions ───────────────────────
+# ── 10. the checkout guard in front of `rm -rf "$OUT"`, in both directions ───────────────────────
 # NOT A FLOOR, AND THE CASE WITH THE WORST FAILURE MODE IN THE FILE ANYWAY. Every floor above fails
 # SILENT; this guard fails DELETING. `$OUT` is derived as `$REPO/<...>/out` and the harness `rm -rf`s
 # it on every run so a stale artifact cannot read as a fresh PASS, which makes `$REPO` -- i.e.
@@ -1093,57 +993,3 @@ STUB
     [ "$harnesses" -gt 0 ]
 }
 
-# ── 13. the guarded array expansion has a platform-independent oracle ────────────────────────────
-# THE ONLY STATIC ASSERTION IN THIS FILE, AND IT IS EARNED. Case 9 executes the harness's empty-array
-# branch -- the branch that crashed -- but it can only FAIL where the bug exists, i.e. bash before 4.4,
-# the macOS developer machine. On the ubuntu lane that runs `bats tests/*.bats` the bare form is
-# perfectly legal, so "simplifying" the guard would sail through CI and land the crash on the one
-# machine no lane covers. That is CLAUDE.md's "a test's PREMISE can depend on the dev platform" class
-# with the platforms swapped: the green lane is the one where the premise holds. Reading the SOURCE is
-# the only gate that fires on both, and it is the honest trade -- a behavioural case cannot assert this
-# on bash 5, because bash 5 has no defect to observe.
-#
-# SCOPED TO THE OPTIONAL PREFIX ARRAY, NOT TO EVERY ARRAY, because "can this be empty" is not
-# statically knowable and a blanket rule is wrong: `REPOS` is seeded with one element before it is
-# ever expanded and `programs_dir_args` is built from it inside a branch that requires two, so both
-# are correctly bare. Only the timeout prefix is legitimately EMPTY, which is what makes it the one
-# expansion the guard is for.
-#
-# ARITHMETIC, NOT PATTERN SURGERY. The guarded form contains the bare form as its own default value,
-# and the comment above it quotes both spellings in prose, so a naive grep for the bare shape matches
-# the guard and its own documentation -- measured, three false positives on the first attempt. Instead:
-# every legitimate mention in CODE is either the guard's test (`[@]+`) or the inner expansion that
-# immediately follows it, so a correct file has exactly TWICE as many `TIMEOUT[@]` occurrences as
-# `TIMEOUT[@]+` ones. A bare expansion adds one to the left side only.
-@test "evals/*/run.sh: the optional prefix array is never expanded bare" {
-    local harness harnesses=0 total guarded
-
-    for harness in "$BORG_HOME"/evals/*/run.sh; do
-        if [ ! -e "$harness" ]; then
-            continue
-        fi
-        harnesses=$((harnesses + 1))
-
-        # `grep -c` RETURNS 1 ON ZERO MATCHES, so neither count may be the last command whose status
-        # is read -- the trap that once reported a bats run of 774 ok as a failure. Captured through
-        # `|| true`, defaulted, then compared as their own statements.
-        total="$(grep -v '^[[:space:]]*#' "$harness" | grep -o 'TIMEOUT\[@\]' | grep -c . || true)"
-        guarded="$(grep -v '^[[:space:]]*#' "$harness" | grep -o 'TIMEOUT\[@\]+' | grep -c . || true)"
-        total="${total:-0}"
-        guarded="${guarded:-0}"
-
-        # THE DISCRIMINATOR, and it must come first. Asserting only the ratio would also hold for a
-        # harness that expands no prefix at all (0 == 2*0), which is what this case would silently
-        # become if the model cases were rewritten or the array renamed. Requiring a guarded site to
-        # EXIST means the thing being protected is still there for the protection to mean anything.
-        [ "$guarded" -gt 0 ]
-
-        if [ "$total" -ne $((2 * guarded)) ]; then
-            echo "bare TIMEOUT[@] expansion in $harness ($total mentions, $guarded guarded):" >&2
-            grep -vn '^[[:space:]]*#' "$harness" | grep 'TIMEOUT\[@\]' >&2 || true
-            false
-        fi
-    done
-
-    [ "$harnesses" -gt 0 ]
-}
