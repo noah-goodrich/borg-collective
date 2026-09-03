@@ -145,9 +145,11 @@ e2e/eval harness that keeps it honest.
   - Verify: eval cases run each skill headless against a fixture repository and grade the emitted manifest; each
     positive case is paired with a negative case proving the conditional discriminates (see `evals/s4-k3/run.sh` E4/E5).
 - [ ] **AC6 — e2e/eval harness MVP.** Generalize the `evals/s4-k3/run.sh` pattern into a reusable convention: a
-      `make eval` target, deterministic cases green in CI, model-dependent cases behind `make eval-live`, every
-      positive case paired with a negative. The session-load case — a fresh session registers each skill exactly
-      once and fires its hooks — is deferred to a parented directive, not built here; see decision (6).
+      `make eval` target, deterministic cases green in CI, model-dependent cases behind `make eval-live`. Two
+      clauses that sat here are deferred rather than gated, both because no clause this AC names could fail for
+      them: the session-load case — a fresh session registers each skill exactly once and fires its hooks — goes to
+      a parented directive (decision (6)), and the positive/negative pairing convention moves into the harness
+      headers where it can be read against the cases it governs, with E2 as its named exception (decision (7)).
   - Verify: three gates, each pointing at something that actually runs. **CI** — `make test` green in the `python`
     job, which collects the offline E2a case (`borg_core/manifest/test_shell.py`'s `e2a` tests: the eight structural
     ref properties over a two-repository tree, plus an exact authored edge count), together with `bats tests/*.bats`
@@ -171,7 +173,7 @@ e2e/eval harness that keeps it honest.
     asked for — a case whose inputs are absent on this machine has not failed. The floors exist because an empty
     gate and a passing gate print the same thing, which is why "deterministic cases green in CI" sat at zero members
     across three checkpoints unnoticed.
-  - **Six decisions ratified 2026-09-02**, after the original verify clause was found unsatisfiable for a second and
+  - **Seven decisions ratified 2026-09-02**, after the original verify clause was found unsatisfiable for a second and
     larger reason.
   - **(1) The CI clause names `make test`, not `make eval`.** NO CI JOB RUNS `make eval` — verified against
     `.github/workflows/test.yml`, whose five jobs are `lint` (shellcheck over `hooks/`, `lib/` and `evals/*/run.sh`),
@@ -233,12 +235,16 @@ e2e/eval harness that keeps it honest.
     `selected 0 of 15 authored` and a fourteen-of-fifteen rename reads `selected 1 of 15`: one mechanism, both
     sizes. The partial size is the one a non-zero floor could never see — renaming fourteen leaves `-k e2a`
     selecting one, pytest exiting 0, and the case printing PASS over a gate that has lost all but one assertion.
-    **rc 5 is belt-and-braces, and crediting it as the guard against renaming was wrong.** The count floor runs
-    FIRST and the pytest RUN sits in its else-branch, so a selection that would make pytest exit 5 (no tests
-    selected) has already failed the count and never reaches the arm — measured by forcing the collection down to
-    one node, which prints the count floor's FAIL and no pytest line at all. The arm stays as defence in depth,
-    because rc 5 otherwise reads as an ordinary failure and it still catches the one shape a collection count
-    cannot: a COLLECT phase and a RUN phase that disagree about what `-k e2a` selects. **The third door is
+    **THERE IS NO rc-5 ARM, AND ONE MUST NOT BE ADDED BACK.** The count floor runs FIRST and the pytest RUN sits
+    in its else-branch, so a selection that would make pytest exit 5 (no tests selected) has already failed the
+    count and never reaches a run — measured by forcing the collection down to one node, which prints the count
+    floor's FAIL and no pytest line at all. The arm was unreachable for every value the minimum can hold, and no
+    oracle could ever cover it (the count-floor case can only assert its string is ABSENT), so it was deleted
+    rather than reworded a third time; `evals/s4-k3/run.sh` says so at the floor. An rc 5 that arrives anyway means
+    the whole selection was renamed BETWEEN the two pytest invocations, milliseconds apart — a race, not a
+    control-flow path — and the generic `pytest exited N` arm still reports it as a FAIL with the rc named and an
+    evidence file reading "no tests ran". That shape is REPORTED, not discriminated, and the difference is only a
+    nicer sentence in an unobservable window. **The third door is
     HOLLOWING, and the count floor structurally cannot see it, because a skipped test is still a COLLECTED test.**
     Measured this round against the harness as it stood before the fix: with every selected test carrying a skip
     marker, pytest printed `15 skipped, 87 deselected` and exited 0, the collection still counted 15, and the
@@ -255,9 +261,10 @@ e2e/eval harness that keeps it honest.
     `-o xfail_strict=true` closes the one door the XML alone cannot see, since a non-strict xpass renders
     byte-identically to a pass while under strictness it becomes a `<failure>` at non-zero rc. Re-measured against
     the same mutant after the floor landed: `FAIL E2a contract: 15 collected but not all executed (0 passed, ...)`
-    at rc 1, beside the control's `PASS E2a contract: pytest green (15 of 15 executed as passes)` at rc 0. So each
-    door has its own mechanism — emptied and shrunk are the count floor's, collect-versus-run disagreement is
-    rc 5's, hollowed is the outcome floor's. What E2a deliberately does NOT cover: whether a ref RESOLVES on GitHub
+    at rc 1, beside the control's `PASS E2a contract: pytest green (15 of 15 executed as passes)` at rc 0. So the
+    three doors are closed by TWO mechanisms, not three: emptied and shrunk are both the count floor's, hollowed is
+    the outcome floor's, and the collect-versus-run race is reported by the generic arm rather than owned by one.
+    What E2a deliberately does NOT cover: whether a ref RESOLVES on GitHub
     is one bit per ref that no committed artifact can establish, since a frozen recording asserts only "it existed
     at T", so that claim stays in E2 behind `make eval-live`.
   - **(5) A floor with no oracle is the defect class the floor exists to prevent — so the floors are COUNTED here,
@@ -284,7 +291,9 @@ e2e/eval harness that keeps it honest.
     negative is a one-token edit of the positive and a discriminator living in a neighbouring case is not a
     discriminator for this one: the `EVAL_ARGS` validator refuses `--help` and a metacharacter word BY NAME while
     asserting the harness never ran at all, then admits an EXPLICIT offline value — distinct from the default the
-    selection negative exercises, since only a typed value reaches the validator's loop; the COUNT floor fails a
+    selection negative exercises, since a typed override is the only shape that reaches the validator's loop with
+    something a USER wrote (the exported default is validated by the same loop, which is why the admitting half is
+    needed at all: without it the validator would be credited for refusing everything); the COUNT floor fails a
     selection one test short naming both numbers, then exits 0 on the same synthetic sandbox one test richer; the
     OUTCOME floor fails a full selection carrying one collected-but-skipped test, then exits 0 on the same sandbox
     without the marker. The twelfth case is nobody's floor: it oracles the `$REPO` checkout guard sitting in front
@@ -337,8 +346,21 @@ e2e/eval harness that keeps it honest.
     whose negative ("a skill registered twice") requires mutating an install. So it is filed rather than gated, in
     the same voice AC7 uses for the rename it defers: to be filed as
     `docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md`, carrying a
-    `*Parent plan:*` line back here. Filing is the remaining action — this round's change owns `PROJECT_PLAN.md`
-    only, so that file is not yet on disk, and AC6 does not tick until it is.
+    `*Parent plan:*` line back here. Filing is the remaining action: the directive file is deliberately not written
+    as part of this change, so it is not yet on disk, and AC6 does not tick until it is.
+  - **(7) The pairing convention moves out of the criterion body for the same reason, and E2 is its named
+    exception.** "Every positive case paired with a negative" sat beside the session-load clause and has the
+    identical defect decision (6) rejects it for: no gate this AC names can go red for it. Nothing in the tree
+    counts pairs or checks pairing, and giving it a gate would mean a harness declaring its own pair structure —
+    meta-machinery whose failure mode is a stale declaration, which is the class this whole amendment exists to
+    stop adding. It is also not universally satisfiable, and that is the more useful fact: E2 asks whether a
+    declared ref RESOLVES on GitHub, a claim about the present state of a system this repository does not own, and
+    its negative would have to be a ref that reliably does NOT resolve — an artifact nobody can commit, since a
+    dead ref today may be a live one tomorrow. So pairing stays where it can be read against the cases it governs,
+    in `evals/s4-k3/run.sh`'s header and in `tests/eval_floor.bats`'s, as a convention every case there does in
+    fact honour; the criterion body no longer asks for what no clause can fail for. The distinction to keep: a
+    convention documented next to its instances is checkable by a reader, while a criterion nothing gates is
+    checkable by nobody.
 - [ ] **AC7 — "Program" is gone, and nothing breaks.** Eliminated from user-facing surfaces, skills, help text, and
       `merge-tree/`. The repository-side rename is filed as a parented directive, not executed. Suites green and
       coverage holds its floor.

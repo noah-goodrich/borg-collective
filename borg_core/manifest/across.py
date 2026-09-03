@@ -77,10 +77,14 @@ def edges_from(manifests: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out of the ready set. A contested *ref* is the opposite case -- reported, never resolved -- and
     the asymmetry is deliberate; see contested_refs.
 
-    THE DEDUP KEY ORDER AND THE SORT KEY ORDER DIFFER ON PURPOSE, transcribing core.derive_edges:
-    `(kind, parent, child)` to collapse, `(kind, child, parent)` to sort. Unifying them is not a
-    tidy-up -- it changes the output order, which is wire-visible to every consumer that renders or
-    diffs these rows.
+    THE TWO KEYS DIFFER, AND ONLY THE SORT ONE IS OBSERVABLE. `(kind, parent, child)` collapses and
+    `(kind, child, parent)` sorts, transcribing core.derive_edges. But the collapse key is a
+    set-membership key -- two edges collide iff all three fields are equal -- so permuting ITS
+    components preserves the equivalence classes exactly and changes nothing, measured on a fixture
+    whose parent order and child order deliberately disagree. The SORT key is wire-visible to every
+    consumer that renders or diffs these rows, and it is the one a "tidy-up" must not touch. Stated
+    this way because an earlier version of this paragraph credited both, which points a maintainer at
+    the wrong line to preserve.
 
     TRANSCRIBED, NOT EXTRACTED INTO A SHARED HELPER, SO BOTH COPIES CARRY THEIR OWN ORACLE.
     test_edges_are_sorted_by_kind_then_child_then_parent exists under that one name TWICE -- in

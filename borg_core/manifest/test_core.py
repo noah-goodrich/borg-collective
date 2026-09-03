@@ -624,8 +624,8 @@ def test_edges_are_sorted_by_kind_then_child_then_parent():
     parents descend (`#5`, `#1`), and a parent-major sort swaps the last two rows.
 
     TWO COPIES OF THE RULE, TWO ORACLES, AND THEY ARE INDEPENDENT RATHER THAN REDUNDANT.
-    across.edges_from transcribes this function's two-key asymmetry -- `(kind, parent, child)` to
-    collapse, `(kind, child, parent)` to sort -- rather than calling a shared helper, because
+    across.edges_from transcribes this function's terminal sort key -- `(kind, child, parent)`, the
+    one of its two keys that is actually observable -- rather than calling a shared helper, because
     extracting one would restructure this live path during AC7's expand phase, which ships the new
     form and repoints nothing. The cross-manifest copy is pinned by the test of this SAME NAME in
     test_across.py, and that file's edges_from docstring points back here; grep the name to find both.
