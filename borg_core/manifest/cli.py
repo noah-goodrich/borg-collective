@@ -77,6 +77,13 @@ def _read_for_write(repository_dir: str, name: str) -> dict[str, Any]:
         raise shell.InvalidManifest(f"{name}: no manifest at {path}", []) from exc
     except json.JSONDecodeError as exc:
         raise shell.InvalidManifest(f"{name}: not valid JSON ({exc})", []) from exc
+    except UnicodeDecodeError as exc:
+        # A manifest is UTF-8 by construction -- `write_manifest` writes it with
+        # `ensure_ascii=False` -- but a file mangled by an editor, a bad merge or a truncated
+        # transfer is bytes this decoder cannot read. Refusing by NAME keeps this module's one
+        # vocabulary for an unreadable input; letting it escape gave a UnicodeDecodeError traceback,
+        # which tells the author about a codec rather than about their file.
+        raise shell.InvalidManifest(f"{name}: not valid UTF-8 ({exc})", []) from exc
     if not isinstance(doc, dict):
         raise shell.InvalidManifest(f"{name}: top level is {type(doc).__name__}, not an object", [])
     errors = core.validate(doc)
@@ -95,18 +102,34 @@ def _row_index(manifest: dict[str, Any], ref: str) -> int | None:
     return None
 
 
-def _next_order(manifest: dict[str, Any], lane: str) -> str:
-    """The next declared order within `lane`.
+def _lane_of(value: Any) -> str:
+    """A lane name bucketed the way `core.lanes` buckets it: stripped, empty falling to the default.
+
+    THIS MUST MATCH `core.lanes` CHARACTER FOR CHARACTER or the CLI and the reader disagree about
+    which rows share a lane. It did not: this module used a bare `str(...)` while `core.lanes` uses
+    `_text(...) or DEFAULT_LANE`, which strips. So a lane written `" contract "` -- hand-authored, or
+    passed straight through from `--lane` -- was a DIFFERENT bucket to the order derivation below and
+    the SAME lane to every consumer, and two rows landed on order "1" in one lane. Measured before
+    the fix: two `add-row` calls, one padded and one not, both derived "1".
+    """
+    return str(value or "").strip() or core.DEFAULT_LANE
+
+
+def _next_order(manifest: dict[str, Any], lane: str, skip_index: int = -1) -> str:
+    """The next declared order within `lane`, ignoring the row at `skip_index`.
 
     Prerequisite rows (`core.PREREQ_ORDERS` -- the dashes and the empty string) carry no number and
     sort first, so they are SKIPPED rather than counted: numbering after them would claim a position
     the author deliberately left unnumbered. An empty lane starts at 1.
+
+    `skip_index` exists for the lane MOVE below: the row being moved must not count itself when its
+    new position is derived, or a move into its own lane would renumber it past its neighbours.
     """
     highest = 0
-    for row in manifest.get("rows") or []:
-        if not isinstance(row, dict):
+    for index, row in enumerate(manifest.get("rows") or []):
+        if not isinstance(row, dict) or index == skip_index:
             continue
-        if str(row.get("lane") or core.DEFAULT_LANE) != lane:
+        if _lane_of(row.get("lane")) != lane:
             continue
         order = str(row.get("order") or "").strip()
         if order in core.PREREQ_ORDERS:
@@ -152,7 +175,7 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
     actually passed are touched, so a hand-written `why` survives a status refresh.
     """
     manifest = _read_for_write(args.repository, args.name)
-    lane = args.lane or core.DEFAULT_LANE
+    lane = _lane_of(args.lane)
     index = _row_index(manifest, args.ref)
     if index is None:
         row: dict[str, Any] = {"ref": args.ref, "lane": lane, "order": args.order or _next_order(manifest, lane)}
@@ -164,9 +187,22 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
         action = "added"
     else:
         row = manifest["rows"][index]
-        for key, value in (("lane", args.lane), ("order", args.order), ("why", args.why), ("status", args.status)):
+        # A LANE MOVE RE-DERIVES THE ORDER, and skipping this corrupted the chain. The update loop
+        # used to set only the fields passed, so `--lane` alone carried the row's OLD order into the
+        # new lane: measured, moving a row with order "1" into a lane already holding "1" and "2"
+        # produced orders ['1','2','1'], which `core.validate` ACCEPTS (it checks duplicate refs, not
+        # duplicate orders). `core.lanes` then sorted the newcomer into the middle and
+        # `core.derive_edges` re-pointed a stacked edge at it, so an UNTOUCHED row was demoted a
+        # position and declared to depend on a row the author never ordered against it -- and
+        # `ready_set` stopped announcing it. An explicit `--order` still wins; this only fills the
+        # gap the caller left.
+        moving = args.lane and _lane_of(args.lane) != _lane_of(row.get("lane"))
+        for key, value in (("lane", lane if args.lane else ""), ("order", args.order),
+                           ("why", args.why), ("status", args.status)):
             if value:
                 row[key] = value
+        if moving and not args.order:
+            row["order"] = _next_order(manifest, lane, skip_index=index)
         action = "updated"
     written = shell.write_manifest(args.repository, manifest, args.name)
     print(f"{action}: {args.ref} (lane {row.get('lane')}, order {row.get('order')}) -> {written}")
