@@ -121,10 +121,12 @@ PASS=0; FAIL=0; SKIPPED=0
 # ENTIRE live sweep absent — the exit code asserting a sweep that never happened.
 #
 # GRANULARITY IS ONE FLOOR PER MODE, NOT ONE PER CASE, and deliberately so: "at least one network
-# case executed" is the strongest claim a mode gate can honestly make here, because E3 additionally
-# needs a SECOND REPOSITORY on disk and E4/E5 need `claude` plus their fixture repositories. A
-# per-case floor would fail for an absent input, which is the exact thing this file exists not to do
-# and the reason `skip` is a first-class verdict above.
+# case executed" is the strongest claim a mode gate can honestly make here, because E2 needs an
+# authenticated `gh` and E4/E5 need `claude`. A per-case floor would fail for an absent input,
+# which is the exact thing this file exists not to do and the reason `skip` is a first-class
+# verdict above. E3 USED TO BE LISTED HERE as needing a second repository on disk and no longer
+# does -- it stages its own two-repository tree from committed fixtures, so its inputs are now as
+# present as E2a's.
 NETWORK_RAN=0
 MODEL_RAN=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS+1)); }
@@ -346,16 +348,57 @@ if [ "$SKIP_NETWORK" -eq 1 ]; then
     # offline — it makes the case's coupling incidental, which is a claim about the deferred rewrite
     # and not a licence to reach the wire under a flag that says not to.
     skip "E3 gather: --skip-network (borg recon fans out over the github adapter)"
-elif [ "${#REPOS[@]}" -lt 2 ]; then
-    # The `>= 14` threshold is calibrated for the two-repository set. With one repository the count
-    # is legitimately lower, so running it would fail for a reason unrelated to what it asserts.
-    skip "E3 gather: needs the second repository (set BORG_EVAL_STILLPOINT)"
 elif ! command -v borg >/dev/null 2>&1; then
     skip "E3 gather: borg is not on PATH"
 else
+    # THE SECOND REPOSITORY IS NOW STAGED, NOT REQUIRED. This case used to skip unless
+    # BORG_EVAL_STILLPOINT named a real checkout, which made it unrunnable on any machine that
+    # happened not to have that repository cloned -- and the machines are three (personal,
+    # ontra, stillpoint), so "present locally" was never a property of the case, only of the
+    # laptop. What E3 asserts is that DECLARED EDGES FLOW through gather and that no ref is
+    # contested; the identity of the repositories carrying those manifests is incidental to both
+    # halves. So it stages a two-repository tree from committed fixtures.
+    #
+    # AND THE THRESHOLD BECOMES AN EQUALITY, which is the real gain. `>= 14` was calibrated
+    # against whatever two live repositories held on the day it was written -- a number nobody
+    # could re-derive, that drifts silently as those repositories change, and that a fixture
+    # producing 200 edges would satisfy just as well as one producing 14. The staged pair is
+    # hand-authored, so the count is EXACT and falsifiable by its own inputs: add or remove a row
+    # in either fixture and this case goes red, naming both numbers.
+    #
+    # `discover` globs `.borg/programs/*.json` and never shells git, so the staged tree needs no
+    # `git init` -- two directories and two files is the whole fixture.
+    fixture_root="$OUT/fixtures"
     programs_dir_args=()
-    for repository in "${REPOS[@]}"; do
+    for fixture_repo in platform warehouse; do
+        mkdir -p "$fixture_root/$fixture_repo/.borg/programs"
+        programs_dir_args+=(--programs-dir "$fixture_root/$fixture_repo")
+    done
+    cp "$SCRIPT_DIR/fixtures/programs/atlas-cutover.json" \
+       "$fixture_root/platform/.borg/programs/"
+    cp "$SCRIPT_DIR/fixtures/programs/warehouse-window.json" \
+       "$fixture_root/warehouse/.borg/programs/"
+
+    # THE OPT-IN REAL-DATA UPGRADE. When a real second repository IS on this machine it is swept
+    # IN ADDITION to the fixtures, so nothing that used to be covered stops being covered -- but
+    # its presence can only ADD edges, so the assertion below compares against the authored
+    # fixture total with a floor rather than an equality in that mode. Absent, the equality holds
+    # and is the stronger claim.
+    # AUTHORED, NOT MEASURED-AND-PINNED. 15 is what the two fixtures above derive: nine apex
+    # edges (six rows under platform#900, three under warehouse#920) plus six stacked edges. It
+    # was verified against BOTH implementations before being written down, and they agree on the
+    # TOTAL while disagreeing on two members -- borg_core honours `after:` and emits
+    # platform#903 -> warehouse#912 and platform#902 -> warehouse#923, merge-tree ignores it and
+    # emits the lane-consecutive warehouse#911 -> #912 and #922 -> #923 instead. That is AC7
+    # decision (3)'s reader/writer divergence in nine rows, and it is the reason this number is
+    # safe across AC7's repoint of gather.py: the count survives, only the membership moves. If a
+    # future change makes the totals differ, THIS COMMENT is the thing that was wrong, not the
+    # fixture.
+    E3_AUTHORED_EDGES=15
+    E3_EXACT=1
+    for repository in "${REPOS[@]:1}"; do
         programs_dir_args+=(--programs-dir "$repository")
+        E3_EXACT=0
     done
     # `&&`, not `;`. With a semicolon the assertion ran even when gather.py had failed, reading
     # whatever e3-gather.json a previous run left behind — a false PASS over stale evidence.
@@ -366,8 +409,15 @@ else
 import json
 g = json.load(open('$OUT/e3-gather.json'))
 prov = g['meta']['edge_provenance']
-print(f\"declared={prov['declared']} contested={g['meta']['program_contested_refs']} dangling={len(prov['dangling_endpoints'])}\")
-exit(0 if prov['declared'] >= 14 and g['meta']['program_contested_refs'] == [] else 1)
+declared, contested = prov['declared'], g['meta']['program_contested_refs']
+exact, authored = $E3_EXACT, $E3_AUTHORED_EDGES
+verdict = declared == authored if exact else declared >= authored
+mode = 'exact' if exact else 'floor'
+print(f\"declared={declared} authored={authored} ({mode}) contested={contested} dangling={len(prov['dangling_endpoints'])}\")
+if not verdict:
+    print(f\"  declared edge count {declared} != authored {authored}\" if exact
+          else f\"  declared edge count {declared} below authored floor {authored}\")
+exit(0 if verdict and contested == [] else 1)
 ")
     E3_RC=$?
     echo "  $E3"

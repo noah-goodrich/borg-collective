@@ -1,0 +1,35 @@
+{
+  "apex": {
+    "ref": "acme/warehouse#920",
+    "title": "warehouse-window apex"
+  },
+  "desc": "E3 fixture: the second repository's own program, so the sweep has two manifests from two dirs.",
+  "note": "HAND-AUTHORED FIXTURE, NEVER REGENERATED. See atlas-cutover.json's note -- the same coupling applies.",
+  "program": "warehouse-window",
+  "rows": [
+    {
+      "lane": "window",
+      "order": "1",
+      "ref": "acme/warehouse#921",
+      "status": "merged",
+      "why": "pick the EU window"
+    },
+    {
+      "lane": "window",
+      "order": "2",
+      "ref": "acme/warehouse#922",
+      "status": "open",
+      "why": "schedule the job"
+    },
+    {
+      "after": [
+        "acme/platform#902"
+      ],
+      "lane": "window",
+      "order": "3",
+      "ref": "acme/warehouse#923",
+      "status": "open",
+      "why": "alert on overrun"
+    }
+  ]
+}
