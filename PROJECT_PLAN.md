@@ -173,8 +173,8 @@ e2e/eval harness that keeps it honest.
     asked for — a case whose inputs are absent on this machine has not failed. The floors exist because an empty
     gate and a passing gate print the same thing, which is why "deterministic cases green in CI" sat at zero members
     across three checkpoints unnoticed.
-  - **Seven decisions ratified 2026-09-02**, after the original verify clause was found unsatisfiable for a second and
-    larger reason.
+  - **Seven decisions ratified 2026-09-02, and an eighth added 2026-09-03**, after the original verify clause was
+    found unsatisfiable for a second and larger reason.
   - **(1) The CI clause names `make test`, not `make eval`.** NO CI JOB RUNS `make eval` — verified against
     `.github/workflows/test.yml`, whose five jobs are `lint` (shellcheck over `hooks/`, `lib/` and `evals/*/run.sh`),
     `test` (`bats tests/*.bats`), `python` (`make lint` + `make test`), `viz` (`make lint-viz` + `make test-viz`) and
@@ -344,10 +344,10 @@ e2e/eval harness that keeps it honest.
     offline and deterministic or sits behind `make eval-live`, whereas this one needs a real session start, real
     hook dispatch and the installed skill set — a different harness, not a case in `evals/s4-k3/run.sh`, and one
     whose negative ("a skill registered twice") requires mutating an install. So it is filed rather than gated, in
-    the same voice AC7 uses for the rename it defers: to be filed as
+    the same voice AC7 uses for the rename it defers: **FILED 2026-09-03** as
     `docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md`, carrying a
-    `*Parent plan:*` line back here. Filing is the remaining action: the directive file is deliberately not written
-    as part of this change, so it is not yet on disk, and AC6 does not tick until it is.
+    `*Parent plan:*` line back here. That discharges this decision. **It does NOT tick AC6, and the reason is the
+    third verify gate rather than this clause** — see decision (8).
   - **(7) The pairing convention moves out of the criterion body for the same reason, and E2 is its named
     exception.** "Every positive case paired with a negative" sat beside the session-load clause and has the
     identical defect decision (6) rejects it for: no gate this AC names can go red for it. Nothing in the tree
@@ -361,6 +361,18 @@ e2e/eval harness that keeps it honest.
     fact honour; the criterion body no longer asks for what no clause can fail for. The distinction to keep: a
     convention documented next to its instances is checkable by a reader, while a criterion nothing gates is
     checkable by nobody.
+  - **(8) The remaining blocker is `make eval-live`, and the model floor is what makes it visible.** Measured
+    2026-09-03 on the machine of record with `claude` on PATH and `gh` authenticated: `make eval-live` exits **rc 2**
+    reporting `2 pass, 0 fail, 3 skip` and `the model sweep was requested but no model case executed`. E2a passes, E2
+    resolves all three declared refs live, and E3/E4/E5 all SKIP for want of a fixture repository — E3 and E4 need
+    `BORG_EVAL_STILLPOINT`, E5 needs `BORG_EVAL_TROTH`, and both are unset. So the MODEL-mode floor fires and is
+    RIGHT to fire: the third gate asks for the everything-sweep and the everything-sweep did not happen. This is the
+    floor earning its place rather than a defect in it — the plan's own Risks section predicted exactly this ("the
+    required run could be performed, reported green, and have executed not one model case"), and before the floor
+    landed this invocation exited 0. **Two remaining actions, not one.** The checkpoint of 2026-09-03-0955 recorded
+    filing the directive as the last thing standing between AC6 and a tick; that was incomplete. Provisioning the two
+    fixture repositories is the other, and it is a prerequisite the criterion never named. Until then AC6 has two of
+    three gates green and stays UNTICKED.
 - [ ] **AC7 — "Program" is gone, and nothing breaks.** Eliminated from user-facing surfaces, skills, help text, and
       `merge-tree/`. The repository-side rename is filed as a parented directive, not executed. Suites green and
       coverage holds its floor.
@@ -406,7 +418,7 @@ e2e/eval harness that keeps it honest.
   matrices beat node-link except on path-finding); live manifests are 3 and 14 rows on a path-finding task, so the
   evidence most likely confirms the specced grammar. An hour of reading, not a phase.
 - NOT building: evals beyond the three lifecycle skills in AC5.
-- NOT building: AC6's session-load case. AC6 files it — to be filed as
+- NOT building: AC6's session-load case. AC6 files it — filed 2026-09-03 as
   `docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md`. See AC6 decision (6): it
   needs a session-lifecycle harness that does not exist, and a criterion clause naming one would be unfalsifiable.
 - If done early: ship what we have, don't expand scope.
