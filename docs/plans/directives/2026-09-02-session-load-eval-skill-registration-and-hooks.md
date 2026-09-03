@@ -40,7 +40,7 @@ zero `borg-*` entries in `~/.claude/skills/`, and 12 hook scripts in `hooks/`.
 `settings.json` to the plugin, and the literal `~/.claude/hooks/...` entries `borg setup` used to write would
 otherwise fire alongside the plugin's copies. That comment is the incident report.
 
-**What is already covered, at the unit altitude — 24 cases, and this directive must not re-litigate them:**
+**What is already covered, at the unit altitude — 31 cases, and this directive must not re-litigate them:**
 
 - `tests/plugin_dedup.bats` — `_borg_unregister_hook` removes matching entries, leaves non-borg hooks intact,
   preserves `permissions`/`model`, no-ops when absent, survives a shared matcher block (6);
@@ -70,7 +70,7 @@ a repository, and it must be able to SKIP with a named reason on a machine that 
 
 1. **Observe, do not simulate.** Start a real headless session (`claude -p` with a trivial prompt, and `cortex` where
    present), and read what the session reports rather than re-deriving it from the filesystem. A harness that greps
-   install paths is testing `borg setup`'s output, which the 24 unit cases already do; the claim under test is what a
+   install paths is testing `borg setup`'s output, which the 31 unit cases already do; the claim under test is what a
    *session* sees.
 2. **Count, then compare against an authored number.** Each borg skill appears exactly once; each lifecycle hook fires
    exactly once per event. Report the shortfall or surplus BY NAME, in the vocabulary
