@@ -7,10 +7,10 @@
 #       machine — no network, no `gh`, no second repository, no model
 #   E2  live refs: every declared ref resolves on GitHub (no typo'd rows)
 #   E3  gather integration: declared edges flow, zero contested refs
-#   E4  K3 manifest path: /pr-description on a manifest-declared PR branch renders chain
-#       position FROM THE MANIFEST (program, lane, gate) — not the fallback
-#   E5  K3 fallback path: /pr-description in a manifest-less repo says "No manifest declared."
-#       (proves the conditional discriminates; without this E4 could pass vacuously)
+#
+# E4/E5 (the /pr-description chain-position pair) RELOCATED 2026-09-03 to claude-plugins,
+# evals/pr-description/. See the tombstone above the floors for why, and for why the model mode
+# and its floor went with them.
 #
 # NO PATH IS HARDCODED, AND NO CASE MAY REQUIRE A SECOND REPOSITORY TO EXIST. `REPO` derives from
 # this script's own location; `STILLPOINT` and `TROTH` are OPTIONAL and default to empty. A case
@@ -37,11 +37,14 @@
 # repository's DATA, which belongs in that repository, not in this harness.
 #
 # Usage: evals/s4-k3/run.sh [--skip-model] [--skip-network]
-#   --skip-model     skip the cases that need a headless model run (E4/E5)
+#   --skip-model     ACCEPTED AND INERT -- no case here needs a model since E4/E5 relocated
+#                    (see the tombstone below); kept because `EVAL_ARGS` passes it to every
+#                    harness and the unknown-flag arm exits 2
 #   --skip-network   skip the cases that read the wire (E2/E3)
 #
-# THE TWO FLAGS PARTITION THE CASES INTO THREE MODES, which is why the execution floors at the
-# bottom are per-mode and not merely global. `--skip-model --skip-network` is the OFFLINE mode and
+# THE FLAGS USED TO PARTITION THE CASES INTO THREE MODES, which is why the execution floors at
+# the bottom are per-mode and not merely global. Since E4/E5 relocated there are TWO: offline
+# and network. `--skip-model --skip-network` is the OFFLINE mode and
 # is what `make eval` passes: E2a alone, deterministic on every machine. DROPPING a flag is a
 # REQUEST for that mode's sweep, so a run that asked for a sweep and executed none of it is a
 # failure, not a 0-of-N pass. `--skip-network` exists because `make eval` was documented as the safe
@@ -128,7 +131,6 @@ PASS=0; FAIL=0; SKIPPED=0
 # does -- it stages its own two-repository tree from committed fixtures, so its inputs are now as
 # present as E2a's.
 NETWORK_RAN=0
-MODEL_RAN=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
 # A case that cannot run is reported as SKIP and does not affect the exit status. CLAUDE.md's
@@ -448,62 +450,32 @@ fi
 # while the macOS lane runs only the CLI contract suite. That is CLAUDE.md's "a test's PREMISE can
 # depend on the dev platform" class with the platforms swapped: the green lane is the one where the
 # premise holds, so the only machine the bug exists on is the developer's own.
-TIMEOUT=()
-command -v gtimeout >/dev/null 2>&1 && TIMEOUT=(gtimeout 420)
-
-if [ "$SKIP_MODEL" -eq 1 ]; then
-    echo "== E4/E5 skipped (--skip-model) =="
-else
-    # E4/E5 grade `/pr-description`, WHICH THIS REPOSITORY DOES NOT OWN — nothing under skills/
-    # matches it; it is a claude-plugins skill. So a red here can mean a defect in a surface that
-    # is not in this tree, and the case cannot be repaired from inside this repo. Recorded rather
-    # than fixed: relocating these two cases is AC5's problem, not the harness's.
-    echo "== E4: /pr-description reads the manifest (stillpoint#48 branch) =="
-    if ! command -v claude >/dev/null 2>&1; then
-        skip "E4 chain position: claude is not on PATH"
-    elif [ -z "$STILLPOINT" ] || [ ! -d "$STILLPOINT" ]; then
-        skip "E4 chain position: needs the second repository (set BORG_EVAL_STILLPOINT)"
-    else
-        WT=/tmp/s4-eval-stillpoint
-        git -C "$STILLPOINT" worktree remove --force "$WT" 2>/dev/null
-        git -C "$STILLPOINT" fetch origin write-freeze-design 2>/dev/null
-        git -C "$STILLPOINT" worktree add "$WT" origin/write-freeze-design --detach 2>/dev/null
-        mkdir -p "$WT/.borg/programs"
-        cp "$STILLPOINT/.borg/programs/ingle-t1-cutover.json" "$WT/.borg/programs/"
-        (cd "$WT" && ${TIMEOUT[@]+"${TIMEOUT[@]}"} claude -p "/pr-description" \
-            > "$OUT/e4-body.md" 2>"$OUT/e4-stderr.txt")
-        if grep -q "ingle-t1-cutover" "$OUT/e4-body.md" && \
-           grep -qi "cutover" "$OUT/e4-body.md" && \
-           ! grep -q "No manifest declared" "$OUT/e4-body.md"; then
-            ok "E4 chain position rendered from the manifest"
-        else
-            bad "E4 chain position (see $OUT/e4-body.md)"
-        fi
-        MODEL_RAN=$((MODEL_RAN+1))
-        git -C "$STILLPOINT" worktree remove --force "$WT" 2>/dev/null
-    fi
-
-    # E5's input is "a repository with no manifest", which an ephemeral `git init` under a tmpdir
-    # satisfies exactly as well as troth does — this case has no business naming a real repository.
-    # NOT substituted here, deliberately: the substitution can only be verified against the real
-    # `/pr-description`, which lives in claude-plugins, and a change that cannot be tested from this
-    # tree is not an improvement. It is the first thing to do when these cases move.
-    echo "== E5: fallback path in a manifest-less repo (troth) =="
-    if ! command -v claude >/dev/null 2>&1; then
-        skip "E5 fallback: claude is not on PATH"
-    elif [ -z "$TROTH" ] || [ ! -d "$TROTH" ]; then
-        skip "E5 fallback: needs a manifest-less repository (set BORG_EVAL_TROTH)"
-    else
-        (cd "$TROTH" && ${TIMEOUT[@]+"${TIMEOUT[@]}"} claude -p "/pr-description" \
-            > "$OUT/e5-body.md" 2>"$OUT/e5-stderr.txt")
-        if grep -q "No manifest declared" "$OUT/e5-body.md"; then
-            ok "E5 fallback line present"
-        else
-            bad "E5 fallback (see $OUT/e5-body.md)"
-        fi
-        MODEL_RAN=$((MODEL_RAN+1))
-    fi
-fi
+# E4 AND E5 LIVED HERE AND WERE RELOCATED 2026-09-03 to claude-plugins,
+# evals/pr-description/{run.sh,floor-tests.sh}. Two reasons, and the first was already recorded in
+# the comment this tombstone replaces: they graded `/pr-description`, which THIS REPOSITORY DOES
+# NOT OWN -- nothing under skills/ matches it, so a red here could mean a defect in a surface not
+# in this tree and the case could not be repaired from inside this repo. A gate belongs in the tree
+# that owns the surface it grades, the same altitude argument as borg_core/recon/cli.py owning the
+# recon retirement gate rather than its zsh caller.
+#
+# The second reason is that they could not RUN. E4 required a stillpoint checkout plus a fetchable
+# `origin/write-freeze-design` branch plus a specific manifest file; E5 required a troth checkout.
+# Measured 2026-09-03: neither was present, both SKIPped, and `make eval-live` exited non-zero on
+# the model floor with the whole model sweep absent. Both are now synthesized from `git init` there
+# and PASS -- the substitution E5's old comment named as "the first thing to do when these cases
+# move", deferred then because it could only be verified against the real `/pr-description`.
+#
+# SO THE MODEL MODE LEFT WITH THEM, AND ITS FLOOR HAD TO GO TOO. With no model case in this
+# harness, `[ "$SKIP_MODEL" -eq 0 ] && [ "$MODEL_RAN" -eq 0 ]` would fire on every invocation that
+# did not pass `--skip-model` -- a floor NOTHING can satisfy, which AC6 decision (3) forbids in as
+# many words: "a floor nothing can satisfy is a permanent red, not a gate". The mode floor now
+# lives in the harness that owns the model cases.
+#
+# `--skip-model` IS STILL ACCEPTED, and inertly so. The Makefile's `EVAL_ARGS` default passes
+# `--skip-model --skip-network` to every harness the glob selects, and the unknown-flag arm above
+# exits 2, so removing the flag would break `make eval` for a harness that no longer has anything
+# to skip. Accepted-and-inert is the honest form; the flag stays meaningful in the relocated
+# harness, so the vocabulary is still shared across both.
 
 echo
 # SKIPs are reported but never gate. A case whose inputs are absent on this machine has not failed;
@@ -537,10 +509,6 @@ if [ $((PASS + FAIL)) -eq 0 ]; then
 fi
 if [ "$SKIP_NETWORK" -eq 0 ] && [ "$NETWORK_RAN" -eq 0 ]; then
     echo "the network sweep was requested but no network case executed" >&2
-    exit 1
-fi
-if [ "$SKIP_MODEL" -eq 0 ] && [ "$MODEL_RAN" -eq 0 ]; then
-    echo "the model sweep was requested but no model case executed" >&2
     exit 1
 fi
 [ "$FAIL" -eq 0 ]
