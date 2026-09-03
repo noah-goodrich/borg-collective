@@ -143,7 +143,12 @@ e2e/eval harness that keeps it honest.
 - [ ] **AC5 — Lifecycle skills author project manifests by default.** `/borg-plan` scaffolds a manifest,
       `/borg-link-up` updates row status, `/borg-assimilate` closes rows. None of it opt-in.
   - Verify: eval cases run each skill headless against a fixture repository and grade the emitted manifest; each
-    positive case is paired with a negative case proving the conditional discriminates (see `evals/s4-k3/run.sh` E4/E5).
+    positive case is paired with a negative case proving the conditional discriminates. **The exemplar moved**: this
+    clause pointed at `evals/s4-k3/run.sh` E4/E5 until decision (9) relocated that pair to
+    `claude-plugins/evals/pr-description/run.sh`, which is where the shape to copy now lives — a positive whose
+    fixture carries the input and a negative whose fixture provably lacks it, both SYNTHESIZED so neither names a
+    repository. AC5's cases grade borg's OWN lifecycle skills, so unlike that pair they belong in THIS tree; what
+    transfers is the fixture discipline, not the location.
 - [ ] **AC6 — e2e/eval harness MVP.** Generalize the `evals/s4-k3/run.sh` pattern into a reusable convention: a
       `make eval` target, deterministic cases green in CI, model-dependent cases behind `make eval-live` — which
       since decision (9) means the harness in the repository that OWNS the surface, not this one. Two
