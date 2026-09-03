@@ -92,10 +92,13 @@
 # argument found in the wild rather than hypothesised. That file was fixed in the same round as this
 # note, so the claim is phrased to be true either way: every sibling that makes a double-bracket
 # assertion suffixes it with `|| false` (223 such lines in cli_contract.bats alone), and this file
-# is the fortieth to do so without exception. The only bare double brackets under `tests/` are `if`
-# conditionals, `sed` character classes, and lines inside generated stub bodies that carry their own
-# `&&` or `|| continue` action. Re-measure, never re-copy this claim:
-# `grep -n '^[[:space:]]*\[\[' tests/*.bats | grep -v '|| false'` is the whole check.
+# is the fortieth to do so without exception. Re-measure, never re-copy this claim, and note the
+# check is scoped to THIS file, where the expected output is genuinely empty:
+# `grep -n '^[[:space:]]*\[\[' tests/eval_floor.bats | grep -v '|| false'`.
+# Run tree-wide it returns a handful of non-assertion forms -- `if` conditionals, `sed` character
+# classes, generated stub bodies carrying their own `&&` or `|| continue`, and one `\`-continued
+# assertion in `cli_contract.bats` whose action sits on the following line -- so a tree-wide grep is
+# a starting point for a reader, not a passing condition.
 #
 # `[ ... ]` needs nothing and must not be "fixed" to match: a single-bracket test is an ordinary
 # builtin command and 3.2 honours errexit for it (measured the same way, exit 1, no REACHED).
@@ -340,8 +343,10 @@ _shortfall_repo() {
 # The count floor's own threshold, READ OUT OF THE HARNESS rather than restated here. A literal 15
 # in this file would keep passing after the harness raised its minimum, against a shortfall sandbox
 # that no longer falls short -- the floor's oracle drifting off the floor. Refused below 2 because
-# `total - 1` has to remain a NON-EMPTY selection: an empty one is pytest's rc 5, a different fact
-# with its own arm in the harness, and the gap the count floor exists for is "some but not enough".
+# `total - 1` has to remain a NON-EMPTY selection. An empty one is a DIFFERENT fact, and the count
+# floor is what names it -- `selected 0 of N authored` -- before the run phase is ever invoked, so
+# pytest never produces an rc for it at all. The gap this floor exists for is "some but not enough",
+# and a minimum of 1 would make the shortfall sandbox empty and quietly move the case off that gap.
 _e2a_min() {
     local min
     min="$(sed -n 's/^E2A_MIN=\([0-9][0-9]*\)$/\1/p' "$1" | head -1)"
@@ -433,6 +438,16 @@ _eval_out_rel() {
 # failing `f` prints nothing and exits 1. That is the same idiom `_allowlist_bin`, `_e2a_min` and
 # `_e2a_target` are called with, which is why the `local` declarations in every case are separate
 # from the assignments.
+#
+# THE LOUDNESS IS A HAND-MAINTAINED INVARIANT, AND THAT IS RECORDED RATHER THAN GATED. Reverting this
+# helper's `return 1` to a `skip` would re-hide the removal of the `test` job's dev-group step, which
+# is the other half of the same two-sided fix -- so this half has no oracle, and by the standard the
+# rest of this file is held to that is worth naming out loud. It is not gated because the assertable
+# rule and the real rule are different: a blanket "this file never calls `skip`" would gate it, but it
+# would also forbid a future case from skipping for a reason that genuinely is an absent input rather
+# than a missing toolchain, and codifying a rule that is wrong in cases nobody has written yet buys
+# less than it costs. The narrow rule -- A MISSING DEV TOOLCHAIN MUST NOT SKIP -- is the one to keep,
+# and it lives here, next to the helper that implements it, where a reader changing it will see it.
 _python_with_pytest() {
     local candidate
     for candidate in "$BORG_HOME/.venv/bin/python" "$BORG_HOME/.venv/bin/python3" \
@@ -830,14 +845,25 @@ STUB
 # harness's counters say so in their own declaration -- so one executed model case is exactly what
 # satisfies it, and E5 is that case.
 #
-# THE `gtimeout` STUB IS A BASH 3.2 WORKAROUND, NOT PART OF THE SUBJECT. The harness builds
-# `TIMEOUT=()` when no `gtimeout` exists and then expands `"${TIMEOUT[@]}"` under `set -u`; bash 3.2
-# treats an empty array expansion as an unbound variable and kills the subshell, so on the machine of
-# record E5 fails with `TIMEOUT[@]: unbound variable` and never writes the file it greps -- measured.
-# Stubbing `gtimeout` takes the populated branch on BOTH platforms, which also makes this case
-# deterministic rather than bash-version-dependent. The no-gtimeout branch is therefore NOT covered
-# here; when the harness stops expanding an unguarded empty array, delete the stub and this case
-# should stay green.
+# `gtimeout` IS DELIBERATELY NOT STUBBED, AND THAT IS THIS CASE'S SECOND SUBJECT. The harness builds
+# `TIMEOUT=()` when no `gtimeout` exists, and bash before 4.4 -- the 3.2 that macOS ships, the machine
+# of record -- treats an empty array expansion under `set -u` as an unbound variable and kills the
+# subshell. Expanded bare, E5 died with `TIMEOUT[@]: unbound variable` before its redirect opened, so
+# the following grep read a missing file and the case reported FAIL for a reason unrelated to what it
+# asserts. The harness now expands the guarded `${TIMEOUT[@]+"${TIMEOUT[@]}"}` form, and leaving
+# `gtimeout` absent is what makes THIS case execute the empty branch that used to crash: revert either
+# expansion site to the bare form and this case goes red on bash 3.2.
+#
+# An earlier draft stubbed `gtimeout` to force the POPULATED branch, on the reasoning that it made the
+# case deterministic rather than bash-version-dependent. It did -- and it also meant the branch that
+# actually crashed was executed by nothing in the tree, so the guard could be "simplified" back with
+# all twelve cases green. That stub's own comment said to delete it once the harness stopped expanding
+# an unguarded empty array. The harness stopped; this is the deletion.
+#
+# This oracle only bites where the bug exists, i.e. bash < 4.4, so it guards the developer's machine
+# and the local `bats tests/*.bats` run, NOT the ubuntu lane, where the bare form is legal. Case 12b
+# carries the platform-independent half as a static assertion for exactly that reason; neither
+# replaces the other.
 @test "evals/*/run.sh: the model-mode floor holds when a model case can execute" {
     local allow python sandbox stubs troth harness harnesses=0
     python="$(_python_with_pytest)"
@@ -858,15 +884,12 @@ case "$*" in
     *) echo "unexpected claude invocation: $*" >&2; exit 3 ;;
 esac
 STUB
-    # `gtimeout <seconds> <command...>`: drop the duration, run the command. It must NOT enforce a
-    # timeout -- there is nothing here to time out, and a stub that could kill its child would make
-    # a slow runner flaky for no gain.
-    _stub_bin "$stubs" gtimeout <<'STUB'
-#!/bin/sh
-shift
-exec "$@"
-STUB
-    _assert_stubbed "$stubs:$allow" "$stubs" claude gtimeout
+    # NO `gtimeout` STUB, and none is coming -- see this case's header. Its absence is what drives the
+    # harness's empty-array branch, which is the branch that crashed on bash 3.2. Refuting it here
+    # rather than assuming it: `gtimeout` is on the hidden list, so a runner that happens to carry one
+    # cannot silently move this case onto the populated branch and take the coverage away again.
+    _refute_resolvable "$stubs:$allow" gtimeout timeout
+    _assert_stubbed "$stubs:$allow" "$stubs" claude
 
     for harness in "$BORG_HOME"/evals/*/run.sh; do
         if [ ! -e "$harness" ]; then
@@ -892,10 +915,13 @@ STUB
 
 # ── 10. the E2a count floor has an oracle, in both directions ────────────────────────────────────
 # THE FLOOR THAT CATCHES A GATE SILENTLY EMPTIED RATHER THAN BROKEN. `-k e2a` is a contract with the
-# test NAMES: rename all of them and pytest reports rc 5, which the harness handles by name, but
-# rename all-but-one and the selection is 1, pytest exits 0, and the case reports PASS over a gate
-# that has lost every assertion but one. The count is what closes that, and until this case existed
-# nothing anywhere read it.
+# test NAMES, and both ways of breaking it land on this one floor: rename ALL of them and the
+# collected count is 0, which the floor reports as `selected 0 of N authored` without ever running
+# pytest; rename all-but-one and the selection is 1, pytest exits 0, and without the floor the case
+# would report PASS over a gate that has lost every assertion but one. The count is what closes both,
+# and until this case existed nothing anywhere read it. (pytest's rc 5 for an empty selection is
+# unreachable from any minimum of one or more -- the floor returns first -- which is why the harness
+# carries no rc-5 arm and says so.)
 #
 # BOTH HALVES RUN AGAINST A SANDBOX WHOSE SELECTION THIS FILE AUTHORS, and the threshold and the
 # target path are read back out of the harness so neither half can drift off the floor it checks.
@@ -1062,6 +1088,61 @@ STUB
         # 2 -- a future guard that exited 1 could otherwise make this half pass by refusing too.
         [[ "$output" == *"SKIP"* ]] || false
         [ "$status" -ne 2 ]
+    done
+
+    [ "$harnesses" -gt 0 ]
+}
+
+# ── 13. the guarded array expansion has a platform-independent oracle ────────────────────────────
+# THE ONLY STATIC ASSERTION IN THIS FILE, AND IT IS EARNED. Case 9 executes the harness's empty-array
+# branch -- the branch that crashed -- but it can only FAIL where the bug exists, i.e. bash before 4.4,
+# the macOS developer machine. On the ubuntu lane that runs `bats tests/*.bats` the bare form is
+# perfectly legal, so "simplifying" the guard would sail through CI and land the crash on the one
+# machine no lane covers. That is CLAUDE.md's "a test's PREMISE can depend on the dev platform" class
+# with the platforms swapped: the green lane is the one where the premise holds. Reading the SOURCE is
+# the only gate that fires on both, and it is the honest trade -- a behavioural case cannot assert this
+# on bash 5, because bash 5 has no defect to observe.
+#
+# SCOPED TO THE OPTIONAL PREFIX ARRAY, NOT TO EVERY ARRAY, because "can this be empty" is not
+# statically knowable and a blanket rule is wrong: `REPOS` is seeded with one element before it is
+# ever expanded and `programs_dir_args` is built from it inside a branch that requires two, so both
+# are correctly bare. Only the timeout prefix is legitimately EMPTY, which is what makes it the one
+# expansion the guard is for.
+#
+# ARITHMETIC, NOT PATTERN SURGERY. The guarded form contains the bare form as its own default value,
+# and the comment above it quotes both spellings in prose, so a naive grep for the bare shape matches
+# the guard and its own documentation -- measured, three false positives on the first attempt. Instead:
+# every legitimate mention in CODE is either the guard's test (`[@]+`) or the inner expansion that
+# immediately follows it, so a correct file has exactly TWICE as many `TIMEOUT[@]` occurrences as
+# `TIMEOUT[@]+` ones. A bare expansion adds one to the left side only.
+@test "evals/*/run.sh: the optional prefix array is never expanded bare" {
+    local harness harnesses=0 total guarded
+
+    for harness in "$BORG_HOME"/evals/*/run.sh; do
+        if [ ! -e "$harness" ]; then
+            continue
+        fi
+        harnesses=$((harnesses + 1))
+
+        # `grep -c` RETURNS 1 ON ZERO MATCHES, so neither count may be the last command whose status
+        # is read -- the trap that once reported a bats run of 774 ok as a failure. Captured through
+        # `|| true`, defaulted, then compared as their own statements.
+        total="$(grep -v '^[[:space:]]*#' "$harness" | grep -o 'TIMEOUT\[@\]' | grep -c . || true)"
+        guarded="$(grep -v '^[[:space:]]*#' "$harness" | grep -o 'TIMEOUT\[@\]+' | grep -c . || true)"
+        total="${total:-0}"
+        guarded="${guarded:-0}"
+
+        # THE DISCRIMINATOR, and it must come first. Asserting only the ratio would also hold for a
+        # harness that expands no prefix at all (0 == 2*0), which is what this case would silently
+        # become if the model cases were rewritten or the array renamed. Requiring a guarded site to
+        # EXIST means the thing being protected is still there for the protection to mean anything.
+        [ "$guarded" -gt 0 ]
+
+        if [ "$total" -ne $((2 * guarded)) ]; then
+            echo "bare TIMEOUT[@] expansion in $harness ($total mentions, $guarded guarded):" >&2
+            grep -vn '^[[:space:]]*#' "$harness" | grep 'TIMEOUT\[@\]' >&2 || true
+            false
+        fi
     done
 
     [ "$harnesses" -gt 0 ]
