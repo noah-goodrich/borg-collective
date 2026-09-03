@@ -168,13 +168,14 @@ e2e/eval harness that keeps it honest.
     authenticated `gh`. The deterministic eval evidence rides the EXISTING pytest and bats legs; per the build order
     no sixth CI job is added.
   - **A green run that selected or executed zero cases is a FAILURE, and every level is armed in this change.**
-    Selection is one floor; execution is three. `make eval` fails when the `evals/*/run.sh` glob selects no harness.
+    Selection is one floor; execution is TWO — the global one and the network mode, since decision (9) retired the
+    model mode. `make eval` fails when the `evals/*/run.sh` glob selects no harness.
     `evals/s4-k3/run.sh` then fails two ways: GLOBALLY, when it ran zero cases at all (`PASS + FAIL == 0`); and on
     the NETWORK mode, when `--skip-network` was absent and no network case executed. A MODEL-mode form sat here too
     and left with E4/E5 in decision (9); the relocated harness owns it. Dropping a skip flag is a REQUEST for that
     mode's sweep,
-    and a run that asked for a sweep and performed none of it has failed at the thing it was asked to do. The two
-    mode floors exist because the global one is satisfied single-handed by the one always-runnable offline case, so
+    and a run that asked for a sweep and performed none of it has failed at the thing it was asked to do. The
+    mode floor exists because the global one is satisfied single-handed by the one always-runnable offline case, so
     `make eval-live` — the "on demand" gate and the Ship Definition's one required run — reported SUCCESS at exit 0
     on a machine with neither `gh` nor `claude`, the entire live sweep absent. SKIPs still never gate a mode nobody
     asked for — a case whose inputs are absent on this machine has not failed. The floors exist because an empty
@@ -317,7 +318,7 @@ e2e/eval harness that keeps it honest.
     a future harness that forgets to self-police turns the oracle red the day it lands. It rides the CI legs that
     already run: the `test` job's `bats tests/*.bats` glob collects the file by existing, so no sixth job is added,
     per decision (1).
-    **AND THE ORACLE WAS ITSELF INERT IN CI — the same principle recursing once more, on its own fix.** The seven
+    **AND THE ORACLE WAS ITSELF INERT IN CI — the same principle recursing once more, on its own fix.** The
     FIVE cases that must EXECUTE a harness each need an interpreter that can `import pytest` — cases 5 through 9;
     case 4's premise IS hiding every interpreter and case 10 needs none. The only job that collects
     the file installed `zsh`, `jq` and `fzf` and no Python toolchain at all, and a bats `skip` prints `ok`. So that
@@ -422,11 +423,13 @@ e2e/eval harness that keeps it honest.
     the guarded-array case is not deleted but INHERITED by
     `claude-plugins/evals/pr-description/floor-tests.sh`, the harness that still expands an optional prefix, and
     that file's own guards are oracled there in both directions with no model at all — mutation-verified, deleting
-    the model floor takes it from 10 ok to 9 ok, 1 fail. **That number was written as "8 ok to 7 ok" and was
-    stale the moment it was written** — it described the eight-case file that existed BEFORE the fix, which is
-    precisely the state in which the mutation left the oracle fully green and was the finding. Round 2 then added
-    two more cases there (the rc arm and the FAIL-gate assertion), so the baseline is 10. Re-measure across the
-    repository boundary or do not quote a number: this is the one figure in this plan that no borg gate can check.
+    the model floor takes it from 10 ok to 9 ok, 1 fail. **This figure has been wrong twice, in opposite
+    directions, and the second time was an OVER-correction.** It first read "8 ok to 7 ok", which was exactly
+    right when written and went stale hours later when that repository gained a case. Round 2 then rewrote it as
+    "stale the moment it was written" — false, and an accurate measurement accused of being wrong. Round 3
+    measured both and neither held. The rule that survives is narrower than either: this is the one figure in
+    this plan NO borg gate can check, because the artifact lives in another repository. Re-measure it there or
+    do not quote it.
     It is wired into that repository's existing `evals-harness`
     job as one step, no new job, so the relocated cases are not another gate nothing invokes.
     **The measured result is the point**: `make eval-live` was rc 2 on `2 pass, 0 fail, 3 skip` and is now rc 0 on
@@ -506,11 +509,12 @@ is most of the increase over the original estimate.
 - **`gate.kind` is hand-set.** Yours-vs-mine is exactly as good as that field. A mis-set gate routes a human decision
   to an agent silently — a wrong answer, not a missing one. AC5's evals are the only thing that would catch
   systematic drift.
-- **Eval flakiness.** Model-dependent cases fail intermittently. `run.sh`'s `--skip-model` flag still holds them
-  back, and the invocation that actually runs them is `make eval-live`. The sharper version of the risk: CI never runs
-  them AT ALL — no job invokes any eval target — so their only gate is someone remembering. The Ship Definition asks
-  for exactly one such run, but asking is not forcing, and it was not forcing the model cases to run: until the
-  model-mode execution floor landed, `make eval-live` exited 0 on a machine with no `claude` on PATH at all, so the
-  required run could be performed, reported green, and have executed not one model case. The mode floor is what
-  forces them now — request the model sweep, execute none of it, and the run exits non-zero with that reason named
-  on stderr.
+- **Eval flakiness. THIS RISK MOVED REPOSITORIES on 2026-09-03 and no longer describes this tree.** It was written
+  about model-dependent cases failing intermittently, held back by `run.sh`'s `--skip-model` and run by
+  `make eval-live`, with the model-mode execution floor as the thing that forced them. Decision (9) relocated the only
+  model cases to `claude-plugins/evals/pr-description/`, and the model floor went with them, so `--skip-model` is
+  accepted and inert here and `make eval-live` in THIS repository reaches neither a model nor any spend. The risk is
+  real where the cases now live, and it is guarded there by a floor whose firing AND holding directions are both
+  oracled by `floor-tests.sh` — cases 2 and 6 — on a leg that needs no model. Kept rather than deleted because the
+  original wording is what the mode floor was built against: request the model sweep, execute none of it, and the run
+  exits non-zero with that reason named on stderr.

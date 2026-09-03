@@ -34,6 +34,12 @@
 # and exited ZERO -- the literal defect the mode floors were added to prevent, with nothing in the
 # repository able to notice their removal.
 #
+# THOSE TWO FIGURES ARE DATED, NOT CURRENT, and are left as measured on 2026-09-02 because they are
+# what the paragraph is reporting. `bats tests/*.bats` is 784 now and the offline harness prints
+# "1 pass, 0 fail, 2 skip", both moved by the E4/E5 relocation and the three cases retired with it.
+# A historical measurement is evidence for the decision it justified; re-quoting it as the present
+# state is the drift this file keeps catching, so the date is part of the claim.
+#
 # THAT IS THE PRINCIPLE THIS FILE IS FOR, AND IT RECURSES ON ITS OWN FIX: a floor with no oracle is
 # the defect class the floor exists to prevent, one level up. PROJECT_PLAN.md asserted both the
 # selection and the execution floors were armed while nothing could have contradicted it; the
@@ -137,8 +143,12 @@
 # only the cases needing no interpreter, so deleting the mode-floor block, the count floor or the
 # outcome floor
 # turned nothing red in CI. Reproduced in a CI-shaped sandbox (`rsync -a --exclude .venv --exclude
-# .git` into a temp dir, then bats from there): `1..11`, `ok 1..4`, then `ok 5 ... # skip no python3
-# with an importable pytest` for 5 through 11.
+# .git` into a temp dir, then bats from there). AS MEASURED THEN, on the eleven-case file: `1..11`,
+# `ok 1..4`, then `ok 5 ... # skip no python3 with an importable pytest` for 5 through 11. RE-RUN
+# TODAY the same sandbox prints `1..10` with `ok 1,2,3,4,10` and `not ok 5,6,7,8,9` -- ten cases,
+# five of them red rather than seven skipped, because the skips became loud failures and three
+# cases retired with E4/E5. Both numbers are given because the old one is the evidence and the new
+# one is the contract.
 #
 # BOTH HALVES OF THE FIX ARE REQUIRED AND NEITHER CLOSES IT ALONE. The `test` job gained a
 # `setup-python` + `pip install --group dev` STEP -- a step in an existing job, which the build order
@@ -447,7 +457,8 @@ _eval_out_rel() {
 # one command that fixes it, and that CI now installs it so the red is local-only and one command
 # deep. NO CASE THAT NEEDS AN INTERPRETER IS EXEMPTED: all five observe floors whose deletion CI
 # could not otherwise see, so exempting any one would leave exactly the hole the other four close.
-# TWO of the ten need no interpreter and are not counted among the five -- case 4, whose premise IS
+# FIVE of the ten need no interpreter and are not counted among the five that do -- cases 1, 2 and 3
+# never execute a harness at all, plus case 4, whose premise IS
 # hiding every interpreter, and case 10, the checkout guard, which says so at its own body. Cases 5
 # through 9 are the five. Measured in an rsync'd CI-shaped copy with no `.venv` and a pytest-less
 # `python3`: `1..10` with `ok 1,2,3,4,10` and `not ok 5,6,7,8,9`.
@@ -727,7 +738,8 @@ _make_eval() {
 # tree makes it: `make eval` forwards both flags and `make eval-live` forwards neither, so the
 # condition `SKIP_NETWORK -eq 0 && NETWORK_RAN -eq 0` was unreachable from every gate in the
 # repository until this case existed. What it caught when it was written, measured with `gh` and
-# `claude` hidden: the live shape printed "1 pass, 0 fail, 4 skip" and exited ZERO.
+# `claude` hidden: the live shape printed "1 pass, 0 fail, 4 skip" and exited ZERO. (Dated: that
+# harness had five cases then and has three now, so the same shape prints "2 skip".)
 #
 # THE INTERPRETER IS SUPPLIED HERE EVEN THOUGH THE SUBJECT IS THE NETWORK. The global floor is
 # ordered FIRST in the harness and exits on the spot, so without an executable E2a this case would

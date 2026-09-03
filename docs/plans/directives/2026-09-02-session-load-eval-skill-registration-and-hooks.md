@@ -4,7 +4,7 @@
 *Filed: 2026-09-03*
 
 **tl;dr** — AC6 asked for a case proving "a fresh session registers each skill exactly once and fires its hooks," and
-no gate it named could ever fail for it. Twenty-four unit cases already prove each registration mechanism correct in
+no gate it named could ever fail for it. Thirty-one unit cases already prove each registration mechanism correct in
 isolation; not one of them starts a session, so the composition is unverified — and double-firing is not hypothetical,
 it shipped once and its remediation is a de-dup pass verified only against a synthetic file. Build the harness that
 observes a real session start, or say plainly that the claim is unowned.
@@ -97,7 +97,7 @@ a repository, and it must be able to SKIP with a named reason on a machine that 
 - [ ] **SL3 — All four invisible surfaces above are covered, each in both directions.** Verify:
       `tests/session_load_floor.bats` has a case per surface per direction, and deleting any floor from `run.sh` turns
       that file red. Run the mutation; a floor whose absence keeps every gate green is not a floor.
-- [ ] **SL4 — Nothing regresses the 24 existing cases.** Verify: `bats tests/plugin_dedup.bats
+- [ ] **SL4 — Nothing regresses the 31 existing cases.** Verify: `bats tests/plugin_dedup.bats
       tests/setup_skill_cleanup.bats` green, unchanged. This directive adds an altitude; it does not rewrite the
       unit layer.
 - [ ] **SL5 — The CoCo double-fire is decided, not discovered.** Verify: either the harness asserts one execution per
@@ -121,7 +121,7 @@ a repository, and it must be able to SKIP with a named reason on a machine that 
 ## Notes
 
 - **The vocabulary is deliberate.** "Registers exactly once" is a claim about what a session SEES, not about what
-  `borg setup` WRITES. The 24 existing cases own the write side completely. Conflating the two is how this clause sat
+  `borg setup` WRITES. The 31 existing cases own the write side completely. Conflating the two is how this clause sat
   in a criterion body for weeks looking covered.
 - **This is the third instance of one defect class in this plan**, after the eval floors and their inert oracle: a
   guard whose own absence is indistinguishable from success. The tell is always the same — delete the guard and every
