@@ -610,6 +610,51 @@ def test_output_is_deterministic_regardless_of_row_order():
     assert core.derive_edges(_manifest(rows)) == core.derive_edges(_manifest(list(reversed(rows))))
 
 
+def test_edges_are_sorted_by_kind_then_child_then_parent():
+    """Hand-authored expected list, NOT a re-computation of the implementation -- an oracle that
+    sorts the same way the code does cannot catch the code sorting wrongly.
+
+    THE TERMINAL SORT KEY HAD NO ORACLE IN THIS MODULE until this case, so the ORIGINAL of the rule
+    was the copy that could drift silently. Every other assertion here either filters to a single
+    `kind` (leaving the kind-major element undiscriminated), compares as a set, self-compares two
+    derive_edges calls, or uses a fixture whose two candidate orders COINCIDE -- a plain three-row
+    lane yields edges whose children and parents ascend together, so `(kind, child, parent)` and
+    `(kind, parent, child)` return the same list. This fixture is built to make them disagree: the
+    lane declares `o/r#5 -> o/r#1 -> o/r#9`, so the stacked children ascend (`#1`, `#9`) while their
+    parents descend (`#5`, `#1`), and a parent-major sort swaps the last two rows.
+
+    TWO COPIES OF THE RULE, TWO ORACLES, AND THEY ARE INDEPENDENT RATHER THAN REDUNDANT.
+    across.edges_from transcribes this function's two-key asymmetry -- `(kind, parent, child)` to
+    collapse, `(kind, child, parent)` to sort -- rather than calling a shared helper, because
+    extracting one would restructure this live path during AC7's expand phase, which ships the new
+    form and repoints nothing. The cross-manifest copy is pinned by the test of this SAME NAME in
+    test_across.py, and that file's edges_from docstring points back here; grep the name to find both.
+    Neither oracle can stand in for the other, and that is MEASURED, not assumed: edges_from re-sorts
+    the union with its own copy of the key, so a flip in here is completely invisible through it.
+    Deleting either test therefore leaves one module's sort pinned by nothing at all.
+
+    MUTATION: flip the key to `(kind, parent, child)`. Measured across the whole borg_core package --
+    this case is the ONLY failure (1 failed, 1038 passed), and the mirror-image mutation in
+    across.edges_from likewise fails only its namesake. Nothing downstream substitutes for either:
+    link/grid.py hands these edges to levels() and _ordering_adjacency, both of which impose an order
+    of their own, so the terminal sort is observable only to a consumer that renders or diffs the rows
+    as they come back.
+    """
+    m = _manifest([_row("1", "o/r#5"), _row("2", "o/r#1"), _row("3", "o/r#9")], apex={"ref": "o/r#0"})
+    got = core.derive_edges(m)
+    assert got == [
+        {"parent": "o/r#0", "child": "o/r#1", "kind": "apex", "source": "declared"},
+        {"parent": "o/r#0", "child": "o/r#5", "kind": "apex", "source": "declared"},
+        {"parent": "o/r#0", "child": "o/r#9", "kind": "apex", "source": "declared"},
+        {"parent": "o/r#5", "child": "o/r#1", "kind": "stacked", "source": "declared"},
+        {"parent": "o/r#1", "child": "o/r#9", "kind": "stacked", "source": "declared"},
+    ]
+    # Discriminator. The three apex rows share one parent, so they sort identically under both
+    # candidate keys and prove only the kind-major element; the stacked pair carries the rest. Its
+    # parents DESCEND, which is what makes the list above more than sorted-looking.
+    assert [e["parent"] for e in got if e["kind"] == "stacked"] == ["o/r#5", "o/r#1"], "not parent-major"
+
+
 def test_an_empty_manifest_yields_no_edges():
     assert core.derive_edges({"rows": []}) == []
 
