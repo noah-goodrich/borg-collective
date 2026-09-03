@@ -207,3 +207,84 @@ def test_the_written_stem_is_basenamed_so_a_name_cannot_escape_the_directory(rep
     assert _run("scaffold", "--repository", repository, "--name", "../escape") == 0
     assert os.path.exists(_path(repository, "escape"))
     assert not os.path.exists(os.path.join(repository, ".borg", "escape.json"))
+
+
+# ── regressions from the 2026-09-03 blind review ─────────────────────────────────────────────────
+def test_a_lane_move_rederives_the_order_instead_of_carrying_a_stale_one(repository):
+    """THE REVIEW'S ONE DATA-CORRUPTION FINDING, pinned.
+
+    `--lane` alone used to set only the lane, carrying the row's old order into the new lane. Two
+    rows then claimed one position -- which `core.validate` ACCEPTS, because it checks duplicate
+    refs and not duplicate orders -- so `core.lanes` sorted the newcomer into the middle and
+    `core.derive_edges` re-pointed a stacked edge at it. An UNTOUCHED row was demoted a position and
+    declared to depend on a row the author never ordered against it.
+
+    MUTATION: drop the `if moving and not args.order` branch in `_cmd_add_row` and this goes red on
+    the edge assertion, which is the one that matters -- the order assertion alone would not show
+    that a third row's dependencies changed.
+    """
+    from borg_core.manifest import core
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "contract")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "contract")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#9", "--lane", "cutover")
+
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#9",
+                "--lane", "contract") == 0
+
+    doc = _read(repository)
+    orders = [row["order"] for row in doc["rows"] if row["lane"] == "contract"]
+    assert len(orders) == len(set(orders)), f"two rows claim one position: {orders}"
+    edges = {(e["parent"], e["child"]) for e in core.derive_edges(doc) if e["kind"] == "stacked"}
+    assert ("o/r#1", "o/r#2") in edges, "the untouched pair keeps its declared edge"
+    assert ("o/r#1", "o/r#9") not in edges, "the moved row is not spliced ahead of it"
+
+
+def test_an_explicit_order_still_wins_over_the_derived_one_on_a_move(repository):
+    """The fix fills the gap the caller left; it does not override the caller."""
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "a")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "b")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2",
+         "--lane", "a", "--order", "7")
+    assert [r["order"] for r in _read(repository)["rows"] if r["ref"] == "o/r#2"] == ["7"]
+
+
+def test_a_padded_lane_buckets_the_way_core_lanes_buckets_it(repository):
+    """`core.lanes` strips the lane; this module used a bare `str()`, so `" a "` was a third bucket.
+
+    Two rows then derived order "1" into what every consumer reads as ONE lane.
+    """
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "a")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "  a  ")
+    rows = _read(repository)["rows"]
+    assert {row["lane"] for row in rows} == {"a"}, "one canonical lane, not two spellings"
+    assert sorted(row["order"] for row in rows) == ["1", "2"]
+
+
+def test_status_is_written_on_a_NEW_row(repository):
+    """cli.py's add-branch `--status` was executed by no test, so deleting it kept every gate green.
+
+    A row written with no status reads as an unknown state, so it is excluded from every ready-set
+    answer and renders unresolved rather than merged.
+    """
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--status", "merged")
+    assert _read(repository)["rows"][0]["status"] == "merged"
+
+
+def test_add_row_and_close_require_a_ref_at_exit_2(repository, capsys):
+    """The guard that distinguishes "you forgot a flag" (rc 2) from "your manifest is bad" (rc 1)."""
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    assert _run("add-row", "--repository", repository, "--name", "demo") == 2
+    assert "--ref is required" in capsys.readouterr().err
+    assert _run("close", "--repository", repository, "--name", "demo") == 2
+
+
+def test_a_non_utf8_manifest_is_refused_by_name_not_by_traceback(repository):
+    """An editor-mangled or truncated file is bytes, not a codec lecture."""
+    os.makedirs(os.path.join(repository, ".borg", "programs"), exist_ok=True)
+    with open(_path(repository), "wb") as handle:
+        handle.write(b'{"rows": [], "desc": "\xff\xfe bad bytes"}')
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 1
