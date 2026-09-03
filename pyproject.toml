@@ -101,8 +101,26 @@ allowed_prefixes = ["borg_core", "__future__"]
 # test_picture.py's AST walk for the same reason that one exists: W9004's allow-list already permits
 # `pathlib`, `json` and `datetime`, so the linter is the coarser of the two gates and neither
 # replaces the other.
+#
+# `across.py` (AC7's expand phase) is here on the same terms, and the omission would be silent in
+# exactly the way the two paragraphs above describe -- classification is by BASENAME and the import
+# check returns early on a file it cannot classify, so an unlisted `across.py` would get ZERO
+# enforcement while `make lint` printed 10.00/10. The name matters more than usual because this
+# module exists as a SPLIT from core.py rather than an addition to it (core.py was 943 lines against
+# pylint's 1000-line default, which nothing here overrides), and a split must never become an escape
+# from the Domain rules its functions used to sit under -- the same condition the `grid.py`
+# paragraph sets for any future extraction. Under `from __future__ import annotations` it imports
+# `typing` plus BOTH manifest siblings -- `borg_core.manifest.core` and `borg_core.manifest.refs`,
+# the latter for the `refs.text` label read -- and nothing else. borg_core/manifest/test_across.py's
+# AST walk pins that as an exact set of TOP-LEVEL import ROOTS, `{"__future__", "typing",
+# "borg_core"}`, which is a narrower claim than the sentence before it: it is deliberately blind to
+# WHICH sibling is imported, so a fourth `borg_core.manifest.*` name passes, while any module from
+# outside those roots fails the set. That is the property this file cannot supply -- W9004's
+# allow-list already permits `pathlib`, `json` and `datetime`, so an exact-ROOT set is what blocks
+# the impurity the linter would wave through, including the aliased `from pathlib import Path as P`
+# spelling a name blacklist misses.
 [tool.clean-arch.module_map]
-Domain = ["core.py", "errors.py", "grid.py", "picture.py", "refs.py", "render.py"]
+Domain = ["across.py", "core.py", "errors.py", "grid.py", "picture.py", "refs.py", "render.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]
