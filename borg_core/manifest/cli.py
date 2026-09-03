@@ -194,7 +194,10 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
         # out as order "3", `core.lanes` put it LAST instead of first, and `derive_edges` emitted
         # `#3 -> #1` -- the ancestor now declared to depend on the whole chain it precedes. Exactly
         # the inversion the rederivation was added to prevent, in the other direction. Prerequisites
-        # are not exotic: core.py records 7 of 16 rows in the live manifests using U+2013.
+        # are not exotic -- the one live manifest in this repository is 3 rows of which 2 carry U+2013,
+        # measured. An earlier version of this comment quoted core.py's "7 of 16 rows" instead, and
+        # borrowing another comment's figure is how a stale number acquires a second home: that one
+        # describes a corpus this tree no longer has, and re-quoting it made it look re-verified.
         prerequisite = str(row.get("order") or "").strip() in core.PREREQ_ORDERS
         for key, value in (("lane", lane if args.lane else ""), ("order", args.order),
                            ("why", args.why), ("status", args.status)):
