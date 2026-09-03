@@ -346,9 +346,14 @@ e2e/eval harness that keeps it honest.
     that file rather than a paragraph here.
   - **(6) The session-load case is DEFERRED to a parented directive, and the criterion no longer asks for it.** It
     sat in the criterion body from the first draft — "a fresh session registers each skill exactly once and fires
-    its hooks" — and nothing in the tree implements it: a grep for `session-load` over `evals/`, `tests/`, the
-    `Makefile` and `docs/plans/directives/` returns NOTHING, and every hit anywhere is in this file — stated that
-    way round on purpose, so the sentence stays true as this plan gains prose about the deferral. So every gate
+    its hooks" — and nothing in the tree implements it. **Measured when this decision was ratified**, a grep for
+    `session-load` over `evals/`, `tests/`, the `Makefile` and `docs/plans/directives/` returned NOTHING. That
+    sentence was written to stay true as this plan gained prose about the deferral, and it did not survive the
+    decision's own action: FILING the directive put hits under `docs/plans/directives/`, so "every hit is in this
+    file" is now false. Dated rather than deleted, because the measurement is what justified the deferral. What a
+    reader should check TODAY is narrower and still decisive: `evals/`, `tests/` and the `Makefile` have NO hit
+    (verified 2026-09-03), so the directive is filed and the harness is still unbuilt — exactly the state the
+    deferral describes. So every gate
     this AC names could go green with the clause wholly unbuilt, which is decision (1)'s finding one level down: a
     requirement no clause can fail for is not a requirement, it is a description. The two honest
     exits are a gate or a deferral, and a gate is unavailable — the only artifact that could check it is a
