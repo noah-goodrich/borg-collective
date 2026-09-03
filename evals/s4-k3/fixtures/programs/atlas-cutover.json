@@ -1,0 +1,56 @@
+{
+  "apex": {
+    "ref": "acme/platform#900",
+    "title": "atlas-cutover apex"
+  },
+  "desc": "E3 fixture: a program spanning two repositories, authored so the declared edge count is EXACT.",
+  "note": "HAND-AUTHORED FIXTURE, NEVER REGENERATED. The declared-edge count E3 asserts is a property of this file plus its sibling warehouse-window.json. Adding or removing a row CHANGES that number and must change the authored total in run.sh with it -- that coupling is the point: it makes the count falsifiable by its own fixture instead of calibrated against whatever two live repositories happened to hold.",
+  "program": "atlas-cutover",
+  "rows": [
+    {
+      "lane": "control",
+      "order": "1",
+      "ref": "acme/platform#901",
+      "status": "merged",
+      "why": "freeze the write path"
+    },
+    {
+      "lane": "control",
+      "order": "2",
+      "ref": "acme/platform#902",
+      "status": "open",
+      "why": "dual-write shim"
+    },
+    {
+      "lane": "control",
+      "order": "3",
+      "ref": "acme/platform#903",
+      "status": "open",
+      "why": "cut reads over"
+    },
+    {
+      "lane": "data",
+      "order": "1",
+      "ref": "acme/warehouse#910",
+      "status": "merged",
+      "why": "backfill the new table"
+    },
+    {
+      "lane": "data",
+      "order": "2",
+      "ref": "acme/warehouse#911",
+      "status": "open",
+      "why": "verify parity"
+    },
+    {
+      "after": [
+        "acme/platform#903"
+      ],
+      "lane": "data",
+      "order": "3",
+      "ref": "acme/warehouse#912",
+      "status": "open",
+      "why": "drop the old table"
+    }
+  ]
+}
