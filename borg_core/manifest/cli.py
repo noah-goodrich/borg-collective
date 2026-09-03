@@ -116,28 +116,18 @@ def _lane_of(value: Any) -> str:
 
 
 def _next_order(manifest: dict[str, Any], lane: str, skip_index: int = -1) -> str:
-    """The next declared order within `lane`, ignoring the row at `skip_index`.
+    """Delegates to `core.next_order_in_lane`. Kept as a name so the call sites read locally.
 
-    Prerequisite rows (`core.PREREQ_ORDERS` -- the dashes and the empty string) carry no number and
-    sort first, so they are SKIPPED rather than counted: numbering after them would claim a position
-    the author deliberately left unnumbered. An empty lane starts at 1.
-
-    `skip_index` exists for the lane MOVE below: the row being moved must not count itself when its
-    new position is derived, or a move into its own lane would renumber it past its neighbours.
+    THIS FUNCTION USED TO COMPUTE THE ANSWER AND THAT WAS THE BUG, twice. It paraphrased
+    `core._sort_key`: once by bucketing lanes with a bare `str()` where `core.lanes` strips, so
+    `" a "` was a third bucket and two rows derived order "1" into one lane; and once by extracting
+    DIGITS and skipping any order holding none, where `_sort_key` falls back to that row's FILE
+    INDEX -- so `"abc"` at index 3 sorts as position 3, this module counted it as nothing, and a
+    moved row took position 1 AHEAD of the untouched row, which was then declared to depend on it.
+    The ordering contract now has one implementation and one owner, reached through its public
+    surface rather than around it.
     """
-    highest = 0
-    for index, row in enumerate(manifest.get("rows") or []):
-        if not isinstance(row, dict) or index == skip_index:
-            continue
-        if _lane_of(row.get("lane")) != lane:
-            continue
-        order = str(row.get("order") or "").strip()
-        if order in core.PREREQ_ORDERS:
-            continue
-        digits = "".join(char for char in order if char.isdigit())
-        if digits:
-            highest = max(highest, int(digits))
-    return str(highest + 1)
+    return core.next_order_in_lane(manifest, lane, skip_index)
 
 
 def _cmd_scaffold(args: argparse.Namespace) -> int:

@@ -302,8 +302,12 @@ def test_a_lane_move_preserves_a_declared_prerequisite_instead_of_numbering_it(r
     `core.lanes` put it LAST, and `derive_edges` emitted `#3 -> #1`: the ancestor declared to depend
     on the whole chain it precedes.
 
-    MUTATION: drop `and not prerequisite` from the rederivation condition and this goes red on the
-    edge assertion.
+    MUTATION: drop `and not prerequisite` and this goes red on the MARKER assertion --
+    `the prerequisite marker was replaced by '3'` at the `in core.PREREQ_ORDERS` check, which is the
+    first of the three. Measured, not guessed: the first version of this note said "the edge
+    assertion", which is the SAME error the same commit corrected on the sibling test six lines up,
+    made again in the same edit. Whichever assertion comes first is the one reported; naming another
+    is a claim about ordering, and this file's ordering is marker, then lane position, then edges.
     """
     from borg_core.manifest import core
     _run("scaffold", "--repository", repository, "--name", "demo")
@@ -322,3 +326,38 @@ def test_a_lane_move_preserves_a_declared_prerequisite_instead_of_numbering_it(r
         "a prerequisite sorts FIRST in its new lane, not last"
     edges = {(e["parent"], e["child"]) for e in core.derive_edges(doc)}
     assert ("o/r#3", "o/r#1") not in edges, "the ancestor must not be declared to depend on its own chain"
+
+
+def test_a_lane_move_does_not_outrank_an_untouched_row_whose_order_holds_no_digit(repository):
+    """ROUND 3: the lane-move rederivation was still wrong, in a third way.
+
+    `core._sort_key` falls back to a row's FILE INDEX when its `order` holds no digit, so `"abc"` at
+    index 3 sorts as though it were order 3. `_next_order` used to extract digits and SKIP such a
+    row entirely, deriving "1" for a moved row -- which then landed AHEAD of the untouched row and
+    was declared its parent. Round 2's prerequisite guard did not close this: `"abc"` is not a
+    prerequisite.
+
+    The fix is not a third string rule but a delegation: `_next_order` now asks `core._sort_key` for
+    each row's effective position instead of paraphrasing how it is computed. Both earlier defects
+    in that function were paraphrase bugs -- a bare `str()` where core strips, and digit extraction
+    where core falls back to the index.
+
+    MUTATION: replace the `core._sort_key` call in `_next_order` with the old digit-extraction loop
+    and this goes red on the lane-order assertion.
+    """
+    from borg_core.manifest import core
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    for n in (1, 2, 3):
+        _run("add-row", "--repository", repository, "--name", "demo", "--ref", f"o/r#{n}", "--lane", "filler")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#7",
+         "--lane", "target", "--order", "abc")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#9", "--lane", "other")
+
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#9",
+                "--lane", "target") == 0
+
+    doc = _read(repository)
+    assert [row["ref"] for row in core.lanes(doc)["target"]] == ["o/r#7", "o/r#9"], \
+        "the newcomer appends after the untouched digit-free row, it does not outrank it"
+    edges = {(e["parent"], e["child"]) for e in core.derive_edges(doc)}
+    assert ("o/r#9", "o/r#7") not in edges, "the untouched row must not be re-parented onto the newcomer"
