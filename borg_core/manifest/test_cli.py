@@ -220,8 +220,11 @@ def test_a_lane_move_rederives_the_order_instead_of_carrying_a_stale_one(reposit
     declared to depend on a row the author never ordered against it.
 
     MUTATION: drop the `if moving and not args.order` branch in `_cmd_add_row` and this goes red on
-    the edge assertion, which is the one that matters -- the order assertion alone would not show
-    that a third row's dependencies changed.
+    the ORDER assertion -- `two rows claim one position: ['1', '2', '1']` -- because that assertion
+    comes first. Measured, after an earlier version of this docstring claimed the EDGE assertion
+    instead: both fire, but only one gets reported, and the order of assertions decides which. The
+    EDGE assertion is still the one that matters, because it is what shows a THIRD row's declared
+    dependencies changed, so it is kept and stated separately rather than folded into the first.
     """
     from borg_core.manifest import core
     _run("scaffold", "--repository", repository, "--name", "demo")
@@ -288,3 +291,34 @@ def test_a_non_utf8_manifest_is_refused_by_name_not_by_traceback(repository):
     with open(_path(repository), "wb") as handle:
         handle.write(b'{"rows": [], "desc": "\xff\xfe bad bytes"}')
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 1
+
+
+def test_a_lane_move_preserves_a_declared_prerequisite_instead_of_numbering_it(repository):
+    """ROUND 2's finding on ROUND 1's fix, and the inversion is the mirror of the one it repaired.
+
+    `core.PREREQ_ORDERS` is not a missing number, it is a declaration that the row has no position
+    and sorts FIRST -- `core._sort_key` gives it a 0-bucket. The rederivation added for the lane-move
+    bug numbered it anyway, so a `"–"` row moved into a lane holding "1" and "2" came out at "3",
+    `core.lanes` put it LAST, and `derive_edges` emitted `#3 -> #1`: the ancestor declared to depend
+    on the whole chain it precedes.
+
+    MUTATION: drop `and not prerequisite` from the rederivation condition and this goes red on the
+    edge assertion.
+    """
+    from borg_core.manifest import core
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1",
+         "--lane", "contract", "--order", "–")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "cutover")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#3", "--lane", "cutover")
+
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1",
+                "--lane", "cutover") == 0
+
+    doc = _read(repository)
+    moved = next(row for row in doc["rows"] if row["ref"] == "o/r#1")
+    assert moved["order"] in core.PREREQ_ORDERS, f"the prerequisite marker was replaced by {moved['order']!r}"
+    assert [row["ref"] for row in core.lanes(doc)["cutover"]] == ["o/r#1", "o/r#2", "o/r#3"], \
+        "a prerequisite sorts FIRST in its new lane, not last"
+    edges = {(e["parent"], e["child"]) for e in core.derive_edges(doc)}
+    assert ("o/r#3", "o/r#1") not in edges, "the ancestor must not be declared to depend on its own chain"

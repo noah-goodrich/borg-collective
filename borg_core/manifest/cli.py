@@ -197,11 +197,20 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
         # `ready_set` stopped announcing it. An explicit `--order` still wins; this only fills the
         # gap the caller left.
         moving = args.lane and _lane_of(args.lane) != _lane_of(row.get("lane"))
+        # A PREREQUISITE STAYS A PREREQUISITE ACROSS A LANE MOVE. `core.PREREQ_ORDERS` (the three
+        # dashes and the empty string) is not a missing number, it is a DECLARATION that the row has
+        # no position and sorts first -- `core._sort_key` returns a 0-bucket for it. Numbering it on
+        # a move destroys that: measured, a row at `"–"` moved into a lane holding "1" and "2" came
+        # out as order "3", `core.lanes` put it LAST instead of first, and `derive_edges` emitted
+        # `#3 -> #1` -- the ancestor now declared to depend on the whole chain it precedes. Exactly
+        # the inversion the rederivation was added to prevent, in the other direction. Prerequisites
+        # are not exotic: core.py records 7 of 16 rows in the live manifests using U+2013.
+        prerequisite = str(row.get("order") or "").strip() in core.PREREQ_ORDERS
         for key, value in (("lane", lane if args.lane else ""), ("order", args.order),
                            ("why", args.why), ("status", args.status)):
             if value:
                 row[key] = value
-        if moving and not args.order:
+        if moving and not args.order and not prerequisite:
             row["order"] = _next_order(manifest, lane, skip_index=index)
         action = "updated"
     written = shell.write_manifest(args.repository, manifest, args.name)
