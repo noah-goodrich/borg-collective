@@ -3,6 +3,8 @@
 # gate for S4 and the evidence for K3's AC3 ("correct chain position for a manifest-declared PR").
 #
 # Evals:
+#   E2a manifest round-trip contract, via pytest: the one case that is deterministic on EVERY
+#       machine — no network, no `gh`, no second repository, no model
 #   E2  live refs: every declared ref resolves on GitHub (no typo'd rows)
 #   E3  gather integration: declared edges flow, zero contested refs
 #   E4  K3 manifest path: /pr-description on a manifest-declared PR branch renders chain
@@ -34,8 +36,18 @@
 # covered was "stillpoint's live manifest file is well-formed" — a smoke test of another
 # repository's DATA, which belongs in that repository, not in this harness.
 #
-# Usage: evals/s4-k3/run.sh [--skip-model]
-#   --skip-model   skip the cases that need a headless model run (E4/E5)
+# Usage: evals/s4-k3/run.sh [--skip-model] [--skip-network]
+#   --skip-model     skip the cases that need a headless model run (E4/E5)
+#   --skip-network   skip the cases that read the wire (E2/E3)
+#
+# THE TWO FLAGS PARTITION THE CASES INTO THREE MODES, which is why the execution floors at the
+# bottom are per-mode and not merely global. `--skip-model --skip-network` is the OFFLINE mode and
+# is what `make eval` passes: E2a alone, deterministic on every machine. DROPPING a flag is a
+# REQUEST for that mode's sweep, so a run that asked for a sweep and executed none of it is a
+# failure, not a 0-of-N pass. `--skip-network` exists because `make eval` was documented as the safe
+# target while E2 still shelled one `gh pr view` per declared ref: with `gh` authenticated and the
+# wire down, the safe target exited non-zero and blamed three manifest rows as unresolved — the same
+# conflation E2's own comment forbids for the 401 case, a transport failure being that class.
 
 set -uo pipefail
 
@@ -43,6 +55,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="${BORG_EVAL_REPO:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 STILLPOINT="${BORG_EVAL_STILLPOINT:-}"
 TROTH="${BORG_EVAL_TROTH:-}"
+
+# THE INTERPRETER IS AN INPUT AND IS DERIVED LIKE THE PATHS ABOVE. E2a needs an importable pytest,
+# which in this repository is a dev-group dependency installed into `.venv` and NOT on the ambient
+# PATH: in the author's default shell `python3` resolves to Homebrew's interpreter and
+# `python3 -m pytest` exits 1 with "No module named pytest". `make test` and `make lint` carry the
+# same unstated precondition — they invoke `coverage`, `ruff`, `mypy` and `pylint` bare — so this is
+# a property of the toolchain's location, not of this harness; the difference is that the harness
+# STATES it, which is what keeps `make eval` from being red on the machine of record. Same
+# ${VAR:-default} override idiom as REPO, except the default is conditional rather than a single
+# expression: the venv interpreter when it is there, bare `python3` when it is not, so a CI job that
+# installs the dev group into the ambient environment keeps working untouched.
+if [ -n "${BORG_EVAL_PYTHON:-}" ]; then
+    PYTHON="$BORG_EVAL_PYTHON"
+elif [ -x "$REPO/.venv/bin/python" ]; then
+    PYTHON="$REPO/.venv/bin/python"
+else
+    PYTHON="python3"
+fi
 
 # Guard before the `rm -rf` below: a mis-derived or mis-overridden REPO must not be able to point
 # the cleanup at an arbitrary directory. `borg.zsh` is the marker because it is TRACKED and sits at
@@ -57,11 +87,13 @@ fi
 OUT="$REPO/evals/s4-k3/out"
 
 SKIP_MODEL=0
+SKIP_NETWORK=0
 while [ $# -gt 0 ]; do
     case "$1" in
-        --skip-model) SKIP_MODEL=1 ;;
-        -h|--help)    echo "usage: evals/s4-k3/run.sh [--skip-model]"; exit 0 ;;
-        *)            echo "unknown flag: $1" >&2; exit 2 ;;
+        --skip-model)   SKIP_MODEL=1 ;;
+        --skip-network) SKIP_NETWORK=1 ;;
+        -h|--help)      echo "usage: evals/s4-k3/run.sh [--skip-model] [--skip-network]"; exit 0 ;;
+        *)              echo "unknown flag: $1" >&2; exit 2 ;;
     esac
     shift
 done
@@ -81,12 +113,168 @@ if [ -n "$STILLPOINT" ] && [ -d "$STILLPOINT" ]; then
     REPOS+=("$STILLPOINT")
 fi
 PASS=0; FAIL=0; SKIPPED=0
+# PER-MODE EXECUTION COUNTERS, incremented by the branch that actually RAN a case rather than by
+# `ok`/`bad`, so "this mode swept something" is recorded once per case regardless of its verdict.
+# They exist because the global PASS+FAIL floor cannot tell "E2a ran" from "the live sweep ran": E2a
+# always executes, so it satisfies a global floor single-handed, and `make eval-live` on a machine
+# with neither `gh` nor `claude` therefore printed "1 pass, 0 fail, 4 skip" and exited 0 with the
+# ENTIRE live sweep absent — the exit code asserting a sweep that never happened.
+#
+# GRANULARITY IS ONE FLOOR PER MODE, NOT ONE PER CASE, and deliberately so: "at least one network
+# case executed" is the strongest claim a mode gate can honestly make here, because E3 additionally
+# needs a SECOND REPOSITORY on disk and E4/E5 need `claude` plus their fixture repositories. A
+# per-case floor would fail for an absent input, which is the exact thing this file exists not to do
+# and the reason `skip` is a first-class verdict above.
+NETWORK_RAN=0
+MODEL_RAN=0
 ok()   { echo "  PASS  $1"; PASS=$((PASS+1)); }
 bad()  { echo "  FAIL  $1"; FAIL=$((FAIL+1)); }
 # A case that cannot run is reported as SKIP and does not affect the exit status. CLAUDE.md's
 # platform-premise lesson in one line: a case that cannot pass here is not a weaker check, it is
 # checking a different fact.
 skip() { echo "  SKIP  $1"; SKIPPED=$((SKIPPED+1)); }
+
+# ── E2a: manifest round-trip contract (offline, deterministic) ───────────────────────────────────
+# THE CASE THAT RUNS ON EVERY MACHINE. No network, no `gh`, no second repository, no model — which
+# is the entire reason it exists. The EXECUTION FLOOR at the bottom of this file is satisfiable
+# rather than a permanent red on a bare checkout only because this case always executes, so E2a is
+# the case that must never SKIP in practice: if it does, the floor fires and the harness says so.
+#
+# ONE IMPLEMENTATION, TWO CALLERS. The assertions live in pytest, where CI's `python` job already
+# collects them through `make test`; `make eval` is not, and must not become, a sixth CI job. This
+# case therefore delegates to the same node selection instead of restating one assertion of its own.
+# Do not "inline the check here so the harness is self-contained" — that creates a second copy of a
+# contract, and the two copies are then free to disagree about what the manifest writer promises.
+#
+# `-k e2a` IS A CONTRACT WITH THE TEST NAMES, AND THE CONTRACT IS A COUNT, NOT A NON-ZERO. Rename or
+# delete 14 of the 15 `test_e2a_*` functions and `-k e2a` selects 1, pytest exits 0, and this case
+# reports PASS over a gate that has been silently emptied of all but one assertion; rename all 15 and
+# the selection is empty. So the count is floored against an authored minimum below, and E2A_MIN is
+# not a guess: it is what `--collect-only` reports for this selection today, verified by running it.
+#
+# THE COUNT FLOOR IS THE LIVE GUARD AGAINST EVERY RENAME, PARTIAL OR TOTAL, AND IT IS THE ONLY ONE.
+# It is checked FIRST, off its own `--collect-only` pass, so the all-or-nothing rename reaches it too
+# and is named as "selected 0 of 15" — which keeps "the tests were renamed" and "the contract broke"
+# apart, the distinction this file once shipped a bug for conflating and the whole reason the count is
+# read at all.
+#
+# WHICH IS ALSO WHY THERE IS NO rc-5 ARM, AND WHY ONE MUST NOT BE ADDED BACK. pytest returns 5 for an
+# empty selection; an empty selection collects zero node ids; zero is below any authored minimum of
+# one or more, so the floor above has already returned with a better message before the run phase is
+# invoked. The arm was unreachable for every value E2A_MIN can hold and had no oracle it could ever
+# get — tests/eval_floor.bats's count-floor case can only assert its string is ABSENT — so it was
+# deleted rather than reworded a third time. An rc 5 that arrives anyway means the whole selection was
+# renamed BETWEEN this case's two pytest invocations, milliseconds apart: a race, not a control-flow
+# path, and one the "pytest exited N" arm still reports as a FAIL, with the rc named and an evidence
+# file that reads "no tests ran". Only a nicer sentence in an unobservable window was given up.
+#
+# AND A COLLECTED TEST IS NOT AN EXECUTED ONE — THE COUNT FLOOR CANNOT SEE THE SKIP DOOR AT ALL.
+# pytest COLLECTS a skipped test, so a selection in which every case carries a skip marker still
+# reports 15 selected, still exits 0, and printed a PASS line whose stdout was BYTE-IDENTICAL to a
+# real pass: measured on a sandbox copy, where the control's evidence read "15 passed, 87 deselected"
+# and the mutant's read "15 skipped, 87 deselected". The partial case is the same shape — 14 of 15
+# skipped reported PASS over an evidence file reading "1 passed, 14 skipped". Not a contrived
+# mutation, either: this very test module legitimately skips a chmod case when it runs as root in a
+# devcontainer, so one marker that drifts to module scope is all it takes.
+#
+# SO THE VERDICT READS THE EXECUTED OUTCOME, AND READS IT FROM `--junit-xml` RATHER THAN FROM `-q`'s
+# SUMMARY. The summary's wording is pytest's to change; the XML's element shape is a published
+# contract, and the interpreter that can parse it is already resolved above. A `<testcase>` executed
+# as a pass iff it carries no `skipped`, `failure` or `error` child, and the whole selection must
+# account for itself that way. That closes both doors rc 0 leaves open, because a skip and an xfail
+# BOTH render as `<skipped>` (measured) while every failure and error forces rc non-zero — so the
+# floor below is the discriminator for exactly the outcomes the exit code cannot show, and the arms
+# after it keep naming the ones it can.
+#
+# `-o xfail_strict=true` CLOSES THE THIRD DOOR, WHICH THE XML ALONE CANNOT. A non-strict xpass
+# renders byte-identically to a pass — no child element, nothing to count — so no reading of this XML
+# could see it; under `xfail_strict` it becomes a `<failure>` at rc 1 and lands in the "pytest exited
+# N" arm with `[XPASS(strict)]` named in the evidence file. An `-o` override rather than a pyproject
+# key, deliberately: strictness is this gate's demand on its own selection, not a rule this harness
+# gets to impose on every other suite the `python` job collects.
+echo "== E2a: manifest round-trip contract (pytest, offline) =="
+E2A_MIN=15
+if ! "$PYTHON" -c "import pytest" >/dev/null 2>&1; then
+    # GUARDED ON THE INPUT THE CASE ACTUALLY NEEDS, which is an importable pytest and not merely an
+    # interpreter. E2 and E3 shell into bare `python3` and are right to — `merge-tree/programs.py`
+    # and `gather.py` import only stdlib, so any stock interpreter runs them — but E2a needs a
+    # THIRD-PARTY DEV DEPENDENCY, which no interpreter carries by construction. "python3 is on PATH"
+    # is therefore a different fact from "this case can execute", and a harness that checks the
+    # first and then reports FAIL prints the manifest contract's name for what is a missing package:
+    # the conflation the header forbids, one layer in from where it was first found.
+    skip "E2a contract: pytest is not importable by $PYTHON"
+else
+    (cd "$REPO" && "$PYTHON" -m pytest borg_core/manifest/test_shell.py -k e2a -q --collect-only) \
+        > "$OUT/e2a-collect.txt" 2>&1
+    # `grep -c` RETURNS 1 ON ZERO MATCHES, so it must never be the last command of a chain whose
+    # status is read — under `pipefail` an empty collection would surface as a shell failure instead
+    # of as the count 0 this floor wants to name. Captured into a variable and compared as its own
+    # statement for exactly that reason. Counting node-id lines, not parsing the trailing "N/M tests
+    # collected" summary, because the summary's wording is pytest's to change and a node id's `::`
+    # is the stable part of `--collect-only -q` output.
+    E2A_SELECTED=$(grep -c '::' "$OUT/e2a-collect.txt")
+    # DEFAULTED SO THE COMPARISON CANNOT FAIL OPEN. `grep -c` writes a count to stdout or nothing at
+    # all, and the nothing case — grep missing, output file unreadable — left this empty, whereupon
+    # `[ "" -lt 15 ]` is not false but an ERROR (status 2, "integer expression expected"), which the
+    # `if` reads as "not less than" and E2a reported PASS with an empty count in its own message.
+    # Measured, not imagined: it is what a PATH-allowlist probe of `make eval-live` printed. A floor
+    # that cannot compute its input must fail CLOSED, so an absent count becomes 0 and trips it.
+    E2A_SELECTED="${E2A_SELECTED:-0}"
+    if [ "$E2A_SELECTED" -lt "$E2A_MIN" ]; then
+        bad "E2a contract: -k e2a selected $E2A_SELECTED of $E2A_MIN authored (see $OUT/e2a-collect.txt)"
+    else
+        (cd "$REPO" && "$PYTHON" -m pytest borg_core/manifest/test_shell.py -k e2a -q \
+            -o xfail_strict=true --junit-xml="$OUT/e2a-junit.xml") \
+            > "$OUT/e2a-pytest.txt" 2>&1
+        E2A_RC=$?
+        if [ "$E2A_RC" -eq 0 ]; then
+            # THE EXECUTED-OUTCOME FLOOR, INSIDE THE rc-0 ARM BECAUSE THAT IS THE ONLY PLACE IT IS
+            # NEEDED: a failure or an error already forces rc non-zero and keeps its own reason
+            # below, so what remains to be caught here is the class the exit code is blind to. The
+            # reader's stderr goes to a file rather than to the terminal so a traceback names its
+            # reason without splicing itself into the PASS/FAIL stream this harness's callers grep.
+            E2A_PASSED=$("$PYTHON" - "$OUT/e2a-junit.xml" 2>"$OUT/e2a-junit-read.txt" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+# Not "has no children": `properties` and `system-out` are legal children of a PASSING testcase
+# under a `junit_logging` setting this harness does not control. The outcome tags are the fact.
+NOT_A_PASS = ("skipped", "failure", "error")
+root = ET.parse(sys.argv[1]).getroot()
+print(sum(1 for case in root.iter("testcase") if not any(k.tag in NOT_A_PASS for k in case)))
+PY
+)
+            # CLASSIFIED BEFORE IT IS COMPARED, NEVER `-lt` ON AN UNKNOWN VALUE. The count floor
+            # above learned this one the expensive way: `[ "" -lt 15 ]` is not false but an ERROR
+            # (status 2, "integer expression expected"), which `if` reads as "not less than", so the
+            # empty case printed PASS. A `case` over the digits admits nothing else to the
+            # comparison, so an absent XML, a malformed one, or a reader that raised gets a reason of
+            # its own instead of a fail-open. An XML recording zero testcases needs no special arm:
+            # it yields 0, which is less than any selection the floor above let through.
+            case "$E2A_PASSED" in
+                ''|*[!0-9]*)
+                    bad "E2a contract: could not read the executed outcome from $OUT/e2a-junit.xml"
+                    ;;
+                *)
+                    if [ "$E2A_PASSED" -lt "$E2A_SELECTED" ]; then
+                        # The tail is assembled in a variable only because `bad` takes ONE argument
+                        # and the whole sentence does not fit the wrap at this indent; a second
+                        # argument would be silently dropped by the reporter rather than printed.
+                        E2A_EVIDENCE="($E2A_PASSED passed, see $OUT/e2a-junit.xml)"
+                        bad "E2a contract: $E2A_SELECTED collected but not all executed $E2A_EVIDENCE"
+                    else
+                        ok "E2a contract: pytest green ($E2A_PASSED of $E2A_SELECTED executed as passes)"
+                    fi
+                    ;;
+            esac
+        else
+            # EVERY NON-ZERO rc LANDS HERE BY NAME, INCLUDING 5 — see the count floor's comment for
+            # why 5 is not special-cased: it cannot be reached from a floor of one or more, and the
+            # rc plus the evidence file say what happened when a race produces it anyway.
+            bad "E2a contract: pytest exited $E2A_RC (see $OUT/e2a-pytest.txt)"
+        fi
+    fi
+fi
 
 # ── E2: live refs ────────────────────────────────────────────────────────────────────────────────
 # THE ONE ESSENTIAL NETWORK DEPENDENCY IN THIS FILE. "Does owner/repo#N exist, and can this token
@@ -95,7 +283,12 @@ skip() { echo "  SKIP  $1"; SKIPPED=$((SKIPPED+1)); }
 # ref's shape, its kind, its uniqueness, whether the fetch path can even address it — is already
 # enforced offline by borg_core.manifest's validator, and belongs in pytest rather than here.
 echo "== E2: every declared ref resolves on GitHub =="
-if ! command -v gh >/dev/null 2>&1; then
+if [ "$SKIP_NETWORK" -eq 1 ]; then
+    # FIRST in the chain, ahead of the `gh` probes: once the caller has said "offline", whether a
+    # `gh` exists and holds a credential is not a fact this run is entitled to consult, and probing
+    # it anyway would make the reason printed depend on the machine rather than on the request.
+    skip "E2 refs: --skip-network (resolving a ref is a live read of GitHub's present state)"
+elif ! command -v gh >/dev/null 2>&1; then
     skip "E2 refs: gh is not installed"
 elif ! gh auth status >/dev/null 2>&1; then
     # NEVER a FAIL. An unauthenticated `gh` makes every ref look unresolved, so failing here would
@@ -129,6 +322,7 @@ PY
     E2_RC=$?
     echo "  $E2_FAILS"
     [ "$E2_RC" -eq 0 ] && ok "E2 refs: all resolve" || bad "E2 refs: unresolved rows"
+    NETWORK_RAN=$((NETWORK_RAN+1))
 fi
 
 # ── E3: gather integration ───────────────────────────────────────────────────────────────────────
@@ -145,7 +339,14 @@ fi
 # onto borg_core must assert a ported `contested_refs()` reading `_id`, or carry a tripwire that
 # goes red the day the retired key disappears.
 echo "== E3: gather integration (live recon) =="
-if [ "${#REPOS[@]}" -lt 2 ]; then
+if [ "$SKIP_NETWORK" -eq 1 ]; then
+    # E3 IS A NETWORK CASE TOO, which the case header above already concedes by calling GitHub its
+    # input: `borg recon` fans out over the adapters, and this repository's reference adapter shells
+    # `gh`. That the assertion survives a completely failed sweep (measured) does not make the sweep
+    # offline — it makes the case's coupling incidental, which is a claim about the deferred rewrite
+    # and not a licence to reach the wire under a flag that says not to.
+    skip "E3 gather: --skip-network (borg recon fans out over the github adapter)"
+elif [ "${#REPOS[@]}" -lt 2 ]; then
     # The `>= 14` threshold is calibrated for the two-repository set. With one repository the count
     # is legitimately lower, so running it would fail for a reason unrelated to what it asserts.
     skip "E3 gather: needs the second repository (set BORG_EVAL_STILLPOINT)"
@@ -171,11 +372,32 @@ exit(0 if prov['declared'] >= 14 and g['meta']['program_contested_refs'] == [] e
     E3_RC=$?
     echo "  $E3"
     [ "$E3_RC" -eq 0 ] && ok "E3 gather: declared edges flow, zero contested" || bad "E3 gather"
+    NETWORK_RAN=$((NETWORK_RAN+1))
 fi
 
 # macOS has no GNU `timeout`; use gtimeout when available, else rely on claude -p terminating.
 # An ARRAY, not a string: the value is two words when gtimeout exists and zero words when it does
 # not, and only an array expands to both correctly under quoting that shellcheck accepts.
+#
+# AND EVERY EXPANSION OF IT IS `${TIMEOUT[@]+"${TIMEOUT[@]}"}`, NEVER A BARE `"${TIMEOUT[@]}"`. On
+# bash BEFORE 4.4 the `[@]` expansion of an EMPTY array is an unbound variable under `set -u`, and
+# `/bin/bash` on macOS is 3.2 — the machine of record, and the only shell that ever reaches the empty
+# branch, because that branch is precisely "no gtimeout", which is the default macOS state. Measured
+# against this file before the guard existed: with `--skip-network`, a reachable `claude` and
+# `BORG_EVAL_TROTH` set, E5 died with `TIMEOUT[@]: unbound variable` BEFORE its `>` redirect opened,
+# the following `grep` read a file that was never written, and the case reported `FAIL E5 fallback` —
+# a case failing for a reason that has nothing to do with what it asserts, which is the one thing
+# this file's header says must never happen. E4 is the same crash at its own expansion, and it was
+# latent only because both model cases skip when their fixture variable is unset, so nothing on the
+# crashing platform had reached the expansion yet. `+` and not `:+`: the test must be SET rather than
+# non-empty, so a prefix whose words are legitimately empty still survives it.
+#
+# DO NOT "SIMPLIFY" THE GUARD BACK — nothing in CI can stop you. No lane runs this harness's model
+# cases at all; the ubuntu lane that drives the harness through tests/eval_floor.bats is bash 5, where
+# the bare form is perfectly legal, and it stubs `gtimeout` so it takes the POPULATED branch anyway,
+# while the macOS lane runs only the CLI contract suite. That is CLAUDE.md's "a test's PREMISE can
+# depend on the dev platform" class with the platforms swapped: the green lane is the one where the
+# premise holds, so the only machine the bug exists on is the developer's own.
 TIMEOUT=()
 command -v gtimeout >/dev/null 2>&1 && TIMEOUT=(gtimeout 420)
 
@@ -198,7 +420,8 @@ else
         git -C "$STILLPOINT" worktree add "$WT" origin/write-freeze-design --detach 2>/dev/null
         mkdir -p "$WT/.borg/programs"
         cp "$STILLPOINT/.borg/programs/ingle-t1-cutover.json" "$WT/.borg/programs/"
-        (cd "$WT" && "${TIMEOUT[@]}" claude -p "/pr-description" > "$OUT/e4-body.md" 2>"$OUT/e4-stderr.txt")
+        (cd "$WT" && ${TIMEOUT[@]+"${TIMEOUT[@]}"} claude -p "/pr-description" \
+            > "$OUT/e4-body.md" 2>"$OUT/e4-stderr.txt")
         if grep -q "ingle-t1-cutover" "$OUT/e4-body.md" && \
            grep -qi "cutover" "$OUT/e4-body.md" && \
            ! grep -q "No manifest declared" "$OUT/e4-body.md"; then
@@ -206,6 +429,7 @@ else
         else
             bad "E4 chain position (see $OUT/e4-body.md)"
         fi
+        MODEL_RAN=$((MODEL_RAN+1))
         git -C "$STILLPOINT" worktree remove --force "$WT" 2>/dev/null
     fi
 
@@ -220,12 +444,14 @@ else
     elif [ -z "$TROTH" ] || [ ! -d "$TROTH" ]; then
         skip "E5 fallback: needs a manifest-less repository (set BORG_EVAL_TROTH)"
     else
-        (cd "$TROTH" && "${TIMEOUT[@]}" claude -p "/pr-description" > "$OUT/e5-body.md" 2>"$OUT/e5-stderr.txt")
+        (cd "$TROTH" && ${TIMEOUT[@]+"${TIMEOUT[@]}"} claude -p "/pr-description" \
+            > "$OUT/e5-body.md" 2>"$OUT/e5-stderr.txt")
         if grep -q "No manifest declared" "$OUT/e5-body.md"; then
             ok "E5 fallback line present"
         else
             bad "E5 fallback (see $OUT/e5-body.md)"
         fi
+        MODEL_RAN=$((MODEL_RAN+1))
     fi
 fi
 
@@ -233,4 +459,38 @@ echo
 # SKIPs are reported but never gate. A case whose inputs are absent on this machine has not failed;
 # printing the count keeps that visible instead of letting a mostly-skipped run read as a pass.
 echo "RESULT: $PASS pass, $FAIL fail, $SKIPPED skip"
+
+# THE EXECUTION FLOORS — one GLOBAL, then one PER MODE. SKIPs still never gate: that part above is
+# correct and stays, because an input that is absent on this machine is not a defect, which is why
+# these conditions count the cases that EXECUTED instead of comparing $SKIPPED against a total. But
+# a run in which nothing executed is a different and worse fact than a run in which cases ran and
+# passed, and the old exit status could not tell them apart: on a machine with no authenticated `gh`
+# and no second repository this printed "0 pass, 0 fail, 3 skip" and exited 0, so "verified nothing"
+# was indistinguishable from "verified everything asked of it". Two halves, deliberately: something
+# must have run, AND nothing that ran may have failed. E2a is what keeps the first half satisfiable
+# everywhere instead of a standing red on a machine with no credentials, so if the global floor ever
+# fires the thing to check is why E2a did not execute.
+#
+# AND THAT IS ALSO WHY THE GLOBAL FLOOR IS NOT SUFFICIENT ON ITS OWN. E2a always executes, so it
+# satisfies PASS+FAIL>0 single-handed and the global floor cannot distinguish the offline mode from
+# a live sweep that found no inputs — `make eval-live` on a machine with neither `gh` nor `claude`
+# reported "1 pass, 0 fail, 4 skip" at rc 0 with the whole live sweep missing, and rc 0 is the only
+# thing the plan's "on demand" gate and the Ship Definition's one required run actually read. The
+# mode floors close that by treating the ABSENCE of a skip flag as a request: ask for the network
+# sweep and none of it ran, and the run failed to do the thing it was asked to do. Ordered before
+# the FAIL check so the more specific reason is the one that gets printed; either way the exit is
+# non-zero. Per-mode, never per-case — see the counters' declaration for why that ceiling is where
+# an honest claim stops.
+if [ $((PASS + FAIL)) -eq 0 ]; then
+    echo "every case skipped: nothing was verified" >&2
+    exit 1
+fi
+if [ "$SKIP_NETWORK" -eq 0 ] && [ "$NETWORK_RAN" -eq 0 ]; then
+    echo "the network sweep was requested but no network case executed" >&2
+    exit 1
+fi
+if [ "$SKIP_MODEL" -eq 0 ] && [ "$MODEL_RAN" -eq 0 ]; then
+    echo "the model sweep was requested but no model case executed" >&2
+    exit 1
+fi
 [ "$FAIL" -eq 0 ]

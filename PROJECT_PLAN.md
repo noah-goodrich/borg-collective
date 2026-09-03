@@ -145,10 +145,200 @@ e2e/eval harness that keeps it honest.
   - Verify: eval cases run each skill headless against a fixture repository and grade the emitted manifest; each
     positive case is paired with a negative case proving the conditional discriminates (see `evals/s4-k3/run.sh` E4/E5).
 - [ ] **AC6 — e2e/eval harness MVP.** Generalize the `evals/s4-k3/run.sh` pattern into a reusable convention: a
-      `make eval` target, deterministic cases green in CI, model-dependent cases behind `--skip-model`, every positive
-      case paired with a negative. Includes the session-load case — a fresh session registers each skill exactly once
-      and fires its hooks.
-  - Verify: `make eval --skip-model` green in CI; full `make eval` green on demand.
+      `make eval` target, deterministic cases green in CI, model-dependent cases behind `make eval-live`, every
+      positive case paired with a negative. The session-load case — a fresh session registers each skill exactly
+      once and fires its hooks — is deferred to a parented directive, not built here; see decision (6).
+  - Verify: three gates, each pointing at something that actually runs. **CI** — `make test` green in the `python`
+    job, which collects the offline E2a case (`borg_core/manifest/test_shell.py`'s `e2a` tests: the eight structural
+    ref properties over a two-repository tree, plus an exact authored edge count), together with `bats tests/*.bats`
+    in the `test` job — which also collects `tests/eval_floor.bats`, the oracle for ALL SEVEN floors below, twelve
+    cases pinning each floor in the firing direction and in the direction that proves it discriminates, per
+    decision (5), and which that job now installs an importable pytest for rather than skipping past — and
+    shellcheck over `evals/*/run.sh` in the `lint` job. **Local aggregate** — `make eval` green, offline by
+    construction rather than by convention (`EVAL_ARGS ?= --skip-model --skip-network`), with the selection floor
+    below armed. **On demand** — `make eval-live` green, the everything sweep that spends money and needs an
+    authenticated `gh`. The deterministic eval evidence rides the EXISTING pytest and bats legs; per the build order
+    no sixth CI job is added.
+  - **A green run that selected or executed zero cases is a FAILURE, and every level is armed in this change.**
+    Selection is one floor; execution is three. `make eval` fails when the `evals/*/run.sh` glob selects no harness.
+    `evals/s4-k3/run.sh` then fails three ways: GLOBALLY, when it ran zero cases at all (`PASS + FAIL == 0`); on the
+    NETWORK mode, when `--skip-network` was absent and no network case executed; and on the MODEL mode, when
+    `--skip-model` was absent and no model case executed. Dropping a skip flag is a REQUEST for that mode's sweep,
+    and a run that asked for a sweep and performed none of it has failed at the thing it was asked to do. The two
+    mode floors exist because the global one is satisfied single-handed by the one always-runnable offline case, so
+    `make eval-live` — the "on demand" gate and the Ship Definition's one required run — reported SUCCESS at exit 0
+    on a machine with neither `gh` nor `claude`, the entire live sweep absent. SKIPs still never gate a mode nobody
+    asked for — a case whose inputs are absent on this machine has not failed. The floors exist because an empty
+    gate and a passing gate print the same thing, which is why "deterministic cases green in CI" sat at zero members
+    across three checkpoints unnoticed.
+  - **Six decisions ratified 2026-09-02**, after the original verify clause was found unsatisfiable for a second and
+    larger reason.
+  - **(1) The CI clause names `make test`, not `make eval`.** NO CI JOB RUNS `make eval` — verified against
+    `.github/workflows/test.yml`, whose five jobs are `lint` (shellcheck over `hooks/`, `lib/` and `evals/*/run.sh`),
+    `test` (`bats tests/*.bats`), `python` (`make lint` + `make test`), `viz` (`make lint-viz` + `make test-viz`) and
+    `contract-macos` (`bats tests/cli_contract.bats`). A clause naming a target no job invokes cannot go red, so it
+    was never evidence of anything — and it is the reason that SURVIVES fixing the flag, which is why repairing only
+    the flag would have left the clause exactly as unfalsifiable as it already was. Step 6 of the corrected build
+    order in `.borg/checkpoints/2026-09-02-1309.md` also forbids a sixth CI job, because all three deterministic legs
+    are already collected: bats by `test`, `borg_core` pytest by `python`, merge-tree pytest by `viz`. So the
+    deterministic eval evidence has to ride a leg that runs, which is what makes E2a a pytest rather than a shell
+    case.
+  - **(2) `make eval` / `make eval-live`, not `make eval --skip-model`.** make's getopt consumes any leading-dash
+    word anywhere in argv before a goal is built, so the flag never reaches a recipe and that invocation exits 2
+    whatever the Makefile contains; a make VARIABLE is the only form that gets through, and `EVAL_ARGS` is the
+    extension point because each harness takes its own flags. The ordering is a deliberate choice, not a
+    convenience, and the split is OFFLINE versus EVERYTHING rather than model-free versus full: `make eval` defaults
+    `EVAL_ARGS` to `--skip-model --skip-network` and `make eval-live` clears both, so the short target reaches
+    neither a model nor the wire. It took the SECOND flag to make that true. Under `--skip-model` alone the target
+    this plan calls the safe one still shelled one `gh pr view` per declared ref in E2 and fanned `borg recon` over
+    the github adapter in E3, so a transport failure came back as "N unresolved rows" — a red gate blaming typo'd
+    manifest data for a dropped connection, which is the conflation E2's own comment already forbids for the 401
+    case. Only with the pair in place does the rule below describe the tree rather than merely assert itself: the
+    target a CI clause names must not be the one that reaches the network, or CI acquires a network dependency by
+    default and the offline guarantee becomes a matter of remembering a flag.
+  - **(3) The floor is armed at both altitudes, and the execution altitude is mode-aware.** Selection is the
+    Makefile's — the `evals/*/run.sh` glob selecting no harness is a failure, guarded on the GLOB rather than on
+    `[ -d evals ]`, since with no nullglob a directory holding no `run.sh` passes a directory test and then hands
+    the literal pattern to bash. Execution is `run.sh`'s, in the global and two per-mode forms above. Arming the
+    execution altitude required giving the harness one case that runs WHEREVER THE DEV TOOLCHAIN IS INSTALLED,
+    which is what E2a is for — every pre-existing case skips without an authenticated `gh`, a second repository, or
+    `claude` on PATH, and a floor nothing can satisfy is a permanent red, not a gate. "One case that runs on ANY
+    machine" was this decision's first wording and it overstated the case: E2a needs pytest importable, and pytest
+    is a third-party dev dependency that is NOT on this repository's ambient PATH — the toolchain lives in a local
+    virtualenv that `make lint` and `make test` need just as much, since they invoke `coverage`, `ruff`, `mypy` and
+    `pylint` bare. E2a's precondition is therefore exactly the one `make test` already carries, no weaker and no
+    stronger, which is the narrower and honest claim. **And narrower again than "the toolchain is on PATH", because
+    the harness RESOLVES ITS INTERPRETER BY PATH rather than assuming its caller exported one**: a
+    `BORG_EVAL_PYTHON` override first, else the repository's own `.venv/bin/python` when that file is executable,
+    else bare `python3`. So E2a RUNS on the machine of record with the virtualenv unactivated — measured in one
+    shell, where `python3 -c "import pytest"` raises `ModuleNotFoundError` and the harness on the very next line
+    reports `PASS E2a contract: pytest green (15 of 15 executed as passes)`, because the middle rung found the
+    venv. (That line read `pytest green (15 tests)` when this decision was first written; the executed-outcome
+    floor in decision (4) reworded it, and the quote is re-measured here rather than left to describe a harness
+    that no longer exists.) It SKIPs only when the RESOLVED interpreter cannot import pytest, and the reason names
+    that interpreter — this file's one vocabulary for an absent input. Forcing the resolution down to the
+    pytest-less rung with `BORG_EVAL_PYTHON=python3` is the negative and the toolchain-less checkout in miniature:
+    E2a skips, the run reports `0 pass, 0 fail, 3 skip`, and the global execution floor then fires and correctly
+    reports that nothing was verified, which is the right answer for that machine and is not a green.
+  - **(4) E2a is one implementation with two callers, and its gate has THREE doors.** pytest owns the assertions —
+    `borg_core/manifest/test_shell.py`'s `e2a` tests, with the negatives that move the numbers (two manifests sharing
+    one ref, a row added or removed), without which the authored counts are unfalsifiable by their own fixture.
+    `evals/s4-k3/run.sh` calls that same `-k e2a` selection rather than restating them, so the CI leg and the
+    harness cannot drift. A `-k` selection is a CONTRACT WITH THE TEST NAMES, and such a contract can be broken in
+    three different sizes: the gate can be EMPTIED by renaming every test, SHRUNK by renaming some of them, and
+    HOLLOWED without renaming anything at all. **The COUNT FLOOR is the live guard against the first two, partial
+    or total.** The harness collects the selection with `--collect-only`, counts node-id lines, and fails when the
+    count is under an authored minimum of 15 — not a guess, but what `--collect-only` reports for this selection
+    today (`15/102 tests collected (87 deselected)`). It names the SHORTFALL, so a total rename reads
+    `selected 0 of 15 authored` and a fourteen-of-fifteen rename reads `selected 1 of 15`: one mechanism, both
+    sizes. The partial size is the one a non-zero floor could never see — renaming fourteen leaves `-k e2a`
+    selecting one, pytest exiting 0, and the case printing PASS over a gate that has lost all but one assertion.
+    **rc 5 is belt-and-braces, and crediting it as the guard against renaming was wrong.** The count floor runs
+    FIRST and the pytest RUN sits in its else-branch, so a selection that would make pytest exit 5 (no tests
+    selected) has already failed the count and never reaches the arm — measured by forcing the collection down to
+    one node, which prints the count floor's FAIL and no pytest line at all. The arm stays as defence in depth,
+    because rc 5 otherwise reads as an ordinary failure and it still catches the one shape a collection count
+    cannot: a COLLECT phase and a RUN phase that disagree about what `-k e2a` selects. **The third door is
+    HOLLOWING, and the count floor structurally cannot see it, because a skipped test is still a COLLECTED test.**
+    Measured this round against the harness as it stood before the fix: with every selected test carrying a skip
+    marker, pytest printed `15 skipped, 87 deselected` and exited 0, the collection still counted 15, and the
+    harness's whole stdout plus its exit status were identical to a real pass — `PASS E2a contract: pytest green
+    (15 tests)`, rc 0, diffed against the control in the same shell. **What closes it is the EXECUTED-OUTCOME
+    FLOOR, and it sits inside the rc-0 arm** — the only place it is needed, since a failure or an error already
+    forces rc non-zero and keeps its own reason. The verdict reads `--junit-xml` rather than `-q`'s summary,
+    because the summary's wording is pytest's to change while the XML's element shape is a published contract: a
+    `<testcase>` counts as executed-as-a-pass iff it carries no `skipped`, `failure` or `error` child, and the case
+    fails when that count comes in under the number COLLECTED — so ONE drifted marker trips it, not merely a
+    wholesale hollowing. Two details are load-bearing. The count is CLASSIFIED before it is compared (a `case` over
+    digits, never `-lt` on an unknown value), because the count floor above learned that the expensive way:
+    `[ "" -lt 15 ]` is an error rather than a false, and `if` reads it as "not less than". And
+    `-o xfail_strict=true` closes the one door the XML alone cannot see, since a non-strict xpass renders
+    byte-identically to a pass while under strictness it becomes a `<failure>` at non-zero rc. Re-measured against
+    the same mutant after the floor landed: `FAIL E2a contract: 15 collected but not all executed (0 passed, ...)`
+    at rc 1, beside the control's `PASS E2a contract: pytest green (15 of 15 executed as passes)` at rc 0. So each
+    door has its own mechanism — emptied and shrunk are the count floor's, collect-versus-run disagreement is
+    rc 5's, hollowed is the outcome floor's. What E2a deliberately does NOT cover: whether a ref RESOLVES on GitHub
+    is one bit per ref that no committed artifact can establish, since a frozen recording asserts only "it existed
+    at T", so that claim stays in E2 behind `make eval-live`.
+  - **(5) A floor with no oracle is the defect class the floor exists to prevent — so the floors are COUNTED here,
+    and ALL SEVEN have one, each in both directions.** The principle first, and it is the reason for the arithmetic
+    that follows: as first shipped neither the selection nor the execution floor was falsifiable — strip the
+    Makefile's `found`-at-zero branch or `run.sh`'s `PASS + FAIL == 0` branch and every gate in this repository
+    stays green, because no CI job invokes an eval target, no other bats file executes anything under `evals/`, and
+    shellcheck models syntax rather than exit status. That is the same "absence and success print the same thing"
+    shape the floors were added to catch, reproduced one altitude up, with this plan asserting both were armed and
+    nothing in the tree able to contradict it. The repair for that is not another assertion of coverage, so: there
+    are SEVEN floors across two artifacts — the Makefile's SELECTION floor and its `EVAL_ARGS` validator (a floor
+    in all but name, since `-h`/`--help` reaches the harness's usage exit before a counter moves and is therefore a
+    green run of nothing arriving through the documented extension point), plus `run.sh`'s GLOBAL execution floor,
+    NETWORK-mode floor, MODEL-mode floor, E2a COUNT floor and E2a EXECUTED-OUTCOME floor.
+    **`tests/eval_floor.bats` is TWELVE cases and covers all seven** — `bats tests/eval_floor.bats` prints `1..12`
+    and twelve `ok` lines, and that file's own header enumerates the same seven floors at three altitudes. Four
+    floors get a case per direction: SELECTION fires on both shapes the recipe's own comment argues about (no
+    `evals/` at all, and an `evals/` that exists but holds no `run.sh`) and holds for one trivial harness that
+    passes; the GLOBAL execution floor fires over the `evals/*/run.sh` glob with every optional input hidden behind
+    a positively-named binary allowlist and holds on the same offline invocation once handed an interpreter that
+    can import pytest; each MODE floor fires on the invocation that drops exactly one skip flag — so that mode's
+    sweep IS requested — with that mode's binary hidden, and holds on the same invocation against a stub and one
+    case it can execute. The remaining three carry both directions inside a SINGLE case, because for them the
+    negative is a one-token edit of the positive and a discriminator living in a neighbouring case is not a
+    discriminator for this one: the `EVAL_ARGS` validator refuses `--help` and a metacharacter word BY NAME while
+    asserting the harness never ran at all, then admits an EXPLICIT offline value — distinct from the default the
+    selection negative exercises, since only a typed value reaches the validator's loop; the COUNT floor fails a
+    selection one test short naming both numbers, then exits 0 on the same synthetic sandbox one test richer; the
+    OUTCOME floor fails a full selection carrying one collected-but-skipped test, then exits 0 on the same sandbox
+    without the marker. The twelfth case is nobody's floor: it oracles the `$REPO` checkout guard sitting in front
+    of the harness's `rm -rf "$OUT"`, in both directions, with a canary planted where `$OUT` would be — the one
+    invariant in this change whose failure mode is destructive rather than merely silent, and equally unread by
+    anything until that case landed. So no floor is credited for an artifact that merely always fails, and every
+    case that executes a harness loops the glob rather than naming `s4-k3` and fails when the loop was vacuous, so
+    a future harness that forgets to self-police turns the oracle red the day it lands. It rides the CI legs that
+    already run: the `test` job's `bats tests/*.bats` glob collects the file by existing, so no sixth job is added,
+    per decision (1).
+    **AND THE ORACLE WAS ITSELF INERT IN CI — the same principle recursing once more, on its own fix.** The seven
+    cases that must EXECUTE a harness each need an interpreter that can `import pytest`; the only job that collects
+    the file installed `zsh`, `jq` and `fzf` and no Python toolchain at all, and a bats `skip` prints `ok`. So that
+    job reported every case green having executed only the ones that need no interpreter, and deleting a mode floor
+    would have turned nothing red there — a suite announcing coverage it was not providing, on the very leg the
+    verify clause above cites as evidence. The repair is two-sided, and it keeps decision (1) intact: **NO SIXTH
+    JOB.** In `.github/workflows/test.yml` the EXISTING `test` job gains a `Set up Python 3.14` step and an
+    `Install dev toolchain (tests/eval_floor.bats needs an importable pytest)` step running
+    `pip install --group dev` — the same action version, interpreter and install invocation as the `python` and
+    `viz` jobs, because three jobs installing the dev group three ways is how they drift — so its steps are now
+    checkout, apt deps, python, dev toolchain, bats, `bats tests/*.bats`, and that file still declares exactly the
+    five jobs decision (1) enumerates: `lint`, `test`, `python`, `viz`, `contract-macos`. That supplies the
+    premise; the other side makes a MISSING premise loud. `_python_with_pytest` no longer calls `skip` — it prints
+    `premise broken: no interpreter with an importable pytest -- run 'pip install --group dev'` and returns
+    non-zero, and a grep for a `skip` call anywhere in the file now finds none. A gate that yields to a missing
+    dependency is the thing this decision exists to remove, so the trade is red-and-actionable over
+    green-and-empty.
+    **The hand runs are HISTORICAL — evidence from the round before the oracle existed**, kept because they are
+    what decisions (3) and (4) measured their numbers against, and superseded as gates by cases 3 and 6–11. With
+    the network binaries hidden and a working interpreter supplied: no flags at all exited non-zero on "the network
+    sweep was requested but no network case executed", `--skip-network` alone exited non-zero on the model twin,
+    both over a run that printed "1 pass, 0 fail, 4 skip" — the exact shape that used to exit 0; forcing the
+    collection below its minimum exited non-zero naming the shortfall; skip-marking the whole selection exited
+    non-zero naming what was collected against what executed, against a control that passed; and
+    `make eval EVAL_ARGS=--help` and `make eval EVAL_ARGS='--bogus; true'` were both refused, by name, before any
+    harness ran. A hand-run is evidence for a checkpoint and not a gate, which is why all five are now cases in
+    that file rather than a paragraph here.
+  - **(6) The session-load case is DEFERRED to a parented directive, and the criterion no longer asks for it.** It
+    sat in the criterion body from the first draft — "a fresh session registers each skill exactly once and fires
+    its hooks" — and nothing in the tree implements it: a grep for `session-load` over `evals/`, `tests/`, the
+    `Makefile` and `docs/plans/directives/` returns NOTHING, and every hit anywhere is in this file — stated that
+    way round on purpose, so the sentence stays true as this plan gains prose about the deferral. So every gate
+    this AC names could go green with the clause wholly unbuilt, which is decision (1)'s finding one level down: a
+    requirement no clause can fail for is not a requirement, it is a description. The two honest
+    exits are a gate or a deferral, and a gate is unavailable — the only artifact that could check it is a
+    session-lifecycle harness that does not exist, and naming an artifact nothing runs is exactly the
+    unfalsifiable clause decision (1) deleted. It is also the wrong SHAPE for this AC: every other case here is
+    offline and deterministic or sits behind `make eval-live`, whereas this one needs a real session start, real
+    hook dispatch and the installed skill set — a different harness, not a case in `evals/s4-k3/run.sh`, and one
+    whose negative ("a skill registered twice") requires mutating an install. So it is filed rather than gated, in
+    the same voice AC7 uses for the rename it defers: to be filed as
+    `docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md`, carrying a
+    `*Parent plan:*` line back here. Filing is the remaining action — this round's change owns `PROJECT_PLAN.md`
+    only, so that file is not yet on disk, and AC6 does not tick until it is.
 - [ ] **AC7 — "Program" is gone, and nothing breaks.** Eliminated from user-facing surfaces, skills, help text, and
       `merge-tree/`. The repository-side rename is filed as a parented directive, not executed. Suites green and
       coverage holds its floor.
@@ -194,12 +384,16 @@ e2e/eval harness that keeps it honest.
   matrices beat node-link except on path-finding); live manifests are 3 and 14 rows on a path-finding task, so the
   evidence most likely confirms the specced grammar. An hour of reading, not a phase.
 - NOT building: evals beyond the three lifecycle skills in AC5.
+- NOT building: AC6's session-load case. AC6 files it — to be filed as
+  `docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md`. See AC6 decision (6): it
+  needs a session-lifecycle harness that does not exist, and a criterion clause naming one would be unfalsifiable.
 - If done early: ship what we have, don't expand scope.
 
 ## Ship Definition
 
-Committed to `main` + `make test` green + `bats tests/` green + `make eval --skip-model` green + one full `make eval`
-run on demand + manual `borg link` smoke in both repository and orchestrator context + `borg help` text updated.
+Committed to `main` + `make test` green + `bats tests/` green + `make eval` green with the zero-selection floor
+armed + one `make eval-live` run on demand + manual `borg link` smoke in both repository and orchestrator context +
+`borg help` text updated.
 
 ## Timeline
 
@@ -219,5 +413,11 @@ is most of the increase over the original estimate.
 - **`gate.kind` is hand-set.** Yours-vs-mine is exactly as good as that field. A mis-set gate routes a human decision
   to an agent silently — a wrong answer, not a missing one. AC5's evals are the only thing that would catch
   systematic drift.
-- **Eval flakiness.** Model-dependent cases fail intermittently. Keeping them behind `--skip-model` protects CI but
-  means they only run when someone remembers; the ship definition forces one run.
+- **Eval flakiness.** Model-dependent cases fail intermittently. `run.sh`'s `--skip-model` flag still holds them
+  back, and the invocation that actually runs them is `make eval-live`. The sharper version of the risk: CI never runs
+  them AT ALL — no job invokes any eval target — so their only gate is someone remembering. The Ship Definition asks
+  for exactly one such run, but asking is not forcing, and it was not forcing the model cases to run: until the
+  model-mode execution floor landed, `make eval-live` exited 0 on a machine with no `claude` on PATH at all, so the
+  required run could be performed, reported green, and have executed not one model case. The mode floor is what
+  forces them now — request the model sweep, execute none of it, and the run exits non-zero with that reason named
+  on stderr.
