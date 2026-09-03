@@ -276,7 +276,7 @@ e2e/eval harness that keeps it honest.
     is one bit per ref that no committed artifact can establish, since a frozen recording asserts only "it existed
     at T", so that claim stays in E2 behind `make eval-live`.
   - **(5) A floor with no oracle is the defect class the floor exists to prevent — so the floors are COUNTED here,
-    and ALL SEVEN have one, each in both directions.** The principle first, and it is the reason for the arithmetic
+    and ALL SIX have one, each in both directions.** The principle first, and it is the reason for the arithmetic
     that follows: as first shipped neither the selection nor the execution floor was falsifiable — strip the
     Makefile's `found`-at-zero branch or `run.sh`'s `PASS + FAIL == 0` branch and every gate in this repository
     stays green, because no CI job invokes an eval target, no other bats file executes anything under `evals/`, and
@@ -309,7 +309,7 @@ e2e/eval harness that keeps it honest.
     needed at all: without it the validator would be credited for refusing everything); the COUNT floor fails a
     selection one test short naming both numbers, then exits 0 on the same synthetic sandbox one test richer; the
     OUTCOME floor fails a full selection carrying one collected-but-skipped test, then exits 0 on the same sandbox
-    without the marker. The twelfth case is nobody's floor: it oracles the `$REPO` checkout guard sitting in front
+    without the marker. The TENTH and last case is nobody's floor: it oracles the `$REPO` checkout guard in front
     of the harness's `rm -rf "$OUT"`, in both directions, with a canary planted where `$OUT` would be — the one
     invariant in this change whose failure mode is destructive rather than merely silent, and equally unread by
     anything until that case landed. So no floor is credited for an artifact that merely always fails, and every
@@ -318,7 +318,8 @@ e2e/eval harness that keeps it honest.
     already run: the `test` job's `bats tests/*.bats` glob collects the file by existing, so no sixth job is added,
     per decision (1).
     **AND THE ORACLE WAS ITSELF INERT IN CI — the same principle recursing once more, on its own fix.** The seven
-    cases that must EXECUTE a harness each need an interpreter that can `import pytest`; the only job that collects
+    FIVE cases that must EXECUTE a harness each need an interpreter that can `import pytest` — cases 5 through 9;
+    case 4's premise IS hiding every interpreter and case 10 needs none. The only job that collects
     the file installed `zsh`, `jq` and `fzf` and no Python toolchain at all, and a bats `skip` prints `ok`. So that
     job reported every case green having executed only the ones that need no interpreter, and deleting a mode floor
     would have turned nothing red there — a suite announcing coverage it was not providing, on the very leg the
@@ -335,7 +336,7 @@ e2e/eval harness that keeps it honest.
     dependency is the thing this decision exists to remove, so the trade is red-and-actionable over
     green-and-empty.
     **The hand runs are HISTORICAL — evidence from the round before the oracle existed**, kept because they are
-    what decisions (3) and (4) measured their numbers against, and superseded as gates by cases 3 and 6–11. With
+    what decisions (3) and (4) measured their numbers against, and superseded as gates by cases 3 and 6–9. With
     the network binaries hidden and a working interpreter supplied: no flags at all exited non-zero on "the network
     sweep was requested but no network case executed", `--skip-network` alone exited non-zero on the model twin,
     both over a run that printed "1 pass, 0 fail, 4 skip" — the exact shape that used to exit 0; forcing the
@@ -421,7 +422,12 @@ e2e/eval harness that keeps it honest.
     the guarded-array case is not deleted but INHERITED by
     `claude-plugins/evals/pr-description/floor-tests.sh`, the harness that still expands an optional prefix, and
     that file's own guards are oracled there in both directions with no model at all — mutation-verified, deleting
-    the model floor takes it from 8 ok to 7 ok, 1 fail. It is wired into that repository's existing `evals-harness`
+    the model floor takes it from 10 ok to 9 ok, 1 fail. **That number was written as "8 ok to 7 ok" and was
+    stale the moment it was written** — it described the eight-case file that existed BEFORE the fix, which is
+    precisely the state in which the mutation left the oracle fully green and was the finding. Round 2 then added
+    two more cases there (the rc arm and the FAIL-gate assertion), so the baseline is 10. Re-measure across the
+    repository boundary or do not quote a number: this is the one figure in this plan that no borg gate can check.
+    It is wired into that repository's existing `evals-harness`
     job as one step, no new job, so the relocated cases are not another gate nothing invokes.
     **The measured result is the point**: `make eval-live` was rc 2 on `2 pass, 0 fail, 3 skip` and is now rc 0 on
     `3 pass, 0 fail, 0 skip` — no skips, on a machine holding neither stillpoint nor troth, which is the state all

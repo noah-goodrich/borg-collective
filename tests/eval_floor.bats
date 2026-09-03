@@ -394,7 +394,7 @@ _e2a_target() {
 }
 
 # The path the harness `rm -rf`s, read out of the harness for the same reason as the threshold and
-# the target above. Case 12 plants a canary exactly where the deletion is aimed; a literal
+# the target above. Case 10 plants a canary exactly where the deletion is aimed; a literal
 # `evals/s4-k3/out` written here instead would keep passing after a harness moved its evidence tree,
 # with the canary sitting somewhere nothing deletes -- so the negative half would be asserting that
 # an unrelated file survived, which is a fact about nothing.
@@ -402,8 +402,8 @@ _e2a_target() {
 # MATCHED ON THE ASSIGNMENT, NOT ON THE `rm` LINE, WHICH NAMES A VARIABLE. The `$REPO/` prefix is
 # part of the pattern rather than stripped afterwards, and that is the load-bearing half: a harness
 # whose `$OUT` sat somewhere OTHER than under `$REPO` would not be protected by the checkout guard
-# at all, so there would be nothing here to oracle and this helper must refuse rather than hand case
-# 12 a path the guard does not stand in front of.
+# at all, so there would be nothing here to oracle and this helper must refuse rather than hand the
+# checkout-guard case a path the guard does not stand in front of.
 _eval_out_rel() {
     local rel
     rel="$(sed -n 's|^OUT="\$REPO/\([^"]*\)"$|\1|p' "$1" | head -1)"
