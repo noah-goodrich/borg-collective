@@ -6,9 +6,15 @@
 #   Makefile `eval`   EVAL_ARGS     a value that would make the run verify nothing is REFUSED
 #   evals/*/run.sh    GLOBAL        a run in which no case executed is a FAILURE
 #   evals/*/run.sh    NETWORK MODE  the network sweep was asked for and none of it ran -> FAILURE
-#   evals/*/run.sh    MODEL MODE    the model sweep was asked for and none of it ran -> FAILURE
 #   evals/*/run.sh    E2a COUNT     `-k e2a` selecting fewer than the authored minimum -> FAILURE
 #   evals/*/run.sh    E2a OUTCOME   collecting more tests than it executed as passes -> FAILURE
+#
+# A MODEL MODE row sat in that table until 2026-09-03 and is deliberately gone rather than quietly
+# dropped: `grep -n MODEL_RAN evals/s4-k3/run.sh` now finds one comment line and no code, because
+# the floor left with E4/E5. It is oracled where it lives, in
+# `claude-plugins/evals/pr-description/floor-tests.sh` (cases 2 and 6, fires and holds). Leaving the
+# row here read as "borg still owns and oracles it", which is exactly the reading that hid the fact
+# that NOTHING oracled its holding direction for a while.
 #
 # Plus ONE guard in the same script that is not a floor and is oracled here for a stronger reason —
 # it is the only invariant in this change whose failure mode is destructive rather than merely
@@ -73,7 +79,8 @@
 # harness in OFFLINE mode (`--skip-model --skip-network`) -- that is what `make eval` forwards and
 # what cases 4 and 5 must use -- so both per-mode conditions are false by construction in every
 # gate and both `if` blocks are unreachable from a suite that only ever runs the offline shape.
-# Cases 6-9 exist to invoke the other two modes, which nothing else in the tree does.
+# Cases 6 and 7 exist to invoke the one other mode, which nothing else in the tree does. (They were
+# 6-9 over two modes until the model pair relocated on 2026-09-03.)
 #
 # HERMETIC BY CONSTRUCTION. No network, no real `gh`, no real `claude`, no writes outside
 # BATS_TEST_TMPDIR, and never a mutation of the repository's own `evals/` tree or Makefile. Every
@@ -124,10 +131,11 @@
 # ── THE CI `test` JOB IS THE ONLY GATE THAT COLLECTS THIS FILE, AND IT HAD TO BE GIVEN A PREMISE ──
 # `bats tests/*.bats` picks this file up by existing, so no new CI job is added: `make eval` is not,
 # and must not become, a sixth job -- the harness's one always-runnable case is a pytest selection
-# the `python` job already collects. But that job installed `zsh jq fzf` and nothing else, and SEVEN
+# the `python` job already collects. But that job installed `zsh jq fzf` and nothing else, and FIVE
 # of the ten cases below cannot run without an importable pytest. They used to `skip` for it, and
-# bats prints `ok` for a skip: the one lane that gates these floors reported 11/11 GREEN having
-# executed FOUR cases, so deleting either mode-floor block, the count floor or the outcome floor
+# bats prints `ok` for a skip: the one lane that gates these floors reported GREEN having executed
+# only the cases needing no interpreter, so deleting the mode-floor block, the count floor or the
+# outcome floor
 # turned nothing red in CI. Reproduced in a CI-shaped sandbox (`rsync -a --exclude .venv --exclude
 # .git` into a temp dir, then bats from there): `1..11`, `ok 1..4`, then `ok 5 ... # skip no python3
 # with an importable pytest` for 5 through 11.
@@ -150,8 +158,8 @@ setup() {
 # omit `--skip-network` and a run that executed no network case fails, by design, because it was
 # asked for a sweep it did not perform. So cases 4 and 5 must ask for the OFFLINE mode -- exactly
 # what `make eval` forwards -- or case 5 would go red on a mode floor rather than on the
-# zero-execution floor it means to discriminate. Cases 6-9 drop exactly one flag each and are the
-# oracles for the two floors that go with it. The duplication with the Makefile's EVAL_ARGS default
+# zero-execution floor it means to discriminate. Cases 6 and 7 drop exactly one flag and are the
+# oracles for the one floor that goes with it. The duplication with the Makefile's EVAL_ARGS default
 # is closed rather than left to drift: case 2 asserts every member of this array appears in the line
 # the recipe echoes, so a default that loses a flag turns this file red instead of quietly making
 # cases 4 and 5 test a mode nobody runs.
@@ -328,7 +336,7 @@ _declare_one_ref() {
 }
 
 # A sandbox `$REPO` whose only content is a pytest file with an AUTHORED number of `e2a` tests, some
-# of which may be collected-but-skipped. It is what gives cases 10 and 11 a selection they control:
+# of which may be collected-but-skipped. It is what gives cases 8 and 9 a selection they control:
 # the real `borg_core/manifest/test_shell.py` is the contract under evaluation and must never be
 # edited by a test, and pointing `-k e2a` at a tree with too few tests is the only way to reach the
 # count floor at all.
@@ -421,24 +429,29 @@ _eval_out_rel() {
 # install puts pytest in the ambient interpreter and the third rung answers.
 #
 # ── ABSENCE IS A BROKEN PREMISE HERE, NOT A SKIP ─────────────────────────────────────────────────
-# This used to hand each of the seven cases a `skip` with a reason, and that was the same defect one
+# This used to hand each of these cases a `skip` with a reason, and that was the same defect one
 # level up: bats prints `ok` for a skip, so "the oracle did not run" and "the floor holds" were the
-# same line of TAP output. Measured on the only lane that collects this file -- 11 cases reported,
-# four executed, and every floor the other seven observe deletable with nothing going red. `skip` is
-# the right verdict for a case whose SUBJECT is absent (that is why the harness itself skips, and why
-# case 9 is content that E4's second repository is missing); it is the wrong verdict for a case whose
-# ORACLE is absent, which is what a missing pytest means here.
+# same line of TAP output. Measured on the only lane that collects this file, before the fix: every
+# case reported green having executed only the ones needing no interpreter, so every floor the rest
+# observe was deletable with nothing going red. `skip` is the right verdict for a case whose SUBJECT
+# is absent -- that is why the harness itself skips, and why the network case is content that `gh`
+# is unauthenticated; it is the wrong verdict for a case whose ORACLE is absent, which is what a
+# missing pytest means here.
 #
 # WHAT THAT COSTS, DECIDED AND STATED RATHER THAN DISCOVERED: a contributor with no dev group
-# installed now gets SEVEN RED CASES instead of seven skips, from a suite that has nothing to do with
+# installed now gets FIVE RED CASES instead of five skips, from a suite that has nothing to do with
 # whatever they were changing. For an ordinary unit test that trade would be wrong -- red for a
 # missing optional tool trains people to ignore red. It is right here for one reason: this file is a
 # GATE on floors and nothing else, and a gate that yields to a missing dependency is precisely the
 # thing this change exists to remove. The mitigation is that the reason is actionable and names the
 # one command that fixes it, and that CI now installs it so the red is local-only and one command
-# deep. NO CASE IS EXEMPTED: all seven observe floors whose deletion CI could not otherwise see, so
-# exempting any one of them would leave exactly the hole the other six close. Case 12 needs no
-# interpreter at all and never reaches this helper -- that is a property of where the checkout guard
+# deep. NO CASE THAT NEEDS AN INTERPRETER IS EXEMPTED: all five observe floors whose deletion CI
+# could not otherwise see, so exempting any one would leave exactly the hole the other four close.
+# TWO of the ten need no interpreter and are not counted among the five -- case 4, whose premise IS
+# hiding every interpreter, and case 10, the checkout guard, which says so at its own body. Cases 5
+# through 9 are the five. Measured in an rsync'd CI-shaped copy with no `.venv` and a pytest-less
+# `python3`: `1..10` with `ok 1,2,3,4,10` and `not ok 5,6,7,8,9`.
+# That is a property of where the checkout guard
 # sits in the harness, not an exemption, and it is why that guard's oracle stays green on a bare
 # checkout.
 #
@@ -877,7 +890,7 @@ STUB
 # THE TWO HALVES DIFFER BY ONE DECORATOR. `_shortfall_repo`'s last argument marks that many of the
 # generated tests `@pytest.mark.skip`; both runs collect the full authored minimum, so the count
 # floor above is satisfied in both and cannot be what fires. That is the isolation this pair needs:
-# the second run is deliberately identical to case 10's positive half rather than deferring to it,
+# the second run is deliberately identical to case 8's positive half rather than deferring to it,
 # because a negative that lives in another case is not a negative for this one.
 @test "evals/*/run.sh: the E2a outcome floor fires on a collected-but-unexecuted test and holds otherwise" {
     local allow python harness min target skipped executed harnesses=0
@@ -934,7 +947,7 @@ STUB
 # EXIT 2, NOT MERELY NON-ZERO: every execution floor above exits 1, so a case content with non-zero
 # would also be satisfied by a guard deleted in favour of some later floor firing on the wreckage.
 # And no interpreter is requested, deliberately -- nothing here needs pytest, so this guard keeps its
-# oracle on a bare checkout where the seven cases above fail their premise.
+# oracle on a bare checkout where the five interpreter-dependent cases above fail their premise.
 @test "evals/*/run.sh: a REPO that is not this checkout is refused before the rm -rf" {
     local allow sandbox harness rel decoy harnesses=0
     allow="$(_allowlist_bin)"

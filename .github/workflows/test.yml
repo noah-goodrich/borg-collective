@@ -40,12 +40,20 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get install -y zsh jq fzf
       # WHY A BATS JOB INSTALLS PYTHON: exactly one suite needs it. tests/eval_floor.bats is the
-      # oracle for the eval harness's execution floors, and seven of its cases must EXECUTE
+      # oracle for the eval harness's execution floors, and FIVE of its ten cases must EXECUTE
       # evals/*/run.sh — whose one always-runnable case (E2a) is a pytest selection, and pytest is a
-      # dev-group dependency that no bare runner carries. Those seven cases FAIL LOUDLY on a machine
+      # dev-group dependency that no bare runner carries. Those five cases FAIL LOUDLY on a machine
       # with no importable pytest rather than skipping, deliberately (see that file's
       # `_python_with_pytest`), because before this step existed they skipped and this job printed
-      # 11/11 green having executed four of them — deleting a mode floor turned nothing red here.
+      # green having executed only the cases that need no interpreter — deleting a floor turned
+      # nothing red here.
+      #
+      # THE NUMBER IS FIVE, NOT SEVEN, and it is stated here because a maintainer sizing this step's
+      # blast radius reads it. It said seven until 2026-09-03: the model-mode pair relocated to
+      # claude-plugins and the array case went with it, and this comment was not re-measured. Cases
+      # 5-9 are the five; case 4's premise IS hiding every interpreter and case 10 needs none.
+      # Measured in an rsync'd copy with no .venv and a pytest-less python3: `1..10`, with
+      # `ok 1,2,3,4,10` and `not ok 5,6,7,8,9`. Delete this step and you get five reds, not seven.
       # Do NOT remove this as a stray Python step in a shell job, and do NOT promote it to a sixth
       # job: `make eval` is not a CI job, this is only the premise `bats tests/*.bats` cannot supply
       # itself. Same action version, same interpreter and the same install invocation as the `python`

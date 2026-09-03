@@ -427,29 +427,24 @@ exit(0 if verdict and contested == [] else 1)
     NETWORK_RAN=$((NETWORK_RAN+1))
 fi
 
-# macOS has no GNU `timeout`; use gtimeout when available, else rely on claude -p terminating.
-# An ARRAY, not a string: the value is two words when gtimeout exists and zero words when it does
-# not, and only an array expands to both correctly under quoting that shellcheck accepts.
+# THE `TIMEOUT` ARRAY AND ITS GUARD LEFT WITH E4/E5 and this is deliberately a pointer rather than
+# the paragraph that used to be here. That paragraph was live-voice instruction about this script's
+# own code -- "An ARRAY, not a string", "EVERY EXPANSION OF IT IS `${TIMEOUT[@]+...}`", "DO NOT
+# 'SIMPLIFY' THE GUARD BACK" -- and there is now no `TIMEOUT` assignment and no expansion anywhere in
+# this file, so a maintainer told not to simplify a guard back went looking for a guard that is not
+# there. The invariant is real and still matters; it is just not this file's any more.
 #
-# AND EVERY EXPANSION OF IT IS `${TIMEOUT[@]+"${TIMEOUT[@]}"}`, NEVER A BARE `"${TIMEOUT[@]}"`. On
-# bash BEFORE 4.4 the `[@]` expansion of an EMPTY array is an unbound variable under `set -u`, and
-# `/bin/bash` on macOS is 3.2 — the machine of record, and the only shell that ever reaches the empty
-# branch, because that branch is precisely "no gtimeout", which is the default macOS state. Measured
-# against this file before the guard existed: with `--skip-network`, a reachable `claude` and
-# `BORG_EVAL_TROTH` set, E5 died with `TIMEOUT[@]: unbound variable` BEFORE its `>` redirect opened,
-# the following `grep` read a file that was never written, and the case reported `FAIL E5 fallback` —
-# a case failing for a reason that has nothing to do with what it asserts, which is the one thing
-# this file's header says must never happen. E4 is the same crash at its own expansion, and it was
-# latent only because both model cases skip when their fixture variable is unset, so nothing on the
-# crashing platform had reached the expansion yet. `+` and not `:+`: the test must be SET rather than
-# non-empty, so a prefix whose words are legitimately empty still survives it.
+# It moved to `claude-plugins/evals/pr-description/`, which is where the only remaining expansion of
+# an optional prefix lives, and it is oracled there in BOTH directions: a static count (every
+# `TIMEOUT[@]` mention is either the guard's test or the expansion immediately after it, so a correct
+# file has exactly twice as many as it has guards) plus a case that drives the model path
+# behaviourally so the empty-array branch is actually executed. The bug it guards is worth keeping
+# named: on bash before 4.4 -- `/bin/bash` on macOS is 3.2 -- the `[@]` expansion of an EMPTY array
+# is an unbound variable under `set -u`, and the empty branch is precisely "no gtimeout", the default
+# macOS state. Measured before the guard existed: E5 died BEFORE its `>` redirect opened, the
+# following `grep` read a file that was never written, and the case reported FAIL for a crash rather
+# than for what it asserts.
 #
-# DO NOT "SIMPLIFY" THE GUARD BACK — nothing in CI can stop you. No lane runs this harness's model
-# cases at all; the ubuntu lane that drives the harness through tests/eval_floor.bats is bash 5, where
-# the bare form is perfectly legal, and it stubs `gtimeout` so it takes the POPULATED branch anyway,
-# while the macOS lane runs only the CLI contract suite. That is CLAUDE.md's "a test's PREMISE can
-# depend on the dev platform" class with the platforms swapped: the green lane is the one where the
-# premise holds, so the only machine the bug exists on is the developer's own.
 # E4 AND E5 LIVED HERE AND WERE RELOCATED 2026-09-03 to claude-plugins,
 # evals/pr-description/{run.sh,floor-tests.sh}. Two reasons, and the first was already recorded in
 # the comment this tombstone replaces: they graded `/pr-description`, which THIS REPOSITORY DOES
