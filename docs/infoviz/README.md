@@ -8,7 +8,10 @@ Phase 0 deliverable: the Question Inventory (docs/research/2026-07-28-territory-
 
 Phases 0-2 complete; dormant since 2026-08-11 with no Phase 3 filed. Done: Phase 0 (territory map, 36 source
 cards, 7-track curriculum), Phase 1 (perception & encoding, P1-P7, 2026-07-30), Phase 2 (dashboards &
-operational UI, D1-D8, assimilated 2026-08-11 via PR #112). The playbook carries 16 evidence-graded rules.
+operational UI, D1-D8, assimilated 2026-08-11 via PR #112). The playbook carries 15 evidence-graded rules
+(P1-P7 and D1-D8). It said 16 until 2026-09-04: a grep for lines opening `**P<n>` returns 16 because
+`**P1 holds.**` in P1's own evidence paragraph matches the same shape as a rule statement. Counted by
+DISTINCT RULE ID, which is what a reader of the playbook counts, it is 15.
 By the curriculum's own terms the load-bearing pair (Tracks 1+2) is finished.
 
 ## Resume order (when the program picks back up)
