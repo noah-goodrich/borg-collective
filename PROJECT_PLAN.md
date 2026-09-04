@@ -502,8 +502,13 @@ e2e/eval harness that keeps it honest.
   occurrences across 97 of 139 tracked code files**, not the ~500 across 57+ estimated here. Plus
   the registry schema key and `.borg-project` markers.
 - NOT building: infoviz Track 6 as a blocker. The one reading with teeth here is Ghoniem et al. (past ~20 vertices,
-  matrices beat node-link except on path-finding); live manifests are 3 and 14 rows on a path-finding task, so the
-  evidence most likely confirms the specced grammar. An hour of reading, not a phase.
+  matrices beat node-link except on path-finding); the live corpus is ONE manifest of 3 rows on a path-finding task,
+  so the evidence most likely confirms the specced grammar. An hour of reading, not a phase. **This line said
+  "3 and 14 rows" until 2026-09-04 and the 14-row manifest does not exist** — measured, `.borg/programs/` holds
+  `viz-program.json` and nothing else. The CONCLUSION survives and is in fact stronger: 3 vertices is an order of
+  magnitude under Ghoniem's ~20 threshold, so node-link is uncontested at this scale. But half the cited evidence
+  was fictional, and a scope boundary defended by a measurement nobody re-ran is the same defect AC6 spent nine
+  decisions on. If the corpus ever passes ~20 rows in one manifest, this boundary is due a re-read, not a re-quote.
 - NOT building: evals beyond the three lifecycle skills in AC5.
 - NOT building: AC6's session-load case. AC6 files it — filed 2026-09-03 as
   `docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md`. See AC6 decision (6): it
