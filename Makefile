@@ -96,10 +96,17 @@ spine:
 # ── AC6: the eval harness ────────────────────────────────────────────────────────────────────────
 # `make eval` IS THE SAFE ONE, AND SAFE NOW MEANS OFFLINE RATHER THAN MERELY MODEL-FREE. It forwards
 # both --skip-model and --skip-network, so it runs only the cases that need neither a headless model
-# run nor the wire. The full sweep, which spends money and needs an authenticated `gh`, is opt-in as
+# run nor the wire. The full sweep, which needs an authenticated `gh`, is opt-in as
 # `make eval-live`, which clears EVAL_ARGS as it always did. That way round is deliberate: the
 # target a CI clause names must not be the one that reaches the network, or CI acquires a network
 # dependency by default and the offline guarantee becomes a matter of remembering a flag.
+#
+# `make eval-live` NO LONGER SPENDS MONEY IN THIS REPOSITORY, as of AC6 decision (9): the only cases
+# that called a model were E4/E5 and they relocated to claude-plugins, so `--skip-model` is accepted
+# here and skips nothing. It is still forwarded, because EVAL_ARGS goes to every harness the glob
+# selects and the harnesses' unknown-flag arms exit 2 — a shared flag vocabulary costs one inert
+# branch and saves the default from being per-harness. The money-spending sweep now lives beside the
+# surface it grades, and CI there excludes it by the same rule that excludes evals/generate.
 #
 # --skip-network IS THE HALF THAT WAS MISSING, and its absence made the sentence above false of the
 # very target it describes. --skip-model alone still left E2 shelling one `gh pr view` per declared
