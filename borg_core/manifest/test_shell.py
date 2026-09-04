@@ -37,7 +37,7 @@ import types
 
 import pytest
 
-from borg_core.manifest import core, errors, refs, shell
+from borg_core.manifest import across, core, errors, refs, shell
 
 
 def _manifest(rows, apex=None):
@@ -55,11 +55,28 @@ def _row(order, ref, lane=None, **extra):
 
 
 def _write_manifest(root, repository, name, doc):
-    """Put one manifest under `<root>/<repository>/.borg/programs/<name>` and return the repo path."""
-    directory = root / repository / ".borg" / "programs"
-    directory.mkdir(parents=True, exist_ok=True)
+    """Put one manifest in the directory `shell.manifest_dir` NAMES for `<root>/<repository>`.
+
+    DERIVED, never spelled `.borg/programs` here, because a fixture holding its own copy of that
+    literal survives a rename by writing to the OLD directory while `shell.discover` reads the new
+    one -- and `shell.discover` is silent by documented design when a repository exists but its
+    manifest directory is simply absent, so the sweep comes back `([], [])`. Clean, empty, and green
+    through every "for every declared ref ..." loop in this file. `shell.manifest_dir`'s own docstring
+    says the `programs` literal "stays until a rename directive moves it", and AC7 has that rename
+    filed, so this is a dated time bomb rather than a hypothetical one.
+
+    Deriving the path is half of that; `_e2a_swept`'s exact count assertion is the other half, and
+    neither alone is enough -- a rename would still be caught by the count, but as a mystery rather
+    than as a rename.
+
+    `doc` is a dict OR an already-serialised string: the malformed-JSON cases have to put bytes on
+    disk that `json.dumps` could never produce.
+    """
+    directory = shell.manifest_dir(str(root / repository))
+    os.makedirs(directory, exist_ok=True)
     body = doc if isinstance(doc, str) else json.dumps(doc)
-    (directory / name).write_text(body, encoding="utf-8")
+    with open(os.path.join(directory, name), "w", encoding="utf-8") as handle:
+        handle.write(body)
     return str(root / repository)
 
 
@@ -634,6 +651,33 @@ def test_repository_slug_feeds_select_for_repository_end_to_end(tmp_path):
 # ── structural ───────────────────────────────────────────────────────────────
 
 
+def _package_module_names():
+    """Every non-test module in this package, sorted -- the list both structural tests below iterate.
+
+    ENUMERATED RATHER THAN SPELLED OUT, because a hardcoded tuple is a list that gets forgotten. Two
+    of them used to stand here, and `across.py` was added to the package and to NEITHER, so the
+    newest module in the package was the one module with no import-time purity check and no
+    independence check on it at all -- silently, since both tests were still green over the five
+    files they did name. That is the same silent-omission class this change argues about for the
+    clean-arch Domain map in `pyproject.toml`; caught there, missed here. A glob cannot be forgotten.
+
+    THE TWO ASSERTIONS ARE THE DERIVATION'S OWN ORACLE, and they live here rather than being restated
+    in both callers for the same reason `_e2a_swept`'s precondition does: a check that enumerates
+    nothing is green. Non-empty catches a glob that matches nothing at all -- a moved file, a renamed
+    package, a `__file__` that no longer resolves. Naming `across.py` catches the narrower failure
+    the non-empty check cannot see: a glob that happens to match only the modules the old tuples
+    already covered, which is exactly the state being fixed.
+
+    Only `test_*.py` is excluded. Everything else in the directory ships, `__init__.py` included, and
+    both constraints below are true of every shipped file rather than of an interesting subset.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    names = sorted(name for name in os.listdir(here) if name.endswith(".py") and not name.startswith("test_"))
+    assert names, f"the module glob enumerated nothing under {here}"
+    assert "across.py" in names, f"the module the old hardcoded tuples forgot must be derived: {names}"
+    return names
+
+
 def _module_level_dotted_names(module_name):
     """Every `a.b` attribute chain appearing OUTSIDE a function or class body in one module."""
     here = os.path.dirname(os.path.abspath(__file__))
@@ -658,9 +702,12 @@ def test_module_reads_no_environment_or_clock_at_import_time():
     `BORG_` -- was satisfied by `GIT_TIMEOUT_SECONDS = int(os.environ.get("BORG_GIT_TIMEOUT", "5"))`,
     which is the exact bug it describes and one line away, since `os` is already imported at module
     scope. Parsing the source catches the read wherever the value is bound.
+
+    Over EVERY module in the package, derived by `_package_module_names` -- see its docstring for why
+    the four-name tuple that used to sit on the loop below was itself the bug.
     """
     forbidden = ("os.environ", "os.getenv", "time.time", "time.monotonic", "datetime.now")
-    for module_name in ("shell.py", "core.py", "refs.py", "errors.py"):
+    for module_name in _package_module_names():
         offenders = [n for n in _module_level_dotted_names(module_name) if n in forbidden]
         assert offenders == [], f"{module_name} reads {offenders} at import time"
     # core.py's module-scope dotted names are `re.compile` for the one regex that did NOT move
@@ -705,11 +752,14 @@ def test_no_module_references_an_external_plugin_or_a_sibling_checkout():
     borg must work identically on a machine that has never heard of another plugin, and no module may
     bake in a path into a sibling checkout. Only STRING LITERALS count for the path check -- a
     docstring may legitimately show an example path.
+
+    Over EVERY module in the package, derived by `_package_module_names` -- see its docstring for why
+    the five-name tuple that used to sit on the loop below was itself the bug.
     """
     here = os.path.dirname(os.path.abspath(__file__))
     forbidden = ("ai-data-engineer", "stacked-pr-program", "stamp_stack")
     offenders = []
-    for name in ("core.py", "errors.py", "refs.py", "shell.py", "__init__.py"):
+    for name in _package_module_names():
         with open(os.path.join(here, name), encoding="utf-8") as handle:
             body = handle.read()
         offenders += [f"{name}: {token}" for token in forbidden if token in body]
@@ -1085,3 +1135,657 @@ def test_a_partially_dropped_manifest_is_not_a_refusal(tmp_path):
     assert len(manifests) == 1, "precondition: the file loaded with its good row"
     assert "rows dropped" in warnings[0]
     assert shell.refused_manifest_paths(warnings) == []
+
+
+# ── E2a: the eight structural ref properties, offline, over a two-repository tree ─────────────────
+#
+# WHAT THIS SECTION IS. `evals/s4-k3/run.sh`'s case E2 asks "does every declared ref resolve on
+# GitHub". Its own comment records that exactly ONE bit of that needs the network -- "does
+# owner/repo#N exist, and can this token see it" -- and that "every OTHER property E2 appears to
+# check ... is already enforced offline by borg_core.manifest's validator, and belongs in pytest
+# rather than here". Last session measured that remainder at EIGHT properties and wrote the count
+# into a checkpoint without ever writing the eight down, so the number has been a claim in prose ever
+# since. This section is that claim turned into an artifact that can go red.
+#
+# THE EIGHT, each named for the function that already enforces it. Nothing here is a new rule and
+# every one has a unit home in test_core.py. What is new is asserting them TOGETHER over a
+# DISCOVERED two-repository set -- the composition no existing case covers, and the one E2 was
+# standing in for:
+#
+#   1. SHAPE -- every row ref matches a recognized vocabulary, and `core.validate` rejects one that
+#      matches none (`_row_ref_error`).
+#   2. KIND -- `refs.ref_kind` classifies each ref as exactly one of github / jira / link, and the
+#      three are mutually exclusive.
+#   3. TRACKED vs REFERENCE -- the two kind sets are ENUMERATED, not complementary, and
+#      `refs.is_reference` decides whether a row participates in ordering at all.
+#   4. UNIQUENESS -- a duplicate `rows[].ref` inside one manifest is rejected, naming the earlier
+#      index.
+#   5. ADDRESSABILITY -- `refs.expects_github` plus `refs.parse_ref` yield the (owner, repo, number)
+#      triple AC3's targeted fetch addresses; a ref that will not parse can never be fetched.
+#   6. SLUG ATTRIBUTION -- `refs.ref_slug` gives the `owner/repo` that `core.select_for_repository`
+#      scopes on, parsed and never prefix-matched.
+#   7. COERCION EXACTNESS -- `refs.text` is the ONLY normalization applied, so the string reaching an
+#      edge endpoint is byte-identical to the one reaching `core.declared_refs`.
+#   8. POINTER CLOSURE -- every non-row ref pointer (each `after` entry, each `gate.blocked_by_ref`,
+#      and `apex.ref` when present) is itself a full ref and never the row's own ref.
+#
+# NO GIT AND NO NETWORK, which is what makes this the right home rather than the harness:
+# `shell.discover` is `os.listdir` plus `open`, so a git repository is not needed at all, and every
+# ref property above is pure. The tree is deliberately CROSS-REPOSITORY IN BOTH DIRECTIONS --
+# `auth-scopes` declares a warehouse row and `keypair-rotation`'s gate points back at a platform
+# row -- because a tree whose every ref is repository-local passes property 6 vacuously. It also
+# names a THIRD slug that no directory in the tree corresponds to: `keypair-rotation` declares a row
+# in `acme/plat`, which is a STRICT PREFIX of `acme/platform`. That is what gives property 6 a
+# falsifiable selection rather than a restated one, and it doubles as the discovery-is-global /
+# selection-is-scoped shape -- the file sits under the `warehouse` directory and is selected by
+# neither of the slugs that directory suggests.
+#
+# THE `e2a` TOKEN IN EVERY TEST NAME IS LOAD-BEARING. `python3 -m pytest borg_core/manifest/
+# test_shell.py -k e2a` is being wired into the eval harness as its one always-runnable case, and a
+# rename that drops the token does not fail there -- it SELECTS NOTHING, and a gate that selected
+# zero cases is green. Rename these and the harness invocation in the same commit.
+#
+# EVERY NUMBER HERE IS AUTHORED, NOT READ OFF THE OUTPUT. The edge count carries its derivation in
+# the case that asserts it, and three negatives move it (+1, -1) or move the contested count
+# (0 -> 1). A test whose expected value came from the implementation it checks is not an oracle, so
+# if the code ever disagrees with the derivation the number stays and the disagreement is the finding.
+
+_E2A_APEX = {"ref": "acme/platform#900", "label": "auth scopes tracker"}
+
+# The row inventory, per manifest, in declared order. Written here rather than derived from the
+# fixture builders so the expectation and the fixture are two artifacts rather than one -- which is
+# also why `acme/plat#12` is spelled out twice (here and in the builder) instead of being hoisted
+# into a shared constant: one constant read by both sides is one artifact again.
+_E2A_ROW_REFS = {
+    "auth-scopes": ["acme/platform#400", "acme/platform#420", "acme/warehouse#87"],
+    "keypair-rotation": [
+        "acme/warehouse#61",
+        "acme/warehouse#64",
+        "acme/warehouse#70",
+        "acme/plat#12",
+    ],
+}
+
+
+def _e2a_platform_doc(declared_id=True):
+    """`platform`'s manifest: an apex, an intra-lane fork, and one row in the OTHER repository.
+
+    Both non-head rows declare `after`, which is what suppresses the lane's own adjacencies -- see
+    the edge-count case for the arithmetic that depends on it.
+    """
+    doc = _manifest(
+        [
+            _row("1", "acme/platform#400"),
+            _row("2", "acme/platform#420", after=["acme/platform#400"]),
+            _row("3", "acme/warehouse#87", after=["acme/platform#400"]),
+        ],
+        apex=dict(_E2A_APEX),
+    )
+    return {**doc, "program": "auth-scopes"} if declared_id else doc
+
+
+def _e2a_warehouse_doc(declared_id=True):
+    """`warehouse`'s manifest: a three-row lane whose tail is gated on a PLATFORM row, plus a
+    one-row second lane in `acme/plat` -- a real slug that is a STRICT PREFIX of `acme/platform`.
+
+    The gate carries all four fields on purpose. `blocked_by`/`resolved_by` are prose and required;
+    `blocked_by_ref` is the optional machine-readable companion and the only channel that becomes a
+    `blocks` edge, which is the second half of the cross-repository shape this tree exists to make.
+
+    THE FOURTH ROW IS PROPERTY 6'S ORACLE AND COSTS THE ARITHMETIC NOTHING, which is the whole reason
+    it is HERE rather than in the platform manifest. `acme/plat#12` sits alone in a second lane, and
+    `_stacked_edges` zips consecutive rows WITHIN a lane, so a lane of one has no adjacency to emit;
+    this manifest also carries no apex, so there is no per-row `apex` edge to pick up. In
+    `auth-scopes` the same row would have cost +1, because `_apex_edges` emits one edge per row
+    unconditionally, and the authored 8 would have had to move for a reason that has nothing to do
+    with edges. It stays out of every `ready_set` answer below for a second, independent reason: no
+    case puts it in `states`, and an unknown state is not open.
+    """
+    doc = _manifest(
+        [
+            _row("1", "acme/warehouse#61"),
+            _row("2", "acme/warehouse#64"),
+            _row(
+                "3",
+                "acme/warehouse#70",
+                gate={
+                    "kind": "verification",
+                    "blocked_by": "the platform scope migration must land before any rotation",
+                    "blocked_by_ref": "acme/platform#400",
+                    "resolved_by": "run the rotation drill against staging and attach the output",
+                },
+            ),
+            _row("1", "acme/plat#12", lane="prefix"),
+        ]
+    )
+    return {**doc, "program": "keypair-rotation"} if declared_id else doc
+
+
+def _e2a_intruder_doc(declared_id=True):
+    """A THIRD manifest, living in `warehouse`, that claims a row `auth-scopes` already declares.
+
+    Its second row is its own. A report that named every ref of a colliding manifest rather than the
+    shared one would therefore come back with two lines, which is what makes the arity assertion in
+    the contested case discriminating rather than decorative.
+    """
+    doc = _manifest([_row("1", "acme/platform#400"), _row("2", "acme/warehouse#99")])
+    return {**doc, "program": "platform-audit"} if declared_id else doc
+
+
+def _e2a_tree(tmp_path, *, warehouse=None, intruder=False, declared_ids=True):
+    """Write the two-repository tree and return the repository paths in sweep order.
+
+    Called twice against one `tmp_path` it REWRITES the same files, which is exactly what the
+    retired-key tripwire needs: rediscovering a tree whose `program` keys were just removed must
+    still report the collision that was there before they went.
+
+    ONLY `warehouse` IS OVERRIDABLE, and the asymmetry is arranged rather than an oversight. The two
+    count cases below move the total by exactly one LANE ADJACENCY, and only this manifest admits
+    that: it declares no apex, so a row appended to or dropped from its default lane moves one
+    adjacency and nothing else. `auth-scopes` carries an apex and `_apex_edges` emits one edge per row
+    unconditionally, so a row appended there costs two (its adjacency AND its apex edge) and a row
+    dropped there costs its apex edge on top of every `after` edge that names it -- see the
+    edge-count case for the arithmetic. A matching `platform=` parameter did sit here, and its
+    `platform or <default>` guard could never take its left operand because no caller passed one:
+    dead code in a section whose entire subject is non-vacuity. Add it back WITH the case that needs
+    it, not before.
+    """
+    paths = [
+        _write_manifest(tmp_path, "platform", "auth-scopes.json", _e2a_platform_doc(declared_ids)),
+        _write_manifest(tmp_path, "warehouse", "keypair-rotation.json", warehouse or _e2a_warehouse_doc(declared_ids)),
+    ]
+    if intruder:
+        _write_manifest(tmp_path, "warehouse", "platform-audit.json", _e2a_intruder_doc(declared_ids))
+    return paths
+
+
+def _e2a_swept(tmp_path, **kwargs):
+    """The tree, discovered. ASSERTS THE SWEEP IS CLEAN **AND** COMPLETE before handing it back.
+
+    The precondition lives here rather than being restated in fifteen cases because it is the one
+    that makes every other assertion in the section non-vacuous: a warning means the validator
+    refused a fixture, a refused fixture is absent from `manifests`, and "for every declared ref ..."
+    over an empty list passes. That is the shape this whole section exists to make impossible, so it
+    is enforced on every entry rather than remembered.
+
+    BOTH HALVES, because zero warnings is ALSO what a sweep that found nothing at all reports, and
+    for a while only the first half was here. `shell.discover` warns about a repository DIRECTORY it
+    cannot find and stays deliberately silent about a repository whose manifest directory is simply
+    absent -- the common case, and the one a fixture writing to the wrong path produces. So the empty
+    sweep is indistinguishable from the clean sweep on warnings alone, and four cases in this section
+    -- including one whose name is a claim about a tree -- would have gone green over nothing. The
+    count is the discriminator, and it is exact rather than a floor: a floor cannot tell a lost
+    manifest from a tree that was never written.
+    """
+    expected = 3 if kwargs.get("intruder") else 2
+    manifests, warnings = shell.discover(_e2a_tree(tmp_path, **kwargs))
+    assert warnings == [], f"the fixture must be valid before anything is asserted about it: {warnings}"
+    # 0 here means the fixture wrote somewhere `shell.discover` does not read; anything else in
+    # between means a manifest was dropped without a warning to say so.
+    assert len(manifests) == expected, f"empty or partial sweep: {len(manifests)} of {expected} manifests discovered"
+    return manifests
+
+
+def _e2a_by_id(manifests):
+    """The swept manifests keyed by the id the loader stamped, so a case can name one by hand."""
+    return {m["_id"]: m for m in manifests}
+
+
+def _e2a_triples(edges):
+    """`(kind, parent, child)` for each edge -- the identity a hand derivation can be written in.
+
+    `source` is deliberately projected away: it is `declared` on every edge these fixtures can
+    produce, so carrying it would make the expected set wider without making it stricter.
+    """
+    return {(e["kind"], e["parent"], e["child"]) for e in edges}
+
+
+def test_e2a_the_two_repository_tree_is_discovered_whole_and_clean(tmp_path):
+    """The premise every other e2a case rests on, asserted WITHOUT the helper that asserts it.
+
+    Two repositories, two manifests, zero warnings, and the ids the loader stamped. A warning here
+    would mean a fixture the validator rejects, which drops it from the sweep and makes every
+    "for every declared ref ..." assertion below true of nothing.
+    """
+    manifests, warnings = shell.discover(_e2a_tree(tmp_path))
+    assert len(manifests) == 2
+    assert warnings == []
+    assert sorted(m["_id"] for m in manifests) == ["auth-scopes", "keypair-rotation"]
+
+
+def test_e2a_property_1_shape_every_row_ref_matches_a_recognized_vocabulary(tmp_path):
+    """1/8 SHAPE. Every row in the tree names something `refs.ref_kind` recognizes, in declared order.
+
+    NEGATIVE: `platform#400` -- the shorthand a model writes for a PR in the repository it is
+    standing in -- matches no vocabulary, so `_row_ref_error` reports it and the row never loads.
+    That is the single most common authoring mistake and the reason "" is a kind rather than a
+    fallback: accepting anything non-empty is what let it resolve against nothing, silently.
+    """
+    by_id = _e2a_by_id(_e2a_swept(tmp_path))
+    for chain_id, expected in _E2A_ROW_REFS.items():
+        assert core.validate(by_id[chain_id]) == []
+        assert [row["ref"] for row in by_id[chain_id]["rows"]] == expected
+        for ref in expected:
+            assert refs.ref_kind(ref) == refs.GITHUB
+
+    problems = core.validate(_manifest([_row("1", "platform#400")]))
+    assert len(problems) == 1
+    assert "must be a GitHub ref" in problems[0]
+    assert errors.offending_value(problems[0]) == "platform#400", "the message hands back the token to fix"
+
+
+def test_e2a_property_2_kind_classifies_each_ref_as_exactly_one_vocabulary(tmp_path):
+    """2/8 KIND. Every ref in the tree is `github`, and the three vocabularies do not overlap.
+
+    Exclusivity is asserted here as INJECTIVITY over one document -- three rows, three distinct
+    kinds -- because that is the property a manifest author can observe. The pattern-level proof that
+    no two of the three regexes can match one string lives in test_core.py's
+    `test_the_three_kinds_are_mutually_exclusive`, which reaches into the private patterns to get it;
+    a second copy of that reach does not belong in the I/O suite.
+
+    NEGATIVE: a string that is ALMOST a GitHub ref, and one that is almost a Jira key, both classify
+    as "" -- no kind at all. Classification never degrades into a silent fourth bucket, which is what
+    makes `ref_kind`'s ladder order irrelevant instead of load-bearing.
+    """
+    for manifest in _e2a_swept(tmp_path):
+        for ref in core.declared_refs(manifest):
+            assert refs.ref_kind(ref) == refs.GITHUB
+
+    mixed = [("acme/platform#400", refs.GITHUB), ("OPS-11", refs.JIRA), ("https://notion.so/scopes", refs.LINK)]
+    assert core.validate(_manifest([_row(str(i), ref) for i, (ref, _) in enumerate(mixed, 1)])) == []
+    assert [refs.ref_kind(ref) for ref, _ in mixed] == [kind for _, kind in mixed]
+    assert len({refs.ref_kind(ref) for ref, _ in mixed}) == 3, "three vocabularies, three kinds"
+    assert set(refs.TRACKED_REF_KINDS) & set(refs.REFERENCE_REF_KINDS) == set()
+    assert refs.ref_kind("platform#400") == "" and refs.ref_kind("ops-11") == ""
+
+
+def test_e2a_property_3_tracked_and_reference_kinds_are_enumerated_not_complementary(tmp_path):
+    """3/8. Every row here is TRACKED, so every row participates in ordering; and because the two kind
+    sets are ENUMERATED rather than complementary, a ref of no known kind is in neither and keeps
+    blocking.
+
+    Asserted THROUGH `core.ready_set` rather than on the predicates, because the predicates are where
+    a test proves nothing: `is_tracked` once had no production caller at all while a link row still
+    blocked its lane. Ordering PARTICIPATION is the observable -- flip the lane head from open to
+    merged and the row behind it becomes ready.
+
+    NEGATIVES, one per direction of the split. A `link` head does NOT block: it can never merge, so a
+    chain that puts its own spec document in a lane would otherwise report nothing ready for as long
+    as the document exists. A defect head (`#149`, no vocabulary) DOES keep blocking, and is refused
+    by the validator on the way in. Two complementary sets cannot express both answers at once, which
+    is why `REFERENCE_REF_KINDS` is a list and not a negation.
+
+    THE FOURTH ROW (`acme/plat#12`, the strict-prefix slug property 6 selects on) is tracked like the
+    other three but is deliberately absent from every `states` dict here, so it never appears in a
+    ready answer. That is not an omission to tidy up: it is the row-side reading of the same "unknown
+    is not merged" rule the last assertion pins from the parent side.
+    """
+    warehouse = _e2a_by_id(_e2a_swept(tmp_path))["keypair-rotation"]
+    head, middle, tail, other_lane = _E2A_ROW_REFS["keypair-rotation"]
+    for ref in (head, middle, tail, other_lane):
+        assert refs.is_tracked(ref) and not refs.is_reference(ref)
+
+    open_all = {head: "open", middle: "open", tail: "open"}
+    assert core.ready_set(warehouse, open_all) == [head], "a tracked head blocks the row behind it"
+    assert core.ready_set(warehouse, {**open_all, head: "merged"}) == [middle]
+
+    referenced = _e2a_warehouse_doc()
+    referenced["rows"][0]["ref"] = "https://notion.so/rotation-spec"
+    assert core.validate(referenced) == [], "a link row is a legal row"
+    assert core.ready_set(referenced, {middle: "open", tail: "open"}) == [middle], "a reference never blocks"
+
+    defective = _e2a_warehouse_doc()
+    defective["rows"][0]["ref"] = "#149"
+    assert core.validate(defective) != [], "and a defect is not a document"
+    assert core.ready_set(defective, {middle: "open", tail: "open"}) == [], "unknown is not merged"
+
+
+def test_e2a_property_4_uniqueness_a_duplicate_row_ref_names_the_earlier_index(tmp_path):
+    """4/8 UNIQUENESS, WITHIN one manifest. Two rows for one ref would give that item two chain
+    positions and make the derived edge set depend on iteration order.
+
+    NEGATIVE: a fourth row duplicating `acme/platform#400`, which rows[0] already declares. The
+    message names the EARLIER index, which is what lets an author find the PAIR rather than only the
+    copy -- and the pinned string is why: `_validate_row` flags the second occurrence and leaves the
+    first alone, so a message naming only "here" would send the reader to the row that is fine.
+
+    Uniqueness ACROSS manifests is a different question with a different answer: two chains claiming
+    one ref is reported by `across.contested_refs`, never refused, and the two contested cases below
+    are where that lives.
+    """
+    for manifest in _e2a_swept(tmp_path):
+        row_ref_list = [row["ref"] for row in manifest["rows"]]
+        assert len(row_ref_list) == len(set(row_ref_list))
+
+    doubled = _e2a_platform_doc()
+    doubled["rows"].append(_row("4", "acme/platform#400"))
+    assert core.validate(doubled) == ["rows[3]: duplicate ref acme/platform#400 (already at rows[0])"]
+
+
+def test_e2a_property_5_addressability_every_declared_ref_parses_into_the_fetch_triple(tmp_path):
+    """5/8 ADDRESSABILITY. `refs.parse_ref` yields `(owner, repo, number)` for every declared ref in
+    the tree, and the parts reconstruct the ref BYTE FOR BYTE -- `f"{owner}/{name}#{number}"` is the
+    address AC3's targeted fetch sends, so a lossy parse fetches a different PR than the one declared.
+
+    NEGATIVE, and it is the PAIR that matters rather than either half: a shorthand ref does not parse
+    (`None`, never a half-filled tuple) while `refs.expects_github` still answers True for it. That
+    combination is deliberate -- an unfetchable ref of no known kind must be REPORTED by the fetch,
+    not skipped the way a jira key or a link is, because it is a defect that should never have
+    validated and must not be swallowed a second time.
+    """
+    for manifest in _e2a_swept(tmp_path):
+        for ref in core.declared_refs(manifest):
+            assert refs.expects_github(ref) is True
+            parts = refs.parse_ref(ref)
+            assert parts is not None and len(parts) == 3
+            owner, name, number = parts
+            assert f"{owner}/{name}#{number}" == ref
+            assert number.isdigit()
+
+    assert refs.parse_ref("platform#400") is None
+    assert refs.expects_github("platform#400") is True, "unfetchable AND worth reporting"
+    assert refs.expects_github("OPS-11") is False, "tracked, but none of a GitHub query's business"
+    assert refs.expects_github("https://notion.so/scopes") is False
+
+
+def test_e2a_property_6_slug_attribution_scopes_by_parse_and_never_by_prefix(tmp_path):
+    """6/8 SLUG ATTRIBUTION, and the reason this tree crosses repositories in BOTH directions.
+
+    `acme/platform` selects `auth-scopes` alone. `acme/warehouse` selects BOTH, because `auth-scopes`
+    declares a warehouse ROW -- the case a manifest exists for, and the case a repository-local
+    fixture cannot produce at all. `keypair-rotation`'s platform pointer is a `gate.blocked_by_ref`
+    and not a row, so it does NOT drag that whole chain under the platform header: selection scopes
+    on `row_refs`, and hosting another chain's blocker is not owning its work.
+
+    THE PREFIX PAIR IS THE POINT, AND IT IS ASSERTED WHERE PREFIX LOGIC COULD ACTUALLY LIVE -- inside
+    `core.select_for_repository`, not on `refs.ref_slug`, which is `parse_ref` plus a join and so
+    cannot be caught out by a test that recomputes it the same way. `keypair-rotation` declares a row
+    in `acme/plat`, a real slug that is a STRICT PREFIX of `acme/platform`, and that one row falsifies
+    both directions of the confusion at once:
+
+      - selecting `acme/plat` returns `keypair-rotation` ALONE. A matcher written
+        `ref_slug(ref).startswith(slug)` would drag `auth-scopes` in with it, because every one of its
+        platform rows begins `acme/plat`.
+      - selecting `acme/platform` returns `auth-scopes` ALONE. A matcher written
+        `slug.startswith(ref_slug(ref))` would drag `keypair-rotation` in, because `acme/platform`
+        begins `acme/plat`. That assertion was already here and, until this row existed, no fixture in
+        the tree could tell the two implementations apart -- it constrained nothing.
+
+    NEGATIVES. `acme/pla` is a prefix of both real slugs and must select nothing; `acme/platform-web`
+    has a real slug as ITS prefix and must select nothing; so must the empty slug, which is what
+    `shell.repository_slug` returns for a repository with no GitHub origin -- it renders an empty grid
+    rather than every manifest borg knows about. `ref_slug` itself is then pinned on HAND-WRITTEN
+    values, including `acme/plat` carrying no `#number` at all, which is the assertion that separates
+    a parse from `str(ref).split("#")[0]`. A derived loop used to stand where those pins are: it
+    computed its expectation by calling `parse_ref` and joining the parts -- `ref_slug`'s own body,
+    spelled a second time -- so it passed for every input by construction. Measured, not assumed:
+    swapping that naive split into `ref_slug` left all fifteen cases in this section green.
+    """
+    manifests = _e2a_swept(tmp_path)
+    by_id = _e2a_by_id(manifests)
+    assert core.select_for_repository(manifests, "acme/platform") == [by_id["auth-scopes"]]
+    assert core.select_for_repository(manifests, "acme/warehouse") == manifests
+    assert core.select_for_repository(manifests, "acme/plat") == [by_id["keypair-rotation"]], "a prefix is not a slug"
+    assert refs.ref_slug(_E2A_APEX["ref"]) == "acme/platform", "an apex still parses, it just never selects"
+    assert refs.ref_slug("acme/plat#12") == "acme/plat", "the shorter slug is a slug, not a truncated one"
+    assert refs.ref_slug("acme/plat") == "", "no `#number`, no ref, no slug -- ref_slug parses, it does not split"
+    for absent in ("acme/pla", "acme/platform-web", "warehouse", ""):
+        assert core.select_for_repository(manifests, absent) == [], absent
+
+
+def test_e2a_property_7_coercion_exactness_edge_endpoints_are_declared_refs_verbatim(tmp_path):
+    """7/8 COERCION EXACTNESS, asserted as an IDENTITY rather than as a rule: every endpoint of every
+    derived edge is a member of `core.declared_refs`, character for character, per manifest and across
+    the union.
+
+    That identity is the entire reason `refs.text` is the ONE coercion in the package. A ref stripped
+    on its way to an edge endpoint but not on its way to `declared_refs` would be TWO keys: the
+    targeted fetch resolves one string while the graph indexes the other, and the edge disappears from
+    the picture instead of raising.
+
+    NEGATIVES, one per direction. Padding IS collapsed, and identically on both sides -- the padded
+    string appears in neither list and the derived edge set is unchanged by the padding. Case is NOT
+    collapsed: `Acme/Platform#400` stays a distinct declared ref rather than folding into the
+    lowercase one. Folding would produce a ref matching no recon item, which `refs.parse_ref`'s dedup
+    note is explicit about; the fix for a mis-cased ref is the author's, not the reader's.
+    """
+    manifests = _e2a_swept(tmp_path)
+    by_id = _e2a_by_id(manifests)
+    assert core.declared_refs(by_id["auth-scopes"]) == [
+        "acme/platform#400",
+        "acme/platform#420",
+        "acme/platform#900",
+        "acme/warehouse#87",
+    ]
+    # `acme/plat#12` sorts AHEAD of `acme/platform#400`, and the ordering is not a typo to correct:
+    # `declared_refs` sorts the raw strings, the two share the prefix `acme/plat`, and the next byte
+    # is `#` (0x23) against `f` (0x66). The prefix ref landing adjacent to the ref it is a prefix of
+    # is exactly the neighbourhood a prefix bug hides in.
+    assert core.declared_refs(by_id["keypair-rotation"]) == [
+        "acme/plat#12",
+        "acme/platform#400",
+        "acme/warehouse#61",
+        "acme/warehouse#64",
+        "acme/warehouse#70",
+    ]
+    for manifest in manifests:
+        declared = set(core.declared_refs(manifest))
+        for edge in core.derive_edges(manifest):
+            assert edge["parent"] in declared and edge["child"] in declared
+
+    union = {ref for manifest in manifests for ref in core.declared_refs(manifest)}
+    for edge in across.edges_from(manifests):
+        assert edge["parent"] in union and edge["child"] in union
+
+    padded = _e2a_platform_doc()
+    padded["rows"][0]["ref"] = "  acme/platform#400  "
+    assert refs.text(padded["rows"][0]["ref"]) == "acme/platform#400"
+    assert "  acme/platform#400  " not in core.declared_refs(padded)
+    assert core.derive_edges(padded) == core.derive_edges(_e2a_platform_doc()), "one coercion, both sides"
+
+    folded = _e2a_platform_doc()
+    folded["rows"].append(_row("4", "Acme/Platform#400"))
+    assert core.validate(folded) == [], "a differently-cased ref is a different ref, not a duplicate"
+    assert "Acme/Platform#400" in core.declared_refs(folded), "case is preserved, never folded"
+
+
+def test_e2a_property_8_pointer_closure_every_non_row_pointer_is_a_full_ref(tmp_path):
+    """8/8 POINTER CLOSURE over all three pointer channels, which this tree exercises together:
+    `after`, `gate.blocked_by_ref` and `apex.ref`.
+
+    Every one of them is an EDGE ENDPOINT. Prose in any of them produces an edge whose endpoint no
+    state lookup can ever resolve, so the row leaves the ready set permanently while the fetch built
+    from `declared_refs` goes looking for a sentence. A self-pointer is the mirror defect and is worse
+    on the gate channel: `_blocks_edges` drops a self-edge, `unmapped_gates` skips any gate that
+    carries a `blocked_by_ref` at all, and `ready_set` then sees a parentless row -- so an open
+    decision is erased in three places at once and its row is announced READY.
+
+    NEGATIVES, one per channel, each pinned by its own message: prose in `after`, a gate naming its
+    own row, and a shorthand apex. The apex one is STRUCTURAL rather than row-scoped -- it describes a
+    sibling key, so there is no subset of rows to keep -- which is why it costs the whole file.
+    """
+    manifests = _e2a_swept(tmp_path)
+    pointers = []
+    for manifest in manifests:
+        apex = manifest.get("apex")
+        if isinstance(apex, dict):
+            pointers.append((apex["ref"], None))
+        for row in manifest["rows"]:
+            pointers += [(entry, row["ref"]) for entry in row.get("after", [])]
+            gate = row.get("gate")
+            if isinstance(gate, dict) and gate.get("blocked_by_ref"):
+                pointers.append((gate["blocked_by_ref"], row["ref"]))
+    assert len(pointers) == 4, "one apex, two `after` entries, one gate pointer -- all three channels"
+    for pointer, own_ref in pointers:
+        assert refs.parse_ref(pointer) is not None, pointer
+        assert pointer != own_ref
+
+    prose = _e2a_platform_doc()
+    prose["rows"][1]["after"] = ["waiting on PR #400"]
+    assert core.validate(prose) == ["rows[1]: after[0] must be a full ref (owner/repo#num), got waiting on PR #400"]
+
+    self_gated = _e2a_warehouse_doc()
+    self_gated["rows"][2]["gate"]["blocked_by_ref"] = "acme/warehouse#70"
+    assert core.validate(self_gated) == ["rows[2]: gate.blocked_by_ref names its own ref acme/warehouse#70"]
+
+    short_apex = _e2a_platform_doc()
+    short_apex["apex"] = {"ref": "platform#900", "label": "auth scopes tracker"}
+    assert core.validate(short_apex) == ["apex: ref must be a full ref (owner/repo#num), got platform#900"]
+
+
+def test_e2a_the_authored_edge_count_across_the_tree_is_eight(tmp_path):
+    """THE NUMBER IS DERIVED BY HAND, and the derivation is written out so a reader can check it
+    rather than trust it.
+
+    `auth-scopes`, subtotal 5: two `after` edges, #400 -> #420 and #400 -> warehouse#87, both kind
+    `stacked`; the two LANE adjacencies are SUPPRESSED because both children appear in an `after`
+    list (`core._stacked_edges`' override rule -- explicit parents REPLACE the lane's inference
+    instead of adding to it, or an intra-lane fork silently renders as a straight line); three `apex`
+    edges from #900 to each row.
+
+    `keypair-rotation`, subtotal 3: two lane `stacked` adjacencies, #61 -> #64 and #64 -> #70; one
+    `blocks` edge, platform#400 -> warehouse#70, from the gate. ITS FOURTH ROW CONTRIBUTES ZERO, and
+    that is arranged rather than lucky: `acme/plat#12` (property 6's strict-prefix oracle) sits alone
+    in a second lane, `_stacked_edges` zips consecutive rows WITHIN a lane so a lane of one emits no
+    adjacency, and this manifest declares no apex so there is no per-row `apex` edge either. Adding
+    it therefore left this subtotal at 3 and the union at 8, which is why the number below did not
+    move; in `auth-scopes` the identical row would have cost +1 through `_apex_edges`.
+
+    Nothing overlaps, so the union is 8 and the dedup on `(kind, parent, child)` collapses nothing.
+    The harness's live `>= 14` floor is deliberately NOT inherited: a floor over whatever happens to
+    be committed cannot tell a lost edge from a repository that was never swept.
+    """
+    manifests = _e2a_swept(tmp_path)
+    by_id = _e2a_by_id(manifests)
+    assert len(core.derive_edges(by_id["auth-scopes"])) == 5
+    assert len(core.derive_edges(by_id["keypair-rotation"])) == 3
+
+    edges = across.edges_from(manifests)
+    assert len(edges) == 8
+    assert sorted(e["kind"] for e in edges) == ["apex"] * 3 + ["blocks"] + ["stacked"] * 4
+    triples = _e2a_triples(edges)
+    assert triples == {
+        ("stacked", "acme/platform#400", "acme/platform#420"),
+        ("stacked", "acme/platform#400", "acme/warehouse#87"),
+        ("apex", "acme/platform#900", "acme/platform#400"),
+        ("apex", "acme/platform#900", "acme/platform#420"),
+        ("apex", "acme/platform#900", "acme/warehouse#87"),
+        ("stacked", "acme/warehouse#61", "acme/warehouse#64"),
+        ("stacked", "acme/warehouse#64", "acme/warehouse#70"),
+        ("blocks", "acme/platform#400", "acme/warehouse#70"),
+    }
+    # Named explicitly even though the set equality above already covers it: this absence IS the
+    # override rule, and a reader scanning for it should not have to diff two eight-element sets.
+    assert ("stacked", "acme/platform#420", "acme/warehouse#87") not in triples
+
+
+def test_e2a_adding_one_row_to_the_warehouse_lane_makes_the_count_nine(tmp_path):
+    """+1, and it is a LANE ADJACENCY: the new row sits at the tail behind #70, so the only edge that
+    can appear is #70 -> #75. Nothing else about the tree moves.
+
+    IT IS APPENDED AFTER THE PREFIX ROW AND STILL LANDS BEHIND #70, which is worth stating because
+    the two facts look contradictory. `_row` gives it no `lane`, so `core.lanes` files it under
+    `DEFAULT_LANE` alongside #61/#64/#70 and sorts it there by its `order` of 4; the prefix row lives
+    in a lane of its own and, for as long as it is alone there, is never a neighbour of anything.
+
+    WHICH IS WHY THE TRIPLE ASSERTION BELOW IS NOT REDUNDANT WITH THE COUNT. Give this row
+    `lane="prefix"` instead and the prefix lane holds TWO rows, so `_stacked_edges` zips them and
+    emits `acme/plat#12 -> acme/warehouse#75`. The total is STILL 9, `len(edges) == 9` still passes,
+    and the only assertion that goes red is the triple -- measured by running exactly that mutation,
+    not reasoned about. So a +1 case asserting the count alone would stay green for a tree whose new
+    edge hangs off the wrong parent, which is the mistake this note exists to prevent.
+
+    `_e2a_swept`'s clean-sweep assertion is load-bearing here rather than incidental. An added row the
+    validator refused would be DROPPED from the manifest, the count would stay at 8, and this case
+    would fail for the right number by the wrong route -- or, had the expectation been 8, pass while
+    asserting nothing at all.
+    """
+    grown = _e2a_warehouse_doc()
+    grown["rows"].append(_row("4", "acme/warehouse#75"))
+    edges = across.edges_from(_e2a_swept(tmp_path, warehouse=grown))
+    assert len(edges) == 9
+    assert ("stacked", "acme/warehouse#70", "acme/warehouse#75") in _e2a_triples(edges)
+
+
+def test_e2a_removing_the_warehouse_lane_head_makes_the_count_seven(tmp_path):
+    """-1, and the row removed is chosen so the arithmetic is a single LANE ADJACENCY.
+
+    #61 is the lane HEAD: dropping it removes #61 -> #64 and touches nothing else. Dropping the TAIL
+    (#70) would cost TWO -- its adjacency and its gate's `blocks` edge -- and dropping the MIDDLE
+    (#64) also lands on 7, but by a different route (two adjacencies removed, #61 -> #70 inferred in
+    their place), which is a worse oracle because two errors there could cancel.
+
+    `rows[1:]` is index arithmetic on the fixture, so note WHICH rows it keeps: #64, #70 and the
+    prefix row, which is last in declaration order and rides along untouched. It emits no edge in
+    either tree, so it neither adds to nor subtracts from this 7.
+    """
+    shortened = _e2a_warehouse_doc()
+    shortened["rows"] = shortened["rows"][1:]
+    edges = across.edges_from(_e2a_swept(tmp_path, warehouse=shortened))
+    assert len(edges) == 7
+    triples = _e2a_triples(edges)
+    assert ("stacked", "acme/warehouse#64", "acme/warehouse#70") in triples
+    assert ("blocks", "acme/platform#400", "acme/warehouse#70") in triples
+    assert [t for t in triples if "acme/warehouse#61" in t] == [], "the head is gone from every edge"
+
+
+def test_e2a_the_clean_tree_is_uncontested(tmp_path):
+    """No ref is claimed by two chains, so `contested_refs` is empty.
+
+    Note WHICH refs this is a claim about. `acme/platform#400` appears in BOTH manifests -- as a row
+    in `auth-scopes` and as `keypair-rotation`'s `gate.blocked_by_ref` -- and that is not a contest:
+    pointing at another chain's work is the cross-repository dependency a manifest exists to express.
+    A `contested_refs` built over `declared_refs` instead of over rows would report this clean tree as
+    contested, and would make the case below unfalsifiable.
+    """
+    assert across.contested_refs(_e2a_swept(tmp_path)) == []
+
+
+def test_e2a_a_third_manifest_claiming_a_platform_row_is_exactly_one_contested_line(tmp_path):
+    """The negative that moves the contested count 0 -> 1.
+
+    `platform-audit` -- a third manifest, living in `warehouse` -- declares `acme/platform#400` as one
+    of its OWN rows, a ref `auth-scopes` already declares. Two chains claiming one item is a
+    declaration conflict for a human to settle, so it is REPORTED and never resolved: hiding it lets
+    the loser's chain quietly lose a member.
+
+    ONE line, not two: the intruder's other row (`acme/warehouse#99`) is its own.
+
+    The exact sentence is deliberately NOT pinned here -- `across` owns its wording, and this file is
+    not the place a second copy of that format becomes a contract. What is pinned is the ARITY and the
+    ATTRIBUTION: one line, naming the contested ref and both claimants by id.
+    """
+    contested = across.contested_refs(_e2a_swept(tmp_path, intruder=True))
+    assert len(contested) == 1, contested
+    assert "acme/platform#400" in contested[0]
+    assert "auth-scopes" in contested[0] and "platform-audit" in contested[0]
+    assert "acme/warehouse#99" not in contested[0], "the shared ref is named, not every ref of a claimant"
+
+
+def test_e2a_the_collision_is_still_reported_once_the_retired_program_key_is_gone(tmp_path):
+    """THE TRIPWIRE, and it is aimed at a dated time bomb rather than at a hypothetical.
+
+    merge-tree's `apply_program_projects` reads each manifest's top-level `program` key and SKIPS any
+    manifest that does not carry one, while borg_core's loader stamps `_id` and is pinned never to
+    invent `program` (see the declared-id case earlier in this file). So the day AC7 removes the last
+    top-level `program` key, that implementation reports ZERO contested refs for a tree with a real
+    collision in it -- green because the code stopped running. Measured last session by stripping the
+    key from a tree with a collision injected; recorded as a comment in `evals/s4-k3/run.sh`, which
+    is the surface that goes quietly green.
+
+    The rewrite is REAL: the same three files, rewritten on disk without the key and rediscovered.
+    Identity therefore has to come from `_id`, which falls back to the FILENAME STEM, and the
+    collision has to outlive the key. The `program not in` assertion is the part that keeps this
+    honest -- without it the case could pass against files that still carry the key.
+    """
+    keyed = _e2a_swept(tmp_path, intruder=True)
+    assert all("program" in m for m in keyed), "precondition: the retired key is on disk to begin with"
+    assert len(across.contested_refs(keyed)) == 1
+
+    keyless = _e2a_swept(tmp_path, intruder=True, declared_ids=False)
+    assert all("program" not in m for m in keyless), "the key is gone from every file"
+    assert sorted(m["_id"] for m in keyless) == ["auth-scopes", "keypair-rotation", "platform-audit"]
+    contested = across.contested_refs(keyless)
+    assert len(contested) == 1, "identity comes from the loader's _id, so the collision outlives the key"
+    assert "acme/platform#400" in contested[0]
+    assert "auth-scopes" in contested[0] and "platform-audit" in contested[0]
