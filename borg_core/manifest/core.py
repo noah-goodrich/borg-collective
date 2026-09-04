@@ -504,6 +504,32 @@ def _sort_key(row: dict[str, Any], index: int) -> tuple[int, int, int]:
     return (1, int(match.group(1)) if match else index, index)  # pylint: disable=clean-arch-demeter
 
 
+def next_order_in_lane(manifest: dict[str, Any], lane: str, skip_index: int = -1) -> str:
+    """The order a NEW row must carry to sort after every row already in `lane`.
+
+    PUBLIC BECAUSE THE INCREMENT BELONGS WITH THE ORDERING. `_sort_key` decides where a row sits;
+    anything that appends to a lane needs the next position, and a caller computing that from
+    `order` strings is paraphrasing this module. `borg_core.manifest.cli` did exactly that and got
+    two defects out of it -- it stripped lane names differently to `lanes` above, and it extracted
+    DIGITS while `_sort_key` falls back to the row's FILE INDEX for an order holding none, so a
+    digit-free order at index 3 sorts as position 3 while the caller counted it as nothing and
+    handed a newcomer position 1, ahead of an untouched row that was then declared to depend on it.
+
+    Prerequisites are excluded because they are not in the numbered sequence: `_sort_key` puts them
+    in bucket 0, ahead of every numbered row, and a lane holding only prerequisites therefore starts
+    its numbering at 1. `skip_index` lets a row being MOVED avoid counting itself, and it indexes
+    `_rows`' filtered view -- the same enumeration `_sort_key` is handed here.
+    """
+    highest = 0
+    for index, row in enumerate(_rows(manifest)):
+        if index == skip_index or (_text(row.get("lane")) or DEFAULT_LANE) != lane:
+            continue
+        bucket, position, _ = _sort_key(row, index)
+        if bucket:
+            highest = max(highest, position)
+    return str(highest + 1)
+
+
 def lanes(manifest: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     """Rows grouped by lane and sorted into declared merge order within each lane.
 

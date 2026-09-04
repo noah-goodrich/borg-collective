@@ -14,11 +14,16 @@ in pyproject.toml about picture.py and render.py carry the full argument.
 
 WHY THIS IS NOT IN core.py -- DECIDED, NOT DRIFTED INTO. The session checkpoint that scheduled this
 work said "port into borg_core/manifest/core.py". That is mechanically impossible without weakening
-a gate: core.py is 950 lines and pylint's default `max-module-lines` is 1000 with no override in
-pyproject.toml, so there are 50 lines of headroom, and the two functions below are more than double
-that at this tree's docstring density -- 131 lines by an AST walk over this file's top-level
-FunctionDefs (46 and 85), which lands core.py at 1081 before the blank separators an appended copy
-needs. HEADROOM is the durable half of that arithmetic and the 131 is not: it measures the two
+a gate: core.py is 976 lines and pylint's default `max-module-lines` is 1000 with no override in
+pyproject.toml, so there are 24 lines of headroom, and the two functions below are more than FIVE
+TIMES that at this tree's docstring density -- 131 lines by an AST walk over this file's top-level
+FunctionDefs (46 and 85), which lands core.py at 1107 before the blank separators an appended copy
+needs. THE MARGIN IS SHRINKING, WHICH MAKES THE CONCLUSION MORE ROBUST, NOT LESS: it was 57 when
+this paragraph was written, 50 after a resync, and 24 once `next_order_in_lane` landed in core.py
+to give the lane ordering one owner. Every edit that makes core.py the right home for something
+else makes it a worse home for these two.
+
+HEADROOM is the durable half of that arithmetic and the 131 is not: it measures the two
 functions below, so any docstring they gain moves it, and it has now moved THREE times -- an earlier
 draft claimed ~95, the two-oracles paragraph added to edges_from took the total from 115 to 127, and
 by 2026-09-03 every digit here was stale (943/57/127/42/1070) because commit 3bb1418 -- itself

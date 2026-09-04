@@ -1433,3 +1433,55 @@ def test_ready_set_tolerates_the_raw_graphql_enum_casing():
 
 def test_ready_set_of_an_empty_manifest_is_empty():
     assert core.ready_set({"rows": []}, {"o/r#1": "open"}) == []
+
+
+# ── next_order_in_lane ───────────────────────────────────────────────────────────────────────────
+def _order_row(ref, lane, order):
+    return {"ref": ref, "lane": lane, "order": order}
+
+
+def test_next_order_in_lane_starts_at_one_for_an_empty_lane():
+    assert core.next_order_in_lane({"rows": []}, "a") == "1"
+
+
+def test_next_order_in_lane_counts_only_its_own_lane():
+    m = {"rows": [_order_row("o/r#1", "a", "1"), _order_row("o/r#2", "a", "2"),
+                  _order_row("o/r#3", "b", "9")]}
+    assert core.next_order_in_lane(m, "a") == "3"
+    assert core.next_order_in_lane(m, "b") == "10"
+
+
+def test_next_order_in_lane_strips_the_lane_the_way_lanes_does():
+    """A padded lane is the SAME bucket here and in `lanes`, or two rows land on one position."""
+    m = {"rows": [_order_row("o/r#1", "  a  ", "1")]}
+    assert core.next_order_in_lane(m, "a") == "2"
+    assert list(core.lanes(m)) == ["a"]
+
+
+def test_next_order_in_lane_skips_prerequisites_so_a_prereq_only_lane_starts_at_one():
+    m = {"rows": [_order_row("o/r#1", "a", "–"), _order_row("o/r#2", "a", "")]}
+    assert core.next_order_in_lane(m, "a") == "1"
+
+
+def test_next_order_in_lane_respects_the_file_index_fallback_for_a_digit_free_order():
+    """THE ROUND-3 DEFECT, pinned at the layer that owns it.
+
+    `_sort_key` falls back to the row's FILE INDEX when `order` holds no digit, so a digit-free
+    order at index 3 sorts as position 3. A caller extracting digits counted it as nothing and
+    handed a newcomer position 1 -- ahead of the untouched row, which `derive_edges` then declared
+    dependent on it.
+    """
+    m = {"rows": [_order_row("o/r#1", "filler", "1"), _order_row("o/r#2", "filler", "2"),
+                  _order_row("o/r#3", "filler", "3"), _order_row("o/r#7", "target", "abc")]}
+    assert core.next_order_in_lane(m, "target") == "4"
+
+
+def test_next_order_in_lane_skips_the_row_being_moved():
+    """A move into a row's OWN lane must not renumber it past its neighbours."""
+    m = {"rows": [_order_row("o/r#1", "a", "1"), _order_row("o/r#2", "a", "2")]}
+    assert core.next_order_in_lane(m, "a", skip_index=1) == "2"
+
+
+def test_next_order_in_lane_ignores_non_dict_rows():
+    m = {"rows": ["not a row", _order_row("o/r#1", "a", "1")]}
+    assert core.next_order_in_lane(m, "a") == "2"
