@@ -10,6 +10,61 @@ Generated: 2026-07-28
 and objection are carried via the council's revision record.
 **AI-scoring: 82/100**
 
+---
+
+## SUPERSEDED 2026-09-04 — READ THIS BEFORE THE RECOMMENDATION BELOW
+
+**This document's chosen option was not built, and the decision that replaced it was made elsewhere.** The
+`2026-08-24-one-front-door-link-derived-fact-surface` plan set the scope boundary "NOT building: S1 `borg show`, and
+the `--md` / `--html` output modes. **ANSI-to-stdout only. Conscious call**" — which removes the delivery medium
+Frozen Atlas requires. What shipped instead is `borg_core/link/picture.py`: a pure terminal renderer that rasterizes
+one manifest's grid into box-drawing rows, pinned against hand-authored `.expected` fixtures. Different medium,
+different renderer. AC2 of that plan ("the topological grid is the renderer, everywhere") is ticked.
+
+The pivot was deliberate but never recorded here, so this file read as the live plan of record for six weeks. The
+2026-08-10 attention-routing directive still deferred to it ("NOT building the Frozen Atlas (Option E) … must stay
+compatible with that design, not preempt it") and was itself severed on 2026-08-11; the One Front Door plan that
+followed does not mention Frozen Atlas, ELK or graph-v3 once.
+
+### The kill-test ran, and its verdict is recorded here for the first time
+
+The gate this document specifies — a full-scale one-shot ELK layout, judged against a legibility envelope where every
+criterion must hold — was executed on 2026-07-28 (`feature/graph-v3-spike`, commit `d80a36d`). Its measurements
+survive at `~/.local/state/borg/merge-tree/spike/raw_measurements.json`; its `VERDICT.md` was never written. Adjudicated
+2026-09-04:
+
+| criterion | measured | verdict |
+|---|---|---|
+| build < 60s on Apple Silicon | 134 ms | PASS, 448× margin |
+| all typed edges route, no ELK errors | 81 edges, 0 errors | PASS |
+| zoom span ≤ 16× | 2.64× | PASS on the metric, see below |
+| 8 project containers distinguishable at fit zoom | 9 containers; smallest renders 32 px wide | **FAIL** |
+| screenshot + recorded eyeball verdict | this section | **FAIL** |
+
+**The numbers passed and the human look failed, which is the outcome this document said would be decisive** — "the
+numbers are falsifiable proxies and the human look is the tiebreaker." Noah viewed both altitudes on 2026-09-04 and
+reported: the SVGs were hard to read and needed two browser zoom steps; neither altitude presented the information he
+needed; and the edges were confusing because the lines were hard to follow.
+
+**One proxy is now dead.** Zoom span measured 2.64× against a ≤16× bar — a six-fold margin — and the reader still had
+to zoom twice. That metric does not predict legibility at fit and should not be reused as though it does.
+
+**And the failure was a FAMILY failure, not a layout failure**, which is the more useful reading. The rendered graph
+was 174 nodes (127 leaves + 38 workstreams + 9 projects) with 81 edges. Ghoniem, Fekete & Castagliola put the
+node-link/matrix crossover at ~20 vertices — this was ~9× past it, and "the lines were hard to follow" is the
+hairball Kosara's *Graphs Beyond the Hairball* names. Infoviz Track 6's own hold for that reading asks "am I tuning a
+layout when I should switch families?" The spike was tuning an ELK layout. The answer, measured on this estate, is
+that the family was wrong at that scale. This document concedes the gap in advance: "Track 2 had already flagged the
+exact hole (no ELK …)".
+
+The E2 District Variant on the failure ladder below is **not** being pursued either, for the same reason the parent
+option is not: the browser is no longer the delivery medium.
+
+**What survives as knowledge, not as a plan:** ELK laid out a 174-node compound graph offline in 134 ms with zero
+routing errors. The engineering worked. The representation did not.
+
+---
+
 ## Glossary
 
 Twelve terms, defined once here and again inline the first time each one carries weight.
