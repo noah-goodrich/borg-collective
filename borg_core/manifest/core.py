@@ -624,9 +624,16 @@ def derive_edges(manifest: dict[str, Any]) -> list[dict[str, Any]]:
 
     DEDUPLICATED on `(kind, parent, child)`, which the port did not need and this version does:
     `after` can restate an adjacency the lane already implies (and the `blocks` channel can restate
-    an `after`), and a duplicated ordering edge would count TWICE in any indegree computation. The
-    dedup key order and the terminal sort key order differ on purpose -- `(kind, parent, child)` to
-    collapse, `(kind, child, parent)` to sort; unifying them changes the output order.
+    an `after`), and a duplicated ordering edge would count TWICE in any indegree computation.
+
+    ONLY THE TERMINAL SORT KEY IS OBSERVABLE, and an earlier version of this paragraph claimed both
+    were. The dedup key is a set-membership key: two edges collide iff all three fields are equal, so
+    permuting its components preserves the equivalence classes exactly and cannot change what is kept
+    or emitted -- measured, on a fixture whose parent order and child order deliberately disagree.
+    The SORT key `(kind, child, parent)` IS wire-visible, and a parent-major sort reorders rows for
+    every consumer that renders or diffs them. So "unifying the two keys" is a no-op if the dedup key
+    is the one moved and a behaviour change if the sort key is; only the latter needs guarding, and
+    test_edges_are_sorted_by_kind_then_child_then_parent is what guards it.
     """
     by_lane = lanes(manifest)
     rows = [row for lane_rows in by_lane.values() for row in lane_rows]

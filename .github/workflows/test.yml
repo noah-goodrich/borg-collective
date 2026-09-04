@@ -39,6 +39,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: sudo apt-get install -y zsh jq fzf
+      # WHY A BATS JOB INSTALLS PYTHON: exactly one suite needs it. tests/eval_floor.bats is the
+      # oracle for the eval harness's execution floors, and seven of its cases must EXECUTE
+      # evals/*/run.sh — whose one always-runnable case (E2a) is a pytest selection, and pytest is a
+      # dev-group dependency that no bare runner carries. Those seven cases FAIL LOUDLY on a machine
+      # with no importable pytest rather than skipping, deliberately (see that file's
+      # `_python_with_pytest`), because before this step existed they skipped and this job printed
+      # 11/11 green having executed four of them — deleting a mode floor turned nothing red here.
+      # Do NOT remove this as a stray Python step in a shell job, and do NOT promote it to a sixth
+      # job: `make eval` is not a CI job, this is only the premise `bats tests/*.bats` cannot supply
+      # itself. Same action version, same interpreter and the same install invocation as the `python`
+      # and `viz` jobs below — three jobs installing the dev group three ways is how they drift.
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install dev toolchain (tests/eval_floor.bats needs an importable pytest)
+        run: pip install --group dev
       # D3: was `git clone --depth 1 ... master` — completely unpinned, so the harness could change
       # under us with no signal in this repo. Pinned to a released action version.
       - name: Setup bats
