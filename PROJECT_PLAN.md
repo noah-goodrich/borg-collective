@@ -149,13 +149,38 @@ e2e/eval harness that keeps it honest.
     fixture carries the input and a negative whose fixture provably lacks it, both SYNTHESIZED so neither names a
     repository. AC5's cases grade borg's OWN lifecycle skills, so unlike that pair they belong in THIS tree; what
     transfers is the fixture discipline, not the location.
-- [ ] **AC6 — e2e/eval harness MVP.** Generalize the `evals/s4-k3/run.sh` pattern into a reusable convention: a
+- [x] **AC6 — e2e/eval harness MVP.** Generalize the `evals/s4-k3/run.sh` pattern into a reusable convention: a
       `make eval` target, deterministic cases green in CI, model-dependent cases behind `make eval-live` — which
       since decision (9) means the harness in the repository that OWNS the surface, not this one. Two
       clauses that sat here are deferred rather than gated, both because no clause this AC names could fail for
       them: the session-load case — a fresh session registers each skill exactly once and fires its hooks — goes to
       a parented directive (decision (6)), and the positive/negative pairing convention moves into the harness
       headers where it can be read against the cases it governs, with E2 as its named exception (decision (7)).
+  - **MET** on `main` at `6cddc31`, after
+    [#188](https://github.com/noah-goodrich/borg-collective/pull/188),
+    [#190](https://github.com/noah-goodrich/borg-collective/pull/190) and
+    [noah-goodrich/claude-plugins#54](https://github.com/noah-goodrich/claude-plugins/pull/54) landed. All three
+    verify gates measured on that tree, not on a branch: **CI** — `make test` green at 99% in the `python` job,
+    `bats tests/*.bats` green in `test`, shellcheck clean over `evals/*/run.sh` in `lint`; **local aggregate** —
+    `make eval` green at `1 pass, 0 fail, 2 skip`, offline by construction; **on demand** — `make eval-live` at
+    **rc 0** with `3 pass, 0 fail, 0 skip`. Decision (6)'s directive is on disk.
+  - **THE THIRD GATE IS WHAT TOOK THE LONGEST AND IT IS THE ONE WORTH READING.** `make eval-live` exited **rc 2** as
+    late as 2026-09-03, on `the model sweep was requested but no model case executed` over `2 pass, 0 fail, 3 skip` —
+    three of five cases skipping for want of a repository checkout. The first prescription (decision (8)) was to
+    provision those repositories, and it was wrong: it accepted the cases' premise that they needed particular
+    repositories at all. Decision (9) is the correction — E3 stages its second repository from committed fixtures and
+    its threshold became an EQUALITY, E4/E5 moved to the tree that owns `/pr-description` and are synthesized from
+    `git init`. **Zero skips now, on a machine holding neither of the two repositories the cases used to name**,
+    which is the state all three machines are in by construction rather than by luck.
+  - **What ticking this box does NOT assert.** Three rounds of blind adversarial review (≈175 agents, 46 confirmed
+    findings) closed every guard with a mutation-verified oracle, and the two findings that justified the exercise
+    were both invariants ORPHANED BY A FIX: borg's model-floor holding case, deleted when E4/E5 relocated and not
+    carried over, and this harness's outermost `[ "$FAIL" -eq 0 ]` gate, which one oracle case captured as `rc` and
+    printed in a success message without ever asserting. Both were fully green under mutation before the fix. What
+    remains OPEN is comment accuracy: the same three rounds confirmed six count errors in prose (`twelve` for
+    `1..13`, `seven` for five, `24` for 31, `24` for 23, `8 ok` for 10 ok, and one correction that left the word it
+    existed to delete, in `The seven FIVE cases`). Every gate this AC names is armed and green; the running text
+    around them is checked by a reader, and this session's evidence is that a reader is not enough.
   - Verify: three gates, each pointing at something that actually runs. **CI** — `make test` green in the `python`
     job, which collects the offline E2a case (`borg_core/manifest/test_shell.py`'s `e2a` tests: the eight structural
     ref properties over a two-repository tree, plus an exact authored edge count), together with `bats tests/*.bats`
