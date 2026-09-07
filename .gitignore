@@ -30,3 +30,8 @@ __pycache__/
 # Runtime session state inside template scaffolds (same convention as root .borg/)
 templates/supabase/.borg/
 .borg/state.json
+
+# Transient research-gate marker. Machine-local session state, never committed:
+# one was swept into the 2026-08-10 infoviz import (54b4846) and sat tracked for
+# three weeks, arming the gate in every clone. See the removal commit.
+.gate-armed
