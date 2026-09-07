@@ -561,6 +561,48 @@ else
     fi
 fi
 
+# ── Phase 7: Refuse to leave changed content under an unchanged version ──────
+#
+# THIS IS THE PREVENTION POINT for the whole drift class. `claude plugin update` compares version
+# STRINGS and never content, so generated output that changes while VERSION stays put is served
+# stale from the install cache forever while the updater reports "already at the latest version".
+# On 2026-09-07 borg-collective sat six weeks stale at 0.8.9 in exactly this way.
+#
+# claude-plugins/check-version-bumps.sh catches this too, but only once the stale copy is already
+# committed there — one hop downstream, after the fact. Here we can catch it before it lands.
+#
+# Advisory by design: the build has already written correct FILES, and failing hard would leave the
+# tree half-updated with no way to finish. Bumping VERSION is a judgment call (is this a patch or a
+# minor?), so we state the problem and let the author decide.
+
+_info "Phase 7: version-vs-content drift check"
+
+_MARKET_ROOT="$(dirname "$PLUGIN_DIR")"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    _dry "would check generated content against the committed version"
+elif ! git -C "$_MARKET_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    _warn "  $_MARKET_ROOT is not a git repository — cannot check for drift"
+else
+    _changed="$(git -C "$_MARKET_ROOT" status --porcelain -- "$(basename "$PLUGIN_DIR")/" 2>/dev/null || true)"
+    if [[ -z "$_changed" ]]; then
+        _info "  no generated content changed — nothing to bump"
+    else
+        _committed_version="$(git -C "$_MARKET_ROOT" show "HEAD:$(basename "$PLUGIN_DIR")/.claude-plugin/plugin.json" 2>/dev/null | jq -r '.version // empty' || true)"
+        _now_version="$(jq -r '.version // empty' "$PLUGIN_JSON" 2>/dev/null || true)"
+        if [[ -n "$_committed_version" && "$_committed_version" == "$_now_version" ]]; then
+            echo ""
+            _warn "DRIFT: generated content changed but the version is still $_now_version."
+            git -C "$_MARKET_ROOT" status --porcelain -- "$(basename "$PLUGIN_DIR")/" | sed 's/^/         /' | head -10
+            echo ""
+            _warn "  Committed at this version, the change ships to NOBODY: 'claude plugin update'"
+            _warn "  compares version strings, so every install keeps serving the cached copy."
+            _warn "  Fix: bump $VERSION_FILE, then re-run this script."
+        else
+            _info "  version moves $_committed_version -> $_now_version — drift covered"
+        fi
+    fi
+fi
+
 echo ""
 _info "Build complete."
 if [[ "$DRY_RUN" -eq 0 ]]; then
