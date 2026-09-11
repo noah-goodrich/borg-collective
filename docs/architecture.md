@@ -59,8 +59,8 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **12 hooks**, **~14 lib files**, **16 skills**, **6 agents** (5 specialists + `ROUTING.md`),
-**4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
+writing: **12 hooks**, **~14 lib files**, **17 skills**, **6 agents** (5 specialists + `ROUTING.md`),
+**5 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
 ```
@@ -119,6 +119,7 @@ writing: **12 hooks**, **~14 lib files**, **16 skills**, **6 agents** (5 special
         com.stillpoint-labs.borg.cortex-wake.plist    30s Cortex Code session watcher
         com.stillpoint-labs.borg.reap.plist           Hourly `borg reap-worktrees`
         com.stillpoint-labs.borg.usage-watch.plist    Usage Guardian poller schedule
+        com.stillpoint-labs.borg.memory-gate.plist    Daily auto-memory read-instrument check
     install.sh                  Installer
     docs/                       Documentation
 ```
@@ -304,7 +305,7 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | break-glass | Manual | Explicit, logged override for a normally-blocked action |
 | simplify / fable-reviewer / no-unnecessary-read-perms | Manual / auto | Code + permission hygiene guardrails |
 
-The full, current roster (16 skills as of this writing) is always `ls skills/` — this table lists
+The full, current roster (17 skills as of this writing) is always `ls skills/` — this table lists
 role, not an exhaustive spec.
 
 ---

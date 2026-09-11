@@ -306,7 +306,7 @@ borg link                                # project dashboard
 borg add ~/dev                           # register orchestrator root if not auto-discovered
 claude plugin list | grep borg-collective
 borg next                                # recommendation engine
-borg doctor                              # verify the 4 launchd agents (registered/exit/fresh output)
+borg doctor                              # verify the 5 launchd agents (registered/exit/fresh output)
 borg init                                # optional: morning briefing + orchestrator session
 ```
 
