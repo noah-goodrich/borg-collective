@@ -36,7 +36,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      # FETCH-DEPTH 0 IS A TEST PREMISE, NOT A CONVENIENCE. checkout@v4 defaults to a shallow
+      # clone of one commit, and `contract: the AC1 baseline still measures 30 at plan start`
+      # reads `git show 638b7c4:borg.zsh` -- the plan-start blob. On a depth-1 clone that object
+      # does not exist and the case dies on its own premise, green locally and red here. Asserting
+      # the baseline is the whole point of that case (a commented baseline rots silently), so the
+      # history is supplied rather than the assertion weakened.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install dependencies
         run: sudo apt-get install -y zsh jq fzf
       # WHY A BATS JOB INSTALLS PYTHON: exactly one suite needs it. tests/eval_floor.bats is the
@@ -122,7 +130,15 @@ jobs:
     # invisible.
     runs-on: macos-latest
     steps:
+      # FETCH-DEPTH 0 IS A TEST PREMISE, NOT A CONVENIENCE. checkout@v4 defaults to a shallow
+      # clone of one commit, and `contract: the AC1 baseline still measures 30 at plan start`
+      # reads `git show 638b7c4:borg.zsh` -- the plan-start blob. On a depth-1 clone that object
+      # does not exist and the case dies on its own premise, green locally and red here. Asserting
+      # the baseline is the whole point of that case (a commented baseline rots silently), so the
+      # history is supplied rather than the assertion weakened.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Install dependencies
         run: brew install jq
       - name: Setup bats
