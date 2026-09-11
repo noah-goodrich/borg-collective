@@ -8,7 +8,7 @@ the two gates. Every impure answer this module needs arrives as an argument.
 
 THE ANNOTATION IS NEVER A COMMAND. `validate_annotation` is an ALLOWLIST -- a closed set of four
 kinds, each carrying a ref or a path matched against an anchored character class -- and not a
-denylist of metacharacters. That direction is the whole of AC4: a denylist is a list of the attacks
+denylist of metacharacters. That direction is the whole of AC9: a denylist is a list of the attacks
 someone thought of, and the four kinds genuinely need no character outside `[A-Za-z0-9._/#-]`. The
 runner for `bats:` and `pytest:` is selected in `shell.py` from the KIND, never assembled from the
 annotation's text, so there is no string anywhere in this package that a plan file contributes to
@@ -32,8 +32,8 @@ _MET_PREFIX = "- [x]"
 _UNMET_PREFIX = "- [ ]"
 
 # An indented sub-bullet naming the machine-readable evidence. The prose `- Verify:` sibling is not
-# matched here and is never rewritten -- it is the clause a human reads, and W1's whole shape is that
-# the annotation sits BESIDE it rather than replacing it.
+# matched here and is never rewritten -- it is the clause a human reads, and the amendment's whole
+# shape is that the annotation sits BESIDE it rather than replacing it.
 _EVIDENCE_RE = re.compile(r"^\s+-\s+Evidence:\s*(.+?)\s*\Z")
 
 # Surrounding backticks are the documented authoring form (`- Evidence: \`pytest:borg_core/planstate/\``)
@@ -203,7 +203,7 @@ def verdict_for_pr(value: str, fetch: dict) -> tuple[str, str]:
 def apply_flips(text: str, lines_to_flip: list[int]) -> str:
     """`text` with `- [ ]` replaced by `- [x]` at each 0-based index in `lines_to_flip`.
 
-    THE ONLY BYTE THAT CHANGES IS THE ONE INSIDE THE BRACKETS (AC3). No strip, no rewrap, no
+    THE ONLY BYTE THAT CHANGES IS THE ONE INSIDE THE BRACKETS (AC8). No strip, no rewrap, no
     normalisation of trailing whitespace, no touching of the line ending -- the prefix is replaced by
     slicing at a FIXED LENGTH and the remainder of the line is concatenated back verbatim, so a line
     with trailing spaces or a criterion whose text contains `- [ ]` again survives byte-identically.
