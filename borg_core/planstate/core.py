@@ -102,7 +102,9 @@ def _annotation_below(lines: list[str], start: int) -> tuple[str | None, int | N
             return None, None
         match = _EVIDENCE_RE.match(candidate)
         if match:
-            return match.group(1).strip(_TICKS).strip(), offset
+            # The same shape borg_core/manifest/refs.py::parse_ref carries a disable for.
+            # JUSTIFICATION: reading the group of a Match this function just produced, not a foreign object.
+            return match.group(1).strip(_TICKS).strip(), offset  # pylint: disable=clean-arch-demeter
     return None, None
 
 
@@ -116,12 +118,22 @@ def validate_annotation(raw: str | None) -> dict:
     """
     if raw is None:
         return _rejected("", "", "no evidence annotation")
-    candidate = raw.strip().strip(_TICKS).strip()
+    # JUSTIFICATION: whitespace/backtick unwrapping of a local string this function owns.
+    candidate = raw.strip().strip(_TICKS).strip()  # pylint: disable=clean-arch-demeter
     if not candidate:
         return _rejected("", "", "empty evidence annotation")
-    kind, _, value = candidate.partition(":")
+    # `partition` is the total form of `split(":", 1)` and cannot raise on an annotation with no colon.
+    # JUSTIFICATION: splitting a local string this function owns, not a caller-supplied collaborator.
+    kind, _, value = candidate.partition(":")  # pylint: disable=clean-arch-demeter
     if kind not in _KINDS:
         return _rejected(kind, value, f"unknown evidence kind {kind!r} (expected one of {', '.join(_KINDS)})")
+    return _validate_value(kind, value)
+
+
+def _validate_value(kind: str, value: str) -> dict:
+    """The per-kind half of `validate_annotation`. SPLIT OUT BECAUSE PYLINT MEASURED IT (R0911, 8
+    returns against a ceiling of 6), and the seam is the honest one: the caller answers WHICH KIND
+    this annotation claims to be, and this answers WHETHER ITS PAYLOAD IS ACCEPTABLE."""
     if not value:
         return _rejected(kind, value, f"{kind}: annotation carries no {'ref' if kind == 'pr' else 'path'}")
     if kind == "pr":
@@ -132,8 +144,7 @@ def validate_annotation(raw: str | None) -> dict:
         # there is no third place for the two vocabularies to drift apart.
         if manifest_core.parse_ref(value) is None:
             return _rejected(kind, value, f"pr: {value!r} is not a bare owner/repo#number ref")
-        return {"ok": True, "kind": kind, "value": value, "reason": ""}
-    if not _PATH_RE.match(value) or ".." in value.split("/"):
+    elif not _PATH_RE.match(value) or ".." in value.split("/"):
         return _rejected(kind, value, f"{kind}: {value!r} is not a plain repo-relative path")
     return {"ok": True, "kind": kind, "value": value, "reason": ""}
 

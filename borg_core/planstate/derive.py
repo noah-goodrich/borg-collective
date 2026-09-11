@@ -2,8 +2,8 @@
 write. Impure by composition -- it calls `shell.py` -- and holds no logic of its own that `core.py`
 could have held.
 
-WHY THIS IS NOT IN `cli.py`: the `/borg-link-up` skill's caller is `--json`, and the skill's consumer (AC1-AC5) will want the
-same report from Python without going through argparse and stdout. A CLI that is the only door to a
+WHY THIS IS NOT IN `cli.py`: the `/borg-link-up` skill's caller is `--json`, and that skill (AC1-AC5)
+will want the same report from Python without going through argparse and stdout. A CLI that is the only door to a
 capability is a capability that has to be re-implemented the first time something else wants it.
 
 THE `pr:` REFS ARE COLLECTED BEFORE ANYTHING IS RESOLVED, so the whole document costs ONE `gh`
@@ -36,7 +36,7 @@ def repo_root(path: Path) -> Path:
     return here
 
 
-def _resolve(entry: dict, gate: dict, root: Path, fetch: dict) -> tuple[str, str]:
+def _resolve(gate: dict, root: Path, fetch: dict) -> tuple[str, str]:
     """`(verdict, evidence line)` for one parsed criterion. Every impure answer arrives through
     `shell`; every DECISION is `core`'s.
 
@@ -79,7 +79,7 @@ def derive(path: Path, root: Path | None = None) -> dict:
     rows = []
     flips = []
     for entry, gate in zip(criteria, gates):
-        verdict, evidence = _resolve(entry, gate, base, fetch)
+        verdict, evidence = _resolve(gate, base, fetch)
         row = {
             "line": entry["line"],
             "checked": entry["checked"],
