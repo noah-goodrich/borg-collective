@@ -9,7 +9,7 @@ Borg is two command-line tools:
 - **`borg`** — Orchestrates your AI development sessions (recommendations, boundaries, planning)
 - **`drone`** — Manages project containers and tmux windows (start/stop, shell access, Claude launch)
 
-Plus 17 Claude Code skills, four hooks, and a tmux keybinding.
+Plus 17 Claude Code skills, 12 hooks, and a tmux keybinding.
 
 ## Prerequisites
 
