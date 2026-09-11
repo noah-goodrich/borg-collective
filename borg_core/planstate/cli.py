@@ -30,17 +30,20 @@ _VERDICT_MARK = {core.PASS: "PASS", core.FAIL: "FAIL", core.UNKNOWN: "????"}
 
 def _die_json(message: str) -> NoReturn:
     """Fail in `--json` mode: a parseable error object on stdout, nothing on stderr to splice into a
-    consumer's `jq`. Mirrors `link/cli.py::_die_json` -- a machine surface that fails with prose is a
-    machine surface that fails silently, because `jq` prints nothing useful and the caller reads an
-    empty document as "no criteria"."""
-    sys.stdout.write(jsonlib.dumps({"error": message}) + "\n")
+    consumer's `jq`. A machine surface that fails with prose fails SILENTLY, because the caller reads
+    an empty document as "no criteria".
+
+    DELIBERATELY DIFFERENT FROM `link/cli.py::_die_json`, which prints prose to stderr: link's
+    `--json` consumer is a `jq` pipeline inside a zsh function that already checks the exit status,
+    while this one is a skill prompt that reads the payload and has no exit status to consult."""
+    print(jsonlib.dumps({"error": message}), file=sys.stdout)
     raise SystemExit(1)
 
 
 def _die(message: str) -> NoReturn:
     """Fail in human mode: the reason on stderr, non-zero. Nothing on stdout, so a caller that
     redirects stdout into a file does not get half a table plus an error."""
-    sys.stderr.write(f"planstate: {message}\n")
+    print(f"planstate: {message}", file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -78,15 +81,17 @@ def _run(args: argparse.Namespace) -> int:
         applied = derive_mod.apply(path, report)
         report["applied"] = applied
     if args.json_only:
-        sys.stdout.write(jsonlib.dumps(report, indent=2, sort_keys=True) + "\n")
+        print(jsonlib.dumps(report, indent=2, sort_keys=True), file=sys.stdout)
     else:
-        sys.stdout.write(_human(report, applied))
+        print(_human(report, applied), end="", file=sys.stdout)
     try:
-        sys.stdout.flush()
+        # JUSTIFICATION: this process's own standard stream, not a caller-supplied collaborator.
+        sys.stdout.flush()  # pylint: disable=clean-arch-demeter
     except BrokenPipeError:
         # The documented CPython idiom, verbatim from `link/cli.py` -- closing stdout or leaving it
         # alone makes the interpreter print "Exception ignored in: <_io.TextIOWrapper ...>" at
         # shutdown instead, which is the same leak wearing a different hat.
+        # JUSTIFICATION: same stream, and this line is the documented CPython idiom verbatim.
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())  # pylint: disable=clean-arch-demeter
     return 0
 
@@ -117,18 +122,22 @@ def _mode(args: argparse.Namespace) -> str:
 def main(argv: list[str] | None = None) -> None:
     """Entrypoint for `python3 -m borg_core.planstate.cli`.
 
-    A SINGLE exception boundary, formatter chosen by mode -- `_die_json` for `--json` so a consumer's
-    `jq` gets an object rather than prose on stderr. `SystemExit` is re-raised untouched so argparse's
-    own exit 2 and `_die`'s exit 1 pass through unmolested.
+    A SINGLE exception boundary, formatter chosen by mode -- `_die_json` for `--json` so a consumer
+    gets an object rather than prose on stderr. `SystemExit(0)` on success, matching
+    `link/cli.py::main`; argparse's own exit 2 leaves before the boundary exists. The
+    `raise SystemExit` sits OUTSIDE the `try` rather than inside it, so the broad `except` cannot
+    swallow the successful exit -- pylint names that shape W0706 and it is a real bug, not a style.
     """
     args = _build_parser().parse_args(argv)
     fail = _die_json if _mode(args) == "json" else _die
     try:
-        raise SystemExit(_run(args))
-    except SystemExit:
-        raise
-    except (OSError, ValueError) as exc:
+        exit_code = _run(args)
+    # Same breadth and same reason as `link/cli.py::main`: a malformed plan raises from parse or
+    # resolve as OSError, ValueError or AttributeError.
+    # JUSTIFICATION: a `--json` consumer must get a payload, never an uncaught traceback.
+    except Exception as exc:  # pylint: disable=broad-except
         fail(str(exc))
+    raise SystemExit(exit_code)
 
 
 if __name__ == "__main__":

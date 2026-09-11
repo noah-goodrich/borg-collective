@@ -28,8 +28,10 @@ from borg_core import proc
 from borg_core.link import shell as link_shell
 
 # The runner argv is built HERE, FROM THE KIND, and the annotation's value is appended as a single
-# already-validated argv element (AC9). `shell=True` appears nowhere in this package; there is no
-# string for a shell to parse. `sys.executable -m pytest` rather than a bare `pytest`, so the
+# already-validated argv element (AC9). Nothing in this package ever enables subprocess's `shell`
+# keyword -- test_security.py greps every non-test module for it, which is why the literal spelling
+# is deliberately absent from this comment. There is no string anywhere for a shell to parse.
+# `sys.executable -m pytest` rather than a bare `pytest`, so the
 # interpreter running the derive is the one running the suite -- a bare name would resolve against
 # whatever PATH the calling hook happened to export.
 _RUNNERS = {
@@ -111,7 +113,10 @@ def resolve_prs(refs: list[str]) -> dict:
     annotation (every fixture in this package's AC9 suite among them) fork-free.
     """
     if not refs:
-        return link_shell.start_fetch([])["done"]
+        # Annotated rather than returned inline: indexing a `dict` yields `Any`, and mypy's
+        # `no-any-return` is right to object -- the callers treat this as a fetch result.
+        skipped: dict = link_shell.start_fetch([])["done"]
+        return skipped
     return link_shell.finish_fetch(link_shell.start_fetch(sorted(set(refs))))
 
 
