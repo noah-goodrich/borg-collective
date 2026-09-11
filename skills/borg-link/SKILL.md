@@ -220,7 +220,8 @@ sentences and getting them backwards is the known trap.
 reason.**
 
 The probe must re-run the SAME command Step 1 used, including the project argument if there was
-one. `ProjectNotFound` is only raised when a project name is passed (`borg_core/link/cli.py:61`); an
+one. `ProjectNotFound` is only raised when a project name is passed (it is raised by `_focus()` in
+`borg_core/link/cli.py`, which returns `None` before that point when no project was given); an
 argument-less overview call can never hit the `not in registry` row, so a probe that drops the
 argument makes that row unreachable. If Step 1's failing call was the overview (no project), that
 row simply won't fire for it — that is correct, not a bug.

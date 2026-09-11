@@ -1315,6 +1315,7 @@ cmd_help() {
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
     pane <direction>     Split active pane top|bottom|left|right (devcontainer-aware)
     scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase, --supabase-shared)
+    link [project]       Deep dive on the project (alias for `borg link`)
     help                 Show this message
 
   PROJECT RESOLUTION
