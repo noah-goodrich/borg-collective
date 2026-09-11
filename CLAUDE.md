@@ -533,6 +533,22 @@ docs/
   family as the `XDG_CONFIG_HOME` leak above and "a shell variable is not an environment variable"
   below it in this list: the sandbox is incomplete in a way the dev machine silently papers over,
   which is exactly why it was invisible where it was being tested.
+- **This repo has NO devcontainer, and tests run against a repo-root `.venv` — not the host interpreter.**
+  `borg` and `drone` drive the host (tmux windows, docker lifecycle, launchd agents, `~/.claude` deployment),
+  so containerizing them is inside-out and there is no `.devcontainer/`, no compose file and no Dockerfile
+  here. That makes this tree the standing exception to "run project tooling via `drone exec`" — but the
+  isolation still has to come from somewhere, and it comes from `.venv`. **Create it before running anything:**
+  `python3 -m venv .venv && .venv/bin/pip install --group dev`. `.venv/` is already in `.gitignore`, and
+  `tests/test_helper/setup.bash`'s `_python_with_pytest` probes `$BORG_HOME/.venv/bin/python` FIRST, falling
+  back to `command -v python3` only if it is missing. **Why it matters, measured 2026-09-11:** with no `.venv`,
+  that fallback found the host python whose `pytest` lives in the HOME-derived user site
+  (`~/Library/Python/3.14/lib/python/site-packages`) — and `setup_temp_dirs` redirects `HOME`, so `import
+  pytest` failed inside the sandbox and five `tests/eval_floor.bats` cases went red with "premise broken: no
+  interpreter with an importable pytest". The advice in that message is right and the implied diagnosis is
+  wrong: pytest WAS installed, just somewhere the sandbox hides. CI never sees this — `pip install --group dev`
+  on a `setup-python` interpreter lands outside `$HOME` — so it is a host-only red, the mirror image of the
+  platform traps below it. Same root as the `XDG_CONFIG_HOME` and git-identity entries above: a redirected
+  `HOME` silently removes something the dev machine supplies ambiently.
 - **A test's PREMISE can depend on the dev platform, not just its environment — and the macOS lane
   structurally cannot catch it**: four failures, one class, all found together on one PR. (1) pytest
   (unlike bats) never redirects `HOME`, so two `borg_core/manifest/test_shell.py` tests that shell to

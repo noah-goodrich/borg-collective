@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Where a directive goes</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-ink: #2d3142; --color-muted: #4f5d75; --color-accent: #eb6c36;
+      --font-sans: 'Geist', system-ui, sans-serif; --font-serif: 'Instrument Serif', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+      letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 0.5rem;
+    }
+    .subtitle { font-size: 0.86rem; color: var(--color-muted); max-width: 66ch; margin-bottom: 1.5rem; line-height: 1.5; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    footer {
+      margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid rgba(45,49,66,0.12);
+      font-family: var(--font-mono); font-size: 0.66rem; color: var(--color-muted); line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">State machine · borg-collective</p>
+    <h1>Where a directive goes</h1>
+    <p class="subtitle">Six directories and three skills describe one path. Only one plan is in flight per
+      repository at a time — `borg start` refuses a second — and every exit from it is a file move.</p>
+
+    <svg viewBox="0 0 1000 620" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-labelledby="plan-life-title plan-life-desc">
+      <title id="plan-life-title">Where a directive goes</title>
+      <desc id="plan-life-desc">Lifecycle of a directive. A filed directive is promoted by borg start into
+        PROJECT_PLAN.md, where borg-plan locks acceptance criteria; borg-review runs mid-flight and borg-verify
+        gates the merge; borg-assimilate archives the plan into the assimilated directory. Side exits lead to
+        severed and handoff. Two automated writers touch the plan: a hook promotes a plan on first edit after
+        exiting plan mode, and the planstate deriver flips criteria whose evidence passes.</desc>
+
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+      <!-- zone: in flight -->
+      <rect x="304" y="80" width="256" height="288" rx="8"
+            fill="rgba(235,108,54,0.05)" stroke="rgba(235,108,54,0.50)" stroke-width="0.8"
+            stroke-dasharray="4,4"/>
+      <rect x="352" y="84" width="160" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="432" y="93" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.14em">IN FLIGHT · EXACTLY ONE</text>
+
+      <!-- arrows -->
+      <line x1="248" y1="160" x2="320" y2="160" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="432" y1="208" x2="432" y2="256" stroke="#eb6c36" stroke-width="1.6"
+            marker-end="url(#arrow-accent)"/>
+      <line x1="544" y1="288" x2="680" y2="288" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <!-- side exits, down from the plan -->
+      <path d="M 360,368 V 424 Q 360,432 352,432 H 248"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+      <path d="M 504,368 V 424 Q 504,432 512,432 H 680"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+
+      <!-- arrow labels -->
+      <rect x="248" y="132" width="80" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="288" y="141" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">borg start</text>
+
+      <rect x="444" y="220" width="92" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="490" y="229" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">CRITERIA LOCK</text>
+
+      <rect x="572" y="260" width="88" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="616" y="269" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">/assimilate</text>
+
+      <rect x="256" y="440" width="64" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="288" y="449" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">/sever</text>
+
+      <rect x="560" y="440" width="72" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="596" y="449" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">HANDOFF</text>
+
+      <!-- nodes -->
+      <rect x="48" y="128" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="48" y="128" width="200" height="64" rx="6" fill="rgba(45,49,66,0.05)"
+            stroke="#4f5d75" stroke-width="1"/>
+      <text x="148" y="154" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">directives/</text>
+      <text x="148" y="172" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">filed, not yet in flight</text>
+
+      <rect x="332" y="128" width="200" height="80" rx="6" fill="#f5f5f5"/>
+      <rect x="332" y="128" width="200" height="80" rx="6" fill="rgba(235,108,54,0.10)"
+            stroke="#eb6c36" stroke-width="1"/>
+      <text x="432" y="164" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">PROJECT_PLAN.md</text>
+      <text x="432" y="180" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">objective + acceptance criteria</text>
+      <text x="432" y="194" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">repo root, or docs/plans/</text>
+
+      <rect x="332" y="256" width="200" height="112" rx="6" fill="#f5f5f5"/>
+      <rect x="332" y="256" width="200" height="112" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="340" y="262" width="52" height="12" rx="2" fill="transparent"
+            stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="366" y="271" fill="rgba(45,49,66,0.80)" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.08em">SKILLS</text>
+      <text x="432" y="298" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">/borg-plan · /borg-review</text>
+      <text x="432" y="316" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">/borg-verify</text>
+      <text x="432" y="336" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">lock · diagnose mid-flight</text>
+      <text x="432" y="350" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">PASS/FAIL gate before merge</text>
+
+      <rect x="680" y="256" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="680" y="256" width="200" height="64" rx="6" fill="rgba(45,49,66,0.05)"
+            stroke="#4f5d75" stroke-width="1"/>
+      <text x="780" y="282" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">assimilated/</text>
+      <text x="780" y="300" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">shipped, with ship_date</text>
+
+      <rect x="48" y="400" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="48" y="400" width="200" height="64" rx="6" fill="rgba(45,49,66,0.03)"
+            stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+      <text x="148" y="426" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">severed/</text>
+      <text x="148" y="444" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">retired, not deleted</text>
+
+      <rect x="680" y="400" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="680" y="400" width="200" height="64" rx="6" fill="rgba(45,49,66,0.03)"
+            stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+      <text x="780" y="426" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">handoff/ · reviews/</text>
+      <text x="780" y="444" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">passed on, or reviewed</text>
+
+      <!-- the two automated writers -->
+      <rect x="48" y="232" width="200" height="96" rx="6" fill="#f5f5f5"/>
+      <rect x="48" y="232" width="200" height="96" rx="6" fill="rgba(45,49,66,0.02)"
+            stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+      <rect x="56" y="238" width="76" height="12" rx="2" fill="transparent"
+            stroke="rgba(45,49,66,0.30)" stroke-width="0.8"/>
+      <text x="94" y="247" fill="rgba(45,49,66,0.70)" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.08em">AUTO-WRITERS</text>
+      <text x="148" y="274" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">borg-plan-promote.sh</text>
+      <text x="148" y="292" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">planstate deriver</text>
+      <text x="148" y="310" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">writes the plan · flips the boxes</text>
+
+      <!-- writer arrow into the plan zone -->
+      <path d="M 248,280 H 280 Q 288,280 288,272 V 176 Q 288,168 296,168 H 332"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+
+      <!-- callouts -->
+      <line x1="48" y1="488" x2="48" y2="536" stroke="#eb6c36" stroke-width="1.2"/>
+      <text x="60" y="502" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">`borg start` refuses when a PROJECT_PLAN.md already exists.</text>
+      <text x="60" y="518" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">That refusal is the whole concurrency model: assimilate</text>
+      <text x="60" y="534" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">or sever the current one before starting the next.</text>
+
+      <line x1="640" y1="496" x2="640" y2="528" stroke="rgba(45,49,66,0.20)" stroke-width="1.2"/>
+      <text x="652" y="506" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">
+        Every project owns its own docs/plans/ — an</text>
+      <text x="652" y="520" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">
+        orchestrator-side aggregate plan is a smell.</text>
+
+      <!-- legend -->
+      <line x1="30" y1="568" x2="970" y2="568" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <text x="30" y="584" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace"
+            letter-spacing="0.14em">LEGEND</text>
+      <line x1="112" y1="580" x2="140" y2="580" stroke="#4f5d75" stroke-width="1.2"/>
+      <text x="148" y="584" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">human move</text>
+      <line x1="256" y1="580" x2="284" y2="580" stroke="#eb6c36" stroke-width="1.6"/>
+      <text x="292" y="584" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">criteria lock</text>
+      <line x1="396" y1="580" x2="424" y2="580" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="432" y="584" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">automated / side exit</text>
+    </svg>
+
+    <footer>
+      borg-collective · docs/diagrams/plan-lifecycle.html
+    </footer>
+  </div>
+</body>
+</html>
