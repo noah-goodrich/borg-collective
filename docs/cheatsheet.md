@@ -41,9 +41,12 @@ drone cortex [project]       Launch Cortex Code (CoCo) in project context
 drone sh [project]           Shell into container
 drone exec [project] -- <cmd>  Run a command inside the container
 drone restart [project]      Restart container + re-exec panes
+drone rebuild [project]      Rebuild image (no cache) + restart + re-exec panes
 drone fix [project]          Restore standard 2-pane layout
 drone toggle [project]       Show/hide top-right side pane (2-pane ↔ 3-pane)
-drone status                 Show all drones
+drone pane <direction>       Split the active pane top|bottom|left|right (devcontainer-aware)
+drone scaffold <dir>         Generate .devcontainer/ from templates
+drone link [project]         Deep dive on the current project (alias for `borg link`)
 ```
 
 ## Skills
@@ -65,8 +68,9 @@ drone status                 Show all drones
 /fable-reviewer               Fable's 5-gate working discipline (scope, evidence, adversarial review)
 /break-glass                  Add a local permission exception to settings.local.json
 /no-unnecessary-read-perms     Suppress redundant read-permission prompts (always active)
+/pane                        Split the current tmux pane in a direction (wraps `drone pane`)
 
-Full list (16 skills): docs/skills-guide.md or run /help in a session.
+Full list (17 skills): docs/skills-guide.md or run /help in a session.
 ```
 
 ## Hotkey

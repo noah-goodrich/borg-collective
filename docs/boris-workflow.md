@@ -195,7 +195,7 @@ You're ready to work.
 ### Working on a project
 
 You switch to the api-service window. You type `drone claude api-service` to start a Claude session
-inside the project's container. (For new feature work, `drone start <project> <feature>` creates a
+inside the project's container. (For new feature work, `drone feature <project> <branch>` creates a
 git worktree and isolated container in one step, so each feature gets its own window and branch.)
 
 Claude starts with context from your last session — the checkpoint you wrote with `/borg-link-up`
@@ -366,7 +366,7 @@ the plumbing — borg handles it.
 > points to absorb context-specific behavior (e.g. JIRA on the work machine). See the "Skill
 > extensions" entry under Key Patterns in [CLAUDE.md](../CLAUDE.md) for the protocol.
 
-| `drone start <project> <feature>` | Worktree + branch + Claude in one command | "Start new feature work" |
+| `drone feature <project> <branch>` | Worktree + branch + Claude in one command | "Start new feature work" |
 | `drone up/down` | Start/stop project containers | Container lifecycle (resuming existing work) |
 | `drone claude` | Launch Claude in project window | "Resume work on this project" |
 | `/adhd-guardrails` | Always-on skill | Scope discipline, break reminders, shame-free language |
@@ -392,7 +392,7 @@ the plumbing — borg handles it.
 │  You (developer)                                                │
 │                                                                 │
 │  "What should I work on?"  →  borg init / borg next             │
-│  "New feature"             →  drone start (worktree + branch)   │
+│  "New feature"             →  drone feature (worktree + branch) │
 │  "Resume project"          →  drone up + drone claude           │
 │  "What am I building?"     →  /borg-plan (sets criteria)        │
 │  "Am I done?"              →  /borg-assimilate (checks + ships) │
