@@ -73,8 +73,9 @@ borg init   # morning briefing + launch orchestrator session
 | `drone rebuild [project\|--all]` | Rebuild image (no cache) + restart + re-exec panes |
 | `drone fix [project\|--all]` | Restore standard 2-pane layout |
 | `drone toggle [project]` | Add/remove top-right side pane (2-pane ↔ 3-pane) |
+| `drone pane <direction>` | Split the active pane top/bottom/left/right (devcontainer-aware) |
 | `drone scaffold <dir>` | Generate `.devcontainer/` from templates |
-| `drone status` | Show all drones (container + session state) |
+| `drone link [project]` | Deep dive on the current project (alias for `borg link`) |
 
 ### Hotkey
 
@@ -89,8 +90,8 @@ Two assimilation units, two lifetimes. Don't blur them.
 | **Drone** | Persistent devcontainer (Docker Compose) | Long-lived; one per project | Whole project — toolchain, dependencies, runtime | `drone up <project>` |
 | **Nanoprobe** | Ephemeral Claude Code subagent (`borg-nanoprobe`) | Single task; exits on completion | One discrete unit of work in a git worktree | Orchestrator via the Agent tool |
 
-The orchestrator session never edits project files inline. It spawns nanoprobes (background, worktree-isolated)
-that perform the work, commit, and exit. The `SubagentStop` hook (`borg-nanoprobe-log.sh`) appends a JSONL
+The orchestrator session never edits project files inline. It spawns nanoprobes in the background, each of which
+creates and removes its own git worktree, performs the work, commits, and exits. The `SubagentStop` hook (`borg-nanoprobe-log.sh`) appends a JSONL
 record to `~/.config/borg/agents.jsonl` so you can list recent runs with `borg nanoprobes` and pull
 transcripts with `borg nanoprobe-log <id>`.
 
@@ -98,7 +99,7 @@ transcripts with `borg nanoprobe-log <id>`.
 
 ### Hooks Track Session Lifecycle
 
-Three hooks update the registry automatically:
+Six hooks run over the session lifecycle — three of them update the registry automatically:
 
 | Hook | Event | What happens |
 |------|-------|-------------|
