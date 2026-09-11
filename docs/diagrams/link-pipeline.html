@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>borg link: one sweep, one document</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2d3142;
+      --color-muted:   #4f5d75;
+      --color-accent:  #eb6c36;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      font-size: 0.86rem;
+      color: var(--color-muted);
+      max-width: 66ch;
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+    svg { width: 100%; min-width: 900px; display: block; }
+    footer {
+      margin-top: 1.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(45,49,66,0.12);
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      color: var(--color-muted);
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · borg-collective</p>
+    <h1>borg link: one sweep, one document</h1>
+    <p class="subtitle">Every invocation reads the world once, then hands it to code that cannot read the
+      world at all. The boundary is what lets the picture be pinned against hand-authored fixtures.</p>
+
+    <svg viewBox="0 0 1000 680" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-labelledby="link-pipe-title link-pipe-desc">
+      <title id="link-pipe-title">borg link: one sweep, one document</title>
+      <desc id="link-pipe-desc">Pipeline for the borg link command. Local state and network sources are read
+        by shell.py, which sweeps and fetches; grid.build_grid derives the topology; picture.py, which performs
+        no input or output of any kind, turns refs and edges into ANSI rows; render.document composes them into
+        a seven-section page; and cli emits the human page, JSON or porcelain, with brief re-rendering the same
+        document when its narrative fails.</desc>
+
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/>
+        </marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/>
+        </marker>
+        <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/>
+        </marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+      <!-- ── zones ─────────────────────────────────────────────────────────── -->
+      <rect x="16" y="48" width="232" height="224" rx="8"
+            fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <rect x="72" y="52" width="120" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="132" y="61" fill="rgba(45,49,66,0.40)" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.14em">SOURCES</text>
+
+      <rect x="328" y="96" width="544" height="128" rx="8"
+            fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <rect x="508" y="100" width="184" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="600" y="109" fill="rgba(45,49,66,0.40)" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.14em">IMPURE · TOUCHES THE WORLD</text>
+
+      <rect x="16" y="344" width="544" height="144" rx="8"
+            fill="rgba(235,108,54,0.05)" stroke="rgba(235,108,54,0.50)" stroke-width="0.8"
+            stroke-dasharray="4,4"/>
+      <rect x="192" y="348" width="192" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="288" y="357" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.14em">PURE · NO I/O OF ANY KIND</text>
+
+      <!-- ── arrows ────────────────────────────────────────────────────────── -->
+      <path d="M 232,116 H 280 Q 288,116 288,124 V 144 Q 288,152 296,152 H 344"
+            fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 232,220 H 296 Q 304,220 304,212 V 192 Q 304,184 312,184 H 344"
+            fill="none" stroke="#2e5aa8" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+      <line x1="544" y1="168" x2="656" y2="168" stroke="#4f5d75" stroke-width="1.2"
+            marker-end="url(#arrow)"/>
+      <!-- the wrap: grid -> picture -->
+      <path d="M 756,208 V 280 Q 756,288 748,288 H 140 Q 132,288 132,296 V 376"
+            fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="232" y1="420" x2="344" y2="420" stroke="#eb6c36" stroke-width="1.6"
+            marker-end="url(#arrow-accent)"/>
+      <path d="M 544,404 H 592 Q 600,404 600,396 V 392 Q 600,384 608,384 H 656"
+            fill="none" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <path d="M 544,436 H 608 Q 616,436 616,444 V 472 Q 616,480 624,480 H 656"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3"
+            marker-end="url(#arrow)"/>
+
+      <!-- ── arrow labels ──────────────────────────────────────────────────── -->
+      <rect x="256" y="124" width="64" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="288" y="133" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">ONE READ</text>
+
+      <rect x="240" y="232" width="68" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="274" y="241" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">ONE SWEEP</text>
+
+      <rect x="572" y="148" width="56" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="600" y="157" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">ITEMS</text>
+
+      <rect x="412" y="268" width="96" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="460" y="277" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">REFS + EDGES</text>
+
+      <rect x="252" y="396" width="72" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="288" y="405" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">ANSI ROWS</text>
+
+      <rect x="568" y="364" width="60" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="598" y="373" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">EMITS</text>
+
+      <rect x="524" y="448" width="80" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="564" y="457" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">FALLBACK</text>
+
+      <!-- ── source nodes ──────────────────────────────────────────────────── -->
+      <rect x="32" y="80" width="200" height="72" rx="6" fill="#f5f5f5"/>
+      <rect x="32" y="80" width="200" height="72" rx="6" fill="rgba(45,49,66,0.05)"
+            stroke="#4f5d75" stroke-width="1"/>
+      <text x="132" y="106" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">Local state</text>
+      <text x="132" y="122" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">registry.json · checkpoints</text>
+      <text x="132" y="136" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">.borg/programs/*.json</text>
+
+      <rect x="32" y="184" width="200" height="72" rx="6" fill="#f5f5f5"/>
+      <rect x="32" y="184" width="200" height="72" rx="6" fill="rgba(45,49,66,0.03)"
+            stroke="rgba(45,49,66,0.30)" stroke-width="1"/>
+      <text x="132" y="210" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">Network</text>
+      <text x="132" y="226" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">gh api graphql</text>
+      <text x="132" y="240" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">recon adapters</text>
+
+      <!-- ── impure nodes ──────────────────────────────────────────────────── -->
+      <rect x="344" y="128" width="200" height="80" rx="6" fill="#f5f5f5"/>
+      <rect x="344" y="128" width="200" height="80" rx="6" fill="#ffffff" stroke="#2d3142"
+            stroke-width="1"/>
+      <rect x="352" y="134" width="44" height="12" rx="2" fill="transparent"
+            stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="374" y="143" fill="rgba(45,49,66,0.80)" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.08em">IMPURE</text>
+      <text x="444" y="170" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">link/shell.py</text>
+      <text x="444" y="186" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">adapter sweep · targeted fetch</text>
+      <text x="444" y="200" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">manifest load</text>
+
+      <rect x="656" y="128" width="200" height="80" rx="6" fill="#f5f5f5"/>
+      <rect x="656" y="128" width="200" height="80" rx="6" fill="#ffffff" stroke="#2d3142"
+            stroke-width="1"/>
+      <text x="756" y="164" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">grid.build_grid</text>
+      <text x="756" y="180" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">levels · parents · children</text>
+      <text x="756" y="194" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">cli._grid stamps picture_width</text>
+
+      <!-- ── pure nodes ────────────────────────────────────────────────────── -->
+      <rect x="32" y="376" width="200" height="88" rx="6" fill="#f5f5f5"/>
+      <rect x="32" y="376" width="200" height="88" rx="6" fill="rgba(235,108,54,0.10)"
+            stroke="#eb6c36" stroke-width="1"/>
+      <rect x="40" y="382" width="32" height="12" rx="2" fill="transparent"
+            stroke="rgba(235,108,54,0.50)" stroke-width="0.8"/>
+      <text x="56" y="391" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.08em">PURE</text>
+      <text x="132" y="418" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">picture.py</text>
+      <text x="132" y="434" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">imports re · grid · manifest</text>
+      <text x="132" y="448" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">columns · crossings · OSC-8</text>
+
+      <rect x="344" y="376" width="200" height="88" rx="6" fill="#f5f5f5"/>
+      <rect x="344" y="376" width="200" height="88" rx="6" fill="#ffffff" stroke="#2d3142"
+            stroke-width="1"/>
+      <text x="444" y="412" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">render.document()</text>
+      <text x="444" y="428" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">the 7-section SECTIONS spine</text>
+      <text x="444" y="442" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">no branch on scope or mode</text>
+
+      <!-- ── outputs ───────────────────────────────────────────────────────── -->
+      <rect x="656" y="352" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="656" y="352" width="200" height="64" rx="6" fill="rgba(45,49,66,0.05)"
+            stroke="#4f5d75" stroke-width="1"/>
+      <text x="756" y="378" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">cli._mode</text>
+      <text x="756" y="396" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">human · --json · --porcelain</text>
+
+      <rect x="656" y="448" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="656" y="448" width="200" height="64" rx="6" fill="rgba(45,49,66,0.02)"
+            stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="756" y="474" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">--brief</text>
+      <text x="756" y="492" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">claude -p prose · same bytes</text>
+
+      <!-- ── editorial callouts (2) ────────────────────────────────────────── -->
+      <line x1="16" y1="512" x2="16" y2="560" stroke="#eb6c36" stroke-width="1.2"/>
+      <text x="28" y="526" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">A subprocess or a file read in picture.py would destroy</text>
+      <text x="28" y="542" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">the property the hand-authored fixtures depend on —</text>
+      <text x="28" y="558" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">an oracle that does not come from the implementation.</text>
+
+      <line x1="608" y1="528" x2="608" y2="560" stroke="rgba(45,49,66,0.20)" stroke-width="1.2"/>
+      <text x="620" y="538" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">
+        PICTURE_BUDGET (68) is measured on the --json</text>
+      <text x="620" y="552" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">
+        side and reported in the page's SIGNALS section.</text>
+      <text x="620" y="566" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace">
+        Raising inside picture.py would end its purity.</text>
+
+      <!-- ── legend ────────────────────────────────────────────────────────── -->
+      <line x1="30" y1="612" x2="970" y2="612" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <text x="30" y="628" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace"
+            letter-spacing="0.14em">LEGEND</text>
+
+      <line x1="112" y1="624" x2="140" y2="624" stroke="#4f5d75" stroke-width="1.2"/>
+      <text x="148" y="628" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">local read</text>
+
+      <line x1="236" y1="624" x2="264" y2="624" stroke="#2e5aa8" stroke-width="1.2"/>
+      <text x="272" y="628" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">network</text>
+
+      <line x1="344" y1="624" x2="372" y2="624" stroke="#eb6c36" stroke-width="1.6"/>
+      <text x="380" y="628" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">pure transform</text>
+
+      <line x1="488" y1="624" x2="516" y2="624" stroke="#4f5d75" stroke-width="1"
+            stroke-dasharray="4,3"/>
+      <text x="524" y="628" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">fallback path</text>
+    </svg>
+
+    <footer>
+      ONE SWEEP, TWO CONSUMERS — `--brief` makes the same `--json` call every other arm makes, feeds it to
+      `claude -p`, and on failure pipes those same bytes back through `--render-document`. Never re-derive;
+      never rebuild for the fallback.<br>
+      borg-collective · docs/diagrams/link-pipeline.html
+    </footer>
+  </div>
+</body>
+</html>

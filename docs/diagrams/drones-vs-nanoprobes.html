@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drones and nanoprobes are not the same thing</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper: #f5f5f5; --color-ink: #2d3142; --color-muted: #4f5d75; --color-accent: #eb6c36;
+      --font-sans: 'Geist', system-ui, sans-serif; --font-serif: 'Instrument Serif', serif;
+      --font-mono: 'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans); background: var(--color-paper); color: var(--color-ink);
+      min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem;
+    }
+    .frame { max-width: 1200px; width: 100%; }
+    .eyebrow {
+      font-family: var(--font-mono); font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em;
+      text-transform: uppercase; color: var(--color-muted); margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif); font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400;
+      letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 0.5rem;
+    }
+    .subtitle { font-size: 0.86rem; color: var(--color-muted); max-width: 66ch; margin-bottom: 1.5rem; line-height: 1.5; }
+    svg { width: 100%; min-width: 900px; display: block; }
+    footer {
+      margin-top: 1.5rem; padding-top: 0.75rem; border-top: 1px solid rgba(45,49,66,0.12);
+      font-family: var(--font-mono); font-size: 0.66rem; color: var(--color-muted); line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Deployment · borg-collective</p>
+    <h1>Drones and nanoprobes are not the same thing</h1>
+    <p class="subtitle">One is a long-lived container you work inside. The other is a subagent that exists for
+      one task, builds its own worktree, and deletes it. They get conflated constantly.</p>
+
+    <svg viewBox="0 0 1000 640" xmlns="http://www.w3.org/2000/svg" role="img"
+         aria-labelledby="dvn-title dvn-desc">
+      <title id="dvn-title">Drones and nanoprobes are not the same thing</title>
+      <desc id="dvn-desc">Execution topology. The borg tmux session holds one window per project, each bound to
+        a persistent devcontainer called a drone. The orchestrator window instead spawns ephemeral nanoprobe
+        subagents, which create their own git worktrees under the borg state directory, commit, remove the
+        worktree, and log one JSONL line on completion; an hourly reaper cleans up whatever they leave.</desc>
+
+      <defs>
+        <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#4f5d75"/></marker>
+        <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <polygon points="0 0, 8 3, 0 6" fill="#eb6c36"/></marker>
+      </defs>
+
+      <rect width="100%" height="100%" fill="#f5f5f5"/>
+
+      <!-- zones -->
+      <rect x="24" y="88" width="440" height="376" rx="8"
+            fill="rgba(45,49,66,0.02)" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <rect x="140" y="92" width="208" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="244" y="101" fill="rgba(45,49,66,0.40)" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.14em">PERSISTENT · ONE PER PROJECT</text>
+
+      <rect x="520" y="88" width="456" height="376" rx="8"
+            fill="rgba(235,108,54,0.05)" stroke="rgba(235,108,54,0.50)" stroke-width="0.8"
+            stroke-dasharray="4,4"/>
+      <rect x="628" y="92" width="240" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="748" y="101" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.14em">EPHEMERAL · ONE PER TASK</text>
+
+      <!-- arrows -->
+      <line x1="244" y1="192" x2="244" y2="248" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="244" y1="328" x2="244" y2="384" stroke="#4f5d75" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="748" y1="192" x2="748" y2="248" stroke="#eb6c36" stroke-width="1.6"
+            marker-end="url(#arrow-accent)"/>
+      <line x1="748" y1="328" x2="748" y2="384" stroke="#eb6c36" stroke-width="1.6"
+            marker-end="url(#arrow-accent)"/>
+      <!-- orchestrator window is itself a window in the session: link across -->
+      <path d="M 464,144 H 492 Q 500,144 500,152 V 152 Q 500,160 508,160 H 520"
+            fill="none" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+
+      <!-- arrow labels -->
+      <rect x="252" y="204" width="96" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="300" y="213" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">drone up</text>
+
+      <rect x="252" y="340" width="112" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="308" y="349" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">3-PANE LAYOUT</text>
+
+      <rect x="756" y="204" width="112" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="812" y="213" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">AGENT TOOL</text>
+
+      <rect x="756" y="340" width="104" height="12" rx="2" fill="#f5f5f5"/>
+      <text x="808" y="349" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.06em">ON COMPLETE</text>
+
+      <!-- left column: the drone stack -->
+      <rect x="144" y="128" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="144" y="128" width="200" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="244" y="154" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">tmux session `borg`</text>
+      <text x="244" y="172" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">one window per project</text>
+
+      <rect x="144" y="248" width="200" height="80" rx="6" fill="#f5f5f5"/>
+      <rect x="144" y="248" width="200" height="80" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="152" y="254" width="40" height="12" rx="2" fill="transparent"
+            stroke="rgba(45,49,66,0.40)" stroke-width="0.8"/>
+      <text x="172" y="263" fill="rgba(45,49,66,0.80)" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.08em">DRONE</text>
+      <text x="244" y="292" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">devcontainer</text>
+      <text x="244" y="308" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">long-lived · docker compose</text>
+      <text x="244" y="320" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">you shell into it</text>
+
+      <rect x="144" y="384" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="144" y="384" width="200" height="64" rx="6" fill="rgba(45,49,66,0.05)"
+            stroke="#4f5d75" stroke-width="1"/>
+      <text x="244" y="410" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">2 or 3 panes</text>
+      <text x="244" y="428" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">drone toggle · drone pane</text>
+
+      <!-- right column: the nanoprobe stack -->
+      <rect x="648" y="128" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="648" y="128" width="200" height="64" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="748" y="154" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">orchestrator window</text>
+      <text x="748" y="172" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">never edits project files</text>
+
+      <rect x="648" y="248" width="200" height="80" rx="6" fill="#f5f5f5"/>
+      <rect x="648" y="248" width="200" height="80" rx="6" fill="rgba(235,108,54,0.10)"
+            stroke="#eb6c36" stroke-width="1"/>
+      <rect x="656" y="254" width="64" height="12" rx="2" fill="transparent"
+            stroke="rgba(235,108,54,0.50)" stroke-width="0.8"/>
+      <text x="688" y="263" fill="#eb6c36" font-size="7" font-family="'Geist Mono', monospace"
+            text-anchor="middle" letter-spacing="0.08em">NANOPROBE</text>
+      <text x="748" y="292" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">its own git worktree</text>
+      <text x="748" y="308" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">~/.local/state/borg/worktrees/</text>
+      <text x="748" y="320" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">&lt;repo&gt;/&lt;slug&gt; — NOT .borg/</text>
+
+      <rect x="648" y="384" width="200" height="64" rx="6" fill="#f5f5f5"/>
+      <rect x="648" y="384" width="200" height="64" rx="6" fill="rgba(45,49,66,0.05)"
+            stroke="#4f5d75" stroke-width="1"/>
+      <text x="748" y="410" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">commit · remove · log</text>
+      <text x="748" y="428" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">agents.jsonl · SubagentStop</text>
+
+      <!-- reaper -->
+      <rect x="520" y="480" width="456" height="48" rx="6" fill="#f5f5f5"/>
+      <rect x="520" y="480" width="456" height="48" rx="6" fill="rgba(45,49,66,0.02)"
+            stroke="rgba(45,49,66,0.20)" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="748" y="500" fill="#2d3142" font-size="12" font-weight="600"
+            font-family="'Geist', sans-serif" text-anchor="middle">borg reap-worktrees · hourly launchd</text>
+      <text x="748" y="516" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace"
+            text-anchor="middle">merged branch, or older than BORG_REAP_STALE_HOURS — whatever a probe left behind</text>
+
+      <!-- callout -->
+      <line x1="24" y1="480" x2="24" y2="528" stroke="#eb6c36" stroke-width="1.2"/>
+      <text x="36" y="494" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">Harness worktree isolation is NOT used —</text>
+      <text x="36" y="510" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">`isolation: worktree` fails hard when the</text>
+      <text x="36" y="526" fill="#2d3142" font-size="14" font-style="italic"
+            font-family="'Instrument Serif', serif">orchestrator cwd is not a git repo.</text>
+
+      <!-- legend -->
+      <line x1="30" y1="580" x2="970" y2="580" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <text x="30" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace"
+            letter-spacing="0.14em">LEGEND</text>
+      <line x1="112" y1="592" x2="140" y2="592" stroke="#4f5d75" stroke-width="1.2"/>
+      <text x="148" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">persistent</text>
+      <line x1="244" y1="592" x2="272" y2="592" stroke="#eb6c36" stroke-width="1.6"/>
+      <text x="280" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">ephemeral</text>
+      <line x1="376" y1="592" x2="404" y2="592" stroke="#4f5d75" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="412" y="596" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace">cleanup / containment</text>
+    </svg>
+
+    <footer>
+      borg-collective · docs/diagrams/drones-vs-nanoprobes.html
+    </footer>
+  </div>
+</body>
+</html>
