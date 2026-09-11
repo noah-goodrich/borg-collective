@@ -2466,6 +2466,7 @@ cmd_doctor() {
         "cortex-wake|com.stillpoint-labs.borg.cortex-wake|"
         "usage-watch|com.stillpoint-labs.borg.usage-watch|$state_dir/usage-samples.jsonl"
         "reap|com.stillpoint-labs.borg.reap|$data_dir/reap.stdout.log"
+        "memory-gate|com.stillpoint-labs.borg.memory-gate|"
     )
 
     local overall_exit=0
@@ -2778,6 +2779,7 @@ cmd_help() {
                           --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
     switch [query]      fzf picker → jump to project tmux window
+    focus [query]       Same as switch — jump to a project's tmux window
     chain <action>      Manifest coordinator over <project>/.borg/programs/*.json
                           list           Every declared chain across registered projects
                           plan           Read-only three-way drift audit (borg / target / recon)
@@ -2789,6 +2791,9 @@ cmd_help() {
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
+    color <project> <color>  Set a project's tmux window color (applies to a live window too)
+    image <build|push|pull>  Manage the shared devcontainer base image
+    vinculum <verb>     Cross-session message bus (pub, sub, unsub, ls, pull, help; alias: vinc)
     sever               Tear down everything: containers, windows, session
     regenerate          Archive stale projects (idle >48h)
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
@@ -2801,7 +2806,7 @@ cmd_help() {
     spend               Main-vs-subagent spend split + trend (this machine; --project/--by-model/--last)
     reap                Persist idle to stale active/waiting sessions (no live window)
     reap-worktrees [p]  Remove stale borg-managed nanoprobe worktrees (all repos or one)
-    doctor              Verify the 4 launchd agents + headless claude -p reachability
+    doctor              Verify the 5 launchd agents + headless claude -p reachability
     help                Show this message
 
   REMOVED

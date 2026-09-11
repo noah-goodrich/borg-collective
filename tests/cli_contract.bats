@@ -269,14 +269,22 @@ run_zsh_borg() {
     # turns this red, which then invites re-deriving the constant instead of asking what moved. The
     # old name lives on as a die-arm in the dispatch and a REMOVED tombstone, and neither is inside
     # the COMMANDS slice this awk counts.
+    #
+    # 29 SINCE 2026-09-11, and the AC1 floor still holds: nothing was REMOVED from the dispatch, four
+    # entries were ADDED to the page. `focus`, `color`, `image` and `vinculum` have been live dispatch
+    # arms the whole time with no COMMANDS entry — the exact "documented while I'm here" move the note
+    # below this test anticipated. CLAUDE.md calls `borg help` the surface of record, so an undocumented
+    # live arm is drift in the page, not slack in the count. 25 + 4 = 29. If this goes red, ask which
+    # entry moved.
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
     [ "$status" -eq 0 ]
-    [ "$output" = "25" ]
+    [ "$output" = "29" ]
 }
 
-# The count alone reaches 26 if someone deletes `doctor` instead of `recon` — and four dispatch
-# verbs (color, image, focus, vinculum) have no COMMANDS entry, so a well-meaning "document these
-# while I'm here" edit cancels the arithmetic in the other direction. This names the entry.
+# The count alone reaches 26 if someone deletes `doctor` instead of `recon` — a deletion and an
+# addition elsewhere cancel in the arithmetic. (The four verbs that used to be undocumented — color,
+# image, focus, vinculum — were added to COMMANDS on 2026-09-11; that is why the count above is 29.)
+# This names the entry.
 @test "contract: recon is gone from COMMANDS and named in REMOVED (AC1)" {
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{print \$1}'"
     [ "$status" -eq 0 ]

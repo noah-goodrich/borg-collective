@@ -1,6 +1,7 @@
 #!/usr/bin/env bats
-# Tests for `borg doctor` — verifies the 4 launchd agents that install.sh bootstraps
-# (notifyd, cortex-wake, usage-watch, reap): registered / last exit status / fresh output.
+# Tests for `borg doctor` — verifies the 5 launchd agents that install.sh bootstraps
+# (notifyd, cortex-wake, usage-watch, reap, memory-gate): registered / last exit status / fresh
+# output.
 
 load test_helper/setup
 
@@ -10,6 +11,7 @@ NOTIFYD_LABEL="com.stillpoint-labs.borg.notifyd"
 CORTEX_LABEL="com.stillpoint-labs.borg.cortex-wake"
 USAGE_LABEL="com.stillpoint-labs.borg.usage-watch"
 REAP_LABEL="com.stillpoint-labs.borg.reap"
+MEMORY_GATE_LABEL="com.stillpoint-labs.borg.memory-gate"
 
 setup() {
     setup_temp_dirs
@@ -37,11 +39,12 @@ GHMOCK
     CORTEX_LOG="$XDG_DATA_HOME/borg/cortex-wake.stdout.log"
     REAP_LOG="$XDG_DATA_HOME/borg/reap.stdout.log"
 
-    # Default: all four agents registered, exit 0, fresh output, notifyd has no StartInterval.
+    # Default: all five agents registered, exit 0, fresh output, notifyd has no StartInterval.
     _write_plist "$NOTIFYD_LABEL" ""
     _write_plist "$CORTEX_LABEL" "30"
     _write_plist "$USAGE_LABEL" "120"
     _write_plist "$REAP_LABEL" "3600"
+    _write_plist "$MEMORY_GATE_LABEL" "86400"
 
     touch "$CORTEX_LOG" "$REAP_LOG"
     echo '{"ts":"now"}' > "$USAGE_SAMPLES"
@@ -54,7 +57,8 @@ GHMOCK
 - 0 $NOTIFYD_LABEL
 - 0 $CORTEX_LABEL
 - 0 $USAGE_LABEL
-- 0 $REAP_LABEL"
+- 0 $REAP_LABEL
+- 0 $MEMORY_GATE_LABEL"
 }
 
 # Args: <label> <start-interval-or-empty>
@@ -107,7 +111,8 @@ EOF
 - 0 $NOTIFYD_LABEL
 - 1 $CORTEX_LABEL
 - 0 $USAGE_LABEL
-- 0 $REAP_LABEL"
+- 0 $REAP_LABEL
+- 0 $MEMORY_GATE_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -ne 0 ]
     [[ "$output" == *"cortex-wake"*"FAIL"* ]] || false
@@ -119,7 +124,8 @@ EOF
     _write_launchctl_list "\
 - 0 $NOTIFYD_LABEL
 - 0 $USAGE_LABEL
-- 0 $REAP_LABEL"
+- 0 $REAP_LABEL
+- 0 $MEMORY_GATE_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -ne 0 ]
     [[ "$output" == *"cortex-wake"*"FAIL"* ]] || false
@@ -136,7 +142,8 @@ EOF
 74574 -15 $NOTIFYD_LABEL
 - 0 $CORTEX_LABEL
 - 0 $USAGE_LABEL
-- 0 $REAP_LABEL"
+- 0 $REAP_LABEL
+- 0 $MEMORY_GATE_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
     [[ "$output" == *"notifyd"*"run"*"OK"* ]] || false
@@ -147,7 +154,8 @@ EOF
 - -15 $NOTIFYD_LABEL
 - 0 $CORTEX_LABEL
 - 0 $USAGE_LABEL
-- 0 $REAP_LABEL"
+- 0 $REAP_LABEL
+- 0 $MEMORY_GATE_LABEL"
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
     [[ "$output" == *"notifyd"*"WARN"* ]] || false

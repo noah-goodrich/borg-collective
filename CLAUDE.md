@@ -46,10 +46,10 @@ Two independent tools that compose:
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
   bash-guard, borg-dispatch-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
-- Skills (16): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
-  and 10 more (full list under Files below)
-- Agents (6, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
-  borg-reviewer, borg-scout, ROUTING
+- Skills (17): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
+  and 11 more (full list under Files below)
+- Agents (6 files: 5 specialists + ROUTING.md — the ephemeral nanoprobe roster): borg-grunt,
+  borg-nanoprobe, borg-researcher, borg-reviewer, borg-scout, ROUTING.md
 - Usage guardian: 85% checkpoint sweep (bin/borg-usage-watch) + `borg-dispatch-guard.sh`
   >=92% hard-stop veto on new Agent/Workflow dispatch — both fail-open, dispatch-guard is
   default-OFF (`BORG_USAGE_HALT_ENABLED=1` to arm)
@@ -115,8 +115,8 @@ borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                            NOT launchd — plists are installed by install.sh only, which calls
                            `borg setup` at the end. A new launchd job needs an install.sh run.
 borg store-secret        Patch a project's secrets.zsh with a new keychain export
-borg sever               Retire/archive a directive or project without deleting it
-borg tidy                Housekeeping pass over registry/checkpoints
+borg sever               Tear down everything: containers, windows, session (alias: borg down)
+borg tidy                Archive registry projects idle >48h (alias: borg regenerate)
 borg color / image       Cosmetic project registry fields (tmux color, session image)
 borg version             Print BORG_VERSION
 borg help                Full command reference
@@ -183,7 +183,8 @@ hooks/
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
     tool-count-nudge.sh     PostToolUse → review reminder every 75 tool calls
-skills/ (16)
+    borg-nanoprobe-log.sh   SubagentStop → appends one JSONL line per nanoprobe run to agents.jsonl
+skills/ (17)
     adhd-guardrails/        Cognitive load guardrails (always active)
     borg-plan/              Project planning + Collective review
     borg-assimilate/        Shipping checklist + Collective review + execution
@@ -200,7 +201,8 @@ skills/ (16)
     fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
     no-unnecessary-read-perms/  Suppress redundant read-permission prompts (always active)
     simplify/               Review session-touched code for reuse/quality/efficiency, then fix
-agents/ (6, ephemeral nanoprobe roster)
+    pane/                   Split the current tmux pane in a direction (wraps `drone pane`)
+agents/ (6 files: 5 specialists + ROUTING.md)
     borg-nanoprobe.md       Default worker: one discrete unit of work, manages its own worktree
     borg-grunt.md           Narrow mechanical task executor
     borg-researcher.md      Read-heavy investigation/research subagent
@@ -213,6 +215,7 @@ launchd/
     com.stillpoint-labs.borg.cortex-wake.plist   LaunchAgent: borg-cortex-watch (30s interval)
     com.stillpoint-labs.borg.reap.plist          LaunchAgent: borg reap-worktrees (hourly)
     com.stillpoint-labs.borg.usage-watch.plist   LaunchAgent: borg-usage-watch (usage guardian sweep)
+    com.stillpoint-labs.borg.memory-gate.plist   LaunchAgent: borg-memory-gate (daily, read-instrument check)
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)
     plans/assimilated/      Shipped plans for borg-collective itself (per-project convention)
