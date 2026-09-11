@@ -239,46 +239,72 @@ run_zsh_borg() {
 # PROJECT_PLAN.md asks for this mechanically: "bats asserts `borg help` is net one command shorter
 # than at plan start."
 #
-# WHY 26, AND HOW TO RE-DERIVE IT. Plan start is `b984616^` (= 638b7c4), the parent of the commit
-# that landed PROJECT_PLAN.md. 638b7c4's own subject says "feat(S4): land the viz-program manifest"
-# — that is a DIFFERENT plan's S4; it is the plan-start ref by ancestry, not by name. Both it and
-# the pre-S4 HEAD render 27 COMMANDS entries:
-#     git show 638b7c4:borg.zsh | awk '/^  COMMANDS$/{f=1;next} f && /^  [A-Z]/{f=0} \
-#                                      f && /^    [a-z]/{n++} END{print n+0}'   # -> 27
-# S4 deletes exactly one entry (`recon`, plus its five 26-space continuation lines) and adds no
-# verb. 27 - 1 = 26. If this goes red, ask which entry moved, not what the number is.
+# THE METRIC IS LIVE DISPATCH ARMS, NOT HELP-TEXT LINES, SINCE 2026-09-11. It counted entries in the
+# COMMANDS section of `borg help` until four verbs that had been live dispatch arms the whole time
+# (`focus`, `color`, `image`, `vinculum`) were finally given COMMANDS entries. That is documentation
+# catching up, not the front door growing — but it moved the number from 25 to 29, past a bar of 26,
+# and the first response was to raise the constant. Raising it would have made a criterion assert
+# something it had stopped measuring. Counting the dispatch instead measures what AC1 is actually
+# about: how many commands EXIST. Documenting one is then a no-op, and only adding or removing a
+# command can move it.
+#
+# HOW THE COUNT IS DEFINED. Every arm of the top-level `case` block, with three exclusions:
+#   - the `*)` fallback, which is not a command;
+#   - `die` tombstones (`was removed` / `was renamed`), which exist so a retired verb prints a
+#     pointer instead of `unknown command` -- counting them would make a removal net zero (live -1,
+#     tombstone +1) and defeat the whole criterion;
+#   - aliases collapse: `sever|down)` is ONE command, as is `vinculum|vinc)` and `nanoprobes|np)`.
+#
+# WHY 29, AND HOW TO RE-DERIVE IT. Plan start is `b984616^` (= 638b7c4), the parent of the commit
+# that landed PROJECT_PLAN.md -- by ancestry, not by name (638b7c4's subject names a DIFFERENT
+# plan's S4). Re-derive both ends with the helper below:
+#     git show 638b7c4:borg.zsh > /tmp/planstart.zsh   # -> 30
+# 30 at plan start, 29 now. The delta is exactly -1 and the arms that moved are nameable:
+# `watch` deleted (2026-08-27-retire-unused-link-surfaces.md: zero typed invocations in six months
+# of shell history), and `program` -> `chain` (AC7), a RENAME that nets zero. `recon` is NOT in the
+# delta: it was retired as a HUMAN verb in S4 but its arm is still live for `--json`/`--adapters`,
+# which is the honest reading -- the engine did not go away.
 #
 # WHY A COUNT AND NOT A SUBSTRING. cli_smoke.bats records the exact trap from the 2026-08-10
 # removal: `[[ "$output" == *"ls"* ]]` stayed green afterwards because the REMOVED block still names
-# the removed commands. "recon" likewise still appears in `borg help` after S4 — in the REMOVED
-# block and in `program`'s `--recon <file>` line. Only a count discriminates.
+# the removed commands. A tombstone arm keeps the name in the file too. Only a count discriminates.
 #
-# WHY THE SECTION SLICE. `borg help | grep -c '^    [a-z]'` over the WHOLE output is 32, not 27: the
-# REMOVED body and the four STATUS entries share the 4-space entry shape. The awk range is what
-# keeps this honest, and `^  [A-Z]` (any section header) rather than `^  REMOVED` is what keeps it
-# honest if the REMOVED heading is ever retitled again.
+# If this goes red, ask WHICH ARM MOVED, not what the number is.
+_live_dispatch_arms() {
+    awk '
+        /^case "\$\{1:-help\}" in/ { inblock = 1; next }
+        inblock && /^esac/           { inblock = 0 }
+        inblock && /^    [a-z*|_-]+\)/ {
+            label = $0
+            sub(/^    /, "", label)
+            sub(/\).*/, "", label)
+            body = $0
+            while (body !~ /;;/ && (getline nxt) > 0) { body = body "\n" nxt }
+            if (label == "*") next
+            if (body ~ /was removed/ || body ~ /was renamed/) next
+            n++
+        }
+        END { print n+0 }
+    ' "$1"
+}
+
 @test "contract: borg help is net one command shorter than at plan start (AC1)" {
-    # 25 SINCE THE 2026-08-27 RETIREMENT, and the criterion is still satisfied: AC1 asks for "net one
-    # command shorter than at plan start", which is a FLOOR on shrinkage, not a target to hit exactly.
-    # 27 at plan start, -1 for `recon` (S4), -1 for `watch`
-    # (2026-08-27-retire-unused-link-surfaces.md: zero typed invocations in six months of shell
-    # history). No verb has been added at any point. If this goes red, ask which entry moved.
-    #
-    # STILL 25 AFTER 2026-08-31 (AC7). `program` became `chain` — a RENAME, so the count is unchanged
-    # by construction. That was the deciding reason not to delete the verb: deletion yields 24 and
-    # turns this red, which then invites re-deriving the constant instead of asking what moved. The
-    # old name lives on as a die-arm in the dispatch and a REMOVED tombstone, and neither is inside
-    # the COMMANDS slice this awk counts.
-    #
-    # 29 SINCE 2026-09-11, and the AC1 floor still holds: nothing was REMOVED from the dispatch, four
-    # entries were ADDED to the page. `focus`, `color`, `image` and `vinculum` have been live dispatch
-    # arms the whole time with no COMMANDS entry — the exact "documented while I'm here" move the note
-    # below this test anticipated. CLAUDE.md calls `borg help` the surface of record, so an undocumented
-    # live arm is drift in the page, not slack in the count. 25 + 4 = 29. If this goes red, ask which
-    # entry moved.
-    run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
+    run _live_dispatch_arms "$BORG"
     [ "$status" -eq 0 ]
     [ "$output" = "29" ]
+}
+
+@test "contract: the AC1 baseline still measures 30 at plan start (AC1)" {
+    # THE BASELINE IS ASSERTED, NOT ANNOTATED. A criterion phrased as a DELTA is only meaningful if
+    # both ends are checked -- a comment claiming "30 at plan start" rots silently the moment the
+    # counter's definition changes, and then the -1 is folklore. This re-runs the SAME helper over
+    # the plan-start blob, so a change to the counting rule that quietly moves the baseline turns
+    # this red instead of leaving the delta wrong but green.
+    local planstart="$BATS_TEST_TMPDIR/planstart-borg.zsh"
+    git -C "$BORG_HOME" show 638b7c4:borg.zsh > "$planstart"
+    run _live_dispatch_arms "$planstart"
+    [ "$status" -eq 0 ]
+    [ "$output" = "30" ]
 }
 
 # The count alone reaches 26 if someone deletes `doctor` instead of `recon` — a deletion and an

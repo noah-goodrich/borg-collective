@@ -23,8 +23,19 @@ e2e/eval harness that keeps it honest.
 - [x] **AC1 — One front door, context-scoped, always a clean read.** In a repository, `link` sweeps that repository
       (~2.7s measured); in the orchestrator, it sweeps all (~12.5s measured, 13 repos). No cache, ever — a clean read
       every time. `--local` is the only opt-down. `recon` retires as a human-facing verb; no new verbs are added.
-  - Verify: bats asserts `borg help` is net one command shorter than at plan start, and that two consecutive
-    `borg link` runs write no cache artifacts.
+  - Verify: bats asserts the command surface is net one command shorter than at plan start, and that two
+    consecutive `borg link` runs write no cache artifacts.
+  - **METRIC RESTATED 2026-09-11, same criterion.** "Net one command shorter" was measured by counting entries in
+    the COMMANDS section of `borg help`. That is a proxy for the command surface, and it broke the first time the
+    two diverged: four verbs (`focus`, `color`, `image`, `vinculum`) had been live dispatch arms all along with no
+    COMMANDS entry, so documenting them moved the count 25 -> 29 and past its own bar. Raising the constant would
+    have left the criterion asserting something it had stopped measuring, so the METRIC moved instead — the test
+    now counts live arms of `borg.zsh`'s top-level `case` block, excluding the `*)` fallback and the `die`
+    tombstones that exist so a retired verb prints a pointer. Under it the claim is exact rather than a floor:
+    **30 at plan start, 29 now**, the delta being `watch` deleted and `program` -> `chain` renamed. Both ends are
+    now asserted by bats (`contract: the AC1 baseline still measures 30 at plan start (AC1)`), because a criterion
+    phrased as a delta is only meaningful if the baseline is checked too. AC1's goal, scope and tick are unchanged;
+    only the instrument is.
   - **MET.** Both verify clauses pass (`contract: borg help is net one command shorter than at plan start (AC1)`,
     `cache: two consecutive borg link runs write no cache artifact (AC1)`) — and, unlike before, the stated goal holds
     too. The box was deliberately held unticked while `borg link --brief` answered from somewhere else: it returned
