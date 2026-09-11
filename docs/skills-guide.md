@@ -162,15 +162,6 @@ Shows what project needs attention most urgently. Use when asking "what should I
 Switches to a different project's tmux window. Use when saying "switch to X", "go to X", or "jump
 to X".
 
-### /borg-search — Search Project Knowledge
-
-**Activation**: Manual (`/borg-search`)
-
-Cairn (the Postgres+pgvector knowledge-graph service this skill used to query) was decommissioned
-on 2026-08-08 — its corpus was exported to per-project `.borg/knowledge/*.md` markdown, which is
-grep-reachable and needs no running service. Use when asking to search knowledge, find past
-decisions, or look something up.
-
 ### /borg-recon — Cross-Source Synthesis
 
 **Activation**: Manual (`/borg-recon`)
@@ -226,6 +217,13 @@ commands too dangerous or project-specific for the global allowlist.
 
 Suppresses unnecessary read-permission prompts for files already accessible via normal tool use.
 Applies to Claude's own tool calls and to subagent prompts that include the system subagent rules.
+
+### /pane — Split the Current tmux Pane
+
+**Activation**: Manual (`/pane`)
+
+Wraps `drone pane <direction>`. Splits the current tmux pane top, bottom, left, or right; asks which
+direction when you don't name one. Use when saying "split the pane" or "open a pane to the right".
 
 ### /adhd-guardrails — Cognitive Load Guardrails
 
