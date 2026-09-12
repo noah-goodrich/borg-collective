@@ -114,8 +114,13 @@ trail.
       annotations.
     - Verify: `grep -c 'Criteria Reconcil' skills/borg-link-up/SKILL.md` returns 1 or more.
 - [ ] AC2 — Flipped criteria carry a machine-greppable annotation distinguishing link-up flips from manual
-      edits and assimilate flips.
-    - Verify: the skill text specifies a fixed annotation format containing `flipped by link-up`.
+      edits and assimilate flips. **The engine writes it, in the same atomic write as the flip** (see AC8).
+    - Verify (RESTATED 2026-09-11): a fixture plan with one passing annotated criterion is run through
+      `--apply`, and the resulting FILE carries `flipped by link-up` on exactly that criterion's line. The
+      original clause greppped `skills/borg-link-up/SKILL.md` for the format string — it checked that the
+      skill *describes* an annotation, never that one ever reaches a plan file, so it would have stayed green
+      through total failure of the behaviour it names. Same shape as
+      `reference_test_supplies_derived_value`: the assertion never touched the artifact it was about.
 - [ ] AC3 — The checkpoint template gains a `## Criteria Reconciled` section that lists flipped criteria and
       evidence.
     - Verify: `grep -c 'Criteria Reconciled' skills/borg-link-up/SKILL.md` returns 1 or more.
@@ -130,10 +135,22 @@ trail.
 - [ ] AC7 — (2026-09-10) Tests drive the production evidence path — a real git/gh/filesystem read — never a
       fixture-supplied verdict, per `reference_test_supplies_derived_value`. Asserted by mutation: break the
       resolver, the test goes red.
-- [ ] AC8 — (2026-09-10) `--apply` flips only `pass` criteria, writes atomically, and the only byte that
-      changes is the checkbox character. A `fail` and an `unknown` in the same file survive a run that flips
-      something else.
+- [ ] AC8 — (2026-09-10, RESTATED 2026-09-11) `--apply` flips only `pass` criteria and writes atomically. The
+      only changes to the file are the checkbox character and, appended to that same line, an annotation
+      matching the fixed `*(flipped by link-up: <evidence>)*` pattern. Every other byte is unchanged. A `fail`
+      and an `unknown` in the same file survive a run that flips something else.
+    - Verify: byte-compare before and after; for each changed line assert the delta is exactly the checkbox
+      plus a pattern-matching suffix, and that no other line moved.
     - Evidence: `pytest:borg_core/planstate/test_write.py`
+    - **WHY IT WIDENED.** As first written, AC8 said "the only byte that changes is the checkbox character",
+      which left AC2's annotation with no writer. Satisfying both then forced a SECOND writer — the skill
+      editing the plan file again after the engine's atomic write — and that reintroduced exactly what the
+      mechanical gate exists to remove: a model performing a free-form markdown edit on a 120-wrapped
+      document, outside the atomicity AC8 promises, once per flipped criterion. A crash between the two
+      writes leaves a flipped box with no attribution, which is indistinguishable from a hand edit and
+      therefore strictly worse than an unflipped one. The guarantee AC8 is actually for is *bounded,
+      provable, non-destructive* — not *one byte* — so the letter widened to keep the guarantee and give the
+      annotation a single owner. AC2's property is unchanged; it now has somewhere to come from.
 - [ ] AC9 — (2026-09-10) An evidence annotation can never cause command execution from file content: a
       crafted annotation carrying `;`, backticks or `$(...)` is rejected rather than resolved, and no
       subprocess runs.
