@@ -135,8 +135,11 @@ No more "where was I?" — your last checkpoint tells you.
 
 ## Skills
 
-Borg installs 17 skills to `~/.claude/skills/`. See [Skills Guide](docs/skills-guide.md) for the full
-list, or run `/help` in a Claude Code session — the highlights:
+Borg ships 17 skills through the borg-collective plugin — `borg setup` builds the plugin distro and
+Claude Code loads them from there. Nothing is installed under `~/.claude/skills/`; see
+[Deployment Model](docs/architecture.md#deployment-model-source--distro) for why. For the full list
+see the [Skills Guide](docs/skills-guide.md), or run `/help` in a Claude Code session — the
+highlights:
 
 ### Always Active
 
