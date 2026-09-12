@@ -111,7 +111,11 @@ borg nanoprobes (np)     List recent ephemeral subagent runs
 borg nanoprobe-log <id>  Fetch the transcript/summary for a nanoprobe run
 borg spend               Summarize accurate token spend from ~/.claude/token-spend.jsonl
 borg doctor              Environment/dependency health check
-borg setup               Install/refresh hooks, skills, agents, tmux keybinding
+borg setup               COPY hooks + lib into ~/.claude, BUILD the plugin, tmux keybinding
+                           It does NOT install skills or agents — it DELETES them from
+                           ~/.claude/skills/ (dirs bearing .borg-managed) and
+                           ~/.claude/agents/<name>.md. Skills and agents ship via the plugin;
+                           see "Source → distro" under Key Patterns.
                            NOT launchd — plists are installed by install.sh only, which calls
                            `borg setup` at the end. A new launchd job needs an install.sh run.
 borg store-secret        Patch a project's secrets.zsh with a new keychain export
@@ -225,6 +229,22 @@ docs/
 
 ## Key Patterns
 
+- **Source → distro (the deployment model)**: this repo is SOURCE; `~/dev/claude-plugins/borg-collective`
+  is BUILD OUTPUT. Three producers, disjoint targets. `install.sh` owns `~/.local/bin/` symlinks and
+  the five `~/Library/LaunchAgents/` plists. `borg setup` COPIES hooks and lib into
+  `~/.claude/hooks/` and `~/.claude/lib/` (copies, not symlinks — devcontainers bind-mount
+  `~/.claude` and cannot follow host-absolute symlink targets) and then runs
+  `scripts/build-plugin.sh`, which writes skills, agents and `hooks/hooks.json` into the distro.
+  **Claude Code loads the distro, never this repo.** Two consequences that read as bugs otherwise:
+  `borg setup` DELETES `~/.claude/skills/*/` (only dirs bearing a `.borg-managed` marker) and
+  `~/.claude/agents/<name>.md` for every source agent — those are the pre-plugin copy loops and they
+  double-loaded; and hook registration is no longer written into `~/.claude/settings.json`, which
+  setup actively un-registers. There is no `hooks/hooks.json` in THIS repo — it is generated into the
+  distro. The direction is one-way and `scripts/check-agent-roster.sh` guards it; never invert,
+  because Cortex Code cannot load plugins. ONE exception: for that reason CoCo skills still install
+  from `$BORG_HOME/skills` via `cortex skill add` (`borg setup`, step 3). Drawn in
+  `docs/diagrams/deployment-ownership.html`; explained in `docs/architecture.md` under
+  "Deployment Model: Source → Distro".
 - **Orchestrator-mode vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
   Stop, and Notification hook now classifies the session via `_borg_session_mode` (in
   `lib/borg-hooks.sh`). A session whose `$CWD` *exactly* equals `$BORG_ORCHESTRATOR_ROOT`
@@ -287,8 +307,10 @@ docs/
   JSONL line per completion to `~/.config/borg/agents.jsonl` (`id`, `agent_type`, `transcript_path`,
   `summary` from `last_assistant_message`, hard-coded `status: "completed"`, `finished_at`, `cwd`).
   Inspect runs with `borg nanoprobes` (alias `np`) and pull transcripts with
-  `borg nanoprobe-log <id-prefix>`. The agent file installs to `~/.claude/agents/borg-nanoprobe.md`
-  via `borg setup`, where both Claude Code and Cortex Code discover it.
+  `borg nanoprobe-log <id-prefix>`. The agent file ships in the **plugin distro** at
+  `~/dev/claude-plugins/borg-collective/agents/borg-nanoprobe.md`, built by `borg setup`. It does
+  NOT install to `~/.claude/agents/borg-nanoprobe.md` — `borg setup` DELETES that path, because the
+  legacy copy double-loaded alongside the plugin. See "Source → distro" below.
 - **Bounded termination (agent loops)**: when fanning out nanoprobes or running any retry/until
   loop, set an explicit ceiling (max spawns / max iterations) up front and stop when hit. Never
   rely on judgment to exit loops — explicit stopping conditions only (e.g., `MAX_RETRIES=3`
