@@ -30,11 +30,22 @@ cd ~/dev/borg-collective
 The installer:
 1. Checks and installs missing dependencies via Homebrew
 2. Creates `~/.config/borg/` (registry, config)
-3. Symlinks `borg` and `drone` to `~/.local/bin/`
-4. Registers hooks in `~/.claude/settings.json` (SessionStart, Stop, Notification, PreToolUse)
-5. Installs skills to `~/.claude/skills/`
-6. Adds tmux keybinding (`Ctrl+Space >`)
-7. Runs `borg scan` to discover existing projects
+3. Symlinks `borg` and `drone` to `~/.local/bin/`, plus the five launchd plists in
+   `~/Library/LaunchAgents/` (only `install.sh` writes those — `borg setup` never touches launchd)
+4. Runs `borg setup`, which does the rest:
+   - Copies hooks and their shared lib into `~/.claude/hooks/` and `~/.claude/lib/`. Copies, not
+     symlinks — devcontainers bind-mount `~/.claude` and can't follow host-absolute symlinks.
+   - Builds the borg-collective **plugin** into `~/dev/claude-plugins/`. Skills, agents and hook
+     registration all ship through the plugin, not through `~/.claude`. See
+     [Deployment Model](architecture.md#deployment-model-source--distro).
+   - Adds the tmux keybinding (`Ctrl+Space >`)
+   - Runs `borg scan` to discover existing projects
+
+Then install the plugin once, from any Claude Code session:
+
+```
+claude plugin install borg-collective@noah-local
+```
 
 ## Step 2: Install Community Skills
 
@@ -115,7 +126,9 @@ volumes:
   - ~/.config/borg:/home/vscode/.config/borg:cached
 ```
 
-This lets hooks update the registry and load skills from inside containers.
+This lets hooks run and update the registry from inside containers. It is also why `borg setup`
+copies hooks into `~/.claude/hooks/` instead of symlinking them — a host-absolute symlink target
+does not resolve on the container side of the bind mount.
 
 ## Verification Checklist
 
@@ -125,8 +138,15 @@ After installation, verify:
 - [ ] `which drone` → `~/.local/bin/drone`
 - [ ] `borg link` → shows discovered projects (or "No projects registered")
 - [ ] `borg help` → shows full command reference
-- [ ] `ls ~/.claude/skills/` → includes borg-plan, borg-assimilate, borg-review, borg-link-up, etc.
+- [ ] `ls ~/.claude/hooks/` → includes borg-link-down.sh, borg-link-up.sh, bash-guard.sh, etc.
+- [ ] `ls ~/dev/claude-plugins/borg-collective/skills/` → the built distro: borg-plan,
+      borg-assimilate, borg-review, borg-link-up, etc.
+- [ ] `claude plugin list` → `borg-collective@noah-local` present and `enabled`
 - [ ] In a Claude session: `/borg-plan` is recognized as a skill
+
+Do **not** expect anything under `~/.claude/skills/` or `~/.claude/agents/` — `borg setup` removes
+borg's entries there on purpose. See
+[Deployment Model](architecture.md#deployment-model-source--distro).
 
 ## Troubleshooting
 
@@ -140,7 +160,9 @@ export PATH="$HOME/.local/bin:$PATH"
 Add the `~/.config/borg` volume mount to your container's docker-compose.yml.
 
 **Skills not available in Claude session**
-Run the installer again: `./install.sh`. It re-symlinks skills idempotently.
+Skills come from the plugin, not from `~/.claude/skills/`. Check `claude plugin list` — if
+`borg-collective@noah-local` is missing or disabled, install or enable it. If it is enabled but
+stale, run `borg setup` to rebuild the distro (idempotent, diff-guarded), then restart the session.
 
 **`borg next` recommends a project but doesn't switch**
 The project may not have a tmux window. Start it with `drone up <project>` first.

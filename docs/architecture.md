@@ -137,24 +137,101 @@ writing: **12 hooks**, **~14 lib files**, **17 skills**, **6 agents** (5 special
         2026-04-22-1730.md
 
 ~/.claude/
-    hooks/
-        borg-link-down.sh       Symlink → repo
-        borg-link-up.sh         Symlink → repo
-        borg-notify.sh          Symlink → repo
-        borg-plan-promote.sh    Symlink → repo
-    skills/
-        adhd-guardrails/        Symlink → repo
-        borg-plan/              Symlink → repo
-        borg-assimilate/        Symlink → repo
-        borg-collective-review/ Symlink → repo
-        borg-review/            Symlink → repo
-        borg-link/              Symlink → repo
-        borg-link-up/           Symlink → repo
+    hooks/                      COPIES of hooks/*.sh, refreshed by `borg setup`
+        bash-guard.sh           (not symlinks — devcontainers bind-mount ~/.claude and
+        borg-link-down.sh        cannot follow host-absolute symlink targets)
+        borg-link-up.sh
+        ...                     all 12 hooks in hooks/
+    lib/                        COPIES of lib/*.sh, sourced by the hooks at runtime
+    bin/                        COPIES of bin/*, put on PATH for hook and skill helpers
+    skills/                     NOT borg's. `borg setup` DELETES every directory here
+                                bearing a .borg-managed marker; hand-authored skills stay.
+    agents/                     NOT borg's. `borg setup` DELETES any file here whose name
+                                matches a source agent (borg-nanoprobe.md, …).
+
+~/dev/claude-plugins/borg-collective/    ← where skills and agents actually live
+    skills/                     17 skills, built from this repo's skills/
+    agents/                     6 agent definitions, built from this repo's agents/
+    hooks/hooks.json            hook registration (NOT ~/.claude/settings.json)
 
 ~/.local/bin/
-    borg                        Symlink → borg.zsh
-    drone                       Symlink → drone.zsh
+    borg                        Symlink → borg.zsh          (install.sh)
+    drone                       Symlink → drone.zsh         (install.sh)
+    borg-notifyd, borg-cortex-watch, borg-usage-watch, borg-memory-gate,
+    borg-vinculum-watch         Symlinks → bin/*            (install.sh)
+
+~/Library/LaunchAgents/         install.sh only — `borg setup` never touches launchd
+    com.stillpoint-labs.borg.notifyd.plist
+    com.stillpoint-labs.borg.cortex-wake.plist
+    com.stillpoint-labs.borg.usage-watch.plist
+    com.stillpoint-labs.borg.reap.plist
+    com.stillpoint-labs.borg.memory-gate.plist
 ```
+
+See [Deployment Model](#deployment-model-source--distro) below for who writes each of these, and
+`docs/diagrams/deployment-ownership.html` for the same map as a picture.
+
+---
+
+## Deployment Model: Source → Distro
+
+This repo is **source**. `~/dev/claude-plugins/borg-collective` is **build output**. Claude Code
+loads the build output, never this repo. Everything below follows from that one fact, and most of
+the surprising details ("why did setup delete my skills?") stop being surprising once you have it.
+
+```
+borg-collective/            scripts/build-plugin.sh        claude-plugins/borg-collective/
+  skills/         ───────────────────────────────────────▶   skills/
+  agents/              (invoked by `borg setup`, step 4a-ii)  agents/
+  hooks/                                                      hooks/  + hooks.json
+                                                                     │
+                                                                     ▼
+                                                        Claude Code loads the plugin
+                                                        (claude plugin install
+                                                         borg-collective@noah-local)
+```
+
+**Three producers, disjoint targets.** Nothing writes to a path another one owns:
+
+- **`install.sh`** → `~/.local/bin/` symlinks and the five `~/Library/LaunchAgents/` plists
+  (notifyd, cortex-wake, usage-watch, reap, memory-gate). Run once, by a human. **`borg setup` does
+  not touch launchd** — a new launchd job needs an `install.sh` run.
+- **`borg setup`** → `~/.claude/hooks/`, `~/.claude/lib/`, `~/.claude/bin/`. **Copies, not
+  symlinks**, deliberately: devcontainers bind-mount `~/.claude`, and a host-absolute symlink target
+  does not resolve inside the container.
+- **`scripts/build-plugin.sh`** → `~/dev/claude-plugins/borg-collective/`. Called by `borg setup`
+  (step 4a-ii). Writes skills, agents, curated self-contained hooks, and the `hooks.json` that
+  registers them.
+
+**`borg setup` also deletes.** Two sweeps, both idempotent and both one-time migrations that match
+nothing on a machine that never ran the pre-plugin installer:
+
+- `~/.claude/skills/*/` — removed, but **only** directories carrying a `.borg-managed` ownership
+  marker. Hand-authored neighbours are untouched.
+- `~/.claude/agents/<name>.md` — removed for every file whose name matches an agent in this repo's
+  `agents/`.
+
+These were the pre-plugin copy loops. Leaving them in place alongside the plugin caused
+double-loading, so setup now removes them. **Skills and agents do not live under `~/.claude` at
+all.**
+
+**Hook registration moved too.** It is no longer written into `~/.claude/settings.json`; the
+plugin's `hooks/hooks.json` owns it. `borg setup` actively *unregisters* the literal-path
+`$HOME/.claude/hooks/...` entries that earlier versions wrote, so the plugin can own them without
+hooks firing twice. Note that there is no `hooks/hooks.json` in this repo — `build-plugin.sh`
+generates it into the distro.
+
+**The direction is one-way, and guarded.** Source → distro, never the reverse. Editing the distro
+is how the two rosters silently diverge, so `scripts/check-agent-roster.sh` asserts that every
+agent in `agents/` has an identical twin in the distro and vice-versa, failing loudly with a
+per-file breakdown when they drift. The inversion is not available even in principle: Cortex Code
+has no plugin system, so the plugin cannot be the source of truth for both runtimes.
+
+**One exception.** Because CoCo cannot load plugins, CoCo skills still install directly from
+`$BORG_HOME/skills` via `cortex skill add` (`borg setup`, step 3). That is the only case where a
+skill installs outside the plugin.
+
+The same map, drawn: [`docs/diagrams/deployment-ownership.html`](diagrams/deployment-ownership.html).
 
 ---
 
@@ -201,19 +278,44 @@ borg.zsh
   ├── Load config.zsh (boundaries, limits)
   ├── Helpers (_borg_relative_time, _borg_boundary_check, _borg_active_count,
   │           _borg_orchestrator_context)
-  ├── Commands
-  │   ├── cmd_init        Build briefing context → claude --append-system-prompt
-  │   ├── cmd_claude      claude --continue from BORG_ORCHESTRATOR_ROOT (resume orchestrator)
-  │   ├── cmd_next        Priority scoring → recommendation → switch
-  │   ├── cmd_ls          Dashboard with sorting, markers, capacity warning
-  │   ├── cmd_switch      fzf picker or direct switch
-  │   ├── cmd_status      Detailed single-project view
-  │   ├── cmd_hail        Full briefing (no arg) or project status (falls back to cmd_status)
-  │   ├── cmd_scan        Auto-discover from session history
-  │   ├── cmd_add/rm      Manual registration
-  │   └── cmd_help        Command reference
-  └── Dispatch (case statement)
+  └── Dispatch: case "${1:-help}" — one arm per verb, in source order
+      ├── init              cmd_init                Briefing context → claude --append-system-prompt
+      ├── claude            cmd_claude              claude --continue from BORG_ORCHESTRATOR_ROOT
+      ├── next              cmd_next                Priority scoring → recommendation → switch
+      ├── link              _borg_link_dispatch     → borg_core.link.cli (the seven-section document)
+      ├── switch            cmd_switch              fzf picker or direct switch
+      ├── recon             (inline)                → borg_core.recon.cli; machine surface only
+      ├── scan              cmd_scan                Auto-discover from session history
+      ├── add               (inline)                → borg_core.registry.cli add
+      ├── rm                (inline)                → borg_core.registry.cli rm
+      ├── color             cmd_color               tmux window color
+      ├── image             cmd_image               Session image
+      ├── pin / unpin       cmd_pin / cmd_unpin     Pin a project to the top of borg link
+      ├── sever | down      cmd_down                Retire/archive without deleting
+      ├── regenerate | tidy cmd_tidy                Housekeeping over registry/checkpoints
+      ├── setup             cmd_setup               Hooks + lib + bin, plugin build, tmux keybinding
+      ├── store-secret      cmd_store_secret        Patch a project's secrets.zsh
+      ├── start             cmd_start               Start a project session
+      ├── focus             cmd_focus               Zoom current pane / project window
+      ├── cortex-resume     cmd_cortex_resume       Resume a CoCo session
+      ├── nanoprobes | np   cmd_nanoprobes          List recent ephemeral subagent runs
+      ├── nanoprobe-log     cmd_nanoprobe_log       Fetch a nanoprobe transcript/summary
+      ├── spend             cmd_spend               Token spend from ~/.claude/token-spend.jsonl
+      ├── reap              cmd_reap                Reap stale active/waiting statuses
+      ├── reap-worktrees    cmd_reap_worktrees      Clean stale nanoprobe worktrees
+      ├── doctor            cmd_doctor              Environment/dependency health check
+      ├── chain             cmd_chain               Program/chain manifests
+      ├── vinculum | vinc   cmd_vinculum            Vinculum
+      ├── version|--version|-V  cmd_version
+      ├── help|--help|-h    cmd_help                Command reference (also the no-arg default)
+      ├── ls|status|hail|brief|briefing|refresh     Removed 2026-08-10 — die, pointing at `link`
+      ├── program                                   Renamed 2026-08-31 — die, pointing at `chain`
+      └── *                                         die "unknown command"
 ```
+
+`cmd_ls` and `cmd_status` still exist as functions, but they are internal helpers with no dispatch
+arm — `borg ls` and `borg status` die with a pointer at `borg link`. `cmd_hail` does not exist at
+all. Derive this tree from the `case` block rather than hand-editing it; it has drifted before.
 
 ### drone.zsh
 
@@ -253,23 +355,24 @@ the next session's `borg-link-down.sh` will read.
 
 ### Hook Registration
 
-Hooks are registered in `~/.claude/settings.json`:
+**Not in `~/.claude/settings.json`.** Registration is owned by the borg-collective plugin, whose
+`hooks/hooks.json` is generated into the distro by `scripts/build-plugin.sh` — there is no
+`hooks/hooks.json` in this repo. Claude Code reads it when the plugin is installed
+(`claude plugin install borg-collective@noah-local`).
 
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-down.sh"}]}
-    ],
-    "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-link-up.sh"}]}],
-    "Notification": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-notify.sh"}]}],
-    "PreToolUse": [
-      {"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/borg-plan-promote.sh"}]},
-      {"matcher": "", "hooks": [{"type": "command", "command": "$HOME/.claude/hooks/bash-guard.sh"}]}
-    ]
-  }
-}
-```
+`borg setup` plays two roles here, and only two:
+
+1. It **copies** `hooks/*.sh` and `lib/*.sh` into `~/.claude/hooks/` and `~/.claude/lib/`, so the
+   scripts exist on disk (and inside devcontainers, which bind-mount `~/.claude`).
+2. It **unregisters** the literal-path `$HOME/.claude/hooks/...` entries that earlier versions of
+   setup wrote into `settings.json`. Leaving them would double-fire every hook now that the plugin
+   registers them. Permissions and every other `settings.json` key are preserved.
+
+CoCo is the exception again: Cortex Code has no plugin system, so `borg setup` copies the hooks to
+`~/.snowflake/cortex/hooks/` and *does* register them in `~/.snowflake/cortex/settings.json`.
+
+The twelve hooks and their events are listed in the project `CLAUDE.md`; the authoritative wiring is
+whatever `build-plugin.sh` emits.
 
 `borg-plan-promote.sh` fires on `Edit`, `Write`, and `NotebookEdit` tool calls. It scans the
 session JSONL for an `ExitPlanMode` tool call since the most recent real user message. If found,
