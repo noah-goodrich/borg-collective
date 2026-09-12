@@ -97,19 +97,23 @@ in §4 Blockers naming the failure and move on.
 - A criterion resting only on this session's belief that it finished is never written. No partial
   credit, no "probably met".
 
-### 4. Stamp the audit trail on each flipped criterion
+### 4. Do NOT touch the plan file yourself
 
-For each criterion the engine flipped, edit `PROJECT_PLAN.md` to append the fixed annotation to that
-criterion's line, using the engine's `evidence` string verbatim — never a paraphrase and never your
-own summary:
+The engine already wrote the annotation. As of the directive's 2026-09-11 restatement of AC2 and AC8, a
+flipped criterion comes back from `--apply` already carrying its audit trail:
 
 ```
 - [x] **AC6 — <name>.** <prose> *(flipped by link-up: <evidence>)*
 ```
 
-The literal `flipped by link-up` is the machine-greppable marker that distinguishes a link-up flip
-from a manual edit and from an assimilate flip, so the completion audit can measure this mechanism.
-Do not reword it, do not localize it, do not wrap it in different emphasis.
+**This step used to tell you to append that yourself, and that was wrong.** It put a free-form markdown edit
+back into the write path — outside the engine's atomic write, once per flipped criterion, on a document
+hard-wrapped at 120 columns. Two failure modes followed from it. A crash between the engine's write and yours
+left a flipped box with no attribution, which is indistinguishable from a hand edit and therefore worse than
+an unflipped one. And now that the engine stamps the mark, a second pass would append it twice.
+
+So: read the file if you want to quote it, and write nothing to it. The literal `flipped by link-up` is the
+machine-greppable marker the completion audit measures; it has exactly one writer, and that writer is not you.
 
 ### 5. Report in the checkpoint
 
