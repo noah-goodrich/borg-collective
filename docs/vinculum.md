@@ -55,9 +55,9 @@ the verb defaults to `ls`.
 | Verb | Arguments | What it does |
 |------|-----------|--------------|
 | `pub` | `<channel> <msg...>` | Append one message to the channel log. All trailing words join with single spaces. |
-| `sub` | `<channel>` | Subscribe this identity, set its cursor to the current end of the log, and spawn a live watcher. |
+| `sub` | `<channel>` | Subscribe this identity, set its cursor to the end of the log, and spawn a live watcher. |
 | `unsub` | `<channel>` | Kill the live watcher and drop this identity from the subscriber list. |
-| `ls` | `[channel]` | With no channel: every channel with message and subscriber counts. With one: its subscribers, unread counts, and watcher state. |
+| `ls` | `[channel]` | No channel: every channel, with counts. One channel: its subscribers, unread, watcher state. |
 | `pull` | `<channel> [--json]` | Print everything after the cursor, then advance the cursor to the end. |
 | `help` | — | The built-in usage block. |
 
@@ -153,8 +153,8 @@ borg-vinculum-watch <channel> --pane <tmuxPane> --as <subId> [--once]
 ```
 
 It is not a launchd agent and you do not normally start it yourself. `borg vinc sub` spawns it with `nohup … &`,
-`disown`s it, and records `{"pane":…,"pid":…}` in `meta/<subId>`. `install.sh` symlinks it onto `PATH` so that bare-name
-spawn resolves.
+`disown`s it, and records `{"pane":…,"pid":…}` in `meta/<subId>`. `install.sh` symlinks it onto `PATH` so the
+bare-name spawn resolves.
 
 What it does:
 
