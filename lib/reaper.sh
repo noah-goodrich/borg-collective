@@ -46,7 +46,10 @@ _borg_should_reap() {
 # BORG_REAP_STALE_HOURS. Only worktrees under the borg state dir are ever
 # touched — non-borg worktrees are completely ignored.
 
-BORG_WORKTREE_STATE_DIR="${BORG_WORKTREE_STATE_DIR:-/Users/noah/.local/state/borg/worktrees}"
+# DERIVED, NOT HARDCODED. This read `/Users/noah/.local/state/...` until 2026-09-11 -- correct on
+# exactly one machine and wrong everywhere else, including under an XDG_STATE_HOME override. Every
+# sibling already derives (install.sh, hooks/borg-dispatch-guard.sh); this one did not.
+BORG_WORKTREE_STATE_DIR="${BORG_WORKTREE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees}"
 
 # Predicate: is this worktree stale?
 # Args: <repo_path> <worktree_path>

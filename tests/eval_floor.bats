@@ -486,7 +486,18 @@ _eval_out_rel() {
 # and it lives here, next to the helper that implements it, where a reader changing it will see it.
 _python_with_pytest() {
     local candidate
+    # THE PRIMARY WORKTREE'S .venv IS A CANDIDATE, AND THAT IS NOT A CONVENIENCE. `.venv/` is
+    # gitignored, so a `git worktree add` checkout never has one -- and nanoprobes do all their work
+    # in worktrees. Without this rung every agent run sees these five cases red, reports "pre-existing,
+    # unrelated", and is trained to wave red through; that is how a real failure gets merged.
+    # `--git-common-dir` resolves to the PRIMARY checkout's .git from inside any linked worktree, so
+    # its parent is the tree that actually has the venv. In the primary checkout it resolves to the
+    # same path the first two candidates already cover, making this rung a no-op there.
+    local primary=""
+    primary=$(git -C "$BORG_HOME" rev-parse --git-common-dir 2>/dev/null) || primary=""
+    [ -n "$primary" ] && primary="${primary%/.git}"
     for candidate in "$BORG_HOME/.venv/bin/python" "$BORG_HOME/.venv/bin/python3" \
+                     "${primary:+$primary/.venv/bin/python}" \
                      "$(command -v python3 2>/dev/null || true)"; do
         if [ -n "$candidate" ] && [ -x "$candidate" ] && "$candidate" -c 'import pytest' >/dev/null 2>&1; then
             printf '%s\n' "$candidate"
