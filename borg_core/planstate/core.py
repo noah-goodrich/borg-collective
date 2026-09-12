@@ -97,7 +97,20 @@ def parse_criteria(text: str) -> list[dict]:
     """
     lines = text.split("\n")
     criteria: list[dict] = []
+    fenced = False
     for index, line in enumerate(lines):
+        # A FENCED BLOCK IS NOT CRITERIA -- see the twin guard in `link/core.py::plan_progress`, which
+        # this must stay in step with. Found by running this module against its OWN directive, whose
+        # amendment shows an example `- [ ] **AC6 ...**` inside a code fence: the example parsed as a
+        # real criterion, so the document reported 10 criteria where it has 9. An unreachable phantom
+        # is not harmless here -- it can never resolve to `pass` (its annotation is illustrative, not
+        # real), so it would sit in the proposal block forever telling a reader that work is outstanding
+        # which does not exist.
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
         if not line.startswith(_CRITERION_PREFIX):
             continue
         criteria.append(

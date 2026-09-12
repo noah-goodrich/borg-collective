@@ -151,3 +151,48 @@ def test_core_imports_nothing_impure():
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
             roots.add(node.module.split(".")[0])
     assert roots == {"__future__", "re", "borg_core"}
+
+
+# ── Fenced-block guard (2026-09-11) ───────────────────────────────────────────────────────────────
+# Found by DOGFOODING, not by unit tests: running the planstate engine against its own directive
+# reported 10 criteria in a file with 9, because the amendment SHOWS an example criterion inside a
+# code fence. Both parsers carry the guard and both are pinned here, in their own suites, because the
+# invariant is that they agree -- a file where `borg link` says 3/10 and planstate says 3/9 has two
+# truths in it.
+
+_FENCED_PLAN = """# Plan
+
+- [x] AC1 real and met.
+- [ ] AC2 real and unmet.
+
+The format looks like this:
+
+```
+- [ ] AC99 an EXAMPLE inside a fence. Not a criterion.
+  - Evidence: `pytest:some/path/`
+- [x] AC98 another example, already ticked.
+```
+
+- [ ] AC3 real and unmet.
+"""
+
+
+def test_parse_criteria_ignores_criteria_inside_a_code_fence():
+    """The twin of link/core.py's guard. These two parsers must agree on what a criterion is."""
+    rows = core.parse_criteria(_FENCED_PLAN)
+    texts = [row["text"] for row in rows]
+    assert len(rows) == 3, f"expected 3 real criteria, got {len(rows)}: {texts}"
+    assert not any("EXAMPLE" in t or "another example" in t for t in texts)
+
+
+def test_parse_criteria_and_plan_progress_agree_on_the_same_document():
+    """THE INVARIANT, ASSERTED RATHER THAN COMMENTED. planstate/core.py's header says it transcribes
+    link/core.py's counting rule and must never invent a second one. Nothing checked that until this
+    case: a fix applied to one parser and not the other produces a document where the board and the
+    writer disagree, and the writer is the one that flips boxes."""
+    from borg_core.link import core as link_core
+
+    met, total = link_core.plan_progress(_FENCED_PLAN)
+    rows = core.parse_criteria(_FENCED_PLAN)
+    assert total == len(rows)
+    assert met == sum(1 for row in rows if row["checked"])
