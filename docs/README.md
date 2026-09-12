@@ -20,7 +20,28 @@
 | [Orchestration Architecture](orchestration-architecture.md) | Frozen spec for the orchestrator-worker model: the handoff state machine and the multi-agent decisions that are settled. Routing itself lives in `agents/ROUTING.md`. | 10 min |
 | [Work Machine Setup](work-machine-setup.md) | The canonical runbook for a fresh macOS work machine — and for ongoing updates to an existing one. | 15 min |
 | [Competitive Landscape](competitive-landscape.md) | How borg compares to alternatives in the ecosystem, refreshed quarterly, so investment and deprecation calls are informed. | Reference |
+| [Vinculum Message Bus](vinculum.md) | The file-based cross-session pub/sub broker behind `borg vinc`: the verb surface, on-disk layout, the live-delivery watcher, and the gaps it still has. | 8 min |
+| [Chains & Program Manifests](chain.md) | `borg chain list/plan/sync` and the `<project>/.borg/programs/*.json` format that declares cross-repo merge order. Explains why `chain` and `program` both appear. | 10 min |
 | [Infoviz Program](infoviz/) | The information/data-visualization learning program: curriculum, ELI10 briefs, and the evidence-traced design playbook. | Reference |
+
+## Contributing
+
+| Document | Purpose | Read Time |
+|----------|---------|-----------|
+| [Contributing Guide](contributing.md) | For someone changing the repo: the `.venv` prerequisite and why there is no devcontainer, every Makefile target, the bats/pytest split, the CI lanes, and what lives in `scripts/`, `bin/`, `merge-tree/` and `evals/`. | 10 min |
+| [Environment Variables](environment.md) | Every `BORG_*` name the code reads, with what reads it and its verified default. Leads with the shell-vs-environment-variable rule that once shipped `borg recon` completely dead. | Reference |
+
+## Diagrams
+
+Self-contained HTML — open them in a browser, no build step.
+
+| Diagram | Shows |
+|---------|-------|
+| [deployment-ownership](diagrams/deployment-ownership.html) | Who installs what, where — `install.sh` vs `borg setup` vs `build-plugin.sh`, and why skills are not under `~/.claude`. |
+| [link-pipeline](diagrams/link-pipeline.html) | One sweep, one document — and the purity boundary `picture.py` sits behind. |
+| [session-state](diagrams/session-state.html) | `active` to `waiting` to `idle` to `archived`, every edge a hook or a timer. |
+| [drones-vs-nanoprobes](diagrams/drones-vs-nanoprobes.html) | Persistent container vs ephemeral subagent — the two things most often conflated. |
+| [plan-lifecycle](diagrams/plan-lifecycle.html) | `directives/` to `PROJECT_PLAN.md` to `assimilated/`, with both side exits and both auto-writers. |
 
 ## Also See
 

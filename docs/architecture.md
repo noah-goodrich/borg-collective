@@ -295,7 +295,7 @@ borg.zsh
       ├── regenerate | tidy cmd_tidy                Housekeeping over registry/checkpoints
       ├── setup             cmd_setup               Hooks + lib + bin, plugin build, tmux keybinding
       ├── store-secret      cmd_store_secret        Patch a project's secrets.zsh
-      ├── start             cmd_start               Start a project session
+      ├── start             cmd_start               Promote a directive to PROJECT_PLAN.md
       ├── focus             cmd_focus               Zoom current pane / project window
       ├── cortex-resume     cmd_cortex_resume       Resume a CoCo session
       ├── nanoprobes | np   cmd_nanoprobes          List recent ephemeral subagent runs
@@ -305,7 +305,7 @@ borg.zsh
       ├── reap-worktrees    cmd_reap_worktrees      Clean stale nanoprobe worktrees
       ├── doctor            cmd_doctor              Environment/dependency health check
       ├── chain             cmd_chain               Program/chain manifests
-      ├── vinculum | vinc   cmd_vinculum            Vinculum
+      ├── vinculum | vinc   cmd_vinculum            Cross-session message bus (see vinculum.md)
       ├── version|--version|-V  cmd_version
       ├── help|--help|-h    cmd_help                Command reference (also the no-arg default)
       ├── ls|status|hail|brief|briefing|refresh     Removed 2026-08-10 — die, pointing at `link`
