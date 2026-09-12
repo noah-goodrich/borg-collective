@@ -83,7 +83,7 @@ untouched. Unannotated criteria remain valid and simply resolve to "propose":
 ```
 - [ ] **AC6 — <name>.** <prose>
   - Verify: <the existing prose clause, unchanged>
-  - Evidence: `bats tests/eval_harness.bats`
+  - Evidence: `bats:tests/eval_harness.bats`
 ```
 
 Four kinds, resolving to `pass` / `fail` / `unknown`: `pr:<owner/repo#N>` (merged), `path:<repo-relative

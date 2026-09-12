@@ -792,3 +792,40 @@ def test_scope_for_longest_prefix_wins_regardless_of_registry_order():
     cwd = "/Users/noah/dev/ingle/packages/nested/src"
     assert core.scope_for(cwd, ROOT, inner_first)["repository"] == "nested"
     assert core.scope_for(cwd, ROOT, outer_first)["repository"] == "nested"
+
+
+# ── Fenced-block guard (2026-09-11) ───────────────────────────────────────────────────────────────
+# Found by DOGFOODING, not by unit tests: running the planstate engine against its own directive
+# reported 10 criteria in a file with 9, because the amendment SHOWS an example criterion inside a
+# code fence. Both parsers carry the guard and both are pinned here, in their own suites, because the
+# invariant is that they agree -- a file where `borg link` says 3/10 and planstate says 3/9 has two
+# truths in it.
+
+_FENCED_PLAN = """# Plan
+
+- [x] AC1 real and met.
+- [ ] AC2 real and unmet.
+
+The format looks like this:
+
+```
+- [ ] AC99 an EXAMPLE inside a fence. Not a criterion.
+  - Evidence: `pytest:some/path/`
+- [x] AC98 another example, already ticked.
+```
+
+- [ ] AC3 real and unmet.
+"""
+
+
+def test_plan_progress_ignores_criteria_inside_a_code_fence():
+    """Three real criteria, one met. The two inside the fence are examples, not work."""
+    met, total = core.plan_progress(_FENCED_PLAN)
+    assert (met, total) == (1, 3)
+
+
+def test_plan_progress_counts_a_criterion_after_the_fence_closes():
+    """The guard must TOGGLE, not latch -- a latching flag would swallow the whole rest of the file,
+    which is the failure mode that turns an inflated count into a silently truncated one."""
+    met, total = core.plan_progress(_FENCED_PLAN)
+    assert total == 3, "AC3 sits after the closing fence and must still be counted"
