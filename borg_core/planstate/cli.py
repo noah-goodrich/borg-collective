@@ -26,6 +26,7 @@ from typing import NoReturn
 from borg_core.planstate import core, derive as derive_mod
 
 _VERDICT_MARK = {core.PASS: "PASS", core.FAIL: "FAIL", core.UNKNOWN: "????"}
+_UNKNOWN_MARK = _VERDICT_MARK[core.UNKNOWN]
 
 
 def _die_json(message: str) -> NoReturn:
@@ -57,7 +58,7 @@ def _human(report: dict, applied: int | None) -> str:
     lines = [f"{report['file']}  ({report['counts']['total']} criteria)"]
     for row in report["criteria"]:
         box = "x" if row["checked"] else " "
-        lines.append(f"  [{box}] {_VERDICT_MARK.get(row['verdict'], '????')}  {row['text']}")
+        lines.append(f"  [{box}] {_VERDICT_MARK.get(row['verdict'], _UNKNOWN_MARK)}  {row['text']}")
         lines.append(f"        {row['evidence']}")
     counts = report["counts"]
     lines.append(

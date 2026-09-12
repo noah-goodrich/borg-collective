@@ -50,7 +50,8 @@ def _resolve(gate: dict, root: Path, fetch: dict) -> tuple[str, str]:
         return core.UNKNOWN, gate["reason"]
     kind, value = gate["kind"], gate["value"]
     if kind == "pr":
-        return core.verdict_for_pr(value, fetch)
+        looked, state = shell.pr_state(fetch, value)
+        return core.verdict_for_pr(value, looked, state)
     if kind == "path":
         return core.verdict_for_path(shell.exists(root, value), value)
     present = shell.exists(root, value)
@@ -67,6 +68,11 @@ def derive(path: Path, root: Path | None = None) -> dict:
     `flips` IS THE INTERSECTION OF TWO CONDITIONS AND NOTHING ELSE: the criterion is currently
     `- [ ]`, and its verdict is `pass`. A `fail`, an `unknown`, and an already-`[x]` criterion are
     all absent from it, which is what AC8's byte-compare pins.
+
+    EACH ENTRY CARRIES `line`, `text` AND `evidence`, not a bare index. `apply` re-reads the file
+    (the derive may have run a suite for minutes) and must be able to tell that the line at an index
+    is STILL the criterion the verdict was about; `text` is that check, and `evidence` is what the
+    annotation is written from. A list of indices was enough to flip the wrong neighbour.
     """
     text = shell.read_text(path)
     if text is None:
@@ -76,8 +82,8 @@ def derive(path: Path, root: Path | None = None) -> dict:
     gates = [core.validate_annotation(entry["annotation"]) for entry in criteria]
     refs = [gate["value"] for gate in gates if gate["ok"] and gate["kind"] == "pr"]
     fetch = shell.resolve_prs(refs)
-    rows = []
-    flips = []
+    rows: list[dict] = []
+    flips: list[dict] = []
     for entry, gate in zip(criteria, gates):
         verdict, evidence = _resolve(gate, base, fetch)
         row = {
@@ -91,7 +97,7 @@ def derive(path: Path, root: Path | None = None) -> dict:
             "would_flip": verdict == core.PASS and not entry["checked"],
         }
         if row["would_flip"]:
-            flips.append(entry["line"])
+            flips.append({"line": entry["line"], "text": entry["text"], "evidence": evidence})
         rows.append(row)
     return {
         "report_version": REPORT_VERSION,
@@ -122,30 +128,31 @@ def apply(path: Path, report: dict) -> int:
 
     THE FILE IS RE-READ HERE rather than the derive's copy being edited in memory, because the derive
     may have taken minutes (a `pytest:` annotation runs a suite) and a human may have edited the plan
-    in that window. `core.apply_flips` re-tests each target line for the `- [ ]` prefix, so a line
-    that moved under us is a no-op rather than a corruption -- the count returned is what ACTUALLY
-    moved, not what was proposed.
+    in that window. `core.apply_flips` re-tests each target line AGAINST THE CRITERION'S TEXT, not
+    merely against the `- [ ]` prefix, so a line that moved under us is a no-op rather than a
+    corruption -- the count returned is what ACTUALLY moved, not what was proposed.
 
     NO WRITE AT ALL WHEN NOTHING WOULD MOVE. A run that flips nothing must not touch the file's
     mtime: `borg link`'s newest-checkpoint and directive readers sort on it, and an `--apply` that
     rewrites 30 directives byte-identically every session would reorder that board for no reason.
     """
-    flips = list(report.get("flips") or [])
-    if not flips:
+    pending = _pending(report)
+    if not pending:
         return 0
     text = shell.read_text(path)
     if text is None:
         raise FileNotFoundError(f"cannot read plan file: {path}")
-    updated = core.apply_flips(text, flips)
-    if updated == text:
+    updated, moved = core.apply_flips(text, pending)
+    if not moved:
         return 0
     shell.write_atomic(path, updated)
-    return _moved(text, updated)
+    return moved
 
 
-def _moved(before: str, after: str) -> int:
-    """How many lines differ between the two texts. The honest count for `apply`'s return value --
-    `len(flips)` would over-report when a target line moved under us and `apply_flips` no-op'd it."""
-    old = before.split("\n")
-    new = after.split("\n")
-    return sum(1 for index, line in enumerate(old) if index < len(new) and line != new[index])
+def _pending(report: dict) -> list[tuple[int, str, str]]:
+    """The report's `flips` as `core.apply_flips` wants them: `(line, text, evidence)` triples.
+
+    JSON HAS NO TUPLES, so the report carries objects and the conversion happens here rather than
+    the wire carrying three-element arrays nobody can read. `.get` rather than `[...]` because a
+    caller may hand `apply` a report it built or trimmed itself."""
+    return [(row["line"], row["text"], row["evidence"]) for row in report.get("flips") or []]

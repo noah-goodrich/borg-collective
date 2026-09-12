@@ -1,8 +1,15 @@
 """I/O layer for `borg_core.planstate`: every filesystem, subprocess and environment read.
 
 Mirrors `borg_core/link/shell.py`'s split -- logic lives in `core.py` and is never reimplemented
-here. This module answers three impure questions and nothing else: does a path exist, what did a
-runner exit with, and what state does GitHub hold for a batch of refs.
+here. This module answers three impure questions: does a path exist, what did a runner exit with,
+and what state does GitHub hold for a batch of refs.
+
+IT ALSO OWNS ONE PURE FUNCTION, `pr_state`, and that is not a leak. It is the translation from
+`link.shell.finish_fetch`'s dict layout into the two facts `core.verdict_for_pr` decides on. Knowing
+a collaborator's wire format is legitimate in the module that already imports that collaborator and
+illegitimate in a module the clean-arch Domain list keeps pure -- so the knowledge lives beside the
+dependency it belongs to, not in `core.py` where a renamed key would silently downgrade every `pr:`
+criterion to `unknown`.
 
 THE PR RESOLVER IS NOT WRITTEN HERE. `resolve_prs` calls `borg_core.link.shell.start_fetch` /
 `finish_fetch` -- the SAME path `borg link` already uses for PR state, including its injection gate
@@ -118,6 +125,29 @@ def resolve_prs(refs: list[str]) -> dict:
         skipped: dict = link_shell.start_fetch([])["done"]
         return skipped
     return link_shell.finish_fetch(link_shell.start_fetch(sorted(set(refs))))
+
+
+def pr_state(fetch: dict, value: str) -> tuple[bool, str | None]:
+    """`(the source answered, the state token it answered with)` for one ref in a fetch result.
+
+    THE ONE PLACE IN THIS PACKAGE THAT KNOWS `link.shell.finish_fetch`'S DICT LAYOUT, and the right
+    place for it: this module's header already declares `link_shell` as its collaborator, so reading
+    that collaborator's keys here is a dependency it already has rather than a new one smuggled into
+    a pure module. `core.verdict_for_pr` used to do this reach itself and therefore encoded a sibling
+    package's wire format, with an `or {}` that would turn a renamed key into `unknown` on every
+    `pr:` criterion, forever and without a word.
+
+    `attempted` AND `status` ARE BOTH CONSULTED because `finish_fetch` degrades on either axis: a
+    source never asked (no `gh`, no refs) and a source asked that failed (auth, rate limit, deadline)
+    are both "nothing was learned", which is `looked=False` and `unknown` downstream.
+    """
+    if not fetch.get("attempted") or fetch.get("status") == "failed":
+        return False, None
+    item = (fetch.get("items") or {}).get(value)
+    if not isinstance(item, dict):
+        return True, None
+    state = item.get("state")
+    return True, str(state) if state else None
 
 
 def write_atomic(path: Path, text: str) -> None:
