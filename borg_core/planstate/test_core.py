@@ -40,7 +40,7 @@ def test_parses_every_criterion_and_no_prose_line():
 def test_an_unannotated_criterion_has_no_annotation_and_does_not_borrow_the_next_one():
     criteria = core.parse_criteria(PLAN)
     assert criteria[0]["annotation"] is None
-    assert criteria[0]["annotation_line"] is None
+    assert criteria[2]["annotation"] == "wat:borg_core/"
 
 
 def test_backticks_are_stripped_and_the_verify_sibling_is_never_matched():
@@ -92,16 +92,50 @@ def test_the_pr_gate_is_manifest_parse_ref_and_not_a_second_regex():
         assert core.validate_annotation(f"pr:{ref}")["ok"] is (manifest_core.parse_ref(ref) is not None)
 
 
-def test_apply_flips_changes_only_the_checkbox_byte():
+def test_apply_flips_changes_the_checkbox_and_appends_the_annotation_and_nothing_else():
     before = "- [ ] AC1 trailing spaces survive   \n- [ ] AC2\n"
-    after = core.apply_flips(before, [0])
-    assert after == "- [x] AC1 trailing spaces survive   \n- [ ] AC2\n"
-    assert len(after) == len(before)
+    after, moved = core.apply_flips(before, [(0, "AC1 trailing spaces survive", "path:x exists")])
+    assert moved == 1
+    assert after == "- [x] AC1 trailing spaces survive    *(flipped by link-up: path:x exists)*\n- [ ] AC2\n"
+    # The trailing whitespace is INSIDE the preserved remainder, before the suffix -- the line is not
+    # stripped, rewrapped or otherwise normalised on its way through.
+    assert after.split("\n")[1] == before.split("\n")[1]
 
 
 def test_apply_flips_is_a_no_op_on_an_already_checked_or_out_of_range_line():
     before = "- [x] AC1\n- [ ] AC2\n"
-    assert core.apply_flips(before, [0, 99, -3]) == before
+    flips = [(0, "AC1", "e"), (99, "AC2", "e"), (-3, "AC2", "e")]
+    assert core.apply_flips(before, flips) == (before, 0)
+
+
+def test_apply_flips_refuses_a_line_that_is_no_longer_the_criterion_it_was_derived_for():
+    # THE BUG, at the pure layer: shape alone ("still starts with `- [ ]`") is true of every
+    # neighbour in an acceptance-criteria block, so an index that shifted flips the wrong one.
+    before = "- [ ] AC1\n- [ ] AC2\n"
+    after, moved = core.apply_flips(before, [(0, "AC2", "path:x exists")])
+    assert (after, moved) == (before, 0)
+
+
+def test_a_criterion_that_already_carries_the_mark_gets_no_second_annotation():
+    before = "- [ ] AC1 *(flipped by link-up: path:x exists)*\n"
+    after, moved = core.apply_flips(before, [(0, "AC1 *(flipped by link-up: path:x exists)*", "path:x exists")])
+    assert moved == 1
+    assert after == "- [x] AC1 *(flipped by link-up: path:x exists)*\n"
+
+
+def test_the_annotation_can_never_introduce_a_line_break():
+    # A newline in `evidence` would split one line into two and break AC8's "no other line moved"
+    # by construction, so the formatter collapses whitespace rather than trusting its caller.
+    assert "\n" not in core.annotation_for("path:x exists\n- [ ] AC9 smuggled")
+
+
+def test_verdict_for_pr_takes_two_facts_and_never_fails_on_a_degraded_source():
+    assert core.verdict_for_pr("o/r#1", False, None)[0] == core.UNKNOWN
+    assert core.verdict_for_pr("o/r#1", False, "merged")[0] == core.UNKNOWN
+    assert core.verdict_for_pr("o/r#1", True, None)[0] == core.UNKNOWN
+    assert core.verdict_for_pr("o/r#1", True, "")[0] == core.UNKNOWN
+    assert core.verdict_for_pr("o/r#1", True, "MERGED") == (core.PASS, "pr:o/r#1 is merged")
+    assert core.verdict_for_pr("o/r#1", True, "open") == (core.FAIL, "pr:o/r#1 is open, not merged")
 
 
 def test_core_imports_nothing_impure():

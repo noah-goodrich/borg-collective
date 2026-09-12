@@ -44,6 +44,30 @@ _TICKS = "`"
 
 _KINDS = ("pr", "path", "bats", "pytest")
 
+# THE AUDIT TRAIL, AND THE ONLY THING THIS PACKAGE EVER APPENDS TO A LINE (AC2, and AC8 as restated
+# 2026-09-11). `_ANNOTATION_MARK` is the literal AC2 greps for; it is also the idempotence test, so
+# the spelling is a constant rather than two string literals that could drift apart.
+_ANNOTATION_MARK = "flipped by link-up"
+
+
+def annotation_for(evidence: str) -> str:
+    """The ` *(flipped by link-up: <evidence>)*` suffix for one flipped criterion.
+
+    THE EVIDENCE IS COLLAPSED TO SINGLE SPACES, which is a no-op for every string `verdict_for_*`
+    produces and is not there for tidiness: a newline inside `evidence` would split one line into
+    two and break AC8's "no other line moved" by construction. Making that impossible in the
+    formatter is cheaper than a validator nobody can see from the call site.
+
+    LINE LENGTH: this suffix can push a criterion line past the repository's 120-column wrap, and it
+    is allowed to. AC8 requires the annotation on the SAME line as the checkbox, so the alternatives
+    are a continuation line (which AC8 forbids) or reflowing the criterion's prose (which would move
+    lines AC8 requires to be byte-identical). The overflow is bounded -- the suffix is 24 characters
+    plus one evidence line, and every evidence line this package emits is a validated ref or path
+    plus a short verb -- and it lands only on lines this package rewrote.
+    """
+    return f" *({_ANNOTATION_MARK}: {' '.join(evidence.split())})*"
+
+
 # ANCHORED, AND DELIBERATELY NARROW. No space, no quote, no `;`, no backtick, no `$`, no `(`/`)`,
 # no `|`, no `&`, no `<`/`>`, no newline -- none of them by enumeration, all of them by absence from
 # the class. `\Z` rather than `$`, because `$` matches before a trailing newline and
@@ -58,9 +82,11 @@ UNKNOWN = "unknown"
 def parse_criteria(text: str) -> list[dict]:
     """Every acceptance criterion in `text`, in file order, with its evidence annotation if any.
 
-    Each entry is `{line, checked, text, annotation, annotation_line}` where `line` is a 0-based
-    index into `text.split("\\n")` and `annotation` is the raw post-`Evidence:` string (backticks
-    stripped) or None.
+    Each entry is `{line, checked, text, annotation}` where `line` is a 0-based index into
+    `text.split("\\n")` and `annotation` is the raw post-`Evidence:` string (backticks stripped) or
+    None. `text` is the criterion's line MINUS the checkbox prefix, stripped -- which is what
+    `apply_flips` matches a target line against, so a criterion that moved between the derive and
+    the write is recognised as a different line rather than flipped by position.
 
     THE SCAN FOR THE SUB-BULLET STOPS AT THE NEXT CRITERION, at the next unindented non-blank line,
     and at nothing else -- so a criterion whose prose runs over several indented lines still finds an
@@ -74,21 +100,19 @@ def parse_criteria(text: str) -> list[dict]:
     for index, line in enumerate(lines):
         if not line.startswith(_CRITERION_PREFIX):
             continue
-        annotation, annotation_line = _annotation_below(lines, index)
         criteria.append(
             {
                 "line": index,
                 "checked": line.startswith(_MET_PREFIX),
                 "text": line[len(_UNMET_PREFIX) :].strip(),
-                "annotation": annotation,
-                "annotation_line": annotation_line,
+                "annotation": _annotation_below(lines, index),
             }
         )
     return criteria
 
 
-def _annotation_below(lines: list[str], start: int) -> tuple[str | None, int | None]:
-    """The `- Evidence:` value belonging to the criterion at `lines[start]`, and its line index.
+def _annotation_below(lines: list[str], start: int) -> str | None:
+    """The `- Evidence:` value belonging to the criterion at `lines[start]`.
 
     SPLIT OUT so `parse_criteria` stays one loop with one job, mirroring the seam
     `link/core.py::_paragraph_from` takes for the same reason: the caller answers WHICH lines are
@@ -97,15 +121,15 @@ def _annotation_below(lines: list[str], start: int) -> tuple[str | None, int | N
     for offset in range(start + 1, len(lines)):
         candidate = lines[offset]
         if candidate.startswith(_CRITERION_PREFIX):
-            return None, None
+            return None
         if candidate.strip() and not candidate[0].isspace():
-            return None, None
+            return None
         match = _EVIDENCE_RE.match(candidate)
         if match:
             # The same shape borg_core/manifest/refs.py::parse_ref carries a disable for.
             # JUSTIFICATION: reading the group of a Match this function just produced, not a foreign object.
-            return match.group(1).strip(_TICKS).strip(), offset  # pylint: disable=clean-arch-demeter
-    return None, None
+            return match.group(1).strip(_TICKS).strip()  # pylint: disable=clean-arch-demeter
+    return None
 
 
 def validate_annotation(raw: str | None) -> dict:
@@ -186,51 +210,78 @@ def verdict_for_suite(kind: str, value: str, present: bool, result: tuple[int, s
     return FAIL, f"{kind}:{value} exited {code}"
 
 
-def verdict_for_pr(value: str, fetch: dict) -> tuple[str, str]:
-    """`(verdict, evidence line)` for a `pr:` annotation, given a `link.shell.finish_fetch` result.
+def verdict_for_pr(value: str, looked: bool, state: str | None) -> tuple[str, str]:
+    """`(verdict, evidence line)` for a `pr:` annotation, given TWO FACTS and not a wire format.
 
-    NEVER `fail` FROM A DEGRADED SOURCE (the directive's third Risk). The fetch result carries
-    `attempted` and `status` precisely so "I could not look" and "I looked and it is open" are
-    different answers; an unauthenticated `gh`, an offline host, a rate limit and a deadline miss all
-    land as `status: failed` / `attempted: False` and resolve here to `unknown`. A ref the fetch
-    answered for but that carries no entry -- deleted, renamed, or not visible -- is also `unknown`,
-    for the same reason: nothing was learned about the work.
+    `looked` is "the source was asked and answered"; `state` is the token it answered with, or None
+    for a ref it had nothing for. TRANSLATING A `link.shell.finish_fetch` RESULT INTO THOSE TWO IS
+    `shell.pr_state`'S JOB, not this module's -- a pure module that reaches into
+    `fetch["items"][value]["state"]` has a sibling package's dict layout encoded in it, and the
+    defensive `or {}` such a reach needs means RENAMING that key downgrades every `pr:` criterion to
+    `unknown` forever and silently. Two booleans-worth of interface cannot rot that way.
+
+    NEVER `fail` FROM A DEGRADED SOURCE (the directive's third Risk). An unauthenticated `gh`, an
+    offline host, a rate limit and a deadline miss all arrive as `looked=False` and resolve to
+    `unknown`; a ref the fetch answered for but carries nothing for -- deleted, renamed, or not
+    visible -- arrives as `state=None` and is `unknown` too, for the same reason: nothing was
+    learned about the work.
 
     `merged` IS THE ONLY PASS. The token is lowercased upstream by `grid.fetched_items` to match the
-    github adapter's `ascii_downcase`, so this comparison is against the same vocabulary a swept item
-    would carry, not a second one.
+    github adapter's `ascii_downcase`, and lowercased again here so this comparison cannot depend on
+    which of the two produced it.
     """
-    if not fetch.get("attempted") or fetch.get("status") == "failed":
+    if not looked:
         return UNKNOWN, f"pr:{value} -- the GitHub source is unreachable or was not asked"
-    item = (fetch.get("items") or {}).get(value)
-    if not isinstance(item, dict) or not item.get("state"):
+    if not state:
         return UNKNOWN, f"pr:{value} did not resolve (deleted, renamed, or not visible)"
-    state = str(item["state"]).lower()
-    if state == "merged":
+    token = state.lower()
+    if token == "merged":
         return PASS, f"pr:{value} is merged"
-    return FAIL, f"pr:{value} is {state}, not merged"
+    return FAIL, f"pr:{value} is {token}, not merged"
 
 
-def apply_flips(text: str, lines_to_flip: list[int]) -> str:
-    """`text` with `- [ ]` replaced by `- [x]` at each 0-based index in `lines_to_flip`.
+def apply_flips(text: str, flips: list[tuple[int, str, str]]) -> tuple[str, int]:
+    """`(text with each flip applied, how many boxes actually moved)`.
 
-    THE ONLY BYTE THAT CHANGES IS THE ONE INSIDE THE BRACKETS (AC8). No strip, no rewrap, no
-    normalisation of trailing whitespace, no touching of the line ending -- the prefix is replaced by
-    slicing at a FIXED LENGTH and the remainder of the line is concatenated back verbatim, so a line
-    with trailing spaces or a criterion whose text contains `- [ ]` again survives byte-identically.
-    `"\\n".join(split("\\n"))` is an exact round trip, including a trailing newline (which splits to a
-    final empty element), so a file does not gain or lose one by passing through here.
+    Each flip is `(line index, the criterion's text as parsed, its evidence line)`.
 
-    A LINE THAT IS NOT AN UNCHECKED CRITERION IS LEFT ALONE rather than raising. The caller has
-    already filtered to `pass` verdicts; this second test makes the function total, so a stale index
-    (a caller that re-read the file between deriving and writing) can produce a no-op but never a
-    corrupted line.
+    THE GUARD IS IDENTITY, NOT SHAPE, AND THAT IS THE WHOLE POINT OF THE `text` ELEMENT. The indices
+    are captured during a derive that may have taken minutes -- a `pytest:` annotation runs a suite
+    -- and a human may have edited the plan in that window. An earlier version tested only that the
+    line at the index still started with `- [ ]`, which in an acceptance-criteria block is true of
+    EVERY NEIGHBOUR: inserting one line above the target shifted every index by one and flipped the
+    criterion below it instead, silently and with the wrong evidence attached. Testing that the line
+    IS STILL THAT CRITERION makes a shifted file a no-op rather than a wrong answer.
+
+    WHAT CHANGES ON A FLIPPED LINE (AC8 as restated 2026-09-11): the checkbox character, and the
+    `annotation_for` suffix appended to the same line. Nothing else -- no strip, no rewrap, no
+    normalisation of trailing whitespace, no touching of the line ending. The prefix is replaced by
+    slicing at a FIXED LENGTH and the remainder is concatenated back verbatim, so a line with
+    trailing spaces or a criterion whose own text contains `- [ ]` survives except for those two
+    changes. `"\\n".join(split("\\n"))` is an exact round trip, including a trailing newline, so a
+    file neither gains nor loses one by passing through here.
+
+    A RE-RUN IS A NO-OP TWICE OVER. A criterion already carrying the mark gets no second annotation,
+    and a criterion already `- [x]` fails the prefix test -- so a crash between the flip and
+    whatever the caller does next can be recovered by simply running again.
+
+    THE COUNT IS RETURNED RATHER THAN RECOMPUTED BY THE CALLER. This function is the only code that
+    knows which targets it actually took, so a caller that re-diffs the two texts to find out is
+    both slower and a second implementation of the same fact.
     """
-    if not lines_to_flip:
-        return text
-    targets = set(lines_to_flip)
+    if not flips:
+        return text, 0
     lines = text.split("\n")
-    for index in targets:
-        if 0 <= index < len(lines) and lines[index].startswith(_UNMET_PREFIX):
-            lines[index] = _MET_PREFIX + lines[index][len(_UNMET_PREFIX) :]
-    return "\n".join(lines)
+    moved = 0
+    for index, expected, evidence in flips:
+        if not 0 <= index < len(lines):
+            continue
+        line = lines[index]
+        if not line.startswith(_UNMET_PREFIX) or line[len(_UNMET_PREFIX) :].strip() != expected:
+            continue
+        flipped = _MET_PREFIX + line[len(_UNMET_PREFIX) :]
+        if _ANNOTATION_MARK not in flipped:
+            flipped += annotation_for(evidence)
+        lines[index] = flipped
+        moved += 1
+    return "\n".join(lines), moved

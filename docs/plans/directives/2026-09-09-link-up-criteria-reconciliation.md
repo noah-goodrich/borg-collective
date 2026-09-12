@@ -113,7 +113,7 @@ trail.
       compares unmet criteria against the session's Accomplished list, and flips checkboxes with evidence
       annotations.
     - Verify: `grep -c 'Criteria Reconcil' skills/borg-link-up/SKILL.md` returns 1 or more.
-- [ ] AC2 — Flipped criteria carry a machine-greppable annotation distinguishing link-up flips from manual
+- [x] AC2 — Flipped criteria carry a machine-greppable annotation distinguishing link-up flips from manual
       edits and assimilate flips. **The engine writes it, in the same atomic write as the flip** (see AC8).
     - Verify (RESTATED 2026-09-11): a fixture plan with one passing annotated criterion is run through
       `--apply`, and the resulting FILE carries `flipped by link-up` on exactly that criterion's line. The
@@ -135,7 +135,7 @@ trail.
 - [ ] AC7 — (2026-09-10) Tests drive the production evidence path — a real git/gh/filesystem read — never a
       fixture-supplied verdict, per `reference_test_supplies_derived_value`. Asserted by mutation: break the
       resolver, the test goes red.
-- [ ] AC8 — (2026-09-10, RESTATED 2026-09-11) `--apply` flips only `pass` criteria and writes atomically. The
+- [x] AC8 — (2026-09-10, RESTATED 2026-09-11) `--apply` flips only `pass` criteria and writes atomically. The
       only changes to the file are the checkbox character and, appended to that same line, an annotation
       matching the fixed `*(flipped by link-up: <evidence>)*` pattern. Every other byte is unchanged. A `fail`
       and an `unknown` in the same file survive a run that flips something else.
