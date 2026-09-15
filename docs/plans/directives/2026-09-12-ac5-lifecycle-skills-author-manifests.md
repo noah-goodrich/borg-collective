@@ -367,6 +367,44 @@ existed on exactly one unmerged branch when it was written, and §"What this doe
 `borg_core/planstate` and `2026-09-09-link-up-criteria-reconciliation.md` are now on `main` and the
 claim is true as written. Recorded rather than deleted: the claim was false when made.
 
+## Pending ruling — which ref kinds may the writer author? (blocks implementation)
+
+**Noah holds the lock on this one and AC5 implementation does not start until it is answered.** It
+arrives from [#201](https://github.com/noah-goodrich/borg-collective/pull/201)'s AC-N3, which gates
+on it explicitly. This directive never said which of the three ref vocabularies the lifecycle skills
+may WRITE — it is a gap in the text, not a ratified decision, which is why recording it here is
+additive rather than a re-litigation.
+
+The proposal from [#201](https://github.com/noah-goodrich/borg-collective/pull/201), verbatim:
+
+> The three verbs author `github` rows only. `jira` and `link` refs remain hand-authored: a `link`
+> row is inert by design (`ready_set` skips it), but a `jira` row is TRACKED with no adapter to
+> resolve it, so an auto-authored jira row would wedge every row behind it with no `▸ SIGNALS` line.
+> Admitting jira to the writer is gated on a jira adapter existing, not on this criterion.
+
+**Reproduced independently on this machine, 2026-09-15, all three rows:**
+
+```
+github parent, swept merged : {'state': 'known', 'refs': ['o/r#2']}
+jira   parent, no adapter   : {'state': 'known', 'refs': []}      <- WEDGED
+link   parent, no adapter   : {'state': 'known', 'refs': ['o/r#2']}
+```
+
+Structurally confirmed too: `refs.py` anchors exactly three vocabularies (`_REF_RE`, `_JIRA_RE`,
+`_LINK_RE`), `grid.RESOLVED_STATE_SOURCES` is `(swept, fetched)`, and `lib/recon/adapters/` holds
+exactly one adapter — `recon-adapter-github`. So a jira row's state is unresolvable by construction,
+and `expects_github`'s docstring deliberately suppresses the `▸ SIGNALS` line that would report it.
+
+**Note the signature.** `{'state': 'known', 'refs': []}` is the SAME confident-empty answer Ruling 2
+measured from the stub-row append. Two independent defects converging on one shape is worth naming:
+the page cannot distinguish "nothing is ready" from "a parent is unresolvable", and `ready_refs`'
+three-state design exists precisely to keep those apart. Whatever the ruling, that convergence is
+the argument for it.
+
+**If the ruling is "github only", AC5 costs one sentence** — a guard in the writer plus one test
+arm. If it is "all three", the jira adapter becomes a prerequisite of AC5 rather than a separate
+scope, which changes the timeline materially. That is the whole reason it blocks.
+
 ## Found on the way, filed separately
 
 The same slug derivation has **two shipped consumers** in `/borg-assimilate` Step 0.75, where it
