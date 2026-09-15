@@ -156,6 +156,15 @@ e2e/eval harness that keeps it honest.
     fixture carries the input and a negative whose fixture provably lacks it, both SYNTHESIZED so neither names a
     repository. AC5's cases grade borg's OWN lifecycle skills, so unlike that pair they belong in THIS tree; what
     transfers is the fixture discipline, not the location.
+  - **Writer ref-kind scope — ruled 2026-09-15 by Noah.** Closes AC-N3 of
+    [#201](https://github.com/noah-goodrich/borg-collective/pull/201).
+    The three verbs author the ref kinds **this machine can resolve**, decided mechanically rather than by a
+    hardcoded list: a kind is authorable when it is in `refs.TRACKED_REF_KINDS` **and** this machine has a resolver
+    for it — a discovered `recon-adapter-<source>`, or the built-in GitHub fetch. On this machine that is `github`
+    alone, which is what AC5 implements. The work machine gains `jira` (and others) by **dropping in an adapter**:
+    no code change here, no second ruling, and `swept` is already source-agnostic and already in
+    `grid.RESOLVED_STATE_SOURCES`, so a resolved jira row stops wedging the moment its adapter exists. `link` refs
+    stay hand-authored — they are references, not tracked work, and `ready_set` skips them by design.
 - [x] **AC6 — e2e/eval harness MVP.** Generalize the `evals/s4-k3/run.sh` pattern into a reusable convention: a
       `make eval` target, deterministic cases green in CI, model-dependent cases behind `make eval-live` — which
       since decision (9) means the harness in the repository that OWNS the surface, not this one. Two

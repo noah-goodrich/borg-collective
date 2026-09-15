@@ -231,6 +231,15 @@ the fixture builder produces a manifest-carrying repo and a manifest-less one th
     - Verify: pytest over the reader — annotation present, absent, and malformed; plus an assertion
       that `resolve` never re-derives a slug from the Objective line.
     - Evidence: `pytest:borg_core/manifest/test_cli.py`
+- [ ] AC5.10 — The writer authors only ref kinds this machine can resolve, decided by a predicate and
+      not a literal. A kind is authorable when it is in `refs.TRACKED_REF_KINDS` and a resolver for it
+      exists (a discovered `recon-adapter-<source>`, or the built-in GitHub fetch).
+    - Verify: pytest — with only `recon-adapter-github` discoverable, a `github` ref is authorable and
+      a `jira` ref is refused by name; with a stub `recon-adapter-jira` discoverable, the SAME jira ref
+      becomes authorable with no code change. The second arm is the one that proves the rule is a
+      predicate rather than an allow-list, and it is the work machine's future stated as a test.
+    - Verify: a `link` ref is never authored in either arm — it is a reference, not tracked work.
+    - Evidence: `pytest:borg_core/manifest/test_cli.py`
 - [ ] AC5.7 — Nothing breaks. `make test` green at its coverage floor, `make lint` at 10.00/10,
       `bats tests/` green, `shellcheck` clean over `evals/*/*.sh`.
 
@@ -265,6 +274,15 @@ the fixture builder produces a manifest-carrying repo and a manifest-less one th
   its own judgment problem and would drag the directive into the same "model volunteers a value"
   territory the mechanical-gate amendment exists to leave.
 - **NOT** retroactive authoring, and **NOT** an `apex` at scaffold time.
+- **NOT** narrowing `refs.expects_github`'s `▸ SIGNALS` suppression, though AC5.10 supplies the exact
+  predicate it needs. It changes what every render prints, which is a `borg link` behaviour change and
+  belongs to a directive that owns that surface. Named so its absence is a decision.
+- **NOT** a fourth `borg`/filesystem ref kind for local artifacts (a directive, a plan, a checkpoint).
+  It is a real gap — and unlike jira it would resolve with **no adapter and no network**, since a
+  directive's state is which directory holds it (`directives/` vs `assimilated/` vs `severed/`). But it
+  is a fourth vocabulary on the one validator AC7 exists to unify, and it already has a home:
+  `2026-08-20-directive-state-deriver.md`, whose D1 classifier is that state machine. It belongs there,
+  not here.
 - **NOT** more than six model cases. Each is a full lifecycle-skill run; the harness is already the
   most expensive thing in the tree.
 - If done early: ship it. Do not expand to a fourth skill.
@@ -367,43 +385,45 @@ existed on exactly one unmerged branch when it was written, and §"What this doe
 `borg_core/planstate` and `2026-09-09-link-up-criteria-reconciliation.md` are now on `main` and the
 claim is true as written. Recorded rather than deleted: the claim was false when made.
 
-## Pending ruling — which ref kinds may the writer author? (blocks implementation)
+## Ruling — writer ref-kind scope (Noah, 2026-09-15). UNBLOCKED.
 
-**Noah holds the lock on this one and AC5 implementation does not start until it is answered.** It
-arrives from [#201](https://github.com/noah-goodrich/borg-collective/pull/201)'s AC-N3, which gates
-on it explicitly. This directive never said which of the three ref vocabularies the lifecycle skills
-may WRITE — it is a gap in the text, not a ratified decision, which is why recording it here is
-additive rather than a re-litigation.
+**The three verbs author the ref kinds THIS MACHINE CAN RESOLVE.** Decided mechanically, never as a
+hardcoded list: a kind is authorable when `refs.TRACKED_REF_KINDS` holds it **and** this machine has
+a resolver for it — a discovered `recon-adapter-<source>`, or the built-in GitHub fetch. Recorded in
+`PROJECT_PLAN.md`'s AC5, which closes
+[#201](https://github.com/noah-goodrich/borg-collective/pull/201)'s AC-N3.
 
-The proposal from [#201](https://github.com/noah-goodrich/borg-collective/pull/201), verbatim:
+This is a **superset** of [#201](https://github.com/noah-goodrich/borg-collective/pull/201)'s
+proposal, and it agrees with it on this machine: `github` alone, because `lib/recon/adapters/` holds
+exactly one adapter here. Where it differs is that "github only" is an **outcome** rather than a
+constant. The work machine gains `jira` by dropping in `recon-adapter-jira` — no code change in this
+tree, and no second ruling.
 
-> The three verbs author `github` rows only. `jira` and `link` refs remain hand-authored: a `link`
-> row is inert by design (`ready_set` skips it), but a `jira` row is TRACKED with no adapter to
-> resolve it, so an auto-authored jira row would wedge every row behind it with no `▸ SIGNALS` line.
-> Admitting jira to the writer is gated on a jira adapter existing, not on this criterion.
+**The framework it needs is already built, which is why the rule can be mechanical.** Measured:
 
-**Reproduced independently on this machine, 2026-09-15, all three rows:**
+- `refs.py:200`'s own comment already states the intent — *"adapters are discovered by filename
+  (`recon-adapter-<source>`) so a machine with a Jira adapter installed already sweeps Jira."*
+- `recon/shell.py:178-181` globs `recon-adapter-*` and takes the source from the filename. Adding a
+  source is a file, not a commit.
+- `grid.STATE_SOURCE_SWEPT` is **source-agnostic** and sits in `RESOLVED_STATE_SOURCES`. Any
+  adapter's answer resolves.
+- `refs.TRACKED_REF_KINDS` is *"the one definition of that split; `core` reads it rather than testing
+  kinds by name."*
 
-```
-github parent, swept merged : {'state': 'known', 'refs': ['o/r#2']}
-jira   parent, no adapter   : {'state': 'known', 'refs': []}      <- WEDGED
-link   parent, no adapter   : {'state': 'known', 'refs': ['o/r#2']}
-```
+So the jira wedge reproduced above is **not a property of jira**. It is the behaviour of a TRACKED
+kind on a machine with no resolver for it — correct on the work machine once its adapter lands, wrong
+here today. That is exactly the condition the writer gate tests, which is what makes one rule right
+on both machines.
 
-Structurally confirmed too: `refs.py` anchors exactly three vocabularies (`_REF_RE`, `_JIRA_RE`,
-`_LINK_RE`), `grid.RESOLVED_STATE_SOURCES` is `(swept, fetched)`, and `lib/recon/adapters/` holds
-exactly one adapter — `recon-adapter-github`. So a jira row's state is unresolvable by construction,
-and `expects_github`'s docstring deliberately suppresses the `▸ SIGNALS` line that would report it.
+**The gap this leaves, and it is the deliverable.** Two things are missing, and neither is the
+resolution layer:
 
-**Note the signature.** `{'state': 'known', 'refs': []}` is the SAME confident-empty answer Ruling 2
-measured from the stub-row append. Two independent defects converging on one shape is worth naming:
-the page cannot distinguish "nothing is ready" from "a parent is unresolvable", and `ready_refs`'
-three-state design exists precisely to keep those apart. Whatever the ruling, that convergence is
-the argument for it.
-
-**If the ruling is "github only", AC5 costs one sentence** — a guard in the writer plus one test
-arm. If it is "all three", the jira adapter becomes a prerequisite of AC5 rather than a separate
-scope, which changes the timeline materially. That is the whole reason it blocks.
+1. **The writer has no gate at all** — AC5.10.
+2. **An unresolvable TRACKED row is silent.** `expects_github` suppresses the `▸ SIGNALS` line for
+   jira by design, reasoning that a jira key *"is still none of a GitHub GraphQL query's business."*
+   Sound where an adapter exists; on a machine with none it is the confident-empty answer measured
+   above. Narrowing that suppression to *"tracked kinds this machine can resolve"* is the same
+   predicate as AC5.10 — named here, and NOT taken into scope (see Scope Boundaries).
 
 ## Found on the way, filed separately
 
