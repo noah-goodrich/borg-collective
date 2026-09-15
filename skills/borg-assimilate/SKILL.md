@@ -49,12 +49,14 @@ If tests or linting fail, that's a blocker — the project is not ready to ship.
 Before evaluating acceptance criteria, check whether any directives in `docs/plans/directives/`
 carry a `*Parent plan:*` line whose slug matches this plan.
 
-**Do not derive the slug.** Run the helper; it reads the slug the plan states about itself:
+**Do not compute the slug.** Run the helper; it reads the slug the plan declares about itself:
 
 ```
 source lib/promote-next.sh
-slug=$(_borg_plan_archive_slug PROJECT_PLAN.md) || {
-    echo "premise broken: PROJECT_PLAN.md has no *Archived-as:* line — add it before assimilating"
+slug=$(_borg_plan_declared_slug PROJECT_PLAN.md) || {
+    echo "cannot check for child directives: PROJECT_PLAN.md declares no \`- Plan-slug:\` annotation."
+    echo "Add one (see /borg-plan's Output section) and re-run. Do NOT proceed: this is 'I could not"
+    echo "tell', not 'there is nothing to find'."
     exit 1
 }
 _borg_child_directives docs/plans/directives "$slug"
@@ -65,29 +67,14 @@ lines; it exits **2** on an empty slug, which is "I could not check" and must ne
 "nothing to find". Only `docs/plans/directives/` is scanned — `assimilated/` and `severed/` are
 resolved by definition.
 
-**THE OLD INSTRUCTION HERE WAS TO COMPUTE THE SLUG AND IT COULD NOT WORK.** It said to derive
-`<established-date>-<slugified-objective>` from the `*Established:*` date and `## Objective` text.
-The archived filename is a human condensation of the objective and there is no function from one to
-the other. Measured 2026-09-15 on this repository: the objective slugifies to
-`make-borg-link-the-single-front-door-that-answers-from-a-clean-read-of-derived-fact-…`, the real
-slug is `2026-08-24-one-front-door-link-derived-fact-surface`, and the real slug appeared **zero**
-times in `PROJECT_PLAN.md`. So this gate searched for a string no directive carried, found nothing,
-and reported "no un-resolved child directives" — while **eight** directives named the plan. It did
-not fail; it certified. That is why the slug is now stored and a missing one is a loud premise
-failure rather than a silent pass.
-3. **If any matches are found**, stop immediately and report:
-
-```
-✗ Blocked: un-resolved child directives (move to severed/ or ship them first):
-  - docs/plans/directives/<filename>.md
-  - docs/plans/directives/<filename>.md
-```
-
-Do NOT proceed to criteria evaluation or shipping. The developer must either ship the child
-directive or `git mv` it to `docs/plans/severed/` with a one-line "why severed" comment before
-assimilation can continue.
-
-4. **If no matches are found**, proceed to Step 1 without comment — do not mention the check.
+**THE OLD INSTRUCTION HERE WAS TO COMPUTE THE SLUG FROM THE OBJECTIVE PROSE, AND NO COMPUTATION
+CAN.** The archived filename is a hand-written condensation. Measured 2026-09-15 on this repository:
+the computed form ran 268 characters against a real slug of
+`2026-08-24-one-front-door-link-derived-fact-surface`, and the plan *title* does not yield it either
+— the real slug drops `borg` and `as-the`. So this gate searched for a string no directive carried,
+found nothing, and was specified to proceed to Step 1 without comment — while **nine** directives
+named the plan. It did not fail; it certified. The slug is now declared once by `/borg-plan` and read
+by everyone, and a missing declaration is a refusal rather than a silent pass.
 
 ## Step 1: Load the Plan
 
@@ -186,10 +173,10 @@ developer to resolve manually.
 ### Plan Archival Format
 
 When archiving PROJECT_PLAN.md:
-- Copy to `docs/plans/assimilated/<slug>.md`, where `<slug>` is the plan's **stored**
-  `*Archived-as:*` value — the same `_borg_plan_archive_slug PROJECT_PLAN.md` read Step 0.75 made.
-  Do NOT re-derive it from the objective: Step 0.75 gated on the stored slug, so archiving under a
-  derived one renames the plan out from under the eight directives that point at it, and the
+- Copy to `docs/plans/assimilated/<slug>.md`, where `<slug>` is the plan's **declared**
+  `- Plan-slug:` value — the same `_borg_plan_declared_slug PROJECT_PLAN.md` read Step 0.75 made.
+  Do NOT compute it from the objective: Step 0.75 gated on the declared slug, so archiving under a
+  computed one renames the plan out from under the nine directives that point at it, and the
   `*Parent plan:*` lineage silently dangles.
 - Add `*Shipped: <today's date> — PR #<number> merged to main*` below the established date
 - Mark all acceptance criteria checkboxes as `[x]`

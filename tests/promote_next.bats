@@ -127,29 +127,71 @@ _mk_shipped() {
 }
 
 # ── Step 0.75: the child-directive gate ──────────────────────────────────────────────────────────
-# These cover the defect measured 2026-09-15: Step 0.75 derived a slug from the objective prose,
-# which cannot produce the human-condensed archived filename, so the gate found 0 children where 8
-# existed and reported success. Each behaviour is pinned in the firing direction AND the direction
-# that proves it discriminates.
+# These cover the defect measured 2026-09-15: Step 0.75 computed a slug from the objective prose,
+# which cannot produce the hand-written archived filename, so the gate found 0 children where 9
+# existed and was specified to proceed without comment. The slug is now DECLARED by
+# PROJECT_PLAN.md's `- Plan-slug:` annotation (AC5.9, Ruling 1). Each behaviour is pinned in the
+# firing direction AND the direction that proves it discriminates.
 
-@test "step075: the slug is READ from the plan, not derived from its objective" {
+_mk_plan() {   # <path> <annotation-line-or-empty>
+    if [ -n "$2" ]; then
+        printf '# Project Plan\n*Established: 2026-08-24*\n\n%s\n\n## Objective\n\nMake borg link the single front door that answers from a clean read of derived fact.\n' "$2" > "$1"
+    else
+        printf '# Project Plan\n*Established: 2026-08-24*\n\n## Objective\n\nMake borg link the single front door that answers from a clean read of derived fact.\n' > "$1"
+    fi
+}
+
+@test "step075: the slug is READ from the annotation, not computed from the objective" {
     local plan="${BATS_TEST_TMPDIR}/PROJECT_PLAN.md"
-    printf '# Project Plan\n*Established: 2026-08-24*\n*Archived-as: 2026-08-24-one-front-door*\n\n## Objective\n\nMake borg link the single front door that answers from a clean read of derived fact.\n' > "$plan"
+    _mk_plan "$plan" '- Plan-slug: `2026-08-24-one-front-door`'
     source "$LIB"
-    run _borg_plan_archive_slug "$plan"
+    run _borg_plan_declared_slug "$plan"
     [ "$status" -eq 0 ]
     [ "$output" = "2026-08-24-one-front-door" ]
-    # The objective would slugify to something else entirely; the point is it is never consulted.
+    # The objective would compute to something else entirely; it is never consulted.
     [[ "$output" != *"make-borg-link"* ]] || false
 }
 
-@test "step075: a plan with no *Archived-as:* line FAILS LOUD instead of returning a guess" {
+@test "step075: the bare (backtick-free) annotation form is accepted too" {
     local plan="${BATS_TEST_TMPDIR}/PROJECT_PLAN.md"
-    printf '# Project Plan\n*Established: 2026-08-24*\n\n## Objective\n\nSomething.\n' > "$plan"
+    _mk_plan "$plan" '- Plan-slug: 2026-08-24-one-front-door'
     source "$LIB"
-    run _borg_plan_archive_slug "$plan"
+    run _borg_plan_declared_slug "$plan"
+    [ "$status" -eq 0 ]
+    [ "$output" = "2026-08-24-one-front-door" ]
+}
+
+@test "step075: a plan with no annotation FAILS LOUD instead of returning a guess" {
+    local plan="${BATS_TEST_TMPDIR}/PROJECT_PLAN.md"
+    _mk_plan "$plan" ""
+    source "$LIB"
+    run _borg_plan_declared_slug "$plan"
     [ "$status" -ne 0 ]
     [ -z "$output" ]
+}
+
+@test "step075: an annotation present but valueless is a refusal, not an empty slug" {
+    source "$LIB"
+    local plan
+    for body in '- Plan-slug:' '- Plan-slug: ' '- Plan-slug: ``'; do
+        plan="${BATS_TEST_TMPDIR}/p.md"
+        _mk_plan "$plan" "$body"
+        run _borg_plan_declared_slug "$plan"
+        [ "$status" -ne 0 ] || { echo "accepted a valueless annotation: [$body]"; false; }
+        [ -z "$output" ]
+    done
+}
+
+@test "step075: prose mentioning the annotation does not win over the annotation" {
+    # PROJECT_PLAN.md carries an explanatory paragraph about `- Plan-slug:` right beside the
+    # annotation, so an unanchored match is a live hazard, not a hypothetical. Verified by mutation:
+    # dropping the `^-` anchor makes this return the whole sentence as the "slug".
+    local plan="${BATS_TEST_TMPDIR}/PROJECT_PLAN.md"
+    printf '# Project Plan\n\nThis plan explains that Plan-slug: is how the slug is declared.\n\n- Plan-slug: `the-real-slug`\n' > "$plan"
+    source "$LIB"
+    run _borg_plan_declared_slug "$plan"
+    [ "$status" -eq 0 ]
+    [ "$output" = "the-real-slug" ]
 }
 
 @test "step075: an empty slug is rc 2, never zero matches" {
@@ -200,4 +242,20 @@ _mk_shipped() {
     run zsh -c "emulate -L zsh; set -e; source '$LIB'; _borg_child_directives '${BATS_TEST_TMPDIR}/absent' a-slug"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
+}
+
+@test "step075: the gate fires on THIS repository, cross-checked against an independent count" {
+    # AC3 of the 2026-09-15 directive asks that the gate be proven on the live tree. It names nine
+    # files; this asserts non-empty and agreement with a SEPARATE grep instead of pinning 9, because
+    # a hard count goes red the next time any directive is filed or resolved -- the number is a fact
+    # about the repo's backlog, not about this code.
+    local root="${BATS_TEST_DIRNAME}/.."
+    source "$LIB"
+    local slug
+    slug=$(_borg_plan_declared_slug "$root/PROJECT_PLAN.md") || skip "no active PROJECT_PLAN.md"
+    local via_helper via_grep
+    via_helper=$(_borg_child_directives "$root/docs/plans/directives" "$slug" | wc -l | tr -d ' ')
+    via_grep=$(grep -lF "*Parent plan: ${slug}*" "$root"/docs/plans/directives/*.md 2>/dev/null | wc -l | tr -d ' ')
+    [ "$via_helper" -gt 0 ] || { echo "gate found no children on the live tree"; false; }
+    [ "$via_helper" -eq "$via_grep" ] || { echo "helper=$via_helper grep=$via_grep"; false; }
 }
