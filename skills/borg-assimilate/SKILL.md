@@ -176,6 +176,26 @@ below before presenting it for confirmation.
 3. Only execute after explicit confirmation. Execute each step, reporting results.
 4. After shipping, verify: PR merged, plan archived, working tree clean.
 
+#### Close the manifest row
+
+After the merge succeeds and before plan archival, close the row for the ref just merged:
+
+```
+PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli close \
+    --ref <owner/repo#N> --status merged
+```
+
+Unconditional, and the ref is **the one just merged** — read it from the `gh pr merge` you executed,
+never from memory.
+
+**A refusal is REPORTED, not repaired.** `no row declares <ref>` means either link-up never ran for
+this PR or the ref is wrong, and both are things the developer needs told. State which ref was
+refused and carry on with archival — a failed close never rolls back a merge.
+
+**Never fall back to `add-row`.** Adding the row here manufactures the very record `close` was meant
+to verify: it would report success while proving nothing, and the chain would gain a row that no
+link-up ever declared. If there is no row to close, say so.
+
 #### Local Extensions: 03-followup
 
 After the merge has succeeded but before plan archival, check for local extension files. Read

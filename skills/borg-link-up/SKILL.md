@@ -155,6 +155,82 @@ independently at ship time, may disagree with anything flipped here, and may un-
 `*(flipped by link-up: ...)*` annotation is NOT sufficient evidence at ship time and must never be
 offered to assimilate as if it were. Flipping every box does not ship a plan.
 
+## Manifest Row
+
+Runs after criteria reconciliation and before the disk write. Unconditional — the developer does not
+opt in. Every step below no-ops silently rather than guessing; a no-op writes ONE proposal line in
+the checkpoint and nothing else.
+
+### 1. Resolve the manifest — never scaffold here
+
+```
+PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli resolve --repository <project root>
+```
+
+Prints one manifest stem at exit 0. **ANY non-zero exit is a no-op**, not an error to work around —
+`no manifest declared`, `ambiguous: <stems>`, or a verb this borg does not have yet. Write one line
+in the checkpoint naming the reason and move on.
+
+**Creation belongs to `/borg-plan`.** Never scaffold from link-up, never hand-write a manifest, and
+never re-run with different arguments to get a different answer. A repository with no manifest is a
+repository whose plan has not scaffolded one, and the proposal line is how that gets noticed.
+
+### 2. Derive the ref from `gh`, never from memory
+
+```
+gh pr view --json number,url --jq '"\(.url)"'
+```
+
+Derive `owner/repo#N` from the **production path** — the PR that `gh` reports for the current
+branch. Degraded `gh`, no PR for this branch, or a detached HEAD → **no row**, one proposal line.
+
+**The ref is never recalled from this session's own narrative.** A session that believes it opened
+#204 and actually opened #205 writes a row pointing at someone else's work, and `core.validate`
+cannot catch it because both are well-formed. If `gh` cannot say, the answer is no row.
+
+**Never write a stub row for a branch with no PR.** Not keyed on the branch name, not "upgraded
+later". `add-row` appends at the lane tail and `_stacked_edges` zips consecutive pairs, so next
+session's real PR would land *behind the stub as its child* — producing `ready = {'state': 'known',
+'refs': []}`, a confident empty answer, which is worse than an unknown one.
+
+### 3. Ref kinds this machine may author
+
+Only kinds this machine can **resolve**: in `refs.TRACKED_REF_KINDS` and carrying a resolver here —
+a discovered `recon-adapter-<source>`, or the built-in GitHub fetch. Step 2 derives from `gh`, so in
+practice that is `github`, which is the ruled scope.
+
+Never hand-author a `jira` or `link` ref into a row from this skill. A `link` is a reference, not
+tracked work. A `jira` key is tracked with no adapter on this machine, so it would wedge every row
+behind it **with no `▸ SIGNALS` line** — the silent-wedge this rule exists to prevent. Those stay
+hand-authored until an adapter exists.
+
+### 4. Add the row
+
+```
+PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli add-row \
+    --ref <owner/repo#N> --lane <lane> --why "<one line: what this PR does>"
+```
+
+`add-row` is append-or-update, so re-running in the same session for a ref already declared is the
+ordinary case, not an error. **`--lane` is a partition, and a typo forks the chain** — `--lane aplha`
+for `alpha` is accepted today and silently starts a second root at order 1. Reuse a lane name already
+in the manifest, verbatim; when in doubt omit `--lane` and take the default.
+
+### 5. Report it in the checkpoint
+
+Beside `## Criteria Reconciled`, in the same voice: what was written, or what was proposed and why.
+
+```markdown
+## Manifest Row
+
+**Wrote:** `owner/repo#N` → `<stem>` (lane `alpha`, order 3).
+
+or
+
+**No row.** `resolve` exited 1: `no manifest declared`. Proposal: `/borg-plan` scaffolds one, or run
+`python3 -m borg_core.manifest.cli scaffold --repository . --name <plan-slug> --desc "<objective>"`.
+```
+
 ## Save to disk
 
 After displaying the checkpoint, save it to `<project-root>/.borg/checkpoints/<timestamp>.md`.
