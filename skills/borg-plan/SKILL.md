@@ -117,9 +117,18 @@ project root (i.e. we are mid-plan, not starting from scratch), write the direct
 immediately below the H1 heading.
 
 `<plan-slug>` is the filename of `PROJECT_PLAN.md`'s eventual archived copy — the basename
-*without* the `.md` extension and without a leading path. If the plan does not yet have a final
-slug, derive it from the plan's `## Objective` line: lowercase, spaces → hyphens, strip special
-chars, prepend today's date in `YYYY-MM-DD` format. Example:
+*without* the `.md` extension and without a leading path. **Read it from the plan's
+`*Archived-as:*` line; never derive it.** The helper that Step 0.75 uses is the same one to use
+here:
+
+```
+source lib/promote-next.sh && _borg_plan_archive_slug PROJECT_PLAN.md
+```
+
+If that line is missing, the plan predates this rule — add it (see `## Output` below) and confirm
+the value with the developer before filing the directive. A derived slug writes a `*Parent plan:*`
+line no gate will ever match, which is exactly how eight directives came to be invisible to the
+check meant to find them. Example:
 
 ```
 # Directive: <title>
@@ -144,11 +153,27 @@ order; later files extend or override earlier ones.
 
 If neither exists, skip silently.
 
-After the conversation, write `PROJECT_PLAN.md` in the project root:
+After the conversation, write `PROJECT_PLAN.md` in the project root.
+
+**`*Archived-as:*` is the plan's own name for its archived copy, and it is chosen HERE — once, by a
+person, at plan time.** It is `<established-date>-<short-slug>`, where the short slug is a 3-6 word
+human condensation of the objective, not a slugification of it. Confirm it with the developer
+alongside the acceptance criteria. Every later consumer READS this line: `/borg-plan`'s own
+follow-up-directive section below, `/borg-assimilate` Step 0.75's child-directive gate, and Step 5's
+archival path. Omit it and Step 0.75 stops the assimilation rather than guessing.
+
+Why it is stored and not computed: an archived filename is a condensation, and there is no function
+from prose to condensation. Measured 2026-09-15 on this repository, the instruction to derive
+`<established-date>-<slugified-objective>` produced
+`make-borg-link-the-single-front-door-that-answers-from-a-clean-read-of-derived-fact-...` against a
+real slug of `2026-08-24-one-front-door-link-derived-fact-surface`. Three separate places carried
+that derivation, so the gate that searched and the step that wrote agreed with each other and
+disagreed with every file on disk.
 
 ```markdown
 # Project Plan: [Project Name]
 *Established: [date]*
+*Archived-as: [date]-[short-slug]*
 
 ## Objective
 [confirmed 1-2 sentences]
