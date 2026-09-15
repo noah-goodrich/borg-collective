@@ -172,6 +172,8 @@ disagreed with every file on disk.
 # Project Plan: [Project Name]
 *Established: [date]*
 
+- Plan-slug: `[date]-[short-hand-chosen-slug]`
+
 ## Objective
 [confirmed 1-2 sentences]
 
@@ -197,6 +199,36 @@ Estimated effort: [sessions/hours]
 - [Risk 1]
 - [Risk 2]
 ```
+
+### Declare the plan slug
+
+`- Plan-slug:` is the plan's **eventual archived filename without `.md`**, and it is DECLARED here
+because it cannot be derived. Choose it the way you would name the archive file: short, readable,
+hand-picked. Do not slugify the Objective — that produces a 268-character string on a real plan and
+matches nothing.
+
+This annotation is the plan's identity for every machine consumer, and `/borg-plan` is its **only
+writer**. Two already read it: `borg_core.manifest.cli resolve` (which manifest owns a session's
+row) and `/borg-assimilate` Step 0.75 (which child directives block shipping). A plan without it is
+a plan those gates cannot identify.
+
+### Scaffold the project manifest
+
+Immediately after writing `PROJECT_PLAN.md`, scaffold the manifest. Unconditional — not an offer,
+not a question, and not something the developer opts into:
+
+```
+command -v borg | xargs readlink -f | xargs dirname
+PYTHONPATH=<that dir> python3 -m borg_core.manifest.cli scaffold \
+    --repository <project root> --name <the Plan-slug> --desc "<the confirmed Objective, one line>"
+```
+
+- **`--name` is the `- Plan-slug:` you just declared**, byte for byte. Same string, same session.
+- **Never pass `--apex`.** A plan has no PR yet. Rows arrive at link-up, which is the ratified split.
+- **It never clobbers.** `scaffold` is idempotent: an existing manifest is reported at exit 0 and
+  left untouched. Re-running `/borg-plan` on a repository that already has one is the ordinary case.
+- **A non-zero exit is reported, never worked around.** Say what failed and carry on writing the
+  plan. Do not hand-write a manifest, and do not retry with a different `--name`.
 
 ## Local Extensions: 03-followup
 
