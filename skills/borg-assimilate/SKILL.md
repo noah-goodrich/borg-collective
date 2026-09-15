@@ -49,12 +49,32 @@ If tests or linting fail, that's a blocker — the project is not ready to ship.
 Before evaluating acceptance criteria, check whether any directives in `docs/plans/directives/`
 carry a `*Parent plan:*` line whose slug matches this plan.
 
-1. Derive the plan's slug: the intended archived filename without `.md`. If the slug is not yet
-   known, compute it as `<established-date>-<slugified-objective>` using the `*Established:*` date
-   and `## Objective` text from `PROJECT_PLAN.md`.
-2. Search `docs/plans/directives/*.md` for files containing `^\*Parent plan: <slug>\*` (the slug
-   only, not a path). Ignore `docs/plans/assimilated/` and `docs/plans/severed/` — those are
-   already resolved.
+**Do not derive the slug.** Run the helper; it reads the slug the plan states about itself:
+
+```
+source lib/promote-next.sh
+slug=$(_borg_plan_archive_slug PROJECT_PLAN.md) || {
+    echo "premise broken: PROJECT_PLAN.md has no *Archived-as:* line — add it before assimilating"
+    exit 1
+}
+_borg_child_directives docs/plans/directives "$slug"
+```
+
+`_borg_child_directives` prints one path per still-parented directive and exits 0 with zero or more
+lines; it exits **2** on an empty slug, which is "I could not check" and must never be read as
+"nothing to find". Only `docs/plans/directives/` is scanned — `assimilated/` and `severed/` are
+resolved by definition.
+
+**THE OLD INSTRUCTION HERE WAS TO COMPUTE THE SLUG AND IT COULD NOT WORK.** It said to derive
+`<established-date>-<slugified-objective>` from the `*Established:*` date and `## Objective` text.
+The archived filename is a human condensation of the objective and there is no function from one to
+the other. Measured 2026-09-15 on this repository: the objective slugifies to
+`make-borg-link-the-single-front-door-that-answers-from-a-clean-read-of-derived-fact-…`, the real
+slug is `2026-08-24-one-front-door-link-derived-fact-surface`, and the real slug appeared **zero**
+times in `PROJECT_PLAN.md`. So this gate searched for a string no directive carried, found nothing,
+and reported "no un-resolved child directives" — while **eight** directives named the plan. It did
+not fail; it certified. That is why the slug is now stored and a missing one is a loud premise
+failure rather than a silent pass.
 3. **If any matches are found**, stop immediately and report:
 
 ```
@@ -166,7 +186,11 @@ developer to resolve manually.
 ### Plan Archival Format
 
 When archiving PROJECT_PLAN.md:
-- Copy to `docs/plans/assimilated/<established-date>-<slugified-objective>.md`
+- Copy to `docs/plans/assimilated/<slug>.md`, where `<slug>` is the plan's **stored**
+  `*Archived-as:*` value — the same `_borg_plan_archive_slug PROJECT_PLAN.md` read Step 0.75 made.
+  Do NOT re-derive it from the objective: Step 0.75 gated on the stored slug, so archiving under a
+  derived one renames the plan out from under the eight directives that point at it, and the
+  `*Parent plan:*` lineage silently dangles.
 - Add `*Shipped: <today's date> — PR #<number> merged to main*` below the established date
 - Mark all acceptance criteria checkboxes as `[x]`
 - Append an "Additional Work Shipped" section if significant work happened beyond the criteria
