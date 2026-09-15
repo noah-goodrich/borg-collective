@@ -514,7 +514,21 @@ def plan_progress(text: str) -> tuple[int, int]:
     """
     total = 0
     met = 0
+    fenced = False
     for line in text.split("\n"):
+        # A FENCED BLOCK IS NOT CRITERIA. A plan that SHOWS a checkbox -- an example annotation, a
+        # quoted diff, a template a directive is proposing -- had every one of those counted as a real
+        # criterion, inflating `total` and understating progress on exactly the documents that explain
+        # the format. Found 2026-09-11 by running `borg_core.planstate` against the directive that
+        # specifies it: 10 criteria reported in a file with 9. `planstate.core.parse_criteria` carries
+        # the SAME guard and the two must stay in step -- a file where `borg link` says 3/10 and
+        # planstate says 3/9 has two truths in it, and the one that flips boxes would be the wrong one
+        # to be wrong.
+        if line.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if fenced:
+            continue
         if line.startswith("- ["):
             total += 1
             if line.startswith("- [x]"):
