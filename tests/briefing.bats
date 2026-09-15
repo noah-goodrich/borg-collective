@@ -160,7 +160,7 @@ EOF
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
 echo "Not logged in · Please run /login"
-exit 0
+exit 1
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
@@ -201,12 +201,18 @@ EOF
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
 echo "Not logged in · Please run /login"
-exit 0
+exit 1
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"narrative unavailable"* ]] || false
-    [[ "$output" == *"not logged in"* ]] || false
+    # THE AUTH ARM IS DISTINGUISHED BY ITS OWN SENTENCE, not by a machine-level claim. It used to
+    # assert "not logged in"; the message now says what it can establish -- claude reported an auth
+    # failure for THIS invocation -- and names the rc, which is 1 and not 0 as the old comment said.
+    [[ "$output" == *"reported an auth failure"* ]] || false
+    [[ "$output" == *"(rc 1)"* ]] || false
+    # And it must still be distinguishable from a generic exit, which is this case's whole point.
+    [[ "$output" != *"exited 1"* ]] || false
 }
 
 @test "briefing: successful LLM output prints no fallback-reason line" {
