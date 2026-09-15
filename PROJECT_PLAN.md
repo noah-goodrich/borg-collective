@@ -1,6 +1,13 @@
 # Project Plan: One Front Door — `borg link` as the Derived-Fact Surface
 *Established: 2026-08-24*
 
+- Plan-slug: `2026-08-24-one-front-door-link-derived-fact-surface`
+
+*The slug is DECLARED here, never re-derived from the Objective line above. One writer (`/borg-plan`
+at `02-output`); `borg_core.manifest.cli resolve` reads it. See AC5.9 of
+`docs/plans/directives/2026-09-12-ac5-lifecycle-skills-author-manifests.md` for why a `scaffold`
+stamp was measured to be a no-op and this annotation replaced it.*
+
 ## Objective
 
 Make `borg link` the single front door that answers, from a clean read of derived fact: what projects are in flight,
