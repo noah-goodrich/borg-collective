@@ -255,16 +255,21 @@ EOF
 }
 
 @test "claude -p not logged in headless -> claude-cli row is WARN, not FAIL" {
+    # EXITS 1, MEASURED against the real CLI 2026-09-15 (three runs of three). This mock said
+    # `exit 0` because borg's code claimed auth failure was invisible in the exit status; it is not.
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
 echo "Not logged in · Please run /login"
-exit 0
+exit 1
 EOF
     chmod +x "$MOCK_BIN/claude"
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
     [[ "$output" == *"claude-cli"*"WARN"* ]] || false
-    [[ "$output" == *"not logged in"* ]] || false
+    # The hint no longer asserts a machine-level cause. It reports what this invocation observed and
+    # names the rc; the "expected on some machines, not a bug to chase" clause is deliberately gone.
+    [[ "$output" == *"reported an auth failure"* ]] || false
+    [[ "$output" != *"not a bug to chase"* ]] || false
 }
 
 @test "claude -p exits nonzero -> claude-cli row is WARN with the exit code" {
