@@ -12,6 +12,17 @@ user-invocable: true
 Do the analysis yourself — read the plan, check the code, run git commands, and TELL the developer
 what you found. Don't ask them to self-assess. They called this because they've lost the thread.
 
+## Local Extensions: 01-context
+
+Before loading context, check for local extension files. Read each file below that exists, in order; later files
+extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-review/01-context.md` (per machine)
+2. `<project root>/.borg/skill-extensions/borg-review/01-context.md` (per project)
+
+If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
+
+
 ## Step 1: Load Context (silently)
 
 1. Read `PROJECT_PLAN.md` if it exists
@@ -52,6 +63,22 @@ and refocus / note for later / add to plan with timeline adjustment."
 
 **Energy drop** (shorter messages, repeated questions): "Momentum is dropping. Take a break or
 timebox: 15 more minutes, then ship what we have."
+
+## Local Extensions: 02-output
+
+Before settling on the single recommendation, check for local extension files. Read each file below that exists, in
+order; later files extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-review/02-output.md` (per machine)
+2. `<project root>/.borg/skill-extensions/borg-review/02-output.md` (per project)
+
+If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
+
+Fold any extension instructions into the recommendation. **There is deliberately no
+`03-followup` for this skill.** Its entire contract is that it ends on exactly ONE action, and a
+hook that runs after the recommendation invites a second — which is the failure mode the
+one-recommendation rule exists to prevent. If a machine needs post-review behaviour, it belongs in
+the skill the recommendation points at.
 
 ## Step 4: One Recommendation
 

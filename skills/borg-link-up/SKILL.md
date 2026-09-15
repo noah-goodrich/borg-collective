@@ -27,6 +27,17 @@ output, not session prose, so it is an appendix rather than a sixth peer, and le
 numbering means no existing section's number ever moves for a reader or a consumer. When there is
 nothing to reconcile the appendix is ABSENT, never present-and-empty (see "If absent, skip" below).
 
+## Local Extensions: 01-context
+
+Before composing the checkpoint, check for local extension files. Read each file below that exists, in order; later
+files extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-link-up/01-context.md` (per machine)
+2. `<project root>/.borg/skill-extensions/borg-link-up/01-context.md` (per project)
+
+If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
+
+
 ## 1. Goal
 What was the original objective of this session? One sentence.
 
@@ -231,6 +242,18 @@ or
 `python3 -m borg_core.manifest.cli scaffold --repository . --name <plan-slug> --desc "<objective>"`.
 ```
 
+## Local Extensions: 02-output
+
+Before writing the checkpoint file, check for local extension files. Read each file below that exists, in order; later
+files extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-link-up/02-output.md` (per machine)
+2. `<project root>/.borg/skill-extensions/borg-link-up/02-output.md` (per project)
+
+If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
+
+Fold any extension instructions into the checkpoint before saving it.
+
 ## Save to disk
 
 After displaying the checkpoint, save it to `<project-root>/.borg/checkpoints/<timestamp>.md`.
@@ -252,3 +275,16 @@ Use the Write tool. The file content should be the checkpoint exactly as display
 additional wrapper or header) — the five numbered sections always, plus the `## Criteria Reconciled`
 appendix if and only if it was displayed. Echo the saved path at the end of your response so the
 developer can `cat` it later.
+
+## Local Extensions: 03-followup
+
+After the checkpoint file lands, check for local extension files. Read each file below that exists, in order; later
+files extend or override earlier ones.
+
+1. `~/.config/borg/extensions/skill-extensions/borg-link-up/03-followup.md` (per machine)
+2. `<project root>/.borg/skill-extensions/borg-link-up/03-followup.md` (per project)
+
+If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
+
+If a follow-up action fails, report the failure but do not delete or rewrite the checkpoint —
+it is the session's record and a failed follow-up does not invalidate it.
