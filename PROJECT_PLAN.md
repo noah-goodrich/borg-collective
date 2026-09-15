@@ -1,6 +1,5 @@
 # Project Plan: One Front Door — `borg link` as the Derived-Fact Surface
 *Established: 2026-08-24*
-*Archived-as: 2026-08-24-one-front-door-link-derived-fact-surface*
 
 - Plan-slug: `2026-08-24-one-front-door-link-derived-fact-surface`
 

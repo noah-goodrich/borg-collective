@@ -8,7 +8,7 @@
 #   _borg_promote_next_candidates <directives_dir>
 #   _borg_promote_next_pointer <shipped_plan_file>
 #   _borg_promote_next_decide <directives_dir> [shipped_plan_file]
-#   _borg_plan_archive_slug <plan_file>                    -- Step 0.75
+#   _borg_plan_declared_slug <plan_file>                   -- Step 0.75
 #   _borg_child_directives <directives_dir> <slug>         -- Step 0.75
 
 # List top-level directive candidate slugs in a directory: every `<dir>/*.md` file with no
@@ -77,36 +77,48 @@ _borg_promote_next_decide() {
 # ── Step 0.75: un-resolved child directives ──────────────────────────────────────────────────────
 #
 # WHY THIS IS CODE AND NOT FOUR LINES OF PROMPT. Step 0.75 is the gate that blocks shipping a plan
-# while a directive parented to it is still open, and until now it lived only in
-# skills/borg-assimilate/SKILL.md as an instruction to "derive the plan's slug ... compute it as
-# `<established-date>-<slugified-objective>`". That derivation CANNOT produce the slug any directive
-# actually carries. Measured 2026-09-15 on this repository: the objective slugifies to
-# `make-borg-link-the-single-front-door-that-answers-from-a-clean-read-of-derived-fact-...`, the real
-# slug is `2026-08-24-one-front-door-link-derived-fact-surface` -- a human condensation -- and the
-# real slug appeared ZERO times in PROJECT_PLAN.md. So the gate searched for a string nothing carries,
-# found nothing, and reported "no un-resolved child directives" while EIGHT directives named the
-# plan. A gate that passes by measuring the wrong thing is worse than no gate: it certifies.
-
-# The slug a plan will be archived under, read from the plan rather than derived from its prose.
-# Args: <plan_file>
-# Prints the slug on stdout and returns 0; prints nothing and returns 1 when the line is absent.
+# while a directive parented to it is still open, and it lived only in skills/borg-assimilate as an
+# instruction to COMPUTE the parent-plan slug from the plan's own Objective prose. No computation can
+# produce it: the archived filename is a hand-written condensation. Measured 2026-09-15 on this
+# repository, the computed form ran 268 characters and the real slug is
+# `2026-08-24-one-front-door-link-derived-fact-surface`; the plan title does not yield it either,
+# because the real slug drops `borg` and `as-the`. So the gate searched for a string nothing carried,
+# found nothing, and was specified to "proceed to Step 1 without comment" -- while NINE directives
+# named the plan. A gate that passes by measuring the wrong thing is worse than no gate: it certifies.
 #
-# READ, NEVER DERIVED, and the failure is LOUD. The archived filename is a human condensation of the
-# objective -- there is no function from one to the other -- so the only correct source is the plan
-# stating its own slug. When it does not, this returns non-zero rather than guessing, because the
-# guess is what produced a silently passing gate. Callers must treat rc 1 as "cannot check", not as
-# "nothing to find".
-_borg_plan_archive_slug() {
+# The fix is a DECLARED slug: PROJECT_PLAN.md's `- Plan-slug:` annotation (AC5.9 of
+# docs/plans/directives/2026-09-12-ac5-lifecycle-skills-author-manifests.md, Ruling 1), written by
+# exactly one writer -- `/borg-plan` at `02-output` -- and read by everyone else.
+
+# The plan's DECLARED slug, read from its `- Plan-slug:` annotation. Never derived.
+# Args: <plan_file>
+# Prints the slug on stdout and returns 0; prints nothing and returns 1 when the annotation is
+# absent, empty, or unreadable.
+#
+# READ, NEVER COMPUTED, and the failure is LOUD. An archived filename is a condensation of an
+# objective and there is no function from prose to condensation, so the only correct source is the
+# plan declaring its own slug. When it has not, this returns non-zero rather than guessing, because
+# the guess is what produced a silently passing gate. Callers must treat rc 1 as "cannot check", not
+# as "nothing to find", and must name `- Plan-slug:` in the refusal so the reader knows what to add.
+#
+# `borg_core.manifest.cli resolve` is specified to read the SAME annotation (AC5.9) and does not
+# exist yet. When it lands, the two readers must accept the same forms -- the backtick-wrapped value
+# below is the form `/borg-plan` writes, and bare is accepted too. Two readers of one annotation is
+# the divergence AC7 exists to end; if they drift, converge them rather than widening either.
+_borg_plan_declared_slug() {
     local plan="$1" line
     [ -f "$plan" ] || return 1
     # `|| return 1` is a `set -e` SHIELD, not duplication of the `-n` check below: under `set -e`
     # a command substitution that exits non-zero aborts the whole shell at the assignment, so
-    # without it a plan with no `*Archived-as:` line kills the caller instead of returning 1.
+    # without it a plan with no annotation kills the caller instead of returning 1.
     # Measured: `bash -c 'set -e; l=$(grep -m1 zzz /dev/null); echo reached'` never reaches.
-    line=$(grep -m1 '^\*Archived-as:' "$plan" 2>/dev/null) || return 1
-    line="${line#\*Archived-as:}"
-    line="${line%\*}"
-    # Trim surrounding whitespace without a subshell.
+    line=$(grep -m1 '^- Plan-slug:' "$plan" 2>/dev/null) || return 1
+    line="${line#- Plan-slug:}"
+    # Trim, then unwrap the backticks `/borg-plan` writes, then trim what they hid.
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    line="${line#\`}"
+    line="${line%\`}"
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line%"${line##*[![:space:]]}"}"
     [ -n "$line" ] || return 1
