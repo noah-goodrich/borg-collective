@@ -61,9 +61,12 @@ a named reason on stderr and exits 1. The proposed rule, in order:
 1. `<root>/.borg/programs/` absent or empty → exit 1, `no manifest declared` (this is the
    **no-op-and-propose** path, not an error condition for the caller to work around).
 2. Exactly one manifest present → that stem.
-3. More than one → the stem matching the active plan's slug, derived from `PROJECT_PLAN.md`'s
-   eventual archived name the same way `/borg-plan` derives it.
-4. More than one and no slug match → exit 1, `ambiguous: <stems>`. Never a guess.
+3. More than one → the manifest whose `_id` equals the slug **declared** by `PROJECT_PLAN.md`'s
+   `- Plan-slug:` annotation (Ruling 1). `shell._load_manifest` already stamps `_id` — a declared
+   top-level `program` key verbatim, else the filename stem — so the manifest side of this rule
+   costs no schema change. The slug is **read, never re-derived**.
+4. More than one and no match, or no `- Plan-slug:` annotation → exit 1, `ambiguous: <stems>` /
+   `no plan slug declared`. Never a guess.
 
 `scaffold` keeps its `--name`, because at scaffold time there is nothing to resolve.
 
@@ -89,6 +92,10 @@ invocation style that step already established:
 2. Derive the ref from the **production path**: `gh pr view --json number` against the current
    branch, yielding `owner/repo#N`. Degraded `gh`, no PR for the branch, or a detached HEAD → no
    row, one proposal line. Identical discipline to planstate's `unknown` is not `fail`.
+   **No stub row is ever written for a branch without a PR** (Ruling 2). "This branch has commits
+   and no PR" is volatile session state, and this repo overlays that class rather than persisting
+   it — the reaper overlay, and CLAUDE.md's cairn lesson. It is derived at READ time as one
+   `▸ SIGNALS` line and never reaches the manifest.
 3. `add-row --ref <ref> --lane <lane> --why "<one line>"`. Already append-or-update, so a re-run in
    the same session for a ref already declared is the ordinary case, not the exceptional one.
 4. Report what was written in the checkpoint, beside `## Criteria Reconciled`.
@@ -198,6 +205,10 @@ the fixture builder produces a manifest-carrying repo and a manifest-less one th
       and N1 goes red; make `/borg-link-up` scaffold when `resolve` exits 1 and N2 goes red; make
       `/borg-assimilate` fall back to `add-row` and N3 goes red.
     - Verify: the three mutations, run and recorded in the PR body.
+    - **AC5.4 is held to its own standard.** §5 demands the harness's negatives be proven by
+      mutation; AC5.4 previously proved N1 and N3 that way and left N2 to prose. `floor-tests.sh`
+      carries a case proving **N2 can fail**: a fixture in which link-up scaffolds where no manifest
+      was declared must turn N2 red. A negative nothing can fail is not a gate.
 - [ ] AC5.5 — `evals/lifecycle-manifests/floor-tests.sh` is green, needs no model, and runs on the
       same CI leg as the rest of the suite. Each guard is exercised in both directions.
     - Verify: `bash evals/lifecycle-manifests/floor-tests.sh` at rc 0 in the `test` job.
@@ -205,6 +216,21 @@ the fixture builder produces a manifest-carrying repo and a manifest-less one th
       turn it red by rejecting a flag it is handed.
     - Verify: `make eval` at rc 0; `make eval-live` at rc 0 with zero skips on a machine holding no
       repository other than this one.
+- [ ] AC5.8 — `core._validate_row` learns about `lane`. Whoever fills the field, it is unguarded
+      today, and a transposed letter forks the chain into a second root (Ruling 3). The validator
+      rejects a row whose `lane` is not among the lanes already declared by the manifest, so the
+      first lane in a file is free and every later row must name an existing one.
+    - Verify: pytest — a row naming a declared lane validates; a row naming an undeclared lane is
+      rejected by name; a manifest with no `lane` anywhere is untouched (single-stack mode).
+    - Note: expand → migrate → contract. The two hand-authored manifests and the three
+      `merge-tree/fixtures/` manifests are checked against the new rule BEFORE it tightens; any that
+      fail are migrated in the expand commit, not after.
+- [ ] AC5.9 — `PROJECT_PLAN.md` carries a machine-readable `- Plan-slug:` annotation, and `resolve`
+      reads it (Ruling 1). Exactly one writer: `/borg-plan` at `02-output`, beside the
+      `PROJECT_PLAN.md` write it already performs.
+    - Verify: pytest over the reader — annotation present, absent, and malformed; plus an assertion
+      that `resolve` never re-derives a slug from the Objective line.
+    - Evidence: `pytest:borg_core/manifest/test_cli.py`
 - [ ] AC5.7 — Nothing breaks. `make test` green at its coverage floor, `make lint` at 10.00/10,
       `bats tests/` green, `shellcheck` clean over `evals/*/*.sh`.
 
@@ -271,24 +297,80 @@ minutes, plus three deliberate mutation runs on top.
   GitHub. That gap is deliberate — the alternative is a case requiring a live PR, which is the
   "names a repository" premise this harness is forbidden from having — but it should be stated in
   the harness header rather than discovered later.
-- **`resolve` rule 3 depends on the plan slug, which is derived, not stored.** `/borg-plan` derives
-  the slug from the Objective line and nothing writes it down. If the Objective is edited after
-  scaffold, rule 3 stops matching and `resolve` falls to rule 4 (`ambiguous`) — which proposes rather
-  than guesses, so it degrades safely, but a repository with several manifests would go quietly
-  un-updated. Worth considering whether `scaffold` should stamp the slug into the manifest itself.
+- ~~**`resolve` rule 3 depends on the plan slug, which is derived, not stored.**~~ **Closed by
+  Ruling 1**, and not in the direction this Risk proposed. A `scaffold` stamp is a measured no-op:
+  `scaffold --name <plan-slug>` writes the stamp and the filename as the same string in the same
+  call, so under the exact drift named here — Objective edited after scaffold — **both sides miss**.
+  The stem *is* already stored state; what drifts is the slug, which no manifest key can reach. The
+  slug is therefore declared where it is authored, in `PROJECT_PLAN.md`.
+- **The `lane` field is unguarded, and that is a live defect, not an AC5 risk.** `_validate_row`
+  does not mention `lane`. A one-letter typo (`--lane aplha`) is accepted, silently forking the
+  chain into a second root and restarting ordering at 1. Reproduced on the work machine. See
+  AC5.8.
 
-## Open questions for the evaluator
+## Rulings (answered 2026-09-15, work machine —
+[#199](https://github.com/noah-goodrich/borg-collective/pull/199) review)
 
-Flagged rather than decided, because each changes the shape of the work:
+All three questions below were referred to the evaluator and are now **closed**. Each ruling landed
+outside the dichotomy as posed, and each was put through a blind adversarial review that returned
+**not-uphold** on the first draft — so none of the three is the answer the council started with.
+Method: four in-tree investigation tracks, 101 measured findings.
 
-1. **Should `scaffold` stamp its own stem into the document** so `resolve` rule 3 matches on stored
-   state rather than a re-derivation? It is one more key and it removes the last Risk above — but it
-   is also a schema change, which means expand → migrate → contract over two existing hand-authored
-   manifests.
-2. **Does `/borg-link-up` add a row for a branch with no PR yet?** The proposal says no (no ref, no
-   row, one proposal line). The alternative — a row keyed on the branch name, upgraded to a PR ref
-   later — would declare work earlier, at the cost of `core.validate` no longer being able to check
-   that a row points at something real.
-3. **Is the lane derivable, or does the model choose it?** The proposal passes `--lane` from the
-   session's own judgment, which is the one place in this directive where a model still volunteers a
-   value into a validated document. `core.DEFAULT_LANE` is the conservative alternative.
+**A premise this directive supplied was wrong and is corrected here.** It argued from "all 5
+manifests carry `program`, and in 5/5 it equals the filename stem." There are **8** manifest-shaped
+files and **2 mismatch** — `merge-tree/fixtures/programs/three-repo-program.json` (`program`
+`auth-hardening`, stem `three-repo-program`) and
+`docs/plans/directives/2026-08-18-program-manifests-stack.json` (`program` absent). The mismatch is
+deliberate and pinned by `test_a_manifest_whose_filename_differs_from_its_program_rewrites_in_place`,
+whose comment records the bug it prevents: writing back via a program-derived name spawned a second
+file — "two copies of one program that then diverge silently."
+
+**Ruling 1 — `scaffold` does NOT stamp its stem.** Not because rule 4 degrades safely, but because
+the stamp is a **measured no-op**: both sides miss under the drift the Risk named. Rule 3's
+population is also zero — across 22 registered repositories, **1** has any manifest and **0** has
+more than one. The slug is stored where it is authored, as a `PROJECT_PLAN.md` annotation with one
+writer, and `resolve` reads `_id`, which `shell._load_manifest` stamps for free. See AC5.9.
+
+**Ruling 2 — no row for a branch with no PR, and no stub row ever.** Horn (b) of the question was
+not a live option: a branch name is a ref in **none** of the three vocabularies, so "upgraded later"
+requires a **fourth ref kind** — a full expand → migrate → contract on the one validator AC7 exists
+to unify. Worse, the append path is a time bomb: `add-row` appends at the lane tail and
+`_stacked_edges` zips consecutive pairs, so next session's real PR lands **behind the stub as its
+child**. Measured across two sessions the result is `ready = {'state':'known','refs':[]}` — a
+*confident* empty answer, which is worse than an unknown one. Derived at read time instead; see §3.
+
+**Ruling 3 — neither horn. Derivability is settled negatively, and the question missed the defect.**
+Repo-derived lanes on the live multi-lane shape lose 9 declared edges, invent 7 never declared, and
+double the READY set from 2 refs to 4. Not derivable from `why` either: 0/6, 0/6 and 0/14 rows
+contain their own lane name. But the real finding is that the field is **unguarded whoever fills
+it** — hence AC5.8, which is the settled half.
+
+**One sub-question is deliberately left open, and is Noah's call, not a model's.** `lane` does two
+unrelated jobs: the **partition** (its one mechanical effect — a second root) and the **name**
+(printed nowhere, yet `core.lanes` returns `sorted()` order, so the name silently decides
+left-to-right column order). Two jobs, two different right answers; splitting the field is a
+schema change and is NOT in this directive's scope. AC5.8 guards the field as it stands today.
+
+**Provenance note.** The blind reviewer reported that with a stub row swept open the page prints
+`● n2 svc#4` — "start this now" — for a PR fourth in line behind three unmerged parents. The work
+machine **did not reproduce that render** (it needs a swept state it did not set up); the lane fork
+above *was* reproduced there. Both point the same way, and at the claim three shipped docstrings
+already refuse — `grid.ready_refs`: *"lights `●` ('start this now') off a field nobody verified."*
+
+## Dependency, now satisfied
+
+This directive's §3 insertion point ("between the criteria reconciliation step and the disk write")
+existed on exactly one unmerged branch when it was written, and §"What this does NOT change" made a
+**present-tense claim about it** — the shape AC6 spent nine decisions removing. Measured at the time:
+`skills/borg-link-up/SKILL.md` carried 0 planstate refs on `main` and 2 on `feat/planstate-writer`.
+[#198](https://github.com/noah-goodrich/borg-collective/pull/198) merged 2026-09-15 as `0b92bf3`, so
+`borg_core/planstate` and `2026-09-09-link-up-criteria-reconciliation.md` are now on `main` and the
+claim is true as written. Recorded rather than deleted: the claim was false when made.
+
+## Found on the way, filed separately
+
+The same slug derivation has **two shipped consumers** in `/borg-assimilate` Step 0.75, where it
+fails as a **silent PASS** rather than a proposal: 8 directives carry
+`2026-08-24-one-front-door-link-derived-fact-surface` and nothing in the tree derives that string
+from an Objective line. **This is broken today, independent of AC5**, and is explicitly NOT in this
+directive's scope — it needs its own directive.
