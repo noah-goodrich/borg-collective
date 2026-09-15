@@ -42,7 +42,7 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (12): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (13): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
   bash-guard, borg-dispatch-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
@@ -163,6 +163,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
     paths.py                Config-path resolution + defaults (the CLI's `_borg_py` mirror)
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
+    extensions/             Local-extension resolution: layer precedence, prefer-tool, liveness
     manifest/               Reader for <project>/.borg/programs/*.json program manifests
     link/                   `borg link` document build + renderer
         core.py             Registry/plan/checkpoint reads, scope resolution, relative time
@@ -179,6 +180,7 @@ hooks/
     bash-guard.sh           PreToolUse (Bash) → destructive-pattern hard-block + RO pre-approval
     borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log
     borg-dispatch-guard.sh  PreToolUse (Agent/Workflow) → >=92% usage hard-stop veto (default-OFF)
+    borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
@@ -215,6 +217,7 @@ launchd/
     com.stillpoint-labs.borg.usage-watch.plist   LaunchAgent: borg-usage-watch (usage guardian sweep)
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)
+    extensions.md           Local extensions: layers, load points, the prefer-tool type
     plans/assimilated/      Shipped plans for borg-collective itself (per-project convention)
     plans/directives/       Backlog for borg-collective itself; every project owns its own
     ...
@@ -290,17 +293,54 @@ docs/
   loop, set an explicit ceiling (max spawns / max iterations) up front and stop when hit. Never
   rely on judgment to exit loops — explicit stopping conditions only (e.g., `MAX_RETRIES=3`
   declared before the loop; hard-stop with a failure summary when reached).
-- **Skill extensions (v1, may evolve)**: `borg-plan` and `borg-assimilate` read markdown extension
-  files at three load points — `01-context` (start), `02-output` (before artifact), `03-followup`
-  (after artifact). At each point both paths are read in order:
-    1. `~/.config/borg/extensions/skill-extensions/<skill>/<hook>.md` (per machine)
-    2. `<project>/.borg/skill-extensions/<skill>/<hook>.md` (per project, layered after machine)
-  Missing files are skipped silently. Markdown only — no executable scripts. One file per hook;
-  if multiple integrations land on one machine, merge manually. Keep extension files terse — they
-  load on every invocation. Example: drop a `01-context.md` for `borg-plan` on the work machine
-  that says "Ask which JIRA ticket this work targets, then read it via `acli jira workitem view`
-  and use its description as the plan source." On a personal machine, the file doesn't exist and
-  `/borg-plan` behaves exactly as it always did.
+- **Local extensions — the canonical reference is `docs/extensions.md`**, which supersedes the
+  summary that used to live here. Two layers, read in order, missing files skipped silently:
+    1. `~/.config/borg/extensions/<kind>/<subject>/<hook>.md` (per machine)
+    2. `<project>/.borg/<kind>/<subject>/<hook>.md` (per project)
+  `<kind>` is `skill-extensions` or `agent-extensions`. Markdown only, no executable scripts. Keep
+  them terse — they load on every invocation of their subject.
+  **Skills get three hook points** (`01-context` before work, `02-output` before the artifact,
+  `03-followup` after it): `borg-plan`, `borg-assimilate`, `borg-link-up`, and `borg-review` —
+  except `borg-review` has **no `03-followup` on purpose**, because its whole contract is to end on
+  exactly ONE action and a post-recommendation hook invites a second. The three names are generic
+  positions, not planning-specific moments, which is why the same three fit a planning conversation
+  and a shipping checklist; `borg-assimilate` was the worked precedent for that before the loader
+  was generalized.
+  **Agents get ONE**, and a different noun. `borg-nanoprobe` reads
+  `agent-extensions/borg-nanoprobe/brief.md` before its scope gate. An agent has no phases — it has
+  a brief consumed once at spawn, a scope gate and a return contract, so there is no "before the
+  artifact" moment to hook and two more load points would be seams nothing sits at. **The scope gate
+  is NOT extensible**: an extension may add instructions, never widen what the agent may touch,
+  raise its deliverable ceiling, or relax bounded termination.
+- **`prefer-tool` extensions, and the one precedence rule**: a file carrying `- Prefer-tool:`
+  declares "use tool X instead of the default" (`- Instead-of:` names the default, `- Requires:`
+  names `command:<n>` or `skill:<plugin>:<n>` that must exist). Everything without that key is
+  prose, so every pre-existing extension parses unchanged. Keys are anchored on the leading `- `,
+  because an extension file is prose that will often DISCUSS its own keys and an unanchored match
+  returns the sentence doing the discussing — the same hazard as `- Plan-slug:`.
+  Precedence is ONE rule, not a per-type exception: **the layer that owns the fact wins.** Project
+  policy is the project's, so prose keeps the existing repo-wins behaviour; the environment is the
+  machine's, so `prefer-tool` inverts it and the MACHINE layer wins. This repo is public and was
+  history-scrubbed once for employer references, so a checked-in file must never override a personal
+  machine's tool choice. A future type inherits the rule by answering: who owns the fact?
+  **It advises in prose and never redirects a call** — silently rewriting what runs would break
+  "skills propose, the developer validates" and its failure mode would be invisible. Escalation, if
+  advice proves insufficient, is a `PreToolUse` WARNING (the surface `bash-guard.sh` occupies),
+  never a rewrite. An absent tool degrades to the default **loudly once**: `borg doctor` prints dead
+  and unprobed preferences in yellow and does **not** fail over them, because a preference naming a
+  plugin this machine lacks is a normal state and a check that cries wolf gets ignored. A
+  `prefer-tool` file with no parseable `- Requires:` is reported `unprobed`, **not** live — it opted
+  out of being checked and must not read as working.
+  **The oracle measures BYPASSES ONLY.** `hooks/borg-prefer-tool-log.sh` (PostToolUse/Bash) logs to
+  `~/.config/borg/prefer-tool.jsonl` when a shell command matches a LIVE preference's
+  `- Instead-of:`. Invoking the preferred *skill* is not a Bash call, so compliance events are
+  unobservable there; nothing computes a ratio, because calling this a "compliance rate" would be
+  the same overclaim as a gate that passes by measuring nothing. It exists at all because the cairn
+  entry below measured what uninstrumented voluntary compliance is worth. The hook delegates to
+  `borg_core.extensions.cli` rather than reimplementing precedence in bash (a second reader is the
+  divergence AC7 ends), resolves the package script-relative or via `$BORG_ROOT`, and **no-ops when
+  neither is present** — so an empty log in a plugin-only install means "not instrumented", not
+  "no bypasses".
 - **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
   `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
   `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS` — with **no branch on

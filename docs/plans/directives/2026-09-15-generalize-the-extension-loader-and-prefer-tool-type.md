@@ -22,13 +22,21 @@ Three, all measured before scoping. None of them kills the ask; two change its s
    by mapping them to positions in its own flow rather than to planning moments: `01-context` = before any work,
    `02-output` = before the artifact, `03-followup` = after it. The names are generic already. So the
    generalization to `borg-link-up` / `borg-review` is a transcription, not a design problem.
-3. **The motivating tool cannot be found on this machine in any form.** Measured: `dev-workflow` appears nowhere
-   under `~/.claude/plugins` (maxdepth 5), no file under `~/.claude/plugins/cache` contains the string `create-pr`,
-   and no file anywhere in the cache contains `pr_default_draft`. The peer correctly flagged that the plugin is not
-   in `~/.claude/plugins/marketplaces/` (which holds two unrelated marketplaces) — the stronger statement is that
-   the named skill, its stated version, and its stated userConfig boolean are all **unverified**, not merely
-   uninstalled. The directive therefore must not encode that interface as a known-good example, and Q3 below stops
-   being an edge case and becomes the default case.
+3. **The motivating tool is real and documented; it is simply not installed. My own first correction here was
+   wrong.** I searched `~/.claude/plugins` (the *install* tree), found no `dev-workflow`, no `create-pr` and no
+   `pr_default_draft`, and wrote that the skill, its version and its userConfig boolean were all "unverified". That
+   was an overreach produced by searching the wrong tree. `claude-marche` is a **directory** marketplace whose source
+   is `~/dev/claude-marche`, and the local checkout was **52 commits behind** `origin/main`. The plugin was in the
+   source the whole time. Verified after syncing: `dev-workflow` is at **2.8.1**, `skills/create-pr/SKILL.md`
+   exists, and `pr_default_draft` is a declared `boolean` userConfig with a default of `false`, documented in the
+   plugin's own README and honoured by the skill with conversation overrides winning. The peer's description was
+   accurate on every substantive point.
+
+   What survives is the narrower true statement, which is still the one that matters for design: it was **not
+   installed**. It is now (`claude plugin install dev-workflow@claude-marche`, scope user) — so the absence case is
+   no longer this feature's first instance. It remains worth designing for, because a `prefer-tool` extension is
+   machine-local by construction and will routinely name something a given machine lacks. But the argument must
+   rest on that, not on the tool's interface being doubtful. It is not doubtful.
 
 ## Why this carries no `*Parent plan:*` line
 
@@ -133,7 +141,8 @@ cannot be chatty. Proposal — report a conflict only when two layers both asser
 
 ## Ask 3 / Q2 — when the preferred tool is absent
 
-This is the default case, not the edge case, per correction 3.
+Not the first instance any more — `dev-workflow` is installed as of filing — but structurally routine, because a
+`prefer-tool` extension is machine-local by construction and will name tools a given machine lacks.
 
 **Degrade to the default, loudly, once.** Not silently — a dead preference that no one is told about is worse than no
 preference, because it reads as working. Not fatally — a missing personal plugin must never break PR creation.
