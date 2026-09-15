@@ -119,6 +119,16 @@ allowed_prefixes = ["borg_core", "__future__"]
 # allow-list already permits `pathlib`, `json` and `datetime`, so an exact-ROOT set is what blocks
 # the impurity the linter would wave through, including the aliased `from pathlib import Path as P`
 # spelling a name blacklist misses.
+#
+# `borg_core/planstate/core.py` NEEDED NO NEW ENTRY, and that is worth saying rather than leaving
+# for someone to rediscover: the map is keyed by BASENAME, so `core.py` already classifies every
+# package's pure module, present and future. The package's impure siblings (`shell.py`, `derive.py`,
+# `cli.py`) are unclassified on purpose, exactly as `link/shell.py` and `link/cli.py` are. The
+# hazard the `picture.py` and `render.py` paragraphs describe therefore does not apply here -- but
+# the SECOND gate does: `borg_core/planstate/test_core.py` walks that module's imports by AST and
+# pins an exact root set, because W9004's allow-list would wave through a `pathlib` or `json` import
+# that has no business in a module whose whole claim is that a plan file cannot reach a subprocess
+# through it.
 [tool.clean-arch.module_map]
 Domain = ["across.py", "core.py", "errors.py", "grid.py", "picture.py", "refs.py", "render.py"]
 
