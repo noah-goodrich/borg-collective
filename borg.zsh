@@ -50,10 +50,18 @@ BORG_CORTEX_WAKES="${BORG_CORTEX_STATE:-$BORG_DIR/cortex-wakes.json}"
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 # Run a command with a timeout, falling back gracefully if `timeout` is unavailable.
+# GNU `timeout` IS `gtimeout` ON macOS, AND CHECKING ONLY ONE NAME MEANT NO BOUND AT ALL HERE.
+# coreutils installs it prefixed; macOS ships neither by default. Verified 2026-09-15 on the machine
+# of record: both absent, so every caller fell through to `"$@"` and ran unbounded while the code
+# read as though it had a timeout. Every other harness in this tree checks `gtimeout` first; this
+# helper did not. The fall-through is KEPT deliberately -- a missing timeout binary must not make
+# `borg link` unusable -- but it is now the third rung rather than the second.
 _borg_timeout() {
     local secs=$1; shift
     if command -v timeout &>/dev/null; then
         timeout "$secs" "$@"
+    elif command -v gtimeout &>/dev/null; then
+        gtimeout "$secs" "$@"
     else
         "$@"
     fi
@@ -1276,8 +1284,17 @@ EOF
         # path being taken with NO indication of why is the defect this whole function exists to fix.
         local claude_rc=0
         local claude_stderr_file="$BORG_DIR/briefing-stderr.log"
+        # NO `--bare` HERE, AND THAT IS THE WHOLE BUG THIS LINE ONCE HAD. `claude --help` lists what
+        # the flag skips: "hooks, LSP, plugin sync, attribution, auto-memory, background prefetches,
+        # KEYCHAIN READS". On macOS the credential IS a Keychain-only OAuth token, so `--bare` asked
+        # claude to skip reading the only thing that could authenticate it. Measured 2026-09-15 on the
+        # machine of record, same user, seconds apart: with `--bare`, rc 1 and stdout
+        # `Not logged in · Please run /login`, three runs out of three; without it, rc 0 and a normal
+        # completion. The credentials were never missing — borg disabled its own access to them, then
+        # reported the machine as having none. Do not re-add it to make this call cheaper; there is no
+        # narrower flag, `--bare` bundles hooks and keychain together.
         briefing=$(_borg_timeout 20 claude -p "$briefing_prompt" \
-            --model claude-haiku-4-5-20251001 --no-session-persistence --bare 2>"$claude_stderr_file") \
+            --model claude-haiku-4-5-20251001 --no-session-persistence 2>"$claude_stderr_file") \
             || claude_rc=$?
         local claude_stderr=""
         [[ -s "$claude_stderr_file" ]] && claude_stderr=$(<"$claude_stderr_file")
@@ -1288,8 +1305,19 @@ EOF
             fallback_reason="claude -p timed out after 20s"
             briefing=""
         elif [[ "$briefing" == *"Not logged in"* ]]; then
-            # claude exits 0 on auth failure — the string match is the only signal.
-            fallback_reason="claude not logged in (headless CLI has no usable credentials on this machine)"
+            # THIS ARM NO LONGER OUTRANKS THE rc TEST FOR THE REASON IT USED TO. Its old comment said
+            # "claude exits 0 on auth failure -- the string match is the only signal", and that was
+            # measured false on 2026-09-15: claude exits 1, three runs of three. So the rc arm below
+            # would have caught it and said `exited 1`, accurately. The string match is kept because
+            # it is the only thing that distinguishes an AUTH failure from any other non-zero exit,
+            # which is a more useful sentence for the reader -- not because rc is silent.
+            #
+            # AND THE MESSAGE NO LONGER ASSERTS A MACHINE-LEVEL CAUSE. It used to read "headless CLI
+            # has no usable credentials on this machine", which was a claim about the host derived
+            # from one string in one subprocess's stdout -- and it was false: the credentials worked,
+            # `--bare` was skipping the keychain read. What this arm can honestly establish is that
+            # claude reported an auth failure for THIS invocation, and that is now what it says.
+            fallback_reason="claude -p reported an auth failure (rc $claude_rc) — try 'claude /login'"
             briefing=""
         elif [[ $claude_rc -ne 0 ]]; then
             fallback_reason="claude -p exited $claude_rc"
@@ -2570,14 +2598,21 @@ cmd_doctor() {
     printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "CHECK" "REG" "EXIT" "FRESH" "STATUS"
     printf '%0.s─' {1..70}; echo
     local narrative_out narrative_rc=0 narrative_hint="" narrative_status="OK" narrative_color="$GREEN"
+    # NO `--bare`, for the reason given at the briefing invocation: it skips keychain reads, which on
+    # macOS is the only place the credential lives. With it, this check reported WARN "not logged in"
+    # on a machine whose credentials work — a health check certifying its own misconfiguration.
     narrative_out=$(_borg_timeout 10 claude -p "say ok" --model claude-haiku-4-5-20251001 \
-        --no-session-persistence --bare 2>&1) || narrative_rc=$?
+        --no-session-persistence 2>&1) || narrative_rc=$?
     if [[ $narrative_rc -eq 124 ]]; then
         narrative_status="WARN"; narrative_color="$YELLOW"
         narrative_hint="claude -p timed out — 'borg link --brief' will fall back to the borg link document"
     elif [[ "$narrative_out" == *"Not logged in"* ]]; then
         narrative_status="WARN"; narrative_color="$YELLOW"
-        narrative_hint="claude not logged in headless (Keychain-only OAuth token on macOS) — expected on some machines, not a bug to chase; 'borg link --brief' falls back to the borg link document"
+        # NO "expected on some machines, not a bug to chase" CLAUSE. It used to be here, and it was a
+        # documentation-level instruction to stop investigating a one-flag self-inflicted failure --
+        # `--bare` skipping the keychain. It survived weeks because it made a real defect read as
+        # ambient. If this WARN fires now, the credentials really are absent and it IS worth chasing.
+        narrative_hint="claude -p reported an auth failure (rc $narrative_rc) — run 'claude /login'; 'borg link --brief' falls back to the borg link document"
     elif [[ $narrative_rc -ne 0 ]]; then
         narrative_status="WARN"; narrative_color="$YELLOW"
         narrative_hint="claude -p exited $narrative_rc — 'borg link --brief' will fall back to the borg link document"
