@@ -125,3 +125,79 @@ _mk_shipped() {
     [ "$status" -eq 0 ]
     [ "$output" = "AUTO only-candidate" ]
 }
+
+# ── Step 0.75: the child-directive gate ──────────────────────────────────────────────────────────
+# These cover the defect measured 2026-09-15: Step 0.75 derived a slug from the objective prose,
+# which cannot produce the human-condensed archived filename, so the gate found 0 children where 8
+# existed and reported success. Each behaviour is pinned in the firing direction AND the direction
+# that proves it discriminates.
+
+@test "step075: the slug is READ from the plan, not derived from its objective" {
+    local plan="${BATS_TEST_TMPDIR}/PROJECT_PLAN.md"
+    printf '# Project Plan\n*Established: 2026-08-24*\n*Archived-as: 2026-08-24-one-front-door*\n\n## Objective\n\nMake borg link the single front door that answers from a clean read of derived fact.\n' > "$plan"
+    source "$LIB"
+    run _borg_plan_archive_slug "$plan"
+    [ "$status" -eq 0 ]
+    [ "$output" = "2026-08-24-one-front-door" ]
+    # The objective would slugify to something else entirely; the point is it is never consulted.
+    [[ "$output" != *"make-borg-link"* ]] || false
+}
+
+@test "step075: a plan with no *Archived-as:* line FAILS LOUD instead of returning a guess" {
+    local plan="${BATS_TEST_TMPDIR}/PROJECT_PLAN.md"
+    printf '# Project Plan\n*Established: 2026-08-24*\n\n## Objective\n\nSomething.\n' > "$plan"
+    source "$LIB"
+    run _borg_plan_archive_slug "$plan"
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+@test "step075: an empty slug is rc 2, never zero matches" {
+    _mk_child child-a 2026-08-24-real-slug
+    source "$LIB"
+    run _borg_child_directives "$DIR" ""
+    [ "$status" -eq 2 ]
+    [ -z "$output" ]
+    # Discriminates: the same directory WITH the slug finds the child.
+    run _borg_child_directives "$DIR" 2026-08-24-real-slug
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"child-a.md"* ]] || false
+}
+
+@test "step075: only directives parented to THIS slug are returned" {
+    _mk_child mine   2026-08-24-real-slug
+    _mk_child theirs 2026-01-01-other-plan
+    _mk_top_level unparented
+    source "$LIB"
+    run _borg_child_directives "$DIR" 2026-08-24-real-slug
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"mine.md"* ]] || false
+    [[ "$output" != *"theirs.md"* ]] || false
+    [[ "$output" != *"unparented.md"* ]] || false
+}
+
+@test "step075: a slug that is a PREFIX of another does not match it" {
+    # `2026-08-24-front` must not match `*Parent plan: 2026-08-24-front-door*`.
+    _mk_child longer 2026-08-24-front-door
+    source "$LIB"
+    run _borg_child_directives "$DIR" 2026-08-24-front
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "step075: a missing directives dir is zero children, not an error" {
+    source "$LIB"
+    run _borg_child_directives "${BATS_TEST_TMPDIR}/absent" 2026-08-24-real-slug
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
+@test "step075: the missing-dir guard survives zsh NOMATCH (pins what bash cannot)" {
+    command -v zsh >/dev/null || skip "zsh not installed"
+    # Under zsh an unmatched glob is FATAL, so this is the only interpreter in which deleting
+    # `[ -d "$dir" ] || return 0` is observable. Verified by mutation: removing that line makes
+    # this case fail with `no matches found` while all bash cases stay green.
+    run zsh -c "emulate -L zsh; set -e; source '$LIB'; _borg_child_directives '${BATS_TEST_TMPDIR}/absent' a-slug"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
