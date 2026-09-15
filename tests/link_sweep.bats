@@ -811,19 +811,22 @@ MOCK
 @test "sweep: --brief renders the document when claude is not logged in" {
     _sweepable_repo
     local dir="${BATS_TEST_TMPDIR}/ws/sierra"
-    # EXITS 0. The auth failure is invisible in the exit status, which is why the string match is
-    # this branch's only signal and why it must sit ABOVE the rc test in the ladder.
+    # EXITS 1, MEASURED. This mock said `exit 0` and carried a comment claiming the auth failure was
+    # invisible in the exit status. Measured 2026-09-15 against the real CLI: rc 1, three runs of
+    # three. So the rc arm would have caught it; the string match sits above it to give the reader a
+    # more specific sentence, not because rc is silent. The mock now matches the CLI it stands in for.
     cat > "$MOCK_BIN/claude" <<'MOCK'
 #!/usr/bin/env bash
 echo "Not logged in · Please run /login"
-exit 0
+exit 1
 MOCK
     chmod +x "$MOCK_BIN/claude"
 
     run bash -c "cd '$dir' && zsh '$BORG' link --local --brief"
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
-    [[ "$output" == *"not logged in"* ]] || false
-    # The raw provider string must not reach the page; only borg's own lowercase paraphrase does.
+    [[ "$output" == *"reported an auth failure"* ]] || false
+    # The raw provider string must not reach the page; only borg's own paraphrase does. That rule is
+    # why the message is "reported an auth failure (rc N)" rather than quoting `Not logged in` back.
     [[ "$output" != *"Not logged in"* ]] || false
     _assert_brief_fallback_document
 }
