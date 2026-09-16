@@ -1,6 +1,7 @@
 # Directive: The Directive-State Deriver
 
-*Filed: 2026-08-20 · Status: Proposed · Parent: 2026-08-20-communication-program.md*
+*Parent plan: 2026-08-20-communication-program*
+*Filed: 2026-08-20 · Status: Proposed*
 
 **tl;dr** — 36 of 109 open directives are already done and nothing records it; 97% of checkpoints restate
 plan position by hand. Derive every directive's status mechanically from evidence git already holds, and

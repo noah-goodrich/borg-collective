@@ -1,6 +1,7 @@
 # Directive: Comms Delivery Surfaces
 
-*Filed: 2026-08-20 · Status: Proposed · Parent: 2026-08-20-communication-program.md*
+*Parent plan: 2026-08-20-communication-program*
+*Filed: 2026-08-20 · Status: Proposed*
 
 **tl;dr** — There is no standard way to put a document beside the conversation, regenerate the PR-chain map,
 or keep chat replies in the shape Noah actually reads. Build three small delivery mechanisms in borg:
