@@ -1,6 +1,30 @@
 # Directive: `/borg-assimilate` Step 0.75 derives a slug nothing can derive
 
-*Filed: 2026-09-15 · Status: Proposed · Parent: 2026-08-24-one-front-door-link-derived-fact-surface*
+*Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
+*Filed: 2026-09-15 · Status: Accepted 2026-09-16 · Owner: Noah*
+*Shipped: 2026-09-16 — implemented by [#203](https://github.com/noah-goodrich/borg-collective/pull/203)
+and [#205](https://github.com/noah-goodrich/borg-collective/pull/205); recorded by
+[#202](https://github.com/noah-goodrich/borg-collective/pull/202)*
+
+> **ASSIMILATION NOTE (2026-09-16).** Shipped before this record merged, which is why the record is
+> archived on arrival. The fix landed in two parts from the other machine:
+> [#203](https://github.com/noah-goodrich/borg-collective/pull/203) found the derivation in THREE
+> places (this directive named one and explicitly cleared Step 4c — that was too narrow), and
+> [#205](https://github.com/noah-goodrich/borg-collective/pull/205) converged them onto the ratified
+> `- Plan-slug:` annotation after a first draft deleted the gate's blocking action entirely.
+>
+> **THE PARENT LINE ON THIS FILE WAS WRONG AND IS THE REASON IT IS WORTH READING.** It was authored
+> with the `design-doc` skill's `*Filed: … · Parent: <file>*` status line, but Step 0.75 greps for
+> `^\*Parent plan: <slug>\*`. So this directive — the one ABOUT a gate that could not see its own
+> children — was itself invisible to that gate, and `_borg_promote_next_candidates` counted it as a
+> TOP-LEVEL auto-promotion candidate. Two other files are still in that state:
+> `2026-08-20-comms-delivery-surfaces.md` and `2026-08-20-directive-state-deriver.md`, both children
+> of `2026-08-20-communication-program`. The general defect — a sanctioned authoring tool writing a
+> convention the gate does not read — is NOT fixed here and needs its own directive.
+>
+> Verified against `main` at `2b48779` before archiving: AC1 `grep -c 'slugified-objective'` = **0**;
+> AC2 refuses with rc 1 naming `- Plan-slug:` on a plan without one, and returns the child when one
+> is present; AC3 the gate lists **nine** on this repository; AC4 lint 10.00/10, bats 799, pytest 1148.
 
 **tl;dr** — `/borg-assimilate`'s child-directive gate computes the parent-plan slug from the Objective line,
 which produces a 268-character string matching zero directives, and a zero-match is specified to proceed
@@ -89,17 +113,17 @@ exercised. The gate is currently passing on a model's eyesight.
 
 ## Acceptance criteria
 
-- [ ] **AC1 — Step 0.75 reads `- Plan-slug:` and never derives.** The `<established-date>-<slugified-objective>`
+- [x] **AC1 — Step 0.75 reads `- Plan-slug:` and never derives.** The `<established-date>-<slugified-objective>`
       fallback is deleted from `SKILL.md`, not merely deprioritised.
     - Verify: `grep -c 'slugified-objective' skills/borg-assimilate/SKILL.md` is 0, and the step names the
       annotation.
-- [ ] **AC2 — A missing annotation stops the gate with a named reason.** Not a pass, not a derivation.
+- [x] **AC2 — A missing annotation stops the gate with a named reason.** Not a pass, not a derivation.
     - Verify: a fixture plan with no annotation produces a refusal naming `- Plan-slug:`; a fixture plan with one
       and a matching child produces the existing block text unchanged.
-- [ ] **AC3 — The gate fires on this repository, today.** Nine directives, named.
+- [x] **AC3 — The gate fires on this repository, today.** Nine directives, named.
     - Verify: running Step 0.75 against this repo lists all nine files and refuses. It must fail before the fix
       and pass after — a gate proven only in the passing direction is the defect being fixed.
-- [ ] **AC4 — Nothing else moves.** `make test` green at its floor, `make lint` 10.00/10, `bats tests/` green.
+- [x] **AC4 — Nothing else moves.** `make test` green at its floor, `make lint` 10.00/10, `bats tests/` green.
 
 ## Risks
 
