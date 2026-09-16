@@ -32,6 +32,7 @@ e2e/eval harness that keeps it honest.
       every time. `--local` is the only opt-down. `recon` retires as a human-facing verb; no new verbs are added.
   - Verify: bats asserts `borg help` is net one command shorter than at plan start, and that two consecutive
     `borg link` runs write no cache artifacts.
+  - Evidence: `bats:tests/cli_contract.bats`
   - **MET.** Both verify clauses pass (`contract: borg help is net one command shorter than at plan start (AC1)`,
     `cache: two consecutive borg link runs write no cache artifact (AC1)`) — and, unlike before, the stated goal holds
     too. The box was deliberately held unticked while `borg link --brief` answered from somewhere else: it returned
@@ -81,6 +82,7 @@ e2e/eval harness that keeps it honest.
       stdout by default with OSC-8 hyperlinks on refs. Repository and orchestrator contexts differ in breadth only —
       never layout, section order, or vocabulary.
   - Verify: golden-file snapshot test rendering both contexts from fixture manifests; one render entry point.
+  - Evidence: `pytest:borg_core/link/test_picture.py`
   - **MET** in [#165](https://github.com/noah-goodrich/borg-collective/pull/165). Both contexts pinned by
     `_assert_link_grid_golden` against `link-grid-repository.golden` / `link-grid-orchestrator.golden`; `document()`
     is the sole render entry point (`render.overview` and `render.deep` deleted). Known gap, carried into AC4:
@@ -90,12 +92,14 @@ e2e/eval harness that keeps it honest.
       current sweep window is targeted-fetched, never rendered `unknown`.
   - Verify: e2e case runs `borg link` inside one repository against a fixture manifest spanning several; asserts zero
     nodes render `unknown`.
+  - Evidence: `pytest:borg_core/manifest/test_across.py`
   - **MET** in [#164](https://github.com/noah-goodrich/borg-collective/pull/164):
     `sweep: AC3 — a manifest spanning two repositories renders zero unknown nodes`.
 - [x] **AC4 — Rows drive "next" and "yours vs mine."** Sourced from `rows[].next` and `gate.kind`, never re-derived.
       READY = open AND every parent merged, announced as a set. Adds row-level `after: [refs]` so forks are
       expressible (lanes only express linear tracks).
   - Verify: pytest over the derivation against fixture manifests including a fork case and a negative case.
+  - Evidence: `pytest:borg_core/link/test_grid.py`
   - **MET.** Implementation shipped in [#169](https://github.com/noah-goodrich/borg-collective/pull/169); the box was
     held unticked because the `unsure` group was UNREACHABLE THROUGH THE FRONT DOOR — `manifest_core.GATE_KINDS` closed
     `gate.kind`, so a row whose kind did not route was refused at load and the router only ever saw an unrecognized kind
@@ -156,6 +160,7 @@ e2e/eval harness that keeps it honest.
     fixture carries the input and a negative whose fixture provably lacks it, both SYNTHESIZED so neither names a
     repository. AC5's cases grade borg's OWN lifecycle skills, so unlike that pair they belong in THIS tree; what
     transfers is the fixture discipline, not the location.
+  - Evidence: `path:evals/lifecycle-manifests/run.sh`
   - **Writer ref-kind scope — ruled 2026-09-15 by Noah.** Closes AC-N3 of
     [#201](https://github.com/noah-goodrich/borg-collective/pull/201).
     The three verbs author the ref kinds **this machine can resolve**, decided mechanically rather than by a
@@ -172,6 +177,11 @@ e2e/eval harness that keeps it honest.
       them: the session-load case — a fresh session registers each skill exactly once and fires its hooks — goes to
       a parented directive (decision (6)), and the positive/negative pairing convention moves into the harness
       headers where it can be read against the cases it governs, with E2 as its named exception (decision (7)).
+  - *No `Evidence:` pin. AC6's gates are prose measurements taken once on a named tree (`make eval` at
+    `1 pass, 0 fail, 2 skip`; `make eval-live` at rc 0 with `3 pass, 0 fail, 0 skip`), and none of the four
+    annotation kinds expresses "this command exits 0 with these counts". A `path:` pin at `evals/s4-k3/run.sh`
+    would prove the file exists, not that the harness passes — a weaker claim wearing the criterion's name.
+    Left `unknown` deliberately; see the annotation-vocabulary note below the criteria.*
   - **MET** on `main` at `6cddc31`, after
     [#188](https://github.com/noah-goodrich/borg-collective/pull/188),
     [#190](https://github.com/noah-goodrich/borg-collective/pull/190) and
@@ -482,6 +492,12 @@ e2e/eval harness that keeps it honest.
   - Verify: `grep -ri program` over the COMMANDS section of `borg help`, over `skills/`, and over `merge-tree/`
     returns nothing; the directive file exists with a `*Parent plan:*` line; `make test` green at `--fail-under=90`;
     `bats tests/` green.
+  - *No `Evidence:` pin, and this one is a limitation rather than a choice. The clause above is a
+    FOUR-WAY CONJUNCTION — a scoped grep, a file's existence, a coverage floor, and a suite. An
+    annotation is a single pin, so any one of them would flip AC7 on evidence that proves a quarter of
+    it, and AC7 is deliberately unticked. `bats:tests/cli_contract.bats` is green today and would tick
+    it outright. Left `unknown` until either the vocabulary grows a conjunction or AC7's verify is
+    split into criteria that can each be pinned.*
   - **Three decisions ratified 2026-08-31**, after the original verify clause was found unsatisfiable as written.
   - **(1) The REMOVED block is excluded from the grep, and the clause above says so.** The original read
     "`grep -ri program` over help text" and could never pass: this repo retires a verb by moving it to a REMOVED
@@ -507,6 +523,23 @@ e2e/eval harness that keeps it honest.
     writer on top of an unresolved reader/writer disagreement runs that risk on every timer tick rather than only
     when someone hand-edits. Measured cost: 292 occurrences across 44 tracked files, and 343 tests covering
     `programs.py` at 98% and `coordinator.py` at 95% move with it.
+
+### A note on the `Evidence:` annotations (added 2026-09-16)
+
+Five of seven criteria now carry a machine-checkable pin, so `borg_core/planstate` can resolve them instead
+of reporting `unknown: no evidence annotation` for the whole plan. Verdicts on the annotated tree:
+**AC1–AC4 `pass`, AC5 `fail`, AC6–AC7 `unknown`, `would_flip: 0`** — nothing was ticked by adding them.
+
+**AC5's `fail` is the point, not a defect.** `path:evals/lifecycle-manifests/run.sh` is absent, and a
+`path:` pin is the one kind where absence means *the work is not done* rather than *we could not look*. The
+plan now reports its own biggest gap mechanically instead of relying on someone remembering it.
+
+**Two criteria cannot be pinned, and the reason is the vocabulary rather than the work.** A `Verify:`
+clause that is a conjunction of several checks has no single-pin expression, so pinning one clause would
+flip the criterion on a fraction of its evidence. AC6 (prose measurements of command output) and AC7 (a
+four-way conjunction) are both in that class and are left `unknown` on purpose. The fix is a vocabulary
+that can express "all of these", or verify clauses split until each is single-pinnable — filed as an
+observation here rather than as a directive, since it belongs to whoever next touches `planstate`.
 
 ## Scope Boundaries
 
