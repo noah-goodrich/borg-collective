@@ -59,3 +59,40 @@ _blocks_with_paths() {
     # Its contract is to end on exactly one action; a post-recommendation hook invites a second.
     ! grep -q 'skill-extensions/borg-review/03-followup' "$ROOT/skills/borg-review/SKILL.md"
 }
+
+# ── The two oracles that were missing when #205 shipped ─────────────────────────────────────────
+
+@test "skills: every SKILL.md starts with YAML frontmatter on line 1" {
+    # Filed as BLOCKING on #205: an editing artifact put a stray prose line ABOVE borg-plan's `---`,
+    # so the block stopped being frontmatter and the skill's name/description stopped being read.
+    # Five CI lanes went green on it, because nothing asserted this. The mechanism was a Python
+    # slice whose bounds were reversed (`t[66:4]` is ""), and `str.replace("", X, 1)` inserts at
+    # position 0 — so the failure mode is specifically "content prepended to the file", which is
+    # exactly what line 1 catches.
+    local f bad=0
+    for f in "$ROOT"/skills/*/SKILL.md; do
+        [ -f "$f" ] || continue
+        if [ "$(head -1 "$f")" != "---" ]; then
+            echo "not frontmatter-first: $f -> $(head -1 "$f")"
+            bad=1
+        fi
+    done
+    [ "$bad" -eq 0 ]
+}
+
+@test "step075: the gate still tells the model to STOP when children are found" {
+    # The other BLOCKING finding on #205. The slug fix replaced all of Step 0.75 and deleted the
+    # `✗ Blocked` output format and the "Do NOT proceed" sentence along with it — leaving a step
+    # that computed the right answer (nine directives) and then shipped anyway. A gate that
+    # measures correctly and does not act is the same defect as one that acts on a wrong
+    # measurement; this pins the ACTION, which no test covered before.
+    local step
+    step=$(sed -n '/^## Step 0.75/,/^## Step 1/p' "$ROOT/skills/borg-assimilate/SKILL.md")
+    [[ "$step" == *"✗ Blocked"* ]] || { echo "no blocked-output format in Step 0.75"; false; }
+    [[ "$step" == *"Do NOT proceed to criteria evaluation or shipping"* ]] || {
+        echo "Step 0.75 no longer instructs the model to stop"; false; }
+    # And the discriminating half: it must still say what to do when there is nothing to find,
+    # or a reader cannot tell "blocked" from "checked and clear".
+    [[ "$step" == *"proceed to Step 1 without comment"* ]] || {
+        echo "Step 0.75 does not say what happens on the clean path"; false; }
+}
