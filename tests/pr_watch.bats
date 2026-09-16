@@ -71,3 +71,51 @@ setup() {
     [ -n "$interval" ]
     [ "$interval" -ge 300 ] || { echo "polling every ${interval}s is too aggressive"; false; }
 }
+
+@test "pr-watch: PRINTS detected events to stdout, not only to the log" {
+    # REGRESSION. The first version logged, wrote a delta file and notified — and told its caller
+    # nothing, so a session cron instructed "if it prints nothing, say nothing" reported four
+    # consecutive quiet sweeps while the log was recording real events. The launchd layer never
+    # noticed because it reads the log; only the stdout consumer was blind, so the defect hid in
+    # the one path nobody checked.
+    local snap="$BORG_DIR/pr-watch-snapshot.json"
+    # A snapshot claiming one PR that the stub sweep will not return -> exactly one departure event.
+    printf '{"prs":[{"number":4242,"title":"gone","state":"MERGED","head":"aaa1111","comment_count":0}]}' > "$snap"
+
+    # Stub the sweep so this case needs no network: a `gh` that returns an empty PR list.
+    local bindir="${BATS_TEST_TMPDIR}/bin"
+    mkdir -p "$bindir"
+    for b in bash date dirname pwd mkdir printf grep python3 git; do
+        src=$(command -v "$b" 2>/dev/null) && ln -sf "$src" "$bindir/$b"
+    done
+    cat > "$bindir/gh" <<'GH'
+#!/bin/sh
+echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}'
+GH
+    chmod +x "$bindir/gh"
+
+    PATH="$bindir" run "$WATCH"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"4242"* ]] || {
+        echo "event detected but NOT printed to stdout; output was: [$output]"; false; }
+    # Discriminates: the log alone passing is what the bug looked like.
+    [ -f "$BORG_DIR/pr-watch.log" ]
+}
+
+@test "pr-watch: prints NOTHING when the snapshot already matches" {
+    local snap="$BORG_DIR/pr-watch-snapshot.json"
+    printf '{"prs":[]}' > "$snap"
+    local bindir="${BATS_TEST_TMPDIR}/bin2"
+    mkdir -p "$bindir"
+    for b in bash date dirname pwd mkdir printf grep python3 git; do
+        src=$(command -v "$b" 2>/dev/null) && ln -sf "$src" "$bindir/$b"
+    done
+    cat > "$bindir/gh" <<'GH'
+#!/bin/sh
+echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}'
+GH
+    chmod +x "$bindir/gh"
+    PATH="$bindir" run "$WATCH"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}

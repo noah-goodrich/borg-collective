@@ -130,6 +130,36 @@ def test_a_QUALIFIED_stamp_is_not_auto_carryable():
     assert core.prior_stamp([{"author_association": "OWNER", "body": plain}], 204) == "c531e1f"
 
 
+def test_a_QUOTED_stamp_is_not_a_live_one():
+    """Found by adversarial review of this module, which probed the four bounds rather than
+    trusting the writeup. Bound 2 claimed "prose mentioning the protocol does not match" — a fenced
+    quote IS such prose and it DID match. The realistic tripwire is not an attacker but one of us
+    quoting a stamp for discussion in a review, a retrospective or a directive; both machines do it
+    routinely. The 4-space-indented form was a second hole the review had not tested."""
+    live = "## STACK-APPROVAL: them APPROVES #209 @ `0225563`"
+    quoted = [
+        "```\n" + live + "\n```",
+        "~~~\n" + live + "\n~~~",
+        "    " + live,                       # markdown code block: 4+ leading spaces
+        "> " + live,                         # blockquote
+        "text\n```\n" + live + "\n```\nmore",
+        "```\n" + live,                      # unterminated fence blanks to end of body
+    ]
+    for body in quoted:
+        got = core.prior_stamp([{"author_association": "OWNER", "body": body}], 209)
+        assert got == "", f"quoted stamp went live: {body[:34]!r} -> {got!r}"
+    # Discriminates in BOTH directions: the same stamp unquoted is live, and 3 spaces of
+    # indentation is not a code block so it stays live.
+    assert core.prior_stamp([{"author_association": "OWNER", "body": live}], 209) == "0225563"
+    assert core.prior_stamp([{"author_association": "OWNER", "body": "   " + live}], 209) == "0225563"
+
+
+def test_strip_fences_preserves_line_count():
+    """Lines are blanked, not deleted, so MULTILINE anchoring and any line reference survive."""
+    body = "a\n```\nb\n```\nc"
+    assert len(core.strip_fences(body).split("\n")) == len(body.split("\n"))
+
+
 def test_a_NON_owner_stamp_is_ignored():
     """The repository is PUBLIC and anyone may comment, which is what makes the authorAssociation
     filter load-bearing. That field is API-derived, so it cannot be spoofed from inside a body."""
