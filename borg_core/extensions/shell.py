@@ -14,6 +14,15 @@ from pathlib import Path
 from borg_core import paths
 from borg_core.extensions import core
 
+# Which hook names exist for each kind. Iterating the UNION against both kinds probed for files that
+# structurally cannot be read -- a `brief.md` under a skill, three prose hooks under an agent -- and
+# that is not harmless generality: a stray `brief.md` copy-pasted into a skill's extension directory
+# would have been surveyed and reported as a live-or-dead preference for a hook the skill never reads.
+HOOKS_BY_KIND = {
+    "skill-extensions": core.PROSE_HOOKS,
+    "agent-extensions": ("brief",),
+}
+
 
 def layer_paths(kind: str, name: str, hook: str, root: str) -> dict:
     """The two candidate paths for one extension, keyed by layer.
@@ -82,11 +91,10 @@ def probe(parsed: dict) -> bool | None:
 
 def repo_root(start: str = "") -> str:
     """The git root containing `start`, else `start` itself. No subprocess: walks for `.git`."""
-    here = Path(start or os.getcwd()).resolve()
-    for candidate in (here, *here.parents):
-        if (candidate / ".git").exists():
-            return str(candidate)
-    return str(here)
+    # The walk is paths.repo_root_of, shared with borg_core/planstate/derive.py. Passing the
+    # directory ITSELF, not its parent -- see that function's docstring for why the distinction is
+    # load-bearing.
+    return str(paths.repo_root_of(Path(start or os.getcwd())))
 
 
 def survey(repo: str = "") -> list[dict]:
@@ -98,10 +106,9 @@ def survey(repo: str = "") -> list[dict]:
     """
     root = repo_root(repo)
     rows: list[dict] = []
-    for kind, names in (("skill-extensions", _dirs(kind="skill-extensions", root=root)),
-                        ("agent-extensions", _dirs(kind="agent-extensions", root=root))):
-        for name in names:
-            for hook in (*core.PROSE_HOOKS, "brief"):
+    for kind, hooks in HOOKS_BY_KIND.items():
+        for name in _dirs(kind=kind, root=root):
+            for hook in hooks:
                 layers = read_layers(kind, name, hook, root)
                 if not layers:
                     continue

@@ -24,7 +24,10 @@ def _survey(args: argparse.Namespace) -> int:
         print("no prefer-tool extensions on this machine or in this repository")
         return 0
     for row in rows:
-        mark = {"live": "ok", "dead": "DEAD", "unprobed": "UNPROBED"}.get(row["status"], "?")
+        # No default: `survey` only emits rows whose status came from `core.status`, which for a
+        # prefer-tool row is always one of these three. A "?" fallback would be unreachable code
+        # asserting that the two modules can disagree.
+        mark = {"live": "ok", "dead": "DEAD", "unprobed": "UNPROBED"}[row["status"]]
         print(f"[{mark}] {row['name']}/{row['hook']} ({row['layer']}) prefer {row['prefer']!r}")
         if row["instead_of"]:
             print(f"        instead of: {row['instead_of']}")
