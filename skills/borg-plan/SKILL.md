@@ -40,6 +40,10 @@ extend or override earlier ones.
 1. `~/.config/borg/extensions/skill-extensions/borg-plan/01-context.md`
 2. `<project root>/.borg/skill-extensions/borg-plan/01-context.md`
 
+**Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
+asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
+Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
 ## Run The Collective Review
@@ -149,6 +153,10 @@ order; later files extend or override earlier ones.
 1. `~/.config/borg/extensions/skill-extensions/borg-plan/02-output.md`
 2. `<project root>/.borg/skill-extensions/borg-plan/02-output.md`
 
+**Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
+asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
+Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+
 If neither exists, skip silently.
 
 After the conversation, write `PROJECT_PLAN.md` in the project root.
@@ -228,6 +236,10 @@ plan to an external ticket). Read in order; later files extend or override earli
 
 1. `~/.config/borg/extensions/skill-extensions/borg-plan/03-followup.md`
 2. `<project root>/.borg/skill-extensions/borg-plan/03-followup.md`
+
+**Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
+asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
+Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently.
 

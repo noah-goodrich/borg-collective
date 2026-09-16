@@ -23,6 +23,21 @@ set -uo pipefail
 BORG_DIR="${BORG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/borg}"
 LOG="$BORG_DIR/prefer-tool.jsonl"
 
+# FAST PATH, before any subprocess. This hook is PostToolUse/Bash, so it runs after EVERY bash
+# command the agent issues. Measured on this machine: `python3 -m borg_core.extensions.cli check`
+# costs ~60ms per call, and the hook also forked two `jq`s and a `git`. With no prefer-tool
+# extension configured anywhere -- the default on every machine -- all of that was pure waste on
+# every single Bash call. Two `[ -d ]` tests cost ~0.17ms per 100 and skip the whole chain.
+#
+# Checked against $PWD rather than the payload's cwd because reading the payload means `cat` +
+# `jq`, which is part of what this gate exists to avoid. A repository-layer extension in some OTHER
+# directory is missed by this test; that is the accepted cost of the gate, and the machine layer
+# (where prefer-tool extensions belong, per the precedence rule) is always checked.
+if [ ! -d "${BORG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/borg}/extensions" ] \
+   && [ ! -d "$PWD/.borg/skill-extensions" ] && [ ! -d "$PWD/.borg/agent-extensions" ]; then
+    exit 0
+fi
+
 payload=$(cat 2>/dev/null) || exit 0
 [ -n "$payload" ] || exit 0
 
@@ -55,11 +70,13 @@ cmd=$(printf '%s' "$payload" | jq -r 'if has("tool_input") then (.tool_input.com
 cwd=$(printf '%s' "$payload" | jq -r '.cwd // ""' 2>/dev/null)
 [ -n "$cwd" ] || cwd="$PWD"
 
-repo=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || repo="$cwd"
+# No `git rev-parse` here: borg_core.extensions.shell.repo_root() walks for `.git` with no
+# subprocess at all, and survey() calls it on whatever --repository receives. Forking git to
+# compute a value the callee recomputes for free was one wasted process per Bash call.
 
 # `check` exits 0 and prints the matched preference only when a LIVE one covers this command.
 matched=$(PYTHONPATH="$_core_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.extensions.cli \
-    --repository "$repo" check "$cmd" 2>/dev/null) || exit 0
+    --repository "$cwd" check "$cmd" 2>/dev/null) || exit 0
 [ -n "$matched" ] || exit 0
 
 # Brace-group so the stderr redirect is established BEFORE the append target is opened: bash opens

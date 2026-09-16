@@ -2701,37 +2701,55 @@ cmd_doctor() {
     echo
 
     # prefer-tool extensions. A machine-local "use tool X instead" preference whose requirement is
-    # unmet is INERT, and an inert preference reads as working — which is the whole failure mode the
-    # type was designed against. This is where "loudly, once" is discharged: the preference states
-    # its own `- Requires:` line, doctor probes it, and a dead or unprobed one is a finding rather
-    # than something noticed by wondering why a tool was never used. See docs/extensions.md.
-    # One call. The `no prefer-tool extensions` sentinel is dropped rather than printed: doctor
-    # should stay silent about a feature this machine is not using, and the standalone
-    # `borg_core.extensions.cli survey` still says it for a human who asked directly.
-    local ext_raw
-    # `|| true` is load-bearing, not defensive noise. `grep -v` exits 1 when it filters EVERY line,
-    # which is the common case (no prefer-tool extensions), and under this file's `set -e` a command
-    # substitution that exits non-zero aborts cmd_doctor at the assignment -- so without it `borg
-    # doctor` returned non-zero on a healthy machine. Caught by 12 doctor.bats cases, all of them
-    # the ones asserting exit 0. Same shape as the `set -e` shield in lib/promote-next.sh.
-    ext_raw=$(_borg_py borg_core.extensions.cli survey 2>/dev/null | grep -v '^no prefer-tool extensions') || true
-    local -a ext_rows
-    ext_rows=("${(@f)ext_raw}")
-    if [[ -n "${ext_rows[*]//[[:space:]]/}" ]]; then
+    # unmet is INERT, and an inert preference reads as working -- which is the whole failure mode the
+    # type was designed against. This is where "loudly, once" is discharged. See docs/extensions.md.
+    #
+    # Reads the --json surface, NOT the human one. The first version shelled to `survey` (human mode)
+    # and coloured lines by substring-matching `[DEAD]`/`[UNPROBED]` -- the printer's own display
+    # markers. That is the altitude mistake the recon-retirement gate was moved to avoid, and it had
+    # already produced a real bug: `_survey` prints the mark only on a row's HEADER line, so the
+    # `requirement NOT satisfied ...` continuation -- the one line the "loudly" goal depends on --
+    # rendered DIM instead of coloured. Reading `.status` is the structured fact; a reword of the
+    # printer can no longer change what doctor highlights.
+    local ext_json
+    ext_json=$(_borg_py borg_core.extensions.cli survey --json 2>/dev/null) || ext_json=""
+    local -a ext_lines
+    if [[ -n "$ext_json" ]]; then
+        ext_lines=("${(@f)$(printf '%s' "$ext_json" | jq -r '
+            .extensions[]?
+            | [.status,
+               "\(.name)/\(.hook) (\(.layer)) prefer \(.prefer)",
+               (if .instead_of == "" then empty else "instead of: \(.instead_of)" end),
+               (if .status == "dead" then "requirement NOT satisfied: \(.requires) — falling back to the default"
+                elif .status == "unprobed" then "declares no `- Requires:` line, so its absence cannot be checked"
+                else empty end),
+               (if .conflicted then "both layers assert the same key; machine wins for prefer-tool" else empty end)]
+            | @tsv' 2>/dev/null)}") || ext_lines=()
+    fi
+    if (( ${#ext_lines[@]} > 0 )) && [[ -n "${ext_lines[*]//[[:space:]]/}" ]]; then
         printf "${BOLD} %s${NC}\n" "EXTENSIONS"
         printf '%0.s─' {1..70}; echo
-        local row
-        for row in "${ext_rows[@]}"; do
-            [[ -z "$row" ]] && continue
-            # WARN, never FAIL, and deliberately not `overall_exit=1`. A preference naming a
-            # plugin this machine does not have is a normal state, not a broken machine — the
-            # contract is "degrade to the default, loudly, once", and the loud part is this row
-            # being here in yellow. Failing doctor over it would cry wolf, which the agent block
-            # above already warns gets the whole command ignored.
-            case "$row" in
-                *"[DEAD]"*|*"[UNPROBED]"*) echo -e " ${YELLOW}${row}${NC}" ;;
-                *)                         echo -e " ${DIM}${row}${NC}" ;;
+        local _row _status _color _part
+        for _row in "${ext_lines[@]}"; do
+            [[ -z "$_row" ]] && continue
+            _status="${_row%%	*}"
+            # WARN, never FAIL, and deliberately not `overall_exit=1`. A preference naming a plugin
+            # this machine does not have is a normal state, not a broken machine -- the contract is
+            # "degrade to the default, loudly, once", and the loud part is these rows being here in
+            # yellow. Failing doctor over it would cry wolf, which the agent block above already
+            # warns gets the whole command ignored.
+            case "$_status" in
+                dead|unprobed) _color="$YELLOW" ;;
+                *)             _color="$DIM" ;;
             esac
+            # EVERY line of the row takes the row's colour, which is the bug the human-text version
+            # had: only the header carried the marker, so the diagnostic below it went dim.
+            local -a _parts
+            _parts=("${(@s:	:)${_row#*	}}")
+            echo -e " ${_color}${_parts[1]}${NC}"
+            for _part in "${_parts[@]:1}"; do
+                [[ -n "$_part" ]] && echo -e "   ${_color}${_part}${NC}"
+            done
         done
         echo
     fi
