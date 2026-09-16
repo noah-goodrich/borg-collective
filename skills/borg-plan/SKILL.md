@@ -117,18 +117,16 @@ project root (i.e. we are mid-plan, not starting from scratch), write the direct
 immediately below the H1 heading.
 
 `<plan-slug>` is the filename of `PROJECT_PLAN.md`'s eventual archived copy — the basename
-*without* the `.md` extension and without a leading path. **Read it from the plan's
-`*Archived-as:*` line; never derive it.** The helper that Step 0.75 uses is the same one to use
-here:
+*without* the `.md` extension and without a leading path. **Read it from the plan's `- Plan-slug:`
+annotation; never compute it.** The helper Step 0.75 uses is the one to use here:
 
 ```
-source lib/promote-next.sh && _borg_plan_archive_slug PROJECT_PLAN.md
+source lib/promote-next.sh && _borg_plan_declared_slug PROJECT_PLAN.md
 ```
 
-If that line is missing, the plan predates this rule — add it (see `## Output` below) and confirm
-the value with the developer before filing the directive. A derived slug writes a `*Parent plan:*`
-line no gate will ever match, which is exactly how eight directives came to be invisible to the
-check meant to find them. Example:
+If the annotation is missing, the plan predates it — add it and confirm the value with the developer
+before filing the directive. A computed slug writes a `*Parent plan:*` line no gate will ever match,
+which is exactly how nine directives came to be invisible to the check meant to find them. Example:
 
 ```
 # Directive: <title>
@@ -173,7 +171,6 @@ disagreed with every file on disk.
 ```markdown
 # Project Plan: [Project Name]
 *Established: [date]*
-*Archived-as: [date]-[short-slug]*
 
 ## Objective
 [confirmed 1-2 sentences]
