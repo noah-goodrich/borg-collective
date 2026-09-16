@@ -145,9 +145,19 @@ _borg_child_directives() {
     # because bash leaves the literal and the `-f` test below rejects it. Step 0.75 sources this
     # file from an interactive shell, so the zsh path is real. Pinned by the `zsh` bats case.
     [ -d "$dir" ] || return 0
-    for f in "$dir"/*.md; do
-        [ -f "$f" ] || continue
-        grep -q "^\*Parent plan: ${slug}\*" "$f" && printf '%s\n' "$f"
-    done
+    # `find`, NOT a bare glob, and NOT one grep per file. Two reasons, both measured.
+    #
+    # (1) zsh NOMATCH. A `for f in "$dir"/*.md` loop dies with `no matches found` on a directory
+    # that EXISTS but holds no `.md` -- the `-d` guard above only covers a MISSING directory, so the
+    # empty-but-present case is fatal under `set -e`. CLAUDE.md names this idiom: quoted `find`,
+    # never bare globs.
+    #
+    # (2) One grep, not one per file. A per-file loop forks a grep per directive -- 33 processes on
+    # this repository today, growing with the backlog, on every /borg-assimilate run.
+    #
+    # `|| true` because grep exits 1 when nothing matches and `find -exec +` propagates it, while
+    # "no children" is a legitimate rc-0 answer rather than an error.
+    find "$dir" -maxdepth 1 -type f -name '*.md' \
+        -exec grep -l "^\*Parent plan: ${slug}\*" {} + 2>/dev/null || true
     return 0
 }

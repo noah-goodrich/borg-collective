@@ -1,5 +1,3 @@
-After the conversation, write `PROJECT_PLAN.md` in the project root:
-
 ---
 name: borg-plan
 description: >

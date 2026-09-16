@@ -67,6 +67,26 @@ lines; it exits **2** on an empty slug, which is "I could not check" and must ne
 "nothing to find". Only `docs/plans/directives/` is scanned — `assimilated/` and `severed/` are
 resolved by definition.
 
+**If it printed ANY paths, STOP.** Report them exactly like this and go no further:
+
+```
+✗ Blocked: un-resolved child directives (move to severed/ or ship them first):
+  - docs/plans/directives/<filename>.md
+  - docs/plans/directives/<filename>.md
+```
+
+Do NOT proceed to criteria evaluation or shipping. The developer must either ship the child
+directive or `git mv` it to `docs/plans/severed/` with a one-line "why severed" comment before
+assimilation can continue. **If it printed nothing**, proceed to Step 1 without comment — do not
+mention the check.
+
+**THE BLOCK ABOVE WAS DELETED ONCE AND MUST NOT BE AGAIN.** The first draft of this rewrite replaced
+the whole step and dropped the `✗ Blocked` format and the "Do NOT proceed" sentence with it, leaving
+a step that computed the right answer and then did nothing with it — on this repository, listing
+nine blocking directives and shipping anyway. Fixing the measurement while deleting the action is
+the same defect one layer over: the old version passed because it measured nothing, that one would
+have passed because it acted on nothing.
+
 **THE OLD INSTRUCTION HERE WAS TO COMPUTE THE SLUG FROM THE OBJECTIVE PROSE, AND NO COMPUTATION
 CAN.** The archived filename is a hand-written condensation. Measured 2026-09-15 on this repository:
 the computed form ran 268 characters against a real slug of

@@ -234,6 +234,17 @@ _mk_plan() {   # <path> <annotation-line-or-empty>
     [ -z "$output" ]
 }
 
+@test "step075: an EMPTY-but-existing directives dir is zero children, not a fatal glob" {
+    command -v zsh >/dev/null || skip "zsh not installed"
+    # `[ -d ]` covers a MISSING directory; a directory that exists and holds no `.md` made the
+    # earlier glob loop die under zsh NOMATCH with `no matches found`. Only zsh shows it — bash
+    # leaves the literal and the `-f` test rejected it.
+    mkdir -p "${BATS_TEST_TMPDIR}/empty"
+    run zsh -c "emulate -L zsh; set -e; source '$LIB'; _borg_child_directives '${BATS_TEST_TMPDIR}/empty' a-slug"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+}
+
 @test "step075: the missing-dir guard survives zsh NOMATCH (pins what bash cannot)" {
     command -v zsh >/dev/null || skip "zsh not installed"
     # Under zsh an unmatched glob is FATAL, so this is the only interpreter in which deleting
