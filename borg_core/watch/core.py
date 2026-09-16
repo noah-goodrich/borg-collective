@@ -161,7 +161,7 @@ FORBIDDEN = ("merge", "close", "approve_changes_requested", "force_push", "edit_
 # nothing downstream branches on it -- it is carried into a re-stamp body as an opaque label, so
 # constraining it would only re-create the matching failure above.
 STAMP_RE = re.compile(
-    r"^[#*\s]*STACK-APPROVAL:\s+(?P<machine>.+?)\s+APPROVES\s+#(?P<number>\d+)\s+@\s+"
+    r"^ {0,3}[#*]{0,4}[ \t]*STACK-APPROVAL:\s+(?P<machine>.+?)\s+APPROVES\s+#(?P<number>\d+)\s+@\s+"
     r"`?(?P<sha>[0-9a-f]{7,40})`?(?P<trailer>.*)$",
     re.MULTILINE,
 )
@@ -176,6 +176,36 @@ _TRIVIAL_TRAILER = set(" \t.,;:—-–*_`")
 def qualified(trailer: str) -> bool:
     """Does this stamp carry a qualifier, making it ineligible for an unattended carry-forward?"""
     return any(ch not in _TRIVIAL_TRAILER for ch in trailer or "")
+
+
+_FENCE_RE = re.compile(r"^\s*(```|~~~)", re.MULTILINE)
+
+
+def strip_fences(body: str) -> str:
+    """Blank out fenced code regions so a QUOTED stamp cannot be read as a live one.
+
+    FOUND BY ADVERSARIAL REVIEW, and the reviewer's severity framing was the right one: the
+    realistic tripwire is not an attacker but one of us QUOTING a stamp for discussion -- in a
+    review, a retrospective, a directive -- and having the quote go live. Both machines quote stamps
+    routinely; this PR's own body does it.
+
+    Measured before fixing: a ```-fenced stamp matched, AND so did a 4-space-indented one, which the
+    review had not tested. Markdown treats 4+ leading spaces as a code block, so the old
+    the old prefix class -- permitting arbitrary leading whitespace -- was the second hole. The regex
+    now caps indentation at 3 spaces and this function removes fenced regions, which is why both
+    forms are needed: one closes the fence, the other closes the indent.
+
+    Lines are blanked rather than deleted so line numbers and MULTILINE anchoring are preserved.
+    An unterminated fence blanks to end of body, which is the refusing direction.
+    """
+    out, in_fence = [], False
+    for line in (body or "").splitlines():
+        if _FENCE_RE.match(line):
+            in_fence = not in_fence
+            out.append("")
+            continue
+        out.append("" if in_fence else line)
+    return "\n".join(out)
 
 
 def prior_stamp(comments: list, number: int) -> str:
@@ -209,7 +239,7 @@ def prior_stamp(comments: list, number: int) -> str:
             continue
         if (comment.get("author_association") or "").upper() != "OWNER":
             continue
-        match = STAMP_RE.search(comment.get("body") or "")
+        match = STAMP_RE.search(strip_fences(comment.get("body") or ""))
         if not match:
             continue
         # `re.Match` is a stdlib value object with no seam to delegate through; wrapping it would

@@ -42,6 +42,16 @@ OUT=$(cd "$BORG_ROOT" && PYTHONPATH="$BORG_ROOT" python3 -m borg_core.watch.cli 
 
 [ -n "$OUT" ] || exit 0
 
+# STDOUT FIRST, and this line is the whole point of the script.
+#
+# It was missing. The first version logged, wrote the delta file and fired a notification -- and
+# told its CALLER nothing, so every sweep looked quiet no matter what moved. A session cron whose
+# instruction is "if it prints nothing, say nothing" then reported "sweep quiet" four times in a row
+# while the log was recording real events, which is a watcher that reports success while measuring
+# nothing its consumer can see. The launchd layer never noticed because it reads the log; only the
+# stdout consumer was blind, so the defect hid in the one path nobody was checking.
+printf '%s\n' "$OUT"
+
 { printf '%s\n%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$OUT" >> "$LOG_FILE"; } 2>/dev/null
 { printf '%s\n' "$OUT" > "$DELTA_FILE"; } 2>/dev/null
 
