@@ -153,12 +153,14 @@ If neither exists, skip silently.
 
 After the conversation, write `PROJECT_PLAN.md` in the project root.
 
-**`*Archived-as:*` is the plan's own name for its archived copy, and it is chosen HERE — once, by a
+**`- Plan-slug:` is the plan's own name for its archived copy, and it is chosen HERE — once, by a
 person, at plan time.** It is `<established-date>-<short-slug>`, where the short slug is a 3-6 word
 human condensation of the objective, not a slugification of it. Confirm it with the developer
 alongside the acceptance criteria. Every later consumer READS this line: `/borg-plan`'s own
-follow-up-directive section below, `/borg-assimilate` Step 0.75's child-directive gate, and Step 5's
-archival path. Omit it and Step 0.75 stops the assimilation rather than guessing.
+follow-up-directive section below, `/borg-assimilate` Step 0.75's child-directive gate, Step 5's
+archival path, and `borg_core.manifest.cli resolve`, which uses it to pick a manifest when a
+repository declares more than one. Omit it and Step 0.75 stops the assimilation rather than
+guessing.
 
 Why it is stored and not computed: an archived filename is a condensation, and there is no function
 from prose to condensation. Measured 2026-09-15 on this repository, the instruction to derive
@@ -171,6 +173,8 @@ disagreed with every file on disk.
 ```markdown
 # Project Plan: [Project Name]
 *Established: [date]*
+
+- Plan-slug: `[date]-[short-slug]`
 
 ## Objective
 [confirmed 1-2 sentences]
@@ -197,6 +201,24 @@ Estimated effort: [sessions/hours]
 - [Risk 1]
 - [Risk 2]
 ```
+
+### Scaffold the project manifest
+
+Immediately after writing `PROJECT_PLAN.md`, scaffold the manifest. Unconditional — not an offer,
+not a question, and not something the developer opts into:
+
+```
+command -v borg | xargs readlink -f | xargs dirname
+PYTHONPATH=<that dir> python3 -m borg_core.manifest.cli scaffold \
+    --repository <project root> --name <the Plan-slug> --desc "<the confirmed Objective, one line>"
+```
+
+- **`--name` is the `- Plan-slug:` you just declared**, byte for byte. Same string, same session.
+- **Never pass `--apex`.** A plan has no PR yet. Rows arrive at link-up, which is the ratified split.
+- **It never clobbers.** `scaffold` is idempotent: an existing manifest is reported at exit 0 and
+  left untouched. Re-running `/borg-plan` on a repository that already has one is the ordinary case.
+- **A non-zero exit is reported, never worked around.** Say what failed and carry on writing the
+  plan. Do not hand-write a manifest, and do not retry with a different `--name`.
 
 ## Local Extensions: 03-followup
 
