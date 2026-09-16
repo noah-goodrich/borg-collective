@@ -157,7 +157,16 @@ _borg_child_directives() {
     #
     # `|| true` because grep exits 1 when nothing matches and `find -exec +` propagates it, while
     # "no children" is a legitimate rc-0 answer rather than an error.
+    #
+    # (3) `-xF`, NOT a regex, and this one shipped as a defect. The slug was interpolated into a
+    # grep REGEX, so a metacharacter in it changed the match: `a.b` also matched `aXb` (a false
+    # child), and `a[b` is an INVALID regex, which makes grep fail, drops the file, and returns
+    # rc 0 with ZERO children -- "safe to ship" while a child exists. That is the certify-instead-
+    # of-gate defect this whole function was written to end, re-entering through the pattern
+    # instead of the slug. `-F` makes the slug literal; `-x` anchors both ends, which is stricter
+    # than the old leading `^` (that also matched trailing content after the closing `*`).
+    # Verified on this repository: the count is unchanged at nine, so `-x` rejects nothing real.
     find "$dir" -maxdepth 1 -type f -name '*.md' \
-        -exec grep -l "^\*Parent plan: ${slug}\*" {} + 2>/dev/null || true
+        -exec grep -lxF -e "*Parent plan: ${slug}*" {} + 2>/dev/null || true
     return 0
 }
