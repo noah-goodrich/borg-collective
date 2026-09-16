@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# borg-pr-watch — one sweep of a repository's open PRs; report movement, take allowlisted action.
+#
+# Entry point for BOTH layers:
+#   launchd  (com.stillpoint-labs.borg.pr-watch.plist) — persistent, notifies + writes the delta
+#   a session cron                                     — wakes a live Claude session with the delta
+#
+# THE FIRST RUN IS SILENT BY DESIGN. `core.diff` returns no events without a previous snapshot, so a
+# cold start stores state and says nothing rather than reporting the entire backlog as new. An
+# alerting channel that pages its reader on install is one they learn to ignore.
+#
+# WHAT IT MAY DO UNATTENDED is decided in borg_core/watch/core.py::decide and nowhere else, keyed
+# only on machine-derived fields. It never merges, never closes, and never posts a verdict it did
+# not already hold -- see that module's allowlist docstring for the four bounds on the one place a
+# comment body is parsed.
+
+set -uo pipefail
+
+BORG_DIR="${BORG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/borg}"
+BORG_ROOT="${BORG_ROOT:-$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)}"
+REPO_SLUG="${BORG_PR_WATCH_REPO:-noah-goodrich/borg-collective}"
+REPO_DIR="${BORG_PR_WATCH_DIR:-$BORG_ROOT}"
+DELTA_FILE="$BORG_DIR/pr-watch-delta.md"
+LOG_FILE="$BORG_DIR/pr-watch.log"
+
+command -v gh >/dev/null 2>&1 || exit 0
+command -v python3 >/dev/null 2>&1 || exit 0
+[ -d "$BORG_ROOT/borg_core" ] || exit 0
+
+mkdir -p "$BORG_DIR" 2>/dev/null || true
+
+# `--apply` posts allowlisted actions. Without it the sweep is read-only and only reports, which is
+# what makes this script safe to run by hand while debugging.
+APPLY=""
+[ "${1:-}" = "--apply" ] && APPLY="--apply"
+
+OUT=$(cd "$BORG_ROOT" && PYTHONPATH="$BORG_ROOT" python3 -m borg_core.watch.cli \
+        --repo "$REPO_SLUG" --repo-dir "$REPO_DIR" $APPLY 2>&1) || {
+    { printf '%s  sweep failed: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$OUT" >> "$LOG_FILE"; } 2>/dev/null
+    exit 0
+}
+
+[ -n "$OUT" ] || exit 0
+
+# STDOUT FIRST, and this line is the whole point of the script.
+#
+# It was missing. The first version logged, wrote the delta file and fired a notification -- and
+# told its CALLER nothing, so every sweep looked quiet no matter what moved. A session cron whose
+# instruction is "if it prints nothing, say nothing" then reported "sweep quiet" four times in a row
+# while the log was recording real events, which is a watcher that reports success while measuring
+# nothing its consumer can see. The launchd layer never noticed because it reads the log; only the
+# stdout consumer was blind, so the defect hid in the one path nobody was checking.
+printf '%s\n' "$OUT"
+
+{ printf '%s\n%s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$OUT" >> "$LOG_FILE"; } 2>/dev/null
+{ printf '%s\n' "$OUT" > "$DELTA_FILE"; } 2>/dev/null
+
+# Notify only when something moved. `-activate` on click, never on fire: an unsolicited focus change
+# interrupts whatever the developer is doing (recorded in CLAUDE.md under Learned).
+if command -v terminal-notifier >/dev/null 2>&1; then
+    COUNT=$(printf '%s\n' "$OUT" | grep -c '^#' || true)
+    terminal-notifier -title "borg: $COUNT PR event(s)" \
+        -message "$(printf '%s\n' "$OUT" | head -3 | tr '\n' ' ')" \
+        -activate com.mitchellh.ghostty >/dev/null 2>&1 || true
+fi
+
+exit 0

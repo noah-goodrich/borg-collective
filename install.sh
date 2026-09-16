@@ -268,6 +268,38 @@ fi
 launchctl bootstrap "gui/$UID" "$REAP_PLIST_DEST"
 info "  launchd agent bootstrapped (runs hourly; logs -> $LOG_DIR/reap.{stdout,stderr}.log)."
 
+# ── borg-pr-watch ─────────────────────────────────────────────────────────────
+#
+# DEFAULT-OFF, and it is the only agent here that is. Every other launchd job in this installer
+# observes or tidies; this one can POST to GitHub under the user's own account when a stamped PR's
+# head moves. An installer that silently arms an unattended poster is not a choice the user made,
+# so the plist is written but NOT bootstrapped unless BORG_PR_WATCH_ENABLED=1. The command to arm it
+# is printed either way.
+info "Installing borg-pr-watch (PR activity watcher)..."
+
+PRWATCH_PLIST_NAME="com.stillpoint-labs.borg.pr-watch.plist"
+PRWATCH_PLIST_SRC="$BORG_HOME/launchd/$PRWATCH_PLIST_NAME"
+PRWATCH_PLIST_DEST="$HOME/Library/LaunchAgents/$PRWATCH_PLIST_NAME"
+
+sed \
+    -e "s|{{BORG_ROOT}}|$BORG_HOME|g" \
+    -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+    "$PRWATCH_PLIST_SRC" > "$PRWATCH_PLIST_DEST"
+info "  plist -> $PRWATCH_PLIST_DEST"
+
+if [[ "${BORG_PR_WATCH_ENABLED:-0}" == "1" ]]; then
+    if launchctl list "com.stillpoint-labs.borg.pr-watch" &>/dev/null 2>&1; then
+        info "  reloading launchd agent..."
+        launchctl bootout "gui/$UID/com.stillpoint-labs.borg.pr-watch" 2>/dev/null || true
+    fi
+    launchctl bootstrap "gui/$UID" "$PRWATCH_PLIST_DEST"
+    info "  launchd agent bootstrapped (every 600s; MAY POST allowlisted comments)."
+else
+    info "  NOT armed (default). It can post to GitHub, so arming is opt-in."
+    info "  To arm:   launchctl bootstrap gui/$UID $PRWATCH_PLIST_DEST"
+    info "  To audit: ./bin/borg-pr-watch    (no --apply: reports what it WOULD post)"
+fi
+
 # ── 3d. Install borg-memory-gate daemon + LaunchAgent ────────────────────────
 #
 # Phase 1.6 of the cairn-decommission directive — the load-bearing step: one recurring,
