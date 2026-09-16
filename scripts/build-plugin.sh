@@ -289,6 +289,12 @@ _build_self_contained_hook "$HOOKS_SRC/borg-dispatch-guard.sh" "$HOOKS_DST/borg-
 _build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-supabase-guard.sh" 0
 # borg-memory-read-log.sh is self-contained (parses stdin JSON only) — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-memory-read-log.sh" "$HOOKS_DST/borg-memory-read-log.sh" 0
+# borg-prefer-tool-log.sh is NOT self-contained: it delegates to borg_core.extensions.cli rather
+# than reimplementing layer precedence in bash, which would be a second reader of the same
+# annotation. It resolves the package script-relative or via $BORG_ROOT and NO-OPS when neither is
+# present — so in a plugin-only install with no borg_core it does not run, and an empty
+# prefer-tool.jsonl there means "not instrumented", not "no bypasses". Copied as-is with guard.
+_build_self_contained_hook "$HOOKS_SRC/borg-prefer-tool-log.sh" "$HOOKS_DST/borg-prefer-tool-log.sh" 0
 
 # ── Phase 3: Agent definition ─────────────────────────────────────────────────
 
@@ -448,6 +454,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-memory-read-log.sh",
             "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-prefer-tool-log.sh",
+            "timeout": 10
           }
         ]
       }
