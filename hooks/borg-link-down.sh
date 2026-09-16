@@ -122,7 +122,7 @@ if [[ "$MODE" == "orchestrator" ]]; then
         _projects_tsv=$(printf '%s' "$_projects_tsv" | sort -t$'\t' -k3 -r 2>/dev/null || printf '%s' "$_projects_tsv")
 
         _proj_count=$(printf '%s' "$_projects_tsv" | grep -c . 2>/dev/null || echo 0)
-        OVERVIEW+="Orchestrator session — workspace overview (${_proj_count} projects)"$'\n\n'
+        OVERVIEW+="Orchestrator session — you are the QUEEN (${_proj_count} projects)"$'\n\n'
         if [[ -n "$_projects_tsv" ]]; then
             while IFS=$'\t' read -r _name _status _last _path; do
                 [[ -z "$_name" ]] && continue
@@ -346,6 +346,33 @@ if [[ -d "$DIRECTIVES_DIR" ]]; then
 ${_directive_lines%$'\n'}")
     fi
 fi
+
+# Queen vocabulary — UNCONDITIONAL, and deliberately not an address.
+#
+# Placed at the seam on purpose: everything above is state that may need action THIS session
+# (capacity, uncommitted work, clock skew, directives); the checkpoint below is narrative history.
+# An identity line is neither -- it is a reference a drone needs only when it addresses a peer -- so
+# it sits between the two rather than displacing the actionable content at the top.
+#
+# WHY THE ADDRESS IS NOT BAKED IN. The request that prompted this asked to inject "the orchestrator
+# is addressed as `dev-4a`". Measured 2026-09-16 across every transcript on this machine: the
+# addressable name is `<basename-of-cwd>-<2 hex>` and the hex is SESSION-scoped, not
+# directory-scoped. `~/dev` has been BOTH `dev-4a` (441 occurrences) and `dev-db` (4); `~/dev/
+# borg-collective` has been both `borg-collective-6a` (217) and `borg-collective-65` (4). So a
+# literal here is correct only until the Queen restarts, after which this hook injects a confidently
+# wrong address into every session -- and the failure is silent, because a drone reading an
+# authoritative injection has no way to know the hook lied. That is strictly worse than the status
+# quo it would replace, where a stale name at least fails visibly. What IS durable is the
+# definition (cwd == $BORG_ORCHESTRATOR_ROOT) and the lookup, so those are what get injected.
+CONTEXT_PARTS+=("VOCABULARY: the orchestrator session is the QUEEN.
+
+The Queen is the session whose cwd is exactly \$BORG_ORCHESTRATOR_ROOT (default ~/dev). That
+definition is durable; her address is NOT. Addressable names are \`<basename-of-cwd>-<2 hex>\` and
+the hex is session-scoped, so it changes whenever she restarts — ~/dev has been both \`dev-4a\` and
+\`dev-db\`.
+
+Call her the Queen in prose. To message her, take her CURRENT name from ListAgents and pass it
+verbatim to SendMessage. Never hardcode an address — not here, not in a checkpoint, not in a skill.")
 
 # Latest checkpoint for this project — written by /borg-link-up
 CHECKPOINT_FILE=""

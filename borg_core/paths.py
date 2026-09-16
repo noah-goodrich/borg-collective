@@ -20,6 +20,29 @@ import os
 from pathlib import Path
 
 
+def repo_root_of(directory: Path) -> Path:
+    """The nearest ancestor of `directory` (inclusive) containing `.git`, else `directory`.
+
+    Hoisted here when `borg_core/extensions/shell.py` grew the second copy of this walk; the first
+    is `borg_core/planstate/derive.py`. This module's own docstring sets the rule for exactly this
+    shape -- two copies tolerated, the third refused by pylint's duplicate-code check -- so the walk
+    lives in one place before it becomes three.
+
+    TAKES A DIRECTORY, INCLUSIVE. The two callers differ in what they start from and that difference
+    is load-bearing: planstate resolves annotations relative to the repository containing a plan
+    FILE, so it passes `path.parent`; extensions resolves a repository from a directory it was
+    handed, so it passes that directory itself. Folding `.parent` in here would have silently moved
+    the extensions caller one level up and let a repository root resolve to its own parent.
+
+    Falling back to `directory` rather than raising keeps a path outside any repository usable.
+    """
+    here = directory.resolve()
+    for candidate in (here, *here.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return here
+
+
 def borg_dir() -> Path:
     """Resolve BORG_DIR, mirroring zsh's `${XDG_CONFIG_HOME:-$HOME/.config}/borg`."""
     if os.environ.get("BORG_DIR"):

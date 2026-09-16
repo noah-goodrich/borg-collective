@@ -20,6 +20,10 @@ extend or override earlier ones.
 1. `~/.config/borg/extensions/skill-extensions/borg-review/01-context.md` (per machine)
 2. `<project root>/.borg/skill-extensions/borg-review/01-context.md` (per project)
 
+**Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
+asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
+Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
 
@@ -71,6 +75,10 @@ order; later files extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-review/02-output.md` (per machine)
 2. `<project root>/.borg/skill-extensions/borg-review/02-output.md` (per project)
+
+**Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
+asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
+Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
