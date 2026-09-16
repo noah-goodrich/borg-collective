@@ -2700,6 +2700,42 @@ cmd_doctor() {
     done
     echo
 
+    # prefer-tool extensions. A machine-local "use tool X instead" preference whose requirement is
+    # unmet is INERT, and an inert preference reads as working — which is the whole failure mode the
+    # type was designed against. This is where "loudly, once" is discharged: the preference states
+    # its own `- Requires:` line, doctor probes it, and a dead or unprobed one is a finding rather
+    # than something noticed by wondering why a tool was never used. See docs/extensions.md.
+    # One call. The `no prefer-tool extensions` sentinel is dropped rather than printed: doctor
+    # should stay silent about a feature this machine is not using, and the standalone
+    # `borg_core.extensions.cli survey` still says it for a human who asked directly.
+    local ext_raw
+    # `|| true` is load-bearing, not defensive noise. `grep -v` exits 1 when it filters EVERY line,
+    # which is the common case (no prefer-tool extensions), and under this file's `set -e` a command
+    # substitution that exits non-zero aborts cmd_doctor at the assignment -- so without it `borg
+    # doctor` returned non-zero on a healthy machine. Caught by 12 doctor.bats cases, all of them
+    # the ones asserting exit 0. Same shape as the `set -e` shield in lib/promote-next.sh.
+    ext_raw=$(_borg_py borg_core.extensions.cli survey 2>/dev/null | grep -v '^no prefer-tool extensions') || true
+    local -a ext_rows
+    ext_rows=("${(@f)ext_raw}")
+    if [[ -n "${ext_rows[*]//[[:space:]]/}" ]]; then
+        printf "${BOLD} %s${NC}\n" "EXTENSIONS"
+        printf '%0.s─' {1..70}; echo
+        local row
+        for row in "${ext_rows[@]}"; do
+            [[ -z "$row" ]] && continue
+            # WARN, never FAIL, and deliberately not `overall_exit=1`. A preference naming a
+            # plugin this machine does not have is a normal state, not a broken machine — the
+            # contract is "degrade to the default, loudly, once", and the loud part is this row
+            # being here in yellow. Failing doctor over it would cry wolf, which the agent block
+            # above already warns gets the whole command ignored.
+            case "$row" in
+                *"[DEAD]"*|*"[UNPROBED]"*) echo -e " ${YELLOW}${row}${NC}" ;;
+                *)                         echo -e " ${DIM}${row}${NC}" ;;
+            esac
+        done
+        echo
+    fi
+
     return $overall_exit
 }
 
