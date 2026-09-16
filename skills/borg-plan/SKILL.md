@@ -153,12 +153,14 @@ If neither exists, skip silently.
 
 After the conversation, write `PROJECT_PLAN.md` in the project root.
 
-**`*Archived-as:*` is the plan's own name for its archived copy, and it is chosen HERE — once, by a
+**`- Plan-slug:` is the plan's own name for its archived copy, and it is chosen HERE — once, by a
 person, at plan time.** It is `<established-date>-<short-slug>`, where the short slug is a 3-6 word
 human condensation of the objective, not a slugification of it. Confirm it with the developer
 alongside the acceptance criteria. Every later consumer READS this line: `/borg-plan`'s own
-follow-up-directive section below, `/borg-assimilate` Step 0.75's child-directive gate, and Step 5's
-archival path. Omit it and Step 0.75 stops the assimilation rather than guessing.
+follow-up-directive section below, `/borg-assimilate` Step 0.75's child-directive gate, Step 5's
+archival path, and `borg_core.manifest.cli resolve`, which uses it to pick a manifest when a
+repository declares more than one. Omit it and Step 0.75 stops the assimilation rather than
+guessing.
 
 Why it is stored and not computed: an archived filename is a condensation, and there is no function
 from prose to condensation. Measured 2026-09-15 on this repository, the instruction to derive
@@ -172,7 +174,7 @@ disagreed with every file on disk.
 # Project Plan: [Project Name]
 *Established: [date]*
 
-- Plan-slug: `[date]-[short-hand-chosen-slug]`
+- Plan-slug: `[date]-[short-slug]`
 
 ## Objective
 [confirmed 1-2 sentences]
@@ -199,18 +201,6 @@ Estimated effort: [sessions/hours]
 - [Risk 1]
 - [Risk 2]
 ```
-
-### Declare the plan slug
-
-`- Plan-slug:` is the plan's **eventual archived filename without `.md`**, and it is DECLARED here
-because it cannot be derived. Choose it the way you would name the archive file: short, readable,
-hand-picked. Do not slugify the Objective — that produces a 268-character string on a real plan and
-matches nothing.
-
-This annotation is the plan's identity for every machine consumer, and `/borg-plan` is its **only
-writer**. Two already read it: `borg_core.manifest.cli resolve` (which manifest owns a session's
-row) and `/borg-assimilate` Step 0.75 (which child directives block shipping). A plan without it is
-a plan those gates cannot identify.
 
 ### Scaffold the project manifest
 
