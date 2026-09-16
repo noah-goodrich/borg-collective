@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.stillpoint-labs.borg.pr-watch</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{BORG_ROOT}}/bin/borg-pr-watch</string>
+        <string>--apply</string>
+    </array>
+    <!-- RunAtLoad is FALSE, unlike the other agents. The first sweep after install is a cold start
+         and `core.diff` is silent on it by contract, so running at load would only burn a `gh`
+         call; and this is the one agent that can POST, so it should not fire during an install
+         while the tree is mid-change. The first real sweep is the next interval. -->
+    <key>RunAtLoad</key>
+    <false/>
+    <!-- 600s. Not 300: a cross-machine thread turns around in minutes-to-hours (the #159 protocol
+         note), so ten minutes is well inside the useful window, and each sweep costs one GraphQL
+         call plus one `gh pr view` per moved head. Faster polling buys nothing a human would
+         notice and multiplies the API cost by every hour the laptop is awake. -->
+    <key>StartInterval</key>
+    <integer>600</integer>
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>BORG_ROOT</key>
+        <string>{{BORG_ROOT}}</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/pr-watch.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/pr-watch.stderr.log</string>
+</dict>
+</plist>
