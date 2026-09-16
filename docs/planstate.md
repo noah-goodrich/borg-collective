@@ -45,6 +45,44 @@ denylist is a list of the attacks someone thought of.
 
 An unannotated criterion is not an error. It resolves to `unknown` and is proposed, never flipped.
 
+## The known limitation: a pin names a FILE, and a criterion is not always a file
+
+Measured against this repository's own plan on 2026-09-16, when the first five annotations landed
+(`noah-goodrich/borg-collective#211`). Two shapes of `Verify:` clause have no faithful annotation, and
+both were found by trying rather than by reasoning:
+
+**1. A pin is only as specific as the file it names.** AC1's pin is `bats:tests/cli_contract.bats` —
+**165 cases**, of which roughly **10** touch what AC1 claims. Compare AC2's
+`pytest:borg_core/link/test_picture.py`: 39 cases, all about the picture. So AC1's pin fails in both
+directions: it goes red for unrelated CLI regressions, and — the serious one — **it can stay green
+while AC1 specifically regresses**, because deleting the ten scope cases leaves the other 155 exiting
+0. That matters more than it would for a reporting-only pin, because **`pass` auto-flips the
+checkbox**: a 165-case suite is authorised to tick a specific criterion on evidence that is mostly
+about something else.
+
+**2. An annotation is ONE pin; a `Verify:` clause is often a conjunction.** AC7's reads: a scoped
+`grep`, a file's existence, a coverage floor, *and* a suite. Pinning any single clause would flip the
+criterion on a quarter of its evidence — and `bats:tests/cli_contract.bats` is green today, so it
+would tick AC7 outright, which is deliberately unticked. AC6 is the same shape in a different key: its
+gates are prose measurements of command output (`make eval` at `1 pass, 0 fail, 2 skip`), and no kind
+expresses "this command exits 0 with these counts". Both are therefore left `unknown` **on purpose**,
+which is why an unannotated criterion must stay a first-class outcome rather than a nag.
+
+**Why the obvious fix is not obviously right.** The tempting repair is to move the ten AC1 cases into a
+dedicated `tests/ac1_scope.bats` and pin that. Examined 2026-09-16 and NOT done: neither AC1 case is
+self-contained. `tests/link_sweep.bats`'s case needs `_sweepable_repo` plus a sandbox that redirects
+`XDG_DATA_HOME` to a *sibling* of `$HOME`, and its own comment records that a cache written there
+"left all four assertions below green" until that root was listed. Re-authoring that harness in a new
+file risks recreating the exact blind spot the comment exists to prevent. **Moving tests to fit the
+annotation vocabulary is the tail wagging the dog.**
+
+**The fix belongs in the vocabulary**, and the two clauses above suggest its shape: a pin that can name
+a *case* rather than only a file, and a criterion that can carry more than one pin with `pass` meaning
+*all of them passed*. Both are additive — existing single-file annotations keep their current meaning —
+so this is an expand, not a migration. Filed here rather than as a directive because it belongs to
+whoever next opens `borg_core/planstate/core.py`, and because filing a directive to fix a bookkeeping
+gap would add a blocker to the very gate it improves.
+
 ## Three verdicts, and why `unknown` is not `fail`
 
 - **`pass`** — flipped, with an audit annotation appended in the same atomic write.
