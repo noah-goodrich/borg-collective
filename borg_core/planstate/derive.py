@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from borg_core import paths
+
 from borg_core.planstate import core, shell
 
 REPORT_VERSION = 1
@@ -29,11 +31,10 @@ def repo_root(path: Path) -> Path:
     keeps a plan file outside any repository usable -- its annotations simply resolve relative to
     where it sits, which is the only reading available.
     """
-    here = path.resolve().parent
-    for candidate in [here, *here.parents]:
-        if (candidate / ".git").exists():
-            return candidate
-    return here
+    # The walk itself is paths.repo_root_of, shared with borg_core/extensions/shell.py. This
+    # function keeps its FILE-oriented signature: `.parent` is applied here, not there, because an
+    # annotation resolves against the repository containing the plan file.
+    return paths.repo_root_of(path.parent)
 
 
 def _resolve(gate: dict, root: Path, fetch: dict) -> tuple[str, str]:

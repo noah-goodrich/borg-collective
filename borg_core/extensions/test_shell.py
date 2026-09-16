@@ -122,3 +122,24 @@ def test_repo_root_finds_the_git_root_and_falls_back(tmp_path):
     bare = tmp_path.parent / "no-git-here"
     bare.mkdir(exist_ok=True)
     assert shell.repo_root(str(bare)) == str(bare.resolve())
+
+
+def test_a_stray_brief_under_a_SKILL_is_not_surveyed(tmp_path, machine):
+    """Hook names are keyed by kind, and this is the reason it matters rather than a tidiness point.
+
+    `brief` belongs to agents. A `brief.md` copy-pasted from an agent template into a skill's
+    extension directory is read by nothing -- the skill's prose only ever loads 01-context/02-output/
+    03-followup -- so surveying it would report a live-or-dead preference for a hook that cannot
+    fire. That is a false signal in `borg doctor`, which is the one place this type is supposed to
+    tell the truth about what is in force.
+    """
+    _write(machine / "extensions", "skill-extensions", "borg-assimilate", "brief",
+           PREFER.replace("definitely-not-a-real-binary-xyz", "sh"))
+    assert shell.survey(str(tmp_path)) == []
+
+
+def test_a_stray_prose_hook_under_an_AGENT_is_not_surveyed(tmp_path, machine):
+    """The mirror direction: an agent has no 02-output, so one sitting there is equally inert."""
+    _write(machine / "extensions", "agent-extensions", "borg-nanoprobe", "02-output",
+           PREFER.replace("definitely-not-a-real-binary-xyz", "sh"))
+    assert shell.survey(str(tmp_path)) == []

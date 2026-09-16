@@ -62,35 +62,42 @@ def _key(line: str, name: str) -> str:
 def parse(text: str) -> dict:
     """Parse an extension file's declared keys out of its prose.
 
-    Returns `{"type", "prefer", "instead_of", "requires", "body"}`. A file with no `- Prefer-tool:`
-    line is `prose` and carries no keys -- which is every extension that exists today, so the
-    pre-existing files parse unchanged and need no migration.
+    Returns `{"type", "prefer", "instead_of", "requires"}`. A file with no `- Prefer-tool:` line is
+    `prose` and carries no keys -- which is every extension that exists today, so the pre-existing
+    files parse unchanged and need no migration.
 
     Only the FIRST occurrence of each key is taken, so a file that restates a key in its explanatory
     prose cannot override its own header.
+
+    The body is deliberately NOT returned. It was, and nothing read it: the row `shell.survey` builds
+    never carried it and neither CLI verb referenced it, so it was a field whose "first occurrence
+    wins, restatements excluded" semantics had to be kept correct for no consumer. If an audit
+    surface ever needs the prose, it can be added in the commit that needs it.
     """
     found: dict[str, str] = {}
-    body: list[str] = []
     for line in text.splitlines():
-        hit = False
         for name in (KEY_PREFER, KEY_INSTEAD_OF, KEY_REQUIRES):
             value = _key(line, name)
-            if value and name not in found:
-                found[name] = value
-                hit = True
-                break
-            if value:
-                hit = True
-                break
-        if not hit:
-            body.append(line)
+            if not value:
+                continue
+            found.setdefault(name, value)
+            break
     return {
         "type": TYPE_PREFER_TOOL if KEY_PREFER in found else TYPE_PROSE,
         "prefer": found.get(KEY_PREFER, ""),
         "instead_of": found.get(KEY_INSTEAD_OF, ""),
         "requires": found.get(KEY_REQUIRES, ""),
-        "body": "\n".join(body).strip(),
     }
+
+
+def _present(layers: dict) -> list[str]:
+    """The layer names that actually have a parsed file, in read order.
+
+    Shared by `winner` and `conflicted` because both are called on the same dict by the same caller
+    and each used to re-derive this list. One definition means a third layer cannot be added to one
+    and forgotten in the other.
+    """
+    return [name for name in LAYERS if layers.get(name)]
 
 
 def winner(layers: dict) -> str:
@@ -99,7 +106,7 @@ def winner(layers: dict) -> str:
     Returns the layer name, or "" when neither layer has a file. The rule is the module docstring's:
     a `prefer-tool` assertion is owned by the machine, anything else by the repository.
     """
-    present = [name for name in LAYERS if layers.get(name)]
+    present = _present(layers)
     if not present:
         return ""
     if len(present) == 1:
@@ -117,7 +124,7 @@ def conflicted(layers: dict) -> bool:
     invocation and the standing rule is that they stay terse. Two layers that assert DIFFERENT keys
     are layering as designed and are not a conflict.
     """
-    present = [name for name in LAYERS if layers.get(name)]
+    present = _present(layers)
     if len(present) < 2:
         return False
     keys = []

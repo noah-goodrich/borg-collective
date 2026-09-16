@@ -40,7 +40,8 @@ def test_a_file_with_no_prefer_tool_key_is_prose():
     parsed = core.parse("Ask which JIRA ticket this work targets, then read it.")
     assert parsed["type"] == core.TYPE_PROSE
     assert parsed["prefer"] == ""
-    assert parsed["body"] == "Ask which JIRA ticket this work targets, then read it."
+    # The prose body is deliberately not returned -- nothing consumed it.
+    assert "body" not in parsed
 
 
 def test_prefer_tool_keys_are_parsed_and_backticks_stripped():
@@ -54,7 +55,6 @@ def test_prefer_tool_keys_are_parsed_and_backticks_stripped():
     assert parsed["prefer"] == "dev-workflow:create-pr"
     assert parsed["instead_of"] == "gh pr create"
     assert parsed["requires"] == "skill:dev-workflow:create-pr"
-    assert parsed["body"] == "Delegate PR creation."
 
 
 def test_prose_discussing_a_key_does_not_become_the_value():

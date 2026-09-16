@@ -34,6 +34,10 @@ Before the scope gate, check for local extension files. Read each that exists, i
 1. `~/.config/borg/extensions/agent-extensions/borg-nanoprobe/brief.md` (per machine)
 2. `<repo path>/.borg/agent-extensions/borg-nanoprobe/brief.md` (per project)
 
+**Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
+asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
+Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+
 If neither exists, skip silently.
 
 **ONE load point, not three, and a different noun.** The three-point shape belongs to skills, which
