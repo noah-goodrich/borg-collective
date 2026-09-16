@@ -382,3 +382,54 @@ EOF
     [ ! -f "${TEST_CWD}/.borg/state.json" ]
 }
 
+
+# ── Queen vocabulary ─────────────────────────────────────────────────────────────────────────────
+# The identity is injected on EVERY SessionStart so it survives compaction, and it deliberately
+# carries the lookup rather than a literal address. Measured 2026-09-16: the addressable name's hex
+# suffix is session-scoped, so `~/dev` has been both `dev-4a` and `dev-db`. A baked-in address would
+# be silently wrong after the Queen restarts.
+
+@test "queen: project-mode injection names the Queen unconditionally" {
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+    local ctx
+    ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"the orchestrator session is the QUEEN"* ]] || {
+        echo "no Queen vocabulary in the injection"; false; }
+}
+
+@test "queen: the injection teaches the LOOKUP, never a hardcoded address" {
+    run bash "$BORG_START" <<< "$(_start_input)"
+    local ctx
+    ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    # Both halves the request asked for: the name AND how to reach her.
+    [[ "$ctx" == *"ListAgents"* ]]   || { echo "no lookup instruction"; false; }
+    [[ "$ctx" == *"SendMessage"* ]]  || { echo "no addressing instruction"; false; }
+    [[ "$ctx" == *"Never hardcode an address"* ]] || { echo "no prohibition"; false; }
+    # The discriminating half: `dev-4a` may appear ONLY as an example of instability, never as
+    # the address to use. It must be accompanied by the counter-example that proves it drifts.
+    if [[ "$ctx" == *"dev-4a"* ]]; then
+        [[ "$ctx" == *"dev-db"* ]] || {
+            echo "dev-4a appears WITHOUT the counter-example — reads as the canonical address"; false; }
+    fi
+}
+
+@test "queen: the address is presented as session-scoped, not directory-scoped" {
+    run bash "$BORG_START" <<< "$(_start_input)"
+    local ctx
+    ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"session-scoped"* ]] || { echo "instability not stated"; false; }
+    [[ "$ctx" == *'BORG_ORCHESTRATOR_ROOT'* ]] || { echo "durable definition missing"; false; }
+}
+
+@test "queen: orchestrator mode tells the Queen she is the Queen" {
+    local orch="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"
+    run bash "$BORG_START" <<< "$(_start_input "$orch")"
+    [ "$status" -eq 0 ]
+    local ctx
+    ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext // ""')
+    [[ "$ctx" == *"you are the QUEEN"* ]] || { echo "orchestrator not self-identified"; false; }
+    # Discriminates against the project branch: the Queen does not get the drone vocabulary block.
+    [[ "$ctx" != *"Call her the Queen in prose"* ]] || {
+        echo "orchestrator got the drone-facing block"; false; }
+}
