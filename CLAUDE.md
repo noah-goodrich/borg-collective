@@ -338,6 +338,27 @@ docs/
   artifact" moment to hook and two more load points would be seams nothing sits at. **The scope gate
   is NOT extensible**: an extension may add instructions, never widen what the agent may touch,
   raise its deliverable ceiling, or relax bounded termination.
+- **THE SHIM LAYER: two tiers, one direction.** borg composes with an employer plugin layer through
+  exactly two sockets, and which socket a shim belongs in is decided by whether it MUST happen or
+  merely shapes judgment.
+    1. **Executable adapters — fire by construction.** Any executable named `recon-adapter-<source>`
+       on `BORG_RECON_ADAPTER_PATH` registers a source; `borg_core/recon/shell.py` globs for them and
+       takes the source from the filename, config dir shadowing repo dir. No code change registers a
+       source. This repo ships exactly one, `lib/recon/adapters/recon-adapter-github`.
+    2. **Prose extensions — model-discretionary.** `docs/extensions.md` is the reference. They are
+       markdown injected into a skill or an agent, which puts them back in the ~70-90% band where a
+       model may or may not comply. `hooks/borg-prefer-tool-log.sh` exists because of that band.
+  **Anything that MUST happen ships as an executable adapter; anything that shapes judgment ships as
+  a prose extension.** That distinction was implicit until 2026-09-17 and is the reason a shim can
+  silently be the wrong kind — a prose file asked to guarantee something is a request, not a gate.
+  **THE DIRECTION IS ONE-WAY: borg reaches down for employer shims; the employer plugin never
+  reaches up for borg.** A teammate with zero borg installed must see a working employer plugin, so
+  a borg reference inside the employer tree is a portability defect, not a convenience. The
+  employer-side grep that guards this was measured incomplete on 2026-08-31 — it covered two paths
+  and missed `commands/`, where the only leak lived, and printed `ok zero borg coupling` while the
+  leak shipped. A shim is closed by an ABSENT FILE, never by a `command -v borg` probe: a probe hands
+  teammates a dead code path they will eventually delete, and an absent file is invisible.
+
 - **`prefer-tool` extensions, and the one precedence rule**: a file carrying `- Prefer-tool:`
   declares "use tool X instead of the default" (`- Instead-of:` names the default, `- Requires:`
   names `command:<n>` or `skill:<plugin>:<n>` that must exist). Everything without that key is
