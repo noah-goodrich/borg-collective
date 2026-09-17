@@ -99,6 +99,13 @@ def main(argv: list[str] | None = None) -> int:
     by_number = {pr["number"]: pr for pr in current.get("prs") or []}
     lines = []
     for event in events:
+        # A departure's real state needs a network call, which `core` cannot make -- it reports
+        # DEPARTED and this rung resolves it. Doing it here rather than in `core` is what keeps that
+        # module pure and is why `core` does not guess between merged and closed.
+        if event["kind"] == core.DEPARTED:
+            state = shell.pr_state(slug, event["number"])
+            event = dict(event, kind=core.MERGED if state == "MERGED" else core.CLOSED,
+                         detail=f"no longer open (state {state.lower() or 'unknown'})")
         lines.append(f"#{event['number']} {event['kind']}: {event['detail']}")
         # Only a moved head can authorize anything, so the stamp fetch costs at most one extra
         # call per moved head rather than one per event.
