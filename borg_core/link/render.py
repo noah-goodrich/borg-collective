@@ -65,13 +65,13 @@ so it does not surprise anyone later.
 # statements. C0302 exists as a proxy for module complexity; the ~500 lines of actual code here are
 # well inside what it targets, and every paragraph above the disable was written to stop a specific
 # wrong answer being re-derived -- the porcelain/picker retraction, the enumerated scrub set, the
-# per-call-site honesty about `_flatten_summary`. Cutting prose to satisfy a line count would trade
+# per-call-site honesty about summary flattening. Cutting prose to satisfy a line count would trade
 # the reasoning for the metric, which is the failure this repo files under "a check pointed at the
 # wrong thing does not fail, it reads as a pass".
 #
 # THIS IS A DEFERRAL, NOT A VERDICT. The real fix is splitting the module along the seam that already
 # exists -- the SECTIONS spine and its section builders on one side, the shared text primitives
-# (`_fold_s`, `_flatten_summary`, `_label`, `_summary_block`) on the other. That is an architecture
+# (`_fold_s`, `_label`, `_summary_block`) on the other. That is an architecture
 # change and was deliberately not made inside a merge fix; it is filed as its own directive. The
 # duplication this merge DID create (two branches each writing the same argument) was collapsed
 # first, AST-verified as behavior-identical, which took the file from 1133 to 1108.
@@ -126,60 +126,10 @@ _JQ_ABSENT_STATUS = "unknown"
 # this tree is a substring test, which is why that change is free.
 SECTION_MARK = "▸ "
 
-# 0x09 TAB, 0x0A LF, 0x0D CR -- `_flatten_summary` enumerates why exactly these three, off the scrub.
-_FLATTEN_WS = str.maketrans({"\t": " ", "\n": " ", "\r": " "})
-
-
-def _flatten_summary(text: str) -> str:
-    """Replace every registry-surviving whitespace control character in a registry `summary` with a
-    single space. THE CANONICAL STATEMENT of the character set, the altitude and the call sites; the
-    three call sites below carry pointers here rather than repeating any of it.
-
-    THE SET IS ENUMERATED FROM `lib/registry.zsh`'s SCRUB, NOT ASSUMED. `_borg_registry_write` pipes
-    through `tr -d '\\000-\\010\\013\\014\\016-\\037'`, which deletes 0x00-0x08, 0x0B (vertical tab),
-    0x0C (form feed) and 0x0E-0x1F. Everything else reaches storage intact -- and of what remains,
-    exactly three are whitespace that a renderer must not emit raw: 0x09 TAB, 0x0A LF, 0x0D CR. So the
-    writer-side argument F1 made about newlines is true of all three, and the earlier defense was one
-    character short at each end of it.
-
-    THE DEFENSE IS PER-CALL-SITE. NOTHING INHERITS IT. An earlier revision of this docstring said
-    "ONE HELPER, THREE CONSUMERS, so a fourth inherits the defense instead of repeating the bug."
-    That is false and it is the kind of false that stops a follow-up from being written: calling this
-    helper is OPT-IN at every site, so a fourth consumer that reads `entry["summary"]` directly
-    reintroduces the bug with every test in this tree green. No chokepoint routes the field through
-    here, and no test asserts that one does. THE UNBUILT ALTERNATIVE, named so it can be filed rather
-    than rediscovered: flatten ONCE at document assembly (`cli._document`), so `summary` is already
-    clean by the time any renderer sees it and this helper becomes unreachable. That is a design
-    change and is deliberately NOT made here. Until it is, the honest statement is the one above --
-    three call sites, each defended because it was edited to be.
-
-    THE THREE CALL SITES, and how each breaks on the same byte. `_summary_block` -- IN FOCUS's fold; a
-    raw control character emits a sub-line `_fold_s` never produced, which the re-indent loop
-    therefore never indents, breaking its `^  [^ ]` continuation contract. `_overview_summary_cut` --
-    the board's fixed-width table; `_overview_row` lays every column out with `:<{_COL_*}` padding, so
-    a `\\n` or a `\\r` splits one row into two and shears every column after it. `porcelain` -- `borg
-    link --porcelain`'s TSV, parsed BY FIELD, so a `\\n` ends a record early and a `\\t` shifts every
-    field after it; NOT `borg switch`'s picker, see `porcelain` for that retraction.
-
-    THE RENDERER OWNS THIS, NOT THE WRITER. Same altitude rule the `borg recon` retirement gate
-    settled (CLAUDE.md; docs/plans/assimilated/2026-08-26-recon-retirement-gate-altitude.md): the
-    artifact that implements the contract owns its invariant. Normalizing in `summarize.summarize_llm`
-    -- whose `result.stdout.strip()[:500]` leaves interior control characters intact, unlike the
-    heuristic path's `step[:200].replace("\\n", " ")` -- would fix today's one known writer and leave
-    all three contracts undefended against the next. And the LLM is not the only possible source: the
-    scrub above lets all three characters through, so a hand-edited registry produces one with no LLM
-    involved at all.
-
-    Replacement is ONE CHARACTER FOR ONE, so every width budget downstream (the 70-column fold, the
-    50-char board cut and its `> 50` ellipsis, porcelain's 80-char cut) is unchanged for input that
-    was already clean, and no golden moves. PRIVATE ON PURPOSE:
-    `test_render_exposes_exactly_one_human_entry_point` asserts this module's public surface is
-    exactly `{document, porcelain}` -- AC2's "one front door" -- so a shared helper here has to carry
-    the underscore or it reads as a third entry point callers may route through.
-    """
-    return text.translate(_FLATTEN_WS)
-
-
+# `summary` ARRIVES ALREADY FLAT. `core.flatten_summary` is applied once at document assembly
+# (`core.assemble`'s projects map), so no renderer here defends itself and a new consumer inherits
+# the guarantee instead of repeating the bug. The helper that used to live here was OPT-IN, and the
+# same defect was found at three separate call sites in one day because of it.
 def _label(text: str, value: str, col: int = _DEEP_LABEL_COL) -> str:
     """One `  {DIM}<label>{NC}<pad>value` IN FOCUS header line, padding computed as col - len(text)
     rather than six separately hand-counted space literals (borg.zsh:440-445)."""
@@ -230,11 +180,11 @@ def _summary_block(summary: str) -> str:
     re-indented to two spaces (NOT folded with the indent already applied).
 
     EMBEDDED WHITESPACE CONTROL CHARACTERS ARE FLATTENED TO SPACES HERE (F1), because the `^  [^ ]`
-    continuation contract is this function's OWN invariant. See `_flatten_summary` for the character
+    continuation contract is this function's OWN invariant. See `core.flatten_summary` for the character
     set, the altitude argument, and why the one-for-one replacement moves no golden.
     """
     out = [f"  {BOLD}Summary{NC}\n"]
-    folded = _fold_s("  " + _flatten_summary(summary), width=70)
+    folded = _fold_s("  " + summary, width=70)
     for i, line in enumerate(folded):
         if i == 0:
             out.append(f"{line}\n")
@@ -335,7 +285,7 @@ def porcelain(doc: dict) -> str:
         status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
         last_activity = core.jq_default(entry.get("last_activity"), "")
         summary = core.jq_default(entry.get("summary"), "")
-        summary = _flatten_summary(str(summary))[:80]
+        summary = str(summary)[:80]
         rows.append(f"{name}\t{source}\t{status}\t{last_activity}\t{summary}\n")
     return "".join(rows)
 
@@ -366,7 +316,7 @@ def _overview_summary_cut(summary: str) -> str:
 
     EMBEDDED WHITESPACE CONTROL CHARACTERS ARE FLATTENED TO SPACES HERE, BEFORE THE CUT (F1, second
     renderer): a fixed-width table cannot survive one, exactly the way it cannot survive an over-long
-    project name. `_flatten_summary` is the canonical statement of the character set, of all three
+    project name. `core.flatten_summary` is the canonical statement of the character set, of all three
     call sites and how each breaks, and of the retraction that none of this is about the picker.
 
     FLATTEN BEFORE CUTTING, NOT AFTER -- the same ordering `_summary_block` uses, pinned there by
@@ -383,7 +333,7 @@ def _overview_summary_cut(summary: str) -> str:
     Because the replacement is one-for-one, both the cut and the ellipsis test are unchanged for
     already-clean input and no golden moves.
     """
-    flat = _flatten_summary(summary)
+    flat = summary
     cut = flat[:50]
     return f"{cut}..." if len(flat) > 50 else cut
 
