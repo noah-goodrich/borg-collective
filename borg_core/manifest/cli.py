@@ -234,7 +234,90 @@ def _cmd_close(args: argparse.Namespace) -> int:
     return 0
 
 
-_VERBS = ("scaffold", "add-row", "close")
+def _declared_plan_slug(repository_dir: str) -> str:
+    """The slug `PROJECT_PLAN.md` DECLARES, from its `- Plan-slug:` annotation. Never derived.
+
+    Same annotation and same discipline as `lib/promote-next.sh::_borg_plan_declared_slug` and
+    `/borg-assimilate` Step 0.75. There is no function from an objective to an archived filename, so
+    computing it is what produced a gate that searched for a string nothing carried; AC5.9 stores it
+    instead, with one writer.
+
+    Anchored on the leading `- ` because a plan file DISCUSSES its own annotation -- this repository's
+    does, in the paragraph directly below it -- and an unanchored match returns the prose. Backticks
+    are stripped because that is the form `/borg-plan` writes.
+
+    THIS IS THE SECOND READER OF THAT ANNOTATION, the first being the shell one above. The two must
+    accept the same forms; if they drift, converge them rather than widening either. Returns "" when
+    the file or the annotation is absent, which rule 4 turns into a refusal rather than a guess.
+    """
+    path = os.path.join(repository_dir, "PROJECT_PLAN.md")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            lines = handle.read().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return ""
+    for line in lines:
+        if not line.startswith("- Plan-slug:"):
+            continue
+        value = line[len("- Plan-slug:"):].strip()
+        if len(value) >= 2 and value.startswith("`") and value.endswith("`"):
+            value = value[1:-1].strip()
+        if value:
+            return value
+    return ""
+
+
+def _cmd_resolve(args: argparse.Namespace) -> int:
+    """Which manifest this repository's lifecycle skills should write to. READ-ONLY.
+
+    Writes nothing and forks nothing -- it lists a directory and reads at most two files. That is the
+    whole reason this verb exists rather than four paragraphs of prose in three SKILL.md files: the
+    selection rule has one implementation, and the skills carry an invocation instead of a copy.
+
+    The four ordered rules (AC5.1):
+
+      1. No manifest at all -> exit 1 with `no manifest`. This is the NO-OP-AND-PROPOSE path, not an
+         error for a caller to work around: `/borg-link-up` writes a proposal line and carries on,
+         because creation belongs to `/borg-plan`.
+      2. Exactly one -> that stem. The overwhelmingly common case; measured across 22 registered
+         repositories, 1 has any manifest and 0 has more than one.
+      3. More than one -> the one whose `_id` equals the slug DECLARED by `PROJECT_PLAN.md`. `_id` is
+         stamped for free by `shell._load_manifest` (a declared `program` key verbatim, else the
+         filename stem), so this costs no schema change.
+      4. More than one and no match, or no declared slug -> exit 1, naming which. NEVER A GUESS.
+         Picking one of several would silently bind a session's row to another program's chain.
+    """
+    directory = shell.manifest_dir(args.repository)
+    try:
+        names = sorted(n for n in os.listdir(directory) if n.endswith(".json"))
+    except OSError:
+        names = []
+
+    if not names:
+        print(f"no manifest under {directory}", file=sys.stderr)
+        return 1
+
+    if len(names) == 1:
+        print(os.path.splitext(names[0])[0])
+        return 0
+
+    slug = _declared_plan_slug(args.repository)
+    if not slug:
+        print(f"no plan slug declared; candidates are "
+              f"{', '.join(os.path.splitext(n)[0] for n in names)}", file=sys.stderr)
+        return 1
+
+    for name in names:
+        if shell.manifest_id(directory, name) == slug:
+            print(os.path.splitext(name)[0])
+            return 0
+
+    print(f"ambiguous: {', '.join(os.path.splitext(n)[0] for n in names)} "
+          f"(none has _id {slug})", file=sys.stderr)
+    return 1
+
+
+_VERBS = ("scaffold", "add-row", "close", "resolve")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -255,7 +338,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="borg_core.manifest.cli", description=__doc__.splitlines()[0])
     parser.add_argument("verb", choices=_VERBS)
     parser.add_argument("--repository", required=True, help="repository root (the directory holding .borg/)")
-    parser.add_argument("--name", required=True, help="manifest file stem under .borg/programs/")
+    # NOT `required=True` any more, and the flat parser is why this needs saying. `resolve` exists
+    # to DISCOVER the stem, so demanding one would make the verb unusable by its only caller. The
+    # three write verbs still require it, enforced below where the verb is known -- moving the check
+    # from argparse to the dispatch is what lets one flat parser serve four verbs with different
+    # needs, the same trade the `--apex`-on-close comment describes.
+    parser.add_argument("--name", default="", help="manifest file stem under .borg/programs/")
     parser.add_argument("--ref", default="", help="the row's ref (add-row, close)")
     parser.add_argument("--lane", default="", help=f"lane name (add-row; default {core.DEFAULT_LANE})")
     parser.add_argument("--order", default=_ORDER_UNSET, help="declared order; derived from the lane when omitted")
@@ -278,10 +366,17 @@ def main(argv: list[str] | None = None) -> int:
     requirement where the verb that has it lives.
     """
     args = _build_parser().parse_args(argv)
+    # Same pattern and same reason as the `--ref` check below: the requirement belongs to the verb,
+    # not the shared flat parser. `resolve` exists to DISCOVER the stem, so requiring one would make
+    # the verb unusable by its only caller.
+    if args.verb != "resolve" and not args.name:
+        print(f"{args.verb}: --name is required", file=sys.stderr)
+        return 2
     if args.verb in ("add-row", "close") and not args.ref:
         print(f"{args.verb}: --ref is required", file=sys.stderr)
         return 2
-    handlers = {"scaffold": _cmd_scaffold, "add-row": _cmd_add_row, "close": _cmd_close}
+    handlers = {"scaffold": _cmd_scaffold, "add-row": _cmd_add_row, "close": _cmd_close,
+                "resolve": _cmd_resolve}
     if args.verb == "close" and not args.status:
         args.status = core.STATE_MERGED
     try:
