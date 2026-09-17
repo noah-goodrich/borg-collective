@@ -74,7 +74,6 @@ borg init   # morning briefing + launch orchestrator session
 | `drone fix [project\|--all]` | Restore standard 2-pane layout |
 | `drone toggle [project]` | Add/remove top-right side pane (2-pane ↔ 3-pane) |
 | `drone scaffold <dir>` | Generate `.devcontainer/` from templates |
-| `drone status` | Show all drones (container + session state) |
 
 ### Hotkey
 
