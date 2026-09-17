@@ -89,13 +89,26 @@ GUTTER = 2
 # column in the picture. The mock's own later render reaches n17 (chains.md), and `n999 ` still fits.
 ID_WIDTH = 4
 
-# The widest a picture row may be, in VISIBLE columns. 68 rather than 80 came from the fzf preview
-# pane: AC2/S3 sized it at 70, leaving two columns of slack for the pane's own border. THAT PANE IS
-# GONE -- `borg switch`'s preview was retired on 2026-08-27 (zero typed invocations in six months),
-# and `grep -c -- '--preview-window' borg.zsh` is 0, which cli_contract.bats' B15 asserts. The number
-# stays 68 on its own merits: it is the bound every manifest that exists is measured against, and
-# raising it is an explicit non-goal of the width-check directive. A future consumer with a real
-# width constraint should be checked against ITS number, not have this one bent toward it.
+# The widest a picture row may be, in VISIBLE columns.
+#
+# 68 IS A MAINTENANCE NUMBER, NOT A WIDTH CONSTRAINT, and saying so plainly is the whole point of
+# this paragraph. It came from the fzf preview pane -- AC2/S3 sized that at 70, leaving two columns
+# for the pane's border. THE PANE IS GONE: `borg switch`'s preview was retired 2026-08-27 (zero typed
+# invocations in six months) and `grep -c -- '--preview-window' borg.zsh` is 0, asserted by
+# cli_contract.bats' B15. So the only thing that ever PRODUCED this number no longer exists.
+#
+# KEPT BECAUSE MOVING IT COSTS FIXTURE CHURN AND BUYS NOTHING MEASURED. That is a maintenance
+# argument and it is labelled as one. The measurement, taken 2026-09-17 on this repository through
+# the production path (`borg link --json --local`): `grid.picture_width` is **30** against a budget
+# of 68. Thirty-eight columns of headroom, so the bound binds nothing that exists -- while both
+# goldens and both hand-authored `.expected` oracles are byte-compared at this width, so changing it
+# regenerates fixtures for no observed gain.
+#
+# THE EARLIER WORDING SAID "stays 68 on its own merits", AND THAT WAS ASSERTED RATHER THAN ARGUED.
+# It implied a width constraint no surviving consumer has: the readers of this picture are a terminal
+# (`borg link`, `drone link`) and a Claude session reading `--json`, and the latter has no width at
+# all. A future consumer with a REAL constraint should be checked against ITS number -- and should
+# not inherit this one on the assumption that it means something.
 #
 # WHAT THIS BUYS AND WHAT IT DOES NOT. It is a CONSTANT, not a terminal probe -- this module is pure,
 # so it cannot measure the terminal, and AC2's non-goal list keeps it that way. What it now HAS is a

@@ -43,7 +43,6 @@ drone exec [project] -- <cmd>  Run a command inside the container
 drone restart [project]      Restart container + re-exec panes
 drone fix [project]          Restore standard 2-pane layout
 drone toggle [project]       Show/hide top-right side pane (2-pane ↔ 3-pane)
-drone status                 Show all drones
 ```
 
 ## Skills
