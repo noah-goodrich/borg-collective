@@ -12,6 +12,10 @@ from pathlib import Path
 from borg_core.watch import core
 
 
+def _issue(number=1, title="i", comments=0, author="a"):
+    return {"number": number, "title": title, "comment_count": comments, "author": author}
+
+
 def _pr(number=1, title="t", decision="", comments=0, head="aaa1111", state="OPEN", author="a"):
     return {"number": number, "title": title, "review_decision": decision,
             "comment_count": comments, "head": head, "state": state, "author": author}
@@ -295,3 +299,57 @@ def test_a_stamped_pr_whose_tree_changed_gets_a_void_notice():
 def test_summary_is_empty_when_nothing_moved():
     assert core.summary([]) == ""
     assert "#1" in core.summary([{"kind": core.NEW_PR, "number": 1, "detail": "d"}])
+
+
+# ── issues (the blind spot) ──────────────────────────────────────────────────────────────────────
+#
+# The sweep queried `pullRequests` and nothing else. That was not academic: a 9-comment coordination
+# issue for a cross-machine PR control hub was being actively designed on this repository while the
+# watcher reported "quiet" for hours.
+
+def test_issues_are_diffed_at_all():
+    was = {"prs": [], "issues": [_issue(97, comments=9)]}
+    now = {"prs": [], "issues": [_issue(97, comments=11), _issue(98, author="x")]}
+    events = core.diff(was, now)
+    kinds = {e["kind"] for e in events}
+    assert kinds == {core.ISSUE_COMMENT, core.NEW_ISSUE}
+    assert any(e["number"] == 97 and "2 new comment" in e["detail"] for e in events)
+
+
+def test_an_issue_leaving_the_open_set_is_reported():
+    gone = core.diff({"prs": [], "issues": [_issue(97)]}, {"prs": [], "issues": []})
+    assert [e["kind"] for e in gone] == [core.ISSUE_CLOSED]
+
+
+def test_an_unchanged_issue_is_not_an_event():
+    """Same discriminating property as PRs: a watcher that re-fires unchanged state is unread."""
+    same = {"prs": [], "issues": [_issue(97, comments=9)]}
+    assert core.diff(same, same) == []
+
+
+def test_a_SNAPSHOT_PREDATING_issue_support_does_not_flood():
+    """THE UPGRADE CASE, which is the cold-start rule arriving through a schema change instead of a
+    first run. A snapshot written before issues were swept has no `issues` key at all; treating that
+    as "zero issues" would report every open issue as NEW on the first sweep after upgrade. The
+    absence of the key is therefore distinguished from an empty list."""
+    pre_upgrade = {"prs": [_pr(1)]}                      # no `issues` key
+    now = {"prs": [_pr(1)], "issues": [_issue(97), _issue(98)]}
+    assert core.diff(pre_upgrade, now) == []
+    # Discriminates: once the key exists, new issues DO report.
+    assert len(core.diff({"prs": [_pr(1)], "issues": []}, now)) == 2
+
+
+def test_a_snapshot_with_only_issues_is_still_a_warm_start():
+    """The cold-start guard keys on "neither prs nor issues", so a repository with issues and no
+    open PRs must not be treated as a cold start forever."""
+    was = {"prs": [], "issues": [_issue(97, comments=1)]}
+    now = {"prs": [], "issues": [_issue(97, comments=3)]}
+    assert [e["kind"] for e in core.diff(was, now)] == [core.ISSUE_COMMENT]
+
+
+def test_NO_issue_event_can_reach_the_auto_post_allowlist():
+    """Issues carry no head and no tree, so nothing about them is actionable unattended. This holds
+    because `decide` refuses by DEFAULT rather than by enumerating rejections — which is the
+    property that let issue support land with no new guard."""
+    for kind in (core.NEW_ISSUE, core.ISSUE_COMMENT, core.ISSUE_CLOSED):
+        assert core.decide({"kind": kind}, "aaa1111", {"head": "bbb2222"}, True) == core.ACTION_NONE
