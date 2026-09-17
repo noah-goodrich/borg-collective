@@ -343,11 +343,13 @@ def main() -> int:
     p.add_argument("--in", dest="src", default="-", help="recon --json document, or - for stdin")
     p.add_argument("--out", default=os.path.join(STATE, "gather.raw.json"))
     p.add_argument(
-        "--programs-dir",
+        "--chains-dir",
+        "--programs-dir",  # legacy spelling; accepted until the contract phase drops it
+        dest="programs_dir",
         action="append",
         default=[],
         metavar="PROJECT_DIR",
-        help="project root to sweep for .borg/programs/*.json (repeatable). The caller resolves "
+        help="project root to sweep for .borg/chains/*.json (repeatable). The caller resolves "
         "registered project paths; this module stays free of registry/config dependencies.",
     )
     args = p.parse_args()

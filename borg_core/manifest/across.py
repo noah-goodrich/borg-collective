@@ -108,7 +108,7 @@ def edges_from(manifests: list[dict[str, Any]]) -> list[dict[str, Any]]:
     commit whose rule is that no existing path changes.
 
     `edges_from([]) == []`. An empty registry, a sweep that discovered no manifests, and a repository
-    with no `.borg/programs/` directory all arrive here as the empty list, and none of them is an
+    with no `.borg/chains/` directory all arrive here as the empty list, and none of them is an
     error.
     """
     seen: dict[tuple[str, str, str], dict[str, Any]] = {}
@@ -145,7 +145,7 @@ def contested_refs(manifests: list[dict[str, Any]]) -> list[str]:
     supplied twice would accuse itself, and the reason it cannot arrive twice is that `discover`
     collapses body-identical manifests on `_manifest_identity` (a serialised `core.declared_body`)
     before any caller sees a list -- its docstring names the git-worktree case as the reason, since
-    `.borg/programs/` is git-tracked and `drone feature` produces a second checkout of every manifest
+    `.borg/chains/` is git-tracked and `drone feature` produces a second checkout of every manifest
     that `borg add` then registers beside its parent. A caller that hand-assembles a list without
     going through discovery is asking a question about the list it passed, and gets an answer about
     that list. Do not re-add a label-equality guard here to compensate: that is what hid the
