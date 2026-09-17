@@ -94,9 +94,80 @@ _eval_plan() {
 _eval_allowlist_bin() {
     local bindir="$1" ghbody="$2" b src
     mkdir -p "$bindir"
-    for b in bash sh env git jq python3 sed grep awk cat printf date mkdir rm ls dirname basename tr wc sort head tail; do
+    # `claude` IS ON THIS LIST AND ITS ABSENCE COST TWO FULL SWEEPS. Rule 2 says the allowlist is
+    # derived from the skill's own needs and rule 3 says it must include `bash` itself or a shebang
+    # cannot resolve — and the first version applied that reasoning to `bash` while omitting the one
+    # binary the harness exists to invoke. Every case failed with the skill never running, which is
+    # indistinguishable from the skill running and declining. Pinned by a floor case.
+    # `security` IS ON THIS LIST BECAUSE claude READS ITS CREDENTIALS FROM THE MACOS KEYCHAIN.
+    # Measured 2026-09-17: with `security` on the allowlist a trivial prompt returns `READY` at
+    # rc 0; without it, claude prints "Not logged in · Please run /login" and exits 1 — while
+    # `command -v claude` still succeeds, so the harness saw a present-but-unusable binary and
+    # graded it as a FAILING SKILL. Exactly the class of the `--bare skipped the keychain` defect
+    # fixed in #200, where a flag that suppressed keychain reads made borg report its own flag as a
+    # missing credential.
+    for b in claude security bash sh env git jq python3 sed grep awk cat printf date mkdir rm ls dirname basename tr wc sort head tail; do
         src=$(command -v "$b" 2>/dev/null) && ln -sf "$src" "$bindir/$b"
     done
     install -m 0755 "$ghbody" "$bindir/gh"
     printf '%s\n' "$bindir"
+}
+
+# A repository holding a SMALL REAL PROJECT: source, a test, and a README naming a genuine gap.
+#
+# WHY THIS IS NOT DECORATION. Measured 2026-09-17: given a bare fixture (one commit, a README
+# containing the word "fixture"), `/borg-plan` read everything and declined -- "the 'probe-slug' name
+# suggests it exists to exercise the borg tooling itself." That is the skill behaving CORRECTLY: a
+# planning conversation needs something to plan about. A fixture that cannot sustain the
+# conversation cannot exercise the step that follows it.
+#
+# The gap is named in the README on purpose, so the objective the prompt supplies is one a reader of
+# the repository would actually reach.
+# Args: <dir>
+_eval_repo_with_project() {
+    local dir="$1"
+    _eval_repo "$dir" >/dev/null
+    mkdir -p "$dir/src" "$dir/tests"
+    printf 'def add(a, b):\n    return a + b\n\n\ndef mul(a, b):\n    return a * b\n' > "$dir/src/calc.py"
+    printf 'from src.calc import add, mul\n\n\ndef test_add():\n    assert add(1, 2) == 3\n\n\ndef test_mul():\n    assert mul(2, 3) == 6\n' \
+        > "$dir/tests/test_calc.py"
+    printf '# calc\n\nA tiny arithmetic library.\n\nThere is no CI and no coverage gate yet.\n' \
+        > "$dir/README.md"
+    _eval_git_env
+    git -C "$dir" add -A >/dev/null 2>&1
+    git -C "$dir" commit --quiet -m "real project" >/dev/null 2>&1
+    printf '%s\n' "$dir"
+}
+
+# THE PROMPT SHAPE, in one place so all three positives cannot drift apart.
+#
+# It carries the slash command, an objective, and a CONFIRMATION -- because the skill's own
+# `## The Conversation` says "Confirm any adjustment before moving on", so a single headless
+# invocation reaches the output step only if the confirmation is supplied. Working with the skill's
+# shape rather than against it.
+#
+# IT MENTIONS NO MANIFEST, NO `.borg`, NO SCAFFOLD, AND NO ROW. That is the property AC5.2 actually
+# cares about -- "no manifest hint, so a pass is proof the behaviour is default rather than
+# requested." The original "bare slash command" wording was a PROXY for that property, and a broken
+# one: it also removed the confirmation, which made the output step unreachable and every positive
+# case a false negative. The requirement is preserved; the proxy is replaced.
+#
+# `_eval_prompt_mentions_no_manifest` below is the mechanical check that keeps this honest.
+# Args: <slash-command> <objective-sentence>
+_eval_prompt() {
+    printf '%s\n\nObjective: %s\n\nThat objective is correct — proceed, and use your own judgement for the details. Treat this as confirmed; do not wait for further input.\n' \
+        "$1" "$2"
+}
+
+# Refuses a prompt that would leak a hint, which is what makes the "default behaviour" claim
+# checkable rather than asserted. Exits non-zero and names the offending word.
+# Args: <prompt-text>
+_eval_prompt_mentions_no_manifest() {
+    local prompt="$1" word
+    for word in manifest .borg scaffold add-row program lane row; do
+        case "$prompt" in
+            *"$word"*) echo "prompt leaks a hint: $word" >&2; return 1 ;;
+        esac
+    done
+    return 0
 }
