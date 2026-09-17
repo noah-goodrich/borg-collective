@@ -27,50 +27,38 @@ GitHub call.
       `AC1 -> cli_contract.bats` coarseness problem one level worse, so this one gets a real gate.
     - Evidence: `bats:tests/prose_contracts.bats`
 
-- [ ] **AC2 — `borg reconcile` ships, adapter-driven, idempotent, and never destructive.**
-      A new `borg_core/reconcile/` package: pure core (field classification, contradiction
-      detection) plus an impure shell (adapter fan-out, atomic write). Derived fields are
-      overwritten every run; declared fields (`lane`, `why`, `after`, `apex`, cross-repo `order`)
-      are never touched and never deleted; degraded mode writes nothing and says so.
-    - **Measured before building, 2026-09-17, across 5 manifests / 24 rows:** `lane` 24/24,
-      `order` 24/24, `why` 14/24, `after` 2/24, `gate` 4/24, and **`apex` 0/24, `blocked_by` 0/24,
-      `resolved_by` 0/24**. So the declared-field guard protects `lane`/`order`/`why` — real
-      populations — and is VACUOUS for `apex`. It is still written for `apex`, because the cost is
-      one dict key and the alternative is a guard that silently stops covering a field the moment
-      someone uses it; but it is named here as unexercised rather than claimed as tested.
-    - **`state` is 0/24.** The field reconcile exists to DERIVE is absent from every manifest today,
-      so the first run is purely additive and "overwritten every run" has no existing data to
-      overwrite. Good news for migration, and a reason the idempotence test must build its own
-      two-run fixture rather than leaning on repository data.
-    - Verify: pytest — (a) two consecutive runs produce a BYTE-IDENTICAL file, asserted on a
-      manifest that actually has rows and declared fields, not an empty one; (b) an unresolvable
-      edge survives a run; (c) with no adapter discoverable, the file is unchanged and the exit
-      says why; (d) an AST import walk pinning `core.py` pure. Plus mutation: deleting the
-      declared-field guard turns (b) red.
+- [ ] **AC2 — `borg reconcile` ships READ-ONLY, and writes nothing at all.**
+      A new `borg_core/reconcile/` package reporting every row whose declared `status` disagrees with
+      its resolved state, plus every `decision` gate on an already-merged ref (the #158 class). It
+      writes no file, creates no file, and forks no adapter of its own.
+    - **The first slice writes nothing, and that is the Collective's finding, not my plan's.** I had
+      planned the writer first. The review's case is better and I verified all of it: the
+      derived-vs-declared join ALREADY EXISTS and is already pure — `grid.resolve_state`
+      (`borg_core/link/grid.py:267`) returns `(state, state_source)` down the
+      `swept > fetched > declared > unknown` ladder, `borg link` already performs the adapter sweep
+      on every invocation, and a contradiction-report shape to mirror exists at
+      `recon/core.py:289`'s `project_contradictions`. So the valuable half is a pure function over a
+      grid that is already built, and it needs none of the blocked prerequisites.
+    - **The writing half is explicitly NOT in this plan.** It is the item the review sized as its own
+      plan, against a writer whose owning directive lists four silent-dataloss paths.
+    - Verify: pytest — (a) the report names a contradicting row on a fixture that has one; (b) it
+      names nothing on a fixture that agrees; (c) **no file under the fixture repository changes
+      bytes or mtime**, asserted over every file, for both fixtures; (d) an AST import walk pinning
+      `core.py` pure. Mutation: deleting the disagreement predicate turns (a) red while (b) stays
+      green.
     - Evidence: `pytest:borg_core/reconcile/test_core.py`
 
-- [ ] **AC3 — Live state comes from adapters, with no hardcoded source name on the path.**
-      `reconcile` resolves a row's state through the same `recon-adapter-<source>` discovery
-      `borg_core/recon/shell.py` already uses. A machine with only `recon-adapter-github` resolves
-      github rows; a machine that drops in `recon-adapter-jira` resolves jira rows with no code
-      change.
+- [ ] **AC3 — Resolution is adapter-driven, with no hardcoded source name on the path.**
+      The report resolves state through the same `recon-adapter-<source>` discovery
+      `borg_core/recon/shell.py` already uses, so a machine that drops in `recon-adapter-jira`
+      resolves jira rows with no code change.
     - Verify: pytest — with only a stub `recon-adapter-github` on `BORG_RECON_ADAPTER_PATH`, a
       github ref resolves and a jira ref reports unresolved; with a stub `recon-adapter-jira` ALSO
-      discoverable, the SAME jira ref resolves. The second arm is the one that proves discovery is a
-      predicate rather than an allow-list, and it is the work machine's future stated as a test.
+      discoverable, the SAME jira ref resolves. The second arm proves discovery is a predicate
+      rather than an allow-list, and it is the work machine's future stated as a test.
     - Evidence: `pytest:borg_core/reconcile/test_shell.py`
 
-- [ ] **AC4 — A contradiction is reported, never guessed.** A `decision` gate on an already-merged
-      PR (the #158 class) is named in reconcile's output and changes no byte of the manifest.
-      **Scoped to `gate` by measurement:** 4 of 24 rows carry a `gate`, so that class has a real
-      population. `blocked_by` and `resolved_by` are 0/24, so their contradiction reporting is
-      deferred rather than built against nothing — the shim directive's table lists all three
-      together and the measurement splits them.
-    - Verify: pytest with a fixture manifest carrying exactly that shape; assert the report names
-      the row AND that the file's bytes and mtime are unchanged.
-    - Evidence: `pytest:borg_core/reconcile/test_core.py`
-
-- [ ] **AC5 — The employer leak is closed as an absence, and the grep that missed it can fail.**
+- [ ] **AC4 — The employer leak is closed as an absence, and the grep that missed it can fail.**
       In `~/dev/ai-data-engineer`: the `/borg-plan` reference leaves `plugins/` entirely and lives
       only as a work-machine extension file; the portability grep widens from two paths to the whole
       `plugins/` tree.
@@ -79,7 +67,7 @@ GitHub call.
       nothing — the mutation is the evidence, and today the narrow grep prints
       `ok zero borg coupling` while the leak ships.
 
-- [ ] **AC6 — Nothing breaks.** `make test` at its coverage floor, `make lint` 10.00/10,
+- [ ] **AC5 — Nothing breaks.** `make test` at its coverage floor, `make lint` 10.00/10,
       `bats tests/` green, `shellcheck` clean over anything new.
     - Verify: all four commands, run and pasted.
 
@@ -92,9 +80,21 @@ Every exclusion below is a live collision or a measured trap, not a preference.
   `manifest.cli` invocations from AC5.2. That rules out three things I would otherwise want:
   the shim directive's `allowed-tools` AC (edits `borg-assimilate`), the `cli load` verb deferred
   from #206 (rewires all three skills' prose), and any edit to the manifest write verbs.
-- **NOT merging the two manifest validators.** The shim directive's own Notes say this is AC7's work
-  under the One Front Door plan — *"do it there, not twice."* Two plans claiming one deliverable is
-  how two machines implement it twice.
+  **The `allowed-tools` item is worse than a collision — it CONTRADICTS shipped AC5 text.**
+  `skills/borg-assimilate/SKILL.md:196` instructs that the ref is "the one just merged — read it
+  from the `gh pr merge` you executed, never from memory." Making `gh pr merge` unreachable deletes
+  the only provenance the AC5 `close` step is permitted to use. Whoever does that item must rewrite
+  the close-step provenance in the same commit, or two of the three changes ship a silent break.
+- **NOT merging the two manifest validators, and that AC should be STRUCK from the shim directive
+  rather than re-sequenced.** Its own Notes already say the work is AC7's. The review found the
+  sharper reason and I verified it: the shim's verify clause asks only for "a round-trip test
+  asserts what the writer emits, the reader accepts", and a borg_core reader→writer round trip
+  ALREADY PASSES today — `borg_core/manifest/test_shell.py`'s
+  `test_the_writer_persists_no_derived_key`. So the shim AC is satisfiable **without touching the
+  cross-implementation asymmetry it names**, while the owning directive
+  (`2026-08-31-retire-merge-tree-programs-into-borg-core`) carries five ACs including "no sync can
+  delete a declared row". A weaker duplicate of a claim whose real version guards dataloss is worse
+  than no claim.
 - **NOT growing a personal-machine PR stamper.** The largest item in the shim directive, and the one
   its own Notes warn against on co-authority grounds: the stamper is employer work product derived
   from a colleague's format. Deferred, not dropped.
