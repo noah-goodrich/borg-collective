@@ -115,6 +115,34 @@ def _lane_of(value: Any) -> str:
     return str(value or "").strip() or core.DEFAULT_LANE
 
 
+def _unknown_lane(manifest: dict[str, Any], lane: str) -> str:
+    """The refusal text when `lane` is not already declared, or "" when it is fine to use.
+
+    WHY THE GUARD IS ON THE WRITER AND NOT IN `core.validate`. `lane` is a PARTITION: its only
+    mechanical effect is that a new name starts a second root, and `core.lanes` buckets on
+    `_text(lane) or DEFAULT_LANE`, so ANY string is a lane. Measured on 2026-09-15: `--lane aplha`
+    for `alpha` was accepted, forked the chain into a second root, and restarted ordering at 1 --
+    `core.validate` returned no errors because a fork is not malformed, it is just wrong.
+
+    A validator cannot catch it either. Rejecting a lane that is not already present would forbid
+    ever adding a SECOND lane, and the live shape is multi-lane; matching on edit distance would be
+    a fuzzy gate, which this tree has argued is worse than no gate at all (a near-miss would bind a
+    row into the wrong chain silently). So the check belongs where the typo is MADE -- one call,
+    with the author standing there -- and the escape hatch is explicit: `--new-lane` says "yes, I
+    mean a lane that does not exist yet", which a typo never says.
+
+    Returns "" for the first row in an empty manifest: there is nothing to typo against yet.
+    """
+    rows = manifest.get("rows") or []
+    if not rows:
+        return ""
+    declared = sorted({_lane_of(row.get("lane")) for row in rows if isinstance(row, dict)})
+    if lane in declared:
+        return ""
+    return (f"unknown lane {lane!r}; declared lanes are {', '.join(repr(x) for x in declared)}. "
+            f"Pass --new-lane to start a new one.")
+
+
 def _next_order(manifest: dict[str, Any], lane: str, skip_index: int = -1) -> str:
     """Delegates to `core.next_order_in_lane`. Kept as a name so the call sites read locally.
 
@@ -166,6 +194,15 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
     """
     manifest = _read_for_write(args.repository, args.name)
     lane = _lane_of(args.lane)
+    # The lane guard fires BEFORE any mutation, on the same principle as `write_manifest` refusing a
+    # whole document rather than writing a partial one: nothing is touched until the lane is known
+    # good. Only checked when the caller actually NAMED a lane -- an omitted `--lane` resolves to
+    # DEFAULT_LANE, which is the single-stack case and cannot be a typo of anything.
+    if args.lane and not args.new_lane:
+        refusal = _unknown_lane(manifest, lane)
+        if refusal:
+            print(refusal, file=sys.stderr)
+            return 1
     index = _row_index(manifest, args.ref)
     if index is None:
         row: dict[str, Any] = {"ref": args.ref, "lane": lane, "order": args.order or _next_order(manifest, lane)}
@@ -346,6 +383,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--name", default="", help="manifest file stem under .borg/programs/")
     parser.add_argument("--ref", default="", help="the row's ref (add-row, close)")
     parser.add_argument("--lane", default="", help=f"lane name (add-row; default {core.DEFAULT_LANE})")
+    parser.add_argument("--new-lane", action="store_true",
+                        help="permit a lane not already declared (add-row); a typo never says this")
     parser.add_argument("--order", default=_ORDER_UNSET, help="declared order; derived from the lane when omitted")
     parser.add_argument("--why", default="", help="one line on why this row exists (add-row)")
     parser.add_argument("--status", default="", help=f"{core.STATE_OPEN}|{core.STATE_MERGED}|{core.STATE_CLOSED}")

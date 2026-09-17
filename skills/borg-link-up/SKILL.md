@@ -227,9 +227,11 @@ PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli add-row \
 ```
 
 `add-row` is append-or-update, so re-running in the same session for a ref already declared is the
-ordinary case, not an error. **`--lane` is a partition, and a typo forks the chain** — `--lane aplha`
-for `alpha` is accepted today and silently starts a second root at order 1. Reuse a lane name already
-in the manifest, verbatim; when in doubt omit `--lane` and take the default.
+ordinary case, not an error. **`--lane` is a partition, and a lane you have not declared is refused** —
+`--lane aplha` for `alpha` now exits 1 and names the declared lanes, because a one-letter typo used to
+fork the chain into a second root silently. Reuse a lane already in the manifest, verbatim. Starting a
+genuinely new lane requires `--new-lane`, which a typo never says. When in doubt omit `--lane` and take
+the default.
 
 ### 5. Report it in the checkpoint
 
