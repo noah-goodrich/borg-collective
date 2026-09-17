@@ -71,7 +71,7 @@ def test_add_row_appends_and_derives_the_order_within_a_lane(repository):
     _run("scaffold", "--repository", repository, "--name", "demo")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "build")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "build")
-    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#3", "--lane", "docs")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#3", "--lane", "docs", "--new-lane")
     rows = {row["ref"]: (row["lane"], row["order"]) for row in _read(repository)["rows"]}
     assert rows == {"o/r#1": ("build", "1"), "o/r#2": ("build", "2"), "o/r#3": ("docs", "1")}
 
@@ -313,7 +313,8 @@ def test_a_lane_move_preserves_a_declared_prerequisite_instead_of_numbering_it(r
     _run("scaffold", "--repository", repository, "--name", "demo")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1",
          "--lane", "contract", "--order", "–")
-    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "cutover")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2",
+         "--lane", "cutover", "--new-lane")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#3", "--lane", "cutover")
 
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1",
@@ -350,11 +351,11 @@ def test_a_lane_move_does_not_outrank_an_untouched_row_whose_order_holds_no_digi
     for n in (1, 2, 3):
         _run("add-row", "--repository", repository, "--name", "demo", "--ref", f"o/r#{n}", "--lane", "filler")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#7",
-         "--lane", "target", "--order", "abc")
-    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#9", "--lane", "other")
+         "--lane", "target", "--order", "abc", "--new-lane")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#9", "--lane", "other", "--new-lane")
 
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#9",
-                "--lane", "target") == 0
+                "--lane", "target", "--new-lane") == 0
 
     doc = _read(repository)
     assert [row["ref"] for row in core.lanes(doc)["target"]] == ["o/r#7", "o/r#9"], \
@@ -490,3 +491,51 @@ def test_resolve_needs_no_name_while_the_write_verbs_still_demand_one(tmp_path, 
     capsys.readouterr()
     assert cli.main(["close", "--repository", repo, "--ref", "o/r#1"]) == 2
     assert "--name is required" in capsys.readouterr().err
+
+
+# ── the lane guard (AC5.8) ───────────────────────────────────────────────────────────────────────
+def test_add_row_refuses_a_lane_that_is_not_already_declared(repository, capsys):
+    """A one-letter lane typo forked the chain silently; measured 2026-09-15.
+
+    `--lane aplha` for `alpha` was ACCEPTED by `core.validate` -- a fork is not malformed, just
+    wrong -- and started a second root whose ordering restarted at 1. The guard is on the writer
+    rather than the validator because rejecting an unknown lane in `validate` would forbid ever
+    adding a second lane, and the live shape is multi-lane.
+
+    MUTATION: delete the `_unknown_lane` call in `_cmd_add_row` and this goes green again.
+    """
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "alpha")
+    capsys.readouterr()
+
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2",
+                "--lane", "aplha") == 1
+    err = capsys.readouterr().err
+    assert "unknown lane 'aplha'" in err
+    assert "'alpha'" in err, "the refusal must NAME the declared lanes, or the author cannot see the typo"
+    assert [row["ref"] for row in _read(repository)["rows"]] == ["o/r#1"], "nothing may be written"
+
+
+def test_add_row_permits_a_new_lane_when_it_is_declared_deliberately(repository):
+    """The discriminating direction: a typo never passes --new-lane, so the flag is the whole gate."""
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "alpha")
+
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2",
+                "--lane", "beta", "--new-lane") == 0
+    lanes = {row["ref"]: row["lane"] for row in _read(repository)["rows"]}
+    assert lanes == {"o/r#1": "alpha", "o/r#2": "beta"}
+
+
+def test_add_row_the_first_lane_in_an_empty_manifest_is_free(repository):
+    """There is nothing to typo against yet, so the guard must not demand --new-lane on row one."""
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    assert _run("add-row", "--repository", repository, "--name", "demo",
+                "--ref", "o/r#1", "--lane", "alpha") == 0
+
+
+def test_add_row_without_a_lane_is_never_a_typo(repository):
+    """An omitted --lane resolves to DEFAULT_LANE -- the single-stack case, which names nothing."""
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "alpha")
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2") == 0
