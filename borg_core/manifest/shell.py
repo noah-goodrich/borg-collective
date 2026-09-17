@@ -502,3 +502,22 @@ def write_manifest(repository_dir: str, manifest: dict, name: str) -> str:
         os.unlink(tmp_path)
         raise
     return path
+
+
+def manifest_id(directory: str, name: str) -> str:
+    """The `_id` of one manifest file, or "" when it cannot be read or is invalid.
+
+    A PUBLIC seam over `_load_manifest`, added for `cli._cmd_resolve`. Reaching into the private
+    loader from the CLI layer tripped the clean-architecture visibility rule (W9003), and the
+    linter's own remedy -- expose an interface rather than justify the access -- is the right one
+    here: `resolve` needs exactly one fact about each candidate, so the narrow function is also the
+    honest one. It returns a string rather than the document, which keeps the `_id`/`_path` stamps
+    `_load_manifest` adds from escaping into a caller that might persist them.
+
+    "" on any failure, which `resolve` treats as "this candidate does not match" -- the refusing
+    direction, since a manifest it cannot read is not one it should silently select.
+    """
+    doc, _warning = _load_manifest(os.path.join(directory, name), name)
+    if not doc:
+        return ""
+    return str(doc.get("_id") or "")
