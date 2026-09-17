@@ -539,3 +539,57 @@ def test_add_row_without_a_lane_is_never_a_typo(repository):
     _run("scaffold", "--repository", repository, "--name", "demo")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "alpha")
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2") == 0
+
+
+# ── the writer ref-kind gate (AC5.10) ────────────────────────────────────────────────────────────
+def test_add_row_refuses_a_tracked_kind_this_machine_cannot_resolve(repository, capsys, monkeypatch, tmp_path):
+    """A jira parent with no adapter WEDGES every row behind it, and does so silently.
+
+    `grid.RESOLVED_STATE_SOURCES` is `(swept, fetched)`, so a kind nothing sweeps never resolves and
+    `ready_set`'s "unknown is not merged" blocks the children forever -- while `refs.expects_github`
+    deliberately suppresses the SIGNALS line for jira. Measured 2026-09-15: a jira parent produced
+    `{'state': 'known', 'refs': []}`, a confident empty answer.
+
+    MUTATION: delete the `_unauthorable_ref` call in `_cmd_add_row` and this goes green.
+    """
+    monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(tmp_path / "no-adapters"))
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    capsys.readouterr()
+
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "DE-2107") == 1
+    assert "no resolver for jira" in capsys.readouterr().err
+    assert _read(repository)["rows"] == [], "nothing may be written"
+
+
+def test_add_row_admits_the_same_jira_ref_once_an_adapter_exists(repository, monkeypatch, tmp_path):
+    """The discriminating direction, and the proof this is a PREDICATE rather than an allow-list.
+
+    The work machine's future stated as a test: the identical ref that is refused above becomes
+    authorable when `recon-adapter-jira` is discoverable -- with no code change and no second ruling.
+    """
+    adapters = tmp_path / "adapters"
+    adapters.mkdir()
+    stub = adapters / "recon-adapter-jira"
+    stub.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    stub.chmod(0o755)
+    monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
+
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "DE-2107") == 0
+    assert [row["ref"] for row in _read(repository)["rows"]] == ["DE-2107"]
+
+
+def test_add_row_never_authors_a_reference_kind(repository, capsys):
+    """Refused for the OPPOSITE reason: `ready_set` skips a link parent, so it is inert rather than
+    wedging. It is still not this writer's to create -- a reference is context a human attaches."""
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    capsys.readouterr()
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "https://x.co/a") == 1
+    assert "Reference kinds are context a human attaches" in capsys.readouterr().err
+
+
+def test_add_row_still_authors_github_refs(repository, monkeypatch, tmp_path):
+    """github is resolvable without any adapter -- `grid` carries a built-in targeted fetch."""
+    monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(tmp_path / "none"))
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 0
