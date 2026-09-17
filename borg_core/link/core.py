@@ -646,6 +646,43 @@ def capacity(active: int, limit: int) -> dict:
     return {"active": active, "limit": limit, "over_limit": active > limit}
 
 
+def _with_flat_summary(entry):
+    """`entry` with its `summary` flattened, or `entry` unchanged when it carries none.
+
+    Copies rather than mutating: `assemble` is documented pure, and the caller's registry dict is
+    not this function's to edit. Non-dict entries pass through -- validation is not this seam's job.
+    """
+    if not isinstance(entry, dict) or "summary" not in entry:
+        return entry
+    return {**entry, "summary": flatten_summary(entry["summary"])}
+
+
+# 0x09 TAB, 0x0A LF, 0x0D CR. ENUMERATED FROM `lib/registry.zsh`'s SCRUB, NOT ASSUMED:
+# `_borg_registry_write` pipes through `tr -d '\000-\010\013\014\016-\037'`, which deletes
+# 0x00-0x08, 0x0B, 0x0C and 0x0E-0x1F. Everything else reaches storage intact, and of what remains
+# exactly these three are whitespace a renderer must not emit raw.
+_FLATTEN_WS = str.maketrans({"\t": " ", "\n": " ", "\r": " "})
+
+
+def flatten_summary(text: str) -> str:
+    """Replace every registry-surviving whitespace control character in a `summary` with one space.
+
+    CALLED ONCE, AT ASSEMBLY, AND THAT IS THE WHOLE POINT. This lived in `render.py` as an OPT-IN
+    helper with three call sites, and the same bug was found and fixed three times in one day at
+    three different renderers -- `_summary_block` (a raw LF emits a sub-line `_fold_s` never
+    indents, breaking its `^  [^ ]` continuation contract), `_overview_summary_cut` (a LF splits one
+    fixed-width board row in two and shears every column after it), and `porcelain` (an LF ends a
+    TSV record early; a TAB shifts every field after it).
+
+    Three renderers, three independent discoveries, ONE missing invariant. The old docstring named
+    the unbuilt fix itself: "flatten ONCE at document assembly, so `summary` is already clean by the
+    time any renderer sees it and this helper becomes unreachable." That is what this now is. A
+    FOURTH consumer reading `entry["summary"]` directly now inherits the guarantee instead of
+    reintroducing the bug, because the field never enters the document dirty.
+    """
+    return str(text).translate(_FLATTEN_WS)
+
+
 # JUSTIFICATION: one flat argument per top-level key of the document; `capacity` names the wire block.
 def assemble(  # pylint: disable=too-many-arguments,too-many-positional-arguments,redefined-outer-name
     generated_at,
@@ -711,7 +748,11 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
         "total_projects": total_projects,
         "capacity": capacity,
         "order": order,
-        "projects": {name: projects[name] for name in order},
+        # THE CHOKEPOINT. `summary` is flattened HERE, once, so no renderer can receive it dirty --
+        # see `flatten_summary` for the three bugs that each came from a renderer defending itself
+        # individually. A row without a `summary` key is left exactly as it was: adding one would
+        # change what the wire carries for projects that never had the field.
+        "projects": {name: _with_flat_summary(projects[name]) for name in order},
         "directives": directives,
         "assimilated": assimilated,
         "cortex_pending": cortex_pending,
