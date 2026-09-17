@@ -22,6 +22,9 @@ REVIEW_CHANGES_REQUESTED = "review_changes_requested"
 NEW_COMMENT = "new_comment"
 MERGED = "merged"
 CLOSED = "closed"
+# One kind for "left the open set". Resolving it to merged-vs-closed needs a network call, which is
+# the caller's job; `core` cannot and must not guess.
+DEPARTED = "departed"
 HEAD_MOVED = "head_moved"
 
 KIND_ORDER = (
@@ -31,6 +34,7 @@ KIND_ORDER = (
     NEW_COMMENT,
     MERGED,
     CLOSED,
+    DEPARTED,
     HEAD_MOVED,
 )
 
@@ -106,14 +110,22 @@ def diff(previous: dict, current: dict) -> list:
         else:
             events.extend(_transitions(number, before, pr))
 
-    # A PR that left the open set was merged or closed. Which one is carried on the snapshot rather
-    # than guessed from its absence.
+    # A PR that left the open set was merged or closed, and WHICH ONE CANNOT COME FROM THE SNAPSHOT.
+    #
+    # The first version read `before["state"]` and branched `MERGED if state == "MERGED"`. The sweep
+    # queries `states:OPEN`, so that field is ALWAYS "OPEN" for anything in the snapshot -- the
+    # MERGED arm was unreachable and every merged PR reported as `closed`, with the self-refuting
+    # detail "no longer open (state OPEN)". Five real merges printed that before it was noticed, and
+    # the watcher surfaced its own defect. Third gate-that-cannot-fire in one day, and the same
+    # cause each time: a branch keyed on a field whose only possible value fails the test.
+    #
+    # The departed state is therefore reported as UNRESOLVED here and the caller -- which can make
+    # network calls, unlike this module -- is expected to resolve it. `DEPARTED` is deliberately one
+    # kind rather than a guess between two.
     for number, before in was.items():
         if number in now:
             continue
-        state = (before.get("state") or "").upper()
-        events.append(_event(MERGED if state == "MERGED" else CLOSED, before, number,
-                             f"no longer open (state {state or 'unknown'})"))
+        events.append(_event(DEPARTED, before, number, "no longer open"))
 
     events.sort(key=lambda e: (KIND_ORDER.index(e["kind"]) if e["kind"] in KIND_ORDER else 99,
                                e["number"]))
