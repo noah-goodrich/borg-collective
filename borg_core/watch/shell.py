@@ -140,3 +140,18 @@ def comments(repo: str, number: int, timeout: int = 45) -> list:
             out.append({"author_association": item.get("authorAssociation") or "",
                         "body": item.get("body") or ""})
     return out
+
+
+def pr_state(repo: str, number: int, timeout: int = 30) -> str:
+    """One PR's real state (`MERGED`/`CLOSED`/`OPEN`), or "" when it cannot be determined.
+
+    Needed because the sweep queries `states:OPEN`, so a snapshot can never say whether a departed
+    PR was merged or closed -- `core.diff` reports DEPARTED and this resolves it. One call, and only
+    for PRs that actually left the open set, which is rare.
+    """
+    try:
+        proc = subprocess.run(["gh", "pr", "view", str(number), "--repo", repo, "--json", "state"],
+                              capture_output=True, text=True, timeout=timeout, check=False)
+        return str(json.loads(proc.stdout or "{}").get("state") or "")
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return ""
