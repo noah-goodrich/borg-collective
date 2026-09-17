@@ -61,10 +61,25 @@ def test_new_pr_comment_headmove_and_departure_are_all_detected():
     now = {"prs": [_pr(1, comments=5, head="bbb2222"), _pr(9, author="x")]}
     kinds = {e["kind"] for e in core.diff(was, now)}
     assert kinds == {core.NEW_COMMENT, core.HEAD_MOVED, core.NEW_PR}
-    gone = core.diff({"prs": [_pr(1, state="MERGED")]}, {"prs": []})
-    assert [e["kind"] for e in gone] == [core.MERGED]
-    gone = core.diff({"prs": [_pr(1, state="CLOSED")]}, {"prs": []})
-    assert [e["kind"] for e in gone] == [core.CLOSED]
+    # A departure is reported as DEPARTED, NOT guessed between merged and closed.
+    gone = core.diff({"prs": [_pr(1)]}, {"prs": []})
+    assert [e["kind"] for e in gone] == [core.DEPARTED]
+
+
+def test_a_departure_is_never_classified_from_the_SNAPSHOT():
+    """REGRESSION, and the watcher caught it on itself. The first version branched
+    `MERGED if before["state"] == "MERGED"`. The sweep queries `states:OPEN`, so that field is
+    ALWAYS "OPEN" for anything in a snapshot — the MERGED arm was unreachable and every merged PR
+    reported as `closed`, with the self-refuting detail "no longer open (state OPEN)". Five real
+    merges printed that before anyone noticed.
+
+    `core` is pure, so it CANNOT resolve the real state; reporting one honest kind and letting the
+    impure caller resolve it is the only correct split. A snapshot state of MERGED must therefore
+    change nothing here — that is the discriminating assertion."""
+    for snapshot_state in ("OPEN", "MERGED", "CLOSED", ""):
+        gone = core.diff({"prs": [_pr(1, state=snapshot_state)]}, {"prs": []})
+        assert [e["kind"] for e in gone] == [core.DEPARTED], snapshot_state
+        assert "OPEN" not in gone[0]["detail"], "the self-refuting detail string is back"
 
 
 def test_a_deleted_comment_is_not_an_event():
