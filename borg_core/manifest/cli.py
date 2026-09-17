@@ -52,7 +52,9 @@ import sys
 from typing import Any
 
 from borg_core.manifest import core
+from borg_core.manifest import refs
 from borg_core.manifest import shell
+from borg_core.recon import shell as recon_shell
 
 _ORDER_UNSET = ""
 
@@ -113,6 +115,58 @@ def _lane_of(value: Any) -> str:
     the fix: two `add-row` calls, one padded and one not, both derived "1".
     """
     return str(value or "").strip() or core.DEFAULT_LANE
+
+
+def _resolvable_kinds() -> set[str]:
+    """Ref kinds this machine can actually resolve a state for.
+
+    `github` is unconditional: `grid` carries a built-in targeted fetch that does not go through an
+    adapter. Everything else must be DISCOVERED, so dropping an executable on the adapter path is
+    the whole install step -- the mechanism `refs.py` already documents ("a machine with a Jira
+    adapter installed already sweeps Jira").
+    """
+    kinds = {refs.GITHUB}
+    try:
+        kinds.update(source for source, _ in recon_shell.discover_adapters())
+    except OSError:
+        pass  # A degraded adapter path is "cannot look", which must not WIDEN what is authorable.
+    return kinds
+
+
+def _unauthorable_ref(ref: str) -> str:
+    """The refusal when this machine cannot RESOLVE `ref`'s kind, or "" when it may be authored.
+
+    RULED BY NOAH 2026-09-15: the lifecycle skills author the ref kinds THIS MACHINE CAN RESOLVE --
+    a predicate, never a hardcoded list. A kind is authorable when it is TRACKED and a resolver for
+    it exists here.
+
+    WHY A PREDICATE AND NOT `if kind == "github"`. One rule has to be correct on BOTH machines. This
+    one holds a single adapter, so it evaluates to github alone; the work machine gains jira the
+    moment it drops in `recon-adapter-jira`, with no code change here and no second ruling. A literal
+    would make "github only" a constant rather than an outcome, and would have to be edited on the
+    wrong machine to let the other one work.
+
+    WHY AN UNRESOLVABLE KIND MUST BE REFUSED. `grid.RESOLVED_STATE_SOURCES` is `(swept, fetched)`, so
+    a kind nothing sweeps never resolves, and `ready_set`'s rule is "unknown is not merged" -- a jira
+    parent with no adapter WEDGES every row behind it. Silently: `refs.expects_github` deliberately
+    suppresses the SIGNALS line for jira, which is sound where an adapter exists and a confident
+    empty answer where one does not.
+
+    REFERENCE kinds are refused for the opposite reason -- `ready_set` SKIPS a `link` parent, so an
+    auto-authored one is inert rather than wedging. It is still not this writer's to create: a
+    reference is context a human attaches, not work a session declares.
+    """
+    kind = refs.ref_kind(ref)
+    if not kind:
+        return ""  # `_row_ref_error` already refuses an unknown-kind ref, with a better message.
+    if kind not in refs.TRACKED_REF_KINDS:
+        return (f"refusing to author a {kind} ref: {ref}. Reference kinds are context a human "
+                f"attaches, not work this writer declares.")
+    if kind in _resolvable_kinds():
+        return ""
+    return (f"refusing to author a {kind} ref: {ref}. This machine has no resolver for {kind}, so "
+            f"the row would never resolve and would wedge every row behind it, silently. Install a "
+            f"recon-adapter-{kind} first, or hand-author the row.")
 
 
 def _unknown_lane(manifest: dict[str, Any], lane: str) -> str:
@@ -203,6 +257,12 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
         if refusal:
             print(refusal, file=sys.stderr)
             return 1
+    # The ref-kind gate fires beside the lane guard, before any mutation, for the same reason: a
+    # document that is wrong on the way in is wrong on disk, and the author is standing right there.
+    unauthorable = _unauthorable_ref(args.ref)
+    if unauthorable:
+        print(unauthorable, file=sys.stderr)
+        return 1
     index = _row_index(manifest, args.ref)
     if index is None:
         row: dict[str, Any] = {"ref": args.ref, "lane": lane, "order": args.order or _next_order(manifest, lane)}

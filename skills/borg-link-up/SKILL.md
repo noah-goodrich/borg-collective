@@ -214,10 +214,12 @@ Only kinds this machine can **resolve**: in `refs.TRACKED_REF_KINDS` and carryin
 a discovered `recon-adapter-<source>`, or the built-in GitHub fetch. Step 2 derives from `gh`, so in
 practice that is `github`, which is the ruled scope.
 
-Never hand-author a `jira` or `link` ref into a row from this skill. A `link` is a reference, not
-tracked work. A `jira` key is tracked with no adapter on this machine, so it would wedge every row
-behind it **with no `▸ SIGNALS` line** — the silent-wedge this rule exists to prevent. Those stay
-hand-authored until an adapter exists.
+**`add-row` now enforces this rather than trusting the prompt.** A kind with no resolver on this
+machine is refused by name — a `jira` ref exits 1 naming the missing `recon-adapter-jira`, because it
+would wedge every row behind it with no `▸ SIGNALS` line. A `link` ref is refused for the opposite
+reason: `ready_set` skips it, so it is inert rather than wedging, but a reference is context a human
+attaches, not work this writer declares. Drop in `recon-adapter-<source>` and the same ref becomes
+authorable with no code change.
 
 ### 4. Add the row
 
