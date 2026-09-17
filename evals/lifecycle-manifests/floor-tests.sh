@@ -121,6 +121,22 @@ if [ -z "$real_gh" ] || [ "$stub_target" != "$real_gh" ]; then
 else
     bad "allowlist's gh resolves to the real binary"
 fi
+# THE CASE THAT WOULD HAVE SAVED TWO SWEEPS. `claude` absent from the allowlist means every model
+# case invokes a command that does not exist, and "the skill never ran" is indistinguishable from
+# "the skill ran and declined" in the output. Asserted by name.
+if PATH="$bindir" command -v claude >/dev/null 2>&1; then
+    ok "claude is reachable under the allowlist PATH"
+else
+    bad "claude is NOT on the allowlist — every model case would fail without running the skill"
+fi
+# Discriminates: a binary deliberately left off must NOT be reachable, or the allowlist is not
+# actually restricting anything and rule 2's whole point is lost.
+if PATH="$bindir" command -v curl >/dev/null 2>&1; then
+    bad "allowlist is not restricting — curl leaked through"
+else
+    ok "a binary not on the list is unreachable (the allowlist restricts)"
+fi
+
 if PATH="$bindir" gh 2>/dev/null | grep -q '"number"'; then
     ok "the gh stub is reachable and answers under the allowlist PATH"
 else
@@ -154,7 +170,17 @@ if [ -x "$RUN" ]; then
     #
     # And the cases must SKIP rather than FAIL in that same run: an absent `claude` is a different
     # fact from a wrong one, and conflating them is exactly what the floor must not do.
-    out="$(PATH="$bindir" "$RUN" 2>&1)"; rc=$?
+    #
+    # A DELIBERATELY CLAUDE-LESS DIR, not the allowlist. This case previously reused `$bindir` and
+    # passed for the wrong reason: the allowlist did not contain `claude` at all, so "hidden" was
+    # indistinguishable from "never there" — and that omission was the actual bug that made every
+    # model case fail without running the skill. Hiding it now has to be done on purpose.
+    nodir="$WORK/noclaude"
+    mkdir -p "$nodir"
+    for b in bash sh env git jq python3 sed grep awk cat printf date mkdir rm ls dirname basename tr wc sort head tail; do
+        src=$(command -v "$b" 2>/dev/null) && ln -sf "$src" "$nodir/$b"
+    done
+    out="$(PATH="$nodir" "$RUN" 2>&1)"; rc=$?
     if [ "$rc" -ne 0 ]; then
         ok "model floor FIRES at rc $rc when claude is unavailable"
     else
