@@ -214,10 +214,12 @@ Only kinds this machine can **resolve**: in `refs.TRACKED_REF_KINDS` and carryin
 a discovered `recon-adapter-<source>`, or the built-in GitHub fetch. Step 2 derives from `gh`, so in
 practice that is `github`, which is the ruled scope.
 
-Never hand-author a `jira` or `link` ref into a row from this skill. A `link` is a reference, not
-tracked work. A `jira` key is tracked with no adapter on this machine, so it would wedge every row
-behind it **with no `▸ SIGNALS` line** — the silent-wedge this rule exists to prevent. Those stay
-hand-authored until an adapter exists.
+**`add-row` now enforces this rather than trusting the prompt.** A kind with no resolver on this
+machine is refused by name — a `jira` ref exits 1 naming the missing `recon-adapter-jira`, because it
+would wedge every row behind it with no `▸ SIGNALS` line. A `link` ref is refused for the opposite
+reason: `ready_set` skips it, so it is inert rather than wedging, but a reference is context a human
+attaches, not work this writer declares. Drop in `recon-adapter-<source>` and the same ref becomes
+authorable with no code change.
 
 ### 4. Add the row
 
@@ -227,9 +229,11 @@ PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli add-row \
 ```
 
 `add-row` is append-or-update, so re-running in the same session for a ref already declared is the
-ordinary case, not an error. **`--lane` is a partition, and a typo forks the chain** — `--lane aplha`
-for `alpha` is accepted today and silently starts a second root at order 1. Reuse a lane name already
-in the manifest, verbatim; when in doubt omit `--lane` and take the default.
+ordinary case, not an error. **`--lane` is a partition, and a lane you have not declared is refused** —
+`--lane aplha` for `alpha` now exits 1 and names the declared lanes, because a one-letter typo used to
+fork the chain into a second root silently. Reuse a lane already in the manifest, verbatim. Starting a
+genuinely new lane requires `--new-lane`, which a typo never says. When in doubt omit `--lane` and take
+the default.
 
 ### 5. Report it in the checkpoint
 
