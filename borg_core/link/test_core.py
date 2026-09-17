@@ -829,3 +829,58 @@ def test_plan_progress_counts_a_criterion_after_the_fence_closes():
     which is the failure mode that turns an inflated count into a silently truncated one."""
     met, total = core.plan_progress(_FENCED_PLAN)
     assert total == 3, "AC3 sits after the closing fence and must still be counted"
+
+
+# ── the summary chokepoint (2026-08-31-flatten-the-summary-once-at-assembly) ─────────────────────
+def test_assemble_flattens_summary_once_at_the_chokepoint():
+    """THE PROPERTY IS ASSERTED ON THE ASSEMBLED DOCUMENT, not on a renderer's output.
+
+    Three renderers each grew their own flatten, and the same bug was found three times in one day
+    because calling the helper was opt-in. Asserting here means the guarantee is about the field
+    entering the document, which is what a FOURTH consumer inherits.
+
+    MUTATION: drop `_with_flat_summary` from `assemble`'s projects map and this goes red.
+    """
+    doc = core.assemble(
+        generated_at="2026-01-01T00:00:00Z", show_all=False, total_projects=1, capacity={},
+        projects={"alpha": {"summary": "a\tb\nc\rd", "status": "idle"}}, order=["alpha"],
+        directives=[], assimilated=[], cortex_pending=[], focus=None,
+    )
+    assert doc["projects"]["alpha"]["summary"] == "a b c d"
+    assert doc["projects"]["alpha"]["status"] == "idle", "no other field may move"
+
+
+def test_assemble_leaves_an_entry_without_a_summary_exactly_as_it_was():
+    """Adding the key would change what the wire carries for a project that never had it."""
+    entry = {"status": "idle"}
+    doc = core.assemble(
+        generated_at="t", show_all=False, total_projects=1, capacity={},
+        projects={"alpha": entry}, order=["alpha"], directives=[], assimilated=[],
+        cortex_pending=[], focus=None,
+    )
+    assert doc["projects"]["alpha"] == {"status": "idle"}
+    assert "summary" not in doc["projects"]["alpha"]
+
+
+def test_assemble_does_not_mutate_the_caller_s_registry_entry():
+    """`assemble` is documented pure; the caller's dict is not this seam's to edit."""
+    entry = {"summary": "a\nb"}
+    core.assemble(
+        generated_at="t", show_all=False, total_projects=1, capacity={},
+        projects={"alpha": entry}, order=["alpha"], directives=[], assimilated=[],
+        cortex_pending=[], focus=None,
+    )
+    assert entry["summary"] == "a\nb", "the source entry must be untouched"
+
+
+def test_a_new_consumer_reading_the_document_inherits_the_guarantee():
+    """The structural claim, stated as a test: a consumer that reads `entry["summary"]` DIRECTLY --
+    the fourth-consumer shape that reintroduced this bug three times -- can no longer see a control
+    character, because the field never enters the document carrying one."""
+    doc = core.assemble(
+        generated_at="t", show_all=False, total_projects=2, capacity={},
+        projects={"a": {"summary": "x\ny"}, "b": {"summary": "p\tq"}}, order=["a", "b"],
+        directives=[], assimilated=[], cortex_pending=[], focus=None,
+    )
+    for entry in doc["projects"].values():
+        assert not set(entry["summary"]) & {"\t", "\n", "\r"}

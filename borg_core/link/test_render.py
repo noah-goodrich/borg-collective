@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from borg_core.link import cli, picture, render
+from borg_core.link import cli, core as link_core, picture, render
 from borg_core.link import grid as link_grid
 from borg_core.manifest import core as manifest_core
 from borg_core.manifest import shell as manifest_shell
@@ -52,6 +52,17 @@ def _doc(**overrides) -> dict:
         },
     }
     base.update(overrides)
+    # SUMMARY IS FLATTENED HERE BECAUSE THE REAL DOCUMENT FLATTENS IT HERE. `core.assemble` applies
+    # `flatten_summary` once, at the chokepoint, so a fixture handing a renderer a raw control
+    # character tests a state no document can produce. Mirroring the one line rather than calling
+    # `assemble` keeps `_doc`'s shape overridable field by field, which most cases rely on.
+    projects = base.get("projects")
+    if isinstance(projects, dict):
+        base["projects"] = {
+            name: ({**entry, "summary": link_core.flatten_summary(entry["summary"])}
+                   if isinstance(entry, dict) and "summary" in entry else entry)
+            for name, entry in projects.items()
+        }
     return base
 
 
@@ -1006,7 +1017,7 @@ class TestSummaryBlock:
         # touch INTERIOR newlines the way the heuristic path's `.replace("\n", " ")` does; nor does
         # lib/registry.zsh's control-char scrub, whose ranges exclude 0x0A. Un-normalized, the raw
         # \n emits a sub-line _fold_s never produced and the re-indent loop therefore never indents.
-        out = render._summary_block("first half\nsecond half")  # pylint: disable=protected-access
+        out = render._summary_block(link_core.flatten_summary("first half\nsecond half"))  # pylint: disable=protected-access
         lines = out.split("\n")[:-1]
         assert all(_CONTINUATION_CONTRACT.match(line) for line in lines[1:]), lines
         assert lines[1] == "  first half second half"
@@ -1016,7 +1027,7 @@ class TestSummaryBlock:
         # The flatten is one-for-one, so a newline occupies a space's worth of the 70-column budget
         # and the break lands exactly where an equivalent space would put it -- i.e. no golden moves.
         summary = "w" * 40 + "\n" + "x" * 40
-        with_newline = render._summary_block(summary)  # pylint: disable=protected-access
+        with_newline = render._summary_block(link_core.flatten_summary(summary))  # pylint: disable=protected-access
         with_space = render._summary_block(summary.replace("\n", " "))  # pylint: disable=protected-access
         assert with_newline == with_space
 
@@ -1032,7 +1043,7 @@ class TestOverviewSummaryCut:
     def test_cut_flattens_an_embedded_newline(self):
         # Same writer as F1's deep-dive case: summarize.summarize_llm's `result.stdout.strip()[:500]`
         # leaves interior newlines intact, and lib/registry.zsh's control-char scrub excludes 0x0A.
-        out = render._overview_summary_cut("first half\nsecond half")  # pylint: disable=protected-access
+        out = render._overview_summary_cut(link_core.flatten_summary("first half\nsecond half"))  # pylint: disable=protected-access
         assert "\n" not in out
         assert out == "first half second half"
 
@@ -1044,9 +1055,9 @@ class TestOverviewSummaryCut:
         # Not an ordering assertion -- with a one-for-one replacement the two orderings are the same
         # string. This pins the property the ordering exists to protect, which is the part a future
         # non-one-for-one replacement could break.
-        exact = render._overview_summary_cut("a" * 49 + "\n")  # pylint: disable=protected-access
+        exact = render._overview_summary_cut(link_core.flatten_summary("a" * 49 + "\n"))  # pylint: disable=protected-access
         assert exact == "a" * 49 + " "
-        over = render._overview_summary_cut("a" * 50 + "\n" + "b")  # pylint: disable=protected-access
+        over = render._overview_summary_cut(link_core.flatten_summary("a" * 50 + "\n" + "b"))  # pylint: disable=protected-access
         assert over == "a" * 50 + "..."
 
     def test_cut_matches_the_equivalent_space_so_no_golden_moves(self):
@@ -1054,7 +1065,7 @@ class TestOverviewSummaryCut:
         # ellipsis test land identically to the same string written with a space. This is the claim
         # that no fixture golden moves.
         summary = "w" * 30 + "\n" + "x" * 30
-        with_newline = render._overview_summary_cut(summary)  # pylint: disable=protected-access
+        with_newline = render._overview_summary_cut(link_core.flatten_summary(summary))  # pylint: disable=protected-access
         with_space = render._overview_summary_cut(summary.replace("\n", " "))  # pylint: disable=protected-access
         assert with_newline == with_space
 
@@ -1062,7 +1073,8 @@ class TestOverviewSummaryCut:
         # The defect stated at the altitude the reader sees it: one registry entry, one board row.
         row = render._overview_row(  # pylint: disable=protected-access
             "alpha",
-            {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": "top\nbottom"},
+            _as_document_carries(
+                {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": "top\nbottom"}),
             {},
         )
         assert row.count("\n") == 1
@@ -1089,18 +1101,37 @@ class TestOverviewSummaryCut:
 _SURVIVING_WS = ["\t", "\n", "\r"]
 
 
+def _as_document_carries(entry: dict) -> dict:
+    """`entry` exactly as the ASSEMBLED DOCUMENT carries it.
+
+    The renderers below used to be handed a raw registry dict and flatten it themselves. They no
+    longer do: `core.assemble` flattens `summary` once, at the chokepoint, so a renderer receiving a
+    raw control character is testing a state the document cannot produce. Routing every case through
+    assembly is what makes these assertions about the real pipeline rather than about a defence each
+    renderer had to be edited to grow.
+    """
+    doc = link_core.assemble(
+        generated_at="2026-01-01T00:00:00Z", show_all=False, total_projects=1, capacity={},
+        projects={"alpha": entry}, order=["alpha"], directives=[], assimilated=[],
+        cortex_pending=[], focus=None,
+    )
+    entry = doc["projects"]["alpha"]
+    assert isinstance(entry, dict)
+    return entry
+
+
 @pytest.mark.parametrize("scrubbed", ["\x00", "\x08", "\x0b", "\x0c", "\x0e", "\x1f"])
 def test_the_registry_scrub_set_is_enumerated_from_the_scrub_not_assumed(scrubbed):
     """A guard on the PREMISE, not on the renderer: every character the `tr -d` range deletes is one
-    `_flatten_summary` deliberately does NOT handle, because it cannot arrive. If someone narrows the
-    scrub in lib/registry.zsh they must revisit this list; if someone widens `_FLATTEN_WS` past the
-    survivors they will find this test explaining why the extra characters were out of scope."""
-    assert render._flatten_summary(scrubbed) == scrubbed  # pylint: disable=protected-access
+    `core.flatten_summary` deliberately does NOT handle, because it cannot arrive. If someone narrows
+    the scrub in lib/registry.zsh they must revisit this list; if someone widens `_FLATTEN_WS` past
+    the survivors they will find this test explaining why the extra characters were out of scope."""
+    assert link_core.flatten_summary(scrubbed) == scrubbed
 
 
 @pytest.mark.parametrize("ch", _SURVIVING_WS)
 def test_flatten_summary_maps_every_surviving_whitespace_control_to_one_space(ch):
-    assert render._flatten_summary(f"a{ch}b") == "a b"  # pylint: disable=protected-access
+    assert link_core.flatten_summary(f"a{ch}b") == "a b"  # pylint: disable=protected-access
 
 
 @pytest.mark.parametrize("ch", _SURVIVING_WS)
@@ -1108,7 +1139,7 @@ def test_summary_block_flattens_every_surviving_control_not_just_newline(ch):
     # Consumer 1. A `\t` inside the fold input also breaks `^  [^ ]` reasoning -- `fold -s` counts a
     # tab as one column while a terminal expands it -- and a `\r` returns the cursor to column zero,
     # erasing the indent the re-indent loop just applied.
-    out = render._summary_block(f"first half{ch}second half")  # pylint: disable=protected-access
+    out = render._summary_block(link_core.flatten_summary(f"first half{ch}second half"))  # pylint: disable=protected-access
     lines = out.split("\n")[:-1]
     assert len(lines) == 2, lines
     assert lines[1] == "  first half second half"
@@ -1121,7 +1152,8 @@ def test_board_row_stays_one_line_for_every_surviving_control(ch):
     # Consumer 2, stated at the altitude the reader sees it: one registry entry, one board row.
     row = render._overview_row(  # pylint: disable=protected-access
         "alpha",
-        {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": f"top{ch}bottom"},
+        _as_document_carries(
+            {"source": "cli", "status": "idle", "relative_activity": "1h", "summary": f"top{ch}bottom"}),
         {},
     )
     assert row.count("\n") == 1
