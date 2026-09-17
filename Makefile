@@ -62,11 +62,26 @@ format:
 # for deletion once REVIEW_BUCKET is ported out of it, so it sits at 0% by design and would drag any
 # whole-tree number down. The floor is therefore set on the modules that are actually live.
 
+# THE INCLUDE LIST IS ASSERTED TO EXIST BEFORE IT IS USED, and that guard is the whole point of the
+# VIZ_COVERED variable. `coverage report --include=` SILENTLY IGNORES a pattern that matches nothing:
+# measured, `--include="a.py,ghost.py"` on a tree holding only a.py reports a.py at 100% and prints a
+# healthy TOTAL, with no warning and exit 0. So deleting a module named here shrinks the gate from six
+# modules to five and the number goes UP. `2026-08-31-retire-merge-tree-programs-into-borg-core` names
+# this as one of four traps that "ship green", and it is the one that disarms the gate measuring the
+# very code that retirement moves. A missing module is now a loud failure instead.
+VIZ_COVERED = merge-tree/curate.py merge-tree/render_graph.py merge-tree/spine.py \
+              merge-tree/gather.py merge-tree/programs.py merge-tree/coordinator.py
+
 test-viz:
 	@if [ -d merge-tree ]; then \
 		set -e; \
+		for f in $(VIZ_COVERED); do \
+			[ -f "$$f" ] || { echo "coverage gate names a module that does not exist: $$f"; \
+				echo "  coverage would IGNORE it silently and shrink the gate. Update VIZ_COVERED deliberately."; \
+				exit 1; }; \
+		done; \
 		coverage run --source=merge-tree -m pytest merge-tree/ || test $$? -eq 5; \
-		coverage report -m --include='merge-tree/curate.py,merge-tree/render_graph.py,merge-tree/spine.py,merge-tree/gather.py,merge-tree/programs.py,merge-tree/coordinator.py' --fail-under=85; \
+		coverage report -m --include='$(shell echo $(VIZ_COVERED) | tr " " ",")' --fail-under=85; \
 	else \
 		echo "merge-tree/ not present -- nothing to test"; \
 	fi
