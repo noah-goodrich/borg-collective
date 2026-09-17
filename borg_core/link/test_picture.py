@@ -141,7 +141,7 @@ def interleaved_lanes_manifest() -> dict:
 
     TRANSCRIBED FROM THE REAL FILE, not invented: two lanes of six and eight rows whose refs
     interleave across levels under ascending-ref ordering. Measured on
-    /Users/noah/dev/stillpoint/.borg/programs/ingle-t1-cutover.json, `levels()` yields
+    /Users/noah/dev/stillpoint/.borg/chains/ingle-t1-cutover.json, `levels()` yields
     `[stillpoint#37, stillpoint#54]` at level 0 (cutover first) but `[ingle#341, stillpoint#39]` at
     level 2 and `[reveal#59, stillpoint#40]` at level 3 (contract first), swapping back at level 4 --
     four crossings in an eight-level picture with no edge crossing anything.
@@ -840,7 +840,7 @@ def test_a_closed_node_is_distinguishable_from_a_merged_one():
 
 
 # ── AC4 PRECONDITION: the glyph is gated on PROVENANCE ────────────────────────────────────────────
-# Measured on the live stillpoint/.borg/programs/ingle-t1-cutover.json: 12 nodes declared "merged",
+# Measured on the live stillpoint/.borg/chains/ingle-t1-cutover.json: 12 nodes declared "merged",
 # 2 unknown, and a glance strip of twelve green checkmarks asserting a project is essentially done
 # entirely from a hand-typed field no sweep and no fetch ever saw. These cases pin all three sites
 # the precondition names, because fixing one and missing another leaves the page contradicting

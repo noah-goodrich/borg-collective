@@ -333,8 +333,18 @@ def _project_dir_of(manifest: dict[str, Any]) -> str:
     path = str(manifest.get("_path") or "")
     if not path:
         return ""
-    # path = <project_dir>/.borg/programs/<program>.json
-    return path.rsplit(os.sep + ".borg" + os.sep + "programs" + os.sep, 1)[0]
+    # path = <project_dir>/.borg/{chains,programs}/<program>.json
+    #
+    # BOTH NAMES, because this recovers a root by SPLITTING ON THE DIRECTORY NAME and the directory
+    # was renamed (AC7). A single-name split against the other name returns the WHOLE PATH unchanged
+    # -- `rsplit` with no match yields the original -- so `sync_borg` would then treat the manifest
+    # file itself as a project root and write outside the tree. That fails silently: the caller only
+    # checks `if not project_dir`, and a non-empty wrong answer passes.
+    for name in (".borg" + os.sep + "chains", ".borg" + os.sep + "programs"):
+        marker = os.sep + name + os.sep
+        if marker in path:
+            return path.rsplit(marker, 1)[0]
+    return ""
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -426,11 +436,13 @@ def main() -> int:
     for name, fn in (("list", cmd_list), ("plan", cmd_plan), ("sync", cmd_sync)):
         sp = sub.add_parser(name)
         sp.add_argument(
-            "--programs-dir",
+            "--chains-dir",
+            "--programs-dir",  # legacy spelling; accepted until the contract phase drops it
+            dest="programs_dir",
             action="append",
             default=[],
             metavar="PROJECT_DIR",
-            help="project root to sweep for .borg/programs/*.json (repeatable)",
+            help="project root to sweep for .borg/chains/*.json (repeatable)",
         )
         if name == "plan":
             sp.add_argument(

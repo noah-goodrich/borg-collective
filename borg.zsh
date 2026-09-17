@@ -2777,22 +2777,23 @@ _borg_version_ge() {
 }
 
 # ── chain manifests (PM6) ──────────────────────────────────────────────────────
-# borg chain list|plan|sync — the sync coordinator over <project>/.borg/programs/*.json.
+# borg chain list|plan|sync — the sync coordinator over <project>/.borg/chains/*.json.
 # The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
 # testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered project
-# path becomes a --programs-dir, so `borg chain list` sweeps the whole collective. Explicit
-# --programs-dir args are passed through untouched and suppress the registry sweep.
+# path becomes a --chains-dir, so `borg chain list` sweeps the whole collective. Explicit
+# --chains-dir args (or the legacy --programs-dir) are passed through untouched and suppress the
+# registry sweep.
 #
 # Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: cmd_chain resolves
 # roots by reading `.projects[].path` from the registry, where "project" means REPOSITORY — so that
 # name would mean one thing and do another until the deferred project→repository rename lands. The
-# --programs-dir and --recon TOKENS are coordinator.py's argparse flags and are deliberately
+# --chains-dir and --recon TOKENS are coordinator.py's argparse flags and are deliberately
 # untouched here; they move with the merge-tree retirement, not with the verb.
 cmd_chain() {
     local action="${1:-list}"
     case "$action" in
         list|plan|sync) ;;
-        *) die "usage: borg chain list|plan|sync [--programs-dir <path>]... ; plan also takes --recon <file>" ;;
+        *) die "usage: borg chain list|plan|sync [--chains-dir <path>]... ; plan also takes --recon <file>" ;;
     esac
     # Guarded: zsh hard-errors a bare `shift` at $#==0 (unlike bash), and set -e makes that fatal —
     # which would kill the argless `borg chain` the :-list default exists for.
@@ -2802,9 +2803,13 @@ cmd_chain() {
     local _explicit_dirs=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --programs-dir)
-                [[ -n "${2:-}" ]] || die "borg chain: --programs-dir needs a path"
-                _chain_args+=(--programs-dir "$2"); _explicit_dirs=1; shift 2 ;;
+            --chains-dir|--programs-dir)
+                # THE REFUSAL NAMES THE SPELLING THE USER TYPED, not the canonical one. `$1` rather
+                # than a literal: a user who typed the legacy `--programs-dir` and is told
+                # "--chains-dir needs a path" has to work out that the two are the same flag, which
+                # is a worse error than the shift crash this guard replaced.
+                [[ -n "${2:-}" ]] || die "borg chain: $1 needs a path"
+                _chain_args+=(--chains-dir "$2"); _explicit_dirs=1; shift 2 ;;
             --recon)
                 # argparse registers --recon on the plan subparser only; failing here beats
                 # advertising a flag downstream then rejects.
@@ -2819,7 +2824,7 @@ cmd_chain() {
         [[ -f "$BORG_REGISTRY" ]] || die "no registry at $BORG_REGISTRY — run 'borg add <path>' first"
         local _proj_path
         while IFS= read -r _proj_path; do
-            [[ -n "$_proj_path" ]] && _chain_args+=(--programs-dir "$_proj_path")
+            [[ -n "$_proj_path" ]] && _chain_args+=(--chains-dir "$_proj_path")
         done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY")
         (( ${#_chain_args[@]} )) || die "registry has no project paths — run 'borg add <path>' first"
     fi
@@ -2867,11 +2872,11 @@ cmd_help() {
                           --all     Include archived projects
     next [--switch]     What needs your attention? (--switch jumps there)
     switch [query]      fzf picker → jump to project tmux window
-    chain <action>      Manifest coordinator over <project>/.borg/programs/*.json
+    chain <action>      Manifest coordinator over <project>/.borg/chains/*.json
                           list           Every declared chain across registered projects
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
-                          --programs-dir <path>  Explicit roots (suppresses the registry sweep)
+                          --chains-dir <path>    Explicit roots (suppresses the registry sweep)
                           --recon <file> (plan only) recon/gather JSON for the reality check
     scan                Discover projects from session history
     add [path]          Register a project (defaults to $PWD)
