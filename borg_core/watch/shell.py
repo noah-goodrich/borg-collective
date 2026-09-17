@@ -29,6 +29,13 @@ query($owner:String!, $name:String!) {
         comments { totalCount }
       }
     }
+    issues(states:OPEN, first:50, orderBy:{field:UPDATED_AT, direction:DESC}) {
+      nodes {
+        number title
+        author { login }
+        comments { totalCount }
+      }
+    }
   }
 }
 """
@@ -80,8 +87,8 @@ def sweep(owner: str, name: str, timeout: int = 45) -> dict:
         payload = json.loads(proc.stdout or "{}")
     except ValueError:
         return {}
-    nodes = (((payload.get("data") or {}).get("repository") or {})
-             .get("pullRequests") or {}).get("nodes")
+    repo = ((payload.get("data") or {}).get("repository") or {})
+    nodes = (repo.get("pullRequests") or {}).get("nodes")
     if nodes is None:
         return {}
     prs = []
@@ -97,7 +104,28 @@ def sweep(owner: str, name: str, timeout: int = 45) -> dict:
             "head": node.get("headRefOid") or "",
             "comment_count": ((node.get("comments") or {}).get("totalCount")) or 0,
         })
-    return {"prs": prs}
+
+    # ISSUES ARE SWEPT IN THE SAME CALL. They were missing entirely, and the gap was not academic:
+    # a 9-comment coordination issue for a cross-machine PR control hub was being actively designed
+    # on this repository while the watcher reported "quiet" for hours, because the query named
+    # `pullRequests` and nothing else. One extra selection on a call already being made, so the cost
+    # is a larger response rather than a second round trip.
+    #
+    # Issues carry NO head and NO tree, so nothing about them can reach the auto-post allowlist --
+    # `core.decide` only ever acts on HEAD_MOVED, and its default is refusal. That is why issue
+    # support needs no new guard: the allowlist was written to refuse by default rather than to
+    # enumerate what it rejects.
+    issues = []
+    for node in (repo.get("issues") or {}).get("nodes") or []:
+        if not isinstance(node, dict):
+            continue
+        issues.append({
+            "number": node.get("number"),
+            "title": node.get("title") or "",
+            "author": ((node.get("author") or {}).get("login")) or "",
+            "comment_count": ((node.get("comments") or {}).get("totalCount")) or 0,
+        })
+    return {"prs": prs, "issues": issues}
 
 
 def trees_identical(repo: str, old_sha: str, new_sha: str) -> bool:

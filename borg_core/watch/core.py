@@ -25,6 +25,9 @@ CLOSED = "closed"
 # One kind for "left the open set". Resolving it to merged-vs-closed needs a network call, which is
 # the caller's job; `core` cannot and must not guess.
 DEPARTED = "departed"
+NEW_ISSUE = "new_issue"
+ISSUE_COMMENT = "issue_comment"
+ISSUE_CLOSED = "issue_closed"
 HEAD_MOVED = "head_moved"
 
 KIND_ORDER = (
@@ -32,7 +35,10 @@ KIND_ORDER = (
     REVIEW_APPROVED,
     NEW_PR,
     NEW_COMMENT,
+    NEW_ISSUE,
+    ISSUE_COMMENT,
     MERGED,
+    ISSUE_CLOSED,
     CLOSED,
     DEPARTED,
     HEAD_MOVED,
@@ -89,6 +95,31 @@ def _transitions(number: int, before: dict, after: dict) -> list:
     return events
 
 
+def _issue_events(previous: dict, current: dict) -> list:
+    """Events for issues. Separate from `_transitions` because an issue has no head and no review.
+
+    A coordination issue is where cross-machine design argument actually happens on this repository,
+    and it was invisible until now. Deliberately narrow: opened, commented, closed. No head, no
+    review decision, nothing the auto-post allowlist can act on.
+    """
+    was, now = _by_number(previous.get("issues")), _by_number(current.get("issues"))
+    events = []
+    for number, issue in now.items():
+        before = was.get(number)
+        if before is None:
+            events.append(_event(NEW_ISSUE, issue, number,
+                                 f"opened by {issue.get('author', '?')}"))
+            continue
+        old_c, new_c = before.get("comment_count", 0), issue.get("comment_count", 0)
+        if isinstance(new_c, int) and isinstance(old_c, int) and new_c > old_c:
+            events.append(_event(ISSUE_COMMENT, issue, number,
+                                 f"{new_c - old_c} new comment(s), now {new_c}"))
+    for number, before in was.items():
+        if number not in now:
+            events.append(_event(ISSUE_CLOSED, before, number, "no longer open"))
+    return events
+
+
 def diff(previous: dict, current: dict) -> list:
     """Events between two snapshots, most-actionable kind first.
 
@@ -97,7 +128,7 @@ def diff(previous: dict, current: dict) -> list:
     train them to ignore the channel, which is the failure mode every alerting surface dies of. The
     caller stores the snapshot and reports nothing.
     """
-    if not previous or not previous.get("prs"):
+    if not previous or not (previous.get("prs") or previous.get("issues")):
         return []
 
     was, now = _by_number(previous.get("prs")), _by_number(current.get("prs"))
@@ -126,6 +157,13 @@ def diff(previous: dict, current: dict) -> list:
         if number in now:
             continue
         events.append(_event(DEPARTED, before, number, "no longer open"))
+
+    # Issues are diffed only when the snapshot actually carried an `issues` key. A snapshot written
+    # before issue support would otherwise report every open issue as NEW on the first sweep after
+    # upgrade -- the same backlog-flood the cold-start rule exists to prevent, arriving through a
+    # schema change instead of a first run.
+    if "issues" in previous:
+        events.extend(_issue_events(previous, current))
 
     events.sort(key=lambda e: (KIND_ORDER.index(e["kind"]) if e["kind"] in KIND_ORDER else 99,
                                e["number"]))
