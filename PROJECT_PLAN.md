@@ -39,8 +39,14 @@ GitHub call.
       on every invocation, and a contradiction-report shape to mirror exists at
       `recon/core.py:289`'s `project_contradictions`. So the valuable half is a pure function over a
       grid that is already built, and it needs none of the blocked prerequisites.
-    - **The writing half is explicitly NOT in this plan.** It is the item the review sized as its own
-      plan, against a writer whose owning directive lists four silent-dataloss paths.
+    - **The writing half is explicitly NOT in this plan, and it belongs to AC7 rather than AC5.**
+      Asked and verified 2026-09-17: the writer already exists as
+      `merge-tree/coordinator.py:292`'s `sync_borg`, which "rewrites each manifest through borg's OWN
+      native writer", and it is owned by `2026-08-31-retire-merge-tree-programs-into-borg-core` — an
+      AC7 child. So a `borg reconcile` writer would REPLACE `sync_borg` and lands squarely in AC7's
+      territory, not AC5's. That is a second and independent reason the read-only slice is the right
+      first one: AC7's directive records the trap where repointing `discover` without changing
+      `sync_borg` "permanently delete[s] rows ... exit 0".
     - Verify: pytest — (a) the report names a contradicting row on a fixture that has one; (b) it
       names nothing on a fixture that agrees; (c) **no file under the fixture repository changes
       bytes or mtime**, asserted over every file, for both fixtures; (d) an AST import walk pinning
@@ -59,6 +65,13 @@ GitHub call.
     - Evidence: `pytest:borg_core/reconcile/test_shell.py`
 
 - [ ] **AC4 — The employer leak is closed as an absence, and the grep that missed it can fail.**
+      **DIRECTION MATTERS AND IS EASY TO INVERT.** This is not an employer reference inside
+      `borg-collective` — the 2026-08-31 history scrub removed those and it holds (verified
+      2026-09-17; a case-insensitive grep for the company name matches only `contract` and
+      `contradiction`, which is the false positive to avoid repeating). This is the OPPOSITE
+      direction: a **borg** reference inside the **employer** tree, at
+      `plugins/data-engineer/commands/strike.md:334`, which breaks portability for a teammate who
+      has zero borg installed.
       In `~/dev/ai-data-engineer`: the `/borg-plan` reference leaves `plugins/` entirely and lives
       only as a work-machine extension file; the portability grep widens from two paths to the whole
       `plugins/` tree.
@@ -110,10 +123,18 @@ machines' stamps per the #159 protocol (comment stamp at a SHA — self-approval
 `borg help` updated if a verb is user-facing. One manual `borg reconcile` smoke run against this
 repository's own `viz-program` manifest, output pasted into the PR body.
 
-**This plan does NOT merge until the One Front Door plan ships.** Replacing `PROJECT_PLAN.md` on
-`main` while AC5 is in flight would break three live readers of the old file: `resolve` rule 3, the
-`planstate` reconciliation in `/borg-link-up`, and the nine child directives parented to the old
-slug.
+**OPEN DECISION — the one-plan-slot conflict.** Noah's ruling is that this work "stands to the side"
+of the One Front Door plan, independent of it. That is in tension with replacing `PROJECT_PLAN.md`,
+because the repository has exactly ONE plan slot at root and `manifest.cli resolve` rule 3 reads
+exactly one `- Plan-slug:` from it. Two independent plans cannot both be that file.
+
+Until ruled, this plan does NOT merge, and the default is the conservative one: main keeps the One
+Front Door plan while AC5 is in flight, because three live readers depend on it — `resolve` rule 3,
+the `planstate` reconciliation in `/borg-link-up`, and the directives parented to its slug.
+
+Three ways out, none of them mine to pick: keep this as `PROJECT_PLAN.md` on the branch and merge
+after One Front Door ships; demote it to a DIRECTIVE, which is the repository's actual convention
+for side work; or establish a second plan slot, which nothing in the tree supports today.
 
 ## Timeline
 
@@ -122,10 +143,10 @@ are one sitting for the pure core and one for the adapter fan-out plus its oracl
 
 ## Risks
 
-- **The nine orphans.** Replacing `PROJECT_PLAN.md` leaves nine directives parented to a slug no
-  plan declares. Step 0.75 then finds zero children for the new plan and stops blocking on work
-  that is genuinely open — a gate going quiet because its subject moved, which is this repository's
-  signature failure. Needs a ruling before merge, not after.
+- ~~**The nine orphans.**~~ **Ruled out of scope by Noah, 2026-09-17.** Replacing the plan file
+  leaves nine directives parented to a slug no plan declares, so Step 0.75 finds zero children for
+  the new plan. Recorded rather than deleted because the mechanism is real and someone will
+  rediscover it: the gate goes quiet because its subject moved, not because the work closed.
 - **AC5 requires work in a private repo from a public one.** The plan describes it; the diff cannot
   live here. `borg-collective` was history-scrubbed once already for employer references.
 - ~~**Declared fields may be empty in practice.**~~ **MEASURED, and the cairn lesson was half
