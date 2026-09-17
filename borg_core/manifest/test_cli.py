@@ -361,3 +361,132 @@ def test_a_lane_move_does_not_outrank_an_untouched_row_whose_order_holds_no_digi
         "the newcomer appends after the untouched digit-free row, it does not outrank it"
     edges = {(e["parent"], e["child"]) for e in core.derive_edges(doc)}
     assert ("o/r#9", "o/r#7") not in edges, "the untouched row must not be re-parented onto the newcomer"
+
+
+# ── `resolve` (AC5.1 / AC5.9) ────────────────────────────────────────────────────────────────────
+
+def _repo_with(tmp_path, manifests: dict, plan_slug: str | None = None):
+    """A repository carrying `{stem: program_key_or_None}` manifests and an optional plan slug."""
+    programs = tmp_path / ".borg" / "programs"
+    programs.mkdir(parents=True, exist_ok=True)
+    for stem, program in manifests.items():
+        doc: dict[str, object] = {"rows": []}
+        if program:
+            doc["program"] = program
+        (programs / f"{stem}.json").write_text(json.dumps(doc), encoding="utf-8")
+    if plan_slug is not None:
+        # PROSE MENTIONING THE ANNOTATION COMES FIRST, deliberately. With the annotation first the
+        # reader returns before ever reaching the prose, so an unanchored match would survive
+        # mutation — the ordering, not the anchor, would be doing the work. Verified: with the prose
+        # above it, dropping the `startswith` anchor turns these cases red.
+        (tmp_path / "PROJECT_PLAN.md").write_text(
+            "# Plan\n\n"
+            "*This plan explains that a `- Plan-slug:` annotation is how the slug is declared, and "
+            "that prose about it must not be mistaken for it.*\n\n"
+            f"- Plan-slug: `{plan_slug}`\n", encoding="utf-8")
+    return str(tmp_path)
+
+
+def test_resolve_rule1_no_manifest_refuses_and_names_the_directory(tmp_path, capsys):
+    """Rule 1. This is the no-op-and-propose path, not an error to work around: `/borg-link-up`
+    writes a proposal line and carries on, because creation belongs to `/borg-plan`."""
+    rc = cli.main(["resolve", "--repository", str(tmp_path)])
+    assert rc == 1
+    assert "no manifest" in capsys.readouterr().err
+
+
+def test_resolve_rule2_exactly_one_manifest_yields_its_stem(tmp_path, capsys):
+    """Rule 2, and the overwhelmingly common case: measured across 22 registered repositories, 1 has
+    any manifest and 0 has more than one."""
+    repo = _repo_with(tmp_path, {"only-one": None})
+    assert cli.main(["resolve", "--repository", repo]) == 0
+    assert capsys.readouterr().out.strip() == "only-one"
+
+
+def test_resolve_rule2_uses_the_STEM_not_the_program_key(tmp_path, capsys):
+    """A manifest whose `program` differs from its filename resolves to the FILENAME, because that
+    is what the write verbs take as `--name`. Two files in this tree deliberately differ, and
+    writing back via a program-derived name once spawned a second file — "two copies of one program
+    that then diverge silently"."""
+    repo = _repo_with(tmp_path, {"three-repo-program": "auth-hardening"})
+    assert cli.main(["resolve", "--repository", repo]) == 0
+    assert capsys.readouterr().out.strip() == "three-repo-program"
+
+
+def test_resolve_rule3_several_manifests_pick_the_one_matching_the_DECLARED_slug(tmp_path, capsys):
+    """Rule 3. `_id` is stamped by `shell._load_manifest` — a declared `program` verbatim, else the
+    stem — so this costs no schema change."""
+    repo = _repo_with(tmp_path, {"alpha": "alpha-thing", "beta": "beta-thing"},
+                      plan_slug="beta-thing")
+    assert cli.main(["resolve", "--repository", repo]) == 0
+    assert capsys.readouterr().out.strip() == "beta"
+
+
+def test_resolve_rule3_matches_a_stem_derived_id_too(tmp_path, capsys):
+    """A manifest with no `program` key has `_id == stem`, so a slug naming the stem resolves."""
+    repo = _repo_with(tmp_path, {"alpha": None, "beta": None}, plan_slug="beta")
+    assert cli.main(["resolve", "--repository", repo]) == 0
+    assert capsys.readouterr().out.strip() == "beta"
+
+
+def test_resolve_rule4_several_and_no_declared_slug_refuses_by_name(tmp_path, capsys):
+    """Rule 4. NEVER A GUESS: picking one of several would silently bind a session's row to another
+    program's chain, and `core.validate` cannot catch that — both are well-formed."""
+    repo = _repo_with(tmp_path, {"alpha": None, "beta": None})
+    assert cli.main(["resolve", "--repository", repo]) == 1
+    err = capsys.readouterr().err
+    assert "no plan slug declared" in err
+    assert "alpha" in err and "beta" in err
+
+
+def test_resolve_rule4_several_with_a_slug_matching_nothing_refuses(tmp_path, capsys):
+    repo = _repo_with(tmp_path, {"alpha": None, "beta": None}, plan_slug="matches-nothing")
+    assert cli.main(["resolve", "--repository", repo]) == 1
+    assert "ambiguous" in capsys.readouterr().err
+
+
+def test_resolve_NEVER_re_derives_a_slug_from_the_objective(tmp_path, capsys):
+    """AC5.9's explicit assertion. A plan whose Objective would slugify to one of the candidate
+    stems, but which declares NO annotation, must still refuse — otherwise the computed-slug defect
+    that produced a silently-passing Step 0.75 reappears here."""
+    repo = _repo_with(tmp_path, {"alpha": None, "beta": None})
+    (tmp_path / "PROJECT_PLAN.md").write_text(
+        "# Plan\n*Established: 2026-09-16*\n\n## Objective\n\nalpha\n", encoding="utf-8")
+    assert cli.main(["resolve", "--repository", repo]) == 1
+    assert "no plan slug declared" in capsys.readouterr().err
+
+
+def test_resolve_ignores_PROSE_mentioning_the_annotation(tmp_path, capsys):
+    """The plan file discusses its own annotation — this repository's does, directly below it — so an
+    unanchored match returns the prose. `_repo_with` plants exactly that paragraph."""
+    repo = _repo_with(tmp_path, {"alpha": None, "beta": None}, plan_slug="beta")
+    assert cli.main(["resolve", "--repository", repo]) == 0
+    assert capsys.readouterr().out.strip() == "beta"
+
+
+def test_resolve_WRITES_NOTHING(tmp_path, capsys):
+    """AC5.1: read-only. Asserted by mtime AND content over every file under the repository, for all
+    four rules, because "it looked read-only" is not a property — a manifest rewritten with
+    identical bytes would still be a write, and `_load_manifest` stamps `_id`/`_path` into the doc
+    it returns, which is exactly the kind of thing that gets persisted by accident."""
+    repo = _repo_with(tmp_path, {"alpha": "alpha-thing", "beta": "beta-thing"}, plan_slug="beta-thing")
+    before = {p: (p.stat().st_mtime_ns, p.read_bytes())
+              for p in tmp_path.rglob("*") if p.is_file()}
+    for argv in (["resolve", "--repository", repo],
+                 ["resolve", "--repository", str(tmp_path / "absent")]):
+        cli.main(argv)
+        capsys.readouterr()
+    after = {p: (p.stat().st_mtime_ns, p.read_bytes())
+             for p in tmp_path.rglob("*") if p.is_file()}
+    assert before == after, "resolve mutated the repository"
+
+
+def test_resolve_needs_no_name_while_the_write_verbs_still_demand_one(tmp_path, capsys):
+    """`resolve` exists to DISCOVER the stem, so `--name` cannot be parser-required. The requirement
+    moved to the dispatch, which is the trade the flat parser makes — so this pins both halves: the
+    verb that must not require it, and a verb that still must."""
+    repo = _repo_with(tmp_path, {"only-one": None})
+    assert cli.main(["resolve", "--repository", repo]) == 0
+    capsys.readouterr()
+    assert cli.main(["close", "--repository", repo, "--ref", "o/r#1"]) == 2
+    assert "--name is required" in capsys.readouterr().err
