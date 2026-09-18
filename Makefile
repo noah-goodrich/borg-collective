@@ -1,4 +1,4 @@
-.PHONY: clean test lint format test-viz lint-viz format-viz spine eval eval-live
+.PHONY: clean test test-bats lint format test-viz lint-viz format-viz spine eval eval-live
 
 # TWO Python surfaces, deliberately separate — do not merge them.
 #
@@ -34,6 +34,13 @@ test:
 	else \
 		echo "borg_core/ does not exist yet (Part 3 not started) -- nothing to test"; \
 	fi
+
+# The bats suite, with stdin CLOSED. A mock that drains stdin (`cat >/dev/null`) blocks forever on an
+# inherited stdin that never reaches EOF — 44 minutes on 2026-09-18 from a background runner. The
+# mocks now read with a timeout, but `< /dev/null` is the belt to that suspender: no caller should
+# have to remember it. CI's `bats tests/*.bats` gets /dev/null from the runner already.
+test-bats:
+	bats tests/*.bats < /dev/null
 
 lint:
 	@if [ -d borg_core ]; then \
