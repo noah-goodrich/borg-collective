@@ -2,8 +2,8 @@
 # borg-pr-watch — one sweep of a repository's open PRs; report movement, take allowlisted action.
 #
 # Entry point for BOTH layers:
-#   launchd  (com.stillpoint-labs.borg.pr-watch.plist) — persistent, notifies + writes the delta
-#   a session cron                                     — wakes a live Claude session with the delta
+#   launchd  (launchd/borg.pr-watch.plist) — persistent, notifies + writes the delta
+#   a session cron                         — wakes a live Claude session with the delta
 #
 # THE FIRST RUN IS SILENT BY DESIGN. `core.diff` returns no events without a previous snapshot, so a
 # cold start stores state and says nothing rather than reporting the entire backlog as new. An

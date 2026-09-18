@@ -45,7 +45,7 @@ setup() {
 }
 
 @test "pr-watch: the launchd plist is valid and does NOT run at load" {
-    local plist="${BATS_TEST_DIRNAME}/../launchd/com.stillpoint-labs.borg.pr-watch.plist"
+    local plist="${BATS_TEST_DIRNAME}/../launchd/borg.pr-watch.plist"
     [ -f "$plist" ]
     if command -v plutil >/dev/null 2>&1; then
         run plutil -lint "$plist"
@@ -65,7 +65,7 @@ setup() {
 }
 
 @test "pr-watch: the plist polls on an interval that is not the :00 thundering herd" {
-    local plist="${BATS_TEST_DIRNAME}/../launchd/com.stillpoint-labs.borg.pr-watch.plist"
+    local plist="${BATS_TEST_DIRNAME}/../launchd/borg.pr-watch.plist"
     local interval
     interval=$(grep -A1 'StartInterval' "$plist" | grep -oE '[0-9]+' | head -1)
     [ -n "$interval" ]

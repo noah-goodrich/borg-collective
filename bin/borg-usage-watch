@@ -11,7 +11,7 @@
 # Log lives at $BORG_USAGE_LOG (default ~/.local/state/borg/usage-watch.log).
 #
 # ── ADAPTIVE CADENCE ──────────────────────────────────────────────────────────────
-# launchd wakes this script every 60s (see launchd/com.stillpoint-labs.borg.usage-watch.plist) —
+# launchd wakes this script every 60s (see launchd/borg.usage-watch.plist) —
 # cheap, no Claude session. Whether that wake turns into a real PROBE (`claude -p "/usage"`, the
 # expensive part) is decided here, script-side, by _probe_due: due every BORG_USAGE_BASE_INTERVAL
 # (120s) below BORG_USAGE_FAST_PCT, every BORG_USAGE_FAST_INTERVAL (60s) at/above it. An

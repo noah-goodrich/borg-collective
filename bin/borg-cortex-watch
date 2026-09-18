@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 # borg-cortex-watch — host daemon: detect Cortex rate-limit pauses, schedule auto-wake.
 #
-# Managed by launchd (com.stillpoint-labs.borg.cortex-wake) with StartInterval=30.
+# Managed by launchd as the `cortex-wake` agent (label via lib/launchd-label.zsh), StartInterval=30.
 # Each invocation does ONE sweep: detect new caps, fire any due wakes, prune orphans, exit.
 #
 #   --once    Single sweep then exit (default; same as no flag — explicit for clarity).
