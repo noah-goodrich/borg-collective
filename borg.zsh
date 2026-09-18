@@ -2498,6 +2498,15 @@ cmd_doctor() {
         "usage-watch|$(_borg_launchd_label usage-watch)|$state_dir/usage-samples.jsonl"
         "reap|$(_borg_launchd_label reap)|$data_dir/reap.stdout.log"
     )
+    # Extension agents (drop-in templates install.sh rendered from
+    # $BORG_DIR/extensions/launchd/<name>.plist.tmpl): registration check ONLY. No artifact, so no
+    # freshness — doctor knows nothing about what an extension writes or how often.
+    local ext_tmpl ext_name
+    while IFS= read -r ext_tmpl; do
+        [[ -n "$ext_tmpl" ]] || continue
+        ext_name=$(_borg_launchd_ext_name "$ext_tmpl")
+        agents+=("$ext_name|$(_borg_launchd_ext_label "$ext_name")|")
+    done <<< "$(_borg_launchd_ext_templates)"
 
     local overall_exit=0
     local list_output

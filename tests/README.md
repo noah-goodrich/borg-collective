@@ -49,6 +49,10 @@ macOS also ships **BSD coreutils**. `stat -f %m` works here and fails on Linux; 
 Linux container does not help you find BSD bugs — it only gives GNU-vs-GNU. The macOS CI leg is the only place
 that catches this class.
 
+**Run bats with stdin closed: `make test-bats` (= `bats tests/*.bats < /dev/null`).** A mock that drains stdin
+blocked for 44 minutes on 2026-09-18 when the caller's stdin was an open pipe. Mocks now read with `read -t 1`
+instead of a bare `cat`, so an inherited stdin costs a second, not the suite — but close it anyway.
+
 ## Known-failing locally, green in CI
 
 `tests/doctor.bats` has **4 failures on macOS** that are environment-dependent — they assert on `launchd` agent

@@ -153,6 +153,20 @@ otherwise leave two daemons running). Set the prefix BEFORE running `./install.s
 mkdir -p ~/.config && printf 'com.stillpoint-labs\n' > ~/.config/launchd-prefix && ./install.sh
 ```
 
+#### Extension agents (drop-in socket)
+
+borg's installer is the only launchd installer on the machine. Anything else that needs a LaunchAgent
+(dotfiles, a project) drops `<name>.plist.tmpl` — a file or a symlink — into
+`${XDG_CONFIG_HOME:-~/.config}/borg/extensions/launchd/`. `install.sh` renders each one through the
+same placeholders the built-in plists use (`{{LABEL}}`, `{{HOME}}`, `{{USER}}`, `{{LOG_DIR}}`,
+`{{PATH_VALUE}}`), writes `~/Library/LaunchAgents/<label>.plist` as a regular file, then boots out any
+loaded copy and bootstraps it — exactly the built-in path. Label = `<prefix>.<name>` when the prefix
+resolves, else `local.<name>` (`_borg_launchd_ext_label`, same resolver, same prefix). An absent or
+empty directory is a no-op with one info line. A render that fails `plutil -lint` is skipped with a
+warning, never bootstrapped, and does not abort the rest. `borg doctor` lists extension agents with a
+registration check only (no freshness, no artifact). There is deliberately no legacy migration for
+extension labels; the operator retires any pre-borg labels by hand, once.
+
 ### Runtime State
 
 ```

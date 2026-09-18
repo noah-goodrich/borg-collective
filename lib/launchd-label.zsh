@@ -18,6 +18,12 @@
 # With `com.stillpoint-labs` in the prefix file the labels are byte-identical to the ones that
 # were hardcoded before this file existed; with no file they are `borg.notifyd` and friends.
 # Installed plist filename in ~/Library/LaunchAgents is always `<label>.plist`.
+#
+# Extension agents (drop-in templates under ${XDG_CONFIG_HOME:-~/.config}/borg/extensions/launchd/,
+# `<name>.plist.tmpl`) share the prefix but not the `borg.` segment:
+#
+#   ext label = <prefix>.<name>   when a prefix resolved
+#             = local.<name>      when none did
 
 # Trim leading/trailing whitespace from stdin and print the first non-blank line.
 _borg_launchd_trim() {
@@ -54,4 +60,42 @@ _borg_launchd_label() {
     else
         printf 'borg.%s\n' "$agent"
     fi
+}
+
+# Usage: _borg_launchd_ext_label <name>     e.g. _borg_launchd_ext_label dev-postgres
+# Prints `<prefix>.<name>` or `local.<name>`. Same prefix resolution as _borg_launchd_label.
+_borg_launchd_ext_label() {
+    local name="$1" prefix=""
+    if [ -z "$name" ]; then
+        echo "_borg_launchd_ext_label: extension name required" >&2
+        return 1
+    fi
+    prefix=$(_borg_launchd_prefix)
+    if [ -n "$prefix" ]; then
+        printf '%s.%s\n' "$prefix" "$name"
+    else
+        printf 'local.%s\n' "$name"
+    fi
+}
+
+# The drop-in directory. Matches the existing ~/.config/borg/extensions/ socket.
+_borg_launchd_ext_dir() {
+    printf '%s/borg/extensions/launchd\n' "${XDG_CONFIG_HOME:-$HOME/.config}"
+}
+
+# Print one template path per line (regular files or symlinks named *.plist.tmpl), sorted.
+# Nothing when the directory is absent or empty. `find`, not a glob: zsh's NOMATCH errors on an
+# unmatched glob and bash leaves the literal pattern behind — both wrong for an optional socket.
+_borg_launchd_ext_templates() {
+    local dir
+    dir=$(_borg_launchd_ext_dir)
+    [ -d "$dir" ] || return 0
+    find "$dir" -maxdepth 1 \( -type f -o -type l \) -name '*.plist.tmpl' 2>/dev/null | sort
+}
+
+# Usage: _borg_launchd_ext_name <template-path>   ->  basename without .plist.tmpl
+_borg_launchd_ext_name() {
+    local base
+    base=$(basename "$1")
+    printf '%s\n' "${base%.plist.tmpl}"
 }

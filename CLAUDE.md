@@ -242,6 +242,15 @@ docs/
   legacy agent out and deletes its plist, because notifyd is KeepAlive and a rename would otherwise
   leave two daemons running. `tests/launchd_label.bats` pins all of this; `bin/` scripts refer to
   agents by name in comments and never carry a literal label.
+  - **Extension agents (drop-in socket)**: borg's installer is the ONLY launchd installer on the
+    machine. Drop `<name>.plist.tmpl` (file or symlink) into
+    `${XDG_CONFIG_HOME:-~/.config}/borg/extensions/launchd/` and `install.sh` renders it through
+    the same placeholders (`{{LABEL}}` `{{HOME}}` `{{USER}}` `{{LOG_DIR}}` `{{PATH_VALUE}}`) to
+    `~/Library/LaunchAgents/<label>.plist` (a regular file), then bootout-if-loaded + bootstrap.
+    Label = `_borg_launchd_ext_label <name>` = `<prefix>.<name>`, or `local.<name>` with no prefix.
+    Absent/empty dir = one info line; a render that fails `plutil -lint` is skipped with a warn and
+    never bootstrapped, and does not stop the others. `borg doctor` lists them, registration only.
+    No legacy migration for extension labels — the operator retires pre-borg labels by hand, once.
 - **Orchestrator-mode vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
   Stop, and Notification hook now classifies the session via `_borg_session_mode` (in
   `lib/borg-hooks.sh`). A session whose `$CWD` *exactly* equals `$BORG_ORCHESTRATOR_ROOT`

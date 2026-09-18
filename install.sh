@@ -396,6 +396,62 @@ info "  launchd agent bootstrapped (runs daily; logs -> $LOG_DIR/memory-gate.{st
 info "  kickstarting first run..."
 launchctl kickstart -k "gui/$UID/$MEMORY_GATE_LABEL" 2>/dev/null || true
 
+# ── 3e. Extension agents: drop-in launchd templates ──────────────────────────
+#
+# borg's installer is the ONLY launchd installer on the machine. Anything else that wants a
+# LaunchAgent (dotfiles, a project) drops `<name>.plist.tmpl` (file or symlink) into
+# ${XDG_CONFIG_HOME:-~/.config}/borg/extensions/launchd/ and gets rendered through the SAME
+# placeholders the built-in plists use — {{LABEL}} {{HOME}} {{USER}} {{LOG_DIR}} {{PATH_VALUE}} —
+# then bootout-if-loaded + bootstrap, exactly like the agents above. Label = <prefix>.<name>, or
+# local.<name> with no prefix (lib/launchd-label.zsh). `borg doctor` lists them (registration only).
+#
+# NO legacy migration here on purpose: the operator retires any pre-borg labels by hand, once.
+EXT_PATH_VALUE="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+
+_launchd_install_extensions() {
+    local ext_dir templates tmpl name label dest count=0
+    ext_dir=$(_borg_launchd_ext_dir)
+    templates=$(_borg_launchd_ext_templates)
+    if [[ -z "$templates" ]]; then
+        info "No extension launchd templates in $ext_dir — skipping."
+        return 0
+    fi
+    info "Installing extension launchd agents from $ext_dir..."
+    while IFS= read -r tmpl; do
+        [[ -n "$tmpl" ]] || continue
+        name=$(_borg_launchd_ext_name "$tmpl")
+        label=$(_borg_launchd_ext_label "$name")
+        dest="$LA_DIR/$label.plist"
+        # A regular file, never a symlink: launchd reads what is on disk at bootstrap, and a
+        # symlink into a repo that later moves is a silently dead agent.
+        [[ -L "$dest" ]] && rm -f "$dest"
+        sed \
+            -e "s|{{LABEL}}|$label|g" \
+            -e "s|{{HOME}}|$HOME|g" \
+            -e "s|{{USER}}|$USER|g" \
+            -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
+            -e "s|{{PATH_VALUE}}|$EXT_PATH_VALUE|g" \
+            "$tmpl" > "$dest"
+        if command -v plutil &>/dev/null && ! plutil -lint "$dest" &>/dev/null; then
+            warn "  $name: rendered plist fails plutil -lint — skipped, NOT bootstrapped ($dest)"
+            rm -f "$dest"
+            continue
+        fi
+        info "  $name -> $dest"
+        if launchctl list "$label" &>/dev/null 2>&1; then
+            info "  reloading launchd agent $label..."
+            launchctl bootout "gui/$UID/$label" 2>/dev/null || true
+        fi
+        launchctl bootstrap "gui/$UID" "$dest"
+        info "  launchd agent bootstrapped: $label"
+        count=$(( count + 1 ))
+    done <<< "$templates"
+    info "  $count extension agent(s) installed."
+    return 0
+}
+
+_launchd_install_extensions
+
 # ── 4. Hooks, skills, config, registry → borg setup ──────────────────────────
 
 info "Running borg setup..."

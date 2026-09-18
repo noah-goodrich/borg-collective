@@ -421,3 +421,54 @@ MOCK
     [ "$status" -eq 0 ]
     [[ "$output" == *"absent"*"WARN"* ]] || false
 }
+
+# ─── extension agents (drop-in templates) ──────────────────────────────────────
+#
+# install.sh renders $XDG_CONFIG_HOME/borg/extensions/launchd/<name>.plist.tmpl to <label>.plist with
+# label <prefix>.<name> | local.<name>. doctor lists them with a REGISTRATION check only: no
+# artifact, so no freshness — doctor knows nothing about what an extension writes.
+
+_write_ext_template() {
+    local dir="$XDG_CONFIG_HOME/borg/extensions/launchd"
+    mkdir -p "$dir"
+    printf '<plist><dict><key>Label</key><string>{{LABEL}}</string></dict></plist>\n' > "$dir/$1.plist.tmpl"
+}
+
+@test "extension agent registered -> its own row, OK, freshness n/a" {
+    _write_ext_template dev-postgres
+    local ext_label; ext_label=$(zsh -c "source '$LABEL_LIB' && _borg_launchd_ext_label dev-postgres")
+    [ "$ext_label" = "local.dev-postgres" ]
+    _write_launchctl_list "\
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL
+- 0 $ext_label"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"dev-postgres"*"yes"*"n/a"*"OK"* ]] || false
+}
+
+@test "extension agent NOT registered -> FAIL, and the prefix is honoured in the label doctor looks for" {
+    printf 'com.stillpoint-labs\n' > "$XDG_CONFIG_HOME/launchd-prefix"
+    _resolve_labels
+    _write_plist "$NOTIFYD_LABEL" ""; _write_plist "$CORTEX_LABEL" "30"
+    _write_plist "$USAGE_LABEL" "120";  _write_plist "$REAP_LABEL" "3600"
+    _write_ext_template dev-postgres
+    # Registered under the UNprefixed extension label only — with the prefix set that is the wrong one.
+    _write_launchctl_list "\
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL
+- 0 local.dev-postgres"
+    run "$BORG_CMD" doctor
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"dev-postgres"*"FAIL"* ]] || false
+}
+
+@test "no extension directory -> doctor prints only the four built-in agents" {
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"dev-postgres"* ]] || false
+}

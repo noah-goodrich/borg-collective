@@ -157,8 +157,8 @@ _label() { zsh -c "source '$LIB' && _borg_launchd_label \"\$@\"" -- "$@"; }
         grep -A1 '<key>Label</key>' "$LAUNCHD_DIR/borg.$a.plist" | grep -q '<string>{{LABEL}}</string>' \
             || { echo "borg.$a.plist Label is not {{LABEL}}"; false; }
     done
-    # Six sed blocks, six {{LABEL}} substitutions.
-    [ "$(grep -c 's|{{LABEL}}|' "$INSTALL_SH")" -eq 6 ]
+    # Six built-in sed blocks plus the one extension-template pipeline: seven {{LABEL}} substitutions.
+    [ "$(grep -c 's|{{LABEL}}|' "$INSTALL_SH")" -eq 7 ]
 }
 
 @test "plists: templating a plist with a resolved label yields a valid plist with that Label and no placeholders left" {
@@ -253,4 +253,194 @@ MOCK
     [ ! -e "$HOME/Library/LaunchAgents/com.stillpoint-labs.borg.reap.plist" ]
     ! grep -q 'bootout' "${BATS_TEST_TMPDIR}/launchctl.log"
     [[ "$output" == *"LEGACY_BOOTED_OUT=0"* ]]
+}
+
+# ─── extension agents: drop-in templates ──────────────────────────────────────
+#
+# ${XDG_CONFIG_HOME}/borg/extensions/launchd/<name>.plist.tmpl -> ~/Library/LaunchAgents/<label>.plist
+# label = <prefix>.<name> | local.<name>. _launchd_install_extensions is extracted from install.sh
+# by line range and run in a zsh with mocked `launchctl` and `plutil`; install.sh itself never runs.
+
+_ext_label() { zsh -c "source '$LIB' && _borg_launchd_ext_label \"\$@\"" -- "$@"; }
+
+@test "ext resolver: no prefix -> local.<name>; prefix -> <prefix>.<name> (no borg. segment)" {
+    run _ext_label dev-postgres
+    [ "$status" -eq 0 ]
+    [ "$output" = "local.dev-postgres" ]
+    printf 'com.stillpoint-labs\n' > "$PREFIX_FILE"
+    run _ext_label dev-postgres
+    [ "$output" = "com.stillpoint-labs.dev-postgres" ]
+    export LAUNCHD_LABEL_PREFIX="ai.example"
+    run _ext_label dev-postgres
+    [ "$output" = "ai.example.dev-postgres" ]
+}
+
+@test "ext resolver: no name -> exit 1" {
+    run _ext_label
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"extension name required"* ]]
+}
+
+_ext_dir() { printf '%s/borg/extensions/launchd' "$XDG_CONFIG_HOME"; }
+
+_write_ext_template() {
+    # $1 = name, $2 = "good" | "broken"
+    local dir; dir=$(_ext_dir); mkdir -p "$dir"
+    if [[ "$2" == "broken" ]]; then
+        printf 'BROKEN <plist><dict><key>Label</key><string>{{LABEL}}</string>\n' > "$dir/$1.plist.tmpl"
+        return
+    fi
+    cat > "$dir/$1.plist.tmpl" <<'TMPL'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LABEL}}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{HOME}}/.local/bin/thing</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>USER</key><string>{{USER}}</string>
+        <key>PATH</key><string>{{PATH_VALUE}}</string>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>{{LOG_DIR}}/thing.stdout.log</string>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>
+TMPL
+}
+
+_run_install_extensions() {
+    export MOCK_BIN="${BATS_TEST_TMPDIR}/bin"
+    mkdir -p "$MOCK_BIN" "$HOME/Library/LaunchAgents"
+    : > "${BATS_TEST_TMPDIR}/launchctl.log"
+    cat > "$MOCK_BIN/launchctl" <<MOCK
+#!/usr/bin/env bash
+echo "launchctl \$*" >> "${BATS_TEST_TMPDIR}/launchctl.log"
+[[ "\$1" == "list" ]] && exit 1
+exit 0
+MOCK
+    # plutil mock: a rendered file containing BROKEN fails lint. Deterministic on Linux CI too, where
+    # the real plutil does not exist and the installer would skip the lint entirely.
+    cat > "$MOCK_BIN/plutil" <<'MOCK'
+#!/usr/bin/env bash
+grep -q BROKEN "$2" && exit 1
+exit 0
+MOCK
+    chmod +x "$MOCK_BIN/launchctl" "$MOCK_BIN/plutil"
+    local fn
+    fn=$(sed -n '/^_launchd_install_extensions() {/,/^}/p' "$INSTALL_SH")
+    [ -n "$fn" ]
+    PATH="$MOCK_BIN:$PATH" zsh -c "
+        source '$LIB'
+        info() { echo \"INFO \$*\"; }
+        warn() { echo \"WARN \$*\"; }
+        LA_DIR=\"\$HOME/Library/LaunchAgents\"
+        LOG_DIR=\"\$HOME/.local/share/borg\"
+        EXT_PATH_VALUE=\"/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin\"
+        $fn
+        _launchd_install_extensions
+    "
+}
+
+@test "ext install: absent directory -> one info line, no launchctl calls, exit 0" {
+    [ ! -d "$(_ext_dir)" ]
+    run _run_install_extensions
+    [ "$status" -eq 0 ]
+    [ "$(printf '%s\n' "$output" | grep -c .)" -eq 1 ]
+    [[ "$output" == *"No extension launchd templates"* ]]
+    [ ! -s "${BATS_TEST_TMPDIR}/launchctl.log" ]
+}
+
+@test "ext install: empty directory -> same no-op" {
+    mkdir -p "$(_ext_dir)"
+    run _run_install_extensions
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"No extension launchd templates"* ]]
+    [ ! -s "${BATS_TEST_TMPDIR}/launchctl.log" ]
+}
+
+@test "ext install: one template renders to <label>.plist with every placeholder filled, then bootstraps" {
+    _write_ext_template dev-postgres good
+    run _run_install_extensions
+    [ "$status" -eq 0 ]
+    local dest="$HOME/Library/LaunchAgents/local.dev-postgres.plist"
+    [ -f "$dest" ]
+    [ ! -L "$dest" ]
+    grep -A1 '<key>Label</key>' "$dest" | grep -q '<string>local.dev-postgres</string>'
+    grep -q "<string>$HOME/.local/bin/thing</string>" "$dest"
+    grep -q "<string>$USER</string>" "$dest"
+    grep -q "<string>$HOME/.local/share/borg/thing.stdout.log</string>" "$dest"
+    grep -q '<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>' "$dest"
+    ! grep -q '{{' "$dest"
+    grep -q "launchctl bootstrap gui/$UID $dest" "${BATS_TEST_TMPDIR}/launchctl.log"
+    [[ "$output" == *"1 extension agent(s) installed"* ]]
+}
+
+@test "ext install: the prefix reaches the extension label and filename" {
+    printf 'com.stillpoint-labs\n' > "$PREFIX_FILE"
+    _write_ext_template dev-postgres good
+    run _run_install_extensions
+    [ "$status" -eq 0 ]
+    [ -f "$HOME/Library/LaunchAgents/com.stillpoint-labs.dev-postgres.plist" ]
+    [ ! -e "$HOME/Library/LaunchAgents/local.dev-postgres.plist" ]
+}
+
+@test "ext install: a symlinked template is accepted; a pre-existing symlink at the destination is replaced by a file" {
+    local dir; dir=$(_ext_dir); mkdir -p "$dir" "$BATS_TEST_TMPDIR/elsewhere"
+    _write_ext_template scratch good
+    mv "$dir/scratch.plist.tmpl" "$BATS_TEST_TMPDIR/elsewhere/real.plist.tmpl"
+    ln -s "$BATS_TEST_TMPDIR/elsewhere/real.plist.tmpl" "$dir/linked.plist.tmpl"
+    mkdir -p "$HOME/Library/LaunchAgents"
+    ln -s /nonexistent "$HOME/Library/LaunchAgents/local.linked.plist"
+    run _run_install_extensions
+    [ "$status" -eq 0 ]
+    [ -f "$HOME/Library/LaunchAgents/local.linked.plist" ]
+    [ ! -L "$HOME/Library/LaunchAgents/local.linked.plist" ]
+}
+
+@test "ext install: a template that fails plutil -lint is skipped with a warn, not bootstrapped, and the others still install" {
+    _write_ext_template aaa-broken broken
+    _write_ext_template zzz-good good
+    run _run_install_extensions
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"WARN"*"aaa-broken"*"plutil -lint"*"skipped"* ]]
+    [ ! -e "$HOME/Library/LaunchAgents/local.aaa-broken.plist" ]
+    ! grep -q 'local.aaa-broken' "${BATS_TEST_TMPDIR}/launchctl.log"
+    [ -f "$HOME/Library/LaunchAgents/local.zzz-good.plist" ]
+    grep -q "launchctl bootstrap gui/$UID $HOME/Library/LaunchAgents/local.zzz-good.plist" "${BATS_TEST_TMPDIR}/launchctl.log"
+    [[ "$output" == *"1 extension agent(s) installed"* ]]
+}
+
+@test "ext install: an already-loaded extension label is booted out before bootstrap" {
+    _write_ext_template dev-postgres good
+    export MOCK_BIN="${BATS_TEST_TMPDIR}/bin"; mkdir -p "$MOCK_BIN"
+    run _run_install_extensions
+    # Re-run with a launchctl whose `list` says the label IS loaded.
+    cat > "$MOCK_BIN/launchctl" <<MOCK
+#!/usr/bin/env bash
+echo "launchctl \$*" >> "${BATS_TEST_TMPDIR}/launchctl.log"
+exit 0
+MOCK
+    chmod +x "$MOCK_BIN/launchctl"
+    local fn; fn=$(sed -n '/^_launchd_install_extensions() {/,/^}/p' "$INSTALL_SH")
+    : > "${BATS_TEST_TMPDIR}/launchctl.log"
+    PATH="$MOCK_BIN:$PATH" zsh -c "
+        source '$LIB'; info() { :; }; warn() { :; }
+        LA_DIR=\"\$HOME/Library/LaunchAgents\"; LOG_DIR=\"\$HOME/.local/share/borg\"; EXT_PATH_VALUE=/usr/bin
+        $fn
+        _launchd_install_extensions"
+    grep -q "launchctl bootout gui/$UID/local.dev-postgres" "${BATS_TEST_TMPDIR}/launchctl.log"
+    grep -q "launchctl bootstrap gui/$UID" "${BATS_TEST_TMPDIR}/launchctl.log"
+}
+
+@test "contract: install.sh calls _launchd_install_extensions and never migrates extension labels" {
+    grep -q '^_launchd_install_extensions$' "$INSTALL_SH"
+    # The legacy migration is keyed on borg's own agents only.
+    [ "$(grep -c '_launchd_retire_legacy ' "$INSTALL_SH")" -eq 6 ]
 }
