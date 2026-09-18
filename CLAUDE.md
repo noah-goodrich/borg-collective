@@ -164,7 +164,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
     extensions/             Local-extension resolution: layer precedence, prefer-tool, liveness
-    manifest/               Reader for <project>/.borg/programs/*.json program manifests
+    manifest/               Reader for <project>/.borg/chains/*.json program manifests
     link/                   `borg link` document build + renderer
         core.py             Registry/plan/checkpoint reads, scope resolution, relative time
         grid.py             Manifests → the topology wire: levels, nodes, parents/children/seq

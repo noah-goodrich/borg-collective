@@ -272,8 +272,22 @@ def unmapped_gates(manifest: dict[str, Any]) -> list[dict[str, str]]:
 
 
 def programs_dir(project_dir: str) -> str:
-    """borg's one location for program manifests, alongside checkpoints and knowledge."""
-    return os.path.join(project_dir, ".borg", "programs")
+    """borg's one location for chain manifests, alongside checkpoints and knowledge.
+
+    RENAMED `.borg/programs` -> `.borg/chains` (AC7). Both resolve during the expand phase, new name
+    first, MIRRORING borg_core.manifest.shell.manifest_dir exactly -- the two implementations
+    disagreeing about WHERE manifests live would be the same reader/writer divergence AC7 exists to
+    end, one level below the schema. This module is itself slated for retirement into
+    borg_core/manifest/; until then it tracks that resolver rather than leading it.
+    """
+    borg = os.path.join(project_dir, ".borg")
+    chains = os.path.join(borg, "chains")
+    if os.path.isdir(chains):
+        return chains
+    legacy = os.path.join(borg, "programs")
+    if os.path.isdir(legacy):
+        return legacy
+    return chains
 
 
 def discover(project_dirs: list[str]) -> tuple[list[dict[str, Any]], list[str]]:

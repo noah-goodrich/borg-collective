@@ -107,13 +107,13 @@ _LINK_FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "l
 
 
 def _manifest_workspace(root, name="warehouse"):
-    """A registered repository carrying a SHIPPED fixture manifest under `.borg/programs/`.
+    """A registered repository carrying a SHIPPED fixture manifest under `.borg/chains/`.
 
     The bytes are `tests/fixtures/link/manifests/warehouse-rollout.json`'s, not an inline copy: the
     goldens pin the same file's rendered form, so a test that built its own rows could stay green
     while the fixture the goldens measure moved underneath it.
     """
-    programs = Path(_project_dir(root, name)) / ".borg" / "programs"
+    programs = Path(_project_dir(root, name)) / ".borg" / "chains"
     programs.mkdir(parents=True, exist_ok=True)
     shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", programs)
     return str(Path(_project_dir(root, name)))
@@ -946,7 +946,7 @@ def test_json_publishes_a_refused_count_on_the_grid_block(isolated_env, capsys, 
     "absent".
     """
     directory = _project_dir(isolated_env, "warehouse")
-    programs = Path(directory) / ".borg" / "programs"
+    programs = Path(directory) / ".borg" / "chains"
     programs.mkdir(parents=True, exist_ok=True)
     # One row, missing `order` -- structurally a manifest, refused whole by `validate`.
     (programs / "broken.json").write_text(json.dumps({"rows": [{"ref": "acme/ledger#1"}]}), encoding="utf-8")
