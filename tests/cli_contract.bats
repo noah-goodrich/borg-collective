@@ -1105,9 +1105,11 @@ EOF
 
     # Mock fzf as an Esc/cancel: cmd_switch's `selection=$(... | fzf ...) || return 0` must
     # take the graceful no-op path rather than crashing or hanging on a missing/real fzf.
+    # Drain stdin with a timeout, never a bare `cat`: a bare cat on an INHERITED stdin (a caller
+    # that ran bats without `< /dev/null`) blocks forever — measured at 44 minutes on 2026-09-18.
     cat > "$MOCK_BIN/fzf" <<'EOF'
 #!/usr/bin/env bash
-cat >/dev/null
+while IFS= read -r -t 1 _; do :; done
 exit 1
 EOF
     chmod +x "$MOCK_BIN/fzf"
@@ -3271,9 +3273,13 @@ _link_picture_budget() {
     export TMUX_MOCK_HAS_SESSION=1
     export TMUX_MOCK_WINDOWS=""
     _mock_tmux
+    # borg passes the prompt as ARGV, so this mock's stdin is whatever bats inherited. A bare
+    # `cat >/dev/null` here hung the whole suite for 44 minutes (2026-09-18) when the caller's stdin
+    # was an open pipe that never closed. Drain with a timeout instead: a real pipe still reads to
+    # EOF instantly; an idle inherited stdin costs one second and moves on.
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
-cat >/dev/null 2>&1 || true
+while IFS= read -r -t 1 _; do :; done
 echo "BRIEFING-FROM-MOCKED-CLAUDE"
 exit 0
 EOF

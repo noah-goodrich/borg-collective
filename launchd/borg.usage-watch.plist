@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.stillpoint-labs.borg.usage-watch</string>
+    <string>{{LABEL}}</string>
     <key>ProgramArguments</key>
     <array>
         <string>{{USAGE_WATCH_BIN}}</string>

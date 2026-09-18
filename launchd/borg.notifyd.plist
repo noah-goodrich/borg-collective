@@ -3,21 +3,20 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.stillpoint-labs.borg.reap</string>
+    <string>{{LABEL}}</string>
     <key>ProgramArguments</key>
     <array>
-        <string>{{BORG_BIN}}</string>
-        <string>reap-worktrees</string>
+        <string>{{NOTIFYD_BIN}}</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
-    <key>StartInterval</key>
-    <integer>3600</integer>
+    <key>KeepAlive</key>
+    <true/>
     <key>ThrottleInterval</key>
     <integer>10</integer>
     <key>StandardOutPath</key>
-    <string>{{LOG_DIR}}/reap.stdout.log</string>
+    <string>{{LOG_DIR}}/notifyd.stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>{{LOG_DIR}}/reap.stderr.log</string>
+    <string>{{LOG_DIR}}/notifyd.stderr.log</string>
 </dict>
 </plist>

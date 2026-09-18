@@ -5,15 +5,27 @@
 load test_helper/setup
 
 BORG_CMD="${BATS_TEST_DIRNAME}/../borg.zsh"
+LABEL_LIB="${BATS_TEST_DIRNAME}/../lib/launchd-label.zsh"
 
-NOTIFYD_LABEL="com.stillpoint-labs.borg.notifyd"
-CORTEX_LABEL="com.stillpoint-labs.borg.cortex-wake"
-USAGE_LABEL="com.stillpoint-labs.borg.usage-watch"
-REAP_LABEL="com.stillpoint-labs.borg.reap"
+# Labels are RESOLVED, never spelled out: the same lib/launchd-label.zsh that doctor and install.sh
+# use. Resolved inside setup(), after setup_temp_dirs has redirected HOME/XDG_CONFIG_HOME, so a
+# prefix file on the developer's real machine cannot leak in — and with LAUNCHD_LABEL_PREFIX
+# unset, so a prefix in the developer's shell cannot either. The "prefixed" case below is the one
+# test that sets a prefix on purpose.
+_label() { zsh -c "source '$LABEL_LIB' && _borg_launchd_label '$1'"; }
+
+_resolve_labels() {
+    NOTIFYD_LABEL=$(_label notifyd)
+    CORTEX_LABEL=$(_label cortex-wake)
+    USAGE_LABEL=$(_label usage-watch)
+    REAP_LABEL=$(_label reap)
+}
 
 setup() {
     setup_temp_dirs
     setup_mock_bin
+    unset LAUNCHD_LABEL_PREFIX
+    _resolve_labels
     # borg.zsh resets PATH from scratch at startup (native-install PATH-safety guard) and only
     # honors BORG_PATH_PREFIX for prepending — plain PATH exports from the test are discarded.
     export BORG_PATH_PREFIX="$MOCK_BIN"
@@ -98,6 +110,66 @@ EOF
     [[ "$output" == *"cortex-wake"*"OK"* ]] || false
     [[ "$output" == *"usage-watch"*"OK"* ]] || false
     [[ "$output" == *"reap"*"OK"* ]] || false
+}
+
+@test "labels resolve unprefixed in the sandbox (no prefix file, no env)" {
+    [ "$NOTIFYD_LABEL" = "borg.notifyd" ]
+    [ "$REAP_LABEL" = "borg.reap" ]
+}
+
+# ─── doctor follows the prefix contract ───────────────────────────────────────
+#
+# The plists and the `launchctl list` fixture below are written under the PREFIXED labels; if
+# doctor resolved labels any other way than through lib/launchd-label.zsh it would look for
+# `borg.notifyd`, find nothing, and FAIL every row.
+
+@test "a prefix file makes doctor look for <prefix>.borg.<agent> — same resolver as install.sh" {
+    printf '  com.stillpoint-labs \n' > "$XDG_CONFIG_HOME/launchd-prefix"
+    _resolve_labels
+    [ "$NOTIFYD_LABEL" = "com.stillpoint-labs.borg.notifyd" ]
+    _write_plist "$NOTIFYD_LABEL" ""
+    _write_plist "$CORTEX_LABEL" "30"
+    _write_plist "$USAGE_LABEL" "120"
+    _write_plist "$REAP_LABEL" "3600"
+    _write_launchctl_list "\
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"notifyd"*"OK"* ]] || false
+    [[ "$output" == *"usage-watch"*"OK"* ]] || false
+}
+
+@test "LAUNCHD_LABEL_PREFIX in the environment reaches doctor and beats the file" {
+    printf 'com.stillpoint-labs\n' > "$XDG_CONFIG_HOME/launchd-prefix"
+    export LAUNCHD_LABEL_PREFIX="ai.example"
+    _resolve_labels
+    [ "$NOTIFYD_LABEL" = "ai.example.borg.notifyd" ]
+    _write_plist "$USAGE_LABEL" "120"
+    # Only the env-prefixed labels are registered; the file-prefixed ones are absent on purpose.
+    _write_launchctl_list "\
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"usage-watch"*"OK"* ]] || false
+}
+
+@test "a registered legacy-prefixed label does NOT count as the unprefixed agent" {
+    # Sandbox resolves `borg.notifyd`; only the legacy name is registered. A substring match would
+    # call that "yes" — it is a different agent, so this must be MISSING/FAIL.
+    _write_launchctl_list "\
+- 0 com.stillpoint-labs.borg.notifyd
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL"
+    run "$BORG_CMD" doctor
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"notifyd"*"FAIL"* ]] || false
 }
 
 # ─── nonzero last exit status ─────────────────────────────────────────────────
@@ -348,4 +420,55 @@ MOCK
     run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
     [[ "$output" == *"absent"*"WARN"* ]] || false
+}
+
+# ─── extension agents (drop-in templates) ──────────────────────────────────────
+#
+# install.sh renders $XDG_CONFIG_HOME/borg/extensions/launchd/<name>.plist.tmpl to <label>.plist with
+# label <prefix>.<name> | local.<name>. doctor lists them with a REGISTRATION check only: no
+# artifact, so no freshness — doctor knows nothing about what an extension writes.
+
+_write_ext_template() {
+    local dir="$XDG_CONFIG_HOME/borg/extensions/launchd"
+    mkdir -p "$dir"
+    printf '<plist><dict><key>Label</key><string>{{LABEL}}</string></dict></plist>\n' > "$dir/$1.plist.tmpl"
+}
+
+@test "extension agent registered -> its own row, OK, freshness n/a" {
+    _write_ext_template dev-postgres
+    local ext_label; ext_label=$(zsh -c "source '$LABEL_LIB' && _borg_launchd_ext_label dev-postgres")
+    [ "$ext_label" = "local.dev-postgres" ]
+    _write_launchctl_list "\
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL
+- 0 $ext_label"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"dev-postgres"*"yes"*"n/a"*"OK"* ]] || false
+}
+
+@test "extension agent NOT registered -> FAIL, and the prefix is honoured in the label doctor looks for" {
+    printf 'com.stillpoint-labs\n' > "$XDG_CONFIG_HOME/launchd-prefix"
+    _resolve_labels
+    _write_plist "$NOTIFYD_LABEL" ""; _write_plist "$CORTEX_LABEL" "30"
+    _write_plist "$USAGE_LABEL" "120";  _write_plist "$REAP_LABEL" "3600"
+    _write_ext_template dev-postgres
+    # Registered under the UNprefixed extension label only — with the prefix set that is the wrong one.
+    _write_launchctl_list "\
+- 0 $NOTIFYD_LABEL
+- 0 $CORTEX_LABEL
+- 0 $USAGE_LABEL
+- 0 $REAP_LABEL
+- 0 local.dev-postgres"
+    run "$BORG_CMD" doctor
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"dev-postgres"*"FAIL"* ]] || false
+}
+
+@test "no extension directory -> doctor prints only the four built-in agents" {
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"dev-postgres"* ]] || false
 }
