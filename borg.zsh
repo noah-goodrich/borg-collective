@@ -2483,17 +2483,20 @@ cmd_doctor() {
     local data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
     local la_dir="$HOME/Library/LaunchAgents"
 
-    # name  label-suffix  artifact-path (or "" for n/a)
+    # name  label  artifact-path (or "" for n/a)
+    #
+    # Labels come from _borg_launchd_label (lib/launchd-label.zsh), the same resolver install.sh
+    # templates the plists with — so a prefix change is seen by both or neither.
     #
     # Only list an artifact for agents that write one on EVERY interval. notifyd and cortex-wake
     # are event-driven: their logs are written when something happens, so an old mtime means "a
     # quiet hour", not "broken". Checking freshness there reports a healthy agent as stale, and a
     # health check that cries wolf gets ignored.
     local -a agents=(
-        "notifyd|com.stillpoint-labs.borg.notifyd|"
-        "cortex-wake|com.stillpoint-labs.borg.cortex-wake|"
-        "usage-watch|com.stillpoint-labs.borg.usage-watch|$state_dir/usage-samples.jsonl"
-        "reap|com.stillpoint-labs.borg.reap|$data_dir/reap.stdout.log"
+        "notifyd|$(_borg_launchd_label notifyd)|"
+        "cortex-wake|$(_borg_launchd_label cortex-wake)|"
+        "usage-watch|$(_borg_launchd_label usage-watch)|$state_dir/usage-samples.jsonl"
+        "reap|$(_borg_launchd_label reap)|$data_dir/reap.stdout.log"
     )
 
     local overall_exit=0
@@ -2513,7 +2516,10 @@ cmd_doctor() {
         local reg_line="" reg="MISSING" exit_status="?" fresh="n/a"
         local agent_ok=1 agent_warn=0 hint=""
 
-        reg_line=$(echo "$list_output" | grep -F "$label" | head -1) || reg_line=""
+        # EXACT match on the label column, not a substring: with no prefix the label is
+        # `borg.notifyd`, which is a suffix of the legacy `com.stillpoint-labs.borg.notifyd` — a
+        # substring grep would report the legacy agent as the new one being registered.
+        reg_line=$(echo "$list_output" | awk -v l="$label" '$3 == l { print; exit }') || reg_line=""
         if [[ -z "$reg_line" ]]; then
             reg="MISSING"
             agent_ok=0

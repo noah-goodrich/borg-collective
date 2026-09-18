@@ -100,6 +100,40 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$BIN_DIR"; then
     warn '  export PATH="$HOME/.local/bin:$PATH"'
 fi
 
+# ── launchd labels: one resolver, one legacy migration ───────────────────────
+#
+# Every plist under launchd/ carries `{{LABEL}}` in its Label; the resolver in
+# lib/launchd-label.zsh turns an agent name into `<prefix>.borg.<agent>` (prefix from
+# $LAUNCHD_LABEL_PREFIX, else ${XDG_CONFIG_HOME:-~/.config}/launchd-prefix) or `borg.<agent>`
+# when neither is set. `borg doctor` resolves through the same function, so the installer and the
+# health check can never disagree about a label. The installed filename is always <label>.plist.
+source "$BORG_HOME/lib/launchd-label.zsh"
+LA_DIR="$HOME/Library/LaunchAgents"
+
+# ONE-TIME MIGRATION. Before the prefix existed every label was hardcoded as
+# `com.stillpoint-labs.borg.<agent>`. A machine that installed under that name and now resolves a
+# different label would otherwise keep the old agent registered AND running (notifyd is a
+# KeepAlive daemon) next to the new one — two fswatch daemons, two notifications per event, and a
+# `borg doctor` that only knows the new name. So: when the legacy label differs from the resolved
+# one, boot it out and delete its plist. When they are equal (prefix file says
+# com.stillpoint-labs) this is a no-op. Sets LEGACY_BOOTED_OUT=1 when it actually unloaded one.
+_launchd_retire_legacy() {
+    local agent="$1" new_label="$2"
+    local legacy="com.stillpoint-labs.borg.$agent"
+    LEGACY_BOOTED_OUT=0
+    [[ "$legacy" == "$new_label" ]] && return 0
+    if launchctl list "$legacy" &>/dev/null; then
+        info "  migrating: booting out legacy agent $legacy (now $new_label)"
+        launchctl bootout "gui/$UID/$legacy" 2>/dev/null || true
+        LEGACY_BOOTED_OUT=1
+    fi
+    if [[ -f "$LA_DIR/$legacy.plist" ]]; then
+        rm -f "$LA_DIR/$legacy.plist"
+        info "  migrating: removed legacy plist $LA_DIR/$legacy.plist"
+    fi
+    return 0
+}
+
 # ── 3. Install borg-notifyd daemon + LaunchAgent ─────────────────────────────
 
 info "Installing borg-notifyd..."
@@ -117,23 +151,25 @@ if ! command -v fswatch &>/dev/null; then
     brew install fswatch 2>&1 | grep -E '(Installing|Already|Error)' || true
 fi
 
-PLIST_NAME="com.stillpoint-labs.borg.notifyd.plist"
-PLIST_SRC="$BORG_HOME/launchd/$PLIST_NAME"
-PLIST_DEST="$HOME/Library/LaunchAgents/$PLIST_NAME"
+NOTIFYD_LABEL="$(_borg_launchd_label notifyd)"
+PLIST_SRC="$BORG_HOME/launchd/borg.notifyd.plist"
+PLIST_DEST="$LA_DIR/$NOTIFYD_LABEL.plist"
 NOTIFYD_BIN="$BIN_DIR/borg-notifyd"
 LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
 
-mkdir -p "$(dirname "$PLIST_DEST")" "$LOG_DIR"
+mkdir -p "$LA_DIR" "$LOG_DIR"
+_launchd_retire_legacy notifyd "$NOTIFYD_LABEL"
 
 sed \
+    -e "s|{{LABEL}}|$NOTIFYD_LABEL|g" \
     -e "s|{{NOTIFYD_BIN}}|$NOTIFYD_BIN|g" \
     -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
     "$PLIST_SRC" > "$PLIST_DEST"
 info "  plist -> $PLIST_DEST"
 
-if launchctl list "com.stillpoint-labs.borg.notifyd" &>/dev/null 2>&1; then
+if launchctl list "$NOTIFYD_LABEL" &>/dev/null 2>&1; then
     info "  reloading launchd agent..."
-    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.notifyd" 2>/dev/null || true
+    launchctl bootout "gui/$UID/$NOTIFYD_LABEL" 2>/dev/null || true
 fi
 launchctl bootstrap "gui/$UID" "$PLIST_DEST"
 info "  launchd agent bootstrapped."
@@ -145,20 +181,22 @@ chmod +x "$BORG_HOME/bin/borg-cortex-watch"
 ln -sf "$BORG_HOME/bin/borg-cortex-watch" "$BIN_DIR/borg-cortex-watch"
 info "  borg-cortex-watch -> $BORG_HOME/bin/borg-cortex-watch"
 
-CORTEX_PLIST_NAME="com.stillpoint-labs.borg.cortex-wake.plist"
-CORTEX_PLIST_SRC="$BORG_HOME/launchd/$CORTEX_PLIST_NAME"
-CORTEX_PLIST_DEST="$HOME/Library/LaunchAgents/$CORTEX_PLIST_NAME"
+CORTEX_LABEL="$(_borg_launchd_label cortex-wake)"
+CORTEX_PLIST_SRC="$BORG_HOME/launchd/borg.cortex-wake.plist"
+CORTEX_PLIST_DEST="$LA_DIR/$CORTEX_LABEL.plist"
 CORTEX_WATCH_BIN="$BIN_DIR/borg-cortex-watch"
+_launchd_retire_legacy cortex-wake "$CORTEX_LABEL"
 
 sed \
+    -e "s|{{LABEL}}|$CORTEX_LABEL|g" \
     -e "s|{{CORTEX_WATCH_BIN}}|$CORTEX_WATCH_BIN|g" \
     -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
     "$CORTEX_PLIST_SRC" > "$CORTEX_PLIST_DEST"
 info "  plist -> $CORTEX_PLIST_DEST"
 
-if launchctl list "com.stillpoint-labs.borg.cortex-wake" &>/dev/null 2>&1; then
+if launchctl list "$CORTEX_LABEL" &>/dev/null 2>&1; then
     info "  reloading launchd agent..."
-    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.cortex-wake" 2>/dev/null || true
+    launchctl bootout "gui/$UID/$CORTEX_LABEL" 2>/dev/null || true
 fi
 launchctl bootstrap "gui/$UID" "$CORTEX_PLIST_DEST"
 info "  launchd agent bootstrapped."
@@ -169,14 +207,17 @@ info "  launchd agent bootstrapped."
 # than "0"). Set BORG_USAGE_WATCH=0 to skip installing/bootstrapping it entirely. If it is
 # already bootstrapped from a previous run and the flag is now 0, bootout it so the opt-out
 # actually takes effect on re-run.
-USAGE_PLIST_NAME="com.stillpoint-labs.borg.usage-watch.plist"
-USAGE_PLIST_DEST="$HOME/Library/LaunchAgents/$USAGE_PLIST_NAME"
+USAGE_LABEL="$(_borg_launchd_label usage-watch)"
+USAGE_PLIST_DEST="$LA_DIR/$USAGE_LABEL.plist"
+# Retire the legacy label on BOTH branches: an opt-out that left the old agent running would not
+# be an opt-out.
+_launchd_retire_legacy usage-watch "$USAGE_LABEL"
 
 if [[ "${BORG_USAGE_WATCH:-1}" == "0" ]]; then
     info "BORG_USAGE_WATCH=0 — skipping borg-usage-watch install."
-    if launchctl list "com.stillpoint-labs.borg.usage-watch" &>/dev/null 2>&1; then
+    if launchctl list "$USAGE_LABEL" &>/dev/null 2>&1; then
         info "  removing previously-bootstrapped agent..."
-        launchctl bootout "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
+        launchctl bootout "gui/$UID/$USAGE_LABEL" 2>/dev/null || true
     fi
 else
     info "Installing borg-usage-watch (BORG_USAGE_WATCH=0 to opt out)..."
@@ -184,13 +225,14 @@ else
     ln -sf "$BORG_HOME/bin/borg-usage-watch" "$BIN_DIR/borg-usage-watch"
     info "  borg-usage-watch -> $BORG_HOME/bin/borg-usage-watch"
 
-    USAGE_PLIST_SRC="$BORG_HOME/launchd/$USAGE_PLIST_NAME"
+    USAGE_PLIST_SRC="$BORG_HOME/launchd/borg.usage-watch.plist"
     USAGE_WATCH_BIN="$BIN_DIR/borg-usage-watch"
     USAGE_PATH_VALUE="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
     USAGE_SAMPLES="${XDG_STATE_HOME:-$HOME/.local/state}/borg/usage-samples.jsonl"
     USAGE_WATCH_LOG="${XDG_STATE_HOME:-$HOME/.local/state}/borg/usage-watch.log"
 
     sed \
+        -e "s|{{LABEL}}|$USAGE_LABEL|g" \
         -e "s|{{USAGE_WATCH_BIN}}|$USAGE_WATCH_BIN|g" \
         -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
         -e "s|{{USER}}|$USER|g" \
@@ -199,9 +241,9 @@ else
         "$USAGE_PLIST_SRC" > "$USAGE_PLIST_DEST"
     info "  plist -> $USAGE_PLIST_DEST"
 
-    if launchctl list "com.stillpoint-labs.borg.usage-watch" &>/dev/null 2>&1; then
+    if launchctl list "$USAGE_LABEL" &>/dev/null 2>&1; then
         info "  reloading launchd agent..."
-        launchctl bootout "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
+        launchctl bootout "gui/$UID/$USAGE_LABEL" 2>/dev/null || true
     fi
     launchctl bootstrap "gui/$UID" "$USAGE_PLIST_DEST"
     info "  launchd agent bootstrapped."
@@ -224,7 +266,7 @@ else
     touch "${XDG_STATE_HOME:-$HOME/.local/state}/borg/usage-watch.force-probe"
 
     info "  verifying usage-watch produces output (kickstart + poll up to 30s)..."
-    launchctl kickstart -k "gui/$UID/com.stillpoint-labs.borg.usage-watch" 2>/dev/null || true
+    launchctl kickstart -k "gui/$UID/$USAGE_LABEL" 2>/dev/null || true
 
     VERIFIED=0
     for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
@@ -250,20 +292,22 @@ fi
 
 info "Installing borg-reap (hourly worktree reaper)..."
 
-REAP_PLIST_NAME="com.stillpoint-labs.borg.reap.plist"
-REAP_PLIST_SRC="$BORG_HOME/launchd/$REAP_PLIST_NAME"
-REAP_PLIST_DEST="$HOME/Library/LaunchAgents/$REAP_PLIST_NAME"
+REAP_LABEL="$(_borg_launchd_label reap)"
+REAP_PLIST_SRC="$BORG_HOME/launchd/borg.reap.plist"
+REAP_PLIST_DEST="$LA_DIR/$REAP_LABEL.plist"
 BORG_BIN="$BIN_DIR/borg"
+_launchd_retire_legacy reap "$REAP_LABEL"
 
 sed \
+    -e "s|{{LABEL}}|$REAP_LABEL|g" \
     -e "s|{{BORG_BIN}}|$BORG_BIN|g" \
     -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
     "$REAP_PLIST_SRC" > "$REAP_PLIST_DEST"
 info "  plist -> $REAP_PLIST_DEST"
 
-if launchctl list "com.stillpoint-labs.borg.reap" &>/dev/null 2>&1; then
+if launchctl list "$REAP_LABEL" &>/dev/null 2>&1; then
     info "  reloading launchd agent..."
-    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.reap" 2>/dev/null || true
+    launchctl bootout "gui/$UID/$REAP_LABEL" 2>/dev/null || true
 fi
 launchctl bootstrap "gui/$UID" "$REAP_PLIST_DEST"
 info "  launchd agent bootstrapped (runs hourly; logs -> $LOG_DIR/reap.{stdout,stderr}.log)."
@@ -277,24 +321,33 @@ info "  launchd agent bootstrapped (runs hourly; logs -> $LOG_DIR/reap.{stdout,s
 # is printed either way.
 info "Installing borg-pr-watch (PR activity watcher)..."
 
-PRWATCH_PLIST_NAME="com.stillpoint-labs.borg.pr-watch.plist"
-PRWATCH_PLIST_SRC="$BORG_HOME/launchd/$PRWATCH_PLIST_NAME"
-PRWATCH_PLIST_DEST="$HOME/Library/LaunchAgents/$PRWATCH_PLIST_NAME"
+PRWATCH_LABEL="$(_borg_launchd_label pr-watch)"
+PRWATCH_PLIST_SRC="$BORG_HOME/launchd/borg.pr-watch.plist"
+PRWATCH_PLIST_DEST="$LA_DIR/$PRWATCH_LABEL.plist"
+_launchd_retire_legacy pr-watch "$PRWATCH_LABEL"
+PRWATCH_LEGACY_WAS_ARMED=$LEGACY_BOOTED_OUT
 
 sed \
+    -e "s|{{LABEL}}|$PRWATCH_LABEL|g" \
     -e "s|{{BORG_ROOT}}|$BORG_HOME|g" \
     -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
     "$PRWATCH_PLIST_SRC" > "$PRWATCH_PLIST_DEST"
 info "  plist -> $PRWATCH_PLIST_DEST"
 
 if [[ "${BORG_PR_WATCH_ENABLED:-0}" == "1" ]]; then
-    if launchctl list "com.stillpoint-labs.borg.pr-watch" &>/dev/null 2>&1; then
+    if launchctl list "$PRWATCH_LABEL" &>/dev/null 2>&1; then
         info "  reloading launchd agent..."
-        launchctl bootout "gui/$UID/com.stillpoint-labs.borg.pr-watch" 2>/dev/null || true
+        launchctl bootout "gui/$UID/$PRWATCH_LABEL" 2>/dev/null || true
     fi
     launchctl bootstrap "gui/$UID" "$PRWATCH_PLIST_DEST"
     info "  launchd agent bootstrapped (every 600s; MAY POST allowlisted comments)."
 else
+    # The user armed this by hand under the legacy label and the migration just unloaded it. The
+    # default-OFF rule still wins (arming is the user's choice, not the installer's), so say so
+    # loudly instead of silently leaving a watcher they had running switched off.
+    if (( PRWATCH_LEGACY_WAS_ARMED )); then
+        warn "borg-pr-watch WAS armed under its legacy label and is now unloaded by the rename."
+    fi
     info "  NOT armed (default). It can post to GitHub, so arming is opt-in."
     info "  To arm:   launchctl bootstrap gui/$UID $PRWATCH_PLIST_DEST"
     info "  To audit: ./bin/borg-pr-watch    (no --apply: reports what it WOULD post)"
@@ -313,13 +366,15 @@ chmod +x "$BORG_HOME/bin/borg-memory-gate"
 ln -sf "$BORG_HOME/bin/borg-memory-gate" "$BIN_DIR/borg-memory-gate"
 info "  borg-memory-gate -> $BORG_HOME/bin/borg-memory-gate"
 
-MEMORY_GATE_PLIST_NAME="com.stillpoint-labs.borg.memory-gate.plist"
-MEMORY_GATE_PLIST_SRC="$BORG_HOME/launchd/$MEMORY_GATE_PLIST_NAME"
-MEMORY_GATE_PLIST_DEST="$HOME/Library/LaunchAgents/$MEMORY_GATE_PLIST_NAME"
+MEMORY_GATE_LABEL="$(_borg_launchd_label memory-gate)"
+MEMORY_GATE_PLIST_SRC="$BORG_HOME/launchd/borg.memory-gate.plist"
+MEMORY_GATE_PLIST_DEST="$LA_DIR/$MEMORY_GATE_LABEL.plist"
 MEMORY_GATE_BIN="$BIN_DIR/borg-memory-gate"
 MEMORY_GATE_PATH_VALUE="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+_launchd_retire_legacy memory-gate "$MEMORY_GATE_LABEL"
 
 sed \
+    -e "s|{{LABEL}}|$MEMORY_GATE_LABEL|g" \
     -e "s|{{MEMORY_GATE_BIN}}|$MEMORY_GATE_BIN|g" \
     -e "s|{{LOG_DIR}}|$LOG_DIR|g" \
     -e "s|{{USER}}|$USER|g" \
@@ -328,9 +383,9 @@ sed \
     "$MEMORY_GATE_PLIST_SRC" > "$MEMORY_GATE_PLIST_DEST"
 info "  plist -> $MEMORY_GATE_PLIST_DEST"
 
-if launchctl list "com.stillpoint-labs.borg.memory-gate" &>/dev/null 2>&1; then
+if launchctl list "$MEMORY_GATE_LABEL" &>/dev/null 2>&1; then
     info "  reloading launchd agent..."
-    launchctl bootout "gui/$UID/com.stillpoint-labs.borg.memory-gate" 2>/dev/null || true
+    launchctl bootout "gui/$UID/$MEMORY_GATE_LABEL" 2>/dev/null || true
 fi
 launchctl bootstrap "gui/$UID" "$MEMORY_GATE_PLIST_DEST"
 info "  launchd agent bootstrapped (runs daily; logs -> $LOG_DIR/memory-gate.{stdout,stderr}.log)."
@@ -339,7 +394,7 @@ info "  launchd agent bootstrapped (runs daily; logs -> $LOG_DIR/memory-gate.{st
 # remembering it") gets its first real, unprompted run right now rather than waiting up to 24h
 # for the first StartInterval tick.
 info "  kickstarting first run..."
-launchctl kickstart -k "gui/$UID/com.stillpoint-labs.borg.memory-gate" 2>/dev/null || true
+launchctl kickstart -k "gui/$UID/$MEMORY_GATE_LABEL" 2>/dev/null || true
 
 # ── 4. Hooks, skills, config, registry → borg setup ──────────────────────────
 

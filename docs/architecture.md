@@ -114,13 +114,43 @@ writing: **12 hooks**, **~14 lib files**, **16 skills**, **6 agents** (5 special
         ROUTING.md               Model/effort routing matrix for all of the above
     bin/
         borg-usage-watch         Usage Guardian poller (see below)
-    launchd/
-        com.stillpoint-labs.borg.notifyd.plist       fswatch presence daemon
-        com.stillpoint-labs.borg.cortex-wake.plist    30s Cortex Code session watcher
-        com.stillpoint-labs.borg.reap.plist           Hourly `borg reap-worktrees`
-        com.stillpoint-labs.borg.usage-watch.plist    Usage Guardian poller schedule
+    lib/
+        launchd-label.zsh        The one launchd label resolver (see "launchd labels" below)
+    launchd/                     Templates — Label is `{{LABEL}}`, installed as <label>.plist
+        borg.notifyd.plist       fswatch presence daemon
+        borg.cortex-wake.plist   30s Cortex Code session watcher
+        borg.reap.plist          Hourly `borg reap-worktrees`
+        borg.usage-watch.plist   Usage Guardian poller schedule
+        borg.pr-watch.plist      PR activity watcher (default-OFF; can post to GitHub)
+        borg.memory-gate.plist   Daily auto-memory read-instrument check
     install.sh                  Installer
     docs/                       Documentation
+```
+
+### launchd labels
+
+The repo plists carry no brand. Every `Label` is the placeholder `{{LABEL}}`, and
+`lib/launchd-label.zsh` is the single resolver that turns an agent name into a label:
+
+| Input                                                            | Label                       |
+| ---------------------------------------------------------------- | --------------------------- |
+| `LAUNCHD_LABEL_PREFIX=ai.example` (set, non-blank; wins)         | `ai.example.borg.<agent>`   |
+| `${XDG_CONFIG_HOME:-~/.config}/launchd-prefix` = `com.stillpoint-labs` | `com.stillpoint-labs.borg.<agent>` |
+| neither                                                          | `borg.<agent>`              |
+
+The file is one line, whitespace-trimmed; the env var overrides it. Agents are `notifyd`,
+`cortex-wake`, `usage-watch`, `reap`, `pr-watch`, `memory-gate`. The same contract is implemented
+in the dotfiles repo for its own LaunchAgents, so one prefix file brands everything on the machine.
+
+`install.sh` resolves each label at install time, templates it into the plist, and writes
+`~/Library/LaunchAgents/<label>.plist`. `borg doctor` resolves at run time through the same
+function, so installer and health check can never disagree. `install.sh` also performs a one-time
+migration: if the resolved label differs from the legacy hardcoded `com.stillpoint-labs.borg.<agent>`,
+the legacy agent is booted out and its plist deleted (notifyd is KeepAlive; a rename would
+otherwise leave two daemons running). Set the prefix BEFORE running `./install.sh`:
+
+```sh
+mkdir -p ~/.config && printf 'com.stillpoint-labs\n' > ~/.config/launchd-prefix && ./install.sh
 ```
 
 ### Runtime State
@@ -314,7 +344,7 @@ role, not an exhaustive spec.
 A two-part safety net that prevents runaway agent fan-out from silently burning a usage window,
 without ever hard-blocking work by default:
 
-1. **`bin/borg-usage-watch`** — a launchd-scheduled poller (`launchd/com.stillpoint-labs.borg.usage-watch.plist`)
+1. **`bin/borg-usage-watch`** — a launchd-scheduled poller (`launchd/borg.usage-watch.plist`)
    that samples `claude -p "/usage"` on an interval and appends one JSONL row per poll to
    `~/.local/state/borg/usage-samples.jsonl` (schema: `ts`, `status` — `ok` / `idle` / `suspect` /
    `error` — plus `session_pct`, `week_pct`, `resets_at` when known). Silence in the samples file has
@@ -392,9 +422,9 @@ tier per `agents/ROUTING.md`:
 
 Nanoprobes (and any subagent doing multi-file work) manage their own git worktrees rather than
 relying on harness-level isolation: `git -C <repo_path> worktree add
-/Users/noah/.local/state/borg/worktrees/<repo>/<slug> -b <branch>`. All edits and commits happen
+~/.local/state/borg/worktrees/<repo>/<slug> -b <branch>`. All edits and commits happen
 inside that worktree; on completion the subagent removes it. `borg reap-worktrees`
-(`launchd/com.stillpoint-labs.borg.reap.plist`, hourly) is the safety net that auto-cleans any borg
+(`launchd/borg.reap.plist`, hourly) is the safety net that auto-cleans any borg
 worktree whose branch has merged or that has gone stale (`BORG_REAP_STALE_HOURS`, default 12h).
 Nanoprobe lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (`SubagentStop`) to
 `~/.config/borg/agents.jsonl`; inspect with `borg nanoprobes` (alias `np`) and pull transcripts with

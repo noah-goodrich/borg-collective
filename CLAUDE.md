@@ -210,11 +210,14 @@ agents/ (6, ephemeral nanoprobe roster)
     borg-scout.md           Lightweight recon/discovery subagent
     ROUTING.md              Guidance for which agent to spawn for a given task shape
 install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
-launchd/
-    com.stillpoint-labs.borg.notifyd.plist       LaunchAgent: borg-notifyd (fswatch daemon)
-    com.stillpoint-labs.borg.cortex-wake.plist   LaunchAgent: borg-cortex-watch (30s interval)
-    com.stillpoint-labs.borg.reap.plist          LaunchAgent: borg reap-worktrees (hourly)
-    com.stillpoint-labs.borg.usage-watch.plist   LaunchAgent: borg-usage-watch (usage guardian sweep)
+lib/launchd-label.zsh       THE launchd label resolver (see "launchd labels" under Key Patterns)
+launchd/                    Templates; Label is `{{LABEL}}`, installed as <label>.plist
+    borg.notifyd.plist      LaunchAgent: borg-notifyd (fswatch daemon)
+    borg.cortex-wake.plist  LaunchAgent: borg-cortex-watch (30s interval)
+    borg.reap.plist         LaunchAgent: borg reap-worktrees (hourly)
+    borg.usage-watch.plist  LaunchAgent: borg-usage-watch (usage guardian sweep)
+    borg.pr-watch.plist     LaunchAgent: borg-pr-watch (default-OFF; can post to GitHub)
+    borg.memory-gate.plist  LaunchAgent: borg-memory-gate (daily read-instrument check)
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)
     extensions.md           Local extensions: layers, load points, the prefer-tool type
@@ -225,6 +228,20 @@ docs/
 
 ## Key Patterns
 
+- **launchd labels are resolved, never spelled out**: `lib/launchd-label.zsh` is the one resolver.
+  `_borg_launchd_label <agent>` returns `<prefix>.borg.<agent>` when a prefix resolves, else
+  `borg.<agent>` (agents: notifyd, cortex-wake, usage-watch, reap, pr-watch, memory-gate). The
+  prefix is `$LAUNCHD_LABEL_PREFIX` when set and non-blank, else the first non-blank line of
+  `${XDG_CONFIG_HOME:-~/.config}/launchd-prefix` (whitespace trimmed), else none — the same
+  contract the dotfiles repo uses for its own agents, so one file brands every LaunchAgent on the
+  machine. `install.sh` resolves at install time and templates `{{LABEL}}` into each plist;
+  `borg doctor` resolves at run time through the same function; the installed filename is always
+  `~/Library/LaunchAgents/<label>.plist`. With `com.stillpoint-labs` in the file the labels are
+  byte-identical to the pre-prefix hardcoded ones. `install.sh` also carries a ONE-TIME migration:
+  when the resolved label differs from the legacy `com.stillpoint-labs.borg.<agent>`, it boots the
+  legacy agent out and deletes its plist, because notifyd is KeepAlive and a rename would otherwise
+  leave two daemons running. `tests/launchd_label.bats` pins all of this; `bin/` scripts refer to
+  agents by name in comments and never carry a literal label.
 - **Orchestrator-mode vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
   Stop, and Notification hook now classifies the session via `_borg_session_mode` (in
   `lib/borg-hooks.sh`). A session whose `$CWD` *exactly* equals `$BORG_ORCHESTRATOR_ROOT`
@@ -277,7 +294,7 @@ docs/
   spawned by the orchestrator via the Agent tool with `background: true` (no harness worktree
   isolation — `isolation: worktree` caused hard failures when the orchestrator CWD is not a git
   repo). **Nanoprobes manage their own git worktrees** when the orchestrator supplies a branch name:
-  `git -C <repo_path> worktree add /Users/noah/.local/state/borg/worktrees/<repo>/<slug> -b <branch>`.
+  `git -C <repo_path> worktree add ~/.local/state/borg/worktrees/<repo>/<slug> -b <branch>`.
   All work and commits happen inside the worktree; on completion the nanoprobe removes it so the
   repo stays clean. `borg reap-worktrees` auto-cleans stale borg worktrees (merged branch or older
   than `BORG_REAP_STALE_HOURS`). Worktrees live under `~/.local/state/borg/worktrees/` (NOT inside
