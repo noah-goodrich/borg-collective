@@ -4105,3 +4105,63 @@ EOF
     run cat "$ARGVDUMP"
     [[ "$output" != *"--local"* ]] || false
 }
+
+# ── printf, not echo, into jq (2026-08-31-printf-not-echo-into-jq) ───────────────────────────────
+#
+# zsh's builtin `echo` expands backslash escapes, so `echo "$json" | jq` re-injects a RAW 0x0A into
+# a JSON string literal and jq refuses the whole document. Under borg.zsh's `set -e` the enclosing
+# function then dies mid-way with nothing on stdout. All 33 sites in borg.zsh and 5 in
+# lib/desktop.zsh now use `printf '%s'`, matching lib/registry.zsh's established spelling.
+#
+# THE FIXTURE MUST CARRY THE NEWLINE OR NEITHER CASE PROVES ANYTHING. A summary without one passes
+# on `echo` and on `printf` alike, which is this repository's most-repeated test defect.
+
+_printf_jq_registry() {   # $1: extra entry fields (e.g. a tmux_window), or empty
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "alpha": {"path": null, "source": "cli", "status": "idle",
+              "last_activity": "2026-08-01T10:00:00Z", "summary": "first line\nsecond line"$1}
+  }
+}
+EOF
+}
+
+@test "contract: cmd_status renders a summary carrying an embedded newline instead of dying in jq" {
+    # MUTATION-VERIFIED, not assumed: restoring `echo` on cmd_status's own `| jq` lines turns this
+    # red with exit 5 and `jq: parse error: Invalid string: control characters from U+0000 through
+    # U+001F must be escaped`. Measured before and after on this fixture.
+    _link_mock_tmux ""
+    _printf_jq_registry ""
+
+    run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_status alpha\" 2>&1"
+    [ "$status" -eq 0 ] || { printf 'cmd_status exited %s\n%s\n' "$status" "$output" >&2; false; }
+    [[ "$output" != *"parse error"* ]] || { printf 'jq still parsing echo output:\n%s\n' "$output" >&2; false; }
+    [[ "$output" == *"first line"* ]] || { printf 'no project detail rendered:\n%s\n' "$output" >&2; false; }
+}
+
+@test "contract: _borg_do_switch survives a newline summary on the NO-tmux_window fallback arm" {
+    # THE CASE THAT WOULD HAVE CAUGHT THE SHIPPED DEFECT, and the unit case above would not have.
+    # With no `tmux_window` the function falls through all four feeds to `warn` + `cmd_status` --
+    # which carried the identical `echo ... | jq` and died there at exit 5. The earlier round fixed
+    # only the picker, shipping a working picker whose selection crashed the switch.
+    _link_mock_tmux ""
+    _printf_jq_registry ""
+
+    run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; _borg_do_switch alpha\" 2>&1"
+    [ "$status" -eq 0 ] || { printf '_borg_do_switch exited %s\n%s\n' "$status" "$output" >&2; false; }
+    [[ "$output" != *"parse error"* ]] || false
+}
+
+@test "contract: no live 'echo ... | jq' site survives in borg.zsh or lib/desktop.zsh" {
+    # The directive's own regeneration command, as the oracle. A hand-maintained list of call sites
+    # is what went stale last time -- `_borg_print_briefing` was named on it after the --brief fold
+    # had already converted that function.
+    local n
+    n=$(awk '/^[a-zA-Z_][a-zA-Z0-9_]*\(\) *\{/{fn=$1} /echo .*\| *jq/{ if ($0 !~ /^ *#/) c++} END{print c+0}' \
+        "${BATS_TEST_DIRNAME}/../borg.zsh")
+    [ "$n" -eq 0 ] || { echo "borg.zsh still has $n live echo|jq site(s)"; false; }
+    n=$(awk '/echo .*\| *jq/{ if ($0 !~ /^ *#/) c++} END{print c+0}' \
+        "${BATS_TEST_DIRNAME}/../lib/desktop.zsh")
+    [ "$n" -eq 0 ] || { echo "lib/desktop.zsh still has $n live echo|jq site(s)"; false; }
+}
