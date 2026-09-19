@@ -31,7 +31,7 @@
       "lane": "_default",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#220",
-      "why": "the shim layer made real: two-tier shim named in CLAUDE.md, read-only adapter-driven reconcile, employer leak closed as an absence"
+      "why": "files the shim directive (child of One Front Door, not a plan replacement): two-tier shim named in CLAUDE.md, read-only adapter-driven reconcile, employer leak closed as an absence via Ontra-ai/ai-data-engineer#48"
     }
   ]
 }
