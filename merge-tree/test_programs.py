@@ -404,7 +404,10 @@ class TestWriteManifest:
     def test_refuses_an_invalid_manifest_and_writes_nothing(self, tmp_path):
         with pytest.raises(ValueError):
             programs.write_manifest(str(tmp_path), "prog-a", _manifest([_row("1", "")]))
-        assert not os.path.exists(os.path.join(tmp_path, ".borg", "programs", "prog-a.json"))
+        # ASSERTED THROUGH THE RESOLVER, NOT A HARDCODED NAME. `programs_dir()` on a fresh tmp_path
+        # now resolves to `chains`, so a literal `.borg/programs/...` path is absent whether or not
+        # the invalid manifest was written -- the negative would pass for the wrong reason.
+        assert not os.path.exists(os.path.join(programs.programs_dir(str(tmp_path)), "prog-a.json"))
 
     def test_is_idempotent_and_atomic_on_rewrite(self, tmp_path):
         m = _manifest([_row("1", "r#1")])

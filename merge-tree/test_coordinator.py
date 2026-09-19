@@ -431,3 +431,33 @@ class TestIndependenceAndBoundary:
             if token in body:
                 offenders.append(token)
         assert offenders == [], f"external-plugin references found: {offenders}"
+
+
+class TestProjectDirOfUnrecognised:
+    """The `""` arm of `_project_dir_of`, which had no coverage (review finding 3 on #222)."""
+
+    def test_a_path_under_neither_directory_name_yields_empty(self):
+        # Before the chains rename this split on one hardcoded name, and `rsplit` with NO MATCH
+        # returns the WHOLE PATH -- so an unrecognised layout produced a non-empty wrong "root".
+        assert coordinator._project_dir_of({"_path": "/tmp/x/.borg/elsewhere/p.json"}) == ""
+
+    def test_both_recognised_names_still_resolve(self):
+        assert coordinator._project_dir_of({"_path": "/tmp/x/.borg/chains/p.json"}) == "/tmp/x"
+        assert coordinator._project_dir_of({"_path": "/tmp/x/.borg/programs/p.json"}) == "/tmp/x"
+
+    def test_sync_borg_NAMES_a_dropped_manifest_instead_of_losing_it(self, tmp_path):
+        """A bare `continue` lost a manifest at exit 0 -- the confident-empty shape again.
+
+        MUTATION: delete the `warnings.append` in `sync_borg`'s guard and this goes red.
+        """
+        written, warnings = coordinator.sync_borg(
+            [{"program": "p", "_path": str(tmp_path / ".borg" / "elsewhere" / "p.json"), "rows": []}]
+        )
+        assert written == []
+        assert any("not under .borg/chains or .borg/programs" in w for w in warnings), warnings
+        assert any("p.json" in w for w in warnings), warnings
+
+    def test_a_manifest_with_no_path_at_all_stays_silent(self):
+        """The other side of the same guard: nothing came from disk, so nothing was lost."""
+        written, warnings = coordinator.sync_borg([{"program": "p", "rows": []}])
+        assert (written, warnings) == ([], [])
