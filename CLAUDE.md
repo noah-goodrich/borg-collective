@@ -356,8 +356,14 @@ docs/
   a borg reference inside the employer tree is a portability defect, not a convenience. The
   employer-side grep that guards this was measured incomplete on 2026-08-31 — it covered two paths
   and missed `commands/`, where the only leak lived, and printed `ok zero borg coupling` while the
-  leak shipped. A shim is closed by an ABSENT FILE, never by a `command -v borg` probe: a probe hands
-  teammates a dead code path they will eventually delete, and an absent file is invisible.
+  leak shipped. **Closed 2026-09-18** (`ai-data-engineer` `fix/close-borg-leak-in-plugins`): the grep
+  covers the whole `plugins/` tree, the leak is portable "do a design pass" prose in `strike.md`, and
+  the borg half is `~/.config/borg/extensions/skill-extensions/borg-plan/01-context.md` on the work
+  machine only. The widened grep excludes `__pycache__`, because Python 3.14 embeds the checkout's
+  absolute path in every `.pyc` and a checkout under `~/.local/state/borg/worktrees/` failed the
+  check on its own bytecode. A shim is closed by an ABSENT FILE, never by a `command -v borg` probe:
+  a probe hands teammates a dead code path they will eventually delete, and an absent file is
+  invisible.
 
 - **`prefer-tool` extensions, and the one precedence rule**: a file carrying `- Prefer-tool:`
   declares "use tool X instead of the default" (`- Instead-of:` names the default, `- Requires:`
