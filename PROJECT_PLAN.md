@@ -17,7 +17,7 @@ GitHub call.
 
 ## Acceptance Criteria
 
-- [ ] **AC1 — The shim pattern is named once, with its two tiers and the one-directional rule.**
+- [x] **AC1 — The shim pattern is named once, with its two tiers and the one-directional rule.**
       CLAUDE.md gains one section: executable adapters fire by construction, prose extensions shape
       judgment and are model-discretionary; borg reaches down for employer shims and the employer
       plugin never reaches up for borg.
@@ -27,7 +27,7 @@ GitHub call.
       `AC1 -> cli_contract.bats` coarseness problem one level worse, so this one gets a real gate.
     - Evidence: `bats:tests/prose_contracts.bats`
 
-- [ ] **AC2 — `borg reconcile` ships READ-ONLY, and writes nothing at all.**
+- [x] **AC2 — `borg reconcile` ships READ-ONLY, and writes nothing at all.**
       A new `borg_core/reconcile/` package reporting every row whose declared `status` disagrees with
       its resolved state, plus every `decision` gate on an already-merged ref (the #158 class). It
       writes no file, creates no file, and forks no adapter of its own.
@@ -54,7 +54,7 @@ GitHub call.
       green.
     - Evidence: `pytest:borg_core/reconcile/test_core.py`
 
-- [ ] **AC3 — Resolution is adapter-driven, with no hardcoded source name on the path.**
+- [x] **AC3 — Resolution is adapter-driven, with no hardcoded source name on the path.**
       The report resolves state through the same `recon-adapter-<source>` discovery
       `borg_core/recon/shell.py` already uses, so a machine that drops in `recon-adapter-jira`
       resolves jira rows with no code change.
@@ -64,7 +64,7 @@ GitHub call.
       rather than an allow-list, and it is the work machine's future stated as a test.
     - Evidence: `pytest:borg_core/reconcile/test_shell.py`
 
-- [ ] **AC4 — The employer leak is closed as an absence, and the grep that missed it can fail.**
+- [x] **AC4 — The employer leak is closed as an absence, and the grep that missed it can fail.**
       **DIRECTION MATTERS AND IS EASY TO INVERT.** This is not an employer reference inside
       `borg-collective` — the 2026-08-31 history scrub removed those and it holds (verified
       2026-09-17; a case-insensitive grep for the company name matches only `contract` and
@@ -79,10 +79,21 @@ GitHub call.
       anywhere under `plugins/` and confirm the grep FAILS. Presence of a widened path proves
       nothing — the mutation is the evidence, and today the narrow grep prints
       `ok zero borg coupling` while the leak ships.
+    - Evidence (2026-09-18): `ai-data-engineer` branch `fix/close-borg-leak-in-plugins`, commit
+      `cc71779`, pushed. Suite green; both mutations (the shipped line back in `strike.md`, and a
+      borg string in `airflow-debugger/`, which the old grep never looked at) fail the widened grep.
+      The borg half lives at `~/.config/borg/extensions/skill-extensions/borg-plan/01-context.md`
+      on this machine only. Found on the way: Python 3.14 embeds the checkout's absolute path in
+      every `.pyc`, so a checkout under `~/.local/state/borg/worktrees/` failed the grep on its own
+      bytecode; `--exclude-dir=__pycache__` closes that, reproduced before and after.
 
-- [ ] **AC5 — Nothing breaks.** `make test` at its coverage floor, `make lint` 10.00/10,
+- [x] **AC5 — Nothing breaks.** `make test` at its coverage floor, `make lint` 10.00/10,
       `bats tests/` green, `shellcheck` clean over anything new.
     - Verify: all four commands, run and pasted.
+    - Evidence (2026-09-18, rebased onto main at `921278c`): `make test` 1258 passed, coverage 93%
+      against the 90% floor; `make lint` 10.00/10; `bats tests/` 877 ok, exit 0; `shellcheck`: this
+      branch adds no shell file (the one it touches, `tests/prose_contracts.bats`, is bats, not sh);
+      the employer-side `tests/run-tests.sh` it edits is `shellcheck --severity=warning` clean.
 
 ## Scope Boundaries
 
@@ -147,8 +158,8 @@ are one sitting for the pure core and one for the adapter fan-out plus its oracl
   leaves nine directives parented to a slug no plan declares, so Step 0.75 finds zero children for
   the new plan. Recorded rather than deleted because the mechanism is real and someone will
   rediscover it: the gate goes quiet because its subject moved, not because the work closed.
-- **AC5 requires work in a private repo from a public one.** The plan describes it; the diff cannot
-  live here. `borg-collective` was history-scrubbed once already for employer references.
+- **AC4 requires work in a private repo from a public one.** The plan describes it; the diff cannot
+  live here. (Mislabelled AC5 until 2026-09-18; the shim plan's AC5 is nothing-breaks.) `borg-collective` was history-scrubbed once already for employer references.
 - ~~**Declared fields may be empty in practice.**~~ **MEASURED, and the cairn lesson was half
   right.** `lane` and `order` are 24/24 and `why` is 14/24 — those are not empty and the guard is
   load-bearing. But `apex`, `blocked_by` and `resolved_by` are **0/24**, exactly as the
