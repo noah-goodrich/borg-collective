@@ -22,7 +22,7 @@ silent-failure class: a wrong `Owner/repo` -> `repo#num` transform yields edges 
 no item, so they disappear from the graph without ever raising.
 
 INDEPENDENCE. This reads borg's artifacts and nothing else. Manifests are discovered only under a
-project's own `.borg/programs/`. No external plugin's file, schema, or path appears here or in the
+project's own `.borg/chains/` (legacy `.borg/programs/`). No external plugin's file, schema, or path appears here or in the
 fixtures; borg must work identically on a machine that has never heard of one.
 
 WHAT IS NOT DERIVED HERE. `gate.blocked_by` is prose ("waiting on Kelly's review"), so it is never
@@ -291,7 +291,7 @@ def programs_dir(project_dir: str) -> str:
 
 
 def discover(project_dirs: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
-    """Load every manifest under the given projects' `.borg/programs/`.
+    """Load every manifest under the given projects' `.borg/chains/` (or legacy `.borg/programs/`).
 
     Returns `(manifests, warnings)`. Takes explicit directories rather than reaching for the registry
     itself: the caller resolves registered project paths, keeping this core pure and testable with no
@@ -313,7 +313,7 @@ def discover(project_dirs: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
                 # A typo'd --programs-dir must not be indistinguishable from "no manifests"
                 # (opus review finding 7): the project itself is missing, name it.
                 warnings.append(f"{project_dir}: project directory does not exist")
-            continue  # project exists, no .borg/programs — the common case, not a problem
+            continue  # project exists, no chains dir — the common case, not a problem
         except OSError as exc:
             # Unreadable (permissions, I/O) is never silent: zero edges from a real directory
             # would look exactly like a correct empty sweep.

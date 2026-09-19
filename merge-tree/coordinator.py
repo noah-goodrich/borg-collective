@@ -310,6 +310,19 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
         project_dir = _project_dir_of(manifest)
         source_path = str(manifest.get("_path") or "")
         if not program or not project_dir:
+            # NAMED ONLY WHEN THERE IS SOMETHING TO NAME, and the distinction is deliberate.
+            #
+            # A manifest with NO `_path` never came from `discover` (which always stamps it), so it
+            # is a caller's hand-built dict rather than a file on disk -- nothing was lost and
+            # `test_a_manifest_with_no_path_stamp_is_skipped_not_raised` pins that silence.
+            #
+            # A manifest WITH a `_path` that `_project_dir_of` cannot resolve is the opposite: a real
+            # file under neither `.borg/chains` nor `.borg/programs`, dropped at exit 0. That is the
+            # confident-empty shape this tree keeps removing, so it is reported.
+            if source_path and not project_dir:
+                warnings.append(
+                    f"skipped {source_path}: not under .borg/chains or .borg/programs"
+                )
             continue
         if program in seen and seen[program] != source_path:
             # Keyed by SOURCE FILE, not project dir (opus round 2, finding 1): two files in the SAME

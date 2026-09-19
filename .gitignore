@@ -16,6 +16,11 @@ registry.json
 !.borg/skill-extensions/
 !.borg/knowledge/
 !.borg/chains/
+# BOTH CARVE-OUTS UNTIL THE CONTRACT COMMIT. `.borg/*` above ignores everything, so a carve-out is
+# the ONLY thing making manifests trackable. Replacing `programs` with `chains` rather than adding it
+# would silently untrack every un-migrated branch's manifests the moment it merged main -- an expand
+# commit performing a contraction, which is the rule this rename is following.
+!.borg/programs/
 
 # Claude Code project-level settings and session state — local only
 .claude/
