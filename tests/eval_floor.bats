@@ -757,6 +757,15 @@ _make_eval() {
         if [ ! -e "$harness" ]; then
             continue
         fi
+        # A HARNESS WITH NO NETWORK MODE HAS NO NETWORK FLOOR TO ORACLE -- the same scoping cases 8
+        # and 9 apply through `E2A_MIN=`. `evals/lifecycle-manifests/run.sh` stubs `gh` by its own
+        # rule 2 and never reads the wire, so `--skip-network` is inert there and a network floor
+        # would be one nothing could satisfy: AC6 decision (3)'s "permanent red, not a gate". The
+        # marker is the per-mode counter the floor reads, declared at column 0 as s4-k3 does; the
+        # `harnesses` guard below still refuses a tree in which NO harness declares one.
+        if ! grep -q '^NETWORK_RAN=' "$harness"; then
+            continue
+        fi
         harnesses=$((harnesses + 1))
         _run_harness "$allow" "$sandbox" "$python" "" "" "$harness" --skip-model
         [ "$status" -ne 0 ]
@@ -817,6 +826,15 @@ STUB
 
     for harness in "$BORG_HOME"/evals/*/run.sh; do
         if [ ! -e "$harness" ]; then
+            continue
+        fi
+        # A HARNESS WITH NO NETWORK MODE HAS NO NETWORK FLOOR TO ORACLE -- the same scoping cases 8
+        # and 9 apply through `E2A_MIN=`. `evals/lifecycle-manifests/run.sh` stubs `gh` by its own
+        # rule 2 and never reads the wire, so `--skip-network` is inert there and a network floor
+        # would be one nothing could satisfy: AC6 decision (3)'s "permanent red, not a gate". The
+        # marker is the per-mode counter the floor reads, declared at column 0 as s4-k3 does; the
+        # `harnesses` guard below still refuses a tree in which NO harness declares one.
+        if ! grep -q '^NETWORK_RAN=' "$harness"; then
             continue
         fi
         harnesses=$((harnesses + 1))

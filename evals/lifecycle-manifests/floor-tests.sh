@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Oracle for evals/lifecycle-manifests/run.sh's guards and fixtures. NEEDS NO MODEL, so CI runs it
-# on the same leg as the rest of the suite while the cases it guards cannot run there at all.
+# on the same leg as the rest of the suite while the cases it guards cannot run there at all --
+# through `tests/eval_lifecycle_floor.bats`, which `bats tests/*.bats` collects by existing. The
+# first version of this header made that claim with NO caller anywhere in the tree, so the "floor"
+# was a script someone had to remember to run: the shape its own second paragraph decries.
+#
+# WHAT IT NEEDS: an interpreter with an importable pytest (the same premise `tests/eval_floor.bats`
+# refuses to skip over), because run.sh's offline VERBS case is what keeps the global floor
+# satisfiable in cases 5 and 7 below. Absent, this file FAILS by name rather than skipping.
 #
 # WHY THIS FILE EXISTS. run.sh is model-only: all six cases call `claude`, so no CI job can execute
 # them and their only forcing function is someone remembering. That is exactly the shape that let
@@ -29,6 +36,27 @@ WORK="$(mktemp -d)"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 
+# THE PREMISE, CHECKED BEFORE ANY CASE. Same ladder run.sh climbs, so this file cannot pass an
+# interpreter run.sh will not find.
+PYTHON="$(_eval_python "$REPO")"
+if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
+    echo "premise broken: no interpreter with an importable pytest -- run 'pip install --group dev'" >&2
+    exit 1
+fi
+
+# A SANDBOX `$REPO` FOR EVERY run.sh INVOCATION BELOW, never the real checkout. run.sh `rm -rf`s
+# `$REPO/evals/lifecycle-manifests/out` on every run, and a floor test that aims that at the tree it
+# lives in mutates the checkout under test. Same recipe as `tests/eval_floor.bats`'s
+# `_eval_sandbox_repo`: every root entry symlinked in EXCEPT `evals/`, which is what the deletion
+# lands in. `borg.zsh` comes along because run.sh's checkout guard demands it.
+SANDBOX="$WORK/repo"
+mkdir -p "$SANDBOX"
+for entry in "$REPO"/*; do
+    [ "${entry##*/}" = "evals" ] && continue
+    ln -sfn "$entry" "$SANDBOX/${entry##*/}"
+done
+export BORG_EVAL_REPO="$SANDBOX" BORG_EVAL_PYTHON="$PYTHON"
+
 echo "== floor: fixture builders =="
 
 # ── 1. the manifest fixture VALIDATES, both directions ───────────────────────────────────────────
@@ -37,9 +65,9 @@ echo "== floor: fixture builders =="
 # and leaked backslashes into the JSON, so `discover()` rejected the file. "Rejected" and "absent"
 # are indistinguishable downstream, so every negative case would have passed for the wrong reason.
 d="$(_eval_repo_with_manifest "$WORK/valid" prog)"
-if [ -f "$d/.borg/programs/prog.json" ] && python3 -c '
+if [ -f "$d/$_EVAL_MANIFEST_DIR/prog.json" ] && python3 -c '
 import json, sys
-json.load(open(sys.argv[1]))' "$d/.borg/programs/prog.json" 2>/dev/null; then
+json.load(open(sys.argv[1]))' "$d/$_EVAL_MANIFEST_DIR/prog.json" 2>/dev/null; then
     ok "manifest fixture is parseable JSON"
 else
     bad "manifest fixture is not parseable JSON"
@@ -74,8 +102,8 @@ fi
 # A `.borg` is PLANTED FIRST, so the builder's removal is genuinely required. Without this the
 # assertion passed whether or not the builder removed anything — `_eval_repo` never creates `.borg`,
 # so "absent because removed" and "absent because never made" were indistinguishable.
-mkdir -p "$WORK/none/.borg/programs"
-printf '{"program":"stale","rows":[]}\n' > "$WORK/none/.borg/programs/stale.json"
+mkdir -p "$WORK/none/$_EVAL_MANIFEST_DIR"
+printf '{"program":"stale","rows":[]}\n' > "$WORK/none/$_EVAL_MANIFEST_DIR/stale.json"
 nd="$(_eval_repo_without_manifest "$WORK/none")"
 if [ ! -e "$nd/.borg" ]; then
     ok "manifest-less fixture has NO .borg at all"
@@ -124,7 +152,12 @@ fi
 # THE CASE THAT WOULD HAVE SAVED TWO SWEEPS. `claude` absent from the allowlist means every model
 # case invokes a command that does not exist, and "the skill never ran" is indistinguishable from
 # "the skill ran and declined" in the output. Asserted by name.
-if PATH="$bindir" command -v claude >/dev/null 2>&1; then
+# CONDITIONAL ON THE MACHINE HAVING ONE, like the `gh` check above: a CI runner has no `claude`, and
+# "the allowlist carries what this machine lacks" is not a fact a symlink can make true.
+real_claude="$(command -v claude 2>/dev/null || true)"
+if [ -z "$real_claude" ]; then
+    ok "claude is absent on this machine, so the allowlist cannot be asked to carry it"
+elif PATH="$bindir" command -v claude >/dev/null 2>&1; then
     ok "claude is reachable under the allowlist PATH"
 else
     bad "claude is NOT on the allowlist — every model case would fail without running the skill"
@@ -145,14 +178,24 @@ fi
 
 echo "== floor: run.sh's own guards =="
 
-# ── 5. --skip-model requests nothing, runs nothing, exits 0, and SAYS SO ─────────────────────────
+# ── 5. --skip-model runs VERBS, skips all six model cases BY NAME, and exits 0 ───────────────────
+#
+# Counted on the `  SKIP  ` / `  PASS  ` case prefixes, never on a word that also appears in the
+# RESULT line -- see case 7 for the measurement that made that rule.
 if [ -x "$RUN" ]; then
     out="$("$RUN" --skip-model 2>&1)"; rc=$?
     if [ "$rc" -eq 0 ]; then ok "--skip-model exits 0"; else bad "--skip-model exits $rc"; fi
-    if printf '%s' "$out" | grep -qi 'no offline cases\|requested nothing'; then
-        ok "--skip-model says plainly that it ran nothing"
+    n_skip=$(printf '%s\n' "$out" | grep -cE '^  SKIP  .*--skip-model|^  SKIP  .*did not run')
+    n_pass=$(printf '%s\n' "$out" | grep -cE '^  PASS  VERBS')
+    if [ "$n_skip" -eq 6 ] && [ "$n_pass" -eq 1 ]; then
+        ok "--skip-model: six model cases SKIP naming the flag, and VERBS executed"
     else
-        bad "--skip-model is silent about having run nothing"
+        bad "--skip-model: expected 6 SKIP / 1 VERBS PASS case lines, got $n_skip / $n_pass"
+    fi
+    if printf '%s\n' "$out" | grep -q 'nothing was verified'; then
+        bad "--skip-model tripped the global floor — VERBS did not count as executed"
+    else
+        ok "--skip-model does not trip the global floor (VERBS counts as executed)"
     fi
 
     # ── 6. --skip-network is ACCEPTED and inert ─────────────────────────────────────────────────
@@ -185,6 +228,20 @@ if [ -x "$RUN" ]; then
         ok "model floor FIRES at rc $rc when claude is unavailable"
     else
         bad "model floor did not fire — a sweep of nothing exited 0"
+    fi
+    # THE MODEL FLOOR'S REASON AND NOT THE GLOBAL ONE'S. VERBS executes in this run, so a non-zero
+    # exit here can only be the mode floor -- unless VERBS silently stopped counting, in which case
+    # the global floor fires first and prints its own sentence. Refuting that sentence is what keeps
+    # this case from passing on the wrong floor.
+    if printf '%s\n' "$out" | grep -q 'the model sweep was requested but no model case executed'; then
+        ok "the reason printed is the MODEL floor's"
+    else
+        bad "the model floor's reason is missing — a different floor (or none) produced the rc"
+    fi
+    if printf '%s\n' "$out" | grep -q 'nothing was verified'; then
+        bad "the GLOBAL floor fired — VERBS did not execute under the claude-less PATH"
+    else
+        ok "and the global floor did not (VERBS still executed)"
     fi
     # ANCHORED ON A CASE LINE, not anywhere in the output. The first version grepped for `skip`
     # and the summary line itself says "N skipped" — so replacing every SKIP with a FAIL left the

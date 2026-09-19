@@ -24,6 +24,31 @@
 #   5. $OUT is RECREATED, never ensured. A stale artifact from a previous run is a false PASS for a
 #      case that produced nothing this time.
 
+# ── where a manifest lives, in ONE place ─────────────────────────────────────────────────────────
+# `.borg/programs` is being renamed to `.borg/chains` as expand -> migrate -> contract (#222). The
+# expand phase keeps the legacy name readable, so these fixtures stay valid on either side of that
+# merge; flipping this one value is the whole migration for this harness, and it happens when the
+# rebase onto #222 lands, not before -- a fixture under a name `discover()` does not yet know is
+# "rejected", which reads downstream exactly like "absent".
+_EVAL_MANIFEST_DIR=".borg/programs"
+
+# ── the interpreter ladder, in ONE place ─────────────────────────────────────────────────────────
+# run.sh and floor-tests.sh both need an interpreter with an importable pytest, which is a dev-group
+# dependency that lives in `.venv` and NOT on the ambient PATH on the machine of record. Same three
+# rungs as `evals/s4-k3/run.sh`: the `BORG_EVAL_PYTHON` override (the seam `tests/eval_floor.bats`
+# reaches through), then the venv, then bare `python3` for a CI job that installs the dev group into
+# the ambient environment. Two copies of this ladder would be two places for it to drift.
+# Args: <repo>
+_eval_python() {
+    if [ -n "${BORG_EVAL_PYTHON:-}" ]; then
+        printf '%s\n' "$BORG_EVAL_PYTHON"
+    elif [ -x "$1/.venv/bin/python" ]; then
+        printf '%s\n' "$1/.venv/bin/python"
+    else
+        printf '%s\n' python3
+    fi
+}
+
 # ── git identity (rule 4) ────────────────────────────────────────────────────────────────────────
 _eval_git_env() {
     export GIT_AUTHOR_NAME="eval" GIT_AUTHOR_EMAIL="eval@localhost"
@@ -61,8 +86,8 @@ _eval_repo_with_manifest() {
         rows='[{"ref":"o/r#1","lane":"alpha","order":"1","why":"seed row"}]'
     fi
     _eval_repo "$dir" >/dev/null
-    mkdir -p "$dir/.borg/programs"
-    printf '{"program":"%s","rows":%s}\n' "$stem" "$rows" > "$dir/.borg/programs/${stem}.json"
+    mkdir -p "$dir/$_EVAL_MANIFEST_DIR"
+    printf '{"program":"%s","rows":%s}\n' "$stem" "$rows" > "$dir/$_EVAL_MANIFEST_DIR/${stem}.json"
     printf '%s\n' "$dir"
 }
 
