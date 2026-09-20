@@ -175,9 +175,15 @@ cmd_ls() {
     # the flatten below is the second; fixing only the flatten fixes nothing observable.
     # `printf '%s'` is the idiom lib/registry.zsh already uses for exactly this reason.
     #
-    # THE SAME `echo "$json" | jq` SPELLING APPEARS ELSEWHERE IN THIS FILE (cmd_status, cmd_next,
-    # the reap/watch paths). Those are NOT touched here -- this round's scope is the picker feed --
-    # and they are filed, not fixed.
+    # NO LIVE `echo ... | jq` SITE SURVIVES ANYWHERE, and this paragraph names the command that
+    # regenerates that fact rather than a list of functions. It used to read "the same spelling
+    # appears elsewhere in this file (cmd_status, cmd_next, the reap/watch paths) ... filed, not
+    # fixed" -- true when the picker alone was converted, false the moment the rest were, and
+    # invisible to the ratchet because its awk skips comment lines. That is the second stale
+    # hand-list in this file; the first was `_borg_do_switch`'s, which named `_borg_print_briefing`
+    # after the --brief fold had already converted it. Regenerate, do not re-read:
+    #
+    #   awk '/echo .*\| *jq/{ if ($0 !~ /^ *#/) print FILENAME":"NR }' borg.zsh bin/* lib/*.zsh
     local registry
     registry=$(borg_registry_with_state)
     local project_count

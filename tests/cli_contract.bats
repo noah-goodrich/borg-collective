@@ -4147,15 +4147,39 @@ EOF
     [[ "$output" != *"parse error"* ]] || false
 }
 
-@test "contract: no live 'echo ... | jq' site survives in borg.zsh or lib/desktop.zsh" {
-    # The directive's own regeneration command, as the oracle. A hand-maintained list of call sites
-    # is what went stale last time -- `_borg_print_briefing` was named on it after the --brief fold
-    # had already converted that function.
-    local n
-    n=$(awk '/^[a-zA-Z_][a-zA-Z0-9_]*\(\) *\{/{fn=$1} /echo .*\| *jq/{ if ($0 !~ /^ *#/) c++} END{print c+0}' \
-        "${BATS_TEST_DIRNAME}/../borg.zsh")
-    [ "$n" -eq 0 ] || { echo "borg.zsh still has $n live echo|jq site(s)"; false; }
-    n=$(awk '/echo .*\| *jq/{ if ($0 !~ /^ *#/) c++} END{print c+0}' \
-        "${BATS_TEST_DIRNAME}/../lib/desktop.zsh")
-    [ "$n" -eq 0 ] || { echo "lib/desktop.zsh still has $n live echo|jq site(s)"; false; }
+@test "contract: no live 'echo ... | jq' site survives in ANY zsh file" {
+    # THE RATCHET SCANS EVERY ZSH FILE, not the two the original diff happened to touch. Scoping it
+    # to borg.zsh and lib/desktop.zsh is what let `bin/borg-cortex-watch` keep three live sites
+    # (lines 197/209/240) through a PR whose title said "all 38" -- and a jq parse failure there
+    # kills the whole launchd sweep, with 240 aborting before its `_write_state`.
+    #
+    # A hand-maintained list of call sites is what went stale twice in this file already, so the
+    # oracle is a regeneration over a glob rather than a list of names.
+    local root="${BATS_TEST_DIRNAME}/.."
+    local bad=""
+    local f
+    for f in "$root"/*.zsh "$root"/bin/* "$root"/lib/*.zsh; do
+        [ -f "$f" ] || continue
+        head -1 "$f" | grep -q "zsh" || [ "${f##*.}" = "zsh" ] || continue
+        local n
+        n=$(awk '/echo .*\| *jq/{ if ($0 !~ /^ *#/) c++} END{print c+0}' "$f")
+        [ "$n" -eq 0 ] || bad="${bad} ${f##*/}:$n"
+    done
+    [ -z "$bad" ] || { echo "live echo|jq site(s):$bad"; false; }
+}
+
+@test "contract: the ratchet also refuses printf '%b', which restores the exact defect" {
+    # `printf '%b'` expands backslash escapes exactly as zsh's `echo` does, so it would re-inject a
+    # raw control character into the JSON and pass every test above. Named because a future edit
+    # reaching for a printf variant is the likeliest way this defect comes back.
+    local root="${BATS_TEST_DIRNAME}/.."
+    local bad=""
+    local f
+    for f in "$root"/*.zsh "$root"/bin/* "$root"/lib/*.zsh; do
+        [ -f "$f" ] || continue
+        local n
+        n=$(awk "/printf +['\"]%b['\"].*\\| *jq/{ if (\$0 !~ /^ *#/) c++} END{print c+0}" "$f")
+        [ "$n" -eq 0 ] || bad="${bad} ${f##*/}:$n"
+    done
+    [ -z "$bad" ] || { echo "printf '%b' into jq restores the defect:$bad"; false; }
 }
