@@ -21,7 +21,7 @@ registry.json
 .claude/
 
 # Python toolchain: local virtualenv + coverage/pytest artifacts
-.venv/
+.venv
 .coverage
 coverage.xml
 __pycache__/
@@ -35,3 +35,4 @@ templates/supabase/.borg/
 # one was swept into the 2026-08-10 infoviz import (54b4846) and sat tracked for
 # three weeks, arming the gate in every clone. See the removal commit.
 .gate-armed
+evals/lifecycle-manifests/out/
