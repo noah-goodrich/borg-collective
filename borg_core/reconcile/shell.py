@@ -31,7 +31,15 @@ def resolvable_kinds() -> set[str]:
     `link` is excluded for free: it is not in TRACKED_REF_KINDS, because a URL is context a human
     attached rather than work whose state anyone can resolve.
     """
-    discovered = {source for source, _path in recon_shell.discover_adapters()}
+    try:
+        discovered = {source for source, _path in recon_shell.discover_adapters()}
+    except OSError:
+        # An unreadable adapter dir is "cannot look". The safe degrade here is NARROWER: with no
+        # kinds resolvable, every ref lands in `unresolvable_refs` and is REPORTED rather than
+        # quietly treated as resolved. `manifest/cli.py::_authorable_kinds` wraps the same call in
+        # the opposite direction -- there a degraded path must never WIDEN what is authorable, so it
+        # keeps its built-in github. Same call, opposite safe direction, on purpose at both sites.
+        return set()
     return {kind for kind in refs.TRACKED_REF_KINDS if kind in discovered}
 
 

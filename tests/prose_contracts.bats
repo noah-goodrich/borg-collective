@@ -175,12 +175,17 @@ _shim_section() {
         "${REPO_ROOT}/CLAUDE.md"
 }
 
-@test "shim: the section this suite greps actually exists" {
-    # Guards the guard: if the heading is reworded, every case below would grep an empty string and
-    # pass vacuously. That is how the first draft of this suite failed.
+@test "shim: the section this suite greps actually exists, and is bounded at BOTH ends" {
+    # Guards the guard in both directions. Too SHORT: the heading was reworded, every case below
+    # greps an empty string and passes vacuously -- how the first draft of this suite failed. Too
+    # LONG: the END anchor (the `prefer-tool` bullet, which this section has no relationship to) was
+    # reworded or removed, and the sed range runs to end-of-file -- measured at 308 lines, at which
+    # point cases 2-4 are whole-file greps again and the recon section supplies `recon-adapter-<source>`
+    # from inside the widened window. A floor alone cannot see that; the ceiling can.
     local n
     n=$(_shim_section | wc -l | tr -d ' ')
     [ "$n" -ge 15 ] || { echo "shim section not found or too short ($n lines)"; false; }
+    [ "$n" -le 40 ] || { echo "shim section unbounded: $n lines -- did the end anchor move?"; false; }
 }
 
 @test "shim: the section names both tiers AND the rule that chooses between them" {
