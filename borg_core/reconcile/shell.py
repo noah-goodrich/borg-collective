@@ -36,7 +36,7 @@ def resolvable_kinds() -> set[str]:
     except OSError:
         # An unreadable adapter dir is "cannot look". The safe degrade here is NARROWER: with no
         # kinds resolvable, every ref lands in `unresolvable_refs` and is REPORTED rather than
-        # quietly treated as resolved. `manifest/cli.py::_authorable_kinds` wraps the same call in
+        # quietly treated as resolved. `manifest/cli.py::_resolvable_kinds` wraps the same call in
         # the opposite direction -- there a degraded path must never WIDEN what is authorable, so it
         # keeps its built-in github. Same call, opposite safe direction, on purpose at both sites.
         return set()
