@@ -25,12 +25,12 @@
 #      case that produced nothing this time.
 
 # ── where a manifest lives, in ONE place ─────────────────────────────────────────────────────────
-# `.borg/programs` is being renamed to `.borg/chains` as expand -> migrate -> contract (#222). The
-# expand phase keeps the legacy name readable, so these fixtures stay valid on either side of that
-# merge; flipping this one value is the whole migration for this harness, and it happens when the
-# rebase onto #222 lands, not before -- a fixture under a name `discover()` does not yet know is
-# "rejected", which reads downstream exactly like "absent".
-_EVAL_MANIFEST_DIR=".borg/programs"
+# `.borg/chains`, the name #222's expand phase made primary. These fixtures were authored under
+# `.borg/programs` and stayed there until that PR was in `main`, because a fixture under a name
+# `discover()` does not yet know is "rejected", which reads downstream exactly like "absent".
+# Flipping this one value was the whole migration for this harness. The legacy name is still
+# readable (expand, not contract), so run.sh's N2 checks that NEITHER name was created.
+_EVAL_MANIFEST_DIR=".borg/chains"
 
 # ── the interpreter ladder, in ONE place ─────────────────────────────────────────────────────────
 # run.sh and floor-tests.sh both need an interpreter with an importable pytest, which is a dev-group
