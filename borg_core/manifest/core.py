@@ -61,11 +61,11 @@ is that a non-conforming ref is a manifest defect to SURFACE, not a string to re
 surfacing point, and a validate error is fatal at load in shell._load_manifest.
 
 VOCABULARY. A *repository* is a git repo; a *project* is work spanning one or more repositories.
-"Program" is retired and names nothing here. The manifest FILES still live under `.borg/programs/`
+"Program" is retired and names nothing here. The manifest FILES still live under `.borg/chains/`
 and still carry a top-level `program` key; those two literals are read verbatim because they are what
 is on disk, and nothing new is named after them.
 
-WHERE MANIFESTS COME FROM. Files are read only from `<repository>/.borg/programs/` -- never from
+WHERE MANIFESTS COME FROM. Files are read only from `<repository>/.borg/chains/` -- never from
 `<repository>/.borg/` and never from the repository root. But the sweep spans EVERY registered
 repository, not just the one in scope: a manifest declaring refs across four repositories lives under
 exactly one of them, so repository-scoped discovery renders an empty grid for the other three (the

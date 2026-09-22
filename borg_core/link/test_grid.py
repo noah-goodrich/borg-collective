@@ -150,7 +150,7 @@ def _write_registry(root: Path, projects: dict) -> None:
 
 
 def _write_manifest(repository_dir: str, name: str, manifest: dict) -> Path:
-    directory = Path(repository_dir) / ".borg" / "programs"
+    directory = Path(repository_dir) / ".borg" / "chains"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{name}.json"
     path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -262,7 +262,7 @@ def _four_repository_registry(root: Path) -> dict:
 def test_a_manifest_hosted_by_another_repository_is_selected_from_the_fourth(isolated, monkeypatch):
     """THE MANDATORY B6 REGRESSION. Four repositories, one manifest, hosted by the second.
 
-    `stillpoint/.borg/programs/ingle-t1-cutover.json` declares rows across four repositories and
+    `stillpoint/.borg/chains/ingle-t1-cutover.json` declares rows across four repositories and
     lives under exactly one of them. Repository-scoped DISCOVERY renders an empty grid in the other
     three -- which the plan's own risk section says "reads as broken" -- and three of four is the
     modal case, not an edge case. This stands in the fourth repository and demands the second's
@@ -723,7 +723,7 @@ def test_a_malformed_manifest_warns_and_the_rest_of_the_grid_survives(isolated, 
     """One bad file must never blank the grid, and an unnamed skip is indistinguishable from a file
     that was never there. manifest/shell.py's header states the policy; this pins that link keeps it."""
     dirs = _four_repository_registry(isolated)
-    broken = Path(dirs["delta"]) / ".borg" / "programs"
+    broken = Path(dirs["delta"]) / ".borg" / "chains"
     broken.mkdir(parents=True, exist_ok=True)
     (broken / "broken.json").write_text("{ not json", encoding="utf-8")
     monkeypatch.chdir(dirs["delta"])
@@ -1017,7 +1017,7 @@ def test_scoped_projects_never_widens_a_narrowed_sweep():
 
 def test_repository_dir_rejects_jqs_null_sentinel():
     """`jq` renders a JSON null as the four characters `null`, and every zsh reader in the tree guards
-    it. Passing it through would make manifest discovery read `null/.borg/programs` relative to
+    it. Passing it through would make manifest discovery read `null/.borg/chains` relative to
     whatever directory the process is sitting in."""
     registry = {"projects": {"a": {"path": "null"}, "b": {"path": "/b"}, "c": {}, "d": None}}
     assert link_grid.repository_dir(registry, {"kind": "repository", "repository": "a"}) == ""
@@ -1602,7 +1602,7 @@ def test_a_missing_gh_is_a_named_warning_and_not_a_blank_grid(isolated, monkeypa
 def test_a_manifest_declaring_no_ref_spawns_nothing_at_all(isolated, monkeypatch, record_forks):
     """NO REFS MEANS NO SUBPROCESS, and this rule is what keeps every fixture registry fork-free.
 
-    A sandbox with no `.borg/programs` declares nothing, and a fetch that spawned `gh` anyway would
+    A sandbox with no `.borg/chains` declares nothing, and a fetch that spawned `gh` anyway would
     put a network round trip on ~46 existing bats link cases and on every `borg link` run in a
     repository that has not adopted a manifest yet.
     """
@@ -2267,7 +2267,7 @@ def test_parents_and_children_are_sorted_by_seq_then_ref():
     """G4. MUTATION: sort either adjacency list by `ref` alone (or leave it in edge order).
 
     `levels()` publishes within-level order as ASCENDING REF, which is deterministic but carries no
-    meaning. Measured on the live stillpoint/.borg/programs/ingle-t1-cutover.json: the `contract` lane
+    meaning. Measured on the live stillpoint/.borg/chains/ingle-t1-cutover.json: the `contract` lane
     holds seq 0-5 and `cutover` seq 6-13, but ascending ref interleaves them at four of eight levels.
     A renderer placing nodes by ref order therefore crosses two lanes four times with no edge crossing
     anything, which is why declaration order is the tie-break and why it is pinned here.
