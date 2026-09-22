@@ -22,11 +22,11 @@ borg_desktop_scan() {
         data=$(cat "$f" 2>/dev/null) || continue
 
         local topic proj_status summary next_steps last_activity
-        topic=$(echo "$data" | jq -r '.topic // ""')
-        proj_status=$(echo "$data" | jq -r '.status // "idle"')
-        summary=$(echo "$data" | jq -r '.summary // ""')
-        next_steps=$(echo "$data" | jq -r '.next_steps // ""')
-        last_activity=$(echo "$data" | jq -r '.last_activity // ""')
+        topic=$(printf '%s' "$data" | jq -r '.topic // ""')
+        proj_status=$(printf '%s' "$data" | jq -r '.status // "idle"')
+        summary=$(printf '%s' "$data" | jq -r '.summary // ""')
+        next_steps=$(printf '%s' "$data" | jq -r '.next_steps // ""')
+        last_activity=$(printf '%s' "$data" | jq -r '.last_activity // ""')
 
         # Use topic as the display name if available, else filename
         local project="${topic:-$name}"
