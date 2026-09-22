@@ -619,7 +619,7 @@ def repository_dir(registry: dict, scope: dict) -> str:
 def select_manifests(manifests: list[dict], scope: dict, slug: str) -> tuple[list[dict], list[str]]:
     """B6's selection half: which of the globally-discovered manifests belong to this scope.
 
-    DISCOVERY IS GLOBAL, SELECTION IS SCOPED. `stillpoint/.borg/programs/ingle-t1-cutover.json`
+    DISCOVERY IS GLOBAL, SELECTION IS SCOPED. `stillpoint/.borg/chains/ingle-t1-cutover.json`
     declares rows across four repositories but lives under exactly one of them; scoping DISCOVERY to
     the repository in hand renders an empty grid in three of the four, which the plan's own risk
     section says "reads as broken". So every registered repository is globbed and the narrowing
@@ -752,7 +752,7 @@ def _grid_nodes(
 
     `seq` IS DECLARATION ORDER, AND IT IS WHAT KEEPS A RENDERED CHAIN IN ONE COLUMN. `levels()`
     publishes within-level order as ASCENDING REF, which is deterministic but not meaningful: measured
-    on the live stillpoint/.borg/programs/ingle-t1-cutover.json (14 refs, 8 levels, 2 lanes), level 0
+    on the live stillpoint/.borg/chains/ingle-t1-cutover.json (14 refs, 8 levels, 2 lanes), level 0
     is [stillpoint#37 (cutover), stillpoint#54 (contract)] while levels 2 and 3 put contract first and
     level 4 swaps back -- so a renderer placing nodes by within-level index crosses the two lanes four
     times in an 8-row picture with no edge crossing anything. `seq` is the row's index in `lanes()`'
@@ -826,7 +826,7 @@ def ready_refs(manifest: dict, nodes: dict[str, dict]) -> dict:
     ("start this now") off a field nobody verified. That is the exact claim AC4's precondition was
     filed to prevent, and it would arrive in AC4's own commit.
 
-    Measured on the live stillpoint/.borg/programs/ingle-t1-cutover.json: a real sweep resolves 14 of
+    Measured on the live stillpoint/.borg/chains/ingle-t1-cutover.json: a real sweep resolves 14 of
     14 (9 swept, 5 fetched); `--local` resolves 0 of 14. So PROVENANCE IS A FUNCTION OF `--local`, not
     of manifest quality -- excluding declared states costs nothing on a swept render and empties the
     set on a local one.

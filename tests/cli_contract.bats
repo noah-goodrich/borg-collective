@@ -4105,3 +4105,24 @@ EOF
     run cat "$ARGVDUMP"
     [[ "$output" != *"--local"* ]] || false
 }
+
+@test "contract: the legacy --programs-dir spelling is still accepted after the chains rename" {
+    # EXPAND PHASE, PINNED AT THE CLI. `.borg/programs` became `.borg/chains` (AC7), and
+    # `--chains-dir` is the primary spelling -- but a caller's muscle memory, a checkpoint, or a
+    # skill written last week all say `--programs-dir`. Dropping it would break them silently: zsh's
+    # case dispatch would fall through to the pass-through arm and hand the flag to coordinator.py,
+    # whose argparse would then fail on an unrecognised argument with no mention of the rename.
+    #
+    # MUTATION: remove `|--programs-dir` from the case arm and this goes red.
+    run zsh -c "'$BORG' chain plan --programs-dir"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--programs-dir needs a path"* ]] || false
+}
+
+@test "contract: the refusal names the spelling the caller typed, not the canonical one" {
+    # A user who typed the legacy flag and is told "--chains-dir needs a path" has to work out that
+    # the two are the same flag. `die "borg chain: $1 needs a path"` uses the typed spelling.
+    run zsh -c "'$BORG' chain plan --chains-dir"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--chains-dir needs a path"* ]] || false
+}

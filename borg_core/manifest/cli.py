@@ -2,7 +2,7 @@
 
 Three verbs, one per moment in a row's life:
 
-    scaffold   `/borg-plan` -- create `<repository>/.borg/programs/<name>.json` with an apex and no
+    scaffold   `/borg-plan` -- create `<repository>/.borg/chains/<name>.json` with an apex and no
                rows. Idempotent and NEVER clobbering.
     add-row    `/borg-link-up` -- append a row for a ref, or update the one already carrying it.
     close      `/borg-assimilate` -- set a row's status, by ref.
@@ -440,7 +440,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # three write verbs still require it, enforced below where the verb is known -- moving the check
     # from argparse to the dispatch is what lets one flat parser serve four verbs with different
     # needs, the same trade the `--apex`-on-close comment describes.
-    parser.add_argument("--name", default="", help="manifest file stem under .borg/programs/")
+    parser.add_argument("--name", default="", help="manifest file stem under .borg/chains/")
     parser.add_argument("--ref", default="", help="the row's ref (add-row, close)")
     parser.add_argument("--lane", default="", help=f"lane name (add-row; default {core.DEFAULT_LANE})")
     parser.add_argument("--new-lane", action="store_true",

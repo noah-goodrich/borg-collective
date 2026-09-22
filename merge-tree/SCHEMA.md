@@ -189,7 +189,7 @@ Every run reports four categories, because they fail differently:
 - `stale_projects` / `stale_workstreams` — judgment whose anchor is gone. Prose someone wrote that no longer
   attaches to anything, surfaced before it is lost.
 
-## Program manifests (`<project>/.borg/programs/*.json`) — borg's declared edges
+## Program manifests (`<project>/.borg/chains/*.json`) — borg's declared edges
 
 **This is borg's own contract, owned here.** It is not derived from, validated against, or dependent on any other
 tool's file format; borg must behave identically on a machine that has no other plugin installed.

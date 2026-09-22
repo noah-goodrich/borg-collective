@@ -54,19 +54,41 @@ from borg_core.manifest import core
 GIT_TIMEOUT_SECONDS = 5
 
 
+CHAINS_DIRNAME = "chains"
+LEGACY_DIRNAME = "programs"
+
+
 def manifest_dir(repository_dir: str) -> str:
-    """borg's one location for manifests: `<repository>/.borg/programs`.
+    """borg's one location for manifests: `<repository>/.borg/chains`, or the legacy name.
 
     The single path constant, and the whole of the location rule. Nothing outside this directory is
     ever opened -- not `<repository>/.borg/anything.json`, not a manifest-shaped file in the
     repository root. What CHANGED with the hardened spec's B6 is not this rule but the sweep: every
     registered repository's copy of this directory is globbed, not just the one in scope.
 
-    The `programs` literal in the RETURN VALUE is what is on disk and stays until a rename directive
-    moves it. The FUNCTION is not named after it: "program" is retired, and a new public symbol in a
-    new package is exactly where the retired word must not reappear.
+    THE RENAME IS THE EXPAND PHASE, AND BOTH NAMES RESOLVE ON PURPOSE. AC7's verify greps the
+    COMMANDS section of `borg help` for the retired word and gets two hits that are NOT the retired
+    verb -- `.borg/chains/*.json` in `chain`'s help line, and `--programs-dir`. Renaming the verb
+    (decision 2) could not reach either, because they are a filesystem path and a flag. `chains`
+    matches the verb `borg chain` and the `▸ CHAINS` section it already prints.
+
+    PRECEDENCE IS "WHICHEVER EXISTS", LEGACY LAST, and never both: a repository mid-migration must
+    not have its manifests split across two directories, which would make `discover` emit each
+    program twice and `resolve` report `ambiguous` for a repository holding one. A repository with
+    NEITHER gets the new name, so nothing created from today lands under the retired word.
+
+    Per the Architecture Rules this is expand -> migrate -> contract: this commit expands (both read),
+    migrates this repository's own manifest, and leaves the contraction -- deleting the legacy arm --
+    to a follow-up, because no artifact may be read by rules it was not written to satisfy.
     """
-    return os.path.join(repository_dir, ".borg", "programs")
+    borg = os.path.join(repository_dir, ".borg")
+    new_dir = os.path.join(borg, CHAINS_DIRNAME)
+    if os.path.isdir(new_dir):
+        return new_dir
+    legacy = os.path.join(borg, LEGACY_DIRNAME)
+    if os.path.isdir(legacy):
+        return legacy
+    return new_dir
 
 
 def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
@@ -207,7 +229,7 @@ def _manifest_identity(manifest: dict) -> str:
     """A manifest's content identity: its declared body with every derived `_` key removed.
 
     Two registry entries can point at two DIFFERENT directories holding the SAME manifest -- a git
-    worktree is the live case, since `.borg/programs/` is git-tracked, so `drone feature` produces a
+    worktree is the live case, since `.borg/chains/` is git-tracked, so `drone feature` produces a
     second checkout of every manifest and `borg add` registers it beside its parent. Their `_path`
     values differ, so no path-level dedup can see it, and the grid would render every node, every
     gate and every declared ref twice under one header.
@@ -224,14 +246,14 @@ def _manifest_identity(manifest: dict) -> str:
 
 
 def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
-    """Load every manifest under the given repositories' `.borg/programs/`.
+    """Load every manifest under the given repositories' `.borg/chains/`.
 
     Returns `(manifests, warnings)`. Takes explicit directories so the pure selection and ranking in
     core.py can be exercised against any set of paths; `discover_registered` is the entry point that
     derives them from the registry.
 
     `except FileNotFoundError` MUST PRECEDE `except OSError` -- FileNotFoundError subclasses OSError,
-    and reordering them would make every repository without a `.borg/programs` emit an "unreadable"
+    and reordering them would make every repository without a `.borg/chains` emit an "unreadable"
     warning, turning the silent common case into noise on every repository borg knows about. Inside
     that branch the isdir check is what distinguishes a typo'd path (warn by name) from a normal
     repository with no manifests (silent).
@@ -266,7 +288,7 @@ def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
                 # A typo'd or stale registry path must not be indistinguishable from "no manifests":
                 # the repository itself is missing, so name it.
                 warnings.append(f"{repository_dir}: repository directory does not exist")
-            continue  # repository exists, no .borg/programs -- the common case, not a problem
+            continue  # repository exists, no .borg/chains -- the common case, not a problem
         except OSError as exc:
             # Unreadable (permissions, I/O) is never silent: zero manifests from a real directory
             # would look exactly like a correct empty sweep.
@@ -298,7 +320,7 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     Blank and the literal string "null" are dropped, and that is not defensive padding: `jq` renders
     a JSON null as the four characters `null`, every zsh reader guards
     `[[ -z "$ppath" || "$ppath" == "null" ]]`, and -- worse -- passing "" to manifest_dir would yield
-    the RELATIVE path `.borg/programs`, making discovery read whatever directory the process happens
+    the RELATIVE path `.borg/chains`, making discovery read whatever directory the process happens
     to be sitting in. One entry with no path is skipped silently, matching every other collector in
     borg_core.
 
@@ -335,7 +357,7 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
 
 
 def discover_registered(registry: Any) -> tuple[list[dict], list[str]]:
-    """Every manifest under EVERY registered repository's `.borg/programs/`. B6's enforcing half.
+    """Every manifest under EVERY registered repository's `.borg/chains/`. B6's enforcing half.
 
     DISCOVERY IS GLOBAL; SELECTION IS SCOPED -- stated once in core.py's module docstring ("WHERE
     MANIFESTS COME FROM") and enforced here. The sweep is a local glob over ~14 directories,
@@ -448,7 +470,7 @@ def _write_refusal(name: str, errors: list[str], slug: str) -> InvalidManifest:
 
 
 def write_manifest(repository_dir: str, manifest: dict, name: str) -> str:
-    """Write a manifest to `<repository>/.borg/programs/<name>.json`. The ONLY writer.
+    """Write a manifest to `<repository>/.borg/chains/<name>.json`. The ONLY writer.
 
     THE ONE PLACE THIS MODULE'S "nothing here is ever fatal" RULE DOES NOT APPLY, and the asymmetry
     is the point. A reader that dies on one bad file blanks the whole grid, so reads degrade: a bad

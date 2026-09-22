@@ -680,7 +680,7 @@ def start_fetch(refs: list[str]) -> dict:
     the Popen is not a seam. A bad path degrades to a named warning rather than to a live fetch.
 
     NO REFS MEANS NO SUBPROCESS, and that one rule is what keeps ~46 existing bats link cases and
-    every fixture registry without a `.borg/programs` fork-free. Same for a ref set where nothing
+    every fixture registry without a `.borg/chains` fork-free. Same for a ref set where nothing
     survives grid._fetchable.
 
     `deadline` IS MONOTONIC AND IS SET HERE, at the spawn, so the fan-out's elapsed time is charged

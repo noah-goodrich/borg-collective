@@ -57,7 +57,7 @@ def _row(order, ref, lane=None, **extra):
 def _write_manifest(root, repository, name, doc):
     """Put one manifest in the directory `shell.manifest_dir` NAMES for `<root>/<repository>`.
 
-    DERIVED, never spelled `.borg/programs` here, because a fixture holding its own copy of that
+    DERIVED, never spelled `.borg/chains` here, because a fixture holding its own copy of that
     literal survives a rename by writing to the OLD directory while `shell.discover` reads the new
     one -- and `shell.discover` is silent by documented design when a repository exists but its
     manifest directory is simply absent, so the sweep comes back `([], [])`. Clean, empty, and green
@@ -137,7 +137,7 @@ def test_manifest_dir_is_the_one_location():
     # The `programs` literal is what is on disk and stays; the FUNCTION is not named after it.
     # "Program" is retired, and a new public symbol in a new package is exactly where the retired
     # word must not reappear (PROJECT_PLAN.md Vocabulary; AC7 greps for it).
-    assert shell.manifest_dir("/repos/ingle") == "/repos/ingle/.borg/programs"
+    assert shell.manifest_dir("/repos/ingle") == "/repos/ingle/.borg/chains"
 
 
 def test_no_public_name_in_the_package_carries_the_retired_word():
@@ -190,7 +190,7 @@ def test_an_unreadable_programs_dir_warns_by_name(tmp_path):
     if os.geteuid() == 0:
         pytest.skip("root ignores mode bits -- chmod 000 cannot deny listdir (devcontainer case)")
 
-    directory = tmp_path / "repo" / ".borg" / "programs"
+    directory = tmp_path / "repo" / ".borg" / "chains"
     directory.mkdir(parents=True)
     os.chmod(directory, 0o000)
     try:
@@ -235,7 +235,7 @@ def test_one_bad_manifest_does_not_suppress_a_good_one(tmp_path):
 
 def test_non_json_files_are_ignored_with_no_warning(tmp_path):
     p = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1")]))
-    (tmp_path / "repo" / ".borg" / "programs" / "README.md").write_text("notes", encoding="utf-8")
+    (tmp_path / "repo" / ".borg" / "chains" / "README.md").write_text("notes", encoding="utf-8")
     manifests, warnings = shell.discover([p])
     assert len(manifests) == 1 and warnings == []
 
@@ -247,7 +247,7 @@ def test_manifests_carry_their_source_path(tmp_path):
 
 
 def test_discovery_reads_only_from_borg_programs(tmp_path):
-    # Nothing outside a repository's own .borg/programs is ever opened.
+    # Nothing outside a repository's own .borg/chains is ever opened.
     p = tmp_path / "repo"
     (p / ".borg").mkdir(parents=True)
     (p / ".borg" / "elsewhere.json").write_text(json.dumps(_manifest([_row("1", "o/r#1")])), encoding="utf-8")
@@ -290,7 +290,7 @@ def test_a_manifest_declaring_four_repositories_is_found_and_selected_from_every
     """THE B6 regression test, end to end over the real shape.
 
     `ingle-t1-cutover.json` declares refs across four repositories but lives only under
-    `stillpoint`. Repository-scoped discovery run from `ingle` globs `ingle/.borg/programs/`, finds
+    `stillpoint`. Repository-scoped discovery run from `ingle` globs `ingle/.borg/chains/`, finds
     nothing, and renders an empty grid -- for three of the four member repositories, which is the
     modal case. This failing is the difference between a working front door and an empty grid.
 
@@ -366,7 +366,7 @@ def test_a_registry_of_the_wrong_shape_warns_instead_of_raising(registry):
 
 
 def test_a_registry_entry_with_no_path_is_skipped_and_never_reads_the_cwd(tmp_path, monkeypatch):
-    # Passing "" to manifest_dir would yield the RELATIVE path `.borg/programs`, making discovery
+    # Passing "" to manifest_dir would yield the RELATIVE path `.borg/chains`, making discovery
     # read whatever directory the process happens to be sitting in.
     _write_manifest(tmp_path, "here", "leak.json", _manifest([_row("1", "o/leak#1")]))
     monkeypatch.chdir(tmp_path / "here")
@@ -434,7 +434,7 @@ def test_one_directory_reached_twice_warns_once(tmp_path, second):
 def test_a_worktree_registered_beside_its_parent_loads_each_manifest_once(tmp_path):
     """THE duplicate no path-level rule can catch, and the one the live registry actually produces.
 
-    `.borg/programs/` is git-tracked, so `drone feature` creates a worktree containing a real second
+    `.borg/chains/` is git-tracked, so `drone feature` creates a worktree containing a real second
     copy of every manifest at a real second path, and `borg add` registers it alongside its parent.
     Both copies load, both declare the same rows, and the grid renders every node, every gate and
     every declared ref twice under one header.
@@ -448,7 +448,7 @@ def test_a_worktree_registered_beside_its_parent_loads_each_manifest_once(tmp_pa
     registry = {"projects": {"repo": {"path": repository}, "repo-pm6": {"path": worktree}}}
     manifests, warnings = shell.discover_registered(registry)
     assert warnings == []
-    assert os.path.exists(os.path.join(worktree, ".borg", "programs", "a.json")), "the copy is really there"
+    assert os.path.exists(os.path.join(worktree, ".borg", "chains", "a.json")), "the copy is really there"
     assert len(manifests) == 1
     selected = core.select_for_repository(manifests, shell.repository_slug(worktree))
     assert len(selected) == 1
@@ -868,7 +868,7 @@ def test_a_structural_failure_still_drops_the_file(tmp_path):
 def test_a_non_manifest_is_rejected_before_validation_ever_runs(tmp_path):
     """The branch the case above names as unreachable, pinned at its real altitude.
 
-    MUTATION: delete the `looks_like_manifest` guard. A stray `settings.json` in `.borg/programs/`
+    MUTATION: delete the `looks_like_manifest` guard. A stray `settings.json` in `.borg/chains/`
     then reaches `validate` and reports `rows: missing or not a list` — a validation verdict on a
     file that was never a manifest.
     """
@@ -941,7 +941,7 @@ def test_a_written_manifest_round_trips_through_the_reader(tmp_path):
     doc = _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", lane="viz")])
     path = shell.write_manifest(repository, doc, "chain")
 
-    assert path == os.path.join(repository, ".borg", "programs", "chain.json")
+    assert path == os.path.join(repository, ".borg", "chains", "chain.json")
     manifests, warnings = shell.discover([repository])
     assert warnings == []
     assert len(manifests) == 1
@@ -990,7 +990,7 @@ def test_an_invalid_manifest_is_refused_whole_and_writes_nothing(tmp_path):
         shell.write_manifest(repository, doc, "chain")
 
     assert "rows[1]" in str(caught.value)
-    assert not os.path.exists(os.path.join(repository, ".borg", "programs", "chain.json"))
+    assert not os.path.exists(os.path.join(repository, ".borg", "chains", "chain.json"))
 
 
 def test_a_refused_write_leaves_no_temp_file(tmp_path):
@@ -1000,7 +1000,7 @@ def test_a_refused_write_leaves_no_temp_file(tmp_path):
     with pytest.raises(shell.InvalidManifest):
         shell.write_manifest(repository, _manifest([_row("1", "bad#1")]), "nope")
 
-    directory = os.path.join(repository, ".borg", "programs")
+    directory = os.path.join(repository, ".borg", "chains")
     assert sorted(os.listdir(directory)) == ["ok.json"]
 
 
@@ -1013,7 +1013,7 @@ def test_a_shorthand_ref_naming_this_repository_is_suggested_not_repaired(tmp_pa
         shell.write_manifest(repository, _manifest([_row("1", "repo#12")]), "chain")
 
     assert "did you mean noah-goodrich/repo#12?" in str(caught.value)
-    assert not os.path.exists(os.path.join(repository, ".borg", "programs", "chain.json"))
+    assert not os.path.exists(os.path.join(repository, ".borg", "chains", "chain.json"))
 
 
 def test_a_shorthand_ref_naming_another_repository_gets_no_guess(tmp_path):
@@ -1044,7 +1044,7 @@ def test_the_name_is_basenamed_so_a_slash_cannot_escape_the_directory(tmp_path):
     # could write outside the directory.
     repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
     path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "../../escape")
-    assert path == os.path.join(repository, ".borg", "programs", "escape.json")
+    assert path == os.path.join(repository, ".borg", "chains", "escape.json")
 
 
 def test_a_name_that_already_ends_in_json_is_not_doubled(tmp_path):
@@ -1066,9 +1066,9 @@ def test_a_non_ascii_order_survives_the_round_trip_unescaped(tmp_path):
 
 def test_write_creates_the_manifest_directory_when_absent(tmp_path):
     repository = _git_repository(tmp_path, "fresh", remote="https://github.com/o/r.git")
-    assert not os.path.isdir(os.path.join(repository, ".borg", "programs"))
+    assert not os.path.isdir(os.path.join(repository, ".borg", "chains"))
     shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
-    assert os.path.isdir(os.path.join(repository, ".borg", "programs"))
+    assert os.path.isdir(os.path.join(repository, ".borg", "chains"))
 
 
 def test_declared_body_is_the_one_definition_of_derived(tmp_path):
@@ -1084,7 +1084,7 @@ def test_declared_body_is_the_one_definition_of_derived(tmp_path):
 def test_refused_paths_names_both_whole_file_refusals(tmp_path):
     # The two shapes that mean "a file here looks like a manifest and could not be used".
     repository = _write_manifest(tmp_path, "repo", "broken.json", {"rows": [{"order": "1"}]})
-    (tmp_path / "repo" / ".borg" / "programs" / "garbage.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "repo" / ".borg" / "chains" / "garbage.json").write_text("{not json", encoding="utf-8")
     _, warnings = shell.discover([repository])
 
     refused = shell.refused_manifest_paths(warnings)
@@ -1094,7 +1094,7 @@ def test_refused_paths_names_both_whole_file_refusals(tmp_path):
 def test_a_stray_non_manifest_is_not_a_refusal(tmp_path):
     # `not a manifest (no rows list)` describes a stray settings.json sitting in the directory, not a
     # manifest that failed. Counting it would make CHAINS claim a broken manifest that does not exist.
-    directory = tmp_path / "repo" / ".borg" / "programs"
+    directory = tmp_path / "repo" / ".borg" / "chains"
     directory.mkdir(parents=True)
     (directory / "settings.json").write_text('{"theme": "dark"}', encoding="utf-8")
     _, warnings = shell.discover([str(tmp_path / "repo")])
@@ -1789,3 +1789,33 @@ def test_e2a_the_collision_is_still_reported_once_the_retired_program_key_is_gon
     assert len(contested) == 1, "identity comes from the loader's _id, so the collision outlives the key"
     assert "acme/platform#400" in contested[0]
     assert "auth-scopes" in contested[0] and "platform-audit" in contested[0]
+
+
+# ── the chains rename, expand phase (AC7) ────────────────────────────────────────────────────────
+def test_manifest_dir_prefers_the_new_name(tmp_path):
+    """A repository with neither directory gets `chains`, so nothing created from today lands under
+    the retired word."""
+    assert shell.manifest_dir(str(tmp_path)).endswith("/.borg/chains")
+
+
+def test_manifest_dir_still_reads_a_legacy_repository(tmp_path):
+    """THE EXPAND PHASE, PINNED. Renaming the directory without this arm would make every
+    un-migrated repository's manifests invisible -- `discover` would find nothing, `resolve` would
+    report `no manifest declared`, and `borg link` would render a chainless board. All three fail
+    SILENTLY, which is why the rename is expand -> migrate -> contract and not a `git mv`.
+
+    MUTATION: delete the legacy branch in `manifest_dir` and this goes red.
+    """
+    (tmp_path / ".borg" / "programs").mkdir(parents=True)
+    assert shell.manifest_dir(str(tmp_path)).endswith("/.borg/programs")
+
+
+def test_manifest_dir_never_splits_a_repository_across_both(tmp_path):
+    """A repository holding BOTH resolves to exactly one, and it is the new name.
+
+    Returning both would make `discover` emit each program twice and `resolve` report `ambiguous`
+    for a repository that declares one -- a mid-migration state that reads as a defect in the data.
+    """
+    (tmp_path / ".borg" / "programs").mkdir(parents=True)
+    (tmp_path / ".borg" / "chains").mkdir(parents=True)
+    assert shell.manifest_dir(str(tmp_path)).endswith("/.borg/chains")
