@@ -175,9 +175,15 @@ cmd_ls() {
     # the flatten below is the second; fixing only the flatten fixes nothing observable.
     # `printf '%s'` is the idiom lib/registry.zsh already uses for exactly this reason.
     #
-    # THE SAME `echo "$json" | jq` SPELLING APPEARS ELSEWHERE IN THIS FILE (cmd_status, cmd_next,
-    # the reap/watch paths). Those are NOT touched here -- this round's scope is the picker feed --
-    # and they are filed, not fixed.
+    # NO LIVE `echo ... | jq` SITE SURVIVES ANYWHERE, and this paragraph names the command that
+    # regenerates that fact rather than a list of functions. It used to read "the same spelling
+    # appears elsewhere in this file (cmd_status, cmd_next, the reap/watch paths) ... filed, not
+    # fixed" -- true when the picker alone was converted, false the moment the rest were, and
+    # invisible to the ratchet because its awk skips comment lines. That is the second stale
+    # hand-list in this file; the first was `_borg_do_switch`'s, which named `_borg_print_briefing`
+    # after the --brief fold had already converted it. Regenerate, do not re-read:
+    #
+    #   awk '/echo .*\| *jq/{ if ($0 !~ /^ *#/) print FILENAME":"NR }' borg.zsh bin/* lib/*.zsh
     local registry
     registry=$(borg_registry_with_state)
     local project_count
@@ -273,13 +279,13 @@ cmd_status() {
     entry=$(borg_registry_get_with_state "$project")
 
     local source ppath proj_status last summary session_id tmux_window
-    source=$(echo "$entry"     | jq -r '.source // "cli"')
-    ppath=$(echo "$entry"      | jq -r '.path // "null"')
-    proj_status=$(echo "$entry"     | jq -r '.status // "unknown"')
-    last=$(echo "$entry"       | jq -r '.last_activity // "(never)"')
-    summary=$(echo "$entry"    | jq -r '.summary // "(no summary)"')
-    session_id=$(echo "$entry" | jq -r '.claude_session_id // "(unknown)"')
-    tmux_window=$(echo "$entry"| jq -r '.tmux_window // "(none)"')
+    source=$(printf '%s' "$entry"     | jq -r '.source // "cli"')
+    ppath=$(printf '%s' "$entry"      | jq -r '.path // "null"')
+    proj_status=$(printf '%s' "$entry"     | jq -r '.status // "unknown"')
+    last=$(printf '%s' "$entry"       | jq -r '.last_activity // "(never)"')
+    summary=$(printf '%s' "$entry"    | jq -r '.summary // "(no summary)"')
+    session_id=$(printf '%s' "$entry" | jq -r '.claude_session_id // "(unknown)"')
+    tmux_window=$(printf '%s' "$entry"| jq -r '.tmux_window // "(none)"')
 
     echo -e "\n${BOLD}${project}${NC}"
     printf '%0.s─' {1..40}; echo
@@ -353,12 +359,20 @@ _borg_do_switch() {
     # which the brief can carry — unlike a TSV record), and the window is selected. So fixing only
     # cmd_ls shipped half a fix: a working picker whose selection crashed the switch.
     #
-    # THE FALLBACK ARM IS STILL BROKEN AND THAT IS DELIBERATE. Drop the `tmux_window` from the same
-    # registry and this function now survives all four feeds below and reaches `warn` + `cmd_status`
-    # — which carries the identical `echo ... | jq` and dies there, exit 5. The same spelling also
-    # survives in cmd_scan, cmd_next, cmd_tidy, _borg_print_briefing, _borg_orchestrator_context and
-    # cmd_cortex_resume, and in lib/desktop.zsh's borg_desktop_scan. None of those are touched here
-    # — this round's scope is the picker's immediate consumer — and they are filed, not fixed.
+    # THE FALLBACK ARM IS NOW FIXED TOO, and this comment is re-derived rather than edited around.
+    # It used to say the arm was "still broken and that is deliberate", listing the functions the
+    # `echo ... | jq` spelling survived in. That list was already stale when it was written --
+    # `_borg_print_briefing` was on it, and the `--brief` fold had converted that function -- which
+    # is exactly why a hand-maintained list of call sites is the wrong artifact. The command that
+    # regenerates the truth, and returns EMPTY on this tree:
+    #
+    #   awk '/^[a-zA-Z_][a-zA-Z0-9_]*\(\) *\{/{fn=$1} /echo .*\| *jq/{ if ($0 !~ /^ *#/) print NR": "fn}' borg.zsh
+    #
+    # All 33 sites in borg.zsh and 5 in lib/desktop.zsh now use `printf '%s'`, matching
+    # lib/registry.zsh's established spelling. Drop the `tmux_window` from the same registry and this
+    # function reaches `warn` + `cmd_status`, which no longer dies: measured exit 0 where it was
+    # exit 5 with `jq: parse error: Invalid string: control characters from U+0000 through U+001F
+    # must be escaped`.
     local tmux_window source summary last
     tmux_window=$(printf '%s' "$entry" | jq -r '.tmux_window // ""')
     source=$(printf '%s' "$entry" | jq -r '.source // "cli"')
@@ -524,12 +538,12 @@ cmd_scan() {
     local updated=0
 
     local projects name ppath session_id jsonl cur_activity file_mtime summary new_json
-    projects=$(echo "$registry_json" | jq -r '.projects | keys[]')
+    projects=$(printf '%s' "$registry_json" | jq -r '.projects | keys[]')
 
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        ppath=$(echo "$registry_json" | jq -r --arg p "$name" '.projects[$p].path // ""')
-        session_id=$(echo "$registry_json" | jq -r --arg p "$name" '.projects[$p].claude_session_id // ""')
+        ppath=$(printf '%s' "$registry_json" | jq -r --arg p "$name" '.projects[$p].path // ""')
+        session_id=$(printf '%s' "$registry_json" | jq -r --arg p "$name" '.projects[$p].claude_session_id // ""')
 
         if [[ -z "$ppath" || "$ppath" == "null" ]]; then
             dbg "$name: no path, skipping refresh"
@@ -552,12 +566,12 @@ cmd_scan() {
         fi
 
         # Seed last_activity from transcript mtime if not already set
-        cur_activity=$(echo "$registry_json" | jq -r --arg p "$name" \
+        cur_activity=$(printf '%s' "$registry_json" | jq -r --arg p "$name" \
             '.projects[$p].last_activity // ""')
         if [[ -z "$cur_activity" || "$cur_activity" == "null" ]]; then
             file_mtime=$(stat -f "%Sm" -t "%Y-%m-%dT%H:%M:%SZ" "$jsonl" 2>/dev/null) || file_mtime=""
             if [[ -n "$file_mtime" ]]; then
-                registry_json=$(echo "$registry_json" | jq \
+                registry_json=$(printf '%s' "$registry_json" | jq \
                     --arg p "$name" \
                     --arg t "$file_mtime" \
                     '.projects[$p].last_activity = $t') || true
@@ -568,7 +582,7 @@ cmd_scan() {
         summary=$(python3 "$BORG_HOME/summarize.py" $llm_flag "$jsonl" 2>/dev/null) || summary=""
 
         if [[ -n "$summary" ]]; then
-            new_json=$(echo "$registry_json" | jq \
+            new_json=$(printf '%s' "$registry_json" | jq \
                 --arg p "$name" \
                 --arg s "$summary" \
                 --arg sid "$session_id" \
@@ -674,7 +688,7 @@ cmd_next() {
     # Score and sort projects: pinned +200, waiting +100, active +50, idle +10, no activity -50
     # Tiebreaker: waiting → oldest first (neglected longest); active/idle → newest first
     local top
-    top=$(echo "$registry" | jq -r '
+    top=$(printf '%s' "$registry" | jq -r '
         .projects | to_entries |
         map(select(.value.status != "archived")) |
         map({
@@ -709,13 +723,13 @@ cmd_next() {
     fi
 
     local name proj_status summary waiting_reason last pinned ppath
-    name=$(echo "$top" | jq -r '.name')
-    proj_status=$(echo "$top" | jq -r '.status')
-    summary=$(echo "$top" | jq -r '.summary')
-    waiting_reason=$(echo "$top" | jq -r '.waiting_reason')
-    last=$(echo "$top" | jq -r '.last_activity')
-    pinned=$(echo "$top" | jq -r '.pinned')
-    ppath=$(echo "$top" | jq -r '.path // "null"')
+    name=$(printf '%s' "$top" | jq -r '.name')
+    proj_status=$(printf '%s' "$top" | jq -r '.status')
+    summary=$(printf '%s' "$top" | jq -r '.summary')
+    waiting_reason=$(printf '%s' "$top" | jq -r '.waiting_reason')
+    last=$(printf '%s' "$top" | jq -r '.last_activity')
+    pinned=$(printf '%s' "$top" | jq -r '.pinned')
+    ppath=$(printf '%s' "$top" | jq -r '.path // "null"')
 
     # --switch mode: skip all output, switch immediately
     if (( do_switch )); then
@@ -763,7 +777,7 @@ cmd_next() {
 
     # Reaper notice — stale active/waiting sessions auto-downgraded to idle for this view
     local reaped_count
-    reaped_count=$(echo "$registry" | jq '[.projects[] | select(._reaped_from != null)] | length')
+    reaped_count=$(printf '%s' "$registry" | jq '[.projects[] | select(._reaped_from != null)] | length')
     if (( reaped_count > 0 )); then
         echo -e "\n  ${DIM}($reaped_count stale session(s) auto-downgraded to idle — run 'borg reap' to persist)${NC}"
     fi
@@ -1005,12 +1019,12 @@ cmd_tidy() {
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
         local entry
-        entry=$(echo "$registry" | jq -c --arg p "$name" '.projects[$p]')
+        entry=$(printf '%s' "$registry" | jq -c --arg p "$name" '.projects[$p]')
         local proj_status
-        proj_status=$(echo "$entry" | jq -r '.status // "unknown"')
+        proj_status=$(printf '%s' "$entry" | jq -r '.status // "unknown"')
         [[ "$proj_status" == "archived" ]] && continue
 
-        last=$(echo "$entry" | jq -r '.last_activity // ""')
+        last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
         [[ -z "$last" || "$last" == "null" ]] && { candidates+=("$name (never active)"); continue; }
 
         epoch_last=$(_borg_iso_to_epoch "$last") || continue
@@ -1020,7 +1034,7 @@ cmd_tidy() {
             rel=$(_borg_relative_time "$last")
             candidates+=("$name ($rel)")
         fi
-    done < <(echo "$registry" | jq -r '.projects | keys[]')
+    done < <(printf '%s' "$registry" | jq -r '.projects | keys[]')
 
     if (( ${#candidates[@]} == 0 )); then
         info "No stale projects. Everything is fresh."
@@ -1384,7 +1398,7 @@ _borg_orchestrator_context() {
     echo "Current time: $now"
     echo ""
     echo "Project registry:"
-    echo "$registry" | jq -r '
+    printf '%s' "$registry" | jq -r '
         .projects | to_entries |
         sort_by(
             if .value.status == "waiting" then 0
@@ -1401,7 +1415,7 @@ _borg_orchestrator_context() {
 
     # Latest checkpoint for top 3 priority projects
     local top3
-    top3=$(echo "$registry" | jq -r '
+    top3=$(printf '%s' "$registry" | jq -r '
         .projects | to_entries |
         map(select(.value.status != "archived")) |
         sort_by(
@@ -1416,7 +1430,7 @@ _borg_orchestrator_context() {
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
         local ppath cp
-        ppath=$(echo "$registry" | jq -r --arg p "$name" '.projects[$p].path // ""')
+        ppath=$(printf '%s' "$registry" | jq -r --arg p "$name" '.projects[$p].path // ""')
         [[ -n "$ppath" && -d "$ppath/.borg/checkpoints" ]] || continue
         cp=$(find "$ppath/.borg/checkpoints" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r | head -1 || true)
         [[ -n "$cp" && -f "$cp" ]] || continue
@@ -2202,11 +2216,11 @@ cmd_cortex_resume() {
 
     local entry
     if [[ -z "$target" ]]; then
-        entry=$(echo "$entries" | jq -c '.[0]')
+        entry=$(printf '%s' "$entries" | jq -c '.[0]')
     elif [[ "$target" == %* ]]; then
-        entry=$(echo "$entries" | jq -c --arg p "$target" '[.[] | select(.pane_id == $p)][0]')
+        entry=$(printf '%s' "$entries" | jq -c --arg p "$target" '[.[] | select(.pane_id == $p)][0]')
     else
-        entry=$(echo "$entries" | jq -c --arg p "$target" '[.[] | select(.project == $p)][0]')
+        entry=$(printf '%s' "$entries" | jq -c --arg p "$target" '[.[] | select(.project == $p)][0]')
     fi
     [[ -n "$entry" && "$entry" != "null" ]] || die "no pending wake matching '$target'"
 
@@ -2218,7 +2232,7 @@ cmd_cortex_resume() {
     # rationale until the 2026-08-27 fold deleted its `read` loop, so the reasoning lives here now
     # rather than as a cross-reference to a function that no longer demonstrates it.
     IFS=$'\x1f' read -r pane_id project session window pane_index < <(
-        echo "$entry" | jq -r '[.pane_id,.project,.session,.window,.pane_index] | join("\u001f")'
+        printf '%s' "$entry" | jq -r '[.pane_id,.project,.session,.window,.pane_index] | join("\u001f")'
     )
 
     # Re-resolve pane_id if the recorded one is gone (tmux server restart).

@@ -194,7 +194,7 @@ _fire_wake() {
 _sweep() {
     local entries count
     entries=$(_read_state)
-    count=$(echo "$entries" | jq '.wakes | length')
+    count=$(printf '%s' "$entries" | jq '.wakes | length')
     (( count == 0 )) && return 0
 
     local now_epoch
@@ -206,7 +206,7 @@ _sweep() {
 
     for (( i = 0; i < count; i++ )); do
         IFS=$'\t' read -r pane_id session window pane_index project reset_at < <(
-            echo "$entries" | jq -r ".wakes[$i] | [.pane_id,.session,.window,.pane_index,.project,.reset_at] | @tsv"
+            printf '%s' "$entries" | jq -r ".wakes[$i] | [.pane_id,.session,.window,.pane_index,.project,.reset_at] | @tsv"
         )
 
         # Re-resolve pane_id if the recorded one is gone.
@@ -237,7 +237,7 @@ _sweep() {
         else
             idx_json='[]'
         fi
-        echo "$entries" | jq --argjson idx "$idx_json" '.wakes = [$idx[] as $i | .wakes[$i]]' | _write_state
+        printf '%s' "$entries" | jq --argjson idx "$idx_json" '.wakes = [$idx[] as $i | .wakes[$i]]' | _write_state
         log "sweep: fired=$fired orphaned=$orphaned remaining=$(jq '.wakes | length' "$STATE_FILE")"
     fi
 }
