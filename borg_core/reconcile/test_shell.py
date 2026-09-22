@@ -156,3 +156,19 @@ def test_shell_calls_no_write_verb():
                  "run", "Popen", "system", "unlink", "rename", "replace"}
     leaked = called & forbidden
     assert not leaked, f"shell.py calls a write/exec verb: {sorted(leaked)}"
+
+
+
+def test_an_unreadable_adapter_dir_degrades_to_no_kinds_and_reports_every_ref(monkeypatch):
+    """The safe degrade is NARROWER, not wider. Review at ad88bd8: `resolvable_kinds` called
+    `discover_adapters` unguarded while `manifest_rows` wrapped its discover in `except OSError`,
+    so an unreadable adapter dir raised out of a feature whose whole claim is that it cannot hurt
+    you. Now it returns no kinds, and every ref is reported as unresolvable rather than resolved."""
+
+    def unreadable():
+        raise OSError("adapter dir unreadable")
+
+    monkeypatch.setattr(shell.recon_shell, "discover_adapters", unreadable)
+    assert shell.resolvable_kinds() == set()
+    rows = [{"ref": "noah-goodrich/borg-collective#158"}, {"ref": "DE-2107"}]
+    assert shell.unresolvable_refs(rows) == ["noah-goodrich/borg-collective#158", "DE-2107"]

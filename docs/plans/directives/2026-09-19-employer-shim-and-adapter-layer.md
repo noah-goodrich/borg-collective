@@ -11,9 +11,9 @@ child of that plan, not as a second plan.
 ## Objective
 
 Make borg's two existing shim sockets — executable recon adapters and prose skill extensions — a
-named, documented, exercised mechanism, and give the chain layer an adapter-driven `borg reconcile`
+named, documented, exercised mechanism, and give the chain layer an adapter-driven reconcile core
 so a row's live state comes from whichever adapters a machine has rather than from a hardcoded
-GitHub call.
+GitHub call. (The `borg reconcile` verb over that core is deferred — see AC2.)
 
 ## Acceptance Criteria
 
@@ -27,7 +27,15 @@ GitHub call.
       `AC1 -> cli_contract.bats` coarseness problem one level worse, so this one gets a real gate.
     - Evidence: `bats:tests/prose_contracts.bats`
 
-- [x] **AC2 — `borg reconcile` ships READ-ONLY, and writes nothing at all.**
+- [x] **AC2 — The `borg_core/reconcile` package reports contradictions READ-ONLY, and writes nothing
+      at all.** *Reworded 2026-09-22 after review at `ad88bd8`: the first wording said "`borg reconcile`
+      ships", and no such command exists — no dispatch arm in `borg.zsh`, no `cmd_reconcile`, no
+      `cli.py`, no consumer outside the package's own tests; `borg reconcile` exits 1 with `unknown
+      command`. The verify clause below is four pytest assertions on the package plus an AST walk, so
+      it was structurally incapable of noticing, which is the `borg watch` / `borg sync` / `borg recon`
+      shape CLAUDE.md records three times. This AC now promises the package it delivers. Wiring the
+      verb — a `borg_core/reconcile/cli.py`, a `reconcile)` arm, and a `cli_contract.bats` case
+      asserting the arm exists — is a FOLLOW-UP directive, not a ticked box here.*
       A new `borg_core/reconcile/` package reporting every row whose declared `status` disagrees with
       its resolved state, plus every `decision` gate on an already-merged ref (the #158 class). It
       writes no file, creates no file, and forks no adapter of its own.
@@ -132,8 +140,9 @@ Every exclusion below is a live collision or a measured trap, not a preference.
 PR against `main` from `plan/employer-shim-and-adapter-layer`, filing this directive. CI green on all
 five lanes. Both
 machines' stamps per the #159 protocol (comment stamp at a SHA — self-approval is blocked).
-`borg help` updated if a verb is user-facing. One manual `borg reconcile` smoke run against this
-repository's own `viz-program` manifest, output pasted into the PR body.
+`borg help` updated if a verb is user-facing (none is, in this directive). One manual smoke run of
+`borg_core.reconcile` — `shell.manifest_rows` on this repository's own `viz-program` manifest, live states
+from `gh`, `core.report` + `core.summary` over them — output pasted into the PR body.
 
 **RESOLVED 2026-09-19 — the one-plan-slot conflict.** Noah ruled, relayed by the orchestrator session:
 **demote the shim plan to a directive.** Noah's earlier ruling was that this work "stands to the side" of

@@ -113,4 +113,4 @@ def summary(findings: list | None) -> str:
     """One line per finding, most-actionable first. Empty string when nothing contradicts."""
     if not findings:
         return ""
-    return "\n".join(f"{f['ref']} {f['kind']}: {f['detail']}" for f in findings or [])
+    return "\n".join(f"{f['ref']} {f['kind']}: {f['detail']}" for f in findings)
