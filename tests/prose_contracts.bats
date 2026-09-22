@@ -155,3 +155,56 @@ setup() {
     run bash -c "grep -c 'borg_core\.manifest\.cli' '$tmp'"
     [ "$output" = "0" ]
 }
+
+# ── The shim layer (AC1) ─────────────────────────────────────────────────────────────────────────
+#
+# A prose criterion with no mechanical check is the thing this repository keeps shipping. The shim
+# directive's own verify clause was "a reader can name which tier a new shim belongs in without
+# reading source", which nothing can fail.
+#
+# THE FIRST VERSION OF THESE CASES WAS ITSELF COARSE, and three of six mutations survived it. It
+# grepped the WHOLE of CLAUDE.md, a ~900-line file where `recon-adapter-<source>`, `prose
+# extension` and `absent file` all already appear in other sections — so deleting the shim section's
+# copy left the greps green. That is the identical defect as pinning a specific criterion to a
+# 165-case suite. Every case below extracts the SECTION first and greps only inside it.
+
+_shim_section() {
+    # From the section's own heading to the start of the next top-level bullet. Anchored on the
+    # heading text rather than a line number, because line numbers in CLAUDE.md drift constantly.
+    sed -n '/^- \*\*THE SHIM LAYER: two tiers, one direction\.\*\*/,/^- \*\*`prefer-tool` extensions/p' \
+        "${REPO_ROOT}/CLAUDE.md"
+}
+
+@test "shim: the section this suite greps actually exists, and is bounded at BOTH ends" {
+    # Guards the guard in both directions. Too SHORT: the heading was reworded, every case below
+    # greps an empty string and passes vacuously -- how the first draft of this suite failed. Too
+    # LONG: the END anchor (the `prefer-tool` bullet, which this section has no relationship to) was
+    # reworded or removed, and the sed range runs to end-of-file -- measured at 308 lines, at which
+    # point cases 2-4 are whole-file greps again and the recon section supplies `recon-adapter-<source>`
+    # from inside the widened window. A floor alone cannot see that; the ceiling can.
+    local n
+    n=$(_shim_section | wc -l | tr -d ' ')
+    [ "$n" -ge 15 ] || { echo "shim section not found or too short ($n lines)"; false; }
+    [ "$n" -le 40 ] || { echo "shim section unbounded: $n lines -- did the end anchor move?"; false; }
+}
+
+@test "shim: the section names both tiers AND the rule that chooses between them" {
+    local s; s=$(_shim_section)
+    [[ "$s" == *'recon-adapter-<source>'* ]] || { echo "executable tier not named"; false; }
+    [[ "$s" == *'Prose extensions'* ]] || { echo "prose tier not named"; false; }
+    [[ "$s" == *'MUST happen ships as an executable adapter'* ]] \
+        || { echo "the rule choosing between tiers is missing"; false; }
+}
+
+@test "shim: the section states the one-directional rule" {
+    local s; s=$(_shim_section)
+    [[ "$s" == *'employer plugin never'* ]] || { echo "the one-way rule is not stated"; false; }
+}
+
+@test "shim: the section says a shim is closed by an absent file, not a probe" {
+    # The directive is explicit that a `command -v borg` probe is the WRONG fix, because it hands
+    # teammates a dead code path. That reasoning is the part a future reader will otherwise undo.
+    local s; s=$(_shim_section)
+    [[ "$s" == *'ABSENT FILE'* ]] || { echo "absent-file rule missing"; false; }
+    [[ "$s" == *'command -v borg'* ]] || { echo "the rejected probe alternative is not named"; false; }
+}

@@ -1,31 +1,37 @@
 {
-  "program": "viz-program",
+  "desc": "Give borg a truthful, cross-repo picture of PR state so mornings start from derived fact instead of memory.",
   "note": "Refreshed 2026-08-31 against live state: all three rows merged. #158's decision gate is removed, not dropped - blocked_by named the PM6/PM7 coordinator (merge-tree/coordinator.py, cmd_sync + local_audit present) and a review against real projects, and resolved_by named that review; the review is docs/pr158-rider/REVIEW.md (2026-08-20) and #158 merged after it. Originally hand-authored from the viz directives and PR bodies.",
+  "program": "viz-program",
   "rows": [
     {
+      "lane": "viz",
       "order": "–",
       "ref": "noah-goodrich/borg-collective#144",
-      "lane": "viz",
-      "ticket": "",
       "status": "merged",
+      "ticket": "",
       "why": "viz-2 S1/S2/S3/S5 — story.json gets a generator"
     },
     {
+      "lane": "viz",
       "order": "–",
       "ref": "noah-goodrich/borg-collective#149",
-      "lane": "viz",
-      "ticket": "",
       "status": "merged",
+      "ticket": "",
       "why": "recon -> raw gather bridge; the producer PM1-PM10 depend on"
     },
     {
+      "lane": "viz",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#158",
-      "lane": "viz",
-      "ticket": "",
       "status": "merged",
+      "ticket": "",
       "why": "declared cross-repo edges — the only channel that can produce them"
+    },
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#220",
+      "why": "files the shim directive (child of One Front Door, not a plan replacement): two-tier shim named in CLAUDE.md, read-only adapter-driven reconcile package, employer leak closed as an absence via Ontra-ai/ai-data-engineer#48"
     }
-  ],
-  "desc": "Give borg a truthful, cross-repo picture of PR state so mornings start from derived fact instead of memory."
+  ]
 }
