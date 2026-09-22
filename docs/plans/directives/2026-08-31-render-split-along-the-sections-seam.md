@@ -90,6 +90,47 @@ graph to reduce a line count, and it puts the spine — the one thing AC2 made u
 **Move the primitives into `core.py`.** Rejected: `core.py` is the registry/plan/checkpoint reader. `_fold_s` and
 friends are presentation, and the clean-arch classification would have to be argued rather than inherited.
 
+## MEASURED 2026-09-17: the split cannot satisfy criterion 2, and that is the finding
+
+The directive's own escape clause — *"if either half still trips C0302 the split was not the fix and
+that is the finding"* — fires. Measured on `main` at `baf4e671`:
+
+```
+render.py                                    1105 lines
+the primitives block (comments included)       71 lines
+render.py after the move                     1034 lines   <- still over C0302's 1000
+```
+
+So `grep -c 'pylint: disable=too-many-lines'` cannot reach 0 with `make lint` at 0 by moving
+`_fold_s`, `_label` and `_summary_block`. **Criterion 2 is unreachable by criterion 1.**
+
+**And the prose share has gone UP, not down.** The disable's own comment records 54% (34.5k of 64.4k
+bytes). Re-measured by tokenising the file: **71%** — 11,678 bytes of comments plus 34,102 of
+docstrings out of 64,457. C0302 is measuring the design record by a wider margin than when the
+deferral was written, because every defect this plan fixed added its reasoning here.
+
+**One list item is also stale.** `_flatten_summary` is named in criterion 1 and no longer lives in
+`render.py` at all — [#218](https://github.com/noah-goodrich/borg-collective/pull/218) moved the
+property to `core.flatten_summary`, applied once at assembly, and deleted the renderer-side helper.
+Three primitives remain, not four.
+
+### What the real options are
+
+1. **Raise `max-module-lines` for prose-dominated modules, with the measurement as the argument.**
+   Honest about what C0302 is for: a complexity proxy that line count approximates badly when 71% of
+   the bytes are prose. Costs a pylintrc entry and applies tree-wide unless scoped per-file.
+2. **Keep the disable permanently and retire this directive**, with the 71% measurement in the
+   justification where the 54% one is now. The disable already carries a `# JUSTIFICATION:` line, so
+   the anti-bypass linter is satisfied and nothing is being smuggled.
+3. **Split much more aggressively** — move the `_*_section` builders out too, not just the
+   primitives. That reaches the ceiling, but it splits `SECTIONS` from the functions it names, which
+   is the one seam AC2 deliberately made single (`render.document()` iterating one spine with no
+   branch on scope). Trading a real invariant for a line count.
+
+**Not done, and deliberately.** A 71-line relocation that leaves the file over the ceiling churns the
+renderer, risks the goldens, and satisfies none of its own success criteria. Recorded rather than
+performed, per the clause above.
+
 ## Acceptance criteria
 
 - [ ] `_fold_s`, `_flatten_summary`, `_label` and `_summary_block` live in one new module with their docstrings

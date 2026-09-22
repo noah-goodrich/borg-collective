@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.stillpoint-labs.borg.pr-watch</string>
+    <string>{{LABEL}}</string>
     <key>ProgramArguments</key>
     <array>
         <string>{{BORG_ROOT}}/bin/borg-pr-watch</string>

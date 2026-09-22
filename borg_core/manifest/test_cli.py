@@ -20,7 +20,7 @@ from borg_core.manifest import shell
 
 
 def _path(repository, name="demo"):
-    return os.path.join(repository, ".borg", "programs", f"{name}.json")
+    return os.path.join(repository, ".borg", "chains", f"{name}.json")
 
 
 def _read(repository, name="demo"):
@@ -180,7 +180,7 @@ def test_add_row_refuses_a_missing_manifest_by_name(repository, capsys):
 
 
 def test_add_row_refuses_a_file_that_is_not_json(repository, capsys):
-    os.makedirs(os.path.join(repository, ".borg", "programs"), exist_ok=True)
+    os.makedirs(os.path.join(repository, ".borg", "chains"), exist_ok=True)
     with open(_path(repository), "w", encoding="utf-8") as handle:
         handle.write("{ not json\n")
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 1
@@ -188,7 +188,7 @@ def test_add_row_refuses_a_file_that_is_not_json(repository, capsys):
 
 
 def test_add_row_refuses_a_json_document_that_is_not_an_object(repository, capsys):
-    os.makedirs(os.path.join(repository, ".borg", "programs"), exist_ok=True)
+    os.makedirs(os.path.join(repository, ".borg", "chains"), exist_ok=True)
     with open(_path(repository), "w", encoding="utf-8") as handle:
         json.dump(["a", "list"], handle)
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 1
@@ -287,7 +287,7 @@ def test_add_row_and_close_require_a_ref_at_exit_2(repository, capsys):
 
 def test_a_non_utf8_manifest_is_refused_by_name_not_by_traceback(repository):
     """An editor-mangled or truncated file is bytes, not a codec lecture."""
-    os.makedirs(os.path.join(repository, ".borg", "programs"), exist_ok=True)
+    os.makedirs(os.path.join(repository, ".borg", "chains"), exist_ok=True)
     with open(_path(repository), "wb") as handle:
         handle.write(b'{"rows": [], "desc": "\xff\xfe bad bytes"}')
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 1
@@ -368,7 +368,7 @@ def test_a_lane_move_does_not_outrank_an_untouched_row_whose_order_holds_no_digi
 
 def _repo_with(tmp_path, manifests: dict, plan_slug: str | None = None):
     """A repository carrying `{stem: program_key_or_None}` manifests and an optional plan slug."""
-    programs = tmp_path / ".borg" / "programs"
+    programs = tmp_path / ".borg" / "chains"
     programs.mkdir(parents=True, exist_ok=True)
     for stem, program in manifests.items():
         doc: dict[str, object] = {"rows": []}

@@ -18,7 +18,13 @@ import subprocess
 import programs
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROGRAMS_DIR = os.path.join(REPO_ROOT, ".borg", "programs")
+# The directory was renamed `.borg/programs` -> `.borg/chains` (AC7 decision 2's other half: the
+# verb rename could not reach a filesystem path). Resolved here the same way
+# borg_core.manifest.shell.manifest_dir resolves it -- new name first, legacy second -- so this
+# suite passes on a migrated tree AND on an un-migrated checkout during the expand phase.
+_CHAINS_DIR = os.path.join(REPO_ROOT, ".borg", "chains")
+_LEGACY_DIR = os.path.join(REPO_ROOT, ".borg", "programs")
+PROGRAMS_DIR = _CHAINS_DIR if os.path.isdir(_CHAINS_DIR) else _LEGACY_DIR
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 FULL_REF_RE = re.compile(r"^[\w.-]+/[\w.-]+#\d+$")

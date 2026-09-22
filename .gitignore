@@ -15,13 +15,18 @@ registry.json
 !.borg/checkpoints/
 !.borg/skill-extensions/
 !.borg/knowledge/
+!.borg/chains/
+# BOTH CARVE-OUTS UNTIL THE CONTRACT COMMIT. `.borg/*` above ignores everything, so a carve-out is
+# the ONLY thing making manifests trackable. Replacing `programs` with `chains` rather than adding it
+# would silently untrack every un-migrated branch's manifests the moment it merged main -- an expand
+# commit performing a contraction, which is the rule this rename is following.
 !.borg/programs/
 
 # Claude Code project-level settings and session state — local only
 .claude/
 
 # Python toolchain: local virtualenv + coverage/pytest artifacts
-.venv/
+.venv
 .coverage
 coverage.xml
 __pycache__/
@@ -35,3 +40,4 @@ templates/supabase/.borg/
 # one was swept into the 2026-08-10 infoviz import (54b4846) and sat tracked for
 # three weeks, arming the gate in every clone. See the removal commit.
 .gate-armed
+evals/lifecycle-manifests/out/

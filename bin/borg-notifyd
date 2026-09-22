@@ -1,6 +1,7 @@
 #!/usr/bin/env zsh
 # borg-notifyd — host daemon: fires macOS notifications when any project transitions to waiting
-# Managed by launchd (com.stillpoint-labs.borg.notifyd). Not for direct invocation.
+# Managed by launchd as the `notifyd` agent (label via lib/launchd-label.zsh). Not for direct
+# invocation.
 
 set -euo pipefail
 

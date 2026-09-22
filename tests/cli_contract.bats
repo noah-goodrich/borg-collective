@@ -1105,9 +1105,11 @@ EOF
 
     # Mock fzf as an Esc/cancel: cmd_switch's `selection=$(... | fzf ...) || return 0` must
     # take the graceful no-op path rather than crashing or hanging on a missing/real fzf.
+    # Drain stdin with a timeout, never a bare `cat`: a bare cat on an INHERITED stdin (a caller
+    # that ran bats without `< /dev/null`) blocks forever — measured at 44 minutes on 2026-09-18.
     cat > "$MOCK_BIN/fzf" <<'EOF'
 #!/usr/bin/env bash
-cat >/dev/null
+while IFS= read -r -t 1 _; do :; done
 exit 1
 EOF
     chmod +x "$MOCK_BIN/fzf"
@@ -3271,9 +3273,13 @@ _link_picture_budget() {
     export TMUX_MOCK_HAS_SESSION=1
     export TMUX_MOCK_WINDOWS=""
     _mock_tmux
+    # borg passes the prompt as ARGV, so this mock's stdin is whatever bats inherited. A bare
+    # `cat >/dev/null` here hung the whole suite for 44 minutes (2026-09-18) when the caller's stdin
+    # was an open pipe that never closed. Drain with a timeout instead: a real pipe still reads to
+    # EOF instantly; an idle inherited stdin costs one second and moves on.
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
-cat >/dev/null 2>&1 || true
+while IFS= read -r -t 1 _; do :; done
 echo "BRIEFING-FROM-MOCKED-CLAUDE"
 exit 0
 EOF
@@ -4182,4 +4188,25 @@ EOF
         [ "$n" -eq 0 ] || bad="${bad} ${f##*/}:$n"
     done
     [ -z "$bad" ] || { echo "printf '%b' into jq restores the defect:$bad"; false; }
+}
+
+@test "contract: the legacy --programs-dir spelling is still accepted after the chains rename" {
+    # EXPAND PHASE, PINNED AT THE CLI. `.borg/programs` became `.borg/chains` (AC7), and
+    # `--chains-dir` is the primary spelling -- but a caller's muscle memory, a checkpoint, or a
+    # skill written last week all say `--programs-dir`. Dropping it would break them silently: zsh's
+    # case dispatch would fall through to the pass-through arm and hand the flag to coordinator.py,
+    # whose argparse would then fail on an unrecognised argument with no mention of the rename.
+    #
+    # MUTATION: remove `|--programs-dir` from the case arm and this goes red.
+    run zsh -c "'$BORG' chain plan --programs-dir"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--programs-dir needs a path"* ]] || false
+}
+
+@test "contract: the refusal names the spelling the caller typed, not the canonical one" {
+    # A user who typed the legacy flag and is told "--chains-dir needs a path" has to work out that
+    # the two are the same flag. `die "borg chain: $1 needs a path"` uses the typed spelling.
+    run zsh -c "'$BORG' chain plan --chains-dir"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--chains-dir needs a path"* ]] || false
 }

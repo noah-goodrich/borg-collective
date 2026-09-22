@@ -11,7 +11,7 @@ SCRIPT="${BATS_TEST_DIRNAME}/../bin/borg-usage-watch"
 FIXTURE="${BATS_TEST_DIRNAME}/fixtures/usage-output.txt"
 IDLE_FIXTURE="${BATS_TEST_DIRNAME}/fixtures/usage-output-idle.txt"
 PANES_FIXTURE="${BATS_TEST_DIRNAME}/fixtures/tmux-panes.txt"
-PLIST="${BATS_TEST_DIRNAME}/../launchd/com.stillpoint-labs.borg.usage-watch.plist"
+PLIST="${BATS_TEST_DIRNAME}/../launchd/borg.usage-watch.plist"
 INSTALL_SH="${BATS_TEST_DIRNAME}/../install.sh"
 
 setup() {
