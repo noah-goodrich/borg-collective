@@ -1,5 +1,5 @@
 # Directive: Retire `merge-tree/programs.py` into `borg_core/manifest/`
-*Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
+*Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface (assimilated 2026-09-23)*
 *Filed: 2026-08-31*
 
 **tl;dr** — AC7 decision 3, and the half of AC7 that is not a rename. Two diverged manifest implementations must

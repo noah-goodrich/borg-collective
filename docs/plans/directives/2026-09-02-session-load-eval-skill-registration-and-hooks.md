@@ -1,6 +1,6 @@
 # Directive: A session-load harness — each skill registered exactly once, each hook fired exactly once
 
-*Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
+*Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface (assimilated 2026-09-23)*
 *Filed: 2026-09-03*
 
 **tl;dr** — AC6 asked for a case proving "a fresh session registers each skill exactly once and fires its hooks," and

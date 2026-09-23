@@ -1,3 +1,11 @@
+---
+Severed: 2026-09-23
+Reason: Measured unreachable, not cancelled for lack of interest. PR #224 (merged 2026-09-22)
+        moved the primitives on paper and `render.py` stayed at 1034 lines, over C0302's 1000, with the
+        prose share at 71%. Its own escape clause fired. The justified `too-many-lines` disable stays;
+        criterion 2 cannot be met by criterion 1. Retained in full below as the reasoning record.
+---
+
 # Directive: Split `render.py` along the seam that already exists
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Parent directive: 2026-08-16-link-port-latent-defects (assimilated 2026-08-31)*

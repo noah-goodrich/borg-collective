@@ -2,6 +2,7 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Parent directive: 2026-08-16-link-port-latent-defects (assimilated 2026-08-31)*
 *Filed: 2026-08-31*
+*Shipped: 2026-09-17 — PR [#218](https://github.com/noah-goodrich/borg-collective/pull/218) merged to main*
 
 **tl;dr** — `_flatten_summary` is opt-in at three call sites. A fourth consumer that reads `entry["summary"]`
 directly reintroduces the bug with every test in the repo green, because nothing asserts the property at the point
@@ -93,16 +94,16 @@ believed to be the last one at the time it shipped, and the file's own comments 
 
 ## Acceptance criteria
 
-- [ ] `summary` is flattened exactly once, at document assembly, and `grep -n '_flatten_summary' borg_core/link/`
+- [x] `summary` is flattened exactly once, at document assembly, and `grep -n '_flatten_summary' borg_core/link/`
       shows the definition, the assembly call site, and test references — no renderer call sites.
-- [ ] A test asserts the property over the ASSEMBLED DOCUMENT, not over a renderer's output: a registry entry whose
+- [x] A test asserts the property over the ASSEMBLED DOCUMENT, not over a renderer's output: a registry entry whose
       summary carries a TAB, an LF and a CR yields a document whose `summary` contains none of the three.
       **The mutation that turns it red is deleting the assembly-side call**, verified rather than assumed.
-- [ ] A second test proves the guarantee is structural rather than incidental: a renderer that reads
+- [x] A second test proves the guarantee is structural rather than incidental: a renderer that reads
       `entry["summary"]` directly — the shape a future consumer would naturally write — still produces a flat line.
       This is the case that distinguishes a chokepoint from a fourth opt-in.
-- [ ] The wire question is answered in the commit message: either `DOCUMENT_VERSION` moves with
+- [x] The wire question is answered in the commit message: either `DOCUMENT_VERSION` moves with
       `skills/borg-link/SKILL.md`'s version gate updated, or the reasoning for why it does not is recorded.
-- [ ] No golden and no `.expected` oracle moves, since no current fixture carries an embedded control character —
+- [x] No golden and no `.expected` oracle moves, since no current fixture carries an embedded control character —
       confirm this rather than assume it, because a moved golden means the change did more than normalize.
-- [ ] `make test`, `make lint` and `bats tests/` all exit 0, checked by exit code.
+- [x] `make test`, `make lint` and `bats tests/` all exit 0, checked by exit code.
