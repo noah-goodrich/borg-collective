@@ -170,6 +170,16 @@ e2e/eval harness that keeps it honest.
     no code change here, no second ruling, and `swept` is already source-agnostic and already in
     `grid.RESOLVED_STATE_SOURCES`, so a resolved jira row stops wedging the moment its adapter exists. `link` refs
     stay hand-authored — they are references, not tracked work, and `ready_set` skips them by design.
+  - **P3 is a skip-by-design — ruled 2026-09-23 by Noah.** The first complete `make eval-live` run
+    ([#227](https://github.com/noah-goodrich/borg-collective/pull/227), 2026-09-22) passed VERBS, P1, N1, P2 and
+    N2 and FAILED P3: `/borg-assimilate` did not close the declared row, and the fixture manifest was
+    byte-identical afterwards. That is the skill's two confirmation gates holding (`skills/borg-assimilate/SKILL.md`
+    refuses to proceed until the developer confirms `/simplify` has run, then presents its checklist for
+    confirmation), not the close verb failing. A prompt that asserted those confirmations would grade the
+    safeguard by switching it off, so the harness does not carry one. AC5 ships on the four cases that can run
+    headless plus the two negatives that prove the conditionals discriminate; P3/N3 stay in the harness as the
+    pair that reports SKIP with its reason, and the `close` verb's own contract is pinned by
+    `borg_core/manifest/test_cli.py` in VERBS.
 - [x] **AC6 — e2e/eval harness MVP.** Generalize the `evals/s4-k3/run.sh` pattern into a reusable convention: a
       `make eval` target, deterministic cases green in CI, model-dependent cases behind `make eval-live` — which
       since decision (9) means the harness in the repository that OWNS the surface, not this one. Two
