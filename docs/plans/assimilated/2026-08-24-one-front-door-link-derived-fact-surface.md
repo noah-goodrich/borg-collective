@@ -1,5 +1,6 @@
 # Project Plan: One Front Door — `borg link` as the Derived-Fact Surface
 *Established: 2026-08-24*
+*Shipped: 2026-09-23 — PR [#229](https://github.com/noah-goodrich/borg-collective/pull/229) merged to main*
 
 - Plan-slug: `2026-08-24-one-front-door-link-derived-fact-surface`
 
@@ -151,7 +152,7 @@ e2e/eval harness that keeps it honest.
     `python3 -m pytest borg_core/link/test_render.py -k "route or unsure or ungated or next_true or nobody"`,
     `bats tests/cli_contract.bats -f "renders the orchestrator context byte-identically"`, plus the three gates
     `make test`, `make lint`, `bats tests/` — all exit 0.
-- [ ] **AC5 — Lifecycle skills author project manifests by default.** `/borg-plan` scaffolds a manifest,
+- [x] **AC5 — Lifecycle skills author project manifests by default.** `/borg-plan` scaffolds a manifest,
       `/borg-link-up` updates row status, `/borg-assimilate` closes rows. None of it opt-in.
   - Verify: eval cases run each skill headless against a fixture repository and grade the emitted manifest; each
     positive case is paired with a negative case proving the conditional discriminates. **The exemplar moved**: this
@@ -496,7 +497,7 @@ e2e/eval harness that keeps it honest.
     **The measured result is the point**: `make eval-live` was rc 2 on `2 pass, 0 fail, 3 skip` and is now rc 0 on
     `3 pass, 0 fail, 0 skip` — no skips, on a machine holding neither stillpoint nor troth, which is the state all
     three machines are now in by construction rather than by luck.
-- [ ] **AC7 — "Program" is gone, and nothing breaks.** Eliminated from user-facing surfaces, skills, help text, and
+- [x] **AC7 — "Program" is gone, and nothing breaks.** Eliminated from user-facing surfaces, skills, help text, and
       `merge-tree/`. The repository-side rename is filed as a parented directive, not executed. Suites green and
       coverage holds its floor.
   - Verify: `grep -ri program` over the COMMANDS section of `borg help`, over `skills/`, and over `merge-tree/`
@@ -607,3 +608,20 @@ is most of the increase over the original estimate.
   oracled by `floor-tests.sh` — cases 2 and 6 — on a leg that needs no model. Kept rather than deleted because the
   original wording is what the mode floor was built against: request the model sweep, execute none of it, and the run
   exits non-zero with that reason named on stderr.
+
+## Additional Work Shipped
+
+Two criteria closed as dated rulings rather than green tests, recorded here so no reader re-derives them:
+
+- **AC5, P3.** `/borg-assimilate` closing a declared row is a skip-by-design (ruled 2026-09-23). The skill's two
+  confirmation gates hold in a headless prompt, and a harness that asserted them would grade the safeguard by
+  switching it off. The `close` verb is pinned by `borg_core/manifest/test_cli.py` in the harness's VERBS case.
+  First complete `make eval-live` (2026-09-22, on #227): VERBS, P1, N1, P2, N2 pass; P3 fail; N3 skip with reason.
+- **AC7, merge-tree.** Decision (3) of 2026-08-31 files `merge-tree/programs.py`'s retirement as a parented
+  directive (`2026-08-31-retire-merge-tree-programs-into-borg-core.md`, now a child of this assimilated plan)
+  instead of executing it. `.borg/programs` → `.borg/chains` landed as the expand phase in #222; the contract
+  phase is that directive's.
+
+Ten child directives were resolved in #229 to pass Step 0.75: five assimilated (#218, #219, #220, #223, and the
+AC5 directive via #214/#216/#221/#227), one severed (render-split, measured unreachable in #224), four re-parented
+as live children of this assimilated plan.
