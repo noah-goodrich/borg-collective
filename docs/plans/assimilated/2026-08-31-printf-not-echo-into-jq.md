@@ -3,6 +3,7 @@
 *Parent directive: (none — this is the tail of PR [#176](https://github.com/noah-goodrich/borg-collective/pull/176)'s
 scope boundary, filed rather than absorbed)*
 *Filed: 2026-08-31*
+*Shipped: 2026-09-22 — PR [#223](https://github.com/noah-goodrich/borg-collective/pull/223) merged to main (41 sites, not the 38 in its title)*
 
 **tl;dr** — zsh's `echo` expands backslash escapes, so `echo "$json" | jq` re-injects a raw control character into a
 JSON string literal and `jq` refuses to parse it. Under `set -e` the enclosing function dies mid-way with nothing on
@@ -111,17 +112,17 @@ neither has been reproduced failing, but neither is less reachable than `cmd_sta
 
 ## Acceptance criteria
 
-- [ ] `awk '/^[a-zA-Z_][a-zA-Z0-9_]*\(\) *\{/{fn=$1} /echo .*\| *jq/{ if ($0 !~ /^ *#/) print NR": "fn}' borg.zsh`
+- [x] `awk '/^[a-zA-Z_][a-zA-Z0-9_]*\(\) *\{/{fn=$1} /echo .*\| *jq/{ if ($0 !~ /^ *#/) print NR": "fn}' borg.zsh`
       prints nothing, and the same command against `lib/desktop.zsh` prints nothing. Comment lines that DISCUSS the
       bug are allowed to survive and the filter already excludes them.
-- [ ] A bats case drives `cmd_status` against a registry whose `summary` carries an embedded newline and asserts
+- [x] A bats case drives `cmd_status` against a registry whose `summary` carries an embedded newline and asserts
       exit 0 with the project detail rendered. **The mutation that must turn it red is restoring `echo` on that one
       line** — verify it, do not assume it, because a fixture whose summary has no newline passes either way and
       that is this repo's most-repeated test defect.
-- [ ] A second bats case covers the reachable user path end to end: `_borg_do_switch` against a project with NO
+- [x] A second bats case covers the reachable user path end to end: `_borg_do_switch` against a project with NO
       `tmux_window` and a newline-carrying summary exits 0 rather than 5. This is the case that would have caught
       the shipped defect; the unit case above would not have.
-- [ ] `_borg_do_switch`'s survivor comment is re-derived rather than edited around: `_borg_print_briefing` is no
+- [x] `_borg_do_switch`'s survivor comment is re-derived rather than edited around: `_borg_print_briefing` is no
       longer on it (the `--brief` fold already converted that function), and the comment names the `awk` command
       instead of a list that nothing regenerates.
-- [ ] `make test`, `make lint` and `bats tests/` all exit 0, checked by exit code and not by reading output.
+- [x] `make test`, `make lint` and `bats tests/` all exit 0, checked by exit code and not by reading output.

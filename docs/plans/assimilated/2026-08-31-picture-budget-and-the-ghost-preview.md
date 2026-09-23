@@ -2,6 +2,7 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Parent directive: 2026-08-27-retire-unused-link-surfaces (assimilated 2026-08-31)*
 *Filed: 2026-08-31*
+*Shipped: 2026-09-17 — PR [#219](https://github.com/noah-goodrich/borg-collective/pull/219) merged to main*
 
 **tl;dr** — `PICTURE_BUDGET = 68` is 70 minus two columns of border for an fzf preview pane that no longer exists.
 The pane, `borg watch` and `drone status` were all retired on 2026-08-27; three shipped surfaces still advertise
@@ -116,16 +117,16 @@ unanswered for another month. It should be re-scoped by this work, not host it.
 
 ## Acceptance criteria
 
-- [ ] `PICTURE_BUDGET`'s comment states a justification that is true on the current tree — either a named live
+- [x] `PICTURE_BUDGET`'s comment states a justification that is true on the current tree — either a named live
       consumer with its width, or an explicit "kept for fixture stability, no width consumer exists" — and does not
       derive the number from the retired pane.
-- [ ] `grep -rn 'drone status' README.md docs/cheatsheet.md install.sh` returns nothing, and `borg doctor` /
+- [x] `grep -rn 'drone status' README.md docs/cheatsheet.md install.sh` returns nothing, and `borg doctor` /
       `drone` help output is unchanged (they were already clean).
-- [ ] `docs/six-pager.md`'s dated release note is UNTOUCHED. It is history, and rewriting history to match the
+- [x] `docs/six-pager.md`'s dated release note is UNTOUCHED. It is history, and rewriting history to match the
       present is how a repo loses the record of what it decided.
-- [ ] `2026-08-25-link-front-door-hardened-spec.md`'s B1 and `2026-08-20-comms-delivery-surfaces.md`'s exemption
+- [x] `2026-08-25-link-front-door-hardened-spec.md`'s B1 and `2026-08-20-comms-delivery-surfaces.md`'s exemption
       list are each either amended in place with the retirement recorded, or severed with the reason — not left
       arguing from three deleted commands.
-- [ ] If the number changes: both grid goldens and both `.expected` oracles regenerate in ONE reviewed commit, and
+- [x] If the number changes: both grid goldens and both `.expected` oracles regenerate in ONE reviewed commit, and
       the `.expected` pair is hand-edited rather than regenerated, per the rule that makes them oracles.
-- [ ] `make test`, `make lint` and `bats tests/` all exit 0.
+- [x] `make test`, `make lint` and `bats tests/` all exit 0.

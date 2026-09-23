@@ -1,6 +1,6 @@
 # Directive: Refuse the manifest — stop salvaging rows on read
 
-*Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
+*Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface (assimilated 2026-09-23)*
 *Filed: 2026-09-01*
 *Reverses: `docs/plans/assimilated/2026-08-27-degrade-the-row-not-the-manifest.md`*
 

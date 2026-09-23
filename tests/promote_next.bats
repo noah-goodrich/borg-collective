@@ -267,6 +267,15 @@ _mk_plan() {   # <path> <annotation-line-or-empty>
     local via_helper via_grep
     via_helper=$(_borg_child_directives "$root/docs/plans/directives" "$slug" | wc -l | tr -d ' ')
     via_grep=$(grep -lF "*Parent plan: ${slug}*" "$root"/docs/plans/directives/*.md 2>/dev/null | wc -l | tr -d ' ')
-    [ "$via_helper" -gt 0 ] || { echo "gate found no children on the live tree"; false; }
+    # ZERO IS A LEGITIMATE ANSWER ON A SHIP-READY TREE, and this case used to forbid it. Between
+    # "every child directive resolved" and "PROJECT_PLAN.md archived" the live count is 0 by
+    # design -- that window is what Step 0.75 exists to reach -- and asserting `-gt 0` here made the
+    # suite red at the exact moment the gate had done its job (measured 2026-09-23 with ten children
+    # resolved for the One Front Door plan). The FIRING direction is carried by the planted-child cases
+    # above; this case's job is the cross-check, so it asserts agreement, and names a zero so a reader
+    # can tell "ready to ship" from "the helper went blind" by looking at the grep column.
     [ "$via_helper" -eq "$via_grep" ] || { echo "helper=$via_helper grep=$via_grep"; false; }
+    if [ "$via_grep" -eq 0 ]; then
+        echo "no children on the live tree (grep agrees): the plan is ready for Step 0.75 to pass"
+    fi
 }

@@ -1,6 +1,7 @@
 # Directive: The shim layer made real — adapter-driven reconcile
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Filed: 2026-09-19 · Planned 2026-09-17 as a `PROJECT_PLAN.md`; demoted to a directive by Noah's ruling of 2026-09-19*
+*Shipped: 2026-09-22 — PR [#220](https://github.com/noah-goodrich/borg-collective/pull/220) merged to main*
 
 **tl;dr** — Five criteria, all five shipped on `plan/employer-shim-and-adapter-layer`
 ([noah-goodrich/borg-collective#220](https://github.com/noah-goodrich/borg-collective/pull/220)). This file
