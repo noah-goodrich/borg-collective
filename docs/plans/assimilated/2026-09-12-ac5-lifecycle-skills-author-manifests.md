@@ -1,7 +1,10 @@
 # Directive: AC5 — lifecycle skills author project manifests by default
 
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
-*Filed: 2026-09-12 · Status: PROPOSAL — awaiting evaluation*
+*Filed: 2026-09-12*
+*Shipped: 2026-09-22 — PR [#214](https://github.com/noah-goodrich/borg-collective/pull/214) (resolve), PR [#216](https://github.com/noah-goodrich/borg-collective/pull/216) (writer gates), PR [#221](https://github.com/noah-goodrich/borg-collective/pull/221) (harness) and PR [#227](https://github.com/noah-goodrich/borg-collective/pull/227)
+(chains paths, first complete `make eval-live`: 5 pass / 1 fail / 1 skip) merged to main. P3 is a
+skip-by-design, ruled 2026-09-23 — see the parent plan's AC5.*
 
 **tl;dr** — AC5's engine shipped in
 [#191](https://github.com/noah-goodrich/borg-collective/pull/191) and **nothing invokes it**. This
@@ -185,22 +188,22 @@ the fixture builder produces a manifest-carrying repo and a manifest-less one th
 
 ## Acceptance Criteria
 
-- [ ] AC5.1 — `borg_core/manifest/cli.py` gains a read-only `resolve` verb implementing the four
+- [x] AC5.1 — `borg_core/manifest/cli.py` gains a read-only `resolve` verb implementing the four
       ordered rules above. It writes nothing and forks nothing.
     - Verify: pytest over `resolve` covering all four arms — absent dir, single manifest, several
       with a slug match, several without — plus an assertion that no file under the fixture
       repository changed mtime.
     - Evidence: `pytest:borg_core/manifest/test_cli.py`
-- [ ] AC5.2 — All three lifecycle skills invoke the CLI unconditionally, with no opt-in language and
+- [x] AC5.2 — All three lifecycle skills invoke the CLI unconditionally, with no opt-in language and
       no conditional the user must satisfy.
     - Verify: each of `skills/borg-plan/SKILL.md`, `skills/borg-link-up/SKILL.md`,
       `skills/borg-assimilate/SKILL.md` contains a `borg_core.manifest.cli` invocation; and the
       P1/P2/P3 eval prompts are the **bare slash command** with no manifest hint, so a pass is proof
       the behaviour is default rather than requested.
-- [ ] AC5.3 — `evals/lifecycle-manifests/run.sh` runs the three positive cases headless and grades
+- [x] AC5.3 — `evals/lifecycle-manifests/run.sh` runs the three positive cases headless and grades
       the manifest file on disk.
     - Verify: `make eval-live` reaches rc 0 with P1/P2/P3 executed and counted, not skipped.
-- [ ] AC5.4 — Each positive is paired with a negative that fails if the conditional is removed.
+- [x] AC5.4 — Each positive is paired with a negative that fails if the conditional is removed.
       Asserted by mutation, not by presence: delete the `os.path.exists` guard in `_cmd_scaffold`
       and N1 goes red; make `/borg-link-up` scaffold when `resolve` exits 1 and N2 goes red; make
       `/borg-assimilate` fall back to `add-row` and N3 goes red.
@@ -209,14 +212,14 @@ the fixture builder produces a manifest-carrying repo and a manifest-less one th
       mutation; AC5.4 previously proved N1 and N3 that way and left N2 to prose. `floor-tests.sh`
       carries a case proving **N2 can fail**: a fixture in which link-up scaffolds where no manifest
       was declared must turn N2 red. A negative nothing can fail is not a gate.
-- [ ] AC5.5 — `evals/lifecycle-manifests/floor-tests.sh` is green, needs no model, and runs on the
+- [x] AC5.5 — `evals/lifecycle-manifests/floor-tests.sh` is green, needs no model, and runs on the
       same CI leg as the rest of the suite. Each guard is exercised in both directions.
     - Verify: `bash evals/lifecycle-manifests/floor-tests.sh` at rc 0 in the `test` job.
-- [ ] AC5.6 — `make eval` (offline, the default `EVAL_ARGS`) stays green and the new harness does not
+- [x] AC5.6 — `make eval` (offline, the default `EVAL_ARGS`) stays green and the new harness does not
       turn it red by rejecting a flag it is handed.
     - Verify: `make eval` at rc 0; `make eval-live` at rc 0 with zero skips on a machine holding no
       repository other than this one.
-- [ ] AC5.8 — `core._validate_row` learns about `lane`. Whoever fills the field, it is unguarded
+- [x] AC5.8 — `core._validate_row` learns about `lane`. Whoever fills the field, it is unguarded
       today, and a transposed letter forks the chain into a second root (Ruling 3). The validator
       rejects a row whose `lane` is not among the lanes already declared by the manifest, so the
       first lane in a file is free and every later row must name an existing one.
@@ -225,13 +228,13 @@ the fixture builder produces a manifest-carrying repo and a manifest-less one th
     - Note: expand → migrate → contract. The two hand-authored manifests and the three
       `merge-tree/fixtures/` manifests are checked against the new rule BEFORE it tightens; any that
       fail are migrated in the expand commit, not after.
-- [ ] AC5.9 — `PROJECT_PLAN.md` carries a machine-readable `- Plan-slug:` annotation, and `resolve`
+- [x] AC5.9 — `PROJECT_PLAN.md` carries a machine-readable `- Plan-slug:` annotation, and `resolve`
       reads it (Ruling 1). Exactly one writer: `/borg-plan` at `02-output`, beside the
       `PROJECT_PLAN.md` write it already performs.
     - Verify: pytest over the reader — annotation present, absent, and malformed; plus an assertion
       that `resolve` never re-derives a slug from the Objective line.
     - Evidence: `pytest:borg_core/manifest/test_cli.py`
-- [ ] AC5.10 — The writer authors only ref kinds this machine can resolve, decided by a predicate and
+- [x] AC5.10 — The writer authors only ref kinds this machine can resolve, decided by a predicate and
       not a literal. A kind is authorable when it is in `refs.TRACKED_REF_KINDS` and a resolver for it
       exists (a discovered `recon-adapter-<source>`, or the built-in GitHub fetch).
     - Verify: pytest — with only `recon-adapter-github` discoverable, a `github` ref is authorable and
@@ -240,7 +243,7 @@ the fixture builder produces a manifest-carrying repo and a manifest-less one th
       predicate rather than an allow-list, and it is the work machine's future stated as a test.
     - Verify: a `link` ref is never authored in either arm — it is a reference, not tracked work.
     - Evidence: `pytest:borg_core/manifest/test_cli.py`
-- [ ] AC5.7 — Nothing breaks. `make test` green at its coverage floor, `make lint` at 10.00/10,
+- [x] AC5.7 — Nothing breaks. `make test` green at its coverage floor, `make lint` at 10.00/10,
       `bats tests/` green, `shellcheck` clean over `evals/*/*.sh`.
 
 ## Testability
