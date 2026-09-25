@@ -129,7 +129,15 @@ def _resolvable_kinds() -> set[str]:
     try:
         kinds.update(source for source, _ in recon_shell.discover_adapters())
     except OSError:
-        pass  # A degraded adapter path is "cannot look", which must not WIDEN what is authorable.
+        # A degraded adapter path is "cannot look". The safe degrade HERE is NARROWER in the
+        # opposite sense to `reconcile/shell.py::resolvable_kinds`: that function returns `set()`
+        # so every ref lands in `unresolvable_refs` and is REPORTED, which is narrow for a reader.
+        # Narrow for a WRITER is the other thing -- it must never let a machine author a ref kind it
+        # cannot resolve, so the built-in `github` stays and nothing discovered is added. Returning
+        # `set()` here would refuse every ref including github; dropping the guard would author
+        # whatever the last good scan suggested. Same call, opposite safe direction, on purpose at
+        # both sites.
+        pass
     return kinds
 
 
