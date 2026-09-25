@@ -83,17 +83,115 @@ dbg()  { [[ -n "${BORG_DEBUG:-}" ]] && echo -e "${CYAN}  [dbg]${NC} $*" >&2 || t
 # Source project secrets if present (Docker Compose needs API keys)
 [[ -f "$HOME/.config/dotfiles/zsh/secrets.zsh" ]] && source "$HOME/.config/dotfiles/zsh/secrets.zsh" || true
 
+# ── Window-name abbreviation ──────────────────────────────────────────────────
+# tmux window names are display real estate; project names are identity. These
+# two are allowed to differ. The map below is explicit for the projects we open
+# daily; anything else longer than DRONE_WNAME_MAX is abbreviated generically.
+# `drone <cmd> <name>` accepts either form — _drone_resolve un-abbreviates first.
+
+typeset -gi DRONE_WNAME_MAX=6
+
+typeset -gA DRONE_WNAME_ABBREV=(
+    borg-collective                 borg
+    analytics-engineer-ai-overseer  aeaio
+    ai-data-engineer                aide
+    infrastructure                  infra
+    snowflake-permissions           sfp
+    snowflake-permissions-wt-e2e    sfp-e2e
+    data-science-analyses           dsa
+    claude-marche                   marche
+    claude-plugins                  plugins
+    claude-plugins-private          private
+    segment-transforms              segment
+    data-eng-dags                   dags
+    dbt-csm_invoice_issue_agent_tool  dbt-csm
+    data-observability              dataobs
+    o-snowflake                     osnow
+    o-vault                         ovault
+    permifrost                      permi
+    dbtguard                        dbtg
+    krakenguard                     kraken
+    data-slas                       slas
+    dotfiles                        dotf
+    noahgoodrich                    noahg
+    test-claude-ref                 testref
+)
+
+# project name -> window name
+_drone_wname() {
+    local name="$1"
+    [[ -z "$name" ]] && return 0
+    if [[ -n "${DRONE_WNAME_ABBREV[$name]}" ]]; then
+        print -r -- "${DRONE_WNAME_ABBREV[$name]}"
+        return 0
+    fi
+    if (( ${#name} <= DRONE_WNAME_MAX )); then
+        print -r -- "$name"
+        return 0
+    fi
+    # Generic fallback: initials of hyphen/underscore segments when there are at
+    # least two, otherwise a hard truncation. Kept deliberately dumb so the
+    # result is predictable rather than clever.
+    local -a parts
+    parts=(${(s:-:)${name//_/-}})
+    if (( ${#parts} >= 3 )); then
+        local acr=""
+        local seg
+        for seg in $parts; do acr+="${seg[1]}"; done
+        print -r -- "$acr"
+    else
+        print -r -- "${name[1,DRONE_WNAME_MAX]}"
+    fi
+}
+
+# window/short name -> project name (inverse of _drone_wname, map entries only).
+# The map must stay injective or this returns whichever key zsh hands back first,
+# which is arbitrary. _drone_wname_selftest asserts that.
+_drone_unabbrev() {
+    local short="$1" k
+    [[ -z "$short" ]] && return 0
+    for k in ${(ok)DRONE_WNAME_ABBREV}; do
+        if [[ "${DRONE_WNAME_ABBREV[$k]}" == "$short" ]]; then
+            print -r -- "$k"
+            return 0
+        fi
+    done
+    print -r -- "$short"
+}
+
+# Assert the abbreviation map is injective. Any duplicate value makes
+# _drone_unabbrev nondeterministic, so this is a real invariant, not a nicety.
+_drone_wname_selftest() {
+    local -A seen
+    local k v dupes=0
+    for k in ${(ok)DRONE_WNAME_ABBREV}; do
+        v="${DRONE_WNAME_ABBREV[$k]}"
+        if [[ -n "${seen[$v]}" ]]; then
+            print -u2 "DRONE_WNAME_ABBREV: '$v' maps from both '${seen[$v]}' and '$k'"
+            (( dupes++ ))
+        fi
+        seen[$v]="$k"
+    done
+    (( dupes == 0 ))
+}
+
+
 # ── Project resolution ────────────────────────────────────────────────────────
 
 # Resolve a project name/path argument to name + absolute dir.
-# Sets: _proj_name, _proj_dir
+# Sets: _proj_name, _proj_dir, _proj_wname
 _drone_resolve() {
     local arg="${1:-}"
+
+    # Accept the abbreviated window name as well as the project name, so
+    # `drone up borg` and `drone up borg-collective` are the same command.
+    [[ -n "$arg" && ! -d "$arg" ]] && arg="$(_drone_unabbrev "$arg")"
 
     if [[ -z "$arg" ]]; then
         # No argument: use current working directory
         _proj_dir="$(pwd)"
         _proj_name="${_proj_dir##*/}"
+        _proj_wname="$(_drone_wname "$_proj_name")"
         return 0
     fi
 
@@ -106,6 +204,7 @@ _drone_resolve() {
         if [[ -n "$reg_path" && -d "$reg_path" ]]; then
             _proj_dir="$reg_path"
             _proj_name="$arg"
+            _proj_wname="$(_drone_wname "$_proj_name")"
             return 0
         fi
     fi
@@ -114,6 +213,7 @@ _drone_resolve() {
     if [[ -d "$arg" ]]; then
         _proj_dir="$(cd "$arg" && pwd)"
         _proj_name="${_proj_dir##*/}"
+        _proj_wname="$(_drone_wname "$_proj_name")"
         return 0
     fi
 
@@ -121,6 +221,7 @@ _drone_resolve() {
     if [[ -d "$BORG_ORCHESTRATOR_ROOT/$arg" ]]; then
         _proj_dir="$BORG_ORCHESTRATOR_ROOT/$arg"
         _proj_name="$arg"
+        _proj_wname="$(_drone_wname "$_proj_name")"
         return 0
     fi
 
@@ -367,6 +468,7 @@ wait_for_container() {
 cmd_up() {
     _drone_resolve "${1:-}"
     local project_name="$_proj_name"
+    local wname="$_proj_wname"
     local project_dir="$_proj_dir"
     local compose="$project_dir/$COMPOSE_FILE"
 
@@ -379,20 +481,20 @@ cmd_up() {
         # ── No devcontainer: plain local window ──────────────────────────────
         dbg "cmd_up: no .devcontainer, creating local window"
 
-        if has_window "$project_name"; then
+        if has_window "$wname"; then
             info "Project '$project_name' already open."
-            attach_or_switch "$project_name"
+            attach_or_switch "$wname"
             return
         fi
 
         # Host-first: left pane runs claude, right pane is a shell at project_dir.
-        create_2pane_window "$project_name" "claude" "$project_dir" ""
-        tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
-        _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
+        create_2pane_window "$wname" "claude" "$project_dir" ""
+        tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
+        _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
         borg add "$project_dir" 2>/dev/null || true
         echo "$project_name" > "$project_dir/.borg-project"
         info "Project '$project_name' ready (local)."
-        attach_or_switch "$project_name"
+        attach_or_switch "$wname"
         return
     fi
 
@@ -411,14 +513,14 @@ cmd_up() {
     fi
 
     # Window already exists — check health
-    if has_window "$project_name"; then
+    if has_window "$wname"; then
         local panes
-        panes=$(window_pane_count "$project_name")
+        panes=$(window_pane_count "$wname")
         dbg "cmd_up: window '$project_name' exists with $panes panes"
 
         if [[ "$panes" != "2" ]]; then
             dbg "cmd_up: wrong pane count, killing window"
-            tmux kill-window -t "$SESSION:$project_name"
+            tmux kill-window -t "$SESSION:$wname"
             # Fall through to create new window
         else
             local container
@@ -439,8 +541,8 @@ cmd_up() {
                 # Host-side panes are immune to container restart — no re-exec needed.
             fi
             info "Project '$project_name' already running."
-            _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
-            attach_or_switch "$project_name"
+            _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
+            attach_or_switch "$wname"
             return
         fi
     fi
@@ -465,16 +567,16 @@ cmd_up() {
 
     # Host-first: both panes are host shells at $project_dir.
     # Left (Claude) pane auto-launches `claude`; right pane stays as a shell prompt.
-    create_2pane_window "$project_name" "claude" "$project_dir" ""
-    tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
-    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
+    create_2pane_window "$wname" "claude" "$project_dir" ""
+    tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
+    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
     borg add "$project_dir" 2>/dev/null || true
     echo "$project_name" > "$project_dir/.borg-project"
 
     dbg "cmd_up: windows: $(tmux list-windows -t "$SESSION" -F '  #I: #W (#{window_panes} panes)' 2>/dev/null)"
 
     info "Project '$project_name' ready."
-    attach_or_switch "$project_name"
+    attach_or_switch "$wname"
 }
 
 # ── drone down ────────────────────────────────────────────────────────────────
@@ -482,14 +584,15 @@ cmd_up() {
 cmd_down() {
     _drone_resolve "${1:-}"
     local project_name="$_proj_name"
+    local wname="$_proj_wname"
     local project_dir="$_proj_dir"
     local compose="$project_dir/$COMPOSE_FILE"
 
     dbg "cmd_down: project=$project_name dir=$project_dir"
 
-    if tmux has-session -t "$SESSION" 2>/dev/null && has_window "$project_name"; then
+    if tmux has-session -t "$SESSION" 2>/dev/null && has_window "$wname"; then
         info "Removing window '$project_name'."
-        tmux kill-window -t "$SESSION:$project_name"
+        tmux kill-window -t "$SESSION:$wname"
     fi
 
     rm -f "$project_dir/.borg-project"
@@ -614,12 +717,13 @@ cmd_rebuild()  { _cmd_cycle "rebuild" "${1:-}"; }
 cmd_claude() {
     _drone_resolve "${1:-}"
     local project_name="$_proj_name"
+    local wname="$_proj_wname"
     local project_dir="$_proj_dir"
 
     dbg "cmd_claude: project=$project_name dir=$project_dir"
 
     # If no window exists, drone up creates it AND auto-launches claude in the right pane.
-    if ! has_window "$project_name"; then
+    if ! has_window "$wname"; then
         info "$project_name: no window found, running drone up first..."
         cmd_up "${1:-}"
     fi
@@ -640,8 +744,8 @@ cmd_claude() {
     esac
 
     # Switch to the project window, focus + zoom Claude pane
-    attach_or_switch "$project_name"
-    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
+    attach_or_switch "$wname"
+    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
     tmux select-pane -t "$claude_pane"
     tmux resize-pane -Z -t "$claude_pane"
 }
@@ -651,11 +755,12 @@ cmd_claude() {
 cmd_cortex() {
     _drone_resolve "${1:-}"
     local project_name="$_proj_name"
+    local wname="$_proj_wname"
     local project_dir="$_proj_dir"
 
     dbg "cmd_cortex: project=$project_name dir=$project_dir"
 
-    if ! has_window "$project_name"; then
+    if ! has_window "$wname"; then
         info "$project_name: no window found, running drone up first..."
         cmd_up "${1:-}"
     fi
@@ -664,10 +769,10 @@ cmd_cortex() {
     claude_pane=$(get_left_pane "$project_name")
     info "Launching Cortex in $project_name (left pane)..."
     tmux send-keys -t "$claude_pane" "cortex" Enter
-    tmux set-option -t "$SESSION:$project_name" @cortex_launched 1
+    tmux set-option -t "$SESSION:$wname" @cortex_launched 1
 
-    attach_or_switch "$project_name"
-    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
+    attach_or_switch "$wname"
+    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
     tmux select-pane -t "$claude_pane"
     tmux resize-pane -Z -t "$claude_pane"
 }
@@ -679,8 +784,9 @@ cmd_feature() {
     [[ -z "$feature" ]] && die "Usage: drone feature <project> <branch>"
     _drone_resolve "${1:-}"
     local project_name="$_proj_name"
+    local wname="$_proj_wname"
     local project_dir="$_proj_dir"
-    local window_name="${project_name}-${feature}"
+    local window_name="${wname}-${feature}"
     local work_dir="${project_dir%/*}/${project_name}-${feature}"
 
     if has_window "$window_name"; then
@@ -723,6 +829,7 @@ cmd_feature() {
 cmd_sh() {
     _drone_resolve "${1:-}"
     local project_name="$_proj_name"
+    local wname="$_proj_wname"
     local project_dir="$_proj_dir"
     local compose="$project_dir/$COMPOSE_FILE"
 
@@ -762,6 +869,7 @@ cmd_exec() {
 
     _drone_resolve "$project_arg"
     local project_name="$_proj_name"
+    local wname="$_proj_wname"
     local project_dir="$_proj_dir"
     local compose="$project_dir/$COMPOSE_FILE"
 
