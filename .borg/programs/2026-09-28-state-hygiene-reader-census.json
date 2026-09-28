@@ -1,0 +1,4 @@
+{
+  "desc": "Give every borg state store a mandatory code-path reader and a collision-proof key, and collapse the two machine-local roots into one with retention.",
+  "rows": []
+}
