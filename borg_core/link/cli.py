@@ -65,12 +65,16 @@ def _focus(project: str, registry: dict, now_epoch: int) -> dict | None:
     entry = projects.get(project)
     if entry is None:
         raise ProjectNotFound(project)
+    # THE GROUP IS RESOLVED ONCE, HERE, and the two checkpoint reads share it. Resolving it inside
+    # each reader would let the list and the head disagree if the registry changed between the two
+    # calls, and would walk `projects` twice for one answer.
+    sources = core.repo_sources(project, projects)
     return {
         "name": project,
         "entry": core.public_entry(entry, now_epoch),
         "plan": shell.read_plan(entry.get("path")),
-        "checkpoints": shell.read_checkpoints(entry.get("path")),
-        "checkpoint_head": shell.read_latest_checkpoint_head(entry.get("path")),
+        "checkpoints": shell.read_checkpoints(sources),
+        "checkpoint_head": shell.read_latest_checkpoint_head(sources),
         "directives": shell.read_directives(entry.get("path")),
         "assimilated": shell.read_assimilated(entry.get("path")),
     }

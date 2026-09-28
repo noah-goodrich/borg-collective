@@ -64,6 +64,7 @@ imported names are public, and neither module is the Domain layer, so no layerin
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -399,36 +400,114 @@ def collect_all_assimilated(registry: dict, max_items: int = 3) -> list[dict]:
     return result
 
 
-def read_checkpoints(project_path: str | None, limit: int = 3) -> list[str]:
-    """The newest checkpoint filenames, newest first, capped at `limit`.
+def _checkpoint_stores(sources: list[tuple[str, str]]) -> dict[str, Path]:
+    """Each source's existing `.borg/checkpoints` directory, keyed by project name.
 
-    Mirrors borg.zsh:466's `find ... -maxdepth 1 -name '*.md' | sort -r | head -3`: a NAME sort, not
-    an mtime sort. Returns filenames, not paths -- the renderer prints `${_cp##*/}`.
+    RESOLVED ONCE PER INVOCATION, and this is why it is its own function. Three things need a
+    store's path -- the glob, the content hash, and the head's read -- and each resolving it
+    independently meant two `_usable_path` guards that the collection invariant made unreachable,
+    plus two copies of `dict(sources)`. Sources with no path, the literal "null", or no checkpoints
+    directory are simply absent from the map, so every later lookup is guaranteed to hit.
     """
-    directory = _usable_path(project_path)
-    if directory is None:
-        return []
-    checkpoints = directory / ".borg" / "checkpoints"
-    if not checkpoints.is_dir():
-        return []
-    # JUSTIFICATION: a filesystem glob on a stdlib Path, not a cross-layer reach.
-    names = [p.name for p in checkpoints.glob("*.md")]  # pylint: disable=clean-arch-demeter
-    return core.sort_checkpoints(names, limit)
+    stores: dict[str, Path] = {}
+    for project_name, project_path in sources:
+        directory = _usable_path(project_path)
+        if directory is None:
+            continue
+        checkpoints = directory / ".borg" / "checkpoints"
+        if checkpoints.is_dir():
+            stores[project_name] = checkpoints
+    return stores
 
 
-def read_latest_checkpoint_head(project_path: str | None, lines: int = 20) -> str:
-    """The first `lines` lines of the newest checkpoint, mirroring `head -20 "${cp_files[1]}"`.
+def _collect_checkpoints(stores: dict[str, Path]) -> list[tuple[str, str]]:
+    """Every `(filename, project_name)` across a repo group's stores.
+
+    UNION-READ, NEVER A MERGE-WRITE. The directive this implements forbids consolidating the stores
+    by moving files, and the reason is in `read_checkpoints`' own history: readers return filenames
+    rather than paths, so two stores holding one filename with different bodies cannot survive being
+    written into one directory. Reading both and labelling the rows gets the outcome with zero
+    writes, zero renames, and nothing to roll back.
+    """
+    found: list[tuple[str, str]] = []
+    for project_name, store in stores.items():
+        # JUSTIFICATION: a filesystem glob on a stdlib Path, not a cross-layer reach.
+        for entry in store.glob("*.md"):  # pylint: disable=clean-arch-demeter
+            found.append((entry.name, project_name))
+    return found
+
+
+def _checkpoint_window(
+    sources: list[tuple[str, str]], limit: int
+) -> tuple[list[tuple[str, str]], dict[str, Path]]:
+    """The `(filename, project)` rows a group displays -- ordered, content-deduped, capped -- plus
+    the store map they were resolved against.
+
+    THE ONE RESOLUTION BOTH READERS SHARE. `read_checkpoints` labels these rows and
+    `read_latest_checkpoint_head` reads the body of the first one, so routing both through here is
+    what makes "the head is the body of the row printed first" true by construction rather than by
+    two call sites agreeing. Splitting them is how the head came to be read out of whichever
+    directory the caller happened to pass. The store map is returned rather than rebuilt for the
+    same reason the window is: one resolution, two consumers.
+    """
+    stores = _checkpoint_stores(sources)
+
+    def identity(filename: str, project_name: str) -> str | None:
+        """A row's content identity -- a digest of its body, or None when it cannot be read.
+
+        HASHES THE BODY, not the size or the mtime. Checkpoints are prose written minutes apart by
+        two sessions; two of the live collisions were written in the same minute, so mtime cannot
+        separate them, and `core.order_checkpoints` documents why mtime is untrustworthy here
+        anyway. Size would collide on edits that preserve length.
+        """
+        body = _read_text(stores[project_name] / filename)
+        if not body:
+            return None
+        # `body` is a local value this function just read, not a collaborator reached through
+        # another object, so there is no boundary to delegate across; the checker counts any method
+        # call on a stdlib str as a chain.
+        # JUSTIFICATION: encoding a local str for a hash function, not a cross-layer reach.
+        encoded = body.encode("utf-8", "replace")  # pylint: disable=clean-arch-demeter
+        return hashlib.sha256(encoded).hexdigest()
+
+    ordered = core.order_checkpoints(_collect_checkpoints(stores))
+    return core.dedupe_checkpoints(ordered, identity, limit), stores
+
+
+def read_checkpoints(sources: list[tuple[str, str]], limit: int = 3) -> list[str]:
+    """The newest checkpoint labels across a repo group, newest first, capped at `limit`.
+
+    TAKES A GROUP, NOT A PATH. It used to take one project path and glob one directory, which made
+    "the latest checkpoint" a function of which directory the caller asked about -- the measured
+    harm, across 4 stores for one repo. `core.repo_sources` decides the group; this reads it.
+
+    Mirrors borg.zsh:466's `find ... -maxdepth 1 -name '*.md' | sort -r | head -3` in everything the
+    port preserved: a NAME sort, not an mtime sort, and filenames rather than paths, because the
+    renderer prints `${_cp##*/}`. What changes is the breadth of the `find`, plus the `@project`
+    byline `core.label_checkpoints` adds when -- and only when -- the group is ambiguous.
+    """
+    window, _ = _checkpoint_window(sources, limit)
+    return core.label_checkpoints(window, limit)
+
+
+def read_latest_checkpoint_head(sources: list[tuple[str, str]], lines: int = 20) -> str:
+    """The first `lines` lines of the group's newest checkpoint, mirroring `head -20 "${cp_files[1]}"`.
 
     "" when there is no checkpoint. The trailing newline behavior follows `head`: the joined lines
     carry no trailing newline of their own.
+
+    RESOLVES THE WINNER'S OWN DIRECTORY, which is the half a union read is easy to get wrong. The
+    previous version derived the filename from `read_checkpoints` and then opened it under the
+    project path it was handed. Once the list can span stores that becomes a genuine mismatch -- the
+    name from one worktree, the body from another -- so the ordering is consumed here as
+    `(filename, project)` pairs and the project is mapped back to its own path. The head is
+    therefore always the body of the row printed first, by construction rather than by coincidence.
     """
-    directory = _usable_path(project_path)
-    if directory is None:
+    window, stores = _checkpoint_window(sources, limit=1)
+    if not window:
         return ""
-    newest = read_checkpoints(project_path, limit=1)
-    if not newest:
-        return ""
-    text = _read_text(directory / ".borg" / "checkpoints" / newest[0])
+    filename, project_name = window[0]
+    text = _read_text(stores[project_name] / filename)
     return "\n".join(text.split("\n")[:lines])
 
 

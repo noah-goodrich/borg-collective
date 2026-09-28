@@ -36,8 +36,24 @@ def build_add_entry(  # pylint: disable=too-many-arguments,too-many-positional-a
     tmux_window: str | None,
     session_id: str | None,
     last_activity: str | None,
+    repo: str | None = None,
 ) -> dict:
-    """Build the registry entry payload for `borg add`, mirroring cmd_add's `jq -n` object."""
+    """Build the registry entry payload for `borg add`, mirroring cmd_add's `jq -n` object.
+
+    `repo` IS THE ONE IDENTITY FIELD, and it is additive. Every other key here describes a
+    directory; `repo` -- the absolute `--git-common-dir` from `shell.git_common_dir` -- says which
+    git clone that directory belongs to. Without it `borg add` recorded no repo, no parent and no
+    kind, so a git worktree was not a view of a project, it WAS one: its own checkpoint store, its
+    own plan slot, its own state.json, invisible to its parent and vice versa.
+
+    DEFAULTED, NOT REQUIRED, which is the expand phase of expand -> migrate -> contract. Entries
+    written before this field existed keep working unchanged -- `link.core.repo_sources` resolves a
+    missing or null `repo` to a group of one, which is exactly the pre-change behaviour -- so no
+    existing registry entry is read by a rule it was not written to satisfy. `borg add` populates it
+    from here on; `borg_core.registry.cli backfill-repo` is the migrate phase for what is already
+    there. No contract phase is scheduled: a registered directory outside any git repository has no
+    common dir, so null stays a legal value permanently rather than becoming one to eliminate.
+    """
     return {
         "path": path,
         "source": source,
@@ -46,4 +62,5 @@ def build_add_entry(  # pylint: disable=too-many-arguments,too-many-positional-a
         "claude_session_id": session_id or None,
         "last_activity": last_activity or None,
         "summary": None,
+        "repo": repo or None,
     }
