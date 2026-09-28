@@ -6,7 +6,8 @@ worktree and discovered borg could not see any of it.*
 **tl;dr:** One git repo is three borg projects, four checkpoint stores and four `PROJECT_PLAN.md` copies with three
 distinct contents, because `borg add` identifies a project by directory basename and nothing else. The decision
 below is what to change, in what order, and what not to build. A blind adversarial review is included and it
-**rejects the original first step** — read §6 before acting on §5.
+**rejects the original first step** — read §5a and §6 before acting on §5. §6.1, which blocked the
+recommendation, was ruled on 2026-09-28.
 
 ## 1. The diagnosis
 
@@ -161,10 +162,55 @@ What did not:
 8. **Three of seven acceptance criteria fail against the proposal's own steps** — including a `--dry-run`
    verification that exercises a code path the fix is not on.
 
+## 5a. Verification on takeover, and one finding the retro missed
+
+*Added 2026-09-28 by the session this was handed to. Every load-bearing claim in §1 and §2 was re-checked against
+the tree rather than inherited: the add path is basename-only with zero git calls, `build_add_entry` emits seven
+keys and no identity, `read_checkpoints` name-sorts filenames, `repository_slug` tests `exists(.git)` for
+worktrees, `--git-common-dir` and `git worktree list` return zero hits across `borg_core/ lib/ hooks/`, and the
+worktree/registration counts are exact. The store count is 4 as claimed; the two the retro elided as "0 / …" are
+`-rbac` (2) and `-wt-smepat` (1).*
+
+**The `BORG_WORKTREE_STATE_DIR` boundary is not strict. It is inert, and has been since it shipped.**
+
+`lib/reaper.sh` defaulted the boundary to a literal `/Users/noah/.local/state/borg/worktrees`, which was already
+wrong on the machine it shipped from — `$HOME` is `/Users/noahgoodrich`. `_borg_reap_worktrees` opens with
+`[ -d "$wt_base" ] || return 0`, so it returned immediately for every registered repo. The hourly LaunchAgent has
+run and removed nothing since `6501294` (2026-06-10, ~3.5 months) while 15 real borg worktrees accumulated across
+9 repos under the correct path. Nothing in `borg.zsh`, `install.sh` or any hook sets the variable — the only
+assignments in the tree are in `tests/reap_worktrees.bats` and `tests/cli_contract.bats`, whose line 968 *comments*
+that the real default "is always overridden." Third instance of the pattern in CLAUDE.md's Learned list, beside the
+`BORG_REGISTRY` and `XDG_CONFIG_HOME` entries: **a test that supplies the value the production path is supposed to
+derive proves nothing about production.**
+
+This does not overturn review point 4 — it changes what that point is an argument for. The 27 hand-made worktrees
+really are outside the reaper's reach today, so Option A's reaper change really would be a data-loss vector billed
+"Breaks: Nothing." But the mechanism is not "a strict boundary traded for a loose one." It is that
+`git worktree list` would **switch a dead code path live and point it at 31 directories in the same change**, with
+no observation of the reaper's real behaviour in between. That is a strictly worse starting position than the
+review assumed, and it makes the §7 prohibition a sequencing constraint rather than a preference.
+
+Fixed separately and first in **PR #232** (`fix/reaper-state-dir-default`), which is a prerequisite to Option A
+rather than a part of it: default derived from `${XDG_STATE_HOME:-$HOME/.local/state}`, matching `install.sh:231-232`
+and `borg.zsh:2482` so the reaper cannot scan a directory `borg doctor` does not report on; the same literal fixed
+on the **writer** side in `agents/borg-nanoprobe.md` (4 occurrences), since a reader-only fix leaves every
+nanoprobe worktree permanently out of scope; and 4 tests that assert the default with the variable unset,
+mutation-verified red against the old literal. Blast radius was computed read-only before merge rather than
+discovered after: 10 of 17 worktrees in scope on the first live run, all clean-tree, none losing work —
+`git worktree remove` deletes the directory and not the branch, and both detached-HEAD worktrees resolve to commits
+reachable from `origin/feat/olf-ingestion-trd`.
+
 ## 6. Open questions — decisions, not analysis
 
-1. **Cross-repo stacks.** Where does a manifest spanning two repos live? One home repo (blind from the other side)
-   or two copies (the duplication this repo has been bitten by twice)? Review point 6 is unanswered and it blocks B.
+1. ~~**Cross-repo stacks.**~~ **RULED 2026-09-28: the apex issue's repo is home, and the other side resolves by
+   slug.** The question as posed was a false binary. A manifest has exactly ONE authoritative copy, in the repo
+   that owns its apex issue — so there is no duplication to pay for. The other repo is not reached by a second
+   file; it is reached **by reference**, because the rows already carry their own `owner/repo` slug and the apex is
+   an issue number, which makes `owner/repo#apex` a complete address. borg standing in `~/dev/infrastructure`
+   already computes `repository_slug()` → `Ontra-ai/infrastructure`; what is missing is a **resolver** that answers
+   "which stacks have rows for this slug", not a copy. This is also the only one of the three options consistent
+   with §7's third bullet, which forbids keeping a copy and requires reading the stack JSON through an adapter.
+   Review point 6 is answered and **B is unblocked on this axis** — though see Q2, which it does not settle.
 2. **Does the stack manifest land on `main` at creation**, before its PRs exist? That is a change to how stacks
    start, not just to a script.
 3. **Who lands the orphaned manifests** currently untracked in the main checkout — and which copy is authoritative,
@@ -178,10 +224,12 @@ What did not:
   union-read-with-byline change to that same function, described in Option A (§4) — it gets the outcome with zero
   writes and no renames.
 - **Do not give the reaper `git worktree list`** without first replacing the `BORG_WORKTREE_STATE_DIR` boundary
-  with something equally strict. 27 hand-made worktrees, some carrying unpushed commits, are protected by exactly
-  that basename check today. **Settled by** either leaving `lib/reaper.sh` `_borg_reap_worktrees` untouched when
-  Option A lands (the default, and what this directive recommends), or by a separate directive that specifies the
-  replacement boundary and its test before any code moves.
+  with something equally strict. 27 hand-made worktrees, some carrying unpushed commits, are outside exactly that
+  basename check today. **Sharpened by §5a:** that boundary is currently *inert*, not merely narrow, so the change
+  would switch a dead code path live and widen it to 31 directories at once. **Settled by** either leaving
+  `lib/reaper.sh` `_borg_reap_worktrees` untouched when Option A lands (the default, and what this directive
+  recommends), or by a separate directive that specifies the replacement boundary and its test before any code
+  moves — and in either case not before PR #232 has landed and the reaper has been observed doing real work once.
 - **Do not duplicate the stack manifest into a borg manifest.** Two homes for merge order is the failure this repo
   has already paid for twice — three copies of one PR status in an apex, and a manifest key read off the wrong CLI
   version. If borg should see stack state, it should **read** the stack JSON via an adapter, not keep a copy.
