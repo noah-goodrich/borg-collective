@@ -239,5 +239,39 @@ reachable from `origin/feat/olf-ingestion-trd`.
 Full transcript — four investigation angles with file:line citations, the option survey, and the complete
 eight-point teardown — is in `docs/plans/directives/assets/2026-09-28-worktree-identity-retro-evidence.md`.
 
+### 8a. The state audit this retro triggered
+
+`docs/plans/directives/assets/2026-09-28-state-audit-adversarial.md`, added 2026-09-28.
+
+The retro's §1 diagnosis — *three systems, three keys* — prompted the wider question of whether borg's
+JSON-and-filesystem state wants a real database, given cairn was decommissioned two months earlier. The audit answers
+**no, and the engine is not the variable**: auto-memory (markdown on a filesystem) is failing the same pre-registered
+metric cairn (Postgres + pgvector) failed, at 0.129 reads/session against a 0.2 bar. It censuses every store borg
+touches — including the six it does not own — and finds **ten of sixteen `.borg/` subdirectory names have no code
+reader at all**, one of which, `.borg/knowledge/`, is cairn's own export and is still named in `CLAUDE.md`'s
+Architecture Rules as a place to grep for prior decisions.
+
+It carries a second blind adversarial review, and it **breaks two of this directive's working assumptions**:
+
+1. **"State travels with the branch" holds in exactly one repo.** Measured: borg-collective tracks 1220 files under
+   `.borg/`, dotfiles 3, and every other sampled repo tracks **zero** — including three that ignore only
+   `.borg/state.json` and could have tracked the rest. So `.borg/` is de facto machine-local everywhere except the
+   repo that builds borg, and any argument from git-distribution generalizes one special case.
+2. **Option A's checkpoint union-read is a palliative, and the audit says so plainly.** The collision it reconciles is
+   a *writer-key* defect: `skills/borg-link-up/SKILL.md` already carries a collision guard, and that guard is scoped
+   to the DIRECTORY — two sessions in two worktrees each check their own store, each find the name free, and both
+   write it. The same unit error as this directive's §1, one level further down. The audit's first recommended fix is
+   therefore at the writer, not the reader.
+
+Its standing recommendation is four steps, **none of which is a storage-engine decision**: fix the checkpoint key at
+the writer; ship a reader-census contract test; retire the ten unread stores (keeping `.borg/knowledge/`'s files but
+deleting the instruction to grep them); consolidate the two machine-local roots with a retention policy. Postgres and
+a second markdown vault are refused outright; SQLite is deferred until those four are shown insufficient.
+
+Part 7 also records that the **board that would have consumed all of this already exists as three pending directives**
+(`2026-08-11-viz-1-awaiting-you-tier`, `-viz-2-spine-generator`, `-viz-3-cross-repo-chains`) and that `story.json`,
+their input, has had no generator and no write since 2026-07-28. Ten stores nothing reads, one store nothing writes:
+the same defect from both ends.
+
 Produced by a 5-agent sweep: borg data model, repo convention, observed damage, design synthesis, and a blind
 adversarial review that never saw the design's reasoning.
