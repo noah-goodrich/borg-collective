@@ -39,14 +39,25 @@ _borg_should_reap() {
 # ── Nanoprobe worktree reaper ─────────────────────────────────────────────────
 #
 # Borg-managed worktrees live at:
-#   /Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug>
+#   ${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees/<repo-basename>/<slug>
 #
 # A worktree is considered stale when its branch has been merged into the repo's
 # default branch OR when the worktree directory's mtime is older than
 # BORG_REAP_STALE_HOURS. Only worktrees under the borg state dir are ever
 # touched — non-borg worktrees are completely ignored.
 
-BORG_WORKTREE_STATE_DIR="${BORG_WORKTREE_STATE_DIR:-/Users/noah/.local/state/borg/worktrees}"
+# DERIVED, NEVER HARDCODED. This default shipped as a literal `/Users/noah/...` on 2026-06-10
+# (6501294) and was wrong on the machine it shipped from -- $HOME is /Users/noahgoodrich -- so
+# `_borg_reap_worktrees` hit its `[ -d "$wt_base" ] || return 0` guard on every repo and the
+# hourly LaunchAgent was a no-op for ~3.5 months while 15 real worktrees accumulated under the
+# correct path. Nothing in borg.zsh, install.sh or any hook sets this variable: the only
+# assignments in the tree are in tests, which is precisely why the suite stayed green. Same class
+# as the BORG_REGISTRY and XDG_CONFIG_HOME entries under Learned in CLAUDE.md -- a test that
+# supplies the value the production path is supposed to derive proves nothing about production.
+#
+# The expression matches install.sh:231-232 and borg.zsh:2482 (cmd_doctor's `state_dir`) exactly,
+# so the reaper cannot read a directory `borg doctor` does not report on.
+BORG_WORKTREE_STATE_DIR="${BORG_WORKTREE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees}"
 
 # Predicate: is this worktree stale?
 # Args: <repo_path> <worktree_path>
