@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -275,3 +276,77 @@ def test_tmux_window_exists_false_when_tmux_binary_missing(monkeypatch, isolated
 def test_tmux_window_exists_matches_exact_name_not_substring(monkeypatch, tmp_path, isolated_env):
     _mock_tmux(monkeypatch, tmp_path, 'echo "troth-old"\nexit 0')
     assert shell.tmux_window_exists("troth") is False
+
+
+# ── git_common_dir ───────────────────────────────────────────────────────────
+#
+# Against REAL git repositories and REAL linked worktrees, never a stubbed `git`. The whole value of
+# this function is an empirical claim about what `git rev-parse` prints from two different kinds of
+# directory, and a stub would just replay whatever the author believed about that -- the same trap
+# borg_core/manifest/test_shell.py's `_git_worktree` docstring records paying for once.
+
+
+def _git_repository(root, name):
+    """A real git repository under tmp_path, with one commit so a worktree can be added."""
+    directory = root / name
+    directory.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q"], cwd=str(directory), check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "root"],
+        cwd=str(directory),
+        check=True,
+        capture_output=True,
+    )
+    return str(directory)
+
+
+def _git_worktree(repository, path, branch):
+    """A REAL linked worktree, whose `.git` is a file containing `gitdir: ...`."""
+    subprocess.run(
+        ["git", "worktree", "add", "-q", "-b", branch, str(path)],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    return str(path)
+
+
+def test_git_common_dir_is_identical_from_a_checkout_and_its_linked_worktree(tmp_path):
+    # THE ENTIRE POINT OF THE FIELD. If these two strings differ, every group is a group of one and
+    # the union read is inert -- which is exactly what a bare `--git-common-dir` (no
+    # `--path-format=absolute`) produces, since it answers a relative ".git" from the checkout.
+    repository = _git_repository(tmp_path, "sp")
+    worktree = _git_worktree(repository, tmp_path / "sp-olf", "feat/olf")
+
+    from_checkout = shell.git_common_dir(repository)
+    from_worktree = shell.git_common_dir(worktree)
+
+    assert from_checkout == from_worktree
+    assert from_checkout is not None
+    assert os.path.isabs(from_checkout)
+
+
+def test_git_common_dir_differs_between_two_independent_clones(tmp_path):
+    first = _git_repository(tmp_path, "sp")
+    second = _git_repository(tmp_path, "sp-elsewhere")
+    assert shell.git_common_dir(first) != shell.git_common_dir(second)
+
+
+def test_git_common_dir_is_none_outside_a_repository(tmp_path):
+    plain = tmp_path / "not-a-repo"
+    plain.mkdir()
+    assert shell.git_common_dir(str(plain)) is None
+
+
+def test_git_common_dir_is_none_for_a_missing_directory(tmp_path):
+    assert shell.git_common_dir(str(tmp_path / "gone")) is None
+
+
+def test_git_common_dir_resolves_from_a_subdirectory_of_a_repository(tmp_path):
+    # Unlike `manifest.shell.repository_slug`, which deliberately refuses a plain subdirectory to
+    # avoid lending it the parent's slug, the common dir of a subdirectory IS the parent's -- and
+    # that is correct here, because a subdirectory genuinely is part of that clone's working state.
+    repository = _git_repository(tmp_path, "sp")
+    nested = os.path.join(repository, "packages", "web")
+    os.makedirs(nested)
+    assert shell.git_common_dir(nested) == shell.git_common_dir(repository)

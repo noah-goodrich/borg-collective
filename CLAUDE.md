@@ -262,6 +262,43 @@ docs/
   borg source tree.
 - **CLI structure mirrors dev.sh**: `set -e`, case dispatch, colored output, `cmd_*` naming
 - **Registry writes are atomic**: write to tmp file, `mv` to final path
+- **A worktree is a VIEW of a repo, and `repo` is the key that says so**: `borg add` used to identify
+  a project by directory basename and nothing else (`registry/cli.py`'s `name = _basename(ppath)`,
+  with no git call in the add path), so a git worktree was not a view of a project, it WAS one —
+  its own `PROJECT_PLAN.md` slot, its own `.borg/checkpoints`, its own `state.json`, invisible to
+  its parent. `build_add_entry` now emits a `repo` field: the absolute
+  `git rev-parse --path-format=absolute --git-common-dir`, which is byte-identical from a main
+  checkout and from every linked worktree of it. **`--path-format=absolute` is load-bearing** — a
+  bare `--git-common-dir` answers a relative `.git` from the checkout, so the two values that must
+  compare equal would be the two that differ. It is the COMMON DIR and not
+  `manifest.shell.repository_slug`'s `owner/repo` on purpose: the slug answers "which stack declares
+  rows here", the common dir answers "where did this session's state go", and two independent clones
+  of one GitHub repo genuinely are separate working state. **Additive, per expand → migrate →
+  contract**: `link.core.repo_sources` resolves a missing or null `repo` to a group of one, which is
+  exactly the pre-change behaviour, so no existing entry is read by a rule it was not written to
+  satisfy. `python3 -m borg_core.registry.cli backfill-repo [--dry-run]` is the migrate phase
+  (idempotent, only ever fills a hole, never overwrites a hand-corrected value). **No contract phase
+  is scheduled** — a registered directory outside any git repository has no common dir, so null is a
+  permanently legal value, not one to eliminate.
+- **Checkpoints are UNION-READ across a repo group, never merged on disk**: `read_checkpoints` takes
+  the group rather than a path, because `borg_core/link/shell.py`'s readers return filenames and
+  name-sort them — so "the latest checkpoint" used to be a different document depending on which
+  directory you asked about (measured: 4 stores for one repo, 3 filenames existing twice with
+  different bodies, two of those written in the same minute by two sessions). **Do not consolidate
+  the stores by moving files**: a merge-write is data loss on exactly those collisions. **Filename
+  equality is not document equality, and this cuts both ways.** snowflake-permissions gitignores
+  `.borg/`, so its collisions are independent writes and both sides must survive, bylined
+  (`2026-09-25-1704.md @snowflake-permissions-olf`). borg-collective TRACKS `.borg/checkpoints/` via
+  its own `.gitignore` carve-out, so a worktree of it holds 115 colliding filenames of which **114
+  are the same git-tracked document** — a union trusting filenames renders this repo's own page with
+  114 duplicate rows and pushes the real history off it. So `core.dedupe_checkpoints` collapses rows
+  by a CONTENT digest, the same fact `manifest.shell._manifest_identity` already hashes bodies for
+  and for the same one-line reason: a git worktree is the live case. The hash is **lazy and
+  bounded** — charged only once a filename has already been kept, each row hashed at most once, the
+  walk stopped at the cap — so a collision-free group pays nothing and the 115-collision group costs
+  ~19ms, not 230 reads. The byline appears only when the rows actually being printed span more than
+  one project; an unreadable body yields no identity and its row is KEPT, because a permissions
+  error must not render as an empty history.
 - **Skills do the thinking**: Claude proposes, developer validates. Minimum cognitive load.
 - **Debriefs replace summaries**: LLM analysis at session stop, not regex extraction
 - **Boundaries are speed bumps**: one-keystroke confirmations, not hard blocks

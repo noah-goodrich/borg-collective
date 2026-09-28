@@ -368,11 +368,167 @@ def test_sort_assimilated_is_filename_descending_with_a_tie_break():
     assert result[1]["path"] == "/y2"
 
 
-def test_sort_checkpoints_is_name_descending_and_capped():
+# ── repo grouping + checkpoint ordering ──────────────────────────────────────
+#
+# `sort_checkpoints` was retired here. Its one rule -- name-descending, capped -- is unchanged and
+# now lives in `order_checkpoints` + `label_checkpoints`, split because the cap is a display concern
+# and the ordering is not: `read_latest_checkpoint_head` needs the full ordering to find the winner's
+# directory and must not see a capped list.
+
+
+def test_order_checkpoints_is_name_descending():
     names = ["2026-08-01.md", "2026-08-05.md", "2026-08-03.md", "2026-08-04.md"]
-    assert core.sort_checkpoints(names) == ["2026-08-05.md", "2026-08-04.md", "2026-08-03.md"]
-    assert core.sort_checkpoints(names, limit=1) == ["2026-08-05.md"]
-    assert core.sort_checkpoints([]) == []
+    found = [(n, "p") for n in names]
+    assert [fn for fn, _ in core.order_checkpoints(found)] == [
+        "2026-08-05.md",
+        "2026-08-04.md",
+        "2026-08-03.md",
+        "2026-08-01.md",
+    ]
+    assert core.order_checkpoints([]) == []
+
+
+def test_label_checkpoints_caps_and_omits_the_byline_for_one_project():
+    found = [(f"2026-08-0{n}.md", "p") for n in (5, 4, 3, 1)]
+    assert core.label_checkpoints(found) == ["2026-08-05.md", "2026-08-04.md", "2026-08-03.md"]
+    assert core.label_checkpoints(found, limit=1) == ["2026-08-05.md"]
+    assert core.label_checkpoints([]) == []
+
+
+def test_label_checkpoints_adds_the_byline_only_when_the_group_is_ambiguous():
+    single = [("2026-08-05.md", "sp")]
+    assert core.label_checkpoints(single) == ["2026-08-05.md"]
+
+    spanning = [("2026-08-05.md", "sp"), ("2026-08-04.md", "sp-olf")]
+    assert core.label_checkpoints(spanning) == ["2026-08-05.md @sp", "2026-08-04.md @sp-olf"]
+
+
+def test_order_checkpoints_breaks_a_filename_collision_on_project_name():
+    # THE MEASURED HARM: one filename in two stores with different bodies. Both rows survive, in an
+    # order set by the data rather than by collection order -- reversing the input must not move it.
+    collision = [("2026-09-25-1704.md", "sp-olf"), ("2026-09-25-1704.md", "sp")]
+    assert core.order_checkpoints(collision) == [
+        ("2026-09-25-1704.md", "sp"),
+        ("2026-09-25-1704.md", "sp-olf"),
+    ]
+    assert core.order_checkpoints(list(reversed(collision))) == core.order_checkpoints(collision)
+    # label_checkpoints does not sort -- it labels what it is handed, which is why the two are
+    # separate functions and why the caller composes them in this order.
+    assert core.label_checkpoints(core.order_checkpoints(collision)) == [
+        "2026-09-25-1704.md @sp",
+        "2026-09-25-1704.md @sp-olf",
+    ]
+
+
+def test_repo_sources_returns_the_focus_alone_when_the_entry_has_no_repo():
+    # The expand phase: a pre-backfill entry must behave exactly as it did before the field existed.
+    projects = {"sp": {"path": "/dev/sp"}, "sp-olf": {"path": "/dev/sp-olf"}}
+    assert core.repo_sources("sp", projects) == [("sp", "/dev/sp")]
+
+
+def test_repo_sources_groups_every_worktree_of_one_clone_focus_first():
+    common = "/dev/sp/.git"
+    projects = {
+        "sp-olf": {"path": "/dev/sp-olf", "repo": common},
+        "sp": {"path": "/dev/sp", "repo": common},
+        "sp-e2e": {"path": "/dev/sp-e2e", "repo": common},
+        "other": {"path": "/dev/other", "repo": "/dev/other/.git"},
+    }
+    assert core.repo_sources("sp-olf", projects) == [
+        ("sp-olf", "/dev/sp-olf"),
+        ("sp", "/dev/sp"),
+        ("sp-e2e", "/dev/sp-e2e"),
+    ]
+
+
+def test_repo_sources_does_not_group_two_independent_clones_of_one_github_repo():
+    # Distinct clones have distinct common dirs, and their working state IS genuinely separate --
+    # this is why the key is the common dir and not the owner/repo slug.
+    projects = {
+        "sp": {"path": "/dev/sp", "repo": "/dev/sp/.git"},
+        "sp-clone": {"path": "/tmp/sp", "repo": "/tmp/sp/.git"},
+    }
+    assert core.repo_sources("sp", projects) == [("sp", "/dev/sp")]
+
+
+def test_repo_sources_ordering_is_independent_of_registry_key_order():
+    common = "/dev/sp/.git"
+    forward = {
+        "sp": {"path": "/dev/sp", "repo": common},
+        "sp-a": {"path": "/dev/sp-a", "repo": common},
+        "sp-b": {"path": "/dev/sp-b", "repo": common},
+    }
+    backward = dict(reversed(list(forward.items())))
+    assert core.repo_sources("sp", forward) == core.repo_sources("sp", backward)
+
+
+def test_dedupe_checkpoints_collapses_identical_bodies_across_stores():
+    # THE borg-collective CASE: `.borg/checkpoints/` is git-tracked, so a worktree holds the SAME
+    # document under the same name. One row, not two, and the page is unchanged by the sibling.
+    ordered = [("2026-09-18.md", "bc"), ("2026-09-18.md", "bc-shim")]
+    bodies = {("2026-09-18.md", "bc"): "same", ("2026-09-18.md", "bc-shim"): "same"}
+    assert core.dedupe_checkpoints(ordered, lambda f, p: bodies[(f, p)]) == [("2026-09-18.md", "bc")]
+
+
+def test_dedupe_checkpoints_keeps_both_when_the_bodies_differ():
+    # THE snowflake-permissions CASE: `.borg/` is ignored, so the two names are independent writes.
+    ordered = [("2026-09-25.md", "sp"), ("2026-09-25.md", "sp-olf")]
+    bodies = {("2026-09-25.md", "sp"): "parent", ("2026-09-25.md", "sp-olf"): "child"}
+    assert core.dedupe_checkpoints(ordered, lambda f, p: bodies[(f, p)]) == ordered
+
+
+def test_dedupe_checkpoints_does_not_hash_a_unique_filename():
+    # THE COST CONTRACT. `identity` is a file read; a group with no collisions must not pay for one.
+    ordered = [("2026-09-25.md", "sp"), ("2026-09-18.md", "sp-olf")]
+    calls = []
+
+    def identity(filename, project):
+        calls.append((filename, project))
+        return "x"
+
+    assert core.dedupe_checkpoints(ordered, identity) == ordered
+    assert calls == []
+
+
+def test_dedupe_checkpoints_hashes_each_row_at_most_once():
+    ordered = [("a.md", "p1"), ("a.md", "p2"), ("a.md", "p3")]
+    calls = []
+
+    def identity(filename, project):
+        calls.append(project)
+        return project  # all distinct, so all three are kept
+
+    assert core.dedupe_checkpoints(ordered, identity) == ordered
+    assert sorted(calls) == ["p1", "p2", "p3"]
+    assert len(calls) == len(set(calls))
+
+
+def test_dedupe_checkpoints_stops_at_the_limit():
+    ordered = [(f"2026-09-{n:02d}.md", "sp") for n in range(1, 10)]
+    assert len(core.dedupe_checkpoints(ordered, lambda f, p: "x", limit=3)) == 3
+    assert core.dedupe_checkpoints(ordered, lambda f, p: "x", limit=0) == []
+
+
+def test_dedupe_checkpoints_keeps_an_unreadable_row_rather_than_swallowing_it():
+    # A permissions error must not render as an empty history.
+    ordered = [("a.md", "p1"), ("a.md", "p2")]
+    assert core.dedupe_checkpoints(ordered, lambda f, p: None) == ordered
+
+
+def test_dedupe_checkpoints_keeps_a_duplicate_of_an_unreadable_row():
+    # The first row is unreadable, the second is readable: with nothing to compare against, the
+    # second is kept. Dropping it would be claiming an equality that was never established.
+    ordered = [("a.md", "p1"), ("a.md", "p2")]
+    digests = {"p1": None, "p2": "abc"}
+    assert core.dedupe_checkpoints(ordered, lambda f, p: digests[p]) == ordered
+
+
+def test_repo_sources_skips_entries_with_no_path():
+    projects = {
+        "sp": {"path": "/dev/sp", "repo": "/dev/sp/.git"},
+        "ghost": {"repo": "/dev/sp/.git"},
+    }
+    assert core.repo_sources("sp", projects) == [("sp", "/dev/sp")]
 
 
 PLAN = """# Project Plan: X

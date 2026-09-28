@@ -28,6 +28,7 @@ is no cycle.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from borg_core import timefmt
@@ -434,13 +435,143 @@ def sort_assimilated(entries: list[dict]) -> list[dict]:
     )
 
 
-def sort_checkpoints(filenames: list[str], limit: int = 3) -> list[str]:
-    """Newest-first by NAME, capped, mirroring `find ... | sort -r | head -3` (borg.zsh:466).
+def repo_sources(name: str, projects: dict) -> list[tuple[str, str]]:
+    """The `(project_name, path)` pairs that are worktrees of ONE git clone, focus first.
 
-    By name, not mtime: checkpoint filenames are ISO-stamped, and a fresh `git clone` gives every
-    file the same checkout mtime. The shell already sorted by name here; this only makes it explicit.
+    The group key is the `repo` field `borg add` writes -- the absolute `--git-common-dir`, which is
+    byte-identical from a main checkout and from every linked worktree of it. Two entries share a
+    group exactly when they are the same clone; two independent clones of the same GitHub repo do
+    NOT, and should not, since their working state is genuinely separate. That is also why the key
+    is the common dir and not the `owner/repo` slug `manifest.shell.repository_slug` computes: the
+    slug is the right key for asking "which stack declares rows here" and the wrong one for asking
+    "where did this session's checkpoints go".
+
+    RETURNS THE FOCUS ALONE when its entry has no `repo`. This is the expand phase of
+    expand -> migrate -> contract: every registry entry written before the field existed reads as a
+    group of one, which is exactly its behaviour today, so no artifact is read by rules it was not
+    written to satisfy. Backfill (`borg_core.registry.cli backfill-repo`) is the migrate phase; no
+    contraction is scheduled, because a directory outside any git repository has no common dir and
+    must keep resolving to itself forever.
+
+    FOCUS FIRST, and the rest by name, so the ordering is a function of the registry and not of dict
+    insertion order -- `order_checkpoints` breaks a filename tie on project name, and a tiebreak that
+    depended on JSON key order would make "the latest checkpoint" unstable across a registry rewrite.
     """
-    return sorted(filenames, reverse=True)[:limit]
+    entry = (projects or {}).get(name) or {}
+    here = str(entry.get("path") or "")
+    repo = str(entry.get("repo") or "")
+    if not repo:
+        return [(name, here)] if here else []
+
+    siblings = []
+    for other, other_entry in (projects or {}).items():
+        if other == name:
+            continue
+        other_entry = other_entry or {}
+        if str(other_entry.get("repo") or "") != repo:
+            continue
+        other_path = str(other_entry.get("path") or "")
+        if other_path:
+            siblings.append((other, other_path))
+
+    head = [(name, here)] if here else []
+    return head + sorted(siblings)
+
+
+def order_checkpoints(found: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """Every `(filename, project_name)` across a repo group, newest first.
+
+    BY NAME, NOT MTIME, and that rule is inherited verbatim from the `sort_checkpoints` this
+    replaces, which mirrored `find ... | sort -r | head -3` (borg.zsh:466): checkpoint filenames are
+    ISO-stamped, and a fresh `git clone` gives every file the same checkout mtime, so mtime is the
+    less trustworthy of the two even though it looks like the more precise one.
+
+    THE TIEBREAK IS THE POINT OF THIS FUNCTION. One repo's stores held three filenames TWICE with
+    different bodies (`2026-09-18-2215.md`, `2026-09-24-1000.md`, `2026-09-25-1704.md`), two of them
+    written in the same minute by two sessions on the same repo. A pure name sort leaves those two
+    rows adjacent and in an order set by whatever the caller happened to collect first, which is how
+    "the latest checkpoint" came to depend on which directory you asked about. Breaking the tie on
+    project name makes the answer a function of the data alone. It does NOT claim the winner is the
+    better document -- neither is -- only that the same registry always yields the same winner, and
+    that `label_checkpoints` says out loud which one it was.
+
+    Composed as two stable sorts rather than one key: project ascending, then filename descending.
+    A single `reverse=True` over a tuple key would reverse the project tiebreak too.
+    """
+    by_project = sorted(found, key=lambda pair: pair[1])
+    return sorted(by_project, key=lambda pair: pair[0], reverse=True)
+
+
+def dedupe_checkpoints(
+    ordered: list[tuple[str, str]],
+    identity: Callable[[str, str], str | None],
+    limit: int = 3,
+) -> list[tuple[str, str]]:
+    """The first `limit` DISTINCT documents in an ordered group, newest first.
+
+    TWO STORES HOLDING ONE FILENAME ARE NOT AUTOMATICALLY TWO CHECKPOINTS, and assuming they were is
+    the bug this function exists to prevent. Measured across the live registry's three repo groups:
+    snowflake-permissions ignores `.borg/`, so its 3 colliding filenames are independent untracked
+    writes with genuinely different bodies and both sides must survive. borg-collective TRACKS
+    `.borg/checkpoints/` (its own .gitignore carve-out), so a worktree of it holds 115 colliding
+    filenames of which 114 are the same git-tracked document -- a union that trusted filenames would
+    render this repo's own page with 114 duplicate rows and push the real history out of the top 3.
+    Same fact `manifest.shell._manifest_identity` already hashes bodies for, with the same one-line
+    reason: a git worktree is the live case.
+
+    `identity` MAPS A ROW TO ITS CONTENT IDENTITY, and None means "unreadable". An unreadable row is
+    KEPT, not dropped: a checkpoint that cannot be read is still evidence that a checkpoint exists,
+    and swallowing it would make a permissions error look like an empty history. The callable is
+    injected so this walk stays pure and testable without a filesystem; `link.shell` supplies the
+    hashing reader.
+
+    LAZY AND BOUNDED, which is why the cap belongs to this function rather than being applied after
+    it. `identity` costs a file read, so it is called ONLY once a filename has already been kept --
+    a unique filename is admitted without touching the disk -- each row is hashed at most once, and
+    the walk stops at `limit`. On the 115-collision group that is a handful of reads, not 230.
+    """
+    digests: dict[tuple[str, str], str | None] = {}
+
+    def digest_of(row: tuple[str, str]) -> str | None:
+        if row not in digests:
+            digests[row] = identity(row[0], row[1])
+        return digests[row]
+
+    kept: list[tuple[str, str]] = []
+    kept_by_name: dict[str, list[tuple[str, str]]] = {}
+    for row in ordered:
+        if len(kept) >= limit:
+            break
+        siblings = kept_by_name.get(row[0])
+        if siblings is None:
+            kept_by_name[row[0]] = [row]
+            kept.append(row)
+            continue
+        mine = digest_of(row)
+        if mine is not None and any(digest_of(other) == mine for other in siblings):
+            continue
+        siblings.append(row)
+        kept.append(row)
+    return kept
+
+
+def label_checkpoints(ordered: list[tuple[str, str]], limit: int = 3) -> list[str]:
+    """The capped display labels for an ordered group -- `<filename>` or `<filename> @<project>`.
+
+    THE BYLINE APPEARS ONLY WHEN THE ROWS BEING PRINTED ARE ACTUALLY AMBIGUOUS -- decided on the
+    rows that survive deduping, not on how many siblings exist or how many files were found. A
+    sibling worktree with no `.borg/checkpoints` contributes no rows and earns no byline; a sibling
+    holding 114 byte-identical copies of tracked checkpoints collapses into the rows that were
+    already there and earns none either. Both matter: 7 of the live registry's 25 entries are in a
+    repo group (3 groups), and only one of those groups holds documents that genuinely differ.
+    So a reader learns the byline the first time it means something.
+
+    Stays `list[str]`, which is why DOCUMENT_VERSION does not move. The JSON `checkpoints` key keeps
+    its shape and `render.py` keeps printing the string it is handed; the byline rides inside the
+    element rather than beside it.
+    """
+    multi = len({project for _, project in ordered}) > 1
+    return [f"{fn} @{project}" if multi else fn for fn, project in ordered[:limit]]
 
 
 def plan_objective(text: str) -> str:
