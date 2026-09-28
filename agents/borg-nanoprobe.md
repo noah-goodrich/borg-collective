@@ -69,7 +69,11 @@ Read the **Task** field first and gate on it:
 When the orchestrator provides a `<branch>` name, create an isolated worktree for your work.
 This keeps `main` clean and lets the orchestrator run concurrent nanoprobes against the same repo.
 
-**Standard worktree location:** `/Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug>`
+**Standard worktree location:** `${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees/<repo-basename>/<slug>`
+
+Let the shell expand that prefix -- do NOT substitute a literal home directory. `lib/reaper.sh`
+resolves `BORG_WORKTREE_STATE_DIR` from the same expression, and a worktree written to any other
+prefix is invisible to `borg reap-worktrees` forever.
 
 Where `<repo-basename>` is `${repo_path##*/}` and `<slug>` is the branch name with `/` replaced
 by `-`.
@@ -78,9 +82,9 @@ Lifecycle steps:
 
 1. **Create** — before touching any files:
    ```
-   mkdir -p /Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug>
+   mkdir -p ${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees/<repo-basename>/<slug>
    git -C <repo_path> worktree add \
-       /Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug> \
+       ${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees/<repo-basename>/<slug> \
        -b <branch>
    ```
 2. **Work** — read, edit, and commit entirely inside the worktree path. Use absolute paths to
@@ -90,7 +94,7 @@ Lifecycle steps:
    relevant issue. Do NOT merge.
 4. **Remove** — after a successful push:
    ```
-   git -C <repo_path> worktree remove /Users/noah/.local/state/borg/worktrees/<repo-basename>/<slug>
+   git -C <repo_path> worktree remove ${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees/<repo-basename>/<slug>
    git -C <repo_path> worktree prune
    ```
 
