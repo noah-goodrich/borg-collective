@@ -269,9 +269,24 @@ run_zsh_borg() {
     # turns this red, which then invites re-deriving the constant instead of asking what moved. The
     # old name lives on as a die-arm in the dispatch and a REMOVED tombstone, and neither is inside
     # the COMMANDS slice this awk counts.
+    #
+    # 26 SINCE 2026-09-28, AND THIS IS THE FIRST VERB EVER ADDED — which is why the sentence above
+    # said none had been. `checkpoint-name` is AC1 of 2026-09-28-state-hygiene-reader-census: the
+    # checkpoint filename now comes from code instead of from a `date` call in
+    # skills/borg-link-up/SKILL.md, because minute resolution plus a directory-scoped existence
+    # guard let two worktrees of one clone write the same filename with different bodies (measured:
+    # three such pairs, two inside the same minute).
+    #
+    # THE CRITERION IS STILL MET, and that is why the constant moves rather than the assertion.
+    # AC1 asked for "net one command shorter than at plan start" — 27 at plan start, so anything
+    # at or below 26 satisfies it, and the comment above already records that this is a FLOOR on
+    # shrinkage and not a target. Moving 25 -> 26 is the honest bookkeeping for a deliberate
+    # addition; widening the assertion to a range would delete the very property that made this
+    # test catch the addition in the first place. It went red, it asked which entry moved, and the
+    # answer is on the line above. Keep it exact.
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
     [ "$status" -eq 0 ]
-    [ "$output" = "25" ]
+    [ "$output" = "26" ]
 }
 
 # The count alone reaches 26 if someone deletes `doctor` instead of `recon` — and four dispatch
