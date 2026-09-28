@@ -55,8 +55,12 @@ _borg_should_reap() {
 # as the BORG_REGISTRY and XDG_CONFIG_HOME entries under Learned in CLAUDE.md -- a test that
 # supplies the value the production path is supposed to derive proves nothing about production.
 #
-# The expression matches install.sh:231-232 and borg.zsh:2482 (cmd_doctor's `state_dir`) exactly,
-# so the reaper cannot read a directory `borg doctor` does not report on.
+# The expression is byte-identical to the one install.sh uses for its usage-watch paths and to
+# cmd_doctor's `state_dir` in borg.zsh, so the reaper cannot read a directory `borg doctor` does not
+# report on. NAMED, NOT PINNED: `docs/plans/directives/2026-08-31-retire-the-line-pin.md` retires
+# `file:NNN` from prose repo-wide, and this comment earned the lesson the hard way -- the first
+# draft pinned two line numbers, and review found the same pin resolving to 2496 on this branch and
+# 2482 on another, both correct for where they were read. Grep the expression instead.
 BORG_WORKTREE_STATE_DIR="${BORG_WORKTREE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees}"
 
 # Predicate: is this worktree stale?
