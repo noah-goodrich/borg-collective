@@ -5,6 +5,7 @@ Mirrors the parity contract pinned in tests/cli_contract.bats, including the KNO
 """
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -222,3 +223,143 @@ def test_basename_helper_mirrors_zsh_pattern_removal():
 def test_env_path_isolation_marker(isolated_env):
     # Sanity check the fixture itself isolates PATH so tmux lookups can't touch a real session.
     assert os.environ["PATH"] == "/nonexistent-bin-dir"
+
+
+# ── cmd_backfill_repo ────────────────────────────────────────────────────────
+#
+# `isolated_env` sets PATH to a nonexistent directory so no real tmux is reachable, which also hides
+# `git`. That is right for the `add` tests above -- they assert registration, not identity -- and it
+# is why these use their own fixture: backfill's whole job is to resolve a real common dir, and a
+# suite that hid `git` from it would pass while proving nothing, the same shape as the reaper default
+# that stayed green for three months by never running in production's configuration.
+
+
+@pytest.fixture()
+def git_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("BORG_DIR", str(tmp_path / "borg-dir"))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("BORG_REGISTRY", raising=False)
+    return tmp_path
+
+
+def _repository(root, name):
+    directory = root / name
+    directory.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["git", "init", "-q"], cwd=str(directory), check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "root"],
+        cwd=str(directory),
+        check=True,
+        capture_output=True,
+    )
+    return str(directory)
+
+
+def _worktree(repository, path, branch):
+    subprocess.run(
+        ["git", "worktree", "add", "-q", "-b", branch, str(path)],
+        cwd=repository,
+        check=True,
+        capture_output=True,
+    )
+    return str(path)
+
+
+def _register(name, path, **extra):
+    entry = {"path": path, "source": "cli", "summary": None}
+    entry.update(extra)
+    shell.registry_merge(name, entry)
+
+
+def test_backfill_repo_groups_a_worktree_with_its_parent(git_env, capsys):
+    repository = _repository(git_env, "sp")
+    worktree = _worktree(repository, git_env / "sp-olf", "feat/olf")
+    _register("sp", repository)
+    _register("sp-olf", worktree)
+
+    assert cli.cmd_backfill_repo() == 0
+
+    projects = shell.read_registry()["projects"]
+    assert projects["sp"]["repo"] == projects["sp-olf"]["repo"]
+    assert projects["sp"]["repo"] is not None
+    assert "filled 2" in capsys.readouterr().out
+
+
+def test_backfill_repo_is_idempotent_and_never_overwrites_a_set_value(git_env, capsys):
+    repository = _repository(git_env, "sp")
+    _register("sp", repository)
+    _register("pinned", repository, repo="/hand/corrected/.git")
+
+    cli.cmd_backfill_repo()
+    first = shell.read_registry()["projects"]
+
+    cli.cmd_backfill_repo()
+    second = shell.read_registry()["projects"]
+
+    assert first == second
+    assert second["pinned"]["repo"] == "/hand/corrected/.git"
+    assert "already set" in capsys.readouterr().out
+
+
+def test_backfill_repo_skips_an_entry_outside_any_git_repository(git_env, capsys):
+    plain = git_env / "not-a-repo"
+    plain.mkdir()
+    _register("plain", str(plain))
+
+    assert cli.cmd_backfill_repo() == 0
+
+    out = capsys.readouterr().out
+    assert "skip   plain" in out
+    assert "skipped 1" in out
+    # Null is not written over null: a no-op must not read as work.
+    assert "repo" not in shell.read_registry()["projects"]["plain"]
+
+
+def test_backfill_repo_dry_run_reports_without_writing(git_env, capsys):
+    repository = _repository(git_env, "sp")
+    _register("sp", repository)
+
+    assert cli.cmd_backfill_repo("--dry-run") == 0
+
+    out = capsys.readouterr().out
+    assert "would fill 1" in out
+    assert "repo" not in shell.read_registry()["projects"]["sp"]
+
+    cli.cmd_backfill_repo()
+    assert shell.read_registry()["projects"]["sp"]["repo"] is not None
+
+
+def test_backfill_repo_rejects_an_unknown_option(git_env):
+    with pytest.raises(SystemExit):
+        cli.cmd_backfill_repo("--force")
+
+
+def test_main_dispatches_backfill_repo(git_env):
+    repository = _repository(git_env, "sp")
+    _register("sp", repository)
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["backfill-repo"])
+    assert exc.value.code == 0
+    assert shell.read_registry()["projects"]["sp"]["repo"] is not None
+
+
+def test_main_rejects_an_unknown_registry_command(git_env, capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["frobnicate"])
+    assert "add, rm or backfill-repo" in capsys.readouterr().err
+
+
+def test_cmd_add_records_the_repo_for_a_real_repository(git_env):
+    # cmd_add's own expand-phase contract, exercised with a real `git` on PATH.
+    repository = _repository(git_env, "sp")
+    cli.cmd_add(repository)
+    assert shell.read_registry()["projects"]["sp"]["repo"] is not None
+
+
+def test_cmd_add_records_a_null_repo_outside_a_repository(git_env):
+    plain = git_env / "loose"
+    plain.mkdir()
+    cli.cmd_add(str(plain))
+    entry = shell.read_registry()["projects"]["loose"]
+    assert entry["repo"] is None
+    assert "repo" in entry

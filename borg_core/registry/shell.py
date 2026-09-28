@@ -192,6 +192,36 @@ def list_tmux_windows() -> list[str]:
     return stdout.splitlines() if returncode == 0 else []
 
 
+def git_common_dir(path: str) -> str | None:
+    """The absolute `--git-common-dir` for `path`, or None when it is not inside a git repository.
+
+    THE GROUP KEY FOR EVERY WORKTREE OF ONE CLONE. `git rev-parse --git-common-dir` answers with the
+    SHARED git directory, so a main checkout and all 31 of its linked worktrees return one identical
+    string, while an independent clone of the same GitHub repo returns its own. That is the relation
+    `borg add` never recorded: it wrote `name = basename(path)` and nothing else, so a worktree
+    became a project coequal with its parent, with its own checkpoint store and its own plan slot.
+
+    `--path-format=absolute` IS LOAD-BEARING, not tidiness. Without it git answers a bare `.git`
+    from a main checkout and an absolute path from a linked worktree -- the two forms that must
+    compare equal are then the two that differ, and every group would be a group of one from the
+    parent's side. Available since git 2.31 (2021).
+
+    None, not "", for "no repository": the caller stores this straight into the registry, and a
+    falsy-but-present `repo` would read as a group key that simply failed to match anything, rather
+    than as the absence of a key. `core.repo_sources` treats both as "resolve to yourself", so the
+    distinction costs nothing to read and keeps the JSON honest about what was knowable.
+    """
+    captured = proc.run_capture(
+        ["git", "-C", path, "rev-parse", "--path-format=absolute", "--git-common-dir"]
+    )
+    if captured is None:
+        return None
+    returncode, stdout = captured
+    if returncode != 0:
+        return None
+    return stdout.strip() or None
+
+
 def tmux_window_exists(name: str) -> bool:
     """Whether a tmux window named `name` exists in borg's session.
 

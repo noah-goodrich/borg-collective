@@ -263,8 +263,10 @@ def test_registry_with_state_uses_the_injected_now_for_the_reap_decision(isolate
 def test_readers_return_empty_for_unusable_paths(isolated_env, bad):
     assert shell.read_directives(bad) == []
     assert shell.read_assimilated(bad) == []
-    assert shell.read_checkpoints(bad) == []
-    assert shell.read_latest_checkpoint_head(bad) == ""
+    # The two checkpoint readers take a repo GROUP rather than a path, so an unusable path reaches
+    # them inside a source pair. Same guard, one level in -- see the two tests below.
+    assert shell.read_checkpoints([("p", bad)]) == []
+    assert shell.read_latest_checkpoint_head([("p", bad)]) == ""
     assert shell.read_plan(bad) is None
 
 
@@ -399,7 +401,7 @@ def test_read_checkpoints_is_name_descending_and_capped(isolated_env):
         "p",
         checkpoints=[(f"2026-08-0{n}-1000.md", f"# cp {n}\n") for n in range(1, 6)],
     )
-    assert shell.read_checkpoints(path) == [
+    assert shell.read_checkpoints([("p", path)]) == [
         "2026-08-05-1000.md",
         "2026-08-04-1000.md",
         "2026-08-03-1000.md",
@@ -407,20 +409,127 @@ def test_read_checkpoints_is_name_descending_and_capped(isolated_env):
 
 
 def test_read_checkpoints_empty_without_the_directory(isolated_env):
-    assert shell.read_checkpoints(_project(isolated_env, "bare")) == []
+    assert shell.read_checkpoints([("bare", _project(isolated_env, "bare"))]) == []
+
+
+def test_read_checkpoints_empty_for_an_empty_group(isolated_env):
+    assert shell.read_checkpoints([]) == []
+
+
+def test_read_checkpoints_skips_an_unusable_source_and_keeps_the_rest(isolated_env):
+    # A group is only as good as its worst entry, and a registry does carry dead paths. One bad
+    # source must not blank the group -- the union degrades to the stores it can actually read.
+    good = _project(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
+    assert shell.read_checkpoints([("sp", good), ("gone", "null")]) == ["2026-09-18-1200.md"]
+    assert shell.read_checkpoints([("gone", "null"), ("sp", good)]) == ["2026-09-18-1200.md"]
+
+
+def test_read_checkpoints_unions_a_repo_group_newest_first(isolated_env):
+    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
+    child = _project(isolated_env, "sp-olf", checkpoints=[("2026-09-25-1704.md", "# child\n")])
+    assert shell.read_checkpoints([("sp", parent), ("sp-olf", child)]) == [
+        "2026-09-25-1704.md @sp-olf",
+        "2026-09-18-1200.md @sp",
+    ]
+
+
+def test_read_checkpoints_keeps_both_sides_of_a_filename_collision(isolated_env):
+    # THE snowflake-permissions CASE, end to end. `.borg/` is gitignored there, so one filename in
+    # two stores is two independent writes with different bodies. NOTHING IS MOVED OR RENAMED: a
+    # merge-write would destroy one of them, so both rows are read and labelled instead.
+    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "# parent body\n")])
+    child = _project(isolated_env, "sp-olf", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
+    assert shell.read_checkpoints([("sp", parent), ("sp-olf", child)]) == [
+        "2026-09-25-1704.md @sp",
+        "2026-09-25-1704.md @sp-olf",
+    ]
+
+
+def test_read_checkpoints_collapses_a_tracked_checkpoint_copied_into_a_worktree(isolated_env):
+    # THE borg-collective CASE, end to end, and the reason a filename union alone is wrong. This
+    # repo TRACKS .borg/checkpoints/, so a worktree of it holds byte-identical copies -- measured at
+    # 114 of 115 on the live registry. They are ONE document and must render as one row, with no
+    # byline, because a sibling holding a git-tracked copy adds no information to disambiguate.
+    body = "# the same checkpoint\n"
+    parent = _project(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)])
+    worktree = _project(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
+    assert shell.read_checkpoints([("bc", parent), ("bc-shim", worktree)]) == ["2026-09-18-1200.md"]
+
+
+def test_read_checkpoints_does_not_let_duplicates_push_out_real_history(isolated_env):
+    # The failure a naive union ships: 3 tracked copies fill a 3-row window and the older real
+    # checkpoints fall off the page. Deduping first is what keeps the window meaningful.
+    body = "# tracked\n"
+    older = [(f"2026-09-1{n}-1200.md", f"# real {n}\n") for n in (1, 2, 3)]
+    parent = _project(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)] + older)
+    worktree = _project(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
+    assert shell.read_checkpoints([("bc", parent), ("bc-shim", worktree)]) == [
+        "2026-09-18-1200.md",
+        "2026-09-13-1200.md",
+        "2026-09-12-1200.md",
+    ]
+
+
+def test_read_checkpoints_keeps_both_rows_when_one_body_is_unreadable(isolated_env):
+    # An empty (or unreadable) checkpoint has no content identity, so no equality can be
+    # established and BOTH rows are kept. A permissions error or a truncated write must not silently
+    # collapse two stores into one row -- that would hide history rather than deduplicate it.
+    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "")])
+    child = _project(isolated_env, "sp-olf", checkpoints=[("2026-09-25-1704.md", "# real\n")])
+    assert shell.read_checkpoints([("sp", parent), ("sp-olf", child)]) == [
+        "2026-09-25-1704.md @sp",
+        "2026-09-25-1704.md @sp-olf",
+    ]
+
+
+def test_read_latest_checkpoint_head_follows_the_deduped_winner(isolated_env):
+    # The head must agree with the row printed first even when deduping changed which row that is.
+    body = "# the same checkpoint\n"
+    parent = _project(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)])
+    worktree = _project(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
+    sources = [("bc-shim", worktree), ("bc", parent)]
+    assert shell.read_checkpoints(sources) == ["2026-09-18-1200.md"]
+    assert shell.read_latest_checkpoint_head(sources) == body
+
+
+def test_read_checkpoints_omits_the_byline_when_only_one_store_has_any(isolated_env):
+    # A sibling worktree is registered but never checkpointed. It contributes no rows, so the page
+    # is byte-identical to a single-project registry -- ambiguity is decided on what was FOUND.
+    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
+    bare = _project(isolated_env, "sp-olf")
+    assert shell.read_checkpoints([("sp", parent), ("sp-olf", bare)]) == ["2026-09-18-1200.md"]
 
 
 def test_read_latest_checkpoint_head_caps_the_lines(isolated_env):
     body = "\n".join(f"line {n}" for n in range(1, 31)) + "\n"
     path = _project(isolated_env, "p", checkpoints=[("2026-08-01-1000.md", body)])
-    head = shell.read_latest_checkpoint_head(path, lines=20)
+    head = shell.read_latest_checkpoint_head([("p", path)], lines=20)
     assert head.split("\n")[0] == "line 1"
     assert head.split("\n")[-1] == "line 20"
     assert "line 21" not in head
 
 
 def test_read_latest_checkpoint_head_empty_without_checkpoints(isolated_env):
-    assert shell.read_latest_checkpoint_head(_project(isolated_env, "bare")) == ""
+    assert shell.read_latest_checkpoint_head([("bare", _project(isolated_env, "bare"))]) == ""
+
+
+def test_read_latest_checkpoint_head_reads_the_winning_store_not_the_first_source(isolated_env):
+    # THE HALF A UNION READ GETS WRONG: the newest name lives in the SECOND source, so resolving the
+    # body under the first source's directory would pair one worktree's filename with another's
+    # body. The head must be the body of the row `read_checkpoints` prints first.
+    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent body\n")])
+    child = _project(isolated_env, "sp-olf", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
+    sources = [("sp", parent), ("sp-olf", child)]
+    assert shell.read_checkpoints(sources)[0] == "2026-09-25-1704.md @sp-olf"
+    assert shell.read_latest_checkpoint_head(sources) == "# child body\n"
+
+
+def test_read_latest_checkpoint_head_picks_one_side_of_a_collision_deterministically(isolated_env):
+    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "# parent body\n")])
+    child = _project(isolated_env, "sp-olf", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
+    forward = shell.read_latest_checkpoint_head([("sp", parent), ("sp-olf", child)])
+    reversed_ = shell.read_latest_checkpoint_head([("sp-olf", child), ("sp", parent)])
+    assert forward == reversed_ == "# parent body\n"
 
 
 def test_read_plan_returns_objective_and_progress(isolated_env):
