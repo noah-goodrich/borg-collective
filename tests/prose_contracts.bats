@@ -114,6 +114,54 @@ setup() {
     [ "$output" = "2026-01-01-fixture-plan" ]
 }
 
+# ── The checkpoint name comes from code, not from prose ─────────────────────────────────────────
+#
+# AC1 of 2026-09-28-state-hygiene-reader-census. `skills/borg-link-up/SKILL.md` used to say "run
+# `date +%Y-%m-%d-%H%M` and use its literal stdout" -- minute resolution, nothing session-specific,
+# and the existence guard beside it checked only the CURRENT directory. Two sessions in two
+# worktrees of one clone each found the name free and both wrote it: three filenames exist twice on
+# the live registry with different bodies, two pairs inside the same minute.
+#
+# THESE CASES GUARD THE PROSE, which is the only place the regression can happen. The generator is
+# pinned by borg_core/checkpoint/test_core.py; nothing there can stop a future edit from putting a
+# `date` call back into the skill, and a `date` call in the skill silently reopens the collision.
+
+@test "checkpoint: no skill composes a checkpoint timestamp itself" {
+    local hits
+    hits=$(grep -rln 'date +%Y-%m-%d-%H%M' "${REPO_ROOT}/skills" 2>/dev/null || true)
+    [ -z "$hits" ] || { echo "a skill still composes a checkpoint timestamp: $hits"; false; }
+}
+
+@test "checkpoint: borg-link-up delegates the name to borg checkpoint-name" {
+    # The paired direction: the case above passes trivially if the skill simply stopped naming the
+    # file at all. This one proves the delegation is present, not merely that the old call is gone.
+    grep -q 'borg checkpoint-name' "${REPO_ROOT}/skills/borg-link-up/SKILL.md"
+}
+
+@test "checkpoint: the verb exists in the CLI and in borg help" {
+    # A skill instructing a command that does not exist is worse than the prose it replaced, and
+    # `borg help` is this repo's stated surface of record.
+    grep -q 'checkpoint-name)' "${REPO_ROOT}/borg.zsh"
+    run bash -c "grep -c 'checkpoint-name' '${REPO_ROOT}/borg.zsh'"
+    [ "$output" -ge 2 ]
+}
+
+@test "checkpoint: the emitted stem carries second resolution and a session tag" {
+    # End to end through the real verb, with a known session id, so the contract the skill relies on
+    # is asserted against the CLI rather than against the library it happens to call today.
+    run env CLAUDE_CODE_SESSION_ID=deadbeef-0000-0000-0000-000000000000 \
+        "${REPO_ROOT}/borg.zsh" checkpoint-name
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}-deadbe$ ]]
+}
+
+@test "checkpoint: the stem degrades to a bare timestamp with no session, and still exits 0" {
+    # An unnamed checkpoint is a lost checkpoint, so a missing session id must never be an error.
+    run env -u CLAUDE_CODE_SESSION_ID "${REPO_ROOT}/borg.zsh" checkpoint-name
+    [ "$status" -eq 0 ]
+    [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$ ]]
+}
+
 # ── Directives name their parent in the form the gate reads ──────────────────────────────────────
 
 @test "directives: every parent is declared as *Parent plan: <slug>*" {
