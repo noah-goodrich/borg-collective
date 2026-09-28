@@ -15,17 +15,50 @@
 setup() {
     REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
     LIB="${REPO_ROOT}/lib/promote-next.sh"
+    PLAN_FIXTURES="${BATS_TEST_DIRNAME}/fixtures/plan"
 }
 
 # ── The plan declares its slug exactly once ──────────────────────────────────────────────────────
+#
+# NO ACTIVE PLAN IS A LEGAL STATE, and asserting otherwise made assimilation impossible. The slot is
+# single by design and promotion is strictly serial, so between the commit that archives a plan and
+# the commit that promotes the next one, `PROJECT_PLAN.md` DOES NOT EXIST. `/borg-assimilate`
+# archives by renaming it into `docs/plans/assimilated/`, which is exactly what PR #230 does --
+# one `R097` rename and nothing else -- and this file's own floor case hard-asserted `[ -f
+# "${REPO_ROOT}/PROJECT_PLAN.md" ]`, so the shipping PR for every completed plan was red by
+# construction. Measured on #230: `not ok 614` and `not ok 616` with the other four lanes green.
+#
+# The two concerns were conflated and are now separated. "Does the live plan declare its slug
+# exactly once" is a question about THIS REPOSITORY and is conditional on a plan existing. "Does the
+# checker discriminate" is a question about `_borg_plan_declared_slug` and must hold at every moment,
+# including between plans -- so it is asked against FIXTURES, which also makes it a stronger test: it
+# exercises the zero-annotation and two-annotation directions that a live plan, being correct, never
+# supplies.
 
 @test "plan: PROJECT_PLAN.md declares exactly one slug annotation" {
     # Two annotations for one fact shipped on 2026-09-15: #199 added `- Plan-slug:` and #203 added
     # `*Archived-as:*`, git merged them CLEANLY, and the plan carried both with identical values
     # while /borg-plan was told to write both. No conflict marker, no gate.
+    #
+    # SKIPPED, NOT PASSED, when there is no active plan -- a silent pass here would be the vacuous
+    # green the floor case below exists to forbid, and a skip says which of the two states we are in.
+    if [ ! -f "${REPO_ROOT}/PROJECT_PLAN.md" ]; then
+        skip "no active plan (between assimilation and the next promotion)"
+    fi
     local n
     n=$(grep -c '^- Plan-slug:' "${REPO_ROOT}/PROJECT_PLAN.md")
     [ "$n" -eq 1 ] || { echo "expected exactly 1 '- Plan-slug:' line, found $n"; false; }
+}
+
+@test "plan: an active plan's declared slug is readable by the gate" {
+    # The other half of the live-plan question: one annotation that the gate cannot parse is as bad
+    # as two. Conditional for the same reason as above.
+    if [ ! -f "${REPO_ROOT}/PROJECT_PLAN.md" ]; then
+        skip "no active plan (between assimilation and the next promotion)"
+    fi
+    run bash -c "source '$LIB'; _borg_plan_declared_slug '${REPO_ROOT}/PROJECT_PLAN.md'"
+    [ "$status" -eq 0 ]
+    [ -n "$output" ]
 }
 
 @test "plan: the retired *Archived-as:* form appears in no plan or skill" {
@@ -37,12 +70,48 @@ setup() {
     [ -z "$hits" ] || { echo "retired annotation still live in: $hits"; false; }
 }
 
-@test "plan: the annotation check is looking at a real file with a real value" {
-    # The floor for the floor: both cases above pass trivially against a missing or empty plan.
-    [ -f "${REPO_ROOT}/PROJECT_PLAN.md" ]
-    run bash -c "source '$LIB'; _borg_plan_declared_slug '${REPO_ROOT}/PROJECT_PLAN.md'"
+@test "plan: the annotation check discriminates -- one annotation is read" {
+    # THE FLOOR FOR THE FLOOR, moved off the live plan. Its job is to prove the cases above cannot
+    # pass vacuously, and that proof must not itself depend on a plan being active -- the state in
+    # which the cases above skip is precisely when a broken checker would go unnoticed.
+    [ -f "${PLAN_FIXTURES}/one-annotation.md" ]
+    run bash -c "source '$LIB'; _borg_plan_declared_slug '${PLAN_FIXTURES}/one-annotation.md'"
     [ "$status" -eq 0 ]
-    [ -n "$output" ]
+    [ "$output" = "2026-01-01-fixture-plan" ]
+}
+
+@test "plan: the annotation check discriminates -- no annotation is refused" {
+    run bash -c "source '$LIB'; _borg_plan_declared_slug '${PLAN_FIXTURES}/no-annotation.md'"
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+@test "plan: the annotation check discriminates -- a PRESENT but empty annotation is refused" {
+    # Distinct from the no-annotation case, and the distinction is load-bearing. Here the line
+    # EXISTS, so `grep -m1` succeeds and the no-annotation guard never fires; only the `-n` check
+    # after the backtick-unwrap refuses it. Verified by mutation: delete that check and, without
+    # this case, the whole suite stays green.
+    run bash -c "source '$LIB'; _borg_plan_declared_slug '${PLAN_FIXTURES}/empty-annotation.md'"
+    [ "$status" -ne 0 ]
+    [ -z "$output" ]
+}
+
+@test "plan: the annotation check discriminates -- a missing file is refused" {
+    run bash -c "source '$LIB'; _borg_plan_declared_slug '${PLAN_FIXTURES}/does-not-exist.md'"
+    [ "$status" -ne 0 ]
+}
+
+@test "plan: two rival annotations are caught by the count, not by the reader" {
+    # `_borg_plan_declared_slug` uses `grep -m1`, so it reads the FIRST of two and reports success --
+    # which is why the count check is a separate case and not folded into the reader. This pins that
+    # division of labour, so a future "fix" to the reader cannot quietly make the count check
+    # redundant, nor the reverse.
+    local n
+    n=$(grep -c '^- Plan-slug:' "${PLAN_FIXTURES}/two-annotations.md")
+    [ "$n" -eq 2 ]
+    run bash -c "source '$LIB'; _borg_plan_declared_slug '${PLAN_FIXTURES}/two-annotations.md'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "2026-01-01-fixture-plan" ]
 }
 
 # ── Directives name their parent in the form the gate reads ──────────────────────────────────────
