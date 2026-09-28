@@ -1,7 +1,9 @@
-"""CLI entrypoint for `borg add` / `borg rm` (ports cmd_add / cmd_rm in borg.zsh).
+"""CLI entrypoint for `borg add` / `borg rm` / `borg backfill-repo` (ports cmd_add / cmd_rm in
+borg.zsh; `backfill-repo` has no zsh original).
 
-One module, two subcommands -- registry CRUD is small enough on both sides that a second file
-would be ceremony.
+One module, three subcommands -- registry CRUD is small enough on both sides that a second file
+would be ceremony. `backfill-repo` lives here rather than in `borg tidy` because it writes the
+`repo` field `cmd_add` writes, and one writer of a field is easier to keep honest than two.
 
 Deliberately NOT argparse (unlike borg_core.recon.cli): the original cmd_add/cmd_rm have zero flag
 surface -- each reads only `$1` (`local ppath="${1:-$PWD}"` / `local project="${1:-}"`) and never
@@ -62,6 +64,7 @@ def cmd_add(path_arg: str | None) -> int:
         tmux_window=tmux_window,
         session_id=session_id,
         last_activity=last_activity,
+        repo=shell.git_common_dir(ppath),
     )
     shell.registry_merge(name, entry)
     print(f"Registered: {name}")
@@ -83,6 +86,58 @@ def cmd_rm(project: str | None) -> int:
     return 0
 
 
+def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
+    """`borg add`'s `repo` field, filled in for entries registered before the field existed.
+
+    THE MIGRATE PHASE, and deliberately a one-shot command rather than a lazy read. Deriving `repo`
+    on demand would fork `git rev-parse` once per registry entry on every `borg link`, which is a
+    cost the `--local` contract exists to bound -- that flag's whole promise is which subprocesses a
+    reader pays for, pinned by subprocess count in tests/link_sweep.bats. A field written once is
+    free to read forever.
+
+    IDEMPOTENT, AND ONLY EVER FILLS A HOLE. An entry whose `repo` is already set is left alone, so
+    running this twice is the same as running it once, and a hand-corrected value is never
+    overwritten by a re-run. An entry whose directory is gone or is outside any git repository is
+    reported and skipped -- `git_common_dir` returns None there, and writing null over null would
+    be churn that makes the summary read as if work happened.
+
+    `--dry-run` prints the same report and writes nothing, which is the only way to inspect a
+    registry-wide write before taking it. It exercises the same resolution the real path does; the
+    single branch between them is the `write_registry` call.
+    """
+    dry_run = dry_run_arg == "--dry-run"
+    if dry_run_arg is not None and not dry_run:
+        _die(f"borg: unknown option '{dry_run_arg}' (expected --dry-run)")
+
+    data = shell.read_registry()
+    projects = data.get("projects") or {}
+
+    filled, already, skipped = 0, 0, 0
+    for name in sorted(projects):
+        entry = projects.get(name) or {}
+        if entry.get("repo"):
+            already += 1
+            continue
+        path = str(entry.get("path") or "")
+        repo = shell.git_common_dir(path) if path else None
+        if repo is None:
+            print(f"  skip   {name}: no git repository at {path or '<no path>'}")
+            skipped += 1
+            continue
+        entry["repo"] = repo
+        projects[name] = entry
+        print(f"  fill   {name}: {repo}")
+        filled += 1
+
+    if filled and not dry_run:
+        data["projects"] = projects
+        shell.write_registry(data)
+
+    prefix = "would fill" if dry_run else "filled"
+    print(f"{prefix} {filled}, already set {already}, skipped {skipped}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     """Entrypoint for `python3 -m borg_core.registry.cli add|rm ...`.
 
@@ -96,11 +151,15 @@ def main(argv: list[str] | None = None) -> None:
     command, rest = args[0], args[1:]
     value = rest[0] if rest else None
 
-    if command not in ("add", "rm"):
-        _die(f"borg: unknown registry command '{command}' (expected add or rm)")
+    if command not in ("add", "rm", "backfill-repo"):
+        _die(
+            f"borg: unknown registry command '{command}' "
+            "(expected add, rm or backfill-repo)"
+        )
 
+    handlers = {"add": cmd_add, "rm": cmd_rm, "backfill-repo": cmd_backfill_repo}
     try:
-        exit_code = cmd_add(value) if command == "add" else cmd_rm(value)
+        exit_code = handlers[command](value)
     except ValueError as exc:
         _die(str(exc))
     raise SystemExit(exit_code)

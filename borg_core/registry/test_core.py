@@ -60,6 +60,7 @@ def test_build_add_entry_full_fields():
         tmux_window="troth",
         session_id="abc-123",
         last_activity="2026-08-12T20:00:00Z",
+        repo="/Users/noah/dev/troth/.git",
     )
     assert entry == {
         "path": "/Users/noah/dev/troth",
@@ -69,7 +70,25 @@ def test_build_add_entry_full_fields():
         "claude_session_id": "abc-123",
         "last_activity": "2026-08-12T20:00:00Z",
         "summary": None,
+        "repo": "/Users/noah/dev/troth/.git",
     }
+
+
+def test_build_add_entry_omitted_repo_is_null_not_missing():
+    # THE EXPAND PHASE'S CONTRACT. `repo` defaults, so a caller that has not been taught the field
+    # still produces a valid entry -- but the key is PRESENT and null rather than absent, so the
+    # difference between "not in a git repository" and "written before the field existed" stays
+    # readable in the JSON. `link.core.repo_sources` treats both as a group of one.
+    entry = core.build_add_entry(
+        path="/Users/noah/dev/troth",
+        source="cli",
+        tmux_session="borg",
+        tmux_window=None,
+        session_id=None,
+        last_activity=None,
+    )
+    assert entry["repo"] is None
+    assert "repo" in entry
 
 
 def test_build_add_entry_no_session_or_tmux_window_yields_null_fields():
