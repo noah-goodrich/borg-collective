@@ -1,5 +1,8 @@
 # Directive: Viz 3 — Cross-Repo Chains + Three-Tier Ranking
 *Filed: 2026-08-11*
+*Status: NOT STARTED — 0 of 8 met. Reconciled 2026-09-29 against `2a62536`: three criteria have been
+partly answered ELSEWHERE by `borg link`, and X7's single-source-of-truth premise no longer holds.
+Needs a re-scope ruling before any of it is built.*
 
 Independent project. Third of three decomposed viz directives. **Supersedes criteria C5–C7 of**
 `2026-08-10-link-unification-and-attention-routing.md` — that directive conflated four concerns; the chain work
@@ -31,6 +34,59 @@ Four distinct reasons, each a design requirement here:
    (*"a careless force-push has already cost you Kelly's fix once"*), chosen over merging three approved PRs —
    minutes at zero risk.
 4. **Its blocker was Noah**, recorded as a `blocked_by` string, which any suppress-on-blocked logic inverts.
+
+## Status — reconciled 2026-09-29
+
+Measured against the tree at `2a62536`. **No X criterion has been implemented.** That is the simple half. The
+complicated half is that five weeks of `borg link` work landed between the filing and now, and it answered
+several of these questions in a different place — so building this as written would mean building a *second*
+answer, which is precisely the divergence this directive's own risk section warns about.
+
+**Partly answered elsewhere — X1, X5, X6.**
+
+- **X1's tier 1 already exists, twice.** It is viz 1, which shipped into `merge-tree/curate.py` (#125); and
+  `borg link`'s `▸ NEXT` independently routes ready rows into `yours` / `mine` / `unsure` — a decision-vs-not
+  split rather than a score, which is what X1 asked tier 1 to be. Tiers 2 and 3 have no home anywhere.
+- **X5's distinction is derived but not rendered.** `merge-tree/spine.py` already separates chain edges
+  (`stacked`/`apex`, which group into one workstream) from `blocks` edges (which must not group, because merging
+  on them collapses a blocker into its own victim). What X5 asks for that does not exist is the *rendering*
+  difference.
+- **X6 shipped for a different noun.** `grid.py` and `picture.py` carry provenance for a ref's **state**
+  (`swept | fetched | declared | unknown`, with `?` marking unverified). X6 wants provenance per **edge** — who
+  asserted the relationship, and when. Different claim, and the retraction that motivated X6 was about an edge,
+  not a state. Still open as written.
+
+**Blocked on the GitHub adapter, not on this directive — X2 and part of X3.**
+
+X2's whole effort signal is `open + APPROVED + MERGEABLE` as a machine-detectable proxy for "minutes".
+`recon-adapter-github` gathers neither review state nor mergeability, which is the same wall viz 1's V2 hit and
+recorded. X2 cannot be built honestly until that adapter widens. X3's picture half exists —
+`borg_core/link/picture.py` renders cross-repo chains with membership and ordering — but not which end Noah owns
+nor a downstream-idle count.
+
+**Still genuinely open and uncovered — X4.**
+
+No `untracked` marker exists anywhere in the tree. The case that motivated it is unaddressed: a workstream
+titled *"Governance: no Jira ticket exists"* scores zero on a stakes axis and vanishes. Of the eight criteria
+this is the one nothing else has touched, and it does not depend on the ruling below.
+
+**Premise broken — X7.**
+
+X7 says chain data derives from the spine: "no new persisted file; the chain builder reads the spine." Since
+filing, `borg link`'s CHAINS section derives from `.borg/chains/*.json` **manifests**, not from `story.json`.
+There are now two chain representations in this repository. X7 cannot be satisfied as written without first
+ruling which one is canonical — and that ruling is larger than this directive.
+
+## The ruling this directive needs before any of it is built
+
+Building viz 3 as filed would put a second ranking engine beside `▸ NEXT` and a second chain model beside the
+manifest grid. This directive predicted the shape of that in its own risk section — *"two independent
+gather-consumers is how the `render.py`/`render_graph.py` divergence happened"* — and it is now the live question
+rather than a risk.
+
+**Worth doing independent of the ruling:** X4's `untracked` marker, which nothing else covers. **Worth doing
+once the adapter widens:** X2's effort signal. **Everything else should wait** for a decision on whether the
+spine or the manifest grid is the canonical chain model.
 
 ## Acceptance Criteria
 
