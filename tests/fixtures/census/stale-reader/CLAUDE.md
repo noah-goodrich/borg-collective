@@ -1,1 +1,1 @@
-Nothing.\n
+Nothing.
