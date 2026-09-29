@@ -1,5 +1,8 @@
 # Directive: Viz 2 — Give the Spine a Generator
 *Filed: 2026-08-11*
+*Status: PARTLY SHIPPED — PR [#144](https://github.com/noah-goodrich/borg-collective/pull/144)
+(2026-08-14) landed S1, S2, S3, S5 and half of S6. Reconciled 2026-09-29 against `2a62536`: four met,
+one partial, two open.*
 
 Independent project. Second of three decomposed viz directives. Depends on nothing, but is the **root cause** of
 the 2026-08-10 failure — viz 1 treats the symptom, this removes the cause.
@@ -40,18 +43,62 @@ edges:  [ {parent, child, kind} ]
 the *skeleton* is derivable. What is not derivable is judgment: project `priority`, human-readable `name`,
 workstream `title`, and the `summary` prose that made `sme-self-service-pat` legible.
 
+## Status — reconciled 2026-09-29
+
+Measured against the tree at `2a62536`. `#144` names its own gaps in its commit message; this section adds the
+part a later reader needs, which is whether those gaps are still real. They are.
+
+**MET — S1, S2, S3, S5.**
+
+- **S1.** `merge-tree/spine.py` derives the skeleton from a gather: projects grouped from `items[].project`,
+  workstreams from chain edges, `blocked_by` from `blocks` edges. The fixture proves the capability the whole viz
+  program exists for — `snowflake-permissions#301` derives `blocked_by = [infrastructure#2334]`, a cross-repo
+  blocking edge, derived rather than hand-authored — and `#339/#340/#341` group as one workstream.
+- **S2.** Skeleton and judgment split by lifetime; the overlay is keyed by project slug plus the workstream's
+  lexicographically smallest member ref. That key's limit is stated rather than hidden: if the anchor item
+  leaves, judgment is orphaned rather than migrated — and S5 reports it instead of dropping it. Hashing the
+  member set would have been worse, changing whenever any member joined.
+- **S3.** `meta.generated_at` ages the skeleton; `summary_authored_at` ages each project's prose independently,
+  so a fresh skeleton wrapped around two-week-old summaries is detectable as exactly that.
+- **S5.** Four orphan categories, split because they fail differently: `unknown_*` is new structure the overlay
+  has never seen (rendering it silently with blank prose is how `infrastructure#2564` stayed invisible);
+  `stale_*` is judgment whose anchor is gone.
+
+**PARTIAL — S6, and the missing half is upstream of this directive.**
+
+`make spine` exists as one documented command, and `SCHEMA.md` now states the spine's provenance in full — that
+was the gap that let a hand-authored file look maintained-by-design. What is missing is "end to end", because
+**nothing writes `gather.raw.json`.** `borg recon --json` emits a RECONCILED doc
+(`since`/`generated_at`/`sources`/`items_by_project`); `curate.py` and `spine.py` both consume the RAW gather
+shape (`meta`/`items`/`edges`/`actions`). No command bridges the two. The fixture exists; the producer does not.
+
+**OPEN — S4, and S7 which is partly obsolete.**
+
+- **S4** (staleness surfaced loudly in both the renderer and `borg link`) was deliberately deferred. It is the
+  criterion that made the other six safe to ship: this directive's own risk section says a worse-but-fresh spine
+  beats a better-but-frozen one **only if** S4's warning is genuinely prominent. The warning is not there, so
+  that trade is currently unbacked — the spine can still present two-week-old chains as fact.
+- **S7** ("existing renderer output unchanged against an unchanged spine") would now fail for a non-bug reason,
+  because #125 deliberately changed renderer output. It needs re-baselining against post-#125 output before it
+  asserts anything.
+
+**The blocker is S6's missing producer, and it is bigger than this directive.** Until something writes
+`gather.raw.json`, the generator runs only against a checked-in fixture — which makes the spine refreshable in
+principle and still frozen in fact, which is the exact condition this directive was filed to end. That bridge is
+the highest-value unbuilt piece in the viz program, and it is upstream of both this directive and viz 3.
+
 ## Acceptance Criteria
 
-- [ ] S1 — A generator produces the spine skeleton from a recon gather: projects grouped from `items[].project`,
+- [x] S1 — A generator produces the spine skeleton from a recon gather: projects grouped from `items[].project`,
       workstreams derived from `edges`/`parallel_group`, `blocked_by` derived from `edges` of blocking kind.
   - Verify: running it against `merge-tree/fixtures/gather.raw.json` produces a spine that validates against
     `SCHEMA.md` and contains every project present in the fixture.
-- [ ] S2 — Judgment persists across regeneration in a **separate overlay file**, keyed by stable ids
+- [x] S2 — Judgment persists across regeneration in a **separate overlay file**, keyed by stable ids
       (`project.id`, and a stable workstream key). Regenerating never destroys `priority`, `name`, `title`, or
       `summary`.
   - Verify: generate → hand-edit a `summary` in the overlay → regenerate → the edited summary survives, and a
     round-trip test asserts it.
-- [ ] S3 — **Structured state and narrative summaries are aged separately.** Each carries its own timestamp,
+- [x] S3 — **Structured state and narrative summaries are aged separately.** Each carries its own timestamp,
       because the summary is simultaneously the highest-value and most perishable field in the spine.
   - Verify: the spine has both a `generated_at` for the skeleton and a per-summary `authored_at`; a summary older
     than its skeleton is detectable programmatically.
@@ -59,7 +106,7 @@ workstream `title`, and the `summary` prose that made `sme-self-service-pat` leg
       the renderer both state the spine's age and print the refresh command rather than presenting chains as fact.
   - Verify: with a spine older than the threshold, both surfaces carry an explicit staleness warning; with a
     fresh one, neither does.
-- [ ] S5 — Orphan detection: items present in the gather but absent from the spine are reported, not silently
+- [x] S5 — Orphan detection: items present in the gather but absent from the spine are reported, not silently
       dropped. `infrastructure#2564` was exactly this case.
   - Verify: a fixture with an item whose project is unknown to the overlay produces a named orphan report.
 - [ ] S6 — One documented command refreshes everything end to end, and `SCHEMA.md`/`PROTOCOL.md` finally state
