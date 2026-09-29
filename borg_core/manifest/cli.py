@@ -224,7 +224,19 @@ def _cmd_scaffold(args: argparse.Namespace) -> int:
     if os.path.exists(path):
         print(f"exists: {path}")
         return 0
-    manifest: dict[str, Any] = {"rows": []}
+    # `program` IS PART OF THE ON-DISK CONTRACT, and omitting it shipped a manifest that this
+    # repository's own contract test rejects: merge-tree/test_s4_manifests.py's
+    # `test_program_id_matches_filename_and_is_a_slug` requires a top-level `program` equal to the
+    # filename stem for every manifest under `.borg/chains/`. A scaffolded plan manifest failed it,
+    # and only surfaced when the file was moved into `chains/` -- while it sat in the legacy
+    # `.borg/programs/` neither that test nor `resolve` could see it.
+    #
+    # NOT A CONTRADICTION OF AC7'S RETIREMENT. `borg_core/manifest/core.py`'s VOCABULARY note is
+    # explicit that the files "still carry a top-level `program` key ... read verbatim because they
+    # are what is on disk, and nothing new is named after them." AC7 retires the word as a name for
+    # new things; it does not retire the key. Writing it here makes the writer agree with the reader
+    # and with the validator, which is the divergence AC7 exists to end rather than one to widen.
+    manifest: dict[str, Any] = {"program": args.name, "rows": []}
     if args.desc:
         manifest["desc"] = args.desc
     if args.apex:

@@ -42,14 +42,24 @@ def test_scaffold_writes_an_empty_manifest_with_the_apex_and_desc(repository):
     assert _run("scaffold", "--repository", repository, "--name", "demo",
                 "--apex", "o/r#1", "--title", "Apex", "--desc", "A demo.") == 0
     doc = _read(repository)
-    assert doc == {"apex": {"ref": "o/r#1", "title": "Apex"}, "desc": "A demo.", "rows": []}
+    # `program` IS EXPECTED, and its absence was the defect these two cases used to pin. Every
+    # manifest under `.borg/chains/` must carry a top-level `program` equal to its filename stem --
+    # merge-tree/test_s4_manifests.py's `test_program_id_matches_filename_and_is_a_slug` enforces
+    # it, and it went red on the first scaffolded plan manifest. See core.py's VOCABULARY note: AC7
+    # retires the WORD as a name for new things, never the on-disk key.
+    assert doc == {
+        "apex": {"ref": "o/r#1", "title": "Apex"},
+        "desc": "A demo.",
+        "program": "demo",
+        "rows": [],
+    }
 
 
 def test_scaffold_with_no_apex_is_still_valid(repository):
     # core._validate_apex: "No apex at all is valid, not a problem" -- work small enough to need no
     # tracker legitimately has none, and pointing at one that does not exist is worse.
     assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
-    assert _read(repository) == {"rows": []}
+    assert _read(repository) == {"program": "demo", "rows": []}
 
 
 def test_scaffold_never_clobbers_an_existing_manifest(repository):
