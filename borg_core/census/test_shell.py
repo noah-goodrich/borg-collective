@@ -69,3 +69,30 @@ def test_reader_mentions_is_true_only_when_the_file_names_the_store(tmp_path):
     assert mentions[".borg/widgets"] is True
     assert mentions[".borg/absent"] is False
     assert mentions[".borg/gone"] is False
+
+
+def test_discover_scans_agent_and_skill_prose_not_just_claude_md(tmp_path):
+    # THE REAL MISS: agents/borg-nanoprobe.md told every nanoprobe to treat `.borg/knowledge/` as
+    # "authoritative prior art" while CLAUDE.md's weaker promise was being retired in the same
+    # change. A gate reading one rules file leaves the others carrying the promise it just removed.
+    _tree(tmp_path)
+    (tmp_path / "agents").mkdir()
+    (tmp_path / "agents" / "worker.md").write_text("prefer .borg/lore\n", encoding="utf-8")
+    (tmp_path / "skills" / "s").mkdir(parents=True)
+    (tmp_path / "skills" / "s" / "SKILL.md").write_text("writes .borg/notes\n", encoding="utf-8")
+    found = shell.discover(tmp_path)
+    assert found[".borg/lore"] == {"docs"}
+    assert found[".borg/notes"] == {"docs"}
+
+
+def test_reader_exists_is_asked_separately_from_reader_mentions(tmp_path):
+    _tree(tmp_path, code="reads nothing in particular\n")
+    rows = {
+        ".borg/here": {"kind": "dynamic", "reader": "lib/reader.sh"},
+        ".borg/gone": {"kind": "dynamic", "reader": "lib/missing.sh"},
+    }
+    exists = shell.reader_exists(tmp_path, rows)
+    mentions = shell.reader_mentions(tmp_path, rows)
+    assert exists[".borg/here"] is True and exists[".borg/gone"] is False
+    # The file exists but does not mention the store -- which is the whole point of `dynamic`.
+    assert mentions[".borg/here"] is False

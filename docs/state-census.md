@@ -1,7 +1,15 @@
 # The reader census
 
-Every `.borg/<name>` store that executable code or `CLAUDE.md` refers to must appear here and must
-name a reader. The gate is `python3 -m borg_core.census.cli`, run by `tests/state_census.bats`.
+Every `.borg/<name>` store referred to by executable code (`borg_core/`, `lib/`, `hooks/`, `bin/`,
+`merge-tree/`, root `*.zsh`) or by a surface that makes promises to an agent (`CLAUDE.md`, and every
+markdown file under `skills/` and `agents/`) must appear here and must name a reader.
+
+**The agent-facing surfaces are in scope because of a real miss.** The first version of this gate
+read `CLAUDE.md` alone, and `agents/borg-nanoprobe.md` was at that moment telling every nanoprobe to
+treat `.borg/knowledge/` markdown as *"authoritative prior art"* — a live promise, stronger than the
+one being retired from `CLAUDE.md` in the very same change, and completely invisible. A gate that
+reads one rules file while agents and skills carry their own retires a promise in one place and
+leaves it in two others. The gate is `python3 -m borg_core.census.cli`, run by `tests/state_census.bats`.
 
 ## Why this file exists
 
@@ -62,4 +70,5 @@ wallpapering this census exists to prevent.
 | `.borg/agent-extensions` | dynamic | `borg_core/extensions/shell.py` | same `layer_paths` join, agent side |
 | `.borg/skills` | store | `hooks/borg-link-up.sh` | project-local skills; also `hooks/borg-link-down.sh` |
 | `.borg/knowledge` | retired | - | cairn's export, 1106 tracked files KEPT; the promise to grep it was deleted from CLAUDE.md 2026-09-28. See `docs/plans/directives/assets/2026-09-28-state-audit-adversarial.md` |
+| `.borg/elsewhere` | prose | - | not a store: a path in `merge-tree/test_coordinator.py`'s fixture for a manifest OUTSIDE the manifest dir |
 | `.borg/anything` | prose | - | not a store: a docstring example in `borg_core/manifest/shell.py` naming a path that is never opened |

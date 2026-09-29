@@ -64,46 +64,91 @@ KIND_DYNAMIC = "dynamic"
 KIND_RETIRED = "retired"
 
 
+def _reader_failure(
+    token: str,
+    kind: str,
+    reader: str,
+    mentions: bool,
+    exists: bool,
+) -> str | None:
+    """What is wrong with a row's READER declaration, or None.
+
+    Split from `_referenced_failure` so neither ladder carries every branch: that one answers "is
+    this token declared, and does its kind require a reader at all", this one answers "is the
+    declared reader any good". The split is also what keeps each under the return-count ceiling
+    without reaching for a linter disable.
+    """
+    if reader == NO_READER:
+        if kind == KIND_DYNAMIC:
+            return f"{token}: kind `dynamic` still has to NAME the reader that builds the path."
+        return (
+            f"{token}: referenced with NO READER declared. "
+            "A store nothing reads is a write-only store; give it a reader or retire it."
+        )
+    if not exists:
+        # THE EXISTENCE CHECK IS NEVER WAIVED, for any kind. An earlier draft skipped it alongside
+        # the mention check for `dynamic` rows, which made docs/state-census.md's own "the gate
+        # proves the named file exists" claim false for four of nine rows -- found by the verify
+        # gate's reviewer, who pointed a dynamic row at a nonexistent file and got a clean pass.
+        # Waiving the mention is forced by the data, since the path is built from a variable;
+        # waiving existence was never forced by anything.
+        return (
+            f"{token}: declares reader `{reader}`, which does not exist. "
+            "`dynamic` waives the mention check, never the file."
+        )
+    if kind != KIND_DYNAMIC and not mentions:
+        return (
+            f"{token}: declares reader `{reader}`, which never mentions it. "
+            "The declaration is stale -- point it at the file that actually reads the store."
+        )
+    return None
+
+
+def _referenced_failure(
+    token: str,
+    surfaces: str,
+    row: dict[str, str] | None,
+    mentions: bool,
+    exists: bool,
+) -> str | None:
+    """The one violation a referenced token produces, or None when it is clean."""
+    if row is None:
+        return (
+            f"{token}: referenced ({surfaces}) but absent from the census. "
+            "Add a row naming its reader, or stop referencing it."
+        )
+    kind = row.get("kind", KIND_STORE)
+    if kind in (KIND_PROSE, KIND_RETIRED):
+        return None
+    return _reader_failure(token, kind, row.get("reader", NO_READER), mentions, exists)
+
+
 def violations(
     discovered: dict[str, set[str]],
     declared: dict[str, dict[str, str]],
     reader_mentions: dict[str, bool],
+    reader_exists: dict[str, bool] | None = None,
 ) -> list[str]:
     """Every census failure, as human-readable lines. Empty list means the gate passes.
 
-    `discovered` maps a `.borg/<name>` token to the set of surfaces it was found on ("code",
-    "docs"). `declared` maps a token to its census row. `reader_mentions` maps a token to whether
-    its declared reader file actually mentions it -- resolved by the caller, since that is I/O.
+    `discovered` maps a `.borg/<name>` token to the surfaces it was found on ("code", "docs").
+    `declared` maps a token to its census row. `reader_mentions` and `reader_exists` are resolved by
+    the caller, since both are I/O -- and they are two maps rather than one because `dynamic` waives
+    the first and never the second.
     """
+    exists = reader_mentions if reader_exists is None else reader_exists
     found: list[str] = []
 
     for token in sorted(discovered):
-        surfaces = ", ".join(sorted(discovered[token]))
-        row = declared.get(token)
-        if row is None:
-            found.append(
-                f"{token}: referenced ({surfaces}) but absent from the census. "
-                "Add a row naming its reader, or stop referencing it."
-            )
-            continue
-        if row.get("kind") in (KIND_PROSE, KIND_RETIRED):
-            continue
-        reader = row.get("reader", NO_READER)
-        if row.get("kind") == KIND_DYNAMIC:
-            if reader == NO_READER:
-                found.append(f"{token}: kind `dynamic` still has to NAME the reader that builds the path.")
-            continue
-        if reader == NO_READER:
-            found.append(
-                f"{token}: referenced ({surfaces}) with NO READER declared. "
-                "A store nothing reads is a write-only store; give it a reader or retire it."
-            )
-            continue
-        if not reader_mentions.get(token, False):
-            found.append(
-                f"{token}: declares reader `{reader}`, which does not exist or never mentions it. "
-                "The declaration is stale -- point it at the file that actually reads the store."
-            )
+        failure = _referenced_failure(
+            token,
+            ", ".join(sorted(discovered[token])),
+            declared.get(token),
+            reader_mentions.get(token, False),
+            exists.get(token, False),
+        )
+        if failure:
+            found.append(failure)
 
     for token in sorted(declared):
         if token not in discovered and declared[token].get("kind") not in (KIND_PROSE, KIND_RETIRED):
