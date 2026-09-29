@@ -9,7 +9,7 @@
 #   hooks/        — curated self-contained hooks (NO source of ~/.claude/lib)
 #   agents/       — borg-nanoprobe.md subagent definition
 #   hooks.json    — regenerated hook wiring for all shipped hooks
-#   plugin.json   — version bump (patch) in .claude-plugin/plugin.json
+#   plugin.json   — version SYNCED from the VERSION file into .claude-plugin/plugin.json
 #   marketplace.json — ensure borg-collective entry is present (idempotent)
 #
 # Self-containment contract for hooks that reference borg state/registry:

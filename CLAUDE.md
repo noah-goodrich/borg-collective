@@ -22,7 +22,7 @@ Two independent tools that compose:
 - **borg** — Session coordination, recommendations, boundaries. Runs on host.
 - **drone** — Container lifecycle, tmux windows, pane layouts. Forked from dev.sh. Runs on host.
 
-## Current State (v2, release v0.8.9)
+## Current State (v2, release v0.9.0)
 
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
