@@ -2916,6 +2916,7 @@ cmd_help() {
     regenerate          Archive stale projects (idle >48h)
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
     setup               Register Claude Code hooks, skills, and config
+    checkpoint-name     Print the collision-proof filename stem for a new checkpoint
     version             Print the installed borg version (alias: --version, -V)
     store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
@@ -3516,6 +3517,20 @@ case "${1:-help}" in
     doctor)         cmd_doctor "${@:2}" ;;
     chain)          cmd_chain "${@:2}" ;;
     vinculum|vinc)  cmd_vinculum "${@:2}" ;;
+    checkpoint-name)
+        # Prints the filename stem a new checkpoint should use. Exists so that
+        # skills/borg-link-up/SKILL.md stops COMPOSING a timestamp -- it used to say to run a
+        # minute-resolution `date` call and use its literal stdout, which carried nothing
+        # session-specific, and the skill's own collision guard checked only the CURRENT directory.
+        # Two sessions in two worktrees of one clone therefore each found the name free and both
+        # wrote it: three filenames exist twice on the live registry with different bodies, two
+        # pairs inside the same minute.
+        #
+        # A VERB RATHER THAN A DOCUMENTED python3 INVOCATION, because the caller is an LLM reading
+        # prose. `borg checkpoint-name` works from any cwd and is discoverable in `borg help`; a
+        # bare `python3 -m borg_core...` line in a skill would carry a PYTHONPATH the skill has to
+        # get right, which is the class of instruction that silently stops working.
+        _borg_py borg_core.checkpoint.cli ;;
     version|--version|-V) cmd_version ;;
     help|--help|-h) cmd_help ;;
     # Removed 2026-08-10: ls/status/hail/brief/briefing/refresh were aliases for `link`. Six names
