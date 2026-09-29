@@ -270,10 +270,18 @@ Fold any extension instructions into the checkpoint before saving it.
 
 After displaying the checkpoint, save it to `<project-root>/.borg/checkpoints/<timestamp>.md`.
 
-To determine `<timestamp>`: do NOT compose it from your own sense of the current date/time — a
-session's ambient clock can be skewed (e.g. a container clock frozen across a host sleep/resume).
-Instead, run `date +%Y-%m-%d-%H%M` via the Bash tool and use its literal stdout, unmodified, as
-`<timestamp>`.
+To determine `<timestamp>`: do NOT compose it, and do not call `date` yourself. Run
+`borg checkpoint-name` via the Bash tool and use its literal stdout, unmodified, as `<timestamp>`.
+
+Two reasons, and the second is the one that bites. A session's ambient clock can be skewed (a
+container clock frozen across a host sleep/resume), so the timestamp must come from a command
+rather than from your sense of the time. And the shape matters: `borg checkpoint-name` returns
+`YYYY-MM-DD-HHMMSS-<session>`, which is second resolution plus a tag for THIS session. The
+minute-resolution `date` call this replaces carried nothing session-specific, and the
+existence check below only ever looked in ONE directory — so two sessions working two worktrees of
+the same clone each found the name free and both wrote it. That happened: three checkpoint
+filenames exist twice on this machine with different bodies, two of the pairs written inside the
+same minute. The collision is now closed by the name itself.
 
 To determine `<project-root>`: use the directory that contains `PROJECT_PLAN.md`, or the git root
 (run `git rev-parse --show-toplevel`), or the current working directory if neither applies.
@@ -282,6 +290,11 @@ Create the directory if it does not exist. Before writing, check whether
 `<project-root>/.borg/checkpoints/<timestamp>.md` already exists (e.g. via the Bash tool,
 `test -e <path>`). If it does, do not overwrite it — append `-2` to the timestamp and check again
 (then `-3`, and so on) until you find a filename that does not yet exist, and save there instead.
+
+KEEP THIS CHECK, but understand what it is now for. It is a belt to `borg checkpoint-name`'s
+suspenders, and it covers only the case the name cannot: the same session writing twice inside one
+second. It is NOT the cross-worktree guard it was mistaken for — a directory-scoped existence test
+cannot see a sibling worktree's store, which is precisely how the collisions above happened.
 
 Use the Write tool. The file content should be the checkpoint exactly as displayed above (no
 additional wrapper or header) — the five numbered sections always, plus the `## Criteria Reconciled`
