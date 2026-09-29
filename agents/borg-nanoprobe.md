@@ -24,7 +24,7 @@ then exit with a brief failure summary.
 - **Working branch** — the branch you commit to before exiting.
 - **Task** — one-paragraph description of what to assimilate.
 - **Project knowledge** (optional) — a pre-loaded block of decisions, patterns, and gotchas the
-  orchestrator pulled from the project's `.borg/knowledge/` markdown. Treat it as authoritative prior
+  orchestrator supplied in your brief. Treat it as authoritative prior
   art: trust it, spot-check rather than re-investigate, and do NOT re-derive what it already states.
 
 ## Local Extensions: brief
@@ -201,8 +201,8 @@ the full output is in the repo or a named file that the orchestrator can fetch o
 
 ## Project-knowledge-warm brief (cost lever)
 
-When the orchestrator supplies a **Project knowledge** block in your brief, it has already pulled the
-project's relevant decisions, patterns, and gotchas from `.borg/knowledge/` markdown for your task.
+When the orchestrator supplies a **Project knowledge** block in your brief, it has already gathered
+the project's relevant decisions, patterns, and gotchas for your task.
 That block is authoritative prior art — assimilate it FIRST and prefer it over re-reading the repo.
 (Cairn, the graph service that used to serve this role, was decommissioned 2026-08-08; the corpus now
 lives as grep-reachable per-project markdown, no service required.)
