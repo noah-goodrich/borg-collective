@@ -55,11 +55,23 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "census: a stale reader declaration FAILS" {
-    # The ratchet's real value: a reader cannot be renamed or deleted without this going red.
+@test "census: a stale reader declaration FAILS — the file exists but never mentions the store" {
+    # TWO FIXTURES, NOT ONE, because the existence and mention checks are two checks -- `dynamic`
+    # waives the second and never the first. The first draft of this case pointed at a NONEXISTENT
+    # file and asserted the word "stale", which passed only while both checks shared one message;
+    # splitting them turned it red in CI and correctly so, because it was asserting the wrong
+    # failure. Here `lib/other.sh` exists and simply does not read the store.
     run "${GATE[@]}" "${FIXTURES}/stale-reader"
     [ "$status" -eq 1 ]
     [[ "$output" == *"stale"* ]]
+    [[ "$output" != *"does not exist"* ]]
+}
+
+@test "census: a reader that does not exist FAILS, and says so distinctly" {
+    run "${GATE[@]}" "${FIXTURES}/missing-reader"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"does not exist"* ]]
+    [[ "$output" != *"never mentions"* ]]
 }
 
 @test "census: a well-formed store PASSES" {
