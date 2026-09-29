@@ -26,7 +26,12 @@ def main(argv: list[str] | None = None) -> None:
     root = Path(args[0]) if args else Path.cwd()
 
     rows = shell.declared(root / CENSUS_FILE)
-    found = core.violations(shell.discover(root), rows, shell.reader_mentions(root, rows))
+    found = core.violations(
+        shell.discover(root),
+        rows,
+        shell.reader_mentions(root, rows),
+        shell.reader_exists(root, rows),
+    )
 
     for line in found:
         print(f"census: {line}", file=sys.stderr)
