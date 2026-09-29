@@ -546,8 +546,14 @@ docs/
 ## Architecture Rules
 
 - Logic goes in a testable core. Shell is a wrapper. New modules ship with tests in the same commit.
-- Prior decisions live in `.borg/checkpoints/`, `.borg/knowledge/`, and `docs/plans/assimilated/` —
-  grep them before assuming something is undocumented.
+- Prior decisions live in `.borg/checkpoints/` and `docs/plans/assimilated/` — grep them before
+  assuming something is undocumented. **`.borg/knowledge/` was removed from this list 2026-09-28 and
+  its 1106 tracked files were NOT deleted.** It is the decommissioned cairn service's export (see
+  the dotfiles `.gitignore`, which says so outright), and no code path has ever read it — so naming
+  it here was a promise to every agent that nothing kept. Retiring a store means deleting the
+  PROMISE, not the data: the files stay, greppable by anyone who wants them, and the reader census
+  (`docs/state-census.md`) now stops caring about them because nothing claims anything about them.
+  The full argument is in `docs/plans/directives/assets/2026-09-28-state-audit-adversarial.md`.
 - **Schema evolution is ALWAYS expand → migrate → contract, everywhere, no exceptions.** Add the new
   form and accept both; migrate every existing instance; only then remove the old form or tighten the
   validator. Never the other order. Done this way a schema change cannot produce a regression,
