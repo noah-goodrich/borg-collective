@@ -6,7 +6,8 @@ adversarial reviewers; every load-bearing claim below was re-verified by hand af
 **tl;dr:** The review asked about *readability*, not speed. mjewell is right about the tests and wrong about
 permissions. But the language question is not the risk — the sweep turned up a **live approval bypass in #523**, a CI
 glob that runs 4 test files and skips the Python ones, and **zero runtime guards** on hooks that invoke `python3`
-directly. Fix those; adopt a one-line language rule; do not run a migration.
+directly. Fix those; adopt a one-line language rule; do not run a migration. (The fail-open finding was independently fixed
+on 2026-09-30 by `a84e7e4b`; see Finding 4.)
 
 ## Finding 1 — a live bypass in #523, verified by hand
 
@@ -73,6 +74,15 @@ So the review's advice — rewrite bash tests into Python — would, applied tod
 is: **make the unrun tests run, then improve readability.** Not the reverse.
 
 ## Finding 4 — the hooks fail open, and no plugin can declare a runtime
+
+> **FIXED 2026-09-30, independently.** claude-marche `a84e7e4b` ("fix(outbound-gate): resolve the interpreter, and
+> fail closed when there is none") landed at 10:37, hours after this was measured. `hooks/hooks.json` now invokes
+> `run-gate.sh deny-on-missing gate_outbound.py` and `run-gate.sh warn-on-missing gate_chat_length.py`, a 66-line
+> wrapper that resolves an interpreter and exits 2 when there is none — exactly the mechanism named as missing below.
+> Two sessions reached the same fix from opposite directions, which is the strongest evidence in this document that
+> the finding was real. **The paragraphs below are preserved as measured, not corrected in place**, because the
+> structural half is still true: a plugin STILL cannot declare a runtime dependency, and a `type: "command"` hook that
+> cannot start is STILL a non-blocking error. The wrapper is a workaround for a packaging gap, not a closure of it.
 
 - `grep -rn 'command -v python3' plugins/` → **0 hits.**
 - `plugins/outbound-gate/hooks/hooks.json` invokes bare `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/gate_outbound.py` and
