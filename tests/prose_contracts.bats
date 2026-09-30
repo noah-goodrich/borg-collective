@@ -162,6 +162,37 @@ setup() {
     [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$ ]]
 }
 
+# ── The hook-language rule states its own inversion ─────────────────────────────────────────────
+#
+# The 2026-08-11 toolchain directive ratified "Hooks stay shell -- permanently, and this is arithmetic rather than
+# preference" on a measurement of EMPTY interpreters (zsh 27.3ms vs python3 47.6ms). Measured 2026-09-29 on the
+# shipped artifact that comparison inverts: hooks/bash-guard.sh is 194ms/call against python3's 35ms floor.
+#
+# CLAUDE.md now carries the qualified rule. These cases exist because a rule that QUALIFIES a ratified decision is
+# the single most likely thing to be silently re-simplified back to the original -- someone reads "hooks stay
+# shell", does not find the qualification, and re-states the narrow version as the whole truth.
+
+@test "hooks: CLAUDE.md states the subprocess-count rule for hook language" {
+    grep -q 'SUBPROCESS COUNT' "${REPO_ROOT}/CLAUDE.md"
+    grep -q 'At most one helper process' "${REPO_ROOT}/CLAUDE.md"
+    grep -q 'Never node or ruby in a hook body' "${REPO_ROOT}/CLAUDE.md"
+}
+
+@test "hooks: the rule names what it qualifies, not just what it asserts" {
+    # The paired direction. A rule stating only "use python for >=2 subprocesses" would pass the case above while
+    # losing the reason it is allowed to contradict a ratified decision -- and the next reader would revert it.
+    grep -q 'QUALIFIES a ratified' "${REPO_ROOT}/CLAUDE.md"
+    grep -q '194 ms/call' "${REPO_ROOT}/CLAUDE.md"
+    grep -q 'Hooks stay shell' "${REPO_ROOT}/CLAUDE.md"
+}
+
+@test "hooks: both language assets exist and are reachable from CLAUDE.md" {
+    for asset in 2026-09-29-bash-vs-python-rationale 2026-09-29-marche-language-policy; do
+        [ -f "${REPO_ROOT}/docs/plans/directives/assets/${asset}.md" ]
+        grep -q "$asset" "${REPO_ROOT}/CLAUDE.md"
+    done
+}
+
 # ── Directives name their parent in the form the gate reads ──────────────────────────────────────
 
 @test "directives: every parent is declared as *Parent plan: <slug>*" {
