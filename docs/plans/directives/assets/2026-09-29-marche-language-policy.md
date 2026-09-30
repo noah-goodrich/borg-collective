@@ -6,7 +6,7 @@ adversarial reviewers; every load-bearing claim below was re-verified by hand af
 **tl;dr:** The review asked about *readability*, not speed. mjewell is right about the tests and wrong about
 permissions. But the language question is not the risk — the sweep turned up a **live approval bypass in #523**, a CI
 glob that runs 4 test files and skips the Python ones, and **zero runtime guards** on hooks that invoke `python3`
-directly. Fix those; adopt a one-line language rule; do not run a migration. (The fail-open finding was independently fixed
+directly. Fix those; adopt a one-line rule; do not run a migration. (The fail-open finding was independently fixed
 on 2026-09-30 by `a84e7e4b`; see Finding 4.)
 
 ## Finding 1 — a live bypass in #523, verified by hand
