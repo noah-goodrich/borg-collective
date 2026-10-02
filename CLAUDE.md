@@ -251,6 +251,31 @@ docs/
     Absent/empty dir = one info line; a render that fails `plutil -lint` is skipped with a warn and
     never bootstrapped, and does not stop the others. `borg doctor` lists them, registration only.
     No legacy migration for extension labels — the operator retires pre-borg labels by hand, once.
+- **A hook body's language is decided by SUBPROCESS COUNT, not by taste — and this QUALIFIES a ratified
+  decision.** `docs/plans/assimilated/2026-08-11-python-core-toolchain-and-enforced-clean-architecture.md`
+  concluded "**Hooks stay shell — permanently, and this is arithmetic rather than preference**", and the
+  arithmetic was `zsh -c true` at 27.3 ms against `python3 -c pass` at 47.6 ms, times ~250 tool calls a
+  session. That comparison is between EMPTY INTERPRETERS, and it is the whole of the recorded basis.
+  Measured on the shipped artifact, the comparison inverts: `hooks/bash-guard.sh` costs MORE than Python's
+  entire interpreter startup (`python3 -c pass`) — at least 2.6x of it on every run,
+  on both machines and both payloads — and an equivalent Python guard costs no more than that
+  startup. The absolute ms figure does not transfer between machines and is deliberately not stated here;
+  the method, both machines' numbers and the process count are in
+  the rationale asset below. The bash hook loses because it is not one
+  process: it is bash plus roughly two dozen `sed`/`grep`/`tr`/`jq` forks per call. So the rule is:
+    1. **At most one helper process** (env vars, paths, exit codes, a single `jq` read) → **shell**. Genuinely
+       cheaper, and this is the majority of the 13 hooks.
+    2. **Two or more** (JSON parse PLUS string work — the shape of every real policy hook) → **Python 3,
+       stdlib only**, behind `command -v python3 >/dev/null 2>&1 || exit 0` so a machine without an
+       interpreter degrades the way the fail-open contract requires.
+    3. **Never node or ruby in a hook body** — single uncontrolled 2026-09-29 observations of 66.7 ms and
+       94.8 ms of startup, worse than the bash they would replace; the direction is the claim.
+  **The ratified line is not wrong, it is narrow**: trivial hooks really do stay shell on 27-vs-41. What it
+  never measured is a hook that works. Do NOT read this as licence to port hooks wholesale — `bash-guard.sh`
+  spawns two dozen subprocesses and qualifies, but porting it is worth doing when it next needs a substantive
+  change, not as a migration. The full recovery of the original reasoning, including why pure Python was refused, is
+  `docs/plans/directives/assets/2026-09-29-bash-vs-python-rationale.md`; the same rule applied to
+  claude-marche, with its own measurements, is `docs/plans/directives/assets/2026-09-29-marche-language-policy.md`.
 - **Orchestrator-mode vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
   Stop, and Notification hook now classifies the session via `_borg_session_mode` (in
   `lib/borg-hooks.sh`). A session whose `$CWD` *exactly* equals `$BORG_ORCHESTRATOR_ROOT`
