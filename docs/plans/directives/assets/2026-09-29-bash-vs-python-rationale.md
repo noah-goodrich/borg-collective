@@ -6,8 +6,8 @@
 **tl;dr:** The decision record exists, is ratified, and is one document. The reason is **testability — specifically a
 permanent zsh tooling gap — plus maintainer fluency.** Speed was never an argument *for* Python in the record;
 it is the argument for keeping **hooks** in shell. And that last piece is where the other session is **right**: the
-"hooks stay shell" arithmetic was computed on *empty* interpreters, and the shipped `bash-guard.sh` measures 194 ms
-against Python's 35 ms floor.
+"hooks stay shell" arithmetic was computed on *empty* interpreters, and the shipped `bash-guard.sh` costs more
+than Python's entire interpreter startup on every machine measured (at least 2.6x on every run; method below).
 
 ## The record
 
@@ -87,16 +87,59 @@ command ~32 ms.
 ## Where the other session is RIGHT, and the record is incomplete
 
 The "hooks stay shell" arithmetic compared **empty interpreters**: `zsh -c true` against `python3 -c pass`. It never
-measured a hook that does real work. Measured independently today, twice, on the shipped artifact:
+measured a hook that does real work. Measured on the shipped artifact, on two machines (both 2026-10-02):
 
-| | ms/call |
-|---|---|
-| `hooks/bash-guard.sh` (42 pattern checks, real payload) | **194.1** |
-| `python3 -c pass` (full interpreter startup, no work) | **35.2** |
-| a same-shape Python guard (stdin JSON + 12 regexes), written by a reviewer | **33.0-33.9** |
+Two machines, one method, one shipped artifact. The direction (the bash hook costs MORE than Python's whole startup)
+holds on both; the absolute figure does not transfer between them, which is why CLAUDE.md pins the direction and not a
+number.
 
-So the shipped bash hook costs **~5.5x Python's entire startup budget**, and a Python equivalent measured *faster than
-`python3 -c pass`* on this machine — i.e. the regex work is free relative to startup, while in bash it dominates.
+**Method.** `hooks/bash-guard.sh` at the head of this PR (shebang `#!/usr/bin/env bash`), invoked as
+`printf '%s' "$P" | bash hooks/bash-guard.sh`. 20 sequential runs inside bash's `time` keyword, total wall clock
+divided by 20. Output discarded. Included: the process spawn, every helper fork (`jq`, `sed`, `tr`, `grep`), and the
+stdout JSON pre-approval; the hook's exit-2 block path is not exercised by either payload. Excluded: any wrapper
+shell. Typical payload `P` is `{"tool_name":"Bash","tool_input":{"command":"ls -la /tmp"}}`. The early-exit-defeating
+payload is `{"tool_name":"Bash","tool_input":{"command":"echo hello world && cat /etc/hosts | sort | uniq -c"}}`,
+chosen so the read-only classifier walks a multi-segment pipeline instead of approving at the first segment.
+
+| ms/call, 20 runs each | reviewer: Apple M3 Pro | author: Apple M4 Pro, pass 1 / pass 2 |
+|---|---|---|
+| `bash-guard.sh`, typical payload | 63.5 | 147.3 / 147.4 |
+| `bash-guard.sh`, early-exit-defeating payload | 80.1 | 164.8 / 168.0 |
+| `python3 -c pass` | 24.1 | 33.1 / 33.2 |
+| `bash -c true` | not measured | 11.2 / 11.1 |
+| `jq -n 1` | not measured | 9.0 / 9.7 |
+| bash-guard typical / `python3 -c pass` | 2.6x | 4.4x |
+| bash-guard early-exit-defeating / `python3 -c pass` | 3.3x | 5.0x |
+
+Run-to-run spread on the author's machine, five passes in total (these two plus three later passes at machine load of
+about 2.4 to 2.5): typical payload 115 to 179 ms (3.7x to 5.6x of `python3 -c pass`), early-exit-defeating payload 147
+to 198 ms (4.8x to 6.2x), `python3 -c pass` 31 to 33 ms. The floor across all runs on both machines is 2.6x (the
+reviewer's single pass); the contract is that floor, not any band above it.
+
+Interpreters on the author's machine: macOS 26.6.2, bash 5.3.20 and python3 3.14.5 and jq all under
+`/opt/homebrew/bin`. The reviewer's interpreter paths and versions were not recorded in the review; add them to
+this table if they differ. A same-shape Python guard (stdin JSON plus 12 regexes, written by a reviewer on the
+author's machine) measured 33.0 to 33.9, i.e. no slower than `python3 -c pass` there.
+
+**Process count, which is the real driver.** `bash -x` traced with `PS4='+TRACE '` and filtered to command words
+that resolve to external binaries (builtins such as `printf` and `[[` excluded) gives, per call: typical payload 23
+external processes (12 `sed`, 5 `grep`, 4 `tr`, 2 `jq`); early-exit-defeating payload 24 (13 `sed`, 5 `grep`,
+4 `tr`, 2 `jq`). The hook is one bash plus roughly two dozen short-lived helpers, not one process. This is a trace
+count, not a `dtrace` exec count, so treat it as accurate to a few processes.
+
+**Why the figure moves with the machine (a hypothesis, consistent with the data and not proven).** Per-exec cost is
+higher on the author's machine: `bash -c true` is 11 ms and `python3 -c pass` 33 ms there, against a 24 ms
+`python3 -c pass` on the reviewer's. A hook that pays that overhead 23 times moves with it (147 versus 63.5, 2.3x),
+while Python's single startup pays it once (33 versus 24, 1.4x). That is also why the ratio is larger here (4.4x
+versus 2.6x). The cause of the higher per-exec cost (chip, OS release, or security tooling) was not isolated.
+
+**The earlier 194.1 ms figure is withdrawn as a headline.** It was an uncontrolled observation with no recorded
+method; a later checkpoint on the same machine recorded 166 ms per Bash call. It sits inside this machine's own
+run-to-run spread above (115 to 198 ms) and does not transfer to another machine. Every run on this machine exceeds
+`python3 -c pass` by more than 3.7x, so the direction was never in doubt; the figure was. The earlier "42 pattern
+checks" parenthetical is also dropped: it was not derivable from the artifact. `hooks/bash-guard.sh` contains no `=~`
+at all, and no counting method over its glob tests and `case` patterns was recorded that reaches 42. The
+process count above is the verifiable description of what was timed.
 
 **That does not overturn the core decision** — the core is Python already, and the reason was never speed. But it does
 falsify the premise of the hook boundary as written. The honest statement is: *trivial* hooks stay shell because 27 ms
