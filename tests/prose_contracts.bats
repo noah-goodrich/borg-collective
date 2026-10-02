@@ -166,7 +166,8 @@ setup() {
 #
 # The 2026-08-11 toolchain directive ratified "Hooks stay shell -- permanently, and this is arithmetic rather than
 # preference" on a measurement of EMPTY interpreters (zsh 27.3ms vs python3 47.6ms). Measured 2026-09-29 on the
-# shipped artifact that comparison inverts: hooks/bash-guard.sh is 194ms/call against python3's 35ms floor.
+# shipped artifact that comparison inverts: hooks/bash-guard.sh costs more than python3's entire startup
+# on every machine measured (the figure differs per machine and is deliberately not pinned).
 #
 # CLAUDE.md now carries the qualified rule. These cases exist because a rule that QUALIFIES a ratified decision is
 # the single most likely thing to be silently re-simplified back to the original -- someone reads "hooks stay
@@ -182,7 +183,10 @@ setup() {
     # The paired direction. A rule stating only "use python for >=2 subprocesses" would pass the case above while
     # losing the reason it is allowed to contradict a ratified decision -- and the next reader would revert it.
     grep -q 'QUALIFIES a ratified' "${REPO_ROOT}/CLAUDE.md"
-    grep -q '194 ms/call' "${REPO_ROOT}/CLAUDE.md"
+    # Pin the DIRECTION, never the figure: a measurement is an observation with a machine attached, and the figure
+    # moved 2.3x between two machines. The method and numbers live in the rationale asset.
+    grep -q "costs MORE than Python's" "${REPO_ROOT}/CLAUDE.md"
+    grep -q "entire interpreter startup" "${REPO_ROOT}/CLAUDE.md"
     grep -q 'Hooks stay shell' "${REPO_ROOT}/CLAUDE.md"
 }
 
