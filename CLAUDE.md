@@ -132,7 +132,8 @@ drone rebuild [project]  Rebuild + restart container
 drone fix [project]      Repair a broken container/window state
 drone feature <project> <branch>  Create a git worktree on <branch> + open its dev window/container
 drone toggle [project]   Toggle the optional 3rd side pane (2 ↔ 3 panes)
-drone pane <direction>   Split the active pane top|bottom|left|right (devcontainer-aware)
+drone pane <direction>   Split the calling pane top|bottom|left|right (devcontainer-aware). Two panes
+                           per window: with a side pane open it reuses that pane and prints its id
 drone scaffold --supabase|--supabase-shared <dir>  Generate a devcontainer + borg-hooks for Supabase
 drone link               Deep dive on current project (alias for borg link)
 ```

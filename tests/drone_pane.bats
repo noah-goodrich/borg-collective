@@ -21,7 +21,10 @@ setup() {
 echo "tmux $*" >> "$TRACE"
 case "$1" in
     display-message)
-        echo "mywindow" ;;
+        case "$*" in
+            *pane_id*) echo "%3" ;;
+            *) echo "mywindow" ;;
+        esac ;;
     split-window)
         echo "%1" ;;
     show-option)
@@ -32,6 +35,11 @@ case "$1" in
         fi
         ;;
     send-keys)
+        exit 0 ;;
+    list-panes)
+        # The calling pane, plus SIDE (if exported) as an already-open side pane.
+        echo "${TMUX_PANE:-%3}"
+        [[ -n "${SIDE:-}" ]] && echo "$SIDE"
         exit 0 ;;
 esac
 exit 0
@@ -134,4 +142,32 @@ _split_call() {
     run "$DRONE" pane right
     [ "$status" -eq 0 ]
     grep -q "tmux send-keys -t %1 cd $PDIR" "$TRACE"
+}
+
+# ─── targeting and the two-pane cap ────────────────────────────────────────────
+
+@test "pane splits and names the CALLING pane (TMUX_PANE), not the focused one" {
+    export TMUX_PANE="%5"
+    run "$DRONE" pane right
+    [ "$status" -eq 0 ]
+    _split_call | grep -q -- '-t %5'
+    grep -q '^tmux display-message -t %5 -p #W' "$TRACE"
+}
+
+@test "pane falls back to the current pane id when TMUX_PANE is unset" {
+    unset TMUX_PANE
+    run "$DRONE" pane right
+    [ "$status" -eq 0 ]
+    grep -q '^tmux display-message -p #{pane_id}' "$TRACE"
+    _split_call | grep -q -- '-t %3'
+}
+
+@test "pane reuses an existing side pane instead of splitting a third" {
+    export TMUX_PANE="%5" SIDE="%9"
+    run "$DRONE" pane right
+    [ "$status" -eq 0 ]
+    # The LAST line is the bare id the caller sends its command to. A substring match is not
+    # enough: the info line above it also names %9, so it passed with the print removed.
+    [ "${lines[${#lines[@]}-1]}" = "%9" ]
+    [ -z "$(_split_call)" ]
 }
