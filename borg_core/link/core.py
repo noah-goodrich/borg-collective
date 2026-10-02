@@ -778,12 +778,20 @@ def capacity(active: int, limit: int) -> dict:
 
 
 def _with_flat_summary(entry):
-    """`entry` with its `summary` flattened, or `entry` unchanged when it carries none.
+    """`entry` with a STRING `summary` flattened; anything else comes back unchanged.
+
+    "Anything else" is a missing key, and also a present-but-null one: the registry writes
+    `"summary": null` for a project with no debrief yet, and `str(None)` is the word "None", which
+    the board row's and porcelain's `jq_default` then keep because it is no longer null. Every
+    non-string passes through as stored, so those renderers' `jq_default` and `str()` see it
+    exactly as they did before flattening moved here. Flattening is a guarantee about STRING
+    summaries only: a list or dict reaches the wire with its nested strings unscrubbed. No borg
+    writer stores either (they write null or a string); only a hand-edited registry can.
 
     Copies rather than mutating: `assemble` is documented pure, and the caller's registry dict is
     not this function's to edit. Non-dict entries pass through -- validation is not this seam's job.
     """
-    if not isinstance(entry, dict) or "summary" not in entry:
+    if not isinstance(entry, dict) or not isinstance(entry.get("summary"), str):
         return entry
     return {**entry, "summary": flatten_summary(entry["summary"])}
 
@@ -809,7 +817,7 @@ def flatten_summary(text: str) -> str:
     the unbuilt fix itself: "flatten ONCE at document assembly, so `summary` is already clean by the
     time any renderer sees it and this helper becomes unreachable." That is what this now is. A
     FOURTH consumer reading `entry["summary"]` directly now inherits the guarantee instead of
-    reintroducing the bug, because the field never enters the document dirty.
+    reintroducing the bug, because a string summary never enters the document dirty.
     """
     return str(text).translate(_FLATTEN_WS)
 
@@ -882,7 +890,10 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
         # THE CHOKEPOINT. `summary` is flattened HERE, once, so no renderer can receive it dirty --
         # see `flatten_summary` for the three bugs that each came from a renderer defending itself
         # individually. A row without a `summary` key is left exactly as it was: adding one would
-        # change what the wire carries for projects that never had the field.
+        # change what the wire carries for projects that never had the field. Likewise a non-string
+        # `summary` stays as stored: the wire carries null, not the word "None". So a v2 consumer
+        # reads a string or the stored non-string, which is null for every row borg itself writes;
+        # d9e27f6's "still reads a string" was wrong.
         "projects": {name: _with_flat_summary(projects[name]) for name in order},
         "directives": directives,
         "assimilated": assimilated,

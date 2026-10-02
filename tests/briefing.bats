@@ -281,6 +281,46 @@ EOF
     [[ "$output" != *"Claude is waiting for your input"* ]] || false
 }
 
+# ── A null summary reaches the prompt as an absence, never as the word None ───
+#
+# Every row borg writes before a debrief carries `"summary": null`. While assembly stringified it
+# (d9e27f6 until the fix), the projection received the string "None": the prompt read
+# `summary: None` and lost its `note: no summary on record` guard, so the narrative was handed a
+# fake summary and no instruction to invent nothing. cli_contract.bats pins the board row for the
+# same field; this pins the prompt, the other consumer that broke.
+
+@test "briefing: a null summary reaches the prompt as the no-summary note, never as the word None" {
+    export PROMPT_FILE="${BATS_TEST_TMPDIR}/prompt.txt"
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "-p" ] && printf '%s' "$2" > "$PROMPT_FILE"
+echo "NARRATIVE"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    cat > "$BORG_REGISTRY" <<'EOF'
+{
+  "projects": {
+    "quiet-project": {
+      "path": "/tmp/quiet-project",
+      "status": "idle",
+      "source": "cli",
+      "last_activity": "2026-08-01T00:00:00Z",
+      "summary": null
+    }
+  }
+}
+EOF
+
+    run "$BORG_CMD" link --brief --local
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$PROMPT_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"PROJECT: quiet-project"* ]] || false
+    [[ "$output" == *"note: no summary on record"* ]] || false
+    [[ "$output" != *"summary: None"* ]] || false
+}
+
 # ── Empty registry ─────────────────────────────────────────────────────────────
 #
 # SAME ASSERTION, NEW ORIGIN (2026-08-27). The hint used to come from a registry read that found no
