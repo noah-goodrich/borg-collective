@@ -733,7 +733,7 @@ cmd_claude() {
     # Reattach: only send `claude` if the pane is at a shell prompt — avoids
     # typing "claude" into a running Claude REPL.
     local claude_pane current_cmd
-    claude_pane=$(get_left_pane "$project_name")
+    claude_pane=$(get_left_pane "$wname")
     current_cmd=$(tmux display-message -p -t "$claude_pane" '#{pane_current_command}' 2>/dev/null)
     case "$current_cmd" in
         zsh|bash|sh|fish|dash|"")
@@ -768,7 +768,7 @@ cmd_cortex() {
     fi
 
     local claude_pane
-    claude_pane=$(get_left_pane "$project_name")
+    claude_pane=$(get_left_pane "$wname")
     info "Launching Cortex in $project_name (left pane)..."
     tmux send-keys -t "$claude_pane" "cortex" Enter
     tmux set-option -t "$SESSION:$wname" @cortex_launched 1
