@@ -11,6 +11,15 @@ setup() {
     REPO_ROOT="$(cd "${BATS_TEST_DIRNAME}/.." && pwd)"
     SB="${BATS_TEST_TMPDIR}/tree"
     mkdir -p "$SB/borg_core" "$SB/evals/e1" "$SB/evals/e2"
+
+    # GIVE THE SANDBOX A GIT IDENTITY. This test runs git commit (line 57) in the isolated sandbox.
+    # The identity must be set via environment variables because this setup function doesn't use the
+    # shared test_helper/setup harness. See tests/test_helper/setup.bash for the rationale: macOS
+    # auto-derives from getpwuid + hostname, but Linux containers refuse outright.
+    export GIT_AUTHOR_NAME="borg tests"    GIT_AUTHOR_EMAIL="tests@borg.invalid"
+    export GIT_COMMITTER_NAME="borg tests" GIT_COMMITTER_EMAIL="tests@borg.invalid"
+    export GIT_CONFIG_NOSYSTEM=1
+
     cp "$REPO_ROOT/Makefile" "$SB/Makefile"
     cp "$REPO_ROOT/borg_core/__init__.py" "$SB/borg_core/__init__.py"
     cp -R "$REPO_ROOT/borg_core/evals" "$SB/borg_core/evals"
