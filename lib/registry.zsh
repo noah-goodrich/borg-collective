@@ -247,7 +247,9 @@ borg_reap_overlay() {
         # named `troth-site` and is reported alive when its session is dead. Domain-named projects are
         # exactly the shape that hits it. -qxF is already this repo's convention (lib/secrets.zsh:22,
         # borg.zsh:3058); these window comparisons were the outliers.
-        if [[ -n "$live_windows" ]] && printf '%s\n' "$live_windows" | /usr/bin/grep -qxF "$tw"; then
+        # Either form: the registry's window OR the project name (borg_core.link.core.window_is_live).
+        if [[ -n "$live_windows" ]] && { printf '%s\n' "$live_windows" | /usr/bin/grep -qxF "$tw" \
+            || printf '%s\n' "$live_windows" | /usr/bin/grep -qxF "$name"; }; then
             live=1
         fi
         if _borg_should_reap "$st" "$last" "$live"; then

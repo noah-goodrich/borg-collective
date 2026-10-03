@@ -395,6 +395,12 @@ _borg_do_switch() {
         tmux_window=""
     fi
 
+    # Either form: a live window under the project name counts even when the registry holds a short name
+    if [[ -n "$tmux_window" && "$tmux_window" != "null" ]]; then
+        tmux_window=$(borg_tmux_find_window "$project" "$tmux_window") || true
+        [[ -n "$tmux_window" ]] || tmux_window="$(printf '%s' "$entry" | jq -r '.tmux_window // ""')"
+    fi
+
     if [[ -n "$tmux_window" && "$tmux_window" != "null" ]]; then
         if (( silent )); then
             # In tmux keybinding context: switch first, then show brief as display-message
@@ -608,8 +614,9 @@ cmd_color() {
     borg_registry_has "$project" || die "Unknown project: $project"
     borg_registry_set "$project" "color" "\"$color\""
     info "Color for $project → $color"
-    if borg_tmux_window_exists "$project" 2>/dev/null; then
-        _borg_apply_window_color "$project" "$color"
+    local live_window
+    if live_window=$(borg_tmux_find_window "$project" "$(borg_registry_get "$project" | jq -r '.tmux_window // ""')" 2>/dev/null); then
+        _borg_apply_window_color "$live_window" "$color"
         info "Applied to live tmux window."
     fi
 }
