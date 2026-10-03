@@ -22,6 +22,7 @@ echo "tmux $*" >> "$TRACE"
 case "$1" in
     display-message)
         case "$*" in
+            *window_zoomed_flag*) echo "${ZOOMED:-0}" ;;
             *pane_id*) echo "%3" ;;
             *) echo "mywindow" ;;
         esac ;;
@@ -34,7 +35,7 @@ case "$1" in
             exit 1
         fi
         ;;
-    send-keys)
+    send-keys|resize-pane)
         exit 0 ;;
     list-panes)
         # The calling pane, plus SIDE (if exported) as an already-open side pane.
@@ -170,4 +171,20 @@ _split_call() {
     # enough: the info line above it also names %9, so it passed with the print removed.
     [ "${lines[${#lines[@]}-1]}" = "%9" ]
     [ -z "$(_split_call)" ]
+}
+
+@test "pane reuse unzooms a zoomed window exactly once and still ends on the bare id" {
+    export TMUX_PANE="%5" SIDE="%9" ZOOMED=1
+    run "$DRONE" pane right
+    [ "$status" -eq 0 ]
+    [ "$(grep -c '^tmux resize-pane -Z -t %5$' "$TRACE")" -eq 1 ]
+    [ "${lines[${#lines[@]}-1]}" = "%9" ]
+}
+
+@test "pane reuse leaves an unzoomed window alone (zoom is a toggle)" {
+    export TMUX_PANE="%5" SIDE="%9" ZOOMED=0
+    run "$DRONE" pane right
+    [ "$status" -eq 0 ]
+    [ "$(grep -c '^tmux resize-pane' "$TRACE")" -eq 0 ]
+    [ "${lines[${#lines[@]}-1]}" = "%9" ]
 }
