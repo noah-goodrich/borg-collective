@@ -172,13 +172,14 @@ fi
 # Write status=active, last_activity, and claude_session_id to the per-project
 # state.json (not the shared registry).
 
-_cur_state=$(_borg_state_read "$PROJ_DIR")
+_borg_proj_repo "$PROJECT" "$PROJ_DIR"
+_cur_state=$(_borg_state_read "$PROJ_DIR" ${_REPO+"$_REPO"})
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg sid "$SESSION_ID" \
     --arg now "$NOW" \
     '.status = "active" | .last_activity = $now |
      (if $sid != "" then .claude_session_id = $sid else . end)')
-_borg_state_write "$PROJ_DIR" "$_new_state" || true
+_borg_state_write "$PROJ_DIR" "$_new_state" ${_REPO+"$_REPO"} || true
 
 # ── 1b. Per-project skill overlay ────────────────────────────────────────────
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
@@ -301,7 +302,7 @@ fi
 
 # Uncommitted-changes reminder from previous session (read from state.json)
 UNCOMMITTED_FLAG=$(jq -r '.has_uncommitted_changes // false' \
-    "$(_borg_state_read_path "$PROJ_DIR")" 2>/dev/null || echo "false")
+    "$(_borg_state_read_path "$PROJ_DIR" ${_REPO+"$_REPO"})" 2>/dev/null || echo "false")
 if [[ "$UNCOMMITTED_FLAG" == "true" ]]; then
     CONTEXT_PARTS+=("REMINDER: Last session ended with uncommitted changes in $PROJECT.
 Run 'git status' to see what's pending. Consider /simplify and committing before new work.")
@@ -312,10 +313,10 @@ fi
 # Strong signal of container/VM clock skew (e.g. a Podman VM clock freeze after a
 # laptop sleep/resume), which makes commit/checkpoint/state.json timestamps unreliable.
 CLOCK_DIVERGED=$(jq -r '.clock_divergence.detected // false' \
-    "$(_borg_state_read_path "$PROJ_DIR")" 2>/dev/null || echo "false")
+    "$(_borg_state_read_path "$PROJ_DIR" ${_REPO+"$_REPO"})" 2>/dev/null || echo "false")
 if [[ "$CLOCK_DIVERGED" == "true" ]]; then
     CLOCK_DELTA=$(jq -r '.clock_divergence.delta_seconds // 0' \
-        "$(_borg_state_read_path "$PROJ_DIR")" 2>/dev/null || echo "0")
+        "$(_borg_state_read_path "$PROJ_DIR" ${_REPO+"$_REPO"})" 2>/dev/null || echo "0")
     CONTEXT_PARTS+=("⚠ CLOCK DIVERGENCE DETECTED for $PROJECT (~${CLOCK_DELTA}s skew).
 The last checkpoint's filename timestamp and its on-disk mtime disagree by more than 5
 minutes — a strong signal the container/VM clock is out of sync with real time (common

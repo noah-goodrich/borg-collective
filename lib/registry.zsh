@@ -112,14 +112,16 @@ borg_registry_set_status() {
     local project="$1" proj_status="$2"
     local now ppath cur new
     now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    ppath=$(borg_registry_read | jq -r --arg p "$project" '.projects[$p].path // ""')
+    local prepo
+    IFS=$'\t' read -r ppath prepo < <(borg_registry_read | jq -r --arg p "$project" \
+        '.projects[$p] | [(.path // ""), (.repo // "" | if type == "string" then . else "" end)] | @tsv')
     if [[ -z "$ppath" || "$ppath" == "null" ]]; then
         return 0
     fi
-    cur=$(borg_state_read "$ppath")
+    cur=$(borg_state_read "$ppath" "$prepo")
     new=$(printf '%s' "$cur" | jq --arg s "$proj_status" --arg t "$now" \
         '.status = $s | .last_activity = $t')
-    borg_state_write "$ppath" "$new"
+    borg_state_write "$ppath" "$new" "$prepo"
 }
 
 # ─── Per-project state helpers (zsh) ─────────────────────────────────────────
@@ -131,7 +133,7 @@ borg_state_file() {
 
 # The state.json to READ: the per-project state-root copy if it exists, else the legacy
 # <dir>/.borg/state.json (also when neither exists). AC5 expand: readers accept both before any writer
-# moves; borg_state_file stays the WRITE path until step c. Optional 2nd arg = the registry entry's `repo`
+# moves; writers use _borg_project_state_file. Optional 2nd arg = the registry entry's `repo`
 # field, which spares the git fork (see _borg_project_state_key). Mirrors _borg_state_read_path in borg-hooks.sh.
 borg_state_read_path() {
     local new
@@ -144,7 +146,7 @@ borg_state_read_path() {
 }
 
 # Read state.json (new location first, else legacy); return '{}' when neither exists. Callers that
-# write back still write the legacy path until step c.
+# write back write the new path.
 borg_state_read() {
     local sf
     sf=$(borg_state_read_path "$@")
@@ -155,11 +157,12 @@ borg_state_read() {
     fi
 }
 
-# Atomic write — strip control chars, reject empty result, tmp+mv.
+# Atomic write to the per-project state-root path (AC5 step c: legacy <dir>/.borg/state.json is never
+# written) — strip control chars, reject empty result, tmp+mv. Optional 3rd arg = registry `repo`.
 borg_state_write() {
     local dir="$1" json="$2"
     local sf
-    sf=$(borg_state_file "$dir")
+    sf=$(_borg_project_state_file "$dir" ${3+"$3"})
     /bin/mkdir -p "${sf:h}"
     local tmp="${sf}.tmp.$$"
     printf '%s' "$json" | tr -d '\000-\010\013\014\016-\037' > "$tmp"
@@ -296,7 +299,7 @@ borg_reap_overlay() {
 # line per reaped project: "<name>\t<old-status>". Idempotent — a no-op on a
 # project with no live window but already idle, and on live/recent sessions.
 borg_reap_persist() {
-    local overlaid name ppath from cur new count=0
+    local overlaid name ppath prepo from cur new count=0 sf
     # Build the overlay against the *un-reaped* view so _reaped_from is populated.
     overlaid=$(BORG_NO_REAP=1 borg_registry_with_state | borg_reap_overlay)
     # tab-safe: name is field 1 of 2 (never empty — selected via ._reaped_from != null);
@@ -305,10 +308,13 @@ borg_reap_persist() {
         [[ -z "$name" ]] && continue
         ppath=$(printf '%s' "$overlaid" | jq -r --arg p "$name" '.projects[$p].path // ""')
         [[ -z "$ppath" || "$ppath" == "null" ]] && continue
-        [[ -f "$ppath/.borg/state.json" ]] || continue
-        cur=$(borg_state_read "$ppath")
+        prepo=$(printf '%s' "$overlaid" | jq -r --arg p "$name" \
+            '.projects[$p].repo // "" | if type == "string" then . else "" end')
+        sf=$(borg_state_read_path "$ppath" "$prepo")
+        [[ -f "$sf" ]] || continue
+        cur=$(borg_state_read "$ppath" "$prepo")
         new=$(printf '%s' "$cur" | jq '.status = "idle"')
-        borg_state_write "$ppath" "$new" || continue
+        borg_state_write "$ppath" "$new" "$prepo" || continue
         printf '%s\t%s\n' "$name" "$from"
         count=$((count + 1))
     done < <(printf '%s' "$overlaid" | jq -r '

@@ -984,7 +984,7 @@ EOF
     [[ "$output" == *"1 stale session(s) downgraded to idle"* ]] || false
 
     local new_status
-    new_status=$(jq -r '.status' "$proj_dir/.borg/state.json")
+    new_status=$(jq -r '.status' "$(state_path_of "$proj_dir" "")")
     [ "$new_status" = "idle" ]
 }
 

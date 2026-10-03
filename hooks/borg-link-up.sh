@@ -95,7 +95,8 @@ fi
 
 # Write status=idle + session fields + has_uncommitted_changes + clock_divergence to
 # state.json (same atomic tmp+mv write this hook already uses for every other field).
-_cur_state=$(_borg_state_read "$PROJ_DIR")
+_borg_proj_repo "$PROJECT" "$PROJ_DIR"
+_cur_state=$(_borg_state_read "$PROJ_DIR" ${_REPO+"$_REPO"})
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg sid "$SESSION_ID" \
     --arg now "$NOW" \
@@ -106,7 +107,7 @@ _new_state=$(printf '%s' "$_cur_state" | jq \
      .has_uncommitted_changes = $dirty |
      .clock_divergence = {detected: $diverged, delta_seconds: $delta} |
      (if $sid != "" then .claude_session_id = $sid else . end)')
-_borg_state_write "$PROJ_DIR" "$_new_state" || true
+_borg_state_write "$PROJ_DIR" "$_new_state" ${_REPO+"$_REPO"} || true
 
 # Per-project skill overlay cleanup
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"

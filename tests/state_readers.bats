@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # AC5 step b (expand, readers only): every reader of a project's state.json reads the per-project
-# state-root path first, else the legacy <dir>/.borg/state.json. Writers still write the legacy path
-# (step c), so every case here seeds the files directly.
+# state-root path first, else the legacy <dir>/.borg/state.json. Writers moved in step c
+# (tests/state_writers_ac5.bats), so every case here seeds the files directly.
 #
 # Per reader family: legacy-only is read; both present -> the new one wins. Plus the registry-`repo`
 # fast path must name the same file as the forking resolver (cross-checked against Python).
@@ -202,22 +202,24 @@ _orch_overview() {
     [[ "$output" == *"CAPACITY WARNING"* ]]
 }
 
-@test "link-up hook (read-modify-write): the READ is new-first; the write still lands on the legacy path" {
+@test "link-up hook (read-modify-write): the READ is new-first; the write lands on the new path" {
     _new '{"marker":"from-new"}'
     _legacy '{"marker":"from-legacy"}'
     run bash "$STOP" <<< "$(printf '{"session_id":"s1","cwd":"%s"}' "$PROJ")"
     [ "$status" -eq 0 ]
-    [ "$(jq -r .marker "$PROJ/.borg/state.json")" = "from-new" ]
-    [ "$(jq -r .status "$PROJ/.borg/state.json")" = "idle" ]
+    [ "$(jq -r .marker "$(_new_path)")" = "from-new" ]
+    [ "$(jq -r .status "$(_new_path)")" = "idle" ]
+    [ "$(jq -r .marker "$PROJ/.borg/state.json")" = "from-legacy" ]
 }
 
-@test "notify hook (read-modify-write): the READ is new-first; the write still lands on the legacy path" {
+@test "notify hook (read-modify-write): the READ is new-first; the write lands on the new path" {
     _new '{"marker":"from-new"}'
     _legacy '{"marker":"from-legacy"}'
     run bash "$NOTIFY" <<< "$(printf '{"session_id":"s1","cwd":"%s","message":"hi"}' "$PROJ")"
     [ "$status" -eq 0 ]
-    [ "$(jq -r .marker "$PROJ/.borg/state.json")" = "from-new" ]
-    [ "$(jq -r .status "$PROJ/.borg/state.json")" = "waiting" ]
+    [ "$(jq -r .marker "$(_new_path)")" = "from-new" ]
+    [ "$(jq -r .status "$(_new_path)")" = "waiting" ]
+    [ "$(jq -r .marker "$PROJ/.borg/state.json")" = "from-legacy" ]
 }
 
 # ── Python: borg link's collector ───────────────────────────────────────────
