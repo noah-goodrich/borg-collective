@@ -162,6 +162,30 @@ setup() {
     [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}$ ]]
 }
 
+# ── The hook-language rule states its own inversion ─────────────────────────────────────────────
+#
+# The 2026-08-11 toolchain directive ratified "Hooks stay shell -- permanently, and this is arithmetic rather than
+# preference" on a measurement of EMPTY interpreters. Measured 2026-10-02 on the shipped artifact that comparison
+# inverts: hooks/bash-guard.sh costs more than python3's entire startup in every 20-run mean on both machines
+# measured. These cases pin that DIRECTION and never a figure, which differs per machine.
+#
+# A rule that QUALIFIES a ratified decision is the single most likely thing to be silently re-simplified back to
+# the original -- someone reads "hooks stay shell", does not find the qualification, and re-states the narrow
+# version as the whole truth.
+
+@test "hooks: CLAUDE.md states the subprocess-count rule for hook language" {
+    grep -q 'SUBPROCESS COUNT' "${REPO_ROOT}/CLAUDE.md"
+    grep -q 'At most one helper process' "${REPO_ROOT}/CLAUDE.md"
+    grep -q 'Never node or ruby in a hook body' "${REPO_ROOT}/CLAUDE.md"
+}
+
+@test "hooks: the rule names what it qualifies and pins the direction, not a figure" {
+    grep -q 'QUALIFIES a ratified' "${REPO_ROOT}/CLAUDE.md"
+    grep -q "costs MORE than Python's" "${REPO_ROOT}/CLAUDE.md"
+    grep -q "entire interpreter startup" "${REPO_ROOT}/CLAUDE.md"
+    grep -q 'Hooks stay shell' "${REPO_ROOT}/CLAUDE.md"
+}
+
 # ── Directives name their parent in the form the gate reads ──────────────────────────────────────
 
 @test "directives: every parent is declared as *Parent plan: <slug>*" {
