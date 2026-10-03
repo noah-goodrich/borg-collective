@@ -49,7 +49,7 @@ file directly).
 ```
 # Directive: <title>
 *Filed: <date>*
-*Next: 2026-08-11-viz-2-spine-generator*
+*Next: 2026-08-11-viz-3-cross-repo-chains*
 ```
 
 ## Why both live here
