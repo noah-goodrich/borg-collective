@@ -100,10 +100,11 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                                      `link` arm, the one live caller (`_link_py_args=(--deep)`)
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
-borg add [path]          Register a project
+borg add [path]          Register a project (a re-add keeps an existing `tmux_window`)
 borg rm <project>        Unregister
 borg focus               Zoom current pane / project window
 borg pin / unpin         Pin (or unpin) a project to the top of borg link
+borg window <p> [short]  Show or set a project's short tmux window name (registry `tmux_window`)
 borg reap / reap-worktrees  Reap stale active/waiting statuses; clean stale nanoprobe worktrees
 borg recon --json        Machine surface only: reconciled sweep JSON (bare `recon` retired; use link)
 borg recon --adapters    List the source adapters discovered on this machine
@@ -338,6 +339,18 @@ docs/
   only, edit target inside repo, no existing `PROJECT_PLAN.md` at either canonical location,
   cwd is a git repo. Always exits 0 (never blocks on any failure). Idempotent: if
   `PROJECT_PLAN.md` already exists, the hook is a no-op.
+- **Window names**: the registry's `tmux_window` is the ONE window-name value; drone creates the window with
+  it and borg looks it up by it. Valid means non-empty, no `.` or `:` (tmux target syntax), not the tmux
+  session name, and not another project's name or `tmux_window` (`validate_window_name`). Derivation
+  (`derive_window_name`, run by `drone up` when `needs_derivation` says the field was never customized) is
+  deterministic: names up to 6 chars stay, 3+ segments on `-`/`_` become initials, otherwise the first 6 chars,
+  lengthening on collision. `borg-collective` therefore becomes `borg-c`, because `borg` is the session name
+  and may not be a window. `borg window <project> [short]` reads or sets it; an explicit name survives
+  re-derivation and survives `borg add`. **Lookups accept either form**: a live window under the registry
+  name OR the project name is the project's window, so windows opened before short names existed keep
+  working. That rule has three statements: `_drone_find_window` (drone.zsh), `borg_tmux_find_window`
+  (lib/tmux.zsh, used by `borg switch`, `borg next --switch` and `borg color`) with the reap overlay in
+  lib/registry.zsh, and `window_is_live` (borg_core/link/core.py). Change one, change all three.
 - **borg-hooks (host-side lifecycle)**: projects can ship executable `.devcontainer/borg-hooks/pre-up.sh`
   and `.devcontainer/borg-hooks/post-down.sh` scripts. `pre-up.sh` runs on the host before
   `docker compose up -d` (strict: non-zero aborts `drone up`); `post-down.sh` runs after
