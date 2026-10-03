@@ -1018,6 +1018,32 @@ def test_assemble_leaves_an_entry_without_a_summary_exactly_as_it_was():
     assert "summary" not in doc["projects"]["alpha"]
 
 
+@pytest.mark.parametrize("absent", [None, False])
+def test_assemble_leaves_a_null_summary_null(absent):
+    """The registry writes `"summary": null` for a project with none yet. `is None`, not falsiness:
+    this is what a `--json` consumer reads, and `str(None)` once put the string "None" on the wire."""
+    doc = core.assemble(
+        generated_at="t", show_all=False, total_projects=1, capacity={},
+        projects={"alpha": {"status": "idle", "summary": absent}}, order=["alpha"], directives=[],
+        assimilated=[], cortex_pending=[], focus=None,
+    )
+    assert doc["projects"]["alpha"]["summary"] is absent
+
+
+@pytest.mark.parametrize("stored", [0, ["a", "b\nc"], {"k": "v\tw"}])
+def test_assemble_passes_a_non_string_summary_through_as_stored(stored):
+    """Flattening is a guarantee about STRING summaries. Any other value reaches the wire as the
+    very object the registry held, as it did before flattening moved to assembly. A guard that
+    special-cased only None and False would still str() these at assembly; this pins that it
+    does not."""
+    doc = core.assemble(
+        generated_at="t", show_all=False, total_projects=1, capacity={},
+        projects={"alpha": {"status": "idle", "summary": stored}}, order=["alpha"], directives=[],
+        assimilated=[], cortex_pending=[], focus=None,
+    )
+    assert doc["projects"]["alpha"]["summary"] is stored
+
+
 def test_assemble_does_not_mutate_the_caller_s_registry_entry():
     """`assemble` is documented pure; the caller's dict is not this seam's to edit."""
     entry = {"summary": "a\nb"}

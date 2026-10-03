@@ -60,7 +60,7 @@ def _doc(**overrides) -> dict:
     if isinstance(projects, dict):
         base["projects"] = {
             name: ({**entry, "summary": link_core.flatten_summary(entry["summary"])}
-                   if isinstance(entry, dict) and "summary" in entry else entry)
+                   if isinstance(entry, dict) and isinstance(entry.get("summary"), str) else entry)
             for name, entry in projects.items()
         }
     return base
@@ -1194,6 +1194,21 @@ def test_porcelain_flattens_before_the_80_char_cut():
     doc = _doc(order=["a"], projects={"a": {"source": "cli", "status": "idle", "summary": summary}})
     field = render.porcelain(doc).split("\t")[4].rstrip("\n")
     assert field == ("w" * 40 + " " + "x" * 60)[:80]
+
+
+def test_a_null_summary_renders_the_default_in_the_board_row_and_empty_in_porcelain():
+    """Registry rows carry `"summary": null`. Through the real pipeline the board row must say
+    "(no summary)" and porcelain must carry an empty field; the string None appears in neither."""
+    entry = _as_document_carries(
+        {"source": "cli", "status": "idle", "relative_activity": "1h", "last_activity": "1h", "summary": None}
+    )
+    row = render._overview_row("alpha", entry, {})  # pylint: disable=protected-access
+    assert "(no summary)" in row
+    assert "None" not in row
+    doc = _doc(order=["alpha"], projects={"alpha": entry})
+    field = render.porcelain(doc).rstrip("\n").split("\t")[4]
+    assert field == ""
+    assert "None" not in render.porcelain(doc)
 
 
 # ── AC4: NEXT, and the yours / mine / unsure routing ──────────────────────────────────────────────

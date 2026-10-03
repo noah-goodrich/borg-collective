@@ -102,6 +102,20 @@ run_zsh_borg() {
     [[ "$output" != *"was removed"* ]] || false
 }
 
+# A registry row with `"summary": null` is what `borg add` writes before any debrief. d9e27f6 ran it
+# through `str()` at assembly, so the board printed the word None where "(no summary)" belongs.
+@test "contract: a null summary prints (no summary) on the board, never None" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":null}}}' \
+        > "$BORG_REGISTRY"
+
+    run_zsh_borg link --local
+    [ "$status" -eq 0 ]
+    plain="$(printf '%s' "$output" | sed $'s/\x1b\\[[0-9;]*m//g')"
+    [[ "$plain" == *"(no summary)"* ]] || false
+    [[ "$plain" != *"None"* ]] || false
+}
+
 @test "contract: briefing was removed and points at 'borg link --brief'" {
     run_zsh_borg briefing
     [ "$status" -ne 0 ]
