@@ -114,6 +114,48 @@ _borg_state_root() {
     printf '%s/borg\n' "${XDG_STATE_HOME:-$HOME/.local/state}"
 }
 
+# First 12 hex of sha256 over stdin (shasum on macOS, sha256sum elsewhere).
+_borg_sha12() {
+    { shasum -a 256 2>/dev/null || sha256sum; } | cut -c1-12
+}
+
+# Key naming one project DIRECTORY's machine-local state: <repo12>-<path12>, or local-<path12> outside a git
+# repo. path12 = sha256 of the PHYSICAL directory path (pwd -P, no trailing slash); repo12 = sha256 of
+# `git rev-parse --path-format=absolute --git-common-dir`. Per directory (worktrees of one repo can be in
+# different statuses at once), namespaced by repo. Siblings, byte-identical: borg_core/paths.py::
+# project_state_key and the other shell copy. Rationale lives in the Python docstring.
+# Usage: _borg_project_state_key <dir>
+_borg_project_state_key() {
+    local _d="${1:?_borg_project_state_key: dir required}" _phys _repo _tail="" _base _anc
+    while [ "${#_d}" -gt 1 ] && [ "${_d%/}" != "$_d" ]; do _d="${_d%/}"; done
+    # A missing directory still resolves like Python's realpath: physicalise the deepest existing ancestor.
+    _anc="$_d"
+    while [ -n "$_anc" ] && [ ! -d "$_anc" ]; do
+        _base="${_anc##*/}"
+        _tail="/$_base$_tail"
+        case "$_anc" in
+            */*) _anc="${_anc%/*}" ;;
+            *) _anc="." ;;
+        esac
+    done
+    _phys="$(cd "${_anc:-/}" 2>/dev/null && pwd -P)" || _phys="$_d"
+    [ "$_phys" = "/" ] && _phys=""
+    _phys="$_phys$_tail"
+    [ -n "$_phys" ] || _phys="/"
+    _repo="$(git -C "$_phys" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || _repo=""
+    if [ -n "$_repo" ]; then
+        printf '%s-%s\n' "$(printf '%s' "$_repo" | _borg_sha12)" "$(printf '%s' "$_phys" | _borg_sha12)"
+    else
+        printf 'local-%s\n' "$(printf '%s' "$_phys" | _borg_sha12)"
+    fi
+}
+
+# <state root>/projects/<key>/state.json for a project directory. Creates nothing.
+# Usage: _borg_project_state_file <dir>
+_borg_project_state_file() {
+    printf '%s/projects/%s/state.json\n' "$(_borg_state_root)" "$(_borg_project_state_key "${1:?_borg_project_state_file: dir required}")"
+}
+
 # Resolve an operational file for READING: the state root's copy if it exists, else the old
 # config-dir location ($BORG_DIR, else ${XDG_CONFIG_HOME:-$HOME/.config}/borg). Expand phase of the
 # config -> state-root move: readers accept both before any writer moves. Neither existing prints
