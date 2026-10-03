@@ -101,7 +101,8 @@ _threshold_token() {
         $'null\tother\tidle'
         $'-\tproj\tactive'
         $'explicit\texplicit\tactive'
-        $'explicit\tproj\tidle'
+        $'explicit\tproj\tactive'
+        $'explicit\tother\tidle'
     )
 
     local row window live_list expect actual

@@ -295,12 +295,12 @@ run_zsh_borg() {
     # AC1 asked for "net one command shorter than at plan start" — 27 at plan start, so anything
     # at or below 26 satisfies it, and the comment above already records that this is a FLOOR on
     # shrinkage and not a target. Moving 25 -> 26 is the honest bookkeeping for a deliberate
-    # addition; widening the assertion to a range would delete the very property that made this
-    # test catch the addition in the first place. It went red, it asked which entry moved, and the
+    # addition (26 -> 27 for `borg window`, 2026-10); widening the assertion to a range would delete
+    # the very property that made this test catch the addition in the first place. It went red, it asked which entry moved, and the
     # answer is on the line above. Keep it exact.
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
     [ "$status" -eq 0 ]
-    [ "$output" = "26" ]
+    [ "$output" = "27" ]
 }
 
 # The count alone reaches 26 if someone deletes `doctor` instead of `recon` — and four dispatch
@@ -4243,4 +4243,54 @@ EOF
     run zsh -c "'$BORG' chain plan --chains-dir"
     [ "$status" -ne 0 ]
     [[ "$output" == *"--chains-dir needs a path"* ]] || false
+}
+
+# ── borg window ──────────────────────────────────────────────────────────────
+
+@test "contract: window prints the effective name, sets a short one, and rejects with the reason" {
+    printf '%s' '{"projects":{"widget-factory":{"path":"/tmp/w"},"other":{"path":"/tmp/o","tmux_window":"wf"}}}' \
+        > "$BORG_REGISTRY"
+
+    run_zsh_borg window widget-factory
+    [ "$status" -eq 0 ]
+    [ "$output" = "widget-factory" ]
+
+    run_zsh_borg window widget-factory widget
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"widget"* ]] || false
+    run jq -r '.projects["widget-factory"].tmux_window' "$BORG_REGISTRY"
+    [ "$output" = "widget" ]
+
+    run_zsh_borg window widget-factory
+    [ "$output" = "widget" ]
+
+    run_zsh_borg window widget-factory wf
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"already tmux window"* || "$output" == *"already the tmux window"* ]] || false
+    run jq -r '.projects["widget-factory"].tmux_window' "$BORG_REGISTRY"
+    [ "$output" = "widget" ]
+
+    run_zsh_borg window widget-factory "a.b"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"'.' or ':'"* ]] || false
+
+    run_zsh_borg window ghost
+    [ "$status" -ne 0 ]
+}
+
+# The tmux session name is a zsh variable set in the user's config.zsh, NOT exported. The test sets it
+# only there, so reaching the Python child proves _borg_py applies it -- an exported var would pass
+# whether or not the wrapper forwarded anything.
+@test "contract: window reaches the python child with the session name from config.zsh, unexported" {
+    printf '%s' '{"projects":{"widget":{"path":"/tmp/w"}}}' > "$BORG_REGISTRY"
+    mkdir -p "$BORG_DIR"
+    printf 'BORG_TMUX_SESSION=work\n' > "$BORG_DIR/config.zsh"
+    unset BORG_TMUX_SESSION
+
+    run_zsh_borg window widget work
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"session name"* ]] || false
+
+    run_zsh_borg window widget borg
+    [ "$status" -eq 0 ]
 }
