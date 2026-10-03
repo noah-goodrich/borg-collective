@@ -83,7 +83,8 @@ def test_should_reap_matches_the_shared_case_table(case):
         (None, ["other"], True),
         ("-", ["proj"], False),
         ("explicit", ["explicit"], False),
-        ("explicit", ["proj"], True),
+        ("explicit", ["proj"], False),
+        ("explicit", ["other"], True),
     ],
 )
 def test_reap_overlay_window_resolution(window_field, live_windows, expect_reaped):
@@ -114,6 +115,34 @@ def test_reap_overlay_liveness_is_literal_not_a_regex():
     }
     result = core.reap_overlay(registry, ["dotted-name"], NOW, 12)
     assert result["projects"]["dotted.name"]["status"] == "idle"
+
+
+def _stale_active(**extra):
+    return {"status": "active", "last_activity": _iso(NOW - 999999), **extra}
+
+
+@pytest.mark.parametrize(
+    "entry, live, expect_live",
+    [
+        ({"tmux_window": "wf"}, ["wf"], True),
+        ({"tmux_window": "wf"}, ["widget-factory"], True),
+        ({"tmux_window": "wf"}, ["other"], False),
+        ({}, ["widget-factory"], True),
+        ({"tmux_window": None}, ["wf"], False),
+    ],
+)
+def test_window_is_live_accepts_either_form(entry, live, expect_live):
+    assert core.window_is_live("widget-factory", entry, live) is expect_live
+
+
+def test_reap_overlay_does_not_downgrade_a_project_whose_long_named_window_is_live():
+    registry = {"projects": {"widget-factory": _stale_active(tmux_window="wf")}}
+    result = core.reap_overlay(registry, ["widget-factory"], NOW, 12)
+    assert result["projects"]["widget-factory"]["status"] == "active"
+    result = core.reap_overlay(registry, ["wf"], NOW, 12)
+    assert result["projects"]["widget-factory"]["status"] == "active"
+    result = core.reap_overlay(registry, ["unrelated"], NOW, 12)
+    assert result["projects"]["widget-factory"]["status"] == "idle"
 
 
 def test_reap_overlay_records_the_previous_status_and_does_not_mutate():

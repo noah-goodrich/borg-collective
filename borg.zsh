@@ -398,6 +398,12 @@ _borg_do_switch() {
         tmux_window=""
     fi
 
+    # Either form: a live window under the project name counts even when the registry holds a short name
+    if [[ -n "$tmux_window" && "$tmux_window" != "null" ]]; then
+        tmux_window=$(borg_tmux_find_window "$project" "$tmux_window") || true
+        [[ -n "$tmux_window" ]] || tmux_window="$(printf '%s' "$entry" | jq -r '.tmux_window // ""')"
+    fi
+
     if [[ -n "$tmux_window" && "$tmux_window" != "null" ]]; then
         if (( silent )); then
             # In tmux keybinding context: switch first, then show brief as display-message
@@ -611,10 +617,24 @@ cmd_color() {
     borg_registry_has "$project" || die "Unknown project: $project"
     borg_registry_set "$project" "color" "\"$color\""
     info "Color for $project → $color"
-    if borg_tmux_window_exists "$project" 2>/dev/null; then
-        _borg_apply_window_color "$project" "$color"
+    local live_window
+    if live_window=$(borg_tmux_find_window "$project" "$(borg_registry_get "$project" | jq -r '.tmux_window // ""')" 2>/dev/null); then
+        _borg_apply_window_color "$live_window" "$color"
         info "Applied to live tmux window."
     fi
+}
+
+cmd_window() {
+    local project="${1:-}" short="${2:-}"
+    [[ -z "$project" ]] && die "Usage: borg window <project> [short]"
+    borg_registry_has "$project" || die "Unknown project: $project"
+    if [[ -z "$short" ]]; then
+        _borg_py borg_core.registry.cli window-name "$project"
+        return
+    fi
+    local applied
+    applied=$(_borg_py borg_core.registry.cli window-name "$project" --set "$short") || exit 1
+    info "Window name for $project → $applied"
 }
 
 cmd_image() {
@@ -1011,6 +1031,22 @@ cmd_down() {
 }
 
 cmd_tidy() {
+    if [[ "$1" == "--cairn-leftovers" ]]; then
+        shift
+        local dry=()
+        local a
+        for a in "$@"; do
+            case "$a" in
+                --dry-run) dry=(--dry-run) ;;
+                *) die "tidy --cairn-leftovers: unknown flag '$a' (only --dry-run)" ;;
+            esac
+        done
+        _borg_py borg_core.tidy.cli cairn-leftovers \
+            --config-root "$BORG_DIR" \
+            --state-root "${XDG_STATE_HOME:-$HOME/.local/state}/borg" "${dry[@]}"
+        return $?
+    fi
+    [[ -n "$1" ]] && die "tidy: unknown argument '$1' (try --cairn-leftovers [--dry-run])"
     local now_epoch=$(date +%s)
     local stale_threshold=$(( 48 * 3600 ))
     local candidates=()
@@ -2925,6 +2961,7 @@ cmd_help() {
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
+    window <p> [short]  Show (or set) a project's short tmux window name
     sever               Tear down everything: containers, windows, session
     regenerate          Archive stale projects (idle >48h)
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
@@ -3512,11 +3549,12 @@ case "${1:-help}" in
         _borg_py borg_core.registry.cli rm "$@"
         ;;
     color)    cmd_color "${@:2}" ;;
+    window)   cmd_window "${@:2}" ;;
     image)    cmd_image "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
     sever|down)  cmd_down ;;
-    regenerate|tidy)  cmd_tidy ;;
+    regenerate|tidy)  cmd_tidy "${@:2}" ;;
     setup)    cmd_setup ;;
     store-secret) cmd_store_secret "${@:2}" ;;
     start)    cmd_start "${@:2}" ;;
