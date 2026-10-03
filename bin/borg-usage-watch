@@ -135,8 +135,17 @@ done
 
 mkdir -p "$STATE_DIR"
 
+# Retention: usage-watch.log and usage-samples.jsonl are capped at 1 MiB with one previous
+# generation (_borg_rotate_log, lib/borg-hooks.sh). Fail-open: a missing lib means no rotation.
+# Rotation happens immediately before each append, never at startup: the sample row lands in the
+# fresh file in the same call, so `tail -n 1` readers (dispatch-guard, _probe_due) never see a gap.
+_USAGE_WATCH_ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)"
+{ source "${BORG_ROOT:-$_USAGE_WATCH_ROOT}/lib/borg-hooks.sh"; } >/dev/null 2>&1 || true
+_rotate() { type _borg_rotate_log >/dev/null 2>&1 && _borg_rotate_log "$1"; return 0; }
+
 log() {
     local line="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
+    _rotate "$LOG"
     echo "$line" >> "$LOG"
     (( DEBUG )) && echo "$line" >&2
     return 0
@@ -222,6 +231,7 @@ _claude_proc_count() {
 # A single row is far below PIPE_BUF, so a plain O(1) append is already atomic. Do not
 # "improve" this into a tmp+rename: that rewrites the whole file on every poll.
 _append_sample() {
+    _rotate "$SAMPLES"
     printf '%s\n' "$1" >> "$SAMPLES"
 }
 

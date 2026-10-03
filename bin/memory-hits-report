@@ -43,7 +43,7 @@ fi
 PROJECTS_DIR="${HOME}/.claude/projects"
 CUTOFF_EPOCH=$(( $(date -u +%s) - DAYS * 86400 ))
 
-if [[ ! -f "$HITS_LOG" ]]; then
+if [[ ! -f "$HITS_LOG" && ! -f "$HITS_LOG.1" ]]; then
     echo "memory-hits-report: no data yet — ${HITS_LOG} does not exist."
     echo "The hook (hooks/borg-memory-read-log.sh) registers at SESSION START, so it cannot"
     echo "retroactively log a session already in progress. Check again after at least one"
@@ -51,9 +51,15 @@ if [[ ! -f "$HITS_LOG" ]]; then
     exit 0
 fi
 
+# History spans the retention rotation (_borg_rotate_log keeps ONE previous generation): read the
+# rotated "$HITS_LOG.1" first, then the live file. Absent generations are simply left out.
+HITS_FILES=()
+[[ -f "$HITS_LOG.1" ]] && HITS_FILES+=("$HITS_LOG.1")
+[[ -f "$HITS_LOG" ]] && HITS_FILES+=("$HITS_LOG")
+
 # Numerator: reads within the window. Row format: ts \t session_id \t project \t filename \t bytes
 READS=$(awk -F'\t' -v cutoff="$(date -u -r "$CUTOFF_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@${CUTOFF_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
-    '$1 >= cutoff' "$HITS_LOG" | wc -l | tr -d ' ')
+    '$1 >= cutoff' "${HITS_FILES[@]}" | wc -l | tr -d ' ')
 
 # Denominator: distinct real session transcripts modified within the window, excluding known
 # pollution dirs. One .jsonl file per session_id, so counting files == counting sessions.
@@ -87,4 +93,4 @@ fi
 echo ""
 echo "  by project (reads within window):"
 awk -F'\t' -v cutoff="$(date -u -r "$CUTOFF_EPOCH" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d "@${CUTOFF_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)" \
-    '$1 >= cutoff { c[$3]++ } END { for (p in c) printf "    %-32s %d\n", p, c[p] }' "$HITS_LOG" | sort -t' ' -k2 -rn
+    '$1 >= cutoff { c[$3]++ } END { for (p in c) printf "    %-32s %d\n", p, c[p] }' "${HITS_FILES[@]}" | sort -t' ' -k2 -rn
