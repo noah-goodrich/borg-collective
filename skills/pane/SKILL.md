@@ -11,6 +11,7 @@ If no direction was named: ask which direction (top, bottom, left, or right), th
 `drone pane <chosen>`.
 
 A window holds two panes at most. If the output says it is reusing an existing side pane, confirm:
-"This window already has its side pane, so I reused it." Otherwise confirm: "Opened a pane to the
+"This window already has its side pane, so I reused it." If the output also says "unzoomed", add that
+the window was zoomed and has been restored so the side pane is visible. Otherwise confirm: "Opened a pane to the
 <direction>." No further commentary needed.
 If it fails (invalid direction or not inside tmux), show the error as-is.

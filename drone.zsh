@@ -15,7 +15,7 @@
 #   drone rebuild [project]      Rebuild images (no cache) + restart
 #   drone fix [project|--all]    Restore standard 2-pane layout
 #   drone toggle [project]       Add/remove side pane (2-pane ↔ 3-pane)
-#   drone pane <direction>       Split the calling pane top|bottom|left|right (two panes max)
+#   drone pane <direction>       Split the calling pane top|bottom|left|right (two panes max; reuse unzooms)
 #   drone help                   Command reference
 
 set -e
@@ -916,7 +916,14 @@ cmd_pane() {
     local existing
     existing=$(tmux list-panes -t "$target" -F '#{pane_id}' | grep -vx "$target" | head -1)
     if [[ -n "$existing" ]]; then
-        info "$wname: reusing existing side pane $existing (two panes per window)"
+        local zoomed note=""
+        zoomed=$(tmux display-message -t "$target" -p '#{window_zoomed_flag}')
+        if [[ "$zoomed" == "1" ]]; then
+            # Zoom is a toggle: only call it when the flag says the side pane is hidden.
+            tmux resize-pane -Z -t "$target"
+            note=", unzoomed"
+        fi
+        info "$wname: reusing existing side pane $existing (two panes per window$note)"
         print -- "$existing"
         return 0
     fi
@@ -1331,7 +1338,8 @@ cmd_help() {
     fix --all            Restore layout for all windows
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
     pane <direction>     Split the calling pane top|bottom|left|right (devcontainer-aware); a window holds
-                         two panes, so with a side pane open it reuses that pane and prints its id
+                         two panes, so with a side pane open it reuses that pane (unzooming the window if
+                         it is zoomed, so the side pane is visible) and prints its id
     scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase, --supabase-shared)
     help                 Show this message
 
