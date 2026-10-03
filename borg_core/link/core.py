@@ -235,6 +235,16 @@ def resolve_window(name: str, entry: dict) -> str:
     return str(window)
 
 
+def window_is_live(name: str, entry: dict, live_windows: "list[str] | set[str]") -> bool:
+    """Whether the project owns a LIVE tmux window under EITHER form: the registry's `tmux_window`
+    (the short name) or the project name (a window opened before short names existed).
+
+    The one either-form rule for the Python side; lib/tmux.zsh's `borg_tmux_find_window` is its zsh
+    twin and drone's `_drone_find_window` the third statement of it. Literal whole-string membership.
+    """
+    return resolve_window(name, entry) in live_windows or name in live_windows
+
+
 def reap_overlay(
     registry: dict,
     live_windows: list[str],
@@ -266,7 +276,7 @@ def reap_overlay(
     for name, entry in projects.items():
         status = entry.get("status", "")
         last_activity = entry.get("last_activity")
-        is_live = resolve_window(name, entry) in live
+        is_live = window_is_live(name, entry, live)
         if should_reap(status, last_activity, is_live, now_epoch, threshold_hours):
             updated[name] = {**entry, "_reaped_from": status, "status": DEFAULT_STATUS}
         else:
