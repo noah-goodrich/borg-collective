@@ -1008,6 +1008,22 @@ cmd_down() {
 }
 
 cmd_tidy() {
+    if [[ "$1" == "--cairn-leftovers" ]]; then
+        shift
+        local dry=()
+        local a
+        for a in "$@"; do
+            case "$a" in
+                --dry-run) dry=(--dry-run) ;;
+                *) die "tidy --cairn-leftovers: unknown flag '$a' (only --dry-run)" ;;
+            esac
+        done
+        _borg_py borg_core.tidy.cli cairn-leftovers \
+            --config-root "$BORG_DIR" \
+            --state-root "${XDG_STATE_HOME:-$HOME/.local/state}/borg" "${dry[@]}"
+        return $?
+    fi
+    [[ -n "$1" ]] && die "tidy: unknown argument '$1' (try --cairn-leftovers [--dry-run])"
     local now_epoch=$(date +%s)
     local stale_threshold=$(( 48 * 3600 ))
     local candidates=()
@@ -3503,7 +3519,7 @@ case "${1:-help}" in
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
     sever|down)  cmd_down ;;
-    regenerate|tidy)  cmd_tidy ;;
+    regenerate|tidy)  cmd_tidy "${@:2}" ;;
     setup)    cmd_setup ;;
     store-secret) cmd_store_secret "${@:2}" ;;
     start)    cmd_start "${@:2}" ;;
