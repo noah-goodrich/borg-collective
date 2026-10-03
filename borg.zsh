@@ -2493,7 +2493,8 @@ _borg_file_mtime() {
 }
 
 cmd_doctor() {
-    local state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+    local state_dir
+    state_dir=$(_borg_state_root)
     local data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
     local la_dir="$HOME/Library/LaunchAgents"
 
@@ -2526,6 +2527,7 @@ cmd_doctor() {
     local list_output
     list_output=$(launchctl list 2>/dev/null) || list_output=""
 
+    printf 'State root: %s\n\n' "$state_dir"
     printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "AGENT" "REG" "EXIT" "FRESH" "STATUS"
     printf '%0.s─' {1..70}; echo
 

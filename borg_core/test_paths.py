@@ -58,3 +58,25 @@ def test_registry_path_treats_an_empty_env_var_as_unset(clean_env, monkeypatch):
     monkeypatch.setenv("BORG_REGISTRY", "")
     monkeypatch.setenv("BORG_DIR", "/sentinel/borg")
     assert paths.registry_path() == Path("/sentinel/borg/registry.json")
+
+
+@pytest.fixture()
+def state_env(monkeypatch, tmp_path):
+    """Sandboxed HOME with XDG_STATE_HOME UNSET: the default must be derived, never pre-supplied."""
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    return tmp_path
+
+
+def test_state_root_derives_default_from_home(state_env):
+    assert paths.state_root() == state_env / ".local" / "state" / "borg"
+
+
+def test_state_root_honours_xdg_state_home(state_env, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(state_env / "xdg"))
+    assert paths.state_root() == state_env / "xdg" / "borg"
+
+
+def test_state_root_treats_blank_xdg_state_home_as_unset(state_env, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", "")
+    assert paths.state_root() == state_env / ".local" / "state" / "borg"
