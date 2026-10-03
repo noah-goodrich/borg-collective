@@ -226,7 +226,7 @@ def _usable_path(project_path: str | None) -> Path | None:
     return Path(project_path)
 
 
-def read_state(project_path: str | None) -> dict | None:
+def read_state(project_path: str | None, repo: object = paths.FORK_GIT) -> dict | None:
     """A project's .borg/state.json as a dict, or None when there is nothing usable to merge.
 
     None for: no path, the literal "null", a missing file, an empty file, invalid JSON, or a parsed
@@ -240,7 +240,9 @@ def read_state(project_path: str | None) -> dict | None:
     directory = _usable_path(project_path)
     if directory is None:
         return None
-    state_file = directory / ".borg" / "state.json"
+    # New per-project path first, else legacy <dir>/.borg/state.json (AC5 expand). `repo` is the registry
+    # entry's field: supplied, no git is forked; left at the default, paths asks git.
+    state_file = paths.project_state_read_path(directory, repo)
     text = _read_text(state_file)
     if not text:
         return None
@@ -254,10 +256,12 @@ def read_state(project_path: str | None) -> dict | None:
 def collect_states(registry: dict) -> dict[str, dict]:
     """Every project's state.json, keyed by project name; projects without one are absent."""
     states: dict[str, dict] = {}
+    projects = registry.get("projects") or {}
     for name, project_path in core.project_paths(registry):
         if not name:
             continue
-        state = read_state(project_path)
+        # The registry's `repo` (null/missing -> path-only key) so N projects cost zero git forks.
+        state = read_state(project_path, (projects.get(name) or {}).get("repo"))
         if state is not None:
             states[name] = state
     return states
@@ -437,9 +441,7 @@ def _collect_checkpoints(stores: dict[str, Path]) -> list[tuple[str, str]]:
     return found
 
 
-def _checkpoint_window(
-    sources: list[tuple[str, str]], limit: int
-) -> tuple[list[tuple[str, str]], dict[str, Path]]:
+def _checkpoint_window(sources: list[tuple[str, str]], limit: int) -> tuple[list[tuple[str, str]], dict[str, Path]]:
     """The `(filename, project)` rows a group displays -- ordered, content-deduped, capped -- plus
     the store map they were resolved against.
 

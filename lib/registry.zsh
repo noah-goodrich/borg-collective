@@ -10,6 +10,8 @@
 
 # Source shared reaper predicate (single home; also sourced by lib/borg-hooks.sh).
 source "${${(%):-%x}:A:h}/reaper.sh"
+# Per-project state-file resolvers (borg_state_read_path below reads the new location first).
+source "${${(%):-%x}:A:h}/state-root.zsh"
 
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 BORG_REGISTRY="$BORG_DIR/registry.json"
@@ -127,10 +129,25 @@ borg_state_file() {
     printf '%s/.borg/state.json\n' "${1:?borg_state_file: dir required}"
 }
 
-# Read state.json; return '{}' when the file does not exist yet.
+# The state.json to READ: the per-project state-root copy if it exists, else the legacy
+# <dir>/.borg/state.json (also when neither exists). AC5 expand: readers accept both before any writer
+# moves; borg_state_file stays the WRITE path until step c. Optional 2nd arg = the registry entry's `repo`
+# field, which spares the git fork (see _borg_project_state_key). Mirrors _borg_state_read_path in borg-hooks.sh.
+borg_state_read_path() {
+    local new
+    new=$(_borg_project_state_file "$@")
+    if [[ -f "$new" ]]; then
+        printf '%s\n' "$new"
+    else
+        borg_state_file "$1"
+    fi
+}
+
+# Read state.json (new location first, else legacy); return '{}' when neither exists. Callers that
+# write back still write the legacy path until step c.
 borg_state_read() {
     local sf
-    sf=$(borg_state_file "$1")
+    sf=$(borg_state_read_path "$@")
     if [[ -f "$sf" ]]; then
         /bin/cat "$sf"
     else
@@ -168,15 +185,17 @@ borg_registry_with_state() {
     # PRINTS it -- `merged=$'{\n  "projects": ...'` lands on stdout from the second iteration onward,
     # straight into the caller's `jq`, which dies with "Invalid numeric literal". Hit while writing
     # this very fix. _borg_cortex_pending (borg.zsh:2402) has the same latent `local cd` in a loop.
-    local raw result name ppath state merged
+    local raw result name ppath prepo sfile state merged
     raw=$(borg_registry_read)
     result="$raw"
     # tab-safe: name (.key, never empty) is field 1 of 2; an empty ppath (field 2, last)
     # cannot shift anything after it, and is guarded below regardless.
-    while IFS=$'\t' read -r name ppath; do
-        [[ -z "$name" || -z "$ppath" || "$ppath" == "null" ]] && continue
-        [[ -f "$ppath/.borg/state.json" ]] || continue
-        state=$(/bin/cat "$ppath/.borg/state.json" 2>/dev/null || true)
+    while IFS=$'\t' read -r name ppath prepo; do
+        [[ -z "$name" || -z "$ppath" || "$ppath" == "-" || "$ppath" == "null" ]] && continue
+        # New per-project path first, else legacy; the registry's repo spares one git fork per project.
+        sfile=$(borg_state_read_path "$ppath" "$prepo")
+        [[ -f "$sfile" ]] || continue
+        state=$(/bin/cat "$sfile" 2>/dev/null || true)
         [[ -z "$state" ]] && continue
         # `|| result="$result"` USED TO BE HERE and was a no-op that silently blanked the registry.
         # Command substitution assigns BEFORE the `||` runs, so once jq failed, `result` was already
@@ -200,7 +219,9 @@ borg_registry_with_state() {
             result="$merged"
         fi
     done < <(printf '%s' "$raw" \
-        | jq -r '.projects | to_entries[] | [.key, (.value.path // "")] | @tsv' 2>/dev/null)
+        | jq -r '.projects | to_entries[]
+            | [.key, (if (.value.path // "") == "" then "-" else .value.path end), (.value.repo // "")]
+            | @tsv' 2>/dev/null)
     # Default status to "idle" for any project that has neither a state.json nor a registry status
     result=$(printf '%s\n' "$result" | jq '.projects |= with_entries(.value.status //= "idle")')
     if [[ -z "${BORG_NO_REAP:-}" ]]; then
