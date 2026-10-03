@@ -11,7 +11,7 @@
 # This job wraps bin/memory-hits-report (which already computes reads/session and prints a
 # `VERDICT: FAIL`/`PASS` line against the pre-registered < 0.2 reads/session threshold) and, on a
 # state TRANSITION:
-#   FAIL: writes a verdict file under $BORG_DIR (surfaced loudly by hooks/borg-link-down.sh as a
+#   FAIL: writes a verdict file under the state root (surfaced loudly by hooks/borg-link-down.sh as a
 #         SessionStart additionalContext block) AND fires a macOS notification via the same
 #         _borg_osa_notify helper hooks/notify.sh uses.
 #   PASS: clears any prior FAIL verdict file so a stale FAIL doesn't nag forever.
@@ -35,12 +35,19 @@ LOG="${BORG_MEMORY_GATE_LOG:-$STATE_DIR/memory-gate.log}"
 
 # The verdict file hooks/borg-link-down.sh checks for a loud SessionStart surface. Present only
 # while the last-known verdict is FAIL; removed on PASS.
-VERDICT_FILE="${BORG_MEMORY_GATE_VERDICT_FILE:-$BORG_DIR/memory-gate-verdict.json}"
+# Moved from the config dir to the state root (AC4); readers still fall back to the old path, so a PASS
+# must clear BOTH copies or a stale pre-move FAIL would resurface the moment the new one is removed.
+VERDICT_FILE="${BORG_MEMORY_GATE_VERDICT_FILE:-$STATE_DIR/memory-gate-verdict.json}"
+OLD_VERDICT_FILE="$BORG_DIR/memory-gate-verdict.json"
 
 # Idempotence state: last delivered verdict, so a run that repeats the same verdict does not
 # re-notify every time (mirrors bin/borg-usage-watch's guardian-state approach — track what was
 # last acted on, only act again on a transition).
-GATE_STATE="${BORG_MEMORY_GATE_STATE:-$BORG_DIR/memory-gate-state.json}"
+# Read AND written: a pre-move copy in the config dir is carried across once, then the state root owns it.
+GATE_STATE="${BORG_MEMORY_GATE_STATE:-$STATE_DIR/memory-gate-state.json}"
+if [[ -z "${BORG_MEMORY_GATE_STATE:-}" && ! -f "$GATE_STATE" && -f "$BORG_DIR/memory-gate-state.json" ]]; then
+    mkdir -p "$STATE_DIR" 2>/dev/null && cp "$BORG_DIR/memory-gate-state.json" "$GATE_STATE" 2>/dev/null || true
+fi
 
 REPORT_BIN="${BORG_MEMORY_GATE_REPORT_BIN:-$(command -v memory-hits-report 2>/dev/null || true)}"
 if [[ -z "$REPORT_BIN" ]]; then
@@ -74,7 +81,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-mkdir -p "$STATE_DIR" "$BORG_DIR"
+mkdir -p "$STATE_DIR"
 
 log() {
     local line="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
@@ -173,6 +180,9 @@ if [[ "$VERDICT" == "FAIL" ]]; then
     _gate_set_delivered "$VERDICT" "$RATIO"
 else
     # PASS: clear any stale FAIL verdict file so it doesn't linger and re-nag forever.
+    if [[ -z "${BORG_MEMORY_GATE_VERDICT_FILE:-}" ]]; then
+        rm -f "$OLD_VERDICT_FILE"
+    fi
     if [[ -f "$VERDICT_FILE" ]]; then
         rm -f "$VERDICT_FILE"
         log "cleared prior FAIL verdict file (now PASS)"

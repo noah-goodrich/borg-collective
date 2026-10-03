@@ -79,12 +79,15 @@ BORG_USAGE_SWEEP_CMD_TEXT="${BORG_USAGE_SWEEP_CMD_TEXT:-/borg-link-up}"
 BORG_USAGE_SENDKEYS_DELAY="${BORG_USAGE_SENDKEYS_DELAY:-0.5}"
 
 # Guardian state (sweep-once-per-window idempotence + the consecutive-UNKNOWN streak below).
-# Distinct from the samples log; lives under the config dir per the directive. tmp+rename writes
-# only; both concerns merge onto the same object rather than overwriting each other's keys.
+# Distinct from the samples log; lives in the state root beside it (moved from the config dir, AC4).
+# tmp+rename writes only; both concerns merge onto the same object rather than overwriting each
+# other's keys. Read AND written, so a pre-move copy in the config dir is carried across once.
 BORG_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
-GUARDIAN_STATE="${BORG_USAGE_GUARDIAN_STATE:-$BORG_CONFIG_DIR/usage-guardian.json}"
-
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+GUARDIAN_STATE="${BORG_USAGE_GUARDIAN_STATE:-$STATE_DIR/usage-guardian.json}"
+if [[ -z "${BORG_USAGE_GUARDIAN_STATE:-}" && ! -f "$GUARDIAN_STATE" && -f "$BORG_CONFIG_DIR/usage-guardian.json" ]]; then
+    mkdir -p "$STATE_DIR" 2>/dev/null && cp "$BORG_CONFIG_DIR/usage-guardian.json" "$GUARDIAN_STATE" 2>/dev/null || true
+fi
 SAMPLES="${BORG_USAGE_SAMPLES:-$STATE_DIR/usage-samples.jsonl}"
 LOG="${BORG_USAGE_LOG:-$STATE_DIR/usage-watch.log}"
 

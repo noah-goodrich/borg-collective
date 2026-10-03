@@ -5,7 +5,7 @@
 # project-memory files as the sole cross-session knowledge layer. This hook is the hit log that
 # proves whether that fallback is actually read, matching the shape of cairn-hits.log. Contract:
 # logs a tab-separated row (timestamp, session_id, project dir, filename, bytes) to
-# $BORG_DIR/memory-hits.log for any Read whose file_path is under
+# $XDG_STATE_HOME/borg/memory-hits.log for any Read whose file_path is under
 # ~/.claude/projects/<dir>/memory/*.md, and is a silent no-op for every other Read. Never blocks
 # (always exits 0) — this is passive observation, not a gate.
 
@@ -33,15 +33,15 @@ _run_hook() {
     _run_hook "$mem_dir/MEMORY.md"
     [ "$status" -eq 0 ]
 
-    [ -f "$BORG_DIR/memory-hits.log" ]
-    run cat "$BORG_DIR/memory-hits.log"
+    [ -f "$XDG_STATE_HOME/borg/memory-hits.log" ]
+    run cat "$XDG_STATE_HOME/borg/memory-hits.log"
     [[ "$output" == *$'\t'"test-session-abc"$'\t'"-Users-noah-dev-cairn"$'\t'"MEMORY.md"$'\t'"7" ]] || false
 }
 
 @test "does not log a read of a non-memory file" {
     _run_hook "/Users/noah/dev/cairn/src/cairn/db.py"
     [ "$status" -eq 0 ]
-    [ ! -f "$BORG_DIR/memory-hits.log" ]
+    [ ! -f "$XDG_STATE_HOME/borg/memory-hits.log" ]
 }
 
 @test "does not log a read outside .claude/projects" {
@@ -51,7 +51,7 @@ _run_hook() {
 
     _run_hook "$other_dir/note.md"
     [ "$status" -eq 0 ]
-    [ ! -f "$BORG_DIR/memory-hits.log" ]
+    [ ! -f "$XDG_STATE_HOME/borg/memory-hits.log" ]
 }
 
 @test "does not log a read of a project file that merely contains 'memory' in its name" {
@@ -61,7 +61,7 @@ _run_hook() {
 
     _run_hook "$proj_dir/memory-notes.md"
     [ "$status" -eq 0 ]
-    [ ! -f "$BORG_DIR/memory-hits.log" ]
+    [ ! -f "$XDG_STATE_HOME/borg/memory-hits.log" ]
 }
 
 @test "extracts the project dir segment correctly for nested memory paths" {
@@ -70,7 +70,7 @@ _run_hook() {
     printf 'hi' > "$mem_dir/project_cairn_overview.md"
 
     _run_hook "$mem_dir/project_cairn_overview.md"
-    run cat "$BORG_DIR/memory-hits.log"
+    run cat "$XDG_STATE_HOME/borg/memory-hits.log"
     [[ "$output" == *$'\t'"-Users-noah-dev-borg-collective"$'\t'"project_cairn_overview.md"$'\t'"2" ]] || false
 }
 
@@ -83,7 +83,7 @@ _run_hook() {
     _run_hook "$mem_dir/a.md"
     _run_hook "$mem_dir/b.md"
 
-    run wc -l < "$BORG_DIR/memory-hits.log"
+    run wc -l < "$XDG_STATE_HOME/borg/memory-hits.log"
     [[ "${output// /}" == "2" ]] || false
 }
 
@@ -97,7 +97,7 @@ _run_hook() {
     run bash -c "bash '$HOOK' < '$payload_file'"
 
     [ "$status" -eq 0 ]
-    run cat "$BORG_DIR/memory-hits.log"
+    run cat "$XDG_STATE_HOME/borg/memory-hits.log"
     [[ "$output" == *$'\t'"unknown"$'\t'* ]] || false
 }
 
@@ -114,5 +114,5 @@ _run_hook() {
 @test "never blocks: exits 0 when file_path is missing from tool_input" {
     run bash -c "echo '{\"session_id\":\"x\",\"tool_input\":{}}' | bash '$HOOK'"
     [ "$status" -eq 0 ]
-    [ ! -f "$BORG_DIR/memory-hits.log" ]
+    [ ! -f "$XDG_STATE_HOME/borg/memory-hits.log" ]
 }

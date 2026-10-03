@@ -541,9 +541,10 @@ for p in sys.argv[1:]:
     # place a future `borg link` memo lands -- and until it was listed here, a cache written there
     # left all four assertions below green. Measured: a `link-cache.json` write into
     # $XDG_DATA_HOME/borg passed; the identical write into $BORG_DIR failed.
-    # $XDG_STATE_HOME and $XDG_CACHE_HOME need no entry: both are unset in this suite and default
+    # $XDG_STATE_HOME IS A ROOT TOO since AC4 (operational writers moved there; setup_temp_dirs
+    # redirects it to a sibling of $HOME). $XDG_CACHE_HOME needs no entry: unset here, so it defaults
     # under the redirected $HOME, which IS a root.
-    local roots=( "$BORG_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$dir" "$TMPDIR" "$BORG_TEST_HOME" )
+    local roots=( "$BORG_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_HOME" "$dir" "$TMPDIR" "$BORG_TEST_HOME" )
 
     # THREE SNAPSHOTS, NOT TWO. A cache is by definition something run 1 WRITES and run 2 READS, so
     # run 2 need not mutate anything: a single before/after pair collapses a cache into the same
@@ -615,20 +616,20 @@ for p in sys.argv[1:]:
     run bash -c "grep -c '^FILE ' '${BATS_TEST_TMPDIR}/s2.txt'"
     [ "$output" = "$before_files" ]
 
-    # (4) THE ONE NAMED ARTIFACT, WITH ITS CONTROL. $BORG_DIR/recon/last-run is a real cache:
+    # (4) THE ONE NAMED ARTIFACT, WITH ITS CONTROL. $XDG_STATE_HOME/borg/recon/last-run (state root since AC4) is a real cache:
     # recon's since-ladder reads it back and advances it on every sweep. `link` folds recon's
     # fan-out in but must never write it -- borg_core/link/shell.py's sweep() says so in prose, and
     # this is the executable half. S4 retires the recon VERB while keeping the ENGINE, so this is
     # exactly one careless refactor (routing a digest through link, reusing recon.cli._sweep) away
     # from becoming false.
-    [ ! -e "${BORG_DIR}/recon/last-run" ]
+    [ ! -e "${XDG_STATE_HOME}/borg/recon/last-run" ]
 
     # THE CONTROL. Without it, `[ ! -e ... ]` is green on a machine where nothing could write it at
     # all. `borg recon --json` runs the same adapters over the same registry and DOES persist the
     # mark, so the assertion above is provably falsifiable. It runs LAST, after the GH_TRACE gate,
     # because it adds a third `gh` call.
     bash -c "cd '$dir' && zsh '$BORG' recon --json" >/dev/null 2>&1
-    [ -e "${BORG_DIR}/recon/last-run" ]
+    [ -e "${XDG_STATE_HOME}/borg/recon/last-run" ]
 }
 
 # ── B9: the latency the whole plan is budgeted against ────────────────────────
