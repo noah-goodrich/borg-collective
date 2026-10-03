@@ -1,5 +1,6 @@
 # Project Plan: State Hygiene and the Reader Census
 *Established: 2026-09-28*
+*Next: 2026-08-11-viz-3-cross-repo-chains*
 
 - Plan-slug: `2026-09-28-state-hygiene-reader-census`
 
@@ -12,7 +13,7 @@ recur unnoticed. No new storage engine.
 
 ## Acceptance Criteria
 
-- [ ] **AC1 — The checkpoint name comes from CODE, not from prose.** A helper returns a
+- [x] **AC1 — The checkpoint name comes from CODE, not from prose.** A helper returns a
   collision-proof checkpoint filename (second resolution plus a short session-id suffix);
   `skills/borg-link-up/SKILL.md` calls it instead of composing `date +%Y-%m-%d-%H%M` itself, and
   no skill composes a checkpoint timestamp anywhere. Two concurrent writers in two worktrees of one
@@ -20,8 +21,12 @@ recur unnoticed. No new storage engine.
   - Verify: `grep -rn 'date +%Y-%m-%d-%H%M' skills/` returns nothing; a new test asserts N
     invocations yield N distinct names, and a second asserts two different `.borg/checkpoints`
     directories under one repo cannot collide. Mutation: remove the suffix and the test goes red.
+  - Evidence, 2026-10-03: shipped in #235. The grep returns nothing; `python3 -m pytest borg_core/checkpoint
+    borg_core/census` passes (43); `bats tests/prose_contracts.bats` passes. Mutation re-run: making
+    `short_suffix` return `""` turns 5 tests red, including
+    `test_two_sessions_in_the_same_second_get_different_stems` (two sessions, not N invocations).
 
-- [ ] **AC2 — A reader census contract test exists and DISCRIMINATES.** It fails when a
+- [x] **AC2 — A reader census contract test exists and DISCRIMINATES.** It fails when a
   `.borg/<name>` is written by any code path, or named in `CLAUDE.md`, but read by none. It names
   three states explicitly, because two is what makes it either toothless or self-contradictory:
   written-by-code-no-reader → FAIL; named-in-docs-no-reader → FAIL;
@@ -31,6 +36,9 @@ recur unnoticed. No new storage engine.
   discriminates.
   - Verify: the new bats case list includes both directions; deleting the known-bad fixture's reader
     turns it red. `bats tests/<new>.bats`.
+  - Evidence, 2026-10-03: shipped in #236. `bats tests/state_census.bats` passes (10 cases), covering state 1
+    (written, no reader: FAIL), state 2 (docs promise, no reader: FAIL), state 3 (inert on disk: PASS), and the
+    stale-reader and missing-reader fixtures, so both directions discriminate.
 
 - [ ] **AC3 — The ten write-only stores are resolved, and `knowledge/` keeps its files.**
   `CLAUDE.md` no longer names `.borg/knowledge/` as a place to grep for prior decisions; its 1106
