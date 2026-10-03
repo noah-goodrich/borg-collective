@@ -433,3 +433,30 @@ EOF
     [[ "$ctx" != *"Call her the Queen in prose"* ]] || {
         echo "orchestrator got the drone-facing block"; false; }
 }
+
+# ─── memory-gate verdict: read through the operational-file helper (AC4 A2b-2) ─────────────────────
+# setup_temp_dirs pins HOME, XDG_CONFIG_HOME, XDG_STATE_HOME and XDG_DATA_HOME. The explicit override
+# BORG_MEMORY_GATE_VERDICT_FILE is unset so the helper path is the one exercised.
+
+_verdict_ctx() {
+    unset BORG_MEMORY_GATE_VERDICT_FILE
+    bash "$BORG_START" <<< "$(_start_input)"
+}
+
+@test "start hook surfaces a verdict that exists only at the old config location" {
+    printf '{"ratio":"0.111","checked_at":"old-loc"}' > "$BORG_DIR/memory-gate-verdict.json"
+    run _verdict_ctx
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"AUTO-MEMORY GATE: FAIL"* ]]
+    [[ "$output" == *"0.111"* ]]
+}
+
+@test "start hook prefers the state-root verdict when both locations hold one" {
+    printf '{"ratio":"0.111","checked_at":"old-loc"}' > "$BORG_DIR/memory-gate-verdict.json"
+    mkdir -p "$XDG_STATE_HOME/borg"
+    printf '{"ratio":"0.222","checked_at":"new-loc"}' > "$XDG_STATE_HOME/borg/memory-gate-verdict.json"
+    run _verdict_ctx
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"0.222"* ]]
+    [[ "$output" != *"0.111"* ]]
+}
