@@ -301,6 +301,14 @@ docs/
   ~19ms, not 230 reads. The byline appears only when the rows actually being printed span more than
   one project; an unreadable body yields no identity and its row is KEPT, because a permissions
   error must not render as an empty history.
+- **Log retention (AC4 part C)**: every unbounded append-only writer in the state root (plan-promote-debug.log,
+  memory-hits.log, agents.jsonl, prefer-tool.jsonl, pr-watch.log, usage-watch.log, usage-samples.jsonl) calls
+  `_borg_rotate_log` (`lib/borg-hooks.sh`; Python sibling `borg_core/retention.py::rotate_log`) immediately before
+  its append. At `BORG_LOG_CAP_BYTES` (default 1 MiB) the file is renamed to `<file>.1`, ONE generation, replacing
+  any older `.1`. Fail-open and silent. Readers that need history read `.1` then the live file: `memory-hits-report`
+  and `borg nanoprobes` / `nanoprobe-log`. The briefing stderr logs are overwritten per run, not appended, so they
+  are bounded already. `data.json.bak.<timestamp>` has no writer in the tree (hand-made copies of the merge-tree
+  board's `data.json`); the board is slated for retirement, so no retention was built for it.
 - **Skills do the thinking**: Claude proposes, developer validates. Minimum cognitive load.
 - **Debriefs replace summaries**: LLM analysis at session stop, not regex extraction
 - **Boundaries are speed bumps**: one-keystroke confirmations, not hard blocks
