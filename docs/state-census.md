@@ -73,6 +73,34 @@ wallpapering this census exists to prevent.
 | `.borg/elsewhere` | prose | - | not a store: a path in `merge-tree/test_coordinator.py`'s fixture for a manifest OUTSIDE the manifest dir |
 | `.borg/anything` | prose | - | not a store: a docstring example in `borg_core/manifest/shell.py` naming a path that is never opened |
 
+## How the ten write-only stores were resolved (AC3, 2026-10-03)
+
+The audit counted sixteen `.borg/<name>` spellings and ten with no reader. Confirmed against the tree on
+2026-10-03: none of the ten is named by executable code, `CLAUDE.md`, a skill or an agent, so there is no writer
+and no promise left to delete. Each is therefore resolved as state (c), inert on-disk data, which is the census'
+third state and needs no row. The one real action was the promise deleted from `CLAUDE.md` and
+`agents/borg-nanoprobe.md` on 2026-09-28.
+
+| store | resolution | reasoning |
+| --- | --- | --- |
+| `knowledge` | (c), `retired` row | cairn's export; 1106 tracked files kept, the promise to grep it is gone |
+| `debriefs` | (c) | no writer, no reader, named nowhere |
+| `research` | (c) | same |
+| `decisions` | (c) | same |
+| `drafts` | (c) | same |
+| `notes` | (c) | same |
+| `inbox` | (c) | same |
+| `recovered-inbox` | (c) | same |
+| `plans` | (c) | invented; plans live in `docs/plans/`, which `borg link` reads |
+| `briefings` | (c) | same; the briefing is generated on demand by `borg link --brief` |
+
+Cairn's machine-local leftovers (`cairn-hits.log`, `cairn-inbox`, `cairn-heartbeat-last`, `.cairn-last-write`,
+`.cairn-write-failed`) have no writer in the tree. They are removed from live machines by
+`borg tidy --cairn-leftovers [--dry-run]`, which copies each into `<state root>/tidy-backups/<timestamp>/` before
+deleting it. Matching is by exact name, and the backup directory is not named for cairn so the post-merge check
+`ls ~/.config/borg ~/.local/state/borg | grep -c cairn` can reach 0. Whether the five names live under the
+config root or the state root is AC4's question; the command checks both.
+
 ## Where each file under the config dir lives (AC4)
 
 The census above lists what READS a store. This one lists WHERE each file under

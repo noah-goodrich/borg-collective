@@ -109,6 +109,16 @@ _drone_resolve() {
             _proj_name="$arg"
             return 0
         fi
+        # Not a project name: it may be a project's SHORT tmux window name (registry `tmux_window`).
+        local reg_project
+        reg_project=$(_drone_project_for_window "$arg")
+        reg_path=""
+        [[ -n "$reg_project" ]] && reg_path=$(jq -r --arg p "$reg_project" '.projects[$p].path // empty' "$registry" 2>/dev/null) || true
+        if [[ -n "$reg_path" && -d "$reg_path" ]]; then
+            _proj_dir="$reg_path"
+            _proj_name="$reg_project"
+            return 0
+        fi
     fi
 
     # Argument is an existing path
@@ -126,6 +136,80 @@ _drone_resolve() {
     fi
 
     die "Cannot find project '$arg'. cd to the project dir, or register it with: borg add <path>"
+}
+
+# ── Window names (registry-owned) ─────────────────────────────────────────────
+
+# Run the registry CLI with borg's config surface in the child's ENVIRONMENT. drone.zsh assigns
+# SESSION/BORG_DIR without export, and a python3 child sees none of them (CLAUDE.md, "A shell
+# variable is not an environment variable"), so every default is applied here, in the wrapper.
+# borg_core is resolved script-relative via DRONE_SCRIPT_DIR, never via cwd or $BORG_HOME.
+_drone_registry_py() {
+    BORG_DIR="$BORG_DIR" \
+    BORG_REGISTRY="${BORG_REGISTRY:-$BORG_DIR/registry.json}" \
+    BORG_TMUX_SESSION="$SESSION" \
+    PYTHONPATH="$DRONE_SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
+    python3 -m borg_core.registry.cli "$@"
+}
+
+# The project's tmux window name, derived-and-stored on first use (`window-name --derive`: an
+# explicit choice is respected). Fail-open: any failure (no python, project not in the registry)
+# prints the project name, which is the pre-registry behaviour.
+_drone_window_name() {
+    local project="$1" out
+    out=$(_drone_registry_py window-name "$project" --derive 2>/dev/null) || out=""
+    print -r -- "${out:-$project}"
+}
+
+# Reverse lookup: the project whose registry `tmux_window` equals $1 (empty when none).
+_drone_project_for_window() {
+    local registry="${BORG_REGISTRY:-$BORG_DIR/registry.json}"
+    [[ -f "$registry" ]] || return 0
+    jq -r --arg w "$1" '[.projects // {} | to_entries[] | select(.value.tmux_window == $w) | .key][0] // empty' \
+        "$registry" 2>/dev/null || true
+}
+
+# Whether the registry knows project $1.
+_drone_registered() {
+    local registry="${BORG_REGISTRY:-$BORG_DIR/registry.json}"
+    [[ -f "$registry" ]] || return 1
+    jq -e --arg p "$1" '.projects[$p] != null' "$registry" >/dev/null 2>&1
+}
+
+# Registry key for $1, which may be a project name or a short window name; $1 itself if unknown.
+_drone_project_of() {
+    local reg_project
+    if _drone_registered "$1"; then print -r -- "$1"; return 0; fi
+    reg_project=$(_drone_project_for_window "$1")
+    print -r -- "${reg_project:-$1}"
+}
+
+# The LIVE tmux window for a project: the short name OR the long (project) name, so windows opened
+# before the short names existed keep working. Prints it; returns 1 when neither is live.
+_drone_find_window() {
+    local project="$1" wname="$2"
+    if has_window "$wname"; then print -r -- "$wname"
+    elif has_window "$project"; then print -r -- "$project"
+    else return 1
+    fi
+}
+
+# Window for a command-line argument in either form (project, short name, or a literal live window).
+_drone_arg_window() {
+    local arg="$1" project wname live
+    if has_window "$arg"; then print -r -- "$arg"; return 0; fi
+    project=$(_drone_project_of "$arg")
+    wname=$(_drone_window_name "$project")
+    live=$(_drone_find_window "$project" "$wname") || live="$wname"
+    print -r -- "$live"
+}
+
+# `borg add` rewrites tmux_window (to the project name, or null) because it knows nothing of short
+# names; put the window's real name back afterwards. Fail-open.
+_drone_register() {
+    local project_dir="$1" project="$2" wname="$3"
+    borg add "$project_dir" 2>/dev/null || true
+    [[ "$wname" == "$project" ]] || _drone_registry_py window-name "$project" --set "$wname" >/dev/null 2>&1 || true
 }
 
 # ── Color helpers ─────────────────────────────────────────────────────────────
@@ -373,6 +457,14 @@ cmd_up() {
 
     dbg "cmd_up: project=$project_name dir=$project_dir"
 
+    # The window name is registry-owned. A brand-new project must be registered first or there is
+    # nothing to derive from; an existing entry is never re-added here (borg add rewrites tmux_window).
+    _drone_registered "$project_name" || borg add "$project_dir" 2>/dev/null || true
+    local wname live
+    wname=$(_drone_window_name "$project_name")
+    live=$(_drone_find_window "$project_name" "$wname") || live=""
+    dbg "cmd_up: window name '$wname' live='$live'"
+
     local has_devcontainer=0
     [[ -f "$compose" ]] && has_devcontainer=1
 
@@ -380,20 +472,20 @@ cmd_up() {
         # ── No devcontainer: plain local window ──────────────────────────────
         dbg "cmd_up: no .devcontainer, creating local window"
 
-        if has_window "$project_name"; then
+        if [[ -n "$live" ]]; then
             info "Project '$project_name' already open."
-            attach_or_switch "$project_name"
+            attach_or_switch "$live"
             return
         fi
 
         # Host-first: left pane runs claude, right pane is a shell at project_dir.
-        create_2pane_window "$project_name" "claude" "$project_dir" ""
-        tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
-        _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
-        borg add "$project_dir" 2>/dev/null || true
+        create_2pane_window "$wname" "claude" "$project_dir" ""
+        tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
+        _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
+        _drone_register "$project_dir" "$project_name" "$wname"
         echo "$project_name" > "$project_dir/.borg-project"
         info "Project '$project_name' ready (local)."
-        attach_or_switch "$project_name"
+        attach_or_switch "$wname"
         return
     fi
 
@@ -412,14 +504,14 @@ cmd_up() {
     fi
 
     # Window already exists — check health
-    if has_window "$project_name"; then
+    if [[ -n "$live" ]]; then
         local panes
-        panes=$(window_pane_count "$project_name")
-        dbg "cmd_up: window '$project_name' exists with $panes panes"
+        panes=$(window_pane_count "$live")
+        dbg "cmd_up: window '$live' exists with $panes panes"
 
         if [[ "$panes" != "2" ]]; then
             dbg "cmd_up: wrong pane count, killing window"
-            tmux kill-window -t "$SESSION:$project_name"
+            tmux kill-window -t "$SESSION:$live"
             # Fall through to create new window
         else
             local container
@@ -440,8 +532,8 @@ cmd_up() {
                 # Host-side panes are immune to container restart — no re-exec needed.
             fi
             info "Project '$project_name' already running."
-            _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
-            attach_or_switch "$project_name"
+            _drone_apply_window_color "$live" "$(_drone_project_color "$project_name")"
+            attach_or_switch "$live"
             return
         fi
     fi
@@ -466,16 +558,16 @@ cmd_up() {
 
     # Host-first: both panes are host shells at $project_dir.
     # Left (Claude) pane auto-launches `claude`; right pane stays as a shell prompt.
-    create_2pane_window "$project_name" "claude" "$project_dir" ""
-    tmux set-option -t "$SESSION:$project_name" @project_dir "$project_dir"
-    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
-    borg add "$project_dir" 2>/dev/null || true
+    create_2pane_window "$wname" "claude" "$project_dir" ""
+    tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
+    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
+    _drone_register "$project_dir" "$project_name" "$wname"
     echo "$project_name" > "$project_dir/.borg-project"
 
     dbg "cmd_up: windows: $(tmux list-windows -t "$SESSION" -F '  #I: #W (#{window_panes} panes)' 2>/dev/null)"
 
     info "Project '$project_name' ready."
-    attach_or_switch "$project_name"
+    attach_or_switch "$wname"
 }
 
 # ── drone down ────────────────────────────────────────────────────────────────
@@ -488,9 +580,11 @@ cmd_down() {
 
     dbg "cmd_down: project=$project_name dir=$project_dir"
 
-    if tmux has-session -t "$SESSION" 2>/dev/null && has_window "$project_name"; then
-        info "Removing window '$project_name'."
-        tmux kill-window -t "$SESSION:$project_name"
+    local live
+    if tmux has-session -t "$SESSION" 2>/dev/null \
+        && live=$(_drone_find_window "$project_name" "$(_drone_window_name "$project_name")"); then
+        info "Removing window '$live'."
+        tmux kill-window -t "$SESSION:$live"
     fi
 
     rm -f "$project_dir/.borg-project"
@@ -576,7 +670,8 @@ _foreach_project_window() {
             warn "$wname: no @project_dir set, skipping"
             continue
         fi
-        "$op_func" "$wname" "$pdir"
+        # The op takes a PROJECT name (docker compose -p, hooks), never a window name.
+        "$op_func" "$(_drone_project_of "$wname")" "$pdir"
         count=$(( count + 1 ))
     done
     info "${past_tense} $count project(s)."
@@ -620,15 +715,19 @@ cmd_claude() {
     dbg "cmd_claude: project=$project_name dir=$project_dir"
 
     # If no window exists, drone up creates it AND auto-launches claude in the right pane.
-    if ! has_window "$project_name"; then
+    local wname
+    wname=$(_drone_window_name "$project_name")
+    if ! wname=$(_drone_find_window "$project_name" "$wname"); then
         info "$project_name: no window found, running drone up first..."
         cmd_up "${1:-}"
+        wname=$(_drone_window_name "$project_name")
+        wname=$(_drone_find_window "$project_name" "$wname") || true
     fi
 
     # Reattach: only send `claude` if the pane is at a shell prompt — avoids
     # typing "claude" into a running Claude REPL.
     local claude_pane current_cmd
-    claude_pane=$(get_left_pane "$project_name")
+    claude_pane=$(get_left_pane "$wname")
     current_cmd=$(tmux display-message -p -t "$claude_pane" '#{pane_current_command}' 2>/dev/null)
     case "$current_cmd" in
         zsh|bash|sh|fish|dash|"")
@@ -641,8 +740,8 @@ cmd_claude() {
     esac
 
     # Switch to the project window, focus + zoom Claude pane
-    attach_or_switch "$project_name"
-    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
+    attach_or_switch "$wname"
+    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
     tmux select-pane -t "$claude_pane"
     tmux resize-pane -Z -t "$claude_pane"
 }
@@ -656,19 +755,23 @@ cmd_cortex() {
 
     dbg "cmd_cortex: project=$project_name dir=$project_dir"
 
-    if ! has_window "$project_name"; then
+    local wname
+    wname=$(_drone_window_name "$project_name")
+    if ! wname=$(_drone_find_window "$project_name" "$wname"); then
         info "$project_name: no window found, running drone up first..."
         cmd_up "${1:-}"
+        wname=$(_drone_window_name "$project_name")
+        wname=$(_drone_find_window "$project_name" "$wname") || true
     fi
 
     local claude_pane
-    claude_pane=$(get_left_pane "$project_name")
+    claude_pane=$(get_left_pane "$wname")
     info "Launching Cortex in $project_name (left pane)..."
     tmux send-keys -t "$claude_pane" "cortex" Enter
-    tmux set-option -t "$SESSION:$project_name" @cortex_launched 1
+    tmux set-option -t "$SESSION:$wname" @cortex_launched 1
 
-    attach_or_switch "$project_name"
-    _drone_apply_window_color "$project_name" "$(_drone_project_color "$project_name")"
+    attach_or_switch "$wname"
+    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
     tmux select-pane -t "$claude_pane"
     tmux resize-pane -Z -t "$claude_pane"
 }
@@ -799,7 +902,7 @@ cmd_fix() {
     if [[ "${1:-}" == "--all" ]]; then
         targets=(${(f)"$(tmux list-windows -t "$SESSION" -F '#W')"})
     elif [[ -n "${1:-}" ]]; then
-        targets=("$1")
+        targets=("$(_drone_arg_window "$1")")
     else
         targets=("$(tmux display -p '#{window_name}')")
     fi
@@ -834,7 +937,7 @@ cmd_fix() {
 cmd_toggle() {
     local wname
     if [[ -n "${1:-}" ]]; then
-        wname="$1"
+        wname=$(_drone_arg_window "$1")
     elif [[ -n "$TMUX" ]]; then
         wname=$(tmux display-message -p '#W')
     else
@@ -872,7 +975,7 @@ cmd_toggle() {
                 if [[ -n "$container" ]]; then
                     shell=$(get_shell "$container")
                     service=$(get_service_name "$pdir")
-                    exec_cmd=$(build_exec_cmd "$wname" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
+                    exec_cmd=$(build_exec_cmd "${pdir##*/}" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
                     tmux send-keys -t "$side" "$exec_cmd" Enter
                 fi
             elif [[ -n "$pdir" ]]; then
@@ -942,7 +1045,7 @@ cmd_pane() {
         if [[ -n "$container" ]]; then
             shell=$(get_shell "$container")
             service=$(get_service_name "$pdir")
-            exec_cmd=$(build_exec_cmd "$wname" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
+            exec_cmd=$(build_exec_cmd "${pdir##*/}" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
             tmux send-keys -t "$new_pane" "$exec_cmd" Enter
         fi
     elif [[ -n "$pdir" ]]; then
