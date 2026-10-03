@@ -5,6 +5,7 @@ import os
 
 import pytest
 
+from borg_core import paths
 from borg_core.link import core, shell
 
 
@@ -14,6 +15,7 @@ def isolated_env(tmp_path, monkeypatch):
     borg_dir.mkdir()
     monkeypatch.setenv("BORG_DIR", str(borg_dir))
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     monkeypatch.delenv("BORG_REGISTRY", raising=False)
     monkeypatch.delenv("BORG_REAP_STALE_HOURS", raising=False)
     monkeypatch.delenv("BORG_NO_REAP", raising=False)
@@ -182,6 +184,53 @@ def test_collect_states_skips_projects_without_usable_state(isolated_env):
         }
     }
     assert shell.collect_states(registry) == {"good": {"status": "active"}}
+
+
+def _seed_new_state(directory, repo, body):
+    target = paths.project_state_file(directory, repo)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+
+
+def test_read_state_new_path_wins_over_legacy(isolated_env):
+    directory = _project(isolated_env, "both", state='{"status":"legacy"}')
+    _seed_new_state(directory, None, '{"status":"new"}')
+    assert shell.read_state(directory, None) == {"status": "new"}
+    assert shell.read_state(directory) == {"status": "new"}  # default: forks git, same file outside git
+
+
+def test_read_state_new_only_and_legacy_only(isolated_env):
+    new_only = _project(isolated_env, "newonly")
+    _seed_new_state(new_only, None, '{"status":"new"}')
+    assert shell.read_state(new_only, None) == {"status": "new"}
+    legacy_only = _project(isolated_env, "legacyonly", state='{"status":"legacy"}')
+    assert shell.read_state(legacy_only, None) == {"status": "legacy"}
+
+
+def test_collect_states_uses_registry_repo_and_forks_no_git(isolated_env, monkeypatch):
+    # The registry's `repo` is the key's repo half, so N projects must cost ZERO git forks.
+    directory = _project(isolated_env, "fast", state='{"status":"legacy"}')
+    _seed_new_state(directory, "/some/common/dir", '{"status":"new"}')
+
+    def no_fork(*args, **kwargs):
+        raise AssertionError(f"collect_states forked a subprocess: {args}")
+
+    monkeypatch.setattr(paths.subprocess, "run", no_fork)
+    registry = {"projects": {"fast": {"path": directory, "repo": "/some/common/dir"}}}
+    assert shell.collect_states(registry) == {"fast": {"status": "new"}}
+
+
+def test_collect_states_null_or_missing_repo_is_path_only_key(isolated_env):
+    directory = _project(isolated_env, "nullrepo", state='{"status":"legacy"}')
+    _seed_new_state(directory, "/some/common/dir", '{"status":"git-keyed"}')
+    _seed_new_state(directory, None, '{"status":"path-only"}')
+    for entry in ({"path": directory, "repo": None}, {"path": directory}):
+        assert shell.collect_states({"projects": {"nullrepo": entry}}) == {"nullrepo": {"status": "path-only"}}
+
+
+def test_state_read_path_falls_back_to_legacy_when_new_is_absent(isolated_env):
+    directory = _project(isolated_env, "fallback")
+    assert paths.project_state_read_path(directory, None) == isolated_env / "fallback" / ".borg" / "state.json"
 
 
 # ── registry_with_state ──────────────────────────────────────────────────────

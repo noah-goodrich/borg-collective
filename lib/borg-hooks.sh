@@ -124,7 +124,9 @@ _borg_sha12() {
 # `git rev-parse --path-format=absolute --git-common-dir`. Per directory (worktrees of one repo can be in
 # different statuses at once), namespaced by repo. Siblings, byte-identical: borg_core/paths.py::
 # project_state_key and the other shell copy. Rationale lives in the Python docstring.
-# Usage: _borg_project_state_key <dir>
+# Usage: _borg_project_state_key <dir> [repo]
+# The optional 2nd arg (even empty) is the registry entry's `repo` field: it replaces the git fork, and
+# empty means outside git (path-only key). Omit it to fork git. Python sibling: project_state_key(dir, repo).
 _borg_project_state_key() {
     local _d="${1:?_borg_project_state_key: dir required}" _phys _repo _tail="" _base _anc
     while [ "${#_d}" -gt 1 ] && [ "${_d%/}" != "$_d" ]; do _d="${_d%/}"; done
@@ -142,7 +144,11 @@ _borg_project_state_key() {
     [ "$_phys" = "/" ] && _phys=""
     _phys="$_phys$_tail"
     [ -n "$_phys" ] || _phys="/"
-    _repo="$(git -C "$_phys" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || _repo=""
+    if [ "${2+set}" = set ]; then
+        _repo="$2"
+    else
+        _repo="$(git -C "$_phys" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || _repo=""
+    fi
     if [ -n "$_repo" ]; then
         printf '%s-%s\n' "$(printf '%s' "$_repo" | _borg_sha12)" "$(printf '%s' "$_phys" | _borg_sha12)"
     else
@@ -151,9 +157,9 @@ _borg_project_state_key() {
 }
 
 # <state root>/projects/<key>/state.json for a project directory. Creates nothing.
-# Usage: _borg_project_state_file <dir>
+# Usage: _borg_project_state_file <dir> [repo]    (repo: see _borg_project_state_key)
 _borg_project_state_file() {
-    printf '%s/projects/%s/state.json\n' "$(_borg_state_root)" "$(_borg_project_state_key "${1:?_borg_project_state_file: dir required}")"
+    printf '%s/projects/%s/state.json\n' "$(_borg_state_root)" "$(_borg_project_state_key "${1:?_borg_project_state_file: dir required}" ${2+"$2"})"
 }
 
 # Resolve an operational file for READING: the state root's copy if it exists, else the old
@@ -198,11 +204,27 @@ _borg_state_file() {
     printf '%s/.borg/state.json\n' "${1:?_borg_state_file: dir required}"
 }
 
-# Read state.json; emit '{}' when the file does not exist yet.
-# Usage: _borg_state_read <project_dir>
+# The state.json to READ for a project: the per-project state-root copy if it exists, else the legacy
+# <dir>/.borg/state.json (also the answer when neither exists, so absent-handling is unchanged). Expand phase of
+# AC5: readers accept both before any writer moves. READER-ONLY -- writers keep using _borg_state_file until
+# step c. Optional 2nd arg is the registry entry's `repo` field (fast path, no git fork; see
+# _borg_project_state_key). Usage: _borg_state_read_path <project_dir> [repo]
+_borg_state_read_path() {
+    local _new
+    _new="$(_borg_project_state_file "$@")"
+    if [ -f "$_new" ]; then
+        printf '%s\n' "$_new"
+    else
+        _borg_state_file "$1"
+    fi
+}
+
+# Read state.json; emit '{}' when the file does not exist yet. Reads new-then-legacy; the caller's
+# write (if any) still goes to the legacy path until step c.
+# Usage: _borg_state_read <project_dir> [repo]
 _borg_state_read() {
     local sf
-    sf=$(_borg_state_file "$1")
+    sf=$(_borg_state_read_path "$@")
     if [[ -f "$sf" ]]; then
         cat "$sf"
     else

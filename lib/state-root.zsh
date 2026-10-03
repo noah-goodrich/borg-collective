@@ -40,7 +40,9 @@ _borg_sha12() {
 # `git rev-parse --path-format=absolute --git-common-dir`. Per directory (worktrees of one repo can be in
 # different statuses at once), namespaced by repo. Siblings, byte-identical: borg_core/paths.py::
 # project_state_key and the other shell copy. Rationale lives in the Python docstring.
-# Usage: _borg_project_state_key <dir>
+# Usage: _borg_project_state_key <dir> [repo]
+# The optional 2nd arg (even empty) is the registry entry's `repo` field: it replaces the git fork, and
+# empty means outside git (path-only key). Omit it to fork git. Python sibling: project_state_key(dir, repo).
 _borg_project_state_key() {
     local _d="${1:?_borg_project_state_key: dir required}" _phys _repo _tail="" _base _anc
     while [ "${#_d}" -gt 1 ] && [ "${_d%/}" != "$_d" ]; do _d="${_d%/}"; done
@@ -58,7 +60,11 @@ _borg_project_state_key() {
     [ "$_phys" = "/" ] && _phys=""
     _phys="$_phys$_tail"
     [ -n "$_phys" ] || _phys="/"
-    _repo="$(git -C "$_phys" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || _repo=""
+    if [ "${2+set}" = set ]; then
+        _repo="$2"
+    else
+        _repo="$(git -C "$_phys" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || _repo=""
+    fi
     if [ -n "$_repo" ]; then
         printf '%s-%s\n' "$(printf '%s' "$_repo" | _borg_sha12)" "$(printf '%s' "$_phys" | _borg_sha12)"
     else
@@ -67,7 +73,7 @@ _borg_project_state_key() {
 }
 
 # <state root>/projects/<key>/state.json for a project directory. Creates nothing.
-# Usage: _borg_project_state_file <dir>
+# Usage: _borg_project_state_file <dir> [repo]    (repo: see _borg_project_state_key)
 _borg_project_state_file() {
-    printf '%s/projects/%s/state.json\n' "$(_borg_state_root)" "$(_borg_project_state_key "${1:?_borg_project_state_file: dir required}")"
+    printf '%s/projects/%s/state.json\n' "$(_borg_state_root)" "$(_borg_project_state_key "${1:?_borg_project_state_file: dir required}" ${2+"$2"})"
 }
