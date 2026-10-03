@@ -2257,7 +2257,8 @@ cmd_cortex_resume() {
 }
 
 cmd_nanoprobes() {
-    local log="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
+    local log
+    log=$(_borg_operational_file agents.jsonl)
     if [[ ! -s "$log" ]]; then
         info "No nanoprobes recorded yet."
         info "Spawn one via the Agent tool with agent_type=borg-nanoprobe; SubagentStop logs here."
@@ -2281,7 +2282,8 @@ cmd_nanoprobe_log() {
     local query="${1:-}"
     [[ -n "$query" ]] || die "usage: borg nanoprobe-log <id-or-prefix>"
 
-    local log="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
+    local log
+    log=$(_borg_operational_file agents.jsonl)
     [[ -s "$log" ]] || die "no nanoprobes recorded yet ($log)"
 
     # Find the newest matching JSONL entry by id prefix

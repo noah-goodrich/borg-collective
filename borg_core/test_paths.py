@@ -80,3 +80,35 @@ def test_state_root_honours_xdg_state_home(state_env, monkeypatch):
 def test_state_root_treats_blank_xdg_state_home_as_unset(state_env, monkeypatch):
     monkeypatch.setenv("XDG_STATE_HOME", "")
     assert paths.state_root() == state_env / ".local" / "state" / "borg"
+
+
+# ── operational_file: the reader-side dual lookup (expand phase) ─────────────────────────────────
+
+
+@pytest.fixture()
+def dual_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    monkeypatch.delenv("BORG_DIR", raising=False)
+    return tmp_path
+
+
+def test_operational_file_reads_old_location_when_only_it_exists(dual_env):
+    old = dual_env / "config" / "borg" / "agents.jsonl"
+    old.parent.mkdir(parents=True)
+    old.write_text("old")
+    assert paths.operational_file("agents.jsonl") == old
+
+
+def test_operational_file_prefers_state_root_when_both_exist(dual_env):
+    old = dual_env / "config" / "borg" / "agents.jsonl"
+    new = dual_env / "state" / "borg" / "agents.jsonl"
+    for f in (old, new):
+        f.parent.mkdir(parents=True)
+        f.write_text("x")
+    assert paths.operational_file("agents.jsonl") == new
+
+
+def test_operational_file_names_the_old_path_when_neither_exists(dual_env):
+    assert paths.operational_file("recon/last-run") == dual_env / "config" / "borg" / "recon" / "last-run"

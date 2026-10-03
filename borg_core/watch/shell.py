@@ -54,7 +54,7 @@ def load_snapshot() -> dict:
     should cost one quiet cycle, not a flood of false "new PR" events.
     """
     try:
-        data = json.loads(snapshot_path().read_text(encoding="utf-8"))
+        data = json.loads(paths.operational_file(SNAPSHOT_NAME).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}
