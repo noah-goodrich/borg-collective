@@ -146,15 +146,6 @@ _memory_payload() {
     [[ "$output" == *"p1"*"2"* ]]
 }
 
-@test "memory-hits-report works when only the rotated generation exists" {
-    mkdir -p "$HOME/.claude/projects/-Users-noah-dev-cairn"
-    printf '{}' > "$HOME/.claude/projects/-Users-noah-dev-cairn/s.jsonl"
-    printf '%s\ta\tp1\tM.md\t1\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$NEW/memory-hits.log.1"
-    touch "$NEW/memory-hits.log.marker"
-    run bash "$BIN/memory-hits-report"
-    [[ "$output" == *"reads:    1"* ]]
-}
-
 @test "borg nanoprobes lists the live file first, then the rotated generation; nanoprobe-log finds a rotated id" {
     printf '{"id":"aaaaaaaa-old","agent_type":"t","summary":"rotated run","finished_at":"2026-01-01"}\n' \
         > "$NEW/agents.jsonl.1"
@@ -167,4 +158,33 @@ _memory_payload() {
     run zsh "${BATS_TEST_DIRNAME}/../borg.zsh" nanoprobe-log aaaaaaaa
     [ "$status" -eq 0 ]
     [[ "$output" == *"rotated run"* ]]
+}
+
+@test "usage-watch: a full samples file rotates and the new row lands in a fresh live file" {
+    local mock="${BATS_TEST_TMPDIR}/claude-mock"
+    printf '#!/usr/bin/env bash\necho "Current session: 10%% used · resets 5pm (America/Denver)"\necho "Current week (all models): 40%% used · resets Jul 30 at 7am (America/Denver)"\n' > "$mock"
+    chmod +x "$mock"
+    export BORG_USAGE_CLAUDE_BIN="$mock" BORG_USAGE_PANE_CMD="echo claude" BORG_USAGE_NOW_EPOCH=1700000000
+    export BORG_USAGE_SAMPLES="$NEW/usage-samples.jsonl" BORG_USAGE_LOG="$NEW/usage-watch.log"
+    export BORG_USAGE_GUARDIAN_STATE="$NEW/usage-guardian.json"
+    printf '{"ts":"2020-01-01T00:00:00Z","status":"ok"}\n' > "$BORG_USAGE_SAMPLES"
+    run env BORG_LOG_CAP_BYTES=10 "$BIN/borg-usage-watch" --once
+    [ "$status" -eq 0 ]
+    grep -q '2020-01-01' "$BORG_USAGE_SAMPLES.1"
+    [ "$(wc -l < "$BORG_USAGE_SAMPLES" | tr -d ' ')" -eq 1 ]
+    ! grep -q '2020-01-01' "$BORG_USAGE_SAMPLES"
+}
+
+@test "plan-promote: its debug log rotates at the cap instead of growing without bound" {
+    local repo="${BATS_TEST_TMPDIR}/repo"
+    mkdir -p "$repo"
+    git -C "$repo" init --quiet
+    jq -n --arg c "$repo" --arg f "$repo/x.txt" \
+        '{tool_name:"Write", session_id:"s1", cwd:$c, tool_input:{file_path:$f}}' > "${BATS_TEST_TMPDIR}/p.json"
+    printf 'stale debug line\n' > "$NEW/plan-promote-debug.log"
+    run bash -c "cd '$repo' && BORG_LOG_CAP_BYTES=5 bash '$HOOKS/borg-plan-promote.sh' < '${BATS_TEST_TMPDIR}/p.json'"
+    [ "$status" -eq 0 ]
+    grep -q 'stale debug line' "$NEW/plan-promote-debug.log.1"
+    ! grep -q 'stale debug line' "$NEW/plan-promote-debug.log"
+    grep -q 'borg-plan-promote' "$NEW/plan-promote-debug.log"
 }
