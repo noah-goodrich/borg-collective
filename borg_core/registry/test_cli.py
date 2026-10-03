@@ -346,7 +346,7 @@ def test_main_dispatches_backfill_repo(git_env):
 def test_main_rejects_an_unknown_registry_command(git_env, capsys):
     with pytest.raises(SystemExit):
         cli.main(["frobnicate"])
-    assert "add, rm or backfill-repo" in capsys.readouterr().err
+    assert "add, rm, backfill-repo or window-name" in capsys.readouterr().err
 
 
 def test_cmd_add_records_the_repo_for_a_real_repository(git_env):
@@ -363,3 +363,80 @@ def test_cmd_add_records_a_null_repo_outside_a_repository(git_env):
     entry = shell.read_registry()["projects"]["loose"]
     assert entry["repo"] is None
     assert "repo" in entry
+
+
+# ── window-name ────────────────────────────────────────────────────────────────
+
+
+def _seed(projects: dict) -> None:
+    shell.write_registry({"projects": projects})
+
+
+def _window(project: str) -> str | None:
+    window: str | None = shell.read_registry()["projects"][project].get("tmux_window")
+    return window
+
+
+def test_window_name_prints_stored_value_else_project_name(isolated_env, capsys):
+    _seed({"alpha-beta-gamma": {"tmux_window": "abg"}, "widget": {}})
+    assert cli.cmd_window_name(["alpha-beta-gamma"]) == 0
+    assert cli.cmd_window_name(["widget"]) == 0
+    assert capsys.readouterr().out.split() == ["abg", "widget"]
+
+
+def test_window_name_set_writes_and_prints(isolated_env, capsys):
+    _seed({"widget-factory": {"path": "/p"}})
+    assert cli.cmd_window_name(["widget-factory", "--set", "wf"]) == 0
+    assert capsys.readouterr().out.strip() == "wf"
+    entry = shell.read_registry()["projects"]["widget-factory"]
+    assert entry["tmux_window"] == "wf" and entry["path"] == "/p"
+
+
+@pytest.mark.parametrize("bad, needle", [("a.b", "'.' or ':'"), ("", "empty"), ("taken", "name of project")])
+def test_window_name_set_rejects_with_reason_and_writes_nothing(isolated_env, capsys, bad, needle):
+    _seed({"me": {}, "taken": {}})
+    with pytest.raises(SystemExit) as exc:
+        cli.cmd_window_name(["me", "--set", bad])
+    assert exc.value.code == 1
+    assert needle in capsys.readouterr().err
+    assert _window("me") is None
+
+
+def test_window_name_set_rejects_session_name_from_environment(isolated_env, monkeypatch, capsys):
+    _seed({"me": {}})
+    monkeypatch.setenv("BORG_TMUX_SESSION", "work")
+    with pytest.raises(SystemExit):
+        cli.cmd_window_name(["me", "--set", "work"])
+    assert "session name" in capsys.readouterr().err
+    assert cli.cmd_window_name(["me", "--set", "borg"]) == 0
+    assert _window("me") == "borg"
+
+
+def test_window_name_derive_writes_for_legacy_and_default_session_is_borg(isolated_env, capsys):
+    _seed({"borg-collective": {"tmux_window": "borg-collective"}})
+    assert cli.cmd_window_name(["borg-collective", "--derive"]) == 0
+    assert capsys.readouterr().out.strip() == "borg-c"
+    assert _window("borg-collective") == "borg-c"
+
+
+def test_window_name_derive_leaves_explicit_choice_alone(isolated_env, capsys):
+    _seed({"alpha-beta-gamma": {"tmux_window": "custom"}})
+    assert cli.cmd_window_name(["alpha-beta-gamma", "--derive"]) == 0
+    assert capsys.readouterr().out.strip() == "custom"
+    assert _window("alpha-beta-gamma") == "custom"
+
+
+def test_window_name_unknown_project_and_bad_args(isolated_env, capsys):
+    _seed({"me": {}})
+    for argv in (["ghost"], [], ["me", "--bogus"], ["me", "--set"]):
+        with pytest.raises(SystemExit) as exc:
+            cli.cmd_window_name(argv)
+        assert exc.value.code == 1
+
+
+def test_main_dispatches_window_name(isolated_env, capsys):
+    _seed({"me": {}})
+    with pytest.raises(SystemExit) as exc:
+        cli.main(["window-name", "me", "--set", "m"])
+    assert exc.value.code == 0
+    assert _window("me") == "m"
