@@ -72,3 +72,49 @@ wallpapering this census exists to prevent.
 | `.borg/knowledge` | retired | - | cairn's export, 1106 tracked files KEPT; the promise to grep it was deleted from CLAUDE.md 2026-09-28. See `docs/plans/directives/assets/2026-09-28-state-audit-adversarial.md` |
 | `.borg/elsewhere` | prose | - | not a store: a path in `merge-tree/test_coordinator.py`'s fixture for a manifest OUTSIDE the manifest dir |
 | `.borg/anything` | prose | - | not a store: a docstring example in `borg_core/manifest/shell.py` naming a path that is never opened |
+
+## Where each file under the config dir lives (AC4)
+
+The census above lists what READS a store. This one lists WHERE each file under
+`${XDG_CONFIG_HOME:-~/.config}/borg` lives after AC4 A2b. The rule: a file a human edits, or one that is
+configuration in the strict sense, stays config-side; a file only borg writes and nobody hand-edits is machine-local
+operational state and lives under the state root, `${XDG_STATE_HOME:-~/.local/state}/borg`. The move shipped as
+expand → migrate → contract: readers accept both locations (the state root wins when both exist) before any writer
+moved, and a pre-move history is carried across on the first write, so nothing is stranded.
+
+The explicit environment overrides (`BORG_CORTEX_STATE`, `BORG_MEMORY_GATE_VERDICT_FILE` and their siblings) still win
+over both locations; the table describes only the defaults.
+
+| file (relative to the config dir) | where | why |
+| --- | --- | --- |
+| `cortex-wakes.json` | MOVED | written only by `borg-cortex-watch`; nobody hand-edits it |
+| `memory-gate-state.json` | MOVED | `borg-memory-gate`'s last-delivered transition record |
+| `memory-gate-verdict.json` | MOVED | written and cleared by `borg-memory-gate`; `borg-link-down.sh` reads both |
+| `usage-guardian.json` | MOVED | `borg-usage-watch` sweep state |
+| `pr-watch-snapshot.json` | MOVED | `borg-pr-watch` machine-written snapshot |
+| `pr-watch-delta.md` | MOVED | `borg-pr-watch` output, regenerated every run |
+| `pr-watch.log` | MOVED | a log; logs are never configuration |
+| `recon/last-run` | MOVED | the recon since-mark marker, machine-written |
+| `devcontainer-hashes/<project>.hash` | MOVED | `drone` change-detection cache, safe to delete |
+| `briefing-*-stderr.log` (4 files) | MOVED | captured stderr of the `--brief` stages; diagnostics only |
+| `plan-promote-debug.log` | MOVED | debug log of `borg-plan-promote.sh` |
+| `memory-hits.log` | MOVED | append-only read log of `borg-memory-read-log.sh` |
+| `agents.jsonl` | MOVED | nanoprobe lifecycle log from `borg-nanoprobe-log.sh` |
+| `prefer-tool.jsonl` | MOVED | bypass log of `borg-prefer-tool-log.sh` |
+| `registry.json`, `.registry.lock` | STAYS | hand-edited AND operational; readers use `BORG_REGISTRY`, no gain moving |
+| `config.zsh` | STAYS | hand-edited configuration (capacity limits, boundaries) |
+| `extensions/**` | STAYS | the user's own prose and adapters; the machine layer of extension precedence |
+| `claude-settings.local.json` | STAYS | hand-edited permission exceptions (`break-glass`) |
+| `cortex-settings.local.json` | STAYS | hand-edited, the Cortex Code twin of the above |
+| `launchd-prefix` | STAYS | human-edited; the one file that brands every LaunchAgent on the machine |
+| `desktop/*.json` | STAYS | an inbox Claude Desktop writes; borg only reads it, so it is not ours to relocate |
+| `.cairn-last-write`, `cairn-hits.log` | STAYS | cairn leftovers, retired by `borg tidy --cairn-leftovers` (PR #244) |
+
+### The third location
+
+`${XDG_DATA_HOME:-~/.local/share}/borg` holds the launchd stdout/stderr logs (`cortex-wake.log` and friends, written by
+the agents `install.sh` loads) and `vinculum/`. This change does not touch it. It is a candidate to fold into the state
+root later: XDG places logs under state, and two machine-local roots beside the config dir is one more than the
+reader needs to know about. It is deferred because the log paths are baked into the installed plists at `install.sh`
+time, so moving them means a reinstall and a bootout/bootstrap of every agent, a different blast radius from this
+change, which only moved files that borg itself opens at run time.
