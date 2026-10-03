@@ -81,7 +81,7 @@ and its commit message records two deviations. Both are restated here so neither
   pre-fix `curate.py`, they fail to *import* — `REVIEW_BUCKET`, `awaits_you` and `is_noah` did not exist. The
   note survives in the comment block above `TestAwaitingYouTier` in `merge-tree/test_curate.py`. Regenerating the
   golden moved four items `active-chains → review-queue`, three of them `warehouse-permissions#339/#340/#341` —
-  the fixture's anonymised names for the SME-PAT trio this directive was written about.
+  the fixture's anonymised names for the three-PR stack this directive was written about.
 - **V7.** 134 tests, ruff clean, 93% coverage on the live modules at the time.
 
 **HALF MET — V3, and its own verify clause fails today.**

@@ -71,7 +71,7 @@ part a later reader needs, which is whether those gaps are still real. They are.
 - **S3.** `meta.generated_at` ages the skeleton; `summary_authored_at` ages each project's prose independently,
   so a fresh skeleton wrapped around two-week-old summaries is detectable as exactly that.
 - **S5.** Four orphan categories, split because they fail differently: `unknown_*` is new structure the overlay
-  has never seen (rendering it silently with blank prose is how `infrastructure#2564` stayed invisible);
+  has never seen (rendering it silently with blank prose is how the real blocking PR stayed invisible);
   `stale_*` is judgment whose anchor is gone.
 
 **PARTIAL — S6, and what is missing is the wiring, not the producer.**
