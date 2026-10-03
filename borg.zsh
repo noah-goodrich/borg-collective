@@ -3562,7 +3562,13 @@ case "${1:-help}" in
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
     sever|down)  cmd_down ;;
-    regenerate|tidy)  cmd_tidy "${@:2}" ;;
+    regenerate|tidy)
+        if [[ "${2:-}" == "--migrate-state" ]]; then
+            _borg_py borg_core.statemigrate.cli "${@:3}"
+        else
+            cmd_tidy "${@:2}"
+        fi
+        ;;
     setup)    cmd_setup ;;
     store-secret) cmd_store_secret "${@:2}" ;;
     start)    cmd_start "${@:2}" ;;
