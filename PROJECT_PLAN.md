@@ -68,6 +68,8 @@ recur unnoticed. No new storage engine.
   - Verify: a test proving the legacy per-directory location is still read during expand; a second
     proving both readers resolve the same path; `find ~/dev -path '*/.borg/state.json' | wc -l`
     reaches 0 after contract.
+  - Status (step d):  is BUILT and tested
+    (); the live run on the operator machine is PENDING.
 
 - [ ] **AC6 — Nothing breaks.** Full suite green. `borg link` output is byte-identical for a project
   with a single checkpoint store, and the three live repo groups

@@ -3568,6 +3568,8 @@ case "${1:-help}" in
     regenerate|tidy)
         if [[ "${2:-}" == "--migrate-state" ]]; then
             _borg_py borg_core.statemigrate.cli "${@:3}"
+        elif [[ "${2:-}" == "--migrate-project-state" ]]; then
+            _borg_py borg_core.statemigrate.project_cli "${@:3}"
         else
             cmd_tidy "${@:2}"
         fi
