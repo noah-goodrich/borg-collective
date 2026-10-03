@@ -206,8 +206,8 @@ _borg_state_file() {
 
 # The state.json to READ for a project: the per-project state-root copy if it exists, else the legacy
 # <dir>/.borg/state.json (also the answer when neither exists, so absent-handling is unchanged). Expand phase of
-# AC5: readers accept both before any writer moves. READER-ONLY -- writers keep using _borg_state_file until
-# step c. Optional 2nd arg is the registry entry's `repo` field (fast path, no git fork; see
+# AC5: readers accept both before any writer moves. READER-ONLY -- writers use
+# _borg_project_state_file. Optional 2nd arg is the registry entry's `repo` field (fast path, no git fork; see
 # _borg_project_state_key). Usage: _borg_state_read_path <project_dir> [repo]
 _borg_state_read_path() {
     local _new
@@ -219,8 +219,8 @@ _borg_state_read_path() {
     fi
 }
 
-# Read state.json; emit '{}' when the file does not exist yet. Reads new-then-legacy; the caller's
-# write (if any) still goes to the legacy path until step c.
+# Read state.json; emit '{}' when the file does not exist yet. Reads new-then-legacy; writes go to
+# the new path.
 # Usage: _borg_state_read <project_dir> [repo]
 _borg_state_read() {
     local sf
@@ -247,12 +247,31 @@ _borg_resolve_proj_dir() {
     printf '%s\n' "$cwd"
 }
 
-# Atomic write — strip control chars, reject empty result, tmp+mv.
-# Usage: _borg_state_write <project_dir> <json>
+# Set the global _REPO to the registry `repo` of <project> when its entry is registered AT <proj_dir>
+# (possibly empty: no repo recorded == the path-only key); leave _REPO UNSET otherwise. Callers expand
+# `${_REPO+"$_REPO"}` into the state helpers, so a registered project is keyed exactly as every registry-driven
+# reader keys it (borg-link-down's overlay, registry.zsh, borg_core.link) and an unregistered CWD forks git.
+# A writer keying differently from the readers would leave a stale shadow. Reads $BORG_REGISTRY.
+# Usage: _borg_proj_repo <project> <proj_dir>
+_borg_proj_repo() {
+    local _r
+    unset _REPO
+    [[ -f "${BORG_REGISTRY:-}" ]] || return 0
+    _r=$(jq -r --arg p "$1" --arg d "$2" \
+        '.projects[$p] | select((.path // "") == $d) | "R" + (.repo // "" | if type == "string" then . else "" end)' \
+        "$BORG_REGISTRY" 2>/dev/null) || return 0
+    [[ -n "$_r" ]] && _REPO="${_r#R}"
+    return 0
+}
+
+# Atomic write to the per-project state-root path (AC5 step c: the legacy <dir>/.borg/state.json is never
+# written) -- strip control chars, reject empty result, tmp+mv. Optional 3rd arg: registry `repo` (see
+# _borg_project_state_key); omit it to fork git.
+# Usage: _borg_state_write <project_dir> <json> [repo]
 _borg_state_write() {
     local dir="$1" json="$2"
     local sf
-    sf=$(_borg_state_file "$dir")
+    sf=$(_borg_project_state_file "$dir" ${3+"$3"})
     mkdir -p "${sf%/*}"
     local tmp="${sf}.tmp.$$"
     printf '%s' "$json" | tr -d '\000-\010\013\014\016-\037' > "$tmp"
