@@ -149,3 +149,40 @@ EOF
     [ ! -f "$BORG_MEMORY_GATE_VERDICT_FILE" ]
     [ ! -f "$NOTIFY_SINK" ]
 }
+
+# ─── AC4: default locations moved from the config dir to the state root ──────────────────────────
+# Every case above overrides the three paths by env, so the DEFAULTS were never exercised.
+
+@test "default locations: an old-location state is read (no re-notify), then the state root is written" {
+    unset BORG_MEMORY_GATE_VERDICT_FILE BORG_MEMORY_GATE_STATE BORG_MEMORY_GATE_LOG
+    mkdir -p "$BORG_DIR"
+    printf '{"last_verdict":"FAIL","last_ratio":"0.100","last_delivered_at":"t"}' > "$BORG_DIR/memory-gate-state.json"
+    _mock_report "FAIL" "0.100"
+    run bash "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    # FAIL was already delivered per the OLD state file, so reading it must suppress the notification.
+    [ ! -f "$NOTIFY_SINK" ]
+    [ -f "$XDG_STATE_HOME/borg/memory-gate-state.json" ]
+    [ "$(jq -r .last_verdict "$XDG_STATE_HOME/borg/memory-gate-state.json")" = "FAIL" ]
+}
+
+@test "default locations: a FAIL writes the verdict file to the state root, not the config dir" {
+    unset BORG_MEMORY_GATE_VERDICT_FILE BORG_MEMORY_GATE_STATE BORG_MEMORY_GATE_LOG
+    _mock_report "FAIL" "0.100"
+    run bash "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$XDG_STATE_HOME/borg/memory-gate-verdict.json" ]
+    [ ! -e "$BORG_DIR/memory-gate-verdict.json" ]
+}
+
+@test "default locations: a PASS clears the verdict at BOTH locations (the reader falls back to the old one)" {
+    unset BORG_MEMORY_GATE_VERDICT_FILE BORG_MEMORY_GATE_STATE BORG_MEMORY_GATE_LOG
+    mkdir -p "$BORG_DIR" "$XDG_STATE_HOME/borg"
+    printf '{"verdict":"FAIL"}' > "$BORG_DIR/memory-gate-verdict.json"
+    printf '{"verdict":"FAIL"}' > "$XDG_STATE_HOME/borg/memory-gate-verdict.json"
+    _mock_report "PASS" "0.500"
+    run bash "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ ! -e "$BORG_DIR/memory-gate-verdict.json" ]
+    [ ! -e "$XDG_STATE_HOME/borg/memory-gate-verdict.json" ]
+}

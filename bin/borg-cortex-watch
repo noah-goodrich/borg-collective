@@ -7,7 +7,7 @@
 #   --once    Single sweep then exit (default; same as no flag — explicit for clarity).
 #   --debug   Log to stderr in addition to file.
 #
-# State lives at $BORG_DIR/cortex-wakes.json.
+# State lives at <state root>/cortex-wakes.json (an old $BORG_DIR copy is seeded across once).
 
 set -euo pipefail
 
@@ -19,7 +19,9 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bi
 [[ -f "$HOME/.claude/lib/borg-hooks.sh" ]] && source "$HOME/.claude/lib/borg-hooks.sh"
 
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
-STATE_FILE="${BORG_CORTEX_STATE:-$BORG_DIR/cortex-wakes.json}"
+# Inlined, not _borg_state_root: the deployed ~/.claude/lib/borg-hooks.sh above may predate it.
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+STATE_FILE="${BORG_CORTEX_STATE:-$STATE_ROOT/cortex-wakes.json}"
 LOG_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
 LOG="$LOG_DIR/cortex-wake.log"
 WAKE_GRACE_SEC=60                    # fire wakes whose reset_at is within this many seconds
@@ -34,7 +36,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-mkdir -p "$LOG_DIR" "$BORG_DIR"
+mkdir -p "$LOG_DIR" "${STATE_FILE%/*}"
 
 log() {
     local line="[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*"
@@ -49,6 +51,12 @@ log() {
 for dep in tmux jq osascript; do
     command -v "$dep" &>/dev/null || { log "skip: $dep not in PATH"; exit 0; }
 done
+
+# Expand phase of the config -> state-root move: this file is read AND written, so carry a pre-move
+# copy across once (copy, never delete -- the old path stays readable for older readers).
+if [[ ! -f "$STATE_FILE" && -f "$BORG_DIR/cortex-wakes.json" && -z "${BORG_CORTEX_STATE:-}" ]]; then
+    cp "$BORG_DIR/cortex-wakes.json" "$STATE_FILE" 2>/dev/null || true
+fi
 
 # Initialise state file if absent.
 [[ -f "$STATE_FILE" ]] || echo '{"wakes":[]}' > "$STATE_FILE"

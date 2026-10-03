@@ -45,7 +45,10 @@ BORG_SESSION_WARN_HOURS="${BORG_SESSION_WARN_HOURS:-2}"
 BORG_WORK_HOURS="${BORG_WORK_HOURS:-}"
 BORG_WORK_DAYS="${BORG_WORK_DAYS:-}"
 BORG_WORK_PROJECTS="${BORG_WORK_PROJECTS:-}"
-BORG_CORTEX_WAKES="${BORG_CORTEX_STATE:-$BORG_DIR/cortex-wakes.json}"
+# Explicit override ONLY (empty by default): the default location is resolved at the use site through
+# _borg_operational_file (read) / _borg_state_root (write), and an empty value falls through to the
+# same resolution in borg_core/link/shell.py::cortex_wakes_path.
+BORG_CORTEX_WAKES="${BORG_CORTEX_STATE:-}"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1155,7 +1158,9 @@ _borg_print_briefing() {
     # the child's exit status, and `cli._die_json` exits 1 on a corrupt registry. The old
     # `|| doc=""` caught it and threw it away; `|| build_rc=$?` catches it AND gives the reason line
     # a number.
-    local build_stderr_file="$BORG_DIR/briefing-build-stderr.log"
+    # The four briefing-*stderr.log captures below are pure-writer logs: machine-local state root, not config.
+    mkdir -p "$(_borg_state_root)" 2>/dev/null
+    local build_stderr_file="$(_borg_state_root)/briefing-build-stderr.log"
     doc=""
     doc=$(_borg_py borg_core.link.cli "${_brief_py_args[@]}" 2>"$build_stderr_file") || build_rc=$?
     if [[ -z "$doc" ]]; then
@@ -1222,7 +1227,7 @@ _borg_print_briefing() {
     # jq's STDERR IS CAPTURED, NOT DISCARDED — see the empty-payload branch below for why. No
     # explicit truncation of the file: `2>` on the command substitution opens it O_TRUNC, exactly as
     # the `claude` call's own stderr capture does further down.
-    local jq_stderr_file="$BORG_DIR/briefing-projection-stderr.log"
+    local jq_stderr_file="$(_borg_state_root)/briefing-projection-stderr.log"
     payload=$(printf '%s' "$doc" | jq -r '
         . as $d
         | (if ($d.scope.kind // "") == "repository" then ($d.focus // {}) else $d end) as $breadth
@@ -1329,11 +1334,11 @@ EOF
     if [[ -z "$fallback_reason" ]]; then
         info "Building morning briefing..."
 
-        # Capture stderr to a file under $BORG_DIR instead of /dev/null (was silent — see
+        # Capture stderr to a file under the state root instead of /dev/null (was silent — see
         # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
         # path being taken with NO indication of why is the defect this whole function exists to fix.
         local claude_rc=0
-        local claude_stderr_file="$BORG_DIR/briefing-stderr.log"
+        local claude_stderr_file="$(_borg_state_root)/briefing-stderr.log"
         # NO `--bare` HERE, AND THAT IS THE WHOLE BUG THIS LINE ONCE HAD. `claude --help` lists what
         # the flag skips: "hooks, LSP, plugin sync, attribution, auto-memory, background prefetches,
         # KEYCHAIN READS". On macOS the credential IS a Keychain-only OAuth token, so `--bare` asked
@@ -1409,7 +1414,7 @@ EOF
             echo -e "  ${DIM}(narrative unavailable: $fallback_reason — showing the borg link document)${NC}"
             echo ""
         fi
-        local render_stderr_file="$BORG_DIR/briefing-render-stderr.log"
+        local render_stderr_file="$(_borg_state_root)/briefing-render-stderr.log"
         printf '%s' "$doc" | _borg_py borg_core.link.cli --render-document 2>"$render_stderr_file" \
             || render_rc=$?
         if (( render_rc != 0 )); then
@@ -2244,10 +2249,13 @@ cmd_store_secret() {
 
 cmd_cortex_resume() {
     local target="${1:-}"
-    [[ -f "$BORG_CORTEX_WAKES" ]] || die "no pending cortex wakes (state file missing)"
+    # Read AND rewritten: read the state root's copy (else the pre-move config-dir one), write the state root.
+    local wakes_read="${BORG_CORTEX_WAKES:-$(_borg_operational_file cortex-wakes.json)}"
+    local wakes_write="${BORG_CORTEX_WAKES:-$(_borg_state_root)/cortex-wakes.json}"
+    [[ -f "$wakes_read" ]] || die "no pending cortex wakes (state file missing)"
 
     local entries
-    entries=$(jq -c '.wakes // []' "$BORG_CORTEX_WAKES")
+    entries=$(jq -c '.wakes // []' "$wakes_read")
     [[ "$entries" == "[]" || -z "$entries" ]] && die "no pending cortex wakes"
 
     local entry
@@ -2286,14 +2294,16 @@ cmd_cortex_resume() {
     info "sent 'wake up!' to $project (pane $pane_id)"
 
     # Drop entry atomically.
-    local tmp="$BORG_CORTEX_WAKES.tmp.$$"
+    mkdir -p "${wakes_write:h}"
+    local tmp="$wakes_write.tmp.$$"
     jq --arg p "$pane_id" --arg pr "$project" \
         '.wakes |= map(select(.pane_id != $p and .project != $pr))' \
-        "$BORG_CORTEX_WAKES" > "$tmp" && mv "$tmp" "$BORG_CORTEX_WAKES"
+        "$wakes_read" > "$tmp" && mv "$tmp" "$wakes_write"
 }
 
 cmd_nanoprobes() {
-    local log="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
+    local log
+    log=$(_borg_operational_file agents.jsonl)
     if [[ ! -s "$log" ]]; then
         info "No nanoprobes recorded yet."
         info "Spawn one via the Agent tool with agent_type=borg-nanoprobe; SubagentStop logs here."
@@ -2317,7 +2327,8 @@ cmd_nanoprobe_log() {
     local query="${1:-}"
     [[ -n "$query" ]] || die "usage: borg nanoprobe-log <id-or-prefix>"
 
-    local log="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
+    local log
+    log=$(_borg_operational_file agents.jsonl)
     [[ -s "$log" ]] || die "no nanoprobes recorded yet ($log)"
 
     # Find the newest matching JSONL entry by id prefix
@@ -2529,7 +2540,8 @@ _borg_file_mtime() {
 }
 
 cmd_doctor() {
-    local state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+    local state_dir
+    state_dir=$(_borg_state_root)
     local data_dir="${XDG_DATA_HOME:-$HOME/.local/share}/borg"
     local la_dir="$HOME/Library/LaunchAgents"
 
@@ -2562,6 +2574,7 @@ cmd_doctor() {
     local list_output
     list_output=$(launchctl list 2>/dev/null) || list_output=""
 
+    printf 'State root: %s\n\n' "$state_dir"
     printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "AGENT" "REG" "EXIT" "FRESH" "STATUS"
     printf '%0.s─' {1..70}; echo
 
