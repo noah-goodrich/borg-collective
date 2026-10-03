@@ -1,6 +1,6 @@
 # Directive: Evals for everything
 
-*Filed: 2026-10-03 · Status: PROPOSAL — needs Noah's word on the runner (Decision 1) before anything is built*
+*Filed: 2026-10-03 · Status: PROPOSAL — Phase 0 done 2026-10-03 (see Decision 1); Phase 1 awaits Noah's go*
 *Requested-via: Noah, 2026-10-03: "we need evals for everything."*
 
 **tl;dr** — "Everything" is smaller than it sounds. Of the 17 skills, 5 agents (plus ROUTING), 13 hooks and two CLIs,
@@ -110,6 +110,42 @@ shell harness cannot ("would the model have done this without the skill?"). The 
 non-plugin repository supplies the skills to the runner (point it at the built plugin, or at a skills dir). That is
 Phase 0, and its answer may collapse the hybrid to one runner. The claude-plugins harness stays where it is.
 
+**Phase 0 result (2026-10-03).** Runner: `claude plugin eval` (v2.1.288), with a throwaway plugin wrapper. A non-plugin
+repo supplies skills by copying `skills/<name>/` into a sandbox dir that has `.claude-plugin/plugin.json`; the runner
+takes that dir as its target and the case lives at `<sandbox>/evals/<case>/{prompt.md,graders/*.md}` (reusable copy:
+`evals/plugin-eval/linkup-writes/`). This answers the open question and it **collapses the hybrid for skills**: the
+runner has a `file_exists` grader (glob under the run's cwd, so "checkpoint written" is an on-disk oracle after all), a
+`tool_used: Skill` grader (the trigger), and an `llm` grader (Haiku by default). Effect-on-disk cases do not need the
+shell harness. The shell harness stays only where the real `borg` CLI must run. Hard gotchas: Write/Edit/Bash must be
+in the case's `allowed_tools` AND granted with `--allow-tools` or the file grader can never pass; the run is hermetic
+(fresh HOME, empty cwd, no `git`), so `borg checkpoint-name` is not on PATH and the skill refuses to invent a name
+(a plugin `bin/` stub was not put on PATH; a Phase 1 case needs a `--scaffold` script or a different fixture); the
+runner reports USD, turns and seconds per run but **not** token counts or the model id, so those cannot be recorded
+from it. Measured, 3 live runs (the cap), 1 case x 1 run each, total about $0.98 against a $2.00 ceiling
+(`--max-cost-usd` works and is checked before each run):
+
+- with skill: $0.228 / $0.245 / $0.240 per run (mean about **$0.24**), 7 turns, 35-39 s; Haiku judge about $0.002
+- no-plugin baseline arm (one run): $0.139, 5 turns, 22 s; the arm roughly adds 0.6x to a case's cost
+- outcomes: skill fired 3 of 3; checkpoint file written 1 of 3 (the failures were the missing `borg` binary, not the
+  model declining), so the case is a working fixture but not yet a stable positive
+
+Full-suite estimate, from the inventory above: about 10 full skills x 3 cases + 5 thin skills x 1 + 2 always-on x 1
++ 5 agents x 2 + 8 ROUTING rows = **about 55 cases**. Assumption: the child model is whatever the CLI defaults to
+(unreported); the figures scale linearly with its price.
+
+- low: 45 cases (waivers taken) x 1 run x $0.15 (trigger/negative cases are shorter) = **about $7**
+- mid: 55 cases x 3 runs (the runner default) x $0.24, no baseline arm = **about $40**; with the baseline arm
+  (+$0.14 per run) about **$63**
+- high: 55 cases x 3 runs x $0.60 (agent and `borg-verify` cases run longer, 2.5x) with the baseline arm = **about
+  $160**
+- Phase 1 alone (6 model cases): about **$4** without the baseline arm, **$7** with it
+
+Grader model: the Haiku judge is under 1% of a run ($0.002 of $0.24). An Opus judge would cost roughly 5-10x that,
+about $0.01-0.02 per run, still under 10% of the run, so judge choice is not the lever; `--runs` and the baseline arm
+are. Per PR once evals are selected by changed files (1-3 skills x 3 cases x 3 runs x $0.24): about **$2-7**, or
+**$3-10** with the baseline arm. Suggested policy for Open Question 2: `--max-cost-usd 10` per invocation and
+`--ablation none` by default, baseline arm on demand.
+
 ### Decision 2 — One eval shape per category
 
 Every shape is a positive/negative pair, and **a negative reports SKIP, never PASS, when its positive did not fire**.
@@ -153,7 +189,7 @@ skill arrive with its eval, and it is the only part of the directive that runs o
 
 ## Acceptance criteria
 
-1. **Runner settled by measurement.** One skill case is authored in the trial runner's format and run once, live,
+1. **[DONE 2026-10-03] Runner settled by measurement.** One skill case is authored in the trial runner's format and run once, live,
    with a cost ceiling; the per-case cost, the run count, and how skills are supplied are written into this file's
    Decision 1 as a dated result.
    *Verify:* `grep -n "Phase 0 result" docs/plans/directives/2026-10-03-evals-for-everything.md` finds a dated
