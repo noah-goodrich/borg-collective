@@ -1448,8 +1448,13 @@ EOF
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 
-    run grep -c "demoproj" "$BORG_DIR/cortex-wakes.json"
+    # AC4: the pre-move config-dir file was READ; the pruned copy was WRITTEN to the state root. The
+    # old file is left alone (still lists demoproj), the new one exists and no longer does.
+    [ -f "$XDG_STATE_HOME/borg/cortex-wakes.json" ]
+    run grep -c "demoproj" "$XDG_STATE_HOME/borg/cortex-wakes.json"
     [ "$status" -ne 0 ]
+    run grep -c "demoproj" "$BORG_DIR/cortex-wakes.json"
+    [ "$status" -eq 0 ]
 }
 
 # ── lifecycle / destructive-adjacent: sever(down), regenerate(tidy), setup, store-secret, ────────

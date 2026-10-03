@@ -35,11 +35,15 @@ PROJECT_DIR="${PROJECT_DIR%%/memory/*}"
 FILE_NAME="${FILE_PATH##*/}"
 BYTES=$(wc -c < "$FILE_PATH" 2>/dev/null | tr -d ' ' || echo 0)
 
-BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
-mkdir -p "$BORG_DIR" 2>/dev/null || true
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+mkdir -p "$STATE_DIR" 2>/dev/null || true
+# Append-only log that the gate counts: carry a pre-move config-dir history across ONCE, or readers
+# (which prefer the state root as soon as it exists) would see a one-row log. Copy, never move.
+OLD_LOG="${XDG_CONFIG_HOME:-$HOME/.config}/borg/memory-hits.log"
+{ [ -e "$STATE_DIR/memory-hits.log" ] || [ ! -f "$OLD_LOG" ] || cp "$OLD_LOG" "$STATE_DIR/memory-hits.log"; } 2>/dev/null || true
 
 { printf '%s\t%s\t%s\t%s\t%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SESSION_ID" "$PROJECT_DIR" "$FILE_NAME" "$BYTES" \
-    >> "${BORG_DIR}/memory-hits.log"; } 2>/dev/null || true
+    >> "${STATE_DIR}/memory-hits.log"; } 2>/dev/null || true
 
 exit 0

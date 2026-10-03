@@ -2,7 +2,7 @@
 # borg-nanoprobe-log.sh — Claude Code SubagentStop hook
 #
 # Fires when a subagent (e.g. borg-nanoprobe) completes. Appends one JSONL line
-# to ~/.config/borg/agents.jsonl describing the run so the orchestrator can list
+# to <state root>/agents.jsonl describing the run so the orchestrator can list
 # nanoprobes via `borg nanoprobes` and pull transcripts via `borg nanoprobe-log`.
 #
 # Evidence gate: scores last_assistant_message for file-path citations before
@@ -34,10 +34,14 @@ set -euo pipefail
 PATH="${HOME}/.config/dotfiles/zsh/bin:${HOME}/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin${PATH:+:$PATH}"
 export PATH
 
-BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
-LOG_FILE="$BORG_DIR/agents.jsonl"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+LOG_FILE="$STATE_DIR/agents.jsonl"
 
-mkdir -p "$BORG_DIR" 2>/dev/null || exit 0
+mkdir -p "$STATE_DIR" 2>/dev/null || exit 0
+# Append-only history: carry a pre-move config-dir log across ONCE, or readers (which prefer the state
+# root as soon as it exists) would see only the newest run. Copy, never move.
+OLD_LOG="${XDG_CONFIG_HOME:-$HOME/.config}/borg/agents.jsonl"
+{ [ -e "$LOG_FILE" ] || [ ! -f "$OLD_LOG" ] || cp "$OLD_LOG" "$LOG_FILE"; } 2>/dev/null || true
 
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 [[ -z "$INPUT" ]] && exit 0

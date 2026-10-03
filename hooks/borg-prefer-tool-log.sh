@@ -21,7 +21,7 @@
 set -uo pipefail
 
 BORG_DIR="${BORG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/borg}"
-LOG="$BORG_DIR/prefer-tool.jsonl"
+LOG="${XDG_STATE_HOME:-$HOME/.local/state}/borg/prefer-tool.jsonl"
 
 # FAST PATH, before any subprocess. This hook is PostToolUse/Bash, so it runs after EVERY bash
 # command the agent issues. Measured on this machine: `python3 -m borg_core.extensions.cli check`
@@ -84,7 +84,7 @@ matched=$(PYTHONPATH="$_core_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_co
 # missing-directory error to the real stderr -- which a consumer merging stderr into stdout splices
 # ahead of any JSON. This bug kept CI red for weeks; see CLAUDE.md.
 {
-    mkdir -p "$BORG_DIR" 2>/dev/null
+    mkdir -p "${LOG%/*}" 2>/dev/null
     printf '%s\n' "$(printf '%s' "$matched" | jq -c --arg cmd "$cmd" --arg cwd "$cwd" \
         '{event:"bypass", prefer:.prefer, instead_of:.instead_of, layer:.layer, command:$cmd, cwd:$cwd}' 2>/dev/null)" >> "$LOG"
 } 2>/dev/null

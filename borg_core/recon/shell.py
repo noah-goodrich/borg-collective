@@ -142,7 +142,7 @@ def read_last_run_marker() -> str | None:
 
 def write_last_run_marker(iso_ts: str) -> None:
     """Persist the mark used by this sweep, mirroring _recon_write_last_run."""
-    recon_dir = borg_dir() / "recon"
+    recon_dir = paths.state_root() / "recon"
     try:
         recon_dir.mkdir(parents=True, exist_ok=True)
         (recon_dir / "last-run").write_text(iso_ts + "\n")

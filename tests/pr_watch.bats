@@ -23,7 +23,7 @@ setup() {
     done
     PATH="$bindir" run "$WATCH"
     [ "$status" -eq 0 ]
-    [ ! -f "$BORG_DIR/pr-watch-delta.md" ]
+    [ ! -f "$XDG_STATE_HOME/borg/pr-watch-delta.md" ]
 }
 
 @test "pr-watch: refuses to run without borg_core reachable" {
@@ -31,7 +31,7 @@ setup() {
     mkdir -p "$BORG_ROOT"
     run "$WATCH"
     [ "$status" -eq 0 ]
-    [ ! -f "$BORG_DIR/pr-watch-delta.md" ]
+    [ ! -f "$XDG_STATE_HOME/borg/pr-watch-delta.md" ]
 }
 
 @test "pr-watch: is READ-ONLY unless --apply is passed" {
@@ -99,7 +99,13 @@ GH
     [[ "$output" == *"4242"* ]] || {
         echo "event detected but NOT printed to stdout; output was: [$output]"; false; }
     # Discriminates: the log alone passing is what the bug looked like.
-    [ -f "$BORG_DIR/pr-watch.log" ]
+    [ -f "$XDG_STATE_HOME/borg/pr-watch.log" ]
+    # AC4: the OLD-location snapshot above was READ (it produced the departure event); the refreshed one
+    # is WRITTEN to the state root and the old file is left as it was.
+    [ -f "$XDG_STATE_HOME/borg/pr-watch-snapshot.json" ]
+    [ "$(jq '.prs | length' "$XDG_STATE_HOME/borg/pr-watch-snapshot.json")" = "0" ]
+    [ "$(jq '.prs | length' "$snap")" = "1" ]
+    [ ! -e "$BORG_DIR/pr-watch.log" ]
 }
 
 @test "pr-watch: prints NOTHING when the snapshot already matches" {

@@ -15,7 +15,7 @@ _probe_input() {
 
 setup() {
     setup_temp_dirs
-    export LOG_FILE="$BORG_DIR/agents.jsonl"
+    export LOG_FILE="$XDG_STATE_HOME/borg/agents.jsonl"
 }
 
 # ─── basic logging ────────────────────────────────────────────────────────────

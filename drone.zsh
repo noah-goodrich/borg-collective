@@ -403,7 +403,7 @@ cmd_up() {
 
     # Detect if devcontainer definition changed since last build
     local _dc_hash _dc_hash_dir _dc_hash_file _build_flag=""
-    _dc_hash_dir="$BORG_DIR/devcontainer-hashes"
+    _dc_hash_dir="$(_borg_state_root)/devcontainer-hashes"
     _dc_hash_file="$_dc_hash_dir/${project_name}.hash"
     _dc_hash=$(_devcontainer_hash "$project_dir")
     if [[ -n "$_dc_hash" && "$(cat "$(_borg_operational_file "devcontainer-hashes/${project_name}.hash")" 2>/dev/null)" != "$_dc_hash" ]]; then
@@ -544,7 +544,7 @@ _cycle_project() {
 
     if [[ "$mode" == "rebuild" ]]; then
         local _dc_hash _dc_hash_dir _dc_hash_file
-        _dc_hash_dir="$BORG_DIR/devcontainer-hashes"
+        _dc_hash_dir="$(_borg_state_root)/devcontainer-hashes"
         _dc_hash_file="$_dc_hash_dir/${project_name}.hash"
         _dc_hash=$(_devcontainer_hash "$project_dir")
         _save_devcontainer_hash

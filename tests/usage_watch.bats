@@ -920,3 +920,25 @@ _launchd_path_value() {
     [ -f "$BORG_USAGE_SAMPLES" ]
     [ "$(_row_field '.status')" = "ok" ]
 }
+
+# ─── AC4: the guardian state moved from the config dir to the state root ─────────────────────────
+
+@test "guardian state default: an old-location streak is READ, then the state root is WRITTEN" {
+    unset BORG_USAGE_GUARDIAN_STATE
+    mkdir -p "$BORG_DIR"
+    printf '{"consecutive_unknown":2}' > "$BORG_DIR/usage-guardian.json"
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(jq -r '.consecutive_unknown' "$XDG_STATE_HOME/borg/usage-guardian.json")" = "3" ]
+    [ "$(jq -r '.consecutive_unknown' "$BORG_DIR/usage-guardian.json")" = "2" ]
+}
+
+@test "guardian state default: a fresh machine writes the state root and leaves the config dir alone" {
+    unset BORG_USAGE_GUARDIAN_STATE
+    _write_mock_claude "echo garbage"
+    run "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ -f "$XDG_STATE_HOME/borg/usage-guardian.json" ]
+    [ ! -e "$BORG_DIR/usage-guardian.json" ]
+}
