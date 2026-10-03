@@ -51,6 +51,16 @@ def borg_dir() -> Path:
     return Path(xdg) / "borg"
 
 
+def state_root() -> Path:
+    """Resolve the machine-local state root: `${XDG_STATE_HOME:-$HOME/.local/state}/borg`.
+
+    Siblings: lib/state-root.zsh and lib/borg-hooks.sh, both `_borg_state_root`. A blank
+    XDG_STATE_HOME is treated as unset, same as the shells' `:-`.
+    """
+    xdg = os.environ.get("XDG_STATE_HOME") or str(Path.home() / ".local" / "state")
+    return Path(xdg) / "borg"
+
+
 def registry_path() -> Path:
     """Path to registry.json, mirroring zsh's `BORG_REGISTRY="$BORG_DIR/registry.json"`."""
     override = os.environ.get("BORG_REGISTRY")

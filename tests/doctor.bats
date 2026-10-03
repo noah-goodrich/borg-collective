@@ -112,6 +112,18 @@ EOF
     [[ "$output" == *"reap"*"OK"* ]] || false
 }
 
+@test "doctor prints the state root from the resolver (XDG_STATE_HOME set)" {
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"State root: $XDG_STATE_HOME/borg"* ]] || false
+}
+
+@test "doctor derives the state root from HOME when XDG_STATE_HOME is unset" {
+    unset XDG_STATE_HOME
+    run "$BORG_CMD" doctor
+    [[ "$output" == *"State root: $HOME/.local/state/borg"* ]] || false
+}
+
 @test "labels resolve unprefixed in the sandbox (no prefix file, no env)" {
     [ "$NOTIFYD_LABEL" = "borg.notifyd" ]
     [ "$REAP_LABEL" = "borg.reap" ]
