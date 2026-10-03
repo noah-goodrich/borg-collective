@@ -129,6 +129,27 @@ _borg_operational_file() {
     fi
 }
 
+# Log retention: cap an append-only log at BORG_LOG_CAP_BYTES, keeping ONE previous generation.
+# Cap = 1 MiB: roughly 8,000 memory-hits rows or 2,000 agents.jsonl rows -- months of history at
+# today's write rates, so a history reader loses nothing it uses, while the worst case per log is
+# 2 MiB (file + .1). One generation, not N: the fewest moving parts that still bounds disk.
+# Siblings: borg_core/retention.py::rotate_log (Python). Same contract: size >= cap rotates.
+# Call it IMMEDIATELY BEFORE the append, so the live file exists again as soon as the write lands
+# (tail -n 1 readers such as usage-samples.jsonl never see a missing file after a write).
+# Usage: _borg_rotate_log <file> [cap_bytes]
+# Returns: 0 always; silent on every path (fail-open -- a hook's stdout is JSON).
+# Race: two concurrent writers may both rotate, costing at most the older generation.
+_borg_rotate_log() {
+    local _f="${1:-}" _cap="${2:-${BORG_LOG_CAP_BYTES:-1048576}}" _size
+    { [ -n "$_f" ] && [ -f "$_f" ] && [ ! -L "$_f" ]; } 2>/dev/null || return 0
+    case "$_cap" in ''|*[!0-9]*) _cap=1048576 ;; esac
+    _size="$(wc -c < "$_f" 2>/dev/null | tr -d ' ')" || return 0
+    case "$_size" in ''|*[!0-9]*) return 0 ;; esac
+    [ "$_size" -ge "$_cap" ] 2>/dev/null || return 0
+    { mv -f "$_f" "$_f.1"; } 2>/dev/null || true
+    return 0
+}
+
 # Canonical path to a project's state file.
 # Usage: _borg_state_file <project_dir>
 _borg_state_file() {
