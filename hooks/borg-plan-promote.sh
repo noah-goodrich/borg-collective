@@ -29,6 +29,8 @@ DEBUG_LOG="$STATE_DIR/plan-promote-debug.log"
 
 _debug() {
     mkdir -p "$STATE_DIR" 2>/dev/null || true
+    # Retention: cap the log at 1 MiB, one previous generation (_borg_rotate_log, lib/borg-hooks.sh).
+    { type _borg_rotate_log >/dev/null 2>&1 && _borg_rotate_log "$DEBUG_LOG"; } 2>/dev/null || true
     printf '%s [borg-plan-promote] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$DEBUG_LOG" 2>/dev/null || true
 }
 

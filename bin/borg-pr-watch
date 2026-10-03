@@ -30,6 +30,8 @@ command -v python3 >/dev/null 2>&1 || exit 0
 [ -d "$BORG_ROOT/borg_core" ] || exit 0
 
 mkdir -p "$STATE_ROOT" 2>/dev/null || true
+# Retention: cap pr-watch.log at 1 MiB, one previous generation (lib/borg-hooks.sh).
+{ source "$BORG_ROOT/lib/borg-hooks.sh" && _borg_rotate_log "$LOG_FILE"; } >/dev/null 2>&1 || true
 
 # `--apply` posts allowlisted actions. Without it the sweep is read-only and only reports, which is
 # what makes this script safe to run by hand while debugging.

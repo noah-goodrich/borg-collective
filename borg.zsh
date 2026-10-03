@@ -2265,17 +2265,25 @@ cmd_cortex_resume() {
         "$wakes_read" > "$tmp" && mv "$tmp" "$wakes_write"
 }
 
+# agents.jsonl rotates to agents.jsonl.1 at the retention cap (_borg_rotate_log): newest first means
+# the live file, then the one previous generation. Absent generations are skipped.
+_borg_agents_newest_first() {
+    [[ -s "$1" ]] && _borg_reverse_lines "$1"
+    [[ -s "$1.1" ]] && _borg_reverse_lines "$1.1"
+    return 0
+}
+
 cmd_nanoprobes() {
     local log
     log=$(_borg_operational_file agents.jsonl)
-    if [[ ! -s "$log" ]]; then
+    if [[ ! -s "$log" && ! -s "$log.1" ]]; then
         info "No nanoprobes recorded yet."
         info "Spawn one via the Agent tool with agent_type=borg-nanoprobe; SubagentStop logs here."
         return 0
     fi
 
     # Newest first; format: short_id  agent_type  summary  finished_at
-    _borg_reverse_lines "$log" | head -50 | jq -r '
+    _borg_agents_newest_first "$log" | head -50 | jq -r '
         [
             (.id // "")[0:8],
             (.agent_type // "?"),
@@ -2293,11 +2301,11 @@ cmd_nanoprobe_log() {
 
     local log
     log=$(_borg_operational_file agents.jsonl)
-    [[ -s "$log" ]] || die "no nanoprobes recorded yet ($log)"
+    [[ -s "$log" || -s "$log.1" ]] || die "no nanoprobes recorded yet ($log)"
 
     # Find the newest matching JSONL entry by id prefix
     local entry
-    entry=$(_borg_reverse_lines "$log" | jq -c --arg q "$query" \
+    entry=$(_borg_agents_newest_first "$log" | jq -c --arg q "$query" \
         'select((.id // "") | startswith($q))' 2>/dev/null | head -1)
 
     [[ -n "$entry" ]] || die "no nanoprobe matching '$query'"

@@ -85,6 +85,8 @@ matched=$(PYTHONPATH="$_core_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_co
 # ahead of any JSON. This bug kept CI red for weeks; see CLAUDE.md.
 {
     mkdir -p "${LOG%/*}" 2>/dev/null
+    # Retention: cap at 1 MiB, one previous generation (nothing reads this log back).
+    source "${HOME}/.claude/lib/borg-hooks.sh" >/dev/null 2>&1 && _borg_rotate_log "$LOG"
     printf '%s\n' "$(printf '%s' "$matched" | jq -c --arg cmd "$cmd" --arg cwd "$cwd" \
         '{event:"bypass", prefer:.prefer, instead_of:.instead_of, layer:.layer, command:$cmd, cwd:$cwd}' 2>/dev/null)" >> "$LOG"
 } 2>/dev/null
