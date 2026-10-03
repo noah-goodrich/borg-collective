@@ -16,7 +16,9 @@ every real invocation; see the _borg_py helper in borg.zsh for the other half of
 
 from __future__ import annotations
 
+import hashlib
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -72,6 +74,47 @@ def operational_file(name: str) -> Path:
     """
     new = state_root() / name
     return new if new.exists() else borg_dir() / name
+
+
+def _digest12(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+def project_state_key(directory: str | os.PathLike[str]) -> str:
+    """The filesystem-safe key naming one project DIRECTORY's machine-local state.
+
+    `<repo12>-<path12>`, or `local-<path12>` outside any git repository, where `path12` is the first
+    12 hex of sha256 over the PHYSICAL directory path (symlinks resolved, no trailing slash) and
+    `repo12` the same over `git rev-parse --path-format=absolute --git-common-dir`.
+
+    PER DIRECTORY, NAMESPACED BY REPO. Two worktrees of one repo can be in different statuses at
+    once (one active, one idle), and today's `<dir>/.borg/state.json` is per directory; keying by
+    repo alone would make them overwrite each other. The repo half is the prefix so a repo's
+    worktrees sort together and a later step can group them without parsing paths. Hashes, not
+    slugs: paths carry spaces and slashes, and a slug of two different paths can collide.
+
+    Siblings, byte-identical output required: `_borg_project_state_key` in lib/borg-hooks.sh and
+    lib/state-root.zsh (pinned by tests/project_state.bats).
+    """
+    physical = os.path.realpath(os.fspath(directory))
+    try:
+        out = subprocess.run(
+            ["git", "-C", physical, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        repo = out.stdout.strip() if out.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        repo = ""
+    return f"{_digest12(repo) if repo else 'local'}-{_digest12(physical)}"
+
+
+def project_state_file(directory: str | os.PathLike[str]) -> Path:
+    """`<state root>/projects/<key>/state.json` for a project directory. One `git rev-parse`, creates
+    nothing. Siblings: `_borg_project_state_file` in lib/borg-hooks.sh and lib/state-root.zsh."""
+    return state_root() / "projects" / project_state_key(directory) / "state.json"
 
 
 def registry_path() -> Path:
