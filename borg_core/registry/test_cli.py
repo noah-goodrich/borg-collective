@@ -85,6 +85,43 @@ def test_cmd_add_upserts_preserving_unrelated_existing_fields(isolated_env, caps
     assert registry["projects"]["existing-project"]["path"] == str(proj_dir)
 
 
+def test_cmd_add_keeps_an_existing_short_tmux_window(isolated_env, capsys):
+    proj_dir = isolated_env / "widget-factory"
+    proj_dir.mkdir()
+    shell.write_registry({"projects": {"widget-factory": {"path": "/old", "tmux_window": "wf"}}})
+
+    cli.cmd_add(str(proj_dir))
+    capsys.readouterr()
+
+    entry = shell.read_registry()["projects"]["widget-factory"]
+    assert entry["tmux_window"] == "wf"
+    assert entry["path"] == str(proj_dir)
+
+
+def test_cmd_add_keeps_the_short_name_even_when_a_long_named_window_is_live(isolated_env, monkeypatch, capsys):
+    proj_dir = isolated_env / "widget-factory"
+    proj_dir.mkdir()
+    shell.write_registry({"projects": {"widget-factory": {"tmux_window": "wf"}}})
+    monkeypatch.setattr(shell, "tmux_window_exists", lambda name: name == "widget-factory")
+
+    cli.cmd_add(str(proj_dir))
+    capsys.readouterr()
+
+    assert shell.read_registry()["projects"]["widget-factory"]["tmux_window"] == "wf"
+
+
+def test_cmd_add_fresh_and_null_entries_still_take_the_computed_window(isolated_env, monkeypatch, capsys):
+    monkeypatch.setattr(shell, "tmux_window_exists", lambda name: True)
+    for name, seed in (("fresh-one", None), ("null-one", {"tmux_window": None})):
+        proj_dir = isolated_env / name
+        proj_dir.mkdir()
+        if seed is not None:
+            shell.write_registry({"projects": {name: seed}})
+        cli.cmd_add(str(proj_dir))
+        capsys.readouterr()
+        assert shell.read_registry()["projects"][name]["tmux_window"] == name
+
+
 # ── cmd_rm ─────────────────────────────────────────────────────────────────────
 
 

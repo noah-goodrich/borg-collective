@@ -48,6 +48,10 @@ def cmd_add(path_arg: str | None) -> int:
     name = _basename(ppath)
 
     tmux_window = name if shell.tmux_window_exists(name) else None
+    # An existing tmux_window is the registry's ONE window-name value (possibly a short or explicit
+    # name); a re-add must not overwrite it with the project name or None. Fresh adds are unchanged.
+    existing = (shell.read_registry().get("projects") or {}).get(name) or {}
+    keep_window = bool(existing.get("tmux_window"))
 
     session_id = shell.claude_latest_session_id(ppath)
 
@@ -66,6 +70,8 @@ def cmd_add(path_arg: str | None) -> int:
         last_activity=last_activity,
         repo=shell.git_common_dir(ppath),
     )
+    if keep_window:
+        entry.pop("tmux_window", None)
     shell.registry_merge(name, entry)
     print(f"Registered: {name}")
 
