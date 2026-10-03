@@ -47,6 +47,11 @@ recur unnoticed. No new storage engine.
   `.borg/<name>` either has a reader or appears in neither code nor `CLAUDE.md`.
   - Verify: AC2's census passes on a clean tree; `git ls-files .borg/knowledge | wc -l` is still
     1106; `ls ~/.config/borg ~/.local/state/borg | grep -c cairn` is 0.
+  - Evidence, 2026-10-03 (pre-merge half only; the box stays open): the census passes on a clean tree,
+    `git ls-files .borg/knowledge | wc -l` is 1106, and all ten stores are resolved as inert on-disk data
+    (table in `docs/state-census.md`). `borg tidy --cairn-leftovers [--dry-run]` backs up then deletes the
+    five cairn files, tested against a sandboxed HOME, XDG_CONFIG_HOME and XDG_STATE_HOME. PENDING: the
+    operator runs it once on the live machine; the `grep -c cairn` clause is checked after that run.
 
 - [ ] **AC4 — One machine-local root, with retention.** Operational state lives under one root;
   `${XDG_CONFIG_HOME}/borg` keeps only what a human edits. Logs rotate (`plan-promote-debug.log` is

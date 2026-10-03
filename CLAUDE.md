@@ -116,7 +116,8 @@ borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                            `borg setup` at the end. A new launchd job needs an install.sh run.
 borg store-secret        Patch a project's secrets.zsh with a new keychain export
 borg sever               Retire/archive a directive or project without deleting it
-borg tidy                Housekeeping pass over registry/checkpoints
+borg tidy                Housekeeping pass over registry/checkpoints; `--cairn-leftovers [--dry-run]`
+                           backs up then deletes cairn's machine-local files
 borg color / image       Cosmetic project registry fields (tmux color, session image)
 borg version             Print BORG_VERSION
 borg help                Full command reference
