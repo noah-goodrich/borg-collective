@@ -861,7 +861,7 @@ def cortex_wakes_path() -> Path:
         value = os.environ.get(env_name)
         if value:
             return Path(value)
-    return borg_dir() / "cortex-wakes.json"
+    return paths.operational_file("cortex-wakes.json")
 
 
 def cortex_pending(now: int | None = None) -> list[dict]:

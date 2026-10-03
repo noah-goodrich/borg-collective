@@ -132,13 +132,11 @@ def newest_checkpoint_epoch(project_dirs: list[str]) -> int | None:
 
 def read_last_run_marker() -> str | None:
     """Read the last-run marker file, trimmed, or None if absent/empty."""
-    marker = borg_dir() / "recon" / "last-run"
-    if not marker.is_file():
-        return None
     try:
-        value = marker.read_text().splitlines()[0].strip() if marker.stat().st_size else ""
+        lines = paths.operational_file("recon/last-run").read_text().splitlines()
     except OSError:
         return None
+    value = lines[0].strip() if lines else ""
     return value or None
 
 

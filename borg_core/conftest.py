@@ -33,3 +33,14 @@ def _git_identity(monkeypatch):
     monkeypatch.setenv("GIT_COMMITTER_NAME", "borg tests")
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "tests@borg.invalid")
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+
+@pytest.fixture(autouse=True)
+def _sandbox_state_home(monkeypatch, tmp_path_factory):
+    """Point XDG_STATE_HOME at an empty sandbox dir for every test.
+
+    Readers now look in the state root before the config dir (AC4 expand phase), so an unset
+    XDG_STATE_HOME would let a developer's REAL ~/.local/state/borg leak into any test that reads
+    an operational file. Tests that exercise the state root set or delete the variable themselves.
+    """
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path_factory.mktemp("xdg-state")))

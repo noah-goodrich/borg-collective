@@ -240,7 +240,9 @@ fi
 # check came back FAIL (< 0.2 reads/session); it is removed on the next PASS. Surface it loudly
 # here, the same CONTEXT_PARTS pattern as the PROJECT_PLAN.md nudge above — printing to a log
 # is not delivery, per the directive.
-MEMORY_GATE_VERDICT_FILE="${BORG_MEMORY_GATE_VERDICT_FILE:-$BORG_DIR/memory-gate-verdict.json}"
+# Read side only: state root first, old config location second (fail-open if the deployed lib predates it).
+_mg_default="$(_borg_operational_file memory-gate-verdict.json 2>/dev/null)" || _mg_default=""
+MEMORY_GATE_VERDICT_FILE="${BORG_MEMORY_GATE_VERDICT_FILE:-${_mg_default:-$BORG_DIR/memory-gate-verdict.json}}"
 if [[ -f "$MEMORY_GATE_VERDICT_FILE" ]]; then
     _mg_ratio=$(jq -r '.ratio // "?"' "$MEMORY_GATE_VERDICT_FILE" 2>/dev/null || echo "?")
     _mg_checked=$(jq -r '.checked_at // "?"' "$MEMORY_GATE_VERDICT_FILE" 2>/dev/null || echo "?")
