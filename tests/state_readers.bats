@@ -113,6 +113,15 @@ _zsh_overlay() {
     [ "$(_zsh_overlay)" = "active" ]
 }
 
+@test "zsh overlay: the registry repo spares the git fork (a git shim on PATH is never called)" {
+    mkdir -p "$BATS_TEST_TMPDIR/shim"
+    printf '#!/bin/sh\necho called >> "%s/git-calls"\nexit 1\n' "$BATS_TEST_TMPDIR" > "$BATS_TEST_TMPDIR/shim/git"
+    chmod +x "$BATS_TEST_TMPDIR/shim/git"
+    _new '{"status":"active"}'
+    [ "$(PATH="$BATS_TEST_TMPDIR/shim:$PATH" _zsh_overlay)" = "active" ]
+    [ ! -e "$BATS_TEST_TMPDIR/git-calls" ]
+}
+
 @test "zsh overlay: a registry entry with no repo field still reads the legacy file" {
     printf '{"projects":{"proj":{"path":"%s","status":"idle"}}}\n' "$PROJ" > "$BORG_REGISTRY"
     _legacy '{"status":"waiting"}'
