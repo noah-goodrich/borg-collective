@@ -15,7 +15,7 @@
 #   drone rebuild [project]      Rebuild images (no cache) + restart
 #   drone fix [project|--all]    Restore standard 2-pane layout
 #   drone toggle [project]       Add/remove side pane (2-pane ↔ 3-pane)
-#   drone pane <direction>       Split active pane top|bottom|left|right
+#   drone pane <direction>       Split the calling pane top|bottom|left|right (two panes max; reuse unzooms)
 #   drone help                   Command reference
 
 set -e
@@ -901,11 +901,35 @@ cmd_pane() {
 
     [[ -n "$TMUX" ]] || die "Not inside a tmux session. Run 'drone pane' from within tmux."
 
+    # Split the CALLING pane, not the active one. tmux sets $TMUX_PANE in every process it
+    # starts inside a pane, so an agent running here targets its own window even when the
+    # user is looking at a different one. Without -t, split-window and '#W' both resolve to
+    # whatever window currently has focus (2026-09-23: a draft opened in the wrong drone).
+    local target="${TMUX_PANE:-}"
+    [[ -n "$target" ]] || target=$(tmux display-message -p '#{pane_id}')
+
     local wname
-    wname=$(tmux display-message -p '#W')
+    wname=$(tmux display-message -t "$target" -p '#W')
+
+    # Two panes per window, period (Noah, 2026-09-23). If a side pane already exists, reuse
+    # it: print its id and stop, so the caller sends its command there instead of splitting.
+    local existing
+    existing=$(tmux list-panes -t "$target" -F '#{pane_id}' | grep -vx "$target" | head -1)
+    if [[ -n "$existing" ]]; then
+        local zoomed note=""
+        zoomed=$(tmux display-message -t "$target" -p '#{window_zoomed_flag}')
+        if [[ "$zoomed" == "1" ]]; then
+            # Zoom is a toggle: only call it when the flag says the side pane is hidden.
+            tmux resize-pane -Z -t "$target"
+            note=", unzoomed"
+        fi
+        info "$wname: reusing existing side pane $existing (two panes per window$note)"
+        print -- "$existing"
+        return 0
+    fi
 
     local new_pane
-    new_pane=$(tmux split-window ${=flags} -PF '#{pane_id}')
+    new_pane=$(tmux split-window ${=flags} -t "$target" -PF '#{pane_id}')
 
     # If this is a devcontainer project, exec into the container (same logic as cmd_toggle);
     # otherwise just cd into the project dir.
@@ -1313,7 +1337,9 @@ cmd_help() {
     fix [project]        Restore standard 2-pane layout for project window
     fix --all            Restore layout for all windows
     toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
-    pane <direction>     Split active pane top|bottom|left|right (devcontainer-aware)
+    pane <direction>     Split the calling pane top|bottom|left|right (devcontainer-aware); a window holds
+                         two panes, so with a side pane open it reuses that pane (unzooming the window if
+                         it is zoomed, so the side pane is visible) and prints its id
     scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase, --supabase-shared)
     help                 Show this message
 
