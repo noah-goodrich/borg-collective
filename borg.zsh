@@ -614,6 +614,19 @@ cmd_color() {
     fi
 }
 
+cmd_window() {
+    local project="${1:-}" short="${2:-}"
+    [[ -z "$project" ]] && die "Usage: borg window <project> [short]"
+    borg_registry_has "$project" || die "Unknown project: $project"
+    if [[ -z "$short" ]]; then
+        _borg_py borg_core.registry.cli window-name "$project"
+        return
+    fi
+    local applied
+    applied=$(_borg_py borg_core.registry.cli window-name "$project" --set "$short") || exit 1
+    info "Window name for $project → $applied"
+}
+
 cmd_image() {
     local subcmd="${1:-help}"
     local registry="${BORG_IMAGE_REGISTRY:-}"
@@ -2912,6 +2925,7 @@ cmd_help() {
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
+    window <p> [short]  Show (or set) a project's short tmux window name
     sever               Tear down everything: containers, windows, session
     regenerate          Archive stale projects (idle >48h)
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
@@ -3499,6 +3513,7 @@ case "${1:-help}" in
         _borg_py borg_core.registry.cli rm "$@"
         ;;
     color)    cmd_color "${@:2}" ;;
+    window)   cmd_window "${@:2}" ;;
     image)    cmd_image "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;

@@ -104,6 +104,7 @@ borg add [path]          Register a project
 borg rm <project>        Unregister
 borg focus               Zoom current pane / project window
 borg pin / unpin         Pin (or unpin) a project to the top of borg link
+borg window <p> [short]  Show or set a project's short tmux window name (registry `tmux_window`)
 borg reap / reap-worktrees  Reap stale active/waiting statuses; clean stale nanoprobe worktrees
 borg recon --json        Machine surface only: reconciled sweep JSON (bare `recon` retired; use link)
 borg recon --adapters    List the source adapters discovered on this machine

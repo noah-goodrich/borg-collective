@@ -1,4 +1,4 @@
-"""CLI entrypoint for `borg add` / `borg rm` / `borg backfill-repo` (ports cmd_add / cmd_rm in
+"""CLI entrypoint for `borg add` / `borg rm` / `borg backfill-repo` / `window-name` (ports cmd_add / cmd_rm in
 borg.zsh; `backfill-repo` has no zsh original).
 
 One module, three subcommands -- registry CRUD is small enough on both sides that a second file
@@ -138,6 +138,53 @@ def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
     return 0
 
 
+def cmd_window_name(args: list[str]) -> int:
+    """`window-name <project> [--set SHORT | --derive]` -- read or write a project's short tmux window name.
+
+    No flag prints the effective name: the stored `tmux_window`, or the project name when none is
+    stored. `--set SHORT` validates against the tmux session name (`$BORG_TMUX_SESSION`, default
+    `borg`) and every OTHER registered project's name and window, then writes atomically; an invalid
+    name exits non-zero with the reason on stderr and writes nothing. `--derive` writes the derived
+    name only when `core.needs_derivation` says the field was never customized, so an explicit
+    choice survives; either way it prints the resulting name.
+    """
+    usage = "usage: borg window <project> [short]  (registry: window-name <project> [--set SHORT | --derive])"
+    if not args or args[0].startswith("--"):
+        _die(usage)
+    project, flags = args[0], args[1:]
+    if flags and flags[0] not in ("--set", "--derive"):
+        _die(f"borg: unknown option '{flags[0]}' (expected --set SHORT or --derive)")
+    if flags[:1] == ["--set"] and len(flags) < 2:
+        _die("borg: --set needs a value")
+
+    projects = shell.read_registry().get("projects") or {}
+    if project not in projects:
+        _die(f"project '{project}' not in registry")
+    entry = projects[project] or {}
+    session = shell.tmux_session_name()
+
+    if not flags:
+        print(entry.get("tmux_window") or project)
+        return 0
+
+    if flags[0] == "--set":
+        short = flags[1]
+        reason = core.validate_window_name(short, project, session, projects)
+        if reason:
+            _die(f"borg: {reason}")
+        shell.registry_merge(project, {"tmux_window": short})
+        print(short)
+        return 0
+
+    if not core.needs_derivation(entry, project):
+        print(entry["tmux_window"])
+        return 0
+    derived = core.derive_window_name(project, session, projects)
+    shell.registry_merge(project, {"tmux_window": derived})
+    print(derived)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> None:
     """Entrypoint for `python3 -m borg_core.registry.cli add|rm ...`.
 
@@ -151,11 +198,13 @@ def main(argv: list[str] | None = None) -> None:
     command, rest = args[0], args[1:]
     value = rest[0] if rest else None
 
-    if command not in ("add", "rm", "backfill-repo"):
+    if command not in ("add", "rm", "backfill-repo", "window-name"):
         _die(
             f"borg: unknown registry command '{command}' "
-            "(expected add, rm or backfill-repo)"
+            "(expected add, rm, backfill-repo or window-name)"
         )
+    if command == "window-name":
+        raise SystemExit(cmd_window_name(rest))
 
     handlers = {"add": cmd_add, "rm": cmd_rm, "backfill-repo": cmd_backfill_repo}
     try:

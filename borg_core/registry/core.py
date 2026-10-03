@@ -8,6 +8,8 @@ lookups) lives in shell.py, which calls into this module for the actual logic.
 
 from __future__ import annotations
 
+import re
+
 # tr -d '\000-\010\013\014\016-\037' keeps tab (0x09), LF (0x0A), CR (0x0D); strips other C0
 # control chars. Mirrors _borg_registry_write's sanitization pass before an atomic write.
 _KEPT_CONTROL_CHARS = {0x09, 0x0A, 0x0D}
@@ -64,3 +66,67 @@ def build_add_entry(  # pylint: disable=too-many-arguments,too-many-positional-a
         "summary": None,
         "repo": repo or None,
     }
+
+
+# ── short tmux window names ────────────────────────────────────────────────────────────────────
+#
+# The short name lives in the registry's existing `tmux_window` field. Everything here is PURE: the
+# tmux session name and the registered projects are passed in, never read from the environment or
+# the registry file, so the CLI boundary owns both lookups and these rules stay table-testable.
+
+_SEPARATORS = "-_"
+_SHORT_MAX = 6
+
+
+def validate_window_name(candidate: str, project: str, session: str, projects: dict) -> str | None:
+    """Why `candidate` cannot be `project`'s tmux window name, or None when it is valid.
+
+    Rejected: empty; containing `.` or `:` (tmux target syntax); equal to the tmux session name
+    (`session:window` would then be ambiguous); equal to any OTHER registered project's name or its
+    `tmux_window`. `project` itself is excluded from the collision scan -- a project may keep its own
+    name, and its current `tmux_window` is exactly what a re-set replaces.
+    """
+    if not candidate:
+        return "window name must not be empty"
+    if "." in candidate or ":" in candidate:
+        return f"window name '{candidate}' must not contain '.' or ':' (tmux target syntax)"
+    if candidate == session:
+        return f"window name '{candidate}' equals the tmux session name"
+    for other, entry in projects.items():
+        if other == project:
+            continue
+        if candidate == other:
+            return f"window name '{candidate}' is already the name of project '{other}'"
+        if candidate == ((entry or {}).get("tmux_window") or None):
+            return f"window name '{candidate}' is already the tmux window of project '{other}'"
+    return None
+
+
+def derive_window_name(project: str, session: str, projects: dict) -> str:
+    """Deterministic short window name for `project`, falling back to longer forms on collision.
+
+    Base form: name <= 6 chars -> the name; >= 3 segments on `-`/`_` -> their initials; otherwise the
+    first 6 chars with trailing separators trimmed. If that is invalid, prefixes of length 7, 8, ...
+    (trailing separators trimmed) are tried, and finally the full project name, returned even if it
+    is itself invalid -- it is the project's identity and the last honest answer.
+    """
+    segments = [s for s in re.split(f"[{_SEPARATORS}]", project) if s]
+    if len(project) <= _SHORT_MAX:
+        base = project
+    elif len(segments) >= 3:
+        base = "".join(s[0] for s in segments)
+    else:
+        base = project[:_SHORT_MAX].rstrip(_SEPARATORS)
+
+    candidates = [base]
+    candidates += [project[:n].rstrip(_SEPARATORS) for n in range(_SHORT_MAX + 1, len(project))]
+    for candidate in candidates:
+        if validate_window_name(candidate, project, session, projects) is None:
+            return candidate
+    return project
+
+
+def needs_derivation(entry: dict | None, project: str) -> bool:
+    """True when `tmux_window` was never customized: absent, or still equal to the project name."""
+    current = (entry or {}).get("tmux_window")
+    return not current or current == project
