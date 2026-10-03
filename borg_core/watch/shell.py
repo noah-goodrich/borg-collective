@@ -42,8 +42,9 @@ query($owner:String!, $name:String!) {
 
 
 def snapshot_path() -> Path:
-    """Where the last sweep is stored. Under BORG_DIR so it shares the config surface."""
-    return Path(paths.borg_dir()) / SNAPSHOT_NAME
+    """Where the last sweep is WRITTEN: the machine-local state root. Reads go through
+    `paths.operational_file`, which falls back to the old config-dir copy (expand phase)."""
+    return paths.state_root() / SNAPSHOT_NAME
 
 
 def load_snapshot() -> dict:
@@ -54,7 +55,7 @@ def load_snapshot() -> dict:
     should cost one quiet cycle, not a flood of false "new PR" events.
     """
     try:
-        data = json.loads(snapshot_path().read_text(encoding="utf-8"))
+        data = json.loads(paths.operational_file(SNAPSHOT_NAME).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return data if isinstance(data, dict) else {}

@@ -116,6 +116,23 @@ def test_read_last_run_marker_absent(isolated_env):
     assert shell.read_last_run_marker() is None
 
 
+def test_read_last_run_marker_old_only_is_read(isolated_env):
+    old = isolated_env / "borg-dir" / "recon"
+    old.mkdir(parents=True)
+    (old / "last-run").write_text("2020-01-01T00:00:00Z\n")
+    assert shell.read_last_run_marker() == "2020-01-01T00:00:00Z"
+
+
+def test_read_last_run_marker_state_root_wins_when_both_present(isolated_env, monkeypatch):
+    old = isolated_env / "borg-dir" / "recon"
+    new = isolated_env / "state" / "borg" / "recon"
+    for d, v in ((old, "2020-01-01T00:00:00Z"), (new, "2024-02-02T00:00:00Z")):
+        d.mkdir(parents=True)
+        (d / "last-run").write_text(v + "\n")
+    monkeypatch.setenv("XDG_STATE_HOME", str(isolated_env / "state"))
+    assert shell.read_last_run_marker() == "2024-02-02T00:00:00Z"
+
+
 def test_write_then_read_last_run_marker(isolated_env):
     shell.write_last_run_marker("2023-05-05T05:05:05Z")
     assert shell.read_last_run_marker() == "2023-05-05T05:05:05Z"

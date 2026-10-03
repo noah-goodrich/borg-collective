@@ -20,14 +20,16 @@ BORG_DIR="${BORG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/borg}"
 BORG_ROOT="${BORG_ROOT:-$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)}"
 REPO_SLUG="${BORG_PR_WATCH_REPO:-noah-goodrich/borg-collective}"
 REPO_DIR="${BORG_PR_WATCH_DIR:-$BORG_ROOT}"
-DELTA_FILE="$BORG_DIR/pr-watch-delta.md"
-LOG_FILE="$BORG_DIR/pr-watch.log"
+# Pure-writer output and the snapshot (borg_core/watch/shell.py) live in the machine-local state root.
+STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+DELTA_FILE="$STATE_ROOT/pr-watch-delta.md"
+LOG_FILE="$STATE_ROOT/pr-watch.log"
 
 command -v gh >/dev/null 2>&1 || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 [ -d "$BORG_ROOT/borg_core" ] || exit 0
 
-mkdir -p "$BORG_DIR" 2>/dev/null || true
+mkdir -p "$STATE_ROOT" 2>/dev/null || true
 
 # `--apply` posts allowlisted actions. Without it the sweep is read-only and only reports, which is
 # what makes this script safe to run by hand while debugging.

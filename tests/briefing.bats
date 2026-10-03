@@ -195,6 +195,10 @@ EOF
     [[ "$output" == *"exited 1"* ]] || false
     # The captured stderr text must actually surface, not be swallowed like the old /dev/null path.
     [[ "$output" == *"API error 401 Unauthorized"* ]] || false
+    # AC4: the stderr capture is a pure-writer log, so it lives in the state root -- not the config dir.
+    [ -f "$XDG_STATE_HOME/borg/briefing-stderr.log" ]
+    grep -q "API error 401" "$XDG_STATE_HOME/borg/briefing-stderr.log"
+    [ ! -e "$BORG_DIR/briefing-stderr.log" ]
 }
 
 @test "briefing: fallback distinguishes the not-logged-in case from a generic exit" {

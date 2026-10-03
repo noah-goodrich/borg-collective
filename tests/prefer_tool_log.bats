@@ -11,7 +11,7 @@ setup() {
     REPO="${BATS_TEST_TMPDIR}/repo"
     mkdir -p "$REPO"
     git -C "$REPO" init --quiet
-    LOG="$BORG_DIR/prefer-tool.jsonl"
+    LOG="$XDG_STATE_HOME/borg/prefer-tool.jsonl"
     cd "${BATS_TEST_DIRNAME}/.." || return 1
 }
 

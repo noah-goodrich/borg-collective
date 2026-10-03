@@ -25,7 +25,21 @@ else
 fi
 
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
+_self="$0"
+while [[ -L "$_self" ]]; do
+    _link="$(readlink "$_self")"
+    case "$_link" in
+        /*) _self="$_link" ;;
+        *)  _self="$(dirname "$_self")/$_link" ;;
+    esac
+done
 HITS_LOG="${BORG_DIR}/memory-hits.log"
+# Read side: state root first, old config location second. state-root.zsh is bash-compatible.
+if [[ -f "$(dirname "$_self")/../lib/state-root.zsh" ]]; then
+    # shellcheck source=/dev/null
+    source "$(dirname "$_self")/../lib/state-root.zsh"
+    HITS_LOG="$(_borg_operational_file memory-hits.log)"
+fi
 PROJECTS_DIR="${HOME}/.claude/projects"
 CUTOFF_EPOCH=$(( $(date -u +%s) - DAYS * 86400 ))
 

@@ -108,6 +108,27 @@ _borg_session_mode() {
 # discovery index — only stable identity fields (path, source, tmux_window,
 # summary, pinned, archived) remain there.
 
+# Machine-local operational state root: ${XDG_STATE_HOME:-$HOME/.local/state}/borg (blank == unset).
+# Siblings: lib/state-root.zsh and borg_core/paths.py::state_root -- keep all three identical.
+_borg_state_root() {
+    printf '%s/borg\n' "${XDG_STATE_HOME:-$HOME/.local/state}"
+}
+
+# Resolve an operational file for READING: the state root's copy if it exists, else the old
+# config-dir location ($BORG_DIR, else ${XDG_CONFIG_HOME:-$HOME/.config}/borg). Expand phase of the
+# config -> state-root move: readers accept both before any writer moves. Neither existing prints
+# the OLD path, so callers' absent handling is unchanged. Reader-only; writers must not call this.
+# Usage: _borg_operational_file <name>     (name may contain a subdir, e.g. recon/last-run)
+_borg_operational_file() {
+    local _new
+    _new="$(_borg_state_root)/${1:?_borg_operational_file: name required}"
+    if [ -e "$_new" ]; then
+        printf '%s\n' "$_new"
+    else
+        printf '%s/%s\n' "${BORG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/borg}" "$1"
+    fi
+}
+
 # Canonical path to a project's state file.
 # Usage: _borg_state_file <project_dir>
 _borg_state_file() {

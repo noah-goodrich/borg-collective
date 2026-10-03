@@ -11,6 +11,8 @@ setup_temp_dirs() {
     export BORG_REGISTRY="$BORG_DIR/registry.json"
     export HOME="$BORG_TEST_HOME"
     export XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/config"
+    export XDG_STATE_HOME="${BATS_TEST_TMPDIR}/state"
+    export XDG_DATA_HOME="${BATS_TEST_TMPDIR}/data"
 
     # GIVE THE SANDBOX A GIT IDENTITY. HOME is redirected on the line above, so `~/.gitconfig` is
     # gone by construction -- and recon_adapter_github.bats's case "adapter: a linked worktree is

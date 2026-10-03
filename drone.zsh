@@ -39,6 +39,7 @@ DRONE_SCRIPT_DIR="${0:A:h}"
 
 # Host-side lifecycle hooks (.devcontainer/borg-hooks/{pre-up,post-down}.sh).
 source "$DRONE_SCRIPT_DIR/lib/drone-hooks.zsh"
+source "$DRONE_SCRIPT_DIR/lib/state-root.zsh"
 
 _run_pre_up()    { run_borg_hook "$1" "$2" pre-up.sh strict || die "pre-up.sh failed for $2"; }
 _run_post_down() { run_borg_hook "$1" "$2" post-down.sh lenient; }
@@ -494,10 +495,10 @@ cmd_up() {
 
     # Detect if devcontainer definition changed since last build
     local _dc_hash _dc_hash_dir _dc_hash_file _build_flag=""
-    _dc_hash_dir="$BORG_DIR/devcontainer-hashes"
+    _dc_hash_dir="$(_borg_state_root)/devcontainer-hashes"
     _dc_hash_file="$_dc_hash_dir/${project_name}.hash"
     _dc_hash=$(_devcontainer_hash "$project_dir")
-    if [[ -n "$_dc_hash" && "$(cat "$_dc_hash_file" 2>/dev/null)" != "$_dc_hash" ]]; then
+    if [[ -n "$_dc_hash" && "$(cat "$(_borg_operational_file "devcontainer-hashes/${project_name}.hash")" 2>/dev/null)" != "$_dc_hash" ]]; then
         info "Devcontainer definition changed — rebuilding image."
         _build_flag="--build"
     fi
@@ -637,7 +638,7 @@ _cycle_project() {
 
     if [[ "$mode" == "rebuild" ]]; then
         local _dc_hash _dc_hash_dir _dc_hash_file
-        _dc_hash_dir="$BORG_DIR/devcontainer-hashes"
+        _dc_hash_dir="$(_borg_state_root)/devcontainer-hashes"
         _dc_hash_file="$_dc_hash_dir/${project_name}.hash"
         _dc_hash=$(_devcontainer_hash "$project_dir")
         _save_devcontainer_hash

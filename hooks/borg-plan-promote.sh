@@ -15,7 +15,7 @@
 #      non-meta user message (i.e. the current user turn).
 #
 # Always exits 0 — never blocks. On any unexpected failure, logs a debug line to
-# ~/.config/borg/plan-promote-debug.log and exits 0.
+# ~/.local/state/borg/plan-promote-debug.log and exits 0.
 #
 # Registered as a PreToolUse hook in ~/.claude/settings.json.
 
@@ -24,11 +24,11 @@ set -euo pipefail
 PATH="${HOME}/.config/dotfiles/zsh/bin:${HOME}/.local/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin${PATH:+:$PATH}"
 export PATH
 
-BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
-DEBUG_LOG="$BORG_DIR/plan-promote-debug.log"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/borg"
+DEBUG_LOG="$STATE_DIR/plan-promote-debug.log"
 
 _debug() {
-    mkdir -p "$BORG_DIR" 2>/dev/null || true
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
     printf '%s [borg-plan-promote] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$DEBUG_LOG" 2>/dev/null || true
 }
 
