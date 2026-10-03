@@ -131,8 +131,8 @@ Ruling 2 settles which is canonical, and X7 below says so.
       rather than a copy. *(Reworded 2026-10-03 per ruling 2; filed as "derives from the spine's
       `blocked_by`/`edges`".)*
   - Verify: `grep -rn story.json borg_core/` is empty (true today). The second half — `grep -rn 'import programs'
-    merge-tree/` is empty — is NOT true today (`gather.py`, `coordinator.py` and three test files import it) and becomes true
-    when `2026-08-31-retire-merge-tree-programs-into-borg-core` lands; X7 is not ticked before then.
+    merge-tree/` is empty — is NOT true today (`gather.py`, `coordinator.py` and three test files import it) and
+    becomes true when `2026-08-31-retire-merge-tree-programs-into-borg-core` lands; X7 is not ticked before then.
 - [ ] X8 — Regression: full bats suite and macOS contract leg green.
 - [ ] X9 — *(carried from viz-1's V4, re-scoped 2026-10-03)* `borg link` surfaces the awaiting-you tier in the
       landing region — the last lines before the prompt (terminal output auto-scrolls; the eye lands at the
