@@ -100,10 +100,11 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                                      `link` arm, the one live caller (`_link_py_args=(--deep)`)
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
-borg add [path]          Register a project
+borg add [path]          Register a project (a re-add keeps an existing `tmux_window`)
 borg rm <project>        Unregister
 borg focus               Zoom current pane / project window
 borg pin / unpin         Pin (or unpin) a project to the top of borg link
+borg window <p> [short]  Show or set a project's short tmux window name (registry `tmux_window`)
 borg reap / reap-worktrees  Reap stale active/waiting statuses; clean stale nanoprobe worktrees
 borg recon --json        Machine surface only: reconciled sweep JSON (bare `recon` retired; use link)
 borg recon --adapters    List the source adapters discovered on this machine
@@ -116,7 +117,8 @@ borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                            `borg setup` at the end. A new launchd job needs an install.sh run.
 borg store-secret        Patch a project's secrets.zsh with a new keychain export
 borg sever               Retire/archive a directive or project without deleting it
-borg tidy                Housekeeping pass over registry/checkpoints
+borg tidy                Housekeeping pass over registry/checkpoints; `--cairn-leftovers [--dry-run]`
+                           backs up then deletes cairn's machine-local files
 borg color / image       Cosmetic project registry fields (tmux color, session image)
 borg version             Print BORG_VERSION
 borg help                Full command reference
@@ -253,6 +255,32 @@ docs/
     Absent/empty dir = one info line; a render that fails `plutil -lint` is skipped with a warn and
     never bootstrapped, and does not stop the others. `borg doctor` lists them, registration only.
     No legacy migration for extension labels — the operator retires pre-borg labels by hand, once.
+- **A hook body's language is decided by SUBPROCESS COUNT, not by taste — and this QUALIFIES a ratified
+  decision.** `docs/plans/assimilated/2026-08-11-python-core-toolchain-and-enforced-clean-architecture.md`
+  concluded "**Hooks stay shell — permanently, and this is arithmetic rather than preference**", and the
+  arithmetic compared `zsh -c true` against `python3 -c pass`, times ~250 tool calls a session. That is a
+  comparison between EMPTY INTERPRETERS, and it is the whole of the recorded basis. Measured on the shipped
+  artifact, the comparison inverts: `hooks/bash-guard.sh` costs MORE than Python's entire interpreter startup
+  (`python3 -c pass`) on every machine measured, and an equivalent Python guard costs startup plus a few ms.
+  The bash hook loses because it is not one process: it is bash plus roughly two dozen `sed`/`grep`/`tr`/`jq`
+  forks per call.
+  **The tests pin the direction only.** Any ratio below is an observation with a machine attached, and absolute
+  figures swing with load and hardware (about 35% between runs on one machine), so none is a contract. Method:
+  20 sequential runs, total wall clock / 20, `printf '%s' "$P" | bash hooks/bash-guard.sh`. On one Darwin arm64
+  machine (M3 Pro) the hook measured 63.5 ms/call on a typical payload, 80.1 ms on one built to defeat early
+  exit, and `python3 -c pass` 24.1 ms, about 2.6x; a second machine measured 4.4 to 4.8x. The direction held in
+  every 20-run mean on both.
+    1. **At most one helper process** (env vars, paths, exit codes, a single `jq` read) → **shell**. Genuinely
+       cheaper, and this is the majority of the 13 hooks.
+    2. **Two or more** (JSON parse PLUS string work — the shape of every real policy hook) → **Python 3,
+       stdlib only**, behind `command -v python3 >/dev/null 2>&1 || exit 0` so a machine without an
+       interpreter degrades the way the fail-open contract requires.
+    3. **Never node or ruby in a hook body** — their interpreter startup is worse than the bash they would
+       replace.
+  **The ratified line is not wrong, it is narrow**: trivial hooks really do stay shell. What it never measured
+  is a hook that works. Do NOT read this as licence to port hooks wholesale — `bash-guard.sh` spawns two dozen
+  subprocesses and qualifies, but porting it is worth doing when it next needs a substantive change, not as a
+  migration.
 - **Orchestrator-mode vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
   Stop, and Notification hook now classifies the session via `_borg_session_mode` (in
   `lib/borg-hooks.sh`). A session whose `$CWD` *exactly* equals `$BORG_ORCHESTRATOR_ROOT`
@@ -320,6 +348,18 @@ docs/
   only, edit target inside repo, no existing `PROJECT_PLAN.md` at either canonical location,
   cwd is a git repo. Always exits 0 (never blocks on any failure). Idempotent: if
   `PROJECT_PLAN.md` already exists, the hook is a no-op.
+- **Window names**: the registry's `tmux_window` is the ONE window-name value; drone creates the window with
+  it and borg looks it up by it. Valid means non-empty, no `.` or `:` (tmux target syntax), not the tmux
+  session name, and not another project's name or `tmux_window` (`validate_window_name`). Derivation
+  (`derive_window_name`, run by `drone up` when `needs_derivation` says the field was never customized) is
+  deterministic: names up to 6 chars stay, 3+ segments on `-`/`_` become initials, otherwise the first 6 chars,
+  lengthening on collision. `borg-collective` therefore becomes `borg-c`, because `borg` is the session name
+  and may not be a window. `borg window <project> [short]` reads or sets it; an explicit name survives
+  re-derivation and survives `borg add`. **Lookups accept either form**: a live window under the registry
+  name OR the project name is the project's window, so windows opened before short names existed keep
+  working. That rule has three statements: `_drone_find_window` (drone.zsh), `borg_tmux_find_window`
+  (lib/tmux.zsh, used by `borg switch`, `borg next --switch` and `borg color`) with the reap overlay in
+  lib/registry.zsh, and `window_is_live` (borg_core/link/core.py). Change one, change all three.
 - **borg-hooks (host-side lifecycle)**: projects can ship executable `.devcontainer/borg-hooks/pre-up.sh`
   and `.devcontainer/borg-hooks/post-down.sh` scripts. `pre-up.sh` runs on the host before
   `docker compose up -d` (strict: non-zero aborts `drone up`); `post-down.sh` runs after
