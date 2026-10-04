@@ -188,6 +188,9 @@ mkdir -p "$DOCS_PLANS_DIR" 2>/dev/null || {
     exit 0
 }
 
-printf '[borg] auto-promoted in-session plan to docs/plans/PROJECT_PLAN.md\n' >&2
+# PreToolUse stderr on exit 0 goes to the debug log only (https://code.claude.com/docs/en/hooks,
+# "Exit code 0"). `systemMessage` is a universal JSON field shown to the user; deliberately NO
+# permissionDecision, so tool flow is untouched. Plain text, one object, only on promotion.
+jq -n '{systemMessage: "▸ borg: auto-promoted in-session plan to docs/plans/PROJECT_PLAN.md"}' 2>/dev/null || true
 
 exit 0
