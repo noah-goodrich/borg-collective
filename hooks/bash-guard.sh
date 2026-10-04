@@ -154,6 +154,7 @@ _bg_settings_write_danger() {
 # on stdin; prints HEREDOC or DQUOTE for a hit, nothing otherwise. Any awk failure prints nothing,
 # so the caller fails open. Heuristic by design: quoted heredocs (<<'EOF', <<"EOF", <<\EOF), single
 # quotes, and backslash-escaped backticks are never flagged.
+# shellcheck disable=SC2016  # an awk program: its $ and backticks are awk text, never shell expansion
 _BG_EXPANSION_AWK='
 function bad(s) { return (s ~ /(^|[^\\])`/ || s ~ /(^|[^\\])\$\(/) }
 {
