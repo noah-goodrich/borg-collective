@@ -375,3 +375,10 @@ _shim_section() {
         grep -qF 'Do not hard-wrap output' "${REPO_ROOT}/skills/${s}/SKILL.md"
     done
 }
+
+@test "wrap rule: CLAUDE.md caps terminal-read tables and fenced blocks at 72 columns, GitHub text exempt" {
+    run grep -F 'within 72 columns: table cells are a few words, longer text goes in bullets below the table, and a table that needs more width becomes a list. GitHub-rendered text (PR bodies, comments) is exempt' \
+        "${REPO_ROOT}/CLAUDE.md"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'every table row and every fenced-block line'* ]]
+}
