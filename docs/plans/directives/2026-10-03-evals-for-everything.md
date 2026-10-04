@@ -1,6 +1,7 @@
 # Directive: Evals for everything
 
-*Filed: 2026-10-03 · Status: PROPOSAL — Phase 0 done 2026-10-03 (see Decision 1); Phase 1 awaits Noah's go*
+*Filed: 2026-10-03 · Status: in flight — Phase 0 (#251) and the ledger/selector (#253) shipped; Phase 1 evals next*
+*Decided by Noah 2026-10-04 (directive triage, #266): status line changed from PROPOSAL to in flight.*
 *Requested-via: Noah, 2026-10-03: "we need evals for everything."*
 
 **tl;dr** — "Everything" is smaller than it sounds. Of the 17 skills, 5 agents (plus ROUTING), 13 hooks and two CLIs,

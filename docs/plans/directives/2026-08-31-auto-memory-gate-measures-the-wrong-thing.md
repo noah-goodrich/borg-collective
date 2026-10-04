@@ -3,6 +3,10 @@
 *Parent directive: 2026-08-08-cairn-decommission-and-unconditional-block, Phase 1.6*
 *Filed: 2026-08-31*
 
+
+> **Decided by Noah 2026-10-04 (directive triage, #266):** Decision: accept the 2026-10-04 PASS (0.600; 11 of 12
+> reads from one project) and keep watching; revisit if it falls below 0.2. The criteria below stay open: the numerator
+> investigation, the re-nag policy and the suite run were not performed.
 **tl;dr** — The gate FAILs and nags on every SessionStart, but its instrument is a `PostToolUse(Read)` hook while
 the dominant way project memory reaches a session is a system-prompt injection and `<system-reminder>` recall —
 neither of which is a tool call. The numerator structurally cannot see them. **The threshold is pre-registered and

@@ -33,3 +33,12 @@ recreate the exact CLI/skill divergence this port exists to eliminate.
 2. Accept that `borg sever` is a filing action with no readback, and that severed plans are
    discoverable only by direct filesystem inspection (`ls <workspace>/docs/plans/severed/`), not
    through any status surface.
+
+## Decision (Noah, 2026-10-04)
+
+**Decided by Noah 2026-10-04 (directive triage, #266): KEEP as the decision record.** Decision: no severed section;
+`borg link` shows one count line (e.g. "3 severed this month"); the files remain for manual review. Implementation is
+a separate PR; this directive stays open with that one criterion.
+
+- [ ] **SV1 — `borg link` prints one severed count line.** A single line such as "3 severed this month" derived from
+      `docs/plans/severed/`; no severed section, no `focus.severed` key, `DOCUMENT_VERSION` unchanged.

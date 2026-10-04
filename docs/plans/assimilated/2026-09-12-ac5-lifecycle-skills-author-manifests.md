@@ -341,7 +341,7 @@ Method: four in-tree investigation tracks, 101 measured findings.
 manifests carry `program`, and in 5/5 it equals the filename stem." There are **8** manifest-shaped
 files and **2 mismatch** — `merge-tree/fixtures/programs/three-repo-program.json` (`program`
 `auth-hardening`, stem `three-repo-program`) and
-`docs/plans/directives/2026-08-18-program-manifests-stack.json` (`program` absent). The mismatch is
+`docs/plans/assimilated/2026-08-18-program-manifests-stack.json` (`program` absent). The mismatch is
 deliberate and pinned by `test_a_manifest_whose_filename_differs_from_its_program_rewrites_in_place`,
 whose comment records the bug it prevents: writing back via a program-derived name spawned a second
 file — "two copies of one program that then diverge silently."
