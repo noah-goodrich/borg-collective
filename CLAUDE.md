@@ -27,7 +27,7 @@ Two independent tools that compose:
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
   wider command surface below (recon, nanoprobes, spend, doctor, focus, pin/unpin,
-  setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`).
+  setup, store-secret, down, tidy, reap-worktrees, and more — see `borg help`).
   **`watch` and `sync` were both listed here and NEITHER is a command.** Neither has an arm in
   `borg.zsh`'s case dispatch, and both exit 1 with `unknown command`; removed 2026-08-28. (`sync`
   survived the first removal pass because only `watch` was checked — the whole line has now been run
@@ -116,7 +116,7 @@ borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                            NOT launchd — plists are installed by install.sh only, which calls
                            `borg setup` at the end. A new launchd job needs an install.sh run.
 borg store-secret        Patch a project's secrets.zsh with a new keychain export
-borg sever               Retire/archive a directive or project without deleting it
+borg down                Tear down everything: windows, containers, shared stacks (`sever` retired)
 borg tidy                Housekeeping pass over registry/checkpoints; `--cairn-leftovers [--dry-run]`
                            backs up then deletes cairn's machine-local files
 borg color / image       Cosmetic project registry fields (tmux color, session image)
