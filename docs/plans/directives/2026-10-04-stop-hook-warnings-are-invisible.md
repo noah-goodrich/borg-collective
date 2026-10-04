@@ -1,5 +1,6 @@
 # Directive: Stop-hook warnings are invisible
 *Filed: 2026-10-04*
+*Decided by Noah 2026-10-04 (directive triage, #266): leave open. AC5: Noah watching for the live render.*
 
 **tl;dr** — `hooks/borg-link-up.sh` is a Stop hook. Every warning it prints goes to stderr and it then exits 0, and
 for a hook that exits 0 Claude Code sends stderr to the debug log only: not the user, not Claude. So the "uncommitted

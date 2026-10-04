@@ -1,41 +1,41 @@
 # Directive triage — 2026-10-04
 
-Scope: every file in `docs/plans/directives/` except `README.md` and `assets/`: 31 markdown directives plus one companion JSON (`2026-08-18-program-manifests-stack.json`). Applied the shipped-unarchived rubric of `2026-08-20-directive-state-deriver.md` by hand: merged PRs (`gh pr list --state merged`), the artifacts on main, git log, checkpoint and CLAUDE.md mentions, and later rulings (#238, One Front Door, State Hygiene). Slugs below drop the date prefix. Nothing was deleted. `viz-3` is not moved: `PROJECT_PLAN.md` points `*Next:*` at it. No directive was SUPERSEDED with direct evidence, so `severed/` is untouched.
+Scope: every file in `docs/plans/directives/` except `README.md` and `assets/`: 31 markdown directives plus one companion JSON (`2026-08-18-program-manifests-stack.json`). Applied the shipped-unarchived rubric of `2026-08-20-directive-state-deriver.md` by hand: merged PRs (`gh pr list --state merged`), the artifacts on main, git log, checkpoint and CLAUDE.md mentions, and later rulings (#238, One Front Door, State Hygiene). Slugs below drop the date prefix. Nothing was deleted. `viz-3` is not moved: `PROJECT_PLAN.md` points `*Next:*` at it. No directive was SUPERSEDED with direct evidence in the first pass. Noah then decided the nine open questions on 2026-10-04; those decisions are recorded below and applied in the same PR (#266), so the table shows final classes.
 
 | slug                        | class       | evidence               |
 |-----------------------------|-------------|------------------------|
-| usage-guardian-build        | NEEDS NOAH  | live-cap run, arming   |
+| usage-guardian-build        | KEEP        | arm, tune later        |
 | cairn-decommission          | PARTIAL     | 25 of 32 ticked        |
 | briefing-fallback           | PARTIAL     | 4 of 8 ticked          |
-| attention-routing           | KEEP        | hooks unchanged        |
+| attention-routing           | SEVERED     | superseded by #257     |
 | link-unification-layout     | PARTIAL     | L1,L2 ticked; #137/#138 |
 | viz-3-cross-repo-chains     | KEEP        | Next: target; 0 of 9   |
-| chained-auto-promotion      | PARTIAL     | AC1-3,5 ticked; #151   |
+| chained-auto-promotion      | SHIPPED     | AC4 withdrawn; AC6 green |
 | deployed-artifact-drift     | KEEP        | no check exists        |
-| severed-in-link-document    | NEEDS NOAH  | way back undecided     |
-| program-manifests-edge      | NEEDS NOAH  | #158 + PM11 gated      |
-| program-manifests-stack     | NEEDS NOAH  | json; follows parent   |
+| severed-in-link-document    | KEEP        | one count line         |
+| program-manifests-edge      | SHIPPED     | #158; PM11 withdrawn   |
+| program-manifests-stack     | SHIPPED     | json; moved with parent |
 | comms-delivery-surfaces     | KEEP        | no borg show; 1 of 10  |
 | communication-program       | KEEP        | umbrella; kids open    |
 | directive-state-deriver     | KEEP        | D1-D4 absent           |
 | security-audit-remediation  | SHIPPED     | #161; AC1-7            |
 | orchestrator-drone-handoff  | KEEP        | hail lacks section     |
-| auto-memory-gate            | NEEDS NOAH  | gate now PASS          |
+| auto-memory-gate            | KEEP        | accept PASS 0.600      |
 | project-to-repository-rename | KEEP        | no inventory           |
 | retire-mt-programs          | KEEP        | programs.py live       |
 | retire-the-line-pin         | KEEP        | no ban, no CI          |
 | shim-architecture           | PARTIAL     | 1 of 7 ticked          |
 | refuse-the-manifest         | KEEP        | salvage still live     |
-| structured-storage          | NEEDS NOAH  | its own Q6             |
+| structured-storage          | SEVERED     | Q6 unanswerable        |
 | session-load-eval           | KEEP        | no evals/session-load  |
 | link-up-criteria            | SHIPPED     | #198; AC1-9            |
 | extension-loader            | SHIPPED     | #206                   |
 | worktree-identity           | PARTIAL     | Option A shipped #233  |
-| evals-for-everything        | NEEDS NOAH  | #251/#253 vs status    |
+| evals-for-everything        | KEEP        | in flight; #251/#253   |
 | retire-merge-tree-board     | KEEP        | filed 10-03; R1-R5     |
 | setup-symlink               | SHIPPED     | #261                   |
-| scope-120-column-rule       | NEEDS NOAH  | #260 vs global file    |
-| stop-hook-warnings          | NEEDS NOAH  | AC5 manual render      |
+| scope-120-column-rule       | SHIPPED     | #260/#265 + 5 PRs      |
+| stop-hook-warnings          | KEEP        | AC5: Noah watching     |
 
 ## Moved to `assimilated/` (SHIPPED)
 
@@ -68,18 +68,21 @@ Scope: every file in `docs/plans/directives/` except `README.md` and `assets/`: 
 - session-load-eval: no `evals/session-load/`.
 - retire-the-merge-tree-browser-board: filed 2026-10-03, inventory only.
 
-## Questions for Noah (NEEDS NOAH)
+## Decisions (Decided by Noah 2026-10-04)
 
-1. usage-guardian-build: Phase 1, the sweep and the dispatch guard are built but ship OFF, and the one live-cap validation never ran. Arm and validate, or sever the remainder and call the built parts done?
-2. severed-in-link-document: `borg link` still renders no severed section (way 1) and `borg sever` has no readback (way 2). Which way, or is the record itself the deliverable and the file should be archived?
-3. program-manifests-as-borg-edge-source: PM1-PM10 shipped as #158 and were later renamed to chains and ported into `borg_core`; PM11 hook wiring was gated on attention-routing. Archive as shipped with PM11 severed, or keep PM11 alive? The companion `-stack.json` moves with whatever you choose.
-4. auto-memory-gate-measures-the-wrong-thing: `~/.local/state/borg/memory-gate.log` shows FAIL from 2026-08-12 and PASS (ratio 0.600) on 2026-10-04, while the file argues the numerator cannot see the dominant path. Fix the numerator, retire the gate, or accept PASS? Cairn's last two criteria wait on this.
-5. structured-storage: the file says to sever it if question 6 has no measurable answer. Is there one?
-6. evals-for-everything: header says Phase 1 awaits your go, but #251 (Phase 0 spike) and #253 (coverage ledger and selector) merged on 2026-10-04. Is it in flight, and should the status line change?
-7. scope-the-120-column-rule: #260 and #265 merged, but the global `~/.claude/CLAUDE.md` still states the old 120 rule (W2), and W7/W8 live in other repos. Accept as done and archive?
-8. stop-hook-warnings-are-invisible: ACs 1-4 and 6 have bats coverage (`tests/lifecycle.bats`, including the dedupe cases). AC5 is a manual look: did the `systemMessage` warning actually render in a real Stop? If yes, archive.
-9. Also decide (not blocking): attention-routing is still wanted? The Stop-hook channel fix partly overlaps its A1/A2. And chained-auto-promotion AC4 is moot: archive it as shipped with AC4 withdrawn?
+1. usage-guardian-build: KEEP. Arm the sweep and the dispatch guard with current thresholds to collect near-cap data; tune later. No code defaults changed here: arming is a machine-local config step.
+2. severed-in-link-document: KEEP as the decision record. No severed section; `borg link` shows one count line (e.g. "3 severed this month"); the files remain for manual review. Implementation is a separate PR, tracked as criterion SV1 in the file.
+3. program-manifests-as-borg-edge-source (+ companion stack.json): PM11 withdrawn (superseded by the personal-repo stamper plan); moved to `assimilated/` as shipped via #158 (PM1-PM10). The json moved with it.
+4. auto-memory-gate-measures-the-wrong-thing: accept the 2026-10-04 PASS (0.600; 11 of 12 reads from one project) and keep watching; revisit if it falls below 0.2. Left in place: the numerator investigation, re-nag policy and suite criteria are still open.
+5. structured-storage-for-borg-generated-artifacts: SEVERED. Its own question 6 has no measurable answer; State Hygiene resolved the concrete problems.
+6. evals-for-everything: status line changed to in flight (Phase 0 #251 and ledger/selector #253 shipped; Phase 1 evals next).
+7. scope-the-120-column-rule: moved to `assimilated/` as shipped (#260, #265, claude-plugins#62/#63, dotfiles#20/#21/#22; live 2026-10-04).
+8. stop-hook-warnings-are-invisible: left open; note "AC5: Noah watching for the live render".
+9. attention-routing: SEVERED, superseded by the #257 communication research (how borg communicates). chained-auto-promotion: AC4 withdrawn (the viz chain was retired by #238); AC6 re-run green (`make test-bats`), so moved to `assimilated/`.
+10. Next plan: the personal-repo PR-stack stamper (shim-architecture directive section 4), the source of truth for personal/stillpoint repos. It replaces program-manifests PM11.
+
+Moves this round (all `git mv`, nothing deleted): program-manifests-as-borg-edge-source, program-manifests-stack.json, scope-the-120-column-rule and chained-auto-promotion to `docs/plans/assimilated/`; structured-storage and attention-routing to `docs/plans/severed/` (each with a front-matter Reason). The stack.json path was repointed in `docs/research/2026-08-31-plugin-coexistence/recommendation.md` and `docs/plans/assimilated/2026-09-12-ac5-lifecycle-skills-author-manifests.md`; the directives README now points at the assimilated chained-auto-promotion file. No test or Python module opens any moved file by path.
 
 ## Counts
 
-SHIPPED 4 (moved), SUPERSEDED 0, PARTIAL 6 (2 unchanged, 4 annotated), KEEP 13, NEEDS NOAH 9 (includes the companion JSON). Total 32 files, of which 31 are markdown directives.
+Final: SHIPPED 8 files moved over both passes (7 markdown plus the companion json), SEVERED 2, PARTIAL 5 (2 unchanged, 3 annotated), KEEP 17, NEEDS NOAH 0. Total 32 files; 22 remain in `docs/plans/directives/`.

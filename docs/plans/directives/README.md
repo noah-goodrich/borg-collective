@@ -57,6 +57,6 @@ file directly).
 `*Parent plan:*` has been live in production since `borg-plan`'s "Follow-Up Directives" section
 shipped, but was never written down anywhere central — only discoverable by reading the skill
 file. `*Next:*` is new as of the chained-auto-promotion mechanism
-(`docs/plans/directives/2026-08-12-chained-auto-promotion.md`). Both conventions are read by
+(`docs/plans/assimilated/2026-08-12-chained-auto-promotion.md`). Both conventions are read by
 `borg-assimilate` (`skills/borg-assimilate/SKILL.md`, Steps 0.75 and 4c) and exercised by
 `tests/promote_next.bats` against `lib/promote-next.sh`.

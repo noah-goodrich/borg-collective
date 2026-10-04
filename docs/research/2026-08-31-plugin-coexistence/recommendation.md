@@ -140,7 +140,7 @@ in the live corpus carries a ref. F was four to five sessions of machinery defen
 do. That is the whole gate-strength gap, and it costs about twenty lines.
 
 Two things also turned up that nobody was looking for. `.borg/programs/viz-program.json` and
-`docs/plans/directives/2026-08-18-program-manifests-stack.json` **both describe PR #158 and disagree about it** —
+`docs/plans/assimilated/2026-08-18-program-manifests-stack.json` **both describe PR #158 and disagree about it** —
 `gate.kind` is `decision` in one and `verification` in the other. Under ai-data-engineer's own published rule
 ("a verification with declared outcomes is never a blocker on a person"), one file says a human must choose and the
 other says anyone can just run it. And borg-collective's *live* program manifest is the one in

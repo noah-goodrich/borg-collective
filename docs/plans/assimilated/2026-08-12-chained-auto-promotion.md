@@ -1,6 +1,7 @@
 # Directive: Chained Auto-Promotion for `borg-assimilate`
 
 *Filed: 2026-08-12*
+*Shipped: PR [#151](https://github.com/noah-goodrich/borg-collective/pull/151); AC4 withdrawn, AC6 re-run green 2026-10-04 — archived by the directive triage (#266)*
 *Triage 2026-10-04: PARTIAL. AC1, AC2, AC3, AC5 shipped in PR #151 (`skills/borg-assimilate/SKILL.md` Step 4c, `docs/plans/directives/README.md`, 20 cases in `tests/promote_next.bats`). AC4 stays deferred and is now moot (viz-1 and viz-2 left the directives dir in #238). AC6 is unticked pending a fresh full-suite run.*
 
 Independent project. Derived from a same-day retro across all registered projects, a 4-candidate design panel
@@ -80,7 +81,7 @@ interrupt channel, not a new CLI verb, not a new background process.
       over count), and a dangling `*Next:*` pointer to a nonexistent slug (falls through to the count branch,
       does not crash).
   - Verify: `bats tests/promote_next.bats` exits 0 with at least 5 `@test` cases; `grep -c '@test.*dangling' tests/promote_next.bats` returns 1 or more.
-- [ ] **AC4 — DEFERRED (owner ruling, 2026-08-15)** — viz-1 -> viz-2 -> viz-3 is wired as a real,
+- [ ] **AC4 — WITHDRAWN (Decided by Noah 2026-10-04, #266; was deferred 2026-08-15; the viz chain was retired by #238)** — viz-1 -> viz-2 -> viz-3 is wired as a real,
       working chain, not just described.
   - Verify (as originally written): `grep -c '^\*Next: viz-2-spine-generator\*'
     docs/plans/directives/2026-08-11-viz-1-awaiting-you-tier.md` = 1; `grep -c '^\*Next:
@@ -101,7 +102,7 @@ interrupt channel, not a new CLI verb, not a new background process.
 - [x] **AC5** — Step 4c reports its outcome as one of two fixed strings so behavior is greppable and stable
       across future edits.
   - Verify: `grep -c '✓ Auto-promoted\|candidates, none chained' skills/borg-assimilate/SKILL.md` returns 2.
-- [ ] **AC6** — Regression: this touches a markdown skill file with no executable surface of its own, so the
+- [x] **AC6** — Regression: this touches a markdown skill file with no executable surface of its own, so the
       guard is that nothing else broke.
   - Verify: `bats tests/*.bats` exits 0.
 
