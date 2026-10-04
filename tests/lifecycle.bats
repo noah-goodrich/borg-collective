@@ -565,3 +565,81 @@ _fresh_checkpoint() {
     [ -z "$STOP_OUT" ]
     [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
 }
+
+# ─── stop fires every TURN: each distinct warning shows once per session ─────
+# Regression from #258: systemMessage made the (correct) per-turn warnings user-visible, so they
+# repeated after every reply. Dedupe key = session_id + sha12(message + fingerprint), stored under
+# <state root>/stop-warnings/. Directive: docs/plans/directives/2026-10-04-stop-hook-warnings-are-invisible.md
+
+_run_stop_sid() {
+    STOP_OUT=$(bash "$BORG_STOP" <<< "$(printf '{"session_id":"%s","cwd":"%s","transcript_path":"%s"}' \
+        "$1" "$TEST_CWD" "$FAKE_TRANSCRIPT")" 2>"${BATS_TEST_TMPDIR}/stop.err")
+    STOP_RC=$?
+}
+
+_dirty_repo() {
+    _git_repo_clean
+    _fresh_checkpoint
+    echo "modified" > "$TEST_CWD/tracked.txt"
+}
+
+@test "stop dedupe: same session, same condition -> first emits, second is silent" {
+    _dirty_repo
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    [ -z "$STOP_OUT" ]
+}
+
+@test "stop dedupe: a changed condition (new uncommitted file) emits again" {
+    _dirty_repo
+    _run_stop_sid sess-one
+    [ -n "$STOP_OUT" ]
+
+    echo "second" > "$TEST_CWD/second.txt"
+    git -C "$TEST_CWD" add second.txt
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+
+    _run_stop_sid sess-one
+    [ -z "$STOP_OUT" ]
+}
+
+@test "stop dedupe: a new session_id emits again" {
+    _dirty_repo
+    _run_stop_sid sess-one
+    [ -n "$STOP_OUT" ]
+
+    _run_stop_sid sess-two
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+}
+
+@test "stop dedupe: the seen-store lives under the state root, not config or repo" {
+    _dirty_repo
+    _run_stop_sid sess-one
+    [ -s "$XDG_STATE_HOME/borg/stop-warnings/sess-one" ]
+    [ ! -e "$XDG_CONFIG_HOME/borg/stop-warnings" ]
+    [ ! -e "$TEST_CWD/stop-warnings" ]
+}
+
+@test "stop dedupe: unwritable store still exits 0 and still emits (fail open)" {
+    _dirty_repo
+    mkdir -p "$XDG_STATE_HOME/borg"
+    printf "not a dir" > "$XDG_STATE_HOME/borg/stop-warnings"
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+}
