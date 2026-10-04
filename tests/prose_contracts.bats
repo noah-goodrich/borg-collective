@@ -349,3 +349,29 @@ _shim_section() {
     [[ "$s" == *'ABSENT FILE'* ]] || { echo "absent-file rule missing"; false; }
     [[ "$s" == *'command -v borg'* ]] || { echo "the rejected probe alternative is not named"; false; }
 }
+
+# ── The wrap rule is SCOPED: rendered text is never hard-wrapped ─────────────────────────────────
+#
+# Directive 2026-10-04-scope-the-120-column-rule. The old rule ("all markdown must wrap at 120")
+# made models hard-wrap PR bodies, which GitHub renders as broken lines. These pin the DIRECTION of
+# the replacement: rendered surfaces are named as never-wrapped, and the universal sentence is gone.
+
+@test "wrap rule: CLAUDE.md says PR bodies and GitHub comments are never hard-wrapped" {
+    run grep -F 'PR bodies, PR/issue/review comments, any `gh` body, release notes, chat replies' \
+        "${REPO_ROOT}/CLAUDE.md"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'are never hard-wrapped'* ]]
+}
+
+@test "wrap rule: CLAUDE.md no longer mandates 120-column wrapping of all markdown" {
+    run grep -F 'All markdown and text files must wrap at 120' "${REPO_ROOT}/CLAUDE.md"
+    [ "$status" -ne 0 ]
+}
+
+@test "wrap rule: borg-link and borg-recon chat output is not hard-wrapped" {
+    for s in borg-link borg-recon; do
+        run grep -F 'Hard-wrap all output' "${REPO_ROOT}/skills/${s}/SKILL.md"
+        [ "$status" -ne 0 ]
+        grep -qF 'Do not hard-wrap output' "${REPO_ROOT}/skills/${s}/SKILL.md"
+    done
+}
