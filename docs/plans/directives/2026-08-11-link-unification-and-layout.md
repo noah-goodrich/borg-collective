@@ -1,5 +1,6 @@
 # Directive: Link Unification + Bottom-Anchored Layout
 *Filed: 2026-08-11*
+*Triage 2026-10-04: PARTIAL. L1 and L2 shipped with the Python-core port (PRs #137, #138; `skills/borg-link/SKILL.md` runs `borg link --json`, fallback at `## Fallback`). L3 and L5 are not evidenced and One Front Door's seven-section page may have overtaken them; L4 is withdrawn above; L6 is unticked pending a fresh run.*
 *Revised 2026-08-12: RESEQUENCED. This is now the SECOND half of a two-pass split. The Python-core port
 ships first as `PROJECT_PLAN.md` ("Port `borg link` to the Python Core, behavior unchanged"), which carries
 L1, L2, and L6. What remains here is the layout redesign — L3 and L5 — against a stable Python target.
@@ -34,9 +35,9 @@ the skill ignores it.
 
 ## Acceptance Criteria
 
-- [ ] L1 — `borg link --json` emits the full reconciled document, mirroring the `borg recon --json` contract.
+- [x] L1 — `borg link --json` emits the full reconciled document, mirroring the `borg recon --json` contract.
   - Verify: `borg link --json | jq -e '.projects and .generated_at'` exits 0.
-- [ ] L2 — `/borg-link` is rewritten as a synthesis layer over `borg link --json`, matching the `/borg-recon`
+- [x] L2 — `/borg-link` is rewritten as a synthesis layer over `borg link --json`, matching the `/borg-recon`
       pattern. The direct-file-read path survives **only** as an explicit fallback for when `borg` is not on
       PATH — the drone-container case that motivated the original design.
   - Verify: `SKILL.md` instructs running `borg link --json` first; the file-read section is clearly marked as the
