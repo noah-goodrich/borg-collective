@@ -13,16 +13,21 @@
 
 ## Gap -> candidates table
 
-| Gap | Candidates (best first) | Verdict |
-|---|---|---|
-| Value/prioritization rule + ranking snapshots | (1) plain JSONL snapshot written by borg (build); (2) Taskwarrior urgency coefficients; (3) Beads ready-queue; (4) Linear/Plane priority fields | Build the snapshot. Taskwarrior/Beads would be a second source of truth for work items. |
-| Appetite + stop dates | (1) GitHub Projects v2 date/number/iteration fields via `gh project`; (2) frontmatter fields in directive files (build); (3) Plane cycles/modules; (4) Linear cycles | Frontmatter in the existing directive file is fewest-moving-parts. Projects v2 is an optional mirror. |
-| Status-history events, flow metrics (lead time, WIP, throughput, aging) | (1) borg's own append-only event log + DuckDB/jq; (2) GitHub `ProjectV2ItemStatusChangedEvent` / issue timeline via GraphQL; (3) ActionableAgile (analytics, SaaS/desktop) UNVERIFIED details; (4) DevLake | Build the log (no external tool can see session status flips). Use GitHub timeline for PR/issue-side history. |
-| DORA-style delivery metrics | (1) `gh` REST/GraphQL (PRs, releases, Deployments) computed locally; (2) Apache DevLake self-hosted; (3) Swarmia free tier (SaaS); (4) OTel Collector githubreceiver (alpha); Four Keys = dead | Compute locally from `gh`. DevLake only if a team appears. |
-| Verify-verdict logging | None found. Closest: Beads (issue graph), generic JSONL | Build (one hook line). |
-| Debriefs/retros fed by repo facts | None found for solo/agent use. Partial inputs: git-quick-stats, gitinspector, `gh` | Build; use `gh`/git as fact source. |
-| Capacity/sustainability signals | (1) Timewarrior (manual time tracking, JSON export); (2) ActivityWatch (automatic window/activity tracking) | Optional personal input only; manual tracking conflicts with ADHD-aware low-capture design. |
-| Re-runnable scorecard | (1) DuckDB SQL files over JSONL/SQLite; (2) Datasette for browsing; (3) Grafana (heavy) | DuckDB (or plain sqlite3 + SQL files) is the cheapest correct shape. |
+- **Value/prioritization rule + ranking snapshots** — (1) plain JSONL snapshot written by borg (build); (2) Taskwarrior urgency coefficients; (3) Beads ready-queue; (4) Linear/Plane priority fields
+  - Verdict: Build the snapshot. Taskwarrior/Beads would be a second source of truth for work items.
+- **Appetite + stop dates** — (1) GitHub Projects v2 date/number/iteration fields via `gh project`; (2) frontmatter fields in directive files (build); (3) Plane cycles/modules; (4) Linear cycles
+  - Verdict: Frontmatter in the existing directive file is fewest-moving-parts. Projects v2 is an optional mirror.
+- **Status-history events, flow metrics (lead time, WIP, throughput, aging)** — (1) borg's own append-only event log + DuckDB/jq; (2) GitHub `ProjectV2ItemStatusChangedEvent` / issue timeline via GraphQL; (3) ActionableAgile (analytics, SaaS/desktop) UNVERIFIED details; (4) DevLake
+  - Verdict: Build the log (no external tool can see session status flips). Use GitHub timeline for PR/issue-side history.
+- **DORA-style delivery metrics** — (1) `gh` REST/GraphQL (PRs, releases, Deployments) computed locally; (2) Apache DevLake self-hosted; (3) Swarmia free tier (SaaS); (4) OTel Collector githubreceiver (alpha); Four Keys = dead
+  - Verdict: Compute locally from `gh`. DevLake only if a team appears.
+- **Verify-verdict logging** (Verdict: Build (one hook line).) — None found. Closest: Beads (issue graph), generic JSONL
+- **Debriefs/retros fed by repo facts** — None found for solo/agent use. Partial inputs: git-quick-stats, gitinspector, `gh`
+  - Verdict: Build; use `gh`/git as fact source.
+- **Capacity/sustainability signals** — (1) Timewarrior (manual time tracking, JSON export); (2) ActivityWatch (automatic window/activity tracking)
+  - Verdict: Optional personal input only; manual tracking conflicts with ADHD-aware low-capture design.
+- **Re-runnable scorecard** — (1) DuckDB SQL files over JSONL/SQLite; (2) Datasette for browsing; (3) Grafana (heavy)
+  - Verdict: DuckDB (or plain sqlite3 + SQL files) is the cheapest correct shape.
 
 ## Candidate entries
 
@@ -114,24 +119,24 @@
 - Star counts and "last push" are activity proxies, not quality evidence.
 
 ## Sources index
-| # | Title | URL | Date | Tier |
-|---|-------|-----|------|------|
-| 1 | GitHub REST API repo/release metadata (many repos) | https://api.github.com/repos/<owner>/<repo> via `gh api` | 2026-10-04 | [2024-2026] |
-| 2 | GitHub GraphQL schema introspection (ProjectV2*, Deployment) | https://docs.github.com/en/graphql | 2026-10-04 | [2024-2026] |
-| 3 | About Projects (GitHub docs) | https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects | 2026 | [2024-2026] |
-| 4 | gh project manual | https://cli.github.com/manual/gh_project | 2026 | [2024-2026] |
-| 5 | DevLake introduction | https://devlake.apache.org/docs/Overview/Introduction | 2026 | [2024-2026] |
-| 6 | DevLake repo | https://github.com/apache/incubator-devlake | 2026 | [2024-2026] |
-| 7 | Four Keys repo | https://github.com/dora-team/fourkeys | 2024 | [2024-2026] |
-| 8 | Swarmia pricing | https://www.swarmia.com/pricing/ | 2026 | [2024-2026] |
-| 9 | LinearB pricing | https://linearb.io/pricing | 2026 | [2024-2026] |
-| 10 | Sleuth home / pricing | https://www.sleuth.io/ , https://www.sleuth.io/pricing | 2026 | [2024-2026] |
-| 11 | Linear pricing | https://linear.app/pricing | 2026 | [2024-2026] |
-| 12 | schpet/linear-cli | https://github.com/schpet/linear-cli | 2026 | [2024-2026] |
-| 13 | Plane repo / pricing | https://github.com/makeplane/plane , https://plane.so/pricing | 2026 | [2024-2026] |
-| 14 | Taskwarrior docs | https://taskwarrior.org/docs/ | 2026 | [2024-2026] |
-| 15 | Timewarrior docs | https://timewarrior.net/docs/ | 2026 | [2024-2026] |
-| 16 | Beads repo | https://github.com/gastownhall/beads | 2026 | [2024-2026] |
-| 17 | git-quick-stats repo | https://github.com/git-quick-stats/git-quick-stats | 2026 | [2024-2026] |
-| 18 | DuckDB JSON loading docs | https://duckdb.org/docs/current/data/json/loading_json | 2026 | [2024-2026] |
-| 19 | OTel githubreceiver README | https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/githubreceiver | 2026 | [2024-2026] |
+- **1** (Date: 2026-10-04; Tier: [2024-2026]) — GitHub REST API repo/release metadata (many repos)
+  - URL: https://api.github.com/repos/<owner>/<repo> via `gh api`
+- **2** (Date: 2026-10-04; Tier: [2024-2026]) — GitHub GraphQL schema introspection (ProjectV2*, Deployment)
+  - URL: https://docs.github.com/en/graphql
+- **3** (Title: About Projects (GitHub docs); Date: 2026; Tier: [2024-2026]) — https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects
+- **4** (Title: gh project manual; Date: 2026; Tier: [2024-2026]) — https://cli.github.com/manual/gh_project
+- **5** (Title: DevLake introduction; Date: 2026; Tier: [2024-2026]) — https://devlake.apache.org/docs/Overview/Introduction
+- **6** (Title: DevLake repo; Date: 2026; Tier: [2024-2026]) — https://github.com/apache/incubator-devlake
+- **7** (Title: Four Keys repo; Date: 2024; Tier: [2024-2026]) — https://github.com/dora-team/fourkeys
+- **8** (Title: Swarmia pricing; Date: 2026; Tier: [2024-2026]) — https://www.swarmia.com/pricing/
+- **9** (Title: LinearB pricing; URL: https://linearb.io/pricing; Date: 2026; Tier: [2024-2026])
+- **10** (Title: Sleuth home / pricing; Date: 2026; Tier: [2024-2026]) — https://www.sleuth.io/ , https://www.sleuth.io/pricing
+- **11** (Title: Linear pricing; URL: https://linear.app/pricing; Date: 2026; Tier: [2024-2026])
+- **12** (Title: schpet/linear-cli; Date: 2026; Tier: [2024-2026]) — https://github.com/schpet/linear-cli
+- **13** (Title: Plane repo / pricing; Date: 2026; Tier: [2024-2026]) — https://github.com/makeplane/plane , https://plane.so/pricing
+- **14** (Title: Taskwarrior docs; Date: 2026; Tier: [2024-2026]) — https://taskwarrior.org/docs/
+- **15** (Title: Timewarrior docs; Date: 2026; Tier: [2024-2026]) — https://timewarrior.net/docs/
+- **16** (Title: Beads repo; Date: 2026; Tier: [2024-2026]) — https://github.com/gastownhall/beads
+- **17** (Title: git-quick-stats repo; Date: 2026; Tier: [2024-2026]) — https://github.com/git-quick-stats/git-quick-stats
+- **18** (Title: DuckDB JSON loading docs; Date: 2026; Tier: [2024-2026]) — https://duckdb.org/docs/current/data/json/loading_json
+- **19** (Title: OTel githubreceiver README; Date: 2026; Tier: [2024-2026]) — https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/githubreceiver

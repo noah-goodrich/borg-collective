@@ -46,29 +46,35 @@ NOT design-reviewed — three blind-review rounds each returned **revise** (none
 
 **Per-gap calls for the pick.**
 
-| Gap | Call | Why, in one line |
-|---|---|---|
-| G1 value rule + ranking snapshot | Build, and say plainly: value ranking stays Noah's manual call in v1 | QUEUED rows print in a written order: past-Review-by first, then nearest Review-by, then filename. Because the default Review-by is filename date plus 4 weeks, that order equals filed-date order for every un-extended directive, so it is not a value order, and it is not snapshotted (a snapshot of it would be near-constant and could not test "did the top item ship first"). No WSJF, ICE or RICE: the only outcome base rate in the corpus is about one in three (card `t2-kohavi-online-experimentation-microsoft`) and no source shows a scored order beats a plain one (analysis §4.2). What is snapshotted instead is `cmd_next`'s real ranking; see "The snapshot decision" below. |
-| G2 review-by + stop | Build, enforced | The reader computes Review-by (filename date plus 4 weeks) and `Review-by:` is written only by `borg directive extend`; lapse is a computed default stop with a one-command revive; extensions are capped (below). `Appetite:` is dropped from v1: an empty placeholder enforces nothing and invites a model to fill it with an invented number. Evidence: see "Evidence fit" below. |
-| G3 status history | Build | Pure append in the SessionStart, Stop and Notification hooks. No external tool can see session flips (Track A). |
-| G4 derived state and delivery numbers | Build, adopt `gh` | Six numbers from files and `gh`, after each definition is pinned (see R6). DevLake, Swarmia, LinearB, Four Keys and the OTel receiver are rejected for team scale, privacy, or being archived or alpha (Track A). |
-| G5 verify-verdict log | Build, but a spike first: the capture is untested | The existing `SubagentStop` hook (`borg-nanoprobe-log.sh`) would also record a `borg-reviewer` verdict. Nothing has shown the message is parseable, and the stored data says it mostly is not: of 200 `borg-reviewer` rows in `agents.jsonl` plus `agents.jsonl.1` (checked 2026-10-04), the stored `summary` is capped at 500 characters, only 31 mention "verdict" and 6 contain a literal PASS or FAIL, and many of those rows are reviews that are not `borg-verify` runs. So the spike is: parse the hook's full last message (or the transcript) rather than the truncated summary, and measure the parse rate on real runs before building the log. An unparseable message is logged as `unparsed`, never dropped. |
-| G6 debrief + action closure | Build, later | A `borg-assimilate` step fed by git and `gh` facts. Facilitated debriefs show about d = .67 across 46 samples (card `t4-tannenbaum-cerasoli-debriefs-meta-analysis`). |
-| G7 sustainability signals | Build, later | A boundary-override log, plus a two-weeks-on, two-weeks-off protocol for the break prompt. ActivityWatch and Timewarrior are rejected: manual or invasive tracking conflicts with the low-capture design. |
-| G8 spend capture | Build, later | Not in v1: drop cost-per-unit and ship only a coverage metric (spend records per merged PR) so the hole stays visible. |
-| G9 re-runnable loop | Build, adopt launchd, gated | `borg_core/pmeval` (pure core, impure shell), `borg pulse`, fail-closed validator, weekly agent, heartbeat. Scorer state, rubric and metric tags are machine-local and denied to agents. DuckDB, Grafana and DevLake rejected. |
+- **G1 value rule + ranking snapshot** — Build, and say plainly: value ranking stays Noah's manual call in v1
+  - Why, in one line: QUEUED rows print in a written order: past-Review-by first, then nearest Review-by, then filename. Because the default Review-by is filename date plus 4 weeks, that order equals filed-date order for every un-extended directive, so it is not a value order, and it is not snapshotted (a snapshot of it would be near-constant and could not test "did the top item ship first"). No WSJF, ICE or RICE: the only outcome base rate in the corpus is about one in three (card `t2-kohavi-online-experimentation-microsoft`) and no source shows a scored order beats a plain one (analysis §4.2). What is snapshotted instead is `cmd_next`'s real ranking; see "The snapshot decision" below.
+- **G2 review-by + stop** (Call: Build, enforced) — The reader computes Review-by (filename date plus 4 weeks) and `Review-by:` is written only by `borg directive extend`; lapse is a computed default stop with a one-command revive; extensions are capped (below). `Appetite:` is dropped from v1: an empty placeholder enforces nothing and invites a model to fill it with an invented number. Evidence: see "Evidence fit" below.
+- **G3 status history** (Call: Build) — Pure append in the SessionStart, Stop and Notification hooks. No external tool can see session flips (Track A).
+- **G4 derived state and delivery numbers** (Call: Build, adopt `gh`) — Six numbers from files and `gh`, after each definition is pinned (see R6). DevLake, Swarmia, LinearB, Four Keys and the OTel receiver are rejected for team scale, privacy, or being archived or alpha (Track A).
+- **G5 verify-verdict log** — Build, but a spike first: the capture is untested
+  - Why, in one line: The existing `SubagentStop` hook (`borg-nanoprobe-log.sh`) would also record a `borg-reviewer` verdict. Nothing has shown the message is parseable, and the stored data says it mostly is not: of 200 `borg-reviewer` rows in `agents.jsonl` plus `agents.jsonl.1` (checked 2026-10-04), the stored `summary` is capped at 500 characters, only 31 mention "verdict" and 6 contain a literal PASS or FAIL, and many of those rows are reviews that are not `borg-verify` runs. So the spike is: parse the hook's full last message (or the transcript) rather than the truncated summary, and measure the parse rate on real runs before building the log. An unparseable message is logged as `unparsed`, never dropped.
+- **G6 debrief + action closure** (Call: Build, later) — A `borg-assimilate` step fed by git and `gh` facts. Facilitated debriefs show about d = .67 across 46 samples (card `t4-tannenbaum-cerasoli-debriefs-meta-analysis`).
+- **G7 sustainability signals** (Call: Build, later) — A boundary-override log, plus a two-weeks-on, two-weeks-off protocol for the break prompt. ActivityWatch and Timewarrior are rejected: manual or invasive tracking conflicts with the low-capture design.
+- **G8 spend capture** (Call: Build, later) — Not in v1: drop cost-per-unit and ship only a coverage metric (spend records per merged PR) so the hole stays visible.
+- **G9 re-runnable loop** (Call: Build, adopt launchd, gated) — `borg_core/pmeval` (pure core, impure shell), `borg pulse`, fail-closed validator, weekly agent, heartbeat. Scorer state, rubric and metric tags are machine-local and denied to agents. DuckDB, Grafana and DevLake rejected.
 
 **Phased build order (what ships first).** Enforcement before capture before measurement: the first deliverables change what Noah decides this week, and nothing after Phase 1 is committed until its gate passes.
 
-| Phase | Ships | Sessions | Exit check |
-|---|---|---|---|
-| 0: enforcing slice + triage | (1) A new small reader, `borg_core/directives` (pure core that takes today's date as an argument, thin shell that reads files). `planstate` does not do this job: it parses acceptance criteria (`parse_criteria`), not directive headers, so an earlier draft's claim that it already parses directive headers was wrong. The reader derives `filed` from the filename, `review_by` as the stored `- Review-by:` header line else filed plus 28 days, `extensions` as the count of `- Extended:` header lines, and `state` as ok, past or stopped. Header lines are anchored on the leading `- ` and read only above the first `## ` heading. (2) The wire change in `borg link`: `read_directives` rows (today only `slug` and `title`) gain `filed`, `review_by`, `extensions` and `state`; additive, so `DOCUMENT_VERSION` stays 2; QUEUED prints past rows marked and at most 3 lines then "N more"; STOPPED rows leave the QUEUED rows and a count line "N stopped, revive with `borg directive extend`" always prints under it ("0 stopped" when none, because the page has no branch on emptiness); goldens and spine tests are regenerated on purpose, and the `--brief` projection reads the same scoped rows so its QUEUED count matches the page. (3) New commands under a new `directive)` arm in `borg.zsh` (no such arm exists; I checked the dispatch): `borg directive list [--lapsed]` (oldest first, with age and extension count), `borg directive sever <slug> --why "..."` (`git mv` into `docs/plans/severed/`, a one-line why comment, an event append) and `borg directive extend <slug> --reason "..." [--days N]` (writes `- Review-by:` and a `- Extended: <date> <reason>` line into the header; default 14 days, at most 28; revives a STOPPED directive; refuses a third extension). (4) `borg next` stays non-interactive: for the project it picks it prints one line, "N directives past Review-by (M stopped), see borg link"; the lapsed list lives in `borg link`; `--switch` stays silent. (5) The STOPPED rules for `borg-assimilate` (Step 0.75 blocks, Step 4c never promotes; see below). (6) Noah's triage session over the 23 stale directives from `borg directive list --lapsed`, oldest first, with the phase-1 numbers. (7) Contract step: lapse-to-STOPPED switched on only after the triage, by a dated constant in the reader | 3 build + 1 Noah | The reader is a pure function pinned by table tests with an injected date; no hook and not the reader ever modifies a directive file (a test asserts byte-identical files after a `borg link` run); `sever` leaves the file in `severed/` plus one event row; `extend` refuses the third; every golden change is deliberate; 0 of the 23 stale directives remain undecided; a missing-state-directory case emits no stray stderr (the known redirect-open leak) |
-| 1: hook appends | Status history (three hooks); the `cmd_next` ranking snapshot (one fail-open append per invocation, including the silent `--switch` path); the `borg-reviewer` verdict capture only if the spike passes (the directive sever and extend events are already written by the Phase 0 commands) | 2 to 2.5 | Each log gains rows from a real session; the extend rate (extends divided by Review-by hits) and each directive's extension count are readable by hand, so a rubber-stamp reflex is visible; the spike reports a parse rate on real reviewer runs before any verdict log is built |
-| 2: manual pulse | Pin each metric's filter first (one session), then `borg_core/pmeval` core and shell, `borg pulse run` and `show`, six derived metrics with coverage, Axis A predicates; the scorer-path guard (below) lands before the rubric exists. Manual only, for a month of wall-clock | 3 (+ near-zero for the month) | The differential test reproduces the phase-1 hand numbers from a frozen fixture only after each definition is pinned and written down; the run exits non-zero unless `metrics_computed > 0` and every metric reports coverage; shell test fails if only the live agent log is passed |
-| 3: close the loop (gate: the manual month happened, and 6 to 8 weeks of Phase-1 log exist) | Pre-registered thresholds (machine-local), `--compare`, heartbeat, weekly launchd agent via `install.sh` | 3 | An end-to-end launchd run on both machines before the first scheduled build is trusted (green bats alone has failed three times in this family) |
-| 4: publish (last; gate: Phase 3 ran clean twice) | Validator and publish for the personal label only; work machine runs local-only | 1 | A dirty fixture is rejected and a clean one accepted |
-| 5: learning | Debrief step in assimilate with action closure, first constraint candidates printed (no files written), the ADHD alternating-weeks protocol, spend-capture diagnosis, sqlite trigger check | 2 to 3 | At least one directive ships whose metric tag (kept machine-local) has a before/after pair |
-| 6: day-90 re-run | Re-run against the thresholds written in Phase 3 | 0.5 | Verdict recorded against the pre-registered nulls, the way `borg-memory-gate` does |
+- **0: enforcing slice + triage** (Sessions: 3 build + 1 Noah) — (1) A new small reader, `borg_core/directives` (pure core that takes today's date as an argument, thin shell that reads files). `planstate` does not do this job: it parses acceptance criteria (`parse_criteria`), not directive headers, so an earlier draft's claim that it already parses directive headers was wrong. The reader derives `filed` from the filename, `review_by` as the stored `- Review-by:` header line else filed plus 28 days, `extensions` as the count of `- Extended:` header lines, and `state` as ok, past or stopped. Header lines are anchored on the leading `- ` and read only above the first `## ` heading. (2) The wire change in `borg link`: `read_directives` rows (today only `slug` and `title`) gain `filed`, `review_by`, `extensions` and `state`; additive, so `DOCUMENT_VERSION` stays 2; QUEUED prints past rows marked and at most 3 lines then "N more"; STOPPED rows leave the QUEUED rows and a count line "N stopped, revive with `borg directive extend`" always prints under it ("0 stopped" when none, because the page has no branch on emptiness); goldens and spine tests are regenerated on purpose, and the `--brief` projection reads the same scoped rows so its QUEUED count matches the page. (3) New commands under a new `directive)` arm in `borg.zsh` (no such arm exists; I checked the dispatch): `borg directive list [--lapsed]` (oldest first, with age and extension count), `borg directive sever <slug> --why "..."` (`git mv` into `docs/plans/severed/`, a one-line why comment, an event append) and `borg directive extend <slug> --reason "..." [--days N]` (writes `- Review-by:` and a `- Extended: <date> <reason>` line into the header; default 14 days, at most 28; revives a STOPPED directive; refuses a third extension). (4) `borg next` stays non-interactive: for the project it picks it prints one line, "N directives past Review-by (M stopped), see borg link"; the lapsed list lives in `borg link`; `--switch` stays silent. (5) The STOPPED rules for `borg-assimilate` (Step 0.75 blocks, Step 4c never promotes; see below). (6) Noah's triage session over the 23 stale directives from `borg directive list --lapsed`, oldest first, with the phase-1 numbers. (7) Contract step: lapse-to-STOPPED switched on only after the triage, by a dated constant in the reader
+  - Exit check: The reader is a pure function pinned by table tests with an injected date; no hook and not the reader ever modifies a directive file (a test asserts byte-identical files after a `borg link` run); `sever` leaves the file in `severed/` plus one event row; `extend` refuses the third; every golden change is deliberate; 0 of the 23 stale directives remain undecided; a missing-state-directory case emits no stray stderr (the known redirect-open leak)
+- **1: hook appends** (Sessions: 2 to 2.5) — Status history (three hooks); the `cmd_next` ranking snapshot (one fail-open append per invocation, including the silent `--switch` path); the `borg-reviewer` verdict capture only if the spike passes (the directive sever and extend events are already written by the Phase 0 commands)
+  - Exit check: Each log gains rows from a real session; the extend rate (extends divided by Review-by hits) and each directive's extension count are readable by hand, so a rubber-stamp reflex is visible; the spike reports a parse rate on real reviewer runs before any verdict log is built
+- **2: manual pulse** — Pin each metric's filter first (one session), then `borg_core/pmeval` core and shell, `borg pulse run` and `show`, six derived metrics with coverage, Axis A predicates; the scorer-path guard (below) lands before the rubric exists. Manual only, for a month of wall-clock
+  - Sessions: 3 (+ near-zero for the month)
+  - Exit check: The differential test reproduces the phase-1 hand numbers from a frozen fixture only after each definition is pinned and written down; the run exits non-zero unless `metrics_computed > 0` and every metric reports coverage; shell test fails if only the live agent log is passed
+- **3: close the loop (gate: the manual month happened, and 6 to 8 weeks of Phase-1 log exist)** (Sessions: 3) — Pre-registered thresholds (machine-local), `--compare`, heartbeat, weekly launchd agent via `install.sh`
+  - Exit check: An end-to-end launchd run on both machines before the first scheduled build is trusted (green bats alone has failed three times in this family)
+- **4: publish (last; gate: Phase 3 ran clean twice)** (Sessions: 1) — Validator and publish for the personal label only; work machine runs local-only
+  - Exit check: A dirty fixture is rejected and a clean one accepted
+- **5: learning** (Sessions: 2 to 3) — Debrief step in assimilate with action closure, first constraint candidates printed (no files written), the ADHD alternating-weeks protocol, spend-capture diagnosis, sqlite trigger check
+  - Exit check: At least one directive ships whose metric tag (kept machine-local) has a before/after pair
+- **6: day-90 re-run** (Sessions: 0.5) — Re-run against the thresholds written in Phase 3
+  - Exit check: Verdict recorded against the pre-registered nulls, the way `borg-memory-gate` does
 
 Total about 14 to 16 sessions if every gate opens; the committed part is Phases 0 and 1, about 6.5 to 7 sessions (5.5 to 6 build, 1 Noah). That is three to five sessions more than Option A's 9 to 11 because of the enforcing slice and the pinning session, and it buys the only decision-changing deliverables up front. Round 2 moved work around rather than removing it: the stamp hook and the 28-file migration are gone, while a new reader, a new command arm, a wire change under golden files and a candidate helper for Step 4c are in. A drafter for directive proposals (Track B's `propose.py`) is deliberately not in v1: it ships only after two scheduled runs exist, and then with a cap of three open proposals.
 
@@ -119,17 +125,15 @@ Total about 14 to 16 sessions if every gate opens; the committed part is Phases 
 
 **Gaps (from phase 1, numbered here for the option tables).**
 
-| # | Gap | Phase-1 recommendations |
-|---|---|---|
-| G1 | No value or ordering rule beyond session status; no ranking snapshot | 3, 4 |
-| G2 | No appetite (time budget), review date or default stop on any directive | 2 |
-| G3 | No status-history events, so WIP, time-in-state and capacity cannot be reconstructed | 6 |
-| G4 | Derived state and delivery numbers not computed (open-directive age, lead time, ship-to-sever ratio, PR merge latency, `fix`-PR share, shipped-but-unrecorded plans) | 1, 9 |
-| G5 | `borg-verify` verdicts not logged, so the gate is unproven | 7 |
-| G6 | No debrief fed by repo facts and no action-closure tracking (0 of 60 shipped plans carry a retro) | 5 |
-| G7 | Sustainability and ADHD guardrails are unobserved prose; boundary overrides not logged | 11 |
-| G8 | Token-spend capture is unreliable (10 records in September against 56 merged PRs), so cost per shipped unit cannot be quoted | 8 |
-| G9 | No re-runnable, multi-machine, self-learning scorecard; scorecard must stay out of agents' reach | 10, 12, 13 |
+- **G1** (Phase-1 recommendations: 3, 4) — No value or ordering rule beyond session status; no ranking snapshot
+- **G2** (Phase-1 recommendations: 2) — No appetite (time budget), review date or default stop on any directive
+- **G3** (Phase-1 recommendations: 6) — No status-history events, so WIP, time-in-state and capacity cannot be reconstructed
+- **G4** (Phase-1 recommendations: 1, 9) — Derived state and delivery numbers not computed (open-directive age, lead time, ship-to-sever ratio, PR merge latency, `fix`-PR share, shipped-but-unrecorded plans)
+- **G5** (Phase-1 recommendations: 7) — `borg-verify` verdicts not logged, so the gate is unproven
+- **G6** (Phase-1 recommendations: 5) — No debrief fed by repo facts and no action-closure tracking (0 of 60 shipped plans carry a retro)
+- **G7** (Phase-1 recommendations: 11) — Sustainability and ADHD guardrails are unobserved prose; boundary overrides not logged
+- **G8** (Phase-1 recommendations: 8) — Token-spend capture is unreliable (10 records in September against 56 merged PRs), so cost per shipped unit cannot be quoted
+- **G9** (Phase-1 recommendations: 10, 12, 13) — No re-runnable, multi-machine, self-learning scorecard; scorecard must stay out of agents' reach
 
 **Phase-1 baseline (LOCAL MEASUREMENT, 2026-10-03).** 28 open directives, 23 older than 30 days, median age 41 days; 60 shipped and 8 severed; 233 merged PRs, median merge latency 0.77 hours; 28 percent of merged PR titles say `fix`; lead time median 2 days for the 39 of 60 shipped plans that record both dates; 0 of 60 shipped plans carry a retro; the memory-read gate's last verdict is FAIL (0.050 reads per session against a pre-registered threshold of under 0.2). Axis A total 14 of 24, plus or minus 2. The agent log rotates (a live file and `agents.jsonl.1`), and reading only the live file undercounted by about a factor of fifty.
 
@@ -153,7 +157,9 @@ Total about 14 to 16 sessions if every gate opens; the committed part is Phases 
 
 ```mermaid
 flowchart LR
-    H[hooks: status flips, ranking snapshot, verify verdict] --> L[(JSONL logs in state root)]
+    H["hooks: status flips,<br/>ranking snapshot,<br/>verify verdict"]
+    L[("JSONL logs in state root")]
+    H --> L
     G[gh: PRs, merges] --> S
     F[registry, plans, checkpoints, spend log, agents.jsonl + .1] --> S
     L --> S[shell.py: read rows, own the clock]
@@ -163,22 +169,22 @@ flowchart LR
     O --> HU{Noah decides}
     HU -->|adopt| D[directive -> normal ship path]
     D -->|next weekly run = before/after| S
-    O -.allow-listed numbers only.-> P[(shared aggregate, personal machine only)]
+    P[("shared aggregate,<br/>personal machine only")]
+    O -.allow-listed numbers only.-> P
 ```
 
 - **Per-gap calls:**
 
-| Gap | Call | What |
-|---|---|---|
-| G1 value rule + ranking snapshot | Build | Written rule in the rubric; one-line snapshot append at `borg next` |
-| G2 appetite + review-by + stop | Build | Two directive fields; pulse lists items past review-by |
-| G3 status history | Build | Append in the existing SessionStart/Stop/Notification hooks |
-| G4 derived delivery and state numbers | Build, adopt `gh` as fact source | Six numbers from files and `gh` |
-| G5 verify-verdict log | Build | One append from `borg-verify` |
-| G6 debrief + action closure | Build | Step in `borg-assimilate` fed by git and `gh` facts |
-| G7 sustainability signals | Build | Boundary-override log; alternating-weeks protocol for the guardrails |
-| G8 spend capture / cost per unit | Build, later | Coverage metric in v1; capture repair after diagnosis |
-| G9 re-runnable loop | Build, adopt launchd | `pmeval`, `borg pulse`, validator, weekly agent |
+- **G1 value rule + ranking snapshot** (Call: Build) — Written rule in the rubric; one-line snapshot append at `borg next`
+- **G2 appetite + review-by + stop** (Call: Build) — Two directive fields; pulse lists items past review-by
+- **G3 status history** (Call: Build) — Append in the existing SessionStart/Stop/Notification hooks
+- **G4 derived delivery and state numbers** — Build, adopt `gh` as fact source
+  - What: Six numbers from files and `gh`
+- **G5 verify-verdict log** (Call: Build) — One append from `borg-verify`
+- **G6 debrief + action closure** (Call: Build) — Step in `borg-assimilate` fed by git and `gh` facts
+- **G7 sustainability signals** (Call: Build) — Boundary-override log; alternating-weeks protocol for the guardrails
+- **G8 spend capture / cost per unit** (Call: Build, later) — Coverage metric in v1; capture repair after diagnosis
+- **G9 re-runnable loop** (Call: Build, adopt launchd) — `pmeval`, `borg pulse`, validator, weekly agent
 
 - **Loop architecture:** Measure (launchd, weekly, out of session) then compare to pre-registered thresholds then print constraint candidates then human decides then ship then next run re-measures. Raw rows stay in the machine's state root. The only shared artifact is a closed-schema numeric aggregate written by a fail-closed validator, comparison is by machine label and rubric version, and nothing is merged across machines.
 - **What it does NOT do:** No dashboard, no board, no cross-team benchmark, no external planning surface, no SQL prompt, no cost-per-shipped-unit number in v1, nothing about the time of day work is best done, and no automatic change to any threshold, target or directive.
@@ -200,7 +206,9 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    D[directive file] <-->|mirror, must stay in sync| I[GitHub issue + Projects v2 item]
+    D[directive file]
+    I["GitHub issue +<br/>Projects v2 item"]
+    D <-->|mirror, must stay in sync| I
     I --> T[ProjectV2ItemStatusChangedEvent timeline]
     I --> F[Appetite / Review-by / Priority fields]
     T --> P[scheduled gh pull -> local JSONL]
@@ -213,17 +221,17 @@ flowchart LR
 
 - **Per-gap calls:**
 
-| Gap | Call | What |
-|---|---|---|
-| G1 value rule + ranking snapshot | Adopt (fields), Build (snapshot) | Priority number field; snapshot still local |
-| G2 appetite + review-by + stop | Adopt | Projects date and number fields, plus built-in workflow automation |
-| G3 status history | Adopt for issue-backed items, Build for sessions | GitHub timeline events; local appends for session flips |
-| G4 derived delivery and state numbers | Adopt `gh` and GraphQL | PR, release and Deployment data |
-| G5 verify-verdict log | Build | No tool exists |
-| G6 debrief + action closure | Build | No tool exists |
-| G7 sustainability signals | Build | No tool exists |
-| G8 spend capture | Build, later | Unrelated to GitHub |
-| G9 re-runnable loop | Build | Same core and validator as A |
+- **G1 value rule + ranking snapshot** — Adopt (fields), Build (snapshot)
+  - What: Priority number field; snapshot still local
+- **G2 appetite + review-by + stop** (Call: Adopt) — Projects date and number fields, plus built-in workflow automation
+- **G3 status history** — Adopt for issue-backed items, Build for sessions
+  - What: GitHub timeline events; local appends for session flips
+- **G4 derived delivery and state numbers** (Call: Adopt `gh` and GraphQL) — PR, release and Deployment data
+- **G5 verify-verdict log** (Call: Build; What: No tool exists)
+- **G6 debrief + action closure** (Call: Build; What: No tool exists)
+- **G7 sustainability signals** (Call: Build; What: No tool exists)
+- **G8 spend capture** (Call: Build, later; What: Unrelated to GitHub)
+- **G9 re-runnable loop** (Call: Build; What: Same core and validator as A)
 
 - **Loop architecture:** Same five-step loop as Option A, but the Measure step begins with a GitHub pull. The compare, propose and human-decides steps are identical. Privacy is weaker: the board is the system of record and lives off-machine.
 - **What it does NOT do:** Does not see session or agent events, does not cover projects that live outside GitHub, does not remove the need for the local pure core, does not give per-field history for anything but Status, and does not by itself satisfy the work-data-never-leaves rule.
@@ -259,17 +267,15 @@ flowchart LR
 
 - **Per-gap calls:**
 
-| Gap | Call | What |
-|---|---|---|
-| G1 value rule + ranking snapshot | Build | As A |
-| G2 appetite + review-by + stop | Build | As A |
-| G3 status history | Build | As A |
-| G4 derived delivery and state numbers | Adopt DuckDB for compute, `gh` for facts | SQL over JSONL |
-| G5 verify-verdict log | Build | As A |
-| G6 debrief + action closure | Build | As A |
-| G7 sustainability signals | Build | As A |
-| G8 spend capture | Build, later | As A |
-| G9 re-runnable loop | Adopt DuckDB, Build the rest | SQL files, validator, launchd |
+- **G1 value rule + ranking snapshot** (Call: Build; What: As A)
+- **G2 appetite + review-by + stop** (Call: Build; What: As A)
+- **G3 status history** (Call: Build; What: As A)
+- **G4 derived delivery and state numbers** (What: SQL over JSONL) — Adopt DuckDB for compute, `gh` for facts
+- **G5 verify-verdict log** (Call: Build; What: As A)
+- **G6 debrief + action closure** (Call: Build; What: As A)
+- **G7 sustainability signals** (Call: Build; What: As A)
+- **G8 spend capture** (Call: Build, later; What: As A)
+- **G9 re-runnable loop** (Call: Adopt DuckDB, Build the rest) — SQL files, validator, launchd
 
 - **Loop architecture:** Same loop as Option A with DuckDB as the compute engine. Raw rows stay local; the shared aggregate is still a closed-schema numeric file. A second runtime must exist on every machine that runs the loop.
 - **What it does NOT do:** Does not remove any capture work, does not add a planning surface, does not run without the DuckDB runtime installed, and does not benchmark against anyone. It also does not make the metrics better, only differently written.
@@ -304,17 +310,16 @@ flowchart LR
 
 - **Per-gap calls:**
 
-| Gap | Call | What |
-|---|---|---|
-| G1 value rule + ranking snapshot | Outsource | Linear priority and ordering; snapshot via API (history UNVERIFIED) |
-| G2 appetite + review-by + stop | Outsource, partial | Linear cycles (fixed length, not appetite per item) |
-| G3 status history | Outsource for issues, Build for sessions | Linear history UNVERIFIED |
-| G4 derived delivery and state numbers | Outsource | Swarmia |
-| G5 verify-verdict log | Build | No tool exists |
-| G6 debrief + action closure | Build | No tool exists |
-| G7 sustainability signals | Build | No tool exists |
-| G8 spend capture | Build, later | Unrelated |
-| G9 re-runnable loop | Outsource the dashboards, Build the rest | No multi-machine self-learning loop on offer |
+- **G1 value rule + ranking snapshot** (Call: Outsource) — Linear priority and ordering; snapshot via API (history UNVERIFIED)
+- **G2 appetite + review-by + stop** (Call: Outsource, partial) — Linear cycles (fixed length, not appetite per item)
+- **G3 status history** (What: Linear history UNVERIFIED) — Outsource for issues, Build for sessions
+- **G4 derived delivery and state numbers** (Call: Outsource; What: Swarmia)
+- **G5 verify-verdict log** (Call: Build; What: No tool exists)
+- **G6 debrief + action closure** (Call: Build; What: No tool exists)
+- **G7 sustainability signals** (Call: Build; What: No tool exists)
+- **G8 spend capture** (Call: Build, later; What: Unrelated)
+- **G9 re-runnable loop** — Outsource the dashboards, Build the rest
+  - What: No multi-machine self-learning loop on offer
 
 - **Loop architecture:** The vendor dashboards are the measure step; compare and human-decides happen by looking. There is no pre-registered threshold file and no re-runnable scorecard of borg itself, so the self-learning loop is mostly absent. Privacy rests on employer approval, not on a design.
 - **What it does NOT do:** Does not keep work data on the work machine, does not see agent or session events, does not score borg's own design, does not provide appetite per item or a circuit breaker, and does not produce a re-runnable multi-machine scorecard.
@@ -351,17 +356,15 @@ flowchart LR
 
 - **Per-gap calls:**
 
-| Gap | Call | What |
-|---|---|---|
-| G1 value rule + ranking snapshot | Build | As A |
-| G2 appetite + review-by + stop | Build | As A |
-| G3 status history | Build | As A |
-| G4 derived delivery and state numbers | Build with stdlib `sqlite3`, adopt `gh` | SQL files over loaded rows |
-| G5 verify-verdict log | Build | As A |
-| G6 debrief + action closure | Build | As A |
-| G7 sustainability signals | Build | As A |
-| G8 spend capture | Build, later | As A |
-| G9 re-runnable loop | Build, adopt launchd and stdlib `sqlite3` | As A with SQL metrics |
+- **G1 value rule + ranking snapshot** (Call: Build; What: As A)
+- **G2 appetite + review-by + stop** (Call: Build; What: As A)
+- **G3 status history** (Call: Build; What: As A)
+- **G4 derived delivery and state numbers** (What: SQL files over loaded rows) — Build with stdlib `sqlite3`, adopt `gh`
+- **G5 verify-verdict log** (Call: Build; What: As A)
+- **G6 debrief + action closure** (Call: Build; What: As A)
+- **G7 sustainability signals** (Call: Build; What: As A)
+- **G8 spend capture** (Call: Build, later; What: As A)
+- **G9 re-runnable loop** (What: As A with SQL metrics) — Build, adopt launchd and stdlib `sqlite3`
 
 - **Loop architecture:** Identical to Option A except the metric engine is SQL in a throwaway database. Privacy contract, validator, guards and human gates are unchanged.
 - **What it does NOT do:** Does not add a persisted database, a dashboard or a planning surface, does not scale like DuckDB to very large logs, does not remove capture work, and does not resolve whether SQL definitions beat Python ones: the probe only showed equivalence and cost at current volume.
@@ -385,34 +388,41 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    DF[(directive files, never written by a hook)] --> RD[reader: filename date + 4 weeks, or stored Review-by]
-    RD --> S[borg link QUEUED: past rows marked, N stopped; borg next: one count line]
+    DF[("directive files,<br/>never written by a hook")]
+    RD["reader: filename date + 4 weeks,<br/>or stored Review-by"]
+    DF --> RD
+    S["borg link QUEUED:<br/>past rows marked, N stopped;<br/>borg next: one count line"]
+    RD --> S
     S --> HU{Noah}
-    HU -->|extend, reason, max 2| X[borg directive extend: writes Review-by and Extended lines]
+    X["borg directive extend:<br/>writes Review-by and Extended lines"]
+    HU -->|extend, reason, max 2| X
     HU -->|sever| SV[borg directive sever: git mv to severed/]
     X --> DF
-    S -->|7 days, no answer, after triage| ST[computed STOPPED, blocks parent at assimilate Step 0.75]
+    ST["computed STOPPED,<br/>blocks parent at assimilate Step 0.75"]
+    S -->|7 days, no answer, after triage| ST
     ST -->|extend revives| X
     X --> EV[(event log)]
     SV --> EV
-    H[hooks: status flips; cmd_next top-3 ranking; verdict only if spike passes] --> L[(JSONL logs)]
+    H["hooks: status flips;<br/>cmd_next top-3 ranking;<br/>verdict only if spike passes"]
+    L[("JSONL logs")]
+    H --> L
     EV --> L
-    L -. gate: manual month + 6 to 8 weeks .-> P[pmeval + launchd, machine-local rubric]
+    P["pmeval + launchd,<br/>machine-local rubric"]
+    L -. gate: manual month + 6 to 8 weeks .-> P
 ```
 
 - **Per-gap calls:**
 
-| Gap | Call | What |
-|---|---|---|
-| G1 value rule + ranking snapshot | Build; value ranking stays manual | QUEUED order is Review-by then filename (not snapshotted); `cmd_next`'s real top-3 ranking is snapshotted at each invocation |
-| G2 review-by + stop | Build, enforced | Reader-computed Review-by, lapse as a computed default stop, `borg directive extend` and `sever` (new commands) |
-| G3 status history | Build | Hook appends |
-| G4 derived delivery and state numbers | Build, adopt `gh` | Manual `borg pulse` after metric definitions are pinned |
-| G5 verify-verdict log | Build, spike first | Capture from the existing `SubagentStop` hook is untested; the stored summary is truncated to 500 characters |
-| G6 debrief + action closure | Build, later | As A, phase 5 |
-| G7 sustainability signals | Build, later | As A, phase 5 |
-| G8 spend capture | Build, later | Coverage metric only |
-| G9 re-runnable loop | Build, adopt launchd, gated | As A, after the gates |
+- **G1 value rule + ranking snapshot** — Build; value ranking stays manual
+  - What: QUEUED order is Review-by then filename (not snapshotted); `cmd_next`'s real top-3 ranking is snapshotted at each invocation
+- **G2 review-by + stop** (Call: Build, enforced) — Reader-computed Review-by, lapse as a computed default stop, `borg directive extend` and `sever` (new commands)
+- **G3 status history** (Call: Build; What: Hook appends)
+- **G4 derived delivery and state numbers** (Call: Build, adopt `gh`) — Manual `borg pulse` after metric definitions are pinned
+- **G5 verify-verdict log** (Call: Build, spike first) — Capture from the existing `SubagentStop` hook is untested; the stored summary is truncated to 500 characters
+- **G6 debrief + action closure** (Call: Build, later; What: As A, phase 5)
+- **G7 sustainability signals** (Call: Build, later; What: As A, phase 5)
+- **G8 spend capture** (Call: Build, later; What: Coverage metric only)
+- **G9 re-runnable loop** (Call: Build, adopt launchd, gated; What: As A, after the gates)
 
 - **Loop architecture:** Two loops. The fast one is Review-by: lapse surfaces a directive, Noah extends or severs with a command, the event is logged. The slow one is Option A's (measure, compare to pre-registered thresholds, print at most one candidate, human decides, re-measure), started only after the gates, with the rubric and the metric tags machine-local so no metric name appears in an agent-visible directive.
 - **What it does NOT do:** No value ranking, nothing about the highest-value time, nothing new for the plan-to-execute hand-off, no dashboard or board, no early scorecard, and no push surface for the scorer.
@@ -522,27 +532,68 @@ Orchestrator note: across three rounds the reviewers moved from "this is instrum
 
 ### Named risks (from mandatory dissent)
 
-| ID | Risk | Raised by | Mitigation | Residual |
-|---|---|---|---|---|
-| R1 | The program measures borg more than it changes decisions; "highest-value time" and plan-to-execute hand-off are unaddressed | Product Strategist; D5 round 1 | Revised: enforcement (reader-computed `Review-by`, lapsed list, triage) ships first and the scorecard is gated; both jobs are now named OPEN GAPS, not non-goals | Real: the two jobs stay unsolved; if two months show no behavior change, do not release Phases 3 onward |
-| R2 | Scorer lives in a repo agents edit; adversarial Goodhart is live | Technical Realist; D5 round 1 | Revised: rubric, results and metric tags machine-local and denied (bash-guard plus `permissions.deny`); no metric names in directives; no push surface; code sha in heartbeat; `pmeval` changes via `borg-verify` | Smaller but real: scorer code and definitions stay in the repo; settings-file and devcontainer bind-mount weakening untested; no field study exists |
-| R3 | The scorecard adds reading burden and decision fatigue | User Advocate | One candidate per run, nothing pushed, pull-only first month | Depends on Noah's actual use |
-| R4 | Option E (and C) add a substrate before it is needed | Pragmatist | Trigger-gated sqlite loader; no DuckDB | Trigger judgment is mine, unsourced |
-| R5 | Silent blindness: exit 0 over empty or partial inputs | Technical Realist | Coverage per metric, null not zero, heartbeat, `borg doctor` stale check, launchd end-to-end test, rotated-log test | Failed three times in this family before |
-| R6 | Metric definitions are ambiguous (nanoprobe type filter; lead-time counts moved by regex) so hand numbers cannot be reproduced | Technical Realist; D5 round 1 | Pin and write down each filter before any fixture is asserted (Phase 2, first session); differential test on a frozen fixture snapshotted at one instant | Open until Phase 2 |
-| R7 | Pre-registered thresholds are guesses with n = 1 and no baseline | Recommender (synthesis) | First reading is the baseline; thresholds are written before the second window opens and versioned | A threshold is a judgment, not a finding |
-| R8 | Single-scorer bias in Axis A is frozen into predicates | Track B (a source, not a council voice) | Periodic second-rater re-score of Axis A, owned by Noah | Phase 1 had one rater and no agreement figure |
-| R9 | Default `Review-by:` date carries no information, so extend becomes a reflex; lapse can hide work that mattered | User Advocate (revision, refined round 2) | Cap of 2 extensions (a third is refused), typed reason, 14-day default extension (max 28), 2nd extension shows the 1st reason, `ext n/2` on every row, extend and sever events logged from Phase 0, lapse switched on only after triage, `N stopped` count always printed, 3-line cap | Real until the extend rate has a baseline; no source tests the practice; the cap of 2 is a judgment; an agent could hand-write the header lines (event log is the human record) |
-| R10 | Value ranking stays manual; the written order is Review-by then filename, not value | Product Strategist (revision, refined round 2) | Named as an open gap; the QUEUED-order snapshot is dropped (near-constant); `cmd_next`'s real top-3 ranking is snapshotted from Phase 1 and read as an attention log (rank 1 versus ranks 2 and 3), dropped at the Phase 3 gate if no gap | Real; two of Noah's jobs unsolved; the snapshot cannot test value because the score is a function of session status |
-| R11 | The gates may delay the requested multi-machine loop by two to three months, or never open | Pragmatist (revision) | Gates are written conditions, Noah can override; Phases 0 and 1 are small | The gate thresholds are my judgments |
-| R12 | Wire change on golden-file-pinned `borg link` (four new keys on directive rows, QUEUED section lines) and one line in `borg next`; the silent hotkey path cannot show it | Technical Realist (revision, refined round 2) | Additive keys, `DOCUMENT_VERSION` stays 2, goldens and spine tests regenerated on purpose, `--brief` projection uses the same scoped rows; `borg next` prints one count line and never prompts | Lapsed items are invisible to a user who only uses the hotkey |
-| R13 | A STOPPED child blocks its parent's assimilation, so a date nobody chose can gate shipping | Technical Realist, User Advocate (round 2 revision) | Lapse off until after the triage; the block message lists STOPPED children first with the one-line sever and extend commands; flip condition written in advance (if a block fires on a child Noah did not mean to act on in the first two months, switch to non-blocking plus a loud warning, one constant) | Real: one command of friction at ship time; the alternative dangles `*Parent plan:*` lineage |
-| R14 | Phase 0 grew to about 3 build sessions plus Noah's; new reader, command arm, wire change, goldens, Step 4c helper | Pragmatist (round 2 revision) | Overrun cuts named in advance: `borg directive list` and the `borg start` warning; the cap, the event append and the 4c helper are not cuttable | Estimate is a planning input, not a commitment |
-| R15 | The `borg-reviewer` verdict capture is untested and the stored data suggests it mostly cannot work from the 500-character summary (31 of 200 rows mention a verdict, 6 a literal PASS or FAIL) | Technical Realist (round 2 revision) | Marked a spike: parse the full last message or transcript and report a parse rate on real runs before any verdict log is built; `unparsed` rows are kept | Open until the spike runs; many reviewer runs are not `borg-verify` runs |
-| R16 | Evidence fit: the strong default-stop evidence is about started work; the 23 stale directives are probably mostly unstarted (not measured), where the support is weak practice evidence | User Advocate, D5 round 2 | Labelled a design stance; the triage list shows per directive whether a branch, PR or checkpoint mentions it so the split becomes a count | Real; no outcome study of backlog age or size exists (phase 1) |
-| KILL | Option A with scorecard phases committed on the calendar (as the pick) | Product Strategist (revision) | Not selected; kept as F's gated phases | n/a |
-| KILL | Option D: breaks the work-data rule; team-scale tools | Product Strategist | Not selected | n/a |
-| KILL | Option B as planning surface: dual truth, voluntary upkeep | Product Strategist | Not selected; optional mirror stays possible | n/a |
+- **R1** — The program measures borg more than it changes decisions; "highest-value time" and plan-to-execute hand-off are unaddressed
+  - Raised by: Product Strategist; D5 round 1
+  - Mitigation: Revised: enforcement (reader-computed `Review-by`, lapsed list, triage) ships first and the scorecard is gated; both jobs are now named OPEN GAPS, not non-goals
+  - Residual: Real: the two jobs stay unsolved; if two months show no behavior change, do not release Phases 3 onward
+- **R2** — Scorer lives in a repo agents edit; adversarial Goodhart is live
+  - Raised by: Technical Realist; D5 round 1
+  - Mitigation: Revised: rubric, results and metric tags machine-local and denied (bash-guard plus `permissions.deny`); no metric names in directives; no push surface; code sha in heartbeat; `pmeval` changes via `borg-verify`
+  - Residual: Smaller but real: scorer code and definitions stay in the repo; settings-file and devcontainer bind-mount weakening untested; no field study exists
+- **R3** (Raised by: User Advocate; Residual: Depends on Noah's actual use) — The scorecard adds reading burden and decision fatigue
+  - Mitigation: One candidate per run, nothing pushed, pull-only first month
+- **R4** (Raised by: Pragmatist) — Option E (and C) add a substrate before it is needed
+  - Mitigation: Trigger-gated sqlite loader; no DuckDB
+  - Residual: Trigger judgment is mine, unsourced
+- **R5** (Raised by: Technical Realist) — Silent blindness: exit 0 over empty or partial inputs
+  - Mitigation: Coverage per metric, null not zero, heartbeat, `borg doctor` stale check, launchd end-to-end test, rotated-log test
+  - Residual: Failed three times in this family before
+- **R6** (Residual: Open until Phase 2) — Metric definitions are ambiguous (nanoprobe type filter; lead-time counts moved by regex) so hand numbers cannot be reproduced
+  - Raised by: Technical Realist; D5 round 1
+  - Mitigation: Pin and write down each filter before any fixture is asserted (Phase 2, first session); differential test on a frozen fixture snapshotted at one instant
+- **R7** (Raised by: Recommender (synthesis)) — Pre-registered thresholds are guesses with n = 1 and no baseline
+  - Mitigation: First reading is the baseline; thresholds are written before the second window opens and versioned
+  - Residual: A threshold is a judgment, not a finding
+- **R8** — Single-scorer bias in Axis A is frozen into predicates
+  - Raised by: Track B (a source, not a council voice)
+  - Mitigation: Periodic second-rater re-score of Axis A, owned by Noah
+  - Residual: Phase 1 had one rater and no agreement figure
+- **R9** — Default `Review-by:` date carries no information, so extend becomes a reflex; lapse can hide work that mattered
+  - Raised by: User Advocate (revision, refined round 2)
+  - Mitigation: Cap of 2 extensions (a third is refused), typed reason, 14-day default extension (max 28), 2nd extension shows the 1st reason, `ext n/2` on every row, extend and sever events logged from Phase 0, lapse switched on only after triage, `N stopped` count always printed, 3-line cap
+  - Residual: Real until the extend rate has a baseline; no source tests the practice; the cap of 2 is a judgment; an agent could hand-write the header lines (event log is the human record)
+- **R10** — Value ranking stays manual; the written order is Review-by then filename, not value
+  - Raised by: Product Strategist (revision, refined round 2)
+  - Mitigation: Named as an open gap; the QUEUED-order snapshot is dropped (near-constant); `cmd_next`'s real top-3 ranking is snapshotted from Phase 1 and read as an attention log (rank 1 versus ranks 2 and 3), dropped at the Phase 3 gate if no gap
+  - Residual: Real; two of Noah's jobs unsolved; the snapshot cannot test value because the score is a function of session status
+- **R11** (Raised by: Pragmatist (revision)) — The gates may delay the requested multi-machine loop by two to three months, or never open
+  - Mitigation: Gates are written conditions, Noah can override; Phases 0 and 1 are small
+  - Residual: The gate thresholds are my judgments
+- **R12** — Wire change on golden-file-pinned `borg link` (four new keys on directive rows, QUEUED section lines) and one line in `borg next`; the silent hotkey path cannot show it
+  - Raised by: Technical Realist (revision, refined round 2)
+  - Mitigation: Additive keys, `DOCUMENT_VERSION` stays 2, goldens and spine tests regenerated on purpose, `--brief` projection uses the same scoped rows; `borg next` prints one count line and never prompts
+  - Residual: Lapsed items are invisible to a user who only uses the hotkey
+- **R13** — A STOPPED child blocks its parent's assimilation, so a date nobody chose can gate shipping
+  - Raised by: Technical Realist, User Advocate (round 2 revision)
+  - Mitigation: Lapse off until after the triage; the block message lists STOPPED children first with the one-line sever and extend commands; flip condition written in advance (if a block fires on a child Noah did not mean to act on in the first two months, switch to non-blocking plus a loud warning, one constant)
+  - Residual: Real: one command of friction at ship time; the alternative dangles `*Parent plan:*` lineage
+- **R14** — Phase 0 grew to about 3 build sessions plus Noah's; new reader, command arm, wire change, goldens, Step 4c helper
+  - Raised by: Pragmatist (round 2 revision)
+  - Mitigation: Overrun cuts named in advance: `borg directive list` and the `borg start` warning; the cap, the event append and the 4c helper are not cuttable
+  - Residual: Estimate is a planning input, not a commitment
+- **R15** — The `borg-reviewer` verdict capture is untested and the stored data suggests it mostly cannot work from the 500-character summary (31 of 200 rows mention a verdict, 6 a literal PASS or FAIL)
+  - Raised by: Technical Realist (round 2 revision)
+  - Mitigation: Marked a spike: parse the full last message or transcript and report a parse rate on real runs before any verdict log is built; `unparsed` rows are kept
+  - Residual: Open until the spike runs; many reviewer runs are not `borg-verify` runs
+- **R16** (Raised by: User Advocate, D5 round 2) — Evidence fit: the strong default-stop evidence is about started work; the 23 stale directives are probably mostly unstarted (not measured), where the support is weak practice evidence
+  - Mitigation: Labelled a design stance; the triage list shows per directive whether a branch, PR or checkpoint mentions it so the split becomes a count
+  - Residual: Real; no outcome study of backlog age or size exists (phase 1)
+- **KILL** (Residual: n/a) — Option A with scorecard phases committed on the calendar (as the pick)
+  - Raised by: Product Strategist (revision)
+  - Mitigation: Not selected; kept as F's gated phases
+- **KILL** (Raised by: Product Strategist; Mitigation: Not selected; Residual: n/a) — Option D: breaks the work-data rule; team-scale tools
+- **KILL** (Raised by: Product Strategist; Residual: n/a) — Option B as planning surface: dual truth, voluntary upkeep
+  - Mitigation: Not selected; optional mirror stays possible
 
 ## Track Findings
 
