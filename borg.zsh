@@ -2921,7 +2921,7 @@ cmd_help() {
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
     window <p> [short]  Show (or set) a project's short tmux window name
-    sever               Tear down everything: containers, windows, session
+    down                Tear down everything: containers, windows, session
     regenerate          Archive stale projects (idle >48h)
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
     setup               Register Claude Code hooks, skills, and config
@@ -2946,6 +2946,8 @@ cmd_help() {
                  /borg-recon and merge-tree/gather.py consume, and both still work.
     2026-08-31 — program renamed to chain. Same command, same actions, same flags; the word
                  "program" is retired in favour of "chain". Run: borg chain
+    2026-10-04 — sever was an alias of 'down' (tears down everything) and never retired a directive.
+                 Tear down with 'borg down'; retire a directive with 'git mv' into docs/plans/severed/.
 
   HOTKEY
     Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
@@ -3512,7 +3514,15 @@ case "${1:-help}" in
     image)    cmd_image "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
-    sever|down)  cmd_down ;;
+    down)  cmd_down ;;
+    # Retired 2026-10-04. `sever` was an alias of `down`, which tears down EVERY tmux window, the
+    # shared Postgres and the Supabase stack and ignores its arguments, while CLAUDE.md told people
+    # to run `borg sever <slug>` to retire a directive. No caller depended on the alias, so it now
+    # always refuses (even bare) rather than guess which of the two meanings was intended.
+    sever)
+        die "'borg sever' was retired. It tore EVERYTHING down (same as 'borg down'): every tmux window, the shared Postgres and the Supabase stack. Nothing was touched.
+  To tear down on purpose: borg down
+  To retire a directive: git mv docs/plans/directives/<slug>.md docs/plans/severed/ and add a one-line why-severed note" ;;
     regenerate|tidy)
         if [[ "${2:-}" == "--migrate-state" ]]; then
             _borg_py borg_core.statemigrate.cli "${@:3}"
