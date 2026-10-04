@@ -1,4 +1,4 @@
-.PHONY: clean test test-bats lint format test-viz lint-viz format-viz spine eval eval-live
+.PHONY: clean test test-bats lint format test-viz lint-viz format-viz spine eval eval-live eval-changed eval-live-changed
 
 # TWO Python surfaces, deliberately separate — do not merge them.
 #
@@ -215,8 +215,17 @@ eval:
 		exit 1; \
 	fi; \
 	failed=0; found=0; \
-	for r in evals/*/run.sh; do \
-		[ -e "$$r" ] || continue; \
+	if [ -n "$$EVAL_ONLY" ]; then \
+		harnesses=''; \
+		for d in $$EVAL_ONLY; do harnesses="$$harnesses $$d/run.sh"; done; \
+	else \
+		harnesses='evals/*/run.sh'; \
+	fi; \
+	for r in $$harnesses; do \
+		if [ ! -e "$$r" ]; then \
+			[ -z "$$EVAL_ONLY" ] || { echo "selected harness missing: $$r" >&2; failed=1; }; \
+			continue; \
+		fi; \
 		found=1; \
 		echo "== $$r $$EVAL_ARGS"; \
 		bash "$$r" $$EVAL_ARGS || failed=1; \
@@ -229,3 +238,36 @@ eval:
 
 eval-live:
 	@$(MAKE) --no-print-directory eval EVAL_ARGS=
+
+# ── Changed-files selection: run only the evals whose declared coverage a change touches ─────────
+# `evals/ledger.json` maps each eval to `covers` globs; `borg_core.evals.cli select` prints the evals
+# a change touches. A change to the ledger, `evals/*`, `borg_core/evals/` or this Makefile selects
+# ALL (see borg_core/evals/core.py), and a change touching nothing covered selects NONE.
+#
+# A SELECTION OF ZERO IS "nothing to run", EXIT 0, AND IT NEVER REACHES THE `eval` RECIPE. The
+# selection floor above (found at 0 is a failure) guards a GLOB that matched no harness -- a broken
+# tree. Zero SELECTED is a correct answer to "what did this change affect", and routing it through
+# that floor would make every docs-only PR red. The two are told apart by who decided: the glob
+# floor catches a tree that cannot run anything, the selector's zero is a decision with a reason on
+# stderr. Once anything IS selected it runs through `eval` itself via EVAL_ONLY, so EVAL_ARGS
+# validation, the per-harness execution floors and the aggregate-don't-abort loop all apply
+# unchanged, and a selected harness that is missing is a failure rather than a skip.
+#
+# Range: EVAL_BASE (default: merge-base with origin/main) .. EVAL_HEAD (default HEAD). For uncommitted
+# work or a custom set, EVAL_FILES="a b" replaces the git range. `make eval` remains the full run.
+EVAL_HEAD ?= HEAD
+EVAL_SELECT = $(if $(EVAL_FILES),--files $(EVAL_FILES),$(if $(EVAL_BASE),--base $(EVAL_BASE)) --head $(EVAL_HEAD))
+
+eval-changed:
+	@selected=$$(python3 -m borg_core.evals.cli select $(EVAL_SELECT)) || exit 1; \
+	if [ -z "$$selected" ]; then \
+		echo "eval-changed: nothing to run -- no changed file is covered by an eval"; \
+		exit 0; \
+	fi; \
+	echo "eval-changed: running" $$selected; \
+	$(MAKE) --no-print-directory eval EVAL_ONLY="$$selected"
+
+# The live variant clears EVAL_ARGS exactly as `eval-live` does; it is a developer command and is
+# deliberately NOT referenced by any CI workflow.
+eval-live-changed:
+	@$(MAKE) --no-print-directory eval-changed EVAL_ARGS=

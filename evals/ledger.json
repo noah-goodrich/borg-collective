@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "evals": {
+    "evals/lifecycle-manifests": {
+      "covers": [
+        "evals/lifecycle-manifests/**",
+        "skills/borg-plan/**",
+        "skills/borg-link-up/**",
+        "skills/borg-assimilate/**",
+        "borg_core/manifest/**",
+        "borg_core/planstate/**",
+        "lib/promote-next.sh"
+      ]
+    },
+    "evals/s4-k3": {
+      "covers": [
+        "evals/s4-k3/**",
+        "borg_core/manifest/**",
+        "borg_core/recon/**",
+        "lib/recon/**",
+        "merge-tree/**"
+      ]
+    }
+  },
+  "items": {
+    "agents/ROUTING": {
+      "waiver": "Phase 2 (evals-for-everything): orchestrator-facing eval to be built (the routing table)",
+      "review_by": "2026-12-15"
+    },
+    "agents/borg-grunt": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything)",
+      "review_by": "2027-01-31"
+    },
+    "agents/borg-nanoprobe": {
+      "waiver": "Phase 1 (evals-for-everything): model eval (scope gate: three deliverables refused, one accepted)",
+      "review_by": "2026-11-15"
+    },
+    "agents/borg-researcher": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything)",
+      "review_by": "2027-01-31"
+    },
+    "agents/borg-reviewer": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything)",
+      "review_by": "2027-01-31"
+    },
+    "agents/borg-scout": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything)",
+      "review_by": "2027-01-31"
+    },
+    "skills/adhd-guardrails": {
+      "waiver": "always-on guidance with no observable output to grade; revisit in the Phase 4 waiver review",
+      "review_by": "2027-01-31"
+    },
+    "skills/borg-assimilate": {
+      "eval": "evals/lifecycle-manifests"
+    },
+    "skills/borg-collective-review": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything): multi-persona review, graded only by a judge model",
+      "review_by": "2027-01-31"
+    },
+    "skills/borg-link": {
+      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
+      "review_by": "2027-01-31"
+    },
+    "skills/borg-link-up": {
+      "eval": "evals/lifecycle-manifests"
+    },
+    "skills/borg-next": {
+      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
+      "review_by": "2027-01-31"
+    },
+    "skills/borg-plan": {
+      "eval": "evals/lifecycle-manifests"
+    },
+    "skills/borg-recon": {
+      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
+      "review_by": "2027-01-31"
+    },
+    "skills/borg-resume": {
+      "waiver": "Phase 2 (evals-for-everything): orchestrator-facing eval to be built",
+      "review_by": "2026-12-15"
+    },
+    "skills/borg-review": {
+      "waiver": "Phase 2 (evals-for-everything): orchestrator-facing eval to be built",
+      "review_by": "2026-12-15"
+    },
+    "skills/borg-switch": {
+      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
+      "review_by": "2027-01-31"
+    },
+    "skills/borg-verify": {
+      "waiver": "Phase 1 (evals-for-everything): model eval (seeded-defect diff must FAIL, clean diff PASS)",
+      "review_by": "2026-11-15"
+    },
+    "skills/break-glass": {
+      "waiver": "Phase 2 (evals-for-everything): eval to be built (negative-heavy: no unprompted permission change)",
+      "review_by": "2026-12-15"
+    },
+    "skills/fable-reviewer": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything)",
+      "review_by": "2027-01-31"
+    },
+    "skills/no-unnecessary-read-perms": {
+      "waiver": "always-on guidance with no observable output to grade; revisit in the Phase 4 waiver review",
+      "review_by": "2027-01-31"
+    },
+    "skills/pane": {
+      "waiver": "thin wrapper over a deterministic CLI; its behaviour is bats-covered; Phase 4 trigger-case review",
+      "review_by": "2027-01-31"
+    },
+    "skills/simplify": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything)",
+      "review_by": "2027-01-31"
+    }
+  }
+}

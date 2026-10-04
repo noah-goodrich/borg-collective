@@ -91,6 +91,28 @@ jobs:
         run: make test
 
 
+  eval-changed:
+    # Offline evals for the code a PR touched, and nothing else (evals/ledger.json `covers` decides;
+    # a ledger, harness or Makefile change selects all). `make eval-changed` forwards the offline
+    # EVAL_ARGS default, so this job can never reach a model or the network. There is deliberately NO
+    # live job: the live-changed target is a developer command with a cost ceiling.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth 0: the selector diffs against merge-base(origin/main, HEAD), which a shallow
+      # clone cannot compute.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install dev toolchain (the E2a case needs an importable pytest)
+        run: pip install --group dev
+      - name: Offline evals for the changed files
+        run: make eval-changed
+
   viz:
     # The infoviz program (merge-tree/) has its own gate, deliberately separate from the `python`
     # job above. borg_core/ is held to a 90% floor with clean-architecture enforcement; merge-tree/
