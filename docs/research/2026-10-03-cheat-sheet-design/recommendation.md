@@ -33,13 +33,31 @@ NOT design-reviewed — three blind-review rounds each returned **revise** (none
 
 **Pick Option E, "Doorways", revised after D5 rounds 1 and 2 and scoped to re-entry and handoff first.** A doorway is a push that is both caused by a transition Noah made and sent down a channel that reaches the audience it is meant for without asking a model to do it. Round 1 showed two of the three original doorways were not user-caused. Round 2 showed the cold-start doorway was a request to the model, not a gate (the brief arrived as SessionStart `additionalContext`, which the model can only act on after Noah has typed a prompt). The pick now puts the human-facing brief in front of Noah by printing it from the launcher, which needs no model, and keeps the model-side injection as a separate, quieter job.
 
-| Doorway | The user's own act | What fires | Channel, and who it reaches | Status of the channel |
-|---------|--------------------|------------|-----------------------------|------------------------|
-| Arrive, launched through borg | Runs `drone claude <project>` or `borg claude` | `borg brief` prints the arrival brief into the pane, then `claude` starts. For `borg claude` (the orchestrator) it prints one cross-project verdict line instead | Plain stdout of the pane's shell, before Claude exists: the human, deterministic, no hook and no model | `cmd_claude` in `drone.zsh` today types `claude` into the pane with `tmux send-keys`; `_borg_launch_in_tmux` in `borg.zsh` runs `"$@"` directly or through a launcher script. Both are places a print can go. Unverified: whether Claude's start-up leaves the printed text on screen (spike a), and whether the left pane's shell can run `borg` when it sits inside a devcontainer (spike a); if it cannot, the print fails loud (see "Failure is loud") |
-| Arrive, hand-typed `claude`, `/resume`, CoCo | Starts a session without the launcher | SessionStart hook, matcher-scoped to `startup` and `resume` only (never `compact` or `clear`): derived lines to the model as `additionalContext`, plus a one-line `sessionTitle` cue | `additionalContext` reaches the model; `sessionTitle` is documented as having the same effect as `/rename`, so it shows wherever session names show (unverified: where, its length limit, whether it overwrites a title on `resume`) | A concession: no pre-prompt print on this path. No restate-on-first-reply instruction is sent (see "Why the restatement is dropped"). The human pulls the full brief with `borg brief` |
-| Arrive, switch into a window that is already running | `borg switch` or `Ctrl+Space >` | A one-line derived headline | `tmux display-message -d <ms> -C`: non-modal, auto-expiring, the pane keeps updating. SessionStart never fires in a running session | Verified in the tmux 3.6a manual on this machine: `-d` sets the delay in milliseconds and `-C` keeps the pane updating. Unverified: whether a key typed while it shows is swallowed (spike d) |
-| Depart, a checkpoint was written | Runs `/borg-link-up` | A Stop `systemMessage` only if a derived CARRIED or NOT DEPLOYED flag is non-empty; otherwise nothing | Stop `systemMessage`, gated on a checkpoint file whose name ends in this session's suffix | Documented, never watched rendering live (directive `2026-10-04-stop-hook-warnings-are-invisible`, AC5). The spike watches it |
-| Depart, no checkpoint | Ends the session | Nothing is shown and no record is written. The next arrival derives it from `state.json` | Read at arrival: `last_activity` against the newest checkpoint time | No new hook. The SessionEnd hook is deleted |
+- **Arrive, launched through borg**
+  - The user's own act: Runs `drone claude <project>` or `borg claude`
+  - What fires: `borg brief` prints the arrival brief into the pane, then `claude` starts. For `borg claude` (the orchestrator) it prints one cross-project verdict line instead
+  - Channel, and who it reaches: Plain stdout of the pane's shell, before Claude exists: the human, deterministic, no hook and no model
+  - Status of the channel: `cmd_claude` in `drone.zsh` today types `claude` into the pane with `tmux send-keys`; `_borg_launch_in_tmux` in `borg.zsh` runs `"$@"` directly or through a launcher script. Both are places a print can go. Unverified: whether Claude's start-up leaves the printed text on screen (spike a), and whether the left pane's shell can run `borg` when it sits inside a devcontainer (spike a); if it cannot, the print fails loud (see "Failure is loud")
+- **Arrive, hand-typed `claude`, `/resume`, CoCo**
+  - The user's own act: Starts a session without the launcher
+  - What fires: SessionStart hook, matcher-scoped to `startup` and `resume` only (never `compact` or `clear`): derived lines to the model as `additionalContext`, plus a one-line `sessionTitle` cue
+  - Channel, and who it reaches: `additionalContext` reaches the model; `sessionTitle` is documented as having the same effect as `/rename`, so it shows wherever session names show (unverified: where, its length limit, whether it overwrites a title on `resume`)
+  - Status of the channel: A concession: no pre-prompt print on this path. No restate-on-first-reply instruction is sent (see "Why the restatement is dropped"). The human pulls the full brief with `borg brief`
+- **Arrive, switch into a window that is already running**
+  - The user's own act: `borg switch` or `Ctrl+Space >`
+  - What fires: A one-line derived headline
+  - Channel, and who it reaches: `tmux display-message -d <ms> -C`: non-modal, auto-expiring, the pane keeps updating. SessionStart never fires in a running session
+  - Status of the channel: Verified in the tmux 3.6a manual on this machine: `-d` sets the delay in milliseconds and `-C` keeps the pane updating. Unverified: whether a key typed while it shows is swallowed (spike d)
+- **Depart, a checkpoint was written**
+  - The user's own act: Runs `/borg-link-up`
+  - What fires: A Stop `systemMessage` only if a derived CARRIED or NOT DEPLOYED flag is non-empty; otherwise nothing
+  - Channel, and who it reaches: Stop `systemMessage`, gated on a checkpoint file whose name ends in this session's suffix
+  - Status of the channel: Documented, never watched rendering live (directive `2026-10-04-stop-hook-warnings-are-invisible`, AC5). The spike watches it
+- **Depart, no checkpoint**
+  - The user's own act: Ends the session
+  - What fires: Nothing is shown and no record is written. The next arrival derives it from `state.json`
+  - Channel, and who it reaches: Read at arrival: `last_activity` against the newest checkpoint time
+  - Status of the channel: No new hook. The SessionEnd hook is deleted
 
 **What changed from the first pick, in one line each.** Stop is no longer "departure": it fires after every assistant turn, so it is used only behind a gate. Plan exit is no longer a doorway (build step 7). Model-written fields no longer lead: derived facts lead. Round 3 adds: the human's cold-start brief is printed by the launcher instead of asked of the model; the SessionEnd hook is gone; the read-back no longer repeats what the skill just displayed; STALE is defined by what changed, not by age; `borg next` and `borg link` share one ranker.
 
@@ -54,16 +72,24 @@ NOT design-reviewed — three blind-review rounds each returned **revise** (none
 **The brief, derived first.** At most 12 lines. Derived lines first, then the checkpoint's own words. Example, as it would print on 2026-10-07 (daggers mark values advanced from 2026-10-04):
 
 ```
-borg-collective · main · checkpoint Sat 22:24 (3d† ago) · STALE: HEAD moved (4 commits) since it was written
-Activity  since the checkpoint: 4 commits, 7 files touched   ·   merges (local): #258, #259
+borg-collective · main · checkpoint Sat 22:24 (3d† ago) ·
+  STALE: HEAD moved (4 commits) since it was written
+Activity  since the checkpoint: 4 commits, 7 files touched  ·
+          merges (local): #258, #259
 Dirty     7 untracked (5 retrospectives-*.md, snapshots/, 1 checkpoint)
-Plan      5/6 met; open: AC6 "Nothing breaks"; first move: its Verify step 1
-Ended     last activity Sun 04:41‡, 6h after the checkpoint; no checkpoint covers it
+Plan      5/6 met; open: AC6 "Nothing breaks";
+          first move: its Verify step 1
+Ended     last activity Sun 04:41‡, 6h after the checkpoint;
+          no checkpoint covers it
 --- from your last checkpoint (written Sat 22:24) ---
-Last      Shipped State Hygiene AC3-AC5; both research runs verified, mid write-up.
+Last      Shipped State Hygiene AC3-AC5; both research runs verified,
+          mid write-up.
 Next      Land the two research PRs, run decision-design, then AC6.
-Blocked   remove stray adapter output (docs/research/sources/retrospectives-0*.md)
+Blocked   remove stray adapter output
+          (docs/research/sources/retrospectives-0*.md)
 ```
+
+Layout note: the mock is wrapped to fit a narrow pane; an indented continuation line is the same logical line on screen, so the brief is still 9 logical lines.
 
 **STALE, defined honestly.** The label means "the repo changed since the checkpoint was written", not "the checkpoint is old". Rule: STALE when HEAD is not the commit that was HEAD at the checkpoint's timestamp (`git rev-list -1 --before=<checkpoint time> HEAD` differs from `git rev-parse HEAD`), or when any dirty path outside `.borg/checkpoints/` has a modification time after the checkpoint's. Otherwise the checkpoint is current and the brief collapses to its header and the Next line. There is no age threshold, so a checkpoint from a month ago on a repo nobody touched reads as current, which is true. Unverified: that `--before` on the checkpoint timestamp lands on the right commit across rebases and amends; the brief shows the commit counts so a wrong baseline is visible.
 
@@ -112,14 +138,21 @@ Five options, each an architecture across the six moments. They were generated f
 - **What it is:** Every moment is carried by the one surface that already exists, `borg link`, and the work is subtraction and ordering inside its fixed `SECTIONS` spine. A verdict line goes first, dormant rows collapse to a count, and the empty `▸ NEXT` stops saying "nobody looked". No new surface, no new push.
 - **How it works:** The moment-to-surface map is below. Hooks stay as they are; the page is the only thing that changes.
 
-| Moment | Surface | What appears | Push or pull |
-|--------|---------|--------------|--------------|
-| M1 glance | `borg link` | One verdict line above everything ("1 needs you"), then only rows that have state | Pull |
-| M2 next move | `▸ NEXT` and `borg next` | Up to three varied moves, each with its reason, the top one labelled "recommended" | Pull |
-| M3 re-enter | `▸ IN FOCUS` | Latest checkpoint tl;dr and the first line of its Next Session | Pull |
-| M4 plan to do | none | Not addressed (the page is not open mid-session) | none |
-| M5 end | checkpoint file | Unchanged | none |
-| M6 going wrong | `▸ SIGNALS` | Same section, deduplicated, one line per cause | Pull |
+| Moment | Push or pull |
+|--------|--------------|
+| M1 glance | Pull |
+| M2 next move | Pull |
+| M3 re-enter | Pull |
+| M4 plan to do | none |
+| M5 end | none |
+| M6 going wrong | Pull |
+
+- **M1 glance** — Surface: `borg link`; What appears: One verdict line above everything ("1 needs you"), then only rows that have state
+- **M2 next move** — Surface: `▸ NEXT` and `borg next`; What appears: Up to three varied moves, each with its reason, the top one labelled "recommended"
+- **M3 re-enter** — Surface: `▸ IN FOCUS`; What appears: Latest checkpoint tl;dr and the first line of its Next Session
+- **M4 plan to do** — Surface: none; What appears: Not addressed (the page is not open mid-session)
+- **M5 end** — Surface: checkpoint file; What appears: Unchanged
+- **M6 going wrong** — Surface: `▸ SIGNALS`; What appears: Same section, deduplicated, one line per cause
 
 - **Removes or quiets:** The 9-line cube header (a decoration; Noah's call whether it stays). The `(no summary)` text on 19 of 20 rows. The 17 rows that say "never" or 26+ days (collapsed to one line: "17 dormant, oldest 123d"). The 30-line `▸ QUEUED` list (top 5 plus the count). The `▸ NEXT  nobody looked` stub, which becomes the last swept answer with its age.
 - **Pros / Cons:**
@@ -132,11 +165,17 @@ Five options, each an architecture across the six moments. They were generated f
 
 ```mermaid
 flowchart LR
-    reg["registry + checkpoints + plan"] --> doc["borg link document (SECTIONS)"]
-    doc --> v["verdict line"]
-    doc --> rows["rows with state only"]
-    doc --> nxt["NEXT: 3 varied, 1 recommended"]
-    v --> eyes["Noah, when he runs it"]
+    reg["registry + checkpoints + plan"]
+    doc["borg link document (SECTIONS)"]
+    v["verdict line"]
+    rows["rows with state only"]
+    nxt["NEXT: 3 varied, 1 recommended"]
+    eyes["Noah, when he runs it"]
+    reg --> doc
+    doc --> v
+    doc --> rows
+    doc --> nxt
+    v --> eyes
     rows --> eyes
     nxt --> eyes
 ```
@@ -148,14 +187,21 @@ flowchart LR
 - **What it is:** State lives at the edge of vision instead of on a page. A tmux status segment, window colors and Claude Code's own status line carry the glance, the next move and the warnings, driven by one small cache file that hooks keep fresh. The page becomes the drill-down.
 - **How it works:** Hooks (SessionStart, Stop, Notification) already write per-project state; a cache writer rolls them into one line. `status-right` reads the cache (no fork of `gh` on a 15-second tick), and the Claude Code `statusLine` setting shows the project-local line inside a session.
 
-| Moment | Surface | What appears | Push or pull |
-|--------|---------|--------------|--------------|
-| M1 glance | tmux `status-right` | `borg: 1 needs you, shopping-app 6h` or `borg: clear 08:40` | Ambient |
-| M2 next move | `Ctrl+Space >` | One line in a tmux message: the target and its reason | Pull |
-| M3 re-enter | Claude Code `statusLine` | `plan 5/6 · next: AC6 · 2 PRs since` | Ambient |
-| M4 plan to do | `statusLine` | Segment flips from `PLAN` to `DO` with the done-when | Ambient |
-| M5 end | `statusLine` | `unsaved: no checkpoint` until one is written | Ambient |
-| M6 going wrong | `status-right` color, existing bell | Segment turns amber and names the cause | Ambient |
+| Moment | Push or pull |
+|--------|--------------|
+| M1 glance | Ambient |
+| M2 next move | Pull |
+| M3 re-enter | Ambient |
+| M4 plan to do | Ambient |
+| M5 end | Ambient |
+| M6 going wrong | Ambient |
+
+- **M1 glance** — Surface: tmux `status-right`; What appears: `borg: 1 needs you, shopping-app 6h` or `borg: clear 08:40`
+- **M2 next move** — Surface: `Ctrl+Space >`; What appears: One line in a tmux message: the target and its reason
+- **M3 re-enter** — Surface: Claude Code `statusLine`; What appears: `plan 5/6 · next: AC6 · 2 PRs since`
+- **M4 plan to do** — Surface: `statusLine`; What appears: Segment flips from `PLAN` to `DO` with the done-when
+- **M5 end** — Surface: `statusLine`; What appears: `unsaved: no checkpoint` until one is written
+- **M6 going wrong** — Surface: `status-right` color, existing bell; What appears: Segment turns amber and names the cause
 
 - **Removes or quiets:** The `⚠ CAPACITY WARNING` paragraph injected at session start (becomes `3/3 active` in the segment). The 75-call check-in text. The date-only `status-right`.
 - **Pros / Cons:**
@@ -168,7 +214,9 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    hooks["SessionStart / Stop / Notification hooks"] --> cache["one cache line + written-at"]
+    hooks["SessionStart / Stop / Notification hooks"]
+    cache["one cache line + written-at"]
+    hooks --> cache
     cache --> tmux["tmux status-right"]
     cache --> sl["Claude Code statusLine"]
     cache --> win["window color + bell"]
@@ -184,14 +232,21 @@ flowchart LR
 - **What it is:** Subtract first. Every message a hook sends to anyone passes one gate that asks four questions (urgent, actionable, first time this session, safe moment) and routes failures to a log that the page and the departure message roll up. The unit of design is the message, not the surface.
 - **How it works:** A single executable (`borg-signal`, per the repo's rule that anything that MUST happen ships as an executable, not as prose) replaces the direct `jq` emitters in the hooks. Pass: delivered once, in the fixed shape WHAT, SINCE, DO. Fail: appended to `signals.jsonl` and shown as one rolled-up line at the next arrival or departure. A budget of one interrupt per session and three per day is counted from the same file.
 
-| Moment | Surface | What appears | Push or pull |
-|--------|---------|--------------|--------------|
-| M1 glance | `▸ SIGNALS` | One line: `4 held back since Sat, 1 needs you` | Pull |
-| M2 next move | unchanged | Not addressed | none |
-| M3 re-enter | session start `additionalContext` | One line of held-back signals, no paragraph. Reaches the model only; the human sees it if the model repeats it. (A launcher print, as in Option E, could carry it to the human without a model; C does not include one) | Push to the model, once |
-| M4 plan to do | breakpoints only | Nothing mid-edit; the one allowed message waits for a commit or green test | Push, gated |
-| M5 end | Stop `systemMessage` | The three warnings coalesced into one 3-line message. Stop fires after every turn, so "once per session" means after the first turn in which a condition holds (for the no-checkpoint warning, turn one), not at the end. A real departure message needs the checkpoint-written gate from Option E. Channel unverified live (AC5) | Push, once per session |
-| M6 going wrong | the gate | Urgent and actionable passes with its DO; the rest is logged | Push, gated |
+| Moment | Push or pull |
+|--------|--------------|
+| M1 glance | Pull |
+| M2 next move | none |
+| M3 re-enter | Push to the model, once |
+| M4 plan to do | Push, gated |
+| M5 end | Push, once per session |
+| M6 going wrong | Push, gated |
+
+- **M1 glance** — Surface: `▸ SIGNALS`; What appears: One line: `4 held back since Sat, 1 needs you`
+- **M2 next move** — Surface: unchanged; What appears: Not addressed
+- **M3 re-enter** — Surface: session start `additionalContext`; What appears: One line of held-back signals, no paragraph. Reaches the model only; the human sees it if the model repeats it. (A launcher print, as in Option E, could carry it to the human without a model; C does not include one)
+- **M4 plan to do** — Surface: breakpoints only; What appears: Nothing mid-edit; the one allowed message waits for a commit or green test
+- **M5 end** — Surface: Stop `systemMessage`; What appears: The three warnings coalesced into one 3-line message. Stop fires after every turn, so "once per session" means after the first turn in which a condition holds (for the no-checkpoint warning, turn one), not at the end. A real departure message needs the checkpoint-written gate from Option E. Channel unverified live (AC5)
+- **M6 going wrong** — Surface: the gate; What appears: Urgent and actionable passes with its DO; the rest is logged
 
 - **Removes or quiets:** The 75-call check-in as a count-based push. Repeats of `pre-commit-remind`. The capacity paragraph (becomes a ledger line unless the limit is crossed). Three separate Stop warnings (one message).
 - **Pros / Cons:**
@@ -218,14 +273,21 @@ flowchart TD
 - **What it is:** Instead of fixed layouts, a model composes the right amount for the moment from the derived JSON that `borg link --json` already produces. One call per moment, a size cap per moment, and the deterministic page as the fallback. It extends the existing `--brief` idea to all six moments.
 - **How it works:** `borg say <moment>` (or a skill) feeds the document JSON plus the moment name and a line cap to `claude -p`, returns prose, and falls back to the real page bytes when the call fails. SessionStart hands the narrated brief to the model; the same text is printed for the human.
 
-| Moment | Surface | What appears | Push or pull |
-|--------|---------|--------------|--------------|
-| M1 glance | `borg link --brief` | 5-line prose verdict | Pull |
-| M2 next move | `borg next` | Two sentences: the move, why, what it unblocks | Pull |
-| M3 re-enter | session start `additionalContext`, or `borg say reenter` | A composed "where you stopped" from checkpoint, `git log` and diff. Reaches the model; the human sees it only if the model repeats it or he runs the command (a switch into a running window triggers no SessionStart). (A launcher print could carry the narrated text to the human before a prompt; D does not include one, and would pay a model call for it on every launch) | Push to the model, once |
-| M4 plan to do | plan exit | Model restates done-when in one line, as ordinary assistant text (reaches the human; model discretion) | Push, once |
-| M5 end | `/borg-link-up` | Model drafts the checkpoint (already true today) | Pull |
-| M6 going wrong | on request | `borg say wrong` explains the last signal | Pull |
+| Moment | Push or pull |
+|--------|--------------|
+| M1 glance | Pull |
+| M2 next move | Pull |
+| M3 re-enter | Push to the model, once |
+| M4 plan to do | Push, once |
+| M5 end | Pull |
+| M6 going wrong | Pull |
+
+- **M1 glance** — Surface: `borg link --brief`; What appears: 5-line prose verdict
+- **M2 next move** — Surface: `borg next`; What appears: Two sentences: the move, why, what it unblocks
+- **M3 re-enter** — Surface: session start `additionalContext`, or `borg say reenter`; What appears: A composed "where you stopped" from checkpoint, `git log` and diff. Reaches the model; the human sees it only if the model repeats it or he runs the command (a switch into a running window triggers no SessionStart). (A launcher print could carry the narrated text to the human before a prompt; D does not include one, and would pay a model call for it on every launch)
+- **M4 plan to do** — Surface: plan exit; What appears: Model restates done-when in one line, as ordinary assistant text (reaches the human; model discretion)
+- **M5 end** — Surface: `/borg-link-up`; What appears: Model drafts the checkpoint (already true today)
+- **M6 going wrong** — Surface: on request; What appears: `borg say wrong` explains the last signal
 
 - **Removes or quiets:** The raw `(no summary)` rows (replaced by generated summaries, which is 20 model calls on a cold start). The verbatim checkpoint paste for the human.
 - **Pros / Cons:**
@@ -238,7 +300,9 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    j["borg link --json (one sweep)"] --> n["claude -p with moment + line cap"]
+    j["borg link --json (one sweep)"]
+    n["claude -p with moment + line cap"]
+    j --> n
     n --> t["narrated text"]
     n -. "fails or times out" .-> p["real page, same bytes"]
     t --> eyes["Noah / session"]
@@ -253,17 +317,27 @@ flowchart LR
 - **How it works:** One pure function (`borg brief`) builds a brief of at most 12 lines: derived lines first (an `Activity` line of commits and files touched since the checkpoint, local merge commits as the merged-PR proxy, dirty files, plan criteria, a derived `Ended` line, and a STALE line meaning "HEAD moved or the tree was edited since the checkpoint", not an age), then the checkpoint's tl;dr, Next and Blocked verbatim. Delivery follows how the session starts. Launched through `drone claude` or `borg claude`: the launcher prints the brief into the pane before `claude` starts (plain stdout, no model, no hook). Started by hand, resumed, or in CoCo: a SessionStart hook scoped to the `startup` and `resume` matchers gives the model the derived lines and sets a one-line `sessionTitle`. Switching into a window whose session is already running: a one-line derived headline through a non-modal `tmux display-message -d`. On the way out: one Stop `systemMessage` that fires only on the turn a checkpoint whose filename ends in this session's suffix appears, and only if a derived CARRIED or NOT DEPLOYED flag is non-empty. There is no SessionEnd hook; "ended without a checkpoint" is derived at arrival from `last_activity` against the newest checkpoint time. If `borg_core` cannot be imported, every path says so in one line and the existing git blocks stay.
 - **Separation move:** Condition. The automatic part is conditioned on the user's own act (launching a session, switching into a window, writing a checkpoint), never on a clock, a counter or a turn boundary, so the pull-only rule and the automatic-re-entry rule both hold.
 
-| Moment | Surface and channel | What appears | Push or pull | Reaches the human how |
-|--------|---------------------|--------------|--------------|------------------------|
-| M1 glance | `borg link` verdict line | One line above everything: who needs you, how many dormant, whether it was swept | Pull | Directly |
-| M2 next move | `borg next` | The recommended move from the same ranker `borg link` uses, with a reason labelled a heuristic (status-driven, not value); the project's own checkpoint line quoted and attributed; whether it was followed is logged | Pull | Directly |
-| M3 re-enter, launched through borg | `drone claude` or `borg claude` prints before `claude` starts | The full brief (the orchestrator gets one cross-project verdict line) | Doorway | Directly, deterministic: stdout of the pane |
-| M3 re-enter, hand-typed `claude`, `/resume`, CoCo | SessionStart `additionalContext` (matchers `startup`, `resume`) and `sessionTitle` | To the model: derived lines. To the human: a one-line title cue only | Doorway (model-side) | The title cue directly (unverified); the brief by pulling `borg brief` |
-| M3 re-enter, running window | `borg switch` and `Ctrl+Space >` through `tmux display-message -d <ms> -C` | A one-line derived headline | Doorway | Directly; non-modal and auto-expiring |
-| M4 plan to do | none in the MVP | Not addressed. The plan-exit doorway through `borg-plan-promote.sh` is dropped as fragile | none | none |
-| M5 end, checkpoint written | Stop `systemMessage`, gated on a checkpoint filename ending in this session's suffix | Only derived CARRIED and NOT DEPLOYED flags, and only if non-empty; never a repeat of the Last and Next the skill just displayed. Empty suffix (CoCo, bare terminal): off | Doorway | Directly, if Stop `systemMessage` renders (unverified live) |
-| M5 end, no checkpoint | nothing at the end | The next arrival's `Ended` line, derived from `last_activity` against the newest checkpoint time | Held to the next doorway | Through the next brief |
-| M6 going wrong | nothing mid-session | Nothing new from borg; blocks (`bash-guard`) unchanged | none | none |
+| Moment | Push or pull |
+|--------|--------------|
+| M1 glance | Pull |
+| M2 next move | Pull |
+| M3 re-enter, launched through borg | Doorway |
+| M3 re-enter, hand-typed launch | Doorway (model-side) |
+| M3 re-enter, running window | Doorway |
+| M4 plan to do | none |
+| M5 end, checkpoint written | Doorway |
+| M5 end, no checkpoint | Held to the next doorway |
+| M6 going wrong | none |
+
+- **M1 glance** — Surface and channel: `borg link` verdict line; What appears: One line above everything: who needs you, how many dormant, whether it was swept; Reaches the human how: Directly
+- **M2 next move** — Surface and channel: `borg next`; What appears: The recommended move from the same ranker `borg link` uses, with a reason labelled a heuristic (status-driven, not value); the project's own checkpoint line quoted and attributed; whether it was followed is logged; Reaches the human how: Directly
+- **M3 re-enter, launched through borg** — Surface and channel: `drone claude` or `borg claude` prints before `claude` starts; What appears: The full brief (the orchestrator gets one cross-project verdict line); Reaches the human how: Directly, deterministic: stdout of the pane
+- **M3 re-enter, hand-typed `claude`, `/resume`, CoCo** — Surface and channel: SessionStart `additionalContext` (matchers `startup`, `resume`) and `sessionTitle`; What appears: To the model: derived lines. To the human: a one-line title cue only; Reaches the human how: The title cue directly (unverified); the brief by pulling `borg brief`
+- **M3 re-enter, running window** — Surface and channel: `borg switch` and `Ctrl+Space >` through `tmux display-message -d <ms> -C`; What appears: A one-line derived headline; Reaches the human how: Directly; non-modal and auto-expiring
+- **M4 plan to do** — Surface and channel: none in the MVP; What appears: Not addressed. The plan-exit doorway through `borg-plan-promote.sh` is dropped as fragile; Reaches the human how: none
+- **M5 end, checkpoint written** — Surface and channel: Stop `systemMessage`, gated on a checkpoint filename ending in this session's suffix; What appears: Only derived CARRIED and NOT DEPLOYED flags, and only if non-empty; never a repeat of the Last and Next the skill just displayed. Empty suffix (CoCo, bare terminal): off; Reaches the human how: Directly, if Stop `systemMessage` renders (unverified live)
+- **M5 end, no checkpoint** — Surface and channel: nothing at the end; What appears: The next arrival's `Ended` line, derived from `last_activity` against the newest checkpoint time; Reaches the human how: Through the next brief
+- **M6 going wrong** — Surface and channel: nothing mid-session; What appears: Nothing new from borg; blocks (`bash-guard`) unchanged; Reaches the human how: none
 
 - **Removes or quiets:** The 75-call count-based check-in (deleted). The git status and last-five-commits blocks of the session-start injection, only when the brief was built (replaced by "since the checkpoint"; a failed build keeps them). The `_borg_do_switch` echo that prints a `summary`-based auto-brief to the pane the user just left. The model's restate-on-first-reply instruction (never sent). A second ranker. It does not touch the three existing Stop warnings; a separate fix limits each to once per session.
 - **Pros / Cons:**
@@ -276,14 +350,27 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    git["git: commits, files, local merges since checkpoint; dirty files"] --> b["brief(): 12 lines max, derived first"]
-    plan["plan criteria and Verify lines"] --> b
-    st["state.json last_activity vs newest checkpoint time"] --> b
-    ck["latest checkpoint: Last, Next, Blocked verbatim"] --> b
-    b --> pr["launcher print: drone claude / borg claude"]
-    b --> ss["SessionStart startup/resume: model context + sessionTitle"]
-    b --> hk["display-message -d headline: borg switch / hotkey"]
-    wr["Stop: checkpoint with this session's suffix AND a derived flag"] --> rb["flags-only systemMessage"]
+    git["git: commits, files,
+    local merges since checkpoint;
+    dirty files"]
+    b["brief(): 12 lines max, derived first"]
+    plan["plan criteria and Verify lines"]
+    st["state.json last_activity<br/>vs newest checkpoint time"]
+    ck["latest checkpoint:<br/>Last, Next, Blocked verbatim"]
+    pr["launcher print:<br/>drone claude / borg claude"]
+    ss["SessionStart startup/resume:<br/>model context + sessionTitle"]
+    hk["display-message -d headline:<br/>borg switch / hotkey"]
+    wr["Stop: checkpoint with this
+    session's suffix AND a derived flag"]
+    rb["flags-only systemMessage"]
+    git --> b
+    plan --> b
+    st --> b
+    ck --> b
+    b --> pr
+    b --> ss
+    b --> hk
+    wr --> rb
 ```
 
 - **Minimum viable version:** *"The smallest version that delivers the core value is: `borg_core/brief` producing the derived-first 12-line arrival brief (an `Activity` line, local merges, a STALE line meaning the repo changed, a derived `Ended` line, then the checkpoint's words), printed by `drone claude` and `borg claude` before `claude` starts with a loud fallback if `borg_core` is missing, plus a matcher-scoped SessionStart injection for hand-typed launches; no SessionEnd hook, no popup, no restatement instruction, no new model-written fields."*
@@ -304,13 +391,36 @@ A second pair, "show less" against "silence reads as hung" (analysis.md 4.9), wa
 
 ### Option set at a glance
 
-| Option | Organising idea | Carries best | Leaves weak | Removes or quiets | MVP size |
-|--------|-----------------|--------------|-------------|-------------------|----------|
-| A One page, on a diet | The page is the only voice | M1, M2 | M4, M5 | Cube, `(no summary)`, dormant rows, 30-line queue | 1 session |
-| B Ambient periphery | State at the edge of vision | M1, M6 | M2, M5 | Capacity paragraph, 75-call text | 1 to 2 sessions |
-| C Quiet router with a budget | Gate every message | M6, M4 | M1, M2 | 75-call push, repeats, 3 Stop warnings | 1 to 2 sessions |
-| D Narrator per moment | A model composes the amount | M2, M3 | M1 (speed) | Verbatim paste for the human | 2 sessions |
-| E Doorways (revised) | Push only on the user's own transitions, on channels that reach him without a model | M3, M5 | M1, M2, M4 | 75-call push, git blocks of the injection, a second ranker | about 3 sessions |
+- **A One page, on a diet**
+  - Organising idea: The page is the only voice
+  - Carries best: M1, M2
+  - Leaves weak: M4, M5
+  - Removes or quiets: Cube, `(no summary)`, dormant rows, 30-line queue
+  - MVP size: 1 session
+- **B Ambient periphery**
+  - Organising idea: State at the edge of vision
+  - Carries best: M1, M6
+  - Leaves weak: M2, M5
+  - Removes or quiets: Capacity paragraph, 75-call text
+  - MVP size: 1 to 2 sessions
+- **C Quiet router with a budget**
+  - Organising idea: Gate every message
+  - Carries best: M6, M4
+  - Leaves weak: M1, M2
+  - Removes or quiets: 75-call push, repeats, 3 Stop warnings
+  - MVP size: 1 to 2 sessions
+- **D Narrator per moment**
+  - Organising idea: A model composes the amount
+  - Carries best: M2, M3
+  - Leaves weak: M1 (speed)
+  - Removes or quiets: Verbatim paste for the human
+  - MVP size: 2 sessions
+- **E Doorways (revised)**
+  - Organising idea: Push only on the user's own transitions, on channels that reach him without a model
+  - Carries best: M3, M5
+  - Leaves weak: M1, M2, M4
+  - Removes or quiets: 75-call push, git blocks of the injection, a second ranker
+  - MVP size: about 3 sessions
 
 ## Council + Dissent
 
@@ -328,18 +438,29 @@ Each persona speaks once and cites the track findings (analysis.md principle num
 
 ### Named risks (mandatory dissent log)
 
-| ID | Risk | Raised by | Mitigation in the recommendation |
-|----|------|-----------|-----------------------------------|
-| R1 (revised twice) | Round 2: the cold-start brief rested on a model restatement after his first prompt. Now: the launcher print is deterministic in what is sent, unverified in what is seen | Technical Realist | Launcher print; spike (a) checks it survives Claude's start-up; restatement dropped; the model still receives the derived lines |
-| R2 | The most visible mess (the page) is left alone while the best-evidenced moments are built | Product Strategist | Step 6, deletions only; this pick does not claim to fix M1 |
-| R3 | Handoff fields become box-ticking (mandated, ritual) | User Advocate | Four-field ceiling; mechanical checks do the policing, not the template; no mandate (C1-12, C1-14) |
-| R4 | Transfer is unproven (no study of a developer with many projects, none of a handoff to a future self or an agent) | All | The two gates; free to drop |
-| R5 | A suppressing gate hides a real failure (relevant if C is adopted later) | Technical Realist | Not built in this pick; if built, the ledger shows its own suppressions |
-| R6 (revised) | A 12-line brief printed on every launch is noise after a quick restart | User Advocate | Not-STALE collapse to the header and the Next line; no restatement, no popup |
-| R7 (revised) | Checkpoint-written gate trips on another session's checkpoint in a repo group | Technical Realist | Gate on the filename suffix `borg checkpoint-name` writes from the session id; empty suffix turns the read-back off. The SessionEnd hook is deleted, so there is no end record to misread |
-| R8 | The `Ended` gap (first guess 30 minutes) and the STALE baseline across rebases are guesses | Pragmatist | Shipped tunable; the brief shows counts so a wrong baseline is visible. STALE has no age threshold |
-| R9 | Unifying `borg next` and `borg link` on one ranker changes `borg next`'s answer and the goldens that pin it | Product Strategist | Diff the two on the live registry first and report how often the top pick differs; reason labelled a heuristic |
-| R10 | The launcher print covers only launches through `drone claude` and `borg claude`; its text may not survive Claude's start-up; the pane may be inside a container with no `borg` | Technical Realist, User Advocate | Spike (a); coverage ratio from a launcher marker; hold or Press Enter fallback; loud fallback line; a `claude` wrapper kept on the table |
+| ID | Raised by |
+|----|-----------|
+| R1 (revised twice) | Technical Realist |
+| R2 | Product Strategist |
+| R3 | User Advocate |
+| R4 | All |
+| R5 | Technical Realist |
+| R6 (revised) | User Advocate |
+| R7 (revised) | Technical Realist |
+| R8 | Pragmatist |
+| R9 | Product Strategist |
+| R10 | Technical Realist, User Advocate |
+
+- **R1 (revised twice)** — Risk: Round 2: the cold-start brief rested on a model restatement after his first prompt. Now: the launcher print is deterministic in what is sent, unverified in what is seen; Mitigation in the recommendation: Launcher print; spike (a) checks it survives Claude's start-up; restatement dropped; the model still receives the derived lines
+- **R2** — Risk: The most visible mess (the page) is left alone while the best-evidenced moments are built; Mitigation in the recommendation: Step 6, deletions only; this pick does not claim to fix M1
+- **R3** — Risk: Handoff fields become box-ticking (mandated, ritual); Mitigation in the recommendation: Four-field ceiling; mechanical checks do the policing, not the template; no mandate (C1-12, C1-14)
+- **R4** — Risk: Transfer is unproven (no study of a developer with many projects, none of a handoff to a future self or an agent); Mitigation in the recommendation: The two gates; free to drop
+- **R5** — Risk: A suppressing gate hides a real failure (relevant if C is adopted later); Mitigation in the recommendation: Not built in this pick; if built, the ledger shows its own suppressions
+- **R6 (revised)** — Risk: A 12-line brief printed on every launch is noise after a quick restart; Mitigation in the recommendation: Not-STALE collapse to the header and the Next line; no restatement, no popup
+- **R7 (revised)** — Risk: Checkpoint-written gate trips on another session's checkpoint in a repo group; Mitigation in the recommendation: Gate on the filename suffix `borg checkpoint-name` writes from the session id; empty suffix turns the read-back off. The SessionEnd hook is deleted, so there is no end record to misread
+- **R8** — Risk: The `Ended` gap (first guess 30 minutes) and the STALE baseline across rebases are guesses; Mitigation in the recommendation: Shipped tunable; the brief shows counts so a wrong baseline is visible. STALE has no age threshold
+- **R9** — Risk: Unifying `borg next` and `borg link` on one ranker changes `borg next`'s answer and the goldens that pin it; Mitigation in the recommendation: Diff the two on the live registry first and report how often the top pick differs; reason labelled a heuristic
+- **R10** — Risk: The launcher print covers only launches through `drone claude` and `borg claude`; its text may not survive Claude's start-up; the pane may be inside a container with no `borg`; Mitigation in the recommendation: Spike (a); coverage ratio from a launcher marker; hold or Press Enter fallback; loud fallback line; a `claude` wrapper kept on the table
 
 ### D5 blind review — round 1
 
@@ -351,17 +472,15 @@ Reviewer's conditions to uphold, as given: (1) move arrival delivery to SessionS
 
 **How round 2 answered it.** (Historical: the row and build-step references below are to the round-2 text, which round 3 superseded; the round-3 recommendation above has its own numbering.)
 
-| Condition | Where it is met |
-|-----------|-----------------|
-| 1. Arrival on `additionalContext`, model restates | §Recommendation table, row 1, and build step 2; the spike (step 1a) can replace the restatement with a direct `systemMessage` |
-| 2. Gated end signal | Row 3 (Stop gated to the turn a checkpoint is written) and row 4 (SessionEnd record read at the next arrival); build step 3 |
-| 3. Derived first, explicit no-checkpoint and stale lines | "The brief, derived first"; the model-written fields move to optional step 5 and two of the four become derived |
-| 4. New popup stated | Row 2 and build step 1c; the fallback if the popup fails is named |
-| Plan-exit doorway | Dropped from the MVP (step 6), with the condition for reviving it |
-| What E replaces in the injection | "What this replaces in the existing session-start injection" |
-| Glance and choose door | MVP line 3 and build step 4 |
-| Starmer bundle | Stated in "Why E over the cheaper A" and in the Option E cons |
-| Once-per-session Stop fix | Referenced as a dependency; E's Stop use is a gate on checkpoint creation, so it does not depend on that fix for correctness |
+- 1. Arrival on `additionalContext`, model restates — §Recommendation table, row 1, and build step 2; the spike (step 1a) can replace the restatement with a direct `systemMessage`
+- 2. Gated end signal — Row 3 (Stop gated to the turn a checkpoint is written) and row 4 (SessionEnd record read at the next arrival); build step 3
+- 3. Derived first, explicit no-checkpoint and stale lines — "The brief, derived first"; the model-written fields move to optional step 5 and two of the four become derived
+- 4. New popup stated — Row 2 and build step 1c; the fallback if the popup fails is named
+- Plan-exit doorway — Dropped from the MVP (step 6), with the condition for reviving it
+- What E replaces in the injection — "What this replaces in the existing session-start injection"
+- Glance and choose door — MVP line 3 and build step 4
+- Starmer bundle — Stated in "Why E over the cheaper A" and in the Option E cons
+- Once-per-session Stop fix — Referenced as a dependency; E's Stop use is a gate on checkpoint creation, so it does not depend on that fix for correctness
 
 ### D4 re-run, round 2 (brief)
 
@@ -387,13 +506,11 @@ Strongest objection: "The cold-start human path in revised E is a request to the
 
 **How round 3 answers it.**
 
-| Condition | Where it is met |
-|-----------|-----------------|
-| 1. Deliver the cold-start brief deterministically by printing it from the launchers; restatement optional; matcher-scope SessionStart; consider `sessionTitle` | Recommendation table row 1 (`cmd_claude` in `drone.zsh` types `claude` into the pane with `tmux send-keys`; `_borg_launch_in_tmux` in `borg.zsh` runs `"$@"`; both are print sites). The restatement is dropped, not made optional ("Why the restatement is dropped"). SessionStart is scoped to `startup` and `resume`. `sessionTitle` is the one-line cue, marked unverified (spike b) |
-| 2. Hotkey non-modal or auto-closing, never steals focus | Row 3: `tmux display-message -d <ms> -C`, checked against the tmux 3.6a manual (non-modal; the pane keeps updating). A popup is rejected because the manual says panes are not updated while one is present. Key handling during the message is spike d |
-| 3. Key the Stop gate on the session suffix; fallback for an empty suffix; read-back only if it carries derived flags the user has not seen | Build step 4: the gate is a checkpoint filename ending in `short_suffix(session_id)`, the same suffix `borg checkpoint-name` writes; an empty suffix turns the read-back off; Last and Next are no longer repeated, so a read-back with no non-empty flag is never sent |
-| 4. Delete the SessionEnd hook; derive "ended without checkpoint" at arrival | "Ended without a checkpoint with no SessionEnd hook": `last_activity` against the newest checkpoint time, read before SessionStart overwrites it |
-| 5. Activity line; honest STALE; local merges; one ranker with a heuristic label; log whether followed; fail-loud fallback; keep the git blocks unless the brief built; cut repetition; Parnin and DeLine | "The brief, derived first", "STALE, defined honestly", "Choosing, with one ranker", "Failure is loud", "Say each thing once", and the paragraph on which half of the evidence the activity line carries |
+- 1. Deliver the cold-start brief deterministically by printing it from the launchers; restatement optional; matcher-scope SessionStart; consider `sessionTitle` — Recommendation table row 1 (`cmd_claude` in `drone.zsh` types `claude` into the pane with `tmux send-keys`; `_borg_launch_in_tmux` in `borg.zsh` runs `"$@"`; both are print sites). The restatement is dropped, not made optional ("Why the restatement is dropped"). SessionStart is scoped to `startup` and `resume`. `sessionTitle` is the one-line cue, marked unverified (spike b)
+- 2. Hotkey non-modal or auto-closing, never steals focus — Row 3: `tmux display-message -d <ms> -C`, checked against the tmux 3.6a manual (non-modal; the pane keeps updating). A popup is rejected because the manual says panes are not updated while one is present. Key handling during the message is spike d
+- 3. Key the Stop gate on the session suffix; fallback for an empty suffix; read-back only if it carries derived flags the user has not seen — Build step 4: the gate is a checkpoint filename ending in `short_suffix(session_id)`, the same suffix `borg checkpoint-name` writes; an empty suffix turns the read-back off; Last and Next are no longer repeated, so a read-back with no non-empty flag is never sent
+- 4. Delete the SessionEnd hook; derive "ended without checkpoint" at arrival — "Ended without a checkpoint with no SessionEnd hook": `last_activity` against the newest checkpoint time, read before SessionStart overwrites it
+- 5. Activity line; honest STALE; local merges; one ranker with a heuristic label; log whether followed; fail-loud fallback; keep the git blocks unless the brief built; cut repetition; Parnin and DeLine — "The brief, derived first", "STALE, defined honestly", "Choosing, with one ranker", "Failure is loud", "Say each thing once", and the paragraph on which half of the evidence the activity line carries
 
 ### D4 re-run, round 3 (brief)
 

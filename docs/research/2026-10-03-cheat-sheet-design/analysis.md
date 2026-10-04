@@ -108,41 +108,57 @@ The research did not hand over a ready-made model, so this section builds one: t
 
 **P13: Keep it small, owned, non-duplicative, and labelled as a heuristic.** Moderate. Passive psychoeducation pooled to d = 0.20 (95% CI 0.01 to 0.40) from four RCTs [C3-05], and in a skills-component trial the taught and practiced skill, not the handout, was the active ingredient [C3-12]. Fourcade's audit of 1,440 procedures found 90.2% compliance but 61% completion, with duplication of existing checklists the top barrier in 16 of 18 centers [C1-05]; focus groups warned that "checklist fatigue" blocks a better list later [C1-11]; the mandated rollout in 101 Ontario hospitals saw mortality OR 0.91 (95% CI 0.80 to 1.03) [C1-12], and the originators themselves concede mandated use "may encourage box-ticking" [C1-14]. Diagrams are heuristics, not measurements: the window-of-tolerance chart is a trauma-clinic model [C3-04], the inverted-U arousal curve has been called folklore [C3-03], and the Four Horsemen's 93% divorce prediction was in-sample and failed to replicate [C3-07; C3-11]. A vocabulary should be built from the audience's own failures: the two programmer precedents (11 frustration categories, 6 learning barriers) came from observation, and nobody has tested whether showing the list helps [C2-04; C2-06].
 
-| # | Principle | Strength | Core cards |
-|---|-----------|----------|-----------|
-| P1 | Conclusion first, detail on request, two layers | Moderate (text) / Weak (layer cap) | S3-12, S3-13, S3-16, S3-03, S1-04 |
-| P2 | One message, few groups, no decoration | Moderate | C1-01, C1-02, C1-09, C1-03, S1-06 |
-| P3 | Size the set to the task | Weak to Moderate, contested | S3-15, S3-02, S3-05, S3-08, S3-18, S3-14 |
-| P4 | No decision-fatigue justification | Strong (lab null) / unresolved (field) | S3-07, S3-17, S3-04, S3-06, S3-11, S3-01 |
-| P5 | Recommended default: label it, show why | Weak, contested | S3-09, S3-10, S3-14 |
-| P6 | Frame and comparison; intentional blank | Weak to Moderate | S1-06, S1-08, S1-04, S1-10 |
-| P7 | Interrupt only urgent and actionable; budget | Moderate | S1-01, S1-07, S1-09, C4-06, C4-08, C4-05, C4-07, C4-11, S2-06 |
-| P8 | Display plus action; measure outcomes | Moderate | S1-11, S1-02, S1-03, S1-05 |
-| P9 | Re-present context; cue at departure | Moderate | S2-02, S2-07, S2-06 |
-| P10 | Fixed handoff fields from observed omissions, as a bundle | Moderate (content) / Weak (outcomes) | S2-08, S2-09, S2-10, S2-04, S2-05, S2-01, S2-03 |
-| P11 | Name routes to if-then next move | Moderate (mechanism) / Weak (format) | C2-11, C2-05, C2-10, C2-02, C3-09, C3-01, C3-10, C3-14 |
-| P12 | Cues at point of work, few and distinct | Moderate (mechanism) / Theory-only (ADHD) | C1-10, C1-08, C4-01, C4-02, C4-09, C1-04, S1-04 |
-| P13 | Small, owned, non-duplicative, heuristic | Moderate | C3-05, C3-12, C1-05, C1-11, C1-12, C1-14, C3-03, C3-04, C3-07, C3-11, C2-04, C2-06 |
+| # | Strength |
+|---|----------|
+| P1 | Moderate (text) / Weak (layer cap) |
+| P2 | Moderate |
+| P3 | Weak to Moderate, contested |
+| P4 | Strong (lab null) / unresolved (field) |
+| P5 | Weak, contested |
+| P6 | Weak to Moderate |
+| P7 | Moderate |
+| P8 | Moderate |
+| P9 | Moderate |
+| P10 | Moderate (content) / Weak (outcomes) |
+| P11 | Moderate (mechanism) / Weak (format) |
+| P12 | Moderate (mechanism) / Theory-only (ADHD) |
+| P13 | Moderate |
+
+- **P1** — Principle: Conclusion first, detail on request, two layers; Core cards: S3-12, S3-13, S3-16, S3-03, S1-04
+- **P2** — Principle: One message, few groups, no decoration; Core cards: C1-01, C1-02, C1-09, C1-03, S1-06
+- **P3** — Principle: Size the set to the task; Core cards: S3-15, S3-02, S3-05, S3-08, S3-18, S3-14
+- **P4** — Principle: No decision-fatigue justification; Core cards: S3-07, S3-17, S3-04, S3-06, S3-11, S3-01
+- **P5** — Principle: Recommended default: label it, show why; Core cards: S3-09, S3-10, S3-14
+- **P6** — Principle: Frame and comparison; intentional blank; Core cards: S1-06, S1-08, S1-04, S1-10
+- **P7** — Principle: Interrupt only urgent and actionable; budget; Core cards: S1-01, S1-07, S1-09, C4-06, C4-08, C4-05, C4-07, C4-11, S2-06
+- **P8** — Principle: Display plus action; measure outcomes; Core cards: S1-11, S1-02, S1-03, S1-05
+- **P9** — Principle: Re-present context; cue at departure; Core cards: S2-02, S2-07, S2-06
+- **P10** — Principle: Fixed handoff fields from observed omissions, as a bundle; Core cards: S2-08, S2-09, S2-10, S2-04, S2-05, S2-01, S2-03
+- **P11** — Principle: Name routes to if-then next move; Core cards: C2-11, C2-05, C2-10, C2-02, C3-09, C3-01, C3-10, C3-14
+- **P12** — Principle: Cues at point of work, few and distinct; Core cards: C1-10, C1-08, C4-01, C4-02, C4-09, C1-04, S1-04
+- **P13** — Principle: Small, owned, non-duplicative, heuristic; Core cards: C3-05, C3-12, C1-05, C1-11, C1-12, C1-14, C3-03, C3-04, C3-07, C3-11, C2-04, C2-06
 
 ### 3.2 Which principles bind at which moment
 
 A filled circle means the principle is a hard constraint at that moment; an open circle means it applies more softly or by implication.
 
-| Principle | M1 Glance | M2 Next move | M3 Re-enter | M4 Plan vs do | M5 End / hand off | M6 Going wrong |
-|-----------|-----------|--------------|-------------|---------------|-------------------|----------------|
+| Principle | M1 | M2 | M3 | M4 | M5 | M6 |
+|---|---|---|---|---|---|---|
 | P1 Conclusion first, two layers | ● | ● | ● | ● | ○ | ○ |
 | P2 One message, few groups | ● | ● | ● | ○ | ● | ● |
-| P3 Size the set to the task | ○ | ● | | | | |
-| P4 No decision-fatigue justification | ○ | ● | | | | |
-| P5 Label the recommendation, show why | | ● | ○ | | | |
-| P6 Frame, comparison, intentional blank | ● | | | | | ○ |
-| P7 Interrupt budget | ○ | | ○ | ● | | ● |
-| P8 Display plus action; outcomes | ● | ○ | | | | ● |
-| P9 Re-present context; cue at departure | | | ● | ● | ● | |
-| P10 Fixed handoff fields | | | ○ | | ● | |
-| P11 Name routes to if-then move | | ○ | ○ | ● | | ● |
-| P12 Cue at the point of work | ○ | | ○ | ● | | ○ |
+| P3 Size the set to the task | ○ | ● |  |  |  |  |
+| P4 No decision-fatigue justification | ○ | ● |  |  |  |  |
+| P5 Label the recommendation, show why |  | ● | ○ |  |  |  |
+| P6 Frame, comparison, intentional blank | ● |  |  |  |  | ○ |
+| P7 Interrupt budget | ○ |  | ○ | ● |  | ● |
+| P8 Display plus action; outcomes | ● | ○ |  |  |  | ● |
+| P9 Re-present context; cue at departure |  |  | ● | ● | ● |  |
+| P10 Fixed handoff fields |  |  | ○ |  | ● |  |
+| P11 Name routes to if-then move |  | ○ | ○ | ● |  | ● |
+| P12 Cue at the point of work | ○ |  | ○ | ● |  | ○ |
 | P13 Small, owned, heuristic | ○ | ○ | ○ | ○ | ● | ○ |
+
+Moments: M1 Glance, M2 Next move, M3 Re-enter, M4 Plan vs do, M5 End / hand off, M6 Going wrong.
 
 ### 3.3 The six moments, one at a time
 
@@ -242,19 +258,17 @@ The ADHD evidence is a supporting strand, not the frame. What it adds is a reaso
 
 ### 4.7 The strongest negatives
 
-| Claim a reader might hope for | Strongest evidence against | Source | Reading |
-|-------------------------------|---------------------------|--------|---------|
-| Better situational awareness means better decisions | Mean r = 0.26, plausible range -0.15 to 0.60, 678 effects | [S1-02] | Use SA as a checklist for what to show; measure outcomes |
-| A dashboard changes behavior | 11 RCTs: conflicting or null for standalone dashboards | [S1-11] | Couple display to action |
-| Willpower drains as you decide | d = 0.04 (23 labs); d = 0.06 (36 labs) | [S3-07; S3-17] | Do not use depletion to justify limits |
-| The hungry judge shows decision fatigue | Implied d = 1.96; reproduced by a rational-judge simulation | [S3-06] | Treat the story as an artefact |
-| Fewer options always helps | Pooled mean about zero over 63 conditions | [S3-15] | Condition the cap on task difficulty [S3-02] |
-| Nudges and defaults are reliable levers | No evidence overall after publication-bias correction | [S3-10] | Defaults are plausible, size unknown [S3-09] |
-| A handoff script saves outcomes | Two RCTs null on clinical outcomes; orthopaedic null | [S2-04; S2-05] | The script is one part of a bundle |
-| Reminders and apps fix adherence | SMS reminders no effect; app trial null | [C4-08; C4-05] | Default to pull |
-| Checklists work when mandated | Ontario OR 0.91 (CI 0.80 to 1.03) | [C1-12] | Do not mandate |
-| A handout teaches | Passive psychoeducation d = 0.20 | [C3-05] | Rehearsal carries the weight |
-| Naming a feeling regulates it | Naming before reappraisal made people feel worse | [C2-10; C2-02] | Pair every name with a next move |
+- **Better situational awareness means better decisions** — Strongest evidence against: Mean r = 0.26, plausible range -0.15 to 0.60, 678 effects; Source: [S1-02]; Reading: Use SA as a checklist for what to show; measure outcomes
+- **A dashboard changes behavior** — Strongest evidence against: 11 RCTs: conflicting or null for standalone dashboards; Source: [S1-11]; Reading: Couple display to action
+- **Willpower drains as you decide** — Strongest evidence against: d = 0.04 (23 labs); d = 0.06 (36 labs); Source: [S3-07; S3-17]; Reading: Do not use depletion to justify limits
+- **The hungry judge shows decision fatigue** — Strongest evidence against: Implied d = 1.96; reproduced by a rational-judge simulation; Source: [S3-06]; Reading: Treat the story as an artefact
+- **Fewer options always helps** — Strongest evidence against: Pooled mean about zero over 63 conditions; Source: [S3-15]; Reading: Condition the cap on task difficulty [S3-02]
+- **Nudges and defaults are reliable levers** — Strongest evidence against: No evidence overall after publication-bias correction; Source: [S3-10]; Reading: Defaults are plausible, size unknown [S3-09]
+- **A handoff script saves outcomes** — Strongest evidence against: Two RCTs null on clinical outcomes; orthopaedic null; Source: [S2-04; S2-05]; Reading: The script is one part of a bundle
+- **Reminders and apps fix adherence** — Strongest evidence against: SMS reminders no effect; app trial null; Source: [C4-08; C4-05]; Reading: Default to pull
+- **Checklists work when mandated** — Strongest evidence against: Ontario OR 0.91 (CI 0.80 to 1.03); Source: [C1-12]; Reading: Do not mandate
+- **A handout teaches** — Strongest evidence against: Passive psychoeducation d = 0.20; Source: [C3-05]; Reading: Rehearsal carries the weight
+- **Naming a feeling regulates it** — Strongest evidence against: Naming before reappraisal made people feel worse; Source: [C2-10; C2-02]; Reading: Pair every name with a next move
 
 ### 4.8 Bias-guard note and the steel-man
 
@@ -413,45 +427,43 @@ Format: **Author year** [ID] [band | evidence level]. Band is keep, borderline o
 
 **Search log** (grouped by subtopic; F marks falsification queries; counts are logged actions):
 
-| # | Track and subtopic | Queries (examples) | Count | Cards produced |
-|---|--------------------|--------------------|-------|----------------|
-| 1 | C1 cognitive load, chunking, recognition | CLT critique (F, adapter and web); Cowan 2001; NN/g recognition vs recall; Kofler ADHD working memory | 5 | Cowan, de Jong, NN/g, Kofler |
-| 2 | C1 multimedia, pictures, dual coding | Mayer meta-analysis (adapter and web); dual coding critique (F); Carney and Levin; patient-education pictograms | 4 | Mayer, Higdon, Wang and Voss |
-| 3 | C1 checklists and job aids | Haynes 2009; Urbach 2014 (F); checklist fatigue and box-ticking (F); adapter and web on job aids; Rossett | 6 | Haynes, Urbach, Thomassen, Fourcade, Weiser |
-| 4 | C1 pre-attentive, colour, handout design | Few 2004; colour-coding benefit and harm (F); CDC Clear Communication Index | 3 | Few, CDC |
-| 5 | C2 affect labeling | Lieberman 2007; Torre and Lieberman 2018; adapter meta-analysis; Nook 2021 (F) | 4 | Lieberman, Torre, Nook, Ariely, Wahba |
-| 6 | C2 granularity | Kashdan 2015; adapter ED and regulation; Seah and Coifman; ED measurement criticism (F) | 4 | Seah, Kalokerinos, Thompson, Matt |
-| 7 | C2 feeling wheel | Willcox 1982; Willcox evaluation or effectiveness (F/gap) | 2 | AAN-Willcox |
-| 8 | C2 IFS | adapter IFS RCT; IFS critique (F); Europe PMC IFS PTSD | 3 | Shadick, Brownstone |
-| 9 | C2 externalization, narrative, self-distance | adapter; narrative therapy effectiveness; Kross third-person self-talk | 3 | Moser/Kross (Dulwich excluded) |
-| 10 | C2 work-state taxonomies | developer blockers taxonomy; shared terminology; Ko et al.; Ford and Parnin | 4 | Ko, Ford and Parnin |
-| 11 | C2 ADHD and lived experience | alexithymia in ADHD; ADHD feelings wheel; ADHD developer blog | 3 | none kept (Shimmer, Substack excluded) |
-| 12 | C3 if-then scripts | Gollwitzer and Sheeran 2006; ADHD implementation intentions; publication bias (F); two adapter runs; ADHD personal accounts | 6 | 642-tests, Gawrilow, Brighter |
-| 13 | C3 NVC and I-statements | NVC evidence and critique (F); NVC RCT or review; I-statements; adapter NVC | 4 | Park NVC RCT, Rogers I-language |
-| 14 | C3 state maps | NICABM chart; Corrigan critique (F); Yerkes-Dodson (F); wise mind evidence; Linehan 2015; Neacsiu 2010 | 6 | Corrigan, Corbett, Linehan, PA DHS (NICABM excluded) |
-| 15 | C3 antidote pairing | Gottman and Levenson 2000; Heyman and Slep (F); Alfieri; Keith and Frese; adapter Gottman | 5 | Gottman-Levenson, Kim, Alfieri, Keith and Frese |
-| 16 | C3 psychoeducation and handouts | Donker 2009; Kazantzis; handout stickiness; reddit ADHD/DBT handouts; adapter; feelings wheel plus ADHD | 6 | Donker (Just1Voice excluded) |
-| 17 | C4 externalization and offloading | Barkley point of performance; CHADD; Risko and Gilbert; adult ADHD working memory (adapter and Europe PMC) | 7 | Barkley, CHOP, Risko and Gilbert |
-| 18 | C4 emotion dysregulation, stress | Shaw, Faraone, Arnsten (adapter, web, Europe PMC) | 6 | Shaw, Faraone, Arnsten |
-| 19 | C4 JITAI | Nahum-Shani (adapter and web) | 2 | Nahum-Shani, van Genugten |
-| 20 | C4 apps, reminders, fatigue | ADHD app evidence (F); notification fatigue (F); "I stopped seeing reminders" (F); reddit; Hacker News; developer blog; adapter | 8 | FOCUS, Nordby, Gani |
-| 21 | S1 SA theory, measurement, validity | Endsley 1995 three levels; Dekker/Flach circularity (F); SAGAT validity; SA meta-analysis of performance validity | 4 | Bakdash, Carsten, Endsley SAGAT |
-| 22 | S1 alarms and alert fatigue | EEMUA 191 alarm rate; HSE Bransby and Jenkinson; alarm flood human factors; Ancker 2017 | 4 | Reising, Ancker |
-| 23 | S1 dashboards | dashboards do not improve decisions (F); Few dashboard SA; Hacker News alert fatigue and dashboard | 3 | Xie, Few 2007, Hawksley |
-| 24 | S1 Kanban and flow | cumulative flow diagram comprehension; kanban visualization; burndown chart evidence | 2 | Rodrigues |
-| 25 | S1 glanceability and CLI design | glanceable display (adapter); clig.dev fetched directly | 2 | clig |
-| 26 | S2 handoff outcomes | I-PASS NEJM 2014; implementation fidelity multicenter; nursing and PICU | 4 | Starmer 2014, Starmer 2022 |
-| 27 | S2 handoff content and tools | what to include in a handoff; AHRQ TeamSTEPPS I-PASS | 2 | Heilman, Starmer 2012, MHS IV |
-| 28 | S2 falsification | I-PASS no improvement (F); standardized handoff reviews (F); handoff null results (F); handoff ritual and ethnography critique (F) | 4 | Orthopaedic I-PASS, Abraham |
-| 29 | S2 SBAR | SBAR effectiveness systematic review | 1 | none (MHS IV supersedes) |
-| 30 | S2 resumption theory and cues | Parnin and Rugaber; Altmann and Trafton memory for goals; preparing to resume; Parnin and DeLine cues; Iqbal and Horvitz | 5 | Altmann and Trafton, Parnin and DeLine |
-| 31 | S2 task context and developer practice | Mylyn task context; resumption cue developers; developer notes and TODO technique | 3 | Parnin 2013 |
-| 32 | S3 choice overload | Scheibehenne 2010; Chernev 2015; conceptual review; single vs ranked list; list length; highlighted top recommendation | 6 | Scheibehenne, Chernev, Dean, Willemsen, Romero |
-| 33 | S3 ego depletion and decision fatigue | Hagger 2016; Glockner 2016; Weinshall-Margel; Vohs 2021; depletion meta-analysis and publication bias (F); decision fatigue validity (F) | 6 | Hagger, Vohs, Dang, Glockner, Maier 2025 |
-| 34 | S3 defaults and nudging | Jachimowicz 2019; Maier 2022 | 2 | Jachimowicz, Maier 2022 |
-| 35 | S3 information overload and layering | Cockburn 2008; Eppler and Mengis 2004; plain language and conclusion first; progressive disclosure UI; executive summary placement; overload in knowledge work | 6 | Cockburn, Arnold |
-| 36 | S3 direct fetches | Shneiderman 1996; NN/g progressive disclosure; Morkes and Nielsen 1997; Iyengar and Lepper 2000; arXiv 2212.03931; NN/g inverted pyramid; Danziger 2011 abstract | 7 | Shneiderman, NN/g, Morkes and Nielsen, Iyengar and Lepper |
-| | **Total** | | **152** | **98** |
+- **1** — Track and subtopic: C1 cognitive load, chunking, recognition; Queries (examples): CLT critique (F, adapter and web); Cowan 2001; NN/g recognition vs recall; Kofler ADHD working memory; Count: 5; Cards produced: Cowan, de Jong, NN/g, Kofler
+- **2** — Track and subtopic: C1 multimedia, pictures, dual coding; Queries (examples): Mayer meta-analysis (adapter and web); dual coding critique (F); Carney and Levin; patient-education pictograms; Count: 4; Cards produced: Mayer, Higdon, Wang and Voss
+- **3** — Track and subtopic: C1 checklists and job aids; Queries (examples): Haynes 2009; Urbach 2014 (F); checklist fatigue and box-ticking (F); adapter and web on job aids; Rossett; Count: 6; Cards produced: Haynes, Urbach, Thomassen, Fourcade, Weiser
+- **4** — Track and subtopic: C1 pre-attentive, colour, handout design; Queries (examples): Few 2004; colour-coding benefit and harm (F); CDC Clear Communication Index; Count: 3; Cards produced: Few, CDC
+- **5** — Track and subtopic: C2 affect labeling; Queries (examples): Lieberman 2007; Torre and Lieberman 2018; adapter meta-analysis; Nook 2021 (F); Count: 4; Cards produced: Lieberman, Torre, Nook, Ariely, Wahba
+- **6** — Track and subtopic: C2 granularity; Queries (examples): Kashdan 2015; adapter ED and regulation; Seah and Coifman; ED measurement criticism (F); Count: 4; Cards produced: Seah, Kalokerinos, Thompson, Matt
+- **7** — Track and subtopic: C2 feeling wheel; Queries (examples): Willcox 1982; Willcox evaluation or effectiveness (F/gap); Count: 2; Cards produced: AAN-Willcox
+- **8** — Track and subtopic: C2 IFS; Queries (examples): adapter IFS RCT; IFS critique (F); Europe PMC IFS PTSD; Count: 3; Cards produced: Shadick, Brownstone
+- **9** — Track and subtopic: C2 externalization, narrative, self-distance; Queries (examples): adapter; narrative therapy effectiveness; Kross third-person self-talk; Count: 3; Cards produced: Moser/Kross (Dulwich excluded)
+- **10** — Track and subtopic: C2 work-state taxonomies; Queries (examples): developer blockers taxonomy; shared terminology; Ko et al.; Ford and Parnin; Count: 4; Cards produced: Ko, Ford and Parnin
+- **11** — Track and subtopic: C2 ADHD and lived experience; Queries (examples): alexithymia in ADHD; ADHD feelings wheel; ADHD developer blog; Count: 3; Cards produced: none kept (Shimmer, Substack excluded)
+- **12** — Track and subtopic: C3 if-then scripts; Queries (examples): Gollwitzer and Sheeran 2006; ADHD implementation intentions; publication bias (F); two adapter runs; ADHD personal accounts; Count: 6; Cards produced: 642-tests, Gawrilow, Brighter
+- **13** — Track and subtopic: C3 NVC and I-statements; Queries (examples): NVC evidence and critique (F); NVC RCT or review; I-statements; adapter NVC; Count: 4; Cards produced: Park NVC RCT, Rogers I-language
+- **14** — Track and subtopic: C3 state maps; Queries (examples): NICABM chart; Corrigan critique (F); Yerkes-Dodson (F); wise mind evidence; Linehan 2015; Neacsiu 2010; Count: 6; Cards produced: Corrigan, Corbett, Linehan, PA DHS (NICABM excluded)
+- **15** — Track and subtopic: C3 antidote pairing; Queries (examples): Gottman and Levenson 2000; Heyman and Slep (F); Alfieri; Keith and Frese; adapter Gottman; Count: 5; Cards produced: Gottman-Levenson, Kim, Alfieri, Keith and Frese
+- **16** — Track and subtopic: C3 psychoeducation and handouts; Queries (examples): Donker 2009; Kazantzis; handout stickiness; reddit ADHD/DBT handouts; adapter; feelings wheel plus ADHD; Count: 6; Cards produced: Donker (Just1Voice excluded)
+- **17** — Track and subtopic: C4 externalization and offloading; Queries (examples): Barkley point of performance; CHADD; Risko and Gilbert; adult ADHD working memory (adapter and Europe PMC); Count: 7; Cards produced: Barkley, CHOP, Risko and Gilbert
+- **18** — Track and subtopic: C4 emotion dysregulation, stress; Queries (examples): Shaw, Faraone, Arnsten (adapter, web, Europe PMC); Count: 6; Cards produced: Shaw, Faraone, Arnsten
+- **19** — Track and subtopic: C4 JITAI; Queries (examples): Nahum-Shani (adapter and web); Count: 2; Cards produced: Nahum-Shani, van Genugten
+- **20** — Track and subtopic: C4 apps, reminders, fatigue; Queries (examples): ADHD app evidence (F); notification fatigue (F); "I stopped seeing reminders" (F); reddit; Hacker News; developer blog; adapter; Count: 8; Cards produced: FOCUS, Nordby, Gani
+- **21** — Track and subtopic: S1 SA theory, measurement, validity; Queries (examples): Endsley 1995 three levels; Dekker/Flach circularity (F); SAGAT validity; SA meta-analysis of performance validity; Count: 4; Cards produced: Bakdash, Carsten, Endsley SAGAT
+- **22** — Track and subtopic: S1 alarms and alert fatigue; Queries (examples): EEMUA 191 alarm rate; HSE Bransby and Jenkinson; alarm flood human factors; Ancker 2017; Count: 4; Cards produced: Reising, Ancker
+- **23** — Track and subtopic: S1 dashboards; Queries (examples): dashboards do not improve decisions (F); Few dashboard SA; Hacker News alert fatigue and dashboard; Count: 3; Cards produced: Xie, Few 2007, Hawksley
+- **24** — Track and subtopic: S1 Kanban and flow; Queries (examples): cumulative flow diagram comprehension; kanban visualization; burndown chart evidence; Count: 2; Cards produced: Rodrigues
+- **25** — Track and subtopic: S1 glanceability and CLI design; Queries (examples): glanceable display (adapter); clig.dev fetched directly; Count: 2; Cards produced: clig
+- **26** — Track and subtopic: S2 handoff outcomes; Queries (examples): I-PASS NEJM 2014; implementation fidelity multicenter; nursing and PICU; Count: 4; Cards produced: Starmer 2014, Starmer 2022
+- **27** — Track and subtopic: S2 handoff content and tools; Queries (examples): what to include in a handoff; AHRQ TeamSTEPPS I-PASS; Count: 2; Cards produced: Heilman, Starmer 2012, MHS IV
+- **28** — Track and subtopic: S2 falsification; Queries (examples): I-PASS no improvement (F); standardized handoff reviews (F); handoff null results (F); handoff ritual and ethnography critique (F); Count: 4; Cards produced: Orthopaedic I-PASS, Abraham
+- **29** — Track and subtopic: S2 SBAR; Queries (examples): SBAR effectiveness systematic review; Count: 1; Cards produced: none (MHS IV supersedes)
+- **30** — Track and subtopic: S2 resumption theory and cues; Queries (examples): Parnin and Rugaber; Altmann and Trafton memory for goals; preparing to resume; Parnin and DeLine cues; Iqbal and Horvitz; Count: 5; Cards produced: Altmann and Trafton, Parnin and DeLine
+- **31** — Track and subtopic: S2 task context and developer practice; Queries (examples): Mylyn task context; resumption cue developers; developer notes and TODO technique; Count: 3; Cards produced: Parnin 2013
+- **32** — Track and subtopic: S3 choice overload; Queries (examples): Scheibehenne 2010; Chernev 2015; conceptual review; single vs ranked list; list length; highlighted top recommendation; Count: 6; Cards produced: Scheibehenne, Chernev, Dean, Willemsen, Romero
+- **33** — Track and subtopic: S3 ego depletion and decision fatigue; Queries (examples): Hagger 2016; Glockner 2016; Weinshall-Margel; Vohs 2021; depletion meta-analysis and publication bias (F); decision fatigue validity (F); Count: 6; Cards produced: Hagger, Vohs, Dang, Glockner, Maier 2025
+- **34** — Track and subtopic: S3 defaults and nudging; Queries (examples): Jachimowicz 2019; Maier 2022; Count: 2; Cards produced: Jachimowicz, Maier 2022
+- **35** — Track and subtopic: S3 information overload and layering; Queries (examples): Cockburn 2008; Eppler and Mengis 2004; plain language and conclusion first; progressive disclosure UI; executive summary placement; overload in knowledge work; Count: 6; Cards produced: Cockburn, Arnold
+- **36** — Track and subtopic: S3 direct fetches; Queries (examples): Shneiderman 1996; NN/g progressive disclosure; Morkes and Nielsen 1997; Iyengar and Lepper 2000; arXiv 2212.03931; NN/g inverted pyramid; Danziger 2011 abstract; Count: 7; Cards produced: Shneiderman, NN/g, Morkes and Nielsen, Iyengar and Lepper
+- **Total** — Count: **152**; Cards produced: **98**
 
 The Google site-reliability chapter (card S1-07) was fetched directly from a known URL and is not tied to a logged query. Subtopics that ended with fewer than three varied queries because the web-search budget ran out: S1 glanceability (1), command-line information design (0 searches), the "single pane of glass" critique (0), S1 alert fatigue (1), and in S3 the plain-language doctrine and any Szaszi-type rebuttal to the nudging correction.
 
@@ -459,66 +471,62 @@ The Google site-reliability chapter (card S1-07) was fetched directly from a kno
 
 **Triage-out log, first run (C1 to C4)** (not carded; one-line reason):
 
-| Item | Track | Reason |
-|------|-------|--------|
-| Fusco 2025 oncology data visualisation | C1 | Redundant with Few; used as a corroboration note only |
-| redasadki.me Mayer blog | C1 | Practitioner opinion, low authority |
-| Jelacic 2023 OR checklists | C1 | Off-topic for design features |
-| Adapter "job aids" (Navy, antenatal, health worker) | C1 | Domain mismatch |
-| Adapter cognitive-load metrics, Popper pieces | C1 | Irrelevant |
-| Wikipedia, Medium, UX blogs | C1 | Tertiary, not fetched |
-| Hu 2024 narrative therapy meta-analysis | C2 | GRADE very low, I2 95%, not about externalization |
-| Edel 2015 ADHD alexithymia | C2 | Correlational n = 78; did not support the use |
-| Vromans and Schweitzer 2011, Lopes 2014 | C2 | Snippets only, not fetched |
-| Lay pages with "20-40%" ADHD alexithymia | C2 | No primary traced |
-| Espinosa 2007 shared mental models | C2 | Blocked; leaves a gap |
-| Antipatterns in software taxonomies (arXiv) | C2 | About software classification, not work states |
-| Wikipedia IFS, therapygroupdc, innerlifestrategies | C2 | Secondary summaries |
-| Adapter noise (nutrition labels, art therapy) | C2 | Off topic |
-| Heyman and Slep 2001 | C3 | Paywalled; abstract summaries only |
-| Kazantzis 2010; Beck Institute homework blog | C3 | Blocked; quote could not be verified, discarded |
-| Toli 2016 clinical implementation intentions | C3 | Verified but superseded by the 2025 meta-analysis |
-| Neacsiu 2010 | C3 | Fetched, not carded to cap size |
-| Learning Scientists, simplypsychology, helpfulprofessor | C3 | Corroboration only or uncritical popularising |
-| Iran NVC studies, breast cancer and childbirth psychoeducation | C3 | Low quality or disease-specific |
-| Gottman marketing pages (94% claims), ML divorce prediction | C3 | Promotional, or circular in-sample |
-| Wikipedia, goodreads, ebay, scribd | C3 | Non-primary |
-| Soler-Gutierrez 2023 | C4 | Good but redundant with Shaw and Faraone |
-| Schweitzer 2006 adult working memory | C4 | n = 51, 2006, abstract only; leaves adult WM as a gap |
-| Hu 2019, AI-offloading papers | C4 | Off-track or redundant with Risko and Gilbert |
-| Hardeman 2019, Hollis 2016, Shou 2022, Parkin 2022 | C4 | Domain, population or scope mismatch |
-| Joseph 2021, Hussain 2021 alert fatigue | C4 | Older or non-peer-reviewed; Gani supersedes |
-| Bored Leopard Substack thread (2026-05-09) | C4 | Rubric reject (about 4.4, anecdote); used as illustration only |
-| chudi.dev ADHD tool stack (2026-07-21) | C4 | Rubric reject (about 4.4, affiliate links); illustration only |
-| Product roundups, HN todo thread, 49-96% override stat | C4 | Marketing, off-target, or single secondary source |
+- **Fusco 2025 oncology data visualisation** — Track: C1; Reason: Redundant with Few; used as a corroboration note only
+- **redasadki.me Mayer blog** — Track: C1; Reason: Practitioner opinion, low authority
+- **Jelacic 2023 OR checklists** — Track: C1; Reason: Off-topic for design features
+- **Adapter "job aids" (Navy, antenatal, health worker)** — Track: C1; Reason: Domain mismatch
+- **Adapter cognitive-load metrics, Popper pieces** — Track: C1; Reason: Irrelevant
+- **Wikipedia, Medium, UX blogs** — Track: C1; Reason: Tertiary, not fetched
+- **Hu 2024 narrative therapy meta-analysis** — Track: C2; Reason: GRADE very low, I2 95%, not about externalization
+- **Edel 2015 ADHD alexithymia** — Track: C2; Reason: Correlational n = 78; did not support the use
+- **Vromans and Schweitzer 2011, Lopes 2014** — Track: C2; Reason: Snippets only, not fetched
+- **Lay pages with "20-40%" ADHD alexithymia** — Track: C2; Reason: No primary traced
+- **Espinosa 2007 shared mental models** — Track: C2; Reason: Blocked; leaves a gap
+- **Antipatterns in software taxonomies (arXiv)** — Track: C2; Reason: About software classification, not work states
+- **Wikipedia IFS, therapygroupdc, innerlifestrategies** — Track: C2; Reason: Secondary summaries
+- **Adapter noise (nutrition labels, art therapy)** — Track: C2; Reason: Off topic
+- **Heyman and Slep 2001** — Track: C3; Reason: Paywalled; abstract summaries only
+- **Kazantzis 2010; Beck Institute homework blog** — Track: C3; Reason: Blocked; quote could not be verified, discarded
+- **Toli 2016 clinical implementation intentions** — Track: C3; Reason: Verified but superseded by the 2025 meta-analysis
+- **Neacsiu 2010** — Track: C3; Reason: Fetched, not carded to cap size
+- **Learning Scientists, simplypsychology, helpfulprofessor** — Track: C3; Reason: Corroboration only or uncritical popularising
+- **Iran NVC studies, breast cancer and childbirth psychoeducation** — Track: C3; Reason: Low quality or disease-specific
+- **Gottman marketing pages (94% claims), ML divorce prediction** — Track: C3; Reason: Promotional, or circular in-sample
+- **Wikipedia, goodreads, ebay, scribd** — Track: C3; Reason: Non-primary
+- **Soler-Gutierrez 2023** — Track: C4; Reason: Good but redundant with Shaw and Faraone
+- **Schweitzer 2006 adult working memory** — Track: C4; Reason: n = 51, 2006, abstract only; leaves adult WM as a gap
+- **Hu 2019, AI-offloading papers** — Track: C4; Reason: Off-track or redundant with Risko and Gilbert
+- **Hardeman 2019, Hollis 2016, Shou 2022, Parkin 2022** — Track: C4; Reason: Domain, population or scope mismatch
+- **Joseph 2021, Hussain 2021 alert fatigue** — Track: C4; Reason: Older or non-peer-reviewed; Gani supersedes
+- **Bored Leopard Substack thread (2026-05-09)** — Track: C4; Reason: Rubric reject (about 4.4, anecdote); used as illustration only
+- **chudi.dev ADHD tool stack (2026-07-21)** — Track: C4; Reason: Rubric reject (about 4.4, affiliate links); illustration only
+- **Product roundups, HN todo thread, 49-96% override stat** — Track: C4; Reason: Marketing, off-target, or single secondary source
 
 **Triage-out log, re-scoped run (S1 to S3)** (not carded; one-line reason):
 
-| Item | Track | Reason |
-|------|-------|--------|
-| Wikipedia, Wrike, Kanbantool, Adobe, Kissflow, Microtool flow-diagram explainers | S1 | Vendor or tutorial content, no comprehension evidence |
-| Buddaraju 2011 alarm-management thesis | S1 | Master's thesis, abstract only; redundant with Reising 2005 |
-| Guy 2016 alarm-flood thesis | S1 | Abstract only; priority-distribution claim unverified; noted as a lead |
-| Matthews 2006 glanceable displays | S1 | Proposal-style abstract with no findings; glanceability left as a gap |
-| Ericsson and Granlof 2011 Kanban thesis | S1 | Student thesis, abstract only; superseded by Rodrigues 2026 |
-| Seqent, Industry Digits, Emerson, ABB, exida alarm pages | S1 | Vendor marketing around EEMUA numbers |
-| medium.com dashboard survey, ResearchGate "interactive dashboards", two arXiv LLM-interface preprints | S1 | Weak, off-topic, or not fetched |
-| Hacker News dashboard comments | S1 | Noise; only the Timeframe post kept |
-| Flach 1995, Dekker and Hollnagel 2004, Endsley 1995 and 2015, Sarter and Woods 1995 | S1 | Paywalled; listed in paywalled candidates |
-| Parnin and Rugaber 2009 and 2011 | S2 | Abstract only or Springer redirect; redundant with Parnin 2013 numbers |
-| Kersten and Murphy 2015 (Mylyn) | S2 | Generic abstract, no effect size |
-| Muller 2018 SBAR review, Rosenthal 2017, Shahid 2018, Patel 2024, Tarter 2026, Rasiya 2026 | S2 | Redundant with or weaker than MHS IV 2025 and Abraham 2013 |
-| Horwitz 2013 JAMA editorial | S2 | Commentary on a pre-2014 evidence base |
-| Borst 2015, Ratwani and Trafton 2007, Monk 2004, Radovic 2026, Labonte 2021, Perry 2020, Moon 2016, Yin 2014, Puente 2017, Yang 2011 | S2 | Lab-only, off-task, or redundant with Parnin and Altmann |
-| Aiss 2025, Gagnier 2016, Mueller 2023, Lakhani 2025 nursing QI | S2 | Single-site process outcomes; Heilman kept as the one frontline voice |
-| Content-mill developer-productivity blogs (seven sites) | S2 | Uncited numbers, SEO, sales intent |
-| Hacker News item 35459333; two handover-ritual ethnographies | S2 | Not fetched or HTTP 403; ethnographies logged as paywalled |
-| Swedish plain-language thesis | S3 | Student thesis, wrong population, null |
-| Inzlicht and Friese 2019; Carter and McCullough 2014 | S3 | Commentary or redundant with Hagger, Vohs, Glockner |
-| NN/g Inverted Pyramid (Schade 2018) | S3 | Non-independent restatement of Morkes and Nielsen |
-| Loepp 2023 multi-list interfaces | S3 | No outcome data on list size |
-| Hospitality choice-overload SLR, haptic-input paper, fruit-and-candy justification paper, EEG choice-overload paper | S3 | Domain-specific or tangential |
-| "Progressive disclosure" in algorithmic-transparency papers | S3 | Different meaning of the term |
+- **Wikipedia, Wrike, Kanbantool, Adobe, Kissflow, Microtool flow-diagram explainers** — Track: S1; Reason: Vendor or tutorial content, no comprehension evidence
+- **Buddaraju 2011 alarm-management thesis** — Track: S1; Reason: Master's thesis, abstract only; redundant with Reising 2005
+- **Guy 2016 alarm-flood thesis** — Track: S1; Reason: Abstract only; priority-distribution claim unverified; noted as a lead
+- **Matthews 2006 glanceable displays** — Track: S1; Reason: Proposal-style abstract with no findings; glanceability left as a gap
+- **Ericsson and Granlof 2011 Kanban thesis** — Track: S1; Reason: Student thesis, abstract only; superseded by Rodrigues 2026
+- **Seqent, Industry Digits, Emerson, ABB, exida alarm pages** — Track: S1; Reason: Vendor marketing around EEMUA numbers
+- **medium.com dashboard survey, ResearchGate "interactive dashboards", two arXiv LLM-interface preprints** — Track: S1; Reason: Weak, off-topic, or not fetched
+- **Hacker News dashboard comments** — Track: S1; Reason: Noise; only the Timeframe post kept
+- **Flach 1995, Dekker and Hollnagel 2004, Endsley 1995 and 2015, Sarter and Woods 1995** — Track: S1; Reason: Paywalled; listed in paywalled candidates
+- **Parnin and Rugaber 2009 and 2011** — Track: S2; Reason: Abstract only or Springer redirect; redundant with Parnin 2013 numbers
+- **Kersten and Murphy 2015 (Mylyn)** — Track: S2; Reason: Generic abstract, no effect size
+- **Muller 2018 SBAR review, Rosenthal 2017, Shahid 2018, Patel 2024, Tarter 2026, Rasiya 2026** — Track: S2; Reason: Redundant with or weaker than MHS IV 2025 and Abraham 2013
+- **Horwitz 2013 JAMA editorial** — Track: S2; Reason: Commentary on a pre-2014 evidence base
+- **Borst 2015, Ratwani and Trafton 2007, Monk 2004, Radovic 2026, Labonte 2021, Perry 2020, Moon 2016, Yin 2014, Puente 2017, Yang 2011** — Track: S2; Reason: Lab-only, off-task, or redundant with Parnin and Altmann
+- **Aiss 2025, Gagnier 2016, Mueller 2023, Lakhani 2025 nursing QI** — Track: S2; Reason: Single-site process outcomes; Heilman kept as the one frontline voice
+- **Content-mill developer-productivity blogs (seven sites)** — Track: S2; Reason: Uncited numbers, SEO, sales intent
+- **Hacker News item 35459333; two handover-ritual ethnographies** — Track: S2; Reason: Not fetched or HTTP 403; ethnographies logged as paywalled
+- **Swedish plain-language thesis** — Track: S3; Reason: Student thesis, wrong population, null
+- **Inzlicht and Friese 2019; Carter and McCullough 2014** — Track: S3; Reason: Commentary or redundant with Hagger, Vohs, Glockner
+- **NN/g Inverted Pyramid (Schade 2018)** — Track: S3; Reason: Non-independent restatement of Morkes and Nielsen
+- **Loepp 2023 multi-list interfaces** — Track: S3; Reason: No outcome data on list size
+- **Hospitality choice-overload SLR, haptic-input paper, fruit-and-candy justification paper, EEG choice-overload paper** — Track: S3; Reason: Domain-specific or tangential
+- **"Progressive disclosure" in algorithmic-transparency papers** — Track: S3; Reason: Different meaning of the term
 
 ### Source Evaluation
 
@@ -569,17 +577,15 @@ Counts reconcile: 39 + 54 = 93 included and 5 excluded = 98 cards on disk = 98 c
 
 **Rule outcomes for the first-run cards (C1 to C4, 59 cards).** The 39 S-track cards record their rule on each card; all were included (17 Core, 22 Supporting) and none was excluded.
 
-| Rule outcome | Sources | Count |
-|--------------|---------|-------|
-| Rule 1 strong include, labelled Core (weighted average 7.0 or higher, not redundant) | the 22 first-run cards labelled Core | 22 |
-| Rule 1 met on score but labelled Supporting (the redundancy check shows it extends or qualifies a Core source) | Ariely, Cowan, de Jong, Higdon, Kross, Thompson, Shadick, Linehan, Keith and Frese, Gani, Faraone, CHOP | 12 |
-| Rule 2 diversity include | CDC, AAN-Willcox, Brighter, PA DHS | 4 |
-| Rule 3 unique-insight include | Few 2004, NN/g, Thomassen, Weiser, Ford and Parnin, Ko, Torre, Wahba, Brownstone, Corbett, Corrigan, Gottman-Levenson, Gawrilow, Rogers, Park NVC, Barkley | 16 |
-| Rule 4 moderate include | none reached it | 0 |
-| Rule 5 weak exclude | Shimmer, NICABM | 2 |
-| Rule 6 default exclude | Dulwich Centre | 1 |
-| Override: Rule 2 would have included, excluded instead | Substack post, Just1Voice | 2 |
-| **Total** | | **59** |
+- **Rule 1 strong include, labelled Core (weighted average 7.0 or higher, not redundant)** — Sources: the 22 first-run cards labelled Core; Count: 22
+- **Rule 1 met on score but labelled Supporting (the redundancy check shows it extends or qualifies a Core source)** — Sources: Ariely, Cowan, de Jong, Higdon, Kross, Thompson, Shadick, Linehan, Keith and Frese, Gani, Faraone, CHOP; Count: 12
+- **Rule 2 diversity include** — Sources: CDC, AAN-Willcox, Brighter, PA DHS; Count: 4
+- **Rule 3 unique-insight include** — Sources: Few 2004, NN/g, Thomassen, Weiser, Ford and Parnin, Ko, Torre, Wahba, Brownstone, Corbett, Corrigan, Gottman-Levenson, Gawrilow, Rogers, Park NVC, Barkley; Count: 16
+- **Rule 4 moderate include** — Sources: none reached it; Count: 0
+- **Rule 5 weak exclude** — Sources: Shimmer, NICABM; Count: 2
+- **Rule 6 default exclude** — Sources: Dulwich Centre; Count: 1
+- **Override: Rule 2 would have included, excluded instead** — Sources: Substack post, Just1Voice; Count: 2
+- **Total** — **59**
 
 **Overrides applied (2).** The rule that would have applied was Rule 2, because each was the only lived-experience voice in its track. The reason for overriding is that both are single anecdotes at Level 8 with weighted averages below 5.0 and neither can carry a claim. Their role in the document is to mark a gap and nothing else. Two further C4 anecdotes (a Substack thread and a developer tool-stack post) were rubric-rejected without cards and appear nowhere as evidence.
 
@@ -623,15 +629,25 @@ Level 1 and 2 are both non-zero, so the primary-evidence banner does not apply. 
 
 ### Perspective Balance
 
-| Topic area | Academic | Institutional | Practitioner | Boots | Contrarian |
-|------------|----------|---------------|--------------|-------|------------|
-| C1 job aids and visual design | Y (5) | Y (1) | Y (3) | Y (2) | Y (3) |
-| C2 naming and vocabulary | Y (10) | N | Y (1) | N | Y (4) |
-| C3 scripts, state maps, psychoeducation | Y (10) | Y (1) | Y (1) | N | Y (2) |
-| C4 in-the-moment use with ADHD | Y (6) | Y (1) | Y (1) | N | Y (3) |
-| S1 status displays and SA | Y (5) | Y (1) | Y (3) | Y (1) | Y (1) |
-| S2 re-entry and handoff | Y (4) | Y (1) | Y (2) | Y (1) | Y (2) |
-| S3 amount and layering | Y (11) | N | Y (2) | Y (1) | Y (4) |
+| Track | Acad | Inst | Prac | Boots | Contr |
+|---|---|---|---|---|---|
+| C1 | Y (5) | Y (1) | Y (3) | Y (2) | Y (3) |
+| C2 | Y (10) | N | Y (1) | N | Y (4) |
+| C3 | Y (10) | Y (1) | Y (1) | N | Y (2) |
+| C4 | Y (6) | Y (1) | Y (1) | N | Y (3) |
+| S1 | Y (5) | Y (1) | Y (3) | Y (1) | Y (1) |
+| S2 | Y (4) | Y (1) | Y (2) | Y (1) | Y (2) |
+| S3 | Y (11) | N | Y (2) | Y (1) | Y (4) |
+
+Columns: Acad = Academic, Inst = Institutional, Prac = Practitioner, Boots = Boots-on-the-ground, Contr = Contrarian. Tracks:
+
+- **C1** — job aids and visual design
+- **C2** — naming and vocabulary
+- **C3** — scripts, state maps, psychoeducation
+- **C4** — in-the-moment use with ADHD
+- **S1** — status displays and SA
+- **S2** — re-entry and handoff
+- **S3** — amount and layering
 
 Every track has at least three of the five categories (C1 five, C2 three, C3 four, C4 four, S1 five, S2 five, S3 four). The Boots column is thin and I want to be plain about it. The five included Boots-on-the-ground sources are surgical-staff experience (Fourcade, Thomassen), emergency-department focus groups (Heilman), twelve streaming-service users (Romero) and one hobbyist's dashboard post (Hawksley). None is a developer working across many projects, and every lived-experience source from ADHD or developer communities that the tracks found failed the credibility rubric. The Institutional column is empty for C2 and S3 because no government or professional-body source on naming or on choice and layering was retrieved; the S3 plain-language and conclusion-first doctrine search was cut by the search budget, so that absence is partly a search gap.
 
