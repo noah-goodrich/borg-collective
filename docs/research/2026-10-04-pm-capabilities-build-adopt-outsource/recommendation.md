@@ -391,7 +391,8 @@ flowchart LR
     DF[("directive files,<br/>never written by a hook")]
     RD["reader: filename date + 4 weeks,<br/>or stored Review-by"]
     DF --> RD
-    S["borg link QUEUED:<br/>past rows marked, N stopped;<br/>borg next: one count line"]
+    S["borg link QUEUED:<br/>past rows marked, N stopped;
+    <br/>borg next: one count line"]
     RD --> S
     S --> HU{Noah}
     X["borg directive extend:<br/>writes Review-by and Extended lines"]
@@ -403,7 +404,8 @@ flowchart LR
     ST -->|extend revives| X
     X --> EV[(event log)]
     SV --> EV
-    H["hooks: status flips;<br/>cmd_next top-3 ranking;<br/>verdict only if spike passes"]
+    H["hooks: status flips;<br/>cmd_next top-3 ranking;
+    <br/>verdict only if spike passes"]
     L[("JSONL logs")]
     H --> L
     EV --> L
