@@ -160,15 +160,51 @@ _run_hook() {
     grep -q "auto-promoted" "$PLAN_PRIMARY"
 }
 
-@test "plan_promote: stderr message emitted on successful promotion" {
+# PreToolUse stderr on exit 0 goes to the debug log only (Claude Code hooks reference, "Exit code 0"),
+# so the promotion notice is a systemMessage JSON object on stdout. No permissionDecision: tool flow
+# is untouched. A non-final `[[ ]]` does not fail a test on bash 3.2 (macOS), so assert via functions.
+_has() { [[ "$1" == *"$2"* ]] || { echo "missing: $2"; return 1; }; }
+_lacks() { [[ "$1" != *"$2"* ]] || { echo "unexpected: $2"; return 1; }; }
+
+_run_hook_split() {
+    HOOK_OUT=$(HOME="$BORG_TEST_HOME" BORG_ORCHESTRATOR_ROOT="${BORG_TEST_HOME}/dev" \
+        bash "$HOOK" <<< "$1" 2>"${BATS_TEST_TMPDIR}/hook.err")
+    HOOK_RC=$?
+}
+
+@test "plan_promote: promotion notice is systemMessage JSON on stdout, stderr empty, rc 0" {
     _write_jsonl_with_plan "$JSONL_PATH" "# Plan\n\nGoal: done."
 
-    input=$(_make_edit_input "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/app.py")
-    HOME="$BORG_TEST_HOME" \
-    BORG_ORCHESTRATOR_ROOT="${BORG_TEST_HOME}/dev" \
-        run bash -c "bash '$HOOK' <<< '$input' 2>&1 1>/dev/null"
+    _run_hook_split "$(_make_edit_input "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/app.py")"
 
-    [[ "$output" == *"auto-promoted"* ]] || false
+    [ "$HOOK_RC" -eq 0 ]
+    printf '%s' "$HOOK_OUT" | jq -e . >/dev/null
+    [ "$(printf '%s' "$HOOK_OUT" | jq -r 'keys | join(",")')" = "systemMessage" ]
+    _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "auto-promoted in-session plan"
+    [ ! -s "${BATS_TEST_TMPDIR}/hook.err" ]
+}
+
+@test "plan_promote: notice is plain text and makes no permission decision" {
+    _write_jsonl_with_plan "$JSONL_PATH" "# Plan\n\nGoal: done."
+
+    _run_hook_split "$(_make_edit_input "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/app.py")"
+
+    local esc
+    esc=$'\033'
+    _lacks "$HOOK_OUT" "$esc"
+    _lacks "$HOOK_OUT" "permissionDecision"
+    _lacks "$HOOK_OUT" "hookSpecificOutput"
+    [ "$(printf '%s' "$HOOK_OUT" | jq -s length)" -eq 1 ]
+}
+
+@test "plan_promote: nothing promoted means empty stdout" {
+    _write_jsonl_no_plan "$JSONL_PATH"
+
+    _run_hook_split "$(_make_edit_input "$SESSION_ID" "$FAKE_REPO" "${FAKE_REPO}/src/app.py")"
+
+    [ "$HOOK_RC" -eq 0 ]
+    [ -z "$HOOK_OUT" ]
+    [ ! -s "${BATS_TEST_TMPDIR}/hook.err" ]
 }
 
 @test "plan_promote: Write tool also triggers promotion" {
