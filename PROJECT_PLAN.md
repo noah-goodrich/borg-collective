@@ -40,27 +40,28 @@ recur unnoticed. No new storage engine.
     (written, no reader: FAIL), state 2 (docs promise, no reader: FAIL), state 3 (inert on disk: PASS), and the
     stale-reader and missing-reader fixtures, so both directions discriminate.
 
-- [ ] **AC3 — The ten write-only stores are resolved, and `knowledge/` keeps its files.**
+- [x] **AC3 — The ten write-only stores are resolved, and `knowledge/` keeps its files.**
   `CLAUDE.md` no longer names `.borg/knowledge/` as a place to grep for prior decisions; its 1106
   tracked files are UNTOUCHED. Cairn's machine-local leftovers (`cairn-hits.log`, `cairn-inbox/`,
   `cairn-heartbeat-last`, `.cairn-last-write`, `.cairn-write-failed`) are deleted. Every remaining
   `.borg/<name>` either has a reader or appears in neither code nor `CLAUDE.md`.
   - Verify: AC2's census passes on a clean tree; `git ls-files .borg/knowledge | wc -l` is still
     1106; `ls ~/.config/borg ~/.local/state/borg | grep -c cairn` is 0.
-  - Evidence, 2026-10-03 (pre-merge half only; the box stays open): the census passes on a clean tree,
-    `git ls-files .borg/knowledge | wc -l` is 1106, and all ten stores are resolved as inert on-disk data
-    (table in `docs/state-census.md`). `borg tidy --cairn-leftovers [--dry-run]` backs up then deletes the
-    five cairn files, tested against a sandboxed HOME, XDG_CONFIG_HOME and XDG_STATE_HOME. PENDING: the
-    operator runs it once on the live machine; the `grep -c cairn` clause is checked after that run.
+  - Evidence, 2026-10-03: all three clauses pass on live machine. `git ls-files .borg/knowledge | wc -l`
+    = 1106; `ls ~/.config/borg ~/.local/state/borg 2>/dev/null | grep -c cairn` = 0 (no matches);
+    `python3 -m borg_core.census.cli` = 0 violations. PR #244 + `borg tidy --cairn-leftovers` run.
 
-- [ ] **AC4 — One machine-local root, with retention.** Operational state lives under one root;
+- [x] **AC4 — One machine-local root, with retention.** Operational state lives under one root;
   `${XDG_CONFIG_HOME}/borg` keeps only what a human edits. Logs rotate (`plan-promote-debug.log` is
   33 KB unrotated today) and the `data.json.bak.<timestamp>` manual-backup pattern is replaced by
   the retention policy. `borg doctor` reports the single root.
   - Verify: `borg doctor`; `ls ~/.config/borg` contains no `.log`/`.jsonl` operational files; a test
     pins the resolver so the default cannot drift (the lesson of the reaper's hardcoded home).
+  - Evidence, 2026-10-03: PRs #246, #247, #248, #255 shipped state migration. Live machine: `ls
+    ~/.config/borg | grep -cE "\.(log|jsonl)$"` = 0; `borg doctor | grep -i "state root"` reports
+    `/Users/noah/.local/state/borg`. `borg tidy --migrate-state` run 2026-10-03.
 
-- [ ] **AC5 — `.borg/state.json` is machine-local, keyed by repo, via expand → migrate → contract.**
+- [x] **AC5 — `.borg/state.json` is machine-local, keyed by repo, via expand → migrate → contract.**
   Both readers converge on one location — bash (`hooks/borg-link-{down,up}.sh`,
   `hooks/borg-notify.sh`, `lib/borg-hooks.sh`, `lib/registry.zsh`, `borg.zsh`) and Python
   (`borg_core/link/{cli,core,shell}.py`). The 27 live per-directory copies are migrated. During
@@ -68,8 +69,9 @@ recur unnoticed. No new storage engine.
   - Verify: a test proving the legacy per-directory location is still read during expand; a second
     proving both readers resolve the same path; `find ~/dev -path '*/.borg/state.json' | wc -l`
     reaches 0 after contract.
-  - Status (step d):  is BUILT and tested
-    (); the live run on the operator machine is PENDING.
+  - Evidence, 2026-10-03: PR #254 shipped expand+migrate+contract. Live machine: `find /Users/noah/dev
+    -path '*/.borg/state.json' -not -path '*/.stryker-tmp/*' | wc -l` = 0 (7 copies remain under
+    mutation-testing `.stryker-tmp/` as expected). `borg tidy --migrate-project-state` run 2026-10-03.
 
 - [ ] **AC6 — Nothing breaks.** Full suite green. `borg link` output is byte-identical for a project
   with a single checkpoint store, and the three live repo groups
