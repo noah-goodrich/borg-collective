@@ -237,3 +237,5 @@ When you run shell commands, follow the same rules the orchestrator follows:
 - No `$()` command substitution — use parameter expansion or pipes.
 - No inline `#` comments in one-liner bash commands.
 - Prefer built-in tools (Grep, Glob, Read) over Bash equivalents (grep, find, cat).
+- Never put backticks or `$(` inside an unquoted heredoc or a double-quoted string; for PR/commit bodies
+  use `<<'EOF'` or `--body-file`.
