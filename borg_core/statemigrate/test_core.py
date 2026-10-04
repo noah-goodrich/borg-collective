@@ -35,15 +35,29 @@ def test_both_present_json_state_keeps_new():
     assert _op("briefing-x-stderr.log", True, True) == core.KEEP_NEW
 
 
+def test_briefing_stderr_log_is_moved():
+    assert _op("briefing-stderr.log", True, False) == core.MOVE
+
+
 def test_stays_files_are_never_planned():
-    stays = ["registry.json", ".registry.lock", "config.zsh", "extensions/a.md", "launchd-prefix",
-             "desktop/x.json", "claude-settings.local.json", ".cairn-last-write", "cairn-hits.log"]
+    stays = [
+        "registry.json",
+        ".registry.lock",
+        "config.zsh",
+        "extensions/a.md",
+        "launchd-prefix",
+        "desktop/x.json",
+        "claude-settings.local.json",
+        ".cairn-last-write",
+        "cairn-hits.log",
+    ]
     assert core.plan([Entry(r, True, False) for r in stays]) == []
 
 
 def test_families_are_moved_but_only_in_their_place():
     assert core.is_moved("devcontainer-hashes/proj.hash")
     assert core.is_moved("briefing-link-stderr.log")
+    assert core.is_moved("briefing-stderr.log")
     assert not core.is_moved("devcontainer-hashes/proj.txt")
     assert not core.is_moved("extensions/briefing-x-stderr.log")
 
