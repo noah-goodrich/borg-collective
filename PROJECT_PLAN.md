@@ -73,13 +73,33 @@ recur unnoticed. No new storage engine.
     -path '*/.borg/state.json' -not -path '*/.stryker-tmp/*' | wc -l` = 0 (7 copies remain under
     mutation-testing `.stryker-tmp/` as expected). `borg tidy --migrate-project-state` run 2026-10-03.
 
-- [ ] **AC6 — Nothing breaks.** Full suite green. `borg link` output is byte-identical for a project
+- [x] **AC6 — Nothing breaks.** Full suite green. `borg link` output is byte-identical for a project
   with a single checkpoint store, and the three live repo groups
   (`snowflake-permissions`+`-olf`+`-wt-e2e`, `borg-collective`+`-shim`, `dbt`+`-csm_...`) still
   render their bylines correctly — the only user-visible surface this plan can disturb.
   - Verify: `make test && make test-bats && make lint`; `borg link --json --local <single-store>`
     diffed against a pre-change capture; `borg link --json --local snowflake-permissions-olf`
     still equals the same call for `snowflake-permissions`.
+  - Evidence, 2026-10-04 (worktree of origin/main 0fe3890): `make test` 1493 passed; `make test-bats` 1081 ok,
+    0 not ok; `make lint` 10.00/10. All three exit 0.
+  - Byte-identity vs `v0.9.0` (2a62536, before AC3-AC5; checked with `git log`): `python3 -m borg_core.link.cli
+    --json --local <p>` from a worktree of each, same real registry, diffed with `jq -S`, for borg-collective,
+    troth, ingle (single store each) plus reveal and reveal-data-consistency. Identical in all five:
+    `assimilated`, `capacity`, `cortex_pending`, `directives`, `grid`, `scope`, `version`, `total_projects`,
+    and every project's checkpoint list, plan and directives. Differing keys are all (a) by design, none
+    unexplained: `claude_session_id`, `last_activity`, `relative_activity`, `has_uncommitted_changes`,
+    `waiting_reason`, `notify_origin`, `clock_divergence` (AC5 #254: v0.9.0 read the legacy
+    `<dir>/.borg/state.json`, which `borg tidy --migrate-project-state` has since moved, so it fell back to
+    stale registry fields while the current build reads the state root; `order` and `focus` differ only
+    through those same fields); `summary` "None" becomes null (#241). Caveat: the legacy files are gone, so
+    the state-derived fields cannot be compared like for like. The claim is that they changed source, not
+    that the old values were reproduced.
+  - Repo group on this machine: `reveal` + `reveal-data-consistency` (shared `repo` key; no
+    `borg-collective-shim` is registered). `reveal-data-consistency` owns 0 checkpoints and renders the
+    group's 3, head included, byte-equal to `reveal`'s and unchanged from v0.9.0 (the local analogue of
+    olf == snowflake-permissions). No byline row can print here, since only one project contributes rows, so
+    byline rendering rests on the suite's `dedupe_checkpoints` tests.
+  - **Work-machine repo groups (snowflake-permissions, dbt) — verify there with the same commands.**
 
 ## Scope Boundaries
 
