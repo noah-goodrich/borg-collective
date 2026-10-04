@@ -16,7 +16,9 @@ every real invocation; see the _borg_py helper in borg.zsh for the other half of
 
 from __future__ import annotations
 
+import hashlib
 import os
+import subprocess
 from pathlib import Path
 
 
@@ -72,6 +74,69 @@ def operational_file(name: str) -> Path:
     """
     new = state_root() / name
     return new if new.exists() else borg_dir() / name
+
+
+def _digest12(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+
+
+FORK_GIT = object()
+"""Sentinel for the `repo` argument below: "not supplied, ask git". Distinct from None, which is a
+registry entry's null `repo` and means outside git (path-only key)."""
+
+
+def project_state_key(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> str:
+    """The filesystem-safe key naming one project DIRECTORY's machine-local state.
+
+    `<repo12>-<path12>`, or `local-<path12>` outside any git repository, where `path12` is the first
+    12 hex of sha256 over the PHYSICAL directory path (symlinks resolved, no trailing slash) and
+    `repo12` the same over `git rev-parse --path-format=absolute --git-common-dir`.
+
+    PER DIRECTORY, NAMESPACED BY REPO. Two worktrees of one repo can be in different statuses at
+    once (one active, one idle), and today's `<dir>/.borg/state.json` is per directory; keying by
+    repo alone would make them overwrite each other. The repo half is the prefix so a repo's
+    worktrees sort together and a later step can group them without parsing paths. Hashes, not
+    slugs: paths carry spaces and slashes, and a slug of two different paths can collide.
+
+    Siblings, byte-identical output required: `_borg_project_state_key` in lib/borg-hooks.sh and
+    lib/state-root.zsh (pinned by tests/project_state.bats).
+
+    `repo` is the fast path for registry-driven readers: pass the registry entry's `repo` field (the
+    git common dir `borg add` recorded; None/"" when the entry has none) and no git is forked, so
+    `borg link` over N projects costs zero forks instead of N. Left as FORK_GIT it asks git. A null
+    `repo` yields the path-only `local-` key, exactly as the resolver does outside git.
+    """
+    physical = os.path.realpath(os.fspath(directory))
+    if repo is FORK_GIT:
+        try:
+            out = subprocess.run(
+                ["git", "-C", physical, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+            )
+            repo = out.stdout.strip() if out.returncode == 0 else ""
+        except (OSError, subprocess.SubprocessError):
+            repo = ""
+    repo_text = repo if isinstance(repo, str) else ""
+    return f"{_digest12(repo_text) if repo_text else 'local'}-{_digest12(physical)}"
+
+
+def project_state_file(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> Path:
+    """`<state root>/projects/<key>/state.json` for a project directory. One `git rev-parse` unless
+    `repo` is supplied (see `project_state_key`); creates nothing. Siblings: `_borg_project_state_file`
+    in lib/borg-hooks.sh and lib/state-root.zsh."""
+    return state_root() / "projects" / project_state_key(directory, repo) / "state.json"
+
+
+def project_state_read_path(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> Path:
+    """The state.json to READ for a project: the per-project state-root copy if it exists, else the
+    legacy `<dir>/.borg/state.json` (also the answer when neither exists). AC5 expand phase: readers
+    accept both before any writer moves. Reader-only. Siblings: `_borg_state_read_path` in
+    lib/borg-hooks.sh and `borg_state_read_path` in lib/registry.zsh."""
+    new = project_state_file(directory, repo)
+    return new if new.is_file() else Path(directory) / ".borg" / "state.json"
 
 
 def registry_path() -> Path:

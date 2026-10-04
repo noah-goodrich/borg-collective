@@ -2078,7 +2078,7 @@ CONF
 
     # ── 4c. Ensure .borg/state.json is gitignored + initialise state files ────
     info "Ensuring .borg/state.json is gitignored in registered projects..."
-    while IFS= read -r _proj_path; do
+    while IFS=$'\t' read -r _proj_path _proj_repo; do
         [[ -n "$_proj_path" && -d "$_proj_path" ]] || continue
         local _gi="$_proj_path/.gitignore"
         # Add .borg/state.json to .gitignore (NOT the entire .borg/ dir —
@@ -2088,14 +2088,17 @@ CONF
             info "  Added .borg/state.json to ${_proj_path##*/}/.gitignore"
         fi
         # Initialise an empty state.json if one doesn't exist yet.
-        local _sf="$_proj_path/.borg/state.json"
+        # Either location existing counts as initialised; the write goes to the per-project state-root path.
+        local _sf=""
+        _sf=$(borg_state_read_path "$_proj_path" "$_proj_repo")
         if [[ ! -f "$_sf" ]]; then
-            mkdir -p "$_proj_path/.borg"
-            echo '{"status":"idle","last_activity":null,"claude_session_id":null,"has_uncommitted_changes":false,"waiting_reason":null,"notify_origin":"host"}' \
-                > "$_sf"
+            borg_state_write "$_proj_path" \
+                '{"status":"idle","last_activity":null,"claude_session_id":null,"has_uncommitted_changes":false,"waiting_reason":null,"notify_origin":"host"}' \
+                "$_proj_repo"
             info "  Initialised state.json for ${_proj_path##*/}"
         fi
-    done < <(borg_registry_read | jq -r '.projects[].path // empty')
+    done < <(borg_registry_read | jq -r '.projects[] | select((.path // "") != "")
+        | [.path, (.repo // "" | if type == "string" then . else "" end)] | @tsv')
 
     # ── 5. Install bin/ utilities ────────────────────────────────────────────
     local CLAUDE_BIN_DIR="$CLAUDE_DIR/bin"
@@ -3565,6 +3568,8 @@ case "${1:-help}" in
     regenerate|tidy)
         if [[ "${2:-}" == "--migrate-state" ]]; then
             _borg_py borg_core.statemigrate.cli "${@:3}"
+        elif [[ "${2:-}" == "--migrate-project-state" ]]; then
+            _borg_py borg_core.statemigrate.project_cli "${@:3}"
         else
             cmd_tidy "${@:2}"
         fi

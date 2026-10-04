@@ -37,13 +37,14 @@ _borg_is_container && ORIGIN=container
 PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
 
 # Write status=waiting + notification context to state.json.
-_cur_state=$(_borg_state_read "$PROJ_DIR")
+_borg_proj_repo "$PROJECT" "$PROJ_DIR"
+_cur_state=$(_borg_state_read "$PROJ_DIR" ${_REPO+"$_REPO"})
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg now "$NOW" \
     --arg msg "$MESSAGE" \
     --arg origin "$ORIGIN" \
     '.status = "waiting" | .last_activity = $now | .notify_origin = $origin |
      (if $msg != "" then .waiting_reason = $msg else . end)')
-_borg_state_write "$PROJ_DIR" "$_new_state" || true
+_borg_state_write "$PROJ_DIR" "$_new_state" ${_REPO+"$_REPO"} || true
 
 exit 0
