@@ -1474,7 +1474,9 @@ EOF
 # coverage elsewhere, not needed again here). This proves the real teardown sequence (has-session ->
 # list-windows -> per-window kill-window -> kill-session, plus the shared-Supabase docker inspect)
 # actually fires against the real dispatch layer, entirely against mocks.
-@test "contract: sever tears down mocked tmux/docker without touching real infrastructure" {
+# Mock tmux/docker/drone that RECORD every call (one file per binary) and report a live session, so
+# a teardown that fires is visible in the trace. Interception is checked by resolving each binary.
+_mock_teardown_infra() {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     export BORG_TMUX_SESSION="borg"
@@ -1508,7 +1510,17 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/drone"
 
-    run_zsh_borg sever
+    local bin resolved
+    for bin in tmux docker drone; do
+        resolved=$(PATH="$MOCK_BIN:/usr/bin:/bin" command -v "$bin")
+        [ "$resolved" = "$MOCK_BIN/$bin" ]
+    done
+}
+
+@test "contract: down tears down mocked tmux/docker without touching real infrastructure" {
+    _mock_teardown_infra
+
+    run_zsh_borg down
 
     [ "$status" -eq 0 ]
     local calls
@@ -1516,6 +1528,41 @@ EOF
     [[ "$calls" == *"has-session -t borg"* ]] || false
     [[ "$calls" == *"kill-window -t borg:testproj"* ]] || false
     [[ "$calls" == *"kill-session -t borg"* ]] || false
+}
+
+@test "contract: sever with an argument refuses, points at git mv, and tears nothing down" {
+    _mock_teardown_infra
+
+    run_zsh_borg sever some-slug
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"borg down"* ]] || false
+    [[ "$output" == *"git mv docs/plans/directives/<slug>.md docs/plans/severed/"* ]] || false
+    [ ! -e "$MOCK_BIN/tmux.calls" ]
+    [ ! -e "$MOCK_BIN/docker.calls" ]
+    [ ! -e "$MOCK_BIN/drone.calls" ]
+}
+
+@test "contract: bare sever also refuses and tears nothing down" {
+    _mock_teardown_infra
+
+    run_zsh_borg sever
+
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"git mv docs/plans/directives/<slug>.md docs/plans/severed/"* ]] || false
+    [ ! -e "$MOCK_BIN/tmux.calls" ]
+    [ ! -e "$MOCK_BIN/docker.calls" ]
+    [ ! -e "$MOCK_BIN/drone.calls" ]
+}
+
+@test "contract: help lists down, not sever, and never says sever retires a directive" {
+    run_zsh_borg help
+
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"down                Tear down everything"* ]] || false
+    [[ "$output" != *"    sever               "* ]] || false
+    [[ "$output" != *"Retire/archive"* ]] || false
+    [[ "$output" == *"never retired a directive"* ]] || false
 }
 
 # cmd_tidy archives projects idle >48h, but only after a `read -rk1` "Archive all? [y/N]"
