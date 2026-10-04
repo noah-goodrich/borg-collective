@@ -1,0 +1,57 @@
+
+## T2 (value / prioritization) candidates
+
+| Citation | URL | Publisher | Est. cost | Claim it would support or refute |
+|----------|-----|-----------|-----------|----------------------------------|
+| Reinertsen, D. G. "The Principles of Product Development Flow: Second Generation Lean Product Development." 2009. | (publisher site not verified) | Celeritas Publishing | unknown (book purchase) | Primary source for cost of delay, CD3/WSJF sequencing rules, the "50 to 1" estimate-spread claim and "85% of product managers do not know CoD". All currently reached only via secondary summaries. |
+| Cooper, R. G., Edgett, S. J., & Kleinschmidt, E. J. "Portfolio management for new product development: results of an industry practices study." R&D Management 31(4), 2001. | https://onlinelibrary.wiley.com/doi/abs/10.1111/1467-9310.00225 | Wiley | unknown (article access; blocked by bot check) | Would test whether firms using explicit financial/scoring portfolio methods outperform those using ad hoc selection (RQ2 outcome evidence). |
+| ~~Roth, S., Robbert, T., & Straus, L. "On the sunk-cost effect in economic decision-making: a meta-analytic review." Business Research 8, 2015.~~ | https://link.springer.com/article/10.1007/s40685-014-0014-8 | Springer | unknown (fetch redirected to login; may be open access) | Independent meta-analytic corroboration of the sunk-cost effect size; would pair with Sleesman et al. 2012. **Obtained 2026-10-03 (user-supplied full text).** |
+| Staw, B. M. "Knee-deep in the big muddy: a study of escalating commitment to a chosen course of action." Organizational Behavior and Human Performance 16, 1976. | (URL not verified; locate via DOI/publisher) | Elsevier | unknown | Original escalation-of-commitment experiments; foundation for kill-criteria rationale. |
+| Systematic literature review on requirement prioritization techniques and their empirical evaluation. Computer Standards & Interfaces / ScienceDirect, 2019. | https://www.sciencedirect.com/science/article/abs/pii/S0920548919300789 | Elsevier | unknown | Would test whether explicit prioritization techniques show measurable benefits in empirical evaluations (search snippet says most techniques other than AHP are unreliable or misleading; not verified). |
+| Standish Group. CHAOS Report. | https://www.standishgroup.com/ | Standish Group | unknown (paid report) | Underlies the "31% succeed, 19% canceled" numbers repeated in trade press; methodology is contested, so a primary check is needed before reuse. |
+
+## T3 (flow) paywalled candidates
+
+| Citation | URL | Publisher | Est. cost | Claim it would support/refute |
+|----------|-----|-----------|-----------|-------------------------------|
+| Forsgren, Humble, Kim. "Accelerate: The Science of Lean Software and DevOps." 2018 | https://itrevolution.com/product/accelerate/ | IT Revolution | ~$20-30 (book) | Original statistical basis for the four keys and the capability-to-performance claims; needed to adjudicate the Lee critique on causal wording. |
+| Vacanti. "Actionable Agile Metrics for Predictability." 2015 | https://leanpub.com/actionableagilemetrics | Leanpub | ~$30 (book) | Primary statement of Little's Law, flow-metric assumptions, and WIP/age claims. |
+| Vacanti. "When Will It Be Done?" 2020 | https://leanpub.com/whenwillitbedone | Leanpub | ~$30 (book) | Probabilistic forecasting from throughput/cycle-time data (SLE percentiles). |
+| ~~Sjoberg et al. "An empirical study of WIP in kanban teams." ESEM 2018 (full text)~~ | https://dl.acm.org/doi/10.1145/3239235.3239238 | ACM DL | unknown (may be free via author/SINTEF) | Full methodology and effect sizes behind the WIP-vs-lead-time result (card read the abstract only). **Obtained 2026-10-03 (user-supplied full text).** |
+| ~~Forsgren et al. "The SPACE of Developer Productivity." ACM Queue 2021 (full text)~~ | https://queue.acm.org/detail.cfm?id=3454124 | ACM Queue | free in principle, but fetch returned HTTP 403 (Cloudflare) | Full guidance on how many SPACE dimensions to measure and perceptual-metric advice. **Obtained 2026-10-03 (user-supplied full text).** |
+
+## T4 (feedback: monitoring, risk/quality, learning) paywalled candidates
+
+| Citation | URL | Publisher | Est. cost | Claim it would support or refute |
+|----------|-----|-----------|-----------|----------------------------------|
+| Klein, G. "Performing a Project Premortem." Harvard Business Review, Sept 2007. | https://hbr.org/2007/09/performing-a-project-premortem | Harvard Business Publishing | unknown (single-article purchase) | Premortem procedure and the cited 30% prospective-hindsight claim; only the intro was verifiable on the live page. |
+| Mitchell, D. J., Russo, J. E., Pennington, N. "Back to the future: Temporal perspective in the explanation of events." J. Behavioral Decision Making, 1989. | (DOI not confirmed) | Wiley | unknown | Lab evidence behind the 30% claim; no field trial of premortems found. |
+| Cox, L. A. "What is Wrong with Risk Matrices?" Risk Analysis 28(2), 497-512, 2008. | https://doi.org/10.1111/j.1539-6924.2008.01030.x | Wiley / SRA | unknown | Peer-reviewed critique: matrices can compare under 10% of hazard pairs correctly; supports lightweight over register-style risk scoring. |
+| Snow, A. P., Keil, M. "The challenge of accurate software project status reporting." IEEE Trans. Eng. Mgmt, 2002. | https://doi.org/10.1109/tem.2002.807290 | IEEE | unknown (about USD 30 typical) | Full model and expert inputs behind the status-distortion finding; the card uses the abstract only. |
+| ~~Lehtinen, T. O. A. et al. "Recurring opinions or productive improvements: what agile teams actually discuss in retrospectives." Empirical Software Engineering, 2017.~~ | https://link.springer.com/article/10.1007/s10664-016-9464-2 | Springer | unknown (fetch blocked; may be open access) | What retros contain and whether improvements follow; the search-snippet 13% figure is unverified. **Obtained 2026-10-03 (user-supplied full text).** |
+| Dingsoyr, T. et al. "Organizational Learning Through Project Postmortem Reviews." EuroSPI, 2007. | https://link.springer.com/chapter/10.1007/978-3-540-75381-0_13 | Springer | unknown | Whether accumulated postmortem reports are reused (snippet only). |
+| Keil, M., Robey, D. "Blowing the Whistle on Troubled Software Projects." CACM 44(4), 2001. | (not located) | ACM | unknown | Reluctance to report bad news as a driver of watermelon status (snippet only). |
+
+## T5 capacity (appended 2026-10-03)
+
+| Citation | URL | Publisher | Est. cost | Claim it would support or refute |
+|----------|-----|-----------|-----------|----------------------------------|
+| ~~Forsgren, Storey, Maddila, Zimmermann, Houck, Butler. "The SPACE of Developer Productivity." ACM Queue 19(1), 2021~~ | https://dl.acm.org/doi/fullHtml/10.1145/3454122.3454124 (also https://queue.acm.org/detail.cfm?id=3454124) | ACM | Free in principle; HTTP 403 / bot challenge to automated fetch | Primary text for "satisfaction and well-being" definition, "metrics from at least three dimensions", and any anti-gaming caution (RQ3) **Obtained 2026-10-03 (user-supplied full text).** |
+| Gollwitzer, P. M., and Sheeran, P. "Implementation intentions and goal achievement: a meta-analysis of effects and processes." Advances in Experimental Social Psychology 38, 2006 | https://doi.org/10.1016/S0065-2601(06)38002-1 | Elsevier | unknown (about 30-40 USD per article) | General effect size of if-then plans (d about 0.65 widely cited, unverified here) |
+| Leroy, S. "Why is it so hard to do my work? The challenge of attention residue when switching between work tasks." Organizational Behavior and Human Decision Processes 109(2):168-181, 2009 | https://doi.org/10.1016/j.obhdp.2009.04.002 | Elsevier | unknown (about 35 USD) | Attention-residue mechanism: unfinished-task switching degrades next-task performance; supports a WIP-limit rationale for individuals |
+| Rubinstein, Meyer, Evans 2001 full text | https://doi.org/10.1037/0096-1523.27.4.763 | APA | unknown (about 15-35 USD) | Full-text numbers on switching cost magnitudes (abstract has none; popular "40%" figure unverified) |
+| Toli et al. 2016 full text, Br J Clin Psychol | https://doi.org/10.1111/bjc.12086 | Wiley | unknown | Per-diagnosis breakdown; whether ADHD samples are included in the pooled estimate |
+| Gawrilow and Gollwitzer 2008 full text, Cogn Ther Res | https://doi.org/10.1007/s10608-007-9150-1 | Springer | unknown (about 40 USD) | Sample sizes and effect sizes for ADHD children Go/No-Go study; limitations |
+| Pencavel 2016 journal version, Economic Journal (if exists; unverified) | search required | Oxford/Wiley | unknown | Whether the 49-hour threshold and munitions data held in the refereed version |
+| ~~An empirical study of WIP in kanban teams, ESEM 2018 full text~~ | https://dl.acm.org/doi/10.1145/3239235.3239238 | ACM | free via ACM open access or author preprint (unverified) | Authors, effect sizes, threats to validity **Obtained 2026-10-03 (user-supplied full text).** |
+
+## T1 (pillars) paywalled candidates
+
+| Citation | URL | Publisher | Est. cost | Claim it would support/refute |
+|----------|-----|-----------|-----------|-------------------------------|
+| PMI. "A Guide to the Project Management Body of Knowledge (PMBOK Guide) - Eighth Edition" and The Standard for Project Management. Nov 2025. | https://www.pmi.org/standards/pmbok | Project Management Institute | unknown (PMI says free for members; pmi.org returned HTTP 403 to automated fetch) | Primary check of the 6 principles, 7 performance domains, 5 focus areas and 40 processes now known only from trainer summaries; and PMI's stated rationale for 12 to 6. |
+| PMI. "A Guide to the PMBOK Guide - Seventh Edition" and The Standard for Project Management (ANSI). 2021. | https://www.pmi.org/standards/pmbok | Project Management Institute | unknown (paid book / PMIstandards+) | Authoritative names and definitions of the 12 principles and 8 domains; the 'Models, Methods, and Artifacts' tool list. |
+| AXELOS / PeopleCert. "Managing Successful Projects with PRINCE2 (Version 7)." 2023. | (publisher URL not verified; PeopleCert) | PeopleCert (custodian since 2021) | unknown (paid manual) | Primary definition of the 7 principles, 7 practices, 7 processes and the new people and sustainability elements; only vendor summaries were read. |
+| Poppendieck, M. and Poppendieck, T. "Lean Software Development: An Agile Toolkit." Addison-Wesley, 2003. | https://www.goodreads.com/book/show/194338.Lean_Software_Development | Addison-Wesley | unknown (book purchase) | The original 2003 wording of the seven principles (amplify learning, decide as late as possible, etc.), which differs from the 2006 chapter that was read. |
+| Winter, Smith, Morris, Cicmil. "Directions for future research in project management." Int. J. of Project Management 24(8), 2006. | https://doi.org/10.1016/j.ijproman.2006.08.009 | Elsevier | unknown (journal access) | Full argument for the five research directions; only the abstract was read. |
+| Serrador, P. and Pinto, J. K. "Does Agile work? A quantitative analysis of agile project success." IJPM 33(5), 2015. | https://www.apm.org.uk/media/4utbqvwg/does-agile-work-a-quantitative-analysis-of-agile-project-success.pdf | Elsevier (APM summary is free) | unknown (journal access) | n=1,002 survey linking agile use to stakeholder satisfaction/effectiveness; only a 2-page APM summary was read. |
