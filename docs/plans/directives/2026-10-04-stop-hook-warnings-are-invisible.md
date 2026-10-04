@@ -89,3 +89,15 @@ Audit: `grep -n '>&2' hooks/*.sh`, each event checked against the "Exit code 2 b
 `hooks/` are copied to `~/.claude/hooks` by `borg setup`; run it after merge or the fix is not live. The claude-plugins
 copy is build output (`scripts/build-plugin.sh`); `borg-link-up.sh` is one of the hooks that script inlines
 `lib/borg-hooks.sh` into, so rebuild the plugin from source rather than editing it there.
+
+## Regression found 2026-10-04
+
+The `systemMessage` fix (#258) made the three `borg-link-up.sh` warnings visible, and because Stop fires after every
+assistant turn they then repeated after every reply: alert spam against the interrupt-budget evidence. Fixed by
+showing each distinct warning at most once per session. Key: `session_id` plus sha12 of (message + fingerprint, where
+the uncommitted-changes fingerprint is the porcelain file list, so a new dirty file re-fires). Stored one key per
+line in `<state root>/stop-warnings/<session_id>` (`_borg_state_root`, machine-local; not the config dir, not the
+repo). Every failure fails open toward visibility: no `session_id` or an unwritable store means the warning shows.
+Audit of the siblings: `borg-nanoprobe-log.sh` (SubagentStop) fires once per subagent completion and its messages
+name the agent id, so no dedupe; `borg-plan-promote.sh` (PreToolUse) is gated on no existing `PROJECT_PLAN.md`, so
+its notice is one-shot by construction. Pinned by the "stop dedupe" cases in `tests/lifecycle.bats`.

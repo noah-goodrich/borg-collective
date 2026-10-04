@@ -46,9 +46,26 @@ fi
 # Claude (https://code.claude.com/docs/en/hooks, "Exit code 0"). The user-visible channel is ONE
 # JSON object on stdout carrying `systemMessage` (plain text, no ANSI), emitted at the end.
 # Warnings accumulate here; nothing else in this script may write to stdout.
+#
+# Stop fires after EVERY assistant turn, not once at session end, so each distinct warning is
+# shown AT MOST ONCE per session_id and again only when its content changes. Seen-keys live in
+# <state root>/stop-warnings/<session_id>, one sha12 of (message + fingerprint) per line. Every
+# failure path fails OPEN toward visibility: no session_id or an unwritable store -> warn anyway.
 WARNINGS=""
 _warn() {
-    WARNINGS+="${WARNINGS:+$'\n\n'}$1"
+    local msg="$1" fp="${2:-}" key sid dir
+    if [[ -n "$SESSION_ID" ]]; then
+        sid="${SESSION_ID//[^A-Za-z0-9_-]/_}"
+        dir="$(_borg_state_root)/stop-warnings"
+        key=$(printf '%s\n%s' "$msg" "$fp" | _borg_sha12 2>/dev/null || true)
+        if [[ -n "$key" ]]; then
+            if grep -qxF "$key" "$dir/$sid" 2>/dev/null; then
+                return 0
+            fi
+            { mkdir -p "$dir" && printf '%s\n' "$key" >> "$dir/$sid"; } 2>/dev/null || true
+        fi
+    fi
+    WARNINGS+="${WARNINGS:+$'\n\n'}$msg"
 }
 
 PROJECT=$(_borg_find_project "$CWD")
@@ -66,7 +83,7 @@ fi
 
 if [[ -n "$UNCOMMITTED" ]]; then
     _warn "▸ WARNING: ${PROJECT} has uncommitted changes
-  Run /simplify then commit before your next session."
+  Run /simplify then commit before your next session." "$UNCOMMITTED"
     DIRTY_FLAG=true
 else
     DIRTY_FLAG=false
