@@ -626,7 +626,7 @@ docs/
 
 ## Style Rules
 
-- Code and code comments wrap at 120 (ruff/pylint enforce it for Python). Markdown and text prose is NOT hard-wrapped: one line per paragraph or bullet. Existing wrapped paragraphs keep their wrap when edited. Never wrap tables, fenced code or URLs. Commit bodies wrap at 72. PR bodies, PR/issue/review comments, any `gh` body, release notes, chat replies and pandoc/epub input are never hard-wrapped.
+- Code and code comments wrap at 120 (ruff/pylint enforce it for Python). Markdown and text prose is NOT hard-wrapped: one line per paragraph or bullet. Existing wrapped paragraphs keep their wrap when edited. Never wrap tables, fenced code or URLs. Commit bodies wrap at 72. PR bodies, PR/issue/review comments, any `gh` body, release notes, chat replies and pandoc/epub input are never hard-wrapped. Markdown files read in a terminal or editor keep every table row and every fenced-block line (mocks, code, diagrams) within 72 columns: table cells are a few words, longer text goes in bullets below the table, and a table that needs more width becomes a list. GitHub-rendered text (PR bodies, comments) is exempt because GitHub wraps table cells.
 - 4-space indentation (except YAML/Lua: 2-space)
 - zsh functions over aliases for anything > 1 line
 - No `$()` substitution in Bash tool calls
