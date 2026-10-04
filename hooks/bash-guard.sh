@@ -149,6 +149,81 @@ _bg_settings_write_danger() {
     return 1
 }
 
+# Backtick / $( expansion in a body the shell will EXPAND (incident 2026-10-04, 3x: an unquoted
+# heredoc or double-quoted PR body ran `borg down` as command substitution). Reads the RAW command
+# on stdin; prints HEREDOC or DQUOTE for a hit, nothing otherwise. Any awk failure prints nothing,
+# so the caller fails open. Heuristic by design: quoted heredocs (<<'EOF', <<"EOF", <<\EOF), single
+# quotes, and backslash-escaped backticks are never flagged.
+_BG_EXPANSION_AWK='
+function bad(s) { return (s ~ /(^|[^\\])`/ || s ~ /(^|[^\\])\$\(/) }
+{
+    line = $0
+    if (inhd) {
+        t = line
+        if (dash) sub(/^\t+/, "", t)
+        if (t == word) { inhd = 0; next }
+        if (unq && bad(line)) hit = "HEREDOC"
+        next
+    }
+    rest = (NR > 1 ? rest "\n" : "") line
+    s = line
+    while ((i = index(s, "<<")) > 0) {
+        r = substr(s, i + 2)
+        if (substr(r, 1, 1) == "<") { s = substr(r, 2); continue }
+        d = 0
+        if (substr(r, 1, 1) == "-") { d = 1; r = substr(r, 2) }
+        sub(/^[ \t]+/, "", r)
+        c = substr(r, 1, 1)
+        if (c ~ /[A-Za-z_]/) {
+            match(r, /^[A-Za-z0-9_]+/)
+            word = substr(r, 1, RLENGTH); dash = d; unq = 1; inhd = 1
+            break
+        }
+        if (c == "\047" || c == "\"" || c == "\\") {
+            r2 = substr(r, 2)
+            if (match(r2, /^[A-Za-z0-9_]+/)) {
+                word = substr(r2, 1, RLENGTH); dash = d; unq = 0; inhd = 1
+                break
+            }
+        }
+        s = r
+    }
+}
+END {
+    if (hit != "") { print hit; exit }
+    if (rest !~ /(^|[ ;&|(])(gh|git)[ ]/) exit
+    n = length(rest); st = 0; esc = 0; sawbt = 0
+    for (k = 1; k <= n; k++) {
+        ch = substr(rest, k, 1)
+        if (st == 1) { if (ch == "\047") st = 0; continue }
+        if (esc) { esc = 0; continue }
+        if (ch == "\\") { esc = 1; continue }
+        if (st == 2) {
+            if (ch == "`") sawbt = 1
+            else if (ch == "\"") {
+                st = 0
+                if (sawbt && pre ~ /(--body|--title|--message|-[A-Za-z]*[bmt])(=| +)$/) { print "DQUOTE"; exit }
+            }
+            continue
+        }
+        if (ch == "\047") { st = 1; continue }
+        if (ch == "\"") { st = 2; sawbt = 0; pre = substr(rest, (k > 40 ? k - 40 : 1), (k > 40 ? 40 : k - 1)); continue }
+    }
+}'
+
+_bg_expansion_hit() {
+    printf '%s\n' "$1" | awk "$_BG_EXPANSION_AWK" 2>/dev/null
+}
+
+_BG_EXPANSION_FIX="use a quoted heredoc (<<'EOF'), or write the body to a file and pass --body-file / -F"
+
+case "$(_bg_expansion_hit "$COMMAND")" in
+    HEREDOC)
+        echo "Blocked: unquoted heredoc body contains a backtick or \$( — the shell would EXECUTE it as command substitution. Fix: $_BG_EXPANSION_FIX" >&2; exit 2 ;;
+    DQUOTE)
+        echo "Blocked: double-quoted gh/git message contains a backtick — the shell would EXECUTE it as command substitution. Fix: $_BG_EXPANSION_FIX" >&2; exit 2 ;;
+esac
+
 NORM=$(_bg_norm "$COMMAND")
 
 if _bg_rm_danger "$NORM"; then
