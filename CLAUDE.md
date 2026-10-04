@@ -626,7 +626,7 @@ docs/
 
 ## Style Rules
 
-- All markdown and text files must wrap at 120 characters. No line may exceed 120 chars.
+- Code and code comments wrap at 120 (ruff/pylint enforce it for Python). Markdown and text prose is NOT hard-wrapped: one line per paragraph or bullet. Existing wrapped paragraphs keep their wrap when edited. Never wrap tables, fenced code or URLs. Commit bodies wrap at 72. PR bodies, PR/issue/review comments, any `gh` body, release notes, chat replies and pandoc/epub input are never hard-wrapped.
 - 4-space indentation (except YAML/Lua: 2-space)
 - zsh functions over aliases for anything > 1 line
 - No `$()` substitution in Bash tool calls
