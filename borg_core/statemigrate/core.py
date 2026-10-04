@@ -25,11 +25,12 @@ MOVED_FILES: tuple[str, ...] = (
     "memory-hits.log",
     "agents.jsonl",
     "prefer-tool.jsonl",
+    "briefing-stderr.log",
 )
 # Subdirectory + suffix families, discovered by the shell layer: (directory, glob).
 MOVED_GLOBS: tuple[tuple[str, str], ...] = (
     ("devcontainer-hashes", "*.hash"),
-    (".", "briefing-*-stderr.log"),  # matches briefing-stderr.log and briefing-<stage>-stderr.log
+    (".", "briefing-*-stderr.log"),  # matches briefing-<stage>-stderr.log (not the plain briefing-stderr.log)
 )
 
 # Genuinely append-only histories: when both copies exist the old history goes first.

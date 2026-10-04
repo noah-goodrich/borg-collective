@@ -12,8 +12,12 @@ from borg_core.statemigrate import cli, shell
 
 @pytest.fixture(name="roots")
 def _roots(tmp_path, monkeypatch):
-    for var, sub in (("HOME", "home"), ("XDG_CONFIG_HOME", "config"), ("XDG_STATE_HOME", "state"),
-                     ("XDG_DATA_HOME", "data")):
+    for var, sub in (
+        ("HOME", "home"),
+        ("XDG_CONFIG_HOME", "config"),
+        ("XDG_STATE_HOME", "state"),
+        ("XDG_DATA_HOME", "data"),
+    ):
         monkeypatch.setenv(var, str(tmp_path / sub))
     monkeypatch.delenv("BORG_DIR", raising=False)
     old, new = tmp_path / "config" / "borg", tmp_path / "state" / "borg"
@@ -108,3 +112,11 @@ def test_discover_uses_both_roots_for_families(roots):
     got = {e.rel: (e.old_present, e.new_present) for e in shell.discover(old, new)}
     assert got["briefing-a-stderr.log"] == (True, False)
     assert got["devcontainer-hashes/z.hash"] == (False, True)
+
+
+def test_discover_briefing_stderr_log_exact_name(roots):
+    """Verify discovery of briefing-stderr.log (the plain name, not a staged variant)."""
+    old, new = roots
+    _put(old, "briefing-stderr.log", "old stderr")
+    got = {e.rel: (e.old_present, e.new_present) for e in shell.discover(old, new)}
+    assert got["briefing-stderr.log"] == (True, False)
