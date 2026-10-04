@@ -1,366 +1,202 @@
-Generated: 2026-10-03
+Generated: 2026-10-04
 
-# D5 blind review packet
+# D5 blind review packet (round 3)
 
 ## Problem statement
 
-borg-collective is an AI orchestration framework (two CLIs, borg and drone, plus hooks and skills) for ONE developer
-with ADHD who juggles about 20 projects. He found six one-page psychoeducation sheets unusually effective for himself:
-a feelings wheel, a DBT wise-mind Venn diagram, an IFS internal-system map, an NVC fill-in script ("When __, I feel
-__, because I need __. Would you be able to __?"), a window-of-tolerance chart, and the Gottman Four Horsemen with
-antidotes. Question: how should borg apply the same design principles to project and workflow management?
+borg-collective is an orchestration framework (two CLIs, borg and drone, plus hooks and skills) for ONE developer with ADHD who works across about 20 projects and several parallel Claude Code sessions. The question: how should borg COMMUNICATE project information (status, priority, context, next moves) so that the right information arrives at the right time, in the right way and in the right amount? This is about how borg says things, not what it measures or enforces (a separate project decides that).
 
-The evidence base (11 design principles with strength labels) is in analysis.md section 3 of the parent folder: one
-message in about four chunks; recognition at the point of performance; every name routes to a next move; problem and
-counter-move as contrast; a small closed vocabulary from the user's own failures; rehearsed if-then scripts; sparse
-distinctive cues; pull by default, push rarely and measured; a handout is a first step; do not duplicate, mandate or
-grow; diagrams are heuristics. No study tests a one-page aid on adults with ADHD or on developers.
+The six moments at which borg speaks: M1 glance (status at rest across the projects); M2 choosing the next move; M3 re-entering a project after time away; M4 switching between planning and doing; M5 ending or handing off a session; M6 something going wrong.
+
+The surfaces that exist today: the borg link page (eight fixed sections, 159 lines in local mode, "(no summary)" on 19 of 20 repository rows, 30 queued directives printed); borg next (one ranked answer, no reason shown); a session-start hook that injects the git status, the last five commits and the latest checkpoint's sections 4 and 5 plus warnings (this reaches the model, not the human); a Stop hook whose three warnings reach the human through a systemMessage since 2026-10-04 (before that they reached no one); a PostToolUse check-in every 75 tool calls (reaches the model only); a checkpoint file with a tl;dr and five numbered sections; a tmux status line that shows only the date, a bell style, and a hotkey that runs borg next.
+
+Facts about delivery, read from the repo, the hook docs and the tmux manual on 2026-10-04: the Claude Code hook docs list additionalContext (reaches the model, "before the first prompt") and sessionTitle (same effect as /rename) as SessionStart output fields, and describe systemMessage as a universal field shown to the user with no SessionStart-specific statement; SessionStart matchers are startup, resume, clear, compact and fork; the Stop hook fires after every assistant turn; SessionEnd fires once at termination and is observational only; borg-link-up.sh is registered as a Stop hook and writes last_activity to the project's state.json on every Stop; borg-link-down.sh (SessionStart) overwrites last_activity and has no matcher; switching into a tmux window whose Claude session is already running fires no SessionStart; the borg switch auto-brief is printed with echo to the pane where borg switch ran and is built from the registry summary field; the hotkey path calls tmux display-message with one line and tmux.conf does not set display-time (the tmux default is 750 ms); tmux 3.6a is installed and its manual says display-message takes -d delay (milliseconds) and -C (keep the pane updating), and that display-popup draws over the panes and "Panes are not updated while a popup is present"; drone claude (drone.zsh cmd_claude) finds or creates the project's tmux window and, if the left pane's foreground command is a shell, types claude into it with tmux send-keys; borg claude (borg.zsh cmd_claude) calls _borg_launch_in_tmux claude --continue, which runs the command directly inside tmux or through a generated launcher script otherwise; `borg checkpoint-name` prints YYYY-MM-DD-HHMMSS-<suffix> where the suffix is derived from CLAUDE_CODE_SESSION_ID and is empty in Cortex Code and in a bare terminal; borg next scores in jq (pinned +200, waiting +100, active +50, idle +10, no activity -50, a tmux window +5, then oldest activity first) while the borg link page orders rows with core.project_sort_key (pinned, status rank, oldest activity first), so there are two rankers; Stop systemMessage has not been watched rendering in a live session; a separate fix is landing that shows each Stop warning at most once per session.
+
+Constraints: one user, no team and no coaching; terminal-first; host tmux plus devcontainers; the evidence base (analysis.md in the parent folder, 13 principles with strength labels) comes mostly from hospitals, shoppers, web readers and programmers in lab studies, not from a solo developer with many projects.
 
 ## Chosen option
 
-Option B-card: Situation and next-move card
+Option E: Doorways, scoped to re-entry and handoff first. Its MVP, in three lines: (1) Arrive: a pure borg_core brief (an Activity line of commits and files touched since the checkpoint, local merge commits as the merged-PR proxy, dirty files, plan criteria, a derived Ended line from last_activity against the newest checkpoint time, a STALE line meaning HEAD moved or the tree was edited since the checkpoint, then the checkpoint's own words) PRINTED by drone claude and borg claude before claude starts, with a loud one-line fallback if borg_core is not importable; for hand-typed launches a SessionStart injection scoped to the startup and resume matchers (derived lines to the model, no restatement instruction) plus a one-line sessionTitle cue; for a running window a one-line derived headline through tmux display-message -d. (2) Depart: one Stop systemMessage, only on the turn a checkpoint whose filename ends in this session's suffix appears and only if a derived CARRIED or NOT DEPLOYED flag is non-empty; off when the suffix is empty; no SessionEnd hook. (3) Choose: a verdict line on borg link and a recommended move on borg next from one ranker, with the reason labelled a heuristic and whether it was followed logged. Build order starts with a one-hour spike on what is unverified (whether printed text survives Claude's start-up and whether the pane can run borg, where sessionTitle shows, Stop systemMessage rendering live, key handling during display-message).
 
 ## Option set (verbatim)
 
-### Option A: Workload state map
+### Option A: One page, on a diet
 
-- **What it is:** A three-zone map of how loaded the work is (overloaded, in range, drifting) with a "you are here"
-  marker, a plain description of each zone, and one move out of it. The zone comes from counts borg already holds:
-  live sessions against the limit, how long the longest-open thread has sat, and hours since the last checkpoint. It
-  borrows the shape of a window-of-tolerance chart, not its trauma claims.
-- **How it works:** `borg link` computes the zone from the `capacity` block it already builds and prints the map as
-  rows inside the existing `▸ SIGNALS` section (no new section, so the page spine is untouched). Noah glances, sees
-  the marker, reads the one move under it. The session-start injection carries the zone name instead of the
-  capacity paragraph.
+- **What it is:** Every moment is carried by the one surface that already exists, `borg link`, and the work is subtraction and ordering inside its fixed `SECTIONS` spine. A verdict line goes first, dormant rows collapse to a count, and the empty `▸ NEXT` stops saying "nobody looked". No new surface, no new push.
+- **How it works:** The moment-to-surface map is below. Hooks stay as they are; the page is the only thing that changes.
+
+| Moment | Surface | What appears | Push or pull |
+|--------|---------|--------------|--------------|
+| M1 glance | `borg link` | One verdict line above everything ("1 needs you"), then only rows that have state | Pull |
+| M2 next move | `▸ NEXT` and `borg next` | Up to three varied moves, each with its reason, the top one labelled "recommended" | Pull |
+| M3 re-enter | `▸ IN FOCUS` | Latest checkpoint tl;dr and the first line of its Next Session | Pull |
+| M4 plan to do | none | Not addressed (the page is not open mid-session) | none |
+| M5 end | checkpoint file | Unchanged | none |
+| M6 going wrong | `▸ SIGNALS` | Same section, deduplicated, one line per cause | Pull |
+
+- **Removes or quiets:** The 9-line cube header (a decoration; Noah's call whether it stays). The `(no summary)` text on 19 of 20 rows. The 17 rows that say "never" or 26+ days (collapsed to one line: "17 dormant, oldest 123d"). The 30-line `▸ QUEUED` list (top 5 plus the count). The `▸ NEXT  nobody looked` stub, which becomes the last swept answer with its age.
 - **Pros / Cons:**
-  - Pro: one picture, one glance, a format Noah already responds to.
-  - Pro: replaces two capacity texts with one artifact.
-  - Con: thresholds are guesses; the inverted-U curve this shape resembles is called folklore, and the
-    window-of-tolerance source frames it as a trauma hypothesis.
-  - Con: says "overloaded" but not which thread to drop.
-  - Con: the "drifting" zone (too little live work) has no detector today.
-- **Key tradeoffs:** You give up specificity (a zone, not a culprit) and accept thresholds that are heuristics with
-  no validation, which the printed map must say out loud.
-- **Cards:** `c3-pa-dhs-window-of-tolerance-tip-sheet.md` (zone, symptoms, actions on one page),
-  `c3-corbett-2015-yerkes-dodson-folklore.md` and `c3-corrigan-2011-window-of-tolerance.md` (heuristic status),
-  `c1-nngroup-recognition-vs-recall.md`.
-- **Feasibility:** High. The `capacity` block (active, limit, over_limit) already feeds `_signals_section` in
-  `borg_core/link/render.py`.
-- **Estimate:** MVP 1 session; full three zones with checkpoint-age signal 3 sessions.
-- **STOPS doing:** the bare "N sessions need attention (limit: N)" line in `▸ SIGNALS`, and the free-text
-  `CAPACITY WARNING` paragraph in the session-start injection.
-- **Visual:**
-
-```
-▸ SIGNALS
-  LOAD     OVERLOADED           IN RANGE             DRIFTING
-           more live than       1 to 3 live,         nothing live,
-           the limit            something moving     20 idle
-                                     ^ you are here (3 of 3 live)
-  Move:    finish or park one: /borg-link-up in the oldest window
-  (heuristic: the limit is a setting, not a measurement)
-```
-
-- **Minimum viable version:** *"The smallest version that delivers the core value is: two zones (over limit, in
-  range) with the you-are-here marker and one move each, rendered in `▸ SIGNALS` from the existing capacity block,
-  with no new detectors."*
-
-### Option B-card: Situation and next-move card
-
-- **What it is:** A static one-page card of three named situations, each paired with an if-then next move. It is a
-  plain markdown file Noah owns and edits (`~/.config/borg/card.md`); borg never regenerates it and `borg link` does
-  not render it. The names come from a one-pass tally of the 40 most recent checkpoints (see Mining result below) and
-  describe the state of a piece of work, not a fault of the person. A fourth name must retire one. WAITING ON (8
-  checkpoints) is not on the card: the three examples spot-checked record it under "No blockers", as a wait for
-  the other machine's review stamp that an existing protocol covers, and its 2-day threshold had no source.
-- **How it works:** Two delivery paths, both measured. (1) Human: `borg card` prints the card and appends an open
-  event to `STATE/card-log.jsonl`; `borg card --report` prints the ledger. (2) Sessions: a per-machine skill
-  extension (`~/.config/borg/extensions/skill-extensions/borg-link-up/02-output.md`) asks `/borg-link-up` to add the
-  `mine:` line of any pair whose cue applied, tagged `[card:<NAME>]`, under `## 5. Next Session`; `borg-link-down.sh`
-  injects section 5 at the next SessionStart. That is prose, so compliance is model-discretionary and the tag makes
-  misses countable. Nothing fires from the card itself; no new push is added. A pair becomes a live row in `▸ SIGNALS`
-  only by the promotion rule below, and none is live at the start.
-  (`STATE` is the state root, `${XDG_STATE_HOME:-~/.local/state}/borg` via `_borg_state_root`; per State Hygiene
-  AC4 operational logs never go in the config dir.)
-- **Rehearsal step (self-formation):** the file ships with placeholder wording and an empty `mine:` line per pair.
-  Noah rewrites each then-clause once, in his own words, and says it aloud once when he does. `borg card --report`
-  prints "rehearsed: k of 3" and delivery uses the `mine:` line when it exists. The if-then evidence is for
-  self-formed, rehearsed plans (larger effects when rehearsed and motivated, no reliable effect on vaccination or
-  voting); a pre-written, unrehearsed pair is outside it.
-- **Instrumentation this needs (none exists today):**
-  - `borg card` arm in `borg.zsh` and `borg_core/card/` (open, report), through `_borg_py`; source tree, live on
-    save.
-  - One append line in `hooks/tool-count-nudge.sh` (in the 75-call branch; today it keeps only a per-session counter
-    and resets it) and one in `hooks/borg-link-up.sh` (beside the no-checkpoint stderr line; today it logs nothing),
-    to `STATE/nudge-log.jsonl`, written with a brace-grouped redirect per the repo's redirect rule. Hooks are
-    copied, so a `borg setup` redeploy is required.
-  - Follow signal from an artifact: a new file in the project's `.borg/checkpoints/` within 60 minutes. Following
-    `/borg-review` leaves no artifact and is not measured. No skill-invocation logging is added.
-- **Ledger semantics (fail closed):** each source reports `no data` (absent or empty), `stale` (newest event older
-  than 7 days while newer checkpoints exist), `insufficient (n=k)` (under 10 events) or `ok` with the rate. A rate, and
-  never 0%, is printed only for `ok`. Tests go through the real `borg card --report` path with `XDG_CONFIG_HOME`
-  redirected (log path derived, not supplied), cover absent, empty, stale and short logs, and include a positive
-  control with a known count. The repo has a documented history of a ledger reading zero from a dead source; this is
-  the guard.
-- **Mining result (LOCAL MEASUREMENT, not literature):** keyword tally over §4 "Blockers" of the last 40 files in
-  `.borg/checkpoints/` (38 had a §4; 2026-08-24 to 2026-10-03). Counts are checkpoints affected, not distinct
-  incidents, because consecutive checkpoints re-record the same open item; the regexes are loose, so treat each count as
-  an upper bound.
-
-  | Situation | Checkpoints | Example files |
-  |-----------|-------------|---------------|
-  | CARRIED (same open item, unchanged, re-listed) | 19 | `2026-08-31-2211`, `2026-09-04-1022`, `2026-09-13-0927` |
-  | UNCHECKED (gate or verdict that measures nothing) | 14 | `2026-08-27-2147`, `2026-09-02-1309`, `2026-09-05-2112` |
-  | NOT DEPLOYED (built, not shipped or synced) | 10 | `2026-08-25-1738`, `2026-08-27-0216`, `2026-09-04-1253` |
-  | Dropped: WAITING ON (protocol wait on another machine's stamp) | 8 | `2026-09-03-0955`, `2026-09-22-1322` |
-  | Reserve: stale claim in prose (hand-read ~5 of 13 keyword hits) | ~5 | `2026-08-31-0759`, `2026-09-04-1022` |
-  | Reserve: self-inflicted slip | 6 | `2026-08-27-0401`, `2026-09-16-1715` |
-  | Reserve: flaky or environment | 5 | `2026-08-31-2156`, `2026-09-18-1238` |
-
-  The draft's original names did not survive contact with the record: SPRAWL (capacity or over-limit) appears in 1 of 38
-  (`2026-10-03-222446-beb3b1`), DRIFT in 1 of 38 (`2026-10-02-145508-fb0d8f`), directive staleness in 0 of 38. Only
-  UNVERIFIED survives, renamed UNCHECKED. Caveat: checkpoints are written by sessions with Noah, so they show what
-  got recorded as a blocker, not what he felt.
-- **The card (draft wording, placeholder until Noah rewrites it):**
-
-```
- SITUATION       IF ...                                      THEN ...
- NOT DEPLOYED    I touched a hook, skill or lib file         run borg setup before closing, or write
-                                                             "not deployed: <file>" on line 1 of Next
- CARRIED         a blocker or next item I am writing is      do it, file a directive, borg sever it,
-                 already in the checkpoint I was handed      or write "held on purpose: <why>"
- UNCHECKED       a check just went green                     break it once on purpose, or confirm it ran
-                                                             one case, before writing "done"
- mine: ______    (one line per pair, in your words)
- (names describe the work, not you; this card is yours to edit)
-```
-
-  CARRIED's cue is something a writer can perceive without a detector: the latest checkpoint is injected into the
-  session at start, so "this item is already in what I was handed" is visible at write time. The "held on purpose"
-  exit is there because some holds are designed (`2026-09-13-0927` records a deliberate hold); "decide it now" must
-  not contradict them.
-- **Promotion rule (any future live row):** a pair earns a row in `▸ SIGNALS` only when all four hold. (1) A real
-  detector reads a stored fact and is tested through the real invocation path, not a fixture that supplies the value,
-  including a case where the fact is broken and the row must say so; the same broken-source test applies to the ledger.
-  (2) A shadow run, logging only and showing nothing, has measured its firing rate over at least 14 days of `borg link`
-  runs and it is true on fewer than about 20% of days; above that it is a permanent row, so it stays on the card.
-  (3) The ledger reports status `ok` (not `no data`, `stale` or `insufficient`) for the relevant source after three
-  weeks, and the card or nudge it would replace has an acted-on rate below a threshold Noah writes in the directive
-  before reading the data. Missing data fails this gate; it never passes it. (4) The change is net-negative in page
-  lines. A pair with no detector prints nothing anywhere, and no line ever reads "nothing to report" for it; the card
-  says "not detected by borg".
-- **Pros / Cons:**
-  - Pro: the card costs one session and can be judged by use before any detector exists.
-  - Pro: the next moves are phrased as if-then, the best-supported of the ingredients considered (bias-corrected d
-    between 0.15 and 0.35, ADHD evidence from children on a lab task), and the rehearsal step moves it toward the
-    self-formed plans that evidence covers.
-  - Pro: the vocabulary is measured from this repo's own record, so no label is invented.
-  - Pro: it has a measured route to being seen, and a ledger that says `no data` instead of 0%.
-  - Con: the contrast-pair mechanism is Moderate and the one-page format is Weak; Alfieri tested classroom concept
-    learning and Keith and Frese tested training, not a pinned card.
-  - Con: the vocabulary-from-own-failures precedent (Ford and Parnin) is descriptive, with no outcome test.
-  - Con: the session path is a prose extension in the 70 to 90% band, and `borg card` logs only opens through that
-    command, not a `cat` or an editor open. The human path still relies on Noah remembering; this repo's
-    voluntary-use surfaces have a poor record.
-  - Con: NOT DEPLOYED duplicates an existing memory note and is better fixed by a `borg doctor` drift check.
-- **Key tradeoffs:** You concede automatic reach and any live signal at the start, and accept that the card's value is
-  unmeasured except through a proxy ledger that can be fooled by coincidence, on about 20 new checkpoints over three
-  weeks.
-- **Cards:** `c3-implementation-intentions-642-tests.md` and `c3-gawrilow-adhd-implementation-intentions.md` (if-then
-  phrasing, rehearsal), `c3-alfieri-2013-case-comparisons.md` and `c3-keith-frese-2008-error-management-training.md`
-  (contrast pairs, mechanism only), `c2-ford-parnin-2015-frustration-categories.md` (own-failure vocabulary,
-  descriptive), `c4-gani-alert-fatigue-primary-care.md` (why no new push).
-- **Feasibility:** High for the card; Medium for the ledger, because its sources do not exist yet and three small
-  items must land first (card log, two nudge logs). No log of these exists today. Live
-  rows are gated by the promotion rule and may never ship.
-- **Estimate:** Card 1 session; instrumentation and ledger with tests 2 sessions; one shadow detector about 1 session
-  each, only for a pair Noah wants promoted.
-- **STOPS doing:** nothing at first. Only the ledger can retire an existing nudge, by the same action-rate rule as
-  Option E, and that retirement is a removal, not a claim that the card replaces it.
-- **Sequence note:** instrumentation (so the ledger has sources), card with Noah's rewrite, extension for delivery,
-  then shadow detectors, then at most one live row, only through the promotion rule.
-- **Visual:** the card above.
-- **Minimum viable version:** *"The smallest version that delivers the core value is: the three-pair card in Noah's
-  own words, `borg card` logging opens, the two nudge firing logs, and a fail-closed report, with no live rows and no
-  nudge retired."*
-
-### Option C: Stuck router
-
-- **What it is:** A small closed vocabulary of ways Noah gets stuck (five names), reached by one command, where
-  choosing a name immediately prints its single next move. It is the project-work analog of picking a word from a
-  feelings list, except the word and the action sit on the same screen. The five names are mined from his own
-  checkpoints and memory notes before anything ships.
-- **How it works:** `borg stuck` (or `/borg-stuck`) shows the five-row menu; Noah picks a row by number; borg prints
-  the move and, where the move is a command, offers to run it. Nothing fires by itself.
-- **Pros / Cons:**
-  - Pro: pure pull, so it cannot add alert fatigue.
-  - Pro: the name and the action arrive together, which is the pairing the labeling studies favor.
-  - Pro: it targets the moment of being stuck, which no current surface does.
-  - Con: it only helps if Noah remembers to run it while stuck, the exact moment recall is weakest.
-  - Con: the vocabulary is only as good as the mining; two descriptive studies are the only precedent.
-- **Key tradeoffs:** You concede automatic reach (it waits to be asked) and accept that a menu is a lookup, not a
-  glance; one source describes a wheel-like list as a step-by-step lookup for some users.
-- **Cards:** `c2-kalokerinos-2019-differentiate-to-regulate.md` and `c2-nook-2021-naming-impedes.md` (name and action
-  together), `c2-ko-myers-aung-2004-learning-barriers.md`, `c2-ford-parnin-2015-frustration-categories.md` (only
-  precedents, descriptive), `c2-matt-2024-emotion-word-training.md` (teaching words alone did not lower distress),
-  `c4-barkley-point-of-performance.md` (why on-demand recall is the weak spot).
-- **Feasibility:** Medium. The command and menu are trivial; deriving the five names from 300-plus checkpoints is the
-  real work and has to come first.
-- **Estimate:** Vocabulary mining 1 session; command and menu 1 session; routing to skills 1 session.
-- **STOPS doing:** the 75-tool-call check-in nudge, whose job (offer a way out when work stalls) the menu takes over
-  on demand.
-- **Visual:**
-
-```
-$ borg stuck
-  What kind of stuck?
-  1  Can't start     cold, no first step      read the latest checkpoint tl;dr, do its Next line
-  2  Can't choose    too many open threads    borg next, then close every other window
-  3  Can't finish    scope keeps growing      reread Done-when, defer the rest in one line
-  4  Can't trust     "done" with no check     /borg-verify before saying shipped
-  5  Lost the thread session went cold        borg link <project>, read the checkpoint
-  pick 1-5:
-```
-
-- **Minimum viable version:** *"The smallest version that delivers the core value is: a printed five-row menu with
-  a number-to-command table, no interactivity, built from a one-session pass over the last 30 checkpoints."*
-
-### Option D: Fill-in scripts
-
-- **What it is:** Short fixed-slot templates, in the spirit of a four-slot "when, I feel, because, would you"
-  sentence, for the artifacts Noah writes most: a directive, a checkpoint handoff, and a nanoprobe brief. Each has at
-  most four slots, and one slot is a rehearsed if-then ("If I open this cold, then I read ___ first, then run ___").
-- **How it works:** `borg-plan`, `borg-link-up` and the brief builder present the slots, Noah or the model fills
-  them, and the result lands in the artifact header. The session-start injection reads the if-then slot back at the
-  next cold start, so the plan is rehearsed by use. Old free-form artifacts stay valid (expand, then migrate, then
-  contract).
-- **Pros / Cons:**
-  - Pro: if-then planning is the best-supported ingredient in the research, and it was tested in children with ADHD.
-  - Pro: fixed slots cap length, which helps the reader on a cold start.
-  - Con: `borg-plan` already demands "Done when" criteria with a Verify line, so the overlap is large.
-  - Con: bias-corrected effects are a third of the headline, and the ADHD evidence is children on a lab task.
-  - Con: a script only works if it is rehearsed; nothing here makes rehearsal happen.
-- **Key tradeoffs:** You concede flexibility (four slots will not fit every directive) and add a template to keep in
-  sync across three skills and the validators.
-- **Cards:** `c3-implementation-intentions-642-tests.md` (bias-corrected d between 0.15 and 0.35),
-  `c3-gawrilow-adhd-implementation-intentions.md` (children, lab task), `c3-brighter-coach-action-planning-adhd.md`,
-  `c3-nvc-korean-nursing-rct-2025.md`, `c3-donker-2009-psychoeducation-meta-analysis.md` (handout alone d = 0.20),
-  `c1-fourcade-2012-checklist-barriers.md` (duplication as top barrier).
-- **Feasibility:** Medium. Skills are prose, so the template is cheap, but anything that must be enforced needs a
-  validator, and prose templates sit in the model-discretionary compliance band.
-- **Estimate:** 2 sessions for directive and handoff templates; 3 more for validators and a rehearsal read-back.
-- **STOPS doing:** free-form "Next:" prose in checkpoints and the open-ended directive preamble, replaced by the slots.
+  - Pros: cheapest, pure renderer so it is testable against fixtures, no new channel, the spine rule (sections never change, rows do) is kept.
+  - Cons: leaves M4 and M5 untouched; everything depends on Noah opening a page; the evidence says a display alone does not change decisions.
+- **Key tradeoffs:** You concede the two moments with the best evidence (M3 re-entry and M5 handoff) to a pull surface, and you accept that the page can only help a person who asked for it.
+- **Feasibility:** High. `render.py` builds the page from a `SECTIONS` tuple with no branch on scope, `picture.py` is pure, and the rows are derived.
+- **Estimate:** 2 to 3 sessions, most of it golden-file updates.
 - **Visual:**
 
 ```mermaid
 flowchart LR
-  A[borg-plan or link-up skill] --> B[four slots offered]
-  B --> C[slots filled, saved in header]
-  C --> D[session start reads the if-then slot back]
-  D --> E[next session opens with a rehearsed first move]
+    reg["registry + checkpoints + plan"] --> doc["borg link document (SECTIONS)"]
+    doc --> v["verdict line"]
+    doc --> rows["rows with state only"]
+    doc --> nxt["NEXT: 3 varied, 1 recommended"]
+    v --> eyes["Noah, when he runs it"]
+    rows --> eyes
+    nxt --> eyes
 ```
 
-- **Minimum viable version:** *"The smallest version that delivers the core value is: one four-slot checkpoint
-  handoff, where the last slot is an if-then for the next cold start, with the old format still accepted."*
+- **Minimum viable version:** *"The smallest version that delivers the core value is: a verdict line at the top of `borg link` and the dormant rows collapsed to one count line, with no other change."*
 
-### Option E: Quiet page
+### Option B: Ambient periphery
 
-- **What it is:** A subtraction-first option. Measure which current prompts Noah acts on, retire the ones he does
-  not, and cap the `borg link` page so its default read is a few chunks instead of eight sections of rows. Nothing
-  new is named or taught. The aid is the absence of noise.
-- **How it works:** A ledger joins existing logs (the hook counters, checkpoint timestamps, command history) to
-  record whether each nudge was followed by the suggested action within the hour. After three weeks, nudges below a
-  set action rate are removed. On the page, row caps apply inside sections (the section list stays identical, as the
-  one-renderer rule requires): QUEUED shows the count and the three oldest, never-active idle repositories collapse
-  to a count.
+- **What it is:** State lives at the edge of vision instead of on a page. A tmux status segment, window colors and Claude Code's own status line carry the glance, the next move and the warnings, driven by one small cache file that hooks keep fresh. The page becomes the drill-down.
+- **How it works:** Hooks (SessionStart, Stop, Notification) already write per-project state; a cache writer rolls them into one line. `status-right` reads the cache (no fork of `gh` on a 15-second tick), and the Claude Code `statusLine` setting shows the project-local line inside a session.
+
+| Moment | Surface | What appears | Push or pull |
+|--------|---------|--------------|--------------|
+| M1 glance | tmux `status-right` | `borg: 1 needs you, shopping-app 6h` or `borg: clear 08:40` | Ambient |
+| M2 next move | `Ctrl+Space >` | One line in a tmux message: the target and its reason | Pull |
+| M3 re-enter | Claude Code `statusLine` | `plan 5/6 · next: AC6 · 2 PRs since` | Ambient |
+| M4 plan to do | `statusLine` | Segment flips from `PLAN` to `DO` with the done-when | Ambient |
+| M5 end | `statusLine` | `unsaved: no checkpoint` until one is written | Ambient |
+| M6 going wrong | `status-right` color, existing bell | Segment turns amber and names the cause | Ambient |
+
+- **Removes or quiets:** The `⚠ CAPACITY WARNING` paragraph injected at session start (becomes `3/3 active` in the segment). The 75-call check-in text. The date-only `status-right`.
 - **Pros / Cons:**
-  - Pro: removing clutter is among the better-supported layout moves in the research (Moderate).
-  - Pro: it shrinks the surface instead of growing it, and it measures before it decides.
-  - Pro: nothing to learn.
-  - Con: adds no new capability, so Noah's request for sheet-like aids goes unanswered.
-  - Con: an action-rate ledger can be fooled by correlation (he ran the command anyway).
-  - Con: capping rows hides things; a buried directive stops existing.
-- **Key tradeoffs:** You concede the aid-as-artifact idea entirely and accept that removed prompts may have been
-  catching real lapses at a rate the ledger cannot see.
-- **Cards:** `c1-mayer-metaanalysis-2025.md` (removing seductive detail had the largest effect),
-  `c1-cowan-2001-magical-number-4.md`, `c1-thomassen-2010-help-or-hurdle.md` (checklist fatigue),
-  `c4-nordby-sms-reminders-adhd-rct.md` and `c4-focus-adhd-app-rct.md` (generic prompts null),
-  `c1-urbach-2014-ontario-checklist-null.md` (mandates).
-- **Feasibility:** High. Counters and timestamps exist; row caps are a render-layer change.
-- **Estimate:** Ledger 1 session; three weeks of waiting; cap and retire 1 session.
-- **STOPS doing:** the 75-call nudge and the no-checkpoint stderr nudge (each unless the ledger saves it), the full
-  29-row QUEUED dump, and 5 never-active repository rows.
+  - Pros: zero interruptions, always in view, matches the empty-state-as-blank idea (a clear segment), reuses the registry color helpers and the existing bell style.
+  - Cons: 30 characters of `status-right-length` fits one item, not twenty projects; tmux exists on the host only (devcontainer panes and plain terminals get nothing); a cache that goes stale looks the same as "all clear".
+- **Key tradeoffs:** You concede detail (one item at a time) and take on a cache that must be made to fail loudly, the same silent-blindness shape that bit `borg-usage-watch` three times.
+- **Feasibility:** Medium. Segment and bell are easy; the risk is the cache's freshness mark and the `statusLine` setting, whose behavior this run did not verify.
+- **Estimate:** 3 to 4 sessions.
 - **Visual:**
 
+```mermaid
+flowchart LR
+    hooks["SessionStart / Stop / Notification hooks"] --> cache["one cache line + written-at"]
+    cache --> tmux["tmux status-right"]
+    cache --> sl["Claude Code statusLine"]
+    cache --> win["window color + bell"]
+    tmux --> eyes["Noah, peripheral"]
+    sl --> eyes
+    win --> eyes
 ```
-▸ REPOSITORIES  20 repositories, 1 needs attention
-  ingle   [C]  waiting <<<   27m ago
-  borg-collective [C] idle   just now
-  ... 5 never active, 10 idle over 30 days (counts only)
-▸ QUEUED  29 directives, 3 oldest shown (docs/plans/directives/ for the rest)
-```
 
-- **Minimum viable version:** *"The smallest version that delivers the core value is: the ledger alone, with no
-  removals, run for three weeks, so the first cut is decided by numbers."*
+- **Minimum viable version:** *"The smallest version that delivers the core value is: one `status-right` segment reading a cache file with a freshness mark, showing the count of projects that need Noah and the top one's name, and nothing else."*
 
-### D3.5: Contradiction check
+### Option C: Quiet router with a budget
 
-Two constraints pull against each other. The research says to put the cue at the point of performance (Option
-A-style state, visible where the work happens), and also says generic pushes fail and alerts fatigue (pull by
-default). Borg's own history says an aid that waits to be used is not used (four voluntary-write surfaces yielded one
-real row in five months), and Noah's standing preference is that automation beats discipline. A pure pull aid and a
-pure push aid each concede one pole.
+- **What it is:** Subtract first. Every message a hook sends to anyone passes one gate that asks four questions (urgent, actionable, first time this session, safe moment) and routes failures to a log that the page and the departure message roll up. The unit of design is the message, not the surface.
+- **How it works:** A single executable (`borg-signal`, per the repo's rule that anything that MUST happen ships as an executable, not as prose) replaces the direct `jq` emitters in the hooks. Pass: delivered once, in the fixed shape WHAT, SINCE, DO. Fail: appended to `signals.jsonl` and shown as one rolled-up line at the next arrival or departure. A budget of one interrupt per session and three per day is counted from the same file.
 
-**Ideal Final Result:** Noah sees his load and the next move at the place he works, without any prompt firing and
-without opening anything.
+| Moment | Surface | What appears | Push or pull |
+|--------|---------|--------------|--------------|
+| M1 glance | `▸ SIGNALS` | One line: `4 held back since Sat, 1 needs you` | Pull |
+| M2 next move | unchanged | Not addressed | none |
+| M3 re-enter | session start `additionalContext` | One line of held-back signals, no paragraph. Reaches the model only; the human sees it if the model repeats it. (A launcher print, as in Option E, could carry it to the human without a model; C does not include one) | Push to the model, once |
+| M4 plan to do | breakpoints only | Nothing mid-edit; the one allowed message waits for a commit or green test | Push, gated |
+| M5 end | Stop `systemMessage` | The three warnings coalesced into one 3-line message. Stop fires after every turn, so "once per session" means after the first turn in which a condition holds (for the no-checkpoint warning, turn one), not at the end. A real departure message needs the checkpoint-written gate from Option E. Channel unverified live (AC5) | Push, once per session |
+| M6 going wrong | the gate | Urgent and actionable passes with its DO; the rest is logged | Push, gated |
 
-### Option F: Ambient status strip (resolved option)
-
-- **Separation move:** Separation in space (the cue lives in the always-visible status line, not in the interrupt
-  channel) combined with separation on condition (it draws only when the state is out of range).
-- **What it is:** A short segment in the tmux status line, empty when everything is in range, showing one state and
-  one antidote when it is not. It is not a banner, a notification or a dismissable prompt. No event fires, nothing
-  asks for acknowledgement, and the text is constant between changes.
-- **How it works:** The session-start and stop hooks already compute capacity; they also write one line to a
-  cache file. The tmux segment only reads that file (it never recomputes and never runs the network sweep). Out of
-  range, it shows for example `LOAD 5/3  > /borg-link-up`. In range it shows nothing.
+- **Removes or quiets:** The 75-call check-in as a count-based push. Repeats of `pre-commit-remind`. The capacity paragraph (becomes a ledger line unless the limit is crossed). Three separate Stop warnings (one message).
 - **Pros / Cons:**
-  - Pro: always at the point of work, with no interrupt, which is the stated ideal.
-  - Pro: reuses computations that already run, so no new poll.
-  - Con: untested for habituation; a permanent out-of-range strip can become wallpaper.
-  - Con: the cache file is a new store, and this repo has a documented history of stores nothing reads; the only
-    reader is the tmux segment, so a dead segment hides a stale cache.
-  - Con: colour change at the edge of vision is a mild attention capture, closer to a push than the label admits.
-- **Key tradeoffs:** You concede the richness of a page (one state, one move) and accept an unproven habituation
-  profile in exchange for zero interruption.
-- **Cards:** `c4-barkley-point-of-performance.md` and `c1-nngroup-recognition-vs-recall.md` (where),
-  `c4-nahum-shani-jitai-framework.md` and `c4-vangenugten-jitai-mental-health-2025.md` (when is unsupported),
-  `c4-gani-alert-fatigue-primary-care.md`.
-- **Feasibility:** Medium. tmux integration and colour helpers exist, but a status segment must never fork per
-  refresh (the `--local` hot-loop rule), so it must read a cache the hooks write.
-- **Estimate:** MVP 2 sessions; with two states 3 sessions.
-- **STOPS doing:** the capacity paragraph in the session-start injection, and the no-checkpoint stderr nudge.
+  - Pros: directly applies the strongest interrupt evidence (each extra reminder per encounter cut acceptance by 30%, generic reminders did nothing in two adult-ADHD trials); the shape WHAT, SINCE, DO pairs a problem with its counter-move; the budget is measurable from one file.
+  - Cons: says nothing about M1 or M2; a gate that suppresses is a gate that can hide a real failure; it touches six hooks and each needs a redeploy.
+- **Key tradeoffs:** You concede the glance and the choice moments entirely, and you take on the risk that suppression is silent. The ledger has to show its own suppressions or the router becomes the next blind spot.
+- **Feasibility:** Medium. The emit sites are known (six hooks), and the attention-routing directive of 2026-08-11 already specifies a session-scoped log.
+- **Estimate:** 4 to 5 sessions.
 - **Visual:**
 
+```mermaid
+flowchart TD
+    h["any hook signal"] --> g{"urgent, actionable, new, safe moment?"}
+    g -- yes --> d["deliver once: WHAT, SINCE, DO"]
+    g -- no --> l["signals.jsonl"]
+    l --> r["rolled up at arrival / departure / SIGNALS"]
+    d --> c["budget counter: 1 per session, 3 per day"]
 ```
-[borg-collective]  1:shell  2:claude  3:tests                   LOAD 5/3  >  /borg-link-up
-(in range, the right side is empty)
+
+- **Minimum viable version:** *"The smallest version that delivers the core value is: the three Stop warnings coalesced into one 3-line `systemMessage` in WHAT, SINCE, DO shape, plus a log line for the 75-call check-in instead of a push."*
+
+### Option D: Narrator per moment
+
+- **What it is:** Instead of fixed layouts, a model composes the right amount for the moment from the derived JSON that `borg link --json` already produces. One call per moment, a size cap per moment, and the deterministic page as the fallback. It extends the existing `--brief` idea to all six moments.
+- **How it works:** `borg say <moment>` (or a skill) feeds the document JSON plus the moment name and a line cap to `claude -p`, returns prose, and falls back to the real page bytes when the call fails. SessionStart hands the narrated brief to the model; the same text is printed for the human.
+
+| Moment | Surface | What appears | Push or pull |
+|--------|---------|--------------|--------------|
+| M1 glance | `borg link --brief` | 5-line prose verdict | Pull |
+| M2 next move | `borg next` | Two sentences: the move, why, what it unblocks | Pull |
+| M3 re-enter | session start `additionalContext`, or `borg say reenter` | A composed "where you stopped" from checkpoint, `git log` and diff. Reaches the model; the human sees it only if the model repeats it or he runs the command (a switch into a running window triggers no SessionStart). (A launcher print could carry the narrated text to the human before a prompt; D does not include one, and would pay a model call for it on every launch) | Push to the model, once |
+| M4 plan to do | plan exit | Model restates done-when in one line, as ordinary assistant text (reaches the human; model discretion) | Push, once |
+| M5 end | `/borg-link-up` | Model drafts the checkpoint (already true today) | Pull |
+| M6 going wrong | on request | `borg say wrong` explains the last signal | Pull |
+
+- **Removes or quiets:** The raw `(no summary)` rows (replaced by generated summaries, which is 20 model calls on a cold start). The verbatim checkpoint paste for the human.
+- **Pros / Cons:**
+  - Pros: amount adapts to context; reads like prose, which the usability evidence favors (concise and scannable text); no schema to maintain.
+  - Cons: layout varies per call so a learned position never forms; summary provenance and the silent-fallback bug are already open directives against `--brief`; cost and latency on every moment; the narration is prose through a model, so compliance is a 70 to 90 percent band.
+- **Key tradeoffs:** You concede determinism and learnability for adaptivity, and you pay model spend on the glance, the moment that has to be fastest.
+- **Feasibility:** Low to Medium. The `--brief` path exists but its own directive says it has fallen back silently and collapsed fields.
+- **Estimate:** 5 to 7 sessions plus ongoing spend.
+- **Visual:**
+
+```mermaid
+flowchart LR
+    j["borg link --json (one sweep)"] --> n["claude -p with moment + line cap"]
+    n --> t["narrated text"]
+    n -. "fails or times out" .-> p["real page, same bytes"]
+    t --> eyes["Noah / session"]
+    p --> eyes
 ```
 
-- **NO PRIMARY EVIDENCE:** No decisive cheap probe exists. The poles are "seen without looking" and "no
-  interruption"; the nearest measurement (antidote command run within an hour of the strip turning on) cannot
-  separate habituation from agreement over a single user's few weeks, so it measures a proxy.
-- **Minimum viable version:** *"The smallest version that delivers the core value is: one state (over the live-session
-  limit) written by the existing stop hook to a one-line cache file and read by a tmux segment that is empty
-  otherwise."*
+- **Minimum viable version:** *"The smallest version that delivers the core value is: `borg say reenter` for one project, a 6-line narrated brief with the fallback page, used by hand for two weeks before any hook calls it."*
 
-### Option set at a glance
+### Option E: Doorways
 
-| Option | Approach | Pull or push | Adds | Stops |
-|--------|----------|--------------|------|-------|
-| A | Zone map with you-are-here | Pull (on the page) | 1 picture | Capacity sentence, capacity paragraph |
-| B-card | Three if-then pairs | Pull (file, command, Next line) | 1 card, 1 ledger, 3 logs | Nothing at first |
-| C | Five-name stuck menu | Pull (command) | 1 command | The 75-call nudge |
-| D | Four-slot fill-in scripts | Pull (at write time) | 3 templates | Free-form Next prose |
-| E | Measure, remove, cap | Subtractive | 1 ledger | Nudges, 29-row dump, 5 idle rows |
-| F | Status-line strip (forged) | Ambient | 1 segment, 1 cache | Capacity paragraph, one nudge |
+- **What it is:** Push is allowed only on a transition Noah makes, and only down a channel that reaches him without asking a model to do it. Everything between is pull or silent. The arrival brief is mostly facts the tool derives from the repo (what the last session did, what merged, what is dirty, whether the last session ended with a checkpoint), with the checkpoint's own words underneath, labelled as his. Forged in D3.5 (below) from the clash between "re-entry must be automatic" and "push is inert for this user".
+- **How it works:** One pure function (`borg brief`) builds a brief of at most 12 lines: derived lines first (an `Activity` line of commits and files touched since the checkpoint, local merge commits as the merged-PR proxy, dirty files, plan criteria, a derived `Ended` line, and a STALE line meaning "HEAD moved or the tree was edited since the checkpoint", not an age), then the checkpoint's tl;dr, Next and Blocked verbatim. Delivery follows how the session starts. Launched through `drone claude` or `borg claude`: the launcher prints the brief into the pane before `claude` starts (plain stdout, no model, no hook). Started by hand, resumed, or in CoCo: a SessionStart hook scoped to the `startup` and `resume` matchers gives the model the derived lines and sets a one-line `sessionTitle`. Switching into a window whose session is already running: a one-line derived headline through a non-modal `tmux display-message -d`. On the way out: one Stop `systemMessage` that fires only on the turn a checkpoint whose filename ends in this session's suffix appears, and only if a derived CARRIED or NOT DEPLOYED flag is non-empty. There is no SessionEnd hook; "ended without a checkpoint" is derived at arrival from `last_activity` against the newest checkpoint time. If `borg_core` cannot be imported, every path says so in one line and the existing git blocks stay.
+- **Separation move:** Condition. The automatic part is conditioned on the user's own act (launching a session, switching into a window, writing a checkpoint), never on a clock, a counter or a turn boundary, so the pull-only rule and the automatic-re-entry rule both hold.
+
+| Moment | Surface and channel | What appears | Push or pull | Reaches the human how |
+|--------|---------------------|--------------|--------------|------------------------|
+| M1 glance | `borg link` verdict line | One line above everything: who needs you, how many dormant, whether it was swept | Pull | Directly |
+| M2 next move | `borg next` | The recommended move from the same ranker `borg link` uses, with a reason labelled a heuristic (status-driven, not value); the project's own checkpoint line quoted and attributed; whether it was followed is logged | Pull | Directly |
+| M3 re-enter, launched through borg | `drone claude` or `borg claude` prints before `claude` starts | The full brief (the orchestrator gets one cross-project verdict line) | Doorway | Directly, deterministic: stdout of the pane |
+| M3 re-enter, hand-typed `claude`, `/resume`, CoCo | SessionStart `additionalContext` (matchers `startup`, `resume`) and `sessionTitle` | To the model: derived lines. To the human: a one-line title cue only | Doorway (model-side) | The title cue directly (unverified); the brief by pulling `borg brief` |
+| M3 re-enter, running window | `borg switch` and `Ctrl+Space >` through `tmux display-message -d <ms> -C` | A one-line derived headline | Doorway | Directly; non-modal and auto-expiring |
+| M4 plan to do | none in the MVP | Not addressed. The plan-exit doorway through `borg-plan-promote.sh` is dropped as fragile | none | none |
+| M5 end, checkpoint written | Stop `systemMessage`, gated on a checkpoint filename ending in this session's suffix | Only derived CARRIED and NOT DEPLOYED flags, and only if non-empty; never a repeat of the Last and Next the skill just displayed. Empty suffix (CoCo, bare terminal): off | Doorway | Directly, if Stop `systemMessage` renders (unverified live) |
+| M5 end, no checkpoint | nothing at the end | The next arrival's `Ended` line, derived from `last_activity` against the newest checkpoint time | Held to the next doorway | Through the next brief |
+| M6 going wrong | nothing mid-session | Nothing new from borg; blocks (`bash-guard`) unchanged | none | none |
+
+- **Removes or quiets:** The 75-call count-based check-in (deleted). The git status and last-five-commits blocks of the session-start injection, only when the brief was built (replaced by "since the checkpoint"; a failed build keeps them). The `_borg_do_switch` echo that prints a `summary`-based auto-brief to the pane the user just left. The model's restate-on-first-reply instruction (never sent). A second ranker. It does not touch the three existing Stop warnings; a separate fix limits each to once per session.
+- **Pros / Cons:**
+  - Pros: spends the budget where the evidence is best (an automated activity cue doubled task success, and the `Activity` line is that cue); the cold-start human path is a print, not a request; no unsolicited mid-session interrupt; no new hook (SessionEnd deleted); each fact travels on one human-facing channel per transition; the explicit STALE and `Ended` lines mean an old or uncovered handoff reads as such; the arrival print and the title cue come from one function so they cannot drift.
+  - Cons: the deterministic print covers only launches through the two borg launchers, and a hand-typed `claude` gets the title cue and a pull; whether the printed text survives Claude's start-up, and whether the pane can run `borg` inside a devcontainer, are unverified; `sessionTitle` and the Stop `systemMessage` are unverified live; switching to one ranker changes what `borg next` answers; the fixed-fields evidence is a bundle (mnemonic, training, faculty observation, sustainability campaign) and none of that exists here; M1 and M2 get only A's two smallest changes.
+- **Key tradeoffs:** You concede the middle of the session (no push at all), the pre-prompt moment on a hand-typed launch, and a modal popup that would show the full brief on a switch; in return the main cold-start path needs no model and no new hook.
+- **Feasibility:** Medium. The pure brief function is High. The launcher print is Medium: two known call sites, an unverified TUI interaction and an unverified pane environment. The model-side hook is High (a documented channel; no restate to measure). The Stop flags are Medium (documented but unwatched channel; the suffix gate reuses `borg checkpoint-name`'s own suffix). The ranker unification is Medium (it changes an answer and its goldens).
+- **Estimate:** MVP about 3 sessions (brief and launcher call sites about 1.5, matcher-scoped hook and title about 0.5, Stop flags about 0.5, ranker, verdict and follow log about 0.5); full build 5 to 6.
+- **Visual:**
+
+```mermaid
+flowchart LR
+    git["git: commits, files, local merges since checkpoint; dirty files"] --> b["brief(): 12 lines max, derived first"]
+    plan["plan criteria and Verify lines"] --> b
+    st["state.json last_activity vs newest checkpoint time"] --> b
+    ck["latest checkpoint: Last, Next, Blocked verbatim"] --> b
+    b --> pr["launcher print: drone claude / borg claude"]
+    b --> ss["SessionStart startup/resume: model context + sessionTitle"]
+    b --> hk["display-message -d headline: borg switch / hotkey"]
+    wr["Stop: checkpoint with this session's suffix AND a derived flag"] --> rb["flags-only systemMessage"]
+```
+
+- **Minimum viable version:** *"The smallest version that delivers the core value is: `borg_core/brief` producing the derived-first 12-line arrival brief (an `Activity` line, local merges, a STALE line meaning the repo changed, a derived `Ended` line, then the checkpoint's words), printed by `drone claude` and `borg claude` before `claude` starts with a loud fallback if `borg_core` is missing, plus a matcher-scoped SessionStart injection for hand-typed launches; no SessionEnd hook, no popup, no restatement instruction, no new model-written fields."*

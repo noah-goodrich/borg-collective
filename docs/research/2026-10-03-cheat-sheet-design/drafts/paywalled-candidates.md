@@ -74,3 +74,45 @@
   at KOPS; full chapter not read.
 - Gottman & Levenson (2000) was read in full from a Berkeley-hosted copy; Gottman 1998 / Carrere & Gottman 1999 not
   fetched.
+
+## S2 additions (re-entry, resumption and handoff) - 2026-10-04
+
+- Altmann EM, Trafton JG. "Memory for goals: An activation-based model." Cognitive Science 26(1):39-83, 2002. doi:10.1207/s15516709cog2601_2. Why: the foundational model of resumption lag and goal decay behind all the cue-availability findings. Access: Wiley (403 on fetch); Semantic Scholar / ResearchGate PDF; author preprint on Altmann's Michigan State site.
+- Parnin C, Rugaber S. "Resumption strategies for interrupted programming tasks." Software Quality Journal 19(1), 2011. doi:10.1007/s11219-010-9104-9. Why: the full 10,000-session analysis and coping-strategy framework only summarized in the Game Developer article. Access: Springer (redirect wall); institutional library; Parnin's NC State site.
+- Starmer AJ et al. "Changes in Medical Errors after Implementation of a Handoff Program." NEJM 371:1803, 2014. doi:10.1056/NEJMsa1405556. Why: primary I-PASS result; full methods, per-site breakdown, key-element list. Access: NEJM (403); WUSTL open-access mirror (403 on fetch from this run, try from browser); PMC author manuscript.
+- Iqbal ST, Horvitz E. "Disruption and recovery of computing tasks: field study, analysis, and directions." CHI 2007. Why: field evidence on how long people take to return to a suspended task and what delays it. Access: ACM; Microsoft Research PDF. (Not retrievable in this run: web-search budget exhausted.)
+- Reported ethnography on handover as ritual: "Examination of current handover practice: Evidence to support changing the ritual" (ResearchGate 51513564, 403) and "Socio-technical issues and challenges in implementing safe patient handovers: Insights from ethnographic case studies" (Int J Med Inform, ScienceDirect). Why: contrarian view that scripted handover can become ritual without information transfer. Access: institutional library; authors' repositories.
+
+## S3 (amount and layering) additions (2026-10-04)
+
+- Eppler, M. J., & Mengis, J. (2004). The Concept of Information Overload. The Information Society, 20(5), 325-344.
+  https://doi.org/10.1080/01972240490507974 - the canonical review of information-overload causes, effects and
+  countermeasures; only the two-sentence abstract was readable (alexandria.unisg.ch). Access: University of St. Gallen
+  repository (https://www.alexandria.unisg.ch/54792), ResearchGate author copy, or institutional library.
+- Johnson, E. J., & Goldstein, D. (2003). Do defaults save lives? Science, 302(5649), 1338-1339.
+  https://doi.org/10.1126/science.1091721 - the seminal organ-donation default study; not retrievable here
+  (uvm.edu mirror returned HTML, not the paper). Access: Columbia author PDF or institutional library.
+- Danziger, S., Levav, J., & Avnaim-Pesso, L. (2011). Extraneous factors in judicial decisions. PNAS, 108(17),
+  6889-6892. https://doi.org/10.1073/pnas.1018033108 - the "hungry judges" study Glockner critiques; PNAS returned 403,
+  only the Europe PMC abstract was read. Access: PMC (open access via PNAS) or institutional library.
+- Weinshall-Margel, K., & Shapard, J. (2011). Overlooked factors in the analysis of parole decisions. PNAS, 108(42),
+  E833. https://doi.org/10.1073/pnas.1110910108 - shows case ordering is not random; PNAS 403, abstract not retrievable
+  (known only from a search snippet, so no card). Access: PNAS site or institutional library.
+- Chernev, A., Bockenholt, U., & Goodman, J. (2015) - the card is abstract-only; full text at Wiley/ScienceDirect
+  (https://doi.org/10.1016/j.jcps.2014.08.002); Chernev's Northwestern faculty page often hosts a PDF.
+- Scheibehenne, Greifeneder, & Todd (2010) JCR full text: Scheibehenne's personal site
+  (https://scheibehenne.com/) hosts a reply to Chernev et al. and possibly the paper; not read.
+
+## S1 (status displays and situational awareness)
+
+- Endsley MR. "Toward a theory of situation awareness in dynamic systems." Human Factors 37(1):32-64, 1995. doi:10.1518/001872095779049543. Why: the primary statement of the three-level model (perception, comprehension, projection) that Few's dashboard paper and the whole SA display literature rest on. Access: Sage (paywalled); institutional library; Endsley's SA Technologies site may host a copy.
+- Endsley MR. "Situation Awareness Misconceptions and Misunderstandings." Journal of Cognitive Engineering and Decision Making 9(1), 2015. doi:10.1177/1555343415572631. Why: Endsley's rebuttal to the Dekker critique, directly on whether SA implies blame and whether it is circular (Sage returned 403 on fetch). Access: Sage; institutional library; author preprint.
+- Flach JM. "Situation awareness: Proceed with caution." Human Factors 37(1):149-157, 1995. doi:10.1518/001872095779049480. Why: origin of the circularity critique ("how do you know SA was lost? because the human responded inappropriately"). Access: Sage; institutional library.
+- Dekker S, Hollnagel E. "Human factors and folk models." Cognition, Technology and Work 6:79-86, 2004. Why: the "folk model" critique of SA summarised second-hand in the Carsten and Vanderhaegen editorial. Access: Springer; institutional library.
+- Sarter NB, Woods DD. "How in the world did we ever get into that mode? Mode error and awareness in supervisory control." Human Factors 37(1):5-19, 1995. Why: source of the claim that the "most important contents" of SA cannot be fixed in advance because meaning depends on context. Access: Sage; institutional library.
+- EEMUA Publication 191, "Alarm systems: a guide to design, management and procurement" (3rd ed. 2013). Why: the primary source of the alarm-rate bands (under 1 per 10 min acceptable, 1-2 manageable, over 10 unacceptable) quoted second-hand via the ASM benchmark. Access: EEMUA shop (paid); institutional or company library.
+- ISA-18.2-2016 / IEC 62682:2014, "Management of alarm systems for the process industries". Why: alarm philosophy, rationalization and priority-distribution lifecycle that the alarm-flood literature measures against. Access: ISA / IEC webstore (paid).
+- Bransby ML, Jenkinson J. "The management of alarm systems." HSE Contract Research Report 166/1998. Why: original HSE evidence that too many alarms stay active too long and operators abandon the alarm list at about 10 alarms a minute in an emergency. Access: HSE (the crr_pdf URL tried in this run returned 404); a library or archive.org copy.
+- Bakdash JZ et al. "The validity of situation awareness for performance: a meta-analysis." Theoretical Issues in Ergonomics Science, 2021. doi:10.1080/1463922x.2021.1921310. Why: load-bearing falsification; only the abstract was read. Access: Taylor and Francis; author preprint (likely on OSF or the ARL repository).
+- Endsley MR. "Direct measurement of situation awareness: validity and use of SAGAT." In Situational Awareness (Routledge, 2017). doi:10.4324/9781315087924-9. Why: primary SAGAT method and validity argument; only the abstract was read. Access: Taylor and Francis / Routledge; institutional library.
+- Xie CX et al. J Am Med Inform Assoc 2022, doi:10.1093/jamia/ocac094. Open access via PMC (PMC9471705) but the PMC page was blocked by a CAPTCHA for the fetcher; only the abstract was read through Europe PMC. Why: full trial table would show which dashboard features correlated with effect. Access: open in a browser.
