@@ -53,4 +53,6 @@ to the orchestrator.
 - Use absolute paths, never `~`.
 - No `$()` substitution in one-liners; no inline `#` comments.
 - No interactive commands.
+- Never put backticks or `$(` inside an unquoted heredoc or a double-quoted string; for PR/commit bodies
+  use `<<'EOF'` or `--body-file`.
 - Prefer built-in tools (Grep, Glob, Read) over Bash equivalents where available.
