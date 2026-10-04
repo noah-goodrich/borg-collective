@@ -462,3 +462,106 @@ _verdict_ctx() {
     [[ "$output" == *"0.222"* ]]
     [[ "$output" != *"0.111"* ]]
 }
+
+# ─── stop hook warnings reach the user: systemMessage JSON on stdout ─────────
+# A Stop hook that exits 0 has stderr sent to the debug log only (Claude Code hooks reference,
+# "Exit code 0"), so these nudges used to be invisible. The channel is ONE JSON object on stdout.
+# Directive: docs/plans/directives/2026-10-04-stop-hook-warnings-are-invisible.md
+
+# A non-final `[[ ]]` does not fail a test on bash 3.2 (macOS), so assert through functions.
+_has() { [[ "$1" == *"$2"* ]] || { echo "missing: $2"; return 1; }; }
+_lacks() { [[ "$1" != *"$2"* ]] || { echo "unexpected: $2"; return 1; }; }
+
+_run_stop_split() {
+    STOP_OUT=$(bash "$BORG_STOP" <<< "$(_stop_input "${1:-$TEST_CWD}")" 2>"${BATS_TEST_TMPDIR}/stop.err")
+    STOP_RC=$?
+}
+
+_git_repo_clean() {
+    git -C "$TEST_CWD" init -q
+    git -C "$TEST_CWD" config user.email "test@test.com"
+    git -C "$TEST_CWD" config user.name "Test"
+    echo "original" > "$TEST_CWD/tracked.txt"
+    git -C "$TEST_CWD" add tracked.txt
+    git -C "$TEST_CWD" commit -q -m "initial"
+}
+
+_fresh_checkpoint() {
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+    echo "# cp" > "${TEST_CWD}/.borg/checkpoints/$(date +%Y-%m-%d-%H%M).md"
+}
+
+@test "stop warnings: uncommitted changes arrive as systemMessage JSON on stdout, stderr empty" {
+    _git_repo_clean
+    _fresh_checkpoint
+    echo "modified" > "$TEST_CWD/tracked.txt"
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    printf "%s" "$STOP_OUT" | jq -e . >/dev/null
+    [ "$(printf "%s" "$STOP_OUT" | jq -r "keys | join(\",\")")" = "systemMessage" ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "myproject has uncommitted changes"
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+}
+
+@test "stop warnings: no-recent-checkpoint nudge arrives as systemMessage" {
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "No checkpoint in the last hour for myproject"
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+}
+
+@test "stop warnings: directive-overlap list arrives as systemMessage" {
+    _git_repo_clean
+    _fresh_checkpoint
+    mkdir -p "$TEST_CWD/docs/plans/directives"
+    printf "# D\n\n## Key Files\n\n- widget.sh\n\n## Other\n" > "$TEST_CWD/docs/plans/directives/2026-01-01-widget.md"
+    git -C "$TEST_CWD" add -A
+    git -C "$TEST_CWD" commit -q -m "directive"
+    echo "x" > "$TEST_CWD/widget.sh"
+    git -C "$TEST_CWD" add widget.sh
+    git -C "$TEST_CWD" commit -q -m "touch widget"
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    msg=$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)
+    _has "$msg" "Directive reconciliation?"
+    _has "$msg" "  - 2026-01-01-widget.md"
+    _lacks "$msg" "uncommitted"
+}
+
+@test "stop warnings: all three conditions yield ONE object carrying all three, with no ANSI" {
+    _git_repo_clean
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+    mkdir -p "$TEST_CWD/docs/plans/directives"
+    printf "# D\n\n## Key Files\n\n- widget.sh\n" > "$TEST_CWD/docs/plans/directives/2026-01-01-widget.md"
+    git -C "$TEST_CWD" add -A
+    git -C "$TEST_CWD" commit -q -m "directive"
+    echo "x" > "$TEST_CWD/widget.sh"
+    git -C "$TEST_CWD" add widget.sh
+    git -C "$TEST_CWD" commit -q -m "touch widget"
+    echo "modified" > "$TEST_CWD/tracked.txt"
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    [ "$(printf "%s" "$STOP_OUT" | jq -s length)" -eq 1 ]
+    msg=$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)
+    _has "$msg" "has uncommitted changes"
+    _has "$msg" "No checkpoint in the last hour"
+    _has "$msg" "Directive reconciliation?"
+    local esc=$'\033'
+    _lacks "$STOP_OUT" "$esc"
+    _lacks "$msg" "$esc"
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+}
+
+@test "stop warnings: nothing to warn about means empty stdout (no object), exit 0" {
+    _fresh_checkpoint
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    [ -z "$STOP_OUT" ]
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+}
