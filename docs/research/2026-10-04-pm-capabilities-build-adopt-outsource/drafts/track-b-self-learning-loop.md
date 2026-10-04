@@ -82,18 +82,24 @@ Residual risk: the evaluator and the code it scores live in one repo that agents
 
 ## Recommended architecture (components and where they live)
 
-| # | Component | Where in borg | Notes |
-|---|-----------|---------------|-------|
-| 1 | `rubric.json` (metric ids, definitions, directions, warn/fail thresholds, registered_at, allowlist) | repo, `borg_core/pmeval/rubric.json` | Human-edited only; changes bump `rubric_version`; schema expand-migrate-contract |
-| 2 | Pure scoring core | `borg_core/pmeval/core.py` | No I/O; rows in, metrics out; imports restricted like `link/picture.py`; Domain list entry in `pyproject.toml` plus AST import-walk test |
-| 3 | Impure shell | `borg_core/pmeval/shell.py` | Reads registry, plans, checkpoints, `gh`, spend log, `agents.jsonl` and `.1`; owns the clock; records `coverage` |
-| 4 | Axis A predicates | `borg_core/pmeval/axis_a.py` (pure over a file-tree snapshot) | Pass/fail per check plus 0-3 rule; identical on every machine |
-| 5 | Validator and publisher | `borg_core/pmeval/publish.py` | Fail-closed; sole writer of the shared aggregate; allowlist from rubric |
-| 6 | Proposal drafter | `borg_core/pmeval/propose.py` | Writes to a staging dir; never to `docs/plans/directives/` |
-| 7 | CLI | `borg pulse` (run, show, compare, publish) via `_borg_py` | Honors the zsh-to-Python config boundary lesson |
-| 8 | Scheduler | `launchd/borg.pmeval.plist`, resolver `_borg_launchd_label pmeval`, installed by `install.sh`, listed in `borg doctor` | Weekly `StartCalendarInterval` |
-| 9 | Guard | `hooks/bash-guard.sh` plus settings deny rules for the pmeval state paths | Gate, not prose |
-| 10 | Heartbeat and verdict | `~/.local/state/borg/pmeval/heartbeat.json` | Same shape as `memory-gate-verdict.json`; `borg doctor` flags stale or zero-metric runs |
+- **1** — `rubric.json` (metric ids, definitions, directions, warn/fail thresholds, registered_at, allowlist)
+  - Where in borg: repo, `borg_core/pmeval/rubric.json`
+  - Notes: Human-edited only; changes bump `rubric_version`; schema expand-migrate-contract
+- **2** (Component: Pure scoring core; Where in borg: `borg_core/pmeval/core.py`) — No I/O; rows in, metrics out; imports restricted like `link/picture.py`; Domain list entry in `pyproject.toml` plus AST import-walk test
+- **3** (Component: Impure shell; Where in borg: `borg_core/pmeval/shell.py`) — Reads registry, plans, checkpoints, `gh`, spend log, `agents.jsonl` and `.1`; owns the clock; records `coverage`
+- **4** (Component: Axis A predicates) — `borg_core/pmeval/axis_a.py` (pure over a file-tree snapshot)
+  - Notes: Pass/fail per check plus 0-3 rule; identical on every machine
+- **5** (Component: Validator and publisher) — `borg_core/pmeval/publish.py`
+  - Notes: Fail-closed; sole writer of the shared aggregate; allowlist from rubric
+- **6** (Component: Proposal drafter) — `borg_core/pmeval/propose.py`
+  - Notes: Writes to a staging dir; never to `docs/plans/directives/`
+- **7** (Component: CLI) — `borg pulse` (run, show, compare, publish) via `_borg_py`
+  - Notes: Honors the zsh-to-Python config boundary lesson
+- **8** (Component: Scheduler) — `launchd/borg.pmeval.plist`, resolver `_borg_launchd_label pmeval`, installed by `install.sh`, listed in `borg doctor`
+  - Notes: Weekly `StartCalendarInterval`
+- **9** (Component: Guard; Notes: Gate, not prose) — `hooks/bash-guard.sh` plus settings deny rules for the pmeval state paths
+- **10** (Component: Heartbeat and verdict) — `~/.local/state/borg/pmeval/heartbeat.json`
+  - Notes: Same shape as `memory-gate-verdict.json`; `borg doctor` flags stale or zero-metric runs
 
 Tests: a differential test per metric against the phase-1 hand numbers (28 open, 60 shipped, 8 severed, median open age 41 days) so the first run reproduces the phase-1 reading; the shell test must NOT pre-supply derived values (the "tests that supply the derived value" lesson); an end-to-end launchd run before declaring done (the usage-watch lesson: green bats never caught it).
 
@@ -130,19 +136,29 @@ None load-bearing. Forsgren et al. 2021 (SPACE) and Bevan and Hood 2006 were han
 
 ## Sources index
 
-| # | Title | URL | Date | Tier |
-|---|-------|-----|------|------|
-| 1 | DORA metrics guide (pitfalls, improvement loop) | https://dora.dev/guides/dora-metrics/ | accessed 2026-10-04 | [2024-2026] |
-| 2 | COS: Why preregister | https://www.cos.io/initiatives/prereg | accessed 2026-10-04 | [2024-2026] |
-| 3 | Anthropic: Demystifying evals for AI agents (summary only) | https://anthropic.com/engineering/demystifying-evals-for-ai-agents | 2026-01-09 | [2024-2026] |
-| 4 | dbt MetricFlow: how metrics are defined | https://docs.getdbt.com/docs/build/about-metricflow | accessed 2026-10-04 | [2024-2026] |
-| 5 | METR: Recent frontier models are reward hacking | https://metr.org/blog/2025-06-05-recent-reward-hacking/ | 2025-06-05 | [2024-2026] |
-| 6 | CMS cell suppression policy (HHS) | https://www.hhs.gov/guidance/document/cms-cell-suppression-policy | accessed 2026-10-04 | [pre-2020 policy, current] |
-| 7 | SyllabAI k-anonymity n<5 note (illustrative, non-authoritative) | https://github.com/SyllabAI/syllabai-core/pull/62 | accessed 2026-10-04 | [2024-2026] |
-| 8 | MotherDuck: analyze JSON with DuckDB (secondary) | https://motherduck.com/blog/analyze-json-data-using-sql/ | accessed 2026-10-04 | [2024-2026] |
-| 9 | PostHog: DuckDB vs SQLite (secondary) | https://posthog.com/blog/duckdb-vs-sqlite | accessed 2026-10-04 | [2024-2026] |
-| 10 | launchd StartCalendarInterval examples (secondary) | https://alvinalexander.com/mac-os-x/launchd-plist-examples-startinterval-startcalendarinterval/ | accessed 2026-10-04 | [2020-2023] |
-| 11 | Apple Developer Forums: StartCalendarInterval behavior changed | https://developer.apple.com/forums/thread/815034 | accessed 2026-10-04 | [2024-2026] |
-| 12 | Phase-1 analysis sections 3 and 4.3 (local) | docs/research/2026-10-03-project-management-pillars/analysis.md | 2026-10-03 | [2024-2026] |
-| 13 | Phase-1 cards: t4-bevan-hood-targets-gaming, t2-manheim-goodhart-variants, t3-space-framework-forsgren-2021, t3-dora-four-keys-guide, t3-beck-orosz-mckinsey-response (local) | docs/research/2026-10-03-project-management-pillars/sources/ | 2026-10-03 | [2024-2026] |
+- **1** (Date: accessed 2026-10-04; Tier: [2024-2026]) — DORA metrics guide (pitfalls, improvement loop)
+  - URL: https://dora.dev/guides/dora-metrics/
+- **2** (Title: COS: Why preregister; Date: accessed 2026-10-04; Tier: [2024-2026]) — https://www.cos.io/initiatives/prereg
+- **3** (Date: 2026-01-09; Tier: [2024-2026]) — Anthropic: Demystifying evals for AI agents (summary only)
+  - URL: https://anthropic.com/engineering/demystifying-evals-for-ai-agents
+- **4** (Date: accessed 2026-10-04; Tier: [2024-2026]) — dbt MetricFlow: how metrics are defined
+  - URL: https://docs.getdbt.com/docs/build/about-metricflow
+- **5** (Date: 2025-06-05; Tier: [2024-2026]) — METR: Recent frontier models are reward hacking
+  - URL: https://metr.org/blog/2025-06-05-recent-reward-hacking/
+- **6** (Date: accessed 2026-10-04; Tier: [pre-2020 policy, current]) — CMS cell suppression policy (HHS)
+  - URL: https://www.hhs.gov/guidance/document/cms-cell-suppression-policy
+- **7** (Date: accessed 2026-10-04; Tier: [2024-2026]) — SyllabAI k-anonymity n<5 note (illustrative, non-authoritative)
+  - URL: https://github.com/SyllabAI/syllabai-core/pull/62
+- **8** (Date: accessed 2026-10-04; Tier: [2024-2026]) — MotherDuck: analyze JSON with DuckDB (secondary)
+  - URL: https://motherduck.com/blog/analyze-json-data-using-sql/
+- **9** (Date: accessed 2026-10-04; Tier: [2024-2026]) — PostHog: DuckDB vs SQLite (secondary)
+  - URL: https://posthog.com/blog/duckdb-vs-sqlite
+- **10** (Date: accessed 2026-10-04; Tier: [2020-2023]) — launchd StartCalendarInterval examples (secondary)
+  - URL: https://alvinalexander.com/mac-os-x/launchd-plist-examples-startinterval-startcalendarinterval/
+- **11** (Date: accessed 2026-10-04; Tier: [2024-2026]) — Apple Developer Forums: StartCalendarInterval behavior changed
+  - URL: https://developer.apple.com/forums/thread/815034
+- **12** (Date: 2026-10-03; Tier: [2024-2026]) — Phase-1 analysis sections 3 and 4.3 (local)
+  - URL: docs/research/2026-10-03-project-management-pillars/analysis.md
+- **13** (Date: 2026-10-03; Tier: [2024-2026]) — Phase-1 cards: t4-bevan-hood-targets-gaming, t2-manheim-goodhart-variants, t3-space-framework-forsgren-2021, t3-dora-four-keys-guide, t3-beck-orosz-mckinsey-response (local)
+  - URL: docs/research/2026-10-03-project-management-pillars/sources/
 EOF'
