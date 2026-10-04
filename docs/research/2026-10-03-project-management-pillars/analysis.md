@@ -164,12 +164,12 @@ obvious next control.
 
 ### 3.2 P1: Value and prioritization (what is worth doing, in what order, and when to stop)
 
-| ID | Checkable statement | Strength | Sources |
-|----|---------------------|----------|---------|
-| P1.1 | Each unit of work names the outcome it serves | Defined only | S10, S11 |
-| P1.2 | Work is ordered by an economic reason, and every score is treated as an estimate that is often wrong | Moderate that estimates are noisy; Weak that a scored order beats an unscored one | S17, S14, S23, S15, S16 |
-| P1.3 | The committed set is small and explicit; ideas are not hoarded in an unbounded backlog | Weak | S21, S11, S03 |
-| P1.4 | Stop conditions and one decision-owner are fixed before starting | Strong (adjacent) for the hazard; Weak for the practice | S22, S20, S18, S21 |
+- **P1.1** (Strength: Defined only; Sources: S10, S11) — Each unit of work names the outcome it serves
+- **P1.2** (Sources: S17, S14, S23, S15, S16) — Work is ordered by an economic reason, and every score is treated as an estimate that is often wrong
+  - Strength: Moderate that estimates are noisy; Weak that a scored order beats an unscored one
+- **P1.3** (Strength: Weak; Sources: S21, S11, S03) — The committed set is small and explicit; ideas are not hoarded in an unbounded backlog
+- **P1.4** (Sources: S22, S20, S18, S21) — Stop conditions and one decision-owner are fixed before starting
+  - Strength: Strong (adjacent) for the hazard; Weak for the practice
 
 **Axis A: 1 of 3.** Lives in the `borg-plan` skill (an Objective section: prose), the `borg-next` skill and the sort in
 `borg.zsh` behind `borg next` (pinned first, then session status waiting, active, idle, archived, then last activity),
@@ -184,13 +184,11 @@ directives, 266 of 349 (76%) in shipped plans. Closed directives split 60 shippe
 
 ### 3.3 P2: Planning and scoping
 
-| ID | Checkable statement | Strength | Sources |
-|----|---------------------|----------|---------|
-| P2.1 | Acceptance criteria are written so a named check can fail | Defined only | S10, S46 |
-| P2.2 | A time budget is fixed before design and scope flexes to it | Weak | S21, S11, S03 |
-| P2.3 | Scope boundaries and non-goals are written down | Defined only | S06, S10 |
-| P2.4 | Estimates are compared with actuals before the next estimate is trusted | Moderate | S43, S17 |
-| P2.5 | Plan success is not defined only as on time, on budget and in scope | Moderate | S02, S06, S09 |
+- **P2.1** (Strength: Defined only; Sources: S10, S46) — Acceptance criteria are written so a named check can fail
+- **P2.2** (Strength: Weak; Sources: S21, S11, S03) — A time budget is fixed before design and scope flexes to it
+- **P2.3** (Strength: Defined only; Sources: S06, S10) — Scope boundaries and non-goals are written down
+- **P2.4** (Strength: Moderate; Sources: S43, S17) — Estimates are compared with actuals before the next estimate is trusted
+- **P2.5** (Strength: Moderate; Sources: S02, S06, S09) — Plan success is not defined only as on time, on budget and in scope
 
 **Axis A: 2 of 3.** Lives in the `borg-plan` skill (objective, criteria each with a `Verify:` line, Scope Boundaries,
 Risks, a Lock Rule: all prose), the `borg-plan-promote.sh` hook (code: persists an approved plan to
@@ -207,13 +205,12 @@ and a numeric estimate on each plan, so scope creep and estimate error exist as 
 
 ### 3.4 P3: Execution
 
-| ID | Checkable statement | Strength | Sources |
-|----|---------------------|----------|---------|
-| P3.1 | WIP is limited and the limit is enforced, not just displayed | Defined only for the practice; the one field study found no productivity benefit | S31, S05, S35, S24 |
-| P3.2 | The age of in-flight items is surfaced | Defined only | S05, S31 |
-| P3.3 | Work moves in small batches merged at least daily | Moderate | S26, S29, S32 |
-| P3.4 | Switches and interruptions are cut, and each switch has a cue | Strong (adjacent, lab) | S57, S55 |
-| P3.5 | When agents write the code, verification capacity is treated as the limit | Weak to Moderate | S30, S33, S37 |
+- **P3.1** (Sources: S31, S05, S35, S24) — WIP is limited and the limit is enforced, not just displayed
+  - Strength: Defined only for the practice; the one field study found no productivity benefit
+- **P3.2** (Strength: Defined only; Sources: S05, S31) — The age of in-flight items is surfaced
+- **P3.3** (Strength: Moderate; Sources: S26, S29, S32) — Work moves in small batches merged at least daily
+- **P3.4** (Strength: Strong (adjacent, lab); Sources: S57, S55) — Switches and interruptions are cut, and each switch has a cue
+- **P3.5** (Strength: Weak to Moderate; Sources: S30, S33, S37) — When agents write the code, verification capacity is treated as the limit
 
 **Axis A: 2 of 3.** Lives in `agents/borg-nanoprobe.md` (a nanoprobe is a short-lived subagent given one task: scope
 gate, one discrete unit of work, self-managed git worktree, which is a second checkout of the repo: prose),
@@ -233,13 +230,12 @@ research or review agent, so read this as "about three quarters of nanoprobe run
 
 ### 3.5 P4: Delivery
 
-| ID | Checkable statement | Strength | Sources |
-|----|---------------------|----------|---------|
-| P4.1 | "Done" is a written, binary gate checked before anything is called shipped | Defined only | S10, S34, S46 |
-| P4.2 | Speed and stability are tracked together; faster with less stable is not a win | Moderate (survey, self-reported) | S26, S27, S28, S32 |
-| P4.3 | With AI help, tests, small batches and fast feedback come before more agents | Moderate | S27, S37 |
-| P4.4 | Delivered value is judged by outcome, not by the on-time triple alone | Moderate | S02, S06, S09 |
-| P4.5 | Shipped state is recorded where it is read from | Moderate (status drifts) | S48 |
+- **P4.1** (Strength: Defined only; Sources: S10, S34, S46) — "Done" is a written, binary gate checked before anything is called shipped
+- **P4.2** (Sources: S26, S27, S28, S32) — Speed and stability are tracked together; faster with less stable is not a win
+  - Strength: Moderate (survey, self-reported)
+- **P4.3** (Strength: Moderate; Sources: S27, S37) — With AI help, tests, small batches and fast feedback come before more agents
+- **P4.4** (Strength: Moderate; Sources: S02, S06, S09) — Delivered value is judged by outcome, not by the on-time triple alone
+- **P4.5** (Strength: Moderate (status drifts); Sources: S48) — Shipped state is recorded where it is read from
 
 **Axis A: 2 of 3.** Lives in `borg-assimilate` (Step 0 simplify, 0.5 tests and lint, 0.75 blocks on unresolved child
 directives, with its gate sentence pinned by prose-contract tests in bats (a shell-script test framework) that check the
@@ -260,13 +256,13 @@ and 47% of the non-backlog open board (36 of 76 directives) was already shipped 
 
 ### 3.6 P5: Monitoring and feedback
 
-| ID | Checkable statement | Strength | Sources |
-|----|---------------------|----------|---------|
-| P5.1 | State is visible without manual reconstruction and inspected against the goal on a cadence | Defined only; Moderate for feedback loops mattering | S10, S12 |
-| P5.2 | Flow measures (cycle time, WIP, age, throughput) are computed from the work system | Defined only | S05, S31 |
-| P5.3 | Several dimensions are tracked, one of them perceptual, and used as diagnostics, not targets | Weak | S36, S28, S25 |
-| P5.4 | Self-reported status and self-perceived speed are distrusted | Strong for speed (n=16); Moderate for status (modelled) | S33, S48 |
-| P5.5 | Any single number is expected to be gamed once it is a target | Moderate | S39, S19, S28, S38 |
+- **P5.1** (Sources: S10, S12) — State is visible without manual reconstruction and inspected against the goal on a cadence
+  - Strength: Defined only; Moderate for feedback loops mattering
+- **P5.2** (Strength: Defined only; Sources: S05, S31) — Flow measures (cycle time, WIP, age, throughput) are computed from the work system
+- **P5.3** (Strength: Weak; Sources: S36, S28, S25) — Several dimensions are tracked, one of them perceptual, and used as diagnostics, not targets
+- **P5.4** (Sources: S33, S48) — Self-reported status and self-perceived speed are distrusted
+  - Strength: Strong for speed (n=16); Moderate for status (modelled)
+- **P5.5** (Strength: Moderate; Sources: S39, S19, S28, S38) — Any single number is expected to be gamed once it is a target
 
 **Axis A: 2 of 3.** This is the most engineered pillar. Lives in `borg link` (one renderer, `render.document()`, with a
 fixed seven-section spine pinned by golden files: code), `borg-recon` and `borg_core/recon` (adapter sweep, plus
@@ -282,12 +278,11 @@ built to repair. **Needs capture:** the derived-versus-declared agreement rate a
 
 ### 3.7 P6: Risk and quality
 
-| ID | Checkable statement | Strength | Sources |
-|----|---------------------|----------|---------|
-| P6.1 | At planning, failure is imagined and the reasons written down (premortem or risk narrative) | Weak | S42, S47 |
-| P6.2 | Risk practice is proportionate; practice associates with success but a heavy register is not shown to be the active ingredient | Moderate to Weak | S45, S47 |
-| P6.3 | An independent check gates release, and it can fail | Defined only | S46, S34 |
-| P6.4 | An overrunning item stops by default (circuit breaker) | Weak for the practice; Strong (adjacent) for the mechanism | S21, S22, S20 |
+- **P6.1** (Strength: Weak; Sources: S42, S47) — At planning, failure is imagined and the reasons written down (premortem or risk narrative)
+- **P6.2** (Strength: Moderate to Weak; Sources: S45, S47) — Risk practice is proportionate; practice associates with success but a heavy register is not shown to be the active ingredient
+- **P6.3** (Strength: Defined only; Sources: S46, S34) — An independent check gates release, and it can fail
+- **P6.4** (Sources: S21, S22, S20) — An overrunning item stops by default (circuit breaker)
+  - Strength: Weak for the practice; Strong (adjacent) for the mechanism
 
 **Axis A: 2 of 3.** Lives in the Risks section of `borg-plan` (prose), `borg-collective-review` (adversarial persona
 review: a skill), `borg-verify`, the bats and pytest suites with the clean-architecture lint in `pyproject.toml`, and
@@ -301,13 +296,11 @@ gate is unproven.
 
 ### 3.8 P7: Sustainability and capacity
 
-| ID | Checkable statement | Strength | Sources |
-|----|---------------------|----------|---------|
-| P7.1 | Sustained hours are capped; output per hour falls at long hours | Moderate (adjacent) | S56, S52 |
-| P7.2 | Burnout is tracked as a risk | Weak (abstract read; causes not read) | S61 |
-| P7.3 | Task state is externalized, switches get cues, and hard starts get if-then plans | Moderate (adjacent) | S60, S53, S57, S54, S62, S59 |
-| P7.4 | Well-being is measured as perception, with the perception caveat attached | Weak | S36, S58, S33, S55 |
-| P7.5 | Pace is sustainable indefinitely for everyone involved | Defined only | S51 |
+- **P7.1** (Strength: Moderate (adjacent); Sources: S56, S52) — Sustained hours are capped; output per hour falls at long hours
+- **P7.2** (Checkable statement: Burnout is tracked as a risk; Sources: S61) — Weak (abstract read; causes not read)
+- **P7.3** (Strength: Moderate (adjacent); Sources: S60, S53, S57, S54, S62, S59) — Task state is externalized, switches get cues, and hard starts get if-then plans
+- **P7.4** (Strength: Weak; Sources: S36, S58, S33, S55) — Well-being is measured as perception, with the perception caveat attached
+- **P7.5** (Strength: Defined only; Sources: S51) — Pace is sustainable indefinitely for everyone involved
 
 No source shows that a PM method or a WIP limit improves delivery for developers with ADHD. That is borg's premise, not
 an evidence finding. The nearest results are an adult-ADHD work trial of 46 people with a clinician-delivered
@@ -329,12 +322,10 @@ one-question end-of-day well-being tick labelled as perception.
 
 ### 3.9 P8: Learning and adaptation
 
-| ID | Checkable statement | Strength | Sources |
-|----|---------------------|----------|---------|
-| P8.1 | A structured, facilitated debrief follows each unit of work | Strong (adjacent) | S49, S50 |
-| P8.2 | The debrief is fed repository facts, such as estimates against actuals and defects | Moderate | S43 |
-| P8.3 | Actions are tracked to closure and recurrence is watched | Weak | S50, S44, S38, S40 |
-| P8.4 | Lessons persist where the next unit of work will read them | Weak | S41 |
+- **P8.1** (Strength: Strong (adjacent); Sources: S49, S50) — A structured, facilitated debrief follows each unit of work
+- **P8.2** (Strength: Moderate; Sources: S43) — The debrief is fed repository facts, such as estimates against actuals and defects
+- **P8.3** (Strength: Weak; Sources: S50, S44, S38, S40) — Actions are tracked to closure and recurrence is watched
+- **P8.4** (Strength: Weak; Sources: S41) — Lessons persist where the next unit of work will read them
 
 **Axis A: 1 of 3.** Lives in `borg-link-up` (a checkpoint flush with a "Next Session" section: state, not a debrief),
 `borg-link-down.sh` (code: injects the latest checkpoint at session start, which is P8.4), the hand-curated "Learned"
@@ -349,17 +340,24 @@ memory is barely read. **Needs capture:** estimate against actual as numbers, an
 
 ### 3.10 Scorecard
 
-| Pillar | Axis A | Strongest mechanism | Biggest gap | Axis B first reading |
-|--------|--------|---------------------|-------------|----------------------|
-| P1 Value and prioritization | 1 | `borg next` attention ordering | No value rule, no stop rule | 23 of 28 open directives older than 30 days |
-| P2 Planning and scoping | 2 | `borg-plan` criteria with `Verify:` | No appetite; estimate not a number | Verify coverage 0.61 (crude) |
-| P3 Execution | 2 | Nanoprobe scope gate, destructive-command guards | WIP is a warning; no item age | Median merge 0.77 h; 24% of nanoprobe runs left no commit |
-| P4 Delivery | 2 | `borg-assimilate` gate sequence | Human-invoked; no frequency or lead-time metric | Lead time median 2 d (n=39 of 60) |
-| P5 Monitoring and feedback | 2 | `borg link` plus `planstate` | Shows state, computes no flow | Prior audit: 97% of checkpoints restate position by hand |
-| P6 Risk and quality | 2 | `borg-verify`, guards, tests | No circuit breaker; verify never seen to fail | `fix` PR share 28% (proxy) |
-| P7 Sustainability and capacity | 2 | `_borg_boundary_check` | Guardrails are unobserved prose | Only proxy unusable (13% to 35%) |
-| P8 Learning and adaptation | 1 | Checkpoint injection | No debrief, no closure tracking | 0 of 60 plans with a retro; memory gate FAIL |
-| **Total** | **14 of 24** | | | |
+- **P1 Value and prioritization** (Axis A: 1; Biggest gap: No value rule, no stop rule) — `borg next` attention ordering
+  - Axis B first reading: 23 of 28 open directives older than 30 days
+- **P2 Planning and scoping** (Axis A: 2; Axis B first reading: Verify coverage 0.61 (crude)) — `borg-plan` criteria with `Verify:`
+  - Biggest gap: No appetite; estimate not a number
+- **P3 Execution** (Axis A: 2) — Nanoprobe scope gate, destructive-command guards
+  - Biggest gap: WIP is a warning; no item age
+  - Axis B first reading: Median merge 0.77 h; 24% of nanoprobe runs left no commit
+- **P4 Delivery** (Axis A: 2) — `borg-assimilate` gate sequence
+  - Biggest gap: Human-invoked; no frequency or lead-time metric
+  - Axis B first reading: Lead time median 2 d (n=39 of 60)
+- **P5 Monitoring and feedback** (Axis A: 2; Strongest mechanism: `borg link` plus `planstate`) — Shows state, computes no flow
+  - Axis B first reading: Prior audit: 97% of checkpoints restate position by hand
+- **P6 Risk and quality** (Axis A: 2; Strongest mechanism: `borg-verify`, guards, tests; Axis B first reading: `fix` PR share 28% (proxy)) — No circuit breaker; verify never seen to fail
+- **P7 Sustainability and capacity** (Axis A: 2; Strongest mechanism: `_borg_boundary_check`) — Guardrails are unobserved prose
+  - Axis B first reading: Only proxy unusable (13% to 35%)
+- **P8 Learning and adaptation** (Axis A: 1; Strongest mechanism: Checkpoint injection) — No debrief, no closure tracking
+  - Axis B first reading: 0 of 60 plans with a retro; memory gate FAIL
+- **Total** (Axis A: **14 of 24**)
 
 If P7 is scored on its prose alone the total is 13. A second rater might move a pillar by a point either way, and the
 total should be read as 14 plus or minus 2.
@@ -423,19 +421,19 @@ been examined for this document.
 Every local number reused from the earlier draft was re-run on 2026-10-03 on this machine (main checkout at commit
 `a4bd1c1`). The table lists what changed. Numbers not listed reproduced exactly.
 
-| Measure (LOCAL MEASUREMENT) | Earlier draft | Re-run | Why it moved |
-|-----------------------------|---------------|--------|--------------|
-| Shipped plans with both filing and ship dates | 32 | 39 | Draft regex was narrower; two of three regex variants here give 39, a looser one gives 41 |
-| Shipped plans with no ship date | 27 (45%) | 20 (33%) | Same |
-| Lead time median / mean / same-day | 1.5 d / 5.8 d / 9 | 2 d / 6.7 d / 10 | Same (90th percentile 17 d unchanged) |
-| PRs total / merged | 239 / 227 | 245 / 233 | Repo kept moving |
-| October merged PRs (partial month) | 12 | 18 | Same |
-| Merge latency median / 90th percentile | 0.74 h / 74 h | 0.77 h / 68.7 h | Same |
-| `fix`-titled merged PRs | 63 of 227 | 65 of 233 (28% both) | Same |
-| Commits | 673 | 688 | Same |
-| Checkpoints / with Criteria Reconciled | 128 / 4 | 129 / 5 | Same |
-| Agent-completion log rows | 19 (17 zero-commit) | 343 in the live file plus 16,907 in the rotated `agents.jsonl.1` | Draft read only the live file after a rotation |
-| `Verify:` to criteria lines | 335 to 551 | 335 to 551 with severed plans; 306 to 505 open and shipped only | Draft's scope was "all plans"; ratio 0.61 either way |
+- **Shipped plans with both filing and ship dates** (Earlier draft: 32; Re-run: 39) — Draft regex was narrower; two of three regex variants here give 39, a looser one gives 41
+- **Shipped plans with no ship date** (Earlier draft: 27 (45%); Re-run: 20 (33%); Why it moved: Same)
+- **Lead time median / mean / same-day** (Earlier draft: 1.5 d / 5.8 d / 9; Re-run: 2 d / 6.7 d / 10) — Same (90th percentile 17 d unchanged)
+- **PRs total / merged** (Earlier draft: 239 / 227; Re-run: 245 / 233; Why it moved: Repo kept moving)
+- **October merged PRs (partial month)** (Earlier draft: 12; Re-run: 18; Why it moved: Same)
+- **Merge latency median / 90th percentile** (Earlier draft: 0.74 h / 74 h; Re-run: 0.77 h / 68.7 h; Why it moved: Same)
+- **`fix`-titled merged PRs** (Earlier draft: 63 of 227; Re-run: 65 of 233 (28% both); Why it moved: Same)
+- **Commits** (Earlier draft: 673; Re-run: 688; Why it moved: Same)
+- **Checkpoints / with Criteria Reconciled** (Earlier draft: 128 / 4; Re-run: 129 / 5; Why it moved: Same)
+- **Agent-completion log rows** (Earlier draft: 19 (17 zero-commit)) — 343 in the live file plus 16,907 in the rotated `agents.jsonl.1`
+  - Why it moved: Draft read only the live file after a rotation
+- **`Verify:` to criteria lines** (Earlier draft: 335 to 551) — 335 to 551 with severed plans; 306 to 505 open and shipped only
+  - Why it moved: Draft's scope was "all plans"; ratio 0.61 either way
 
 Unchanged on re-run: 28 open directives, 60 shipped, 8 severed, median open age 41 days with 23 older than 30 and a
 maximum of 87, criteria boxes 35 of 156 open and 266 of 349 shipped, 0 of 60 retros, 1 of 60 scope-grew, 817 spend
@@ -451,9 +449,12 @@ cd /Users/noah/dev/borg-collective &&
     ls docs/plans/directives/20*.md | wc -l &&
     ls docs/plans/assimilated | wc -l &&
     ls docs/plans/severed | wc -l &&
-    gh pr list --state all --limit 1000 --json number,state,mergedAt,createdAt,title | jq 'length' &&
-    jq -s 'length, (map(.est_cost_usd)|add)' ~/.claude/token-spend.jsonl &&
-    cat ~/.local/state/borg/agents.jsonl.1 ~/.local/state/borg/agents.jsonl |
+    gh pr list --state all --limit 1000 \
+        --json number,state,mergedAt,createdAt,title | jq 'length' &&
+    jq -s 'length, (map(.est_cost_usd)|add)' \
+        ~/.claude/token-spend.jsonl &&
+    cat ~/.local/state/borg/agents.jsonl.1 \
+        ~/.local/state/borg/agents.jsonl |
     jq -s '[.[]|select(.zero_commit!=null)]|length' &&
     cat ~/.local/state/borg/memory-gate-verdict.json
 ```
@@ -483,16 +484,14 @@ years, the count is a framing choice and the concepts are the stable part.
 The eight pillars in this document are therefore my synthesis, not a standard, and the table shows where each is
 named. A blank means the source text I could read is silent, not that the framework forbids it.
 
-| Pillar | Named by | Silent |
-|--------|----------|--------|
-| P1 Value and prioritization | PMBOK 8 "focus on value" (S06); PRINCE2 "continued business justification" (S09); Scrum Product Goal (S10); Shape Up betting (S11, S21); Lean "eliminate waste" (S08) | Kanban |
-| P2 Planning and scoping | PMBOK 8 Scope, Schedule, Finance domains (S06); PRINCE2 plans practice (S09); Scrum sprint planning (S10); Shape Up shaping and appetite (S11) | Kanban |
-| P3 Execution | PMBOK 8 Executing area and Resources domain (S06); Scrum Sprint (S10); Kanban "actively manage items" (S05) | |
-| P4 Delivery | PMBOK 8 Closing area (S06); Scrum Increment and Definition of Done (the written bar every piece of work must clear) (S10); Lean "deliver fast" (S08) | |
-| P5 Monitoring and feedback | PMBOK 8 Monitoring and Controlling (S06); PRINCE2 progress practice (S09); Scrum inspection and adaptation (S10); Kanban flow measures (S05) | |
-| P6 Risk and quality | PMBOK 8 Risk domain and "embed quality" (S06); PRINCE2 quality and risk practices (S09); Lean "build quality in" (S08); Shape Up circuit breaker (S11) | |
-| P7 Sustainability and capacity | PMBOK 8 "integrate sustainability" (S06); PRINCE2 7 sustainability and people (S09); Agile principle 8 (S51) | Scrum, Kanban |
-| P8 Learning and adaptation | PRINCE2 "learn from experience" (S09); Scrum's events (S10); Lean "create knowledge" (S08) | PMBOK 8 as described by S06 |
+- **P1 Value and prioritization** (Silent: Kanban) — PMBOK 8 "focus on value" (S06); PRINCE2 "continued business justification" (S09); Scrum Product Goal (S10); Shape Up betting (S11, S21); Lean "eliminate waste" (S08)
+- **P2 Planning and scoping** (Silent: Kanban) — PMBOK 8 Scope, Schedule, Finance domains (S06); PRINCE2 plans practice (S09); Scrum sprint planning (S10); Shape Up shaping and appetite (S11)
+- **P3 Execution** — PMBOK 8 Executing area and Resources domain (S06); Scrum Sprint (S10); Kanban "actively manage items" (S05)
+- **P4 Delivery** — PMBOK 8 Closing area (S06); Scrum Increment and Definition of Done (the written bar every piece of work must clear) (S10); Lean "deliver fast" (S08)
+- **P5 Monitoring and feedback** — PMBOK 8 Monitoring and Controlling (S06); PRINCE2 progress practice (S09); Scrum inspection and adaptation (S10); Kanban flow measures (S05)
+- **P6 Risk and quality** — PMBOK 8 Risk domain and "embed quality" (S06); PRINCE2 quality and risk practices (S09); Lean "build quality in" (S08); Shape Up circuit breaker (S11)
+- **P7 Sustainability and capacity** (Silent: Scrum, Kanban) — PMBOK 8 "integrate sustainability" (S06); PRINCE2 7 sustainability and people (S09); Agile principle 8 (S51)
+- **P8 Learning and adaptation** (Silent: PMBOK 8 as described by S06) — PRINCE2 "learn from experience" (S09); Scrum's events (S10); Lean "create knowledge" (S08)
 
 PMBOK 7's own principle and domain names (Delivery, Measurement, Uncertainty, Adaptability and Resiliency) come from a
 trade page that scored reject and was read but not carded, so I left them out of the table. Only PMI's counts (S07) are
@@ -532,22 +531,29 @@ a reason to keep P1 on the list, not as evidence.
 frameworks are built around. Think of the inspection report as a list of which beams were load-tested and which were
 only drawn.
 
-| Practice | Best evidence | Level | Verdict |
-|----------|---------------|-------|---------|
-| Structured, facilitated debriefs | 46 samples, d = .67; facilitated .75 against unfacilitated .25 (S49) | 1 | Strong, adjacent: mostly non-software, quasi-experimental, few unfacilitated studies |
-| Pre-committed stop rules against escalation | 166 samples (S22); sunk-cost d = .50, progress decisions .44, knowing the theory does not help (S20) | 1 | Strong for the hazard; Weak for any particular kill rule (S18, S21) |
-| Cutting task switches and interruptions | Switch cost grows with rule complexity, shrinks with a cue (S57); interrupted work is faster and more stressful (S55) | 2 | Strong in the lab; field transfer untested |
-| If-then plans | Large effect on goal attainment in clinical samples (S60); ADHD inhibition task (S53) | 1, 2 | Strong, adjacent; lab goals are short, so likely optimistic |
-| Capping hours | Output rises at a decreasing rate past a threshold (S56); longer days raise handling time (S52) | 3 | Moderate, adjacent: munitions workers and call-centre staff |
-| Small batches, tests, trunk-based work (small changes merged to the main branch at least daily) | DORA 2024 and 2025 surveys (S26, S27); definition (S29) | 3, 4 | Moderate; self-reported cross-sectional data (S32) |
-| Feedback loops in Scrum teams | About 2,000 teams, model-fit score CFI 0.959 (1.0 is perfect) (S12) | 3 | Moderate; self-selected survey |
-| Risk-management practice | 415 projects, positive association (S45) | 3 | Moderate to Weak; perception-based, not about registers |
-| WIP limits | 8,505 items, five teams: no support for a productivity benefit; lead-time link vanished at quarterly level (S35) | 3 | Contested; the practice is defined (S31) but unproven |
-| Scoring models (WSJF, ICE, RICE) | None tests a scored order against an unscored one; ideas improve the key metric about one time in three (S17) | 5 | Weak |
-| Appetite, betting, no backlog, circuit breaker | Method text and field reports (S21, S11, S03) | 7, 8 | Weak |
-| Retrospectives in software | They discuss opinions; estimation accuracy did not improve; data went unused (S43) | 5 | Weak: no outcome test |
-| Blameless postmortems, premortems | Practice descriptions; the 30% premortem claim is cited, not verified (S41, S42) | 4, 7 | Weak |
-| Definition of Done | Guide text only (S10, S34, S46) | 4 | Defined only |
+- **Structured, facilitated debriefs** (Level: 1) — 46 samples, d = .67; facilitated .75 against unfacilitated .25 (S49)
+  - Verdict: Strong, adjacent: mostly non-software, quasi-experimental, few unfacilitated studies
+- **Pre-committed stop rules against escalation** (Level: 1) — 166 samples (S22); sunk-cost d = .50, progress decisions .44, knowing the theory does not help (S20)
+  - Verdict: Strong for the hazard; Weak for any particular kill rule (S18, S21)
+- **Cutting task switches and interruptions** (Level: 2) — Switch cost grows with rule complexity, shrinks with a cue (S57); interrupted work is faster and more stressful (S55)
+  - Verdict: Strong in the lab; field transfer untested
+- **If-then plans** (Level: 1, 2) — Large effect on goal attainment in clinical samples (S60); ADHD inhibition task (S53)
+  - Verdict: Strong, adjacent; lab goals are short, so likely optimistic
+- **Capping hours** (Level: 3) — Output rises at a decreasing rate past a threshold (S56); longer days raise handling time (S52)
+  - Verdict: Moderate, adjacent: munitions workers and call-centre staff
+- **Small batches, tests, trunk-based work (small changes merged to the main branch at least daily)** (Level: 3, 4) — DORA 2024 and 2025 surveys (S26, S27); definition (S29)
+  - Verdict: Moderate; self-reported cross-sectional data (S32)
+- **Feedback loops in Scrum teams** (Level: 3) — About 2,000 teams, model-fit score CFI 0.959 (1.0 is perfect) (S12)
+  - Verdict: Moderate; self-selected survey
+- **Risk-management practice** (Level: 3) — 415 projects, positive association (S45)
+  - Verdict: Moderate to Weak; perception-based, not about registers
+- **WIP limits** (Level: 3) — 8,505 items, five teams: no support for a productivity benefit; lead-time link vanished at quarterly level (S35)
+  - Verdict: Contested; the practice is defined (S31) but unproven
+- **Scoring models (WSJF, ICE, RICE)** (Level: 5; Verdict: Weak) — None tests a scored order against an unscored one; ideas improve the key metric about one time in three (S17)
+- **Appetite, betting, no backlog, circuit breaker** (Level: 7, 8; Verdict: Weak) — Method text and field reports (S21, S11, S03)
+- **Retrospectives in software** (Level: 5; Verdict: Weak: no outcome test) — They discuss opinions; estimation accuracy did not improve; data went unused (S43)
+- **Blameless postmortems, premortems** (Level: 4, 7; Verdict: Weak) — Practice descriptions; the 30% premortem claim is cited, not verified (S41, S42)
+- **Definition of Done** (Level: 4; Verdict: Defined only) — Guide text only (S10, S34, S46)
 
 **Where sources agree.** Nobody disputes that estimates are noisy: one informal exercise got one-month delay costs from
 0 to $16 million on the same project (S23), and the large experimentation platform found a third of well-designed ideas
@@ -655,21 +661,19 @@ pages refuse automated fetches. The two data-bearing sources here cut against th
 statistics PM advocacy leans on and finds them wanting (S02). The other validates a model of Scrum team effectiveness on
 about 2,000 teams and finds that feedback loops, not roles, carry the weight (S12).
 
-| Source | Band | Level | Finding used |
-|---|---|---|---|
-| Burdakov and Ahn 2025 (S01) | borderline | L6 | PMBOK 7 gaps for AI projects: limited data management, weak iteration support, no ethics guidance; recommends adding, not discarding. Preprint, respondent ranking. |
-| Eveleens and Verhoef 2010 (S02) | keep | L3 | Standish success definitions are "misleading, one-sided"; tested on 5,457 forecasts of 1,211 projects. |
-| Nunez Alberro 2020 (S03) | borderline | L8 | A year of Shape Up in a small team: no-backlog and cool-down liked; appetite does not remove estimation; team split from the main team is a confound. |
-| Jeffries 2018 (S04) | borderline | L7 | Opinion, no data: poorly applied Agile adds pressure; ceremonies survive while developer autonomy erodes. |
-| Kanban Guide 2025 (S05) | keep | L4 | Three practices, four flow measures (WIP, throughput, work item age, cycle time); the 2025 edition deleted its immutability claim. |
-| PM Academy (Aldridge) 2025 (S06) | borderline | L7 | PMBOK 8: 6 principles, 7 domains, about 40 processes in five focus areas; value widened past scope, schedule and cost; PMI text unchecked. |
-| PMI PMBOK 7 facts 2021 (S07) | borderline | L4 | PMBOK 7: 12 principles and 8 domains, "from processes to principles"; tailoring section added; tool detail moved behind a paid platform. |
-| Poppendieck 2006 (S08) | borderline | L7 | Seven principles in 2006, four in 2002; principles are underlying truths and practices must adapt. |
-| ILX PRINCE2 7 (S09) | borderline | L7 | PRINCE2 7 keeps seven principles, recasts themes as practices, adds sustainability and people; official manual paywalled. |
-| Scrum Guide 2020 (S10) | keep | L4 | Three empirical pillars; 0 mentions of budget or procurement and 1 of cost; Scrum exists only in its entirety. |
-| Singer, Shape Up 2019 (S11) | borderline | L7 | Shaping, betting and building in six-week cycles; fixed time, variable scope; effectiveness unevidenced. |
-| Verwijs and Russo 2022 (S12) | keep | L3 | Model on about 5,000 developers and 2,000 teams: responsiveness, stakeholder concern, improvement, autonomy, management support; CFI 0.959; self-selected survey. |
-| Winter et al. 2006 (S13) | borderline | L4 | UK network named five directions: complexity, social process, value creation, conceptualisation, practitioner development; abstract only. |
+- **Burdakov and Ahn 2025 (S01)** (Band: borderline; Level: L6) — PMBOK 7 gaps for AI projects: limited data management, weak iteration support, no ethics guidance; recommends adding, not discarding. Preprint, respondent ranking.
+- **Eveleens and Verhoef 2010 (S02)** (Band: keep; Level: L3) — Standish success definitions are "misleading, one-sided"; tested on 5,457 forecasts of 1,211 projects.
+- **Nunez Alberro 2020 (S03)** (Band: borderline; Level: L8) — A year of Shape Up in a small team: no-backlog and cool-down liked; appetite does not remove estimation; team split from the main team is a confound.
+- **Jeffries 2018 (S04)** (Band: borderline; Level: L7) — Opinion, no data: poorly applied Agile adds pressure; ceremonies survive while developer autonomy erodes.
+- **Kanban Guide 2025 (S05)** (Band: keep; Level: L4) — Three practices, four flow measures (WIP, throughput, work item age, cycle time); the 2025 edition deleted its immutability claim.
+- **PM Academy (Aldridge) 2025 (S06)** (Band: borderline; Level: L7) — PMBOK 8: 6 principles, 7 domains, about 40 processes in five focus areas; value widened past scope, schedule and cost; PMI text unchecked.
+- **PMI PMBOK 7 facts 2021 (S07)** (Band: borderline; Level: L4) — PMBOK 7: 12 principles and 8 domains, "from processes to principles"; tailoring section added; tool detail moved behind a paid platform.
+- **Poppendieck 2006 (S08)** (Band: borderline; Level: L7) — Seven principles in 2006, four in 2002; principles are underlying truths and practices must adapt.
+- **ILX PRINCE2 7 (S09)** (Band: borderline; Level: L7) — PRINCE2 7 keeps seven principles, recasts themes as practices, adds sustainability and people; official manual paywalled.
+- **Scrum Guide 2020 (S10)** (Band: keep; Level: L4) — Three empirical pillars; 0 mentions of budget or procurement and 1 of cost; Scrum exists only in its entirety.
+- **Singer, Shape Up 2019 (S11)** (Band: borderline; Level: L7) — Shaping, betting and building in six-week cycles; fixed time, variable scope; effectiveness unevidenced.
+- **Verwijs and Russo 2022 (S12)** (Band: keep; Level: L3) — Model on about 5,000 developers and 2,000 teams: responsiveness, stakeholder concern, improvement, autonomy, management support; CFI 0.959; self-selected survey.
+- **Winter et al. 2006 (S13)** (Band: borderline; Level: L4) — UK network named five directions: complexity, social process, value creation, conceptualisation, practitioner development; abstract only.
 
 ### 5.2 P1: Value and prioritization
 
@@ -679,17 +683,15 @@ method while agreeing on the premise (S15, S16, S14). No source in this pillar s
 one. The kill-rule items come from practice, not trial (S18, S21), so the strongest argument for a stop date is the
 escalation evidence, not any evidence about stop dates.
 
-| Source | Band | Level | Finding used |
-|---|---|---|---|
-| Arnold and Yuce 2013 (S14) | borderline | L5 | Maersk Line: top 25% of requirements worth about three orders of magnitude more than the bottom 25%; one feature waiting 38 weeks cost about $8M; author-reported. |
-| Black Swan Farming (WSJF) (S15) | borderline | L7 | Three objections to WSJF: adding value and time criticality is unsound because cost of delay is zero if either is zero; relative scores hide magnitudes; scores are hard to recall past about 20 items. |
-| Gilad, ICE (S16) | borderline | L7 | ICE (Impact, Confidence, Ease) is a comparison aid, "not exact science"; scoring shortens debates driven by opinion and politics. |
-| Kohavi et al. 2009 (S17) | keep | L5 | About one third of well-designed experiments improved the key metric; the transferable lesson is the base rate, not the method. |
-| Doerrfeld 2026 (S18) | borderline | L7 | Set exit conditions (timebox, cost ceiling, confidence threshold) and one decision-owner before starting; its statistics are second-hand. |
-| Roth et al. 2015 (S20) | keep | L1 | k = 100 effect sizes, d = 0.496; continue-funding decisions d = 0.443 and the effect grows with elapsed time; knowing the theory gives no protection; mostly hypothetical monetary scenarios. |
-| Singer, Betting Table (S21) | borderline | L7 | Betting is a per-cycle decision over shaped pitches; appetite is a time budget set first; a circuit breaker means no default extension; no outcome data. |
-| Sleesman et al. 2012 (S22) | keep | L1 | 166 independent samples: escalation of commitment is robust; sunk-cost prominence was lower than expected; shared authority may raise escalation; mostly lab data. |
-| Yeret 2014 (S23) | borderline | L8 | On a $16M-profit project, one-month delay cost estimates ran from 0 to $16M, most $150K to $2M; one informal replication. |
+- **Arnold and Yuce 2013 (S14)** (Band: borderline; Level: L5) — Maersk Line: top 25% of requirements worth about three orders of magnitude more than the bottom 25%; one feature waiting 38 weeks cost about $8M; author-reported.
+- **Black Swan Farming (WSJF) (S15)** (Band: borderline; Level: L7) — Three objections to WSJF: adding value and time criticality is unsound because cost of delay is zero if either is zero; relative scores hide magnitudes; scores are hard to recall past about 20 items.
+- **Gilad, ICE (S16)** (Band: borderline; Level: L7) — ICE (Impact, Confidence, Ease) is a comparison aid, "not exact science"; scoring shortens debates driven by opinion and politics.
+- **Kohavi et al. 2009 (S17)** (Band: keep; Level: L5) — About one third of well-designed experiments improved the key metric; the transferable lesson is the base rate, not the method.
+- **Doerrfeld 2026 (S18)** (Band: borderline; Level: L7) — Set exit conditions (timebox, cost ceiling, confidence threshold) and one decision-owner before starting; its statistics are second-hand.
+- **Roth et al. 2015 (S20)** (Band: keep; Level: L1) — k = 100 effect sizes, d = 0.496; continue-funding decisions d = 0.443 and the effect grows with elapsed time; knowing the theory gives no protection; mostly hypothetical monetary scenarios.
+- **Singer, Betting Table (S21)** (Band: borderline; Level: L7) — Betting is a per-cycle decision over shaped pitches; appetite is a time budget set first; a circuit breaker means no default extension; no outcome data.
+- **Sleesman et al. 2012 (S22)** (Band: keep; Level: L1) — 166 independent samples: escalation of commitment is robust; sunk-cost prominence was lower than expected; shared authority may raise escalation; mostly lab data.
+- **Yeret 2014 (S23)** (Band: borderline; Level: L8) — On a $16M-profit project, one-month delay cost estimates ran from 0 to $16M, most $150K to $2M; one informal replication.
 
 ### 5.3 P2: Planning and scoping
 
@@ -709,15 +711,13 @@ strongest execution evidence is psychological and comes from labs: switching cos
 and interruptions are survived by working faster at the price of stress (S55). For AI-assisted work the data is a
 vendor's telemetry (S30) and DORA's small-batch advice (S29, S26 in 5.5).
 
-| Source | Band | Level | Finding used |
-|---|---|---|---|
-| 55 Degrees 2023 (S24) | borderline | L7 | Little's Law needs five assumptions (arrival equals departure, all items exit, WIP stable, age stable, consistent units); it is a diagnostic. |
-| DORA trunk-based (S29) | borderline | L4 | Trunk-based development means small batches merged at least daily; the team-coordination rationale weakens for one person, the batch logic does not. |
-| Faros AI 2025 (S30) | borderline | L5 | High-AI teams completed 21% more tasks and merged 98% more PRs; review time rose 91%; vendor telemetry, the weakest data-bearing source. |
-| Kanban Guide 2020 (S31) | borderline | L4 | Four flow measures plus the Service Level Expectation (period and probability); WIP is controlled "often" with limits; no outcome evidence. |
-| Sjoberg 2018 (S35) | borderline | L3 | 8,505 items, five teams, 2010 to 2013: WIP and lead time correlate 0.80 at year level (n=4, not significant) and 0.12 at quarter level; WIP and productivity 0.71, partly Little's Law arithmetic; no optimal limit. |
-| Mark et al. 2008 (S55) | keep | L2 | Interrupted tasks finished faster with no quality loss, at the price of more stress, frustration, time pressure and effort. |
-| Rubinstein et al. 2001 (S57) | keep | L2 | Switch cost is measurable, grows with rule complexity and shrinks with a cue; the popular 40% figure is not in the abstract. |
+- **55 Degrees 2023 (S24)** (Band: borderline; Level: L7) — Little's Law needs five assumptions (arrival equals departure, all items exit, WIP stable, age stable, consistent units); it is a diagnostic.
+- **DORA trunk-based (S29)** (Band: borderline; Level: L4) — Trunk-based development means small batches merged at least daily; the team-coordination rationale weakens for one person, the batch logic does not.
+- **Faros AI 2025 (S30)** (Band: borderline; Level: L5) — High-AI teams completed 21% more tasks and merged 98% more PRs; review time rose 91%; vendor telemetry, the weakest data-bearing source.
+- **Kanban Guide 2020 (S31)** (Band: borderline; Level: L4) — Four flow measures plus the Service Level Expectation (period and probability); WIP is controlled "often" with limits; no outcome evidence.
+- **Sjoberg 2018 (S35)** (Band: borderline; Level: L3) — 8,505 items, five teams, 2010 to 2013: WIP and lead time correlate 0.80 at year level (n=4, not significant) and 0.12 at quarter level; WIP and productivity 0.71, partly Little's Law arithmetic; no optimal limit.
+- **Mark et al. 2008 (S55)** (Band: keep; Level: L2) — Interrupted tasks finished faster with no quality loss, at the price of more stress, frustration, time pressure and effort.
+- **Rubinstein et al. 2001 (S57)** (Band: keep; Level: L2) — Switch cost is measurable, grows with rule complexity and shrinks with a cue; the popular 40% figure is not in the abstract.
 
 ### 5.5 P4: Delivery
 
@@ -727,15 +727,13 @@ metric owner warns against turning its keys into goals (S28); and an outside rev
 causal language (S32). The Definition of Done appears twice because two tracks read the same passage of the same Guide
 (S34, S46); section 6.4 flags this as a redundancy.
 
-| Source | Band | Level | Finding used |
-|---|---|---|---|
-| DORA 2024 (S26) | borderline | L3 | Per 25% more AI adoption: throughput -1.5%, stability -7.2%; individual benefit, system-level cost; small batches and testing are the stated fix; self-reported. |
-| DORA 2025 (S27) | borderline | L3 | 2025: AI adoption positive for throughput and product performance, still negative for stability; AI amplifies existing strengths and flaws; tests and fast feedback advised. |
-| DORA four keys 2026 (S28) | keep | L4 | Five delivery metrics; pitfalls include setting metrics as a goal, relying on a single metric, cross-application comparison and team competition. |
-| Lee, Accelerate review (S32) | borderline | L7 | Accelerate uses causal words over a cross-sectional survey design; continuous integration and trunk-based work may be right "not because of this research". |
-| Scrum Guide DoD (T3) (S34) | borderline | L4 | Work that fails the Definition of Done cannot be released or shown at review; no outcome evidence. |
-| Vilas Boas et al. 2026 (S37) | borderline | L5 | One engineer with four AI agents delivered a four-person initiative in half the planned time; 90% first-review acceptance; self-reported; specification quality is the binding constraint. |
-| Scrum Guide DoD (T4) (S46) | borderline | L4 | The Definition of Done is the Increment's commitment and a binary gate; the team sets it where no standard exists; no evidence on strictness. |
+- **DORA 2024 (S26)** (Band: borderline; Level: L3) — Per 25% more AI adoption: throughput -1.5%, stability -7.2%; individual benefit, system-level cost; small batches and testing are the stated fix; self-reported.
+- **DORA 2025 (S27)** (Band: borderline; Level: L3) — 2025: AI adoption positive for throughput and product performance, still negative for stability; AI amplifies existing strengths and flaws; tests and fast feedback advised.
+- **DORA four keys 2026 (S28)** (Band: keep; Level: L4) — Five delivery metrics; pitfalls include setting metrics as a goal, relying on a single metric, cross-application comparison and team competition.
+- **Lee, Accelerate review (S32)** (Band: borderline; Level: L7) — Accelerate uses causal words over a cross-sectional survey design; continuous integration and trunk-based work may be right "not because of this research".
+- **Scrum Guide DoD (T3) (S34)** (Band: borderline; Level: L4) — Work that fails the Definition of Done cannot be released or shown at review; no outcome evidence.
+- **Vilas Boas et al. 2026 (S37)** (Band: borderline; Level: L5) — One engineer with four AI agents delivered a four-person initiative in half the planned time; 90% first-review acceptance; self-reported; specification quality is the binding constraint.
+- **Scrum Guide DoD (T4) (S46)** (Band: borderline; Level: L4) — The Definition of Done is the Increment's commitment and a binary gate; the team sets it where no standard exists; no evidence on strictness.
 
 ### 5.6 P5: Monitoring and feedback
 
@@ -744,16 +742,14 @@ literature says how measures fail (S19, S39), and the experiments say how self-r
 belief and clock (S33), the modelled status distortion (S48), and the point that incident counts are not learning
 (S38). One practitioner response argues the effort-and-output family of measures is the problem (S25).
 
-| Source | Band | Level | Finding used |
-|---|---|---|---|
-| Manheim and Garrabrant 2019 (S19) | borderline | L7 | Four Goodhart modes: regressional, extremal, causal, adversarial; adversarial is live when the scorer is rewarded by the score. |
-| Beck and Orosz 2023 (S25) | borderline | L7 | Argues McKinsey's framework measures effort and output and creates perverse incentives; reasoning, not data. |
-| METR 2025 (S33) | keep | L2 | RCT, 16 developers: 19% longer with AI; they forecast 24% faster and afterwards still believed 20% faster; METR now marks the result out of date. |
-| Forsgren et al. 2021 (SPACE) (S36) | keep | L7 | At least three dimensions, one perceptual; activity never alone to reward or penalize; individuals may track their own productivity; framework, not trial. |
-| Allspaw 2025 (S38) | borderline | L7 | Incident counts are a poor proxy for learning in either direction; organisations can only create conditions for learning. |
-| Bevan and Hood 2006 (S39) | keep | L5 | Targets worked and were gamed; gaming spreads; a met target cannot be told from gaming; health-service evidence applied by analogy. |
-| Snow and Keil 2002 (S48) | borderline | L6 | Reported status differs from true status through perception error and deliberate bias; executives should be skeptical of favourable reports; modelled, abstract only. |
-| Forsgren 2023 (Azure blog) (S58) | borderline | L7 | Companion blog naming SPACE's five dimensions; activity, speed or volume alone miss what success needs. |
+- **Manheim and Garrabrant 2019 (S19)** (Band: borderline; Level: L7) — Four Goodhart modes: regressional, extremal, causal, adversarial; adversarial is live when the scorer is rewarded by the score.
+- **Beck and Orosz 2023 (S25)** (Band: borderline; Level: L7) — Argues McKinsey's framework measures effort and output and creates perverse incentives; reasoning, not data.
+- **METR 2025 (S33)** (Band: keep; Level: L2) — RCT, 16 developers: 19% longer with AI; they forecast 24% faster and afterwards still believed 20% faster; METR now marks the result out of date.
+- **Forsgren et al. 2021 (SPACE) (S36)** (Band: keep; Level: L7) — At least three dimensions, one perceptual; activity never alone to reward or penalize; individuals may track their own productivity; framework, not trial.
+- **Allspaw 2025 (S38)** (Band: borderline; Level: L7) — Incident counts are a poor proxy for learning in either direction; organisations can only create conditions for learning.
+- **Bevan and Hood 2006 (S39)** (Band: keep; Level: L5) — Targets worked and were gamed; gaming spreads; a met target cannot be told from gaming; health-service evidence applied by analogy.
+- **Snow and Keil 2002 (S48)** (Band: borderline; Level: L6) — Reported status differs from true status through perception error and deliberate bias; executives should be skeptical of favourable reports; modelled, abstract only.
+- **Forsgren 2023 (Azure blog) (S58)** (Band: borderline; Level: L7) — Companion blog naming SPACE's five dimensions; activity, speed or volume alone miss what success needs.
 
 ### 5.7 P6: Risk and quality
 
@@ -763,12 +759,10 @@ proposes timelines and futurespectives instead of a register (S47), and the SRE 
 without measuring its effect (S41). Quality gates appear under delivery (S34, S46), and the circuit-breaker mechanism
 under value (S21).
 
-| Source | Band | Level | Finding used |
-|---|---|---|---|
-| Lunney and Lueder 2016 (S41) | borderline | L4 | Postmortems document, find causes and prevent recurrence; blameless; explicit triggers; no measured effect offered. |
-| Klein 2007 (S42) | borderline | L7 | Assume the plan failed, then list why; cites a 30% improvement seen only in a truncated copy; body paywalled. |
-| Rabechini 2013 (S45) | borderline | L3 | 415 projects: risk-management practice has a significant positive impact on success; non-probability, perception-based sample. |
-| Silver 2023 (S47) | borderline | L7 | Registers treat risk as independent point events; alternatives are a living timeline reviewed twice a week and futurespective narratives; experience report. |
+- **Lunney and Lueder 2016 (S41)** (Band: borderline; Level: L4) — Postmortems document, find causes and prevent recurrence; blameless; explicit triggers; no measured effect offered.
+- **Klein 2007 (S42)** (Band: borderline; Level: L7) — Assume the plan failed, then list why; cites a 30% improvement seen only in a truncated copy; body paywalled.
+- **Rabechini 2013 (S45)** (Band: borderline; Level: L3) — 415 projects: risk-management practice has a significant positive impact on success; non-probability, perception-based sample.
+- **Silver 2023 (S47)** (Band: borderline; Level: L7) — Registers treat risk as independent point events; alternatives are a living timeline reviewed twice a week and futurespective narratives; experience report.
 
 ### 5.8 P7: Sustainability and capacity
 
@@ -779,17 +773,15 @@ intervention (S62), and one podcast guest (S59). The conclusion the evidence sup
 and if-then plans plausibly help, long hours plausibly hurt, and no source tests a project-management method on this
 population.
 
-| Source | Band | Level | Finding used |
-|---|---|---|---|
-| Agile principle 8 (S51) | borderline | L7 | Principle 8: sponsors, developers and users should maintain a constant pace indefinitely; gives no measure. |
-| Collewet and Sauermann 2017 (S52) | keep | L3 | Within-person data: longer hours raise handling time per call, even in a mostly part-time workforce; speed metric only. |
-| Gawrilow and Gollwitzer 2008 (S53) | borderline | L2 | If-then plans raised inhibition in children with ADHD to the level of children without; best with medication; lab task, no adult or workplace outcome. |
-| Liebel et al. 2024 (S54) | keep | L6 | Interviews: task organization and estimation are hard; lists, calendars, reminders and pairing help; self-selected sample. |
-| Pencavel 2014 (S56) | keep | L3 | Output is proportional to hours below a threshold and rises at a decreasing rate above it; munitions workers a century ago; the popular 49-hour figure was not verified in the body. |
-| Kennedy and Ferdinandi 2024 (S59) | borderline | L8 | Time blindness, hyperfocus and body doubling; small tasks can sit on a list for years; self-report only. |
-| Toli et al. 2016 (S60) | keep | L1 | Large effect of if-then plans on goal attainment in mental-health samples; held across problems; likely optimistic outside the lab. |
-| Tulili et al. 2023 (S61) | keep | L1 | 92 papers mapped from the early 1990s; research shifted from qualitative to quantitative; the abstract lists no causes. |
-| Work-MAP RCT 2024 (S62) | borderline | L2 | Waitlist RCT, n=46, 11-session telehealth: gains in self-rated performance held at 3 months; small, clinician-delivered. |
+- **Agile principle 8 (S51)** (Band: borderline; Level: L7) — Principle 8: sponsors, developers and users should maintain a constant pace indefinitely; gives no measure.
+- **Collewet and Sauermann 2017 (S52)** (Band: keep; Level: L3) — Within-person data: longer hours raise handling time per call, even in a mostly part-time workforce; speed metric only.
+- **Gawrilow and Gollwitzer 2008 (S53)** (Band: borderline; Level: L2) — If-then plans raised inhibition in children with ADHD to the level of children without; best with medication; lab task, no adult or workplace outcome.
+- **Liebel et al. 2024 (S54)** (Band: keep; Level: L6) — Interviews: task organization and estimation are hard; lists, calendars, reminders and pairing help; self-selected sample.
+- **Pencavel 2014 (S56)** (Band: keep; Level: L3) — Output is proportional to hours below a threshold and rises at a decreasing rate above it; munitions workers a century ago; the popular 49-hour figure was not verified in the body.
+- **Kennedy and Ferdinandi 2024 (S59)** (Band: borderline; Level: L8) — Time blindness, hyperfocus and body doubling; small tasks can sit on a list for years; self-report only.
+- **Toli et al. 2016 (S60)** (Band: keep; Level: L1) — Large effect of if-then plans on goal attainment in mental-health samples; held across problems; likely optimistic outside the lab.
+- **Tulili et al. 2023 (S61)** (Band: keep; Level: L1) — 92 papers mapped from the early 1990s; research shifted from qualitative to quantitative; the abstract lists no causes.
+- **Work-MAP RCT 2024 (S62)** (Band: borderline; Level: L2) — Waitlist RCT, n=46, 11-session telehealth: gains in self-rated performance held at 3 months; small, clinician-delivered.
 
 ### 5.9 P8: Learning and adaptation
 
@@ -798,13 +790,11 @@ not software retrospectives. The software evidence points the other way: retros 
 topics (S43), and practitioners describe rituals that change nothing (S40, S44). Army doctrine adds the step the
 others skip, which is following up until the lesson changes behaviour (S50).
 
-| Source | Band | Level | Finding used |
-|---|---|---|---|
-| Corry 2023 (S40) | borderline | L7 | Three retrospective antipatterns (Wheel of Fortune, In the soup, Loudmouth); process-design failures, no outcome data. |
-| Lehtinen et al. 2017 (S43) | borderline | L5 | 37 retros, 7 teams: 445 negative statements led to 180 actions; 43 statements recurred; estimation accuracy did not improve; earlier outcomes and repository data went unused. |
-| Maric 2026 (S44) | borderline | L7 | No rigorous study of action-item completion exists, by its own account; the 48% repeat-incident figure is second-hand. |
-| Tannenbaum and Cerasoli 2013 (S49) | keep | L1 | d = .67 across 46 samples (about 25% better); facilitated d = .75 against .25; quasi-experimental. |
-| US Army TC 25-20 1993 (S50) | borderline | L4 | An AAR (after-action review) is a discussion, "not a critique", with a chapter on following up so results change later work. |
+- **Corry 2023 (S40)** (Band: borderline; Level: L7) — Three retrospective antipatterns (Wheel of Fortune, In the soup, Loudmouth); process-design failures, no outcome data.
+- **Lehtinen et al. 2017 (S43)** (Band: borderline; Level: L5) — 37 retros, 7 teams: 445 negative statements led to 180 actions; 43 statements recurred; estimation accuracy did not improve; earlier outcomes and repository data went unused.
+- **Maric 2026 (S44)** (Band: borderline; Level: L7) — No rigorous study of action-item completion exists, by its own account; the 48% repeat-incident figure is second-hand.
+- **Tannenbaum and Cerasoli 2013 (S49)** (Band: keep; Level: L1) — d = .67 across 46 samples (about 25% better); facilitated d = .75 against .25; quasi-experimental.
+- **US Army TC 25-20 1993 (S50)** (Band: borderline; Level: L4) — An AAR (after-action review) is a discussion, "not a critique", with a chapter on following up so results change later work.
 
 ---
 
@@ -845,119 +835,177 @@ academic, institutional, practitioner, boots-on-the-ground and contrarian for ev
 **Search log** (one row per query; the logs do not record result counts per query, so the last column records what each
 query yielded):
 
-| Track | # | Query | Engine | Framing | Result used |
-|---|---|---|---|---|---|
-| T1 | 1 | PMBOK Guide Seventh Edition 12 principles 8 performance domains list PMI | WebSearch | factual | becomeaprojectmanager.com (names; rejected), ricardo-vargas.com (read, not carded) |
-| T1 | 2 | PRINCE2 seven themes seven principles seven processes official overview | WebSearch | factual | prince2.com ILX blog (read) |
-| T1 | 3 | PMBOK Guide 8th edition released 2025 changes principles performance domains PMI official announcement | WebSearch | factual (recency) | learningtree.com (read, cut), PMA (carded) |
-| T1 | 4 | pmi.org PMBOK Guide Eighth Edition announcement ... (allowed_domains pmi.org) | WebSearch | factual (primary) | pmi.org/standards/pmbok snippet only (HTTP 403 to fetch); PMI facts + FAQ PDFs (carded) |
-| T1 | 5 | PMI press release PMBOK Guide Eighth Edition released November 2025 "48,000 data points" | WebSearch | factual (primary) | no primary press release found; trainer pages only |
-| T1 | 6 | critique of PMBOK body of knowledge project management theory Winter Smith Morris Cicmil | WebSearch | contrarian | Winter et al. 2006 (carded, abstract); scielo critical review (cut, no abstract text) |
-| T1 | 7 | Winter Smith Morris Cicmil 2006 "Directions for future research..." abstract | WebSearch | contrarian | Manchester Research Explorer abstract (carded) |
-| T1 | 8 | is project management methodology evidence that PMBOK PRINCE2 certification does not improve project success empirical study | WebSearch | FALSIFICATION | only low-quality comparison papers surfaced; none carded |
-| T1 | 9 | project management body of knowledge criticized "one size fits all" empirical evidence practitioners ignore PMBOK tools usage survey | WebSearch | FALSIFICATION | arXiv 2506.02214 (carded); no usage-survey found |
-| T1 | 10 | Eveleens Verhoef "The rise and fall of the Chaos report figures" IEEE Software | WebSearch | FALSIFICATION | VU author PDF (carded) |
-| T1 | 11 | "Eveleens" "Verhoef" Chaos report figures pdf ... | WebSearch | FALSIFICATION | cs.vu.nl PDF located |
-| T1 | 12 | Serrador Pinto "Does Agile work" quantitative analysis ... | WebSearch | evaluative | APM 2-page summary read (cut; secondary) |
-| T1 | 13 | comparison PMBOK PRINCE2 Scrum Kanban common elements knowledge areas mapping systematic literature review | WebSearch | evaluative | only trainer comparisons; none carded (no neutral mapping study found) |
-| T1 | 14 | PRINCE2 7 what's new practices replace themes people sustainability digital data PeopleCert | WebSearch | factual | prince2.com v7 page (carded); lumifywork, purplegriffon, projex snippets (corroboration only) |
-| T1 | 15 | PRINCE2 criticism bureaucratic overhead small projects failure study | WebSearch | FALSIFICATION/contrarian | only blog-grade pros/cons; no failure study; none carded |
-| T1 | 16 | Scrum Guide 2020 changes what's new Schwaber Sutherland removed prescriptive | WebSearch | factual | scrumguides.org/revisions.html fetched (not carded); InfoQ Q&A snippet |
-| T1 | 17 | Scrum criticism empirical evidence does Scrum improve outcomes study teams | WebSearch | evaluative/contrarian | Verwijs and Russo (carded) |
-| T1 | 18 | Kanban evidence study WIP limits effect on cycle time empirical software teams | WebSearch | evaluative | ACM WIP study (HTTP 403; covered by track T3/T5 cards) |
-| T1 | 19 | Kanban vs Scrum which for small team experience report switched from Scrum to Kanban | WebSearch | experiential | Agile Alliance, Caktus, Mind the Product snippets (not fetched; overlaps T3) |
-| T1 | 20 | Poppendieck Lean Software Development seven principles eliminate waste amplify learning decide as late as possible | WebSearch | factual | secondary pages only; led to #21 |
-| T1 | 21 | Poppendieck "Principles of Lean Thinking" pdf eliminate waste amplify learning build integrity in see the whole | WebSearch | factual | 2002 paper (read, superseded) and InfoQ ch.2 (carded) |
-| T1 | 22 | lean software development criticism limitations Poppendieck waste metaphor manufacturing not software | WebSearch | FALSIFICATION | Springer lit review (not fetched; abstract-level only) |
-| T1 | 23 | Ron Jeffries "Developers Should Abandon Agile" ronjeffries.com | WebSearch | contrarian | ronjeffries.com (carded) |
-| T1 | 24 | Shape Up methodology experience after one year problems criticism small team not Basecamp | WebSearch | experiential/contrarian | fnune.com (carded); Shape Up forum 'disappointing' post (read, not carded) |
-| T1 | 25 | Shape Up Ryan Singer book review pros cons appetite betting table | WebSearch | evaluative | review snippets only (circuit-breaker depends on leadership; shapers vs delivery teams) |
-| T1 | 26 | solo developer project management Scrum kanban one person team what works experience | WebSearch | experiential | HN item 21905423 (carded, rejected); scrum.org forum (HTTP 403) |
-| T1 | 27 | PMI Pulse of the Profession 2025 project success rates performance report | WebSearch | evaluative | Pulse 2025 PDF read (cut, tangential) |
-| T2 | 1 | Reinertsen cost of delay Principles of Product Development Flow CD3 weighted shortest job first | WebSearch | - | wind4change, Wikipedia (not fetched); led to Arnold and Yeret |
-| T2 | 2 | WSJF criticism flaws weighted shortest job first SAFe problems (falsification) | WebSearch | falsification | blackswanfarming.com WSJF (carded), Kusters blog (cut) |
-| T2 | 3 | Shape Up appetite betting table Basecamp | WebSearch | - | basecamp.com/shapeup ch.8 (carded), ch.3, ch.9 (fetched) |
-| T2 | 4 | Staw escalation of commitment sunk cost project failure review meta-analysis | WebSearch | - | Sleesman 2012 PDF (carded), Roth 2015 (paywalled) |
-| T2 | 5 | prioritization frameworks don't work RICE scoring criticism product management (falsification) | WebSearch | falsification | vendor guides only (cut); led to Gilad |
-| T2 | 6 | backlog bankruptcy declare delete old backlog items practice | WebSearch | - | ProductPlan (carded, reject), HN thread (cut), Mountain Goat (unreachable) |
-| T2 | 7 | Kohavi online controlled experiments only one-third of ideas improve metrics Microsoft | WebSearch | - | Kohavi 2009 PDF (carded) |
-| T2 | 8 | Goodhart's law metrics software engineering teams measurement dysfunction study | WebSearch | - | vendor/blog Goodhart pages (cut); led to Manheim arXiv |
-| T2 | 9 | empirical study prioritization techniques requirements release planning systematic review outcomes | WebSearch | - | SLR ScienceDirect (paywalled candidate) |
-| T2 | 10 | kill criteria stopping rules project portfolio when to stop a project evidence | WebSearch | - | LeadDev (carded); PMI/APM pages not fetchable |
-| T2 | 11 | Intercom RICE scoring origin Sean McBride | WebSearch | - | vendor pages only (cut) |
-| T2 | 12 | Reinertsen "cost of delay" estimates differ 50 to 1 intuitive study product managers | WebSearch | - | Yeret exercise (carded) |
-| T2 | 13 | Cooper Edgett Kleinschmidt portfolio management new product development lessons from leading firms | WebSearch | - | Wiley article blocked (paywalled candidate) |
-| T2 | 14 | Itamar Gilad ICE scoring confidence meter evidence-guided prioritization | WebSearch | - | Gilad ICE page (carded) |
-| T2 | 15 | Scaled Agile Framework WSJF official guidance cost of delay ... | WebSearch | - | framework.scaledagile.com blocked by Cloudflare; scaledagile.com blog fetched, not carded |
-| T2 | 16 | Joshua Arnold Black Swan Farming cost of delay profiles value distribution backlog data | WebSearch | - | Arnold/Yuce paper (carded) |
-| T2 | 17 | solo developer side project abandon sunk cost when to kill a project experience | WebSearch | - | dev.to 47 side projects (cut), LeadDev |
-| T3 | 1 | DORA 2024 Accelerate State of DevOps report AI adoption delivery throughput stability findings | WebSearch | - | Google Cloud 2024 blog |
-| T3 | 2 | DORA 2025 State of AI-assisted Software Development report findings | WebSearch | - | Google Cloud 2025 blog |
-| T3 | 3 | DORA metrics criticism Goodhart gaming four keys | WebSearch | falsification | dora.dev four-keys guide |
-| T3 | 4 | Kanban Guide 2020 Daniel Vacanti Prateek Singh WIP flow metrics definition | WebSearch | - | Kanban Guide 2020.12 |
-| T3 | 5 | SPACE framework developer productivity Forsgren Storey ACM Queue | WebSearch | - | (led to #17) |
-| T3 | 6 | METR randomized controlled trial AI experienced open-source developers slower | WebSearch | - | METR blog |
-| T3 | 7 | WIP limits empirical evidence study effect on lead time software teams kanban | WebSearch | - | Sjoberg ESEM 2018 (SINTEF) |
-| T3 | 8 | WIP limits don't help criticism kanban evidence weak | WebSearch | falsification | ProKanban WIP post (read, not carded) |
-| T3 | 9 | Little's Law software development cycle time WIP throughput Vacanti Actionable Agile | WebSearch | - | led to #19 |
-| T3 | 10 | trunk-based development research small batches continuous integration DORA capability | WebSearch | - | DORA trunk-based page |
-| T3 | 11 | solo developer personal kanban WIP limit one-person team experience | WebSearch | - | none (low-quality blogs) |
-| T3 | 12 | DORA metrics are harmful misleading critique Accelerate statistical validity methodology | WebSearch | falsification | led to #20 |
-| T3 | 13 | "An empirical study of WIP in kanban teams" authors abstract | WebSearch | - | SINTEF record |
-| T3 | 14 | Faros AI Productivity Paradox report 10,000 developers | WebSearch | - | Faros page |
-| T3 | 15 | Kent Beck Gergely Orosz measuring developer productivity McKinsey response | WebSearch | contrarian | Beck/Orosz newsletter |
-| T3 | 16 | solo developer AI coding agents shipping workflow lessons small batches review bottleneck | WebSearch | experiential | Folkman (excluded), Osmani (not carded) |
-| T3 | 17 | "SPACE of Developer Productivity" "productivity cannot be reduced to a single dimension" | WebSearch | - | atlas.science mirror |
-| T3 | 18 | DORA pausing annual survey 2026 dora.dev announcement | WebSearch | - | dora.dev/survey (no primary pause statement found) |
-| T3 | 19 | Vacanti Little's Law assumptions flow metrics stable system | WebSearch | - | 55 Degrees post |
-| T3 | 20 | Accelerate DORA research critique self-reported survey causal claims methodology | WebSearch | falsification | Keunwoo Lee review |
-| T3 | 21 | Goodhart's law software engineering metrics empirical study gaming velocity story points | WebSearch | falsification | none (blogs only; no empirical study found) |
-| T3 | 22 | arXiv survey solo developers agile practices one-person software projects | WebSearch | - | arXiv 2605.18461 |
-| T3 | 23 | Hacker News Ask HN solo developer how do you manage tasks WIP limit kanban | WebSearch | experiential | HN item 41473997 (excluded) |
-| T4 | 1 | Tannenbaum Cerasoli 2013 debriefs meta-analysis performance improvement 25% | WebSearch | factual | cebma.org PDF (card) |
-| T4 | 2 | Google SRE book postmortem culture learning from failure blameless | WebSearch | factual | sre.google chapter (card) |
-| T4 | 3 | Klein pre-mortem prospective hindsight 30% increase identify reasons for outcomes | WebSearch | factual | hbr.org (card), USC mirror (context) |
-| T4 | 4 | post-mortems don't prevent recurrence incident review action items never completed research | WebSearch | falsification | odd.fyi lead only; vendor blogs triaged out |
-| T4 | 5 | retrospectives effectiveness empirical study agile teams do retrospectives improve outcomes | WebSearch | evaluative | leads to Lehtinen, Stålesen/Dølvik, arXiv 2007.08265 (not carded) |
-| T4 | 6 | agile retrospectives are useless waste of time critique | WebSearch | falsification/contrarian | Corry on martinfowler.com (card) |
-| T4 | 7 | watermelon project status reporting green outside red inside research | WebSearch | experiential | all vendor/PM blogs; triaged out |
-| T4 | 8 | Goodhart's law software metrics gaming measurement dysfunction empirical | WebSearch | factual | Thomas & Uminsky arXiv (triaged); vendor blogs out |
-| T4 | 9 | risk register effectiveness criticism project risk management lightweight alternative evidence | WebSearch | evaluative/contrarian | niksilver.com (card) |
-| T4 | 10 | definition of done quality gates Scrum Guide commitment increment | WebSearch | factual | scrumguides.org (card) |
-| T4 | 11 | Learning from incidents post-incident reviews do not reduce recurrence Allspaw blameless critique Safety-II | WebSearch | falsification | odd.fyi (card), ACL Allspaw (card) |
-| T4 | 12 | project post-mortem reviews software organizations study learning actually applied Dingsøyr postmortem review | WebSearch | evaluative | Dingsøyr papers identified (paywalled) |
-| T4 | 13 | Snow Keil optimistic pessimistic biasing software project status reporting study | WebSearch | factual | leads (MIT Sloan article blocked) |
-| T4 | 14 | Keil Robey "Blowing the whistle on troubled software projects" escalation reporting bad news | WebSearch | factual | paywalled list |
-| T4 | 15 | Hacker News retrospectives are theater nothing changes solo developer weekly review | WebSearch | experiential | HN item 28352828 (card, rejected) |
-| T4 | 16 | Bevan Hood "What's measured is what matters" targets and gaming English public health care system | WebSearch | factual | LSE eprints (card) |
-| T4 | 17 | Cox "What's wrong with risk matrices" Risk Analysis 2008 | WebSearch | contrarian | paywalled list |
-| T4 | 18 | US Army A Leader's Guide to After-Action Reviews TC 25-20 four questions | WebSearch | factual | TC 25-20 mirror (card) |
-| T4 | 19 | Gary Klein premortem project failure prospective hindsight Mitchell Russo Pennington 1989 30 percent original | WebSearch | factual | paywalled list |
-| T4 | 20 | Lehtinen Mantyla problem causes software projects retrospective Recurring opinions productive improvements 13% | WebSearch | evaluative | Lehtinen Springer (blocked), arXiv 2502.03570 (not carded) |
-| T4 | 21 | agile retrospectives effectiveness team learning | OpenAlex adapter | evaluative | leads only |
-| T4 | 22 | postmortem reviews software projects organizational learning | OpenAlex adapter | factual | Desouza/Dingsøyr 2005 lead |
-| T4 | 23 | after action review effectiveness team learning | OpenAlex adapter | factual | Tannenbaum record, hospice AAR lead |
-| T4 | 24 | project risk management practice effectiveness empirical | OpenAlex adapter | evaluative | Rabechini 2013 (card) |
-| T4 | 25 | project status reporting bias software projects | OpenAlex adapter | factual | Snow & Keil 2002 (card), Anandasivam 2009 lead |
-| T4 | 26 | Goodhart law performance measurement dysfunction | OpenAlex adapter | factual | Bevan & Hamblin 2008 lead |
-| T4 | 27 | retrospective meetings agile software teams improvement | OpenAlex adapter | evaluative | Matthies 2019 lead |
-| T4 | 28 | What is wrong with risk matrices Cox | OpenAlex adapter | contrarian | Elmontsri 2014 lead (Cox not indexed) |
-| T5 | 1 | task switching costs executive control | OpenAlex adapter | factual | Rubinstein 2001 identified (abstract via Europe PMC) |
-| T5 | 2 | interrupted work cost | OpenAlex adapter | factual | Mark 2008 identified |
-| T5 | 3 | burnout software engineering systematic | OpenAlex adapter | factual | Tulili 2023 |
-| T5 | 4 | implementation intentions ADHD | OpenAlex adapter | factual | 0 results |
-| T5 | 5 | working hours productivity output | OpenAlex adapter | factual | Pencavel; Collewet and Sauermann |
-| T5 | 6 | Pencavel productivity of working hours output falls after 49 hours IZA | WebSearch | factual | IZA DP 8129 |
-| T5 | 7 | WIP limits individual personal kanban evidence no empirical support | WebSearch | falsification | ESEM 2018 WIP study |
-| T5 | 8 | ADHD productivity systems criticism evidence external scaffolding planners adults randomized trial | WebSearch | falsification | Work-MAP RCT; ScienceWorks (rejected); neural-revolution, pckt (cut) |
-| T5 | 9 | Liebel "software engineers with ADHD" challenges strengths strategies case study arXiv | WebSearch | factual | Liebel 2024 |
-| T5 | 10 | Gawrilow Gollwitzer implementation intentions facilitate response inhibition children ADHD | WebSearch | factual | Gawrilow 2008; Toli 2016 surfaced |
-| T5 | 11 | Rubinstein Meyer Evans 2001 executive control of cognitive processes in task switching pdf | WebSearch | factual | Rubinstein bibliographic record; pop-press pages cut |
-| T5 | 12 | Leroy 2009 "Why is it so hard to do my work" attention residue task switching | WebSearch | factual | Leroy identified (paywalled; blog explainers cut) |
-| T5 | 13 | Tulili Capiluppi Rastogi Burnout in software engineering systematic mapping study IST | WebSearch | factual | Groningen portal record |
-| T5 | 14 | SPACE of Developer Productivity "Satisfaction and well-being" "at least three dimensions" Forsgren Storey | WebSearch | factual | Azure blog (primary blocked) |
-| T5 | 15 | developer with ADHD first-person experience task management what worked what failed blog software engineer time blindness | WebSearch | experiential | Talk Python 473; Medium and kodaps posts cut |
-| T5 | 16 | Agile principle 8 / c2 wiki SustainablePace | WebFetch | factual | agilemanifesto.org; c2 wiki returned no text |
+- **T1** (#: 1; Engine: WebSearch; Framing: factual) — PMBOK Guide Seventh Edition 12 principles 8 performance domains list PMI
+  - Result used: becomeaprojectmanager.com (names; rejected), ricardo-vargas.com (read, not carded)
+- **T1** (#: 2; Engine: WebSearch; Framing: factual; Result used: prince2.com ILX blog (read)) — PRINCE2 seven themes seven principles seven processes official overview
+- **T1** (#: 3; Engine: WebSearch; Framing: factual (recency)) — PMBOK Guide 8th edition released 2025 changes principles performance domains PMI official announcement
+  - Result used: learningtree.com (read, cut), PMA (carded)
+- **T1** (#: 4; Engine: WebSearch; Framing: factual (primary)) — pmi.org PMBOK Guide Eighth Edition announcement ... (allowed_domains pmi.org)
+  - Result used: pmi.org/standards/pmbok snippet only (HTTP 403 to fetch); PMI facts + FAQ PDFs (carded)
+- **T1** (#: 5; Engine: WebSearch; Framing: factual (primary)) — PMI press release PMBOK Guide Eighth Edition released November 2025 "48,000 data points"
+  - Result used: no primary press release found; trainer pages only
+- **T1** (#: 6; Engine: WebSearch; Framing: contrarian) — critique of PMBOK body of knowledge project management theory Winter Smith Morris Cicmil
+  - Result used: Winter et al. 2006 (carded, abstract); scielo critical review (cut, no abstract text)
+- **T1** (#: 7; Engine: WebSearch; Framing: contrarian) — Winter Smith Morris Cicmil 2006 "Directions for future research..." abstract
+  - Result used: Manchester Research Explorer abstract (carded)
+- **T1** (#: 8; Engine: WebSearch; Framing: FALSIFICATION) — is project management methodology evidence that PMBOK PRINCE2 certification does not improve project success empirical study
+  - Result used: only low-quality comparison papers surfaced; none carded
+- **T1** (#: 9; Engine: WebSearch; Framing: FALSIFICATION) — project management body of knowledge criticized "one size fits all" empirical evidence practitioners ignore PMBOK tools usage survey
+  - Result used: arXiv 2506.02214 (carded); no usage-survey found
+- **T1** (#: 10; Engine: WebSearch; Framing: FALSIFICATION; Result used: VU author PDF (carded)) — Eveleens Verhoef "The rise and fall of the Chaos report figures" IEEE Software
+- **T1** (#: 11; Engine: WebSearch; Framing: FALSIFICATION; Result used: cs.vu.nl PDF located) — "Eveleens" "Verhoef" Chaos report figures pdf ...
+- **T1** (#: 12; Engine: WebSearch; Framing: evaluative) — Serrador Pinto "Does Agile work" quantitative analysis ...
+  - Result used: APM 2-page summary read (cut; secondary)
+- **T1** (#: 13; Engine: WebSearch; Framing: evaluative) — comparison PMBOK PRINCE2 Scrum Kanban common elements knowledge areas mapping systematic literature review
+  - Result used: only trainer comparisons; none carded (no neutral mapping study found)
+- **T1** (#: 14; Engine: WebSearch; Framing: factual) — PRINCE2 7 what's new practices replace themes people sustainability digital data PeopleCert
+  - Result used: prince2.com v7 page (carded); lumifywork, purplegriffon, projex snippets (corroboration only)
+- **T1** (#: 15; Engine: WebSearch; Framing: FALSIFICATION/contrarian) — PRINCE2 criticism bureaucratic overhead small projects failure study
+  - Result used: only blog-grade pros/cons; no failure study; none carded
+- **T1** (#: 16; Engine: WebSearch; Framing: factual) — Scrum Guide 2020 changes what's new Schwaber Sutherland removed prescriptive
+  - Result used: scrumguides.org/revisions.html fetched (not carded); InfoQ Q&A snippet
+- **T1** (#: 17; Engine: WebSearch; Framing: evaluative/contrarian; Result used: Verwijs and Russo (carded)) — Scrum criticism empirical evidence does Scrum improve outcomes study teams
+- **T1** (#: 18; Engine: WebSearch; Framing: evaluative) — Kanban evidence study WIP limits effect on cycle time empirical software teams
+  - Result used: ACM WIP study (HTTP 403; covered by track T3/T5 cards)
+- **T1** (#: 19; Engine: WebSearch; Framing: experiential) — Kanban vs Scrum which for small team experience report switched from Scrum to Kanban
+  - Result used: Agile Alliance, Caktus, Mind the Product snippets (not fetched; overlaps T3)
+- **T1** (#: 20; Engine: WebSearch; Framing: factual) — Poppendieck Lean Software Development seven principles eliminate waste amplify learning decide as late as possible
+  - Result used: secondary pages only; led to #21
+- **T1** (#: 21; Engine: WebSearch; Framing: factual) — Poppendieck "Principles of Lean Thinking" pdf eliminate waste amplify learning build integrity in see the whole
+  - Result used: 2002 paper (read, superseded) and InfoQ ch.2 (carded)
+- **T1** (#: 22; Engine: WebSearch; Framing: FALSIFICATION) — lean software development criticism limitations Poppendieck waste metaphor manufacturing not software
+  - Result used: Springer lit review (not fetched; abstract-level only)
+- **T1** (#: 23; Engine: WebSearch; Framing: contrarian; Result used: ronjeffries.com (carded)) — Ron Jeffries "Developers Should Abandon Agile" ronjeffries.com
+- **T1** (#: 24; Engine: WebSearch; Framing: experiential/contrarian) — Shape Up methodology experience after one year problems criticism small team not Basecamp
+  - Result used: fnune.com (carded); Shape Up forum 'disappointing' post (read, not carded)
+- **T1** (#: 25; Engine: WebSearch; Framing: evaluative) — Shape Up Ryan Singer book review pros cons appetite betting table
+  - Result used: review snippets only (circuit-breaker depends on leadership; shapers vs delivery teams)
+- **T1** (#: 26; Engine: WebSearch; Framing: experiential) — solo developer project management Scrum kanban one person team what works experience
+  - Result used: HN item 21905423 (carded, rejected); scrum.org forum (HTTP 403)
+- **T1** (#: 27; Engine: WebSearch; Framing: evaluative) — PMI Pulse of the Profession 2025 project success rates performance report
+  - Result used: Pulse 2025 PDF read (cut, tangential)
+- **T2** (#: 1; Engine: WebSearch; Framing: -) — Reinertsen cost of delay Principles of Product Development Flow CD3 weighted shortest job first
+  - Result used: wind4change, Wikipedia (not fetched); led to Arnold and Yeret
+- **T2** (#: 2; Engine: WebSearch; Framing: falsification) — WSJF criticism flaws weighted shortest job first SAFe problems (falsification)
+  - Result used: blackswanfarming.com WSJF (carded), Kusters blog (cut)
+- **T2** (#: 3; Engine: WebSearch; Framing: -) — Shape Up appetite betting table Basecamp
+  - Result used: basecamp.com/shapeup ch.8 (carded), ch.3, ch.9 (fetched)
+- **T2** (#: 4; Engine: WebSearch; Framing: -) — Staw escalation of commitment sunk cost project failure review meta-analysis
+  - Result used: Sleesman 2012 PDF (carded), Roth 2015 (paywalled)
+- **T2** (#: 5; Engine: WebSearch; Framing: falsification) — prioritization frameworks don't work RICE scoring criticism product management (falsification)
+  - Result used: vendor guides only (cut); led to Gilad
+- **T2** (#: 6; Engine: WebSearch; Framing: -) — backlog bankruptcy declare delete old backlog items practice
+  - Result used: ProductPlan (carded, reject), HN thread (cut), Mountain Goat (unreachable)
+- **T2** (#: 7; Engine: WebSearch; Framing: -; Result used: Kohavi 2009 PDF (carded)) — Kohavi online controlled experiments only one-third of ideas improve metrics Microsoft
+- **T2** (#: 8; Engine: WebSearch; Framing: -) — Goodhart's law metrics software engineering teams measurement dysfunction study
+  - Result used: vendor/blog Goodhart pages (cut); led to Manheim arXiv
+- **T2** (#: 9; Engine: WebSearch; Framing: -) — empirical study prioritization techniques requirements release planning systematic review outcomes
+  - Result used: SLR ScienceDirect (paywalled candidate)
+- **T2** (#: 10; Engine: WebSearch; Framing: -) — kill criteria stopping rules project portfolio when to stop a project evidence
+  - Result used: LeadDev (carded); PMI/APM pages not fetchable
+- **T2** (#: 11; Engine: WebSearch; Framing: -; Result used: vendor pages only (cut)) — Intercom RICE scoring origin Sean McBride
+- **T2** (#: 12; Engine: WebSearch; Framing: -; Result used: Yeret exercise (carded)) — Reinertsen "cost of delay" estimates differ 50 to 1 intuitive study product managers
+- **T2** (#: 13; Engine: WebSearch; Framing: -) — Cooper Edgett Kleinschmidt portfolio management new product development lessons from leading firms
+  - Result used: Wiley article blocked (paywalled candidate)
+- **T2** (#: 14; Engine: WebSearch; Framing: -; Result used: Gilad ICE page (carded)) — Itamar Gilad ICE scoring confidence meter evidence-guided prioritization
+- **T2** (#: 15; Engine: WebSearch; Framing: -) — Scaled Agile Framework WSJF official guidance cost of delay ...
+  - Result used: framework.scaledagile.com blocked by Cloudflare; scaledagile.com blog fetched, not carded
+- **T2** (#: 16; Engine: WebSearch; Framing: -; Result used: Arnold/Yuce paper (carded)) — Joshua Arnold Black Swan Farming cost of delay profiles value distribution backlog data
+- **T2** (#: 17; Engine: WebSearch; Framing: -) — solo developer side project abandon sunk cost when to kill a project experience
+  - Result used: dev.to 47 side projects (cut), LeadDev
+- **T3** (#: 1; Engine: WebSearch; Framing: -; Result used: Google Cloud 2024 blog) — DORA 2024 Accelerate State of DevOps report AI adoption delivery throughput stability findings
+- **T3** (#: 2; Engine: WebSearch; Framing: -; Result used: Google Cloud 2025 blog) — DORA 2025 State of AI-assisted Software Development report findings
+- **T3** (#: 3; Engine: WebSearch; Framing: falsification; Result used: dora.dev four-keys guide) — DORA metrics criticism Goodhart gaming four keys
+- **T3** (#: 4; Engine: WebSearch; Framing: -; Result used: Kanban Guide 2020.12) — Kanban Guide 2020 Daniel Vacanti Prateek Singh WIP flow metrics definition
+- **T3** (#: 5; Engine: WebSearch; Framing: -; Result used: (led to #17)) — SPACE framework developer productivity Forsgren Storey ACM Queue
+- **T3** (#: 6; Engine: WebSearch; Framing: -; Result used: METR blog) — METR randomized controlled trial AI experienced open-source developers slower
+- **T3** (#: 7; Engine: WebSearch; Framing: -; Result used: Sjoberg ESEM 2018 (SINTEF)) — WIP limits empirical evidence study effect on lead time software teams kanban
+- **T3** (#: 8; Engine: WebSearch; Framing: falsification) — WIP limits don't help criticism kanban evidence weak
+  - Result used: ProKanban WIP post (read, not carded)
+- **T3** (#: 9; Engine: WebSearch; Framing: -; Result used: led to #19) — Little's Law software development cycle time WIP throughput Vacanti Actionable Agile
+- **T3** (#: 10; Engine: WebSearch; Framing: -; Result used: DORA trunk-based page) — trunk-based development research small batches continuous integration DORA capability
+- **T3** (#: 11; Engine: WebSearch; Framing: -; Result used: none (low-quality blogs)) — solo developer personal kanban WIP limit one-person team experience
+- **T3** (#: 12; Engine: WebSearch; Framing: falsification; Result used: led to #20) — DORA metrics are harmful misleading critique Accelerate statistical validity methodology
+- **T3** (#: 13; Engine: WebSearch; Framing: -; Result used: SINTEF record) — "An empirical study of WIP in kanban teams" authors abstract
+- **T3** (#: 14; Engine: WebSearch; Framing: -; Result used: Faros page) — Faros AI Productivity Paradox report 10,000 developers
+- **T3** (#: 15; Engine: WebSearch; Framing: contrarian; Result used: Beck/Orosz newsletter) — Kent Beck Gergely Orosz measuring developer productivity McKinsey response
+- **T3** (#: 16; Engine: WebSearch; Framing: experiential) — solo developer AI coding agents shipping workflow lessons small batches review bottleneck
+  - Result used: Folkman (excluded), Osmani (not carded)
+- **T3** (#: 17; Engine: WebSearch; Framing: -; Result used: atlas.science mirror) — "SPACE of Developer Productivity" "productivity cannot be reduced to a single dimension"
+- **T3** (#: 18; Engine: WebSearch; Framing: -) — DORA pausing annual survey 2026 dora.dev announcement
+  - Result used: dora.dev/survey (no primary pause statement found)
+- **T3** (#: 19; Engine: WebSearch; Framing: -; Result used: 55 Degrees post) — Vacanti Little's Law assumptions flow metrics stable system
+- **T3** (#: 20; Engine: WebSearch; Framing: falsification; Result used: Keunwoo Lee review) — Accelerate DORA research critique self-reported survey causal claims methodology
+- **T3** (#: 21; Engine: WebSearch; Framing: falsification) — Goodhart's law software engineering metrics empirical study gaming velocity story points
+  - Result used: none (blogs only; no empirical study found)
+- **T3** (#: 22; Engine: WebSearch; Framing: -; Result used: arXiv 2605.18461) — arXiv survey solo developers agile practices one-person software projects
+- **T3** (#: 23; Engine: WebSearch; Framing: experiential; Result used: HN item 41473997 (excluded)) — Hacker News Ask HN solo developer how do you manage tasks WIP limit kanban
+- **T4** (#: 1; Engine: WebSearch; Framing: factual; Result used: cebma.org PDF (card)) — Tannenbaum Cerasoli 2013 debriefs meta-analysis performance improvement 25%
+- **T4** (#: 2; Engine: WebSearch; Framing: factual; Result used: sre.google chapter (card)) — Google SRE book postmortem culture learning from failure blameless
+- **T4** (#: 3; Engine: WebSearch; Framing: factual) — Klein pre-mortem prospective hindsight 30% increase identify reasons for outcomes
+  - Result used: hbr.org (card), USC mirror (context)
+- **T4** (#: 4; Engine: WebSearch; Framing: falsification) — post-mortems don't prevent recurrence incident review action items never completed research
+  - Result used: odd.fyi lead only; vendor blogs triaged out
+- **T4** (#: 5; Engine: WebSearch; Framing: evaluative) — retrospectives effectiveness empirical study agile teams do retrospectives improve outcomes
+  - Result used: leads to Lehtinen, Stålesen/Dølvik, arXiv 2007.08265 (not carded)
+- **T4** (#: 6; Engine: WebSearch; Framing: falsification/contrarian) — agile retrospectives are useless waste of time critique
+  - Result used: Corry on martinfowler.com (card)
+- **T4** (#: 7; Engine: WebSearch; Framing: experiential) — watermelon project status reporting green outside red inside research
+  - Result used: all vendor/PM blogs; triaged out
+- **T4** (#: 8; Engine: WebSearch; Framing: factual) — Goodhart's law software metrics gaming measurement dysfunction empirical
+  - Result used: Thomas & Uminsky arXiv (triaged); vendor blogs out
+- **T4** (#: 9; Engine: WebSearch; Framing: evaluative/contrarian; Result used: niksilver.com (card)) — risk register effectiveness criticism project risk management lightweight alternative evidence
+- **T4** (#: 10; Engine: WebSearch; Framing: factual; Result used: scrumguides.org (card)) — definition of done quality gates Scrum Guide commitment increment
+- **T4** (#: 11; Engine: WebSearch; Framing: falsification) — Learning from incidents post-incident reviews do not reduce recurrence Allspaw blameless critique Safety-II
+  - Result used: odd.fyi (card), ACL Allspaw (card)
+- **T4** (#: 12; Engine: WebSearch; Framing: evaluative) — project post-mortem reviews software organizations study learning actually applied Dingsøyr postmortem review
+  - Result used: Dingsøyr papers identified (paywalled)
+- **T4** (#: 13; Engine: WebSearch; Framing: factual) — Snow Keil optimistic pessimistic biasing software project status reporting study
+  - Result used: leads (MIT Sloan article blocked)
+- **T4** (#: 14; Engine: WebSearch; Framing: factual; Result used: paywalled list) — Keil Robey "Blowing the whistle on troubled software projects" escalation reporting bad news
+- **T4** (#: 15; Engine: WebSearch; Framing: experiential) — Hacker News retrospectives are theater nothing changes solo developer weekly review
+  - Result used: HN item 28352828 (card, rejected)
+- **T4** (#: 16; Engine: WebSearch; Framing: factual; Result used: LSE eprints (card)) — Bevan Hood "What's measured is what matters" targets and gaming English public health care system
+- **T4** (#: 17; Engine: WebSearch; Framing: contrarian; Result used: paywalled list) — Cox "What's wrong with risk matrices" Risk Analysis 2008
+- **T4** (#: 18; Engine: WebSearch; Framing: factual; Result used: TC 25-20 mirror (card)) — US Army A Leader's Guide to After-Action Reviews TC 25-20 four questions
+- **T4** (#: 19; Engine: WebSearch; Framing: factual; Result used: paywalled list) — Gary Klein premortem project failure prospective hindsight Mitchell Russo Pennington 1989 30 percent original
+- **T4** (#: 20; Engine: WebSearch; Framing: evaluative) — Lehtinen Mantyla problem causes software projects retrospective Recurring opinions productive improvements 13%
+  - Result used: Lehtinen Springer (blocked), arXiv 2502.03570 (not carded)
+- **T4** (#: 21; Engine: OpenAlex adapter; Framing: evaluative; Result used: leads only) — agile retrospectives effectiveness team learning
+- **T4** (#: 22; Engine: OpenAlex adapter; Framing: factual; Result used: Desouza/Dingsøyr 2005 lead) — postmortem reviews software projects organizational learning
+- **T4** (#: 23; Engine: OpenAlex adapter; Framing: factual) — after action review effectiveness team learning
+  - Result used: Tannenbaum record, hospice AAR lead
+- **T4** (#: 24; Engine: OpenAlex adapter; Framing: evaluative; Result used: Rabechini 2013 (card)) — project risk management practice effectiveness empirical
+- **T4** (#: 25; Engine: OpenAlex adapter; Framing: factual) — project status reporting bias software projects
+  - Result used: Snow & Keil 2002 (card), Anandasivam 2009 lead
+- **T4** (#: 26; Engine: OpenAlex adapter; Framing: factual; Result used: Bevan & Hamblin 2008 lead) — Goodhart law performance measurement dysfunction
+- **T4** (#: 27; Engine: OpenAlex adapter; Framing: evaluative; Result used: Matthies 2019 lead) — retrospective meetings agile software teams improvement
+- **T4** (#: 28; Engine: OpenAlex adapter; Framing: contrarian) — What is wrong with risk matrices Cox
+  - Result used: Elmontsri 2014 lead (Cox not indexed)
+- **T5** (#: 1; Engine: OpenAlex adapter; Framing: factual) — task switching costs executive control
+  - Result used: Rubinstein 2001 identified (abstract via Europe PMC)
+- **T5** (#: 2; Query: interrupted work cost; Engine: OpenAlex adapter; Framing: factual; Result used: Mark 2008 identified)
+- **T5** (#: 3; Engine: OpenAlex adapter; Framing: factual; Result used: Tulili 2023) — burnout software engineering systematic
+- **T5** (#: 4; Engine: OpenAlex adapter; Framing: factual; Result used: 0 results) — implementation intentions ADHD
+- **T5** (#: 5; Engine: OpenAlex adapter; Framing: factual) — working hours productivity output
+  - Result used: Pencavel; Collewet and Sauermann
+- **T5** (#: 6; Engine: WebSearch; Framing: factual; Result used: IZA DP 8129) — Pencavel productivity of working hours output falls after 49 hours IZA
+- **T5** (#: 7; Engine: WebSearch; Framing: falsification; Result used: ESEM 2018 WIP study) — WIP limits individual personal kanban evidence no empirical support
+- **T5** (#: 8; Engine: WebSearch; Framing: falsification) — ADHD productivity systems criticism evidence external scaffolding planners adults randomized trial
+  - Result used: Work-MAP RCT; ScienceWorks (rejected); neural-revolution, pckt (cut)
+- **T5** (#: 9; Engine: WebSearch; Framing: factual; Result used: Liebel 2024) — Liebel "software engineers with ADHD" challenges strengths strategies case study arXiv
+- **T5** (#: 10; Engine: WebSearch; Framing: factual) — Gawrilow Gollwitzer implementation intentions facilitate response inhibition children ADHD
+  - Result used: Gawrilow 2008; Toli 2016 surfaced
+- **T5** (#: 11; Engine: WebSearch; Framing: factual) — Rubinstein Meyer Evans 2001 executive control of cognitive processes in task switching pdf
+  - Result used: Rubinstein bibliographic record; pop-press pages cut
+- **T5** (#: 12; Engine: WebSearch; Framing: factual) — Leroy 2009 "Why is it so hard to do my work" attention residue task switching
+  - Result used: Leroy identified (paywalled; blog explainers cut)
+- **T5** (#: 13; Engine: WebSearch; Framing: factual; Result used: Groningen portal record) — Tulili Capiluppi Rastogi Burnout in software engineering systematic mapping study IST
+- **T5** (#: 14; Engine: WebSearch; Framing: factual; Result used: Azure blog (primary blocked)) — SPACE of Developer Productivity "Satisfaction and well-being" "at least three dimensions" Forsgren Storey
+- **T5** (#: 15; Engine: WebSearch; Framing: experiential) — developer with ADHD first-person experience task management what worked what failed blog software engineer time blindness
+  - Result used: Talk Python 473; Medium and kodaps posts cut
+- **T5** (#: 16; Engine: WebFetch; Framing: factual) — Agile principle 8 / c2 wiki SustainablePace
+  - Result used: agilemanifesto.org; c2 wiki returned no text
 
 **Totals.** Queries: 111. Sources pulled for evaluation: 69 (one card each). Triaged out before carding: 73 entries
 listed in 6.6, some of which bundle several pages. Results returned per query were not counted, so I report no total
@@ -1103,13 +1151,11 @@ distinct documents. Dropping S34 changes no conclusion.
 
 Counts are included sources only. Every track has at least three of the five categories.
 
-| Topic area | Academic | Institutional | Practitioner | Boots | Contrarian |
-|------------|----------|---------------|--------------|-------|------------|
-| T1 Pillars and frameworks | Y (3) | Y (3) | Y (4) | Y (1) | Y (2) |
-| T2 Value and prioritization | Y (4) | N (0) | Y (4) | Y (1) | Y (1) |
-| T3 Flow, delivery, measurement | Y (4) | Y (6) | Y (3) | N (0) | Y (1) |
-| T4 Feedback: monitoring, risk, learning | Y (5) | Y (3) | Y (3) | N (0) | Y (2) |
-| T5 Capacity and sustainability | Y (9) | Y (1) | Y (1) | Y (1) | N (0) |
+- **T1 Pillars and frameworks** (Academic: Y (3); Institutional: Y (3); Practitioner: Y (4); Boots: Y (1); Contrarian: Y (2))
+- **T2 Value and prioritization** (Academic: Y (4); Institutional: N (0); Practitioner: Y (4); Boots: Y (1); Contrarian: Y (1))
+- **T3 Flow, delivery, measurement** (Academic: Y (4); Institutional: Y (6); Practitioner: Y (3); Boots: N (0); Contrarian: Y (1))
+- **T4 Feedback: monitoring, risk, learning** (Academic: Y (5); Institutional: Y (3); Practitioner: Y (3); Boots: N (0); Contrarian: Y (2))
+- **T5 Capacity and sustainability** (Academic: Y (9); Institutional: Y (1); Practitioner: Y (1); Boots: Y (1); Contrarian: N (0))
 
 The gaps are real absences, not skipped searches. T2 has no institutional voice because no standards body publishes on
 prioritization economics that I could fetch (the SAFe page was blocked by a Cloudflare challenge). Boots-on-the-ground
@@ -1121,81 +1167,141 @@ blog, none of which argues against capacity limits. The ADHD evidence in T5 is m
 
 Sources screened out before a card was written, with the one-line reason from each track's log:
 
-| Track | Source | Reason triaged out |
-|---|---|---|
-| T1 | becomeaprojectmanager.com "Significant Changes in the PMBOK Guide's Seventh Edition" (2022) | Exam-prep blog; est. weighted score ~4.3 (reject). Used only to read the names (see below); not carded |
-| T1 | Learning Tree PMBOK 8 article | Training vendor, secondary; est. ~5.0; redundant with the PMA card (same 6/7/40/5 counts) |
-| T1 | Poppendieck "Principles of Lean Thinking" (2002 paper) | Read in full; scored borderline (~5.5) but superseded by the 2006 chapter; kept as a cited claim in that card |
-| T1 | HN Ask HN solo devs (item 21905423) | Carded but REJECT band (~4.5): anonymous anecdote; the run's deliberate real cut |
-| T1 | Serrador and Pinto APM summary | Two-page secondary summary of a paywalled paper; tangential to decomposition; listed as paywalled candidate |
-| T1 | PMI Pulse of the Profession 2025 | Self-reported survey n=2,254; tangential (business-acumen skills, not decomposition); the '31% successful' snippet was not found in the PDF text |
-| T1 | scielo.org.co PMBOK critical review (Spanish) | No abstract/body text recovered in fetch |
-| T1 | Scrum.org forum "One man Scrum Team" | HTTP 403; HN thread used instead |
-| T1 | ACM "An empirical study of WIP in kanban teams" | HTTP 403; handled by T3/T5 tracks |
-| T1 | Shape Up forum 'My experience ... disappointing' (2023) | Thin single post; overlaps fnune.com; kept out to avoid redundancy |
-| T1 | prince2.com ILX older blog (principles/themes/processes) | Superseded by ILX V7 page |
-| T1 | Wikipedia and generic trainer pages (asana, monday, knowledgehut, etc.) | Not minimally credible / redundant |
-| T1 | ricardo-vargas.com PMBOK 7 domains podcast | Page text only says domains have 'no sequence'; no list; thin |
-| T2 | Kusters, "Why WSJF is Nonsense" (failfastmoveon.blogspot.com, 2021-03-15) | Real cut. Toy numeric example of error compounding; weak authority; the structural WSJF critique is carried by the Black Swan Farming card. Its "do the discussion, forget the numbers" recommendation is opinion. |
-| T2 | ProductPlan backlog bankruptcy (productplan.com) | Scored band reject (4.9); retained as an Excluded card only for audit. |
-| T2 | Hacker News thread 10829735 (2016) | Anonymous forum comments; useful idea ("inbox zero or bankrupt") but no verifiable authority. |
-| T2 | Mountain Goat Software backlog-bankruptcy URL | Page returned a different blog index; claimed article not found. |
-| T2 | Humanizing Work "life-changing focus of a clean backlog" | Blocked by Cloudflare challenge. |
-| T2 | framework.scaledagile.com/wsjf | Blocked by Cloudflare challenge; official SAFe formula taken from search summary only, flagged unverified. |
-| T2 | Scaled Agile blog "Challenge of Economic Prioritization" | Fetched; generic organizational-culture prose, no data on WSJF outcomes. |
-| T2 | PMI "Pull the plug", "sunk-cost dilemma", APM "when to give up" | Not fetchable (error page) or only snippets. |
-| T2 | Vendor RICE/WSJF guides (Atlassian, monday.com, Tempo, projectmanager.com, airfocus, ProdPad, Ducalis) | Vendor marketing; redundant with each other and lower quality than Gilad. |
-| T2 | Goodhart blog posts (axify, typoapp, ctoframework, codepulsehq, Hillel Wayne) | Redundant with Manheim and Garrabrant; blogs without systematic evidence. |
-| T2 | dev.to "47 unfinished side projects" | Anecdote, no authority, generic content. |
-| T2 | Wikipedia Cost of delay | Tertiary. |
-| T2 | cond-mat arXiv "Performance Variability and Project Dynamics" | Off-topic (physics model). |
-| T2 | Sleesman duplicate: ResearchGate copies | Redundant with the NTNU-hosted PDF. |
-| T3 | Medium: "DORA Report 2024 reviewed", RedMonk, New Stack, OpsLevel, Scribd copies | Secondary summaries of a primary already fetched |
-| T3 | Scrum.org DORA 2025 summary | Secondary; Google blog is primary |
-| T3 | Honeycomb / Faros DORA 2025 takeaways | Vendor summaries of the same report |
-| T3 | codepulsehq, keypup, typoapp, alekseialeinikov, neuralwired Goodhart/DORA posts | Vendor or low-credibility content marketing; DORA guide already states Goodhart |
-| T3 | Aviator "Everything wrong with DORA metrics", Medium "Optimisation Trap" | Vendor/blog opinion; Lee review covers the substantive critique |
-| T3 | Bryan Finster "How to Misuse & Abuse DORA Metrics" PDF | Promising practitioner source; PDF returned binary, not text-verifiable this run (follow-up candidate) |
-| T3 | InfoQ "How Not to Use the DORA Metrics" | Fetched; overlaps DORA guide and pre-dates 2024; not carded |
-| T3 | Thoughtworks Radar DORA metrics | Page did not render usable text (JS); not verified |
-| T3 | super-productivity.com, easykanb, miro, kanbantool, teachingagile WIP posts | Vendor marketing; no evidence |
-| T3 | Medium Little's Law posts, leanability, calade, resumelens | Secondary explanations; 55 Degrees (Vacanti's firm) used instead |
-| T3 | ProKanban "WIP: what it is" post | Read; conceptual, no evidence beyond assertion; claim that the ProKanban guide removed the WIP-limit requirement was not verified and the 2020 Guide still says "often using WIP Limits" |
-| T3 | Osmani "AI writes code faster..." (Jan 2026) | Read; opinion with unsourced statistics (75% logic errors); overlaps Faros/Folkman themes |
-| T3 | Waydev "DORA is pausing the survey" | Vendor blog; primary dora.dev announcement not found, so claim left unused |
-| T3 | METR 2026 follow-up and ingenire/particula summaries | Secondary; Feb 2026 METR follow-up not fetched (gap) |
-| T3 | DORA 2025 PDF/ROI report | Not fetched; Google blog used instead |
-| T3 | Folkman substack (carded) | Rubric band reject: anecdote, unverified credentials |
-| T3 | HN Ask solo developer thread (carded) | Rubric band reject: anonymous anecdotes |
-| T3 | tameflow, spamcast, agilelaws, businessmap | Secondary / low-authority |
-| T4 | incident.io, hyperping, Atlassian, upstat, itoc360 and similar postmortem guides | Vendor content marketing; restate SRE book; unsourced statistics |
-| T4 | TeamRetro "178 Agile statistics" page | Vendor stats page; unsourced figures (e.g. 24% responsiveness, 20% balanced performance) |
-| T4 | Watermelon-status blogs (Cascade, Pragmatic Coders, Cultivated, Medium, Substack, etc.) | Vendor or opinion pieces with no evidence; mechanism covered by Snow & Keil |
-| T4 | MIT Sloan "The Pitfalls of Project Status Reporting" | Blocked by Cloudflare to the fetcher; could not verify quotes |
-| T4 | Thomas & Uminsky 2020, arXiv 2002.08512 | Fetched (abstract verified) but AI-specific, lower authority than Bevan & Hood; superseded for Goodhart evidence |
-| T4 | Bevan & Hamblin 2008 ambulance targets | Adapter abstract only; narrower than Bevan & Hood 2006 |
-| T4 | Anandasivam & Premm 2009 (survey, n = 91) | Abstract only via adapter; overlaps Snow & Keil; thin |
-| T4 | Desouza, Dingsøyr, Awazu 2005 postmortems; Dingsøyr 2007 | Abstract only / paywalled; no outcome evidence |
-| T4 | Matthies 2019 ICSE-Companion; Milani/Storey 2025 (arXiv 2502.03570, n = 19) | Doctoral-symposium abstract and tiny survey; retro-data-use topic only |
-| T4 | Elmontsri 2014 and Capogna/Bull 2022 risk-matrix pieces | Abstract-level adapter hits; mild critiques; Cox 2008 is the real source but paywalled |
-| T4 | Hospice AAR poster (BMJ SPCare 2025) | Conference abstract; single-site; healthcare |
-| T4 | Lehtinen 2017 (Springer) and Aalto theses | Fetcher blocked; moved to paywalled list; 13% figure unverified |
-| T4 | Etsy Debriefing Facilitation Guide | Blocked (JavaScript challenge) |
-| T4 | Wikipedia risk register / premortem pages, Medium premortem posts | Tertiary or marketing |
-| T4 | Hacker News thread 28352828 | Carded but band reject; illustration only |
-| T5 | ScienceWorks Health, External Systems for ADHD at Work | Carded then rejected: commercial intent, secondary citation of primary studies |
-| T5 | neural-revolution.com ADHD coaching evidence blog | Commercial coaching site; claims not independently verifiable |
-| T5 | pckt.blog "What Actually Works for Productivity With ADHD" | Anonymous-tier personal blog; page fetched but not usable |
-| T5 | ScienceWorks "ADHD Software Engineers: Sprints and Standups" | Same publisher as rejected card; redundant |
-| T5 | Medium/kodaps ADHD developer tips | Anecdotal tips, redundant with Talk Python card |
-| T5 | get-alfred.ai, strongerhabits, hushpod, goalsandprogress attention-residue explainers | Secondary popularizations of Leroy 2009; primary is paywalled instead |
-| T5 | vocal.media, minagi, zenexmachina "myth of multitasking" | Low-authority explainers of Rubinstein |
-| T5 | Collewet and Sauermann (journal) vs IZA | Same work; IZA DP carded |
-| T5 | Tether (arXiv 2509.01946) | LLM ADHD tool prototype, "not yet evaluated by target users": no evidence of efficacy |
-| T5 | attexis CBT RCT (medRxiv 2025), A self-guided internet intervention protocol, ISCAP 2025 paper | Clinical interventions or protocols without a task-management mechanism; preprint/protocol status |
-| T5 | OpenAlex adapter auto-cards (capacity-01..05) | Abstract-only stubs, unreviewed; sit in claude-plugins hooks dir |
-| T5 | Machine-learning burnout detection SLR (OpenAlex) | Duplicative of Tulili on topic; not fetched |
-| T5 | SPACE secondary explainers (getdx, swarmia, space-framework.com) | Vendor content; Azure/primary preferred |
+- **T1** — becomeaprojectmanager.com "Significant Changes in the PMBOK Guide's Seventh Edition" (2022)
+  - Reason triaged out: Exam-prep blog; est. weighted score ~4.3 (reject). Used only to read the names (see below); not carded
+- **T1** — Learning Tree PMBOK 8 article
+  - Reason triaged out: Training vendor, secondary; est. ~5.0; redundant with the PMA card (same 6/7/40/5 counts)
+- **T1** — Poppendieck "Principles of Lean Thinking" (2002 paper)
+  - Reason triaged out: Read in full; scored borderline (~5.5) but superseded by the 2006 chapter; kept as a cited claim in that card
+- **T1** — HN Ask HN solo devs (item 21905423)
+  - Reason triaged out: Carded but REJECT band (~4.5): anonymous anecdote; the run's deliberate real cut
+- **T1** — Serrador and Pinto APM summary
+  - Reason triaged out: Two-page secondary summary of a paywalled paper; tangential to decomposition; listed as paywalled candidate
+- **T1** — PMI Pulse of the Profession 2025
+  - Reason triaged out: Self-reported survey n=2,254; tangential (business-acumen skills, not decomposition); the '31% successful' snippet was not found in the PDF text
+- **T1** — scielo.org.co PMBOK critical review (Spanish)
+  - Reason triaged out: No abstract/body text recovered in fetch
+- **T1** — Scrum.org forum "One man Scrum Team"
+  - Reason triaged out: HTTP 403; HN thread used instead
+- **T1** — ACM "An empirical study of WIP in kanban teams"
+  - Reason triaged out: HTTP 403; handled by T3/T5 tracks
+- **T1** — Shape Up forum 'My experience ... disappointing' (2023)
+  - Reason triaged out: Thin single post; overlaps fnune.com; kept out to avoid redundancy
+- **T1** (Reason triaged out: Superseded by ILX V7 page) — prince2.com ILX older blog (principles/themes/processes)
+- **T1** — Wikipedia and generic trainer pages (asana, monday, knowledgehut, etc.)
+  - Reason triaged out: Not minimally credible / redundant
+- **T1** — ricardo-vargas.com PMBOK 7 domains podcast
+  - Reason triaged out: Page text only says domains have 'no sequence'; no list; thin
+- **T2** — Kusters, "Why WSJF is Nonsense" (failfastmoveon.blogspot.com, 2021-03-15)
+  - Reason triaged out: Real cut. Toy numeric example of error compounding; weak authority; the structural WSJF critique is carried by the Black Swan Farming card. Its "do the discussion, forget the numbers" recommendation is opinion.
+- **T2** — ProductPlan backlog bankruptcy (productplan.com)
+  - Reason triaged out: Scored band reject (4.9); retained as an Excluded card only for audit.
+- **T2** — Hacker News thread 10829735 (2016)
+  - Reason triaged out: Anonymous forum comments; useful idea ("inbox zero or bankrupt") but no verifiable authority.
+- **T2** — Mountain Goat Software backlog-bankruptcy URL
+  - Reason triaged out: Page returned a different blog index; claimed article not found.
+- **T2** — Humanizing Work "life-changing focus of a clean backlog"
+  - Reason triaged out: Blocked by Cloudflare challenge.
+- **T2** — framework.scaledagile.com/wsjf
+  - Reason triaged out: Blocked by Cloudflare challenge; official SAFe formula taken from search summary only, flagged unverified.
+- **T2** — Scaled Agile blog "Challenge of Economic Prioritization"
+  - Reason triaged out: Fetched; generic organizational-culture prose, no data on WSJF outcomes.
+- **T2** — PMI "Pull the plug", "sunk-cost dilemma", APM "when to give up"
+  - Reason triaged out: Not fetchable (error page) or only snippets.
+- **T2** — Vendor RICE/WSJF guides (Atlassian, monday.com, Tempo, projectmanager.com, airfocus, ProdPad, Ducalis)
+  - Reason triaged out: Vendor marketing; redundant with each other and lower quality than Gilad.
+- **T2** — Goodhart blog posts (axify, typoapp, ctoframework, codepulsehq, Hillel Wayne)
+  - Reason triaged out: Redundant with Manheim and Garrabrant; blogs without systematic evidence.
+- **T2** — dev.to "47 unfinished side projects"
+  - Reason triaged out: Anecdote, no authority, generic content.
+- **T2** (Source: Wikipedia Cost of delay; Reason triaged out: Tertiary.)
+- **T2** (Reason triaged out: Off-topic (physics model).) — cond-mat arXiv "Performance Variability and Project Dynamics"
+- **T2** — Sleesman duplicate: ResearchGate copies
+  - Reason triaged out: Redundant with the NTNU-hosted PDF.
+- **T3** — Medium: "DORA Report 2024 reviewed", RedMonk, New Stack, OpsLevel, Scribd copies
+  - Reason triaged out: Secondary summaries of a primary already fetched
+- **T3** (Source: Scrum.org DORA 2025 summary) — Secondary; Google blog is primary
+- **T3** — Honeycomb / Faros DORA 2025 takeaways
+  - Reason triaged out: Vendor summaries of the same report
+- **T3** — codepulsehq, keypup, typoapp, alekseialeinikov, neuralwired Goodhart/DORA posts
+  - Reason triaged out: Vendor or low-credibility content marketing; DORA guide already states Goodhart
+- **T3** — Aviator "Everything wrong with DORA metrics", Medium "Optimisation Trap"
+  - Reason triaged out: Vendor/blog opinion; Lee review covers the substantive critique
+- **T3** — Bryan Finster "How to Misuse & Abuse DORA Metrics" PDF
+  - Reason triaged out: Promising practitioner source; PDF returned binary, not text-verifiable this run (follow-up candidate)
+- **T3** — InfoQ "How Not to Use the DORA Metrics"
+  - Reason triaged out: Fetched; overlaps DORA guide and pre-dates 2024; not carded
+- **T3** — Thoughtworks Radar DORA metrics
+  - Reason triaged out: Page did not render usable text (JS); not verified
+- **T3** — super-productivity.com, easykanb, miro, kanbantool, teachingagile WIP posts
+  - Reason triaged out: Vendor marketing; no evidence
+- **T3** — Medium Little's Law posts, leanability, calade, resumelens
+  - Reason triaged out: Secondary explanations; 55 Degrees (Vacanti's firm) used instead
+- **T3** — ProKanban "WIP: what it is" post
+  - Reason triaged out: Read; conceptual, no evidence beyond assertion; claim that the ProKanban guide removed the WIP-limit requirement was not verified and the 2020 Guide still says "often using WIP Limits"
+- **T3** — Osmani "AI writes code faster..." (Jan 2026)
+  - Reason triaged out: Read; opinion with unsourced statistics (75% logic errors); overlaps Faros/Folkman themes
+- **T3** — Waydev "DORA is pausing the survey"
+  - Reason triaged out: Vendor blog; primary dora.dev announcement not found, so claim left unused
+- **T3** — METR 2026 follow-up and ingenire/particula summaries
+  - Reason triaged out: Secondary; Feb 2026 METR follow-up not fetched (gap)
+- **T3** (Source: DORA 2025 PDF/ROI report) — Not fetched; Google blog used instead
+- **T3** (Source: Folkman substack (carded)) — Rubric band reject: anecdote, unverified credentials
+- **T3** — HN Ask solo developer thread (carded)
+  - Reason triaged out: Rubric band reject: anonymous anecdotes
+- **T3** (Reason triaged out: Secondary / low-authority) — tameflow, spamcast, agilelaws, businessmap
+- **T4** — incident.io, hyperping, Atlassian, upstat, itoc360 and similar postmortem guides
+  - Reason triaged out: Vendor content marketing; restate SRE book; unsourced statistics
+- **T4** — TeamRetro "178 Agile statistics" page
+  - Reason triaged out: Vendor stats page; unsourced figures (e.g. 24% responsiveness, 20% balanced performance)
+- **T4** — Watermelon-status blogs (Cascade, Pragmatic Coders, Cultivated, Medium, Substack, etc.)
+  - Reason triaged out: Vendor or opinion pieces with no evidence; mechanism covered by Snow & Keil
+- **T4** — MIT Sloan "The Pitfalls of Project Status Reporting"
+  - Reason triaged out: Blocked by Cloudflare to the fetcher; could not verify quotes
+- **T4** — Thomas & Uminsky 2020, arXiv 2002.08512
+  - Reason triaged out: Fetched (abstract verified) but AI-specific, lower authority than Bevan & Hood; superseded for Goodhart evidence
+- **T4** — Bevan & Hamblin 2008 ambulance targets
+  - Reason triaged out: Adapter abstract only; narrower than Bevan & Hood 2006
+- **T4** — Anandasivam & Premm 2009 (survey, n = 91)
+  - Reason triaged out: Abstract only via adapter; overlaps Snow & Keil; thin
+- **T4** — Desouza, Dingsøyr, Awazu 2005 postmortems; Dingsøyr 2007
+  - Reason triaged out: Abstract only / paywalled; no outcome evidence
+- **T4** — Matthies 2019 ICSE-Companion; Milani/Storey 2025 (arXiv 2502.03570, n = 19)
+  - Reason triaged out: Doctoral-symposium abstract and tiny survey; retro-data-use topic only
+- **T4** — Elmontsri 2014 and Capogna/Bull 2022 risk-matrix pieces
+  - Reason triaged out: Abstract-level adapter hits; mild critiques; Cox 2008 is the real source but paywalled
+- **T4** — Hospice AAR poster (BMJ SPCare 2025)
+  - Reason triaged out: Conference abstract; single-site; healthcare
+- **T4** — Lehtinen 2017 (Springer) and Aalto theses
+  - Reason triaged out: Fetcher blocked; moved to paywalled list; 13% figure unverified
+- **T4** — Etsy Debriefing Facilitation Guide
+  - Reason triaged out: Blocked (JavaScript challenge)
+- **T4** (Reason triaged out: Tertiary or marketing) — Wikipedia risk register / premortem pages, Medium premortem posts
+- **T4** (Source: Hacker News thread 28352828) — Carded but band reject; illustration only
+- **T5** — ScienceWorks Health, External Systems for ADHD at Work
+  - Reason triaged out: Carded then rejected: commercial intent, secondary citation of primary studies
+- **T5** — neural-revolution.com ADHD coaching evidence blog
+  - Reason triaged out: Commercial coaching site; claims not independently verifiable
+- **T5** — pckt.blog "What Actually Works for Productivity With ADHD"
+  - Reason triaged out: Anonymous-tier personal blog; page fetched but not usable
+- **T5** — ScienceWorks "ADHD Software Engineers: Sprints and Standups"
+  - Reason triaged out: Same publisher as rejected card; redundant
+- **T5** — Medium/kodaps ADHD developer tips
+  - Reason triaged out: Anecdotal tips, redundant with Talk Python card
+- **T5** — get-alfred.ai, strongerhabits, hushpod, goalsandprogress attention-residue explainers
+  - Reason triaged out: Secondary popularizations of Leroy 2009; primary is paywalled instead
+- **T5** — vocal.media, minagi, zenexmachina "myth of multitasking"
+  - Reason triaged out: Low-authority explainers of Rubinstein
+- **T5** (Reason triaged out: Same work; IZA DP carded) — Collewet and Sauermann (journal) vs IZA
+- **T5** (Source: Tether (arXiv 2509.01946)) — LLM ADHD tool prototype, "not yet evaluated by target users": no evidence of efficacy
+- **T5** — attexis CBT RCT (medRxiv 2025), A self-guided internet intervention protocol, ISCAP 2025 paper
+  - Reason triaged out: Clinical interventions or protocols without a task-management mechanism; preprint/protocol status
+- **T5** — OpenAlex adapter auto-cards (capacity-01..05)
+  - Reason triaged out: Abstract-only stubs, unreviewed; sit in claude-plugins hooks dir
+- **T5** — Machine-learning burnout detection SLR (OpenAlex)
+  - Reason triaged out: Duplicative of Tulili on topic; not fetched
+- **T5** — SPACE secondary explainers (getdx, swarmia, space-framework.com)
+  - Reason triaged out: Vendor content; Azure/primary preferred
 
 ### 6.7 Paywalled and skipped sources
 
@@ -1204,22 +1310,22 @@ Sjoberg 2018, Forsgren et al. 2021, Lehtinen 2017) and are read in full. Noah de
 candidates. The candidates file lists five books (Reinertsen 2009; Forsgren, Humble and Kim 2018; two Vacanti books;
 Poppendieck 2003) and does not record which three were declined, so I list all five as not read.
 
-| Candidate | Why it matters | Status |
-|-----------|----------------|--------|
-| PMI, PMBOK Guide 7th and 8th editions and the Standard for Project Management | Primary check of the principle and domain lists now known from trainers (S06, S07) | Not read; pmi.org blocked automated fetch, standard paywalled |
-| PeopleCert, Managing Successful Projects with PRINCE2 7 | Primary definition of the principles and practices (S09) | Not read; paywalled manual |
-| Reinertsen, Principles of Product Development Flow (2009) | Primary source for cost of delay and the 50-to-1 estimate spread (S14, S15, S23) | Book; not read |
-| Forsgren, Humble and Kim, Accelerate (2018) | Statistical basis behind DORA; would adjudicate the critique S32 | Book; not read |
-| Vacanti, Actionable Agile Metrics (2015) and When Will It Be Done (2020) | Primary on Little's Law and percentile forecasting (S24, S31) | Books; not read |
-| Poppendieck, Lean Software Development (2003) | Original wording of the Lean principles, which differs from S08 | Book; not read |
-| Cox, "What is Wrong with Risk Matrices?" (2008) | Peer-reviewed critique that would supersede S47 on evidence quality | Paywalled; not read |
-| Mitchell, Russo and Pennington (1989) | Lab basis of the 30% premortem claim (S42) | Paywalled; not read |
-| Cooper, Edgett and Kleinschmidt (2001) | Would test whether scored portfolio methods beat ad hoc selection | Paywalled; not read |
-| Staw (1976) | Original escalation experiments behind S22 | Not read |
-| Keil and Robey (2001); Dingsoyr et al. (2007) | Bad-news reluctance and reuse of postmortems | Not located / paywalled |
-| Gollwitzer and Sheeran (2006); Leroy (2009) | Effect size of if-then plans; attention residue | Paywalled; not read |
-| Serrador and Pinto (2015); Standish CHAOS reports; a 2019 review of prioritization techniques | Agile-versus-waterfall survey; the statistics S02 attacks; whether prioritization methods show benefits | Paywalled or commercial; not read |
-| Pencavel's refereed version | Whether the 49-hour threshold held (S56 cites the working paper) | Not located |
+- **PMI, PMBOK Guide 7th and 8th editions and the Standard for Project Management** — Primary check of the principle and domain lists now known from trainers (S06, S07)
+  - Status: Not read; pmi.org blocked automated fetch, standard paywalled
+- **PeopleCert, Managing Successful Projects with PRINCE2 7** (Status: Not read; paywalled manual) — Primary definition of the principles and practices (S09)
+- **Reinertsen, Principles of Product Development Flow (2009)** (Status: Book; not read) — Primary source for cost of delay and the 50-to-1 estimate spread (S14, S15, S23)
+- **Forsgren, Humble and Kim, Accelerate (2018)** (Status: Book; not read) — Statistical basis behind DORA; would adjudicate the critique S32
+- **Vacanti, Actionable Agile Metrics (2015) and When Will It Be Done (2020)** (Status: Books; not read) — Primary on Little's Law and percentile forecasting (S24, S31)
+- **Poppendieck, Lean Software Development (2003)** (Status: Book; not read) — Original wording of the Lean principles, which differs from S08
+- **Cox, "What is Wrong with Risk Matrices?" (2008)** (Status: Paywalled; not read) — Peer-reviewed critique that would supersede S47 on evidence quality
+- **Mitchell, Russo and Pennington (1989)** (Status: Paywalled; not read) — Lab basis of the 30% premortem claim (S42)
+- **Cooper, Edgett and Kleinschmidt (2001)** (Status: Paywalled; not read) — Would test whether scored portfolio methods beat ad hoc selection
+- **Staw (1976)** (Status: Not read) — Original escalation experiments behind S22
+- **Keil and Robey (2001); Dingsoyr et al. (2007)** (Status: Not located / paywalled) — Bad-news reluctance and reuse of postmortems
+- **Gollwitzer and Sheeran (2006); Leroy (2009)** (Status: Paywalled; not read) — Effect size of if-then plans; attention residue
+- **Serrador and Pinto (2015); Standish CHAOS reports; a 2019 review of prioritization techniques** — Agile-versus-waterfall survey; the statistics S02 attacks; whether prioritization methods show benefits
+  - Status: Paywalled or commercial; not read
+- **Pencavel's refereed version** (Status: Not located) — Whether the 49-hour threshold held (S56 cites the working paper)
 
 The most load-bearing gaps are the PMBOK 8 and PRINCE2 7 primaries, which leave RQ1's account of the current frameworks
 resting on trainer summaries, and Reinertsen, which leaves the cost-of-delay material at level 5 to 8.
