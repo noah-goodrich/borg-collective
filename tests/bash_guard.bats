@@ -817,6 +817,80 @@ _marker_walk() {
     _assert_approved
 }
 
+# ─── Expansion in heredoc / double-quoted bodies (incident 2026-10-04) ───────────
+
+# The exact incident shape: unquoted heredoc inside gh --body "$(...)" with a backticked `borg down`.
+@test "EXP: incident shape - gh pr create --body with unquoted heredoc and backticks is blocked" {
+    _run_guard $'gh pr create --title "x" --body "$(cat <<EOF\nRun `borg down` to stop\nEOF\n)"'
+    _assert_blocked
+    [[ "$output" == *"<<'EOF'"* ]] || false
+    [[ "$output" == *"--body-file"* ]] || false
+}
+
+@test "EXP: unquoted <<-EOF heredoc with a backtick is blocked" {
+    _run_guard $'cat <<-EOF\n\tuse `x`\n\tEOF'
+    _assert_blocked
+    [[ "$output" == *"--body-file"* ]] || false
+}
+
+@test "EXP: unquoted heredoc with a dollar-paren is blocked" {
+    _run_guard $'git commit -F - <<EOF\nbuilt on $(date)\nEOF'
+    _assert_blocked
+}
+
+@test "EXP: double-quoted gh --body containing a backtick is blocked" {
+    _run_guard 'gh pr create --body "run `borg down` now"'
+    _assert_blocked
+    [[ "$output" == *"--body-file"* ]] || false
+}
+
+@test "EXP: double-quoted gh -b / --title / git commit -m with a backtick is blocked" {
+    _run_guard 'gh issue create -b "a `b`"'
+    _assert_blocked
+    _run_guard 'gh pr create --title "a `b`"'
+    _assert_blocked
+    _run_guard 'git commit -m "fix `b`"'
+    _assert_blocked
+    _run_guard 'git commit -am "fix `b`"'
+    _assert_blocked
+}
+
+@test "EXP: quoted heredoc with backticks is allowed" {
+    _run_guard $'gh pr create --body "$(cat <<\'EOF\'\nRun `borg down` and $(date)\nEOF\n)"'
+    [ "$status" -ne 2 ]
+    _run_guard $'cat <<"EOF"\n`x`\nEOF'
+    [ "$status" -ne 2 ]
+}
+
+@test "EXP: single-quoted body with backticks is allowed" {
+    _run_guard "gh pr create --body 'run \`borg down\` now'"
+    [ "$status" -ne 2 ]
+    _run_guard "git commit -m 'fix \`b\`'"
+    [ "$status" -ne 2 ]
+}
+
+@test "EXP: --body-file is allowed" {
+    _run_guard 'gh pr create --title "x" --body-file /tmp/body.md'
+    [ "$status" -ne 2 ]
+}
+
+@test "EXP: unquoted heredoc without backticks or dollar-paren is allowed" {
+    _run_guard $'cat <<EOF\nplain text $HOME\nEOF'
+    [ "$status" -ne 2 ]
+}
+
+@test "EXP: escaped backtick in a double-quoted message is allowed" {
+    _run_guard 'git commit -m "fix \`b\`"'
+    [ "$status" -ne 2 ]
+}
+
+@test "EXP: here-string and non-gh double quotes are not flagged" {
+    _run_guard 'cat <<< "a `b`"'
+    [ "$status" -ne 2 ]
+    _run_guard 'echo "a `b`"'
+    [ "$status" -ne 2 ]
+}
+
 # ─── Empty / non-Bash input ───────────────────────────────────────────────────
 
 @test "exits 0 on empty stdin" {
