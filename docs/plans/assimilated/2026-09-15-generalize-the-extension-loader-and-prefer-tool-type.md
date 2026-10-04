@@ -1,6 +1,7 @@
 # Directive: Generalize the local-extension loader, and make "prefer a different base tool" a type
 
 *Filed: 2026-09-15 · Status: PROPOSAL — needs Noah's word before anything is built*
+*Shipped: 2026-09-16 — PR [#206](https://github.com/noah-goodrich/borg-collective/pull/206) merged to main (loader generalized, `prefer-tool` type, `hooks/borg-prefer-tool-log.sh` oracle, `docs/extensions.md`); the PROPOSAL status above is the filing-time state; closed out by the 2026-10-04 directive triage*
 *Requested-via: a peer session (`dev-4a`), relaying Noah*
 *Deliberately unparented — see "Why this carries no `*Parent plan:*` line"*
 
