@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for the checkpoint-freshness helpers used by `borg sever` (cmd_down):
+# Tests for the checkpoint-freshness helpers used by `borg sever` (cmd_down, now borg down):
 # _borg_has_recent_checkpoint and _borg_offer_checkpoint (borg.zsh).
 # Regression coverage for #98: checkpoint freshness must be judged by file
 # mtime, not by the timestamp embedded in the checkpoint filename.
