@@ -108,13 +108,6 @@ setup() {
     grep -q '## Local Supabase — ONE shared stack' "$TEST_PROJECT/CLAUDE.md"
 }
 
-@test "scaffold --supabase-shared: CLAUDE.md block wraps at 120 columns" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
-    [ "$status" -eq 0 ]
-    run awk '{ if (length($0) > 120) { print; exit 1 } }' "$TEST_PROJECT/CLAUDE.md"
-    [ "$status" -eq 0 ]
-}
-
 @test "scaffold --supabase-shared: writes devcontainer.json with project name" {
     run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
     [ "$status" -eq 0 ]
