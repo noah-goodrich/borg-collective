@@ -21,7 +21,7 @@ def discover(old_root: Path, new_root: Path) -> list[core.Entry]:
     return [core.Entry(r, (old_root / r).is_file(), (new_root / r).is_file()) for r in sorted(rels)]
 
 
-def _backup_dir(new_root: Path) -> Path:
+def backup_dir(new_root: Path) -> Path:
     """A fresh, unique timestamped directory under `<state root>/tidy-backups/`."""
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     base = new_root / "tidy-backups"
@@ -34,7 +34,8 @@ def _backup_dir(new_root: Path) -> Path:
     return candidate
 
 
-def _write_atomic(dest: Path, data: bytes) -> None:
+def write_atomic(dest: Path, data: bytes) -> None:
+    """Write via a temp file in the same directory, then rename into place."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(f".{dest.name}.migrate-tmp")
     with open(tmp, "wb") as handle:
@@ -42,7 +43,8 @@ def _write_atomic(dest: Path, data: bytes) -> None:
     os.replace(tmp, dest)
 
 
-def _copy(src: Path, dest: Path) -> None:
+def copy_file(src: Path, dest: Path) -> None:
+    """Copy with metadata, creating parent directories."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dest)
 
@@ -53,16 +55,16 @@ def apply(action: core.Action, old_root: Path, new_root: Path, backups: Path) ->
     Returns None on success, else a failure reason (old copy left in place).
     """
     old, new = old_root / action.rel, new_root / action.rel
-    _copy(old, backups / action.rel)
+    copy_file(old, backups / action.rel)
     prev_new = new.read_bytes() if new.is_file() else b""
     if prev_new:
-        _copy(new, backups / (action.rel + ".new"))
+        copy_file(new, backups / (action.rel + ".new"))
     old_bytes = old.read_bytes()
     want = core.expected_result(action.op, old_bytes, prev_new)
     if want is None:
         return None
     if action.op != core.KEEP_NEW:
-        _write_atomic(new, want)
+        write_atomic(new, want)
     problem = core.verify(action.rel, action.op, old_bytes, prev_new, new.read_bytes())
     if problem:
         return problem
@@ -76,7 +78,7 @@ def migrate(old_root: Path, new_root: Path, dry_run: bool) -> tuple[list[core.Ac
     failures: list[str] = []
     if dry_run or not actions:
         return actions, failures
-    backups = _backup_dir(new_root)
+    backups = backup_dir(new_root)
     for action in actions:
         problem = apply(action, old_root, new_root, backups)
         if problem:

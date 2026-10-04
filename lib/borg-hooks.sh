@@ -114,6 +114,54 @@ _borg_state_root() {
     printf '%s/borg\n' "${XDG_STATE_HOME:-$HOME/.local/state}"
 }
 
+# First 12 hex of sha256 over stdin (shasum on macOS, sha256sum elsewhere).
+_borg_sha12() {
+    { shasum -a 256 2>/dev/null || sha256sum; } | cut -c1-12
+}
+
+# Key naming one project DIRECTORY's machine-local state: <repo12>-<path12>, or local-<path12> outside a git
+# repo. path12 = sha256 of the PHYSICAL directory path (pwd -P, no trailing slash); repo12 = sha256 of
+# `git rev-parse --path-format=absolute --git-common-dir`. Per directory (worktrees of one repo can be in
+# different statuses at once), namespaced by repo. Siblings, byte-identical: borg_core/paths.py::
+# project_state_key and the other shell copy. Rationale lives in the Python docstring.
+# Usage: _borg_project_state_key <dir> [repo]
+# The optional 2nd arg (even empty) is the registry entry's `repo` field: it replaces the git fork, and
+# empty means outside git (path-only key). Omit it to fork git. Python sibling: project_state_key(dir, repo).
+_borg_project_state_key() {
+    local _d="${1:?_borg_project_state_key: dir required}" _phys _repo _tail="" _base _anc
+    while [ "${#_d}" -gt 1 ] && [ "${_d%/}" != "$_d" ]; do _d="${_d%/}"; done
+    # A missing directory still resolves like Python's realpath: physicalise the deepest existing ancestor.
+    _anc="$_d"
+    while [ -n "$_anc" ] && [ ! -d "$_anc" ]; do
+        _base="${_anc##*/}"
+        _tail="/$_base$_tail"
+        case "$_anc" in
+            */*) _anc="${_anc%/*}" ;;
+            *) _anc="." ;;
+        esac
+    done
+    _phys="$(cd "${_anc:-/}" 2>/dev/null && pwd -P)" || _phys="$_d"
+    [ "$_phys" = "/" ] && _phys=""
+    _phys="$_phys$_tail"
+    [ -n "$_phys" ] || _phys="/"
+    if [ "${2+set}" = set ]; then
+        _repo="$2"
+    else
+        _repo="$(git -C "$_phys" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || _repo=""
+    fi
+    if [ -n "$_repo" ]; then
+        printf '%s-%s\n' "$(printf '%s' "$_repo" | _borg_sha12)" "$(printf '%s' "$_phys" | _borg_sha12)"
+    else
+        printf 'local-%s\n' "$(printf '%s' "$_phys" | _borg_sha12)"
+    fi
+}
+
+# <state root>/projects/<key>/state.json for a project directory. Creates nothing.
+# Usage: _borg_project_state_file <dir> [repo]    (repo: see _borg_project_state_key)
+_borg_project_state_file() {
+    printf '%s/projects/%s/state.json\n' "$(_borg_state_root)" "$(_borg_project_state_key "${1:?_borg_project_state_file: dir required}" ${2+"$2"})"
+}
+
 # Resolve an operational file for READING: the state root's copy if it exists, else the old
 # config-dir location ($BORG_DIR, else ${XDG_CONFIG_HOME:-$HOME/.config}/borg). Expand phase of the
 # config -> state-root move: readers accept both before any writer moves. Neither existing prints
@@ -156,11 +204,27 @@ _borg_state_file() {
     printf '%s/.borg/state.json\n' "${1:?_borg_state_file: dir required}"
 }
 
-# Read state.json; emit '{}' when the file does not exist yet.
-# Usage: _borg_state_read <project_dir>
+# The state.json to READ for a project: the per-project state-root copy if it exists, else the legacy
+# <dir>/.borg/state.json (also the answer when neither exists, so absent-handling is unchanged). Expand phase of
+# AC5: readers accept both before any writer moves. READER-ONLY -- writers use
+# _borg_project_state_file. Optional 2nd arg is the registry entry's `repo` field (fast path, no git fork; see
+# _borg_project_state_key). Usage: _borg_state_read_path <project_dir> [repo]
+_borg_state_read_path() {
+    local _new
+    _new="$(_borg_project_state_file "$@")"
+    if [ -f "$_new" ]; then
+        printf '%s\n' "$_new"
+    else
+        _borg_state_file "$1"
+    fi
+}
+
+# Read state.json; emit '{}' when the file does not exist yet. Reads new-then-legacy; writes go to
+# the new path.
+# Usage: _borg_state_read <project_dir> [repo]
 _borg_state_read() {
     local sf
-    sf=$(_borg_state_file "$1")
+    sf=$(_borg_state_read_path "$@")
     if [[ -f "$sf" ]]; then
         cat "$sf"
     else
@@ -183,12 +247,31 @@ _borg_resolve_proj_dir() {
     printf '%s\n' "$cwd"
 }
 
-# Atomic write — strip control chars, reject empty result, tmp+mv.
-# Usage: _borg_state_write <project_dir> <json>
+# Set the global _REPO to the registry `repo` of <project> when its entry is registered AT <proj_dir>
+# (possibly empty: no repo recorded == the path-only key); leave _REPO UNSET otherwise. Callers expand
+# `${_REPO+"$_REPO"}` into the state helpers, so a registered project is keyed exactly as every registry-driven
+# reader keys it (borg-link-down's overlay, registry.zsh, borg_core.link) and an unregistered CWD forks git.
+# A writer keying differently from the readers would leave a stale shadow. Reads $BORG_REGISTRY.
+# Usage: _borg_proj_repo <project> <proj_dir>
+_borg_proj_repo() {
+    local _r
+    unset _REPO
+    [[ -f "${BORG_REGISTRY:-}" ]] || return 0
+    _r=$(jq -r --arg p "$1" --arg d "$2" \
+        '.projects[$p] | select((.path // "") == $d) | "R" + (.repo // "" | if type == "string" then . else "" end)' \
+        "$BORG_REGISTRY" 2>/dev/null) || return 0
+    [[ -n "$_r" ]] && _REPO="${_r#R}"
+    return 0
+}
+
+# Atomic write to the per-project state-root path (AC5 step c: the legacy <dir>/.borg/state.json is never
+# written) -- strip control chars, reject empty result, tmp+mv. Optional 3rd arg: registry `repo` (see
+# _borg_project_state_key); omit it to fork git.
+# Usage: _borg_state_write <project_dir> <json> [repo]
 _borg_state_write() {
     local dir="$1" json="$2"
     local sf
-    sf=$(_borg_state_file "$dir")
+    sf=$(_borg_project_state_file "$dir" ${3+"$3"})
     mkdir -p "${sf%/*}"
     local tmp="${sf}.tmp.$$"
     printf '%s' "$json" | tr -d '\000-\010\013\014\016-\037' > "$tmp"

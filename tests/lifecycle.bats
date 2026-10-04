@@ -65,14 +65,14 @@ EOF
 @test "start hook sets project status to active" {
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$TEST_CWD" "")")
     [ "$status" = "active" ]
 }
 
 @test "start hook records session_id in state.json" {
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    sid=$(jq -r '.claude_session_id' "${TEST_CWD}/.borg/state.json")
+    sid=$(jq -r '.claude_session_id' "$(state_path_of "$TEST_CWD" "")")
     [ "$sid" = "sess-abc" ]
 }
 
@@ -191,14 +191,14 @@ _write_long_checkpoint() {
 
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$TEST_CWD" "")")
     [ "$status" = "idle" ]
 }
 
 @test "stop hook records session_id in state.json" {
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    sid=$(jq -r '.claude_session_id' "${TEST_CWD}/.borg/state.json")
+    sid=$(jq -r '.claude_session_id' "$(state_path_of "$TEST_CWD" "")")
     [ "$sid" = "sess-abc" ]
 }
 
@@ -218,7 +218,7 @@ _write_long_checkpoint() {
 @test "stop hook sets has_uncommitted_changes false for non-git directory" {
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    flag=$(jq -r '.has_uncommitted_changes' "${TEST_CWD}/.borg/state.json")
+    flag=$(jq -r '.has_uncommitted_changes' "$(state_path_of "$TEST_CWD" "")")
     [ "$flag" = "false" ]
 }
 
@@ -234,7 +234,7 @@ _write_long_checkpoint() {
 
     bash "$BORG_STOP" <<< "$(_stop_input "$TEST_CWD")" 2>/dev/null
 
-    flag=$(jq -r '.has_uncommitted_changes' "${TEST_CWD}/.borg/state.json")
+    flag=$(jq -r '.has_uncommitted_changes' "$(state_path_of "$TEST_CWD" "")")
     [ "$flag" = "true" ]
 }
 
@@ -253,7 +253,7 @@ EOF
 
     bash "$BORG_START" <<< "$(_start_input "$container_dir")" >/dev/null
 
-    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$container_dir" "")")
     [ "$status" = "active" ]
 }
 
@@ -270,7 +270,7 @@ EOF
 
     bash "$BORG_START" <<< "$(_start_input "$sub_dir")" >/dev/null
 
-    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$container_dir" "")")
     [ "$status" = "active" ]
 }
 
@@ -286,7 +286,7 @@ EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input "$sub_dir")" 2>/dev/null
 
-    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$container_dir" "")")
     [ "$status" = "idle" ]
 }
 
@@ -294,7 +294,7 @@ EOF
     # Standard host session: no marker, basename matches registry key
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$TEST_CWD" "")")
     [ "$status" = "active" ]
 }
 
@@ -332,6 +332,7 @@ EOF
 
     # No state.json should have been created for myproject — orch hook exits early
     [ ! -f "${TEST_CWD}/.borg/state.json" ]
+    [ ! -f "$(state_path_of "$TEST_CWD" "")" ]
 }
 
 # ─── clock divergence detection ───────────────────────────────────────────────
@@ -345,7 +346,7 @@ EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    detected=$(jq -r '.clock_divergence.detected' "${TEST_CWD}/.borg/state.json")
+    detected=$(jq -r '.clock_divergence.detected' "$(state_path_of "$TEST_CWD" "")")
     [ "$detected" = "true" ]
 }
 
@@ -357,7 +358,7 @@ EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    detected=$(jq -r '.clock_divergence.detected' "${TEST_CWD}/.borg/state.json")
+    detected=$(jq -r '.clock_divergence.detected' "$(state_path_of "$TEST_CWD" "")")
     [ "$detected" = "false" ]
 }
 
@@ -380,6 +381,7 @@ EOF
 
     # No state.json should have been created for myproject — orch hook exits early
     [ ! -f "${TEST_CWD}/.borg/state.json" ]
+    [ ! -f "$(state_path_of "$TEST_CWD" "")" ]
 }
 
 

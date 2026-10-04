@@ -110,10 +110,11 @@ setup() {
     run_zsh_fn registry borg_registry_init
     printf '{"projects":{"myproj":{"path":"%s","source":"cli"}}}' "$proj_dir" > "$BORG_REGISTRY"
     run_zsh_fn registry borg_registry_set_status myproj active
-    run jq -r '.status' "${proj_dir}/.borg/state.json"
+    run jq -r '.status' "$(state_path_of "$proj_dir" "")"
     [ "$output" = "active" ]
-    run jq -r '.last_activity' "${proj_dir}/.borg/state.json"
+    run jq -r '.last_activity' "$(state_path_of "$proj_dir" "")"
     [[ "$output" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]] || false
+    [ ! -e "${proj_dir}/.borg/state.json" ]
 }
 
 # ─── borg_scan_path_should_skip ───────────────────────────────────────────────

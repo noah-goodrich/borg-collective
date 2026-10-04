@@ -112,3 +112,53 @@ def test_operational_file_prefers_state_root_when_both_exist(dual_env):
 
 def test_operational_file_names_the_old_path_when_neither_exists(dual_env):
     assert paths.operational_file("recon/last-run") == dual_env / "config" / "borg" / "recon" / "last-run"
+
+
+# --- project_state_key / project_state_file (AC5 step a) -------------------------------------------
+
+
+def _git(cwd, *args):
+    import subprocess
+
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+
+@pytest.fixture()
+def repo_and_worktree(tmp_path):
+    main = tmp_path / "main"
+    main.mkdir()
+    _git(main, "init", "-q")
+    _git(main, "commit", "-q", "--allow-empty", "-m", "x")
+    wt = tmp_path / "wt"
+    _git(main, "worktree", "add", "-q", str(wt), "-b", "wtb")
+    return main, wt
+
+
+def test_state_key_shape_is_filesystem_safe(tmp_path):
+    import re
+
+    d = tmp_path / "with space"
+    d.mkdir()
+    assert re.fullmatch(r"local-[0-9a-f]{12}", paths.project_state_key(d))
+
+
+def test_state_key_repo_prefix_is_shared_by_worktrees_but_path_half_is_not(repo_and_worktree):
+    main, wt = repo_and_worktree
+    k_main, k_wt = paths.project_state_key(main), paths.project_state_key(wt)
+    assert k_main != k_wt
+    assert k_main.split("-")[0] == k_wt.split("-")[0] != "local"
+
+
+def test_state_key_is_stable_and_ignores_trailing_slash_and_symlinks(tmp_path):
+    d = tmp_path / "p"
+    d.mkdir()
+    link = tmp_path / "ln"
+    link.symlink_to(d)
+    assert paths.project_state_key(d) == paths.project_state_key(f"{d}/") == paths.project_state_key(link)
+
+
+def test_state_file_lives_under_state_root_projects(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "st"))
+    f = paths.project_state_file(tmp_path)
+    assert f == tmp_path / "st" / "borg" / "projects" / paths.project_state_key(tmp_path) / "state.json"
+    assert not f.parent.exists()
