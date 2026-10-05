@@ -1,6 +1,7 @@
 # Project Plan: State Hygiene and the Reader Census
 *Established: 2026-09-28*
-*Next: 2026-08-11-viz-3-cross-repo-chains*
+*Shipped: 2026-10-04 — PRs #235, #236, #244, #246, #247, #248, #250, #254, #255, #256, #264 and #269 merged to main*
+*Next: 2026-08-31-shim-architecture-for-borg-and-employer-plugins*
 
 - Plan-slug: `2026-09-28-state-hygiene-reader-census`
 
@@ -138,3 +139,18 @@ two-reader migration across bash and Python with 27 live files.
   pre-set the variable it is meant to derive; this repo has three recorded instances of that bug.
 - **The reaper is now live for the first time** (PR #232, merged today). Unrelated to this plan, but
   newly true, and it will start removing stale worktrees hourly.
+
+## Additional Work Shipped
+
+- Migrations run live on the personal machine on 2026-10-03/04: `borg tidy --cairn-leftovers` (3 items), `borg tidy --migrate-state` (22 files incl. `briefing-stderr.log` after #255), `python3 -m borg_core.registry.cli backfill-repo` (14 entries), `borg tidy --migrate-project-state` (20 registered projects plus `takeout-sort` via `--path`). Backups under `~/.local/state/borg/tidy-backups/`.
+- Found and fixed along the way: #250 tested a matcher instead of discovery (fixed through discovery in #255); `test_deep_is_accepted_and_ignored` is flaky (seen twice, passes on rerun — unfixed); `tests/dispatch_guard.bats` inherited an armed `BORG_USAGE_HALT_ENABLED` from the environment (#269).
+- Collective Review at ship (2026-10-04): ship. Follow-ups: a census for the machine-local state root (only `.borg/` stores are census-checked today); one CLAUDE.md paragraph saying where state lives now; a machine-local config for the usage-guardian switches (the sweep switch sits in a launchd plist that `install.sh` re-renders).
+
+## Work-machine run sheet (follow-up, in this order)
+
+1. `git -C ~/dev/borg-collective pull --ff-only && borg setup`
+2. `borg tidy --cairn-leftovers --dry-run && borg tidy --cairn-leftovers`
+3. `borg tidy --migrate-state --dry-run && borg tidy --migrate-state`
+4. `python3 -m borg_core.registry.cli backfill-repo --dry-run && python3 -m borg_core.registry.cli backfill-repo` (must precede step 5; step 5 refuses while any git entry lacks `repo`)
+5. `borg tidy --migrate-project-state --dry-run && borg tidy --migrate-project-state`
+6. AC6 byline check for the work-machine repo groups: `borg link --json --local snowflake-permissions-olf` must equal the same call for `snowflake-permissions`; repeat for the `dbt` group.
