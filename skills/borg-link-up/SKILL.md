@@ -225,10 +225,11 @@ authorable with no code change.
 
 ```
 PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli add-row \
+    --repository <project root> --name <the stem step 1 printed> \
     --ref <owner/repo#N> --lane <lane> --why "<one line: what this PR does>"
 ```
 
-`add-row` is append-or-update, so re-running in the same session for a ref already declared is the
+`--repository` and `--name` are both required (omitting either exits 2); `--name` is the stem step 1 printed, byte for byte. `add-row` is append-or-update, so re-running in the same session for a ref already declared is the
 ordinary case, not an error. **`--lane` is a partition, and a lane you have not declared is refused** —
 `--lane aplha` for `alpha` now exits 1 and names the declared lanes, because a one-letter typo used to
 fork the chain into a second root silently. Reuse a lane already in the manifest, verbatim. Starting a
