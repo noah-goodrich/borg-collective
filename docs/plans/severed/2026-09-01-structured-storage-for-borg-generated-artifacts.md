@@ -1,3 +1,9 @@
+---
+Severed: 2026-10-04
+Reason: Its own open question 6 has no measurable answer, and this directive says to sever on exactly that. State
+        Hygiene resolved the concrete problems that motivated it. Decided by Noah 2026-10-04 (directive triage, #266).
+---
+
 # Directive: Structured storage for borg-generated artifacts
 
 *Filed: 2026-09-01*

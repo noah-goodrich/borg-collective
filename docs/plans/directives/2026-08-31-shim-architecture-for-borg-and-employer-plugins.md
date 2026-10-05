@@ -1,4 +1,5 @@
 # Directive: One shim architecture for borg and the employer plugin layer
+*Triage 2026-10-04: PARTIAL. The pattern criterion shipped (CLAUDE.md "THE SHIM LAYER", pinned by the `shim:` cases in `tests/prose_contracts.bats`). The `borg reconcile` verb was deferred by the assimilated 2026-09-19 plan, and `merge-tree/programs.py` still exists, so the validators are not one.*
 *Filed: 2026-08-31*
 
 ## Why
@@ -97,7 +98,7 @@ deliberately absent. Copy that shape, comment included, and confirm the replacem
 
 ## Acceptance criteria
 
-- [ ] **The pattern is documented once, in CLAUDE.md, as one named mechanism** with its two tiers (executable
+- [x] **The pattern is documented once, in CLAUDE.md, as one named mechanism** with its two tiers (executable
       adapter vs. prose extension) and the one-directional rule stated.
   - Verify: a reader can name which tier a new shim belongs in without reading source.
 - [ ] **`ai-data-engineer` has zero borg references and the test proves it.** The portability grep covers the whole

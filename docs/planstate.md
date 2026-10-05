@@ -5,7 +5,7 @@ world, and ticks the boxes it can prove. `/borg-link-up` calls it at session end
 depending on someone remembering to hand-edit markdown.
 
 Parent directive:
-[`2026-09-09-link-up-criteria-reconciliation.md`](plans/directives/2026-09-09-link-up-criteria-reconciliation.md).
+[`2026-09-09-link-up-criteria-reconciliation.md`](plans/assimilated/2026-09-09-link-up-criteria-reconciliation.md).
 
 ## Why it exists
 
@@ -158,7 +158,7 @@ engine promises.
 ## See also
 
 - The directive, its 2026-09-10 amendment, and the 2026-09-11 restatement of AC2/AC8:
-  [`2026-09-09-link-up-criteria-reconciliation.md`](plans/directives/2026-09-09-link-up-criteria-reconciliation.md)
+  [`2026-09-09-link-up-criteria-reconciliation.md`](plans/assimilated/2026-09-09-link-up-criteria-reconciliation.md)
 - `docs/diagrams/plan-lifecycle.html` — where this sits in the directive lifecycle (ships on the
   docs branch; the link resolves once both land)
 - `skills/borg-link-up/SKILL.md` — the caller

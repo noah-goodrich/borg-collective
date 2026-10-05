@@ -1,4 +1,5 @@
 # Directive: borg keys state by directory; the work is keyed by repo and by apex stack
+*Triage 2026-10-04: PARTIAL. Option A shipped (PR #233: `repo` field, `backfill-repo`, union-read checkpoints with byline; see CLAUDE.md Key Patterns). Option B (stack manifest on `main` at creation) and open questions 2-4 are not evidenced.*
 
 *Filed: 2026-09-28 — retro, from a session that shipped 5 PRs of the OLF ingestion train out of an unregistered
 worktree and discovered borg could not see any of it.*
