@@ -1,6 +1,7 @@
 # Directive: One shim architecture for borg and the employer plugin layer
 *Triage 2026-10-04: PARTIAL. The pattern criterion shipped (CLAUDE.md "THE SHIM LAYER", pinned by the `shim:` cases in `tests/prose_contracts.bats`). The `borg reconcile` verb was deferred by the assimilated 2026-09-19 plan, and `merge-tree/programs.py` still exists, so the validators are not one.*
 *Filed: 2026-08-31*
+*Status 2026-10-05: §4 ("borg owns personal stacking") moved to its own directive, `2026-10-04-personal-pr-stack-stamper`, which drops the employer-ownership half: that directive publishes only to repos on this machine's allowlist. §5 is split between a machine-local file and a change outside this repo, so its status is not tracked here. §3 and §6 remain open here.*
 
 ## Why
 
@@ -54,11 +55,9 @@ than inventing a second shape.
 A new verb. One idempotent function of (live state for declared refs, local declared overlay), writing
 `<repo>/.borg/programs/*.json` atomically.
 
-| Field class | Fields | Treatment |
-| --- | --- | --- |
-| Derived | `state`, merged-ness, same-repo `order` | Overwritten every run |
-| Declared | `lane`, `why`, `after`, `apex`, cross-repo `order` | Never touched, never deleted |
-| Declared-but-checked | `gate.kind`, `blocked_by`, `resolved_by` | Reported when they contradict derived state |
+- **Derived** (`state`, merged-ness, same-repo `order`): overwritten every run.
+- **Declared** (`lane`, `why`, `after`, `apex`, cross-repo `order`): never touched, never deleted.
+- **Declared-but-checked** (`gate.kind`, `blocked_by`, `resolved_by`): reported when they contradict derived state.
 
 Cross-repo `order` is in the declared column because `merge-tree/programs.py` says so in its own docstring, three
 times: "a base branch is a repo-local name... nothing in git or the GitHub API says platform#834 must merge before
@@ -101,10 +100,6 @@ deliberately absent. Copy that shape, comment included, and confirm the replacem
 - [x] **The pattern is documented once, in CLAUDE.md, as one named mechanism** with its two tiers (executable
       adapter vs. prose extension) and the one-directional rule stated.
   - Verify: a reader can name which tier a new shim belongs in without reading source.
-- [ ] **`ai-data-engineer` has zero borg references and the test proves it.** The portability grep covers the whole
-      `plugins/` tree; `strike.md:303` is gone from the repo and lives as a work-machine extension.
-  - Verify: `bash tests/run-tests.sh` green with the widened path; the grep fails if a reference is reintroduced
-    anywhere under `plugins/`, confirmed by mutation.
 - [ ] **`allowed-tools` on `borg-plan` and `borg-assimilate`, omitting the dangerous verb**, with the replacement
       ship path confirmed working.
   - Verify: `gh pr merge` is unreachable from `borg-assimilate`; a named user-typed path merges instead.
@@ -116,10 +111,10 @@ deliberately absent. Copy that shape, comment included, and confirm the replacem
   - Verify: pytest for idempotence, edge preservation, and the degraded no-write path; one launchd plist installed.
 - [ ] **The #158 class is reported, not guessed.** A `decision` gate on a merged PR is named in reconcile's output.
   - Verify: fixture manifest with a merged-PR decision gate; assert the report names it and the file is unchanged.
-- [ ] **Personal-machine stacking works with zero employer plugins**, and the work machine has exactly one writer
-      per repo.
-  - Verify: stacking exercised in a personal repo with the employer marketplace disabled; an extension declares
-    ownership on the work machine and a test asserts the non-owner does not write.
+
+Moved out on 2026-10-05, and no longer tracked as criteria here:
+- §4's criterion, "personal-machine stacking works with zero employer plugins", now belongs to `2026-10-04-personal-pr-stack-stamper`.
+- §5's criterion, "zero borg references in the employer plugin", is verified outside this repo.
 
 ## Notes
 
