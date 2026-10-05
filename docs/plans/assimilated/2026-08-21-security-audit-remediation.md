@@ -1,6 +1,7 @@
 # Directive: Security-Audit Remediation
 
 *Filed: 2026-08-21 · Status: Proposed · Source: 2026-08-21 dependency + attack-surface audit (work machine)*
+*Shipped: 2026-08-24 — SA1-SA6 landed in PR [#161](https://github.com/noah-goodrich/borg-collective/pull/161) (commit `b776819`, filed together with the fix); closed out by the 2026-10-04 directive triage, which verified AC1-AC6 against main and took AC7 from the commit's 123-pass bats record*
 
 **tl;dr** — A full audit of borg-collective's installed dependencies and hook surface found no critical issues
 and zero shell-injection patterns, but six concrete fixes: one CVE-driven upgrade, one real policy gap in
@@ -56,17 +57,17 @@ a `gh` version that partially leaks fine-grained PATs into terminal output, and 
 
 ## Acceptance criteria
 
-- [ ] AC1 `gh --version` >= 2.97.0 on this machine, and `borg doctor` fails with a named check when `gh` is
+- [x] AC1 `gh --version` >= 2.97.0 on this machine, and `borg doctor` fails with a named check when `gh` is
       below the floor (test: floor check function unit-tested against a fake version string).
-- [ ] AC2 bash-guard: the blanket `gh`/`docker`/`git` allows are gone; bats tests prove `gh pr view` is
+- [x] AC2 bash-guard: the blanket `gh`/`docker`/`git` allows are gone; bats tests prove `gh pr view` is
       pre-approved while `gh repo delete`, `gh pr merge`, `docker rm`, and `git push --force` are not.
-- [ ] AC3 The `/borg-recon` and `/borg-link-up` skill templates carry the untrusted-quotation rule, and
+- [x] AC3 The `/borg-recon` and `/borg-link-up` skill templates carry the untrusted-quotation rule, and
       `borg-link-down.sh` injects the standing data-not-instructions line (bats: line present in hook output).
-- [ ] AC4 tool-count-nudge writes only under the user cache dir; no reference to `/tmp` remains in the hook.
-- [ ] AC5 `cmd_store_secret` never places the secret on argv and never echoes secret bytes; the verification
+- [x] AC4 tool-count-nudge writes only under the user cache dir; no reference to `/tmp` remains in the hook.
+- [x] AC5 `cmd_store_secret` never places the secret on argv and never echoes secret bytes; the verification
       message shows length + keychain entry name only.
-- [ ] AC6 `merge-tree/app/requirements.txt` pins exact versions.
-- [ ] AC7 Full bats suite + `make test`/`lint` + the merge-tree suite green.
+- [x] AC6 `merge-tree/app/requirements.txt` pins exact versions.
+- [x] AC7 Full bats suite + `make test`/`lint` + the merge-tree suite green.
 
 ## Non-Goals
 

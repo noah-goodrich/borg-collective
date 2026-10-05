@@ -159,7 +159,7 @@ def test_derive_resolves_this_repositorys_own_directive(tmp_path):
     empty root makes every suite pin resolve `unknown` through the production missing-path branch,
     which is the branch this case wants anyway. No verdict is supplied; only the root is chosen."""
     here = Path(__file__).resolve()
-    directive = here.parents[2] / "docs/plans/directives/2026-09-09-link-up-criteria-reconciliation.md"
+    directive = here.parents[2] / "docs/plans/assimilated/2026-09-09-link-up-criteria-reconciliation.md"
     if not directive.exists():
         pytest.skip("the directive is not present in this checkout")
     report = derive_mod.derive(directive, tmp_path)

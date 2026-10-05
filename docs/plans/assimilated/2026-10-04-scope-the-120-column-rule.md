@@ -1,5 +1,6 @@
 # Directive: Scope the 120-column rule to where a line-oriented tool reads the text
 *Filed: 2026-10-04*
+*Shipped: 2026-10-04 — borg-collective PRs [#260](https://github.com/noah-goodrich/borg-collective/pull/260) and [#265](https://github.com/noah-goodrich/borg-collective/pull/265), claude-plugins#62/#63, dotfiles#20/#21/#22; live 2026-10-04. **Decided by Noah 2026-10-04 (#266)** to accept as done; W2 and W7 were not re-verified by the triage.*
 
 **tl;dr** — "Wrap markdown at 120" is stated in about 20 instruction sites and enforced in 3 places across three
 repos, and it is applied to text a renderer reflows (PR bodies, GitHub comments, chat output), where hard wraps render

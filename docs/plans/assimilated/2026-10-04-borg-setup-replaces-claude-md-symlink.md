@@ -1,5 +1,6 @@
 # Directive: borg setup replaces a symlinked ~/.claude/CLAUDE.md
 *Filed: 2026-10-04*
+*Shipped: 2026-10-04 — PR [#261](https://github.com/noah-goodrich/borg-collective/pull/261) merged to main (`lib/claude-md.zsh`, `tests/claude_md.bats`); closed out by the 2026-10-04 directive triage*
 
 **tl;dr** - `borg setup` merged its block into `~/.claude/CLAUDE.md` with a tmp file and `mv`. `mv` onto a
 symlink replaces the link, so the dotfiles symlink became a regular file and dotfiles edits stopped reaching it.

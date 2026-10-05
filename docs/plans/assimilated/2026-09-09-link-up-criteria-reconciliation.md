@@ -1,6 +1,7 @@
 # Directive: Link-up criteria reconciliation — flip checkboxes from evidence already in hand
 
 *Filed: 2026-09-09 · Status: Active · Amended: 2026-09-10*
+*Shipped: 2026-09-15 — PR [#198](https://github.com/noah-goodrich/borg-collective/pull/198) merged to main (`borg_core/planstate/`, the writer, and the link-up wiring, AC1-AC9); closed out by the 2026-10-04 directive triage*
 
 ## Why this exists
 
@@ -109,7 +110,7 @@ trail.
 
 ## Acceptance Criteria
 
-- [ ] AC1 — `skills/borg-link-up/SKILL.md` gains a criteria reconciliation step that reads `PROJECT_PLAN.md`,
+- [x] AC1 — `skills/borg-link-up/SKILL.md` gains a criteria reconciliation step that reads `PROJECT_PLAN.md`,
       compares unmet criteria against the session's Accomplished list, and flips checkboxes with evidence
       annotations.
     - Verify: `grep -c 'Criteria Reconcil' skills/borg-link-up/SKILL.md` returns 1 or more.
@@ -121,18 +122,18 @@ trail.
       skill *describes* an annotation, never that one ever reaches a plan file, so it would have stayed green
       through total failure of the behaviour it names. Same shape as
       `reference_test_supplies_derived_value`: the assertion never touched the artifact it was about.
-- [ ] AC3 — The checkpoint template gains a `## Criteria Reconciled` section that lists flipped criteria and
+- [x] AC3 — The checkpoint template gains a `## Criteria Reconciled` section that lists flipped criteria and
       evidence.
     - Verify: `grep -c 'Criteria Reconciled' skills/borg-link-up/SKILL.md` returns 1 or more.
-- [ ] AC4 — When `PROJECT_PLAN.md` is absent, the step is a silent no-op — no error, no empty section in the
+- [x] AC4 — When `PROJECT_PLAN.md` is absent, the step is a silent no-op — no error, no empty section in the
       checkpoint.
     - Verify: the skill text contains an explicit "If absent, skip" guard.
-- [ ] AC6 — (2026-09-10) `borg_core/planstate/` parses criteria and evidence annotations out of a real
+- [x] AC6 — (2026-09-10) `borg_core/planstate/` parses criteria and evidence annotations out of a real
       `PROJECT_PLAN.md` and returns `pass`/`fail`/`unknown` per criterion with an evidence line each.
     - Verify: pytest over the parser against fixtures including an unannotated criterion, a malformed
       annotation, a criterion already `[x]`, and a missing path resolving to `unknown` rather than `fail`.
     - Evidence: `pytest:borg_core/planstate/`
-- [ ] AC7 — (2026-09-10) Tests drive the production evidence path — a real git/gh/filesystem read — never a
+- [x] AC7 — (2026-09-10) Tests drive the production evidence path — a real git/gh/filesystem read — never a
       fixture-supplied verdict, per `reference_test_supplies_derived_value`. Asserted by mutation: break the
       resolver, the test goes red.
 - [x] AC8 — (2026-09-10, RESTATED 2026-09-11) `--apply` flips only `pass` criteria and writes atomically. The
@@ -151,10 +152,10 @@ trail.
       therefore strictly worse than an unflipped one. The guarantee AC8 is actually for is *bounded,
       provable, non-destructive* — not *one byte* — so the letter widened to keep the guarantee and give the
       annotation a single owner. AC2's property is unchanged; it now has somewhere to come from.
-- [ ] AC9 — (2026-09-10) An evidence annotation can never cause command execution from file content: a
+- [x] AC9 — (2026-09-10) An evidence annotation can never cause command execution from file content: a
       crafted annotation carrying `;`, backticks or `$(...)` is rejected rather than resolved, and no
       subprocess runs.
-- [ ] AC5 — `borg-assimilate` remains authoritative. The skill text does not weaken assimilate's independent
+- [x] AC5 — `borg-assimilate` remains authoritative. The skill text does not weaken assimilate's independent
       evaluation or treat a link-up flip as sufficient evidence at ship time.
     - Verify: `skills/borg-assimilate/SKILL.md` is unchanged by this directive.
 
