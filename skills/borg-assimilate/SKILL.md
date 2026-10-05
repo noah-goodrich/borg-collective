@@ -189,9 +189,13 @@ below before presenting it for confirmation.
 After the merge succeeds and before plan archival, close the row for the ref just merged:
 
 ```
+PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli resolve --repository <project root>
 PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli close \
+    --repository <project root> --name <the stem resolve printed> \
     --ref <owner/repo#N> --status merged
 ```
+
+`resolve` prints the manifest stem; a non-zero exit (`no manifest declared`, `ambiguous`) means there is no row to close, so say so and carry on. `close` requires `--repository` and `--name` (omitting either exits 2).
 
 Unconditional, and the ref is **the one just merged** — read it from the `gh pr merge` you executed,
 never from memory.
