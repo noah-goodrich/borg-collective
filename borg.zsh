@@ -704,6 +704,7 @@ cmd_focus() {
 # the environment by borg_core.paths.state_root.
 _borg_next_log() {
     local registry="$1" do_switch="$2" pick="$3" cur active=""
+    shift 3
     cur=$(borg_tmux_current_window 2>/dev/null || true)
     if [[ -n "$cur" ]]; then
         active=$(printf '%s' "$registry" | jq -r --arg cur "$cur" '
@@ -713,11 +714,55 @@ _borg_next_log() {
     local -a args=(--active "$active" --session "${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-$$}}")
     (( do_switch )) && args+=(--switch)
     [[ -n "$pick" ]] && args+=(--pick "$pick")
+    args+=("$@")
     { printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${args[@]}"; } >/dev/null 2>&1 || true
 }
 
+# Interactive chooser: draw the rows (one `_borg_py` call, registry on stdin), read ONE key, switch + log.
+# Enter = top row, 1-9 = that row, q/Esc = quit. One invalid key re-prompts once, a second quits.
+# The trailing `names` line of the rows output is the machine channel; everything above it is the screen.
+_borg_next_chooser() {
+    local registry="$1" local_flag="$2" out names_line screen key
+    local -F start=$SECONDS
+    local -a rows_args=(--rows) names
+    (( local_flag )) && rows_args+=(--local)
+    out=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null) || out=""
+    names_line="${out##*$'\n'}"
+    if [[ "$names_line" != names$'\t'?* ]]; then
+        echo -e "\n${GREEN}▸${NC} All clear. Take a break.\n"
+        _borg_next_log "$registry" 0 "" --chooser
+        return 0
+    fi
+    screen="${out%$'\n'*}"
+    names=("${(@ps:\t:)${names_line#names$'\t'}}")
+    local -a base=(--chooser)
+    [[ "$screen" == *"▸ suggested:"* ]] && base+=(--shown)
+    print -r -- "$screen"
+    local tries=0 idx=0
+    while (( tries < 2 )); do
+        key=""
+        read -r -u 0 -k1 key || break
+        case "$key" in
+            $'\n'|$'\r') idx=1; break ;;
+            q|Q|$'\e') break ;;
+            [1-9]) if (( key <= ${#names} )); then idx=$key; break; fi ;;
+        esac
+        tries=$(( tries + 1 ))
+    done
+    echo
+    if (( idx == 0 )); then
+        _borg_next_log "$registry" 0 "" "${base[@]}"
+        return 0
+    fi
+    _borg_next_log "$registry" 0 "" "${base[@]}" --opened "${names[idx]}" --opened-after "$(( SECONDS - start ))"
+    _borg_do_switch "${names[idx]}" --silent
+}
+
 cmd_next() {
-    local do_switch=0 pick=""
+    local do_switch=0 pick="" local_flag=0
+    local -a _next_args=("${(@)@:#--local}")
+    (( $# != ${#_next_args} )) && local_flag=1
+    set -- "${_next_args[@]}"
     case "${1:-}" in
         --switch) do_switch=1 ;;
         --pick)
@@ -731,6 +776,13 @@ cmd_next() {
 
     local registry
     registry=$(borg_registry_with_state)
+
+    # Interactive chooser: only a real terminal (or the undocumented BORG_NEXT_FORCE_TTY test seam), never
+    # with --switch/--pick. Everything else falls through to the unchanged paths below.
+    if (( ! do_switch )) && [[ -z "$pick" ]] && { [[ -t 0 && -t 1 ]] || [[ -n "${BORG_NEXT_FORCE_TTY:-}" ]]; }; then
+        _borg_next_chooser "$registry" "$local_flag"
+        return $?
+    fi
 
     # Score and sort projects: pinned +200, waiting +100, active +50, idle +10, no activity -50
     # Tiebreaker: waiting → oldest first (neglected longest); active/idle → newest first
