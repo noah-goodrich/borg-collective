@@ -698,9 +698,33 @@ cmd_focus() {
     cmd_switch "${@:-}"
 }
 
+# One fail-open log row per `borg next` run (borg_core.nextpick.cli never writes stdout, exits 0).
+# Called BEFORE the --pick range check so the row exists even for a bad pick; a die after it is fine.
+# `_borg_py` (not bare python3) so the child inherits the config surface; XDG_STATE_HOME is read from
+# the environment by borg_core.paths.state_root.
+_borg_next_log() {
+    local registry="$1" do_switch="$2" pick="$3" cur active=""
+    cur=$(borg_tmux_current_window 2>/dev/null || true)
+    if [[ -n "$cur" ]]; then
+        active=$(printf '%s' "$registry" | jq -r --arg cur "$cur" '
+            [.projects | to_entries[] | select(.value.tmux_window == $cur)][0].key //
+            [.projects | to_entries[] | select(.key == $cur)][0].key // empty' 2>/dev/null || true)
+    fi
+    local -a args=(--active "$active" --session "${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-$$}}")
+    (( do_switch )) && args+=(--switch)
+    [[ -n "$pick" ]] && args+=(--pick "$pick")
+    { printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${args[@]}"; } >/dev/null 2>&1 || true
+}
+
 cmd_next() {
-    local do_switch=0
-    [[ "${1:-}" == "--switch" ]] && do_switch=1
+    local do_switch=0 pick=""
+    case "${1:-}" in
+        --switch) do_switch=1 ;;
+        --pick)
+            pick="${2:-}"
+            [[ "$pick" =~ ^[1-9][0-9]*$ ]] || die "next --pick needs a positive row number (1 = top)"
+            ;;
+    esac
 
     # Merge Desktop sessions
     borg_desktop_scan 2>/dev/null || true
@@ -711,7 +735,7 @@ cmd_next() {
     # Score and sort projects: pinned +200, waiting +100, active +50, idle +10, no activity -50
     # Tiebreaker: waiting → oldest first (neglected longest); active/idle → newest first
     local top
-    top=$(printf '%s' "$registry" | jq -r '
+    top=$(printf '%s' "$registry" | jq -r --argjson idx "$(( ${pick:-1} - 1 ))" '
         .projects | to_entries |
         map(select(.value.status != "archived")) |
         map({
@@ -733,8 +757,14 @@ cmd_next() {
             path: (.value.path // "null")
         }) |
         sort_by(-.score, .last_activity) |
-        first // empty
+        .[$idx] // empty
     ')
+
+    _borg_next_log "$registry" "$do_switch" "$pick"
+
+    if [[ -n "$pick" && ( -z "$top" || "$top" == "null" ) ]]; then
+        die "next --pick $pick is out of range (no such row in the ranked order)"
+    fi
 
     if [[ -z "$top" || "$top" == "null" ]]; then
         if (( do_switch )); then
@@ -754,8 +784,8 @@ cmd_next() {
     pinned=$(printf '%s' "$top" | jq -r '.pinned')
     ppath=$(printf '%s' "$top" | jq -r '.path // "null"')
 
-    # --switch mode: skip all output, switch immediately
-    if (( do_switch )); then
+    # --switch / --pick mode: skip all output, switch immediately
+    if (( do_switch )) || [[ -n "$pick" ]]; then
         _borg_do_switch "$name" --silent
         return $?
     fi
@@ -2907,7 +2937,7 @@ cmd_help() {
                           --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
                           --all     Include archived projects
-    next [--switch]     What needs your attention? (--switch jumps there)
+    next [--switch|--pick n]  What needs your attention? (--switch jumps there)
     switch [query]      fzf picker → jump to project tmux window
     chain <action>      Manifest coordinator over <project>/.borg/chains/*.json
                           list           Every declared chain across registered projects
