@@ -143,6 +143,7 @@ Ruling 2 settles which is canonical, and X7 below says so.
       adapter PR first.
   - Verify: `borg link | tail -6` contains the awaiting-you items when any exist, and contains no tier header
     against a fixture with none.
+  - *Amended 2026-10-06:* the empty state is one line in an always-present section, per `2026-10-05-board-chooser-and-trains-ux` AC4 and CLAUDE.md's renderer rule of no branch on scope, mode or emptiness. The "absent, not empty" clause and the "no tier header" half of Verify are superseded: an empty fixture shows the section header and a `nothing waits on you` line. X9's other clauses stand.
 
 ## Scope Boundaries
 - NOT the merge-tree browser board or the Frozen Atlas (Option E in

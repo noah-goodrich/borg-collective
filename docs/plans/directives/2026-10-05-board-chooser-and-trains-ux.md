@@ -12,7 +12,7 @@ This directive is INPUT to `2026-08-11-viz-3-cross-repo-chains.md`, not a compet
 
 ## Relationship to the backlog
 
-- **viz-3 (`2026-08-11-viz-3-cross-repo-chains`) — this directive is SUBORDINATE.** X1 (three tiers, tier 1 is the awaiting-you filter) and X9 (awaiting-you tier in the landing region, absent when empty) own the ordering and the tier. Screen 1's WAITING ON YOU block is a mock of X9 and screen 3 is a mock of X3 and X5; if a mock disagrees with an X criterion, the X criterion wins and the mock is wrong. X2 (value ÷ effort) is not touched here; the chooser does not rank by effort.
+- **viz-3 (`2026-08-11-viz-3-cross-repo-chains`) — this directive is SUBORDINATE.** X1 (three tiers, tier 1 is the awaiting-you filter) and X9 (awaiting-you tier in the landing region, absent when empty) own the ordering and the tier. Screen 1's WAITING ON YOU block is a mock of X9 and screen 3 is a mock of X3 and X5; AC4 below supersedes X9's empty-state clause ("absent, not empty"), and X9's other clauses stand; anywhere else, a mock that disagrees with an X criterion is the one that is wrong. X2 (value ÷ effort) is not touched here; the chooser does not rank by effort.
 - **link-unification L3 (`2026-08-11-link-unification-and-layout`) — defers to it.** L3 puts the answer in the last 3-5 lines before the prompt, so the WAITING ON YOU block lands at the bottom of the page, not the top as the mocks draw it for readability. Where the mock and L3 disagree about position, L3 wins.
 - **link-unification L4 — idle collapse is REJECTED here.** L4's "idle projects collapse to a count line" was withdrawn; the first draft of screen 1 revived it as a `17 quiet` row. That row is removed. Nothing in this directive collapses projects.
 - **attention-routing A2 (`2026-08-11-attention-routing`, moved to severed/ by noah-goodrich/borg-collective#266) — not revived.** This directive adds no hook signal and no channel; waiting items come from `borg link`'s existing routing.
@@ -22,14 +22,14 @@ This directive is INPUT to `2026-08-11-viz-3-cross-repo-chains.md`, not a compet
 
 ## Data available at each stage
 
-Screens 1, 2 and 4 are built before the stamper, so they use only data that exists today. Owner is the render-time routing `borg link` already computes (`▸ NEXT`: yours / mine / unsure); no owner is stored anywhere. Per item, the owner is that row's routing. The per-project counts on screen 1 are the number of that project's `▸ NEXT` rows in each routing bucket, and a project with no routed rows shows dashes. Trains appear only once the stamper exists, and then only in screen 3 and as an added column in screens 1, 2 and 4. The mocks below are illustrative: the data is made up and internally consistent, not a snapshot of real state.
+Screens 1, 2 and 4 are built before the stamper, so they use only data that exists today. Owner is the render-time routing `borg link` already computes (`▸ NEXT`: yours / mine / unsure); no owner is stored anywhere. Per item, the owner is that row's routing. The per-project counts on screen 1 are the number of that project's `▸ NEXT` rows in each routing bucket, and a project with no routed rows shows dashes. Trains appear only once the stamper exists, and then only in screen 3 and as an added column in screens 1, 2 and 4. The mocks below are illustrative: the data is made up and is not a snapshot of real state, and a mismatch between two mocks is a defect in the mocks, not a requirement.
 
 ## 1. Queen session — `/borg-link` (the board)
 
-Renderer: this is a change to `render.SECTIONS` in `borg_core/link/render.py`, which is X9's wiring. Adding or moving a section turns the spine test red on purpose; the goldens are regenerated in the same commit. When nothing waits, X9 says the block is absent, but CLAUDE.md's renderer rule is "no branch on scope, mode or emptiness": every section always exists. This directive keeps the renderer rule. The section is always present and prints one line, `nothing waits on you`, when empty. X9's "absent when empty" is flagged for amendment in viz-3 rather than overridden here. The load bar from the first draft is dropped: no measure of "load" was ever defined.
+Renderer: this is a change to `render.SECTIONS` in `borg_core/link/render.py`, which is X9's wiring. Adding or moving a section turns the spine test red on purpose; the goldens are regenerated in the same commit. When nothing waits, X9 says the block is absent, but CLAUDE.md's renderer rule is "no branch on scope, mode or emptiness": every section always exists. This directive keeps the renderer rule. The section is always present and prints one line, `nothing waits on you`, when empty. AC4 supersedes X9's "absent when empty", and viz-3 carries a dated 2026-10-06 note on X9 saying so. The load bar from the first draft is dropped: no measure of "load" was ever defined.
 
 ```
-BORG ── Sun 4 Oct 18:40 ───────────────────────────────────
+BORG ── Tue 6 Oct 09:15 ───────────────────────────────────
  PROJECTS            yours mine unsure  touched
  borg-coll              3    1     –    now
  ingle                  1    –     –    10d
@@ -47,23 +47,26 @@ BORG ── Sun 4 Oct 18:40 ─────────────────�
 
 ## 2. `borg next` — a chooser
 
-Host: bare `borg next` run on a TTY in the queen session's shell (or via `!borg next` from inside Claude). When stdin is not a TTY, `borg next` keeps its current non-interactive output. A `--pick <n>` flag selects row n without a prompt; it is the test seam and also a scripting path.
+Host: bare `borg next` run where both stdin and stdout are a TTY (`-t 0 && -t 1`), such as the queen session's terminal, a tmux pane, or `tmux display-popup -E 'borg next'`. A `!borg next` run from inside Claude has no TTY, so it never gets the chooser. When either stream is not a TTY, `borg next` keeps today's output: one `Next up: <project>` block for the top-ranked project, or `All clear` when nothing ranks. A `--pick <n>` flag selects row n without a prompt; it is the non-interactive seam, for tests and for scripting.
 
-`borg next --switch` (Ctrl+Space >) picks the top project and switches to it, pinned in `tests/cli_contract.bats`, and it is unchanged. The chooser is the new interactive path, entered by `borg next` on a terminal; it lists candidates and the user opens one. The line marked ▸ is the gated recommendation (Decision 3): it is NOT drawn until the gate below passes, and in shadow mode it is only logged.
+`borg next --switch` (Ctrl+Space >) picks the top project and switches to it, and it is unchanged. Only its empty-registry branch is pinned in `tests/cli_contract.bats` today; AC1's first commit adds the populated-fixture case. The chooser is the new interactive path, entered by `borg next` on a terminal; it lists candidates and the user opens one. The line marked ▸ is the gated recommendation (Decision 3): it is NOT drawn until the gate below passes, and in shadow mode it is only logged.
 
 ```
 WHERE COULD YOUR FOCUS GO?
 ───────────────────────────────────────────────────────────
  # project · item      next step          owner   ready
  1 borg · hygiene      /borg-assimilate   yours   ● now
- 2 borg · research     merge #252         yours   ● now
+ 2 borg · research     merge #252         mine    ● now
  3 borg · comms        paste /tui         yours   ● 5m
- 4 ingle · session     reply to session   yours   ○ 10d
- 5 borg · fixes        #272 CI → merge    mine    ○ running
+ 4 borg · triage       answer triage Qs   yours   ● 1h
+ 5 dotfiles · install  run install.sh     yours   ● 2h
+ 6 ingle · session     reply to session   yours   ○ 10d
 ───────────────────────────────────────────────────────────
  ▸ suggested: 1 borg · hygiene    (shown only after the gate)
  sort: [a]ge [o]wner [r]eady [p]roject   ⏎ open  d drone
 ```
+
+Column sources. The `next step`, `owner` and `ready` cells come from the grid's ready set (`grid.ready_refs`) and the `▸ NEXT` routing, and only for a project that has a manifest. A project with no manifest still gets a row, with those three cells blank. The mock's cell text is drawn for readability.
 
 ## 3. One repo, several trains — `/borg-link borg-collective`
 
@@ -80,8 +83,8 @@ borg-collective ── 4 trains ────────────────
  TRUTH     shim━stamper━manifests━board
            ✔    ○       ○         ○
            decided 10/4: build the stamper
- FIXES     #267━#268━install.sh
-           ✔    ✔    ●  YOU
+ FIXES     #267━#268━#272━install.sh
+           ✔    ✔    ✔    ●  YOU
 ───────────────────────────────────────────────────────────
  ✔ merged  ● ready  ○ open  ◌ draft  ✗ closed
 ```
@@ -95,7 +98,7 @@ Channel: `drone up` prints it to the new window's shell pane after the window op
  last time   AC6 ticked (#264), 6/6 criteria met
  next        /borg-assimilate              owner: yours
  watch out   byline check pending
- since then  3 PRs merged (#264 #267 #268) · tree clean
+ since then  4 PRs merged (#264 #267 #268 #272) · tree clean
 ```
 
 ## Which sheet taught what
@@ -111,22 +114,22 @@ Channel: `drone up` prints it to the new window's shell pane after the window op
 The numbers here are fixed before any data exists; changing one after seeing data requires a dated note in this file.
 
 - **Shadow mode first.** On each chooser invocation borg computes its suggestion and appends a row, but does not show the ▸ line. The chooser is otherwise identical.
-- **Log file.** `${XDG_STATE_HOME:-~/.local/state}/borg/next-recs.jsonl`, one fail-open JSONL row per chooser invocation, rotated by `_borg_rotate_log` like every state-root log. It is the same append #262 specifies for `cmd_next`; the fields are: `ts`, `session` (chooser invocation id), `shown` (bool, false in shadow mode), `top3` (project, rank, score, status, as in #262), `rec` (project and item suggested), `opened` (the project and item the user opened, or null), `opened_after_s` (seconds from chooser start to open, or null), `switch` (bool, true for the `--switch` path).
-- **Followed means:** the user opens the suggested row's window in the same chooser invocation, or opens that project's window within 10 minutes of the chooser starting. Anything else (a different row, or nothing) is not followed.
+- **Log file.** `${XDG_STATE_HOME:-~/.local/state}/borg/next-recs.jsonl`, one fail-open JSONL row per chooser invocation, rotated by `_borg_rotate_log` like every state-root log. It is the same append #262 specifies for `cmd_next`; the fields are: `ts`, `session` (chooser invocation id), `shown` (bool, false in shadow mode), `top3` (project, rank, score, status, as in #262), `rec` (project and item suggested), `opened` (the project and item the user opened, or null), `opened_after_s` (seconds from chooser start to open, or null), `active` (the project whose tmux window had focus when the chooser started, found by matching `borg_tmux_current_window` against each registry entry's `tmux_window`, or its name when that is unset; null from the queen session or outside tmux), `switch` (bool, true for the `--switch` path).
+- **Followed means:** the user opens the suggested row in the same chooser invocation. Anything else (a different row, or nothing) is not followed. Nothing records window switches made after the chooser exits, so there is no later-window branch.
 - **Threshold:** follow rate >= 60% over >= 20 chooser sessions that were not `--switch` rows. Below 60% at 20 sessions, the suggestion is not shown and the ranking is rebuilt; the check is re-run each further 20 sessions.
 - **Only after the gate passes** is the ▸ suggested line shown (first, as drawn in screen 2), and the same follow rate keeps being logged with `shown: true`.
-- **Falsification note:** a high follow rate in shadow mode can be the ranking merely naming the already-active project, which the user would open anyway. Read the rate alongside #262's finding that rank 1 is mostly the already-active project; a rate that does not exceed "opens the active project" is not evidence of relevance.
+- **Falsification note:** a high follow rate in shadow mode can be the ranking merely naming the already-active project, which the user would open anyway. Read the rate alongside #262's finding that rank 1 is mostly a project whose session status is already active; a rate that does not exceed "opens the project whose window had focus", computed from each row's `active` field, is not evidence of relevance.
 
 ## Acceptance criteria
 
-- [ ] AC1 — The chooser (`borg next` on a terminal) lists candidate rows with project, next step, owner and readiness, using only data available without the stamper, and `borg next --switch` behaves exactly as before.
-  - Verify: `tests/cli_contract.bats` pins only the empty-registry branch of `next --switch`, so the FIRST commit adds a characterisation case: `borg next --switch` against a populated fixture registry, with the window target asserted. It lands green on unchanged code. The chooser commit must keep it green unchanged. A second case drives the chooser through `--pick 1` against the fixture and finds one row per candidate, each with an owner of yours, mine or unsure.
+- [ ] AC1 — The chooser (`borg next` on a terminal) lists candidate rows with project, next step, owner and readiness, using only data available without the stamper (the `next step`, `owner` and `ready` cells filled from the grid's ready set and the `▸ NEXT` routing where a manifest exists, blank otherwise), and `borg next --switch` behaves exactly as before.
+  - Verify: `tests/cli_contract.bats` pins only the empty-registry branch of `next --switch`, so the FIRST commit adds a characterisation case: `borg next --switch` against a populated fixture registry, with the window target asserted. It lands green on unchanged code. The chooser commit must keep it green unchanged. A second case drives the chooser through `--pick 1` against the fixture and finds one row per candidate: a project with a manifest carries an owner of yours, mine or unsure, and a project without one carries blank next step, owner and ready cells.
 - [ ] AC2 — Shadow mode appends one well-formed row per chooser invocation and displays no suggestion.
-  - Verify: after one chooser run against a fixture, `tail -1 "${XDG_STATE_HOME:-$HOME/.local/state}/borg/next-recs.jsonl" | jq -e '.shown == false and has("rec") and has("opened")'` exits 0, and the chooser output contains no `suggested` line.
+  - Verify: after one chooser run against a fixture, `tail -1 "${XDG_STATE_HOME:-$HOME/.local/state}/borg/next-recs.jsonl" | jq -e '.shown == false and has("rec") and has("opened") and has("active")'` exits 0, and the chooser output contains no `suggested` line.
 - [ ] AC3 — The ▸ suggested line is shown only when the gate is satisfied.
   - Verify: a unit test over a fixture log with 19 sessions at 100% follow shows no line, 20 sessions at 55% shows no line, and 20 sessions at 60% shows the line.
-- [ ] AC4 — The WAITING ON YOU block is wired through `render.SECTIONS`, is always present, and prints one `nothing waits on you` line when empty (renderer rule kept; X9 flagged).
-  - Verify: `borg link | tail -6` contains the waiting items against a fixture with some, and contains no tier header against a fixture with none; the spine test and goldens are regenerated in the same commit.
+- [ ] AC4 — The WAITING ON YOU block is wired through `render.SECTIONS`, is always present, and prints one `nothing waits on you` line when empty (renderer rule kept; AC4 supersedes X9's empty-state clause).
+  - Verify: against an empty fixture, `borg link` prints the WAITING ON YOU section header and the `nothing waits on you` line after the WAITING ON YOU header; against a populated fixture, the lines between that header and the next section header (or the end of the output) are the waiting items, one per fixture item. The assertion is by section header, not by a fixed line offset from the end. The spine test and goldens are regenerated in the same commit.
 - [ ] AC5 — Screen 3 renders trains only from the stamper's render-time derivation and uses the ratified glyphs.
   - Verify: against a fixture with no keys and no rows, `/borg-link <repo>` prints no train rows; against a stamped fixture, an open PR with unmerged parents renders `○` and a merged PR renders `✔`.
 - [ ] AC6 — Full bats suite and the macOS contract leg stay green.

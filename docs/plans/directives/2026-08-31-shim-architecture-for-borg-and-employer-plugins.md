@@ -10,7 +10,8 @@ Three audiences, one machine each, and no contract between them.
 - **Personal machine.** PR stacking and the whole borg workflow must work with zero employer plugins installed.
   Today they cannot: `stacked-pr-program` and `stamp_stack.py` live only in `ai-data-engineer`, so a personal repo
   has no stacking at all.
-- **Teammates.** `ai-data-engineer` must work with zero borg. Currently violated —
+- **Teammates.** `ai-data-engineer` must work with zero borg. As filed (§5 is tracked outside this repo; no status claim
+  here either way):
   `plugins/data-engineer/commands/strike.md:303` tells the reader to run `/borg-plan` and `/borg-collective-review`.
   It is the only `borg` string under `plugins/`, and the portability grep at `tests/run-tests.sh:213` covers
   `skills/stacked-pr-program` and `hooks` only, so it misses `commands/` **and** `skills/deploy-to-airflow-dev/`.
@@ -59,7 +60,7 @@ A new verb. One idempotent function of (live state for declared refs, local decl
 - **Declared** (`lane`, `why`, `after`, `apex`, cross-repo `order`): never touched, never deleted.
 - **Declared-but-checked** (`gate.kind`, `blocked_by`, `resolved_by`): reported when they contradict derived state.
 
-Cross-repo `order` is in the declared column because `merge-tree/programs.py` says so in its own docstring, three
+Cross-repo `order` is in the declared group because `merge-tree/programs.py` says so in its own docstring, three
 times: "a base branch is a repo-local name... nothing in git or the GitHub API says platform#834 must merge before
 warehouse#302... So it has to be *declared*."
 
@@ -83,6 +84,8 @@ body in employer repos. On the work machine an extension file declares which imp
 solved, avoided rather than attempted.
 
 ### 5. Close the leak as an extension, not a deletion
+
+§5 is tracked outside this repo, and this file makes no status claim about it either way.
 
 `strike.md:303` should be neither deleted nor guarded by a `command -v borg` probe. It should be an extension file
 that exists only on the work machine. A probe hands teammates a dead code path they will eventually delete; an
@@ -114,7 +117,7 @@ deliberately absent. Copy that shape, comment included, and confirm the replacem
 
 Moved out on 2026-10-05, and no longer tracked as criteria here:
 - §4's criterion, "personal-machine stacking works with zero employer plugins", now belongs to `2026-10-04-personal-pr-stack-stamper`.
-- §5's criterion, "zero borg references in the employer plugin", is verified outside this repo.
+- §5's criterion, "zero borg references in the employer plugin", is tracked outside this repo, and this file makes no status claim about it.
 
 ## Notes
 

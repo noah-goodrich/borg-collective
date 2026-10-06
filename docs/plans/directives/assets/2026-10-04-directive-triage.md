@@ -24,7 +24,7 @@ Scope: every file in `docs/plans/directives/` except `README.md` and `assets/`: 
 | project-to-repository-rename | KEEP        | no inventory           |
 | retire-mt-programs          | KEEP        | programs.py live       |
 | retire-the-line-pin         | KEEP        | no ban, no CI          |
-| shim-architecture           | PARTIAL     | 1 of 7 ticked          |
+| shim-architecture           | PARTIAL     | 1 of 5 ticked          |
 | refuse-the-manifest         | KEEP        | salvage still live     |
 | structured-storage          | SEVERED     | Q6 unanswerable        |
 | session-load-eval           | KEEP        | no evals/session-load  |
