@@ -128,9 +128,9 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
     state a `since` that does not correspond to its own `generated_at`.
 
     KNOWN AND ACCEPTED COST, recorded rather than gated: this function is not mode-gated, so every
-    invocation pays one `git remote get-url` in repository scope plus a `.borg/chains` listdir per
-    registered repository. THE MULTIPLIER THAT MADE THIS WORTH A PARAGRAPH IS GONE -- it used to read
-    "`drone status` pays [this] per tmux window ... measured at 12 windows against a 14-repository
+    invocation pays one `git remote get-url` in repository scope plus a listdir of each manifest root
+    (`.stacks`, `.borg/chains`) per registered repository. THE MULTIPLIER THAT MADE THIS WORTH A PARAGRAPH IS GONE -- it
+    used to read "`drone status` pays [this] per tmux window ... measured at 12 windows against a 14-repository
     registry, 12 forks and ~168 listdirs for a table that greps one `Status:` line", and `drone
     status` exits 1 with "unknown command 'status'". Divide by the window count: one fork and ~14
     listdirs, once, per typed command. It is bounded, it is local, and the two obvious "fixes" are

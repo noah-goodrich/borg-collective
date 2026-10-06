@@ -603,3 +603,196 @@ def test_add_row_still_authors_github_refs(repository, monkeypatch, tmp_path):
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(tmp_path / "none"))
     _run("scaffold", "--repository", repository, "--name", "demo")
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 0
+
+
+# ── manifests living in the tool-neutral `.stacks/` root ─────────────────────────────────────────
+def _stacks_path(repository, name="demo"):
+    return os.path.join(repository, shell.STACKS_DIRNAME, f"{name}.json")
+
+
+def _put_stacks(repository, name="demo"):
+    os.makedirs(os.path.join(repository, shell.STACKS_DIRNAME), exist_ok=True)
+    with open(_stacks_path(repository, name), "w", encoding="utf-8") as handle:
+        json.dump({"program": name, "rows": []}, handle)
+
+
+def test_resolve_finds_a_stacks_manifest(repository, capsys):
+    _put_stacks(repository, "alpha")
+    assert _run("resolve", "--repository", repository) == 0
+    assert capsys.readouterr().out.strip() == "alpha"
+
+
+def test_resolve_refuses_a_stem_declared_in_both_roots(repository, capsys):
+    _put_stacks(repository, "alpha")
+    os.makedirs(os.path.dirname(_path(repository, "alpha")), exist_ok=True)
+    with open(_path(repository, "alpha"), "w", encoding="utf-8") as handle:
+        json.dump({"rows": []}, handle)
+    assert _run("resolve", "--repository", repository) == 1
+    err = capsys.readouterr().err
+    assert "declared in both" in err
+    assert "no manifest" not in err, "a refused duplicate is reported as a duplicate, not as an absence"
+
+
+def _put_chains(repository, name):
+    os.makedirs(os.path.dirname(_path(repository, name)), exist_ok=True)
+    with open(_path(repository, name), "w", encoding="utf-8") as handle:
+        json.dump({"rows": []}, handle)
+
+
+def _declare_slug(repository, slug):
+    with open(os.path.join(repository, "PROJECT_PLAN.md"), "w", encoding="utf-8") as handle:
+        handle.write(f"- Plan-slug: `{slug}`\n")
+
+
+def test_resolve_prints_the_intact_stem_the_slug_names_even_when_another_stem_is_refused(repository, capsys):
+    """MUTATION: restore the unconditional `if refused: return 1` in `_cmd_resolve` and this goes red."""
+    _put_stacks(repository, "alpha")
+    _put_chains(repository, "alpha")
+    _put_chains(repository, "bravo")
+    _declare_slug(repository, "bravo")
+    assert _run("resolve", "--repository", repository) == 0
+    assert capsys.readouterr().out.strip() == "bravo"
+
+
+def test_resolve_refuses_when_the_slug_names_the_refused_stem(repository, capsys):
+    _put_stacks(repository, "alpha")
+    _put_chains(repository, "alpha")
+    _put_chains(repository, "bravo")
+    _declare_slug(repository, "alpha")
+    assert _run("resolve", "--repository", repository) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and "refused (declared in both roots): alpha" in captured.err
+
+
+def test_resolve_refuses_when_no_slug_decides_and_a_stem_is_refused(repository, capsys):
+    _put_stacks(repository, "alpha")
+    _put_chains(repository, "alpha")
+    _put_chains(repository, "bravo")
+    assert _run("resolve", "--repository", repository) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and "refused (declared in both roots): alpha" in captured.err
+
+
+def test_scaffold_refuses_by_name_when_a_root_it_must_check_is_unreadable(repository, capsys):
+    """MUTATION: delete the `unreadable_roots` refusal in `_cmd_scaffold` and this goes red."""
+    _put_stacks(repository, "alpha")
+    stacks = os.path.join(repository, shell.STACKS_DIRNAME)
+    os.chmod(stacks, 0)
+    try:
+        if os.access(stacks, os.R_OK):
+            pytest.skip("permissions are not enforced (running as root)")
+        assert _run("scaffold", "--repository", repository, "--name", "alpha") == 1
+        assert stacks in capsys.readouterr().err
+    finally:
+        os.chmod(stacks, 0o755)
+    assert os.listdir(stacks) == ["alpha.json"]
+    assert not os.path.exists(os.path.join(repository, ".borg"))
+
+
+def test_add_row_on_a_stacks_manifest_writes_back_to_stacks(repository):
+    _put_stacks(repository)
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "acme/ledger#1") == 0
+    with open(_stacks_path(repository), encoding="utf-8") as handle:
+        assert [r["ref"] for r in json.load(handle)["rows"]] == ["acme/ledger#1"]
+    assert not os.path.exists(os.path.join(repository, ".borg", "chains")), "nothing lands under .borg"
+
+
+def test_close_on_a_stacks_manifest_writes_back_to_stacks(repository):
+    _put_stacks(repository)
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "acme/ledger#1")
+    assert _run("close", "--repository", repository, "--name", "demo", "--ref", "acme/ledger#1",
+                "--status", "merged") == 0
+    with open(_stacks_path(repository), encoding="utf-8") as handle:
+        assert json.load(handle)["rows"][0]["status"] == "merged"
+    assert not os.path.exists(os.path.join(repository, ".borg"))
+
+
+def test_add_row_refuses_a_stem_declared_in_both_roots(repository, capsys):
+    _put_stacks(repository)
+    os.makedirs(os.path.dirname(_path(repository)), exist_ok=True)
+    with open(_path(repository), "w", encoding="utf-8") as handle:
+        json.dump({"rows": []}, handle)
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "acme/ledger#1") == 1
+    assert "declared in both" in capsys.readouterr().err
+
+
+def test_scaffold_still_creates_under_borg_chains_and_leaves_stacks_alone(repository):
+    assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
+    assert os.path.isfile(_path(repository))
+    assert not os.path.exists(os.path.join(repository, shell.STACKS_DIRNAME))
+
+
+def test_scaffold_does_not_recreate_a_manifest_that_already_lives_in_stacks(repository, capsys):
+    _put_stacks(repository)
+    assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
+    assert "exists:" in capsys.readouterr().out
+    assert not os.path.exists(_path(repository))
+
+
+def test_resolve_does_not_fall_back_to_a_sibling_when_the_planned_stem_is_refused(repository, capsys):
+    """MUTATION: count only the surviving manifests in `_cmd_resolve` and this goes red."""
+    _put_stacks(repository, "alpha")
+    for name in ("alpha", "bravo"):
+        os.makedirs(os.path.dirname(_path(repository, name)), exist_ok=True)
+        with open(_path(repository, name), "w", encoding="utf-8") as handle:
+            json.dump({"rows": []}, handle)
+    with open(os.path.join(repository, "PROJECT_PLAN.md"), "w", encoding="utf-8") as handle:
+        handle.write("- Plan-slug: `alpha`\n")
+    assert _run("resolve", "--repository", repository) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "" and "alpha" in captured.err and "bravo" in captured.err
+
+
+def test_scaffold_does_not_replace_a_manifest_whose_name_differs_only_in_case(repository, capsys):
+    path = _path(repository, "alpha")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump({"program": "alpha", "rows": [{"ref": "acme/ledger#1", "status": "open"}]}, handle)
+    if not os.path.exists(os.path.join(os.path.dirname(path), "ALPHA.json")):
+        pytest.skip("case-sensitive filesystem")
+    assert _run("scaffold", "--repository", repository, "--name", "Alpha") == 0
+    with open(path, encoding="utf-8") as handle:
+        assert len(json.load(handle)["rows"]) == 1
+
+
+# ── aliased roots and the both-roots refusal on every verb ───────────────────────────────────────
+def _alias_roots(repository):
+    """`.stacks` as a symlink to `.borg/chains`, holding one manifest named `alpha`."""
+    chains = os.path.dirname(_path(repository, "alpha"))
+    os.makedirs(chains, exist_ok=True)
+    with open(_path(repository, "alpha"), "w", encoding="utf-8") as handle:
+        json.dump({"program": "alpha", "rows": []}, handle)
+    os.symlink(chains, os.path.join(repository, shell.STACKS_DIRNAME))
+    return chains
+
+
+def test_aliased_roots_resolve_and_add_row_see_one_manifest(repository, capsys):
+    """MUTATION: drop the realpath de-duplication in `survey_manifests` and this goes red."""
+    chains = _alias_roots(repository)
+    assert _run("resolve", "--repository", repository) == 0
+    captured = capsys.readouterr()
+    assert captured.out.strip() == "alpha" and "declared in both" not in captured.err
+    assert _run("add-row", "--repository", repository, "--name", "alpha", "--ref", "acme/ledger#1") == 0
+    assert os.listdir(chains) == ["alpha.json"], "one real file, no sibling written"
+    with open(_path(repository, "alpha"), encoding="utf-8") as handle:
+        assert [r["ref"] for r in json.load(handle)["rows"]] == ["acme/ledger#1"]
+
+
+def test_scaffold_refuses_a_stem_declared_in_both_roots(repository, capsys):
+    _put_stacks(repository)
+    os.makedirs(os.path.dirname(_path(repository)), exist_ok=True)
+    with open(_path(repository), "w", encoding="utf-8") as handle:
+        json.dump({"rows": []}, handle)
+    before = _read(repository)
+    assert _run("scaffold", "--repository", repository, "--name", "demo") == 1
+    assert "declared in both" in capsys.readouterr().err
+    assert _read(repository) == before
+
+
+def test_not_found_messages_name_both_roots(repository, capsys):
+    assert _run("resolve", "--repository", repository) == 1
+    err = capsys.readouterr().err
+    assert shell.STACKS_DIRNAME in err and os.path.join(".borg", "chains") in err
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "acme/ledger#1") == 1
+    err = capsys.readouterr().err
+    assert shell.STACKS_DIRNAME in err and os.path.join(".borg", "chains") in err

@@ -3,9 +3,13 @@
 Three verbs, one per moment in a row's life:
 
     scaffold   `/borg-plan` -- create `<repository>/.borg/chains/<name>.json` with an apex and no
-               rows. Idempotent and NEVER clobbering.
+               rows. Idempotent and NEVER clobbering. Always creates under borg's own root.
     add-row    `/borg-link-up` -- append a row for a ref, or update the one already carrying it.
     close      `/borg-assimilate` -- set a row's status, by ref.
+
+add-row and close edit in place: the manifest is looked up in `<repository>/.stacks/` and
+`<repository>/.borg/chains/`, and written back to the file that was found. A stem declared in both
+roots is refused by name.
 
 WHY A CLI AT ALL, RATHER THAN THE SKILLS WRITING JSON. A skill is markdown: asking one to emit a
 valid manifest means asking a model to satisfy `core.validate` freehand on every invocation, and the
@@ -65,18 +69,31 @@ def _manifest_path(repository_dir: str, name: str) -> str:
     return os.path.join(shell.manifest_dir(repository_dir), stem if stem.endswith(".json") else f"{stem}.json")
 
 
-def _read_for_write(repository_dir: str, name: str) -> dict[str, Any]:
-    """The manifest at `name`, validated whole. Raises `shell.InvalidManifest` rather than salvaging.
+def _roots_phrase(repository_dir: str) -> str:
+    """Both roots a lookup searched, so a not-found message never implies only borg's was read."""
+    stacks = os.path.join(repository_dir, shell.STACKS_DIRNAME)
+    return f"{stacks} or {shell.manifest_dir(repository_dir)}"
+
+
+def _read_for_write(repository_dir: str, name: str) -> tuple[dict[str, Any], str]:
+    """`(manifest, directory)`: `name` validated whole, and the root it was FOUND in.
+
+    Raises `shell.InvalidManifest` rather than salvaging. The directory is returned so the write goes
+    back to the file that was read -- a `.stacks/` manifest stays in `.stacks/`. A stem declared in
+    both roots is refused by name here too, never resolved to one of them.
 
     See the module docstring for why this does not go through `shell.discover`. `_path`/`_id` are
     never stamped here, so what comes back is already the declared body.
     """
-    path = _manifest_path(repository_dir, name)
+    path, problem = shell.locate_manifest(repository_dir, name)
+    if problem:
+        raise shell.InvalidManifest(f"{name}: {problem}", [])
+    path = path or _manifest_path(repository_dir, name)
     try:
         with open(path, encoding="utf-8") as handle:
             doc = json.load(handle)
     except FileNotFoundError as exc:
-        raise shell.InvalidManifest(f"{name}: no manifest at {path}", []) from exc
+        raise shell.InvalidManifest(f"{name}: no manifest at {path} ({_roots_phrase(repository_dir)})", []) from exc
     except json.JSONDecodeError as exc:
         raise shell.InvalidManifest(f"{name}: not valid JSON ({exc})", []) from exc
     except UnicodeDecodeError as exc:
@@ -93,7 +110,7 @@ def _read_for_write(repository_dir: str, name: str) -> dict[str, Any]:
         raise shell.InvalidManifest(
             f"{name}: refusing to rewrite an invalid manifest — {'; '.join(errors)}", errors
         )
-    return doc
+    return doc, os.path.dirname(path)
 
 
 def _row_index(manifest: dict[str, Any], ref: str) -> int | None:
@@ -228,10 +245,22 @@ def _cmd_scaffold(args: argparse.Namespace) -> int:
     re-plan, so an existing file is reported and left exactly as it is -- at exit 0, since "already
     scaffolded" is the desired end state and not a failure.
     """
-    path = _manifest_path(args.repository, args.name)
-    if os.path.exists(path):
-        print(f"exists: {path}")
+    existing, problem = shell.locate_manifest(args.repository, args.name)
+    if problem:
+        print(problem, file=sys.stderr)
+        return 1
+    # An existing manifest in EITHER root counts: scaffolding beside a `.stacks/` one would create the
+    # same stem in both roots, which discovery then refuses by name.
+    if existing:
+        print(f"exists: {existing}")
         return 0
+    # A root that cannot be listed may hold this very stem, so creating it in the other root could make
+    # the duplicate discovery refuses. Scaffold is the only verb that creates, so it is the only one to
+    # refuse here; an edit changes the file it located and needs no view of the other root.
+    blind = shell.unreadable_roots(args.repository)
+    if blind:
+        print(f"{args.name}: refusing to scaffold, cannot rule out a duplicate -- {'; '.join(blind)}", file=sys.stderr)
+        return 1
     # `program` IS PART OF THE ON-DISK CONTRACT, and omitting it shipped a manifest that this
     # repository's own contract test rejects: merge-tree/test_s4_manifests.py's
     # `test_program_id_matches_filename_and_is_a_slug` requires a top-level `program` equal to the
@@ -266,7 +295,7 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
     case rather than the exceptional one. Updating keeps that idempotent; only the fields the caller
     actually passed are touched, so a hand-written `why` survives a status refresh.
     """
-    manifest = _read_for_write(args.repository, args.name)
+    manifest, directory = _read_for_write(args.repository, args.name)
     lane = _lane_of(args.lane)
     # The lane guard fires BEFORE any mutation, on the same principle as `write_manifest` refusing a
     # whole document rather than writing a partial one: nothing is touched until the lane is known
@@ -323,7 +352,7 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
         if moving and not args.order and not prerequisite:
             row["order"] = _next_order(manifest, lane, skip_index=index)
         action = "updated"
-    written = shell.write_manifest(args.repository, manifest, args.name)
+    written = shell.write_manifest(args.repository, manifest, args.name, directory)
     print(f"{action}: {args.ref} (lane {row.get('lane')}, order {row.get('order')}) -> {written}")
     return 0
 
@@ -336,7 +365,7 @@ def _cmd_close(args: argparse.Namespace) -> int:
     the row was never added or the ref is wrong, and both are things the author needs told rather
     than papered over by a row appearing at close time with no `why` and no lane.
     """
-    manifest = _read_for_write(args.repository, args.name)
+    manifest, directory = _read_for_write(args.repository, args.name)
     index = _row_index(manifest, args.ref)
     if index is None:
         declared = [str(r.get("ref")) for r in manifest.get("rows") or [] if isinstance(r, dict)]
@@ -346,7 +375,7 @@ def _cmd_close(args: argparse.Namespace) -> int:
         )
         return 1
     manifest["rows"][index]["status"] = args.status
-    written = shell.write_manifest(args.repository, manifest, args.name)
+    written = shell.write_manifest(args.repository, manifest, args.name, directory)
     print(f"closed: {args.ref} status={args.status} -> {written}")
     return 0
 
@@ -387,7 +416,7 @@ def _declared_plan_slug(repository_dir: str) -> str:
 def _cmd_resolve(args: argparse.Namespace) -> int:
     """Which manifest this repository's lifecycle skills should write to. READ-ONLY.
 
-    Writes nothing and forks nothing -- it lists a directory and reads at most two files. That is the
+    Writes nothing and forks nothing -- it lists the manifest roots and reads at most two files. That is the
     whole reason this verb exists rather than four paragraphs of prose in three SKILL.md files: the
     selection rule has one implementation, and the skills carry an invocation instead of a copy.
 
@@ -396,41 +425,58 @@ def _cmd_resolve(args: argparse.Namespace) -> int:
       1. No manifest at all -> exit 1 with `no manifest`. This is the NO-OP-AND-PROPOSE path, not an
          error for a caller to work around: `/borg-link-up` writes a proposal line and carries on,
          because creation belongs to `/borg-plan`.
-      2. Exactly one -> that stem. The overwhelmingly common case; measured across 22 registered
+      2. Exactly one candidate -> that stem. The overwhelmingly common case; measured across 22 registered
          repositories, 1 has any manifest and 0 has more than one.
       3. More than one -> the one whose `_id` equals the slug DECLARED by `PROJECT_PLAN.md`. `_id` is
          stamped for free by `shell._load_manifest` (a declared `program` key verbatim, else the
          filename stem), so this costs no schema change.
       4. More than one and no match, or no declared slug -> exit 1, naming which. NEVER A GUESS.
          Picking one of several would silently bind a session's row to another program's chain.
-    """
-    directory = shell.manifest_dir(args.repository)
-    try:
-        names = sorted(n for n in os.listdir(directory) if n.endswith(".json"))
-    except OSError:
-        names = []
 
-    if not names:
-        print(f"no manifest under {directory}", file=sys.stderr)
+    A stem declared in both roots is REFUSED (neither copy loads) but is still a CANDIDATE, and it
+    stops the verb only where it could be the chosen one: the deciding slug names it, or no slug
+    decides and a refused stem is among the candidates. A slug that names an intact manifest prints
+    that stem even when some other stem is refused -- an unrelated duplicate must not block a program
+    whose own manifest is fine.
+    """
+    listing, refused, warnings = shell.survey_manifests(args.repository)
+    for warning in warnings:
+        print(warning, file=sys.stderr)
+    names = [name for name, _ in listing]
+    paths = dict(listing)
+
+    if not names and not refused:
+        print(f"no manifest under {_roots_phrase(args.repository)}", file=sys.stderr)
         return 1
 
-    if len(names) == 1:
-        print(os.path.splitext(names[0])[0])
+    # A refused stem is still a CANDIDATE: dropping it from the count would let rule 2 or 3 pick a
+    # sibling program's manifest at exactly the moment the wanted one was refused.
+    stems = [os.path.splitext(n)[0] for n in names + refused]
+    refused_stems = [os.path.splitext(n)[0] for n in refused]
+    refusal = (f"refused (declared in both roots): {', '.join(refused_stems)}; "
+               f"candidates are {', '.join(stems)}")
+
+    if len(stems) == 1 and not refused:
+        print(stems[0])
         return 0
 
-    slug = _declared_plan_slug(args.repository)
+    # A lone refused stem has no sibling for a slug to choose between, so it falls to the refusal below.
+    slug = _declared_plan_slug(args.repository) if len(stems) > 1 else ""
     if not slug:
-        print(f"no plan slug declared; candidates are "
-              f"{', '.join(os.path.splitext(n)[0] for n in names)}", file=sys.stderr)
+        # No slug decides, so any refused stem could be the wanted one: never pick around it.
+        print(refusal if refused else f"no plan slug declared; candidates are {', '.join(stems)}", file=sys.stderr)
+        return 1
+
+    if slug in refused_stems:
+        print(refusal, file=sys.stderr)
         return 1
 
     for name in names:
-        if shell.manifest_id(directory, name) == slug:
+        if shell.manifest_id(os.path.dirname(paths[name]), name) == slug:
             print(os.path.splitext(name)[0])
             return 0
 
-    print(f"ambiguous: {', '.join(os.path.splitext(n)[0] for n in names)} "
-          f"(none has _id {slug})", file=sys.stderr)
+    print(f"ambiguous: {', '.join(stems)} (none has _id {slug})", file=sys.stderr)
     return 1
 
 
@@ -460,7 +506,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # three write verbs still require it, enforced below where the verb is known -- moving the check
     # from argparse to the dispatch is what lets one flat parser serve four verbs with different
     # needs, the same trade the `--apex`-on-close comment describes.
-    parser.add_argument("--name", default="", help="manifest file stem under .borg/chains/")
+    parser.add_argument("--name", default="", help="manifest file stem under .stacks/ or .borg/chains/")
     parser.add_argument("--ref", default="", help="the row's ref (add-row, close)")
     parser.add_argument("--lane", default="", help=f"lane name (add-row; default {core.DEFAULT_LANE})")
     parser.add_argument("--new-lane", action="store_true",

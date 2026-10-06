@@ -108,7 +108,7 @@ def edges_from(manifests: list[dict[str, Any]]) -> list[dict[str, Any]]:
     commit whose rule is that no existing path changes.
 
     `edges_from([]) == []`. An empty registry, a sweep that discovered no manifests, and a repository
-    with no `.borg/chains/` directory all arrive here as the empty list, and none of them is an
+    with no manifest root (`.stacks/` or `.borg/chains/`) all arrive here as the empty list, and none of them is an
     error.
     """
     seen: dict[tuple[str, str, str], dict[str, Any]] = {}

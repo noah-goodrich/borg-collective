@@ -1819,3 +1819,179 @@ def test_manifest_dir_never_splits_a_repository_across_both(tmp_path):
     (tmp_path / ".borg" / "programs").mkdir(parents=True)
     (tmp_path / ".borg" / "chains").mkdir(parents=True)
     assert shell.manifest_dir(str(tmp_path)).endswith("/.borg/chains")
+
+
+# ── the second root: `<repository>/.stacks/` ─────────────────────────────────────────────────────
+def _stacks_manifest(repository, name, ref="acme/ledger#1"):
+    """Write one valid manifest straight into `<repository>/.stacks/`, creating it."""
+    directory = os.path.join(str(repository), shell.STACKS_DIRNAME)
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"{name}.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(_manifest([_row("1", ref)]), handle)
+    return path
+
+
+def _borg_manifest(repository, name, ref="acme/ledger#2"):
+    directory = shell.manifest_dir(str(repository))
+    os.makedirs(directory, exist_ok=True)
+    path = os.path.join(directory, f"{name}.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(_manifest([_row("1", ref)]), handle)
+    return path
+
+
+def test_stacks_dir_alone_is_discovered(tmp_path):
+    """MUTATION: drop `.stacks` from `manifest_roots` and this goes red."""
+    repository = tmp_path / "alpha"
+    path = _stacks_manifest(repository, "alpha")
+    manifests, warnings = shell.discover([str(repository)])
+    assert warnings == []
+    assert [m["_path"] for m in manifests] == [path]
+
+
+def test_both_roots_with_distinct_stems_load_both_stacks_first(tmp_path):
+    repository = tmp_path / "alpha"
+    stacks = _stacks_manifest(repository, "alpha")
+    borg = _borg_manifest(repository, "bravo")
+    manifests, warnings = shell.discover([str(repository)])
+    assert warnings == []
+    assert [m["_path"] for m in manifests] == [stacks, borg]
+
+
+def test_the_same_stem_in_both_roots_loads_neither_and_names_both(tmp_path):
+    """MUTATION: delete the duplicate refusal in `_reconcile` and this goes red."""
+    repository = tmp_path / "alpha"
+    stacks = _stacks_manifest(repository, "alpha")
+    borg = _borg_manifest(repository, "alpha")
+    other = _borg_manifest(repository, "bravo", ref="acme/ledger#3")
+    manifests, warnings = shell.discover([str(repository)])
+    assert [m["_path"] for m in manifests] == [other], "the unrelated stem still loads"
+    assert len(warnings) == 2, "one path-led warning per refused file"
+    assert all(stacks in w and borg in w and "neither loaded" in w for w in warnings)
+    assert sorted(shell.refused_manifest_paths(warnings, str(repository))) == sorted([stacks, borg])
+
+
+def test_an_absent_stacks_dir_is_silent(tmp_path):
+    repository = tmp_path / "alpha"
+    _borg_manifest(repository, "alpha")
+    assert shell.manifest_roots(str(repository))[1] == []
+    assert shell.discover([str(repository)])[1] == []
+
+
+def test_a_stacks_path_that_is_a_file_warns_once_and_is_skipped(tmp_path):
+    repository = tmp_path / "alpha"
+    borg = _borg_manifest(repository, "alpha")
+    (repository / ".stacks").write_text("not a directory", encoding="utf-8")
+    manifests, warnings = shell.discover([str(repository)])
+    assert [m["_path"] for m in manifests] == [borg]
+    assert len(warnings) == 1 and ".stacks" in warnings[0] and "not a directory" in warnings[0]
+
+
+def test_locate_manifest_finds_a_stacks_manifest_and_refuses_a_duplicate(tmp_path):
+    repository = tmp_path / "alpha"
+    stacks = _stacks_manifest(repository, "alpha")
+    assert shell.locate_manifest(str(repository), "alpha") == (stacks, "")
+    assert shell.locate_manifest(str(repository), "missing") == ("", "")
+    _borg_manifest(repository, "alpha")
+    path, problem = shell.locate_manifest(str(repository), "alpha")
+    assert path == "" and "declared in both" in problem
+
+
+def test_locate_manifest_lets_the_filesystem_decide_name_equality(tmp_path):
+    """MUTATION: delete the `os.path.exists` fallback in `locate_manifest` and this goes red."""
+    repository = tmp_path / "alpha"
+    borg = _borg_manifest(repository, "alpha")
+    if not os.path.exists(os.path.join(os.path.dirname(borg), "ALPHA.json")):
+        pytest.skip("case-sensitive filesystem")
+    path, problem = shell.locate_manifest(str(repository), "Alpha")
+    assert problem == "" and os.path.samefile(path, borg)
+
+
+def test_the_repo_group_union_sees_a_stacks_manifest_in_a_sibling_worktree(tmp_path):
+    """Two registry entries for one repo group: the sibling's `.stacks/` manifest is swept."""
+    main = tmp_path / "alpha"
+    sibling = tmp_path / "alpha-feature"
+    main.mkdir()
+    path = _stacks_manifest(sibling, "alpha")
+    manifests, warnings = shell.discover_registered(_registry(str(main), str(sibling)))
+    assert warnings == []
+    assert [m["_path"] for m in manifests] == [path]
+
+
+# ── unreadable is never silent; aliased roots are one root ───────────────────────────────────────
+def _borg_repository(tmp_path):
+    repository = tmp_path / "alpha"
+    _borg_manifest(repository, "alpha")
+    return repository
+
+
+def _stacks_repository(tmp_path):
+    repository = tmp_path / "alpha"
+    _stacks_manifest(repository, "alpha")
+    return repository
+
+
+@pytest.fixture(name="restore_modes")
+def _restore_modes():
+    chmodded: list[tuple[str, int]] = []
+    yield chmodded
+    for path, mode in reversed(chmodded):
+        os.chmod(path, mode)
+
+
+def _lock(path, restore_modes):
+    restore_modes.append((str(path), os.stat(path).st_mode & 0o777))
+    os.chmod(path, 0)
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
+def test_an_unreadable_borg_parent_warns_by_name(tmp_path, restore_modes):
+    """MUTATION: return borg's root only when it exists in `manifest_roots` and this goes red."""
+    repository = _borg_repository(tmp_path)
+    _lock(repository / ".borg", restore_modes)
+    manifests, warnings = shell.discover([str(repository)])
+    assert manifests == []
+    assert len(warnings) == 1 and ".borg" in warnings[0] and "unreadable" in warnings[0]
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
+@pytest.mark.parametrize("build", [_borg_repository, _stacks_repository])
+def test_an_unreadable_repository_directory_warns_by_name(tmp_path, restore_modes, build):
+    """MUTATION: drop the `.stacks` `os.stat` error branch in `manifest_roots` and the stacks case goes red."""
+    repository = build(tmp_path)
+    _lock(repository, restore_modes)
+    manifests, warnings = shell.discover([str(repository)])
+    assert manifests == []
+    assert any("unreadable" in w for w in warnings), warnings
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
+def test_an_unreadable_repository_with_stacks_names_the_stacks_root(tmp_path, restore_modes):
+    repository = _stacks_repository(tmp_path)
+    _lock(repository, restore_modes)
+    warnings = shell.manifest_roots(str(repository))[1]
+    assert len(warnings) == 1 and ".stacks" in warnings[0] and "unreadable" in warnings[0]
+
+
+def test_a_stacks_root_symlinked_to_borg_chains_is_read_once(tmp_path):
+    """MUTATION: drop the realpath de-duplication in `survey_manifests` and this goes red."""
+    repository = tmp_path / "alpha"
+    borg = _borg_manifest(repository, "alpha")
+    os.symlink(os.path.dirname(borg), repository / ".stacks")
+    manifests, warnings = shell.discover([str(repository)])
+    assert warnings == [] and len(manifests) == 1
+    assert shell.locate_manifest(str(repository), "alpha")[1] == ""
+    assert shell.locate_manifest(str(repository), "alpha")[0] != ""
+    assert shell.list_manifests(str(repository))[1] == []
+
+
+def test_borg_chains_symlinked_to_stacks_is_read_once(tmp_path):
+    repository = tmp_path / "alpha"
+    stacks = _stacks_manifest(repository, "alpha")
+    (repository / ".borg").mkdir()
+    os.symlink(os.path.dirname(stacks), repository / ".borg" / "chains")
+    manifests, warnings = shell.discover([str(repository)])
+    assert warnings == [] and len(manifests) == 1
+    path, problem = shell.locate_manifest(str(repository), "alpha")
+    assert problem == "" and os.path.samefile(path, stacks)

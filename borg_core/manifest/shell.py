@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import tempfile
 from typing import Any
 
@@ -57,14 +58,21 @@ GIT_TIMEOUT_SECONDS = 5
 CHAINS_DIRNAME = "chains"
 LEGACY_DIRNAME = "programs"
 
+# The second, tool-neutral root: `<repository>/.stacks/`, for a repository shared with people who do
+# not run borg and so should not have to carry a `.borg/` directory. It is READ alongside borg's own
+# root (see `manifest_roots`); it is never CREATED into -- `scaffold` still writes under
+# `manifest_dir`, and an in-place edit writes back to whichever file it found.
+STACKS_DIRNAME = ".stacks"
+
 
 def manifest_dir(repository_dir: str) -> str:
-    """borg's one location for manifests: `<repository>/.borg/chains`, or the legacy name.
+    """borg's own manifest root: `<repository>/.borg/chains`, or the legacy name.
 
-    The single path constant, and the whole of the location rule. Nothing outside this directory is
-    ever opened -- not `<repository>/.borg/anything.json`, not a manifest-shaped file in the
-    repository root. What CHANGED with the hardened spec's B6 is not this rule but the sweep: every
-    registered repository's copy of this directory is globbed, not just the one in scope.
+    This is where manifests are CREATED, and one of the two roots they are READ from -- the other is
+    `<repository>/.stacks/`, see `manifest_roots`. Nothing outside those two directories is ever
+    opened -- not `<repository>/.borg/anything.json`, not a manifest-shaped file in the repository
+    root. What CHANGED with the hardened spec's B6 is not this rule but the sweep: every registered
+    repository's copy of these directories is globbed, not just the one in scope.
 
     THE RENAME IS THE EXPAND PHASE, AND BOTH NAMES RESOLVE ON PURPOSE. AC7's verify greps the
     COMMANDS section of `borg help` for the retired word and gets two hits that are NOT the retired
@@ -89,6 +97,157 @@ def manifest_dir(repository_dir: str) -> str:
     if os.path.isdir(legacy):
         return legacy
     return new_dir
+
+
+def manifest_roots(repository_dir: str) -> tuple[list[str], list[str]]:
+    """`(roots, warnings)`: the manifest roots to read under a repository, in a FIXED order.
+
+    `.stacks/` first (when it exists), then borg's own `manifest_dir`. borg's root is ALWAYS returned,
+    even when nothing is there: listing it is what tells a genuinely absent root (silent, the normal
+    case -- most repositories have neither) from an unreadable one, and an untraversable parent
+    (`.borg`, or the repository itself, with no permissions) must reach `discover`'s named
+    "unreadable" warning rather than vanish from the sweep. `.stacks` is probed with one `os.stat`:
+    absent is silent, any other failure is a named "unreadable" warning, and a `.stacks` that exists
+    but is not a directory gets ONE warning and is skipped; it is never opened.
+    """
+    stacks = os.path.join(repository_dir, STACKS_DIRNAME)
+    roots: list[str] = []
+    warnings: list[str] = []
+    try:
+        if stat.S_ISDIR(os.stat(stacks).st_mode):
+            roots.append(stacks)
+        else:
+            warnings.append(f"{stacks}: not a directory -- skipped")
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        warnings.append(f"{stacks}: unreadable ({exc})")
+    roots.append(manifest_dir(repository_dir))
+    return roots, warnings
+
+
+def list_manifests(repository_dir: str, swept: set[str] | None = None) -> tuple[list[tuple[str, str]], list[str]]:
+    """`([(filename, path), ...], warnings)` across every root of one repository. See `survey_manifests`."""
+    found, _, warnings = survey_manifests(repository_dir, swept)
+    return found, warnings
+
+
+def survey_manifests(
+    repository_dir: str, swept: set[str] | None = None
+) -> tuple[list[tuple[str, str]], list[str], list[str]]:
+    """`([(filename, path), ...], refused_filenames, warnings)` across every root of one repository.
+
+    `refused_filenames` are the names dropped as duplicates. A lookup by stem needs them: a refused
+    stem is still a CANDIDATE, so a caller that chooses among the survivors alone would pick another
+    manifest exactly when the one it wanted was refused.
+
+    THE ONE PLACE THE TWO ROOTS ARE RECONCILED, shared by `discover` and every lookup by stem. The
+    same filename in both roots is REFUSED BY NAME: neither copy is returned and each file gets one
+    warning, naming both paths. Picking one silently would bind a reader to a manifest its author may not be looking
+    at. Roots are collapsed on `os.path.realpath` in EVERY call: `swept` carries the realpaths an earlier
+    repository already listed (a symlinked or trailing-slash registry entry), and a caller with no such
+    set gets a local one. So `.stacks` symlinked to `.borg/chains` (or the reverse) is read ONCE by
+    discover and by every lookup alike, and is never reported as declared in both.
+
+    """
+    if not os.path.isdir(repository_dir):
+        # A typo'd or stale registry path must not be indistinguishable from "no manifests".
+        return [], [], [f"{repository_dir}: repository directory does not exist"]
+    roots, warnings = manifest_roots(repository_dir)
+    listed: list[tuple[str, list[str]]] = []
+    seen = swept if swept is not None else set()
+    for directory in roots:
+        real = os.path.realpath(directory)
+        if real in seen:
+            continue
+        seen.add(real)
+        names, warning = _list_root(directory)
+        warnings.extend([warning] if warning else [])
+        if names is not None:
+            listed.append((directory, names))
+    found, refused, refusals = _reconcile(listed)
+    return found, refused, warnings + refusals
+
+
+def _list_root(directory: str) -> tuple[list[str] | None, str]:
+    """`(names, warning)` for one root: `.json` filenames sorted, or `None` when there is nothing to list.
+
+    `except FileNotFoundError` MUST PRECEDE `except OSError`, as it always has: FileNotFoundError
+    subclasses OSError, and the silent common case must not become an "unreadable" warning.
+    """
+    try:
+        return sorted(n for n in os.listdir(directory) if n.endswith(".json")), ""
+    except FileNotFoundError:
+        return None, ""
+    except OSError as exc:
+        # Unreadable (permissions, I/O) is never silent: zero manifests from a real directory
+        # would look exactly like a correct empty sweep.
+        return None, f"{directory}: unreadable ({exc})"
+
+
+def _reconcile(listed: list[tuple[str, list[str]]]) -> tuple[list[tuple[str, str]], list[str], list[str]]:
+    """Flatten per-root listings, refusing any filename that appears in more than one root.
+
+    One warning PER refused file, led by its path and built by `_invalid_manifest`, so
+    `refused_manifest_paths` counts both copies under their repository and CHAINS says a manifest
+    could not be read rather than that none exists.
+    """
+    owners: dict[str, list[str]] = {}
+    for directory, names in listed:
+        for name in names:
+            owners.setdefault(name, []).append(os.path.join(directory, name))
+    found: list[tuple[str, str]] = []
+    refused: list[str] = []
+    warnings: list[str] = []
+    for directory, names in listed:
+        for name in names:
+            paths = owners[name]
+            if len(paths) == 1:
+                found.append((name, paths[0]))
+                continue
+            here = os.path.join(directory, name)
+            other = next(p for p in paths if p != here)
+            if name not in refused:
+                refused.append(name)
+            reasons = [f"declared in both {here} and {other}", "neither loaded; separate files, reconcile them"]
+            warnings.append(_invalid_manifest(here, reasons))
+    return found, refused, warnings
+
+
+def locate_manifest(repository_dir: str, name: str) -> tuple[str, str]:
+    """`(path, problem)` for the existing manifest `name` (a stem or a filename), by the two-root rule.
+
+    `path` is "" with `problem` "" when no root holds it -- the caller decides whether that is an
+    error (`add-row`) or the expected state (`scaffold`). `problem` is set, and `path` "", when the
+    stem is declared in both roots: the refusal `survey_manifests` words, never a silent pick.
+    """
+    stem = os.path.basename(name)
+    filename = stem if stem.endswith(".json") else f"{stem}.json"
+    found, refused, warnings = survey_manifests(repository_dir)
+    for listed_name, path in found:
+        if listed_name == filename:
+            return path, ""
+    if filename in refused:
+        marker = f"{os.sep}{filename}{_INVALID_MANIFEST}declared in both"
+        return "", next(w for w in warnings if marker in w)
+    # The filesystem, not a string compare, decides name equality: on a case-insensitive volume
+    # `Alpha.json` IS `alpha.json`, and a creator told "absent" would replace the existing file.
+    for root in manifest_roots(repository_dir)[0]:
+        if os.path.exists(os.path.join(root, filename)):
+            return os.path.join(root, filename), ""
+    return "", ""
+
+
+def unreadable_roots(repository_dir: str) -> list[str]:
+    """The `<root>: unreadable (...)` warnings of one repository's manifest roots; `[]` when every root lists.
+
+    Only a CREATOR needs this. `locate_manifest` answers "absent" for a stem it cannot see, which is
+    right for an edit (the file it located is the file it edits) and wrong for `scaffold`: a root it
+    cannot list may hold the same stem, and creating it in the other root would make the both-roots
+    duplicate that discovery then refuses. An absent root is not listed here, and neither is a `.stacks`
+    that is not a directory -- only a root that exists and cannot be read.
+    """
+    return [w for w in survey_manifests(repository_dir)[2] if _UNREADABLE_ROOT in w]
 
 
 def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
@@ -182,6 +341,9 @@ def _drop_invalid_rows(doc: dict, path: str, errors: list[str]) -> tuple[dict | 
 _INVALID_MANIFEST = ": invalid manifest -- "
 _UNREADABLE = ": unreadable or invalid JSON ("
 _REFUSAL_MARKERS = (_INVALID_MANIFEST, _UNREADABLE)
+# A manifest ROOT that exists and cannot be listed (`_list_root`, `manifest_roots`). Distinct from
+# `_UNREADABLE`, which is one FILE that could not be parsed.
+_UNREADABLE_ROOT = ": unreadable ("
 
 
 def _invalid_manifest(where: str, reasons: list[str]) -> str:
@@ -246,28 +408,24 @@ def _manifest_identity(manifest: dict) -> str:
 
 
 def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
-    """Load every manifest under the given repositories' `.borg/chains/`.
+    """Load every manifest under the given repositories' two roots: `.stacks/` and `.borg/chains/`.
 
     Returns `(manifests, warnings)`. Takes explicit directories so the pure selection and ranking in
     core.py can be exercised against any set of paths; `discover_registered` is the entry point that
     derives them from the registry.
 
-    `except FileNotFoundError` MUST PRECEDE `except OSError` -- FileNotFoundError subclasses OSError,
-    and reordering them would make every repository without a `.borg/chains` emit an "unreadable"
-    warning, turning the silent common case into noise on every repository borg knows about. Inside
-    that branch the isdir check is what distinguishes a typo'd path (warn by name) from a normal
-    repository with no manifests (silent).
+    The per-repository listing, its two-root reconciliation (a stem declared in BOTH roots is refused
+    by name, neither copy loaded) and its silent-common-case rules live in `survey_manifests`.
 
     DEDUPLICATED TWICE, because a duplicate arrives by two different routes and neither catches the
-    other. Directories are collapsed on `os.path.realpath`, which absorbs a symlinked registry entry
+    other. Root directories are collapsed on `os.path.realpath`, which absorbs a symlinked registry entry
     and the `/x/repo` vs `/x/repo/` pair that `os.path.join` would otherwise turn into two sweeps of
     one directory (indistinguishable afterwards -- the two manifests carry an IDENTICAL `_path`).
     Loaded manifests are then collapsed on content identity, which is the only thing that catches a
     worktree: a real second checkout at a real second path holding a real second copy of the same
-    file. `os.path.realpath` does not stat, so a missing directory normalizes lexically and still
-    reaches its "does not exist" warning.
+    file.
 
-    Manifests come back in `sorted()` filename order within each repository, so load order is
+    Manifests come back `.stacks/` first, then borg's root, each in `sorted()` filename order, so load order is
     deterministic across filesystems, and only `.json` files are read -- a README.md living beside
     the manifests produces zero warnings.
     """
@@ -277,26 +435,11 @@ def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
     bodies: set[str] = set()
 
     for repository_dir in repository_dirs:
-        directory = manifest_dir(repository_dir)
-        if os.path.realpath(directory) in swept:
-            continue
-        swept.add(os.path.realpath(directory))
-        try:
-            names = sorted(n for n in os.listdir(directory) if n.endswith(".json"))
-        except FileNotFoundError:
-            if not os.path.isdir(repository_dir):
-                # A typo'd or stale registry path must not be indistinguishable from "no manifests":
-                # the repository itself is missing, so name it.
-                warnings.append(f"{repository_dir}: repository directory does not exist")
-            continue  # repository exists, no .borg/chains -- the common case, not a problem
-        except OSError as exc:
-            # Unreadable (permissions, I/O) is never silent: zero manifests from a real directory
-            # would look exactly like a correct empty sweep.
-            warnings.append(f"{directory}: unreadable ({exc})")
-            continue
+        listing, listing_warnings = list_manifests(repository_dir, swept)
+        warnings.extend(listing_warnings)
 
-        for name in names:
-            manifest, warning = _load_manifest(os.path.join(directory, name), name)
+        for name, path in listing:
+            manifest, warning = _load_manifest(path, name)
             # A WARNING NOW ACCOMPANIES A LOADED MANIFEST, so this can no longer be `if manifest is
             # None`. A partially-salvaged file returns BOTH -- the rows that validated and a warning
             # naming the ones dropped -- and gating the append on the manifest being None would
@@ -320,9 +463,9 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     Blank and the literal string "null" are dropped, and that is not defensive padding: `jq` renders
     a JSON null as the four characters `null`, every zsh reader guards
     `[[ -z "$ppath" || "$ppath" == "null" ]]`, and -- worse -- passing "" to manifest_dir would yield
-    the RELATIVE path `.borg/chains`, making discovery read whatever directory the process happens
-    to be sitting in. One entry with no path is skipped silently, matching every other collector in
-    borg_core.
+    the RELATIVE path `.borg/chains`, making discovery read whatever directory the process happens to
+    be sitting in (`discover` now warns and reads nothing for it, but a blank must never get that far).
+    One entry with no path is skipped silently, matching every other collector in borg_core.
 
     TYPE-CHECKED, NOT TRUTH-CHECKED. `registry.get("projects") or {}` covers missing, null and empty
     but not a wrong TYPE: `{"projects": ["/a", "/b"]}` reached `.values()` and raised AttributeError
@@ -357,7 +500,7 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
 
 
 def discover_registered(registry: Any) -> tuple[list[dict], list[str]]:
-    """Every manifest under EVERY registered repository's `.borg/chains/`. B6's enforcing half.
+    """Every manifest under EVERY registered repository's two roots. B6's enforcing half.
 
     DISCOVERY IS GLOBAL; SELECTION IS SCOPED -- stated once in core.py's module docstring ("WHERE
     MANIFESTS COME FROM") and enforced here. The sweep is a local glob over ~14 directories,
@@ -469,8 +612,13 @@ def _write_refusal(name: str, errors: list[str], slug: str) -> InvalidManifest:
     return InvalidManifest(_invalid_manifest(name, detailed), detailed)
 
 
-def write_manifest(repository_dir: str, manifest: dict, name: str) -> str:
-    """Write a manifest to `<repository>/.borg/chains/<name>.json`. The ONLY writer.
+def write_manifest(repository_dir: str, manifest: dict, name: str, directory: str = "") -> str:
+    """Write a manifest to `<directory>/<name>.json`, by default under `manifest_dir`. The ONLY writer.
+
+    `directory` is for an in-place edit: `add-row` and `close` pass the directory the manifest was
+    FOUND in, so a `.stacks/` manifest is written back to `.stacks/`. Creation passes nothing and
+    lands under `manifest_dir`, exactly as before. The function writes wherever it is told; only the CLI never creates
+    into `.stacks/`.
 
     THE ONE PLACE THIS MODULE'S "nothing here is ever fatal" RULE DOES NOT APPLY, and the asymmetry
     is the point. A reader that dies on one bad file blanks the whole grid, so reads degrade: a bad
@@ -509,7 +657,7 @@ def write_manifest(repository_dir: str, manifest: dict, name: str) -> str:
         suggestible = any(core.offending_value(error) for error in errors)
         raise _write_refusal(name, errors, repository_slug(repository_dir) if suggestible else "")
 
-    directory = manifest_dir(repository_dir)
+    directory = directory or manifest_dir(repository_dir)
     os.makedirs(directory, exist_ok=True)
     stem = os.path.basename(name)
     path = os.path.join(directory, stem if stem.endswith(".json") else f"{stem}.json")

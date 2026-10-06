@@ -972,3 +972,41 @@ def test_a_registry_of_readable_manifests_publishes_refused_zero(isolated_env, c
     grid_block = json.loads(capsys.readouterr().out)["grid"]
     assert grid_block["manifests"], "precondition: a manifest did load"
     assert grid_block["refused"] == 0
+
+
+def test_json_reports_a_stacks_manifest_with_its_stacks_path(isolated_env, capsys, monkeypatch):
+    """A manifest in `.stacks/` is on the wire with the REAL file path, not a `.borg/chains` one."""
+    directory = _project_dir(isolated_env, "warehouse")
+    stacks = Path(directory) / ".stacks"
+    stacks.mkdir()
+    shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", stacks)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    grid_block = json.loads(capsys.readouterr().out)["grid"]
+    assert [m["path"] for m in grid_block["manifests"]] == [str(stacks / "warehouse-rollout.json")]
+    assert not (Path(directory) / ".borg").exists()
+
+
+def test_a_stem_declared_in_both_roots_counts_as_refused_not_as_no_manifest(isolated_env, capsys, monkeypatch):
+    """MUTATION: reword the duplicate warning so it carries no refusal marker and this goes red.
+
+    Without the count CHAINS prints the "run /borg-plan to scaffold one" sentence beside a
+    manifest that exists twice, which is the false advice the `refused` key was added to end.
+    """
+    directory = _project_dir(isolated_env, "warehouse")
+    for root in (".stacks", ".borg/chains"):
+        target = Path(directory) / root
+        target.mkdir(parents=True)
+        shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", target)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    grid_block = json.loads(capsys.readouterr().out)["grid"]
+    assert grid_block["manifests"] == [] and grid_block["refused"] == 2
+    assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
+    page = capsys.readouterr().out
+    assert "2 manifests could not be read" in page
+    assert "to scaffold one" not in page and "in the registry yet" not in page
