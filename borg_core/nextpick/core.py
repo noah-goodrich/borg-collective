@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from borg_core.link import grid, picture, render
+
 
 def _falsy(value: Any) -> bool:
     """jq's `//` treats null AND false as empty."""
@@ -110,3 +112,87 @@ def gate(rows: list[dict[str, Any]], min_rows: int = 20, threshold: float = 0.60
         return False
     followed = sum(1 for row in eligible if row.get("opened") == row.get("rec"))
     return followed / len(eligible) >= threshold
+
+
+_BLANK = {"item": "", "next_step": "", "owner": "", "ready": ""}
+
+
+def _project_ready(path: str, manifests: list[dict[str, Any]]) -> dict[str, str]:
+    """The first ready row of the manifests that live under `path`, routed exactly as `▸ NEXT` routes it.
+
+    A manifest belongs to a project when its file sits inside the project directory. A manifest whose READY set
+    is `unlooked` (nothing resolved, e.g. `--local`) contributes nothing, as `render._next_tally` skips it.
+    Within a manifest `rows[].next` orders first, then ref, the same stable order `_next_tally` uses.
+    """
+    if not path or path == "null":
+        return dict(_BLANK)
+    prefix = path.rstrip("/") + "/"
+    for manifest in manifests:
+        if not str(manifest.get("path") or "").startswith(prefix):
+            continue
+        ready = manifest.get("ready") or {}
+        if ready.get("state") == grid.STATE_READY_UNLOOKED:
+            continue
+        nodes = manifest.get("nodes") or {}
+        refs = sorted((not (nodes.get(ref) or {}).get("next"), ref) for ref in ready.get("refs") or [])
+        if not refs:
+            continue
+        ref = refs[0][1]
+        gate_: dict[str, Any] = next((g for g in manifest.get("gates") or [] if g.get("ref") == ref), {})
+        return {
+            "item": ref,
+            "next_step": gate_.get("blocked_by") or ref,
+            "owner": render.route_kind(gate_.get("kind") or ""),
+            "ready": picture.state_glyph(nodes.get(ref) or {}),
+        }
+    return dict(_BLANK)
+
+
+def chooser_rows(ranked: list[dict[str, Any]], link_doc: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """One row per ranked project, ranked order: `{n, project, item, next_step, owner, ready}`.
+
+    Cells come from the link document's grid manifests via `render.route_kind` (owner) and `picture.state_glyph`
+    (ready glyph). A project with no manifest, or a None / degraded document, gets blank cells, never an error.
+    """
+    manifests = ((link_doc or {}).get("grid") or {}).get("manifests") or []
+    rows = []
+    for index, item in enumerate(ranked):
+        cells = _project_ready(str(item.get("path") or ""), manifests)
+        rows.append({"n": index + 1, "project": item["name"], **cells})
+    return rows
+
+
+def _fit(text: str, width: int) -> str:
+    """Pad or truncate to exactly `width` visible characters, ending a truncation with an ellipsis."""
+    if len(text) > width:
+        return text[: width - 1] + "…"
+    return text.ljust(width)
+
+
+_LABEL_W = 24
+_STEP_W = 19
+
+
+def _line(n: str, label: str, step: str, owner: str, ready: str) -> str:
+    return f"{n:>2} {_fit(label, _LABEL_W)} {_fit(step, _STEP_W)} {_fit(owner, 5)} {ready}".rstrip()
+
+
+def render_chooser(rows: list[dict[str, Any]], *, suggestion: str | None, width: int = 59) -> list[str]:
+    """Plain-text screen 2: header, rule, column header, one line per row, rule, optional suggestion, key hint."""
+    rule = "─" * width
+    lines = ["WHERE COULD YOUR FOCUS GO?", rule, _line("#", "project · item", "next step", "owner", "ready")]
+    for row in rows:
+        label = f"{row['project']} · {row['item']}" if row.get("item") else row["project"]
+        lines.append(_line(str(row["n"]), label, row.get("next_step", ""), row.get("owner", ""), row.get("ready", "")))
+    lines.append(rule)
+    if suggestion is not None:
+        lines.append(f"▸ suggested: {suggestion}")
+    lines.append("⏎ top · 1-9 open · q quit")
+    return [line if len(line) <= width else line[: width - 1] + "…" for line in lines]
+
+
+def suggestion_for(rows: list[dict[str, Any]], log_rows: list[dict[str, Any]]) -> str | None:
+    """The top row's label ("<n> <project>") only once the follow-rate `gate` has passed, else None."""
+    if not rows or not gate(log_rows):
+        return None
+    return f"{rows[0]['n']} {rows[0]['project']}"
