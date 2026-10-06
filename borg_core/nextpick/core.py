@@ -65,6 +65,8 @@ def rank(projects: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     return items
 
 
+# JUSTIFICATION: the row is a flat record of eleven independent facts; keyword-only keeps call sites honest.
+# pylint: disable-next=too-many-arguments
 def log_row(
     *,
     ts: str,
