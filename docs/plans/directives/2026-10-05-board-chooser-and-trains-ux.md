@@ -70,7 +70,7 @@ Column sources. The `next step`, `owner` and `ready` cells come from the grid's 
 
 ## 3. One repo, several trains — `/borg-link borg-collective`
 
-Built last, and only once the stamper's render-time train derivation exists (no cache, no persisted file); borg cannot tell trains apart inside one repo today: 3 manifests exist across 20 registered repos, 2 of them in borg-collective, and nothing groups PRs into trains. It is the mock of viz-3's X3 and X5 and defers to them. Glyphs are the ratified set from `borg_core/link/picture.py`: ✔ merged, ● ready, ○ open, ◌ draft, ✗ closed.
+Built last, and only once the stamper's render-time train derivation exists (no cache, no persisted file); borg cannot tell trains apart inside one repo today: as of 2026-10-06, 3 manifests exist across 20 registered repos, 2 of them in borg-collective, and nothing groups PRs into trains. It is the mock of viz-3's X3 and X5 and defers to them. Glyphs are the ratified set from `borg_core/link/picture.py`: ✔ merged, ● ready, ○ open, ◌ draft, ✗ closed.
 
 ```
 borg-collective ── 4 trains ───────────────────────────────
@@ -139,3 +139,10 @@ The numbers here are fixed before any data exists; changing one after seeing dat
 ## Ship definition and boundaries
 
 Each screen ships as its own PR in the stated order; screens 1 and 2 may not wait on the stamper. This directive adds no new edge source and no persisted chain file (viz-3 X7). It does not rank by effort or deadline (viz-3 X2, X4). If a mock turns out to need a graph layout, stop and take it to viz-3's risk note rather than growing the picture here.
+
+## Follow-ups from the #271 approval (2026-10-06)
+
+Recorded from the approving review of noah-goodrich/borg-collective#271. None blocks the directive, and none changes an acceptance criterion as written: whoever promotes it decides where each lands.
+
+- **`chooser: false` exclusion and scripted `--pick` runs (AC3, recommendation gate).** AC3's fixture log does not test that rows with `chooser: false` are excluded from the follow-rate denominator, and `borg next --pick <n>` runs are logged exactly like interactive ones, so scripted runs count as human choices in the gate. Resolution: add `chooser: false` rows to AC3's fixture and assert they are excluded; and either log a `scripted` flag on `--pick` rows and count only `scripted: false` rows toward the 20-row threshold, or exclude `--pick` rows from the gate outright.
+- **AC2 log path and `XDG_STATE_HOME` (AC2).** AC2's verify reads `${XDG_STATE_HOME:-$HOME/.local/state}/borg/next-recs.jsonl` through the shell, so it depends on that variable resolving the same way for the writer and the check. Resolution: have the Python writer resolve the path through `borg_core/paths.py` (`state_root()` already implements `${XDG_STATE_HOME:-$HOME/.local/state}/borg`) instead of recomputing it, and set `XDG_STATE_HOME` explicitly in the AC2 test setup (`setup_temp_dirs` in `tests/test_helper/setup.bash` exports it today) so a case that skips that helper cannot write to the real state root.
