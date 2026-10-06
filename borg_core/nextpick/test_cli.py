@@ -80,3 +80,94 @@ def test_unwritable_state_dir(tmp_path, monkeypatch):
 def test_unserialisable_row(state):
     assert shell.append_row({"a": object()}) is False
     assert not state.exists() or state.read_text() == ""
+
+
+def test_chooser_quit_row_has_null_opened(state, monkeypatch):
+    _run(monkeypatch, ["--chooser", "--shown"])
+    (row,) = _rows(state)
+    assert (row["chooser"], row["scripted"], row["shown"]) == (True, False, True)
+    assert (row["rec"], row["opened"], row["opened_after_s"]) == ("a", None, None)
+
+
+def test_chooser_open_row_carries_opened_and_elapsed(state, monkeypatch):
+    _run(monkeypatch, ["--chooser", "--opened", "b", "--opened-after", "3"])
+    (row,) = _rows(state)
+    assert (row["rec"], row["opened"], row["opened_after_s"], row["shown"]) == ("a", "b", 3.0, False)
+
+
+LINK_DOC = {
+    "grid": {
+        "manifests": [
+            {
+                "path": "/p/a/.borg/chains/x.json",
+                "nodes": {"o/r#1": {"ref": "o/r#1", "state": "open", "ready": True}},
+                "gates": [],
+                "ready": {"state": "known", "refs": ["o/r#1"]},
+            }
+        ]
+    }
+}
+PATH_REGISTRY = {
+    "projects": {
+        "a": {"status": "waiting", "last_activity": "2026-09-01", "path": "/p/a"},
+        "b": {"status": "idle", "last_activity": "2026-10-01", "path": "/p/b"},
+    }
+}
+
+
+def _rows_run(monkeypatch, capsys, doc, argv=("--rows",)):
+    seen = []
+    monkeypatch.setattr(shell, "link_document", lambda local: seen.append(local) or doc)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(PATH_REGISTRY)))
+    assert cli.main(list(argv)) == 0
+    return capsys.readouterr().out.splitlines(), seen
+
+
+def test_rows_mode_prints_screen_then_names_line(state, monkeypatch, capsys):
+    lines, seen = _rows_run(monkeypatch, capsys, LINK_DOC)
+    assert lines[0] == "WHERE COULD YOUR FOCUS GO?"
+    assert any(line.startswith(" 1 a · o/r#1") for line in lines)
+    assert lines[-1] == "names\ta\tb"
+    assert seen == [False]
+    assert not state.exists()
+
+
+def test_rows_mode_passes_local_through(state, monkeypatch, capsys):
+    _, seen = _rows_run(monkeypatch, capsys, LINK_DOC, ("--rows", "--local"))
+    assert seen == [True]
+
+
+def test_rows_mode_blank_cells_when_link_build_fails(state, monkeypatch, capsys):
+    lines, _ = _rows_run(monkeypatch, capsys, None)
+    assert " 1 a" in lines[3] and "o/r#1" not in "".join(lines)
+    assert lines[-1] == "names\ta\tb"
+
+
+def test_link_document_failure_is_none(monkeypatch):
+    def boom(*_a, **_k):
+        raise OSError("no python")
+
+    monkeypatch.setattr(shell.subprocess, "run", boom)
+    assert shell.link_document(True) is None
+
+
+def test_link_document_runs_in_orchestrator_root(tmp_path, monkeypatch):
+    calls = []
+
+    class Done:
+        returncode = 0
+        stdout = '{"grid": {}}'
+
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path))
+    monkeypatch.setattr(shell.subprocess, "run", lambda argv, **kw: calls.append((argv, kw)) or Done())
+    assert shell.link_document(True) == {"grid": {}}
+    argv, kw = calls[0]
+    assert argv[-2:] == ["--json", "--local"]
+    assert kw["cwd"] == str(tmp_path.resolve())
+
+
+def test_read_log_rows_reads_rotated_then_live(state):
+    state.parent.mkdir(parents=True)
+    state.with_name(state.name + ".1").write_text('{"n": 1}\nbad\n')
+    state.write_text('{"n": 2}\n')
+    assert shell.read_log_rows() == [{"n": 1}, {"n": 2}]

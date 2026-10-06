@@ -35,7 +35,7 @@ case "$1" in
     list-panes)
         echo "0 %1" ;;
     display-message)
-        echo "mock-window" ;;
+        echo "${TMUX_MOCK_CURRENT:-mock-window}" ;;
     *)
         exit 0 ;;
 esac
@@ -138,4 +138,59 @@ _last_row() {
     run zsh "$BORG" next < /dev/null
     [ "$status" -eq 0 ]
     [ "$output" = "$expected" ]
+}
+
+@test "next --switch: logs the focused project as active when the tmux window matches tmux_window" {
+    _write_registry ""
+    export TMUX_MOCK_CURRENT="w-act"
+    run zsh "$BORG" next --switch
+    [ "$status" -eq 0 ]
+    _last_row | jq -e '.active == "act"'
+}
+
+_chooser() {
+    local keys="$1"
+    run bash -c 'printf "%s" "$1" | BORG_NEXT_FORCE_TTY=1 zsh "$2" next --local' _ "$keys" "$BORG"
+}
+
+@test "chooser (forced tty): Enter opens the top row and logs an interactive row" {
+    _write_registry ""
+    _chooser $'\n'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"WHERE COULD YOUR FOCUS GO?"* ]]
+    [ "$(_selected)" = "w-old" ]
+    _last_row | jq -e '.chooser == true and .scripted == false and .switch == false and .shown == false
+        and .rec == "wait-old" and .opened == "wait-old" and (.opened_after_s | type) == "number"'
+}
+
+@test "chooser (forced tty): 2 opens the second row, rec stays the top" {
+    _write_registry ""
+    _chooser "2"
+    [ "$status" -eq 0 ]
+    [ "$(_selected)" = "w-new" ]
+    _last_row | jq -e '.scripted == false and .rec == "wait-old" and .opened == "wait-new"'
+}
+
+@test "chooser (forced tty): q quits with no switch and a null opened" {
+    _write_registry ""
+    _chooser "q"
+    [ "$status" -eq 0 ]
+    [ -z "$(_selected)" ]
+    _last_row | jq -e '.chooser == true and .scripted == false and .opened == null
+        and .opened_after_s == null and .rec == "wait-old"'
+}
+
+@test "chooser (forced tty): two out-of-range keys quit without switching" {
+    _write_registry ""
+    _chooser "98"
+    [ "$status" -eq 0 ]
+    [ -z "$(_selected)" ]
+    _last_row | jq -e '.chooser == true and .opened == null'
+}
+
+@test "chooser: --pick and --switch never draw the chooser even with the seam set" {
+    _write_registry ""
+    BORG_NEXT_FORCE_TTY=1 run zsh "$BORG" next --pick 1 < /dev/null
+    [[ "$output" != *"WHERE COULD YOUR FOCUS GO?"* ]]
+    [ "$(_selected)" = "w-old" ]
 }
