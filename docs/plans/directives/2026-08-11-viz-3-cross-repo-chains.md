@@ -133,6 +133,7 @@ Ruling 2 settles which is canonical, and X7 below says so.
   - Verify: `grep -rn story.json borg_core/` is empty (true today). The second half — `grep -rn 'import programs'
     merge-tree/` is empty — is NOT true today (`gather.py`, `coordinator.py` and three test files import it) and
     becomes true when `2026-08-31-retire-merge-tree-programs-into-borg-core` lands; X7 is not ticked before then.
+  - *Amended 2026-10-06:* "plus the live sweep" widens to "plus live GitHub state". That means the sweep for row state, plus `2026-10-04-personal-pr-stack-stamper`'s membership search, which finds keyed train members at render time. The rest of X7 stands: no new persisted file, and the manifests stay the only edge source (ruling 2), because a key's `- After:` is a proposal until `add-row --after` records it.
 - [ ] X8 — Regression: full bats suite and macOS contract leg green.
 - [ ] X9 — *(carried from viz-1's V4, re-scoped 2026-10-03)* `borg link` surfaces the awaiting-you tier in the
       landing region — the last lines before the prompt (terminal output auto-scrolls; the eye lands at the
