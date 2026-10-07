@@ -28,6 +28,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--shown", action="store_true")
     parser.add_argument("--opened", default="")
     parser.add_argument("--opened-after", type=float, default=None)
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--unmeasured", action="store_true")
     return parser
 
 
@@ -59,6 +61,8 @@ def build_row(args: argparse.Namespace, projects: dict[str, Any], now: datetime)
 def _opened_after(args: argparse.Namespace, opened: str | None) -> float | None:
     if opened is None:
         return None
+    if args.unmeasured:
+        return None
     return args.opened_after if args.opened_after is not None else 0
 
 
@@ -74,10 +78,44 @@ def rows_output(projects: dict[str, Any], local: bool) -> list[str]:
     return [*lines, NAMES_PREFIX + "\t".join(row["project"] for row in rows)]
 
 
+def rows_json(projects: dict[str, Any], local: bool) -> dict[str, Any]:
+    """The `--rows --json` payload: rows, the top-ranked project, and the earned suggestion's row number or None."""
+    ranked = core.rank(projects)
+    rows = core.chooser_rows(ranked, shell.link_document(local))
+    earned = core.suggestion_for(rows, shell.read_log_rows()) is not None
+    return {
+        "rows": rows,
+        "rec": rows[0]["project"] if rows else None,
+        "suggestion": rows[0]["n"] if rows and earned else None,
+    }
+
+
+def _rows_json_failopen(projects: dict[str, Any], local: bool) -> dict[str, Any]:
+    """`rows_json`, degrading to blank cells and then to an empty payload; never raises."""
+    try:
+        return rows_json(projects, local)
+    # JUSTIFICATION: the payload must be valid JSON whatever fails underneath; degrade, do not crash.
+    except Exception:  # pylint: disable=broad-exception-caught
+        pass
+    try:
+        rows = core.chooser_rows(core.rank(projects), None)
+        return {"rows": rows, "rec": rows[0]["project"] if rows else None, "suggestion": None}
+    # JUSTIFICATION: last-resort empty payload keeps the machine surface parseable.
+    except Exception:  # pylint: disable=broad-exception-caught
+        return {"rows": [], "rec": None, "suggestion": None}
+
+
 def main(argv: list[str] | None = None) -> int:
     """Log one row; swallow every failure. Always returns 0."""
     try:
         args, _unknown = _parser().parse_known_args(argv)
+        if args.rows and args.json:
+            try:
+                projects = json.load(sys.stdin).get("projects") or {}
+            except (ValueError, AttributeError):
+                projects = {}
+            print(json.dumps(_rows_json_failopen(projects, bool(args.local))))
+            return 0
         doc = json.load(sys.stdin)
         projects = doc.get("projects") or {}
         if args.rows:

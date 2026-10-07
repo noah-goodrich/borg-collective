@@ -232,3 +232,63 @@ PYEOF
     run bash -c 'printf "" | BORG_NEXT_FORCE_TTY=1 zsh "$1" next --local' _ "$BORG"
     [[ "$output" != *"checking GitHub"* ]]
 }
+
+_log_file() {
+    echo "${XDG_STATE_HOME}/borg/next-recs.jsonl"
+}
+
+_log_count() {
+    [ -f "$(_log_file)" ] && wc -l < "$(_log_file)" | tr -d " " || echo 0
+}
+
+@test "next --rows --json: valid JSON with the three keys, and logs nothing" {
+    _write_registry ""
+    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    printf "%s" "$output" | jq -e "(.rows | length) == 5 and .rec == \"wait-old\" and .suggestion == null
+        and (.rows[0] | keys | sort) == [\"item\",\"n\",\"next_step\",\"owner\",\"project\",\"ready\"]"
+    [ "$(_log_count)" = "0" ]
+    [ -z "$(_selected)" ]
+}
+
+@test "next --open p --chosen: switches and logs an unscripted chooser row" {
+    _write_registry ""
+    run zsh "$BORG" next --open wait-new --chosen
+    [ "$status" -eq 0 ]
+    [ "$(_selected)" = "w-new" ]
+    [ "$(_log_count)" = "1" ]
+    _last_row | jq -e ".chooser == true and .scripted == false and .opened == \"wait-new\"
+        and .rec == \"wait-old\" and .shown == false and .opened_after_s == null and .switch == false"
+}
+
+@test "next --open p --chosen --shown: shown is true" {
+    _write_registry ""
+    run zsh "$BORG" next --open act --chosen --shown
+    [ "$status" -eq 0 ]
+    _last_row | jq -e ".shown == true and .opened == \"act\""
+}
+
+@test "next --open with an unknown project dies with no switch and no log" {
+    _write_registry ""
+    run zsh "$BORG" next --open nonesuch --chosen
+    [ "$status" -ne 0 ]
+    [ -z "$(_selected)" ]
+    [ "$(_log_count)" = "0" ]
+}
+
+@test "next --declined: logs opened null, rec is the top, and does not switch" {
+    _write_registry ""
+    run zsh "$BORG" next --declined
+    [ "$status" -eq 0 ]
+    [ -z "$(_selected)" ]
+    [ "$(_log_count)" = "1" ]
+    _last_row | jq -e ".chooser == true and .scripted == false and .opened == null and .rec == \"wait-old\"
+        and .shown == false"
+}
+
+@test "next --declined --shown: shown is true" {
+    _write_registry ""
+    run zsh "$BORG" next --declined --shown
+    [ "$status" -eq 0 ]
+    _last_row | jq -e ".shown == true and .opened == null"
+}
