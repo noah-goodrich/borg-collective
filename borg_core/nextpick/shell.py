@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 from borg_core import paths, retention
+from borg_core.link import shell as link_shell
 
 LOG_NAME = "next-recs.jsonl"
 
@@ -29,3 +32,54 @@ def append_row(row: dict[str, Any]) -> bool:
         return True
     except (OSError, TypeError, ValueError):
         return False
+
+
+LINK_TIMEOUT_S = 15
+
+
+def link_document(local: bool, timeout: float = LINK_TIMEOUT_S) -> dict[str, Any] | None:
+    """The `borg link --json` document built in ORCHESTRATOR scope, or None on any failure.
+
+    chooser_rows needs every project's manifests, and `link` narrows them to one repository when its cwd sits
+    inside a registered project. So the child runs with cwd = the orchestrator root (`link.shell.orchestrator_root`,
+    the same BORG_ORCHESTRATOR_ROOT-or-~/dev rule `link` itself uses to decide scope). `--local` skips the network.
+    """
+    argv = [sys.executable, "-m", "borg_core.link.cli", "--json"] + (["--local"] if local else [])
+    root = link_shell.orchestrator_root()
+    env = dict(os.environ)
+    package_parent = str(Path(__file__).resolve().parents[2])
+    env["PYTHONPATH"] = package_parent + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    try:
+        proc = subprocess.run(
+            argv,
+            cwd=root if os.path.isdir(root) else None,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+        )
+        doc = json.loads(proc.stdout) if proc.returncode == 0 else None
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    return doc if isinstance(doc, dict) else None
+
+
+def read_log_rows() -> list[dict[str, Any]]:
+    """Every parseable row of `next-recs.jsonl`, rotated generation first. Missing or unreadable files yield []."""
+    target = log_path()
+    rows: list[dict[str, Any]] = []
+    for path in (Path(f"{target}.1"), target):
+        try:
+            with open(path, encoding="utf-8") as handle:
+                lines = handle.read().splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict):
+                rows.append(row)
+    return rows

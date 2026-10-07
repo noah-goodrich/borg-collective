@@ -111,7 +111,8 @@ def test_render_exposes_exactly_one_human_entry_point():
         for name, value in vars(render).items()
         if not name.startswith("_") and callable(value) and getattr(value, "__module__", "") == render.__name__
     }
-    assert public == {"document", "porcelain"}
+    # route_kind is a routing seam for borg_core.nextpick, not a second way to render the page.
+    assert public == {"document", "porcelain", "route_kind"}
 
 
 def test_the_human_arm_names_render_document_exactly_once():
