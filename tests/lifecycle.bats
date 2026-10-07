@@ -65,14 +65,14 @@ EOF
 @test "start hook sets project status to active" {
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$TEST_CWD" "")")
     [ "$status" = "active" ]
 }
 
 @test "start hook records session_id in state.json" {
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    sid=$(jq -r '.claude_session_id' "${TEST_CWD}/.borg/state.json")
+    sid=$(jq -r '.claude_session_id' "$(state_path_of "$TEST_CWD" "")")
     [ "$sid" = "sess-abc" ]
 }
 
@@ -191,14 +191,14 @@ _write_long_checkpoint() {
 
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$TEST_CWD" "")")
     [ "$status" = "idle" ]
 }
 
 @test "stop hook records session_id in state.json" {
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    sid=$(jq -r '.claude_session_id' "${TEST_CWD}/.borg/state.json")
+    sid=$(jq -r '.claude_session_id' "$(state_path_of "$TEST_CWD" "")")
     [ "$sid" = "sess-abc" ]
 }
 
@@ -218,7 +218,7 @@ _write_long_checkpoint() {
 @test "stop hook sets has_uncommitted_changes false for non-git directory" {
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    flag=$(jq -r '.has_uncommitted_changes' "${TEST_CWD}/.borg/state.json")
+    flag=$(jq -r '.has_uncommitted_changes' "$(state_path_of "$TEST_CWD" "")")
     [ "$flag" = "false" ]
 }
 
@@ -234,7 +234,7 @@ _write_long_checkpoint() {
 
     bash "$BORG_STOP" <<< "$(_stop_input "$TEST_CWD")" 2>/dev/null
 
-    flag=$(jq -r '.has_uncommitted_changes' "${TEST_CWD}/.borg/state.json")
+    flag=$(jq -r '.has_uncommitted_changes' "$(state_path_of "$TEST_CWD" "")")
     [ "$flag" = "true" ]
 }
 
@@ -253,7 +253,7 @@ EOF
 
     bash "$BORG_START" <<< "$(_start_input "$container_dir")" >/dev/null
 
-    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$container_dir" "")")
     [ "$status" = "active" ]
 }
 
@@ -270,7 +270,7 @@ EOF
 
     bash "$BORG_START" <<< "$(_start_input "$sub_dir")" >/dev/null
 
-    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$container_dir" "")")
     [ "$status" = "active" ]
 }
 
@@ -286,7 +286,7 @@ EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input "$sub_dir")" 2>/dev/null
 
-    status=$(jq -r '.status' "${container_dir}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$container_dir" "")")
     [ "$status" = "idle" ]
 }
 
@@ -294,7 +294,7 @@ EOF
     # Standard host session: no marker, basename matches registry key
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
-    status=$(jq -r '.status' "${TEST_CWD}/.borg/state.json")
+    status=$(jq -r '.status' "$(state_path_of "$TEST_CWD" "")")
     [ "$status" = "active" ]
 }
 
@@ -332,6 +332,7 @@ EOF
 
     # No state.json should have been created for myproject — orch hook exits early
     [ ! -f "${TEST_CWD}/.borg/state.json" ]
+    [ ! -f "$(state_path_of "$TEST_CWD" "")" ]
 }
 
 # ─── clock divergence detection ───────────────────────────────────────────────
@@ -345,7 +346,7 @@ EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    detected=$(jq -r '.clock_divergence.detected' "${TEST_CWD}/.borg/state.json")
+    detected=$(jq -r '.clock_divergence.detected' "$(state_path_of "$TEST_CWD" "")")
     [ "$detected" = "true" ]
 }
 
@@ -357,7 +358,7 @@ EOF
 
     bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
 
-    detected=$(jq -r '.clock_divergence.detected' "${TEST_CWD}/.borg/state.json")
+    detected=$(jq -r '.clock_divergence.detected' "$(state_path_of "$TEST_CWD" "")")
     [ "$detected" = "false" ]
 }
 
@@ -380,6 +381,7 @@ EOF
 
     # No state.json should have been created for myproject — orch hook exits early
     [ ! -f "${TEST_CWD}/.borg/state.json" ]
+    [ ! -f "$(state_path_of "$TEST_CWD" "")" ]
 }
 
 
@@ -459,4 +461,185 @@ _verdict_ctx() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"0.222"* ]]
     [[ "$output" != *"0.111"* ]]
+}
+
+# ─── stop hook warnings reach the user: systemMessage JSON on stdout ─────────
+# A Stop hook that exits 0 has stderr sent to the debug log only (Claude Code hooks reference,
+# "Exit code 0"), so these nudges used to be invisible. The channel is ONE JSON object on stdout.
+# Directive: docs/plans/directives/2026-10-04-stop-hook-warnings-are-invisible.md
+
+# A non-final `[[ ]]` does not fail a test on bash 3.2 (macOS), so assert through functions.
+_has() { [[ "$1" == *"$2"* ]] || { echo "missing: $2"; return 1; }; }
+_lacks() { [[ "$1" != *"$2"* ]] || { echo "unexpected: $2"; return 1; }; }
+
+_run_stop_split() {
+    STOP_OUT=$(bash "$BORG_STOP" <<< "$(_stop_input "${1:-$TEST_CWD}")" 2>"${BATS_TEST_TMPDIR}/stop.err")
+    STOP_RC=$?
+}
+
+_git_repo_clean() {
+    git -C "$TEST_CWD" init -q
+    git -C "$TEST_CWD" config user.email "test@test.com"
+    git -C "$TEST_CWD" config user.name "Test"
+    echo "original" > "$TEST_CWD/tracked.txt"
+    git -C "$TEST_CWD" add tracked.txt
+    git -C "$TEST_CWD" commit -q -m "initial"
+}
+
+_fresh_checkpoint() {
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+    echo "# cp" > "${TEST_CWD}/.borg/checkpoints/$(date +%Y-%m-%d-%H%M).md"
+}
+
+@test "stop warnings: uncommitted changes arrive as systemMessage JSON on stdout, stderr empty" {
+    _git_repo_clean
+    _fresh_checkpoint
+    echo "modified" > "$TEST_CWD/tracked.txt"
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    printf "%s" "$STOP_OUT" | jq -e . >/dev/null
+    [ "$(printf "%s" "$STOP_OUT" | jq -r "keys | join(\",\")")" = "systemMessage" ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "myproject has uncommitted changes"
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+}
+
+@test "stop warnings: no-recent-checkpoint nudge arrives as systemMessage" {
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "No checkpoint in the last hour for myproject"
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+}
+
+@test "stop warnings: directive-overlap list arrives as systemMessage" {
+    _git_repo_clean
+    _fresh_checkpoint
+    mkdir -p "$TEST_CWD/docs/plans/directives"
+    printf "# D\n\n## Key Files\n\n- widget.sh\n\n## Other\n" > "$TEST_CWD/docs/plans/directives/2026-01-01-widget.md"
+    git -C "$TEST_CWD" add -A
+    git -C "$TEST_CWD" commit -q -m "directive"
+    echo "x" > "$TEST_CWD/widget.sh"
+    git -C "$TEST_CWD" add widget.sh
+    git -C "$TEST_CWD" commit -q -m "touch widget"
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    msg=$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)
+    _has "$msg" "Directive reconciliation?"
+    _has "$msg" "  - 2026-01-01-widget.md"
+    _lacks "$msg" "uncommitted"
+}
+
+@test "stop warnings: all three conditions yield ONE object carrying all three, with no ANSI" {
+    _git_repo_clean
+    mkdir -p "${TEST_CWD}/.borg/checkpoints"
+    mkdir -p "$TEST_CWD/docs/plans/directives"
+    printf "# D\n\n## Key Files\n\n- widget.sh\n" > "$TEST_CWD/docs/plans/directives/2026-01-01-widget.md"
+    git -C "$TEST_CWD" add -A
+    git -C "$TEST_CWD" commit -q -m "directive"
+    echo "x" > "$TEST_CWD/widget.sh"
+    git -C "$TEST_CWD" add widget.sh
+    git -C "$TEST_CWD" commit -q -m "touch widget"
+    echo "modified" > "$TEST_CWD/tracked.txt"
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    [ "$(printf "%s" "$STOP_OUT" | jq -s length)" -eq 1 ]
+    msg=$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)
+    _has "$msg" "has uncommitted changes"
+    _has "$msg" "No checkpoint in the last hour"
+    _has "$msg" "Directive reconciliation?"
+    local esc=$'\033'
+    _lacks "$STOP_OUT" "$esc"
+    _lacks "$msg" "$esc"
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+}
+
+@test "stop warnings: nothing to warn about means empty stdout (no object), exit 0" {
+    _fresh_checkpoint
+
+    _run_stop_split
+    [ "$STOP_RC" -eq 0 ]
+    [ -z "$STOP_OUT" ]
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+}
+
+# ─── stop fires every TURN: each distinct warning shows once per session ─────
+# Regression from #258: systemMessage made the (correct) per-turn warnings user-visible, so they
+# repeated after every reply. Dedupe key = session_id + sha12(message + fingerprint), stored under
+# <state root>/stop-warnings/. Directive: docs/plans/directives/2026-10-04-stop-hook-warnings-are-invisible.md
+
+_run_stop_sid() {
+    STOP_OUT=$(bash "$BORG_STOP" <<< "$(printf '{"session_id":"%s","cwd":"%s","transcript_path":"%s"}' \
+        "$1" "$TEST_CWD" "$FAKE_TRANSCRIPT")" 2>"${BATS_TEST_TMPDIR}/stop.err")
+    STOP_RC=$?
+}
+
+_dirty_repo() {
+    _git_repo_clean
+    _fresh_checkpoint
+    echo "modified" > "$TEST_CWD/tracked.txt"
+}
+
+@test "stop dedupe: same session, same condition -> first emits, second is silent" {
+    _dirty_repo
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    [ -z "$STOP_OUT" ]
+}
+
+@test "stop dedupe: a changed condition (new uncommitted file) emits again" {
+    _dirty_repo
+    _run_stop_sid sess-one
+    [ -n "$STOP_OUT" ]
+
+    echo "second" > "$TEST_CWD/second.txt"
+    git -C "$TEST_CWD" add second.txt
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+
+    _run_stop_sid sess-one
+    [ -z "$STOP_OUT" ]
+}
+
+@test "stop dedupe: a new session_id emits again" {
+    _dirty_repo
+    _run_stop_sid sess-one
+    [ -n "$STOP_OUT" ]
+
+    _run_stop_sid sess-two
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+}
+
+@test "stop dedupe: the seen-store lives under the state root, not config or repo" {
+    _dirty_repo
+    _run_stop_sid sess-one
+    [ -s "$XDG_STATE_HOME/borg/stop-warnings/sess-one" ]
+    [ ! -e "$XDG_CONFIG_HOME/borg/stop-warnings" ]
+    [ ! -e "$TEST_CWD/stop-warnings" ]
+}
+
+@test "stop dedupe: unwritable store still exits 0 and still emits (fail open)" {
+    _dirty_repo
+    mkdir -p "$XDG_STATE_HOME/borg"
+    printf "not a dir" > "$XDG_STATE_HOME/borg/stop-warnings"
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
+    [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
+
+    _run_stop_sid sess-one
+    [ "$STOP_RC" -eq 0 ]
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "has uncommitted changes"
 }

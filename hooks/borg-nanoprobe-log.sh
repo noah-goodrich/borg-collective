@@ -7,7 +7,7 @@
 #
 # Evidence gate: scores last_assistant_message for file-path citations before
 # logging. Appends evidence_found + evidence_score to the JSONL record and emits
-# a stderr warning when evidence is absent, so the orchestrator can see at a glance
+# a systemMessage warning when evidence is absent, so the orchestrator can see at a glance
 # which nanoprobes completed without citing their work.
 #
 # Evidence scoring:
@@ -97,12 +97,19 @@ else
     EVIDENCE_FOUND=false
 fi
 
+# A SubagentStop hook that exits 0 has its stderr sent to the debug log only -- never the user
+# (https://code.claude.com/docs/en/hooks, "Exit code 0"). The user-visible, non-blocking channel is
+# ONE JSON object on stdout carrying `systemMessage` (plain text, no ANSI), emitted below. No
+# `decision` field, so the subagent is not kept running. Nothing else here may write to stdout.
+WARNINGS=""
+_warn() {
+    WARNINGS+="${WARNINGS:+$'\n\n'}$1"
+}
+
 # Warn orchestrator when a nanoprobe completes without citing its work.
 if [[ "$EVIDENCE_FOUND" == "false" && -n "$LAST_MSG" ]]; then
-    printf '\n\033[1;33m▸ NANOPROBE EVIDENCE WARNING: %s completed without file-path citations.\033[0m\n' \
-        "${AGENT_ID:0:8}" >&2
-    printf '\033[1;33m  Review the transcript (%s) to confirm work was done.\033[0m\n\n' \
-        "${TRANSCRIPT_PATH:-unknown}" >&2
+    _warn "▸ NANOPROBE EVIDENCE WARNING: ${AGENT_ID:0:8} completed without file-path citations.
+  Review the transcript (${TRANSCRIPT_PATH:-unknown}) to confirm work was done."
 fi
 
 # ─── Zero-commit detection ────────────────────────────────────────────────────
@@ -118,10 +125,14 @@ if [[ -n "$CWD" ]] && command -v git >/dev/null 2>&1 \
         if [[ "$_n" -eq 0 ]] && ! git -C "$CWD" diff --quiet 2>/dev/null; then _n=1; fi
         if [[ "$_n" -eq 0 ]]; then
             ZERO_COMMIT=true
-            printf '\n\033[1;31m▸ NANOPROBE ZERO-COMMIT: %s left branch empty (0 writes). Re-spawn with a tighter, single-deliverable brief.\033[0m\n\n' \
-                "${AGENT_ID:0:8}" >&2
+            _warn "▸ NANOPROBE ZERO-COMMIT: ${AGENT_ID:0:8} left branch empty (0 writes). Re-spawn with a tighter, single-deliverable brief."
         fi
     fi
+fi
+
+# Emit ONE object. No warnings => no stdout at all.
+if [[ -n "$WARNINGS" ]]; then
+    jq -n --arg msg "$WARNINGS" '{systemMessage: $msg}' 2>/dev/null || true
 fi
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
