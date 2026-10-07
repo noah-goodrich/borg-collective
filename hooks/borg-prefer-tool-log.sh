@@ -75,7 +75,7 @@ cwd=$(printf '%s' "$payload" | jq -r '.cwd // ""' 2>/dev/null)
 # compute a value the callee recomputes for free was one wasted process per Bash call.
 
 # `check` exits 0 and prints the matched preference only when a LIVE one covers this command.
-matched=$(PYTHONPATH="$_core_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.extensions.cli \
+matched=$(PYTHONSAFEPATH=1 PYTHONPATH="$_core_root${PYTHONPATH:+:$PYTHONPATH}" python3 -m borg_core.extensions.cli \
     --repository "$cwd" check "$cmd" 2>/dev/null) || exit 0
 [ -n "$matched" ] || exit 0
 

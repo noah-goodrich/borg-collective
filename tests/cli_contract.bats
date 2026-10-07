@@ -4341,3 +4341,18 @@ EOF
     run_zsh_borg window widget borg
     [ "$status" -eq 0 ]
 }
+
+# python3 -m puts the CURRENT DIRECTORY ahead of PYTHONPATH on sys.path, so a borg_core in the caller's
+# cwd (another checkout, or the main clone while a worktree runs) shadows the one borg launched from.
+# _borg_py exports PYTHONSAFEPATH=1 (Python 3.11+; the repo runs 3.14) so cwd is never searched.
+@test "contract: _borg_py is not shadowed by a borg_core in the caller's cwd" {
+    local decoy="${BATS_TEST_TMPDIR}/decoy"
+    mkdir -p "$decoy/borg_core/registry"
+    : > "$decoy/borg_core/__init__.py"
+    : > "$decoy/borg_core/registry/__init__.py"
+    echo 'print("DECOY-SHADOWED")' > "$decoy/borg_core/registry/cli.py"
+
+    cd "$decoy"
+    run zsh "$BORG" rm no-such-project
+    [[ "$output" != *"DECOY-SHADOWED"* ]] || false
+}
