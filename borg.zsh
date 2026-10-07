@@ -726,12 +726,21 @@ _borg_next_chooser() {
     local -F start=$SECONDS
     local -a rows_args=(--rows) names
     (( local_flag )) && rows_args+=(--local)
+    # The link build can wait on the network; say so on stderr (never stdout), and not at all with --local.
+    (( ! local_flag )) && printf '\r%s' "${DIM}checking GitHub…${NC}" >&2
     out=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null) || out=""
+    (( ! local_flag )) && printf '\r\033[K' >&2
     names_line="${out##*$'\n'}"
     if [[ "$names_line" != names$'\t'?* ]]; then
-        echo -e "\n${GREEN}▸${NC} All clear. Take a break.\n"
-        _borg_next_log "$registry" 0 "" --chooser
-        return 0
+        # Genuinely empty registry: nothing to choose, nothing worth a chooser row.
+        if [[ "$(printf '%s' "$registry" | jq -r '[.projects | to_entries[] | select(.value.status != "archived")] | length' 2>/dev/null)" == "0" ]]; then
+            echo -e "\n${GREEN}▸${NC} All clear. Take a break.\n"
+            _borg_next_log "$registry" 0 "" --chooser
+            return 0
+        fi
+        # The rows call failed (crash, timeout, no output): return 3 so cmd_next falls through to the
+        # non-interactive "Next up" output and logs the run as the non-chooser row.
+        return 3
     fi
     screen="${out%$'\n'*}"
     names=("${(@ps:\t:)${names_line#names$'\t'}}")
@@ -780,8 +789,9 @@ cmd_next() {
     # Interactive chooser: only a real terminal (or the undocumented BORG_NEXT_FORCE_TTY test seam), never
     # with --switch/--pick. Everything else falls through to the unchanged paths below.
     if (( ! do_switch )) && [[ -z "$pick" ]] && { [[ -t 0 && -t 1 ]] || [[ -n "${BORG_NEXT_FORCE_TTY:-}" ]]; }; then
-        _borg_next_chooser "$registry" "$local_flag"
-        return $?
+        local chooser_rc=0
+        _borg_next_chooser "$registry" "$local_flag" || chooser_rc=$?
+        (( chooser_rc != 3 )) && return $chooser_rc
     fi
 
     # Score and sort projects: pinned +200, waiting +100, active +50, idle +10, no activity -50
