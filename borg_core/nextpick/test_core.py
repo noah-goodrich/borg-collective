@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from borg_core.link import core as link_core
 from borg_core.nextpick import core
 
 W = "w"
@@ -176,8 +177,8 @@ def test_core_imports_nothing_impure():
             roots.add(node.module.split(".")[0])
             if node.module == "borg_core.link":
                 pure_link.update(a.name for a in node.names)
-    assert roots == {"__future__", "typing", "borg_core"}, f"core.py grew an impure import: {sorted(roots)}"
-    assert pure_link == {"grid", "picture", "render"}, f"only borg_core.link's pure Domain modules: {pure_link}"
+    assert roots == {"__future__", "re", "typing", "borg_core"}, f"core.py grew an impure import: {sorted(roots)}"
+    assert pure_link == {"core", "grid", "picture", "render"}, f"only borg_core.link's pure Domain modules: {pure_link}"
 
 
 BLANK = {"item": "", "next_step": "", "owner": "", "ready": ""}
@@ -224,6 +225,9 @@ def test_chooser_rows_route_with_the_pages_own_router():
         "next_step": "answer triage Qs",
         "owner": "yours",
         "ready": "●",
+        "status": "",
+        "age": "never",
+        "waiting_reason": "",
     }
     assert [r["n"] for r in rows] == [1, 2, 3]
 
@@ -293,3 +297,65 @@ def test_suggestion_for_both_branches():
     assert core.suggestion_for(_three(), _rows(20, 20)) == "1 borg"
     assert core.suggestion_for(_three(), _rows(19, 19)) is None
     assert core.suggestion_for([], _rows(20, 20)) is None
+
+
+def test_chooser_rows_carry_status_age_and_waiting_reason():
+    ranked = [
+        {
+            "name": "w",
+            "path": "null",
+            "status": "waiting",
+            "waiting_reason": "needs OK",
+            "last_activity": "2026-10-05T09:00:00Z",
+        }
+    ]
+    now = link_core.iso_to_epoch("2026-10-05T12:00:00Z")
+    (row,) = core.chooser_rows(ranked, None, None, now)
+    assert (row["status"], row["age"], row["waiting_reason"]) == ("waiting", "3h ago", "needs OK")
+
+
+def test_chooser_rows_fall_back_to_checkpoint_but_prefer_the_manifest():
+    rows = core.chooser_rows(_ranked_paths(), _doc(), {"borg": "cp", "ingle": "cp step"})
+    assert rows[0]["next_step"] == "answer triage Qs"
+    assert rows[1]["next_step"] == "cp step"
+
+
+def _qrow(n, project, status, step="", reason=""):
+    return {"n": n, "project": project, "status": status, "next_step": step, "waiting_reason": reason}
+
+
+def test_split_quiet_partitions_idle_blank_rows_in_rank_order():
+    rows = [
+        _qrow(1, "a", "waiting", reason="why"),
+        _qrow(2, "b", "idle"),
+        _qrow(3, "c", "idle", step="do"),
+        _qrow(4, "d", "active"),
+        _qrow(5, "e", "idle"),
+    ]
+    kept, quiet = core.split_quiet(rows)
+    assert [r["project"] for r in kept] == ["a", "c", "d"]
+    assert [r["n"] for r in kept] == [1, 2, 3]
+    assert quiet == ["b", "e"]
+
+
+def test_checkpoint_next_step_numbered_list():
+    text = "## 5. Next Session\n\n1. First  thing\n   wrapped\n2. Second\n"
+    assert core.checkpoint_next_step(text) == "First thing wrapped"
+
+
+def test_checkpoint_next_step_bullets_and_prose():
+    assert core.checkpoint_next_step("## 5. Next Session\n\n- [ ] do it\n- more\n") == "[ ] do it"
+    prose = "## 5. Next Session\nJust prose\nstill prose\n\nnext para\n"
+    assert core.checkpoint_next_step(prose) == "Just prose still prose"
+
+
+def test_checkpoint_next_step_missing_section_or_empty():
+    assert core.checkpoint_next_step("## 1. Goal\n\nx\n") == ""
+    assert core.checkpoint_next_step("") == ""
+    assert core.checkpoint_next_step("## 5. Next Session\n\n## Manifest Row\nx\n") == ""
+
+
+def test_checkpoint_next_step_ignores_tldr_preamble_and_truncates():
+    text = "tl;dr: 5. Next Session is later\n\n## 1. Goal\n\nx\n\n## 5. Next Session\n\n1. " + "w" * 120 + "\n"
+    step = core.checkpoint_next_step(text)
+    assert len(step) == 80 and step.endswith("…") and step.startswith("w")
