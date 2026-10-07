@@ -1,6 +1,6 @@
 Generated: 2026-10-04
 
-Kept verbatim as sent to the round-3 reviewers; not narrowed to 72 columns.
+Kept verbatim as sent to the round-3 reviewer; not narrowed to 72 columns.
 
 # D5 review packet: borg project-management capabilities (build, adopt or outsource, plus a self-learning loop)
 
