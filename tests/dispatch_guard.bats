@@ -14,6 +14,7 @@ BUILD_PLUGIN="${BATS_TEST_DIRNAME}/../scripts/build-plugin.sh"
 
 setup() {
     setup_temp_dirs
+    unset BORG_USAGE_HALT_ENABLED BORG_USAGE_HALT_PCT BORG_USAGE_HALT_TTL_SEC
     export BORG_USAGE_SAMPLES="${BATS_TEST_TMPDIR}/usage-samples.jsonl"
     # Deterministic, portable "now" so freshness math never depends on the machine clock or on
     # date-arithmetic direction differing between macOS and Linux.

@@ -1,3 +1,9 @@
+---
+Severed: 2026-10-04
+Reason: Superseded by the #257 communication research (how borg communicates). Decided by Noah 2026-10-04
+        (directive triage, #266).
+---
+
 # Directive: Attention Routing — Give Subcritical Signal Somewhere Else to Go
 *Filed: 2026-08-11*
 

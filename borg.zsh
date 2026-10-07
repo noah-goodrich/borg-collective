@@ -698,9 +698,87 @@ cmd_focus() {
     cmd_switch "${@:-}"
 }
 
+# One fail-open log row per `borg next` run (borg_core.nextpick.cli never writes stdout, exits 0).
+# Called BEFORE the --pick range check so the row exists even for a bad pick; a die after it is fine.
+# `_borg_py` (not bare python3) so the child inherits the config surface; XDG_STATE_HOME is read from
+# the environment by borg_core.paths.state_root.
+_borg_next_log() {
+    local registry="$1" do_switch="$2" pick="$3" cur active=""
+    shift 3
+    cur=$(borg_tmux_current_window 2>/dev/null || true)
+    if [[ -n "$cur" ]]; then
+        active=$(printf '%s' "$registry" | jq -r --arg cur "$cur" '
+            [.projects | to_entries[] | select(.value.tmux_window == $cur)][0].key //
+            [.projects | to_entries[] | select(.key == $cur)][0].key // empty' 2>/dev/null || true)
+    fi
+    local -a args=(--active "$active" --session "${CLAUDE_CODE_SESSION_ID:-${CLAUDE_SESSION_ID:-$$}}")
+    (( do_switch )) && args+=(--switch)
+    [[ -n "$pick" ]] && args+=(--pick "$pick")
+    args+=("$@")
+    { printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${args[@]}"; } >/dev/null 2>&1 || true
+}
+
+# Interactive chooser: draw the rows (one `_borg_py` call, registry on stdin), read ONE key, switch + log.
+# Enter = top row, 1-9 = that row, q/Esc = quit. One invalid key re-prompts once, a second quits.
+# The trailing `names` line of the rows output is the machine channel; everything above it is the screen.
+_borg_next_chooser() {
+    local registry="$1" local_flag="$2" out names_line screen key
+    local -F start=$SECONDS
+    local -a rows_args=(--rows) names
+    (( local_flag )) && rows_args+=(--local)
+    # The link build can wait on the network; say so on stderr (never stdout), and not at all with --local.
+    (( ! local_flag )) && printf '\r%s' "${DIM}checking GitHub…${NC}" >&2
+    out=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null) || out=""
+    (( ! local_flag )) && printf '\r\033[K' >&2
+    names_line="${out##*$'\n'}"
+    if [[ "$names_line" != names$'\t'?* ]]; then
+        # Genuinely empty registry: nothing to choose, nothing worth a chooser row.
+        if [[ "$(printf '%s' "$registry" | jq -r '[.projects | to_entries[] | select(.value.status != "archived")] | length' 2>/dev/null)" == "0" ]]; then
+            echo -e "\n${GREEN}▸${NC} All clear. Take a break.\n"
+            _borg_next_log "$registry" 0 "" --chooser
+            return 0
+        fi
+        # The rows call failed (crash, timeout, no output): return 3 so cmd_next falls through to the
+        # non-interactive "Next up" output and logs the run as the non-chooser row.
+        return 3
+    fi
+    screen="${out%$'\n'*}"
+    names=("${(@ps:\t:)${names_line#names$'\t'}}")
+    local -a base=(--chooser)
+    [[ "$screen" == *"▸ suggested:"* ]] && base+=(--shown)
+    print -r -- "$screen"
+    local tries=0 idx=0
+    while (( tries < 2 )); do
+        key=""
+        read -r -u 0 -k1 key || break
+        case "$key" in
+            $'\n'|$'\r') idx=1; break ;;
+            q|Q|$'\e') break ;;
+            [1-9]) if (( key <= ${#names} )); then idx=$key; break; fi ;;
+        esac
+        tries=$(( tries + 1 ))
+    done
+    echo
+    if (( idx == 0 )); then
+        _borg_next_log "$registry" 0 "" "${base[@]}"
+        return 0
+    fi
+    _borg_next_log "$registry" 0 "" "${base[@]}" --opened "${names[idx]}" --opened-after "$(( SECONDS - start ))"
+    _borg_do_switch "${names[idx]}" --silent
+}
+
 cmd_next() {
-    local do_switch=0
-    [[ "${1:-}" == "--switch" ]] && do_switch=1
+    local do_switch=0 pick="" local_flag=0
+    local -a _next_args=("${(@)@:#--local}")
+    (( $# != ${#_next_args} )) && local_flag=1
+    set -- "${_next_args[@]}"
+    case "${1:-}" in
+        --switch) do_switch=1 ;;
+        --pick)
+            pick="${2:-}"
+            [[ "$pick" =~ ^[1-9][0-9]*$ ]] || die "next --pick needs a positive row number (1 = top)"
+            ;;
+    esac
 
     # Merge Desktop sessions
     borg_desktop_scan 2>/dev/null || true
@@ -708,10 +786,18 @@ cmd_next() {
     local registry
     registry=$(borg_registry_with_state)
 
+    # Interactive chooser: only a real terminal (or the undocumented BORG_NEXT_FORCE_TTY test seam), never
+    # with --switch/--pick. Everything else falls through to the unchanged paths below.
+    if (( ! do_switch )) && [[ -z "$pick" ]] && { [[ -t 0 && -t 1 ]] || [[ -n "${BORG_NEXT_FORCE_TTY:-}" ]]; }; then
+        local chooser_rc=0
+        _borg_next_chooser "$registry" "$local_flag" || chooser_rc=$?
+        (( chooser_rc != 3 )) && return $chooser_rc
+    fi
+
     # Score and sort projects: pinned +200, waiting +100, active +50, idle +10, no activity -50
     # Tiebreaker: waiting → oldest first (neglected longest); active/idle → newest first
     local top
-    top=$(printf '%s' "$registry" | jq -r '
+    top=$(printf '%s' "$registry" | jq -r --argjson idx "$(( ${pick:-1} - 1 ))" '
         .projects | to_entries |
         map(select(.value.status != "archived")) |
         map({
@@ -733,8 +819,14 @@ cmd_next() {
             path: (.value.path // "null")
         }) |
         sort_by(-.score, .last_activity) |
-        first // empty
+        .[$idx] // empty
     ')
+
+    _borg_next_log "$registry" "$do_switch" "$pick"
+
+    if [[ -n "$pick" && ( -z "$top" || "$top" == "null" ) ]]; then
+        die "next --pick $pick is out of range (no such row in the ranked order)"
+    fi
 
     if [[ -z "$top" || "$top" == "null" ]]; then
         if (( do_switch )); then
@@ -754,8 +846,8 @@ cmd_next() {
     pinned=$(printf '%s' "$top" | jq -r '.pinned')
     ppath=$(printf '%s' "$top" | jq -r '.path // "null"')
 
-    # --switch mode: skip all output, switch immediately
-    if (( do_switch )); then
+    # --switch / --pick mode: skip all output, switch immediately
+    if (( do_switch )) || [[ -n "$pick" ]]; then
         _borg_do_switch "$name" --silent
         return $?
     fi
@@ -1586,46 +1678,6 @@ _borg_launch_in_tmux() {
     exec tmux attach-session -t "$BORG_TMUX_SESSION"
 }
 
-# Merge a borg-managed CLAUDE.md block into a target CLAUDE.md, preserving user content
-# above and below. Delimited by HTML comment markers so the block is replaceable on re-run.
-# If target doesn't exist and a personal seed is provided, seed from it first.
-# Usage: _borg_merge_claude_md <borg_src> <target> [personal_seed]
-_borg_merge_claude_md() {
-    local borg_src="$1" target="$2" personal_seed="${3:-}"
-    [[ -f "$borg_src" ]] || return 0
-
-    local begin='<!-- BEGIN borg-managed -->'
-    local end='<!-- END borg-managed -->'
-
-    mkdir -p "$(dirname "$target")"
-    [[ -L "$target" && ! -f "$target" ]] && rm -f "$target"
-    if [[ ! -f "$target" && -n "$personal_seed" && -f "$personal_seed" ]]; then
-        cp "$personal_seed" "$target"
-    fi
-    [[ -f "$target" ]] || : > "$target"
-
-    local tmp="$target.borg.$$"
-    # Strip existing borg-managed block AND trailing blank lines in one pass —
-    # blank lines are buffered and only emitted when a non-blank follows, so
-    # trailing blanks get dropped. Keeps the merge idempotent.
-    awk -v b="$begin" -v e="$end" '
-        $0 == b { skip=1; next }
-        $0 == e { skip=0; next }
-        skip    { next }
-        /^$/    { pending++; next }
-                { for (i=0; i<pending; i++) print ""; pending=0; print }
-    ' "$target" > "$tmp"
-
-    local out="$target.new.$$"
-    {
-        cat "$tmp"
-        printf '\n%s\n' "$begin"
-        cat "$borg_src"
-        printf '%s\n' "$end"
-    } > "$out" && mv "$out" "$target"
-    rm -f "$tmp" "$out"
-}
-
 # Union-merge permissions.allow from a base settings file into a target settings file.
 # Substitutes __DOTFILES_DIR__ in base before merging. Additive only — never removes entries.
 # Usage: _borg_merge_settings_permissions <base> <target> <dotfiles_dir>
@@ -1802,30 +1854,18 @@ cmd_setup() {
     mkdir -p "$CLAUDE_DIR" "$CLAUDE_HOOKS_DIR" "$CLAUDE_SKILLS_DIR"
     borg_registry_init
 
-    # ── 1a. Merge borg-managed CLAUDE.md block ───────────────────────────────
+    # ── 1a. Install borg-managed CLAUDE.md rules ─────────────────────────────
     # Borg owns its rules (permissions, bash patterns, subagent rules) at
-    # $BORG_HOME/config/claude/CLAUDE.md and merges them into ~/.claude/CLAUDE.md
-    # inside a delimited block. User content above/below the markers is preserved,
-    # so personal dotfiles don't need to carry borg-specific content anymore.
-    # On a fresh setup with no ~/.claude/CLAUDE.md, we seed from the dotfiles copy
-    # if present (personal content) before appending the borg block.
+    # $BORG_HOME/config/claude/CLAUDE.md and writes them to ~/.claude/borg-managed.md, which
+    # ~/.claude/CLAUDE.md pulls in with one `@~/.claude/borg-managed.md` import line. A symlinked
+    # CLAUDE.md (dotfiles) is never replaced or written through -- see lib/claude-md.zsh.
+    # On a fresh setup with no ~/.claude/CLAUDE.md, we seed from the dotfiles copy if present.
     local claude_md_borg="$BORG_HOME/config/claude/CLAUDE.md"
     local claude_md_seed="$DOTFILES_DIR/claude/code/CLAUDE.md"
-    local claude_md_dst="$CLAUDE_DIR/CLAUDE.md"
-    if [[ -f "$claude_md_borg" ]]; then
-        _borg_merge_claude_md "$claude_md_borg" "$claude_md_dst" "$claude_md_seed"
-        info "CLAUDE.md borg-managed block updated"
-    fi
-
-    # Apply per-environment extension CLAUDE.md (appended after base)
     local _ext_dir="$BORG_DIR/extensions"
-    if [[ -f "$_ext_dir/CLAUDE.md" && -f "$claude_md_dst" ]]; then
-        local _marker="<!-- borg-extensions -->"
-        local _tmp="$claude_md_dst.ext.$$"
-        awk -v m="$_marker" '$0 == m {exit} {print}' "$claude_md_dst" > "$_tmp" \
-            && mv "$_tmp" "$claude_md_dst"
-        { printf '\n%s\n' "$_marker"; cat "$_ext_dir/CLAUDE.md"; } >> "$claude_md_dst"
-        info "CLAUDE.md extension appended"
+    if [[ -f "$claude_md_borg" ]]; then
+        _borg_install_claude_md "$claude_md_borg" "$CLAUDE_DIR" "$claude_md_seed" "$_ext_dir/CLAUDE.md"
+        info "CLAUDE.md borg-managed rules updated (~/.claude/borg-managed.md)"
     fi
 
     if [[ ! -f "$BORG_DIR/config.zsh" ]]; then
@@ -2959,7 +2999,7 @@ cmd_help() {
                           --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
                           --all     Include archived projects
-    next [--switch]     What needs your attention? (--switch jumps there)
+    next [--switch|--pick n]  What needs your attention? (--switch jumps there)
     switch [query]      fzf picker → jump to project tmux window
     chain <action>      Manifest coordinator over <project>/.borg/chains/*.json
                           list           Every declared chain across registered projects
@@ -2973,7 +3013,7 @@ cmd_help() {
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag
     window <p> [short]  Show (or set) a project's short tmux window name
-    sever               Tear down everything: containers, windows, session
+    down                Tear down everything: containers, windows, session
     regenerate          Archive stale projects (idle >48h)
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
     setup               Register Claude Code hooks, skills, and config
@@ -2998,6 +3038,8 @@ cmd_help() {
                  /borg-recon and merge-tree/gather.py consume, and both still work.
     2026-08-31 — program renamed to chain. Same command, same actions, same flags; the word
                  "program" is retired in favour of "chain". Run: borg chain
+    2026-10-04 — sever was an alias of 'down' (tears down everything) and never retired a directive.
+                 Tear down with 'borg down'; retire a directive with 'git mv' into docs/plans/severed/.
 
   HOTKEY
     Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
@@ -3564,7 +3606,15 @@ case "${1:-help}" in
     image)    cmd_image "${@:2}" ;;
     pin)      cmd_pin "${@:2}" ;;
     unpin)    cmd_unpin "${@:2}" ;;
-    sever|down)  cmd_down ;;
+    down)  cmd_down ;;
+    # Retired 2026-10-04. `sever` was an alias of `down`, which tears down EVERY tmux window, the
+    # shared Postgres and the Supabase stack and ignores its arguments, while CLAUDE.md told people
+    # to run `borg sever <slug>` to retire a directive. No caller depended on the alias, so it now
+    # always refuses (even bare) rather than guess which of the two meanings was intended.
+    sever)
+        die "'borg sever' was retired. It tore EVERYTHING down (same as 'borg down'): every tmux window, the shared Postgres and the Supabase stack. Nothing was touched.
+  To tear down on purpose: borg down
+  To retire a directive: git mv docs/plans/directives/<slug>.md docs/plans/severed/ and add a one-line why-severed note" ;;
     regenerate|tidy)
         if [[ "${2:-}" == "--migrate-state" ]]; then
             _borg_py borg_core.statemigrate.cli "${@:3}"

@@ -1,6 +1,8 @@
 # Directive: Borg-Native Program Manifests + Sync Coordinator
 
 *Filed: 2026-08-18*
+*Shipped: 2026-08-18 — PM1–PM10 via PR [#158](https://github.com/noah-goodrich/borg-collective/pull/158) (later renamed to chains and ported into `borg_core`); archived by the 2026-10-04 directive triage*
+*PM11 WITHDRAWN — Decided by Noah 2026-10-04 (#266): superseded by the personal-repo PR-stack stamper plan (shim-architecture directive §4). Its hook wiring was gated on attention-routing, which is severed. The companion `2026-08-18-program-manifests-stack.json` moved with this file.*
 
 Independent project. **Unblocks `viz-3`** (`2026-08-11-viz-3-cross-repo-chains.md`), which cannot start without
 `blocks`/`apex` edges.
