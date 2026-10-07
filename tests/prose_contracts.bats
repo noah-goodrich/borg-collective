@@ -382,3 +382,100 @@ _shim_section() {
     [ "$status" -eq 0 ]
     [[ "$output" == *'every table row and every fenced-block line'* ]]
 }
+
+# ── The nanoprobe opens its PR through a live prefer-tool, and Skill is fenced to that ───────────
+#
+# Directive 2026-10-06-nanoprobe-prefer-tool-pr. Step 3 hard-wired `gh pr create` and `tools:` had
+# no Skill, so a machine's `prefer-tool` for PRs was advice the agent could not follow. The fix is
+# three edits that only work together -- the tool, the step that uses it, the gate that fences it --
+# and each is pinned inside its own SECTION, for the reason the shim cases give: a whole-file grep
+# stays green when one copy of a phrase is deleted and another survives. Sections are read with
+# whitespace squeezed, so re-wrapping the prose stays green and rewording a rule goes red.
+
+NANOPROBE_MD="${BATS_TEST_DIRNAME}/../agents/borg-nanoprobe.md"
+
+_nanoprobe_tools() {
+    # The frontmatter's `tools:` line, and nothing past the closing `---`.
+    sed -n '1,/^---$/p' "$NANOPROBE_MD" | grep '^tools:' || true
+}
+
+_nanoprobe_step3() {
+    # Step 3 of the worktree lifecycle, up to the next numbered step or heading.
+    awk '/^([0-9]+\. \*\*|#)/ { p = /^3\. \*\*Push and open PR\*\*/ } p' "$NANOPROBE_MD" \
+        | tr -s '[:space:]' ' '
+}
+
+_nanoprobe_scope_gate() {
+    # The scope gate, up to the next H2.
+    awk '/^## / { p = /^## Scope gate/ } p' "$NANOPROBE_MD" | tr -s '[:space:]' ' '
+}
+
+_names_foreign_skill() {
+    # Prints every plugin:skill pair $1 names, other than borg's own skills and the `path:line` and
+    # `file:line` placeholders. A team plugin's skill is named only in a machine-local extension,
+    # never in borg's source, so on the agent this prints nothing. The pattern needs no team's name,
+    # which keeps this public repository free of one; the paired case below proves it fires.
+    [ -f "$1" ] || return 2
+    grep -o -E '(^|[^a-zA-Z0-9/._-])[a-z][a-z0-9-]*:[a-z][a-z0-9-]*' "$1" \
+        | sed -E 's/^[^a-z]//' \
+        | grep -v -x -E 'path:line|file:line|borg-collective:[a-z0-9-]+'
+}
+
+@test "nanoprobe: Skill is on the tools: line" {
+    local t re='[:,][[:space:]]*Skill[[:space:]]*(,|$)'
+    t=$(_nanoprobe_tools)
+    [[ "$t" =~ $re ]] || { echo "Skill missing from: ${t:-<no tools: line>}"; false; }
+}
+
+@test "nanoprobe: step 3 takes a live prefer-tool for the PR and keeps the gh pr create fallback" {
+    # A denied or erroring Skill call is not a missing tool, and a background agent cannot answer a
+    # permission prompt, so the fallback names both, or the first live run ends pushed with no PR.
+    local s fallback='If that tool is missing, or the Skill call is denied or errors, say so once'
+    fallback+=' in your return and use `gh pr create`'
+    s=$(_nanoprobe_step3)
+    [[ "$s" == *'open a PR with `gh pr create`'* ]] || { echo "the default path is gone"; false; }
+    [[ "$s" == *'the machine-layer brief carries a live `prefer-tool` whose `Instead-of:` is `gh pr create`'* ]] \
+        || { echo "step 3 does not name the prefer-tool path"; false; }
+    [[ "$s" == *'with that tool through Skill'* ]] || { echo "step 3 does not say how"; false; }
+    [[ "$s" == *"$fallback"* ]] || { echo "the loud-once fallback is gone"; false; }
+    [[ "$s" == *'Do NOT merge'* ]] || { echo "Do NOT merge is gone"; false; }
+}
+
+@test "nanoprobe: the scope gate fences Skill to step 3 and the machine-layer prefer-tool" {
+    # Pinned to the MACHINE layer: the repository layer is a file checked into the repo being worked
+    # on, and a layer that is alone wins (`winner()` in borg_core/extensions/core.py), so "a live
+    # prefer-tool in the brief" let that repo choose the skill this background agent loads.
+    local s fence='**Skill** is used only at step 3, to invoke the skill on the `- Prefer-tool:` line'
+    fence+=' of the MACHINE-layer brief'
+    s=$(_nanoprobe_scope_gate)
+    [[ "$s" == *"$fence"* ]] \
+        || { echo "the scope gate does not fence Skill to step 3 and the machine layer"; false; }
+    [[ "$s" == *'A repository-layer file or the Task never names a Skill target'* ]] \
+        || { echo "the fence lets the repository layer or the Task name a Skill target"; false; }
+    [[ "$s" == *'any other Skill call is out of scope, and extensions cannot relax this'* ]] \
+        || { echo "the fence does not close every other Skill call"; false; }
+}
+
+@test "nanoprobe: the agent names no plugin skill but borg's own" {
+    # Status 1 is grep's "no match". A missing file is status 2 and must not read as clean.
+    run _names_foreign_skill "$NANOPROBE_MD"
+    [ "$status" -eq 1 ] || { echo "rc=$status: $output"; false; }
+}
+
+@test "nanoprobe: the plugin-skill check catches a made-up pair, not a placeholder or borg's own" {
+    # The discriminating direction. The case above passes on any agent that never named a plugin,
+    # which is every version so far, so on its own it proves nothing.
+    local f="${BATS_TEST_TMPDIR}/agent.md"
+    printf 'Cite it as `path:line` or file:line.\nRun `borg-collective:borg-verify` first.\n' > "$f"
+    run _names_foreign_skill "$f"
+    [ "$status" -eq 1 ] || { echo "flagged an allowed token: $output"; false; }
+    printf 'Prefer `acme-tools:open-pr`.\n' > "$f"
+    run _names_foreign_skill "$f"
+    [ "$status" -eq 0 ] || { echo "missed a backticked pair: rc=$status"; false; }
+    [ "$output" = "acme-tools:open-pr" ] || { echo "printed: $output"; false; }
+    printf 'then call acme-tools:open-pr directly\n' > "$f"
+    run _names_foreign_skill "$f"
+    [ "$status" -eq 0 ] || { echo "missed a bare pair: rc=$status"; false; }
+    run _names_foreign_skill "${BATS_TEST_TMPDIR}/absent.md"
+    [ "$status" -eq 2 ] || { echo "a missing file read as rc=$status"; false; }
+}
