@@ -115,7 +115,7 @@ Layout note: the mock is wrapped to fit a narrow pane; an indented continuation 
 
 **MVP, in three lines.**
 
-1. **Arrive.** `borg_core/brief` (pure; `Activity`, local merges, dirty files, plan, derived `Ended`, a STALE line defined by what changed, the checkpoint's own words underneath), PRINTED at all six launch sites (`drone up` on both paths, `drone claude`, `drone feature`, `borg init`, `borg claude`; the pane command becomes `<brief command> <project>; claude`) before `claude` starts, with a loud fallback; for hand-typed launches a matcher-scoped (`startup`, `resume`) model-side injection and a `sessionTitle` cue; for a running window a one-line `display-message -d` headline; no restatement instruction, no popup.
+1. **Arrive.** `borg_core/brief` (pure; `Activity`, local merges, dirty files, plan, derived `Ended`, a STALE line defined by what changed, the checkpoint's own words underneath), PRINTED at the four drone launch sites (`drone up` on both paths, `drone claude`, `drone feature`; the pane command becomes `<brief command> <project>; claude`) before `claude` starts, with a loud fallback, while `borg init` and `borg claude` print the verdict line; for hand-typed launches a matcher-scoped (`startup`, `resume`) model-side injection and a `sessionTitle` cue; for a running window a one-line `display-message -d` headline; no restatement instruction, no popup.
 2. **Depart.** One Stop `systemMessage`, only on the turn a checkpoint whose name ends in this session's suffix appears and only if a derived CARRIED or NOT DEPLOYED flag is non-empty; no SessionEnd hook; "ended without a checkpoint" derived at arrival.
 3. **Choose.** The verdict line on `borg link` only. `borg next` and its follow log are main's chooser (#274, #275, `next-recs.jsonl`): no second log and no ranker swap (superseded 2026-10-07, see "Choosing, with one ranker").
 
@@ -384,7 +384,7 @@ flowchart LR
     wr --> rb
 ```
 
-- **Minimum viable version:** *"The smallest version that delivers the core value is: `borg_core/brief` producing the derived-first 12-line arrival brief (an `Activity` line, local merges, a STALE line meaning the repo changed, a derived `Ended` line, then the checkpoint's words), printed at all six launch sites (the pane command becomes `<brief command> <project>; claude`) before `claude` starts with a loud fallback if `borg_core` is missing, plus a matcher-scoped SessionStart injection for hand-typed launches; no SessionEnd hook, no popup, no restatement instruction, no new model-written fields."*
+- **Minimum viable version:** *"The smallest version that delivers the core value is: `borg_core/brief` producing the derived-first 12-line arrival brief (an `Activity` line, local merges, a STALE line meaning the repo changed, a derived `Ended` line, then the checkpoint's words), printed at the four drone launch sites (the pane command becomes `<brief command> <project>; claude`) before `claude` starts with a loud fallback if `borg_core` is missing, the verdict line at `borg init` and `borg claude`, plus a matcher-scoped SessionStart injection for hand-typed launches; no SessionEnd hook, no popup, no restatement instruction, no new model-written fields."*
 
 
 ### D3.5: Contradiction Forge

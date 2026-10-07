@@ -22,7 +22,7 @@ Companion to [recommendation.md](recommendation.md) (options, council, the three
 
 Where each fact came from, and what is invented (nothing here is a claim about the future, it is a fixed test input):
 
-- Real, read this session: `BORG_MAX_ACTIVE` default 3 and the capacity code in `hooks/borg-link-down.sh` (lines 290-298). `shopping-app` is the real `waiting` row in `borg link --local` today (5h ago). The three newest checkpoints are `.borg/checkpoints/2026-09-28-takeover.md`, `2026-10-02-145508-fb0d8f.md`, `2026-10-03-222446-beb3b1.md`.
+- Real, read this session: `BORG_MAX_ACTIVE` default 3 and the capacity code in `hooks/borg-link-down.sh` (lines 290-298). `shopping-app`, a masked name, stands in for the real `waiting` row in `borg link --local` today (5h ago). The three newest checkpoints are `.borg/checkpoints/2026-09-28-takeover.md`, `2026-10-02-145508-fb0d8f.md`, `2026-10-03-222446-beb3b1.md`.
 - Real: the adapter-widening item. It is in `2026-10-02-145508-fb0d8f.md` section 5 ("The highest-value unblocked work is the one-line adapter widening", adding `reviewDecision` and `mergeable`). It is NOT in the 10-03 checkpoint, so "three in a row" is constructed: I assume two later checkpoints copy it unchanged.
 - Real: `make eval-changed` and the changed-files selector exist (shipped as #253 in the 10-03 checkpoint). Real precedent for the UNCHECKED shape: #250's test "bypassed discovery" and #255 fixed it (same checkpoint). The zero-case run is constructed.
 - Real: source and deployed hooks are byte-identical TODAY (I compared every file in `hooks/` with `~/.claude/hooks/`; no drift, because `borg setup` was run on 10-03). The unsynced edit is constructed. It is the very hook that B-card's instrumentation step edits, which is deliberate: it makes the ledger show `no data`.
@@ -191,7 +191,7 @@ $ borg stuck
   pick 1-5: 2
 
   Can't choose -> borg next
-  Runs: borg next     (ranks: shopping-app waiting first, then borg-collective)
+  Runs: borg next   (ranks: shopping-app first, then borg-collective)
   Then: close every other window.   Run it now? [y/N]
 ```
 
