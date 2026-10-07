@@ -1,5 +1,7 @@
 Generated: 2026-10-04
 
+Kept verbatim as sent to the round-3 reviewers; not narrowed to 72 columns.
+
 # D5 review packet: borg project-management capabilities (build, adopt or outsource, plus a self-learning loop)
 
 You are the blind reviewer. Try to REFUTE the chosen option across three lenses: Ideator (is there a materially better option the set missed entirely?), Critic (does the chosen option have a fatal flaw?), Auditor (is it supported by evidence, or by assertion?). You are given the problem, the full option set (six options, A to F) and the chosen option's name only. Return a verdict (uphold, revise or overturn) and your strongest objection verbatim.
