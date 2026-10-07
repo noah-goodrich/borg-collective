@@ -185,3 +185,51 @@ def test_link_document_uses_the_named_timeout(tmp_path, monkeypatch):
     shell.link_document(True)
     assert shell.LINK_TIMEOUT_S == 15
     assert calls[0]["timeout"] == 15
+
+
+def _json_run(monkeypatch, capsys, doc, log_rows=(), argv=("--rows", "--json")):
+    monkeypatch.setattr(shell, "link_document", lambda local: doc)
+    monkeypatch.setattr(shell, "read_log_rows", lambda: list(log_rows))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(PATH_REGISTRY)))
+    assert cli.main(list(argv)) == 0
+    return json.loads(capsys.readouterr().out)
+
+
+def test_rows_json_payload_shape(state, monkeypatch, capsys):
+    payload = _json_run(monkeypatch, capsys, LINK_DOC)
+    assert set(payload) == {"rows", "rec", "suggestion"}
+    assert payload["rec"] == "a"
+    assert payload["suggestion"] is None
+    first = payload["rows"][0]
+    assert set(first) == {"n", "project", "item", "next_step", "owner", "ready"}
+    assert first["n"] == 1 and first["project"] == "a" and first["item"] == "o/r#1"
+    assert not state.exists()
+
+
+def test_rows_json_suggestion_is_row_number_once_gate_passes(state, monkeypatch, capsys):
+    followed = [{"chooser": True, "scripted": False, "opened": "a", "rec": "a"}] * 20
+    assert _json_run(monkeypatch, capsys, LINK_DOC, followed)["suggestion"] == 1
+    below = followed[:19]
+    assert _json_run(monkeypatch, capsys, LINK_DOC, below)["suggestion"] is None
+
+
+def test_rows_json_blank_cells_when_link_build_fails(state, monkeypatch, capsys):
+    payload = _json_run(monkeypatch, capsys, None)
+    assert [row["project"] for row in payload["rows"]] == ["a", "b"]
+    assert all(row["item"] == "" and row["owner"] == "" for row in payload["rows"])
+
+
+def test_rows_json_is_valid_json_even_when_everything_fails(state, monkeypatch, capsys):
+    def boom(*_a, **_k):
+        raise RuntimeError("down")
+
+    monkeypatch.setattr(shell, "link_document", boom)
+    monkeypatch.setattr("sys.stdin", io.StringIO("not json"))
+    assert cli.main(["--rows", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"rows": [], "rec": None, "suggestion": None}
+
+
+def test_unmeasured_logs_null_opened_after(state):
+    args, _ = cli._parser().parse_known_args(["--chooser", "--opened", "a", "--unmeasured"])
+    row = cli.build_row(args, PATH_REGISTRY["projects"], __import__("datetime").datetime(2026, 1, 1))
+    assert row["opened"] == "a" and row["opened_after_s"] is None and row["scripted"] is False
