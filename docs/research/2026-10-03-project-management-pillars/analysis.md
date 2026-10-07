@@ -67,16 +67,17 @@ Ordered by effort, cheapest first (the 80/20 cut). Each names the section that b
    against capacity and time in state cannot be computed after the fact (sections 3.4 and 3.8).
 7. **Read past `borg-verify` (the independent-reviewer skill) verdicts from `agents.jsonl` first, and add capture only
    for what that cannot recover.** The reviewer must return JSON beginning with `"verdict"`
-   (`skills/borg-verify/SKILL.md:45`, `:85-88`), and `hooks/borg-nanoprobe-log.sh` keeps the first 500 characters of every
-   subagent's last message as `summary` (`:58-62`, registered for every subagent in `SubagentStop` in
-   `config/claude/settings.base.json:214-216`), so past verdicts are probably one `jq` query away. Until that query is
-   run nobody can say whether the gate ever returns FAIL, and a gate never seen to fail is unproven (sections 3.7 and
-   4.3).
+   (`skills/borg-verify/SKILL.md:45`, `:85-88`), and `hooks/borg-nanoprobe-log.sh` keeps a last message of up to 500
+   characters whole, and otherwise its first 497 plus "...", as `summary` (`:58-63`), registered for every subagent in
+   `SubagentStop` in `config/claude/settings.base.json:214-220`, so past verdicts are probably one `jq` query away.
+   Until that query is run nobody can say whether the gate ever returns FAIL, and a gate never seen to fail is unproven
+   (sections 3.7 and 4.3).
 8. **Repair token-spend capture before quoting any cost-per-shipped-unit number.** September has 10 records against 56
    merged PRs, and one day in July holds 316 records. The logged prices are also wrong: main's
-   `docs/research/2026-09-03-harness-token-efficiency/recommendation.md:74-78` finds the model-tier regex bills
-   `claude-opus-5` and `claude-sonnet-5` at the old rates and puts the corrected total at $53,324.95 against $92,711.92
-   logged (sections 3.4 and 6.9).
+   `docs/research/2026-09-03-harness-token-efficiency/recommendation.md:60-78` finds two rate errors in the logged
+   prices, the cache-write rate and the model-tier regex (which bills `claude-opus-5` and `claude-sonnet-5` at the old
+   rates), and puts the corrected total at $53,324.95 against $92,711.92 logged; that total still counts duplicated
+   requests (sections 3.4 and 6.9).
 9. **Show speed next to stability and next to a perception reading, never alone.** PR counts rose from 4 to 67 a month,
    which is the Activity dimension that the SPACE framework (a five-dimension scheme for measuring developer
    productivity) says never to use alone; the AI randomized trial shows self-perceived speed can be wrong in sign
@@ -188,11 +189,11 @@ obvious next control.
   - Strength: Strong (adjacent) for the hazard; Weak for the practice
 
 **Axis A: 1 of 3.** Lives in the `borg-plan` skill (an Objective section: prose), the `borg-next` skill and the scoring
-behind `borg next` (`borg_core/nextpick/core.py:28`: archived dropped, pinned +200, waiting +100, active +50, idle +10,
-no activity -50, tmux window +5, ties broken by last activity), and the QUEUED section of `borg link`. That score is an
-attention heuristic. A search of skills, hooks, agents, `borg_core`, `lib`, `borg.zsh` and `drone.zsh` for appetite,
-circuit breaker, cost of delay, WSJF, lead time and cycle time returns no hits (re-run 2026-10-03). P1.1 is met by
-prose; P1.2 to P1.4 are absent.
+behind `borg next` (`_score` at `borg_core/nextpick/core.py:28`: pinned +200, waiting +100, active +50, idle +10, no
+activity -50, tmux window +5; `rank` at `:47-67` drops archived and breaks ties by last activity), and the QUEUED
+section of `borg link`. That score is an attention heuristic. A search of skills, hooks, agents, `borg_core`, `lib`,
+`borg.zsh` and `drone.zsh` for appetite, circuit breaker, cost of delay, WSJF, lead time and cycle time returns no hits
+(re-run 2026-10-03). P1.1 is met by prose; P1.2 to P1.4 are absent.
 
 **Axis B, measured today (LOCAL MEASUREMENT).** 28 open directives; 23 older than 30 days; median age 41 days, maximum
 87 (age from the filename date, not last activity). Acceptance-criteria boxes checked: 35 of 156 (22%) in open
@@ -271,8 +272,8 @@ survivor-biased toward plans that remembered to record it. Unchecked boxes insid
 titled `fix`: 65 of 233 (28%), a title proxy for instability, not DORA's change-fail rate; zero PR titles contain
 "revert". **Prior internal audit, not re-run now** (`docs/research/2026-08-20-project-completion-audit`): started work
 finishes 87% of the time, mid-plan stalls are 6.7%, and 47% of the non-backlog open board (36 of 76 directives) was
-already shipped but unrecorded. **Needs capture:** a `Fixes-plan:` trailer linking fix PRs to plans, and a verdict log
-from `borg-verify`.
+already shipped but unrecorded. **Needs capture:** a `Fixes-plan:` trailer linking fix PRs to plans. No dedicated
+verdict log exists for `borg-verify`; capture only what recommendation 7's `agents.jsonl` read cannot recover.
 
 ### 3.6 P5: Monitoring and feedback
 
@@ -307,12 +308,14 @@ built to repair. **Needs capture:** the derived-versus-declared agreement rate a
 **Axis A: 2 of 3.** Lives in the Risks section of `borg-plan` (prose), `borg-collective-review` (adversarial persona
 review: a skill), `borg-verify`, the bats and pytest suites with the clean-architecture lint in `pyproject.toml`, and
 `bash-guard.sh`. Gaps: no circuit breaker exists; `borg-verify` is advisory when a plan has no criteria and reports
-"unverifiable" rather than FAIL when a check is missing, and whether it has ever returned FAIL is not logged, so the
-gate is unproven.
+"unverifiable" rather than FAIL when a check is missing, and no dedicated verdict log exists (recommendation 7's
+`agents.jsonl` read may recover past verdicts), so whether it has ever returned FAIL is unknown and the gate is
+unproven.
 
 **Axis B, measured today (LOCAL MEASUREMENT).** 23 of 28 open directives are older than 30 days with no kill rule.
-`fix`-titled PRs 28% (proxy). The evals directive records that only three skills have any behaviour eval.
-**Needs capture:** the `borg-verify` verdict log and post-ship defects linked to their plans.
+`fix`-titled PRs 28% (proxy). The evals directive records that only three skills have any behaviour eval. **Needs
+capture:** post-ship defects linked to their plans, plus only what recommendation 7's `agents.jsonl` read cannot recover
+of the `borg-verify` verdicts.
 
 ### 3.8 P7: Sustainability and capacity
 
@@ -457,12 +460,12 @@ Every local number reused from the earlier draft was re-run on 2026-10-03 on thi
 
 Unchanged on re-run: 28 open directives, 60 shipped, 8 severed, median open age 41 days with 23 older than 30 and a
 maximum of 87, criteria boxes 35 of 156 open and 266 of 349 shipped, 0 of 60 retros, 1 of 60 scope-grew, 817 spend
-records totalling about $95.3k as logged (uncorrected: main's `docs/research/2026-09-03-harness-token-efficiency/
-recommendation.md:74-78` finds the logged prices materially high and says its corrected total, $53,324.95 over 803
-records, is the one to quote) with $15.6k across 81 borg-collective sessions and a 20.7% subagent share (also logged
-prices; the token-cost skill's "about 4%" is a standing generalization that the same file marks for replacement at
-`:200`), memory gate FAIL at 0.050, 20 registered
-projects, and `prefer-tool.jsonl` absent (not instrumented, or no bypass logged).
+records totalling about $95.3k as logged (uncorrected: main's
+`docs/research/2026-09-03-harness-token-efficiency/recommendation.md:60-78` finds the logged prices materially high and
+says its corrected total, $53,324.95 over 803 records, is the one to quote) with $15.6k across 81 borg-collective
+sessions and a 20.7% subagent share (also logged prices; the token-cost skill's "about 4%" is a standing generalization
+that the same file marks for replacement at `:200`), memory gate FAIL at 0.050, 20 registered projects, and
+`prefer-tool.jsonl` absent (not instrumented, or no bypass logged).
 
 The commands, chained so one block runs the cheap ones (the longer Python bodies are summarized, not pasted, and the
 follow-up directive should turn each into a tested function):
@@ -470,7 +473,7 @@ follow-up directive should turn each into a tested function):
 ```
 cd <repo root> &&
     ls docs/plans/directives/20*.md | wc -l &&
-    ls docs/plans/assimilated | wc -l &&
+    ls docs/plans/assimilated/*.md | wc -l &&
     ls docs/plans/severed | wc -l &&
     gh pr list --state all --limit 1000 \
         --json number,state,mergedAt,createdAt,title | jq 'length' &&
