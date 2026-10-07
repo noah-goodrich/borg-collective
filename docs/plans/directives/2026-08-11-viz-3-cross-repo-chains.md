@@ -133,6 +133,7 @@ Ruling 2 settles which is canonical, and X7 below says so.
   - Verify: `grep -rn story.json borg_core/` is empty (true today). The second half — `grep -rn 'import programs'
     merge-tree/` is empty — is NOT true today (`gather.py`, `coordinator.py` and three test files import it) and
     becomes true when `2026-08-31-retire-merge-tree-programs-into-borg-core` lands; X7 is not ticked before then.
+  - *Amended 2026-10-06:* "plus the live sweep" widens to "plus live GitHub state". That means the sweep for row state, plus `2026-10-04-personal-pr-stack-stamper`'s membership search, which finds keyed train members at render time. The rest of X7 stands: no new persisted file, and the manifests stay the only edge source (ruling 2), because a key's `- After:` is a proposal until `add-row --after` records it.
 - [ ] X8 — Regression: full bats suite and macOS contract leg green.
 - [ ] X9 — *(carried from viz-1's V4, re-scoped 2026-10-03)* `borg link` surfaces the awaiting-you tier in the
       landing region — the last lines before the prompt (terminal output auto-scrolls; the eye lands at the
@@ -143,6 +144,7 @@ Ruling 2 settles which is canonical, and X7 below says so.
       adapter PR first.
   - Verify: `borg link | tail -6` contains the awaiting-you items when any exist, and contains no tier header
     against a fixture with none.
+  - *Amended 2026-10-06:* the empty state is one line in an always-present section, per `2026-10-05-board-chooser-and-trains-ux` AC4 and CLAUDE.md's renderer rule of no branch on scope, mode or emptiness. The "absent, not empty" clause and the "no tier header" half of Verify are superseded: an empty fixture shows the section header and a `nothing waits on you` line. X9's other clauses stand.
 
 ## Scope Boundaries
 - NOT the merge-tree browser board or the Frozen Atlas (Option E in

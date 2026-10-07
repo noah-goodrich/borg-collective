@@ -98,18 +98,22 @@ if [[ "$MODE" == "orchestrator" ]]; then
             .projects // {} | to_entries
             | map(select(.value.archived // false | not))
             | .[]
-            | [.key, (.value.path // "")]
+            | [.key, (if (.value.path // "") == "" then "-" else .value.path end), (.value.repo // "")]
             | @tsv
         ' "$BORG_REGISTRY" 2>/dev/null || true)
 
         _projects_tsv=""
-        while IFS=$'\t' read -r _name _path; do
+        while IFS=$'\t' read -r _name _path _repo; do
             [[ -z "$_name" ]] && continue
+            [[ "$_path" == "-" ]] && _path=""
             _status="idle"
             _last=""
-            if [[ -n "$_path" && -f "$_path/.borg/state.json" ]]; then
-                _status=$(jq -r '.status // "idle"' "$_path/.borg/state.json" 2>/dev/null || echo "idle")
-                _last=$(jq -r '.last_activity // ""' "$_path/.borg/state.json" 2>/dev/null || echo "")
+            # New per-project path first, else legacy (AC5 expand); the registry's repo spares a git fork.
+            _sf=""
+            [[ -n "$_path" ]] && _sf=$(_borg_state_read_path "$_path" "$_repo")
+            if [[ -n "$_sf" && -f "$_sf" ]]; then
+                _status=$(jq -r '.status // "idle"' "$_sf" 2>/dev/null || echo "idle")
+                _last=$(jq -r '.last_activity // ""' "$_sf" 2>/dev/null || echo "")
             fi
             # Sentinel ("-") for an empty last_activity: bash `read` with a whitespace IFS (tab is
             # whitespace) collapses consecutive separators, so an empty _last (field 3 of 4, NOT
@@ -168,13 +172,14 @@ fi
 # Write status=active, last_activity, and claude_session_id to the per-project
 # state.json (not the shared registry).
 
-_cur_state=$(_borg_state_read "$PROJ_DIR")
+_borg_proj_repo "$PROJECT" "$PROJ_DIR"
+_cur_state=$(_borg_state_read "$PROJ_DIR" ${_REPO+"$_REPO"})
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg sid "$SESSION_ID" \
     --arg now "$NOW" \
     '.status = "active" | .last_activity = $now |
      (if $sid != "" then .claude_session_id = $sid else . end)')
-_borg_state_write "$PROJ_DIR" "$_new_state" || true
+_borg_state_write "$PROJ_DIR" "$_new_state" ${_REPO+"$_REPO"} || true
 
 # ── 1b. Per-project skill overlay ────────────────────────────────────────────
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
@@ -267,9 +272,9 @@ if [[ -f "$BORG_REGISTRY" ]]; then
     # Sentinel ("-") for empty columns — bash `read` with a whitespace IFS (tab is
     # whitespace) collapses consecutive separators, shifting fields. Keep every
     # column populated, then map sentinels back below.
-    while IFS=$'\t' read -r _rname _rpath _rwin; do
+    while IFS=$'\t' read -r _rname _rpath _rwin _rrepo; do
         [[ -z "$_rpath" || "$_rpath" == "-" || "$_rpath" == "null" ]] && continue
-        _sf="$_rpath/.borg/state.json"
+        _sf=$(_borg_state_read_path "$_rpath" "$_rrepo")
         [[ -f "$_sf" ]] || continue
         _s=$(jq -r '.status // "idle"' "$_sf" 2>/dev/null || true)
         [[ "$_s" == "active" || "$_s" == "waiting" ]] || continue
@@ -285,7 +290,8 @@ if [[ -f "$BORG_REGISTRY" ]]; then
     done < <(jq -r '.projects | to_entries[]
         | [.key,
            (if (.value.path // "") == "" then "-" else .value.path end),
-           (if (.value.tmux_window // "") == "" then "-" else .value.tmux_window end)]
+           (if (.value.tmux_window // "") == "" then "-" else .value.tmux_window end),
+           (.value.repo // "")]
         | @tsv' "$BORG_REGISTRY" 2>/dev/null || true)
     if (( _active_count > _max_active )); then
         CONTEXT_PARTS+=("⚠ CAPACITY WARNING: $_active_count projects active/waiting (limit: $_max_active).
@@ -296,7 +302,7 @@ fi
 
 # Uncommitted-changes reminder from previous session (read from state.json)
 UNCOMMITTED_FLAG=$(jq -r '.has_uncommitted_changes // false' \
-    "$(_borg_state_file "$PROJ_DIR")" 2>/dev/null || echo "false")
+    "$(_borg_state_read_path "$PROJ_DIR" ${_REPO+"$_REPO"})" 2>/dev/null || echo "false")
 if [[ "$UNCOMMITTED_FLAG" == "true" ]]; then
     CONTEXT_PARTS+=("REMINDER: Last session ended with uncommitted changes in $PROJECT.
 Run 'git status' to see what's pending. Consider /simplify and committing before new work.")
@@ -307,10 +313,10 @@ fi
 # Strong signal of container/VM clock skew (e.g. a Podman VM clock freeze after a
 # laptop sleep/resume), which makes commit/checkpoint/state.json timestamps unreliable.
 CLOCK_DIVERGED=$(jq -r '.clock_divergence.detected // false' \
-    "$(_borg_state_file "$PROJ_DIR")" 2>/dev/null || echo "false")
+    "$(_borg_state_read_path "$PROJ_DIR" ${_REPO+"$_REPO"})" 2>/dev/null || echo "false")
 if [[ "$CLOCK_DIVERGED" == "true" ]]; then
     CLOCK_DELTA=$(jq -r '.clock_divergence.delta_seconds // 0' \
-        "$(_borg_state_file "$PROJ_DIR")" 2>/dev/null || echo "0")
+        "$(_borg_state_read_path "$PROJ_DIR" ${_REPO+"$_REPO"})" 2>/dev/null || echo "0")
     CONTEXT_PARTS+=("⚠ CLOCK DIVERGENCE DETECTED for $PROJECT (~${CLOCK_DELTA}s skew).
 The last checkpoint's filename timestamp and its on-disk mtime disagree by more than 5
 minutes — a strong signal the container/VM clock is out of sync with real time (common

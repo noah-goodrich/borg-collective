@@ -1,5 +1,10 @@
 # Directive: Build the Usage Guardian
 
+> **Decided by Noah 2026-10-04 (directive triage, #266): KEEP.** Decision: arm the sweep and the dispatch guard with
+> current thresholds to collect near-cap data; tune later. No code default changes: arming is a machine-local
+> config step (`BORG_USAGE_HALT_ENABLED=1` for the guard; load the usage-watch launchd agent for the sweep), not a
+> repo change.
+
 *Filed: 2026-07-08 · Status: OPEN (Phase 1 shipped; Phase-2 delivery spike RESOLVED 2026-07-15; sweep now gated only on
 threshold-tuning data) · Gated by: nothing (spike returned GO)*
 *Source: `docs/research/2026-07-08-usage-guardian-detection-spike.md`*

@@ -25,11 +25,12 @@ MOVED_FILES: tuple[str, ...] = (
     "memory-hits.log",
     "agents.jsonl",
     "prefer-tool.jsonl",
+    "briefing-stderr.log",
 )
 # Subdirectory + suffix families, discovered by the shell layer: (directory, glob).
 MOVED_GLOBS: tuple[tuple[str, str], ...] = (
     ("devcontainer-hashes", "*.hash"),
-    (".", "briefing-*-stderr.log"),
+    (".", "briefing-*-stderr.log"),  # matches briefing-<stage>-stderr.log (not the plain briefing-stderr.log)
 )
 
 # Genuinely append-only histories: when both copies exist the old history goes first.
@@ -80,7 +81,9 @@ def is_moved(rel: str) -> bool:
     head, _, tail = rel.rpartition("/")
     if head == "devcontainer-hashes" and tail.endswith(".hash") and tail != ".hash":
         return True
-    return not head and tail.startswith("briefing-") and tail.endswith("-stderr.log")
+    return not head and (
+        tail == "briefing-stderr.log" or (tail.startswith("briefing-") and tail.endswith("-stderr.log"))
+    )
 
 
 def expected_result(op: str, old: bytes, prev_new: bytes) -> bytes | None:

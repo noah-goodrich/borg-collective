@@ -41,8 +41,9 @@ EOF
         source '${BORG_HOME}/lib/borg-hooks.sh'
         _borg_state_write '${TEST_PROJ}' '{\"status\":\"active\",\"last_activity\":\"2026-01-01T00:00:00Z\"}'
     "
-    [ -f "${TEST_PROJ}/.borg/state.json" ]
-    status=$(jq -r '.status' "${TEST_PROJ}/.borg/state.json")
+    [ -f "$(state_path_of "$TEST_PROJ" "")" ]
+    [ ! -e "${TEST_PROJ}/.borg/state.json" ]
+    status=$(jq -r '.status' "$(state_path_of "$TEST_PROJ" "")")
     [ "$status" = "active" ]
 }
 
@@ -63,17 +64,16 @@ EOF
         source '${BORG_HOME}/lib/borg-hooks.sh'
         _borg_state_write '${TEST_PROJ}' ''
     "
-    [ ! -f "${TEST_PROJ}/.borg/state.json" ]
+    [ ! -f "$(state_path_of "$TEST_PROJ" "")" ]
 }
 
-@test "_borg_state_write creates parent .borg/ dir if absent" {
-    # Ensure .borg/ doesn't exist
-    rm -rf "${TEST_PROJ}/.borg"
+@test "_borg_state_write creates the per-project state dir if absent" {
+    [ ! -d "$(dirname "$(state_path_of "$TEST_PROJ" "")")" ]
     bash -c "
         source '${BORG_HOME}/lib/borg-hooks.sh'
         _borg_state_write '${TEST_PROJ}' '{\"status\":\"idle\"}'
     "
-    [ -f "${TEST_PROJ}/.borg/state.json" ]
+    [ -f "$(state_path_of "$TEST_PROJ" "")" ]
 }
 
 # ─── zsh helpers (borg_state_file / borg_state_read / borg_state_write) ───────
@@ -90,8 +90,9 @@ EOF
 
 @test "borg_state_write (zsh) creates state.json" {
     run_zsh_fn registry borg_state_write "$TEST_PROJ" '{"status":"idle","has_uncommitted_changes":false}'
-    [ -f "${TEST_PROJ}/.borg/state.json" ]
-    flag=$(jq -r '.has_uncommitted_changes' "${TEST_PROJ}/.borg/state.json")
+    [ -f "$(state_path_of "$TEST_PROJ" "")" ]
+    [ ! -e "${TEST_PROJ}/.borg/state.json" ]
+    flag=$(jq -r '.has_uncommitted_changes' "$(state_path_of "$TEST_PROJ" "")")
     [ "$flag" = "false" ]
 }
 
