@@ -1,6 +1,7 @@
-"""argparse entrypoint that logs one `borg next` row. Registry JSON on stdin; NEVER writes stdout; exit 0 always.
+"""argparse entrypoint for `borg next`. Registry JSON on stdin; exit 0 always.
 
-PR 1 of the chooser plan: nothing is ever shown, so `shown` is False and `rec` is the top-ranked project.
+Log mode (default) appends one row and NEVER writes stdout. `--rows` prints the chooser screen instead: the
+rendered lines, then one final `names` line (tab-separated ranked project names in row order) for the zsh side.
 """
 
 from __future__ import annotations
@@ -22,6 +23,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--scripted", action="store_true")
     parser.add_argument("--active", default="")
     parser.add_argument("--session", default="")
+    parser.add_argument("--rows", action="store_true")
+    parser.add_argument("--local", action="store_true")
+    parser.add_argument("--shown", action="store_true")
+    parser.add_argument("--opened", default="")
+    parser.add_argument("--opened-after", type=float, default=None)
     return parser
 
 
@@ -33,18 +39,39 @@ def build_row(args: argparse.Namespace, projects: dict[str, Any], now: datetime)
     opened = None
     if args.pick is not None and 1 <= args.pick <= len(ranked):
         opened = ranked[args.pick - 1]["name"]
+    if args.opened:
+        opened = args.opened
     return core.log_row(
         ts=now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         session=args.session,
         ranked=ranked,
         rec=rec,
         opened=opened,
-        opened_after_s=0 if opened is not None else None,
+        opened_after_s=_opened_after(args, opened),
         active=args.active or None,
         switch=bool(args.switch),
         chooser=chooser,
         scripted=bool(args.scripted or args.pick is not None),
+        shown=bool(args.shown),
     )
+
+
+def _opened_after(args: argparse.Namespace, opened: str | None) -> float | None:
+    if opened is None:
+        return None
+    return args.opened_after if args.opened_after is not None else 0
+
+
+NAMES_PREFIX = "names\t"
+
+
+def rows_output(projects: dict[str, Any], local: bool) -> list[str]:
+    """The chooser screen plus the trailing names line. A failed link build yields blank cells, never an error."""
+    ranked = core.rank(projects)
+    rows = core.chooser_rows(ranked, shell.link_document(local))
+    suggestion = core.suggestion_for(rows, shell.read_log_rows())
+    lines = core.render_chooser(rows, suggestion=suggestion)
+    return [*lines, NAMES_PREFIX + "\t".join(row["project"] for row in rows)]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -53,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
         args, _unknown = _parser().parse_known_args(argv)
         doc = json.load(sys.stdin)
         projects = doc.get("projects") or {}
+        if args.rows:
+            print("\n".join(rows_output(projects, bool(args.local))))
+            return 0
         shell.append_row(build_row(args, projects, datetime.now(UTC)))
     # JUSTIFICATION: a logging side channel must never fail the command it observes; every error is swallowed.
     except (Exception, SystemExit):  # pylint: disable=broad-exception-caught
