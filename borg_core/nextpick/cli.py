@@ -69,10 +69,18 @@ def _opened_after(args: argparse.Namespace, opened: str | None) -> float | None:
 NAMES_PREFIX = "names\t"
 
 
+def _rows(
+    projects: dict[str, Any], ranked: list[dict[str, Any]], link_doc: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """Chooser rows with the checkpoint next-step fallback and the relative-age clock applied."""
+    fallbacks = shell.checkpoint_next_steps(projects, [item["name"] for item in ranked])
+    return core.chooser_rows(ranked, link_doc, fallbacks, int(datetime.now(UTC).timestamp()))
+
+
 def rows_output(projects: dict[str, Any], local: bool) -> list[str]:
     """The chooser screen plus the trailing names line. A failed link build yields blank cells, never an error."""
     ranked = core.rank(projects)
-    rows = core.chooser_rows(ranked, shell.link_document(local))
+    rows = _rows(projects, ranked, shell.link_document(local))
     suggestion = core.suggestion_for(rows, shell.read_log_rows())
     lines = core.render_chooser(rows, suggestion=suggestion)
     return [*lines, NAMES_PREFIX + "\t".join(row["project"] for row in rows)]
@@ -81,12 +89,13 @@ def rows_output(projects: dict[str, Any], local: bool) -> list[str]:
 def rows_json(projects: dict[str, Any], local: bool) -> dict[str, Any]:
     """The `--rows --json` payload: rows, the top-ranked project, and the earned suggestion's row number or None."""
     ranked = core.rank(projects)
-    rows = core.chooser_rows(ranked, shell.link_document(local))
+    rows, quiet = core.split_quiet(_rows(projects, ranked, shell.link_document(local)))
     earned = core.suggestion_for(rows, shell.read_log_rows()) is not None
     return {
         "rows": rows,
         "rec": rows[0]["project"] if rows else None,
         "suggestion": rows[0]["n"] if rows and earned else None,
+        "quiet": quiet,
     }
 
 
@@ -99,10 +108,10 @@ def _rows_json_failopen(projects: dict[str, Any], local: bool) -> dict[str, Any]
         pass
     try:
         rows = core.chooser_rows(core.rank(projects), None)
-        return {"rows": rows, "rec": rows[0]["project"] if rows else None, "suggestion": None}
+        return {"rows": rows, "rec": rows[0]["project"] if rows else None, "suggestion": None, "quiet": []}
     # JUSTIFICATION: last-resort empty payload keeps the machine surface parseable.
     except Exception:  # pylint: disable=broad-exception-caught
-        return {"rows": [], "rec": None, "suggestion": None}
+        return {"rows": [], "rec": None, "suggestion": None, "quiet": []}
 
 
 def main(argv: list[str] | None = None) -> int:

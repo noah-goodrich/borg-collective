@@ -245,8 +245,9 @@ _log_count() {
     _write_registry ""
     run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
     [ "$status" -eq 0 ]
-    printf "%s" "$output" | jq -e "(.rows | length) == 5 and .rec == \"wait-old\" and .suggestion == null
-        and (.rows[0] | keys | sort) == [\"item\",\"n\",\"next_step\",\"owner\",\"project\",\"ready\"]"
+    printf "%s" "$output" | jq -e "(.rows | length) == 3 and .rec == \"wait-old\" and .suggestion == null
+        and .quiet == [\"idle\",\"never\"]
+        and (.rows[0] | keys | sort) == [\"age\",\"item\",\"n\",\"next_step\",\"owner\",\"project\",\"ready\",\"status\",\"waiting_reason\"]"
     [ "$(_log_count)" = "0" ]
     [ -z "$(_selected)" ]
 }
@@ -291,4 +292,17 @@ _log_count() {
     run zsh "$BORG" next --declined --shown
     [ "$status" -eq 0 ]
     _last_row | jq -e ".shown == true and .opened == null"
+}
+
+@test "next --rows --json: a checkpoint fills next_step and rows carry status and age" {
+    local proj="${BATS_TEST_TMPDIR}/cp-proj"
+    mkdir -p "$proj/.borg/checkpoints"
+    printf '%s\n' "tl;dr" "" "## 5. Next Session" "" "1. Ship the chooser rows" "2. Later" \
+        > "$proj/.borg/checkpoints/2026-10-05-0900.md"
+    _write_registry ", \"has-cp\": {\"path\":\"$proj\",\"status\":\"idle\",\"last_activity\":\"2026-10-05T08:00:00Z\"}"
+    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    printf "%s" "$output" | jq -e "(.rows[] | select(.project == \"has-cp\")) as \$r
+        | \$r.next_step == \"Ship the chooser rows\" and \$r.status == \"idle\" and (\$r.age | length) > 0
+        and (.quiet | index(\"has-cp\")) == null and (.quiet | index(\"never\")) != null"
 }

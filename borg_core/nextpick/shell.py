@@ -10,7 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from borg_core import paths, retention
+from borg_core.link import core as link_core
 from borg_core.link import shell as link_shell
+from borg_core.nextpick import core
 
 LOG_NAME = "next-recs.jsonl"
 
@@ -63,6 +65,29 @@ def link_document(local: bool, timeout: float = LINK_TIMEOUT_S) -> dict[str, Any
     except (OSError, ValueError, subprocess.SubprocessError):
         return None
     return doc if isinstance(doc, dict) else None
+
+
+_WHOLE_CHECKPOINT_LINES = 1_000_000
+
+
+def checkpoint_next_steps(projects: dict[str, Any], names: list[str]) -> dict[str, str]:
+    """`{project: first next-session item of its latest checkpoint}` for the names that have one. Fail-open.
+
+    Resolves the checkpoint through `link.shell` (repo-group union read, name-sorted, content-deduped), so the
+    "latest checkpoint" is the very document `borg link` shows. Any error for a project omits that project.
+    """
+    found: dict[str, str] = {}
+    for name in names:
+        try:
+            sources = link_core.repo_sources(name, projects)
+            text = link_shell.read_latest_checkpoint_head(sources, _WHOLE_CHECKPOINT_LINES)
+            step = core.checkpoint_next_step(text)
+        # JUSTIFICATION: a checkpoint that cannot be read must leave the cell blank, never fail the chooser.
+        except Exception:  # pylint: disable=broad-exception-caught
+            continue
+        if step:
+            found[name] = step
+    return found
 
 
 def read_log_rows() -> list[dict[str, Any]]:

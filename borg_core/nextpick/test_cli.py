@@ -197,11 +197,14 @@ def _json_run(monkeypatch, capsys, doc, log_rows=(), argv=("--rows", "--json")):
 
 def test_rows_json_payload_shape(state, monkeypatch, capsys):
     payload = _json_run(monkeypatch, capsys, LINK_DOC)
-    assert set(payload) == {"rows", "rec", "suggestion"}
+    assert set(payload) == {"rows", "rec", "suggestion", "quiet"}
     assert payload["rec"] == "a"
     assert payload["suggestion"] is None
     first = payload["rows"][0]
-    assert set(first) == {"n", "project", "item", "next_step", "owner", "ready"}
+    assert set(first) == {
+        "n", "project", "item", "next_step", "owner", "ready", "status", "age", "waiting_reason"
+    }
+    assert first["status"] == "waiting" and first["age"] == "2026-09-01"
     assert first["n"] == 1 and first["project"] == "a" and first["item"] == "o/r#1"
     assert not state.exists()
 
@@ -215,7 +218,8 @@ def test_rows_json_suggestion_is_row_number_once_gate_passes(state, monkeypatch,
 
 def test_rows_json_blank_cells_when_link_build_fails(state, monkeypatch, capsys):
     payload = _json_run(monkeypatch, capsys, None)
-    assert [row["project"] for row in payload["rows"]] == ["a", "b"]
+    assert [row["project"] for row in payload["rows"]] == ["a"]
+    assert payload["quiet"] == ["b"]
     assert all(row["item"] == "" and row["owner"] == "" for row in payload["rows"])
 
 
@@ -226,10 +230,49 @@ def test_rows_json_is_valid_json_even_when_everything_fails(state, monkeypatch, 
     monkeypatch.setattr(shell, "link_document", boom)
     monkeypatch.setattr("sys.stdin", io.StringIO("not json"))
     assert cli.main(["--rows", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"rows": [], "rec": None, "suggestion": None}
+    assert json.loads(capsys.readouterr().out) == {"rows": [], "rec": None, "suggestion": None, "quiet": []}
 
 
 def test_unmeasured_logs_null_opened_after(state):
     args, _ = cli._parser().parse_known_args(["--chooser", "--opened", "a", "--unmeasured"])
     row = cli.build_row(args, PATH_REGISTRY["projects"], __import__("datetime").datetime(2026, 1, 1))
     assert row["opened"] == "a" and row["opened_after_s"] is None and row["scripted"] is False
+
+
+def _checkpointed_registry(tmp_path: Path) -> dict:
+    store = tmp_path / "proj" / ".borg" / "checkpoints"
+    store.mkdir(parents=True)
+    (store / "2026-10-01-0900.md").write_text("## 5. Next Session\n\n1. old step\n")
+    newest = "tl;dr nothing\n\n## 5. Next Session\n\n1. ship the   chooser\n2. two\n"
+    (store / "2026-10-02-0900.md").write_text(newest)
+    return {
+        "projects": {
+            "p": {"status": "idle", "last_activity": "2026-10-01T00:00:00Z", "path": str(tmp_path / "proj")},
+            "q": {"status": "idle", "path": str(tmp_path / "nope")},
+        }
+    }
+
+
+def test_checkpoint_next_steps_reads_the_latest_checkpoint(tmp_path):
+    reg = _checkpointed_registry(tmp_path)
+    assert shell.checkpoint_next_steps(reg["projects"], ["p", "q"]) == {"p": "ship the chooser"}
+
+
+def test_checkpoint_next_steps_is_fail_open(monkeypatch):
+    def boom(*_a, **_k):
+        raise OSError("denied")
+
+    monkeypatch.setattr(shell.link_shell, "read_latest_checkpoint_head", boom)
+    assert shell.checkpoint_next_steps({"p": {"path": "/x"}}, ["p"]) == {}
+
+
+def test_rows_json_checkpoint_fallback_keeps_a_row_out_of_quiet(state, monkeypatch, capsys, tmp_path):
+    reg = _checkpointed_registry(tmp_path)
+    monkeypatch.setattr(shell, "link_document", lambda local: None)
+    monkeypatch.setattr(shell, "read_log_rows", lambda: [])
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(reg)))
+    assert cli.main(["--rows", "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [r["project"] for r in payload["rows"]] == ["p"]
+    assert payload["rows"][0]["next_step"] == "ship the chooser"
+    assert payload["quiet"] == ["q"]

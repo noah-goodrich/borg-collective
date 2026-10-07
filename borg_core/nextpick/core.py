@@ -11,8 +11,10 @@ any real timestamp among equal scores.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
+from borg_core.link import core as link_core
 from borg_core.link import grid, picture, render
 
 
@@ -148,18 +150,90 @@ def _project_ready(path: str, manifests: list[dict[str, Any]]) -> dict[str, str]
     return dict(_BLANK)
 
 
-def chooser_rows(ranked: list[dict[str, Any]], link_doc: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """One row per ranked project, ranked order: `{n, project, item, next_step, owner, ready}`.
+_NEXT_HEADING = re.compile(r"^##\s*5\.?\s*next\s+session\b", re.IGNORECASE)
+_ANY_H2 = re.compile(r"^##\s")
+_LIST_MARKER = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+NEXT_STEP_MAX = 80
+
+
+def _truncate(text: str, limit: int = NEXT_STEP_MAX) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def checkpoint_next_step(text: str) -> str:
+    """The first item of a checkpoint's `## 5. Next Session` section, or "" when there is none.
+
+    The first block after the heading: a list item (marker or number stripped, wrapped continuation lines joined)
+    or the first prose paragraph. Whitespace is collapsed and the result truncated to `NEXT_STEP_MAX` with an
+    ellipsis. Text before the heading (a tl;dr preamble) is never inspected.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if _NEXT_HEADING.match(line.strip()):
+            body = lines[index + 1 :]
+            break
+    else:
+        return ""
+    block: list[str] = []
+    for line in body:
+        if _ANY_H2.match(line):
+            break
+        if not line.strip():
+            if block:
+                break
+            continue
+        if block and _LIST_MARKER.match(line):
+            break
+        block.append(_LIST_MARKER.sub("", line, count=1))
+    return _truncate(" ".join(" ".join(block).split()))
+
+
+def chooser_rows(
+    ranked: list[dict[str, Any]],
+    link_doc: dict[str, Any] | None,
+    fallbacks: dict[str, str] | None = None,
+    now_epoch: int = 0,
+) -> list[dict[str, Any]]:
+    """One row per ranked project, ranked order: `{n, project, item, next_step, owner, ready, status, age,
+    waiting_reason}`.
 
     Cells come from the link document's grid manifests via `render.route_kind` (owner) and `picture.state_glyph`
     (ready glyph). A project with no manifest, or a None / degraded document, gets blank cells, never an error.
+    `next_step` falls back to `fallbacks[project]` (the latest checkpoint's first next-session item) when no
+    manifest supplied one. `age` is `link_core.relative_time`, the string `borg link` shows.
     """
     manifests = ((link_doc or {}).get("grid") or {}).get("manifests") or []
     rows = []
     for index, item in enumerate(ranked):
         cells = _project_ready(str(item.get("path") or ""), manifests)
-        rows.append({"n": index + 1, "project": item["name"], **cells})
+        if not cells["next_step"]:
+            cells["next_step"] = (fallbacks or {}).get(item["name"], "")
+        rows.append(
+            {
+                "n": index + 1,
+                "project": item["name"],
+                **cells,
+                "status": item.get("status") or "",
+                "age": str(link_core.relative_time(item.get("last_activity") or None, now_epoch)),
+                "waiting_reason": item.get("waiting_reason") or "",
+            }
+        )
     return rows
+
+
+def split_quiet(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Move idle rows with no next step and no waiting reason out of `rows`; return (kept, quiet names).
+
+    Rank-relative order is preserved on both sides, and kept rows are renumbered so `n` stays 1..len(kept).
+    """
+    kept: list[dict[str, Any]] = []
+    quiet: list[str] = []
+    for row in rows:
+        if row.get("status") == "idle" and not row.get("next_step") and not row.get("waiting_reason"):
+            quiet.append(row["project"])
+        else:
+            kept.append({**row, "n": len(kept) + 1})
+    return kept, quiet
 
 
 def _fit(text: str, width: int) -> str:
