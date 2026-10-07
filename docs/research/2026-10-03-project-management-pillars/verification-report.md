@@ -22,48 +22,27 @@ t5-toli-implementation-intentions-mental-health-meta.md
 
 ## Per-card outcomes
 
-- `t1-burdakov-pmbok-ai-2025.md`: verified; both quotes found in PDF
-  text; see note 1
-- `t1-pmbok8-pma-vs-pmbok7.md`: verified; 3 quotes found,
-  headings/paragraphs match
-- `t1-scrum-guide-2020.md`: verified; 5 quotes found, sections match;
-  see note 2
-- `t2-arnold-maersk-cost-of-delay.md`: verified; both quotes found,
-  sections match
-- `t2-gilad-ice-scores.md`: verified; both quotes found, sentence/bullet
-  positions match
-- `t2-manheim-goodhart-variants.md`: verified; both quotes found
-  (hyphenation only), locations match
-- `t2-sleesman-escalation-meta-analysis.md`: verified; 3 quotes found;
-  Methods/Conclusions positions match
-- `t2-yeret-cost-of-delay-intuition-exercise.md`: verified; both quotes
-  found, paragraph/sentence match
-- `t3-55degrees-littles-law-assumptions.md`: verified; 3 quotes found;
-  see note 3
-- `t3-beck-orosz-mckinsey-response.md`: verified; quote found in last
-  intro paragraph, 2nd sentence
-- `t3-scrum-guide-definition-of-done.md`: verified; both quotes found;
-  DoD paragraphs 1 and 3 match
-- `t3-sjoberg-wip-kanban-study.md`: inaccessible; ACM URL 403; card
-  flagged cached/partial
-- `t3-vilasboas-one-person-squad-2026.md`: verified; 3 abstract quotes
-  found, sentence positions match
-- `t4-corry-retrospective-antipatterns.md`: verified; both quotes found,
-  sections/paragraphs match
-- `t4-hn-retrospectives-thread.md`: verified; both comments found,
-  nesting levels match
-- `t4-lehtinen-retrospectives-2017.md`: inaccessible; Springer returns
-  bot challenge; card flagged cached/partial
-- `t4-scrum-guide-definition-of-done.md`: verified; both quotes found;
-  Increment p3, DoD p3 match
-- `t4-snow-keil-status-reporting-distortion.md`: inaccessible; IEEE/doi
-  page empty to fetch; card cached/partial
-- `t4-tannenbaum-cerasoli-debriefs-meta-analysis.md`: verified; 3 quotes
-  found in PDF; sections match
-- `t5-liebel-adhd-software-engineers.md`: verified; abstract and HTML
-  5.1 Strategies quotes found
-- `t5-toli-implementation-intentions-mental-health-meta.md`:
-  inaccessible; Wiley 403 bot block; card cached/partial
+- `t1-burdakov-pmbok-ai-2025.md`: verified; both quotes found in PDF text; see note 1
+- `t1-pmbok8-pma-vs-pmbok7.md`: verified; 3 quotes found, headings/paragraphs match
+- `t1-scrum-guide-2020.md`: verified; 5 quotes found, sections match; see note 2
+- `t2-arnold-maersk-cost-of-delay.md`: verified; both quotes found, sections match
+- `t2-gilad-ice-scores.md`: verified; both quotes found, sentence/bullet positions match
+- `t2-manheim-goodhart-variants.md`: verified; both quotes found (hyphenation only), locations match
+- `t2-sleesman-escalation-meta-analysis.md`: verified; 3 quotes found; Methods/Conclusions positions match
+- `t2-yeret-cost-of-delay-intuition-exercise.md`: verified; both quotes found, paragraph/sentence match
+- `t3-55degrees-littles-law-assumptions.md`: verified; 3 quotes found; see note 3
+- `t3-beck-orosz-mckinsey-response.md`: verified; quote found in last intro paragraph, 2nd sentence
+- `t3-scrum-guide-definition-of-done.md`: verified; both quotes found; DoD paragraphs 1 and 3 match
+- `t3-sjoberg-wip-kanban-study.md`: inaccessible; ACM URL 403; card flagged cached/partial
+- `t3-vilasboas-one-person-squad-2026.md`: verified; 3 abstract quotes found, sentence positions match
+- `t4-corry-retrospective-antipatterns.md`: verified; both quotes found, sections/paragraphs match
+- `t4-hn-retrospectives-thread.md`: verified; both comments found, nesting levels match
+- `t4-lehtinen-retrospectives-2017.md`: inaccessible; Springer returns bot challenge; card flagged cached/partial
+- `t4-scrum-guide-definition-of-done.md`: verified; both quotes found; Increment p3, DoD p3 match
+- `t4-snow-keil-status-reporting-distortion.md`: inaccessible; IEEE/doi page empty to fetch; card cached/partial
+- `t4-tannenbaum-cerasoli-debriefs-meta-analysis.md`: verified; 3 quotes found in PDF; sections match
+- `t5-liebel-adhd-software-engineers.md`: verified; abstract and HTML 5.1 Strategies quotes found
+- `t5-toli-implementation-intentions-mental-health-meta.md`: inaccessible; Wiley 403 bot block; card cached/partial
 
 ## Notes
 
