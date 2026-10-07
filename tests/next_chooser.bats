@@ -194,3 +194,41 @@ _chooser() {
     [[ "$output" != *"WHERE COULD YOUR FOCUS GO?"* ]]
     [ "$(_selected)" = "w-old" ]
 }
+
+_break_rows_call() {
+    local real_py
+    real_py="$(command -v python3)"
+    cat > "$MOCK_BIN/python3" <<PYEOF
+#!/usr/bin/env bash
+for a in "\$@"; do [ "\$a" = "--rows" ] && exit 1; done
+exec "$real_py" "\$@"
+PYEOF
+    chmod +x "$MOCK_BIN/python3"
+}
+
+@test "chooser (forced tty): a failed rows call falls back to Next up, not All clear, and logs chooser:false" {
+    _write_registry ""
+    _break_rows_call
+    run bash -c 'printf "" | BORG_NEXT_FORCE_TTY=1 zsh "$1" next --local' _ "$BORG"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Next up: wait-old"* ]]
+    [[ "$output" != *"All clear"* ]]
+    _last_row | jq -e '.chooser == false and .switch == false and .opened == null'
+}
+
+@test "chooser (forced tty): an empty registry still says All clear" {
+    echo '{"projects": {}}' > "$BORG_REGISTRY"
+    _break_rows_call
+    run bash -c 'printf "" | BORG_NEXT_FORCE_TTY=1 zsh "$1" next --local' _ "$BORG"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"All clear"* ]]
+}
+
+@test "chooser: the status line shows without --local and never with --local" {
+    _write_registry ""
+    _break_rows_call
+    run bash -c 'printf "" | BORG_NEXT_FORCE_TTY=1 zsh "$1" next' _ "$BORG"
+    [[ "$output" == *"checking GitHub"* ]]
+    run bash -c 'printf "" | BORG_NEXT_FORCE_TTY=1 zsh "$1" next --local' _ "$BORG"
+    [[ "$output" != *"checking GitHub"* ]]
+}

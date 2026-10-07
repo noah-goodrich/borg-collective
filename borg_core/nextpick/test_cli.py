@@ -171,3 +171,17 @@ def test_read_log_rows_reads_rotated_then_live(state):
     state.with_name(state.name + ".1").write_text('{"n": 1}\nbad\n')
     state.write_text('{"n": 2}\n')
     assert shell.read_log_rows() == [{"n": 1}, {"n": 2}]
+
+
+def test_link_document_uses_the_named_timeout(tmp_path, monkeypatch):
+    calls = []
+
+    class Done:
+        returncode = 0
+        stdout = "{}"
+
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path))
+    monkeypatch.setattr(shell.subprocess, "run", lambda argv, **kw: calls.append(kw) or Done())
+    shell.link_document(True)
+    assert shell.LINK_TIMEOUT_S == 15
+    assert calls[0]["timeout"] == 15

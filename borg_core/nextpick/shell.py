@@ -34,7 +34,7 @@ def append_row(row: dict[str, Any]) -> bool:
         return False
 
 
-LINK_TIMEOUT_S = 60
+LINK_TIMEOUT_S = 15
 
 
 def link_document(local: bool, timeout: float = LINK_TIMEOUT_S) -> dict[str, Any] | None:
