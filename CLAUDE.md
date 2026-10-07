@@ -27,7 +27,7 @@ Two independent tools that compose:
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
   wider command surface below (recon, nanoprobes, spend, doctor, focus, pin/unpin,
-  setup, store-secret, sever, tidy, reap-worktrees, and more — see `borg help`).
+  setup, store-secret, down, tidy, reap-worktrees, and more — see `borg help`).
   **`watch` and `sync` were both listed here and NEITHER is a command.** Neither has an arm in
   `borg.zsh`'s case dispatch, and both exit 1 with `unknown command`; removed 2026-08-28. (`sync`
   survived the first removal pass because only `watch` was checked — the whole line has now been run
@@ -116,7 +116,7 @@ borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                            NOT launchd — plists are installed by install.sh only, which calls
                            `borg setup` at the end. A new launchd job needs an install.sh run.
 borg store-secret        Patch a project's secrets.zsh with a new keychain export
-borg sever               Retire/archive a directive or project without deleting it
+borg down                Tear down everything: windows, containers, shared stacks (`sever` retired)
 borg tidy                Housekeeping pass over registry/checkpoints; `--cairn-leftovers [--dry-run]`
                            backs up then deletes cairn's machine-local files
 borg color / image       Cosmetic project registry fields (tmux color, session image)
@@ -626,7 +626,7 @@ docs/
 
 ## Style Rules
 
-- All markdown and text files must wrap at 120 characters. No line may exceed 120 chars.
+- Code and code comments wrap at 120 (ruff/pylint enforce it for Python). Markdown and text prose is NOT hard-wrapped: one line per paragraph or bullet. Existing wrapped paragraphs keep their wrap when edited. Never wrap tables, fenced code or URLs. Commit bodies wrap at 72. PR bodies, PR/issue/review comments, any `gh` body, release notes, chat replies and pandoc/epub input are never hard-wrapped. Markdown files read in a terminal or editor keep every table row and every fenced-block line (mocks, code, diagrams) within 72 columns: table cells are a few words, longer text goes in bullets below the table, and a table that needs more width becomes a list. GitHub-rendered text (PR bodies, comments) is exempt because GitHub wraps table cells.
 - 4-space indentation (except YAML/Lua: 2-space)
 - zsh functions over aliases for anything > 1 line
 - No `$()` substitution in Bash tool calls

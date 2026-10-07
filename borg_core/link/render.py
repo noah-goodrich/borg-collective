@@ -823,6 +823,11 @@ def _route(kind: str) -> str:
     return _GATE_ROUTING.get(kind, _GROUP_UNSURE)
 
 
+def route_kind(kind: str) -> str:
+    """Public seam over `_route` for pure consumers outside this package (`borg_core.nextpick`)."""
+    return _route(kind)
+
+
 def _next_row(node: dict, gate: dict) -> str:
     """One ready row: state glyph, provenance mark, the linked FULL ref, and the gate's sentence.
 

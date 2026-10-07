@@ -42,12 +42,38 @@ if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then
     exit 0
 fi
 
+# A Stop hook that exits 0 has its stderr sent to the debug log only -- never the user, never
+# Claude (https://code.claude.com/docs/en/hooks, "Exit code 0"). The user-visible channel is ONE
+# JSON object on stdout carrying `systemMessage` (plain text, no ANSI), emitted at the end.
+# Warnings accumulate here; nothing else in this script may write to stdout.
+#
+# Stop fires after EVERY assistant turn, not once at session end, so each distinct warning is
+# shown AT MOST ONCE per session_id and again only when its content changes. Seen-keys live in
+# <state root>/stop-warnings/<session_id>, one sha12 of (message + fingerprint) per line. Every
+# failure path fails OPEN toward visibility: no session_id or an unwritable store -> warn anyway.
+WARNINGS=""
+_warn() {
+    local msg="$1" fp="${2:-}" key sid dir
+    if [[ -n "$SESSION_ID" ]]; then
+        sid="${SESSION_ID//[^A-Za-z0-9_-]/_}"
+        dir="$(_borg_state_root)/stop-warnings"
+        key=$(printf '%s\n%s' "$msg" "$fp" | _borg_sha12 2>/dev/null || true)
+        if [[ -n "$key" ]]; then
+            if grep -qxF "$key" "$dir/$sid" 2>/dev/null; then
+                return 0
+            fi
+            { mkdir -p "$dir" && printf '%s\n' "$key" >> "$dir/$sid"; } 2>/dev/null || true
+        fi
+    fi
+    WARNINGS+="${WARNINGS:+$'\n\n'}$msg"
+}
+
 PROJECT=$(_borg_find_project "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
 
-# Check for uncommitted changes (warn in terminal; store flag in state.json)
+# Check for uncommitted changes (warn via systemMessage; store flag in state.json)
 UNCOMMITTED=""
 if command -v git >/dev/null 2>&1; then
     if git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -56,8 +82,8 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 if [[ -n "$UNCOMMITTED" ]]; then
-    printf '\n\033[1;33m▸ WARNING: %s has uncommitted changes\033[0m\n' "$PROJECT" >&2
-    printf '\033[1;33m  Run /simplify then commit before your next session.\033[0m\n\n' >&2
+    _warn "▸ WARNING: ${PROJECT} has uncommitted changes
+  Run /simplify then commit before your next session." "$UNCOMMITTED"
     DIRTY_FLAG=true
 else
     DIRTY_FLAG=false
@@ -130,8 +156,8 @@ CHECKPOINT_DIR="$CWD/.borg/checkpoints"
 if [[ -d "$CHECKPOINT_DIR" ]]; then
     _recent_cp=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "*.md" -mmin -60 2>/dev/null | head -1 || true)
     if [[ -z "$_recent_cp" ]]; then
-        printf '\n\033[1;33m▸ No checkpoint in the last hour for %s\033[0m\n' "$PROJECT" >&2
-        printf '\033[1;33m  Run /borg-link-up next session to save state for future resumption.\033[0m\n\n' >&2
+        _warn "▸ No checkpoint in the last hour for ${PROJECT}
+  Run /borg-link-up next session to save state for future resumption."
     fi
 fi
 
@@ -165,12 +191,16 @@ if [[ -d "$DIRECTIVES_DIR" ]] && command -v git >/dev/null 2>&1; then
                 done <<< "$_changed_files"
             done < <(find "$DIRECTIVES_DIR" -maxdepth 1 -name "*.md" -print0 2>/dev/null | sort -z)
             if [[ -n "$_matched_directives" ]]; then
-                printf '\n\033[1;36m▸ Directive reconciliation? Committed files overlap with:\033[0m\n' >&2
-                printf '%s' "$_matched_directives" >&2
-                printf '\033[1;36m  Review open directives and update checkboxes if this work advances them.\033[0m\n\n' >&2
+                _warn "▸ Directive reconciliation? Committed files overlap with:
+${_matched_directives}  Review open directives and update checkboxes if this work advances them."
             fi
         fi
     fi
+fi
+
+# Emit ONE object. No warnings => no stdout at all (nothing to show, nothing to mis-parse).
+if [[ -n "$WARNINGS" ]]; then
+    jq -n --arg msg "$WARNINGS" '{systemMessage: $msg}'
 fi
 
 exit 0

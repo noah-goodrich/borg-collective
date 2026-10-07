@@ -1,6 +1,8 @@
 # Directive: Chained Auto-Promotion for `borg-assimilate`
 
 *Filed: 2026-08-12*
+*Shipped: PR [#151](https://github.com/noah-goodrich/borg-collective/pull/151); AC4 withdrawn, AC6 re-run green 2026-10-04 — archived by the directive triage (#266)*
+*Triage 2026-10-04: PARTIAL. AC1, AC2, AC3, AC5 shipped in PR #151 (`skills/borg-assimilate/SKILL.md` Step 4c, `docs/plans/directives/README.md`, 20 cases in `tests/promote_next.bats`). AC4 stays deferred and is now moot (viz-1 and viz-2 left the directives dir in #238). AC6 is unticked pending a fresh full-suite run.*
 
 Independent project. Derived from a same-day retro across all registered projects, a 4-candidate design panel
 (each candidate designed blind by a separate agent), 3 independent judges (unanimous on the winning mechanism),
@@ -65,21 +67,21 @@ interrupt channel, not a new CLI verb, not a new background process.
 
 ## Acceptance Criteria
 
-- [ ] **AC1** — `skills/borg-assimilate/SKILL.md` gets a new Step 4c, between "Archive `PROJECT_PLAN.md`" and
+- [x] **AC1** — `skills/borg-assimilate/SKILL.md` gets a new Step 4c, between "Archive `PROJECT_PLAN.md`" and
       the end of Step 4b, written in Step 0.75's own style: literal grep patterns embedded in the prose.
   - Verify: `grep -n "Step 4c" skills/borg-assimilate/SKILL.md` matches; the step text contains both literal
     patterns `^\*Parent plan:` and `^\*Next: `.
-- [ ] **AC2** — The `*Parent plan:*` and `*Next:*` line conventions are documented once, outside the skill
+- [x] **AC2** — The `*Parent plan:*` and `*Next:*` line conventions are documented once, outside the skill
       file (`*Parent plan:*` has been live since `borg-plan`'s "Follow-Up Directives" section but was never
       written down anywhere central).
   - Verify: `docs/plans/directives/README.md` exists; `grep -c '\*Next:\|\*Parent plan:' docs/plans/directives/README.md` returns 2 or more.
-- [ ] **AC3** — Candidate-scan and next-slug logic is bats-tested against fixtures: zero top-level candidates
+- [x] **AC3** — Candidate-scan and next-slug logic is bats-tested against fixtures: zero top-level candidates
       (silent no-op), exactly one candidate (auto-promote), two-plus with no `*Next:*` (ask one bounded
       question, stop), a `*Next:*` pointer that resolves even when two-plus raw candidates exist (chain wins
       over count), and a dangling `*Next:*` pointer to a nonexistent slug (falls through to the count branch,
       does not crash).
   - Verify: `bats tests/promote_next.bats` exits 0 with at least 5 `@test` cases; `grep -c '@test.*dangling' tests/promote_next.bats` returns 1 or more.
-- [ ] **AC4 — DEFERRED (owner ruling, 2026-08-15)** — viz-1 -> viz-2 -> viz-3 is wired as a real,
+- [ ] **AC4 — WITHDRAWN (Decided by Noah 2026-10-04, #266; was deferred 2026-08-15; the viz chain was retired by #238)** — viz-1 -> viz-2 -> viz-3 is wired as a real,
       working chain, not just described.
   - Verify (as originally written): `grep -c '^\*Next: viz-2-spine-generator\*'
     docs/plans/directives/2026-08-11-viz-1-awaiting-you-tier.md` = 1; `grep -c '^\*Next:
@@ -97,10 +99,10 @@ interrupt channel, not a new CLI verb, not a new background process.
     no `*Next:*` pointers were wired from here regardless. AC3's fixture suite
     (`tests/promote_next.bats`) exercises the same chain-resolution and dangling-pointer logic
     against synthetic fixtures instead, and carries the weight AC4 would have.
-- [ ] **AC5** — Step 4c reports its outcome as one of two fixed strings so behavior is greppable and stable
+- [x] **AC5** — Step 4c reports its outcome as one of two fixed strings so behavior is greppable and stable
       across future edits.
   - Verify: `grep -c '✓ Auto-promoted\|candidates, none chained' skills/borg-assimilate/SKILL.md` returns 2.
-- [ ] **AC6** — Regression: this touches a markdown skill file with no executable surface of its own, so the
+- [x] **AC6** — Regression: this touches a markdown skill file with no executable surface of its own, so the
       guard is that nothing else broke.
   - Verify: `bats tests/*.bats` exits 0.
 
