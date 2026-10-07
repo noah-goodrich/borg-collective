@@ -36,6 +36,14 @@ Every term is also defined inline where it first appears. This block is for skim
 
 ## 1. Recommendations
 
+**Status, 2026-10-07 (main `b34e7e0`; the counts below were taken at `a4bd1c1`).** #274 now appends a top-3 row per
+`borg next` run to `next-recs.jsonl` (`borg_core/nextpick/core.py` `log_row`) and adds a follow-rate gate
+(`gate(min_rows=20, threshold=0.60)`), so the log recommendation 3 asks for exists; #275's chooser uses that gate for
+its suggestion. The gate counts how often the suggested project is opened, not whether the top item shipped first, and
+`_score` still ranks by attention, so the value rule is still open. The stacked #262 revises recommendations 2, 3 and
+12. Counts on main: 24 open directives (was 28), 68 shipped plans (was 60), 10 severed (was 8; 9 dated plus
+`plugin-audit.md`).
+
 Ordered by effort, cheapest first (the 80/20 cut). Each names the section that backs it.
 
 1. **Compute six derived numbers on a schedule, with coverage printed beside each**: open-directive age (a directive is
@@ -57,10 +65,18 @@ Ordered by effort, cheapest first (the 80/20 cut). Each names the section that b
    retrospective, and the best outcome evidence in the run is for facilitated debriefs (sections 3.9 and 4.2).
 6. **Append a status-history event whenever a session flips between active, idle and waiting.** Without it, WIP
    against capacity and time in state cannot be computed after the fact (sections 3.4 and 3.8).
-7. **Log every `borg-verify` (the independent-reviewer skill) verdict.** Nobody can say whether the gate ever returns
-   FAIL, and a gate never seen to fail is unproven (sections 3.7 and 4.3).
+7. **Read past `borg-verify` (the independent-reviewer skill) verdicts from `agents.jsonl` first, and add capture only
+   for what that cannot recover.** The reviewer must return JSON beginning with `"verdict"`
+   (`skills/borg-verify/SKILL.md:45`, `:85-88`), and `hooks/borg-nanoprobe-log.sh` keeps the first 500 characters of every
+   subagent's last message as `summary` (`:58-62`, registered for every subagent in `SubagentStop` in
+   `config/claude/settings.base.json:214-216`), so past verdicts are probably one `jq` query away. Until that query is
+   run nobody can say whether the gate ever returns FAIL, and a gate never seen to fail is unproven (sections 3.7 and
+   4.3).
 8. **Repair token-spend capture before quoting any cost-per-shipped-unit number.** September has 10 records against 56
-   merged PRs, and one day in July holds 316 records (sections 3.4 and 6.9).
+   merged PRs, and one day in July holds 316 records. The logged prices are also wrong: main's
+   `docs/research/2026-09-03-harness-token-efficiency/recommendation.md:74-78` finds the model-tier regex bills
+   `claude-opus-5` and `claude-sonnet-5` at the old rates and puts the corrected total at $53,324.95 against $92,711.92
+   logged (sections 3.4 and 6.9).
 9. **Show speed next to stability and next to a perception reading, never alone.** PR counts rose from 4 to 67 a month,
    which is the Activity dimension that the SPACE framework (a five-dimension scheme for measuring developer
    productivity) says never to use alone; the AI randomized trial shows self-perceived speed can be wrong in sign
@@ -171,16 +187,18 @@ obvious next control.
 - **P1.4** (Sources: S22, S20, S18, S21) — Stop conditions and one decision-owner are fixed before starting
   - Strength: Strong (adjacent) for the hazard; Weak for the practice
 
-**Axis A: 1 of 3.** Lives in the `borg-plan` skill (an Objective section: prose), the `borg-next` skill and the sort in
-`borg.zsh` behind `borg next` (pinned first, then session status waiting, active, idle, archived, then last activity),
-and the QUEUED section of `borg link`. That ordering is an attention heuristic. A search of skills, hooks, agents,
-`borg_core`, `lib`, `borg.zsh` and `drone.zsh` for appetite, circuit breaker, cost of delay, WSJF, lead time and cycle
-time returns no hits (re-run 2026-10-03). P1.1 is met by prose; P1.2 to P1.4 are absent.
+**Axis A: 1 of 3.** Lives in the `borg-plan` skill (an Objective section: prose), the `borg-next` skill and the scoring
+behind `borg next` (`borg_core/nextpick/core.py:28`: archived dropped, pinned +200, waiting +100, active +50, idle +10,
+no activity -50, tmux window +5, ties broken by last activity), and the QUEUED section of `borg link`. That score is an
+attention heuristic. A search of skills, hooks, agents, `borg_core`, `lib`, `borg.zsh` and `drone.zsh` for appetite,
+circuit breaker, cost of delay, WSJF, lead time and cycle time returns no hits (re-run 2026-10-03). P1.1 is met by
+prose; P1.2 to P1.4 are absent.
 
 **Axis B, measured today (LOCAL MEASUREMENT).** 28 open directives; 23 older than 30 days; median age 41 days, maximum
 87 (age from the filename date, not last activity). Acceptance-criteria boxes checked: 35 of 156 (22%) in open
-directives, 266 of 349 (76%) in shipped plans. Closed directives split 60 shipped to 8 severed.
-**Needs capture:** a ranking snapshot per `borg next`, and a numeric appetite on each directive.
+directives, 266 of 349 (76%) in shipped plans. Closed directives split 60 shipped to 8 severed (the 8 counts
+`plugin-audit.md`, an audit note, so 7 dated). **Needs capture:** a ranking snapshot per `borg next`, and a numeric
+appetite on each directive.
 
 ### 3.3 P2: Planning and scoping
 
@@ -225,8 +243,9 @@ latency 0.77 hours, 90th percentile 68.7 hours. Merges per month: March 4, April
 67, September 56. Agent-completion log: 9,724 of 17,250 rows carry a `zero_commit` field (56% coverage); 3,560 of those
 (37%) are true. Rows typed as nanoprobe: 228 of 968 (24%) are zero-commit. A zero-commit run is not a defect for a
 research or review agent, so read this as "about three quarters of nanoprobe runs left a commit", not as a failure rate.
-**Needs capture:** status history. The registry holds no status field (status lives in each project's
-`.borg/state.json`, latest value only), so WIP over capacity cannot be reconstructed.
+**Needs capture:** status history. The registry holds no status field (status lives in a per-project file under the
+state root, written by `_borg_state_write` in `lib/borg-hooks.sh:271`, latest value only), so WIP over capacity cannot
+be reconstructed.
 
 ### 3.5 P4: Delivery
 
@@ -245,14 +264,15 @@ archive), `borg-verify` (an independent PASS or FAIL reviewer), `pre-commit-remi
 state, and never repairs it). Gap: assimilate is invoked by the human, so shipped-but-unrecorded drift is possible, and
 no delivery-frequency or lead-time number is produced anywhere.
 
-**Axis B, measured today (LOCAL MEASUREMENT).** Shipped plans 60, severed 8 (88% to 12%). Lead time, filing to shipping,
-for the 39 plans that record both dates: median 2 days, mean 6.7, 90th percentile 17, 10 same-day. 20 of 60 shipped
-plans (33%) have no ship date at all, so the median is survivor-biased toward plans that remembered to record it.
-Unchecked boxes inside plans filed as shipped: 83. Merged PRs titled `fix`: 65 of 233 (28%), a title proxy for
-instability, not DORA's change-fail rate; zero PR titles contain "revert". **Prior internal audit, not re-run now**
-(`docs/research/2026-08-20-project-completion-audit`): started work finishes 87% of the time, mid-plan stalls are 6.7%,
-and 47% of the non-backlog open board (36 of 76 directives) was already shipped but unrecorded. **Needs capture:** a
-`Fixes-plan:` trailer linking fix PRs to plans, and a verdict log from `borg-verify`.
+**Axis B, measured today (LOCAL MEASUREMENT).** Shipped plans 60, severed 8 (88% to 12%; the 8 includes the undated
+`plugin-audit.md`, so 7 dated). Lead time, filing to shipping, for the 39 plans that record both dates: median 2 days,
+mean 6.7, 90th percentile 17, 10 same-day. 20 of 60 shipped plans (33%) have no ship date at all, so the median is
+survivor-biased toward plans that remembered to record it. Unchecked boxes inside plans filed as shipped: 83. Merged PRs
+titled `fix`: 65 of 233 (28%), a title proxy for instability, not DORA's change-fail rate; zero PR titles contain
+"revert". **Prior internal audit, not re-run now** (`docs/research/2026-08-20-project-completion-audit`): started work
+finishes 87% of the time, mid-plan stalls are 6.7%, and 47% of the non-backlog open board (36 of 76 directives) was
+already shipped but unrecorded. **Needs capture:** a `Fixes-plan:` trailer linking fix PRs to plans, and a verdict log
+from `borg-verify`.
 
 ### 3.6 P5: Monitoring and feedback
 
@@ -265,7 +285,7 @@ and 47% of the non-backlog open board (36 of 76 directives) was already shipped 
 - **P5.5** (Strength: Moderate; Sources: S39, S19, S28, S38) — Any single number is expected to be gamed once it is a target
 
 **Axis A: 2 of 3.** This is the most engineered pillar. Lives in `borg link` (one renderer, `render.document()`, with a
-fixed seven-section spine pinned by golden files: code), `borg-recon` and `borg_core/recon` (adapter sweep, plus
+fixed section spine pinned by golden files: code), `borg-recon` and `borg_core/recon` (adapter sweep, plus
 detection of a checkpoint that contradicts a live source), `borg_core/planstate`, `bin/borg-pr-watch`,
 `bin/borg-notifyd` and the morning briefing from `borg init`. Gap: it shows state, not flow. No lead time, cycle time,
 throughput or age is computed; P5.2 and P5.3 are absent.
@@ -437,15 +457,18 @@ Every local number reused from the earlier draft was re-run on 2026-10-03 on thi
 
 Unchanged on re-run: 28 open directives, 60 shipped, 8 severed, median open age 41 days with 23 older than 30 and a
 maximum of 87, criteria boxes 35 of 156 open and 266 of 349 shipped, 0 of 60 retros, 1 of 60 scope-grew, 817 spend
-records totalling about $95.3k with $15.6k across 81 borg-collective sessions and a 20.7% subagent share (the token-cost
-skill's "about 4%" figure disagrees with this and neither is explained yet), memory gate FAIL at 0.050, 20 registered
+records totalling about $95.3k as logged (uncorrected: main's `docs/research/2026-09-03-harness-token-efficiency/
+recommendation.md:74-78` finds the logged prices materially high and says its corrected total, $53,324.95 over 803
+records, is the one to quote) with $15.6k across 81 borg-collective sessions and a 20.7% subagent share (also logged
+prices; the token-cost skill's "about 4%" is a standing generalization that the same file marks for replacement at
+`:200`), memory gate FAIL at 0.050, 20 registered
 projects, and `prefer-tool.jsonl` absent (not instrumented, or no bypass logged).
 
 The commands, chained so one block runs the cheap ones (the longer Python bodies are summarized, not pasted, and the
 follow-up directive should turn each into a tested function):
 
 ```
-cd /Users/noah/dev/borg-collective &&
+cd <repo root> &&
     ls docs/plans/directives/20*.md | wc -l &&
     ls docs/plans/assimilated | wc -l &&
     ls docs/plans/severed | wc -l &&
@@ -459,9 +482,10 @@ cd /Users/noah/dev/borg-collective &&
     cat ~/.local/state/borg/memory-gate-verdict.json
 ```
 
-Lead time, open-directive age, checkbox rates and the PR percentiles are short Python reductions over the plan files
-and the `gh` JSON. The agent-log reduction must read both the live file and the rotated one, or it undercounts by a
-factor of fifty.
+Lead time, open-directive age, checkbox rates and the PR percentiles are short Python reductions over the plan files and
+the `gh` JSON. `memory-gate-verdict.json` exists only while the verdict is FAIL (`bin/borg-memory-gate:36-37`), so on a
+PASS the last command finds no file. The agent-log reduction must read both the live file and the rotated one, or it
+undercounts by a factor of fifty.
 
 ---
 
