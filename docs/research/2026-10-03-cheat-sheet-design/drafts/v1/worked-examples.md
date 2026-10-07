@@ -10,7 +10,8 @@ Companion to [recommendation.md](recommendation.md) (options, council, the three
  MONDAY 2026-10-05, 08:40. Noah opens a terminal and starts a session in borg-collective.
 
  LOAD       3 projects active/waiting, BORG_MAX_ACTIVE=3. At the limit, not over it.
-            shopping-app (waiting), borg-collective (active), claude-plugins (active)
+            shopping-app (waiting), borg-collective (active),
+            claude-plugins (active)
  CARRIED    "widen the GitHub adapter: add reviewDecision + mergeable" sits in Next Session of
             three checkpoints in a row, unchanged. Noah is about to write the fourth.
  NOT        Last session edited hooks/tool-count-nudge.sh (added a log line). `borg setup` was
@@ -190,7 +191,7 @@ $ borg stuck
   pick 1-5: 2
 
   Can't choose -> borg next
-  Runs: borg next            (ranks: shopping-app waiting first, then borg-collective)
+  Runs: borg next     (ranks: shopping-app waiting first, then borg-collective)
   Then: close every other window.   Run it now? [y/N]
 ```
 
@@ -280,7 +281,7 @@ Estimate from the recommendation: ledger 1 session, three weeks of waiting, cap 
 
 ### 4. Evidence and strongest objection
 
-Leans on P1 (removing seductive detail had the largest effect in Mayer's meta-analysis), P8, P10 (do not grow). Strongest objection (Recommender): it answers none of what Noah asked (how to apply the sheets' principles), subtraction deletes a signal he chose to have, and it cannot tell a useless nudge from a quiet one that works. The action-rate ledger can also be fooled by correlation, and the round-3 reviewer's point that a Stop-hook stderr nudge reaches nobody applies to its input too.
+Leans on P1 (removing seductive detail had the largest effect in Mayer's meta-analysis), P8, P10 (do not grow). Strongest objection (Recommender): it answers none of the original question (how to apply the sheets' principles), subtraction deletes a signal he chose to have, and it cannot tell a useless nudge from a quiet one that works. The action-rate ledger can also be fooled by correlation, and the round-3 reviewer's point that a Stop-hook stderr nudge reaches nobody applies to its input too.
 
 ---
 

@@ -235,7 +235,7 @@ with the PRs.
 
 **Note for C and D.** A launcher print is a delivery path, not an option; C's held-back line or D's narrated text could ride it, but neither option includes it, and D would pay a model call at every launch to do so.
 
-**E, path 0 [H, deterministic].** The pane command at each launch site is `borg brief borg-collective; claude` (`drone up` on both paths, `drone claude` when the pane is at a shell prompt, `drone feature`), so the brief prints into the target pane and then `claude` starts. No hook and no model is involved, so the brief is on screen before Claude starts and before Noah types anything. Derived lines come first, with the `Activity` line (the part of the evidence that corresponds to the automated cue); the checkpoint's own words come under a line that says who wrote them and when. `Ended` is derived from `state.json` `last_activity` against the newest checkpoint time, read before Claude's SessionStart hook overwrites it. Whether the text stays visible once Claude's screen takes over is the spike's question (a). If `borg_core` cannot be imported, the pane shows `borg brief unavailable: <import error>` and Claude starts anyway.
+**E, path 0 [H, deterministic].** The pane command at each launch site is `<brief command> borg-collective; claude` (`drone up` on both paths, `drone claude` when the pane is at a shell prompt, `drone feature`), so the brief prints into the target pane and then `claude` starts. No hook and no model is involved, so the brief is on screen before Claude starts and before Noah types anything. Derived lines come first, with the `Activity` line (the part of the evidence that corresponds to the automated cue); the checkpoint's own words come under a line that says who wrote them and when. `Ended` is derived from `state.json` `last_activity` against the newest checkpoint time, read before Claude's SessionStart hook overwrites it. Whether the text stays visible once Claude's screen takes over is the spike's question (a). If `borg_core` cannot be imported, the pane shows `<brief command> unavailable: <import error>` and Claude starts anyway.
 
 ```
 $ drone claude borg-collective
@@ -270,18 +270,18 @@ Model gets:     derived lines (Activity, Dirty, Plan, Ended) + sections
 Model no longer has: the git status block and the last-5-commits
                 block, but only if the brief built; if borg_core is not
                 importable it keeps both and gains:
-                "borg brief unavailable: <reason>"
-Noah pulls:     $ borg brief            (the same 9 lines as path 0)
+                "<brief command> unavailable: <reason>"
+Noah pulls:     $ <brief command>     (the same 9 lines as path 0)
 ```
 
-**E, path 2 [H, directly, non-modal].** After the window is selected, `borg switch` and the hotkey show one derived headline through `tmux display-message -d 4000 -C`, which does not take over the pane and expires on its own. The old `summary` echo to the origin pane is gone. The full brief is `borg brief`. A popup was rejected: the tmux manual says panes are not updated while one is present.
+**E, path 2 [H, directly, non-modal].** After the window is selected, `borg switch` and the hotkey show one derived headline through `tmux display-message -d 4000 -C`, which does not take over the pane and expires on its own. The old `summary` echo to the origin pane is gone. The full brief is `<brief command>`. A popup was rejected: the tmux manual says panes are not updated while one is present.
 
 ```
  borg-collective · STALE: 4 commits since the checkpoint · AC6 open ·
- full brief: borg brief
+ full brief: <brief command>
 ```
 
-The headline carries no Next text, because the launcher print or the model's sections already carry it; the headline points at `borg brief`.
+The headline carries no Next text, because the launcher print or the model's sections already carry it; the headline points at `<brief command>`.
 
 ---
 
@@ -442,7 +442,7 @@ Each cell says what appears and who sees it. **H** is the human, **M** is the mo
   - B Ambient: Status-line segment (H, ambient)
   - C Quiet router: -
   - D Narrator: - unless he runs `borg say`
-  - E Doorways (revised): One derived headline, non-modal and auto-expiring (H); `borg brief` for the rest
+  - E Doorways (revised): One derived headline, non-modal and auto-expiring (H); `<brief command>` for the rest
 - **M4 plan to do**
   - Today: -
   - A One page: -

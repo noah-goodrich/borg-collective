@@ -20,4 +20,4 @@ Status: the evidence half passes its citation gate; the design half is stamped N
 
 ## Not in this directory
 
-Machine paths and some checkpoints cited in the worked examples are local measurements from the authoring machine and are not committed. The scanned sheets that prompted the first run are private and are not reproduced anywhere in this tree.
+Machine paths and some checkpoints cited in the worked examples are local measurements from the authoring machine and are not committed. The sheets that prompted the first run are not reproduced in this tree.
