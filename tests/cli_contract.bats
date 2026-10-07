@@ -1021,13 +1021,13 @@ EOF
     git -C "$repo" config user.name "Test"
     echo init > "$repo/file.txt"
     git -C "$repo" add file.txt
-    git -C "$repo" commit -q -m initial
+    GIT_COMMITTER_DATE=2000-01-01T00:00:00 git -C "$repo" commit -q -m initial --date=2000-01-01T00:00:00
 
     local repo_name="${repo##*/}"
     mkdir -p "${BORG_WORKTREE_STATE_DIR}/${repo_name}"
     local wt="${BORG_WORKTREE_STATE_DIR}/${repo_name}/feat-expired"
     git -C "$repo" worktree add -q "$wt" -b feat-expired
-    touch -t 200001010000 "$wt"
+    touch -t 200001010000 "$wt" "$(git -C "$wt" rev-parse --absolute-git-dir)/index"
 
     printf '{"projects":{"repo-wt":{"path":"%s","source":"cli"}}}' "$repo" > "$BORG_REGISTRY"
 
