@@ -1,7 +1,7 @@
 # Source: Wahba 2026 - affect labeling meta-analysis (Zenodo, non-peer-reviewed)
 
 **Full citation:** Wahba MAR. "Putting feelings into words: A systematic review and meta-analysis of affect labeling."
-Zenodo, v1.1.0 record. 2026. DOI 10.5281/zenodo.20109595. (Abstract snapshot:
+Zenodo, v1.1.0 record. 2026. DOI 10.5281/zenodo.20109595. (Abstract snapshot, not committed; re-derive from the card URL:
 drafts/adapter/snapshots/c2-naming-02-putting-feelings-into-words-a-systematic-review-.txt; an earlier version record
 10.5281/zenodo.20109596 reports g=-0.43.)
 **URL:** https://doi.org/10.5281/zenodo.20109595

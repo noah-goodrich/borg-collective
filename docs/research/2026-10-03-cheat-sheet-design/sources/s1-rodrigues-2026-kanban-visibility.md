@@ -39,6 +39,7 @@
 ## Verified Quote(s)
 
 **Location reference:** Quote 1: Abstract, sentence 5 (sentences counted by terminal period followed by a capital letter). Snapshot: docs/research/snapshots/s1-rodrigues-2026-kanban-visibility.txt.
+(Snapshot not committed; re-derive from the card URL.)
 
 > We found statistically significant improvements in perceived communication and collaboration after Kanban adoption, and our qualitative findings suggest that increased work visibility, the use of visual resources, and reduced dependence on intermediary communication contributed to these improvements.
 

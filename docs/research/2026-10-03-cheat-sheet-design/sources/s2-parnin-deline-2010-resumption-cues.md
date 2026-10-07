@@ -43,6 +43,7 @@ Card revised: 2026-10-04 (location audit before verification)
 period or question mark followed by a capital letter (decimals, "vs.", "i.e." and "e.g." do not split). The abstract
 is reconstructed from the record's `abstract_inverted_index` by ordering words by position. Snapshot:
 docs/research/snapshots/s2-parnin-deline-2010-resumption-cues.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > We surveyed 371 programmers on the nature of their tasks, interruptions, task suspension and resumption strategies and found that they rely heavily on note-taking across several types of media.
 

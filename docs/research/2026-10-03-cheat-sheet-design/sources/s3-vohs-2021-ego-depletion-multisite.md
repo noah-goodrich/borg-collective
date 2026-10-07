@@ -45,6 +45,7 @@ because the card URL's raw `abstractText` has it; with markup stripped it reads 
 sentence 5 (the abstract is unlabelled; seven sentences in all). Counting rule: the abstract text is split at a
 terminal period or question mark followed by a capital letter (decimals, "vs.", "i.e." and "e.g." do not split).
 Snapshot: drafts/adapter/snapshots/s3q6-03-a-multisite-preregistered-paradigmatic-test-of-t.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Confirmatory tests found a nonsignificant result (<i>d</i> = 0.06).
 

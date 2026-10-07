@@ -44,6 +44,7 @@ abstract is unlabelled). Counting rule: the abstract text is split at a terminal
 capital letter (decimals, "vs.", "i.e." and "e.g." do not split). The abstract is reconstructed from the record's
 `abstract_inverted_index` by ordering words by position. Snapshot:
 docs/research/snapshots/s1-endsley-sagat-validity.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > SAGAT queries allow for detailed information about subject SA to be collected on an element by element basis that can be evaluated against reality, thus providing an objective assessment of operator SA.
 

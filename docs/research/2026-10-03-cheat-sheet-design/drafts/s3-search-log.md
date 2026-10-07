@@ -1,6 +1,6 @@
 # S3 search log (amount and layering) - 2026-10-04
 
-Snapshot paths in S3 adapter-style cards are relative to docs/research/2026-10-03-cheat-sheet-design/ (drafts/adapter/snapshots/).
+Snapshot paths in S3 adapter-style cards are relative to docs/research/2026-10-03-cheat-sheet-design/ (drafts/adapter/snapshots/). The snapshots are not committed; re-derive each from its card URL.
 
 ## Blocker
 The session WebSearch budget (200 calls, shared with the sibling tracks) ran out after 8 web searches in this track. Remaining discovery used the scholarly adapter (OpenAlex), the OpenAlex and Europe PMC REST APIs, and direct WebFetch/curl on known URLs. Consequences: no government plain-language / BLUF doctrine source (e.g. plainlanguage.gov, military BLUF guidance) was retrieved; no search for Szaszi rebuttal to Maier 2022; no "single recommendation vs ranked list" primary study was found (gap).

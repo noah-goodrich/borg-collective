@@ -10,7 +10,7 @@ Companion to [recommendation.md](recommendation.md) (options, council, the three
  MONDAY 2026-10-05, 08:40. Noah opens a terminal and starts a session in borg-collective.
 
  LOAD       3 projects active/waiting, BORG_MAX_ACTIVE=3. At the limit, not over it.
-            ingle (waiting), borg-collective (active), claude-plugins (active)
+            shopping-app (waiting), borg-collective (active), claude-plugins (active)
  CARRIED    "widen the GitHub adapter: add reviewDecision + mergeable" sits in Next Session of
             three checkpoints in a row, unchanged. Noah is about to write the fourth.
  NOT        Last session edited hooks/tool-count-nudge.sh (added a log line). `borg setup` was
@@ -21,12 +21,12 @@ Companion to [recommendation.md](recommendation.md) (options, council, the three
 
 Where each fact came from, and what is invented (nothing here is a claim about the future, it is a fixed test input):
 
-- Real, read this session: `BORG_MAX_ACTIVE` default 3 and the capacity code in `hooks/borg-link-down.sh` (lines 290-298). `ingle` is the real `waiting` row in `borg link --local` today (5h ago). The three newest checkpoints are `.borg/checkpoints/2026-09-28-takeover.md`, `2026-10-02-145508-fb0d8f.md`, `2026-10-03-222446-beb3b1.md`.
+- Real, read this session: `BORG_MAX_ACTIVE` default 3 and the capacity code in `hooks/borg-link-down.sh` (lines 290-298). `shopping-app` is the real `waiting` row in `borg link --local` today (5h ago). The three newest checkpoints are `.borg/checkpoints/2026-09-28-takeover.md`, `2026-10-02-145508-fb0d8f.md`, `2026-10-03-222446-beb3b1.md`.
 - Real: the adapter-widening item. It is in `2026-10-02-145508-fb0d8f.md` section 5 ("The highest-value unblocked work is the one-line adapter widening", adding `reviewDecision` and `mergeable`). It is NOT in the 10-03 checkpoint, so "three in a row" is constructed: I assume two later checkpoints copy it unchanged.
 - Real: `make eval-changed` and the changed-files selector exist (shipped as #253 in the 10-03 checkpoint). Real precedent for the UNCHECKED shape: #250's test "bypassed discovery" and #255 fixed it (same checkpoint). The zero-case run is constructed.
 - Real: source and deployed hooks are byte-identical TODAY (I compared every file in `hooks/` with `~/.claude/hooks/`; no drift, because `borg setup` was run on 10-03). The unsynced edit is constructed. It is the very hook that B-card's instrumentation step edits, which is deliberate: it makes the ledger show `no data`.
 - Real pattern, invented number: the 10-02 checkpoint lists four PRs waiting on the work machine for ten days. The single waiting PR (written as "#257" below) is constructed.
-- Real, from the current `borg link --local` page: 20 repositories, 5 never active, 19 of 20 rows say "(no summary)". Section names and the `▸` spine are the real ones. Repo names other than ingle, borg-collective and claude-plugins are left out on purpose.
+- Real, from the current `borg link --local` page: 20 repositories, 5 never active, 19 of 20 rows say "(no summary)". Section names and the `▸` spine are the real ones. Repo names other than shopping-app, borg-collective and claude-plugins are left out on purpose.
 - Note from the code: today's CAPACITY WARNING fires only when active is strictly greater than the limit (`_active_count > _max_active`). At 3 of 3 the current system says nothing about load. That is part of why the scenario is interesting.
 
 How to read the principle labels (P1 to P11 are analysis.md section 3): P1 one message, few chunks. P2 recognition at the point of performance. P3 every name routes to a next move. P4 problem beside its counter-move. P5 small closed vocabulary from your own failures. P6 rehearsed if-then scripts. P7 sparse distinctive cues. P8 pull by default, push rarely. P9 a handout is a first step and wants practice. P10 do not duplicate, mandate or grow. P11 diagrams are heuristics.
@@ -190,13 +190,13 @@ $ borg stuck
   pick 1-5: 2
 
   Can't choose -> borg next
-  Runs: borg next            (ranks: ingle waiting first, then borg-collective)
+  Runs: borg next            (ranks: shopping-app waiting first, then borg-collective)
   Then: close every other window.   Run it now? [y/N]
 ```
 
 ### 2. What happens next
 
-Noah picks 2 (three live threads), `borg next` says ingle first, he switches. That helps the load. It does nothing for the carried item, the undeployed hook, the zero-case green or the waiting PR, because none of them is a feeling of being stuck: the agent was not stuck, it was wrong. The agent sessions never see this menu.
+Noah picks 2 (three live threads), `borg next` says shopping-app first, he switches. That helps the load. It does nothing for the carried item, the undeployed hook, the zero-case green or the waiting PR, because none of them is a feeling of being stuck: the agent was not stuck, it was wrong. The agent sessions never see this menu.
 
 ### 3. Cost and what it stops
 
@@ -253,7 +253,7 @@ Subtraction first. Same `borg link` page, same section list (the one-renderer ru
 $ borg link --local
 ▸ IN FOCUS  borg-collective   idle   just now
 ▸ REPOSITORIES  the collective · 20 repositories · 3 need attention
-  ingle             [C]  waiting <<<   5h ago
+  shopping-app      [C]  waiting <<<   5h ago
   borg-collective   [C]  active        just now
   claude-plugins    [C]  active        26d ago
   ... 5 never active, 10 idle over 30 days (counts only)

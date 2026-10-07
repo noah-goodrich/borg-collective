@@ -45,6 +45,7 @@ Abstract, Results section, sentence 4 (overall sentence 10). Counting rule: the 
 not sentences. Section ordinals count within the labelled section; overall ordinals count from the first abstract
 sentence, with each label belonging to the sentence that follows it. Snapshot:
 docs/research/snapshots/s2-heilman-2016-ipass-ed-adaptation.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Focus group participants agreed the patient summary should be adapted to include anticipated disposition of patient.
 

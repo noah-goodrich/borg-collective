@@ -47,6 +47,7 @@ sentence). Counting rule: the abstract text in the card URL's `abstractText` fie
 question mark followed by a capital letter; section labels are not sentences. Section ordinals count within the
 labelled section; overall ordinals count from the first abstract sentence, with each label belonging to the sentence
 that follows it. Snapshot: docs/research/snapshots/s2-starmer-2014-ipass-nejm.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > The intervention included a mnemonic to standardize oral and written handoffs, handoff and communication training, a faculty development and observation program, and a sustainability campaign.
 

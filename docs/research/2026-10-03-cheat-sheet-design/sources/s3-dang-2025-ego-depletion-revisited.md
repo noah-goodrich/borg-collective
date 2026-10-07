@@ -47,6 +47,7 @@ I-squared = 0 are in the remainder of that sentence of the abstract and are not 
 (added). Quote 3: Abstract, sentence 4 (added). Counting rule: the abstract text is split at a terminal period or
 question mark followed by a capital letter (decimals, "vs.", "i.e." and "e.g." do not split). Snapshot:
 drafts/adapter/snapshots/s3-05-revisiting-ego-depletion-evidence-from-multi-lab.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Results consistently demonstrated significant ego depletion effects
 

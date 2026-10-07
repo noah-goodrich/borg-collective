@@ -46,6 +46,7 @@ these results"). Counting rule: the abstract text is split at a terminal period 
 letter (decimals, "vs.", "i.e." and "e.g." do not split). The abstract is reconstructed from the record's
 `abstract_inverted_index` by ordering words by position. Snapshot:
 drafts/adapter/snapshots/s3q1-01-understanding-the-role-of-latent-feature-diversi.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Study 2 extends these results by testing our diversification algorithm against traditional Top-N recommendations, and finds that diverse, small item sets are just as satisfying and less effortful to choose from than Top-N recommendations.
 

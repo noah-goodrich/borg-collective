@@ -45,6 +45,7 @@ Card revised: 2026-10-04 (location audit before verification)
 the Europe PMC `abstractText`; ten sentences in all). Counting rule: the abstract text is split at a terminal period
 or question mark followed by a capital letter (decimals, "vs.", "i.e." and "e.g." do not split). Snapshot:
 drafts/adapter/snapshots/s3q6-04-systematic-review-of-the-effects-of-decision-fat.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Narrative synthesis revealed that 45% of cases that quantitatively assessed the decision fatigue hypothesis provided evidence of significant decision fatigue effects across diagnostic, test ordering, prescribing, and therapeutic decisions.
 

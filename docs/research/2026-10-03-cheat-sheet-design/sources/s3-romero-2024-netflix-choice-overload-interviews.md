@@ -45,6 +45,7 @@ Card revised: 2026-10-04 (location audit before verification)
 "Abstract" title in the Crossref JATS; sentence 10 begins "Paradoxically, this gives rise to a potential"). Counting
 rule: the abstract text is split at a terminal period or question mark followed by a capital letter (decimals, "vs.",
 "i.e." and "e.g." do not split). Snapshot: drafts/adapter/snapshots/s3-netflix-2024.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Paradoxically, this gives rise to a potential “user's dilemma,” as the study exposes a high reliance and trust in recommendation lists.
 
