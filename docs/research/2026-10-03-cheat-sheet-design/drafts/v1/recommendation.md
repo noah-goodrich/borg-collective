@@ -93,8 +93,8 @@ stop at any gate:
 This stops nothing at first. Retiring a nudge is a separate, ledger-decided removal (Option E's rule).
 
 **Why this one.** It is the only option that answers the question asked, a named, paired, glanceable artifact like
-the one-page sheets, and it now carries the instrumentation to find out whether it was ever seen. Options C and D ask him
-to remember to use something at the moment recall is weakest, A names a zone but not the culprit, F is the least
+the one-page sheets, and it now carries the instrumentation to find out whether it was ever seen. Options C and D ask
+him to remember to use something at the moment recall is weakest, A names a zone but not the culprit, F is the least
 evidenced. The evidence is mixed and the wording follows it: the contrast-pair mechanism is Moderate and the one-page
 format is Weak (case comparison in classroom concept learning, `c3-alfieri-2013-case-comparisons.md`;
 error-management training, `c3-keith-frese-2008-error-management-training.md`). If-then phrasing is the
@@ -121,8 +121,8 @@ stands, and the opens log exists to measure exactly that. Full argument under Co
 **What is not known.** No study tests a one-page aid on adults with ADHD or on developers, and none was run here
 (`analysis.md` §2). The if-then evidence is for self-formed, rehearsed plans, which is why the rehearsal step exists;
 a plan Noah never rewrote is outside it. There is no direct outcome signal for the sheets themselves. The mining is
-one author's tally of what sessions recorded as blockers, not a survey of what developers felt. The three-week ledger is how this gets tested on the person it is for, and it is a proxy that coincidence can
-fool.
+one author's tally of what sessions recorded as blockers, not a survey of what developers felt. The three-week ledger is
+how this gets tested on the person it is for, and it is a proxy that coincidence can fool.
 
 ## Options
 
@@ -518,7 +518,7 @@ the "fix" worsens the problem. I take its sequencing and its budget in full: the
 net-negative in page lines, and anything unacted after three weeks is removed. I decline its conclusion that E alone
 suffices, for three reasons. Subtraction without a replacement deletes a signal Noah chose to have (his standing
 preference is that borg actions do something, not just show information), E cannot tell a useless nudge from a quiet
-one that works, and E answers none of the question he asked, which was how to apply the sheets' principles. I take the
+one that works, and E answers none of the original question, which was how to apply the sheets' principles. I take the
 Advocate's wording conditions as binding (R1) and I accept the Advocate's kill of F, with the note that F is only worth
 revisiting
 if the ledger first shows the page rows are read. The Realist's detector warning (R3) is met by using only numbers
@@ -582,11 +582,11 @@ I name that R6.
 Feasible: B-card. Fragile: F.
 
 **User Advocate.** I DISAGREE less, but still formally. The names are better: they describe a piece of work (NOT
-DEPLOYED, CARRIED) and not a person's failing, and the file is Noah's to edit, which matters for someone with ADHD and
-emotional dysregulation (`c4-faraone-2019-emotional-dysregulation.md`). My condition stays binding: no warning colour,
-no verdict wording, and "CARRIED" must not be rendered anywhere borg shows it as a count of things left undone on the
-morning page. A card he opens by choice is safe; the same four words on `borg link` are not. This is R1. I still kill
-F, for the habituation reason.
+DEPLOYED, CARRIED) and not a person's failing, and the file is Noah's to edit, which matters because emotional
+symptoms are common and persistent in ADHD (`c4-faraone-2019-emotional-dysregulation.md`). My condition stays binding:
+no warning colour, no verdict wording, and "CARRIED" must not be rendered anywhere borg shows it as a count of things
+left undone on the morning page. A card he opens by choice is safe; the same four words on `borg link` are not. This is
+R1. I still kill F, for the habituation reason.
 
 **Pragmatist.** The page is 158 lines in eight sections, and B-card adds zero to it. I withdraw the growth objection to
 B and keep a weaker one (R2): a card nobody opens is a file, and the ledger's three-week window is the whole test. My
@@ -739,7 +739,8 @@ detector is cheap, plus a human card only where Noah is the actor. That is Noah'
 
 The full evidence deliverable is [analysis.md](analysis.md): 59 sources evaluated across four tracks, 54 kept, an
 independent verifier checked 18 cards with 0 failures. Verification detail is in
-[verification-report-v1-59cards.md](../verification-report-v1-59cards.md). The findings that carry weight in this document:
+[verification-report-v1-59cards.md](../verification-report-v1-59cards.md). The findings that carry weight in this
+document:
 
 - **One message, few groups, no decoration is among the better-supported layout moves.** Moderate strength: Mayer's
   meta-analysis found g = 0.37 overall, largest for removing seductive detail (`c1-mayer-metaanalysis-2025.md`); working
