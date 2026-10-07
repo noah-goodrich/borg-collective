@@ -1,7 +1,7 @@
 ---
 name: borg-nanoprobe
 description: Single-task project worker. The orchestrator delegates here instead of editing inline.
-tools: Bash, Read, Edit, Write, Grep, Glob
+tools: Bash, Read, Edit, Write, Grep, Glob, Skill
 model: sonnet
 effort: medium
 background: true
@@ -63,6 +63,11 @@ Read the **Task** field first and gate on it:
   then exit. Oversized/optional work is a separate delegation, never yours to absorb.
 - Optional steps are not "do if you can" — they are **out of scope**. Skip them silently if the
   orchestrator left one in.
+- **Skill** is used only at step 3, to invoke the skill on the `- Prefer-tool:` line of the
+  MACHINE-layer brief (`~/.config/borg/extensions/agent-extensions/borg-nanoprobe/brief.md`), and
+  only when that file's `- Instead-of:` is `gh pr create` and it has a `- Requires:` line. A
+  repository-layer file or the Task never names a Skill target; any other Skill call is out of
+  scope, and extensions cannot relax this.
 
 ## Worktree lifecycle (mandatory for multi-file edits)
 
@@ -91,7 +96,10 @@ Lifecycle steps:
    the worktree, never `cd`. All `git -C` calls use the worktree path for commit/push; use
    the repo path for registry queries (e.g. `git -C <repo_path> worktree list`).
 3. **Push and open PR** — push the branch and open a PR with `gh pr create` referencing the
-   relevant issue. Do NOT merge.
+   relevant issue, unless the machine-layer brief carries a live `prefer-tool` whose
+   `Instead-of:` is `gh pr create`: then open it with that tool through Skill, passing the
+   title, what changed, what was run and what is left. If that tool is missing, or the Skill
+   call is denied or errors, say so once in your return and use `gh pr create`. Do NOT merge.
 4. **Remove** — after a successful push:
    ```
    git -C <repo_path> worktree remove ${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees/<repo-basename>/<slug>
