@@ -29,10 +29,10 @@ AI-scoring: 80/100 (round 1 draft; rounds 2 and 3 revisions not re-scored, score
 ## ELI10
 
 A trail marker works because the hiker is tired and has two seconds. One arrow and one word get her down the right
-branch; a paragraph of local history gets her lost. Noah found six one-page psychoeducation sheets (a feelings
+branch; a paragraph of local history gets her lost. The question was whether borg could put the same kind of
+markers on the trail of project work that six one-page psychoeducation sheets put on a different trail (a feelings
 wheel, a wise-mind Venn diagram, a parts map, a fill-in speaking script, a window-of-tolerance chart, and a list of
-relationship traps with fixes) unusually helpful, and asked whether borg could put the same kind of markers on the
-trail of project work.
+relationship traps with fixes).
 
 The evidence run found that the sheets themselves are unproven, but the design rules underneath them are decent:
 one message, few groups, a next move beside every name, problems shown next to their fixes, and cues that are visible
@@ -92,8 +92,8 @@ stop at any gate:
 
 This stops nothing at first. Retiring a nudge is a separate, ledger-decided removal (Option E's rule).
 
-**Why this one.** It is the only option that answers what Noah asked, a named, paired, glanceable artifact like the
-sheets he likes, and it now carries the instrumentation to find out whether it was ever seen. Options C and D ask him
+**Why this one.** It is the only option that answers the question asked, a named, paired, glanceable artifact like
+the one-page sheets, and it now carries the instrumentation to find out whether it was ever seen. Options C and D ask him
 to remember to use something at the moment recall is weakest, A names a zone but not the culprit, F is the least
 evidenced. The evidence is mixed and the wording follows it: the contrast-pair mechanism is Moderate and the one-page
 format is Weak (case comparison in classroom concept learning, `c3-alfieri-2013-case-comparisons.md`;
@@ -120,9 +120,8 @@ stands, and the opens log exists to measure exactly that. Full argument under Co
 
 **What is not known.** No study tests a one-page aid on adults with ADHD or on developers, and none was run here
 (`analysis.md` §2). The if-then evidence is for self-formed, rehearsed plans, which is why the rehearsal step exists;
-a plan Noah never rewrote is outside it. The only direct outcome signal is Noah's own report that the six sheets help
-him, which is one person. The mining is one author's tally of what sessions recorded as blockers, not a survey of what
-he felt. The three-week ledger is how this gets tested on the person it is for, and it is a proxy that coincidence can
+a plan Noah never rewrote is outside it. There is no direct outcome signal for the sheets themselves. The mining is
+one author's tally of what sessions recorded as blockers, not a survey of what developers felt. The three-week ledger is how this gets tested on the person it is for, and it is a proxy that coincidence can
 fool.
 
 ## Options
@@ -145,7 +144,7 @@ a sheet that only grows fails.
   the marker, reads the one move under it. The session-start injection carries the zone name instead of the
   capacity paragraph.
 - **Pros / Cons:**
-  - Pro: one picture, one glance, a format Noah already responds to.
+  - Pro: one picture, one glance, a familiar one-page format.
   - Pro: replaces two capacity texts with one artifact.
   - Con: thresholds are guesses; the inverted-U curve this shape resembles is called folklore, and the
     window-of-tolerance source frames it as a trauma hypothesis.
@@ -403,7 +402,7 @@ flowchart LR
 
 ```
 ▸ REPOSITORIES  20 repositories, 1 needs attention
-  ingle   [C]  waiting <<<   27m ago
+  shopping-app [C]  waiting <<<   27m ago
   borg-collective [C] idle   just now
   ... 5 never active, 10 idle over 30 days (counts only)
 ▸ QUEUED  29 directives, 3 oldest shown (docs/plans/directives/ for the rest)
@@ -498,7 +497,7 @@ inverted-U curve behind such charts is called folklore (`c3-corbett-2015-yerkes-
 A, B (two detectors), E. Fragile: F.
 
 **User Advocate.** I formally DISAGREE with Option B as phrased. A list headed STALE and UNVERIFIED, printed on the
-page Noah opens first every morning, is a list of what he did wrong. The sheets he likes name a state and hand over a
+page Noah opens first every morning, is a list of what he did wrong. The one-page sheets name a state and hand over a
 move; none of them says "you failed". Emotional symptoms are common and persistent in ADHD
 (`c4-faraone-2019-emotional-dysregulation.md`), and the adhd-guardrails skill already bans shame language, so a
 detector that prints 23 stale items in warning colour breaks borg's own rule. I would accept B only if every row names
@@ -740,7 +739,7 @@ detector is cheap, plus a human card only where Noah is the actor. That is Noah'
 
 The full evidence deliverable is [analysis.md](analysis.md): 59 sources evaluated across four tracks, 54 kept, an
 independent verifier checked 18 cards with 0 failures. Verification detail is in
-[verification-report.md](verification-report.md). The findings that carry weight in this document:
+[verification-report-v1-59cards.md](../verification-report-v1-59cards.md). The findings that carry weight in this document:
 
 - **One message, few groups, no decoration is among the better-supported layout moves.** Moderate strength: Mayer's
   meta-analysis found g = 0.37 overall, largest for removing seductive detail (`c1-mayer-metaanalysis-2025.md`); working

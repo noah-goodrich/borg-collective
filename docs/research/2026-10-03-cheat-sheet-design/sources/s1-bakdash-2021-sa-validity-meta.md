@@ -44,6 +44,7 @@ ten sentences in all). Counting rule: the abstract text is split at a terminal p
 capital letter (decimals, "vs.", "i.e." and "e.g." do not split). The abstract is reconstructed from the record's
 `abstract_inverted_index` by ordering words by position. Snapshot:
 docs/research/snapshots/s1-bakdash-2021-sa-validity-meta.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > The overall mean effect, while significant, was also limited in magnitude (r = 0.26, p < 0.001).
 

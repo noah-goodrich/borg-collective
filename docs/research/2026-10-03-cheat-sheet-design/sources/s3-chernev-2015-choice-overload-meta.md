@@ -47,6 +47,7 @@ character-for-character). Quote 2: Abstract, sentence 6 (the last of six sentenc
 from the "Abstract" title). Counting rule: the abstract text is split at a terminal period or question mark followed
 by a capital letter (decimals, "vs.", "i.e." and "e.g." do not split). Snapshot:
 drafts/adapter/snapshots/s3-chernev-2015-choice-overload-meta.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > We further show that each of these four factors has a reliable and significant impact on choice overload, whereby higher levels of decision task difficulty, greater choice set complexity, higher preference uncertainty, and a more prominent, effort‐minimizing goal facilitate choice overload.
 

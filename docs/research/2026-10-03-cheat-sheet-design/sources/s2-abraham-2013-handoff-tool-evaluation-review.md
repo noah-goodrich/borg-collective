@@ -44,6 +44,7 @@ Abstract, Conclusions section, sentence 1 (overall sentence 10). Counting rule: 
 not sentences. Section ordinals count within the labelled section; overall ordinals count from the first abstract
 sentence, with each label belonging to the sentence that follows it. Snapshot:
 docs/research/snapshots/s2-abraham-2013-handoff-tool-evaluation-review.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Evaluation studies were quasi-experimental (42%) or observational (50%), with a major focus on handoff-related outcome measures (94%) using predominantly survey-based tools (70%) with user satisfaction metrics (53%).
 

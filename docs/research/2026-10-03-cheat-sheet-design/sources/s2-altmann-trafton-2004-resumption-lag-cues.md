@@ -43,6 +43,7 @@ abstract is unlabelled). Counting rule: the abstract text is split at a terminal
 capital letter (decimals, "vs.", "i.e." and "e.g." do not split). The abstract is reconstructed from the record's
 `abstract_inverted_index` by ordering words by position. Snapshot:
 docs/research/snapshots/s2-altmann-trafton-2004-resumption-lag-cues.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > The resumption lag (in this task environment) was double the interval between uninterrupted actions (3.8 seconds vs. 1.9 seconds), indicating a substantial disruptive effect.
 

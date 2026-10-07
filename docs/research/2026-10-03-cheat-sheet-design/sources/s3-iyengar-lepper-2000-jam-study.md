@@ -44,6 +44,7 @@ Card revised: 2026-10-04 (location audit before verification)
 sentences in all, the last being "Implications for future research are discussed."). Counting rule: the abstract text
 is split at a terminal period or question mark followed by a capital letter (decimals, "vs.", "i.e." and "e.g." do not
 split). Snapshot: drafts/adapter/snapshots/s3-iyengar-lepper-2000.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > These experiments, which were conducted in both field and laboratory settings, show that people are more likely to purchase gourmet jams or chocolates or to undertake optional class essay assignments when offered a limited array of 6 choices rather than a more extensive array of 24 or 30 choices.
 

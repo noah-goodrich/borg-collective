@@ -45,6 +45,7 @@ Card revised: 2026-10-04 (location audit before verification)
 mark followed by a capital letter; section labels are not sentences. Section ordinals count within the labelled
 section; overall ordinals count from the first abstract sentence, with each label belonging to the sentence that
 follows it. Snapshot: docs/research/snapshots/s1-xie-2022-clinical-dashboards-sr.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Eight trials evaluated clinical dashboards as standalone interventions and provided conflicting evidence on changes in antibiotic prescribing and no effects on statin prescribing compared to usual care.
 

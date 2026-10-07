@@ -4,7 +4,7 @@ Generated: 2026-10-04
 
 ## Problem statement
 
-borg-collective is an orchestration framework (two CLIs, borg and drone, plus hooks and skills) for ONE developer with ADHD who works across about 20 projects and several parallel Claude Code sessions. The question: how should borg COMMUNICATE project information (status, priority, context, next moves) so that the right information arrives at the right time, in the right way and in the right amount? This is about how borg says things, not what it measures or enforces (a separate project decides that).
+borg-collective is an orchestration framework (two CLIs, borg and drone, plus hooks and skills) for ONE developer who works across about 20 projects and several parallel Claude Code sessions. The question: how should borg COMMUNICATE project information (status, priority, context, next moves) so that the right information arrives at the right time, in the right way and in the right amount? This is about how borg says things, not what it measures or enforces (a separate project decides that).
 
 The six moments at which borg speaks: M1 glance (status at rest across the projects); M2 choosing the next move; M3 re-entering a project after time away; M4 switching between planning and doing; M5 ending or handing off a session; M6 something going wrong.
 

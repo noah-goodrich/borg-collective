@@ -8,9 +8,9 @@ The recommendation is in [recommendation.md](recommendation.md). This file runs 
 
 **Wednesday 2026-10-07, 08:40.** Noah has been away from borg for three days. He glances at the whole board, picks something to work on, re-enters borg-collective, plans the next acceptance criterion and switches to doing it, hits friction around tool call 75, and stops for the day.
 
-**Where the facts come from.** Every fact was read from this machine on 2026-10-04. Durations that grow with time are advanced by exactly three days and marked with a dagger (†). The one staged event is marked with a double dagger (‡); it is a plausible instance of a real failure class, not a recorded one. Project names other than the public repos are masked (`shopping-app` is Noah's grocery project).
+**Where the facts come from.** Every fact was read from this machine on 2026-10-04. Durations that grow with time are advanced by exactly three days and marked with a dagger (†). The one staged event is marked with a double dagger (‡); it is a plausible instance of a real failure class, not a recorded one. Project names other than the public repos are masked (`shopping-app` is Noah's grocery project). Paths on the authoring machine (`~/...`, its checkout of this repo) and the checkpoints named below are local measurements, not committed files: a reader without that machine cannot re-run them, and the checkpoint `.borg/checkpoints/2026-10-03-222446-beb3b1.md` is not in the repo.
 
-- 20 repositories, 1 needs attention, `shopping-app` waiting, 19 of 20 rows `(no summary)`, 17 rows never or 26+ days idle, 30 queued directives, `▸ NEXT  nobody looked`, 159 lines of output — `zsh borg.zsh link --local` run in `/Users/noah/dev/borg-collective` on 2026-10-04
+- 20 repositories, 1 needs attention, `shopping-app` waiting, 19 of 20 rows `(no summary)`, 17 rows never or 26+ days idle, 30 queued directives, `▸ NEXT  nobody looked`, 159 lines of output — `zsh borg.zsh link --local` run in the authoring machine's checkout of this repo on 2026-10-04 (a local measurement)
 - Last session ended with tl;dr "Shipped State Hygiene AC3 to AC5 ... two full-tier research runs ... mid write-up"; Blockers (stray adapter output to remove, a research-tools bug, a stale gate marker); five Next Session items — `.borg/checkpoints/2026-10-03-222446-beb3b1.md`
 - 7 untracked entries (1 checkpoint, `docs/research/snapshots/`, 5 `retrospectives-0*.md`) — `git status` at session start, 2026-10-04
 - PRs #258 and #259 merged Sun 2026-10-04 03:42 -0600 (Stop warnings now reach the user) — `git log` on `main`
@@ -23,7 +23,7 @@ The recommendation is in [recommendation.md](recommendation.md). This file runs 
 - Launcher paths — `cmd_claude` in `drone.zsh` (`tmux send-keys "claude" Enter`); `cmd_claude` and `_borg_launch_in_tmux` in `borg.zsh`
 - 4 commits and 2 merges after the checkpoint, touching 7 files — `git log --since` the checkpoint time on `main`, 2026-10-04
 
-**Who sees what.** Marked **[H]** when the human sees it and **[M]** when only the model receives it. Corrected after the first blind review: SessionStart, PostToolUse and PreToolUse `additionalContext` reach the model only, and a model-side message reaches the human only if the model repeats it. Stop `systemMessage` is documented to reach the human (and has been emitted since PR #258) but has not been watched rendering live, and Stop fires after every assistant turn, so it is not an end-of-session signal. SessionStart `systemMessage` is not documented as a SessionStart output and is unverified. Switching into a tmux window whose Claude session is already running fires no SessionStart at all. The `borg switch` auto-brief prints to the pane Noah leaves and is built from `summary`. A print from `drone claude` or `borg claude` is plain stdout in the pane and reaches the human with no hook or model, but only for launches that go through those commands.
+**Who sees what.** Marked **[H]** when the human sees it and **[M]** when only the model receives it. Corrected after the first blind review: SessionStart, PostToolUse and PreToolUse `additionalContext` reach the model only, and a model-side message reaches the human only if the model repeats it. Stop `systemMessage` is documented to reach the human (and has been emitted since PR #258) but has not been watched rendering live, and Stop fires after every assistant turn, so it is not an end-of-session signal. SessionStart `systemMessage` may render: the current hooks reference lists `systemMessage` as a universal field shown to the user, but a public report (anthropics/claude-code#41285, last reproduced on 2.1.132 under tmux, closed without a fix) says it stopped rendering in the terminal, and nobody has watched it in a borg session; the spike watches it. Switching into a tmux window whose Claude session is already running fires no SessionStart at all. The `borg switch` auto-brief prints to the pane Noah leaves and is built from `summary`. A print from `drone claude` or `borg claude` is plain stdout in the pane and reaches the human with no hook or model, but only for launches that go through those commands.
 
 **Order.** The moments run in clock order, which puts M6 (a problem mid-session) before M5 (the end).
 
@@ -98,7 +98,7 @@ touched in a month. (narrated 08:41 from one sweep; real page available:
 borg link)
 ```
 
-**E, doorways [H, pull].** The MVP adds A's smallest change here, the verdict line, ordered by the same ranker as `borg next`, and nothing else; the dormant-row collapse is the optional last step (build step 8). Shown is the verdict line plus the rows as they are today.
+**E, doorways [H, pull].** The MVP adds A's smallest change here, the verdict line, derived from the rows the page already orders (it adds no ranker; `borg next` is left to main's chooser, see M2), and nothing else; the dormant-row collapse is the optional last step (build step 9), and main's board/chooser directive rejects it ("Nothing in this directive collapses projects", `docs/plans/directives/2026-10-05-board-chooser-and-trains-ux.md:17`). Shown is the verdict line plus the rows as they are today.
 
 ```
 $ borg link --local
@@ -107,14 +107,14 @@ $ borg link --local
 ▸ REPOSITORIES  the collective · 20 repositories · 1 need attention
  shopping-app            [C]  waiting <<<  3d ago†  (no summary)
  ... the rows as today (collapsing the dormant ones is optional
-     step 8) ...
+     step 9) ...
 ```
 
 ---
 
 ## M2: choosing the next move (08:44)
 
-**Today.** `borg next` returns one project by score (pinned +200, waiting +100, active +50, idle +10). It shows no reason and no alternatives, and nothing records whether Noah took it. `Needs:` is absent because the registry has no waiting reason.
+**Today.** `borg next` returns one project by score (pinned +200, waiting +100, active +50, idle +10). It shows no reason and no alternatives, and nothing records whether Noah took it. *Superseded 2026-10-07: that describes `borg next` as it was on 2026-10-04. #274 and #275 have since shipped M2 as a TTY chooser that lists every ranked project (`borg.zsh:791`, `borg_core/nextpick/core.py:180-191`); every run appends a row to `next-recs.jsonl` (`borg_core/nextpick/shell.py:15-20`); and a `▸ suggested:` line stays hidden until at least 20 chooser rows show a follow rate of at least 60% (`core.py:108-114`, `:194-198`). Any ranker change goes through that directive's gate and keeps `cmd_next`'s null handling. The mock below is the 2026-10-04 output.* `Needs:` is absent because the registry has no waiting reason.
 
 ```
 $ borg next
@@ -154,7 +154,7 @@ preferences. If you want a short win instead, borg-collective has one
 criterion left (AC6).
 ```
 
-**E [H, pull].** One ranker for `borg link` and `borg next` (`core.project_sort_key`, the page's own order), so the verdict line in M1 and this answer cannot disagree. The reason is labelled a heuristic and says what it is: status order, not value. What the PR is worth is quoted from the project's own checkpoint and attributed to it, so borg does not claim it. The recommendation and, on the next call, whether that project's activity moved after it are logged to `next-log.jsonl`. Noah overrides the recommendation and goes to borg-collective; the log records `followed: false`. The three-move list is not in E.
+**E [H, pull].** *Superseded 2026-10-07: E leaves M2 to main's chooser.* This paragraph first proposed one ranker for `borg link` and `borg next` (`core.project_sort_key`) and a `next-log.jsonl`; neither is built. #274 and #275 shipped the chooser and `next-recs.jsonl`, and the ranker stays `cmd_next`'s until that directive's gate passes. What survives is a proposal for the chooser's suggestion line once the gate passes: a reason labelled a heuristic that says what it is (status order, not value), with what the PR is worth quoted from the project's own checkpoint and attributed to it, so borg does not claim it. The mock below is that proposal's wording, not a shipped output. The three-move list is not in E.
 
 ```
 $ borg next
@@ -168,9 +168,9 @@ $ borg next
 
 ## M3: re-entering borg-collective (08:46)
 
-Noah has not touched this project for three days†. There are three ways in, and they have different channels. **Path 0, launched through borg** (`drone claude borg-collective`, the usual case after three days): the launcher types `claude` into the project's pane. **Path 1, a hand-typed `claude`, `/resume`, or CoCo**: SessionStart fires and nothing runs before it. **Path 2, `borg switch` or `Ctrl+Space >`** into a window whose Claude session is already running: SessionStart does not fire, because no session starts. Everything below that says [M] reaches only the model; the human sees it only if the model repeats it.
+Noah has not touched this project for three days†. There are three ways in, and they have different channels. **Path 0, launched through borg** (`drone up borg-collective` or `drone claude borg-collective`, the usual cases after three days, or `drone feature`): the launcher puts `claude` into the project's pane (`drone.zsh:482`, `:561`, `:735`, `:817`). **Path 1, a hand-typed `claude`, `/resume`, or CoCo**: SessionStart fires and nothing runs before it. **Path 2, `borg switch` or `Ctrl+Space >`** into a window whose Claude session is already running: SessionStart does not fire, because no session starts. Everything below that says [M] reaches only the model; the human sees it only if the model repeats it.
 
-**Today, path 0.** Same as path 1: `drone claude` runs `tmux send-keys "claude" Enter` and prints nothing of its own, so the human sees an empty prompt and the model gets the injection below.
+**Today, path 0.** Same as path 1: `drone up`, `drone claude` and `drone feature` put `claude` into the pane (the `send-keys` at `drone.zsh:413`, `:735` and `:817`) and print nothing of their own, so the human sees an empty prompt and the model gets the injection below.
 
 **Today, path 1.** The human sees an empty prompt. The model receives about 60 lines [M]: git status (7 untracked entries), the last 5 commits, the memory-gate FAIL paragraph (every session since 2026-10-02), and sections 4 and 5 of the checkpoint verbatim.
 
@@ -235,7 +235,7 @@ with the PRs.
 
 **Note for C and D.** A launcher print is a delivery path, not an option; C's held-back line or D's narrated text could ride it, but neither option includes it, and D would pay a model call at every launch to do so.
 
-**E, path 0 [H, deterministic].** `drone claude` runs `borg brief borg-collective` and prints it into the pane, then types `claude`. No hook and no model is involved, so the brief is on screen before Claude starts and before Noah types anything. Derived lines come first, with the `Activity` line (the part of the evidence that corresponds to the automated cue); the checkpoint's own words come under a line that says who wrote them and when. `Ended` is derived from `state.json` `last_activity` against the newest checkpoint time, read before Claude's SessionStart hook overwrites it. Whether the text stays visible once Claude's screen takes over is the spike's question (a), as is whether the pane's shell can run `borg` when it sits inside the devcontainer. If `borg_core` cannot be imported, the pane shows `borg brief unavailable: <import error>` and Claude starts anyway.
+**E, path 0 [H, deterministic].** The pane command at each launch site is `borg brief borg-collective; claude` (`drone up` on both paths, `drone claude` when the pane is at a shell prompt, `drone feature`), so the brief prints into the target pane and then `claude` starts. No hook and no model is involved, so the brief is on screen before Claude starts and before Noah types anything. Derived lines come first, with the `Activity` line (the part of the evidence that corresponds to the automated cue); the checkpoint's own words come under a line that says who wrote them and when. `Ended` is derived from `state.json` `last_activity` against the newest checkpoint time, read before Claude's SessionStart hook overwrites it. Whether the text stays visible once Claude's screen takes over is the spike's question (a), as is whether the pane's shell can run `borg` when it sits inside the devcontainer. If `borg_core` cannot be imported, the pane shows `borg brief unavailable: <import error>` and Claude starts anyway.
 
 ```
 $ drone claude borg-collective
@@ -421,14 +421,14 @@ Each cell says what appears and who sees it. **H** is the human, **M** is the mo
   - B Ambient: One status-line item (H, ambient)
   - C Quiet router: Page as today, `SIGNALS` rolled up (H, pull)
   - D Narrator: 3-sentence prose (H, pull)
-  - E Doorways (revised): Verdict line (H, pull); dormant-row collapse is optional step 8
+  - E Doorways (revised): Verdict line (H, pull); dormant-row collapse is optional step 9
 - **M2 next move**
-  - Today: One project, no reason, not logged (H)
+  - Today: One project, no reason, not logged (H) as of 2026-10-04; superseded 2026-10-07 by the #274 and #275 chooser
   - A One page: 3 varied moves, 1 recommended with reason (H)
   - B Ambient: One line (H)
   - C Quiet router: As today (H)
   - D Narrator: 2 sentences (H)
-  - E Doorways (revised): Recommended move with its reason (H, pull); adoption log is a later step
+  - E Doorways (revised): Left to main's chooser (superseded 2026-10-07); a labelled reason is a proposal for its suggestion line
 - **M3 re-enter, fresh session**
   - Today: Empty prompt; model gets about 60 lines (M)
   - A One page: Page if he asks (H, pull)
@@ -502,4 +502,4 @@ Each cell says what appears and who sees it. **H** is the human, **M** is the mo
 - No option fixes everything. A is the only one that improves the glance in depth, and E's MVP adds only the verdict line and the reason line there; E is the only one that changes the handoff itself.
 - B and D carry M1 best on paper and fail the scenario's weakest test: B cannot see the failure that actually happened (the red bats), and D adds a model call to the moment that has to be fastest, and its session-start text reaches the model rather than the human.
 - E's value in this scenario is mostly derived: the `Activity` and `Dirty` lines against the checkpoint's `Blocked` line (the same five files from two sources), the explicit `STALE` and `Ended` lines, and the two mechanical flags at the read-back. All of these are checks that do not depend on anyone remembering, which is where v1's reviewers pushed.
-- E's cold-start path no longer depends on a model: the launcher print is deterministic in what is sent. What is unverified is what is seen: whether the text survives Claude's start-up and whether the pane can run `borg` (spike a), where `sessionTitle` shows (b), Stop `systemMessage` rendering live (c) and key handling during `display-message -d` (d). A hand-typed `claude` is the uncovered path; the launcher marker measures how often that happens.
+- E's cold-start path no longer depends on a model: the launcher print is deterministic in what is sent. What is unverified is what is seen: whether the text survives Claude's start-up (spike a; the pane reaching `borg` is answered from the code: the panes are host shells, `drone.zsh:559`), where `sessionTitle` shows (b), Stop `systemMessage` rendering live (c) and key handling during `display-message -d` (d). A hand-typed `claude` is the uncovered path; the launcher marker measures how often that happens.

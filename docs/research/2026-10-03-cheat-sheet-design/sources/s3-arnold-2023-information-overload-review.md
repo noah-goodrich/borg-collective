@@ -46,6 +46,7 @@ studies cover..."). Quote 2: Abstract, sentence 4 (it begins "A keyword search i
 databases"). The abstract is a single unlabelled paragraph on the card URL's page (Frontiers in Psychology); sentences
 are split at a terminal period followed by a capital letter. Snapshot:
 drafts/adapter/snapshots/s3q5-04-dealing-with-information-overload-a-comprehensiv.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Although the identified studies cover a wide range of possible interventions and design approaches to address information overload, the strength of the evidence from these studies is mixed.
 

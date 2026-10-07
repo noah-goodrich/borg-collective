@@ -45,6 +45,7 @@ URL's `abstractText` field is split at a terminal period or question mark follow
 are not sentences. Section ordinals count within the labelled section; overall ordinals count from the first abstract
 sentence, with each label belonging to the sentence that follows it. Snapshot:
 docs/research/snapshots/s1-ancker-2017-alert-fatigue.txt
+(Snapshot not committed; re-derive from the card URL.)
 
 > Likelihood of reminder acceptance dropped by 30% for each additional reminder received per encounter, and by 10% for each five percentage point increase in proportion of repeated reminders.
 
