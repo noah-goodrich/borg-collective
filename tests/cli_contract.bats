@@ -563,6 +563,34 @@ EOF
     [ "$output" = "cli" ]
 }
 
+@test "contract: add --name registers under that name; a path held under another name is a no-op, or exit 1 with --name" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    cat > "$MOCK_BIN/tmux" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "has-session" ] && exit 1
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/tmux"
+
+    local proj_dir="${BATS_TEST_TMPDIR}/monorepo/widget-kit"
+    mkdir -p "$proj_dir"
+
+    run_zsh_borg add "$proj_dir" --name widgets
+    [[ "$output" == *"Registered: widgets"* ]] || false
+
+    run_zsh_borg add "$proj_dir"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"'widgets'"* ]] || false
+
+    run_zsh_borg add "$proj_dir" --name gadgets
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"'widgets'"* ]] || false
+
+    run jq -r '.projects | keys | join(",")' "$BORG_REGISTRY"
+    [ "$output" = "widgets" ]
+}
+
 @test "contract: add with no path argument registers the current directory (currently exits 1 -- known bug)" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"

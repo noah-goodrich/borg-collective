@@ -6,7 +6,7 @@
 #   borg link [project]       # deep dive on one project
 #   borg switch [query]       # fzf picker → tmux window switch
 #   borg scan                 # auto-discover projects from session history
-#   borg add [path]           # manually register a project
+#   borg add [path] [--name n] # manually register a project
 #   borg rm <name>            # unregister a project
 
 # Set a known-good PATH from scratch. Non-interactive zsh scripts invoked via shebang
@@ -3008,7 +3008,7 @@ cmd_help() {
                           --chains-dir <path>    Explicit roots (suppresses the registry sweep)
                           --recon <file> (plan only) recon/gather JSON for the reality check
     scan                Discover projects from session history
-    add [path]          Register a project (defaults to $PWD)
+    add [path] [--name <n>]  Register a project (defaults to $PWD, named by folder; --name overrides)
     rm <project>        Unregister a project
     pin [project]       Mark as priority (sorts first, preferred by next)
     unpin [project]     Remove priority flag

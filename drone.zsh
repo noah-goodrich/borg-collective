@@ -204,11 +204,14 @@ _drone_arg_window() {
     print -r -- "$live"
 }
 
-# `borg add` rewrites tmux_window (to the project name, or null) because it knows nothing of short
-# names; put the window's real name back afterwards. Fail-open.
+# Register $project if it is not already, then put its window name back. `borg add` rewrites
+# tmux_window (to the project name, or null) because it knows nothing of short names, and names a
+# project by its folder basename unless told otherwise -- so an existing entry is never re-added
+# (a monorepo subfolder registered as `widgets` would grow a `widget-kit` twin), and a new one is
+# added under the name drone was given. Fail-open.
 _drone_register() {
     local project_dir="$1" project="$2" wname="$3"
-    borg add "$project_dir" 2>/dev/null || true
+    _drone_registered "$project" || borg add "$project_dir" --name "$project" 2>/dev/null || true
     [[ "$wname" == "$project" ]] || _drone_registry_py window-name "$project" --set "$wname" >/dev/null 2>&1 || true
 }
 
@@ -459,7 +462,7 @@ cmd_up() {
 
     # The window name is registry-owned. A brand-new project must be registered first or there is
     # nothing to derive from; an existing entry is never re-added here (borg add rewrites tmux_window).
-    _drone_registered "$project_name" || borg add "$project_dir" 2>/dev/null || true
+    _drone_registered "$project_name" || borg add "$project_dir" --name "$project_name" 2>/dev/null || true
     local wname live
     wname=$(_drone_window_name "$project_name")
     live=$(_drone_find_window "$project_name" "$wname") || live=""
