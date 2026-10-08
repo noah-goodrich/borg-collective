@@ -232,3 +232,131 @@ PYEOF
     run bash -c 'printf "" | BORG_NEXT_FORCE_TTY=1 zsh "$1" next --local' _ "$BORG"
     [[ "$output" != *"checking GitHub"* ]]
 }
+
+_log_file() {
+    echo "${XDG_STATE_HOME}/borg/next-recs.jsonl"
+}
+
+_log_count() {
+    [ -f "$(_log_file)" ] && wc -l < "$(_log_file)" | tr -d " " || echo 0
+}
+
+@test "next --rows --json: valid JSON with the item-row keys, and logs nothing" {
+    _write_registry ""
+    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    printf "%s" "$output" | jq -e "(.rows | length) == 2 and .rec == \"wait-old\" and .suggestion == null
+        and .quiet == [\"act\",\"idle\",\"never\"] and .degraded == null
+        and (.rows[0] | keys | sort) == [\"age\",\"item\",\"n\",\"next_step\",\"owner\",\"project\",\"ready\",\"ref\",\"status\",\"waiting_reason\"]
+        and (.rows[0] | .next_step == \"reply to session\" and .owner == \"YOU\" and (.ready | startswith(\"✔\")))"
+    [ "$(_log_count)" = "0" ]
+    [ -z "$(_selected)" ]
+}
+
+@test "next --open p --chosen: switches and logs an unscripted chooser row" {
+    _write_registry ""
+    run zsh "$BORG" next --open wait-new --chosen
+    [ "$status" -eq 0 ]
+    [ "$(_selected)" = "w-new" ]
+    [ "$(_log_count)" = "1" ]
+    _last_row | jq -e ".chooser == true and .scripted == false and .opened == \"wait-new\"
+        and .rec == \"wait-old\" and .shown == false and .opened_after_s == null and .switch == false"
+}
+
+@test "next --open p --chosen --shown: shown is true" {
+    _write_registry ""
+    run zsh "$BORG" next --open act --chosen --shown
+    [ "$status" -eq 0 ]
+    _last_row | jq -e ".shown == true and .opened == \"act\""
+}
+
+@test "next --open with an unknown project dies with no switch and no log" {
+    _write_registry ""
+    run zsh "$BORG" next --open nonesuch --chosen
+    [ "$status" -ne 0 ]
+    [ -z "$(_selected)" ]
+    [ "$(_log_count)" = "0" ]
+}
+
+@test "next --declined: logs opened null, rec is the top, and does not switch" {
+    _write_registry ""
+    run zsh "$BORG" next --declined
+    [ "$status" -eq 0 ]
+    [ -z "$(_selected)" ]
+    [ "$(_log_count)" = "1" ]
+    _last_row | jq -e ".chooser == true and .scripted == false and .opened == null and .rec == \"wait-old\"
+        and .shown == false"
+}
+
+@test "next --declined --shown: shown is true" {
+    _write_registry ""
+    run zsh "$BORG" next --declined --shown
+    [ "$status" -eq 0 ]
+    _last_row | jq -e ".shown == true and .opened == null"
+}
+
+@test "next --rows --json: a checkpoint fills next_step and rows carry status and age" {
+    local proj="${BATS_TEST_TMPDIR}/cp-proj"
+    mkdir -p "$proj/.borg/checkpoints"
+    printf '%s\n' "tl;dr" "" "## 5. Next Session" "" "1. Ship the chooser rows" "2. Later" \
+        > "$proj/.borg/checkpoints/2026-10-05-0900.md"
+    _write_registry ", \"has-cp\": {\"path\":\"$proj\",\"status\":\"idle\",\"last_activity\":\"2026-10-05T08:00:00Z\"}"
+    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    printf "%s" "$output" | jq -e "(.rows[] | select(.project == \"has-cp\")) as \$r
+        | \$r.next_step == \"Ship the chooser rows\" and \$r.status == \"idle\" and (\$r.age | length) > 0
+        and (.quiet | index(\"has-cp\")) == null and (.quiet | index(\"never\")) != null"
+}
+
+
+_repo_with_open_pr() {
+    local repo="${BATS_TEST_TMPDIR}/pr-proj"
+    git init -q "$repo"
+    git -C "$repo" remote add origin "git@github.com:owner/pr-proj.git"
+    cat > "$MOCK_BIN/gh" <<'GHEOF'
+#!/usr/bin/env bash
+echo "gh $*" >> "$TRACE"
+cat <<'JSON'
+{"data":{"viewer":{"login":"me"},
+"r0":{"pullRequests":{"nodes":[
+ {"number":7,"title":"feat: ship the thing","state":"OPEN","isDraft":false,
+  "updatedAt":"2026-01-01T10:00:00Z","url":"u","headRefName":"h","baseRefName":"main",
+  "author":{"login":"me"}}]}}}}
+JSON
+GHEOF
+    chmod +x "$MOCK_BIN/gh"
+    _write_registry ", \"pr-proj\": {\"path\":\"$repo\",\"status\":\"idle\",\"last_activity\":\"2026-10-05T09:00:00Z\"}"
+}
+
+@test "next --rows --json --local: no sweep, so gh is never called and no PR row appears" {
+    _repo_with_open_pr
+    export BORG_RECON_ADAPTER_PATH="${BATS_TEST_DIRNAME}/../lib/recon/adapters"
+    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    printf "%s" "$output" | jq -e "(.rows | map(.project) | index(\"pr-proj\")) == null and .degraded == null"
+    ! grep -q "^gh " "$TRACE"
+}
+
+@test "next --rows --json: without --local the sweep runs and an open PR becomes a YOU merge row" {
+    _repo_with_open_pr
+    export BORG_RECON_ADAPTER_PATH="${BATS_TEST_DIRNAME}/../lib/recon/adapters"
+    run bash -c "zsh \"$BORG\" next --rows --json 2>/dev/null"
+    [ "$status" -eq 0 ]
+    grep -q "^gh " "$TRACE"
+    printf "%s" "$output" | jq -e "(.rows[] | select(.project == \"pr-proj\")) as \$r
+        | \$r.next_step == \"merge #7\" and \$r.owner == \"YOU\" and \$r.item == \"ship the thing\"
+        and \$r.ready == \"✔ now\""
+    [ "$(_log_count)" = "0" ]
+}
+
+@test "chooser (forced tty): the screen shows item rows in the mock columns, a quiet line, and keys select a row" {
+    _write_registry ""
+    _chooser $'\n'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"project · item"*"next step"*"owner"*"ready"* ]]
+    [[ "$output" == *"wait-old · session"*"reply to session"*"YOU"*"✔"* ]]
+    [[ "$output" == *"+3 quiet: act, idle, never"* ]]
+    [ "$(_selected)" = "w-old" ]
+    _chooser "2"
+    [ "$(_selected | tail -n 1)" = "w-new" ]
+}

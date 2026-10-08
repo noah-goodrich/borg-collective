@@ -1021,13 +1021,13 @@ EOF
     git -C "$repo" config user.name "Test"
     echo init > "$repo/file.txt"
     git -C "$repo" add file.txt
-    git -C "$repo" commit -q -m initial
+    GIT_COMMITTER_DATE=2000-01-01T00:00:00 git -C "$repo" commit -q -m initial --date=2000-01-01T00:00:00
 
     local repo_name="${repo##*/}"
     mkdir -p "${BORG_WORKTREE_STATE_DIR}/${repo_name}"
     local wt="${BORG_WORKTREE_STATE_DIR}/${repo_name}/feat-expired"
     git -C "$repo" worktree add -q "$wt" -b feat-expired
-    touch -t 200001010000 "$wt"
+    touch -t 200001010000 "$wt" "$(git -C "$wt" rev-parse --absolute-git-dir)/index"
 
     printf '{"projects":{"repo-wt":{"path":"%s","source":"cli"}}}' "$repo" > "$BORG_REGISTRY"
 
@@ -4340,4 +4340,19 @@ EOF
 
     run_zsh_borg window widget borg
     [ "$status" -eq 0 ]
+}
+
+# python3 -m puts the CURRENT DIRECTORY ahead of PYTHONPATH on sys.path, so a borg_core in the caller's
+# cwd (another checkout, or the main clone while a worktree runs) shadows the one borg launched from.
+# _borg_py exports PYTHONSAFEPATH=1 (Python 3.11+; the repo runs 3.14) so cwd is never searched.
+@test "contract: _borg_py is not shadowed by a borg_core in the caller's cwd" {
+    local decoy="${BATS_TEST_TMPDIR}/decoy"
+    mkdir -p "$decoy/borg_core/registry"
+    : > "$decoy/borg_core/__init__.py"
+    : > "$decoy/borg_core/registry/__init__.py"
+    echo 'print("DECOY-SHADOWED")' > "$decoy/borg_core/registry/cli.py"
+
+    cd "$decoy"
+    run zsh "$BORG" rm no-such-project
+    [[ "$output" != *"DECOY-SHADOWED"* ]] || false
 }

@@ -42,8 +42,8 @@ _borg_should_reap() {
 #   ${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees/<repo-basename>/<slug>
 #
 # A worktree is considered stale when its branch has been merged into the repo's
-# default branch OR when the worktree directory's mtime is older than
-# BORG_REAP_STALE_HOURS. Only worktrees under the borg state dir are ever
+# default branch OR when its last activity (tip commit / index mtime) is older than
+# BORG_REAP_STALE_HOURS and it has no unpushed commits. Only worktrees under the borg state dir are ever
 # touched — non-borg worktrees are completely ignored.
 
 # DERIVED, NEVER HARDCODED. This default shipped as a literal `/Users/noah/...` on 2026-06-10
@@ -67,7 +67,8 @@ BORG_WORKTREE_STATE_DIR="${BORG_WORKTREE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.loc
 # Args: <repo_path> <worktree_path>
 # Returns 0 (stale) when the branch has been merged into the default branch (i.e.
 # the branch has unique commits AND all of them are now reachable from the default
-# branch), OR when the worktree directory mtime is older than BORG_REAP_STALE_HOURS.
+# branch), OR when its last activity (the newer of the branch-tip commit time and the per-worktree
+# index mtime) is older than BORG_REAP_STALE_HOURS and the branch has no unpushed commits.
 # Returns 1 (keep) for fresh or unmerged worktrees.
 _borg_worktree_is_stale() {
     local repo="$1" wt="$2"
@@ -93,12 +94,33 @@ _borg_worktree_is_stale() {
         fi
     fi
 
+    # Never reap on age while the branch holds work that exists nowhere else: commits not on
+    # its upstream, or (no upstream) commits not on the default branch.
+    local ahead
+    if git -C "$wt" rev-parse --verify -q '@{u}' >/dev/null 2>&1; then
+        ahead=$(git -C "$wt" rev-list --count '@{u}..HEAD' 2>/dev/null) || ahead=1
+    else
+        ahead=$(git -C "$wt" rev-list --count "${default_branch}..HEAD" 2>/dev/null) || ahead=1
+    fi
+    case "$ahead" in ''|*[!0-9]*) return 1;; esac
+    [ "$ahead" -gt 0 ] && return 1
+
+    # Activity = newest of the branch tip's committer time and the per-worktree index mtime.
+    # The worktree directory's own mtime is NOT used: it changes only when direct entries are
+    # added or removed, so commits and subdirectory edits never touched it.
     local threshold="${BORG_REAP_STALE_HOURS:-12}"
-    local mtime now age_h
-    mtime=$(stat -c %Y "$wt" 2>/dev/null || stat -f %m "$wt" 2>/dev/null)
-    case "$mtime" in ''|*[!0-9]*) return 1;; esac
+    local ct idx imtime last now age_h
+    ct=$(git -C "$wt" log -1 --format=%ct 2>/dev/null)
+    case "$ct" in ''|*[!0-9]*) ct=0;; esac
+    idx=$(git -C "$wt" rev-parse --git-path index 2>/dev/null)
+    case "$idx" in ''|/*) ;; *) idx="$wt/$idx";; esac
+    imtime=$(stat -c %Y "$idx" 2>/dev/null || stat -f %m "$idx" 2>/dev/null)
+    case "$imtime" in ''|*[!0-9]*) imtime=0;; esac
+    last=$ct
+    [ "$imtime" -gt "$last" ] && last=$imtime
+    [ "$last" -gt 0 ] || return 1
     now=$(date +%s)
-    age_h=$(( (now - mtime) / 3600 ))
+    age_h=$(( (now - last) / 3600 ))
     [ "$age_h" -ge "$threshold" ]
 }
 
@@ -120,7 +142,9 @@ _borg_reap_worktrees() {
     for wt in "$wt_base"/*/; do
         [ -d "$wt" ] || continue
 
-        if git -C "$wt" status --porcelain 2>/dev/null | grep -q .; then
+        # --no-optional-locks: a plain status may rewrite the index, bumping the very mtime the
+        # staleness check reads, so the reaper own probe would count as activity.
+        if git -C "$wt" --no-optional-locks status --porcelain 2>/dev/null | grep -q .; then
             continue
         fi
 

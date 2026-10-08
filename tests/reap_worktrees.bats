@@ -23,7 +23,7 @@ setup() {
     git -C "$REPO" config user.name "Test"
     echo "init" > "$REPO/file.txt"
     git -C "$REPO" add file.txt
-    git -C "$REPO" commit -q -m "initial"
+    GIT_COMMITTER_DATE="2000-01-01T00:00:00" git -C "$REPO" commit -q -m "initial"
 }
 
 _repo_name() { printf '%s' "${REPO##*/}"; }
@@ -42,6 +42,21 @@ _merge_branch() {
     default_branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null) || default_branch="main"
     git -C "$REPO" checkout -q "$default_branch"
     git -C "$REPO" merge -q --no-ff "$branch" -m "merge $branch"
+}
+
+# Age a worktree the way real inactivity does: old dir mtime AND old index.
+_age_worktree() {
+    local wt="$1" idx
+    idx=$(git -C "$wt" rev-parse --absolute-git-dir)/index
+    touch -t 200001010000 "$wt" "$idx"
+}
+
+# Give a worktree's branch an upstream (a bare remote) so it has nothing unpushed.
+_push_upstream() {
+    local wt="$1"
+    [ -d "$BATS_TEST_TMPDIR/remote.git" ] || git init -q --bare "$BATS_TEST_TMPDIR/remote.git"
+    git -C "$wt" remote add origin "$BATS_TEST_TMPDIR/remote.git" 2>/dev/null || true
+    git -C "$wt" push -q -u origin HEAD
 }
 
 # ─── _borg_worktree_is_stale ─────────────────────────────────────────────────
@@ -67,7 +82,7 @@ _merge_branch() {
 
 @test "_borg_worktree_is_stale returns 0 (stale) for an age-expired worktree" {
     wt=$(_make_worktree "feat-old-branch")
-    touch -t 200001010000 "$wt"
+    _age_worktree "$wt"
 
     run bash -c "
         BORG_REAP_STALE_HOURS=12
@@ -82,7 +97,7 @@ _merge_branch() {
 
 @test "_borg_worktree_is_stale honors BORG_REAP_STALE_HOURS override (keep under large threshold)" {
     wt=$(_make_worktree "feat-override-test")
-    touch -t 200001010000 "$wt"
+    _age_worktree "$wt"
 
     run bash -c "
         BORG_REAP_STALE_HOURS=9999999
@@ -92,6 +107,82 @@ _merge_branch() {
 
     git -C "$REPO" worktree remove --force "$wt" 2>/dev/null || true
 
+    [ "$status" -ne 0 ]
+}
+
+# ─── activity-based staleness ────────────────────────────────────────────────
+
+@test "a worktree with an old dir mtime but a recent pushed commit is KEPT" {
+    wt=$(_make_worktree "feat-active-pr")
+    echo "work" >> "$wt/file.txt"
+    git -C "$wt" add file.txt
+    git -C "$wt" commit -q -m "recent work"
+    _push_upstream "$wt"
+    _age_worktree "$wt"
+    touch -t 200001010000 "$(git -C "$wt" rev-parse --absolute-git-dir)/index"
+
+    run bash -c "
+        BORG_REAP_STALE_HOURS=12
+        . '$REAPER_SH'
+        _borg_worktree_is_stale '$REPO' '$wt'
+    "
+    [ "$status" -ne 0 ]
+}
+
+@test "a worktree with no recent commit and an old index is reaped as stale" {
+    wt=$(_make_worktree "feat-idle")
+    _age_worktree "$wt"
+
+    result=$(bash -c "
+        BORG_REAP_STALE_HOURS=12
+        . '$REAPER_SH'
+        _borg_reap_worktrees '$REPO'
+    ")
+    printf '%s' "$result" | grep -q "stale"
+    [ ! -d "$wt" ]
+}
+
+@test "a recently touched index keeps an otherwise old worktree" {
+    wt=$(_make_worktree "feat-index-fresh")
+    touch -t 200001010000 "$wt"
+
+    run bash -c "
+        BORG_REAP_STALE_HOURS=12
+        . '$REAPER_SH'
+        _borg_worktree_is_stale '$REPO' '$wt'
+    "
+    [ "$status" -ne 0 ]
+}
+
+@test "a stale-aged worktree with unpushed commits is KEPT" {
+    wt=$(_make_worktree "feat-unpushed")
+    echo "work" >> "$wt/file.txt"
+    git -C "$wt" add file.txt
+    GIT_COMMITTER_DATE="2000-01-02T00:00:00" git -C "$wt" commit -q -m "old unpushed"
+    _age_worktree "$wt"
+
+    result=$(bash -c "
+        BORG_REAP_STALE_HOURS=12
+        . '$REAPER_SH'
+        _borg_reap_worktrees '$REPO'
+    ")
+    [ -z "$result" ]
+    [ -d "$wt" ]
+}
+
+@test "a stale-aged worktree ahead of its upstream is KEPT" {
+    wt=$(_make_worktree "feat-ahead-upstream")
+    _push_upstream "$wt"
+    echo "more" >> "$wt/file.txt"
+    git -C "$wt" add file.txt
+    GIT_COMMITTER_DATE="2000-01-02T00:00:00" git -C "$wt" commit -q -m "old unpushed"
+    _age_worktree "$wt"
+
+    run bash -c "
+        BORG_REAP_STALE_HOURS=12
+        . '$REAPER_SH'
+        _borg_worktree_is_stale '$REPO' '$wt'
+    "
     [ "$status" -ne 0 ]
 }
 
@@ -121,7 +212,7 @@ _merge_branch() {
 
 @test "_borg_reap_worktrees removes an age-expired worktree and prints its path" {
     wt=$(_make_worktree "feat-expired")
-    touch -t 200001010000 "$wt"
+    _age_worktree "$wt"
 
     result=$(bash -c "
         BORG_WORKTREE_STATE_DIR='$WT_BASE'
@@ -137,7 +228,7 @@ _merge_branch() {
 
 @test "_borg_reap_worktrees prints 'stale' reason for age-expired worktree" {
     wt=$(_make_worktree "feat-stale-reason")
-    touch -t 200001010000 "$wt"
+    _age_worktree "$wt"
 
     result=$(bash -c "
         BORG_WORKTREE_STATE_DIR='$WT_BASE'
@@ -152,7 +243,7 @@ _merge_branch() {
 @test "_borg_reap_worktrees skips a worktree with uncommitted changes" {
     wt=$(_make_worktree "feat-dirty")
     echo "dirty" >> "$wt/file.txt"
-    touch -t 200001010000 "$wt"
+    _age_worktree "$wt"
 
     result=$(bash -c "
         BORG_WORKTREE_STATE_DIR='$WT_BASE'
@@ -222,7 +313,7 @@ _merge_branch() {
 
 @test "_borg_reap_worktrees prunes git worktree metadata after removal" {
     wt=$(_make_worktree "feat-prune-check")
-    touch -t 200001010000 "$wt"
+    _age_worktree "$wt"
 
     bash -c "
         BORG_WORKTREE_STATE_DIR='$WT_BASE'
@@ -282,7 +373,7 @@ _merge_branch() {
     mkdir -p "${derived}/$(_repo_name)"
     wt="${derived}/$(_repo_name)/feat-default-scan"
     git -C "$REPO" worktree add -q "$wt" -b "feat-default-scan"
-    touch -t 200001010000 "$wt"
+    _age_worktree "$wt"
 
     result=$(bash -c '
         unset BORG_WORKTREE_STATE_DIR XDG_STATE_HOME
