@@ -268,9 +268,9 @@ def _three():
 GOLDEN_HEAD = [
     "WHERE COULD YOUR FOCUS GO?",
     "───────────────────────────────────────────────────────────",
-    " # project · item           next step           owner ready",
-    " 1 borg · hygiene           /borg-assimilate    yours ●",
-    " 2 borg · research          merge #252          mine  ●",
+    " # project · item         next step          owner ready",
+    " 1 borg · hygiene         /borg-assimilate   yours ●",
+    " 2 borg · research        merge #252         mine  ●",
     " 3 ingle",
     "───────────────────────────────────────────────────────────",
 ]
@@ -283,6 +283,14 @@ def test_render_chooser_golden_without_suggestion():
 def test_render_chooser_golden_with_suggestion():
     got = core.render_chooser(_three(), suggestion="1 borg")
     assert got == GOLDEN_HEAD + ["▸ suggested: 1 borg", "⏎ top · 1-9 open · q quit"]
+
+
+def test_render_chooser_collapses_quiet_projects_into_one_trailing_line():
+    got = core.render_chooser(_three(), suggestion=None, quiet=["x", "y"])
+    assert got[6] == "+2 quiet: x, y"
+    assert got[7] == GOLDEN_HEAD[-1]
+    long = core.render_chooser(_three(), suggestion=None, quiet=["q" * 30, "r" * 30])
+    assert len(long[6]) == 59 and long[6].endswith("…")
 
 
 def test_render_chooser_truncates_long_cells_to_width():
@@ -445,3 +453,14 @@ def test_short_title_strips_prefix_and_truncates():
     assert core.short_title("fix!: tiny") == "tiny"
     assert core.short_title("plain title here") == "plain title here"
     assert len(core.short_title("x" * 40)) == 18
+
+
+def test_numbered_rows_adds_n_status_and_default_waiting_reason():
+    ranked = [{"name": "a", "status": "waiting"}, {"name": "b", "status": "idle"}]
+    work = [
+        {"project": "a", "item": "session", "next_step": "reply to session", "owner": "YOU", "ready": "✔ 1d ago",
+         "ref": None, "age": "1d ago", "waiting_reason": "why"},
+        {"project": "b", "item": "", "next_step": "x", "owner": "—", "ready": "", "ref": None, "age": "2d ago"},
+    ]
+    rows = core.numbered_rows(work, ranked)
+    assert [(r["n"], r["status"], r["waiting_reason"]) for r in rows] == [(1, "waiting", "why"), (2, "idle", "")]
