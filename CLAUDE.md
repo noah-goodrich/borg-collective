@@ -168,7 +168,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
     extensions/             Local-extension resolution: layer precedence, prefer-tool, liveness
-    manifest/               Reader for <project>/.borg/chains/*.json program manifests
+    manifest/               Reader for <project>/.borg/chains/ and .stacks/ manifests
     link/                   `borg link` document build + renderer
         core.py             Registry/plan/checkpoint reads, scope resolution, relative time
         grid.py             Manifests → the topology wire: levels, nodes, parents/children/seq
@@ -481,6 +481,17 @@ docs/
   divergence AC7 ends), resolves the package script-relative or via `$BORG_ROOT`, and **no-ops when
   neither is present** — so an empty log in a plugin-only install means "not instrumented", not
   "no bypasses".
+- **Manifests are read from two roots**: `<repo>/.borg/chains/` (borg's own) and the tool-neutral
+  `<repo>/.stacks/`. `scaffold` creates in `.stacks/` if it exists, else borg's own directory (`.borg/chains/`, or
+  legacy `.borg/programs/`) if it exists, else `.stacks/` when git ignores `.borg/`, else `.borg/chains/`
+  (`placement.choose_scaffold_root`, facts from `shell.scaffold_root`; `--root stacks|borg` overrides), and prints
+  `root: <folder> (<reason>)` after its `scaffolded:` line (an `exists:` line has none).
+  So a repository shared with people who do not run borg need
+  not carry a `.borg/`; a stem declared in both is refused by name, never picked, an in-place edit
+  writes back to the file it found, two roots that are one directory (a symlink) are read once, and an
+  unreadable root or parent is a named warning, never silence (`scaffold`, the one creator, refuses by
+  name rather than create beside a root it cannot read). `borg_core` reads both roots, while `borg chain`
+  (`merge-tree/programs.py`) still reads only `.borg/chains`.
 - **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
   `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
   `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS` — with **no branch on

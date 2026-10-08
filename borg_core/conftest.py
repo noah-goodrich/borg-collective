@@ -6,6 +6,8 @@ Autouse git identity, applied to every test in this tree (present and future) th
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 
@@ -33,6 +35,9 @@ def _git_identity(monkeypatch):
     monkeypatch.setenv("GIT_COMMITTER_NAME", "borg tests")
     monkeypatch.setenv("GIT_COMMITTER_EMAIL", "tests@borg.invalid")
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    # The global config is the other ambient layer: a `core.excludesFile` ignoring `.borg/` would change
+    # what `git check-ignore` answers for every scaffold-placement test. CI has none; a dev machine may.
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", os.devnull)
 
 
 @pytest.fixture(autouse=True)
