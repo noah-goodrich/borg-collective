@@ -33,6 +33,7 @@ In a smoke test, the shipped chooser listed one row per project, with next step,
   - **Waiting session:** "reply to session", owner YOU, ready ✔ with its age.
   - **Open PR, not draft, checks pass, mergeable, no changes requested:** "merge #N", owner YOU, ready ✔.
   - **Checks pending:** "#N CI", owner AGENT, ready "… run".
+  - **Merge conflicts (CONFLICTING):** "resolve conflicts #N", owner AGENT, ready ✗. Checked after draft and before checks fail.
   - **Checks fail:** "fix #N CI", owner AGENT, ready ✗.
   - **Draft:** "finish #N", owner AGENT, ready ◌.
   - **Changes requested:** "address review #N", owner AGENT.
