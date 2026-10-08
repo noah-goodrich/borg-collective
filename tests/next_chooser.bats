@@ -241,13 +241,14 @@ _log_count() {
     [ -f "$(_log_file)" ] && wc -l < "$(_log_file)" | tr -d " " || echo 0
 }
 
-@test "next --rows --json: valid JSON with the three keys, and logs nothing" {
+@test "next --rows --json: valid JSON with the item-row keys, and logs nothing" {
     _write_registry ""
     run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
     [ "$status" -eq 0 ]
-    printf "%s" "$output" | jq -e "(.rows | length) == 3 and .rec == \"wait-old\" and .suggestion == null
-        and .quiet == [\"idle\",\"never\"]
-        and (.rows[0] | keys | sort) == [\"age\",\"item\",\"n\",\"next_step\",\"owner\",\"project\",\"ready\",\"status\",\"waiting_reason\"]"
+    printf "%s" "$output" | jq -e "(.rows | length) == 2 and .rec == \"wait-old\" and .suggestion == null
+        and .quiet == [\"act\",\"idle\",\"never\"] and .degraded == null
+        and (.rows[0] | keys | sort) == [\"age\",\"item\",\"n\",\"next_step\",\"owner\",\"project\",\"ready\",\"ref\",\"status\",\"waiting_reason\"]
+        and (.rows[0] | .next_step == \"reply to session\" and .owner == \"YOU\" and (.ready | startswith(\"✔\")))"
     [ "$(_log_count)" = "0" ]
     [ -z "$(_selected)" ]
 }
@@ -305,4 +306,57 @@ _log_count() {
     printf "%s" "$output" | jq -e "(.rows[] | select(.project == \"has-cp\")) as \$r
         | \$r.next_step == \"Ship the chooser rows\" and \$r.status == \"idle\" and (\$r.age | length) > 0
         and (.quiet | index(\"has-cp\")) == null and (.quiet | index(\"never\")) != null"
+}
+
+
+_repo_with_open_pr() {
+    local repo="${BATS_TEST_TMPDIR}/pr-proj"
+    git init -q "$repo"
+    git -C "$repo" remote add origin "git@github.com:owner/pr-proj.git"
+    cat > "$MOCK_BIN/gh" <<'GHEOF'
+#!/usr/bin/env bash
+echo "gh $*" >> "$TRACE"
+cat <<'JSON'
+{"data":{"viewer":{"login":"me"},
+"r0":{"pullRequests":{"nodes":[
+ {"number":7,"title":"feat: ship the thing","state":"OPEN","isDraft":false,
+  "updatedAt":"2026-01-01T10:00:00Z","url":"u","headRefName":"h","baseRefName":"main",
+  "author":{"login":"me"}}]}}}}
+JSON
+GHEOF
+    chmod +x "$MOCK_BIN/gh"
+    _write_registry ", \"pr-proj\": {\"path\":\"$repo\",\"status\":\"idle\",\"last_activity\":\"2026-10-05T09:00:00Z\"}"
+}
+
+@test "next --rows --json --local: no sweep, so gh is never called and no PR row appears" {
+    _repo_with_open_pr
+    export BORG_RECON_ADAPTER_PATH="${BATS_TEST_DIRNAME}/../lib/recon/adapters"
+    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    printf "%s" "$output" | jq -e "(.rows | map(.project) | index(\"pr-proj\")) == null and .degraded == null"
+    ! grep -q "^gh " "$TRACE"
+}
+
+@test "next --rows --json: without --local the sweep runs and an open PR becomes a YOU merge row" {
+    _repo_with_open_pr
+    export BORG_RECON_ADAPTER_PATH="${BATS_TEST_DIRNAME}/../lib/recon/adapters"
+    run bash -c "zsh \"$BORG\" next --rows --json 2>/dev/null"
+    [ "$status" -eq 0 ]
+    grep -q "^gh " "$TRACE"
+    printf "%s" "$output" | jq -e "(.rows[] | select(.project == \"pr-proj\")) as \$r
+        | \$r.next_step == \"merge #7\" and \$r.owner == \"YOU\" and \$r.item == \"ship the thing\"
+        and \$r.ready == \"✔ now\""
+    [ "$(_log_count)" = "0" ]
+}
+
+@test "chooser (forced tty): the screen shows item rows in the mock columns, a quiet line, and keys select a row" {
+    _write_registry ""
+    _chooser $'\n'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"project · item"*"next step"*"owner"*"ready"* ]]
+    [[ "$output" == *"wait-old · session"*"reply to session"*"YOU"*"✔"* ]]
+    [[ "$output" == *"+3 quiet: act, idle, never"* ]]
+    [ "$(_selected)" = "w-old" ]
+    _chooser "2"
+    [ "$(_selected | tail -n 1)" = "w-new" ]
 }

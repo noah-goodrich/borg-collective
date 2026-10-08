@@ -69,49 +69,53 @@ def _opened_after(args: argparse.Namespace, opened: str | None) -> float | None:
 NAMES_PREFIX = "names\t"
 
 
-def _rows(
-    projects: dict[str, Any], ranked: list[dict[str, Any]], link_doc: dict[str, Any] | None
-) -> list[dict[str, Any]]:
-    """Chooser rows with the checkpoint next-step fallback and the relative-age clock applied."""
-    fallbacks = shell.checkpoint_next_steps(projects, [item["name"] for item in ranked])
-    return core.chooser_rows(ranked, link_doc, fallbacks, int(datetime.now(UTC).timestamp()))
+def item_rows(projects: dict[str, Any], local: bool) -> tuple[list[dict[str, Any]], list[str], str | None]:
+    """`(rows, quiet, degraded)`: work items from the recon sweep, plans, sessions and checkpoints.
+
+    Each source is gathered fail-open (a failed sweep only sets `degraded`). Under `local` the sweep is skipped, so
+    only session, plan and checkpoint rows appear.
+    """
+    ranked = core.rank(projects)
+    names = [item["name"] for item in ranked]
+    by_project, degraded = shell.recon_items(projects, local)
+    work, quiet = core.work_items(
+        ranked,
+        by_project,
+        shell.read_plans(projects, names),
+        shell.checkpoint_next_steps(projects, names),
+        int(datetime.now(UTC).timestamp()),
+    )
+    return core.numbered_rows(work, ranked), quiet, degraded
 
 
 def rows_output(projects: dict[str, Any], local: bool) -> list[str]:
-    """The chooser screen plus the trailing names line. A failed link build yields blank cells, never an error."""
-    ranked = core.rank(projects)
-    rows = _rows(projects, ranked, shell.link_document(local))
+    """The chooser screen plus the trailing names line (one project per ROW, so a key selects a row)."""
+    rows, quiet, _degraded = item_rows(projects, local)
     suggestion = core.suggestion_for(rows, shell.read_log_rows())
-    lines = core.render_chooser(rows, suggestion=suggestion)
+    lines = core.render_chooser(rows, suggestion=suggestion, quiet=quiet)
     return [*lines, NAMES_PREFIX + "\t".join(row["project"] for row in rows)]
 
 
 def rows_json(projects: dict[str, Any], local: bool) -> dict[str, Any]:
-    """The `--rows --json` payload: rows, the top-ranked project, and the earned suggestion's row number or None."""
-    ranked = core.rank(projects)
-    rows, quiet = core.split_quiet(_rows(projects, ranked, shell.link_document(local)))
+    """The `--rows --json` payload: item rows, the first row's project, the earned suggestion's row number or None."""
+    rows, quiet, degraded = item_rows(projects, local)
     earned = core.suggestion_for(rows, shell.read_log_rows()) is not None
     return {
         "rows": rows,
         "rec": rows[0]["project"] if rows else None,
         "suggestion": rows[0]["n"] if rows and earned else None,
         "quiet": quiet,
+        "degraded": degraded,
     }
 
 
 def _rows_json_failopen(projects: dict[str, Any], local: bool) -> dict[str, Any]:
-    """`rows_json`, degrading to blank cells and then to an empty payload; never raises."""
+    """`rows_json`, degrading to an empty payload that says why; never raises."""
     try:
         return rows_json(projects, local)
     # JUSTIFICATION: the payload must be valid JSON whatever fails underneath; degrade, do not crash.
-    except Exception:  # pylint: disable=broad-exception-caught
-        pass
-    try:
-        rows = core.chooser_rows(core.rank(projects), None)
-        return {"rows": rows, "rec": rows[0]["project"] if rows else None, "suggestion": None, "quiet": []}
-    # JUSTIFICATION: last-resort empty payload keeps the machine surface parseable.
-    except Exception:  # pylint: disable=broad-exception-caught
-        return {"rows": [], "rec": None, "suggestion": None, "quiet": []}
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return {"rows": [], "rec": None, "suggestion": None, "quiet": [], "degraded": f"rows failed: {exc}"}
 
 
 def main(argv: list[str] | None = None) -> int:

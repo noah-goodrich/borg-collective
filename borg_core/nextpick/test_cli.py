@@ -95,75 +95,182 @@ def test_chooser_open_row_carries_opened_and_elapsed(state, monkeypatch):
     assert (row["rec"], row["opened"], row["opened_after_s"], row["shown"]) == ("a", "b", 3.0, False)
 
 
-LINK_DOC = {
-    "grid": {
-        "manifests": [
-            {
-                "path": "/p/a/.borg/chains/x.json",
-                "nodes": {"o/r#1": {"ref": "o/r#1", "state": "open", "ready": True}},
-                "gates": [],
-                "ready": {"state": "known", "refs": ["o/r#1"]},
-            }
-        ]
-    }
-}
-PATH_REGISTRY = {
-    "projects": {
-        "a": {"status": "waiting", "last_activity": "2026-09-01", "path": "/p/a"},
-        "b": {"status": "idle", "last_activity": "2026-10-01", "path": "/p/b"},
-    }
-}
+PR_ITEM = {"state": "open", "ref": "o/r#7", "title": "feat: ship it", "checks": "pass", "mergeable": "MERGEABLE"}
+PLAN = "# Project Plan: `Chooser plan`\n\n- [ ] **AC1 — Do the thing.** more\n"
 
 
-def _rows_run(monkeypatch, capsys, doc, argv=("--rows",)):
+def _plan_registry(tmp_path: Path) -> dict:
+    """a waits (and has an open PR), b has a plan, c has a checkpoint, d is idle and empty."""
+    for name in "abcd":
+        (tmp_path / name / ".borg" / "checkpoints").mkdir(parents=True)
+    (tmp_path / "b" / "PROJECT_PLAN.md").write_text(PLAN)
+    (tmp_path / "c" / ".borg" / "checkpoints" / "2026-10-01-0900.md").write_text("## 5. Next Session\n\n1. write it\n")
+    return {
+        "projects": {
+            "a": {
+                "status": "waiting",
+                "waiting_reason": "needs a call",
+                "last_activity": "2026-09-01",
+                "path": str(tmp_path / "a"),
+            },
+            "b": {"status": "idle", "last_activity": "2026-10-01", "path": str(tmp_path / "b")},
+            "c": {"status": "idle", "last_activity": "2026-09-30", "path": str(tmp_path / "c")},
+            "d": {"status": "idle", "last_activity": "2026-09-29", "path": str(tmp_path / "d")},
+        }
+    }
+
+
+def _wire(monkeypatch, registry, items=None, note=None, log_rows=()):
     seen = []
-    monkeypatch.setattr(shell, "link_document", lambda local: seen.append(local) or doc)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(PATH_REGISTRY)))
+
+    def fake_recon(_projects, local):
+        seen.append(local)
+        return ({} if local else (items or {})), note
+
+    monkeypatch.setattr(shell, "recon_items", fake_recon)
+    monkeypatch.setattr(shell, "read_log_rows", lambda: list(log_rows))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(registry)))
+    return seen
+
+
+def _rows_run(monkeypatch, capsys, registry, items=None, note=None, argv=("--rows",), log_rows=()):
+    seen = _wire(monkeypatch, registry, items, note, log_rows)
     assert cli.main(list(argv)) == 0
-    return capsys.readouterr().out.splitlines(), seen
+    return capsys.readouterr().out, seen
 
 
-def test_rows_mode_prints_screen_then_names_line(state, monkeypatch, capsys):
-    lines, seen = _rows_run(monkeypatch, capsys, LINK_DOC)
-    assert lines[0] == "WHERE COULD YOUR FOCUS GO?"
-    assert any(line.startswith(" 1 a · o/r#1") for line in lines)
-    assert lines[-1] == "names\ta\tb"
-    assert seen == [False]
+def _json_run(monkeypatch, capsys, registry, items=None, note=None, argv=("--rows", "--json"), log_rows=()):
+    out, seen = _rows_run(monkeypatch, capsys, registry, items, note, argv, log_rows)
+    return json.loads(out), seen
+
+
+def test_rows_json_payload_has_you_and_agent_quiet_rows(state, monkeypatch, capsys, tmp_path):
+    payload, _ = _json_run(monkeypatch, capsys, _plan_registry(tmp_path), {"a": [PR_ITEM]})
+    assert set(payload) == {"rows", "rec", "suggestion", "quiet", "degraded"}
+    assert [(r["n"], r["project"], r["owner"]) for r in payload["rows"]] == [
+        (1, "a", "YOU"),
+        (2, "a", "YOU"),
+        (3, "c", "—"),
+        (4, "b", "AGENT"),
+    ]
+    session, merge, step, plan = payload["rows"]
+    assert set(session) == {
+        "n",
+        "project",
+        "item",
+        "next_step",
+        "owner",
+        "ready",
+        "ref",
+        "age",
+        "status",
+        "waiting_reason",
+    }
+    assert (session["next_step"], session["waiting_reason"], session["status"]) == (
+        "reply to session",
+        "needs a call",
+        "waiting",
+    )
+    assert (merge["next_step"], merge["item"], merge["ref"]) == ("merge #7", "ship it", "o/r#7")
+    assert (plan["item"], plan["next_step"].startswith("AC1")) == ("Chooser plan", True)
+    assert step["next_step"] == "write it"
+    assert payload["quiet"] == ["d"]
+    assert payload["rec"] == "a" and payload["suggestion"] is None and payload["degraded"] is None
     assert not state.exists()
 
 
-def test_rows_mode_passes_local_through(state, monkeypatch, capsys):
-    _, seen = _rows_run(monkeypatch, capsys, LINK_DOC, ("--rows", "--local"))
+def test_rows_json_suggestion_is_row_number_once_gate_passes(state, monkeypatch, capsys, tmp_path):
+    registry = _plan_registry(tmp_path)
+    followed = [{"chooser": True, "scripted": False, "opened": "a", "rec": "a"}] * 20
+    assert _json_run(monkeypatch, capsys, registry, log_rows=followed)[0]["suggestion"] == 1
+    assert _json_run(monkeypatch, capsys, registry, log_rows=followed[:19])[0]["suggestion"] is None
+
+
+def test_rows_json_local_skips_the_sweep(state, monkeypatch, capsys, tmp_path):
+    payload, seen = _json_run(
+        monkeypatch, capsys, _plan_registry(tmp_path), {"a": [PR_ITEM]}, argv=("--rows", "--json", "--local")
+    )
+    assert seen == [True]
+    assert [r["next_step"] for r in payload["rows"]][:1] == ["reply to session"]
+    assert all(not r["next_step"].startswith("merge") for r in payload["rows"])
+
+
+def test_rows_json_degraded_sweep_keeps_the_other_sources(state, monkeypatch, capsys, tmp_path):
+    payload, _ = _json_run(monkeypatch, capsys, _plan_registry(tmp_path), note="sweep: no recon adapters found")
+    assert payload["degraded"] == "sweep: no recon adapters found"
+    assert [r["project"] for r in payload["rows"]] == ["a", "c", "b"]
+
+
+def test_rows_mode_prints_item_rows_quiet_line_then_names_line(state, monkeypatch, capsys, tmp_path):
+    out, seen = _rows_run(monkeypatch, capsys, _plan_registry(tmp_path), {"a": [PR_ITEM]})
+    lines = out.splitlines()
+    assert lines[0] == "WHERE COULD YOUR FOCUS GO?"
+    assert any(line.startswith(" 2 a · ship it") and "merge #7" in line for line in lines)
+    assert "+1 quiet: d" in lines
+    assert lines[-1] == "names\ta\ta\tc\tb"
+    assert seen == [False]
+    assert all(len(line) <= 59 for line in lines)
+    assert not state.exists()
+
+
+def test_rows_mode_passes_local_through(state, monkeypatch, capsys, tmp_path):
+    _, seen = _rows_run(monkeypatch, capsys, _plan_registry(tmp_path), argv=("--rows", "--local"))
     assert seen == [True]
 
 
-def test_rows_mode_blank_cells_when_link_build_fails(state, monkeypatch, capsys):
-    lines, _ = _rows_run(monkeypatch, capsys, None)
-    assert " 1 a" in lines[3] and "o/r#1" not in "".join(lines)
-    assert lines[-1] == "names\ta\tb"
-
-
-def test_link_document_failure_is_none(monkeypatch):
+def test_recon_items_local_runs_no_sweep(monkeypatch):
     def boom(*_a, **_k):
-        raise OSError("no python")
+        raise AssertionError("swept under --local")
 
-    monkeypatch.setattr(shell.subprocess, "run", boom)
-    assert shell.link_document(True) is None
+    monkeypatch.setattr(shell.link_shell, "sweep", boom)
+    assert shell.recon_items({"a": {}}, True) == ({}, None)
 
 
-def test_link_document_runs_in_orchestrator_root(tmp_path, monkeypatch):
-    calls = []
+def test_recon_items_groups_items_and_flags_a_failed_source(monkeypatch):
+    tracks = [
+        {"source": "github", "ok": True, "items": [{"project": "a", "ref": "o/r#1"}]},
+        {"source": "slack", "ok": False, "items": []},
+    ]
+    monkeypatch.setattr(shell.link_shell, "sweep", lambda projects: {"swept": True, "tracks": tracks})
+    items, note = shell.recon_items({"a": {}, "z": {"status": "archived"}}, False)
+    assert items == {"a": [{"project": "a", "ref": "o/r#1"}]}
+    assert note == "sweep source failed: slack"
 
-    class Done:
-        returncode = 0
-        stdout = '{"grid": {}}'
 
-    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path))
-    monkeypatch.setattr(shell.subprocess, "run", lambda argv, **kw: calls.append((argv, kw)) or Done())
-    assert shell.link_document(True) == {"grid": {}}
-    argv, kw = calls[0]
-    assert argv[-2:] == ["--json", "--local"]
-    assert kw["cwd"] == str(tmp_path.resolve())
+def test_recon_items_unswept_and_raising_sweeps_degrade(monkeypatch):
+    monkeypatch.setattr(shell.link_shell, "sweep", lambda projects: {"swept": False, "tracks": [], "warnings": ["w1"]})
+    assert shell.recon_items({"a": {}}, False) == ({}, "w1")
+
+    def boom(_projects):
+        raise OSError("down")
+
+    monkeypatch.setattr(shell.link_shell, "sweep", boom)
+    assert shell.recon_items({"a": {}}, False) == ({}, "sweep failed: down")
+
+
+def test_recon_items_never_writes_the_last_run_marker(monkeypatch):
+    def marker(*_a, **_k):
+        raise AssertionError("marker written")
+
+    monkeypatch.setattr(shell.link_shell.recon_shell, "write_last_run_marker", marker)
+    monkeypatch.setattr(shell.link_shell, "sweep", lambda projects: {"swept": True, "tracks": []})
+    assert shell.recon_items({"a": {}}, False) == ({}, None)
+
+
+def test_plan_name_prefers_title_then_slug_then_fallback():
+    assert shell.plan_name("# Project Plan: `Foo bar`\n- Plan-slug: x\n", "p") == "Foo bar"
+    assert shell.plan_name("- Plan-slug: `my-slug`\n", "p") == "my-slug"
+    assert shell.plan_name("nothing", "p") == "p"
+
+
+def test_read_plans_finds_root_and_docs_plans(tmp_path):
+    (tmp_path / "r").mkdir()
+    (tmp_path / "r" / "PROJECT_PLAN.md").write_text("# Project Plan: Root\n")
+    (tmp_path / "d" / "docs" / "plans").mkdir(parents=True)
+    (tmp_path / "d" / "docs" / "plans" / "PROJECT_PLAN.md").write_text("# Project Plan: Deep\n")
+    projects = {"r": {"path": str(tmp_path / "r")}, "d": {"path": str(tmp_path / "d")}, "n": {"path": "null"}}
+    got = shell.read_plans(projects, ["r", "d", "n", "missing"])
+    assert {k: v["name"] for k, v in got.items()} == {"r": "Root", "d": "Deep"}
 
 
 def test_read_log_rows_reads_rotated_then_live(state):
@@ -173,69 +280,20 @@ def test_read_log_rows_reads_rotated_then_live(state):
     assert shell.read_log_rows() == [{"n": 1}, {"n": 2}]
 
 
-def test_link_document_uses_the_named_timeout(tmp_path, monkeypatch):
-    calls = []
-
-    class Done:
-        returncode = 0
-        stdout = "{}"
-
-    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(tmp_path))
-    monkeypatch.setattr(shell.subprocess, "run", lambda argv, **kw: calls.append(kw) or Done())
-    shell.link_document(True)
-    assert shell.LINK_TIMEOUT_S == 15
-    assert calls[0]["timeout"] == 15
-
-
-def _json_run(monkeypatch, capsys, doc, log_rows=(), argv=("--rows", "--json")):
-    monkeypatch.setattr(shell, "link_document", lambda local: doc)
-    monkeypatch.setattr(shell, "read_log_rows", lambda: list(log_rows))
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(PATH_REGISTRY)))
-    assert cli.main(list(argv)) == 0
-    return json.loads(capsys.readouterr().out)
-
-
-def test_rows_json_payload_shape(state, monkeypatch, capsys):
-    payload = _json_run(monkeypatch, capsys, LINK_DOC)
-    assert set(payload) == {"rows", "rec", "suggestion", "quiet"}
-    assert payload["rec"] == "a"
-    assert payload["suggestion"] is None
-    first = payload["rows"][0]
-    assert set(first) == {
-        "n", "project", "item", "next_step", "owner", "ready", "status", "age", "waiting_reason"
-    }
-    assert first["status"] == "waiting" and first["age"] == "2026-09-01"
-    assert first["n"] == 1 and first["project"] == "a" and first["item"] == "o/r#1"
-    assert not state.exists()
-
-
-def test_rows_json_suggestion_is_row_number_once_gate_passes(state, monkeypatch, capsys):
-    followed = [{"chooser": True, "scripted": False, "opened": "a", "rec": "a"}] * 20
-    assert _json_run(monkeypatch, capsys, LINK_DOC, followed)["suggestion"] == 1
-    below = followed[:19]
-    assert _json_run(monkeypatch, capsys, LINK_DOC, below)["suggestion"] is None
-
-
-def test_rows_json_blank_cells_when_link_build_fails(state, monkeypatch, capsys):
-    payload = _json_run(monkeypatch, capsys, None)
-    assert [row["project"] for row in payload["rows"]] == ["a"]
-    assert payload["quiet"] == ["b"]
-    assert all(row["item"] == "" and row["owner"] == "" for row in payload["rows"])
-
-
 def test_rows_json_is_valid_json_even_when_everything_fails(state, monkeypatch, capsys):
     def boom(*_a, **_k):
         raise RuntimeError("down")
 
-    monkeypatch.setattr(shell, "link_document", boom)
+    monkeypatch.setattr(shell, "recon_items", boom)
     monkeypatch.setattr("sys.stdin", io.StringIO("not json"))
     assert cli.main(["--rows", "--json"]) == 0
-    assert json.loads(capsys.readouterr().out) == {"rows": [], "rec": None, "suggestion": None, "quiet": []}
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["rows"] == [] and payload["rec"] is None and payload["suggestion"] is None
 
 
 def test_unmeasured_logs_null_opened_after(state):
     args, _ = cli._parser().parse_known_args(["--chooser", "--opened", "a", "--unmeasured"])
-    row = cli.build_row(args, PATH_REGISTRY["projects"], __import__("datetime").datetime(2026, 1, 1))
+    row = cli.build_row(args, REGISTRY["projects"], __import__("datetime").datetime(2026, 1, 1))
     assert row["opened"] == "a" and row["opened_after_s"] is None and row["scripted"] is False
 
 
@@ -268,11 +326,7 @@ def test_checkpoint_next_steps_is_fail_open(monkeypatch):
 
 def test_rows_json_checkpoint_fallback_keeps_a_row_out_of_quiet(state, monkeypatch, capsys, tmp_path):
     reg = _checkpointed_registry(tmp_path)
-    monkeypatch.setattr(shell, "link_document", lambda local: None)
-    monkeypatch.setattr(shell, "read_log_rows", lambda: [])
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(reg)))
-    assert cli.main(["--rows", "--json"]) == 0
-    payload = json.loads(capsys.readouterr().out)
+    payload, _ = _json_run(monkeypatch, capsys, reg)
     assert [r["project"] for r in payload["rows"]] == ["p"]
     assert payload["rows"][0]["next_step"] == "ship the chooser"
     assert payload["quiet"] == ["q"]

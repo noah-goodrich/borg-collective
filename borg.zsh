@@ -793,7 +793,7 @@ _borg_next_surface() {
             local -a rows_args=(--rows --json)
             (( local_flag )) && rows_args+=(--local)
             printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null ||
-                printf '{"rows":[],"rec":null,"suggestion":null}\n'
+                printf '{"rows":[],"rec":null,"suggestion":null,"quiet":[],"degraded":"rows failed"}\n'
             ;;
         open)
             (( chosen )) || die "next --open needs --chosen"

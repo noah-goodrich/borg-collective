@@ -244,21 +244,31 @@ def _fit(text: str, width: int) -> str:
     return text.ljust(width)
 
 
-_LABEL_W = 24
-_STEP_W = 19
+_LABEL_W = 22
+_STEP_W = 18
 
 
 def _line(n: str, label: str, step: str, owner: str, ready: str) -> str:
     return f"{n:>2} {_fit(label, _LABEL_W)} {_fit(step, _STEP_W)} {_fit(owner, 5)} {ready}".rstrip()
 
 
-def render_chooser(rows: list[dict[str, Any]], *, suggestion: str | None, width: int = 59) -> list[str]:
-    """Plain-text screen 2: header, rule, column header, one line per row, rule, optional suggestion, key hint."""
+def _quiet_line(quiet: list[str], width: int) -> str:
+    text = f"+{len(quiet)} quiet: {', '.join(quiet)}"
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def render_chooser(
+    rows: list[dict[str, Any]], *, suggestion: str | None, width: int = 59, quiet: list[str] | None = None
+) -> list[str]:
+    """Plain-text screen 2: header, rule, column header, one line per item row, optional `+N quiet` line, rule,
+    optional suggestion, key hint. Every line is at most `width` visible columns, cut with an ellipsis."""
     rule = "─" * width
     lines = ["WHERE COULD YOUR FOCUS GO?", rule, _line("#", "project · item", "next step", "owner", "ready")]
     for row in rows:
         label = f"{row['project']} · {row['item']}" if row.get("item") else row["project"]
         lines.append(_line(str(row["n"]), label, row.get("next_step", ""), row.get("owner", ""), row.get("ready", "")))
+    if quiet:
+        lines.append(_quiet_line(quiet, width))
     lines.append(rule)
     if suggestion is not None:
         lines.append(f"▸ suggested: {suggestion}")
@@ -377,3 +387,23 @@ def work_items(
             quiet.append(project)
         rows.extend({"project": project, **row, "age": age} for row in mine)
     return rows, quiet
+
+
+def numbered_rows(work: list[dict[str, Any]], ranked: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`work_items` rows as the wire rows: `n` 1..len, the project's `status`, and a `waiting_reason` always set."""
+    status = {entry["name"]: entry.get("status") or "" for entry in ranked}
+    return [
+        {
+            "n": index + 1,
+            "project": row["project"],
+            "item": row.get("item", ""),
+            "next_step": row.get("next_step", ""),
+            "owner": row.get("owner", ""),
+            "ready": row.get("ready", ""),
+            "ref": row.get("ref"),
+            "age": row.get("age", ""),
+            "status": status.get(row["project"], ""),
+            "waiting_reason": row.get("waiting_reason", ""),
+        }
+        for index, row in enumerate(work)
+    ]
