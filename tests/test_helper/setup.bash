@@ -13,6 +13,10 @@ setup_temp_dirs() {
     export XDG_CONFIG_HOME="${BATS_TEST_TMPDIR}/config"
     export XDG_STATE_HOME="${BATS_TEST_TMPDIR}/state"
     export XDG_DATA_HOME="${BATS_TEST_TMPDIR}/data"
+    # The orchestrator root defaults to "$HOME/dev", which the HOME line above already sandboxes. A
+    # value EXPORTED by the invoking shell beats that default and points every case at a directory
+    # outside the sandbox, so drop it here; a case that needs a custom root sets it inline.
+    unset BORG_ORCHESTRATOR_ROOT
 
     # GIVE THE SANDBOX A GIT IDENTITY. HOME is redirected on the line above, so `~/.gitconfig` is
     # gone by construction -- and recon_adapter_github.bats's case "adapter: a linked worktree is
