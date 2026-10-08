@@ -223,6 +223,14 @@ PYTHONPATH=<that dir> python3 -m borg_core.manifest.cli scaffold \
 
 - **`--name` is the `- Plan-slug:` you just declared**, byte for byte. Same string, same session.
 - **Never pass `--apex`.** A plan has no PR yet. Rows arrive at link-up, which is the ratified split.
+- **Scaffold picks the folder, and you tell the developer which and why.** A new manifest goes in
+  `.stacks/` (the tool-neutral root) or `.borg/chains/`: `.stacks/` if it exists, else borg's own
+  directory (`.borg/chains/`, or legacy `.borg/programs/`) if it exists, else `.stacks/` when git ignores `.borg/`
+  (a manifest there could never be shared), else `.borg/chains/`. When it creates one, the output
+  ends with `root: <folder> (<reason>)`; relay it in one sentence. An `exists:` line means nothing was created;
+  say so instead. Do not choose the folder yourself.
+- **`--root stacks|borg` is the override**, for when the developer names a folder. Pass it only on their say-so,
+  never to second-guess the derived choice.
 - **It never clobbers.** `scaffold` is idempotent: an existing manifest is reported at exit 0 and
   left untouched. Re-running `/borg-plan` on a repository that already has one is the ordinary case.
 - **A non-zero exit is reported, never worked around.** Say what failed and carry on writing the

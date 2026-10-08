@@ -29,7 +29,7 @@
 # `.borg/programs` and stayed there until that PR was in `main`, because a fixture under a name
 # `discover()` does not yet know is "rejected", which reads downstream exactly like "absent".
 # Flipping this one value was the whole migration for this harness. The legacy name is still
-# readable (expand, not contract), so run.sh's N2 checks that NEITHER name was created.
+# readable (expand, not contract), so run.sh's N2 checks that NONE of `.stacks`, `.borg/chains` and `.borg/programs` was created.
 _EVAL_MANIFEST_DIR=".borg/chains"
 
 # ── the interpreter ladder, in ONE place ─────────────────────────────────────────────────────────
