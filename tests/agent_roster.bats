@@ -47,11 +47,11 @@ SRC_AGENTS="${BATS_TEST_DIRNAME}/../agents"
     local fake_distro="${BATS_TEST_TMPDIR}/roster-content"
     mkdir -p "$fake_distro"
     cp "$SRC_AGENTS"/*.md "$fake_distro/"
-    printf '\nDRIFTED LINE\n' >> "$fake_distro/ROUTING.md"
+    printf '\nDRIFTED LINE\n' >> "$fake_distro/borg-grunt.md"
 
     run bash -c "PLUGIN_AGENTS_DIR='$fake_distro' bash '$CHECK_ROSTER'"
     [ "$status" -eq 1 ]
-    echo "$output" | grep -q "ROUTING.md — content differs"
+    echo "$output" | grep -q "borg-grunt.md — content differs"
 }
 
 @test "roster: exits 1 when the distro agents dir does not exist" {

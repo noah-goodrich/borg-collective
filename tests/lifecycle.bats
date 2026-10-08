@@ -91,6 +91,25 @@ EOF
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null
 }
 
+@test "start hook injects the agent-routing card (project mode), within 15 lines" {
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+    ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"AGENT ROUTING"* ]] || false
+    [[ "$ctx" == *"borg-collective:borg-scout"* ]] || false
+    [[ "$ctx" == *"docs/agent-routing.md"* ]] || false
+    card_lines=$(printf '%s\n' "$ctx" | awk '/^AGENT ROUTING/{f=1} f&&/^---$/{exit} f' | wc -l)
+    [ "$card_lines" -le 15 ]
+}
+
+@test "start hook injects the agent-routing card (orchestrator mode)" {
+    export BORG_ORCHESTRATOR_ROOT="$TEST_CWD"
+    run bash "$BORG_START" <<< "$(_start_input)"
+    [ "$status" -eq 0 ]
+    ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"AGENT ROUTING"* ]] || false
+}
+
 @test "start hook emits clean JSON (no stderr leak) when BORG_DIR config home is absent" {
     # Regression: the cairn-hits.log metric append was written as
     #   printf ... >> "$BORG_DIR/cairn-hits.log" 2>/dev/null

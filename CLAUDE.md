@@ -42,14 +42,14 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (13): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (15): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
-  bash-guard, borg-dispatch-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
+  bash-guard, borg-dispatch-guard, borg-workflow-model-guard, borg-scout-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
 - Skills (16): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
   and 10 more (full list under Files below)
-- Agents (6, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
-  borg-reviewer, borg-scout, ROUTING
+- Agents (5, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
+  borg-reviewer, borg-scout (routing guide: docs/agent-routing.md)
 - Usage guardian: 85% checkpoint sweep (bin/borg-usage-watch) + `borg-dispatch-guard.sh`
   >=92% hard-stop veto on new Agent/Workflow dispatch — both fail-open, dispatch-guard is
   default-OFF (`BORG_USAGE_HALT_ENABLED=1` to arm)
@@ -185,6 +185,8 @@ hooks/
     bash-guard.sh           PreToolUse (Bash) → destructive-pattern hard-block + RO pre-approval
     borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log
     borg-dispatch-guard.sh  PreToolUse (Agent/Workflow) → >=92% usage hard-stop veto (default-OFF)
+    borg-workflow-model-guard.sh  PreToolUse (Workflow) → denies agent() calls with no agentType/model pin (fail-open)
+    borg-scout-guard.sh     PreToolUse (Bash) → confines the borg-scout subagent to read-only git/gh (allowlist)
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
@@ -207,13 +209,12 @@ skills/ (16)
     fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
     no-unnecessary-read-perms/  Suppress redundant read-permission prompts (always active)
     simplify/               Review session-touched code for reuse/quality/efficiency, then fix
-agents/ (6, ephemeral nanoprobe roster)
+agents/ (5, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
     borg-nanoprobe.md       Default worker: one discrete unit of work, manages its own worktree
     borg-grunt.md           Narrow mechanical task executor
     borg-researcher.md      Read-heavy investigation/research subagent
     borg-reviewer.md        Independent review/verdict subagent
     borg-scout.md           Lightweight recon/discovery subagent
-    ROUTING.md              Guidance for which agent to spawn for a given task shape
 install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
 lib/launchd-label.zsh       THE launchd label resolver (see "launchd labels" under Key Patterns)
 launchd/                    Templates; Label is `{{LABEL}}`, installed as <label>.plist
