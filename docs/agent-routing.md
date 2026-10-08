@@ -1,5 +1,9 @@
 # Agent Routing Guide
 
+> Lives in `docs/`, not `agents/`: a file in `agents/` registers as a spawnable agent type and is never
+> injected into context. The short card is injected at SessionStart by `hooks/borg-link-down.sh`; the
+> `Workflow` guard `hooks/borg-workflow-model-guard.sh` enforces the workflow rule below.
+
 **Principle: the expensive tier is opt-IN. Route to the cheapest tier that fits.**
 
 Every unspecified subagent inherits the **main session model**. On this machine the session default is
@@ -35,6 +39,11 @@ matrix to pick the right tier before spawning rather than letting a stage silent
 |                  |        |        | novel architecture, complex multi-step inference, tasks where  | EXCEPTION, not the default. Defaulting here for      |
 |                  |        |        | the orchestrator cannot write a clear spec.                    | routine work is the primary cost driver.             |
 
+**borg-scout can read git and GitHub state.** It answers "what is the state of PR X?" and "what changed in
+commit Y?" via read-only `git` and `gh` (log/show/diff/status/blame/grep/ls-files/rev-parse, branch list,
+remote -v, worktree list; pr view/list/diff/checks, issue view/list, run view/list, repo view, api GET). This is
+enforced, not requested: `hooks/borg-scout-guard.sh` denies any other Bash command when the caller is scout.
+
 ---
 
 ## Decision tree
@@ -56,35 +65,28 @@ Is the task fully specified (no judgment calls)?
 
 ---
 
-## Cost reference (current API rates, per million tokens)
+## Cost reference
 
-| Model            | Input | Output | Cache read | Notes                                             |
-|------------------|-------|--------|------------|---------------------------------------------------|
-| Haiku 4.5        | $1    | $5     | $0.10      | Mechanical / read-only tier.                      |
-| Sonnet 4.6       | $3    | $15    | $0.30      | Judgment / analysis / review tier.                |
-| **Opus 4.6+ / 5** | $5 | $25    | $0.50      | **Current session default (Opus 5, 1M ctx)** — the intended orchestrator tier, and what any unspecified subagent inherits. |
-| Fable 5          | $10   | $50    | $1.00      | Most expensive; opt-in only, never the inherited default. |
-
-Two things matter here: **Opus dropped ~3x** at the 4.6 generation ($15/$75 → $5/$25), which is why it is
-now the session default rather than an emergency-only tier; and **Fable 5 sits ABOVE Opus** at $10/$50, so
-it must be selected deliberately — it is never something a session or workflow inherits by accident. A
-Haiku subagent is still ~10x cheaper on output than the inherited Opus 4.8 default. Routing a mechanical
-grep or a read-only search to the inherited model instead of Haiku is the single most avoidable cost in a
-multi-agent session. Cache reads of the growing orchestrator context usually dominate a long session —
-keep the main loop lean (delegate verbose reads; don't pull large tool output into the orchestrator).
+Prices go stale with every model generation, so none are listed here. Check current rates before quoting
+one. The durable facts: Haiku is the cheap mechanical tier, Sonnet the judgment tier, Opus the session
+default and the most expensive tier you should inherit by accident, and any model above Opus must be
+selected deliberately, never inherited. Routing a mechanical grep or read-only search to the inherited
+model instead of Haiku is the most avoidable cost in a multi-agent session. Cache reads of the growing
+orchestrator context usually dominate a long session, so keep the main loop lean (delegate verbose reads;
+don't pull large tool output into the orchestrator).
 
 ---
 
 ## Model routing inside Workflow scripts
 
 The `Agent`-tool matrix above does NOT apply automatically inside a `Workflow` script. In a workflow,
-`agent(prompt, opts)` spawns a generic worker that **inherits the session model (currently Opus 4.8)
-unless `opts.model` is set**. A 30-agent fan-out with no `model:` is 30 Opus 4.8 agents — wasteful for
+`agent(prompt, opts)` spawns a generic worker that **inherits the session model 
+unless `opts.model` is set**. A 30-agent fan-out with no `model:` is 30 Opus agents — wasteful for
 mechanical or judgment-tier work even though it is no longer the Fable-5-scale cost bomb it briefly was.
 Treat an `agent()` call with no `model:` as a bug in any workflow that is not doing genuinely open-ended
 reasoning in that stage.
 
-**Rule: every `agent()` call carries an explicit `model:` (and usually an `effort:`).** Pick with the same
+**Rule: every `agent()` call sets a namespaced `agentType:` (e.g. `'borg-collective:borg-scout'`) OR an explicit `model:` plus `effort:`.** `CLAUDE_CODE_SUBAGENT_MODEL` does NOT reach `agent()`; an unpinned call inherits the session model AND session effort. `hooks/borg-workflow-model-guard.sh` denies unpinned calls; put `/* inherit-ok */` inside a call to inherit on purpose. Pick with the same
 logic as the matrix:
 
 | Stage kind                                                        | `model:`    | `effort:` |
@@ -96,14 +98,14 @@ logic as the matrix:
 | Blind adversarial review / verification gate that guards a merge  | `'sonnet'`  | `'high'`  |
 | Genuinely open-ended reasoning with no writable spec (rare)       | omit (inherit) | `'high'` |
 
-- **Compose with the specialists.** `agent(prompt, { agentType: 'borg-scout' })` reuses a borg specialist
+- **Compose with the specialists.** `agent(prompt, { agentType: 'borg-collective:borg-scout' })` reuses a borg specialist
   (and its cheap model) from inside a workflow — prefer this for search/locate stages so the model choice and
   the system prompt both come from the specialist definition.
 - **Only the last row justifies inheriting the session default.** If you can write a clear brief for the
   stage, you do not need the inherited tier — pass `sonnet`. Reserve the inherited (session) model, currently
-  Opus 4.8, for the one or two stages that truly cannot be briefed.
+  Opus, for the one or two stages that truly cannot be briefed.
 - **The gate stage is worth Sonnet-high, not the inherited default.** A verifier/reviewer that guards a
-  deliverable should be the strongest *cheap* tier (`sonnet` + `effort:'high'`), not the inherited Opus 4.8
+  deliverable should be the strongest *cheap* tier (`sonnet` + `effort:'high'`), not the inherited Opus
   default — independence and rigor come from the blind setup and the high effort, not from spending the top
   tier.
 

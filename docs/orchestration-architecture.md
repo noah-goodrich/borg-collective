@@ -1,7 +1,7 @@
 # Borg Orchestration Architecture (frozen spec)
 
 Generated: 2026-07-07 · Status: STABLE — freeze these decisions so lighter models (Opus 4.8 / Sonnet) run the
-harness without re-deriving the multi-agent philosophy. Routing lives in `agents/ROUTING.md`; this doc is the
+harness without re-deriving the multi-agent philosophy. Routing lives in `docs/agent-routing.md`; this doc is the
 other half — the handoff state-machine and the decisions that are settled. Grounded in the 2026-05-23 agent-teams
 research (`docs/research/2026-05-23-agent-teams/analysis.md`, 16 source cards) and the current `agents/*.md`.
 
@@ -55,7 +55,7 @@ output returns to the Conductor, which spawns the next.
    each other. Agent Teams stay off.
 2. **Cost-ordered routing with explicit model tiers.** scout/grunt → Haiku; nanoprobe/researcher → Sonnet/med;
    reviewer → Sonnet/high; general-purpose → inherited (last resort). Gate conditions are fully specified in
-   `ROUTING.md`.
+   `docs/agent-routing.md`.
 3. **Session-model rule (post-2026-07-07).** The session default is now Opus 4.8; Fable 5 is opt-in. Inside a
    `Workflow` script, **every `agent()` call carries an explicit `model:`** — a missing one silently inherits the
    session model and is a bug. This supersedes the old "unspecified subagents run on Opus" assumption.
@@ -88,5 +88,5 @@ output returns to the Conductor, which spawns the next.
   episodic layer replaced cairn after its 2026-08-08 decommission. Recommended-but-unadopted: an
   OpenMemory-style MCP.
 - **Research-framework mapping.** The agent-teams research is GTM-scoped (4-tier delegation Tier 0–3); its
-  transfer to the dev-orchestration tiers is implied but never formally mapped. `ROUTING.md` is the operational
+  transfer to the dev-orchestration tiers is implied but never formally mapped. `docs/agent-routing.md` is the operational
   implementation; it does not cite the research framework.

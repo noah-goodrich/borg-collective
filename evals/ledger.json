@@ -23,10 +23,6 @@
     }
   },
   "items": {
-    "agents/ROUTING": {
-      "waiver": "Phase 2 (evals-for-everything): orchestrator-facing eval to be built (the routing table)",
-      "review_by": "2026-12-15"
-    },
     "agents/borg-grunt": {
       "waiver": "Phase 4 long-tail review (evals-for-everything)",
       "review_by": "2027-01-31"
