@@ -477,3 +477,149 @@ def test_main_dispatches_window_name(isolated_env, capsys):
         cli.main(["window-name", "me", "--set", "m"])
     assert exc.value.code == 0
     assert _window("me") == "m"
+
+
+# ── borg add --name / the path-already-registered check ────────────────────────
+
+
+def _seed_entry(name, path, **extra):
+    shell.registry_merge(name, {"path": str(path), "source": "cli", **extra})
+
+
+def test_cmd_add_name_overrides_the_basename(isolated_env, capsys):
+    proj_dir = isolated_env / "monorepo" / "widget-kit"
+    proj_dir.mkdir(parents=True)
+
+    cli.cmd_add(str(proj_dir), "widgets")
+
+    projects = shell.read_registry()["projects"]
+    assert list(projects) == ["widgets"]
+    assert projects["widgets"]["path"] == str(proj_dir)
+    assert "Registered: widgets" in capsys.readouterr().out
+
+
+def test_cmd_add_bare_and_path_forms_still_name_by_basename(isolated_env, monkeypatch):
+    first = isolated_env / "alpha"
+    second = isolated_env / "beta"
+    first.mkdir()
+    second.mkdir()
+    cli.cmd_add(str(first))
+    monkeypatch.chdir(second)
+    cli.cmd_add(None)
+    assert sorted(shell.read_registry()["projects"]) == ["alpha", "beta"]
+
+
+def test_cmd_add_without_name_is_a_noop_when_the_path_is_held_under_another_name(isolated_env, capsys):
+    proj_dir = isolated_env / "widget-kit"
+    proj_dir.mkdir()
+    _seed_entry("widgets", proj_dir, tmux_window="wdg")
+    before = shell.read_registry()
+
+    exit_code = cli.cmd_add(str(proj_dir))
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "widgets" in out
+    assert shell.read_registry() == before
+
+
+def test_cmd_add_with_a_different_name_refuses_and_names_the_holder(isolated_env, capsys):
+    proj_dir = isolated_env / "widget-kit"
+    proj_dir.mkdir()
+    _seed_entry("widgets", proj_dir)
+    before = shell.read_registry()
+
+    with pytest.raises(SystemExit) as raised:
+        cli.cmd_add(str(proj_dir), "gadgets")
+
+    assert raised.value.code == 1
+    assert "'widgets'" in capsys.readouterr().err
+    assert shell.read_registry() == before
+
+
+def test_cmd_add_with_the_holding_name_keeps_the_update_path(isolated_env, capsys):
+    proj_dir = isolated_env / "widget-kit"
+    proj_dir.mkdir()
+    _seed_entry("widgets", proj_dir, tmux_window="wdg", note="kept")
+
+    cli.cmd_add(str(proj_dir), "widgets")
+
+    entry = shell.read_registry()["projects"]["widgets"]
+    assert entry["tmux_window"] == "wdg"
+    assert entry["note"] == "kept"
+    assert entry["source"] == "cli"
+    assert list(shell.read_registry()["projects"]) == ["widgets"]
+
+
+def test_cmd_add_with_either_name_of_an_existing_twin_keeps_the_update_path(isolated_env, capsys):
+    # The old bug left one path under two names. --name naming EITHER is an update of that entry,
+    # not a refusal, whichever comes first in the registry; a third name is refused naming both.
+    proj_dir = isolated_env / "widget-kit"
+    proj_dir.mkdir()
+    _seed_entry("widgets", proj_dir, tmux_window="wdg")
+    _seed_entry("widget-kit", proj_dir, note="twin", source="scan")
+
+    cli.cmd_add(str(proj_dir), "widget-kit")
+
+    projects = shell.read_registry()["projects"]
+    assert sorted(projects) == ["widget-kit", "widgets"]
+    assert projects["widget-kit"]["note"] == "twin"
+    assert projects["widget-kit"]["source"] == "cli"
+    assert projects["widgets"]["tmux_window"] == "wdg"
+
+    before = shell.read_registry()
+    with pytest.raises(SystemExit) as raised:
+        cli.cmd_add(str(proj_dir), "gadgets")
+    err = capsys.readouterr().err
+    assert raised.value.code == 1
+    assert "'widgets'" in err and "'widget-kit'" in err
+    assert shell.read_registry() == before
+
+
+def test_path_check_ignores_a_trailing_slash_in_the_stored_path(isolated_env):
+    proj_dir = isolated_env / "widget-kit"
+    proj_dir.mkdir()
+    _seed_entry("widgets", str(proj_dir) + "/")
+
+    assert cli.cmd_add(str(proj_dir)) == 0
+    assert list(shell.read_registry()["projects"]) == ["widgets"]
+
+
+def test_path_check_resolves_symlinks_on_the_added_path(isolated_env):
+    proj_dir = isolated_env / "widget-kit"
+    proj_dir.mkdir()
+    link = isolated_env / "shortcut"
+    link.symlink_to(proj_dir)
+    _seed_entry("widgets", proj_dir)
+
+    with pytest.raises(SystemExit):
+        cli.cmd_add(str(link), "gadgets")
+    assert list(shell.read_registry()["projects"]) == ["widgets"]
+
+
+def test_path_check_resolves_symlinks_in_the_stored_path(isolated_env):
+    proj_dir = isolated_env / "widget-kit"
+    proj_dir.mkdir()
+    link = isolated_env / "shortcut"
+    link.symlink_to(proj_dir)
+    _seed_entry("widgets", link)
+
+    assert cli.cmd_add(str(proj_dir)) == 0
+    assert list(shell.read_registry()["projects"]) == ["widgets"]
+
+
+def test_main_parses_name_in_both_spellings_and_rejects_a_bare_flag(isolated_env, capsys):
+    first = isolated_env / "one"
+    second = isolated_env / "two"
+    first.mkdir()
+    second.mkdir()
+    with pytest.raises(SystemExit):
+        cli.main(["add", str(first), "--name", "uno"])
+    with pytest.raises(SystemExit):
+        cli.main(["add", "--name=dos", str(second)])
+    assert sorted(shell.read_registry()["projects"]) == ["dos", "uno"]
+
+    with pytest.raises(SystemExit) as raised:
+        cli.main(["add", str(first), "--name"])
+    assert raised.value.code == 1
+    assert "--name needs a value" in capsys.readouterr().err

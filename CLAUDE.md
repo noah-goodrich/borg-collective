@@ -100,7 +100,8 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                                      `link` arm, the one live caller (`_link_py_args=(--deep)`)
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
-borg add [path]          Register a project (a re-add keeps an existing `tmux_window`)
+borg add [path] [--name <n>]  Register a project (a re-add keeps an existing `tmux_window`; a path
+                         already registered under another name is a no-op, or exit 1 with --name)
 borg rm <project>        Unregister
 borg focus               Zoom current pane / project window
 borg pin / unpin         Pin (or unpin) a project to the top of borg link

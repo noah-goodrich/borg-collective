@@ -185,3 +185,56 @@ _new_window_names() { grep -E '^tmux (new-window|new-session)' "$TRACE" | sed -E
     grep -q 'set-option -t wtest:fox @cortex_launched 1' "$TRACE"
     ! grep -q 'wtest:amber-fox-labs' "$TRACE"
 }
+
+# ── drone must not register a twin of a project whose name is not its folder's basename ──────────────
+# A monorepo subfolder is registered as `widgets`; `borg add` alone would name it `widget-kit`. These
+# use the REAL registry writer (borg_core.registry.cli) behind a call-logging `borg` shim, because the
+# stub above names by basename too and would hide exactly the bug.
+
+_real_borg() {
+    cat > "$MOCK_BIN/borg" <<MOCK
+#!/usr/bin/env bash
+echo "borg \$*" >> "\$TRACE"
+[[ "\$1" == "add" ]] || exit 0
+shift
+PYTHONPATH="${BATS_TEST_DIRNAME}/.." exec "${BORG_EVAL_PYTHON:-python3}" -m borg_core.registry.cli add "\$@"
+MOCK
+    chmod +x "$MOCK_BIN/borg"
+}
+
+_entries_for() { jq -r --arg d "$1" '[.projects | to_entries[] | select(.value.path == $d)] | length' "$BORG_REGISTRY"; }
+
+@test "up twice on a non-basename project leaves one entry, same name and tmux_window" {
+    _real_borg
+    SUB="$BATS_TEST_TMPDIR/dev/monorepo/libs/widget-kit"
+    mkdir -p "$SUB"
+    SUB="$(cd "$SUB" && pwd -P)"
+    _register widgets "$SUB" wdg
+
+    run "$DRONE" up widgets
+    [ "$status" -eq 0 ]
+    : > "$WINDOWS"
+    run "$DRONE" up widgets
+    [ "$status" -eq 0 ]
+
+    [ "$(_entries_for "$SUB")" = "1" ]
+    [ "$(jq -r '.projects | keys | join(",")' "$BORG_REGISTRY")" = "widgets" ]
+    [ "$(_reg widgets)" = "wdg" ]
+    [[ "$output" != *"Registered: widget-kit"* ]]
+}
+
+@test "drone does not call borg add for an already-registered project" {
+    _register widgets "$BATS_TEST_TMPDIR/dev/widget-kit" wdg
+    mkdir -p "$BATS_TEST_TMPDIR/dev/widget-kit"
+    run "$DRONE" up widgets
+    [ "$status" -eq 0 ]
+    ! grep -q '^borg add' "$TRACE"
+}
+
+@test "drone registers a brand-new project under the name it was given" {
+    _real_borg
+    run "$DRONE" up "$PROJ"
+    [ "$status" -eq 0 ]
+    grep -q "^borg add .* --name amber-fox-labs" "$TRACE"
+    [ "$(_entries_for "$(cd "$PROJ" && pwd -P)")" = "1" ]
+}
