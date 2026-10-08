@@ -21,7 +21,7 @@ document. Where the grid's unresolved token has to be compared, `grid.STATE_SOUR
 imported -- so the two modules cannot drift, which a duplicated string literal would allow, and so a
 grep for the literal stays a meaningful check. `state_glyph` has no `unknown` branch at all: it has
 three named-state branches and a DEFAULT arm, which `unknown` takes alongside an injected Jira
-adapter's `in_progress` and the live viz manifest's `stacked`. `resolve_state` takes a swept token
+adapter's `in_progress` and a manifest's `stacked` or `review`. `resolve_state` takes a swept token
 verbatim without checking DECLARABLE_STATES (grid.py's resolve_state docstring carries the argument),
 so foreign tokens are a live path here, not a hypothetical.
 
@@ -257,8 +257,8 @@ def link_ref(ref: str, text: str) -> str:
 def state_glyph(node: dict) -> str:
     """One node's glyph. TOTAL over every state token, including ones no adapter here emits.
 
-    THE DEFAULT ARM IS THE POINT. A dict lookup keyed on state would raise KeyError on the live
-    viz manifest, whose rows declare `"status": "stacked"` -- a position in a stack, not a PR state --
+    THE DEFAULT ARM IS THE POINT. A dict lookup keyed on state would raise KeyError on a
+    manifest whose rows declare `"status": "stacked"` -- a position in a stack, not a PR state --
     and on any injected Jira or Slack adapter's vocabulary, which resolve_state passes through
     verbatim. It would also raise on the grid's own unresolved token, which is the MAJORITY case on
     any `--local` render, since opting down from both network rungs leaves every row unresolved by
@@ -293,7 +293,7 @@ def resolved_provenance(node: dict) -> bool:
     `RESOLVED_STATE_SOURCES` rather than a local tuple: `swept` and `fetched` were looked up,
     `declared` and `unknown` were not, and if a fifth rung is ever added this follows it.
 
-    `grid.py:898` computes `unresolved` from the SAME tuple, so the `▸ SIGNALS` count and the marks
+    `grid.build_grid` computes `unresolved` from the SAME tuple, so the `▸ SIGNALS` count and the marks
     in the picture are two views of one fact rather than two derivations that can drift.
     """
     return node.get("state_source") in grid.RESOLVED_STATE_SOURCES
@@ -382,7 +382,7 @@ _STATE_SENTENCE = {
     grid.STATE_SOURCE_SWEPT: "from the sweep",
     grid.STATE_SOURCE_FETCHED: "from a targeted fetch",
     grid.STATE_SOURCE_DECLARED: "from the manifest (declared, may be stale)",
-    grid.STATE_SOURCE_UNKNOWN: "nobody has an answer for this ref (not swept, not fetched, not declared)",
+    grid.STATE_SOURCE_UNKNOWN: "nobody has an answer for this ref (not swept, not fetched, no PR state declared)",
 }
 
 

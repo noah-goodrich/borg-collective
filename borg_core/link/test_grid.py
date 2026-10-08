@@ -427,7 +427,7 @@ def test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_reposito
 
 
 def test_a_declared_status_outside_the_three_state_tokens_resolves_to_unknown():
-    """`stacked` is authoring vocabulary, not a PR state, and the live viz manifest carries it.
+    """`stacked` is authoring vocabulary, not a PR state, and a team's manifest may carry it.
 
     Promoting it would put `stacked` in the same field a renderer reads `merged` from, and every
     downstream state glyph would need a branch for a word that describes a position in a stack. The
@@ -443,6 +443,67 @@ def test_a_declared_status_outside_the_three_state_tokens_resolves_to_unknown():
     assert link_grid.resolve_state("o/r#1", "MERGED", {}, {}) == ("merged", "declared")
     assert link_grid.resolve_state("o/r#1", "", {}, {}) == ("unknown", "unknown")
     assert link_grid.resolve_state("o/r#1", None, {}, {}) == ("unknown", "unknown")
+
+
+def _status_manifest(*words) -> dict:
+    rows = [{"ref": f"o/r#{index}", "order": str(index), "lane": "L"} for index, _ in enumerate(words, 1)]
+    for row, word in zip(rows, words):
+        if word is not None:
+            row["status"] = word
+    return {"program": "p", "rows": rows}
+
+
+def _unread(manifest: dict, items=None, fetched=None) -> list[str]:
+    grids = [link_grid.grid_manifest(manifest, items or {}, fetched or {})]
+    return link_grid.unread_status_warning([manifest], grids)
+
+
+def test_unread_status_names_the_words_once_with_counts_and_no_forbidden_text():
+    """MUTATION: drop the `state_source == unknown` gate, or make the membership test case-sensitive."""
+    manifest = _status_manifest("review", "review", "stacked", "Merged", "", None, "MERGED")
+    (line,) = _unread(manifest)
+    assert line == (
+        'declared: 3 row(s) carry a word that is not a PR state ("review" x2, "stacked" x1) -- shown unresolved'
+    )
+    for forbidden in ("unknown", "nobody has an answer for this ref", "declared refs unresolved"):
+        assert forbidden not in line
+
+
+def test_unread_status_is_silent_when_nothing_carries_an_unread_word():
+    assert not _unread(_status_manifest("merged", "OPEN", "closed", " ", None))
+
+
+def test_unread_status_is_silent_when_the_sweep_or_fetch_answers_the_ref():
+    manifest = _status_manifest("review", "stacked")
+    assert not _unread(manifest, items={"o/r#1": {"state": "open"}}, fetched={"o/r#2": {"state": "merged"}})
+    (line,) = _unread(manifest, items={"o/r#1": {"state": "open"}})
+    assert '"stacked" x1' in line and '"review"' not in line
+
+
+def test_unread_status_caps_the_quoted_words_at_three():
+    """MUTATION: remove the cap and all five words are quoted."""
+    (line,) = _unread(_status_manifest("a", "a", "a", "b", "b", "c", "d", "e"))
+    assert line.startswith("declared: 8 row(s)")
+    assert '"a" x3, "b" x2, "c" x1, +2 more)' in line
+    assert '"d"' not in line and '"e"' not in line
+
+
+def test_unread_status_matches_the_three_words_case_insensitively():
+    """The gate alone hides a case slip (a declared `Merged` resolves to `declared`, not `unknown`),
+    so this hands the helper a node already at `unknown` to pin the membership test by itself.
+
+    MUTATION: compare the raw word instead of its lowercase."""
+    manifest = _status_manifest("Merged", "OPEN", "Review")
+    grids = [{"nodes": {f"o/r#{index}": {"state_source": "unknown"} for index in (1, 2, 3)}}]
+    (line,) = link_grid.unread_status_warning([manifest], grids)
+    assert line.startswith("declared: 1 row(s)") and '"Review" x1' in line
+
+
+def test_unread_status_rides_the_grid_warnings_and_adds_no_wire_key():
+    manifest = _status_manifest("review")
+    block = link_grid.build_grid({"kind": "repository"}, "o/r", {}, {}, [manifest], ["earlier"])
+    assert block["warnings"][0] == "earlier" and len(block["warnings"]) == 2
+    assert 'unread' not in " ".join(block)
 
 
 def test_a_swept_state_beats_a_declared_one_and_is_taken_verbatim():
