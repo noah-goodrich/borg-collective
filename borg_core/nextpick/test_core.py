@@ -359,3 +359,89 @@ def test_checkpoint_next_step_ignores_tldr_preamble_and_truncates():
     text = "tl;dr: 5. Next Session is later\n\n## 1. Goal\n\nx\n\n## 5. Next Session\n\n1. " + "w" * 120 + "\n"
     step = core.checkpoint_next_step(text)
     assert len(step) == 80 and step.endswith("…") and step.startswith("w")
+
+
+def _pr(num, title="feat(next): add the thing", **kw):
+    base = {"ref": f"o/r#{num}", "title": title, "state": "open", "draft": False, "checks": "pass",
+            "mergeable": "MERGEABLE", "review_decision": None, "owner": "you"}
+    return {**base, **kw}
+
+
+def _rank(name, status="idle", reason=""):
+    return {"name": name, "status": status, "waiting_reason": reason, "last_activity": ""}
+
+
+def _one(pr):
+    rows, quiet = core.work_items([_rank("p")], {"p": [pr]}, {}, {})
+    assert quiet == []
+    assert len(rows) == 1
+    return rows[0]
+
+
+def test_work_items_pr_rule_precedence():
+    assert _one(_pr(1, draft=True, checks="fail", mergeable="CONFLICTING"))["next_step"] == "finish #1"
+    row = _one(_pr(2, mergeable="CONFLICTING", checks="fail"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("resolve conflicts #2", "AGENT", "✗")
+    row = _one(_pr(3, checks="fail", review_decision="CHANGES_REQUESTED"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("fix #3 CI", "AGENT", "✗")
+    row = _one(_pr(4, checks="pending", review_decision="CHANGES_REQUESTED"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("#4 CI", "AGENT", "… run")
+    row = _one(_pr(5, review_decision="CHANGES_REQUESTED"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("address review #5", "AGENT", "○")
+    for extra in ({"checks": "none"}, {"mergeable": "UNKNOWN"}, {}):
+        row = _one(_pr(6, **extra))
+        assert (row["next_step"], row["owner"], row["ready"], row["ref"]) == ("merge #6", "YOU", "✔ now", "o/r#6")
+    row = _one(_pr(3, draft=True))
+    assert (row["owner"], row["ready"]) == ("AGENT", "◌")
+
+
+def test_work_items_ignores_closed_prs_and_author():
+    rows, quiet = core.work_items([_rank("p")], {"p": [_pr(1, state="merged")]}, {}, {})
+    assert rows == [] and quiet == ["p"]
+    assert _one(_pr(7, owner="unknown"))["owner"] == "YOU"
+    assert _one(_pr(8, owner="you", checks="fail"))["owner"] == "AGENT"
+
+
+def test_work_items_several_prs_order_you_first_then_agent_by_number():
+    prs = [_pr(9, checks="fail"), _pr(5, draft=True), _pr(12), _pr(3)]
+    rows, _ = core.work_items([_rank("p")], {"p": prs}, {}, {})
+    assert [r["ref"] for r in rows] == ["o/r#3", "o/r#12", "o/r#5", "o/r#9"]
+
+
+def test_work_items_waiting_session_first():
+    ranked = [_rank("p", "waiting", "needs input")]
+    rows, _ = core.work_items(ranked, {"p": [_pr(2)]}, {}, {}, now_epoch=0)
+    assert rows[0]["item"] == "session" and rows[0]["next_step"] == "reply to session"
+    assert rows[0]["owner"] == "YOU" and rows[0]["ready"].startswith("✔ ")
+    assert rows[0]["waiting_reason"] == "needs input" and rows[0]["ref"] is None
+    assert rows[1]["next_step"] == "merge #2"
+
+
+PLAN = {"name": "next-chooser", "text": "- [x] **AC1 — done.** x\n- [ ] **AC5 — The sweep sees every open PR.** y\n"}
+
+
+def test_work_items_plan_row_and_suppression():
+    rows, _ = core.work_items([_rank("p")], {}, {"p": PLAN}, {"p": "step"})
+    assert len(rows) == 1
+    assert (rows[0]["item"], rows[0]["owner"], rows[0]["ready"]) == ("next-chooser", "AGENT", "○")
+    assert rows[0]["next_step"].startswith("AC5 The sweep sees") and len(rows[0]["next_step"]) <= 22
+    rows, _ = core.work_items([_rank("p")], {"p": [_pr(1)]}, {"p": PLAN}, {})
+    assert [r["next_step"] for r in rows] == ["merge #1"]
+    done = {"name": "x", "text": "- [x] **AC1 — done.**\n"}
+    rows, quiet = core.work_items([_rank("p")], {}, {"p": done}, {})
+    assert rows == [] and quiet == ["p"]
+
+
+def test_work_items_checkpoint_fallback_and_quiet_and_order():
+    ranked = [_rank("a"), _rank("b"), _rank("c")]
+    rows, quiet = core.work_items(ranked, {"c": [_pr(1)]}, {}, {"a": "do the thing"})
+    assert quiet == ["b"]
+    assert [r["project"] for r in rows] == ["a", "c"]
+    assert (rows[0]["item"], rows[0]["next_step"], rows[0]["owner"], rows[0]["ready"]) == ("", "do the thing", "—", "")
+
+
+def test_short_title_strips_prefix_and_truncates():
+    assert core.short_title("feat(next): interactive chooser with an earned suggestion") == "interactive choos…"
+    assert core.short_title("fix!: tiny") == "tiny"
+    assert core.short_title("plain title here") == "plain title here"
+    assert len(core.short_title("x" * 40)) == 18
