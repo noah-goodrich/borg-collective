@@ -3332,6 +3332,24 @@ _link_picture_budget() {
     [ "$output" = "1" ]
 }
 
+# One row of auth-hardening.json declares `review`, a word borg does not read as PR state. Both grid
+# goldens resolve that row (the sweep answers platform#420), so they do not move; `--local` resolves
+# nothing, so the page must NAME the word once, above the resolution line. The sibling case above
+# counts three strings and stays unedited, which is why this line's text contains none of them.
+@test "contract: link --local names a declared status word borg does not read, above the resolution line" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local platform
+    run grep -c 'carry a word that is not a PR state' "${BATS_TEST_TMPDIR}/local.txt"
+    [ "$output" = "1" ]
+    run grep -c '"review" x1' "${BATS_TEST_TMPDIR}/local.txt"
+    [ "$output" = "1" ]
+    word_line=$(grep -n 'carry a word that is not a PR state' "${BATS_TEST_TMPDIR}/local.txt" | cut -d: -f1)
+    resolved_line=$(grep -n 'declared refs unresolved' "${BATS_TEST_TMPDIR}/local.txt" | cut -d: -f1)
+    [ "$word_line" -lt "$resolved_line" ]
+}
+
 # The MODAL repository: a git origin, no manifest. Six of its seven sections are strictly richer than
 # what `borg link <project>` showed before AC2 (which had no board and no chains at all), and the one
 # empty section carries a DIAGNOSIS rather than a blank frame.

@@ -79,6 +79,23 @@ def test_a_stale_declared_status_is_reported():
     assert "resolved merged" in findings[0]["detail"]
 
 
+def test_a_declared_word_borg_does_not_read_is_no_claim_and_case_is_ignored():
+    """`review` on an open ref and `Merged` on a merged one agree with grid.resolve_state, which
+    lowercases and reads only three words. `open` on a merged ref is still stale."""
+    assert core.report([_row(status="Merged")], {"o/r#1": ("merged", "swept")}) == []
+    assert core.report([_row(status="review")], {"o/r#1": ("open", "swept")}) == []
+    assert core.report([_row(status="stacked")], {"o/r#1": ("merged", "fetched")}) == []
+    findings = core.report([_row(status="open")], {"o/r#1": ("merged", "swept")})
+    assert [f["kind"] for f in findings] == [core.STALE_DECLARED]
+
+
+def test_the_declared_words_literal_equals_grids():
+    """core.py may import nothing, so it keeps a copy; this is the guard against drift."""
+    from borg_core.link import grid  # pylint: disable=import-outside-toplevel
+
+    assert core.DECLARED_STATES == grid.DECLARABLE_STATES
+
+
 def test_a_decision_gate_on_a_merged_ref_is_reported_even_when_the_status_AGREES():
     """The #158 class, and the reason it cannot fold into `stale_declared`. Here declared and
     resolved BOTH say merged, so there is no status disagreement at all — the gate is the finding.

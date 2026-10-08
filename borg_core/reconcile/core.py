@@ -34,6 +34,12 @@ KIND_ORDER = (STALE_DECLARED, MERGED_DECISION_GATE, UNRESOLVED)
 # importing `link.grid` here would make this module depend on the renderer to compare two strings.
 RESOLVED_SOURCES = ("swept", "fetched")
 
+# The only declared `status` words that are a claim about PR state. Mirrors `grid.DECLARABLE_STATES`,
+# which is the rule `grid.resolve_state` applies (lowercased, then membership), and is a literal for
+# the same reason RESOLVED_SOURCES is. `test_core.py` pins the two equal. Any other word ("review",
+# "stacked") is a team's own vocabulary, not a claim, so it is never stale.
+DECLARED_STATES = ("open", "merged", "closed")
+
 # A gate kind whose whole purpose is to hold work back. A `decision` gate on an already-merged ref is
 # the #158 class: the thing it was gating happened anyway, so either the gate is stale or the merge
 # was premature. Both are facts a human needs; neither is something a machine should silently fix.
@@ -79,8 +85,8 @@ def row_finding(row: dict, resolved_state: str, state_source: str) -> dict | Non
         return {"kind": MERGED_DECISION_GATE, "ref": ref,
                 "detail": f"a {GATE_DECISION} gate on a ref that resolved {MERGED}"}
 
-    declared = _text(row.get("status"))
-    if declared and declared != resolved_state:
+    declared = _text(row.get("status")).lower()
+    if declared in DECLARED_STATES and declared != resolved_state:
         return {"kind": STALE_DECLARED, "ref": ref,
                 "detail": f"declared {declared}, resolved {resolved_state} ({state_source})"}
 

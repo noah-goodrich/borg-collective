@@ -28,6 +28,9 @@ what keeps the fetch inside the Domain purity gate instead of needing a new modu
 pyproject's clean-arch map.
 """
 
+# JUSTIFICATION: main sat at the 1000-line cap; a split would move names picture, render and tests import.
+# pylint: disable=too-many-lines
+
 from __future__ import annotations
 
 from typing import Callable
@@ -69,12 +72,13 @@ STATE_READY_KNOWN = "known"
 STATE_READY_UNLOOKED = "unlooked"
 
 # The ONLY declared `status` values the ladder will promote to a state, and they are exactly the
-# github adapter's three tokens (borg_core/manifest/core.py:103-105). A manifest's `status` field is
-# hand-authored and its vocabulary is WIDER than that: the live viz manifest carries `"stacked"`,
-# which is a position in a stack, not a PR state. Accepting it would put the token `stacked` in the
-# same field a renderer reads `merged` from, and every state glyph downstream would have to grow a
-# branch for authoring vocabulary. Anything outside this tuple falls through to `unknown`, which is
-# the honest answer until AC3's targeted fetch resolves it.
+# github adapter's three tokens (borg_core/manifest/core.py:185-187). A manifest's `status` field is
+# hand-authored and its vocabulary is WIDER than that: a team's own words such as `"stacked"` or
+# `"review"` are real, and `"stacked"` is a position in a stack, not a PR state. Accepting one would
+# put it in the same field a renderer reads `merged` from, and every state glyph downstream would
+# have to grow a branch for authoring vocabulary. Anything outside this tuple falls through to
+# `unknown`, which is the honest answer until AC3's targeted fetch resolves it -- and when nothing
+# live answers, unread_status_warning names the word in SIGNALS instead of dropping it silently.
 DECLARABLE_STATES = (manifest_core.STATE_OPEN, manifest_core.STATE_MERGED, manifest_core.STATE_CLOSED)
 
 
@@ -273,9 +277,9 @@ def resolve_state(
     is. The asymmetry is deliberate. A source adapter owns its own state vocabulary -- the github
     adapter emits three tokens, but an injected Jira or Slack adapter emits its own, and coercing
     those to `unknown` would throw away the only real answer anybody has. A manifest `status` is
-    hand-typed by whoever wrote the file, in a field with no schema, and `"stacked"` is already in
-    the live data; promoting that to a state would put authoring vocabulary in the field renderers
-    read PR state from.
+    hand-typed by whoever wrote the file, in a field with no schema, and a team's own words
+    (`"stacked"`, `"review"`) are legitimate in it; promoting one to a state would put authoring
+    vocabulary in the field renderers read PR state from.
 
     A FETCHED TOKEN IS TAKEN VERBATIM FOR THE SAME REASON. It came off the wire, not out of a text
     editor, so the argument that filters a declared status does not apply to it.
@@ -473,7 +477,7 @@ def fetched_items(payload: dict, aliases: dict[str, str]) -> dict[str, dict]:
             "title": _grid_text(answer.get("title")),
             # AC4. `isDraft` was SELECTED by _FETCH_NODE since AC3 and thrown away here, which is why
             # `picture.GLYPH_DRAFT` shipped dead-but-tested. It is carried only on this rung: the
-            # sweep's adapter contract has three tokens and no draft-ness (recon-adapter-github:179),
+            # sweep's adapter contract has three tokens and no draft-ness (recon-adapter-github emits none),
             # and a draft PR is `open` there. `is True` because a missing key, a JSON `false` and the
             # STRING "true" must all read as not-draft -- the Python side of the jq `//` trap.
             "draft": answer.get("isDraft") is True,
@@ -714,6 +718,43 @@ def _declared_rows(manifest: dict) -> tuple[dict[str, dict], dict[str, int], int
     rows = {_grid_text(row.get("ref")): row for row in declared}
     seq_of = {_grid_text(row.get("ref")): index for index, row in enumerate(declared)}
     return rows, seq_of, len(declared)
+
+
+# How many distinct unread words the SIGNALS line quotes. Per-row lines teach a reader to skip the
+# section, so this is ONE aggregate line and the quote is capped; the count in front is the whole
+# truth and the quote is a sample of it.
+UNREAD_STATUS_WORD_CAP = 3
+
+
+def unread_status_warning(manifests: list[dict], grids: list[dict]) -> list[str]:
+    """One SIGNALS sentence naming declared `status` words borg does not read as PR state, or `[]`.
+
+    A row counts only when it declared a non-blank word, the word is outside DECLARABLE_STATES
+    (compared lowercased, exactly as resolve_state does), AND its node ended at `state_source`
+    `unknown`. The last clause is the gate: a swept or fetched answer means the page rendered the
+    row correctly and a line naming its word would be noise on every healthy render, and a declared
+    `merged` never ends at `unknown`, so the gate needs no second copy of the three words beyond the
+    membership test. It adds no wire key: the sentence rides `grid.warnings`. The text must not
+    contain `unknown`, `nobody has an answer for this ref` or `declared refs unresolved`, which
+    tests/cli_contract.bats counts on a `--local` page.
+    """
+    counts: dict[str, int] = {}
+    for manifest, grid in zip(manifests, grids):
+        rows, _, _ = _declared_rows(manifest)
+        for ref, row in rows.items():
+            word = core.flatten_summary(_grid_text(row.get("status")))
+            node = grid["nodes"].get(ref) or {}
+            if word and word.lower() not in DECLARABLE_STATES and node.get("state_source") == STATE_SOURCE_UNKNOWN:
+                counts[word] = counts.get(word, 0) + 1
+    if not counts:
+        return []
+    ranked = sorted(counts.items(), key=lambda pair: -pair[1])
+    shown = ", ".join(f'"{word}" x{count}' for word, count in ranked[:UNREAD_STATUS_WORD_CAP])
+    more = len(ranked) - UNREAD_STATUS_WORD_CAP
+    if more > 0:
+        shown += f", +{more} more"
+    total = sum(counts.values())
+    return [f"declared: {total} row(s) carry a word that is not a PR state ({shown}) -- shown unresolved"]
 
 
 # JUSTIFICATION (too-many-locals): 20 of a permitted 15, and both obvious extractions were tried and
@@ -996,5 +1037,8 @@ def build_grid(scope: dict, slug: str, sweep: dict, fetch: dict, manifests: list
         "manifests": grids,
         "declared": len(nodes),
         "unresolved": sum(1 for node in nodes if node["state_source"] not in RESOLVED_STATE_SOURCES),
-        "warnings": list(warnings) + list(sweep.get("warnings") or []) + list(fetch.get("warnings") or []),
+        "warnings": list(warnings)
+        + list(sweep.get("warnings") or [])
+        + list(fetch.get("warnings") or [])
+        + unread_status_warning(manifests, grids),
     }

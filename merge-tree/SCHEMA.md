@@ -211,7 +211,7 @@ only in the head of whoever planned the program, so it has to be **declared**.
   "note":    "optional",
   "rows": [
     {"order": "I1", "ref": "owner/repo#834", "lane": "ingest", "ticket": "OPS-11",
-     "status": "stacked", "next": false, "why": "",
+     "status": "open", "next": false, "why": "",
      "gate": {"blocked_by": "what is holding it", "kind": "decision | verification",
               "resolved_by": "the thing that settles it", "outcomes": ["optional"]}}
   ]
@@ -260,6 +260,17 @@ simultaneously — need declared parents: a row-level `after: [refs]` list. Deri
 explicit `after` overrides consecutive-row inference within the lane; READY = open AND every parent
 merged; all READY nodes are next simultaneously. Recorded here so a review of this contract evaluates the
 shape the consuming program needs, not just today's fields.
+
+### `rows[].status`
+
+| field | required | meaning |
+|---|---|---|
+| `rows[].status` | no | a hand-authored word; borg reads only `open`, `merged`, `closed` (any case) as state |
+
+`borg link` reads a declared `status` as a PR state only when it is one of those three words, and only as the last
+rung, below a sweep answer and a targeted fetch. Any other word (`review`, `stacked`, a team's own vocabulary) is not
+an error and not a state: the row renders unresolved, and when nothing live answered for it `▸ SIGNALS` names the
+word once. `borg_core/link/grid.py::resolve_state` is the rule and `DECLARABLE_STATES` the list.
 
 ### `decision` vs `verification`
 

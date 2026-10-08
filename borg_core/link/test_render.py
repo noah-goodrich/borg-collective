@@ -597,6 +597,22 @@ def test_the_board_header_still_describes_its_rows_when_a_name_overflows_the_col
     assert paused.index("⏸") == 1 + len(long_display) + 2, paused
 
 
+def test_the_last_word_on_a_local_page_is_that_nobody_looked():
+    """render.py's `_signals_section` cites this. The unread-status line and every other warning print
+    BEFORE the resolution line, so the page's last SIGNALS word stays "nobody looked".
+
+    MUTATION: move the `_resolution_line` call above the warnings loop."""
+    doc = _doc()
+    doc["grid"].update({
+        "declared": 3,
+        "unresolved": 3,
+        "warnings": ['declared: 1 row(s) carry a word that is not a PR state ("review" x1) -- shown unresolved'],
+    })
+    lines = [line for line in plain(render.document(doc)).split("\n") if line.strip()]
+    assert "declared refs unresolved — nobody looked" in lines[-1]
+    assert any('"review" x1' in line for line in lines[:-1])
+
+
 def test_signals_reports_the_ladders_gap_as_a_sentence_never_a_token():
     doc = _doc()
     doc["grid"].update({"declared": 11, "unresolved": 3})

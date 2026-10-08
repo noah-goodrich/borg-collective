@@ -10,6 +10,7 @@
     {
       "ref": "acme/platform#420",
       "order": "2",
+      "status": "review",
       "why": "add auth scopes to the token service",
       "after": ["acme/platform#400"]
     },

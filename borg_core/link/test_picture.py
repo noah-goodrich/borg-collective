@@ -444,8 +444,8 @@ def test_a_state_token_nobody_recognizes_takes_the_default_arm():
     """P13. MUTATION: replace the default arm with a dict lookup -> KeyError.
 
     Three live tokens, not one hypothetical: the grid's own unresolved token, an injected adapter's
-    vocabulary (`resolve_state` passes a swept token through verbatim), and `stacked`, which the LIVE
-    viz manifest declares on every row.
+    vocabulary (`resolve_state` passes a swept token through verbatim), and `stacked`, a word a team may declare on
+    any row.
     """
     # `state_source` IS SUPPLIED ON EVERY NODE HERE, and it is load-bearing rather than noise. AC4's
     # precondition makes `state_word` return "" for unresolved provenance, so without a resolved
