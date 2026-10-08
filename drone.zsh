@@ -148,6 +148,7 @@ _drone_registry_py() {
     BORG_DIR="$BORG_DIR" \
     BORG_REGISTRY="${BORG_REGISTRY:-$BORG_DIR/registry.json}" \
     BORG_TMUX_SESSION="$SESSION" \
+    PYTHONSAFEPATH=1 \
     PYTHONPATH="$DRONE_SCRIPT_DIR${PYTHONPATH:+:$PYTHONPATH}" \
     python3 -m borg_core.registry.cli "$@"
 }

@@ -767,11 +767,57 @@ _borg_next_chooser() {
     _borg_do_switch "${names[idx]}" --silent
 }
 
+# Non-interactive surfaces for skills (no TTY): `--rows --json` (logs nothing), `--open <p> --chosen [--shown]`
+# and `--declined [--shown]` (each logs ONE real, unscripted chooser row).
+_borg_next_surface() {
+    local local_flag="$1" mode="" project="" shown=0 chosen=0 arg
+    shift
+    while (( $# )); do
+        arg="$1"; shift
+        case "$arg" in
+            --rows) mode=rows ;;
+            --json) ;;
+            --open) mode=open; project="${1:-}"; (( $# )) && shift ;;
+            --chosen) chosen=1 ;;
+            --declined) mode=declined ;;
+            --shown) shown=1 ;;
+            *) die "next: unknown argument '$arg'" ;;
+        esac
+    done
+    local registry
+    registry=$(borg_registry_with_state)
+    local -a base=(--chooser)
+    (( shown )) && base+=(--shown)
+    case "$mode" in
+        rows)
+            local -a rows_args=(--rows --json)
+            (( local_flag )) && rows_args+=(--local)
+            printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null ||
+                printf '{"rows":[],"rec":null,"suggestion":null,"quiet":[],"degraded":"rows failed"}\n'
+            ;;
+        open)
+            (( chosen )) || die "next --open needs --chosen"
+            [[ -n "$project" ]] || die "next --open needs a project"
+            printf '%s' "$registry" | jq -e --arg p "$project" '.projects[$p] != null' >/dev/null 2>&1 ||
+                die "next --open: unknown project '$project'"
+            _borg_next_log "$registry" 0 "" "${base[@]}" --opened "$project" --unmeasured
+            _borg_do_switch "$project" --silent
+            ;;
+        declined)
+            _borg_next_log "$registry" 0 "" "${base[@]}"
+            ;;
+    esac
+}
+
 cmd_next() {
     local do_switch=0 pick="" local_flag=0
     local -a _next_args=("${(@)@:#--local}")
     (( $# != ${#_next_args} )) && local_flag=1
     set -- "${_next_args[@]}"
+    if (( ${@[(I)--rows|--open|--declined]} )); then
+        _borg_next_surface "$local_flag" "$@"
+        return $?
+    fi
     case "${1:-}" in
         --switch) do_switch=1 ;;
         --pick)
@@ -2999,7 +3045,7 @@ cmd_help() {
                           --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
                           --all     Include archived projects
-    next [--switch|--pick n]  What needs your attention? (--switch jumps there)
+    next [--switch|--pick n|--rows --json|--open p --chosen|--declined]  What needs your attention?
     switch [query]      fzf picker → jump to project tmux window
     chain <action>      Manifest coordinator over <project>/.borg/chains/*.json
                           list           Every declared chain across registered projects
@@ -3346,6 +3392,7 @@ _borg_py() {
     BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}" \
     BORG_CORTEX_WAKES="$BORG_CORTEX_WAKES" \
     BORG_NO_REAP="$BORG_NO_REAP" \
+    PYTHONSAFEPATH=1 \
     PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
     python3 -m "$@"
 }

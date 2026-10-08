@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
-import sys
+import re
 from pathlib import Path
 from typing import Any
 
 from borg_core import paths, retention
+from borg_core.link import core as link_core
 from borg_core.link import shell as link_shell
+from borg_core.nextpick import core
+from borg_core.recon import core as recon_core
 
 LOG_NAME = "next-recs.jsonl"
 
@@ -34,35 +36,85 @@ def append_row(row: dict[str, Any]) -> bool:
         return False
 
 
-LINK_TIMEOUT_S = 15
+def recon_items(projects: dict[str, Any], local: bool) -> tuple[dict[str, list[dict[str, Any]]], str | None]:
+    """`(items grouped by project, degraded note)` from the recon sweep `borg recon --json` runs. Fail-open.
 
-
-def link_document(local: bool, timeout: float = LINK_TIMEOUT_S) -> dict[str, Any] | None:
-    """The `borg link --json` document built in ORCHESTRATOR scope, or None on any failure.
-
-    chooser_rows needs every project's manifests, and `link` narrows them to one repository when its cwd sits
-    inside a registered project. So the child runs with cwd = the orchestrator root (`link.shell.orchestrator_root`,
-    the same BORG_ORCHESTRATOR_ROOT-or-~/dev rule `link` itself uses to decide scope). `--local` skips the network.
+    Uses `link.shell.sweep`, the in-process fan-out under its own 10s per-adapter deadline (inside the 15s network
+    bound). Unlike `borg recon --json` it NEVER writes the last-run marker, so `--rows --json` stays read-only.
+    `--local` skips the sweep entirely: no adapter discovery, no subprocess, no network, no note.
     """
-    argv = [sys.executable, "-m", "borg_core.link.cli", "--json"] + (["--local"] if local else [])
-    root = link_shell.orchestrator_root()
-    env = dict(os.environ)
-    package_parent = str(Path(__file__).resolve().parents[2])
-    env["PYTHONPATH"] = package_parent + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    if local:
+        return {}, None
+    live = {name: entry for name, entry in projects.items() if entry.get("status") != "archived"}
     try:
-        proc = subprocess.run(
-            argv,
-            cwd=root if os.path.isdir(root) else None,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-        )
-        doc = json.loads(proc.stdout) if proc.returncode == 0 else None
-    except (OSError, ValueError, subprocess.SubprocessError):
-        return None
-    return doc if isinstance(doc, dict) else None
+        result = link_shell.sweep(live)
+        tracks = result.get("tracks") or []
+        by_project = recon_core.merge_by_project(tracks)
+        failed = [str(t.get("source")) for t in tracks if t.get("ok") is False]
+        if not result.get("swept"):
+            note = "; ".join(result.get("warnings") or []) or "sweep did not run"
+        elif failed:
+            note = "sweep source failed: " + ", ".join(failed)
+        else:
+            note = None
+    # JUSTIFICATION: a failed sweep must degrade the rows to the other sources, never fail the chooser.
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        return {}, f"sweep failed: {exc}"
+    return by_project, note
+
+
+_PLAN_TITLE = re.compile(r"^#\s*Project Plan:\s*(.+?)\s*$", re.MULTILINE)
+_PLAN_SLUG = re.compile(r"^- Plan-slug:\s*(.+?)\s*$", re.MULTILINE)
+
+
+def plan_name(text: str, fallback: str) -> str:
+    """The plan's name: its `# Project Plan:` title, else its `- Plan-slug:` value, else `fallback`. Backticks go."""
+    for pattern in (_PLAN_TITLE, _PLAN_SLUG):
+        found = pattern.search(text)
+        if found:
+            value = found[1]
+            return value.replace("`", "").strip()
+    return fallback
+
+
+def read_plans(projects: dict[str, Any], names: list[str]) -> dict[str, dict[str, str]]:
+    """`{project: {"name", "text"}}` for each project with a PROJECT_PLAN.md at its root or under docs/plans/."""
+    found: dict[str, dict[str, str]] = {}
+    for name in names:
+        path = str((projects.get(name) or {}).get("path") or "")
+        if not path or path == "null":
+            continue
+        for candidate in (Path(path) / "PROJECT_PLAN.md", Path(path) / "docs" / "plans" / "PROJECT_PLAN.md"):
+            try:
+                text = candidate.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            found[name] = {"name": plan_name(text, name), "text": text}
+            break
+    return found
+
+
+_WHOLE_CHECKPOINT_LINES = 1_000_000
+
+
+def checkpoint_next_steps(projects: dict[str, Any], names: list[str]) -> dict[str, str]:
+    """`{project: first next-session item of its latest checkpoint}` for the names that have one. Fail-open.
+
+    Resolves the checkpoint through `link.shell` (repo-group union read, name-sorted, content-deduped), so the
+    "latest checkpoint" is the very document `borg link` shows. Any error for a project omits that project.
+    """
+    found: dict[str, str] = {}
+    for name in names:
+        try:
+            sources = link_core.repo_sources(name, projects)
+            text = link_shell.read_latest_checkpoint_head(sources, _WHOLE_CHECKPOINT_LINES)
+            step = core.checkpoint_next_step(text)
+        # JUSTIFICATION: a checkpoint that cannot be read must leave the cell blank, never fail the chooser.
+        except Exception:  # pylint: disable=broad-exception-caught
+            continue
+        if step:
+            found[name] = step
+    return found
 
 
 def read_log_rows() -> list[dict[str, Any]]:

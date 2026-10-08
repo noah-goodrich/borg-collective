@@ -121,6 +121,13 @@ The numbers here are fixed before any data exists; changing one after seeing dat
 - **Only after the gate passes** is the ▸ suggested line shown (first, as drawn in screen 2), and the same follow rate keeps being logged with `shown: true`.
 - **Falsification note:** a high follow rate in shadow mode can be the ranking merely naming the already-active project, which the user would open anyway. Read the rate alongside #262's finding that rank 1 is mostly a project whose session status is already active; a rate that does not exceed "opens the project whose window had focus", computed from each row's `active` field, is not evidence of relevance.
 
+## Inside Claude first (2026-10-07)
+
+- Every screen's primary path is inside a Claude session: a skill or `!` command calling a machine-readable CLI surface, with choices taken through AskUserQuestion. A TTY view is an optional extra, never the only path.
+- Choices made through a skill log as human choices (`scripted: false`), so the recommendation gate can fill.
+- Screen 2's skill path ships in the `fix/next-rows-and-reaper` branch: `/borg-next` calls `borg next --rows --json`, asks, then logs one `--open --chosen` or `--declined`.
+- Screens 1, 3 and 4 follow the same rule: the board via `/borg-link`, the trains via `/borg-link`, the arrival brief in `!drone up` output.
+
 ## Acceptance criteria
 
 - [ ] AC1 — The chooser (`borg next` on a terminal) lists candidate rows with project, next step, owner and readiness, using only data available without the stamper (the `next step`, `owner` and `ready` cells filled from the grid's ready set and the `▸ NEXT` routing where a manifest exists, blank otherwise), and `borg next --switch` behaves exactly as before.

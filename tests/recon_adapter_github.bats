@@ -103,9 +103,9 @@ JSON
     [ "$output" = "now" ]
 }
 
-@test "adapter: a PR updated before the mark is filtered out" {
+@test "adapter: a merged PR updated before the mark is filtered out" {
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
-    _mock_gh "$(_one_pr_body | sed 's/2026-08-20T10:00:00Z/2026-08-01T10:00:00Z/')"
+    _mock_gh "$(_one_pr_body | sed -e 's/2026-08-20T10:00:00Z/2026-08-01T10:00:00Z/' -e 's/"OPEN"/"MERGED"/')"
     run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
     run bash -c "printf '%s' '$output' | jq -r '.items | length'"
     [ "$output" = "0" ]
@@ -314,4 +314,77 @@ EOF
 
     run bash -c "wc -c < '$GH_CALLS' | tr -d ' '"
     [ "$output" = "0" ]
+}
+
+# ── AC5: every open PR, whatever the since-mark, plus readiness fields ───────
+
+_pr_json() {
+    local num="$1" state="$2" updated="$3" extra="${4:-}"
+    printf '{"number":%s,"title":"t%s","state":"%s","isDraft":false,"updatedAt":"%s","url":"u",' \
+        "$num" "$num" "$state" "$updated"
+    printf '"headRefName":"h","baseRefName":"main","author":{"login":"me"}%s}' "$extra"
+}
+
+_sweep_doc() {
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    [ "$status" -eq 0 ]
+    printf '%s' "$output" > "${BATS_TEST_TMPDIR}/doc.json"
+}
+
+_open_body() {
+    printf '{"data":{"viewer":{"login":"me"},"r0":{"pullRequests":{"nodes":[%s]},"openPrs":{"nodes":[%s]}}}}' "$1" "$2"
+}
+
+@test "adapter: an open PR last updated before the mark is present" {
+    _repo_with_remote alpha "git@github.com:owner/alpha.git"
+    _mock_gh "$(_open_body '' "$(_pr_json 394 OPEN 2026-06-01T10:00:00Z)")"
+    _sweep_doc
+    run jq -r '.items | map(.ref) | join(",")' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "owner/alpha#394" ]
+}
+
+@test "adapter: a merged PR before the mark is absent, and an open PR in both lists is not doubled" {
+    _repo_with_remote alpha "git@github.com:owner/alpha.git"
+    local merged open_old open_new
+    merged="$(_pr_json 1 MERGED 2026-06-01T10:00:00Z)"
+    open_old="$(_pr_json 2 OPEN 2026-06-01T10:00:00Z)"
+    open_new="$(_pr_json 3 OPEN 2026-08-20T10:00:00Z)"
+    _mock_gh "$(_open_body "$open_new,$merged" "$open_new,$open_old")"
+    _sweep_doc
+    run jq -r '.items | map(.ref) | sort | join(",")' "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "owner/alpha#2,owner/alpha#3" ]
+}
+
+@test "adapter: checks maps statusCheckRollup state, and a missing rollup is none" {
+    _repo_with_remote alpha "git@github.com:owner/alpha.git"
+    local n=10 s nodes="" rollup
+    for s in SUCCESS FAILURE ERROR PENDING EXPECTED; do
+        rollup=",\"commits\":{\"nodes\":[{\"commit\":{\"statusCheckRollup\":{\"state\":\"$s\"}}}]}"
+        nodes="$nodes$(_pr_json "$n" OPEN 2026-08-20T10:00:00Z "$rollup"),"
+        n=$((n + 1))
+    done
+    rollup=',"commits":{"nodes":[{"commit":{"statusCheckRollup":null}}]}'
+    nodes="$nodes$(_pr_json 20 OPEN 2026-08-20T10:00:00Z "$rollup"),"
+    nodes="$nodes$(_pr_json 21 OPEN 2026-08-20T10:00:00Z)"
+    _mock_gh "$(_open_body '' "$nodes")"
+    _sweep_doc
+    run jq -r '.items | sort_by(.ref | split("#")[1] | tonumber) | map(.checks) | join(",")' \
+        "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "pass,fail,fail,pending,pending,none,none" ]
+}
+
+@test "adapter: draft, mergeable and review_decision pass through as GitHub reports them" {
+    _repo_with_remote alpha "git@github.com:owner/alpha.git"
+    local a b c d
+    a="$(_pr_json 1 OPEN 2026-08-20T10:00:00Z ',"mergeable":"MERGEABLE","reviewDecision":"APPROVED"')"
+    b="$(_pr_json 2 OPEN 2026-08-20T10:00:00Z ',"mergeable":"CONFLICTING","reviewDecision":"CHANGES_REQUESTED"')"
+    c="$(_pr_json 3 OPEN 2026-08-20T10:00:00Z ',"mergeable":"UNKNOWN","reviewDecision":"REVIEW_REQUIRED"')"
+    c="${c/\"isDraft\":false/\"isDraft\":true}"
+    d="$(_pr_json 4 OPEN 2026-08-20T10:00:00Z ',"reviewDecision":null')"
+    _mock_gh "$(_open_body '' "$a,$b,$c,$d")"
+    _sweep_doc
+    run jq -r '.items | sort_by(.ref | split("#")[1] | tonumber)
+               | map([.draft, .mergeable, .review_decision] | map(tostring) | join("/")) | join(" ")' \
+        "${BATS_TEST_TMPDIR}/doc.json"
+    [ "$output" = "false/MERGEABLE/APPROVED false/CONFLICTING/CHANGES_REQUESTED true/UNKNOWN/REVIEW_REQUIRED false/UNKNOWN/null" ]
 }

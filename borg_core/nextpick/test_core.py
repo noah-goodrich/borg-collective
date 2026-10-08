@@ -5,6 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from borg_core.link import core as link_core
 from borg_core.nextpick import core
 
 W = "w"
@@ -176,8 +177,8 @@ def test_core_imports_nothing_impure():
             roots.add(node.module.split(".")[0])
             if node.module == "borg_core.link":
                 pure_link.update(a.name for a in node.names)
-    assert roots == {"__future__", "typing", "borg_core"}, f"core.py grew an impure import: {sorted(roots)}"
-    assert pure_link == {"grid", "picture", "render"}, f"only borg_core.link's pure Domain modules: {pure_link}"
+    assert roots == {"__future__", "re", "typing", "borg_core"}, f"core.py grew an impure import: {sorted(roots)}"
+    assert pure_link == {"core", "grid", "picture", "render"}, f"only borg_core.link's pure Domain modules: {pure_link}"
 
 
 BLANK = {"item": "", "next_step": "", "owner": "", "ready": ""}
@@ -224,6 +225,9 @@ def test_chooser_rows_route_with_the_pages_own_router():
         "next_step": "answer triage Qs",
         "owner": "yours",
         "ready": "●",
+        "status": "",
+        "age": "never",
+        "waiting_reason": "",
     }
     assert [r["n"] for r in rows] == [1, 2, 3]
 
@@ -264,9 +268,9 @@ def _three():
 GOLDEN_HEAD = [
     "WHERE COULD YOUR FOCUS GO?",
     "───────────────────────────────────────────────────────────",
-    " # project · item           next step           owner ready",
-    " 1 borg · hygiene           /borg-assimilate    yours ●",
-    " 2 borg · research          merge #252          mine  ●",
+    " # project · item         next step          owner ready",
+    " 1 borg · hygiene         /borg-assimilate   yours ●",
+    " 2 borg · research        merge #252         mine  ●",
     " 3 ingle",
     "───────────────────────────────────────────────────────────",
 ]
@@ -281,6 +285,14 @@ def test_render_chooser_golden_with_suggestion():
     assert got == GOLDEN_HEAD + ["▸ suggested: 1 borg", "⏎ top · 1-9 open · q quit"]
 
 
+def test_render_chooser_collapses_quiet_projects_into_one_trailing_line():
+    got = core.render_chooser(_three(), suggestion=None, quiet=["x", "y"])
+    assert got[6] == "+2 quiet: x, y"
+    assert got[7] == GOLDEN_HEAD[-1]
+    long = core.render_chooser(_three(), suggestion=None, quiet=["q" * 30, "r" * 30])
+    assert len(long[6]) == 59 and long[6].endswith("…")
+
+
 def test_render_chooser_truncates_long_cells_to_width():
     row = {"n": 1, "project": "p" * 80, "item": "i", "next_step": "s" * 40, "owner": "unsure", "ready": "○"}
     lines = core.render_chooser([row], suggestion="1 " + "p" * 80)
@@ -293,3 +305,162 @@ def test_suggestion_for_both_branches():
     assert core.suggestion_for(_three(), _rows(20, 20)) == "1 borg"
     assert core.suggestion_for(_three(), _rows(19, 19)) is None
     assert core.suggestion_for([], _rows(20, 20)) is None
+
+
+def test_chooser_rows_carry_status_age_and_waiting_reason():
+    ranked = [
+        {
+            "name": "w",
+            "path": "null",
+            "status": "waiting",
+            "waiting_reason": "needs OK",
+            "last_activity": "2026-10-05T09:00:00Z",
+        }
+    ]
+    now = link_core.iso_to_epoch("2026-10-05T12:00:00Z")
+    (row,) = core.chooser_rows(ranked, None, None, now)
+    assert (row["status"], row["age"], row["waiting_reason"]) == ("waiting", "3h ago", "needs OK")
+
+
+def test_chooser_rows_fall_back_to_checkpoint_but_prefer_the_manifest():
+    rows = core.chooser_rows(_ranked_paths(), _doc(), {"borg": "cp", "ingle": "cp step"})
+    assert rows[0]["next_step"] == "answer triage Qs"
+    assert rows[1]["next_step"] == "cp step"
+
+
+def _qrow(n, project, status, step="", reason=""):
+    return {"n": n, "project": project, "status": status, "next_step": step, "waiting_reason": reason}
+
+
+def test_split_quiet_partitions_idle_blank_rows_in_rank_order():
+    rows = [
+        _qrow(1, "a", "waiting", reason="why"),
+        _qrow(2, "b", "idle"),
+        _qrow(3, "c", "idle", step="do"),
+        _qrow(4, "d", "active"),
+        _qrow(5, "e", "idle"),
+    ]
+    kept, quiet = core.split_quiet(rows)
+    assert [r["project"] for r in kept] == ["a", "c", "d"]
+    assert [r["n"] for r in kept] == [1, 2, 3]
+    assert quiet == ["b", "e"]
+
+
+def test_checkpoint_next_step_numbered_list():
+    text = "## 5. Next Session\n\n1. First  thing\n   wrapped\n2. Second\n"
+    assert core.checkpoint_next_step(text) == "First thing wrapped"
+
+
+def test_checkpoint_next_step_bullets_and_prose():
+    assert core.checkpoint_next_step("## 5. Next Session\n\n- [ ] do it\n- more\n") == "[ ] do it"
+    prose = "## 5. Next Session\nJust prose\nstill prose\n\nnext para\n"
+    assert core.checkpoint_next_step(prose) == "Just prose still prose"
+
+
+def test_checkpoint_next_step_missing_section_or_empty():
+    assert core.checkpoint_next_step("## 1. Goal\n\nx\n") == ""
+    assert core.checkpoint_next_step("") == ""
+    assert core.checkpoint_next_step("## 5. Next Session\n\n## Manifest Row\nx\n") == ""
+
+
+def test_checkpoint_next_step_ignores_tldr_preamble_and_truncates():
+    text = "tl;dr: 5. Next Session is later\n\n## 1. Goal\n\nx\n\n## 5. Next Session\n\n1. " + "w" * 120 + "\n"
+    step = core.checkpoint_next_step(text)
+    assert len(step) == 80 and step.endswith("…") and step.startswith("w")
+
+
+def _pr(num, title="feat(next): add the thing", **kw):
+    base = {"ref": f"o/r#{num}", "title": title, "state": "open", "draft": False, "checks": "pass",
+            "mergeable": "MERGEABLE", "review_decision": None, "owner": "you"}
+    return {**base, **kw}
+
+
+def _rank(name, status="idle", reason=""):
+    return {"name": name, "status": status, "waiting_reason": reason, "last_activity": ""}
+
+
+def _one(pr):
+    rows, quiet = core.work_items([_rank("p")], {"p": [pr]}, {}, {})
+    assert quiet == []
+    assert len(rows) == 1
+    return rows[0]
+
+
+def test_work_items_pr_rule_precedence():
+    assert _one(_pr(1, draft=True, checks="fail", mergeable="CONFLICTING"))["next_step"] == "finish #1"
+    row = _one(_pr(2, mergeable="CONFLICTING", checks="fail"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("resolve conflicts #2", "AGENT", "✗")
+    row = _one(_pr(3, checks="fail", review_decision="CHANGES_REQUESTED"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("fix #3 CI", "AGENT", "✗")
+    row = _one(_pr(4, checks="pending", review_decision="CHANGES_REQUESTED"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("#4 CI", "AGENT", "… run")
+    row = _one(_pr(5, review_decision="CHANGES_REQUESTED"))
+    assert (row["next_step"], row["owner"], row["ready"]) == ("address review #5", "AGENT", "○")
+    for extra in ({"checks": "none"}, {"mergeable": "UNKNOWN"}, {}):
+        row = _one(_pr(6, **extra))
+        assert (row["next_step"], row["owner"], row["ready"], row["ref"]) == ("merge #6", "YOU", "✔ now", "o/r#6")
+    row = _one(_pr(3, draft=True))
+    assert (row["owner"], row["ready"]) == ("AGENT", "◌")
+
+
+def test_work_items_ignores_closed_prs_and_author():
+    rows, quiet = core.work_items([_rank("p")], {"p": [_pr(1, state="merged")]}, {}, {})
+    assert rows == [] and quiet == ["p"]
+    assert _one(_pr(7, owner="unknown"))["owner"] == "YOU"
+    assert _one(_pr(8, owner="you", checks="fail"))["owner"] == "AGENT"
+
+
+def test_work_items_several_prs_order_you_first_then_agent_by_number():
+    prs = [_pr(9, checks="fail"), _pr(5, draft=True), _pr(12), _pr(3)]
+    rows, _ = core.work_items([_rank("p")], {"p": prs}, {}, {})
+    assert [r["ref"] for r in rows] == ["o/r#3", "o/r#12", "o/r#5", "o/r#9"]
+
+
+def test_work_items_waiting_session_first():
+    ranked = [_rank("p", "waiting", "needs input")]
+    rows, _ = core.work_items(ranked, {"p": [_pr(2)]}, {}, {}, now_epoch=0)
+    assert rows[0]["item"] == "session" and rows[0]["next_step"] == "reply to session"
+    assert rows[0]["owner"] == "YOU" and rows[0]["ready"].startswith("✔ ")
+    assert rows[0]["waiting_reason"] == "needs input" and rows[0]["ref"] is None
+    assert rows[1]["next_step"] == "merge #2"
+
+
+PLAN = {"name": "next-chooser", "text": "- [x] **AC1 — done.** x\n- [ ] **AC5 — The sweep sees every open PR.** y\n"}
+
+
+def test_work_items_plan_row_and_suppression():
+    rows, _ = core.work_items([_rank("p")], {}, {"p": PLAN}, {"p": "step"})
+    assert len(rows) == 1
+    assert (rows[0]["item"], rows[0]["owner"], rows[0]["ready"]) == ("next-chooser", "AGENT", "○")
+    assert rows[0]["next_step"].startswith("AC5 The sweep sees") and len(rows[0]["next_step"]) <= 22
+    rows, _ = core.work_items([_rank("p")], {"p": [_pr(1)]}, {"p": PLAN}, {})
+    assert [r["next_step"] for r in rows] == ["merge #1"]
+    done = {"name": "x", "text": "- [x] **AC1 — done.**\n"}
+    rows, quiet = core.work_items([_rank("p")], {}, {"p": done}, {})
+    assert rows == [] and quiet == ["p"]
+
+
+def test_work_items_checkpoint_fallback_and_quiet_and_order():
+    ranked = [_rank("a"), _rank("b"), _rank("c")]
+    rows, quiet = core.work_items(ranked, {"c": [_pr(1)]}, {}, {"a": "do the thing"})
+    assert quiet == ["b"]
+    assert [r["project"] for r in rows] == ["a", "c"]
+    assert (rows[0]["item"], rows[0]["next_step"], rows[0]["owner"], rows[0]["ready"]) == ("", "do the thing", "—", "")
+
+
+def test_short_title_strips_prefix_and_truncates():
+    assert core.short_title("feat(next): interactive chooser with an earned suggestion") == "interactive choos…"
+    assert core.short_title("fix!: tiny") == "tiny"
+    assert core.short_title("plain title here") == "plain title here"
+    assert len(core.short_title("x" * 40)) == 18
+
+
+def test_numbered_rows_adds_n_status_and_default_waiting_reason():
+    ranked = [{"name": "a", "status": "waiting"}, {"name": "b", "status": "idle"}]
+    work = [
+        {"project": "a", "item": "session", "next_step": "reply to session", "owner": "YOU", "ready": "✔ 1d ago",
+         "ref": None, "age": "1d ago", "waiting_reason": "why"},
+        {"project": "b", "item": "", "next_step": "x", "owner": "—", "ready": "", "ref": None, "age": "2d ago"},
+    ]
+    rows = core.numbered_rows(work, ranked)
+    assert [(r["n"], r["status"], r["waiting_reason"]) for r in rows] == [(1, "waiting", "why"), (2, "idle", "")]

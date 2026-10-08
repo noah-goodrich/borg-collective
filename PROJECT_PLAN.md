@@ -23,6 +23,28 @@ Screen 2 of `docs/plans/directives/2026-10-05-board-chooser-and-trains-ux.md` (i
 - [ ] **AC4 — Nothing breaks.** `make test && make test-bats && make lint` are green. `borg help` is unchanged, since no command is added.
   - Verify: the three make targets; the help-count case in `tests/cli_contract.bats` stays at its current value.
 
+### Scope change, 2026-10-08 (Noah: "I'd rather make the rows match the mock and fix whatever underlying issues are causing the disconnect right now.")
+
+In a smoke test, the shipped chooser listed one row per project, with next step, owner and ready all blank. The cells were blank because they were read from manifests, and only 2 of 16 projects have any manifest rows. The mock shows one row per piece of work, each with an owner and readiness. These criteria close that gap with data borg already sweeps live, and no manifest backfill.
+
+- [ ] **AC5 — The sweep sees every open PR and its readiness.** `recon-adapter-github` includes every OPEN PR in a swept repo whatever the since-mark. Today stillpoint-labs/ingle#394 is open and missing. Each item gains additive fields `draft`, `checks` (`pass`, `fail`, `pending` or `none`), `mergeable` and `review_decision`.
+  - Verify: bats through a `gh` stub: an open PR last updated before the since-mark is present; the four new fields map from the stub's GraphQL; merged and closed PRs still honour the since-mark.
+- [ ] **AC6 — Rows are work items with an owner and readiness.** A pure `nextpick` function builds one row per actionable item:
+  - **Waiting session:** "reply to session", owner YOU, ready ✔ with its age.
+  - **Open PR, not draft, not conflicting, checks pass or none (no CI configured), no changes requested; UNKNOWN mergeability counts as mergeable because GitHub reports it while still computing:** "merge #N", owner YOU, ready ✔.
+  - **Checks pending:** "#N CI", owner AGENT, ready "… run".
+  - **Merge conflicts (CONFLICTING):** "resolve conflicts #N", owner AGENT, ready ✗. Checked after draft and before checks fail.
+  - **Checks fail:** "fix #N CI", owner AGENT, ready ✗.
+  - **Draft:** "finish #N", owner AGENT, ready ◌.
+  - **Changes requested:** "address review #N", owner AGENT.
+  - **Active `PROJECT_PLAN.md` with an unchecked criterion and no open PR:** that criterion's name, owner AGENT, ready ○.
+  - **Fallback:** a project with none of the above but with a checkpoint next step gets one row with that step, owner "—".
+
+  Owner is decided by these rules, never by PR author, since every PR is authored as Noah. The item column is the PR title (short) or plan name until trains exist. Projects with no rows are listed in `quiet`. The ranking stays `cmd_next`'s project order, and items within a project follow the rule order above.
+  - Verify: pytest for every rule, including a project with several items and a quiet project.
+- [ ] **AC7 — The skill and the terminal view both show item rows.** `borg next --rows --json` emits item rows; `/borg-next` and the TTY chooser render them in the mock's columns (project · item, next step, owner, ready) with quiet projects collapsed; `--open` opens the item's project.
+  - Verify: bats on `--rows --json` against fixtures; a smoke run of `/borg-next-preview` on the real registry shows at least one YOU row and one AGENT row.
+
 ## Scope Boundaries
 
 - NOT building: the board (screen 1), the arrival brief (screen 4), or trains (screen 3).

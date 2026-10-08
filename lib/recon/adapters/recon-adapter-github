@@ -153,6 +153,8 @@ if [ "$SWEPT" -eq 0 ]; then
 fi
 
 # Build the batched document: viewer once, then one aliased repository node per project.
+PR_FIELDS='number title state isDraft updatedAt url headRefName baseRefName author { login }'
+PR_FIELDS_OPEN="$PR_FIELDS mergeable reviewDecision commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
 QUERY='query { viewer { login }'
 IDX=0
 while IFS=$'\t' read -r PROJECT REPO; do
@@ -161,11 +163,21 @@ while IFS=$'\t' read -r PROJECT REPO; do
     NAME="${REPO#*/}"
     QUERY="$QUERY r${IDX}: repository(owner: \"$OWNER\", name: \"$NAME\") {"
     QUERY="$QUERY pullRequests(first: 30, orderBy: {field: UPDATED_AT, direction: DESC}) {"
-    QUERY="$QUERY nodes { number title state isDraft updatedAt url headRefName baseRefName author { login } } } }"
+    QUERY="$QUERY nodes { $PR_FIELDS } }"
+    QUERY="$QUERY openPrs: pullRequests(states: OPEN, first: 100, orderBy: {field: UPDATED_AT, direction: DESC}) {"
+    QUERY="$QUERY nodes { $PR_FIELDS_OPEN } } }"
     IDX=$((IDX + 1))
 done < "$REPOS_FILE"
 QUERY="$QUERY }"
 
+# OPEN PRs ARE NEVER SINCE-FILTERED (AC5). A second aliased connection, `openPrs`, asks for OPEN PRs
+# only, `first: 100`, in the SAME query (still one round trip, one rate-limit point). 100 is GitHub's
+# per-connection page maximum and no registered repo is near it; paging would cost an extra call per
+# overflowing repo for a case that does not exist, so open PRs beyond 100 are a known, accepted bound.
+# The 30-newest `pullRequests` list keeps its cap and the since-mark for merged/closed PRs; the two
+# lists are unioned and de-duplicated by number, and only non-open PRs are since-filtered. Items gain the additive
+# fields draft, checks, mergeable, review_decision (validate_item ignores extra keys).
+#
 # `first: 30` mirrors the REST `--limit 30` bound, so a busy repo still cannot flood the sweep.
 #
 # ONE DELIBERATE BEHAVIOR CHANGE, and it is a fix. The REST implementation passed
@@ -197,8 +209,8 @@ ITEMS="$(printf '%s' "$RESPONSE" | jq -c \
       | . as $m
       | ($d[$m.alias] // null)
       | select(. != null)
-      | .pullRequests.nodes[]
-      | select((.updatedAt | split("T")[0]) >= $since)
+      | (((.openPrs.nodes // []) + (.pullRequests.nodes // [])) | unique_by(.number))[]
+      | select(.state == "OPEN" or ((.updatedAt | split("T")[0]) >= $since))
       | {
           project: $m.project,
           source:  $source,
@@ -215,7 +227,15 @@ ITEMS="$(printf '%s' "$RESPONSE" | jq -c \
           one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]"),
           repo:     $m.repo,
           head_ref: (.headRefName // ""),
-          base_ref: (.baseRefName // "")
+          base_ref: (.baseRefName // ""),
+          draft:    (.isDraft // false),
+          checks:   ((.commits.nodes[0].commit.statusCheckRollup.state // "") as $c
+                     | if $c == "SUCCESS" then "pass"
+                       elif ($c == "FAILURE" or $c == "ERROR") then "fail"
+                       elif ($c == "PENDING" or $c == "EXPECTED") then "pending"
+                       else "none" end),
+          mergeable:       (.mergeable // "UNKNOWN"),
+          review_decision: (.reviewDecision // null)
         } ]' 2>/dev/null || echo "[]")"
 
 COUNT="$(printf '%s' "$ITEMS" | jq 'length' 2>/dev/null || echo 0)"

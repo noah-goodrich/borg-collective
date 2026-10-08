@@ -11,9 +11,12 @@ any real timestamp among equal scores.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
+from borg_core.link import core as link_core
 from borg_core.link import grid, picture, render
+from borg_core.planstate import core as planstate
 
 
 def _falsy(value: Any) -> bool:
@@ -148,18 +151,90 @@ def _project_ready(path: str, manifests: list[dict[str, Any]]) -> dict[str, str]
     return dict(_BLANK)
 
 
-def chooser_rows(ranked: list[dict[str, Any]], link_doc: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """One row per ranked project, ranked order: `{n, project, item, next_step, owner, ready}`.
+_NEXT_HEADING = re.compile(r"^##\s*5\.?\s*next\s+session\b", re.IGNORECASE)
+_ANY_H2 = re.compile(r"^##\s")
+_LIST_MARKER = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+NEXT_STEP_MAX = 80
+
+
+def _truncate(text: str, limit: int = NEXT_STEP_MAX) -> str:
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def checkpoint_next_step(text: str) -> str:
+    """The first item of a checkpoint's `## 5. Next Session` section, or "" when there is none.
+
+    The first block after the heading: a list item (marker or number stripped, wrapped continuation lines joined)
+    or the first prose paragraph. Whitespace is collapsed and the result truncated to `NEXT_STEP_MAX` with an
+    ellipsis. Text before the heading (a tl;dr preamble) is never inspected.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if _NEXT_HEADING.match(line.strip()):
+            body = lines[index + 1 :]
+            break
+    else:
+        return ""
+    block: list[str] = []
+    for line in body:
+        if _ANY_H2.match(line):
+            break
+        if not line.strip():
+            if block:
+                break
+            continue
+        if block and _LIST_MARKER.match(line):
+            break
+        block.append(_LIST_MARKER.sub("", line, count=1))
+    return _truncate(" ".join(" ".join(block).split()))
+
+
+def chooser_rows(
+    ranked: list[dict[str, Any]],
+    link_doc: dict[str, Any] | None,
+    fallbacks: dict[str, str] | None = None,
+    now_epoch: int = 0,
+) -> list[dict[str, Any]]:
+    """One row per ranked project, ranked order: `{n, project, item, next_step, owner, ready, status, age,
+    waiting_reason}`.
 
     Cells come from the link document's grid manifests via `render.route_kind` (owner) and `picture.state_glyph`
     (ready glyph). A project with no manifest, or a None / degraded document, gets blank cells, never an error.
+    `next_step` falls back to `fallbacks[project]` (the latest checkpoint's first next-session item) when no
+    manifest supplied one. `age` is `link_core.relative_time`, the string `borg link` shows.
     """
     manifests = ((link_doc or {}).get("grid") or {}).get("manifests") or []
     rows = []
     for index, item in enumerate(ranked):
         cells = _project_ready(str(item.get("path") or ""), manifests)
-        rows.append({"n": index + 1, "project": item["name"], **cells})
+        if not cells["next_step"]:
+            cells["next_step"] = (fallbacks or {}).get(item["name"], "")
+        rows.append(
+            {
+                "n": index + 1,
+                "project": item["name"],
+                **cells,
+                "status": item.get("status") or "",
+                "age": str(link_core.relative_time(item.get("last_activity") or None, now_epoch)),
+                "waiting_reason": item.get("waiting_reason") or "",
+            }
+        )
     return rows
+
+
+def split_quiet(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Move idle rows with no next step and no waiting reason out of `rows`; return (kept, quiet names).
+
+    Rank-relative order is preserved on both sides, and kept rows are renumbered so `n` stays 1..len(kept).
+    """
+    kept: list[dict[str, Any]] = []
+    quiet: list[str] = []
+    for row in rows:
+        if row.get("status") == "idle" and not row.get("next_step") and not row.get("waiting_reason"):
+            quiet.append(row["project"])
+        else:
+            kept.append({**row, "n": len(kept) + 1})
+    return kept, quiet
 
 
 def _fit(text: str, width: int) -> str:
@@ -169,21 +244,31 @@ def _fit(text: str, width: int) -> str:
     return text.ljust(width)
 
 
-_LABEL_W = 24
-_STEP_W = 19
+_LABEL_W = 22
+_STEP_W = 18
 
 
 def _line(n: str, label: str, step: str, owner: str, ready: str) -> str:
     return f"{n:>2} {_fit(label, _LABEL_W)} {_fit(step, _STEP_W)} {_fit(owner, 5)} {ready}".rstrip()
 
 
-def render_chooser(rows: list[dict[str, Any]], *, suggestion: str | None, width: int = 59) -> list[str]:
-    """Plain-text screen 2: header, rule, column header, one line per row, rule, optional suggestion, key hint."""
+def _quiet_line(quiet: list[str], width: int) -> str:
+    text = f"+{len(quiet)} quiet: {', '.join(quiet)}"
+    return text if len(text) <= width else text[: width - 1] + "…"
+
+
+def render_chooser(
+    rows: list[dict[str, Any]], *, suggestion: str | None, width: int = 59, quiet: list[str] | None = None
+) -> list[str]:
+    """Plain-text screen 2: header, rule, column header, one line per item row, optional `+N quiet` line, rule,
+    optional suggestion, key hint. Every line is at most `width` visible columns, cut with an ellipsis."""
     rule = "─" * width
     lines = ["WHERE COULD YOUR FOCUS GO?", rule, _line("#", "project · item", "next step", "owner", "ready")]
     for row in rows:
         label = f"{row['project']} · {row['item']}" if row.get("item") else row["project"]
         lines.append(_line(str(row["n"]), label, row.get("next_step", ""), row.get("owner", ""), row.get("ready", "")))
+    if quiet:
+        lines.append(_quiet_line(quiet, width))
     lines.append(rule)
     if suggestion is not None:
         lines.append(f"▸ suggested: {suggestion}")
@@ -196,3 +281,129 @@ def suggestion_for(rows: list[dict[str, Any]], log_rows: list[dict[str, Any]]) -
     if not rows or not gate(log_rows):
         return None
     return f"{rows[0]['n']} {rows[0]['project']}"
+
+
+_CC_PREFIX = re.compile(r"^\s*[a-z]+(?:\([^)]*\))?!?:\s+", re.IGNORECASE)
+ITEM_MAX = 18
+STEP_MAX = 22
+_PR_NUMBER = re.compile(r"#(\d+)\s*$")
+_AC_HEAD = re.compile(r"^\**\s*(AC\d+)\s*[—–:-]*\s*(.*)$")
+
+
+def short_title(title: str, limit: int = ITEM_MAX) -> str:
+    """A PR title without its conventional-commit prefix, cut to `limit` characters with an ellipsis."""
+    text = _CC_PREFIX.sub("", title or "", count=1).strip()
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _criterion_name(text: str) -> str:
+    """"**AC5 — The sweep sees every open PR.** ..." -> "AC5 The sweep sees every…"."""
+    found = _AC_HEAD.findall(text.strip())
+    if not found:
+        return _truncate(text.replace("*", "").strip(), STEP_MAX)
+    ident, rest = found[0]
+    title = rest.split("**", 1)[0].strip().rstrip(".")
+    return _truncate(f"{ident} {title}".strip(), STEP_MAX)
+
+
+def _pr_number(item: dict[str, Any]) -> int:
+    found = _PR_NUMBER.findall(str(item.get("ref") or ""))
+    return int(found[0]) if found else 0
+
+
+def _pr_row(item: dict[str, Any]) -> dict[str, Any]:
+    """The one row an OPEN PR earns; the first matching rule wins. Owner never reads the PR author."""
+    number = _pr_number(item)
+    if item.get("draft"):
+        step, owner, ready = f"finish #{number}", "AGENT", "◌"
+    elif item.get("mergeable") == "CONFLICTING":
+        step, owner, ready = f"resolve conflicts #{number}", "AGENT", "✗"
+    elif item.get("checks") == "fail":
+        step, owner, ready = f"fix #{number} CI", "AGENT", "✗"
+    elif item.get("checks") == "pending":
+        step, owner, ready = f"#{number} CI", "AGENT", "… run"
+    elif item.get("review_decision") == "CHANGES_REQUESTED":
+        step, owner, ready = f"address review #{number}", "AGENT", "○"
+    else:
+        step, owner, ready = f"merge #{number}", "YOU", "✔ now"
+    return {"item": short_title(str(item.get("title") or "")), "next_step": step, "owner": owner, "ready": ready,
+            "ref": item.get("ref")}
+
+
+def _plan_rows(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The active plan's first unchecked criterion as a row, or nothing."""
+    if not plan:
+        return []
+    unchecked = [c for c in planstate.parse_criteria(str(plan.get("text") or "")) if not c["checked"]]
+    if not unchecked:
+        return []
+    return [
+        {
+            "item": _truncate(str(plan.get("name") or ""), ITEM_MAX),
+            "next_step": _criterion_name(unchecked[0]["text"]),
+            "owner": "AGENT",
+            "ready": "○",
+            "ref": None,
+        }
+    ]
+
+
+def work_items(
+    ranked: list[dict[str, Any]],
+    recon_items_by_project: dict[str, list[dict[str, Any]]],
+    plans_by_project: dict[str, dict[str, Any]],
+    checkpoint_steps: dict[str, str],
+    now_epoch: int = 0,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """One row per actionable item, in ranked project order, plus the `quiet` project names.
+
+    Row: `{project, item, next_step, owner, ready, ref, age}` (a waiting-session row also carries
+    `waiting_reason`). Within a project: waiting session; open PRs (YOU merges first, then AGENT rows by PR
+    number); the active plan's first unchecked criterion when no PR row exists; else the checkpoint next step.
+    `plans_by_project[p]` is `{"name": str, "text": <PROJECT_PLAN.md text>}`, parsed by planstate.parse_criteria.
+    """
+    rows: list[dict[str, Any]] = []
+    quiet: list[str] = []
+    for entry in ranked:
+        project = entry["name"]
+        age = str(link_core.relative_time(entry.get("last_activity") or None, now_epoch))
+        mine: list[dict[str, Any]] = []
+        if entry.get("status") == "waiting":
+            mine.append(
+                {"item": "session", "next_step": "reply to session", "owner": "YOU", "ready": f"✔ {age}",
+                 "ref": None, "waiting_reason": entry.get("waiting_reason") or ""}
+            )
+        prs = [it for it in recon_items_by_project.get(project) or [] if it.get("state") == "open"]
+        pr_rows = sorted(
+            (_pr_row(it) for it in prs), key=lambda r: (r["owner"] != "YOU", _pr_number({"ref": r["ref"]}))
+        )
+        mine.extend(pr_rows)
+        if not pr_rows:
+            mine.extend(_plan_rows(plans_by_project.get(project)))
+        step = checkpoint_steps.get(project, "")
+        if not mine and step:
+            mine.append({"item": "", "next_step": step, "owner": "—", "ready": "", "ref": None})
+        if not mine:
+            quiet.append(project)
+        rows.extend({"project": project, **row, "age": age} for row in mine)
+    return rows, quiet
+
+
+def numbered_rows(work: list[dict[str, Any]], ranked: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`work_items` rows as the wire rows: `n` 1..len, the project's `status`, and a `waiting_reason` always set."""
+    status = {entry["name"]: entry.get("status") or "" for entry in ranked}
+    return [
+        {
+            "n": index + 1,
+            "project": row["project"],
+            "item": row.get("item", ""),
+            "next_step": row.get("next_step", ""),
+            "owner": row.get("owner", ""),
+            "ready": row.get("ready", ""),
+            "ref": row.get("ref"),
+            "age": row.get("age", ""),
+            "status": status.get(row["project"], ""),
+            "waiting_reason": row.get("waiting_reason", ""),
+        }
+        for index, row in enumerate(work)
+    ]
