@@ -67,7 +67,8 @@ BORG_WORKTREE_STATE_DIR="${BORG_WORKTREE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.loc
 # Args: <repo_path> <worktree_path>
 # Returns 0 (stale) when the branch has been merged into the default branch (i.e.
 # the branch has unique commits AND all of them are now reachable from the default
-# branch), OR when the worktree directory mtime is older than BORG_REAP_STALE_HOURS.
+# branch), OR when its last activity (the newer of the branch-tip commit time and the per-worktree
+# index mtime) is older than BORG_REAP_STALE_HOURS and the branch has no unpushed commits.
 # Returns 1 (keep) for fresh or unmerged worktrees.
 _borg_worktree_is_stale() {
     local repo="$1" wt="$2"
