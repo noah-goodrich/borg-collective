@@ -5,12 +5,29 @@
 # settings.json without disturbing other hooks or permissions.
 #
 # B1 tests: verify build-plugin.sh basic behaviour (idempotency, --dry-run, self-containment).
+#
+# THE HAZARD: build-plugin.sh WRITES. With no PLUGIN_DIR_OVERRIDE it resolves its target to
+# ${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}/claude-plugins/borg-collective -- the live plugin Claude Code
+# loads -- and also writes marketplace.json and runs git in that directory's parent. setup_temp_dirs
+# redirects HOME and XDG_CONFIG_HOME but never BORG_ORCHESTRATOR_ROOT, and an exported value beats
+# the HOME fallback anyway. So a case that forgot the override used to rewrite the real machine, and
+# the first B1 case did exactly that; on a machine with the plugin installed, the directory it
+# claimed to test as absent was never absent.
+# setup() below sandboxes EVERY case by default, so forgetting the override lands in the sandbox.
 
 load test_helper/setup
 
 BORG_ZSH="${BATS_TEST_DIRNAME}/../borg.zsh"
 BUILD_PLUGIN="${BATS_TEST_DIRNAME}/../scripts/build-plugin.sh"
 CHECK_VERSION="${BATS_TEST_DIRNAME}/../scripts/check-plugin-version.sh"
+
+setup() {
+    setup_temp_dirs
+    # Both the root and the override point into the sandbox. The override does NOT exist yet, which
+    # is what the "plugin dir does not exist" case needs; cases that want a populated tree mkdir it.
+    export BORG_ORCHESTRATOR_ROOT="$BORG_TEST_HOME/dev"
+    export PLUGIN_DIR_OVERRIDE="${BATS_TEST_TMPDIR}/claude-plugins/borg-collective"
+}
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -63,7 +80,6 @@ EOF
 # ─── B2: _borg_unregister_hook tests ─────────────────────────────────────────
 
 @test "B2: _borg_unregister_hook removes matching hook entry from settings.json" {
-    setup_temp_dirs
     local settings="$BORG_TEST_HOME/.claude/settings.json"
     mkdir -p "$(dirname "$settings")"
     _fake_settings_with_hooks "$settings"
@@ -78,7 +94,6 @@ EOF
 }
 
 @test "B2: _borg_unregister_hook leaves non-borg hooks intact" {
-    setup_temp_dirs
     local settings="$BORG_TEST_HOME/.claude/settings.json"
     mkdir -p "$(dirname "$settings")"
     _fake_settings_with_hooks "$settings"
@@ -93,7 +108,6 @@ EOF
 }
 
 @test "B2: _borg_unregister_hook preserves permissions and model keys" {
-    setup_temp_dirs
     local settings="$BORG_TEST_HOME/.claude/settings.json"
     mkdir -p "$(dirname "$settings")"
     _fake_settings_with_hooks "$settings"
@@ -110,7 +124,6 @@ EOF
 }
 
 @test "B2: _borg_unregister_hook is a no-op when hook not present" {
-    setup_temp_dirs
     local settings="$BORG_TEST_HOME/.claude/settings.json"
     mkdir -p "$(dirname "$settings")"
     echo '{"hooks": {}, "model": "claude-sonnet-4-5"}' > "$settings"
@@ -126,7 +139,6 @@ EOF
 }
 
 @test "B2: _borg_unregister_hook removes multiple borg hooks leaving non-borg hooks" {
-    setup_temp_dirs
     local settings="$BORG_TEST_HOME/.claude/settings.json"
     mkdir -p "$(dirname "$settings")"
     _fake_settings_with_hooks "$settings"
@@ -142,7 +154,6 @@ EOF
 }
 
 @test "B2: _borg_unregister_hook preserves co-located non-borg hooks in a shared matcher block" {
-    setup_temp_dirs
     local settings="$BORG_TEST_HOME/.claude/settings.json"
     mkdir -p "$(dirname "$settings")"
     cat > "$settings" <<'EOF'
@@ -177,14 +188,35 @@ EOF
 # ─── B1: build-plugin.sh tests ───────────────────────────────────────────────
 
 @test "B1: build-plugin.sh exits 0 when plugin dir does not exist" {
+    # Prove the premise first: the target is in the sandbox and absent, so the build must create it.
+    # The sandbox check comes first because `[ ! -e "" ]` passes, so without it a lost setup() would
+    # let this case run a real build against the live plugin before anything failed.
+    [[ "$PLUGIN_DIR_OVERRIDE" == "$BATS_TEST_TMPDIR"/* ]] || false
+    [ ! -e "$PLUGIN_DIR_OVERRIDE" ]
     run bash "$BUILD_PLUGIN" 2>&1
     [ "$status" -eq 0 ]
+    [ -d "$PLUGIN_DIR_OVERRIDE" ]
+    [ -d "$PLUGIN_DIR_OVERRIDE/skills" ]
+    [ -d "$PLUGIN_DIR_OVERRIDE/hooks" ]
+    [ -d "$PLUGIN_DIR_OVERRIDE/agents" ]
 }
 
-@test "B1: build-plugin.sh --dry-run exits 0 and prints nothing harmful" {
+@test "B1: build-plugin.sh --dry-run exits 0, writes nothing, and targets the sandbox" {
     run bash "$BUILD_PLUGIN" --dry-run
     [ "$status" -eq 0 ]
-    echo "$output" | grep -qv "ERROR"
+    [[ "$output" != *"ERROR"* ]] || false
+    [ ! -e "$PLUGIN_DIR_OVERRIDE" ]
+    [[ "$output" == *"dest: ${BATS_TEST_TMPDIR}/"* ]] || false
+}
+
+@test "B1: with no override, the default resolution still lands in the sandbox" {
+    # DISCRIMINATING GUARD: drop the override and ask the script to resolve its own default. It must
+    # land under BATS_TEST_TMPDIR via the sandboxed BORG_ORCHESTRATOR_ROOT/HOME. If setup() stops
+    # sandboxing, this prints the real home's path and goes red.
+    unset PLUGIN_DIR_OVERRIDE
+    run bash "$BUILD_PLUGIN" --dry-run
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"dest: ${BATS_TEST_TMPDIR}/"* ]] || false
 }
 
 @test "B1: build-plugin.sh is idempotent — second run reports no changes" {
@@ -344,9 +376,9 @@ EOF
     mkdir -p "$fake_marketplace/.claude-plugin"
     echo '{"name":"noah-local","plugins":[]}' > "$fake_marketplace/.claude-plugin/marketplace.json"
 
-    run bash -c "HOME='$fake_home' unset PLUGIN_DIR_OVERRIDE; HOME='$fake_home' bash '$BUILD_PLUGIN' --dry-run 2>&1"
+    run bash -c "unset BORG_ORCHESTRATOR_ROOT; HOME='$fake_home' unset PLUGIN_DIR_OVERRIDE; HOME='$fake_home' bash '$BUILD_PLUGIN' --dry-run 2>&1"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"$fake_home"* ]] || [[ "$output" != *"/Users/noah"* ]] || false
+    [[ "$output" == *"dest: $fake_home/dev/claude-plugins/borg-collective"* ]] || false
 }
 
 # ─── B3: check-plugin-version.sh drift-guard tests ───────────────────────────
