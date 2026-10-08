@@ -284,11 +284,13 @@ else
     _run_skill "$n2" "/borg-link-up" "record where this session got to"
     if ! printf '%s' "$p2_rows" | grep -q '#7'; then
         skip "N2 link-up never wrote a row even where one was declared — premise unproven"
-    # BOTH SPELLINGS, because the writer under test may know either. `.borg/programs` is being
+    # ALL THREE ROOTS (`.stacks/` too: scaffold creates there when git ignores `.borg/`), and BOTH
+    # `.borg` SPELLINGS, because the writer under test may know either. `.borg/programs` is being
     # renamed to `.borg/chains` as expand -> migrate -> contract (#222); during the expand phase a
     # scaffold could land under whichever name the writer resolves first, and checking one of them
     # would let a scaffold under the other read as "nothing was created".
-    elif [ ! -e "$n2/.borg/programs" ] && [ ! -e "$n2/.borg/chains" ]; then
+    elif [ ! -e "$n2/.borg/programs" ] && [ ! -e "$n2/.borg/chains" ] \
+        && [ ! -e "$n2/.stacks" ]; then
         ok "N2 no manifest was created — creation still belongs to /borg-plan"
     else
         bad "N2 /borg-link-up scaffolded — the ratified creation split is dissolved"

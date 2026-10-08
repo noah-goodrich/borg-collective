@@ -2,8 +2,8 @@
 
 Three verbs, one per moment in a row's life:
 
-    scaffold   `/borg-plan` -- create `<repository>/.borg/chains/<name>.json` with an apex and no
-               rows. Idempotent and NEVER clobbering. Always creates under borg's own root.
+    scaffold   `/borg-plan` -- create `<name>.json` with an apex and no rows, in `.stacks/` or
+               `.borg/chains/` (derived, or `--root`). Idempotent and NEVER clobbering.
     add-row    `/borg-link-up` -- append a row for a ref, or update the one already carrying it.
     close      `/borg-assimilate` -- set a row's status, by ref.
 
@@ -57,6 +57,7 @@ from typing import Any
 
 from borg_core.manifest import core
 from borg_core.manifest import refs
+from borg_core.manifest import placement
 from borg_core.manifest import shell
 from borg_core.recon import shell as recon_shell
 
@@ -244,6 +245,10 @@ def _cmd_scaffold(args: argparse.Namespace) -> int:
     that already have a manifest. Clobbering there would delete a whole declared program on a
     re-plan, so an existing file is reported and left exactly as it is -- at exit 0, since "already
     scaffolded" is the desired end state and not a failure.
+
+    A NEW manifest goes where `shell.scaffold_root` says -- `--root`, else an existing root, else
+    `.stacks/` when git ignores `.borg/`, else borg's own. The second stdout line names the folder
+    and the reason; the first token of the first line (`scaffolded:` / `exists:`) is unchanged.
     """
     existing, problem = shell.locate_manifest(args.repository, args.name)
     if problem:
@@ -281,8 +286,13 @@ def _cmd_scaffold(args: argparse.Namespace) -> int:
         if args.title:
             apex["title"] = args.title
         manifest["apex"] = apex
-    written = shell.write_manifest(args.repository, manifest, args.name)
+    directory, reason = shell.scaffold_root(args.repository, args.root)
+    if os.path.lexists(directory) and not os.path.isdir(directory):
+        print(f"{args.name}: cannot scaffold, {directory} exists and is not a directory", file=sys.stderr)
+        return 1
+    written = shell.write_manifest(args.repository, manifest, args.name, directory)
     print(f"scaffolded: {written}")
+    print(f"root: {directory} ({reason})")
     return 0
 
 
@@ -514,6 +524,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--order", default=_ORDER_UNSET, help="declared order; derived from the lane when omitted")
     parser.add_argument("--why", default="", help="one line on why this row exists (add-row)")
     parser.add_argument("--status", default="", help=f"{core.STATE_OPEN}|{core.STATE_MERGED}|{core.STATE_CLOSED}")
+    parser.add_argument("--root", default="", choices=("", *placement.ROOT_CHOICES),
+                        help="where scaffold creates a new manifest; derived when omitted (scaffold)")
     parser.add_argument("--apex", default="", help="apex ref (scaffold)")
     parser.add_argument("--title", default="", help="apex title (scaffold)")
     parser.add_argument("--desc", default="", help="one-line program description (scaffold)")

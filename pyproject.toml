@@ -130,7 +130,7 @@ allowed_prefixes = ["borg_core", "__future__"]
 # that has no business in a module whose whole claim is that a plan file cannot reach a subprocess
 # through it.
 [tool.clean-arch.module_map]
-Domain = ["across.py", "core.py", "errors.py", "grid.py", "picture.py", "refs.py", "render.py"]
+Domain = ["across.py", "core.py", "errors.py", "grid.py", "picture.py", "refs.py", "render.py", "placement.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]

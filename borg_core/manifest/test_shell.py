@@ -1995,3 +1995,69 @@ def test_borg_chains_symlinked_to_stacks_is_read_once(tmp_path):
     assert warnings == [] and len(manifests) == 1
     path, problem = shell.locate_manifest(str(repository), "alpha")
     assert problem == "" and os.path.samefile(path, stacks)
+
+
+# ── scaffold_root: the git probe and the facts behind placement.choose_scaffold_root ──────────────────
+def _ignore(repository, pattern):
+    with open(os.path.join(repository, ".gitignore"), "w", encoding="utf-8") as handle:
+        handle.write(pattern + "\n")
+
+
+def test_scaffold_root_derives_stacks_when_git_ignores_borg(tmp_path):
+    repository = _git_repository(tmp_path, "r")
+    _ignore(repository, ".borg/")
+    directory, reason = shell.scaffold_root(repository)
+    assert directory == os.path.join(repository, ".stacks")
+    assert "ignores" in reason
+
+
+def test_scaffold_root_keeps_borg_when_borg_is_tracked(tmp_path):
+    repository = _git_repository(tmp_path, "r")
+    assert shell.scaffold_root(repository)[0] == shell.manifest_dir(repository)
+
+
+def test_scaffold_root_keeps_borg_outside_any_git_repository(tmp_path):
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    assert shell.scaffold_root(str(plain))[0] == shell.manifest_dir(str(plain))
+
+
+def test_scaffold_root_keeps_borg_when_git_is_missing(tmp_path, monkeypatch):
+    repository = _git_repository(tmp_path, "r")
+    _ignore(repository, ".borg/")
+    monkeypatch.setattr(shell.proc, "run_capture", lambda *a, **k: None)
+    assert shell.scaffold_root(repository)[0] == shell.manifest_dir(repository)
+
+
+def test_scaffold_root_existing_root_beats_the_ignore_probe(tmp_path):
+    repository = _git_repository(tmp_path, "r")
+    _ignore(repository, ".borg/")
+    os.makedirs(os.path.join(repository, ".borg", "chains"))
+    assert shell.scaffold_root(repository)[0] == shell.manifest_dir(repository)
+
+
+def test_scaffold_root_override_wins_and_skips_the_probe(tmp_path, monkeypatch):
+    repository = _git_repository(tmp_path, "r")
+    _ignore(repository, ".borg/")
+    monkeypatch.setattr(shell.proc, "run_capture", lambda *a, **k: pytest.fail("probe ran"))
+    assert shell.scaffold_root(repository, "borg")[0] == shell.manifest_dir(repository)
+
+
+def test_scaffold_root_legacy_programs_dir_counts_as_borg_existing(tmp_path):
+    repository = _git_repository(tmp_path, "r")
+    _ignore(repository, ".borg/")
+    os.makedirs(os.path.join(repository, ".borg", "programs"))
+    assert shell.scaffold_root(repository)[0] == os.path.join(repository, ".borg", "programs")
+
+
+def test_scaffold_root_probe_names_a_file_so_a_contents_only_ignore_still_counts(tmp_path):
+    """`.borg/*` plus `!.borg/chains/` leaves `.borg/chains/` un-ignored, so borg keeps its root; `.borg/chains/*`
+    ignores every file in it while the bare directory name is not ignored, and only a probe that names a FILE sees
+    that. MUTATION: probe the directory instead and the second case goes red."""
+    carved = _git_repository(tmp_path, "carved")
+    with open(os.path.join(carved, ".gitignore"), "w", encoding="utf-8") as handle:
+        handle.write(".borg/*\n!.borg/chains/\n")
+    assert shell.scaffold_root(carved)[0] == shell.manifest_dir(carved)
+    contents = _git_repository(tmp_path, "contents")
+    _ignore(contents, ".borg/chains/*")
+    assert shell.scaffold_root(contents)[0] == os.path.join(contents, ".stacks")

@@ -45,7 +45,7 @@ import tempfile
 from typing import Any
 
 from borg_core import proc
-from borg_core.manifest import core
+from borg_core.manifest import core, placement
 
 # `git remote get-url` on a healthy checkout is instant, but a repository whose object store sits on
 # a stale network mount can block indefinitely, and this runs once per registered repository on a
@@ -60,19 +60,19 @@ LEGACY_DIRNAME = "programs"
 
 # The second, tool-neutral root: `<repository>/.stacks/`, for a repository shared with people who do
 # not run borg and so should not have to carry a `.borg/` directory. It is READ alongside borg's own
-# root (see `manifest_roots`); it is never CREATED into -- `scaffold` still writes under
-# `manifest_dir`, and an in-place edit writes back to whichever file it found.
+# root (see `manifest_roots`); it is CREATED into only when `scaffold_root` picks it, and an in-place
+# edit writes back to whichever file it found.
 STACKS_DIRNAME = ".stacks"
 
 
 def manifest_dir(repository_dir: str) -> str:
     """borg's own manifest root: `<repository>/.borg/chains`, or the legacy name.
 
-    This is where manifests are CREATED, and one of the two roots they are READ from -- the other is
-    `<repository>/.stacks/`, see `manifest_roots`. Nothing outside those two directories is ever
-    opened -- not `<repository>/.borg/anything.json`, not a manifest-shaped file in the repository
-    root. What CHANGED with the hardened spec's B6 is not this rule but the sweep: every registered
-    repository's copy of these directories is globbed, not just the one in scope.
+    scaffold creates here unless `scaffold_root` picks `.stacks/`, and this is one of the two roots
+    manifests are READ from -- the other is `<repository>/.stacks/`, see `manifest_roots`. Nothing outside
+    those two directories is ever opened -- not `<repository>/.borg/anything.json`, not a manifest-shaped
+    file in the repository root. What CHANGED with the hardened spec's B6 is not this rule but the sweep:
+    every registered repository's copy of these directories is globbed, not just the one in scope.
 
     THE RENAME IS THE EXPAND PHASE, AND BOTH NAMES RESOLVE ON PURPOSE. AC7's verify greps the
     COMMANDS section of `borg help` for the retired word and gets two hits that are NOT the retired
@@ -612,13 +612,44 @@ def _write_refusal(name: str, errors: list[str], slug: str) -> InvalidManifest:
     return InvalidManifest(_invalid_manifest(name, detailed), detailed)
 
 
+def _borg_dir_is_ignored(repository_dir: str) -> bool:
+    """True when git says `.borg/chains/` is ignored in this repository. Any doubt is "not ignored".
+
+    `git check-ignore -q` exits 0 for an ignored path, 1 for a not-ignored one and 128 on error, so
+    ONLY exit 0 counts: a non-git directory, a missing git, a timeout and a git error all answer False
+    and scaffold keeps borg's own root. The probe names a file UNDER `.borg/chains/`, not the directory,
+    because a `.gitignore` of `.borg/` and one of `.borg/chains/*` both match the file but only the
+    first matches the bare directory name.
+    """
+    captured = proc.run_capture(
+        ["git", "-C", repository_dir, "check-ignore", "-q", "--", ".borg/chains/.scaffold-probe.json"],
+        timeout=GIT_TIMEOUT_SECONDS,
+    )
+    return captured is not None and captured[0] == 0
+
+
+def scaffold_root(repository_dir: str, override: str = "") -> tuple[str, str]:
+    """`(directory, reason)` where `scaffold` should create a new manifest: gathers the facts, then
+    hands them to the pure `placement.choose_scaffold_root`. The git probe is skipped when the answer
+    cannot depend on it (an override, or either root already present)."""
+    stacks = os.path.join(repository_dir, STACKS_DIRNAME)
+    borg = manifest_dir(repository_dir)
+    stacks_exists = os.path.isdir(stacks)
+    borg_exists = os.path.isdir(borg)
+    needs_probe = override not in placement.ROOT_CHOICES and not stacks_exists and not borg_exists
+    return placement.choose_scaffold_root(
+        override, stacks_exists, borg_exists, needs_probe and _borg_dir_is_ignored(repository_dir),
+        (stacks, borg),
+    )
+
+
 def write_manifest(repository_dir: str, manifest: dict, name: str, directory: str = "") -> str:
     """Write a manifest to `<directory>/<name>.json`, by default under `manifest_dir`. The ONLY writer.
 
     `directory` is for an in-place edit: `add-row` and `close` pass the directory the manifest was
-    FOUND in, so a `.stacks/` manifest is written back to `.stacks/`. Creation passes nothing and
-    lands under `manifest_dir`, exactly as before. The function writes wherever it is told; only the CLI never creates
-    into `.stacks/`.
+    FOUND in, so a `.stacks/` manifest is written back to `.stacks/`. Creation passes the directory
+    `scaffold_root` picked (`.stacks/` or borg's own root); passing nothing lands under `manifest_dir`.
+    The function writes wherever it is told.
 
     THE ONE PLACE THIS MODULE'S "nothing here is ever fatal" RULE DOES NOT APPLY, and the asymmetry
     is the point. A reader that dies on one bad file blanks the whole grid, so reads degrade: a bad

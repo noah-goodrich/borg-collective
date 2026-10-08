@@ -481,8 +481,12 @@ docs/
   divergence AC7 ends), resolves the package script-relative or via `$BORG_ROOT`, and **no-ops when
   neither is present** — so an empty log in a plugin-only install means "not instrumented", not
   "no bypasses".
-- **Manifests are read from two roots**: `<repo>/.borg/chains/` (borg's own, and where `scaffold` creates)
-  and the tool-neutral `<repo>/.stacks/`, so a repository shared with people who do not run borg need
+- **Manifests are read from two roots**: `<repo>/.borg/chains/` (borg's own) and the tool-neutral
+  `<repo>/.stacks/`. `scaffold` creates in `.stacks/` if it exists, else borg's own directory (`.borg/chains/`, or
+  legacy `.borg/programs/`) if it exists, else `.stacks/` when git ignores `.borg/`, else `.borg/chains/`
+  (`placement.choose_scaffold_root`, facts from `shell.scaffold_root`; `--root stacks|borg` overrides), and prints
+  `root: <folder> (<reason>)` after its `scaffolded:` line (an `exists:` line has none).
+  So a repository shared with people who do not run borg need
   not carry a `.borg/`; a stem declared in both is refused by name, never picked, an in-place edit
   writes back to the file it found, two roots that are one directory (a symlink) are read once, and an
   unreadable root or parent is a named warning, never silence (`scaffold`, the one creator, refuses by
