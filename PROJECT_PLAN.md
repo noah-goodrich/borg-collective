@@ -31,7 +31,7 @@ In a smoke test, the shipped chooser listed one row per project, with next step,
   - Verify: bats through a `gh` stub: an open PR last updated before the since-mark is present; the four new fields map from the stub's GraphQL; merged and closed PRs still honour the since-mark.
 - [ ] **AC6 — Rows are work items with an owner and readiness.** A pure `nextpick` function builds one row per actionable item:
   - **Waiting session:** "reply to session", owner YOU, ready ✔ with its age.
-  - **Open PR, not draft, checks pass, mergeable, no changes requested:** "merge #N", owner YOU, ready ✔.
+  - **Open PR, not draft, not conflicting, checks pass or none (no CI configured), no changes requested; UNKNOWN mergeability counts as mergeable because GitHub reports it while still computing:** "merge #N", owner YOU, ready ✔.
   - **Checks pending:** "#N CI", owner AGENT, ready "… run".
   - **Merge conflicts (CONFLICTING):** "resolve conflicts #N", owner AGENT, ready ✗. Checked after draft and before checks fail.
   - **Checks fail:** "fix #N CI", owner AGENT, ready ✗.
