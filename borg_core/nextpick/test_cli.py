@@ -145,15 +145,21 @@ def _json_run(monkeypatch, capsys, registry, items=None, note=None, argv=("--row
 
 
 def test_rows_json_payload_has_you_and_agent_quiet_rows(state, monkeypatch, capsys, tmp_path):
-    payload, _ = _json_run(monkeypatch, capsys, _plan_registry(tmp_path), {"a": [PR_ITEM]})
-    assert set(payload) == {"rows", "rec", "suggestion", "quiet", "degraded"}
-    assert [(r["n"], r["project"], r["owner"]) for r in payload["rows"]] == [
+    registry = _plan_registry(tmp_path)
+    payload, _ = _json_run(monkeypatch, capsys, registry, {"a": [PR_ITEM]})
+    assert set(payload) == {"rows", "rec", "suggestion", "quiet", "degraded", "hidden"}
+    assert [(r["n"], r["project"], r["owner"]) for r in payload["rows"]] == [(1, "a", "YOU"), (2, "a", "YOU")]
+    assert payload["hidden"] == {"agent": 2, "stale": 0, "overflow": 0}
+    session, merge = payload["rows"]
+    everything, _ = _json_run(monkeypatch, capsys, registry, {"a": [PR_ITEM]}, argv=("--rows", "--json", "--all"))
+    assert everything["hidden"] == {"agent": 0, "stale": 0, "overflow": 0}
+    assert [(r["n"], r["project"], r["owner"]) for r in everything["rows"]] == [
         (1, "a", "YOU"),
         (2, "a", "YOU"),
         (3, "c", "—"),
         (4, "b", "AGENT"),
     ]
-    session, merge, step, plan = payload["rows"]
+    step, plan = everything["rows"][2:]
     assert set(session) == {
         "n",
         "project",
@@ -198,7 +204,8 @@ def test_rows_json_local_skips_the_sweep(state, monkeypatch, capsys, tmp_path):
 def test_rows_json_degraded_sweep_keeps_the_other_sources(state, monkeypatch, capsys, tmp_path):
     payload, _ = _json_run(monkeypatch, capsys, _plan_registry(tmp_path), note="sweep: no recon adapters found")
     assert payload["degraded"] == "sweep: no recon adapters found"
-    assert [r["project"] for r in payload["rows"]] == ["a", "c", "b"]
+    assert [r["project"] for r in payload["rows"]] == ["a"]
+    assert payload["hidden"]["agent"] == 2
 
 
 def test_rows_mode_prints_item_rows_quiet_line_then_names_line(state, monkeypatch, capsys, tmp_path):
@@ -207,7 +214,8 @@ def test_rows_mode_prints_item_rows_quiet_line_then_names_line(state, monkeypatc
     assert lines[0] == "WHERE COULD YOUR FOCUS GO?"
     assert any(line.startswith(" 2 a · ship it") and "merge #7" in line for line in lines)
     assert "+1 quiet: d" in lines
-    assert lines[-1] == "names\ta\ta\tc\tb"
+    assert "+2 agent tasks" in lines
+    assert lines[-1] == "names\ta\ta"
     assert seen == [False]
     assert all(len(line) <= 59 for line in lines)
     assert not state.exists()
@@ -326,7 +334,45 @@ def test_checkpoint_next_steps_is_fail_open(monkeypatch):
 
 def test_rows_json_checkpoint_fallback_keeps_a_row_out_of_quiet(state, monkeypatch, capsys, tmp_path):
     reg = _checkpointed_registry(tmp_path)
-    payload, _ = _json_run(monkeypatch, capsys, reg)
+    payload, _ = _json_run(monkeypatch, capsys, reg, argv=("--rows", "--json", "--all"))
     assert [r["project"] for r in payload["rows"]] == ["p"]
     assert payload["rows"][0]["next_step"] == "ship the chooser"
     assert payload["quiet"] == ["q"]
+    capped, _ = _json_run(monkeypatch, capsys, reg)
+    assert capped["rows"] == [] and capped["hidden"]["agent"] == 1 and capped["quiet"] == ["q"]
+
+
+def _crowded(tmp_path: Path, count: int = 8) -> tuple[dict, dict]:
+    """Two projects sharing one repo plus a lone one; `count` YOU PRs on `solo`, one stale draft on `a`."""
+    registry = {
+        "projects": {
+            "a": {"status": "idle", "last_activity": "2026-09-01", "path": str(tmp_path / "a"), "repo": "/g"},
+            "a2": {"status": "idle", "last_activity": "2026-09-02", "path": str(tmp_path / "a2"), "repo": "/g"},
+            "solo": {"status": "idle", "last_activity": "2026-09-29", "path": str(tmp_path / "s")},
+        }
+    }
+    shared = {**PR_ITEM, "ref": "o/r#1"}
+    stale = {**PR_ITEM, "ref": "o/r#2", "draft": True, "changed": "updated 2020-01-01T00:00:00Z; draft"}
+    many = [{**PR_ITEM, "ref": f"o/s#{n}", "title": f"pr {n}"} for n in range(10, 10 + count)]
+    return registry, {"a": [shared, stale], "a2": [shared], "solo": many}
+
+
+def test_rows_json_caps_dedupes_and_counts_stale(state, monkeypatch, capsys, tmp_path):
+    registry, items = _crowded(tmp_path)
+    payload, _ = _json_run(monkeypatch, capsys, registry, items)
+    assert [r["n"] for r in payload["rows"]] == [1, 2, 3, 4, 5]
+    assert [r["ref"] for r in payload["rows"]] == ["o/r#1", "o/s#10", "o/s#11", "o/s#12", "o/s#13"]
+    assert payload["hidden"] == {"agent": 0, "stale": 1, "overflow": 4}
+
+
+def test_chooser_screen_and_json_agree_and_all_lists_everything(state, monkeypatch, capsys, tmp_path):
+    registry, items = _crowded(tmp_path)
+    payload, _ = _json_run(monkeypatch, capsys, registry, items)
+    out, _ = _rows_run(monkeypatch, capsys, registry, items)
+    lines = out.splitlines()
+    assert lines[-1] == "names\t" + "\t".join(r["project"] for r in payload["rows"])
+    assert "+4 more decisions" in lines and "+1 stale drafts" in lines
+    full, _ = _json_run(monkeypatch, capsys, registry, items, argv=("--rows", "--json", "--all"))
+    assert len(full["rows"]) == 10 and full["hidden"] == {"agent": 0, "stale": 0, "overflow": 0}
+    assert [r["n"] for r in full["rows"]] == list(range(1, 11))
+    assert "o/r#2" in [r["ref"] for r in full["rows"]]

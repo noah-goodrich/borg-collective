@@ -70,6 +70,7 @@ def test_items_carry_the_fields_cmd_next_reads_with_jq_defaults():
         "last_activity": "",
         "pinned": False,
         "path": "null",
+        "repo": "",
     }
 
 
@@ -370,8 +371,16 @@ def test_checkpoint_next_step_ignores_tldr_preamble_and_truncates():
 
 
 def _pr(num, title="feat(next): add the thing", **kw):
-    base = {"ref": f"o/r#{num}", "title": title, "state": "open", "draft": False, "checks": "pass",
-            "mergeable": "MERGEABLE", "review_decision": None, "owner": "you"}
+    base = {
+        "ref": f"o/r#{num}",
+        "title": title,
+        "state": "open",
+        "draft": False,
+        "checks": "pass",
+        "mergeable": "MERGEABLE",
+        "review_decision": None,
+        "owner": "you",
+    }
     return {**base, **kw}
 
 
@@ -458,9 +467,95 @@ def test_short_title_strips_prefix_and_truncates():
 def test_numbered_rows_adds_n_status_and_default_waiting_reason():
     ranked = [{"name": "a", "status": "waiting"}, {"name": "b", "status": "idle"}]
     work = [
-        {"project": "a", "item": "session", "next_step": "reply to session", "owner": "YOU", "ready": "✔ 1d ago",
-         "ref": None, "age": "1d ago", "waiting_reason": "why"},
+        {
+            "project": "a",
+            "item": "session",
+            "next_step": "reply to session",
+            "owner": "YOU",
+            "ready": "✔ 1d ago",
+            "ref": None,
+            "age": "1d ago",
+            "waiting_reason": "why",
+        },
         {"project": "b", "item": "", "next_step": "x", "owner": "—", "ready": "", "ref": None, "age": "2d ago"},
     ]
     rows = core.numbered_rows(work, ranked)
     assert [(r["n"], r["status"], r["waiting_reason"]) for r in rows] == [(1, "waiting", "why"), (2, "idle", "")]
+
+
+NOW = 1_790_000_000
+OLD = "updated 2026-07-01T00:00:00Z; state=open; draft"
+FRESH = "updated 2026-09-20T00:00:00Z; state=open; draft"
+
+
+def _work(ranked, items, now=NOW):
+    rows, _ = core.work_items(ranked, items, {}, {}, now_epoch=now)
+    return rows
+
+
+def _you_rows(count):
+    return [{"project": "p", "item": f"i{n}", "owner": "YOU", "ref": f"o/r#{n}", "stale": False} for n in range(count)]
+
+
+def test_cap_rows_shows_at_most_five_you_rows_in_existing_order():
+    shown, hidden = core.cap_rows(_you_rows(8))
+    assert [r["ref"] for r in shown] == [f"o/r#{n}" for n in range(5)]
+    assert hidden == {"agent": 0, "stale": 0, "overflow": 3}
+
+
+def test_cap_rows_collapses_agent_and_unowned_rows_into_a_count():
+    work = [{"owner": "AGENT", "stale": False}, {"owner": "—", "stale": False}, *_you_rows(2)]
+    shown, hidden = core.cap_rows(work)
+    assert [r["owner"] for r in shown] == ["YOU", "YOU"]
+    assert hidden == {"agent": 2, "stale": 0, "overflow": 0}
+
+
+def test_cap_rows_all_returns_everything_uncounted():
+    work = [{"owner": "AGENT", "stale": True}, *_you_rows(7)]
+    shown, hidden = core.cap_rows(work, show_all=True)
+    assert shown == work and hidden == {"agent": 0, "stale": 0, "overflow": 0}
+
+
+def test_hidden_lines_fixed_order_and_no_zeros():
+    assert core.hidden_lines({"agent": 4, "stale": 2, "overflow": 1}) == [
+        "+1 more decisions",
+        "+4 agent tasks",
+        "+2 stale drafts",
+    ]
+    assert core.hidden_lines({"agent": 0, "stale": 0, "overflow": 0}) == []
+
+
+def test_render_chooser_prints_the_summary_lines_before_the_rule():
+    rows = [{"n": 1, "project": "a", "item": "x", "next_step": "merge #1", "owner": "YOU", "ready": "✔ now"}]
+    lines = core.render_chooser(rows, suggestion=None, hidden={"agent": 3, "stale": 1, "overflow": 0})
+    assert lines[2 + 1 + 1 : 2 + 1 + 3] == ["+3 agent tasks", "+1 stale drafts"]
+
+
+def test_stale_drafts_are_flagged_only_past_thirty_days():
+    rows = _work([_rank("p")], {"p": [_pr(1, draft=True, changed=OLD), _pr(2, draft=True, changed=FRESH)]})
+    assert [(r["ref"], r["stale"]) for r in rows] == [("o/r#1", True), ("o/r#2", False)]
+    _, hidden = core.cap_rows(rows)
+    assert hidden["stale"] == 1 and hidden["agent"] == 1
+
+
+def test_stale_needs_a_clock_a_draft_and_a_timestamp():
+    assert not _work([_rank("p")], {"p": [_pr(1, draft=True, changed=OLD)]}, now=0)[0]["stale"]
+    assert not _work([_rank("p")], {"p": [_pr(1, changed=OLD)]})[0]["stale"]
+    assert not _work([_rank("p")], {"p": [_pr(1, draft=True)]})[0]["stale"]
+
+
+def test_projects_sharing_a_repo_do_not_repeat_a_pr():
+    ranked = [{**_rank("reveal"), "repo": "/g"}, {**_rank("reveal-data-consistency"), "repo": "/g"}]
+    rows = _work(ranked, {"reveal": [_pr(4)], "reveal-data-consistency": [_pr(4), _pr(5)]})
+    assert [(r["project"], r["ref"]) for r in rows] == [("reveal", "o/r#4"), ("reveal-data-consistency", "o/r#5")]
+
+
+def test_null_or_different_repo_is_a_group_of_one():
+    ranked = [{**_rank("a"), "repo": ""}, {**_rank("b"), "repo": ""}, {**_rank("c"), "repo": "/other"}]
+    rows = _work(ranked, {"a": [_pr(4)], "b": [_pr(4)], "c": [_pr(4)]})
+    assert [r["project"] for r in rows] == ["a", "b", "c"]
+
+
+def test_sessions_are_never_deduped_across_a_repo_group():
+    ranked = [{**_rank("a", "waiting"), "repo": "/g"}, {**_rank("b", "waiting"), "repo": "/g"}]
+    assert [r["item"] for r in _work(ranked, {})] == ["session", "session"]

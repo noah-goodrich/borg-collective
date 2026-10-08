@@ -722,10 +722,11 @@ _borg_next_log() {
 # Enter = top row, 1-9 = that row, q/Esc = quit. One invalid key re-prompts once, a second quits.
 # The trailing `names` line of the rows output is the machine channel; everything above it is the screen.
 _borg_next_chooser() {
-    local registry="$1" local_flag="$2" out names_line screen key
+    local registry="$1" local_flag="$2" all_flag="${3:-0}" out names_line screen key
     local -F start=$SECONDS
     local -a rows_args=(--rows) names
     (( local_flag )) && rows_args+=(--local)
+    (( all_flag )) && rows_args+=(--all)
     # The link build can wait on the network; say so on stderr (never stdout), and not at all with --local.
     (( ! local_flag )) && printf '\r%s' "${DIM}checking GitHub…${NC}" >&2
     out=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null) || out=""
@@ -770,13 +771,14 @@ _borg_next_chooser() {
 # Non-interactive surfaces for skills (no TTY): `--rows --json` (logs nothing), `--open <p> --chosen [--shown]`
 # and `--declined [--shown]` (each logs ONE real, unscripted chooser row).
 _borg_next_surface() {
-    local local_flag="$1" mode="" project="" shown=0 chosen=0 arg
+    local local_flag="$1" mode="" project="" shown=0 chosen=0 all_flag=0 arg
     shift
     while (( $# )); do
         arg="$1"; shift
         case "$arg" in
             --rows) mode=rows ;;
             --json) ;;
+            --all) all_flag=1 ;;
             --open) mode=open; project="${1:-}"; (( $# )) && shift ;;
             --chosen) chosen=1 ;;
             --declined) mode=declined ;;
@@ -792,8 +794,9 @@ _borg_next_surface() {
         rows)
             local -a rows_args=(--rows --json)
             (( local_flag )) && rows_args+=(--local)
+            (( all_flag )) && rows_args+=(--all)
             printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null ||
-                printf '{"rows":[],"rec":null,"suggestion":null,"quiet":[],"degraded":"rows failed"}\n'
+                printf '{"rows":[],"rec":null,"suggestion":null,"quiet":[],"degraded":"rows failed","hidden":{"agent":0,"stale":0,"overflow":0}}\n'
             ;;
         open)
             (( chosen )) || die "next --open needs --chosen"
@@ -810,7 +813,7 @@ _borg_next_surface() {
 }
 
 cmd_next() {
-    local do_switch=0 pick="" local_flag=0
+    local do_switch=0 pick="" local_flag=0 all_flag=0
     local -a _next_args=("${(@)@:#--local}")
     (( $# != ${#_next_args} )) && local_flag=1
     set -- "${_next_args[@]}"
@@ -818,6 +821,9 @@ cmd_next() {
         _borg_next_surface "$local_flag" "$@"
         return $?
     fi
+    _next_args=("${(@)@:#--all}")
+    (( $# != ${#_next_args} )) && all_flag=1
+    set -- "${_next_args[@]}"
     case "${1:-}" in
         --switch) do_switch=1 ;;
         --pick)
@@ -836,7 +842,7 @@ cmd_next() {
     # with --switch/--pick. Everything else falls through to the unchanged paths below.
     if (( ! do_switch )) && [[ -z "$pick" ]] && { [[ -t 0 && -t 1 ]] || [[ -n "${BORG_NEXT_FORCE_TTY:-}" ]]; }; then
         local chooser_rc=0
-        _borg_next_chooser "$registry" "$local_flag" || chooser_rc=$?
+        _borg_next_chooser "$registry" "$local_flag" "$all_flag" || chooser_rc=$?
         (( chooser_rc != 3 )) && return $chooser_rc
     fi
 
@@ -3045,7 +3051,7 @@ cmd_help() {
                           --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
                           --all     Include archived projects
-    next [--switch|--pick n|--rows --json|--open p --chosen|--declined]  What needs your attention?
+    next [--all|--switch|--pick n|--rows --json|--open p --chosen|--declined]  What needs your attention?
     switch [query]      fzf picker → jump to project tmux window
     chain <action>      Manifest coordinator over <project>/.borg/chains/*.json
                           list           Every declared chain across registered projects
