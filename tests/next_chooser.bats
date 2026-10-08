@@ -243,7 +243,7 @@ _log_count() {
 
 @test "next --rows --json: valid JSON with the item-row keys, and logs nothing" {
     _write_registry ""
-    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
     [ "$status" -eq 0 ]
     printf "%s" "$output" | jq -e "(.rows | length) == 2 and .rec == \"wait-old\" and .suggestion == null
         and .quiet == [\"act\",\"idle\",\"never\"] and .degraded == null
@@ -301,7 +301,7 @@ _log_count() {
     printf '%s\n' "tl;dr" "" "## 5. Next Session" "" "1. Ship the chooser rows" "2. Later" \
         > "$proj/.borg/checkpoints/2026-10-05-0900.md"
     _write_registry ", \"has-cp\": {\"path\":\"$proj\",\"status\":\"idle\",\"last_activity\":\"2026-10-05T08:00:00Z\"}"
-    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
     [ "$status" -eq 0 ]
     printf "%s" "$output" | jq -e "(.rows[] | select(.project == \"has-cp\")) as \$r
         | \$r.next_step == \"Ship the chooser rows\" and \$r.status == \"idle\" and (\$r.age | length) > 0
@@ -331,7 +331,7 @@ GHEOF
 @test "next --rows --json --local: no sweep, so gh is never called and no PR row appears" {
     _repo_with_open_pr
     export BORG_RECON_ADAPTER_PATH="${BATS_TEST_DIRNAME}/../lib/recon/adapters"
-    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
     [ "$status" -eq 0 ]
     printf "%s" "$output" | jq -e "(.rows | map(.project) | index(\"pr-proj\")) == null and .degraded == null"
     ! grep -q "^gh " "$TRACE"
@@ -359,4 +359,17 @@ GHEOF
     [ "$(_selected)" = "w-old" ]
     _chooser "2"
     [ "$(_selected | tail -n 1)" = "w-new" ]
+}
+
+@test "next --rows --json: carries hidden counts, and --all zeroes them" {
+    local proj="${BATS_TEST_TMPDIR}/cp-proj"
+    mkdir -p "$proj/.borg/checkpoints"
+    printf "%s\n" "## 5. Next Session" "" "1. Ship it" > "$proj/.borg/checkpoints/2026-10-05-0900.md"
+    _write_registry ", \"has-cp\": {\"path\":\"$proj\",\"status\":\"idle\",\"last_activity\":\"2026-10-05T08:00:00Z\"}"
+    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    printf "%s" "$output" | jq -e "(.rows | map(.project) | index(\"has-cp\")) == null and .hidden.agent >= 1"
+    run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
+    [ "$status" -eq 0 ]
+    printf "%s" "$output" | jq -e "(.rows | map(.project) | index(\"has-cp\")) != null and .hidden.agent == 0"
 }
