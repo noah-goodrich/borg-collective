@@ -14,6 +14,8 @@ confirmed, real divergences from that behavior (found in adversarial review of t
 so for a genuinely zero-flag command, direct `argv` indexing is the more faithful port, not a step
 backward from argparse.
 
+`add` has since gained ONE flag, `--name <name>` (see `_split_name_flag`); every other token is still data.
+
 KNOWN BUG, preserved for parity (see tests/cli_contract.bats around the `add` tests): cmd_add in
 borg.zsh exits 1 whenever no Claude session is found for the newly-registered project, even though
 registration itself succeeded -- an accident of `set -e` tripping on the truthiness of its last
@@ -25,6 +27,7 @@ flip this contract on purpose, not as a silent side effect of an unrelated chang
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from typing import NoReturn
 
 from borg_core.registry import core, shell
@@ -41,16 +44,55 @@ def _basename(path: str) -> str:
     return path.rpartition("/")[2]
 
 
-def cmd_add(path_arg: str | None) -> int:
-    """`borg add [path]` -- register a project. Returns 1 if no Claude session is found (known bug,
-    preserved intentionally -- see module docstring), 0 otherwise."""
+def _same_path(stored: str, ppath: str) -> bool:
+    """True when a stored registry path and `ppath` name one directory.
+
+    Compared the way the registry stores them: `resolve_path` (realpath when the directory exists,
+    the raw string otherwise) with trailing slashes dropped, so `/x/y/` equals `/x/y` and a symlink
+    equals its target. Both sides go through it because an entry may predate realpath-on-add.
+    """
+    return shell.resolve_path(stored).rstrip("/") == ppath.rstrip("/")
+
+
+def _path_holders(projects: dict[str, dict], ppath: str) -> list[str]:
+    """Every registered name that already holds `ppath`, in registry order.
+
+    Usually zero or one. It is a list because the bug this check closes left twins behind: one
+    path registered under two names. Checking only the first holder refused a `--name` naming the
+    second, so an update of an entry that exists was reported as an attempt to add a third name.
+    """
+    return [
+        str(key)
+        for key, entry in projects.items()
+        if isinstance((entry or {}).get("path"), str) and _same_path(entry["path"], ppath)
+    ]
+
+
+def cmd_add(path_arg: str | None, name_arg: str | None = None) -> int:
+    """`borg add [path] [--name <name>]` -- register a project. Returns 1 if no Claude session is
+    found (known bug, preserved intentionally -- see module docstring), 0 otherwise.
+
+    The name defaults to the folder basename; `--name` overrides it (a monorepo subfolder is
+    registered under a name that is not its basename). A path already registered under a DIFFERENT
+    name is never added a second time: without `--name` that is a no-op (exit 0, so `|| true`
+    callers and scripts stay idempotent), with a `--name` naming another entry it is an error.
+    """
     ppath = shell.resolve_path(path_arg or ".")
-    name = _basename(ppath)
+    name = name_arg or _basename(ppath)
+    projects = shell.read_registry().get("projects") or {}
+
+    holders = _path_holders(projects, ppath)
+    if holders and name not in holders:
+        held = ", ".join(f"'{holder}'" for holder in holders)
+        if name_arg:
+            _die(f"path {ppath} is already registered as {held}; not adding it as '{name_arg}'")
+        print(f"Already registered as {held}: {ppath} (nothing changed)")
+        return 0
 
     tmux_window = name if shell.tmux_window_exists(name) else None
     # An existing tmux_window is the registry's ONE window-name value (possibly a short or explicit
     # name); a re-add must not overwrite it with the project name or None. Fresh adds are unchanged.
-    existing = (shell.read_registry().get("projects") or {}).get(name) or {}
+    existing = projects.get(name) or {}
     keep_window = bool(existing.get("tmux_window"))
 
     session_id = shell.claude_latest_session_id(ppath)
@@ -191,6 +233,33 @@ def cmd_window_name(args: list[str]) -> int:
     return 0
 
 
+def _split_name_flag(rest: list[str]) -> tuple[list[str], str | None]:
+    """Pull `--name <n>` / `--name=<n>` out of `add`'s args; everything else stays positional.
+
+    The one flag `add` has. Anything else (including `-h`) is still ordinary path data, per the
+    module docstring. A `--name` with no value is an error rather than a silent default.
+    """
+    kept: list[str] = []
+    name: str | None = None
+    i = 0
+    while i < len(rest):
+        arg = rest[i]
+        if arg == "--name":
+            if i + 1 >= len(rest) or not rest[i + 1]:
+                _die("usage: borg add [path] [--name <name>] (--name needs a value)")
+            name = rest[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--name="):
+            name = arg[len("--name="):]
+            if not name:
+                _die("usage: borg add [path] [--name <name>] (--name needs a value)")
+        else:
+            kept.append(arg)
+        i += 1
+    return kept, name
+
+
 def main(argv: list[str] | None = None) -> None:
     """Entrypoint for `python3 -m borg_core.registry.cli add|rm ...`.
 
@@ -202,6 +271,9 @@ def main(argv: list[str] | None = None) -> None:
     if not args:
         _die("usage: borg <add|rm> ...")
     command, rest = args[0], args[1:]
+    name_arg = None
+    if command == "add":
+        rest, name_arg = _split_name_flag(rest)
     value = rest[0] if rest else None
 
     if command not in ("add", "rm", "backfill-repo", "window-name"):
@@ -212,9 +284,9 @@ def main(argv: list[str] | None = None) -> None:
     if command == "window-name":
         raise SystemExit(cmd_window_name(rest))
 
-    handlers = {"add": cmd_add, "rm": cmd_rm, "backfill-repo": cmd_backfill_repo}
+    handlers: dict[str, Callable[[str | None], int]] = {"rm": cmd_rm, "backfill-repo": cmd_backfill_repo}
     try:
-        exit_code = handlers[command](value)
+        exit_code = cmd_add(value, name_arg) if command == "add" else handlers[command](value)
     except ValueError as exc:
         _die(str(exc))
     raise SystemExit(exit_code)
