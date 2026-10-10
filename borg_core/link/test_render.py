@@ -1572,7 +1572,7 @@ def test_waiting_on_you_prints_one_line_per_yours_row_and_no_mine_rows():
 
 def test_waiting_on_you_does_not_claim_nothing_waits_when_nobody_looked():
     """A `--local` page cannot know. MUTATION: delete the `unlooked` arm in `_waiting_section`."""
-    doc = _ready_doc([], state="unlooked")
+    doc = _ready_doc([], nodes={"o/r#1": {"state_source": "declared"}}, state="unlooked")
     page = plain(render.document(doc))
     assert "WAITING ON YOU  nobody looked" in page and "nothing waits on you" not in page
 
@@ -1602,3 +1602,10 @@ def test_the_board_counts_a_projects_routed_next_rows_and_dashes_the_rest():
     assert "YOURS" in plain(render.document(doc))
     assert " 2    –      1 " in rows["alpha"]
     assert " –    –      – " in rows["beta"]
+
+
+def test_an_unlooked_manifest_with_no_refs_does_not_cloud_waiting_on_you():
+    """MUTATION: set `unlooked = True` unconditionally in `_waiting`. Three empty manifests did this live."""
+    doc = _ready_doc([], state="unlooked", declared=0)
+    doc["grid"]["manifests"][0]["nodes"] = {}
+    assert _waiting_body(doc) == ["  — nothing waits on you"]

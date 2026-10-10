@@ -1040,7 +1040,9 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
     unlooked = False
     for manifest in (doc.get("grid") or {}).get("manifests") or []:
         if (manifest.get("ready") or {}).get("state") == grid.STATE_READY_UNLOOKED:
-            unlooked = True
+            # A manifest declaring NO refs has nothing for anyone to have looked up, so it cannot make
+            # the page unsure whether something waits (live: three empty manifests did exactly that).
+            unlooked = unlooked or bool(manifest.get("nodes"))
             continue
         nodes = manifest.get("nodes") or {}
         project = _manifest_project(manifest, projects)
