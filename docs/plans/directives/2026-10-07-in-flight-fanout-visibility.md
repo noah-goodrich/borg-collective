@@ -103,5 +103,7 @@ ignored, so a crashed session leaves no tombstone and no Stop-hook bookkeeping i
 
 ## Decisions requested
 
+> **Decided by Noah 2026-10-09 (PR triage):** (1) Filter at RENDER time: log every Agent/Workflow dispatch, apply any threshold only when showing it, so changing the threshold never loses data. (2) No `borg in-flight` subcommand: one `borg link` line is the surface.
+
 1. Filter at write time or render time? Writing everything keeps the data honest; filtering keeps the file small.
 2. Does `borg in-flight` earn its own subcommand, or is the `borg link` line enough?
