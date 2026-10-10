@@ -3358,9 +3358,10 @@ _link_picture_budget() {
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.txt" link ledger
-    # SEVEN `▸` HEADERS SINCE AC4 (the eighth section is the header block, which carries no `▸` line).
+    # EIGHT `▸` HEADERS SINCE THE BOARD'S WAITING ON YOU (the ninth section is the header block, which
+    # carries no `▸` line). Seven since AC4.
     run grep -c '▸ ' "${BATS_TEST_TMPDIR}/ledger.txt"
-    [ "$output" = "7" ]
+    [ "$output" = "8" ]
     run grep -c 'no project manifest declares work in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
     [ "$output" = "1" ]
     run grep -c 'none declaring a row in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
