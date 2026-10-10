@@ -43,6 +43,6 @@
   [2m— sweep: no recon adapters found on <TMP>/no-adapters -- every state falls back to what the manifest declares[0m
   [2m— fetch: replayed from fixture <TMP>/no-fetch.json -- no gh ran[0m
 
-[1m▸ WAITING ON YOU[0m
-  [2m— nothing waits on you[0m
+[1m▸ WAITING ON YOU[0m  [2m1 item[0m
+  [1;33m▶[0m session  bravo  reply to session
 

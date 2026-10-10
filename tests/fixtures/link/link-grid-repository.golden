@@ -120,6 +120,7 @@
   [2m— fetch: replayed from fixture <TESTS>/fixtures/link/fetch-acme.json -- no gh ran[0m
   [2m— 7 of 7 declared refs resolved.[0m
 
-[1m▸ WAITING ON YOU[0m
-  [2m— nothing waits on you[0m
+[1m▸ WAITING ON YOU[0m  [2m2 items[0m
+  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/420\#420]8;;\  platform  merge #420  Status: normalise…
+  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/431\#431]8;;\  platform  merge #431  enforce scopes on…
 

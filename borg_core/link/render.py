@@ -1026,17 +1026,30 @@ def _routing_counts(doc: dict) -> dict[str, dict[str, int]]:
 _WAITING_TEXT = 52
 
 
-def _waiting(doc: dict) -> tuple[list[dict], bool]:
-    """`(items, unlooked)`: every ready row routed to `yours`, and whether any manifest was unlooked.
+def _chooser_item(row: dict) -> dict:
+    """One of the chooser's YOU rows as a waiting item. The row is `borg next`'s own, passed in on the
+    document (`waiting.rows`); this module never routes it."""
+    ref = str(row.get("ref") or "")
+    # JUSTIFICATION: str.partition on a plain string; the Demeter rule reads it as a chain on a stranger.
+    _, hash_mark, number = ref.partition("#")  # pylint: disable=clean-arch-demeter
+    label = hash_mark + number if hash_mark else str(row.get("item") or "session")
+    detail = str(row.get("item") or "")
+    text = f"{row.get('next_step') or ''}  {detail}".strip() if ref else str(row.get("next_step") or "")
+    return {"ref": ref or label, "label": label, "linkable": bool(ref), "project": str(row.get("project") or ""),
+            "text": text, "unblocks": 0}
 
-    ONE ITEM PER ROW, in manifest order, and no rank: X1 makes tier 1 a filter, not a score. `text` is
-    the gate's own sentence (what has to be decided), falling back to the pull request's title, then
-    the row's `why`. `unblocks` is the node's child count, i.e. how many declared rows order after it.
-    NO AGE: nothing in the document says when a row began waiting, and a made-up age would be the
-    "mock data" the directive warns about.
+
+def _waiting(doc: dict) -> tuple[list[dict], bool]:
+    """`(items, unlooked)`: the chooser's YOU rows, then every `yours` manifest decision not already among them.
+
+    TWO SOURCES, ONE ROUTER FOR EACH. The chooser rows arrive on `doc["waiting"]` already built by
+    `borg next`'s own functions (board directive, decided 2026-10-09), so link and next cannot disagree about
+    them. Manifest decisions are `▸ NEXT`'s `yours` rows, deduplicated by ref. No rank beyond that order.
+    NO AGE: nothing in the document says when a row began waiting; a made-up age would be mock data.
     """
     projects = doc.get("projects") or {}
-    items: list[dict] = []
+    items = [_chooser_item(row) for row in (doc.get("waiting") or {}).get("rows") or []]
+    seen = {item["ref"] for item in items}
     unlooked = False
     for manifest in (doc.get("grid") or {}).get("manifests") or []:
         if (manifest.get("ready") or {}).get("state") == grid.STATE_READY_UNLOOKED:
@@ -1047,44 +1060,51 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
         nodes = manifest.get("nodes") or {}
         project = _manifest_project(manifest, projects)
         for ref, gate, group in _ready_rows(manifest):
-            if group != _GROUP_YOURS:
+            if group != _GROUP_YOURS or ref in seen:
                 continue
             node = nodes.get(ref) or {}
             text = gate.get("blocked_by") or node.get("title") or node.get("why") or ref
-            items.append({"ref": ref, "project": project, "text": text, "unblocks": len(node.get("children") or [])})
+            items.append(
+                {"ref": ref, "label": ref, "linkable": True, "project": project, "text": text,
+                 "unblocks": len(node.get("children") or [])}
+            )
     return items, unlooked
 
 
 def _waiting_line(item: dict, ref_w: int, proj_w: int) -> str:
-    """One waiting item on one line: marker, linked ref, project, the sentence, what it unblocks."""
+    """One waiting item on one line: marker, ref, project, the sentence, what it unblocks."""
     text = item["text"] if len(item["text"]) <= _WAITING_TEXT else item["text"][: _WAITING_TEXT - 1] + "…"
-    pad_ref = " " * (ref_w - len(item["ref"]))
-    unblocks = f"unblocks {item['unblocks']}" if item["unblocks"] else "–"
-    return (
-        f"  {YELLOW}▶{NC} {picture.link_ref(item['ref'], item['ref'])}{pad_ref}  "
-        f"{item['project']:<{proj_w}}  {text:<{_WAITING_TEXT}}  {DIM}{unblocks}{NC}\n"
-    )
+    text = text.rstrip()
+    pad_ref = " " * (ref_w - len(item["label"]))
+    shown_ref = picture.link_ref(item["ref"], item["label"]) if item["linkable"] else item["label"]
+    unblocks = f"  {DIM}unblocks {item['unblocks']}{NC}" if item["unblocks"] else ""
+    return f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['project']:<{proj_w}}  {text}{unblocks}\n"
 
 
 def _waiting_section(doc: dict) -> tuple[str, list[str]]:
-    """WAITING ON YOU: the ready rows only you can move, last on the page where the eye lands.
+    """WAITING ON YOU: what only you can move, last on the page where the eye lands.
 
     ALWAYS PRESENT, per the board directive's AC4: empty prints ONE line, `nothing waits on you`, not
     an absent section (that supersedes X9's "absent, not empty"). The one distinction kept is the
     three-state NEXT already makes: when no manifest was resolved the page does not KNOW that nothing
-    waits, and saying so would be false, so it says nobody looked.
+    waits, and saying so would be false, so it says nobody looked. The chooser's hidden-count lines
+    (`+N more decisions`, `+N agent tasks`, `+N stale drafts`) follow the items verbatim.
     """
     items, unlooked = _waiting(doc)
+    waiting = doc.get("waiting") or {}
+    tail = [f"  {DIM}{line}{NC}\n" for line in waiting.get("hidden_lines") or []]
+    if waiting.get("degraded"):
+        tail.append(_placeholder(f"rows degraded: {waiting['degraded']}"))
     if not items:
         if unlooked:
-            return "nobody looked", [_placeholder("no state on this page was resolved; run without --local.")]
-        return "", [_placeholder("nothing waits on you")]
+            return "nobody looked", [_placeholder("no state on this page was resolved; run without --local."), *tail]
+        return "", [_placeholder("nothing waits on you"), *tail]
     note = _plural(len(items), "item", "items")
     if unlooked:
         note += " — and some refs nobody looked up"
-    ref_w = max(len(item["ref"]) for item in items)
+    ref_w = max(len(item["label"]) for item in items)
     proj_w = max(len(item["project"]) for item in items)
-    return note, [_waiting_line(item, ref_w, proj_w) for item in items]
+    return note, [*(_waiting_line(item, ref_w, proj_w) for item in items), *tail]
 
 
 def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:

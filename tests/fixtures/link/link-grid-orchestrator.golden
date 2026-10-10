@@ -185,6 +185,11 @@
   [2m— fetch: 1 of 13 declared ref(s) did not resolve (deleted, renamed, or not visible) -- they fall back to what the manifest declares[0m
   [2m— 1 of 13 declared refs unresolved — nobody looked[0m
 
-[1m▸ WAITING ON YOU[0m  [2m1 item[0m
-  [1;33m▶[0m ]8;;https://github.com/acme/warehouse/issues/64\acme/warehouse#64]8;;\  warehouse  Kelly must sign off on the maintenance window         [2munblocks 1[0m
+[1m▸ WAITING ON YOU[0m  [2m5 items[0m
+  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/420\#420]8;;\     platform   merge #420  Status: normalise…
+  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/431\#431]8;;\     platform   merge #431  enforce scopes on…
+  [1;33m▶[0m session  atlas      reply to session
+  [1;33m▶[0m session  warehouse  reply to session
+  [1;33m▶[0m ]8;;https://github.com/acme/warehouse/issues/64\#64]8;;\      warehouse  merge #64  us-west region cu…
+  [2m+2 more decisions[0m
 
