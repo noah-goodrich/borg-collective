@@ -103,6 +103,9 @@ _COL_PROJECT = 20
 _COL_SRC = 4
 _COL_STATUS = 12
 _COL_LAST_ACTIVE = 12
+# The three routing columns (yours / mine / unsure), each as wide as its header.
+_COL_ROUTE = (5, 4, 6)
+_ROUTE_GROUPS = ("yours", "mine", "unsure")
 
 # The deep dive's label column (borg.zsh:440-445): a 2-space indent PLUS a 14-wide label field, so
 # every value starts at column 16 measured from the start of the line. col=14 is the padding target
@@ -125,6 +128,7 @@ _JQ_ABSENT_STATUS = "unknown"
 # its `{YELLOW}▸{NC}`. Both sentences are otherwise verbatim; every assertion on them anywhere in
 # this tree is a substring test, which is why that change is free.
 SECTION_MARK = "▸ "
+
 
 # `summary` ARRIVES ALREADY FLAT. `core.flatten_summary` is applied once at document assembly
 # (`core.assemble`'s projects map), so no renderer here defends itself and a new consumer inherits
@@ -355,8 +359,24 @@ def _board_width(order: list[str], projects: dict) -> int:
     return max([_COL_PROJECT, *(len(_board_display(name, projects.get(name) or {})) for name in order)])
 
 
+def _route_cells(counts: dict[str, int] | None) -> str:
+    """The yours / mine / unsure cells for one board row: the count, or an en dash when there is none.
+
+    A project with no routed `▸ NEXT` rows has `counts` of None, and a bucket of zero prints the same
+    dash, so "nothing in this bucket" has one spelling.
+    """
+    return " ".join(
+        f"{(counts or {}).get(group) or '–':>{width}}" for group, width in zip(_ROUTE_GROUPS, _COL_ROUTE)
+    )
+
+
 def _overview_row(
-    name: str, entry: dict, cortex_by_project: dict[str, str], mark: str = "", width: int = _COL_PROJECT
+    name: str,
+    entry: dict,
+    cortex_by_project: dict[str, str],
+    mark: str = "",
+    width: int = _COL_PROJECT,
+    counts: dict[str, int] | None = None,
 ) -> str:
     """One board row, plus its cortex pause continuation when the project has a pending wake.
 
@@ -384,7 +404,7 @@ def _overview_row(
     line = (
         f"{pin_mark}{display:<{width}} {_src_badge(source):<{_COL_SRC}} "
         f"{_status_color(status)}{status_display:<{_COL_STATUS}}{NC} "
-        f"{last_activity:<{_COL_LAST_ACTIVE}} {summary_short}{mark}\n"
+        f"{last_activity:<{_COL_LAST_ACTIVE}} {_route_cells(counts)} {summary_short}{mark}\n"
     )
     countdown = cortex_by_project.get(name)
     if countdown:
@@ -601,14 +621,17 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     width = _board_width(order, projects)
     lines = [
         f"{BOLD} {'PROJECT':<{width}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
-        f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} SUMMARY{NC}\n",
+        f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} "
+        + " ".join(f"{group.upper():>{w}}" for group, w in zip(_ROUTE_GROUPS, _COL_ROUTE))
+        + f" SUMMARY{NC}\n",
         ("─" * 90) + "\n",
     ]
     countdowns = _cortex_countdowns(doc)
+    routed = _routing_counts(doc)
     scoped = _scoped_name(doc)
     for name in order:
         mark = f" {CYAN}◀{NC}" if name == scoped else ""
-        lines.append(_overview_row(name, projects[name], countdowns, mark, width))
+        lines.append(_overview_row(name, projects[name], countdowns, mark, width, routed.get(name)))
     return note, lines
 
 
@@ -850,6 +873,32 @@ def _next_row(node: dict, gate: dict) -> str:
     return line + "\n"
 
 
+def _ready_rows(manifest: dict) -> list[tuple[str, dict, str]]:
+    """`(ref, gate, group)` for one manifest's READY set, in display order. The ONE routing walk:
+    NEXT, the WAITING ON YOU block and the board's per-project counts all read it, so the three can
+    never route the same row to different owners.
+
+    Returns nothing for an `unlooked` manifest; a caller that must tell "unlooked" from "empty" reads
+    `manifest["ready"]["state"]` itself, as `_next_tally` and `_waiting` do.
+    """
+    nodes = manifest.get("nodes") or {}
+    ready = manifest.get("ready") or {}
+    if ready.get("state") == grid.STATE_READY_UNLOOKED:
+        return []
+    gates = {gate["ref"]: gate for gate in manifest.get("gates") or []}
+    # `rows[].next` ORDERS WITHIN A GROUP; IT DOES NOT GRANT MEMBERSHIP. AC4 names it as an input
+    # alongside `gate.kind` without saying what it does, and the two readings are not close: as
+    # an override it would put a row the author flagged into NEXT even when a parent has not
+    # merged, which is a hand-typed field beating a resolved one -- the exact inversion AC4's
+    # precondition exists to prevent, arriving through a different door. As emphasis it lets the
+    # author say "start with this one" among rows that are ALREADY ready, which costs nothing if
+    # the flag is stale. Sorted stably, so rows with no flag keep declaration order.
+    # KEY BUILT EAGERLY, NOT AS A CLOSURE (pylint W0640). The tuple sorts False before True, and
+    # `ready_set` already returned its refs sorted, so alphabetical order survives inside each half.
+    refs = [ref for _, ref in sorted((not (nodes.get(ref) or {}).get("next"), ref) for ref in ready.get("refs") or [])]
+    return [(ref, gates.get(ref) or {}, _route((gates.get(ref) or {}).get("kind") or "")) for ref in refs]
+
+
 def _next_tally(manifests: list[dict]) -> tuple[dict[str, list[str]], list[str], int, bool]:
     """One walk over every manifest: `(grouped rows, unrecognized kinds, ready count, unlooked)`.
 
@@ -873,34 +922,13 @@ def _next_tally(manifests: list[dict]) -> tuple[dict[str, list[str]], list[str],
     unlooked = False
 
     for manifest in manifests:
-        nodes = manifest.get("nodes") or {}
-        ready = manifest.get("ready") or {}
-        if ready.get("state") == grid.STATE_READY_UNLOOKED:
+        if (manifest.get("ready") or {}).get("state") == grid.STATE_READY_UNLOOKED:
             unlooked = True
             continue
-        gates = {gate["ref"]: gate for gate in manifest.get("gates") or []}
-        # `rows[].next` ORDERS WITHIN A GROUP; IT DOES NOT GRANT MEMBERSHIP. AC4 names it as an input
-        # alongside `gate.kind` without saying what it does, and the two readings are not close: as
-        # an override it would put a row the author flagged into NEXT even when a parent has not
-        # merged, which is a hand-typed field beating a resolved one -- the exact inversion AC4's
-        # precondition exists to prevent, arriving through a different door. As emphasis it lets the
-        # author say "start with this one" among rows that are ALREADY ready, which costs nothing if
-        # the flag is stale. Sorted stably, so rows with no flag keep declaration order.
-        # KEY BUILT EAGERLY, NOT AS A CLOSURE. `key=lambda ref: ... nodes.get(ref) ...` captures a
-        # loop variable (pylint W0640) -- harmless here because the sort is consumed inside the same
-        # iteration, but the local pylint rated it 10.00/10 while CI's flagged it, so the version that
-        # is right is the one that fails the build. The tuple sorts False before True, and
-        # `ready_set` already returned its refs sorted, so alphabetical order survives inside each
-        # half.
-        refs = [
-            ref for _, ref in sorted((not (nodes.get(ref) or {}).get("next"), ref) for ref in ready.get("refs") or [])
-        ]
-        for ref in refs:
-            gate = gates.get(ref) or {}
-            kind = gate.get("kind") or ""
-            group = _route(kind)
+        nodes = manifest.get("nodes") or {}
+        for ref, gate, group in _ready_rows(manifest):
             if group == _GROUP_UNSURE:
-                unsure_kinds.append(kind)
+                unsure_kinds.append(gate.get("kind") or "")
             grouped[group].append(_next_row(nodes.get(ref) or {}, gate))
             ready_total += 1
     return grouped, unsure_kinds, ready_total, unlooked
@@ -954,6 +982,105 @@ def _next_section(doc: dict) -> tuple[str, list[str]]:
         lines.append(f"  {BOLD}{group}{NC} {DIM}— {heading}{NC}\n")
         lines.extend(rows)
     return note, lines
+
+
+def _manifest_project(manifest: dict, projects: dict) -> str:
+    """The registered project whose directory CONTAINS this manifest's file, or "" when none does.
+
+    The longest matching path wins, so a project registered inside another still owns its own
+    manifests. Plain string prefixes on purpose: this module is pure, and the registry's `path` and a
+    manifest's `path` are both absolute strings the discovery step already produced from that same
+    registry. A manifest nobody contains has no project, and is simply absent from the counts.
+    """
+    where = str(manifest.get("path") or "")
+    best = ""
+    best_len = -1
+    for name, entry in projects.items():
+        root = str((entry or {}).get("path") or "").rstrip("/")
+        if root and where.startswith(root + "/") and len(root) > best_len:
+            best, best_len = name, len(root)
+    return best
+
+
+def _routing_counts(doc: dict) -> dict[str, dict[str, int]]:
+    """`{project: {yours, mine, unsure}}`: how many of that project's `▸ NEXT` rows route to each owner.
+
+    A project with no routed rows is ABSENT, and the board prints dashes for it. Counts are the READY
+    set routed by `_ready_rows`, i.e. exactly the rows `▸ NEXT` prints, so the board and NEXT cannot
+    disagree about a number.
+    """
+    projects = doc.get("projects") or {}
+    counts: dict[str, dict[str, int]] = {}
+    for manifest in (doc.get("grid") or {}).get("manifests") or []:
+        name = _manifest_project(manifest, projects)
+        if not name:
+            continue
+        for _, _, group in _ready_rows(manifest):
+            bucket = counts.setdefault(name, {_GROUP_YOURS: 0, _GROUP_MINE: 0, _GROUP_UNSURE: 0})
+            bucket[group] += 1
+    return counts
+
+
+_WAITING_TEXT = 52
+
+
+def _waiting(doc: dict) -> tuple[list[dict], bool]:
+    """`(items, unlooked)`: every ready row routed to `yours`, and whether any manifest was unlooked.
+
+    ONE ITEM PER ROW, in manifest order, and no rank: X1 makes tier 1 a filter, not a score. `text` is
+    the gate's own sentence (what has to be decided), falling back to the pull request's title, then
+    the row's `why`. `unblocks` is the node's child count, i.e. how many declared rows order after it.
+    NO AGE: nothing in the document says when a row began waiting, and a made-up age would be the
+    "mock data" the directive warns about.
+    """
+    projects = doc.get("projects") or {}
+    items: list[dict] = []
+    unlooked = False
+    for manifest in (doc.get("grid") or {}).get("manifests") or []:
+        if (manifest.get("ready") or {}).get("state") == grid.STATE_READY_UNLOOKED:
+            unlooked = True
+            continue
+        nodes = manifest.get("nodes") or {}
+        project = _manifest_project(manifest, projects)
+        for ref, gate, group in _ready_rows(manifest):
+            if group != _GROUP_YOURS:
+                continue
+            node = nodes.get(ref) or {}
+            text = gate.get("blocked_by") or node.get("title") or node.get("why") or ref
+            items.append({"ref": ref, "project": project, "text": text, "unblocks": len(node.get("children") or [])})
+    return items, unlooked
+
+
+def _waiting_line(item: dict, ref_w: int, proj_w: int) -> str:
+    """One waiting item on one line: marker, linked ref, project, the sentence, what it unblocks."""
+    text = item["text"] if len(item["text"]) <= _WAITING_TEXT else item["text"][: _WAITING_TEXT - 1] + "…"
+    pad_ref = " " * (ref_w - len(item["ref"]))
+    unblocks = f"unblocks {item['unblocks']}" if item["unblocks"] else "–"
+    return (
+        f"  {YELLOW}▶{NC} {picture.link_ref(item['ref'], item['ref'])}{pad_ref}  "
+        f"{item['project']:<{proj_w}}  {text:<{_WAITING_TEXT}}  {DIM}{unblocks}{NC}\n"
+    )
+
+
+def _waiting_section(doc: dict) -> tuple[str, list[str]]:
+    """WAITING ON YOU: the ready rows only you can move, last on the page where the eye lands.
+
+    ALWAYS PRESENT, per the board directive's AC4: empty prints ONE line, `nothing waits on you`, not
+    an absent section (that supersedes X9's "absent, not empty"). The one distinction kept is the
+    three-state NEXT already makes: when no manifest was resolved the page does not KNOW that nothing
+    waits, and saying so would be false, so it says nobody looked.
+    """
+    items, unlooked = _waiting(doc)
+    if not items:
+        if unlooked:
+            return "nobody looked", [_placeholder("no state on this page was resolved; run without --local.")]
+        return "", [_placeholder("nothing waits on you")]
+    note = _plural(len(items), "item", "items")
+    if unlooked:
+        note += " — and some refs nobody looked up"
+    ref_w = max(len(item["ref"]) for item in items)
+    proj_w = max(len(item["project"]) for item in items)
+    return note, [_waiting_line(item, ref_w, proj_w) for item in items]
 
 
 def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:
@@ -1094,6 +1221,9 @@ SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
     # going red is a reviewable event rather than a diff nobody sees.
     ("NEXT", _next_section),
     ("SIGNALS", _signals_section),
+    # LAST ON PURPOSE: link-unification L3 puts the answer in the final lines before the prompt, and
+    # where the board mock and L3 disagree about position, L3 wins. Always present (board AC4).
+    ("WAITING ON YOU", _waiting_section),
 )
 
 
