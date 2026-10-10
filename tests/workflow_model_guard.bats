@@ -6,6 +6,8 @@
 load test_helper/setup
 
 HOOK="${BATS_TEST_DIRNAME}/../hooks/borg-workflow-model-guard.sh"
+BASH_BIN=bash
+[ -x /bin/bash ] && BASH_BIN=/bin/bash
 BUILD_PLUGIN="${BATS_TEST_DIRNAME}/../scripts/build-plugin.sh"
 
 setup() {
@@ -16,7 +18,7 @@ setup() {
 _run_script() {
     local json
     json=$(jq -nc --arg s "$1" '{tool_name:"Workflow", tool_input:{script:$s}}')
-    run bash -c "printf '%s' \"\$1\" | '$HOOK' 2>&1" _ "$json"
+    run bash -c "printf '%s' \"\$1\" | '$BASH_BIN' '$HOOK' 2>&1" _ "$json"
 }
 
 @test "pinned via agentType is allowed" {
@@ -74,33 +76,33 @@ _run_script() {
     printf "await agent('p', { label: 'file-stage' })\n" > "${BATS_TEST_TMPDIR}/wf.js"
     local json
     json=$(jq -nc --arg p "${BATS_TEST_TMPDIR}/wf.js" '{tool_name:"Workflow", tool_input:{scriptPath:$p}}')
-    run bash -c "printf '%s' \"\$1\" | '$HOOK' 2>&1" _ "$json"
+    run bash -c "printf '%s' \"\$1\" | '$BASH_BIN' '$HOOK' 2>&1" _ "$json"
     [ "$status" -eq 2 ]
     [[ "$output" == *"file-stage"* ]] || false
 }
 
 @test "unreadable scriptPath fails open" {
-    run bash -c "printf '%s' '{\"tool_name\":\"Workflow\",\"tool_input\":{\"scriptPath\":\"/nonexistent/wf.js\"}}' | '$HOOK'"
+    run bash -c "printf '%s' '{\"tool_name\":\"Workflow\",\"tool_input\":{\"scriptPath\":\"/nonexistent/wf.js\"}}' | '$BASH_BIN' '$HOOK'"
     [ "$status" -eq 0 ]
 }
 
 @test "saved workflow by name is allowed without inspection" {
-    run bash -c "printf '%s' '{\"tool_name\":\"Workflow\",\"tool_input\":{\"name\":\"my-flow\",\"script\":\"agent(1)\"}}' | '$HOOK'"
+    run bash -c "printf '%s' '{\"tool_name\":\"Workflow\",\"tool_input\":{\"name\":\"my-flow\",\"script\":\"agent(1)\"}}' | '$BASH_BIN' '$HOOK'"
     [ "$status" -eq 0 ]
 }
 
 @test "malformed JSON fails open" {
-    run bash -c "printf '%s' '{not json' | '$HOOK'"
+    run bash -c "printf '%s' '{not json' | '$BASH_BIN' '$HOOK'"
     [ "$status" -eq 0 ]
 }
 
 @test "empty stdin fails open" {
-    run bash -c "printf '' | '$HOOK'"
+    run bash -c "printf '' | '$BASH_BIN' '$HOOK'"
     [ "$status" -eq 0 ]
 }
 
 @test "non-Workflow tool is ignored" {
-    run bash -c "printf '%s' '{\"tool_name\":\"Agent\",\"tool_input\":{\"script\":\"agent(1)\"}}' | '$HOOK'"
+    run bash -c "printf '%s' '{\"tool_name\":\"Agent\",\"tool_input\":{\"script\":\"agent(1)\"}}' | '$BASH_BIN' '$HOOK'"
     [ "$status" -eq 0 ]
 }
 

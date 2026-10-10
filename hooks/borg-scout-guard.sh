@@ -81,7 +81,17 @@ if len(segs) == 2:
             deny("grep file-pattern flag")
 
 a = segs[0]
-bad_common = ("--output", "--ext-diff", "--open-files-in-pager", "--textconv", "--web", "--watch")
+bad_common = ("--output", "--ext-diff", "--open-files-in-pager", "--textconv", "--web", "--watch", "--no-index")
+
+def is_bad_long(r):
+    # git and gh accept any unambiguous ABBREVIATION of a long option, so deny a token when it is a
+    # prefix of a denylisted name (--outpu=x, --ext-di) as well as when it extends one (--output-file).
+    if r.startswith(bad_common):
+        return True
+    if r.startswith("--"):
+        name = r.split("=", 1)[0]
+        return len(name) > 2 and any(b.startswith(name) for b in bad_common)
+    return False
 
 def check_git(args):
     i = 0
@@ -92,7 +102,7 @@ def check_git(args):
     sub, rest = args[i], args[i + 1:]
     if sub.startswith("-"): deny("git global option %s" % sub)
     for r in rest:
-        if r.startswith(bad_common) or re.match(r"^-O", r) and sub == "grep":
+        if is_bad_long(r) or re.match(r"^-O", r) and sub == "grep":
             deny("flag %s" % r)
     if sub in ("log", "show", "diff", "status", "blame", "grep", "ls-files", "rev-parse"):
         return
@@ -128,7 +138,7 @@ def check_gh(args):
     g, sub = args[0], args[1]
     rest = args[2:]
     for r in rest:
-        if r.startswith(bad_common) or r in ("-w",):
+        if is_bad_long(r) or r in ("-w",):
             deny("flag %s" % r)
     allowed = {"pr": ("view", "list", "diff", "checks"), "issue": ("view", "list"),
                "run": ("view", "list"), "repo": ("view",)}
