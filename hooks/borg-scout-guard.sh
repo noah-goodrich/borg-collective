@@ -72,12 +72,25 @@ for t in toks:
 if len(segs) > 2 or any(not s for s in segs):
     deny("pipeline shape")
 
+def short_flags(tok, valued=""):
+    # Decompose a short-option cluster (-abc, or -xVALUE attached) into its flag characters. A character in
+    # `valued` takes the REST of the token as its value, so the walk stops there (-efoo is pattern "foo", not
+    # flag f). Long options and non-options yield nothing.
+    if len(tok) < 2 or tok[0] != "-" or tok[1] == "-":
+        return ""
+    out = ""
+    for ch in tok[1:]:
+        out += ch
+        if ch in valued:
+            break
+    return out
+
 if len(segs) == 2:
     pipe = segs[1]
     if pipe[0] not in ("head", "wc", "grep"):
         deny("pipe target %r not head/wc/grep" % pipe[0])
     for a in pipe[1:]:
-        if a.startswith(("-f", "--file", "--exclude-from")) and pipe[0] == "grep":
+        if pipe[0] == "grep" and (a.startswith(("--file", "--exclude-from")) or "f" in short_flags(a, "emABCDd")):
             deny("grep file-pattern flag")
 
 a = segs[0]
@@ -101,8 +114,12 @@ def check_git(args):
     if i >= len(args): deny("git with no subcommand")
     sub, rest = args[i], args[i + 1:]
     if sub.startswith("-"): deny("git global option %s" % sub)
+    # Short flags that open a pager/editor (-O: runs an arbitrary command) or write a file (-o), per subcommand.
+    # Checked on every character of a cluster (-nOtouch, -iOsh, -On), not just the token start. Deliberately NOT
+    # value-aware: a false deny on an attached pickaxe value is cheap, a false allow is command execution.
+    danger = {"grep": "O", "diff": "Oo", "log": "Oo", "show": "Oo", "blame": "o"}.get(sub, "")
     for r in rest:
-        if is_bad_long(r) or re.match(r"^-O", r) and sub == "grep":
+        if is_bad_long(r) or any(c in danger for c in short_flags(r)):
             deny("flag %s" % r)
     if sub in ("log", "show", "diff", "status", "blame", "grep", "ls-files", "rev-parse"):
         return
@@ -138,7 +155,9 @@ def check_gh(args):
     g, sub = args[0], args[1]
     rest = args[2:]
     for r in rest:
-        if is_bad_long(r) or r in ("-w",):
+        # -w is --web (opens a browser) / --watch; deny it in any cluster (-cw). The walk stops at value-taking
+        # flags so -Rowner/w does not false-deny. gh api has its own (stricter) cluster walk below.
+        if is_bad_long(r) or ("w" in short_flags(r, "RLsSlaAqtBHbeuj") and g != "api"):
             deny("flag %s" % r)
     allowed = {"pr": ("view", "list", "diff", "checks"), "issue": ("view", "list"),
                "run": ("view", "list"), "repo": ("view",)}
@@ -153,11 +172,20 @@ def check_gh(args):
             if x in ("-X", "--method"):
                 if i + 1 >= len(endpoint_args) or endpoint_args[i + 1].upper() != "GET": deny("gh api non-GET method")
                 i += 2; continue
-            if re.match(r"^-X.", x) or x.startswith("--method="):
-                if x.split("=", 1)[-1].lstrip("-X").upper() != "GET": deny("gh api non-GET method")
-            if x in ("-f", "-F", "--field", "--raw-field", "--input") or re.match(r"^-[fF].", x) \
-                    or x.startswith(("--field=", "--raw-field=", "--input=")):
+            if x.startswith("--method="):
+                if x.split("=", 1)[-1].upper() != "GET": deny("gh api non-GET method")
+            if x in ("--field", "--raw-field", "--input") or x.startswith(("--field=", "--raw-field=", "--input=")):
                 deny("gh api request body flag")
+            if x[:1] == "-" and x[1:2] not in ("-", ""):
+                # Short cluster: -f/-F send a body (deny anywhere), -X takes the rest of the token as the method
+                # (-iXPOST), else the NEXT token. H/q/t/p take a value and end the walk.
+                for k, ch in enumerate(x[1:], 1):
+                    if ch in "fF": deny("gh api request body flag")
+                    if ch == "X":
+                        val = x[k + 1:] or (endpoint_args[i + 1] if i + 1 < len(endpoint_args) else "")
+                        if val.upper() != "GET": deny("gh api non-GET method")
+                        break
+                    if ch in "Hqtp": break
             if "graphql" in x.lower(): deny("gh api graphql")
             i += 1
         return
