@@ -15,6 +15,7 @@ import re
 from typing import Any
 
 from borg_core.link import core as link_core
+from borg_core import timefmt
 from borg_core.link import grid, picture, render
 from borg_core.planstate import core as planstate
 
@@ -64,6 +65,7 @@ def rank(projects: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
                 "last_activity": _or(entry.get("last_activity"), ""),
                 "pinned": _or(entry.get("pinned"), False),
                 "path": _or(entry.get("path"), "null"),
+                "repo": _or(entry.get("repo"), ""),
             }
         )
     items.sort(key=lambda item: (-item["score"], item["last_activity"]))
@@ -258,7 +260,12 @@ def _quiet_line(quiet: list[str], width: int) -> str:
 
 
 def render_chooser(
-    rows: list[dict[str, Any]], *, suggestion: str | None, width: int = 59, quiet: list[str] | None = None
+    rows: list[dict[str, Any]],
+    *,
+    suggestion: str | None,
+    width: int = 59,
+    quiet: list[str] | None = None,
+    hidden: dict[str, int] | None = None,
 ) -> list[str]:
     """Plain-text screen 2: header, rule, column header, one line per item row, optional `+N quiet` line, rule,
     optional suggestion, key hint. Every line is at most `width` visible columns, cut with an ellipsis."""
@@ -267,6 +274,7 @@ def render_chooser(
     for row in rows:
         label = f"{row['project']} · {row['item']}" if row.get("item") else row["project"]
         lines.append(_line(str(row["n"]), label, row.get("next_step", ""), row.get("owner", ""), row.get("ready", "")))
+    lines.extend(hidden_lines(hidden or {}))
     if quiet:
         lines.append(_quiet_line(quiet, width))
     lines.append(rule)
@@ -297,7 +305,7 @@ def short_title(title: str, limit: int = ITEM_MAX) -> str:
 
 
 def _criterion_name(text: str) -> str:
-    """"**AC5 — The sweep sees every open PR.** ..." -> "AC5 The sweep sees every…"."""
+    """ "**AC5 — The sweep sees every open PR.** ..." -> "AC5 The sweep sees every…"."""
     found = _AC_HEAD.findall(text.strip())
     if not found:
         return _truncate(text.replace("*", "").strip(), STEP_MAX)
@@ -326,8 +334,15 @@ def _pr_row(item: dict[str, Any]) -> dict[str, Any]:
         step, owner, ready = f"address review #{number}", "AGENT", "○"
     else:
         step, owner, ready = f"merge #{number}", "YOU", "✔ now"
-    return {"item": short_title(str(item.get("title") or "")), "next_step": step, "owner": owner, "ready": ready,
-            "ref": item.get("ref")}
+    return {
+        "item": short_title(str(item.get("title") or "")),
+        "next_step": step,
+        "owner": owner,
+        "ready": ready,
+        "ref": item.get("ref"),
+        "draft": bool(item.get("draft")),
+        "changed": str(item.get("changed") or ""),
+    }
 
 
 def _plan_rows(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -370,8 +385,14 @@ def work_items(
         mine: list[dict[str, Any]] = []
         if entry.get("status") == "waiting":
             mine.append(
-                {"item": "session", "next_step": "reply to session", "owner": "YOU", "ready": f"✔ {age}",
-                 "ref": None, "waiting_reason": entry.get("waiting_reason") or ""}
+                {
+                    "item": "session",
+                    "next_step": "reply to session",
+                    "owner": "YOU",
+                    "ready": f"✔ {age}",
+                    "ref": None,
+                    "waiting_reason": entry.get("waiting_reason") or "",
+                }
             )
         prs = [it for it in recon_items_by_project.get(project) or [] if it.get("state") == "open"]
         pr_rows = sorted(
@@ -386,7 +407,69 @@ def work_items(
         if not mine:
             quiet.append(project)
         rows.extend({"project": project, **row, "age": age} for row in mine)
-    return rows, quiet
+    return _dedupe_repo_groups(rows, ranked, now_epoch), quiet
+
+
+STALE_DRAFT_DAYS = 30
+SHOWN_MAX = 5
+
+
+def _dedupe_repo_groups(
+    rows: list[dict[str, Any]], ranked: list[dict[str, Any]], now_epoch: int
+) -> list[dict[str, Any]]:
+    """Drop rows a repo-sharing sibling project already carries, and flag stale drafts.
+
+    Projects whose registry `repo` (the git common dir) is equal are views of ONE repo, so the same PR, plan or
+    checkpoint step shows up under each. The best-ranked project keeps it. Session rows are never merged (each
+    project has its own session), and a null / missing `repo` is a group of one. A draft PR whose last activity
+    is older than `STALE_DRAFT_DAYS` days gets `stale: True`; with `now_epoch` 0 (no clock) nothing is stale.
+    """
+    repo_of = {entry["name"]: str(entry.get("repo") or "") for entry in ranked}
+    cutoff = timefmt.epoch_to_iso(now_epoch - STALE_DRAFT_DAYS * 86400)[:19] if now_epoch else ""
+    seen: set[tuple[str, ...]] = set()
+    kept: list[dict[str, Any]] = []
+    for row in rows:
+        repo = repo_of.get(row["project"], "")
+        if repo and row.get("item") != "session":
+            identity = row.get("ref") or (row.get("item"), row.get("next_step"))
+            key = (repo, str(identity))
+            if key in seen:
+                continue
+            seen.add(key)
+        changed = timefmt.iso_in_prose_to_utc(str(row.get("changed") or ""))[:19]
+        stale = bool(cutoff and row.get("draft") and changed and changed < cutoff)
+        kept.append({**row, "stale": stale})
+    return kept
+
+
+def cap_rows(
+    work: list[dict[str, Any]], show_all: bool = False, limit: int = SHOWN_MAX
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """`(shown, hidden)`: at most `limit` YOU rows in existing order; everything else is only counted.
+
+    `hidden` is `{agent, stale, overflow}`: stale drafts first (whoever owns them), then every other non-YOU row
+    as `agent`, then YOU rows beyond `limit` as `overflow`. `show_all` returns every row and zero counts.
+    """
+    if show_all:
+        return list(work), {"agent": 0, "stale": 0, "overflow": 0}
+    hidden = {"agent": 0, "stale": 0, "overflow": 0}
+    shown: list[dict[str, Any]] = []
+    for row in work:
+        if row.get("stale"):
+            hidden["stale"] += 1
+        elif row.get("owner") != "YOU":
+            hidden["agent"] += 1
+        elif len(shown) < limit:
+            shown.append(row)
+        else:
+            hidden["overflow"] += 1
+    return shown, hidden
+
+
+def hidden_lines(hidden: dict[str, int]) -> list[str]:
+    """The summary lines for the counts `cap_rows` hid, in a fixed order, omitting zeros."""
+    labels = (("overflow", "more decisions"), ("agent", "agent tasks"), ("stale", "stale drafts"))
+    return [f"+{hidden[key]} {text}" for key, text in labels if hidden.get(key)]
 
 
 def numbered_rows(work: list[dict[str, Any]], ranked: list[dict[str, Any]]) -> list[dict[str, Any]]:
