@@ -9,6 +9,7 @@
 # - Plan-mode nudge (if no PROJECT_PLAN.md)
 # - Uncommitted-changes reminder from previous session
 # - Latest checkpoint from .borg/checkpoints/ (written by /borg-link-up)
+# - Agent-routing card (both session modes; guide: docs/agent-routing.md)
 #
 # Registered as a SessionStart hook in ~/.claude/settings.json
 
@@ -42,6 +43,19 @@ CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 source "${HOME}/.claude/lib/borg-hooks.sh"
 
 MODE=$(_borg_session_mode "$CWD")
+
+# Agent-routing card, injected into BOTH session modes (the Queen launches the Workflow fan-outs).
+# Full guide: docs/agent-routing.md. Enforced for Workflow by hooks/borg-workflow-model-guard.sh.
+ROUTING_CARD="AGENT ROUTING — the expensive tier is opt-in; unpinned subagents inherit the session model AND effort.
+  scout (locate/search, read-only), grunt (fully-specified edit/run)  -> Haiku
+  nanoprobe (one task, judgment), researcher (web, one track)         -> Sonnet
+  reviewer (blind adversarial review)                                 -> Sonnet, high effort
+  general-purpose / no pin                                            -> Opus, LAST RESORT
+Agent tool: pass subagent_type (e.g. borg-collective:borg-scout).
+Workflow: EVERY agent() sets agentType (namespaced, borg-collective:borg-scout) OR model + effort.
+  CLAUDE_CODE_SUBAGENT_MODEL does not reach agent(). An unpinned call is denied by the guard hook;
+  /* inherit-ok */ inside the call means inheriting is intentional.
+Full guide: docs/agent-routing.md in the borg-collective repo."
 
 # ── Orchestrator-mode branch ─────────────────────────────────────────────────
 # When CWD is the workspace root (default $HOME/dev), render a scannable
@@ -141,6 +155,7 @@ if [[ "$MODE" == "orchestrator" ]]; then
     else
         OVERVIEW="Orchestrator session — registry not initialized. Run 'borg setup'."
     fi
+    OVERVIEW+=$'\n\n'"$ROUTING_CARD"
 
     jq -n --arg ctx "$OVERVIEW" '{
         "hookSpecificOutput": {
@@ -381,6 +396,8 @@ the hex is session-scoped, so it changes whenever she restarts — ~/dev has bee
 
 Call her the Queen in prose. To message her, take her CURRENT name from ListAgents and pass it
 verbatim to SendMessage. Never hardcode an address — not here, not in a checkpoint, not in a skill.")
+
+CONTEXT_PARTS+=("$ROUTING_CARD")
 
 # Latest checkpoint for this project — written by /borg-link-up
 CHECKPOINT_FILE=""
