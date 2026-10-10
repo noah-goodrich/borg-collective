@@ -108,6 +108,17 @@ network round trip and then rendering the same deep dive as before it existed. R
   report it as unrouted rather than guessing, and name the kind. Do not invent a fourth rule, and do
   not treat `rows[].next` as membership: it is the author's emphasis for ordering among rows that are
   already ready, never a reason to include one that isn't.
+- **WAITING ON YOU is the board's last block, and you surface it too (inside Claude first).** It is
+  the `yours` rows of `▸ NEXT` and nothing else: for every manifest block with `.ready.state ==
+  "known"`, each ref in `.ready.refs` whose `gates[]` entry has `kind == "decision"` waits on the
+  user. Print it LAST, after everything else, one line per item: the ref, the project, the gate's
+  `blocked_by` sentence, and `unblocks N` where N is `len(.nodes[ref].children)`. The project is the
+  registered project whose `path` contains the manifest's `.path` (in a deep dive it is the focused
+  project). No age: the document carries none, so never invent one. **It is ALWAYS present**: when
+  every manifest is `known` and no ref routes to the user, print the single line `nothing waits on
+  you`; when a manifest is `unlooked` and nothing else qualified, say "nobody looked" instead, never
+  "nothing waits on you" (the same three-state rule as `.ready` above). No new JSON key and no
+  whitelist change: `.grid` already carries every input, and `DOCUMENT_VERSION` stays 2.
 
 **Why the jq.** The two pipes work differently. The overview pipe (`.directives |= (...)`) does not
 enumerate a field — it transforms one key in place, so anything the document gains later passes
@@ -208,6 +219,9 @@ Queued: <n> directives — <up to 5 titles>
 Shipped recently: <title> (<ship_date>)
 > <contradiction between the checkpoint's claims and the live status>
 ```
+
+Both skeletons END with the WAITING ON YOU block described above (see the `.ready` bullets). It is the
+last thing the user reads.
 
 Sort by `.order` and nothing else. If `.order` is empty and `total_projects` is 0, say "No
 projects registered — run `borg scan`." and stop. If `.order` is empty and `total_projects > 0`,

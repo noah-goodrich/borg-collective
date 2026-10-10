@@ -55,9 +55,9 @@
   body line 20
 
 [1m▸ REPOSITORIES[0m  [2mthe collective · 1 repository · 0 need attention[0m
-[1m PROJECT              SRC  STATUS       LAST ACTIVE  SUMMARY[0m
+[1m PROJECT              SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
- delta                [C]  [0;32mactive      [0m 3h ago       Delta keeps the deep dive deterministic. [0;36m◀[0m
+ delta                [C]  [0;32mactive      [0m 3h ago           –    –      – Delta keeps the deep dive deterministic. [0;36m◀[0m
 
 [1m▸ CHAINS[0m  [2m0 projects · 0 refs · 0 unresolved · not swept[0m
   [2m— this directory has no GitHub origin — nothing to scope a chain to.[0m
@@ -76,4 +76,7 @@
   [2m— grid: no owner/repo resolved for 'delta' (no git origin, or not a checkout) -- no grid scoped[0m
   [2m— sweep: no recon adapters found on <TMP>/no-adapters -- every state falls back to what the manifest declares[0m
   [2m— fetch: replayed from fixture <TMP>/no-fetch.json -- no gh ran[0m
+
+[1m▸ WAITING ON YOU[0m
+  [2m— nothing waits on you[0m
 
