@@ -131,12 +131,12 @@ def test_every_section_renders_its_header_in_both_contexts():
     """The invariant compares each context against the SECTIONS CONSTANT, never against the other
     context: a header diff between two renderings goes green if both drift together."""
     expected = [title for title, _ in render.SECTIONS if title]
-    # A9. EIGHT SECTIONS SINCE AC4. This list going red is the reviewable event AC2's directive chose
+    # A9. NINE SECTIONS SINCE THE BOARD (WAITING ON YOU, last: link-unification L3). EIGHT SINCE AC4. This list going red is the reviewable event AC2's directive chose
     # over reserving an always-empty slot for yours-vs-mine ahead of time -- "a section that renders
     # only a placeholder in every context for a whole release is the exact 'reads as broken' failure
     # Q10 exists to prevent". NEXT sits below SHIPPED so the page reads history-then-future, and
     # above SIGNALS so the honest "nobody looked" line is the last word on a `--local` render.
-    assert expected == ["IN FOCUS", "REPOSITORIES", "CHAINS", "QUEUED", "SHIPPED", "NEXT", "SIGNALS"]
+    assert expected == ["IN FOCUS", "REPOSITORIES", "CHAINS", "QUEUED", "SHIPPED", "NEXT", "SIGNALS", "WAITING ON YOU"]
     assert _headers(render.document(_doc())) == expected
     assert _headers(render.document(_repository_doc())) == expected
 
@@ -608,7 +608,11 @@ def test_the_last_word_on_a_local_page_is_that_nobody_looked():
         "unresolved": 3,
         "warnings": ['declared: 1 row(s) carry a word that is not a PR state ("review" x1) -- shown unresolved'],
     })
-    lines = [line for line in plain(render.document(doc)).split("\n") if line.strip()]
+    page = plain(render.document(doc))
+    # SIGNALS is no longer the last section (WAITING ON YOU lands last), so the last word is read OFF
+    # THE SIGNALS SECTION, which is what this test's docstring always claimed.
+    signals = page.split("▸ SIGNALS", 1)[1].split("▸ WAITING ON YOU", 1)[0]
+    lines = [line for line in signals.split("\n") if line.strip()]
     assert "declared refs unresolved — nobody looked" in lines[-1]
     assert any('"review" x1' in line for line in lines[:-1])
 
@@ -1518,3 +1522,83 @@ def test_the_router_covers_every_declared_gate_kind():
         "a gate kind the validator admits but the router does not route would fall to a default side"
     )
     assert render._route("review") == render._GROUP_UNSURE  # pylint: disable=protected-access
+
+
+# ── the board: WAITING ON YOU and the per-project routing counts ─────────────────────────────────
+
+
+def _gate(ref: str, kind: str, text: str) -> dict:
+    return {"ref": ref, "kind": kind, "blocked_by": text, "resolved_by": "", "blocked_by_ref": ""}
+
+
+def _waiting_body(doc: dict) -> list[str]:
+    """The lines between the WAITING ON YOU header and the next section header (or the end)."""
+    out, inside = [], False
+    for line in plain(render.document(doc)).split("\n"):
+        if line.startswith(f"{render.SECTION_MARK}WAITING ON YOU"):
+            inside = True
+            continue
+        if line.startswith(render.SECTION_MARK):
+            inside = False
+        if inside and line.strip():
+            out.append(line)
+    return out
+
+
+def test_waiting_on_you_is_always_present_and_says_so_when_empty():
+    """Board AC4. MUTATION: drop the entry from SECTIONS, or return [] from `_waiting_section`."""
+    page = plain(render.document(_doc()))
+    assert f"{render.SECTION_MARK}WAITING ON YOU" in page
+    assert _waiting_body(_doc()) == ["  — nothing waits on you"]
+
+
+def test_waiting_on_you_is_the_last_section():
+    """link-unification L3 wins over the mock's position: the answer lands at the bottom."""
+    assert render.SECTIONS[-1][0] == "WAITING ON YOU"
+
+
+def test_waiting_on_you_prints_one_line_per_yours_row_and_no_mine_rows():
+    """Board AC4 (populated). Only `yours` rows wait on the reader; `mine` and ungated rows never do."""
+    doc = _ready_doc(
+        ["o/r#1", "o/r#2", "o/r#3"],
+        gates=[_gate("o/r#1", "decision", "Kelly signs off"), _gate("o/r#2", "verification", "canary must pass")],
+        nodes={"o/r#1": {"children": ["o/r#9", "o/r#8"]}},
+    )
+    body = _waiting_body(doc)
+    assert len(body) == 1
+    assert "o/r#1" in body[0] and "Kelly signs off" in body[0] and "unblocks 2" in body[0]
+    assert "o/r#2" not in "\n".join(body) and "o/r#3" not in "\n".join(body)
+
+
+def test_waiting_on_you_does_not_claim_nothing_waits_when_nobody_looked():
+    """A `--local` page cannot know. MUTATION: delete the `unlooked` arm in `_waiting_section`."""
+    doc = _ready_doc([], state="unlooked")
+    page = plain(render.document(doc))
+    assert "WAITING ON YOU  nobody looked" in page and "nothing waits on you" not in page
+
+
+def test_waiting_item_text_is_truncated_to_one_line():
+    doc = _ready_doc(["o/r#1"], gates=[_gate("o/r#1", "decision", "x" * 200)])
+    body = _waiting_body(doc)
+    assert len(body) == 1 and "…" in body[0]
+
+
+def test_the_board_counts_a_projects_routed_next_rows_and_dashes_the_rest():
+    """The counts are `▸ NEXT`'s rows per owner, attributed by the manifest's path. MUTATION: count
+    `yours` rows into the `mine` bucket, or attribute by basename instead of path prefix."""
+    doc = _ready_doc(
+        ["o/r#1", "o/r#2", "o/r#3"],
+        gates=[_gate("o/r#1", "decision", "a"), _gate("o/r#2", "decision", "b"), _gate("o/r#3", "weird", "c")],
+    )
+    doc["grid"]["manifests"][0]["path"] = "/work/alpha/.borg/chains/m.json"
+    entry = {"path": "/work/alpha", "source": "cli", "status": "idle", "relative_activity": "now"}
+    doc.update(
+        total_projects=2,
+        order=["alpha", "beta"],
+        projects={"alpha": entry, "beta": {**entry, "path": "/work/beta"}},
+    )
+    assert render._routing_counts(doc) == {"alpha": {"yours": 2, "mine": 0, "unsure": 1}}  # pylint: disable=protected-access
+    rows = {line.split()[0]: line for line in plain(render.document(doc)).split("\n") if line[1:6] in ("alpha", "beta ")}
+    assert "YOURS" in plain(render.document(doc))
+    assert " 2    –      1 " in rows["alpha"]
+    assert " –    –      – " in rows["beta"]
