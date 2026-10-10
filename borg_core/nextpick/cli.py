@@ -29,6 +29,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--opened", default="")
     parser.add_argument("--opened-after", type=float, default=None)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument("--all", action="store_true")
     parser.add_argument("--unmeasured", action="store_true")
     return parser
 
@@ -69,8 +70,12 @@ def _opened_after(args: argparse.Namespace, opened: str | None) -> float | None:
 NAMES_PREFIX = "names\t"
 
 
-def item_rows(projects: dict[str, Any], local: bool) -> tuple[list[dict[str, Any]], list[str], str | None]:
-    """`(rows, quiet, degraded)`: work items from the recon sweep, plans, sessions and checkpoints.
+def item_rows(
+    projects: dict[str, Any], local: bool, show_all: bool = False
+) -> tuple[list[dict[str, Any]], list[str], str | None, dict[str, int]]:
+    """`(rows, quiet, degraded, hidden)`: work items from the recon sweep, plans, sessions and checkpoints.
+
+    Capped by `core.cap_rows` (at most 5 YOU rows; the rest only counted in `hidden`) unless `show_all`.
 
     Each source is gathered fail-open (a failed sweep only sets `degraded`). Under `local` the sweep is skipped, so
     only session, plan and checkpoint rows appear.
@@ -85,20 +90,24 @@ def item_rows(projects: dict[str, Any], local: bool) -> tuple[list[dict[str, Any
         shell.checkpoint_next_steps(projects, names),
         int(datetime.now(UTC).timestamp()),
     )
-    return core.numbered_rows(work, ranked), quiet, degraded
+    shown, hidden = core.cap_rows(work, show_all)
+    return core.numbered_rows(shown, ranked), quiet, degraded, hidden
 
 
-def rows_output(projects: dict[str, Any], local: bool) -> list[str]:
+def rows_output(projects: dict[str, Any], local: bool, show_all: bool = False) -> list[str]:
     """The chooser screen plus the trailing names line (one project per ROW, so a key selects a row)."""
-    rows, quiet, _degraded = item_rows(projects, local)
+    rows, quiet, _degraded, hidden = item_rows(projects, local, show_all)
     suggestion = core.suggestion_for(rows, shell.read_log_rows())
-    lines = core.render_chooser(rows, suggestion=suggestion, quiet=quiet)
+    lines = core.render_chooser(rows, suggestion=suggestion, quiet=quiet, hidden=hidden)
     return [*lines, NAMES_PREFIX + "\t".join(row["project"] for row in rows)]
 
 
-def rows_json(projects: dict[str, Any], local: bool) -> dict[str, Any]:
-    """The `--rows --json` payload: item rows, the first row's project, the earned suggestion's row number or None."""
-    rows, quiet, degraded = item_rows(projects, local)
+def rows_json(projects: dict[str, Any], local: bool, show_all: bool = False) -> dict[str, Any]:
+    """The `--rows --json` payload: item rows, the first row's project, the earned suggestion's row number or None.
+
+    `hidden` is `{agent, stale, overflow}`: how many rows the cap left out (all zero under `--all`).
+    """
+    rows, quiet, degraded, hidden = item_rows(projects, local, show_all)
     earned = core.suggestion_for(rows, shell.read_log_rows()) is not None
     return {
         "rows": rows,
@@ -106,16 +115,24 @@ def rows_json(projects: dict[str, Any], local: bool) -> dict[str, Any]:
         "suggestion": rows[0]["n"] if rows and earned else None,
         "quiet": quiet,
         "degraded": degraded,
+        "hidden": hidden,
     }
 
 
-def _rows_json_failopen(projects: dict[str, Any], local: bool) -> dict[str, Any]:
+def _rows_json_failopen(projects: dict[str, Any], local: bool, show_all: bool = False) -> dict[str, Any]:
     """`rows_json`, degrading to an empty payload that says why; never raises."""
     try:
-        return rows_json(projects, local)
+        return rows_json(projects, local, show_all)
     # JUSTIFICATION: the payload must be valid JSON whatever fails underneath; degrade, do not crash.
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        return {"rows": [], "rec": None, "suggestion": None, "quiet": [], "degraded": f"rows failed: {exc}"}
+        return {
+            "rows": [],
+            "rec": None,
+            "suggestion": None,
+            "quiet": [],
+            "degraded": f"rows failed: {exc}",
+            "hidden": {"agent": 0, "stale": 0, "overflow": 0},
+        }
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -127,12 +144,12 @@ def main(argv: list[str] | None = None) -> int:
                 projects = json.load(sys.stdin).get("projects") or {}
             except (ValueError, AttributeError):
                 projects = {}
-            print(json.dumps(_rows_json_failopen(projects, bool(args.local))))
+            print(json.dumps(_rows_json_failopen(projects, bool(args.local), bool(args.all))))
             return 0
         doc = json.load(sys.stdin)
         projects = doc.get("projects") or {}
         if args.rows:
-            print("\n".join(rows_output(projects, bool(args.local))))
+            print("\n".join(rows_output(projects, bool(args.local), bool(args.all))))
             return 0
         shell.append_row(build_row(args, projects, datetime.now(UTC)))
     # JUSTIFICATION: a logging side channel must never fail the command it observes; every error is swallowed.
