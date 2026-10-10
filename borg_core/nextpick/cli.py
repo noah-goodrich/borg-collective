@@ -71,7 +71,10 @@ NAMES_PREFIX = "names\t"
 
 
 def item_rows(
-    projects: dict[str, Any], local: bool, show_all: bool = False
+    projects: dict[str, Any],
+    local: bool,
+    show_all: bool = False,
+    swept: tuple[dict[str, list[dict[str, Any]]], str | None] | None = None,
 ) -> tuple[list[dict[str, Any]], list[str], str | None, dict[str, int]]:
     """`(rows, quiet, degraded, hidden)`: work items from the recon sweep, plans, sessions and checkpoints.
 
@@ -79,10 +82,13 @@ def item_rows(
 
     Each source is gathered fail-open (a failed sweep only sets `degraded`). Under `local` the sweep is skipped, so
     only session, plan and checkpoint rows appear.
+
+    `swept` is a sweep the caller ALREADY RAN, as `(items by project, degraded note)`: `borg link` hands in the one
+    its grid performed, so a page that shows these rows never pays a second `gh` round trip for them.
     """
     ranked = core.rank(projects)
     names = [item["name"] for item in ranked]
-    by_project, degraded = shell.recon_items(projects, local)
+    by_project, degraded = swept if swept is not None else shell.recon_items(projects, local)
     work, quiet = core.work_items(
         ranked,
         by_project,

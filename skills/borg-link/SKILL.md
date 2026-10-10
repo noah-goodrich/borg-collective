@@ -37,7 +37,7 @@ Deep dive:
 
 ```bash
 bash -c 'set -o pipefail; borg link --json <project> | jq "{version, generated_at, capacity,
-  total_projects, scope, grid, focus}"'
+  total_projects, scope, grid, focus, waiting}"'
 ```
 
 One call serves both — `borg link --json <project>` returns the full overview document PLUS
@@ -108,12 +108,24 @@ network round trip and then rendering the same deep dive as before it existed. R
   report it as unrouted rather than guessing, and name the kind. Do not invent a fourth rule, and do
   not treat `rows[].next` as membership: it is the author's emphasis for ordering among rows that are
   already ready, never a reason to include one that isn't.
+- **WAITING ON YOU is the board's last block, and you surface it too (inside Claude first).** It reads
+  the top-level `.waiting` key, which is `borg next`'s own YOU rows (decided 2026-10-09: link and next
+  share one router for "what's mine"). `.waiting.rows[]` are the rows the chooser shows (at most 5, each
+  `{project, item, next_step, owner:"YOU", ref, age, waiting_reason}`); `.waiting.hidden_lines` is the
+  chooser's own `+N more decisions` / `+N agent tasks` / `+N stale drafts` text; `.waiting.degraded` is a
+  note when the sweep or rows failed (say it once). Under `--local` there is no sweep, so no PR rows. Then
+  add every `yours` manifest decision (the `gates[].kind == "decision"` routing above) whose ref is not
+  already a row. Print the block LAST, one line per item: the project, the `next_step`, the `item`, and
+  `unblocks N` (`len(.nodes[ref].children)`) for manifest items; then the `hidden_lines` verbatim. No age
+  invention. **It is ALWAYS present**: with no rows and every manifest `known`, print the single line
+  `nothing waits on you`; if a manifest with refs is `unlooked` and nothing else qualified, say "nobody
+  looked" instead. `.waiting` is ADDITIVE (absent in `--porcelain`), so `DOCUMENT_VERSION` stays 2.
 
 **Why the jq.** The two pipes work differently. The overview pipe (`.directives |= (...)`) does not
 enumerate a field — it transforms one key in place, so anything the document gains later passes
 through untouched. It collapses the one uncapped array (directives, ~121 items live) from 27,298
 bytes raw to ~13,935. The deep-dive pipe (`{version, generated_at, capacity, total_projects, scope,
-grid, focus}`) is the opposite: an explicit top-level whitelist. It drops the 20-project `projects` map,
+grid, focus, waiting}`) is the opposite: an explicit top-level whitelist. It drops the 20-project `projects` map,
 the full `order`, and the uncapped cross-project arrays the skeleton never reads, from 31,136 bytes
 raw to ~4,661 — an 85% cut — but a field the document gains later is invisible until this list is
 updated to include it. If `jq` is missing, drop the pipe and read the raw document.
@@ -208,6 +220,9 @@ Queued: <n> directives — <up to 5 titles>
 Shipped recently: <title> (<ship_date>)
 > <contradiction between the checkpoint's claims and the live status>
 ```
+
+Both skeletons END with the WAITING ON YOU block described above (see the `.ready` bullets). It is the
+last thing the user reads.
 
 Sort by `.order` and nothing else. If `.order` is empty and `total_projects` is 0, say "No
 projects registered — run `borg scan`." and stop. If `.order` is empty and `total_projects > 0`,

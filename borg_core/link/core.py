@@ -846,6 +846,7 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
     focus,
     scope=None,
     grid=None,
+    waiting=None,
 ) -> dict:
     """Assemble the `borg link --json` document from already-gathered data. Pure: no clock, no shell
     import, no os.environ.
@@ -890,7 +891,7 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
 
     `grid` (S3) defaults to None for the same reason `scope` does: every pre-S3 caller keeps working.
     """
-    return {
+    document = {
         "version": DOCUMENT_VERSION,
         "generated_at": generated_at,
         "show_all": show_all,
@@ -912,3 +913,8 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
         "scope": scope,
         "grid": grid,
     }
+    # `waiting` is ADDITIVE and present only when the caller computed it (the porcelain path does not):
+    # the chooser's YOU rows, so `borg link` and `borg next` answer "what is mine" from one router.
+    if waiting is not None:
+        document["waiting"] = waiting
+    return document
