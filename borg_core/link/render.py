@@ -370,6 +370,8 @@ def _route_cells(counts: dict[str, int] | None) -> str:
     )
 
 
+# JUSTIFICATION: six inputs, each independent (identity, cortex join, scope mark, measured width, counts).
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def _overview_row(
     name: str,
     entry: dict,
