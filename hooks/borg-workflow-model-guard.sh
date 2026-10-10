@@ -40,7 +40,7 @@ if [[ -z "$SCRIPT" ]]; then
 fi
 [[ -z "$SCRIPT" ]] && exit 0
 
-PARSER=$(cat <<'PY'
+read -r -d "" PARSER <<'PY' || true
 import re, sys
 
 src = sys.stdin.read()
@@ -137,7 +137,6 @@ for p in sites:
 if missing:
     print("; ".join(missing))
 PY
-)
 
 REASON=$(printf '%s' "$SCRIPT" | python3 -I -c "$PARSER" 2>/dev/null) || exit 0
 [[ -z "$REASON" ]] && exit 0

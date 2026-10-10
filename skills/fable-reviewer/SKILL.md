@@ -89,7 +89,7 @@ result honestly; if a step was skipped, say so.
 Match the effort, the model routing, and the output size to the task. Over-spending on a small task is the same
 failure as under-thinking a large one.
 
-- **Model routing (the cost gate — see `agents/ROUTING.md`):** mechanical/read-only → Haiku; analysis/writing/
+- **Model routing (the cost gate — see `docs/agent-routing.md`):** mechanical/read-only → Haiku; analysis/writing/
   review → Sonnet; open-ended reasoning → the inherited tier, used sparingly. Inside a `Workflow`, every
   `agent()` call carries an explicit `model:` — a missing one silently inherits the session model and is a bug.
 - **Response size:** answer the question asked. A yes/no gets a sentence; a design decision gets the reasoning;

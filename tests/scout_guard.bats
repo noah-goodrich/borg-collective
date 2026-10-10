@@ -122,3 +122,20 @@ _scout() { _caller "borg-collective:borg-scout" "$1"; }
     run grep -B4 'borg-scout-guard.sh' "$BUILD_PLUGIN"
     [[ "$output" == *'"matcher": "Bash"'* ]] || false
 }
+
+@test "denied: abbreviated long options and --no-index (git/gh accept unambiguous prefixes)" {
+    for c in "git diff --outpu=/tmp/zz" "git diff --out=/tmp/zz" "git log --output /tmp/zz" "git log --ext-di" \
+             "git diff --ext-d" "git grep --open-files-in-p foo" "git grep --open-f foo" "git show --textc" \
+             "git diff --no-index /etc/passwd /dev/null" "git diff --no-ind a b" "git diff --no-i a b" \
+             "gh pr view 1 --we" "gh pr checks 1 --wat" "gh pr view 1 --out=x"; do
+        _scout "$c"
+        [ "$status" -eq 2 ] || { echo "allowed: $c"; false; }
+    done
+}
+
+@test "allowed: ordinary long options and the -- separator still pass" {
+    for c in "git log --oneline --no-color -n 3" "git diff --stat -- hooks" "git log --format=%H"; do
+        _scout "$c"
+        [ "$status" -eq 0 ] || { echo "denied: $c -> $output"; false; }
+    done
+}
