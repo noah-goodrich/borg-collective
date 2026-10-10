@@ -138,6 +138,7 @@ The numbers here are fixed before any data exists; changing one after seeing dat
   - Verify: a unit test over a fixture log with 19 sessions at 100% follow shows no line, 20 sessions at 55% shows no line, and 20 sessions at 60% shows the line.
 - [ ] AC4 — The WAITING ON YOU block is wired through `render.SECTIONS`, is always present, and prints one `nothing waits on you` line when empty (renderer rule kept; AC4 supersedes X9's empty-state clause).
   - Verify: against an empty fixture, `borg link` prints the WAITING ON YOU section header and the `nothing waits on you` line after the WAITING ON YOU header; against a populated fixture, the lines between that header and the next section header (or the end of the output) are the waiting items, one per fixture item. The assertion is by section header, not by a fixed line offset from the end. The spine test and goldens are regenerated in the same commit.
+  > **Decided by Noah 2026-10-09 (PR #285):** WAITING ON YOU reads the chooser's YOU rows (borg_core/nextpick core), not only ▸ NEXT manifest routing, so link and next share one router for "what's mine".
 - [ ] AC5 — Screen 3 renders trains only from the stamper's render-time derivation and uses the ratified glyphs.
   - Verify: against a fixture with no keys and no rows, `/borg-link <repo>` prints no train rows; against a stamped fixture, an open PR with unmerged parents renders `○` and a merged PR renders `✔`.
 - [ ] AC6 — Full bats suite and the macOS contract leg stay green.

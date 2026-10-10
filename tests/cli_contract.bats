@@ -3024,8 +3024,10 @@ EOF
     # The poisoned title really is on the page -- otherwise this case proves nothing.
     run grep -c 'Status: normalise the rollout report' "${BATS_TEST_TMPDIR}/repo.txt"
     [ "$output" = "1" ]
+    # Three hits: the card's own line, the PR title in CHAINS, and the same title again as a WAITING ON YOU
+    # row (last section, so it can never precede the card). Two before the board's chooser rows.
     run grep -c 'Status:' "${BATS_TEST_TMPDIR}/repo.txt"
-    [ "$output" = "2" ]
+    [ "$output" = "3" ]
     # ...and the FIRST hit is the card's, not the PR's.
     run bash -c "grep -m1 'Status:' '${BATS_TEST_TMPDIR}/repo.txt' | sed \$'s/\033\\\\[[0-9;]*m//g'"
     [[ "$output" == "  Status:"*"active" ]] || false
