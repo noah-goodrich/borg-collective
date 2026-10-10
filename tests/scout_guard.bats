@@ -139,3 +139,44 @@ _scout() { _caller "borg-collective:borg-scout" "$1"; }
         [ "$status" -eq 0 ] || { echo "denied: $c -> $output"; false; }
     done
 }
+
+@test "denied: bundled and attached short flags (cluster decomposition, not token-start match)" {
+    for c in "git grep -nOtouch foo" "git grep -iOsh foo" "git grep -On foo" "git grep -nO foo" "git grep -O foo" \
+             "git grep -inO sh foo" "git diff -Ofile" "git diff -pO x" "git log -nOx" "git show -O" \
+             "git diff -o/tmp/x" "git log -po/tmp/x" "git blame -Lo x" \
+             "gh pr view 1 -cw" "gh pr checks 1 -w" "gh run view 1 -vw" "gh repo view -w" \
+             "gh api -iXPOST repos/o/r" "gh api -ifx=1 repos/o/r" "gh api -iF a=b repos/o/r" "gh api -iX POST repos/o/r" \
+             "gh api -iXGET -fa=b repos/o/r"; do
+        _scout "$c"
+        [ "$status" -eq 2 ] || { echo "allowed: $c"; false; }
+    done
+}
+
+@test "denied: clustered file-pattern flag on the grep pipe target" {
+    for c in "git log | grep -rf /tmp/x" "git log | grep -f /tmp/x" "git log | grep -ff /tmp/x" "git log | grep -if/tmp/x" \
+             "git log | grep --file=/tmp/x" "git log | grep --exclude-from=/tmp/x"; do
+        _scout "$c"
+        [ "$status" -eq 2 ] || { echo "allowed: $c"; false; }
+    done
+}
+
+@test "allowed: ordinary short flags and clusters still pass" {
+    for c in "git log --oneline | head -5" "git grep -n foo" "git grep -inw foo" "git grep -e foo -n" "git log -n5 -p" \
+             "git diff -U3 -w" "git log -S foo" "git ls-files -o" "git log | grep -rn foo" "git log | grep -efoo" \
+             "git log | grep -in foo" "gh api repos/a/b/pulls" "gh api -i repos/a/b" "gh api -iXGET repos/a/b" \
+             "gh pr view 1 -R o/r" "gh pr list -L 5 -s all" "gh run list -L5"; do
+        _scout "$c"
+        [ "$status" -eq 0 ] || { echo "denied: $c -> $output"; false; }
+    done
+}
+
+@test "deploy topology: scout agent and guard share one vehicle (the plugin); setup never installs a bare agent" {
+    # borg setup removes legacy ~/.claude/agents copies and copies no agent file anywhere, and CoCo has no agent
+    # install path, so a Bash-enabled borg-scout can only arrive via the plugin build that also registers the guard.
+    run grep -nE 'cp .*(agent_file|/agents/)' "${BATS_TEST_DIRNAME}/../borg.zsh"
+    [ "$status" -ne 0 ]
+    run grep -nE 'cp .*agents' "${BATS_TEST_DIRNAME}/../install.sh"
+    [ "$status" -ne 0 ]
+    grep -q 'borg-scout-guard.sh' "$BUILD_PLUGIN"
+    grep -q 'agents' "$BUILD_PLUGIN"
+}
