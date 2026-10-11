@@ -18,7 +18,7 @@ from borg_core.link import shell
 
 def main() -> int:
     """Print the overlaid registry as one JSON document on stdout."""
-    sys.stdout.write(json.dumps(shell.registry_with_state()) + "\n")
+    print(json.dumps(shell.registry_with_state()))
     return 0
 
 
