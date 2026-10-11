@@ -59,7 +59,7 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **12 hooks**, **~14 lib files**, **16 skills**, **6 agents** (5 specialists + `ROUTING.md`),
+writing: **12 hooks**, **~14 lib files**, **16 skills**, **5 agents** (+ `docs/agent-routing.md`),
 **4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
@@ -91,6 +91,7 @@ writing: **12 hooks**, **~14 lib files**, **16 skills**, **6 agents** (5 special
         borg-notify.sh          Notification → status=waiting + reason
         borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
         borg-dispatch-guard.sh  PreToolUse → >=92% usage dispatch veto (Usage Guardian)
+        borg-workflow-model-guard.sh  PreToolUse (Workflow) → denies unpinned agent() calls (fail-open)
         borg-nanoprobe-log.sh   SubagentStop → append nanoprobe completion to agents.jsonl
         bash-guard.sh, borg-supabase-guard.sh, notify.sh,
         pre-commit-remind.sh, tool-count-nudge.sh  Smaller guardrail/reminder hooks
@@ -111,7 +112,6 @@ writing: **12 hooks**, **~14 lib files**, **16 skills**, **6 agents** (5 special
         borg-nanoprobe.md        Sonnet — single-task judgment work (implement/fix/refactor)
         borg-researcher.md       Sonnet — from-zero web research, one track
         borg-reviewer.md         Sonnet/high — blind adversarial review
-        ROUTING.md               Model/effort routing matrix for all of the above
     bin/
         borg-usage-watch         Usage Guardian poller (see below)
     lib/
@@ -424,7 +424,7 @@ the move.
 
 The orchestrator session never edits project files directly — it briefs, spawns, monitors, and
 synthesizes. Actual work is delegated to ephemeral subagents via the Agent tool, routed by model
-tier per `agents/ROUTING.md`:
+tier per `docs/agent-routing.md`:
 
 | Agent | Model | Role |
 |-------|-------|------|
