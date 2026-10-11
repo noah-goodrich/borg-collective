@@ -388,7 +388,7 @@ docs/
   but not yet wired into any project — no per-project cutover has happened.
 - **Nanoprobe orchestrator (drones vs nanoprobes)**: drones are persistent devcontainers (long-lived,
   one per project); nanoprobes are ephemeral Claude Code subagents (`agents/borg-nanoprobe.md`)
-  spawned by the orchestrator via the Agent tool with `background: true` (no harness worktree
+  spawned by the orchestrator via the Agent tool with subagent_type `borg-collective:borg-nanoprobe` (do not pass model, effort or background; the agent frontmatter sets them) (no harness worktree
   isolation — `isolation: worktree` caused hard failures when the orchestrator CWD is not a git
   repo). **Nanoprobes manage their own git worktrees** when the orchestrator supplies a branch name:
   `git -C <repo_path> worktree add ~/.local/state/borg/worktrees/<repo>/<slug> -b <branch>`.
