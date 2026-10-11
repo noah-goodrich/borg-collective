@@ -42,9 +42,9 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (15): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (14): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
-  bash-guard, borg-dispatch-guard, borg-workflow-model-guard, borg-scout-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
+  bash-guard, borg-dispatch-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
 - Skills (16): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
   and 10 more (full list under Files below)
@@ -186,7 +186,6 @@ hooks/
     borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log
     borg-dispatch-guard.sh  PreToolUse (Agent/Workflow) → >=92% usage hard-stop veto (default-OFF)
     borg-workflow-model-guard.sh  PreToolUse (Workflow) → denies agent() calls with no agentType/model pin (fail-open)
-    borg-scout-guard.sh     PreToolUse (Bash) → confines the borg-scout subagent to read-only git/gh (allowlist)
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)

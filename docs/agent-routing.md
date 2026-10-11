@@ -39,10 +39,10 @@ matrix to pick the right tier before spawning rather than letting a stage silent
 |                  |        |        | novel architecture, complex multi-step inference, tasks where  | EXCEPTION, not the default. Defaulting here for      |
 |                  |        |        | the orchestrator cannot write a clear spec.                    | routine work is the primary cost driver.             |
 
-**borg-scout can read git and GitHub state.** It answers "what is the state of PR X?" and "what changed in
-commit Y?" via read-only `git` and `gh` (log/show/diff/status/blame/grep/ls-files/rev-parse, branch list,
-remote -v, worktree list; pr view/list/diff/checks, issue view/list, run view/list, repo view, api GET). This is
-enforced, not requested: `hooks/borg-scout-guard.sh` denies any other Bash command when the caller is scout.
+**borg-scout has read-only file tools only (no Bash).** It cannot run `git` or `gh`. Route git and GitHub
+lookups ("what is the state of PR X?", "what changed in commit Y?") to an agent that has Bash: borg-grunt for a
+fully-specified command, borg-nanoprobe when judgment is needed. A scoped read-only shell for the scout is tracked in
+`docs/plans/directives/2026-10-10-scout-shell-allowlist.md`.
 
 ---
 
