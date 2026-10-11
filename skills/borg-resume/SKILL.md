@@ -29,15 +29,25 @@ completed `agent()` calls are already cached under the run id, so nothing is los
    minutes AFTER the reset. If it's unknown, default to +60 minutes. Get "now" from the environment if you need to convert
    (`TZ=<zone> date`); never fabricate a timestamp.
 
-3. **Schedule a one-shot resume trigger** that fires into THIS session at the resume time. Use the `create_trigger` tool
-   (or `send_later`) with `run_once_at` = the resume time and this prompt:
+3. **Schedule a one-shot resume** that fires into THIS session at the resume time. Use `CronCreate` with `recurring: false`
+   and a cron expression pinned to the resume time (a few minutes after the reset, and off the :00/:30 marks, e.g. 7:13 not
+   7:00 or 7:30), and this prompt:
 
    > Usage limit has reset — resume the paused workflow with no rework:
    > `Workflow({ scriptPath: "<scriptPath>", resumeFromRunId: "<runId>" })`
    > Completed agents return cached; only the unfinished steps re-run. Then carry on where we left off.
 
 4. **Tell the user**: which workflow, the `runId`, and the exact time it will auto-resume. Do NOT poll for the reset —
-   the trigger handles it.
+   the scheduled job handles it.
+
+## Caveats
+
+- **Lost if the session exits.** The `CronCreate` job lives in this session; if the session is closed or killed before the
+  resume time, nothing fires. Keep the session open (or re-run this skill in the new one).
+- **The resume prompt runs on the session model.** The prompt itself executes on whatever model the session is on, while
+  the resumed workflow's agents keep their own `model:` pins.
+- **`RemoteTrigger` cannot resume a LOCAL workflow.** It starts a fresh cloud session with no plugins or local files, so
+  the persisted `scriptPath` and cached run are unreachable. Use `CronCreate` only.
 
 ## Notes
 
