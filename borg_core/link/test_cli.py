@@ -1010,3 +1010,39 @@ def test_a_stem_declared_in_both_roots_counts_as_refused_not_as_no_manifest(isol
     page = capsys.readouterr().out
     assert "2 manifests could not be read" in page
     assert "to scaffold one" not in page and "in the registry yet" not in page
+
+
+# ── WAITING ON YOU shares ONE router with `borg next` ────────────────────────────────────────────
+
+
+def _open_pr(number: int, **extra) -> dict:
+    return {"project": "alpha", "source": "github", "ref": f"o/alpha#{number}", "title": f"feat: change {number}",
+            "state": "open", "changed": "2026-10-01T00:00:00Z", **extra}
+
+
+def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
+    """Board decision 2026-10-09. MUTATION: build `waiting.rows` from anything but `nextpick_cli.item_rows`
+    (or re-run the sweep with different items) and the two lists diverge. The sweep is handed in, so this
+    also pins that `borg link` asks `gh` nothing extra."""
+    from borg_core.nextpick import cli as nextpick_cli  # pylint: disable=import-outside-toplevel
+    from borg_core.recon import core as recon_core  # pylint: disable=import-outside-toplevel
+
+    projects = {"alpha": {"path": "/nonexistent/alpha", "status": "idle", "last_activity": None, "pinned": False}}
+    tracks = [{"source": "github", "ok": True, "items": [_open_pr(n) for n in range(1, 8)]
+               + [_open_pr(20, draft=True), _open_pr(21, checks="fail")]}]
+    scope = {"kind": "orchestrator", "repository": None, "local": False}
+
+    waiting = cli._waiting(projects, scope, False, tracks)  # pylint: disable=protected-access
+    rows, _quiet, _degraded, hidden = nextpick_cli.item_rows(
+        projects, False, False, swept=(recon_core.merge_by_project(tracks), None)
+    )
+
+    assert [r["ref"] for r in waiting["rows"]] == [r["ref"] for r in rows if r["owner"] == "YOU"]
+    assert len(waiting["rows"]) == 5
+    assert waiting["hidden"] == hidden and hidden["overflow"] == 2 and hidden["agent"] == 2
+    assert waiting["hidden_lines"] == ["+2 more decisions", "+2 agent tasks"]
+
+    page = cli.render.document({"projects": projects, "grid": {"manifests": []}, "waiting": waiting})
+    body = [line for line in page.split("\x1b[1m▸ WAITING ON YOU")[1].split("\n")[1:] if line.strip()]
+    assert len(body) == 5 + 2
+    assert "+2 more decisions" in body[-2] and "+2 agent tasks" in body[-1]

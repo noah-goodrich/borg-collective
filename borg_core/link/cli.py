@@ -21,6 +21,9 @@ import sys
 from typing import NoReturn
 
 from borg_core.link import core, grid, picture, render, shell
+from borg_core.nextpick import cli as nextpick_cli
+from borg_core.nextpick import core as nextpick_core
+from borg_core.recon import core as recon_core
 
 
 class ProjectNotFound(Exception):
@@ -80,7 +83,7 @@ def _focus(project: str, registry: dict, now_epoch: int) -> dict | None:
     }
 
 
-def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
+def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: list | None = None) -> dict:
     """The `grid` block: discover manifests globally, select them scoped, sweep at the scope's breadth.
 
     THE ORDER OF THE THREE STEPS IS FIXED and each one's breadth is different, which is the whole of
@@ -180,6 +183,9 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
         else shell.sweep(grid.scoped_projects(registry, scope), now=moment)
     )
     fetch = grid.no_fetch() if pending is None else shell.finish_fetch(pending)
+    # HANDED BACK, NOT RE-FETCHED: the WAITING ON YOU rows are built from this very sweep (see `_waiting`).
+    if tracks_out is not None:
+        tracks_out.extend(sweep.get("tracks") or [])
     block = grid.build_grid(scope, slug, sweep, fetch, selected, warnings + select_warnings)
     block["picture_width"] = picture.max_row_width(block["manifests"])
     # STAMPED HERE, LIKE `picture_width` DIRECTLY ABOVE, and for the same reason: `build_grid` is
@@ -190,6 +196,43 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int) -> dict:
     # answers before this is read.
     block["refused"] = len(shell.refused_manifest_paths(warnings, directory))
     return block
+
+
+def _waiting(projects: dict, scope: dict, local: bool, tracks: list[dict]) -> dict:
+    """The `waiting` key: the chooser's YOU rows, built by `borg next`'s own functions over THIS page's sweep.
+
+    ONE ROUTER FOR "WHAT IS MINE" (decided by Noah 2026-10-09): `nextpick_cli.item_rows` is the call the chooser
+    makes, so the rows, their order and the hidden counts match `borg next` exactly. The sweep is the one `_grid`
+    already ran, passed in, so there is no second `gh` round trip; `--local` has no sweep and so no PR rows, the
+    same as `borg next --local`. NEVER writes next-recs.jsonl: only the row-building half of nextpick runs.
+    In repository scope only that repository's rows are built, because the sweep covered only that repository.
+    Fail-open: any failure degrades to an empty block that says why.
+    """
+    try:
+        repo = str(scope.get("repository") or "")
+        scoped: dict = {repo: projects[repo]} if scope.get("kind") == "repository" and repo in projects else projects
+        by_project = recon_core.merge_by_project(tracks)
+        rows, _quiet, degraded, hidden = nextpick_cli.item_rows(scoped, local, False, swept=(by_project, None))
+    # JUSTIFICATION: a side block must never take the page down; degrade and say why.
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        rows, degraded, hidden = [], f"waiting rows failed: {exc}", {"agent": 0, "stale": 0, "overflow": 0}
+    return {
+        "rows": [row for row in rows if row.get("owner") == "YOU"],
+        "hidden": hidden,
+        "hidden_lines": nextpick_core.hidden_lines(hidden),
+        "degraded": degraded,
+    }
+
+
+# JUSTIFICATION: six independent inputs of one assembly step; a container would only relocate the names.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+def _grid_and_waiting(
+    overlaid: dict, projects: dict, scope: dict, local: bool, moment: int, mode: str
+) -> tuple[dict, dict | None]:
+    """The `grid` block and the `waiting` block, the second built from the sweep the first performed."""
+    tracks: list[dict] = []
+    block = _grid(overlaid, scope, local, moment, tracks)
+    return block, (None if mode == "porcelain" else _waiting(projects, scope, local, tracks))
 
 
 def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
@@ -207,7 +250,8 @@ def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
     return shell.collect_all_directives(raw), shell.collect_all_assimilated(raw)
 
 
-def _document(project: str, show_all: bool, mode: str, local: bool = False) -> dict:
+# JUSTIFICATION: the assembly step of one document; every local is a distinct input to core.assemble.
+def _document(project: str, show_all: bool, mode: str, local: bool = False) -> dict:  # pylint: disable=too-many-locals
     """Assemble the `borg link` document for one invocation, consumed by `--json`, `--porcelain` and
     the one human renderer.
 
@@ -311,6 +355,7 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     # per-project glob, so it is priced with the render rather than with the aggregates.
     cortex_pending = [] if mode == "porcelain" else shell.cortex_pending(now=moment)
 
+    block, waiting = _grid_and_waiting(overlaid, projects, scope, local, moment, mode)
     return core.assemble(
         generated_at=core.format_iso(moment),
         show_all=show_all,
@@ -323,7 +368,8 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
         cortex_pending=cortex_pending,
         focus=focus,
         scope=scope,
-        grid=_grid(overlaid, scope, local, moment),
+        grid=block,
+        waiting=waiting,
     )
 
 

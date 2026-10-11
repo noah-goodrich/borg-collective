@@ -12,15 +12,15 @@
   [2m— no repository in focus. cd into one, or run borg link <name>.[0m
 
 [1m▸ REPOSITORIES[0m  [2mthe collective · 7 repositories · 2 need attention[0m
-[1m PROJECT              SRC  STATUS       LAST ACTIVE  SUMMARY[0m
+[1m PROJECT              SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
-*platform             [C]  [0;32mactive      [0m 2h ago       Scoped keypair auth rollout.
- atlas                [C]  [1;33mwaiting <<< [0m 5d ago       Waiting on a schema decision.
- warehouse            [D]  [1;33mwaiting <<< [0m yesterday    Key cutover blocked on the rollout run.
- infra                [X]  [0;32mactive      [0m 3h ago       (no summary)
- archive-tools        [C]  [2midle        [0m never        Nothing here since the fork.
- relay                [C]  [2midle        [0m 2d ago       Relay has no summary yet.
- ledger               [C]  [2midle        [0m 30m ago      Nightly close reconciliation.
+*platform             [C]  [0;32mactive      [0m 2h ago           –    3      – Scoped keypair auth rollout.
+ atlas                [C]  [1;33mwaiting <<< [0m 5d ago           –    –      – Waiting on a schema decision.
+ warehouse            [D]  [1;33mwaiting <<< [0m yesterday        1    –      1 Key cutover blocked on the rollout run.
+ infra                [X]  [0;32mactive      [0m 3h ago           –    –      – (no summary)
+ archive-tools        [C]  [2midle        [0m never            –    –      – Nothing here since the fork.
+ relay                [C]  [2midle        [0m 2d ago           –    –      – Relay has no summary yet.
+ ledger               [C]  [2midle        [0m 30m ago          –    –      – Nightly close reconciliation.
 
 [1m▸ CHAINS[0m  [2m2 projects · 13 refs · 1 unresolved · swept back to 2026-05-28[0m
 
@@ -184,4 +184,12 @@
   [2m— fetch: replayed from fixture <TESTS>/fixtures/link/fetch-acme.json -- no gh ran[0m
   [2m— fetch: 1 of 13 declared ref(s) did not resolve (deleted, renamed, or not visible) -- they fall back to what the manifest declares[0m
   [2m— 1 of 13 declared refs unresolved — nobody looked[0m
+
+[1m▸ WAITING ON YOU[0m  [2m5 items[0m
+  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/420\#420]8;;\     platform   merge #420  Status: normalise…
+  [1;33m▶[0m ]8;;https://github.com/acme/platform/issues/431\#431]8;;\     platform   merge #431  enforce scopes on…
+  [1;33m▶[0m session  atlas      reply to session
+  [1;33m▶[0m session  warehouse  reply to session
+  [1;33m▶[0m ]8;;https://github.com/acme/warehouse/issues/64\#64]8;;\      warehouse  merge #64  us-west region cu…
+  [2m+2 more decisions[0m
 
