@@ -373,3 +373,54 @@ GHEOF
     [ "$status" -eq 0 ]
     printf "%s" "$output" | jq -e "(.rows | map(.project) | index(\"has-cp\")) != null and .hidden.agent == 0"
 }
+
+# ONE STATE OVERLAY. `borg link` and `borg next` used to read the registry through two implementations (the
+# Python overlay vs the zsh borg_registry_with_state), so "what waits on me" could differ between them. Both now
+# consume borg_core.link.overlay. The fixture is the shape the two readers were supposed to agree on: the REGISTRY
+# says idle and a fresh state.json says waiting, one project per liveness path (live window, window under the
+# short name, dead window with a recent timestamp is kept by age).
+@test "link's waiting rows and next --rows --json rows are the same rows, session rows included" {
+    local now
+    now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    mkdir -p "${BATS_TEST_TMPDIR}/p/live/.borg" "${BATS_TEST_TMPDIR}/p/short/.borg" "${BATS_TEST_TMPDIR}/p/fresh/.borg"
+    for n in live short fresh; do
+        printf '{"status":"waiting","last_activity":"%s","waiting_reason":"needs you"}' "$now" \
+            > "${BATS_TEST_TMPDIR}/p/$n/.borg/state.json"
+    done
+    cat > "$BORG_REGISTRY" <<JSON
+{"projects": {
+  "live":  {"path":"${BATS_TEST_TMPDIR}/p/live","status":"idle"},
+  "short": {"path":"${BATS_TEST_TMPDIR}/p/short","status":"idle","tmux_window":"s-win"},
+  "fresh": {"path":"${BATS_TEST_TMPDIR}/p/fresh","status":"idle","tmux_window":"gone"}
+}}
+JSON
+    export TMUX_MOCK_WINDOWS="live s-win"
+    run bash -c "zsh \"$BORG\" next --rows --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    local next_rows="$output"
+    run bash -c "zsh \"$BORG\" link --json --local 2>/dev/null"
+    [ "$status" -eq 0 ]
+    local link_rows
+    link_rows=$(printf '%s' "$output" | jq -c '.waiting.rows')
+    next_rows=$(printf '%s' "$next_rows" | jq -c '[.rows[] | select(.owner == "YOU")]')
+    [ "$(printf '%s' "$link_rows" | jq 'length')" -ge 3 ]
+    printf '%s' "$link_rows" | jq -e 'all(.[]; .next_step == "reply to session")'
+    [ "$link_rows" = "$next_rows" ]
+    [ "$(_log_count)" = "0" ]
+}
+
+@test "every next path reads the registry through borg_core.link.overlay, not the zsh overlay" {
+    local real
+    real=$(command -v python3)
+    printf '#!/usr/bin/env bash\necho "py $*" >> "$TRACE"\nexec "%s" "$@"\n' "$real" > "$MOCK_BIN/python3"
+    chmod +x "$MOCK_BIN/python3"
+    _write_registry ""
+    local -a variants=("--rows --json --local" "--pick 1" "--switch" "--declined")
+    local v
+    for v in "${variants[@]}"; do
+        : > "$TRACE"
+        run bash -c "zsh \"$BORG\" next $v 2>/dev/null"
+        [ "$status" -eq 0 ]
+        grep -q "py -m borg_core.link.overlay" "$TRACE"
+    done
+}

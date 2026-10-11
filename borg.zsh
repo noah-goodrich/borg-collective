@@ -698,6 +698,16 @@ cmd_focus() {
     cmd_switch "${@:-}"
 }
 
+# The registry every `borg next` path reads (rows --json, the TTY chooser, --pick, --switch, the log row): the
+# Python state overlay `borg link` uses, NOT `borg_registry_with_state`. Two readers of one registry is how link
+# and next came to disagree about what waits on the user; this is the single seam. Loud on failure: a quietly
+# empty registry would read as "All clear", the one lie this command must not tell.
+_borg_next_registry() {
+    local out
+    out=$(_borg_py borg_core.link.overlay) && [[ -n "$out" ]] || { print -u2 "borg next: state overlay failed"; return 1; }
+    printf '%s\n' "$out"
+}
+
 # One fail-open log row per `borg next` run (borg_core.nextpick.cli never writes stdout, exits 0).
 # Called BEFORE the --pick range check so the row exists even for a bad pick; a die after it is fine.
 # `_borg_py` (not bare python3) so the child inherits the config surface; XDG_STATE_HOME is read from
@@ -787,7 +797,7 @@ _borg_next_surface() {
         esac
     done
     local registry
-    registry=$(borg_registry_with_state)
+    registry=$(_borg_next_registry) || return 1
     local -a base=(--chooser)
     (( shown )) && base+=(--shown)
     case "$mode" in
@@ -836,7 +846,7 @@ cmd_next() {
     borg_desktop_scan 2>/dev/null || true
 
     local registry
-    registry=$(borg_registry_with_state)
+    registry=$(_borg_next_registry) || return 1
 
     # Interactive chooser: only a real terminal (or the undocumented BORG_NEXT_FORCE_TTY test seam), never
     # with --switch/--pick. Everything else falls through to the unchanged paths below.
