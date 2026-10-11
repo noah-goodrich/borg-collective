@@ -318,6 +318,18 @@ else
         _agent_name="${_agent_file##*/}"
         _copy_if_changed "$_agent_file" "$AGENTS_DST/$_agent_name" "agents/$_agent_name"
     done
+    # Prune: mirror agents with no source counterpart (e.g. ROUTING.md moved out of agents/ in #284)
+    # would otherwise register as junk spawnable agent types forever.
+    for _stale in "$AGENTS_DST"/*.md; do
+        [[ -f "$_stale" ]] || continue
+        [[ -f "$AGENTS_SRC/${_stale##*/}" ]] && continue
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            _dry "would prune stale agents/${_stale##*/}"
+        else
+            rm -f "$_stale"
+            _info "  pruned stale agents/${_stale##*/}"
+        fi
+    done
 fi
 
 # ── Phase 4: Regenerate hooks.json ───────────────────────────────────────────
