@@ -794,6 +794,25 @@ def test_no_module_references_an_external_plugin_or_a_sibling_checkout():
     assert offenders == [], f"independence violations: {offenders}"
 
 
+def test_no_fixture_references_an_external_plugin():
+    """The fixture half of the independence rule `merge-tree/test_programs.py` carried.
+
+    Scans `borg_core/manifest/fixtures/` and NOT `.borg/chains/`: viz-program.json legitimately names
+    `addon-plugins` (a row's `why`), and the tracked chains are borg's own data rather than a fixture a
+    test authored. The directory is asserted non-empty first, because a scan over nothing is green.
+    """
+    directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+    names = sorted(os.listdir(directory))
+    assert "three-repo-program.json" in names, names
+    forbidden = ("addon-plugins", "stack-program", "stamp_tool")
+    offenders = []
+    for name in names:
+        with open(os.path.join(directory, name), encoding="utf-8") as handle:
+            body = handle.read()
+        offenders += [f"{name}: {token}" for token in forbidden if token in body]
+    assert offenders == [], f"external-plugin references in fixtures: {offenders}"
+
+
 # ── whole-file refusal: ANY invalid row refuses the file, and only that file ────────────────────
 #
 # This section used to pin row-level SALVAGE (`2026-08-27-degrade-the-row-not-the-manifest`). Noah
@@ -2073,12 +2092,12 @@ def test_scaffold_root_probe_names_a_file_so_a_contents_only_ignore_still_counts
 
 # ── the writer round-trips through the reader, over the real corpus (AC3) ───────────────────────────
 #
-# Rehomed from merge-tree/test_programs.py, which validated ONE on-disk fixture and one hand-built
+# Rehomed from merge-tree/test_programs.py (deleted in AC7), which validated ONE on-disk fixture and one hand-built
 # manifest. The property AC3 states is "anything the writer accepts, the reader loads", and a property
 # is checked over the documents that actually exist, not over one the test author wrote to pass.
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-_THREE_REPO_FIXTURE = os.path.join(_REPO_ROOT, "merge-tree", "fixtures", "programs", "three-repo-program.json")
+_THREE_REPO_FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "three-repo-program.json")
 
 
 def _corpus_paths():

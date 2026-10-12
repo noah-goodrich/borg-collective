@@ -424,7 +424,11 @@ def _project_dir_of(manifest: dict[str, Any]) -> str:
     # with no match yields the original -- so `sync_borg` would then treat the manifest file itself as
     # a project root and write outside the tree. That fails silently: the caller only checks
     # `if not project_dir`, and a non-empty wrong answer passes.
-    for name in (".borg" + os.sep + "chains", ".borg" + os.sep + "programs", shell.STACKS_DIRNAME):
+    for name in (
+        os.path.join(".borg", shell.CHAINS_DIRNAME),
+        os.path.join(".borg", shell.LEGACY_DIRNAME),
+        shell.STACKS_DIRNAME,
+    ):
         marker = os.sep + name + os.sep
         if marker in path:
             return path.rsplit(marker, 1)[0]

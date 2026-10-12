@@ -229,12 +229,15 @@ a blocker on a person. A `verification` means **someone must run something** —
 blocker on a person and must not be routed to the awaiting-you tier. Both `blocked_by` and `resolved_by` are
 mandatory: a blocker naming nothing that would unpark it is the defect the field exists to prevent.
 
-**The two readers disagree about whether the set is CLOSED, and deliberately.** `merge-tree/programs.py` still
-rejects a third value. `borg_core/manifest/core.py` no longer does: it requires only that a gate NAME some kind,
-because `borg link`'s `▸ NEXT` has a third group (`unsure`) that reports an unrecognized kind on the page instead
-of deleting the row that carried it. An ABSENT or blank `kind` is a defect on both sides. See
-`borg_core/manifest/core.py::_validate_gate` for the argument and the module docstring for the full divergence
-list.
+**The set of gate kinds is not CLOSED, and deliberately.** There is one reader now (`borg_core/manifest`, retired from `merge-tree/programs.py` in AC7), and `borg_core/manifest/core.py` requires only that a gate NAME some kind, because `borg link`'s `▸ NEXT` has a third group (`unsure`) that reports an unrecognized kind on the page instead of deleting the row that carried it. An ABSENT or blank `kind` is a defect. See `borg_core/manifest/core.py::_validate_gate` for the argument and the module docstring for the full divergence list.
+
+### The sync-target payload (`borg chain plan|sync`)
+
+`coordinator.py` hands a discovered `borg-sync-target-<name>` executable `{"manifests": [...]}` on stdin. Each entry is the **declared body** of one manifest (`core.declared_body`): exactly the keys the author wrote, with every `_`-prefixed key (`_path`, `_id`, anything borg derives later) removed.
+
+**Wire change, 2026-10-12:** the payload no longer carries a top-level `program` key synthesized from the filename. A `program` key is present only when the manifest's author wrote one, so a target that identified a manifest by `m["program"]` must tolerate its absence (key on the `ref`s, or derive an identity from the manifest). The shape under "Shape" above is therefore what a target receives, minus any key the file does not contain.
+
+The same rule governs what `borg chain sync` writes back: the declared body only, in place, in whichever root holds the file (`.stacks/`, `.borg/chains/` or the legacy `.borg/programs/`), with no `_id`, no `_path` and no injected `program`.
 
 ### Edge provenance
 

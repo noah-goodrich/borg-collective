@@ -4,7 +4,7 @@ Every function here that touches the filesystem, subprocess, the environment or 
 this module. Logic (parsing, validating, ranking, selecting) is delegated to core.py -- this module
 never reimplements it.
 
-Ports the I/O half of merge-tree/programs.py:274-331 (its `programs_dir`, `discover`) and adds the
+Ports the I/O half of the deleted merge-tree/programs.py (its `programs_dir`, `discover`, writer) and adds the
 two entry points the one-front-door `link` needs: `discover_registered`, which globs EVERY registered
 repository rather than one, and `repository_slug`, which answers "which `owner/repo` is this
 directory?" the same way the recon github adapter does.
@@ -271,7 +271,7 @@ def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
 
     TWO DERIVED KEYS ARE ADDED, both underscore-prefixed so the declared body stays exactly what is
     on disk: `_path`, which must always reflect where this copy was read from (the literal key name
-    is a cross-module contract -- merge-tree's writer strips exactly that key), and `_id`, the
+    is a cross-module contract -- merge-tree/coordinator.py reads it to find the file to rewrite), and `_id`, the
     manifest's identity for display. `_id` reads a declared top-level `program` key VERBATIM when
     there is one, because that is what is on disk, and falls back to the filename stem. What it does
     NOT do is write a `program` key back into the document: reading a retired word is unavoidable,

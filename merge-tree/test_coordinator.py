@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import pathlib
+import re
 import stat
 
 import pytest
@@ -534,6 +535,45 @@ class TestIndependenceAndBoundary:
             if token in body:
                 offenders.append(token)
         assert offenders == [], f"external-plugin references found: {offenders}"
+
+
+    def test_no_string_literal_in_the_coordinator_hardcodes_a_path_into_a_sibling_repo(self):
+        """Rehomed from the retired module's TestIndependence, which opened programs.py by name.
+
+        Only STRING LITERALS count -- a docstring may legitimately show an example path. `borg_core`'s
+        own scan covers only borg_core, so without this the coordinator, the one merge-tree module left,
+        would have no guard at all against a path baked into code.
+        """
+        offenders = []
+        with open(coordinator.__file__) as fh:
+            for number, line in enumerate(fh, 1):
+                for literal in re.findall(r"""["']([^"']*)["']""", line):
+                    # `~/.local/state/borg/...` is borg's OWN state dir and correct. What must never
+                    # appear is a path into a sibling checkout under the dev root.
+                    if "/dev/" in literal:
+                        offenders.append(f"coordinator.py:{number} -> {literal}")
+        assert offenders == [], f"hardcoded sibling-repo paths: {offenders}"
+
+
+class TestTheRetiredWordIsOutOfMergeTree:
+    """AC5. The word names nothing in merge-tree/ any more; only the three spellings that are a
+    filesystem path, a CLI flag, or the on-disk key an author may have written remain."""
+
+    ALLOWED = ("--programs-dir", ".borg/programs", "`program` key")
+
+    def test_no_non_test_module_uses_it_outside_the_allowlist(self):
+        here = os.path.dirname(os.path.abspath(coordinator.__file__))
+        sources = sorted(n for n in os.listdir(here) if n.endswith(".py") and not n.startswith("test_"))
+        assert "coordinator.py" in sources, sources
+        offenders = []
+        for name in sources:
+            with open(os.path.join(here, name), encoding="utf-8") as fh:
+                for number, line in enumerate(fh, 1):
+                    for allowed in self.ALLOWED:
+                        line = line.replace(allowed, "")
+                    if "program" in line.lower():
+                        offenders.append(f"{name}:{number}")
+        assert offenders == [], f"the retired word is back in merge-tree/: {offenders}"
 
 
 class TestProjectDirOfUnrecognised:

@@ -5,24 +5,23 @@ environment reads, no clock reads. Every function here takes already-gathered da
 returns plain data structures or strings. All I/O (filesystem reads, subprocess calls, environment
 and clock lookups) lives in shell.py, which calls into this module for the actual logic.
 
-Ports the pure half of merge-tree/programs.py:40-271 -- GATE_KINDS, PREREQ_ORDERS, DEFAULT_LANE,
-looks_like_manifest, validate, lanes, derive_edges, unmapped_gates and their private helpers.
-PORTED, NOT IMPORTED, and that is forced twice over: `merge-tree` carries a hyphen so it can never
-be a Python package name, and pyproject.toml:76 pins
+Ports the pure half of merge-tree/programs.py (deleted in AC7; it survives in git history) --
+GATE_KINDS, PREREQ_ORDERS, DEFAULT_LANE, looks_like_manifest, validate, lanes, derive_edges,
+unmapped_gates and their private helpers. PORTED, NOT IMPORTED, and that is forced twice over:
+`merge-tree` carries a hyphen so it can never be a Python package name, and pyproject.toml pins
 `allowed_prefixes = ["borg_core", "__future__"]`, so an import would fail `make lint` even if the
-path resolved.
+path resolved. The arrow now runs the other way: merge-tree/coordinator.py imports this package.
 
-THE PORT HAS DELIBERATELY DIVERGED from the copy that still lives in merge-tree/programs.py, which
-is itself still live (merge-tree/coordinator.py rewrites manifests through its writer; the
-other former caller, merge-tree/gather.py, retired with the browser board). The differences, so the
-next editor of either copy can see them: this side validates `after` and derives edges from it (the writer over there
-accepts an `after` of any shape and derives nothing from it, so its write gate is WEAKER than this
-read gate -- a manifest it happily writes can be rejected here), this side deduplicates edges within
-a manifest, this side requires every declared ref to be a FULL `owner/repo#num`, this side no longer
-closes `gate.kind` to GATE_KINDS (see _validate_gate: an unrecognized kind is a ROUTER concern here
-and a validation error over there, so this read gate is the WEAKER of the two on that one field --
-the only axis where the asymmetry runs that direction), and this side does not use the retired
-"program" vocabulary in any name. Retiring one of the two copies is AC7's problem, not this module's.
+THERE IS ONE IMPLEMENTATION NOW, and these are the ways the port had diverged from the copy it replaced,
+kept because each is the reason this side's rules are what they are: this side validates `after` and
+derives edges from it (the old writer accepted an `after` of any shape and derived nothing from it, so
+its write gate was WEAKER than this read gate -- a manifest it happily wrote could be rejected here),
+this side deduplicates edges within a manifest, this side requires every declared ref to be a FULL
+`owner/repo#num`, this side no longer closes `gate.kind` to GATE_KINDS (see _validate_gate: an
+unrecognized kind is a ROUTER concern here and was a validation error over there), and this side
+does not use the retired "program" vocabulary in any name. Retiring the other copy was AC7's problem
+and is done: `shell.write_manifest` validates with `validate` below, so what the writer accepts the
+reader loads.
 
 WHY DECLARED EDGES EXIST AT ALL. Branch topology only ever links PRs inside ONE repository -- a base
 branch is a repository-local name -- so nothing mechanical says `stillpoint#48` must merge before
@@ -161,7 +160,7 @@ GATE_KINDS = {"decision", "verification"}
 # with no declared position among themselves. They keep their file order (see _sort_key).
 #
 # THE DASHES ARE FOUR DISTINCT VALUES: ASCII HYPHEN-MINUS (U+002D), EN DASH (U+2013), EM DASH
-# (U+2014) and the empty string. Copied byte-for-byte from merge-tree/programs.py:48, not retyped,
+# (U+2014) and the empty string. Copied byte-for-byte from the deleted merge-tree/programs.py, not retyped,
 # and pinned by a codepoint assertion in test_core.py because the glyphs are visually
 # indistinguishable at a glance. Every prerequisite row in both live manifests uses U+2013
 # exclusively (7 of 16 rows), so an editor pass or a "normalize the punctuation" reflex that rewrote
@@ -235,9 +234,9 @@ def declared_body(manifest: dict[str, Any]) -> dict[str, Any]:
     key. `_`-prefixed means derived, everywhere in this package, and `manifest_dir`'s docstring
     already relies on that convention holding.
 
-    Note `merge-tree/coordinator.py:98` does this same strip by hand to build the payload for an
-    out-of-repo sync shim, and is NOT yet routed here -- it still names `_path` alone. Repointing it
-    is the retirement's job; until then that shim receives an `_id` this writer no longer writes.
+    `merge-tree/coordinator.py::run_target` builds the payload for an out-of-repo sync shim through
+    this function too, so the shim receives exactly the declared body the writer persists and no
+    derived key (it used to strip `_path` alone and so leaked `_id`).
     """
     return {k: v for k, v in manifest.items() if not k.startswith("_")}
 
@@ -381,12 +380,11 @@ def _validate_after(row: dict[str, Any], ref: str, label: str) -> list[str]:
 
     `after: null` is treated as absent, matching how _validate_gate treats a null gate.
 
-    THE WRITE GATE IS WEAKER THAN THIS READ GATE, and that asymmetry is worth knowing about:
-    merge-tree/programs.py -- still live, still rewriting every manifest in place through its own
-    writer -- validates no `after` at all, so it will happily write `"after": "o/r#2"` (a bare
-    string) which this rejects, dropping the ENTIRE file at shell._load_manifest. Today's live
-    manifests carry no `after`, so it is latent. See the module docstring for the full divergence
-    list.
+    THE WRITE GATE USED TO BE WEAKER THAN THIS READ GATE, and the asymmetry is gone: the writer this
+    replaced (merge-tree/programs.py) validated no `after` at all, so it would happily write
+    `"after": "o/r#2"` (a bare string) which this rejects, dropping the ENTIRE file at
+    shell._load_manifest. `shell.write_manifest` validates with this function, so that shape is now
+    refused on the way in. See the module docstring for the full divergence list.
     """
     after = row.get("after")
     if after is None:

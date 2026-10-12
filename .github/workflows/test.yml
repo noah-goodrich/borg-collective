@@ -125,7 +125,8 @@ jobs:
     # renderer would have shipped green.
     #
     # The renderers retired 2026-10-12 with the browser board; this job now gates what is left of
-    # merge-tree/ (coordinator.py, programs.py and their three test files).
+    # merge-tree/ (coordinator.py and its two test files; programs.py was retired into
+    # borg_core/manifest). `make test-viz` fails if a merge-tree module is not named in VIZ_COVERED.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

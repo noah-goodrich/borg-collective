@@ -1,8 +1,8 @@
 """Unit tests for borg_core.manifest.core (the pure domain layer).
 
 Calling convention: in-process only, plain data in and plain data out. No filesystem, no fixture
-files on disk -- the three-repository manifest that merge-tree/test_programs.py loads from
-fixtures/programs/three-repo-program.json is built by `_fixture()` below instead. Two reasons: this
+files on disk -- the three-repository manifest that fixtures/three-repo-program.json holds (read by
+test_shell.py, which may touch the filesystem) is built by `_fixture()` below instead. Two reasons: this
 package's test surface is two modules, and an on-disk fixture drags in the REPO_ROOT path-depth trap
 that merge-tree/test_s4_manifests.py documents, where a moved file silently discovers zero manifests
 and the failure reads as "the feature is missing" rather than "the test moved".
@@ -43,7 +43,7 @@ def _gate(ref=None, **over):
 def _fixture():
     """The three-repository manifest, rebuilt fresh each call so no test can mutate another's input.
 
-    Content-equivalent to merge-tree/fixtures/programs/three-repo-program.json: an apex, two lanes,
+    Content-equivalent to fixtures/three-repo-program.json: an apex, two lanes,
     a merged prerequisite anchoring one of them, a lane whose declared order spans three
     repositories, one `decision` gate and one `verification` gate, both prose-only.
     """
@@ -1487,7 +1487,7 @@ def test_next_order_in_lane_ignores_non_dict_rows():
     assert core.next_order_in_lane(m, "a") == "2"
 
 
-# ── rehomed from merge-tree/test_programs.py before that module is deleted (AC1) ─────────────────────
+# ── rehomed from merge-tree/test_programs.py, deleted in AC7 ─────────────────────────────────────────
 
 
 def test_manifest_rows_keeps_only_dict_rows_and_is_empty_for_a_non_list():
