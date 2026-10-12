@@ -251,6 +251,7 @@ _user_result() {
 @test "recover: missing transcript keeps summary empty, writes the row, exits 0" {
     run bash "$BORG_NANOPROBE_LOG" <<< "$(_recover_payload "${BATS_TEST_TMPDIR}/nope.jsonl")"
     [ "$status" -eq 0 ]
+    [ -z "$output" ]
     [ "$(wc -l < "$LOG_FILE" | tr -d ' ')" -eq 1 ]
     [ "$(jq -r .summary "$LOG_FILE")" = "" ]
 }
@@ -290,4 +291,46 @@ _user_result() {
     bash "$BORG_NANOPROBE_LOG" <<< "$(_recover_payload "$t")"
     [ "$(jq -r .evidence_found "$LOG_FILE")" = "true" ]
     [ "$(jq -r .evidence_score "$LOG_FILE")" -ge 2 ]
+}
+
+@test "recover: a SubagentHandback whose message is not a string gives compact JSON" {
+    local t="${BATS_TEST_TMPDIR}/t.jsonl"
+    _asst_tool SubagentHandback '{"message":{"a":1}}' > "$t"
+    bash "$BORG_NANOPROBE_LOG" <<< "$(_recover_payload "$t")"
+    [ "$(jq -r .summary "$LOG_FILE")" = '{"message":{"a":1}}' ]
+}
+
+@test "recover: an assistant entry whose content is a plain string is used" {
+    local t="${BATS_TEST_TMPDIR}/t.jsonl"
+    jq -nc '{type:"assistant",message:{role:"assistant",content:"plain string report"}}' > "$t"
+    bash "$BORG_NANOPROBE_LOG" <<< "$(_recover_payload "$t")"
+    [ "$(jq -r .summary "$LOG_FILE")" = "plain string report" ]
+}
+
+@test "recover: two assistant lines sharing a message.id recover the text" {
+    local t="${BATS_TEST_TMPDIR}/t.jsonl"
+    {
+        jq -nc '{type:"assistant",message:{id:"msg_1",role:"assistant",content:[{type:"text",text:"split report"}]}}'
+        jq -nc '{type:"assistant",message:{id:"msg_1",role:"assistant",content:[{type:"tool_use",id:"tu2",name:"Bash",input:{command:"true"}}]}}'
+    } > "$t"
+    bash "$BORG_NANOPROBE_LOG" <<< "$(_recover_payload "$t")"
+    [ "$(jq -r .summary "$LOG_FILE")" = "split report" ]
+}
+
+@test "recover: a handback in an earlier same-id line is found" {
+    local t="${BATS_TEST_TMPDIR}/t.jsonl"
+    {
+        jq -nc '{type:"assistant",message:{id:"msg_2",role:"assistant",content:[{type:"tool_use",id:"a",name:"SubagentHandback",input:{message:"handed back"}}]}}'
+        jq -nc '{type:"assistant",message:{id:"msg_2",role:"assistant",content:[{type:"tool_use",id:"b",name:"Bash",input:{command:"true"}}]}}'
+    } > "$t"
+    bash "$BORG_NANOPROBE_LOG" <<< "$(_recover_payload "$t")"
+    [ "$(jq -r .summary "$LOG_FILE")" = "handed back" ]
+}
+
+@test "recover: 30 non-assistant lines after the last assistant entry still recover" {
+    local t="${BATS_TEST_TMPDIR}/t.jsonl" i
+    _asst_tool SubagentHandback '{"message":"deep recovery"}' > "$t"
+    for i in $(seq 1 30); do _user_result >> "$t"; done
+    bash "$BORG_NANOPROBE_LOG" <<< "$(_recover_payload "$t")"
+    [ "$(jq -r .summary "$LOG_FILE")" = "deep recovery" ]
 }
