@@ -89,9 +89,10 @@ result honestly; if a step was skipped, say so.
 Match the effort, the model routing, and the output size to the task. Over-spending on a small task is the same
 failure as under-thinking a large one.
 
-- **Model routing (the cost gate — see `docs/agent-routing.md`):** mechanical/read-only → Haiku; analysis/writing/
-  review → Sonnet; open-ended reasoning → the inherited tier, used sparingly. Inside a `Workflow`, every
-  `agent()` call carries an explicit `model:` — a missing one silently inherits the session model and is a bug.
+- **Model routing (the cost gate — see `docs/agent-routing.md`):** the session runs Opus; every subagent runs
+  below it. Mechanical/read-only → Haiku; analysis/writing/review → Sonnet (effort at most high); open-ended
+  reasoning stays in the main session. Inside a `Workflow`, every `agent()` call
+  carries agentType, or model + effort — a missing pin silently inherits the session model and effort, and the guard denies it.
 - **Response size:** answer the question asked. A yes/no gets a sentence; a design decision gets the reasoning;
   neither gets a wall. Lead with the outcome.
 - **Prevents:** burning the top tier on a grep, and burying the answer under process.

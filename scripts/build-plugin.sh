@@ -286,8 +286,10 @@ _build_self_contained_hook "$HOOKS_SRC/borg-nanoprobe-log.sh" "$HOOKS_DST/borg-n
 # borg-dispatch-guard.sh is self-contained (reads samples file only) — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-dispatch-guard.sh" "$HOOKS_DST/borg-dispatch-guard.sh" 0
 # borg-supabase-guard.sh is self-contained (parses stdin JSON only) — copy as-is with guard.
-# borg-workflow-model-guard.sh is self-contained (jq + python3, fail-open) — copy as-is.
+# borg-workflow-model-guard.sh is self-contained (python3; fails closed on unparseable scripts) — copy as-is.
 _build_self_contained_hook "$HOOKS_SRC/borg-workflow-model-guard.sh" "$HOOKS_DST/borg-workflow-model-guard.sh" 0
+# borg-agent-model-guard.sh is self-contained (python3, stdin JSON + transcript only) — copy as-is.
+_build_self_contained_hook "$HOOKS_SRC/borg-agent-model-guard.sh" "$HOOKS_DST/borg-agent-model-guard.sh" 0
 _build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-supabase-guard.sh" 0
 # borg-memory-read-log.sh is self-contained (parses stdin JSON only) — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-memory-read-log.sh" "$HOOKS_DST/borg-memory-read-log.sh" 0
@@ -445,6 +447,16 @@ HOOKS_JSON='{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-workflow-model-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-agent-model-guard.sh",
             "timeout": 5
           }
         ]
