@@ -942,3 +942,73 @@ _launchd_path_value() {
     [ -f "$XDG_STATE_HOME/borg/usage-guardian.json" ]
     [ ! -e "$BORG_DIR/usage-guardian.json" ]
 }
+
+# ─── launchd runs the INSTALLED SYMLINK (~/.local/bin/borg-usage-watch -> repo/bin) ───────────
+#
+# Regression: the repo root was derived from dirname "$0" without resolving the symlink, so the
+# lib/ source pointed at ~/.local/lib/borg-hooks.sh (absent). On macOS bash 3.2 a failed `source`
+# aborts a non-interactive shell even inside `{ ...; } || true`, so the job exited 1 with empty
+# stderr on every fire.
+@test "launchd: invoked through an install-style symlink still samples (exit 0)" {
+    local fake_home="${BATS_TEST_TMPDIR}/lnkhome"
+    mkdir -p "$fake_home/.local/bin"
+    printf '#!/usr/bin/env bash\ncat "%s"\n' "$FIXTURE" > "$fake_home/.local/bin/claude"
+    chmod +x "$fake_home/.local/bin/claude"
+    ln -s "$SCRIPT" "$fake_home/.local/bin/borg-usage-watch"
+
+    run env -i \
+        USER=test \
+        HOME="$fake_home" \
+        PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin" \
+        BORG_USAGE_SAMPLES="$BORG_USAGE_SAMPLES" \
+        BORG_USAGE_LOG="$BORG_USAGE_LOG" \
+        BORG_USAGE_PANE_CMD="echo claude" \
+        "$fake_home/.local/bin/borg-usage-watch" --once
+    [ "$status" -eq 0 ]
+    [ "$(_row_field '.status')" = "ok" ]
+}
+
+@test "launchd: a missing lib/borg-hooks.sh is fail-open, not fatal" {
+    local fake_home="${BATS_TEST_TMPDIR}/nolib"
+    mkdir -p "$fake_home/.local/bin"
+    printf '#!/usr/bin/env bash\ncat "%s"\n' "$FIXTURE" > "$fake_home/.local/bin/claude"
+    chmod +x "$fake_home/.local/bin/claude"
+
+    run env -i \
+        USER=test \
+        HOME="$fake_home" \
+        PATH="/usr/bin:/bin" \
+        BORG_ROOT="${BATS_TEST_TMPDIR}/does-not-exist" \
+        BORG_USAGE_SAMPLES="$BORG_USAGE_SAMPLES" \
+        BORG_USAGE_LOG="$BORG_USAGE_LOG" \
+        BORG_USAGE_PANE_CMD="echo claude" \
+        "$SCRIPT" --once
+    [ "$status" -eq 0 ]
+    [ "$(_row_field '.status')" = "ok" ]
+}
+
+# ─── shared claude resolver (lib/borg/claude-bin.sh) ─────────────────────────
+@test "claude-bin: resolves an absolute path from the plist PATH plus \$HOME/.local/bin" {
+    local fake_home="${BATS_TEST_TMPDIR}/rh"
+    mkdir -p "$fake_home/.local/bin"
+    printf '#!/bin/sh\nexit 0\n' > "$fake_home/.local/bin/claude"
+    chmod +x "$fake_home/.local/bin/claude"
+    run env -i HOME="$fake_home" PATH="/usr/bin:/bin" /bin/bash -c \
+        "source '${BATS_TEST_DIRNAME}/../lib/borg/claude-bin.sh'; borg_resolve_claude_bin && echo \"\$BORG_CLAUDE_BIN\""
+    [ "$status" -eq 0 ]
+    [ "$output" = "$fake_home/.local/bin/claude" ]
+}
+
+@test "claude-bin: honours an executable BORG_CLAUDE_BIN override and fails when none found" {
+    local fake_home="${BATS_TEST_TMPDIR}/rh2"
+    mkdir -p "$fake_home"
+    printf '#!/bin/sh\nexit 0\n' > "$fake_home/myclaude"
+    chmod +x "$fake_home/myclaude"
+    run env -i HOME="$fake_home" PATH="/usr/bin:/bin" BORG_CLAUDE_BIN="$fake_home/myclaude" /bin/bash -c \
+        "source '${BATS_TEST_DIRNAME}/../lib/borg/claude-bin.sh'; borg_resolve_claude_bin && echo \"\$BORG_CLAUDE_BIN\""
+    [ "$output" = "$fake_home/myclaude" ]
+
+    run env -i HOME="$fake_home" PATH="/usr/bin:/bin" BORG_CLAUDE_SEARCH_DIRS="$fake_home/none" /bin/bash -c \
+        "source '${BATS_TEST_DIRNAME}/../lib/borg/claude-bin.sh'; borg_resolve_claude_bin"
+    [ "$status" -ne 0 ]
+}
