@@ -192,6 +192,24 @@ _not_captured() {
     [ "$status" -eq 0 ]
 }
 
+# bash 3.2 does not abort a test on a failed [[ ]] unless it is the last command,
+# so every assertion goes through a function that returns non-zero explicitly.
+_absent() {
+    local h="$1"
+    shift
+    local n
+    for n in "$@"; do
+        case "$h" in *"$n"*) echo "unexpected: $n"; return 1 ;; esac
+    done
+    return 0
+}
+
+_present() {
+    case "$1" in *"$2"*) return 0 ;; esac
+    echo "missing: $2"
+    return 1
+}
+
 _hook() {
     export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
     printf '%s' "$1" | "$HARNESS" hook StopFailure
@@ -201,77 +219,77 @@ _hook() {
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"session_id":"s","cwd":"/Users/someone/dev/secret","prompt":"my private prompt","last_assistant_message":"You'"'"'ve hit your session limit · resets 7am"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" == *"resets 7am"* ]]
-    [[ "$output" != *"private prompt"* ]]
-    [[ "$output" != *someone* ]]
-    [[ "$output" != *secret* ]]
+    _present "$output" 'resets 7am' || false
+    _absent "$output" 'private prompt' || false
+    _absent "$output" 'someone' || false
+    _absent "$output" 'secret' || false
 }
 
 @test "harness hook: plain private text in error_details is redacted (no secret shape)" {
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"session_id":"s","error":"rate_limit","error_details":"customer Acme owes money"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *Acme* ]]
-    [[ "$output" == *'"error":"rate_limit"'* ]]
+    _absent "$output" 'Acme' || false
+    _present "$output" '"error":"rate_limit"' || false
 }
 
 @test "harness hook: unlisted keys with plain text are dropped" {
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"extra_note":"Customer Acme owes 50k","error_info":"private plan about merger","agent_type":"my private agent name"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *Acme* ]]
-    [[ "$output" != *merger* ]]
-    [[ "$output" != *"private agent"* ]]
-    [[ "$output" != *extra_note* ]]
+    _absent "$output" 'Acme' || false
+    _absent "$output" 'merger' || false
+    _absent "$output" 'private agent' || false
+    _absent "$output" 'extra_note' || false
 }
 
 @test "harness hook: strings in arrays and under nested unlisted keys are dropped" {
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"items":["my private text in array"],"nested":{"foo":"internal codename ingle"}}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *"private text"* ]]
-    [[ "$output" != *codename* ]]
-    [[ "$output" != *ingle* ]]
+    _absent "$output" 'private text' || false
+    _absent "$output" 'codename' || false
+    _absent "$output" 'ingle' || false
 }
 
 @test "harness hook: case variant of a free-text key is dropped" {
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"LastAssistantMessage":"private words","Last_Assistant_Message":"more private words"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *"private words"* ]]
+    _absent "$output" 'private words' || false
 }
 
 @test "harness hook: Bearer, URL, AIza and sk_live credentials are dropped under any key" {
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"a":"Bearer abcdef1234567890","message":"postgres://user:pw@host/db","error_details":"AIzaSyA1234567890abcdefghij","b":"sk_live_abc123XYZ"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *Bearer* ]]
-    [[ "$output" != *postgres* ]]
-    [[ "$output" != *AIza* ]]
-    [[ "$output" != *sk_live* ]]
+    _absent "$output" 'Bearer' || false
+    _absent "$output" 'postgres' || false
+    _absent "$output" 'AIza' || false
+    _absent "$output" 'sk_live' || false
 }
 
 @test "harness hook: /private/var, /tmp, spaced and Windows paths are dropped" {
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"a":"/private/var/folders/xx/secret-project","message":"/tmp/secretproj/file.txt","error_details":"/Users/bob/My Docs/tax return/x.pdf","b":"C:\\Users\\bob\\taxes\\x.pdf"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *secret-project* ]]
-    [[ "$output" != *secretproj* ]]
-    [[ "$output" != *"tax return"* ]]
-    [[ "$output" != *bob* ]]
-    [[ "$output" != *taxes* ]]
+    _absent "$output" 'secret-project' || false
+    _absent "$output" 'secretproj' || false
+    _absent "$output" 'tax return' || false
+    _absent "$output" 'bob' || false
+    _absent "$output" 'taxes' || false
 }
 
 @test "harness hook: token-shaped enum values and keys are dropped" {
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"error":"sk-ant-abc123def456","status":"hunter2-password-xyz","model":"acme-merger-plan","mode":"AKIAABCDEFGHIJ12","ghp_abcdefghijklmnopqrstuvwxyz0123456789":1,"MY_SECRET_PW_hunter2":2}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *sk-ant* ]]
-    [[ "$output" != *hunter2* ]]
-    [[ "$output" != *acme* ]]
-    [[ "$output" != *AKIA* ]]
-    [[ "$output" != *ghp_* ]]
-    [[ "$output" != *SECRET* ]]
+    _absent "$output" 'sk-ant' || false
+    _absent "$output" 'hunter2' || false
+    _absent "$output" 'acme' || false
+    _absent "$output" 'AKIA' || false
+    _absent "$output" 'ghp_' || false
+    _absent "$output" 'SECRET' || false
 }
 
 @test "harness hook: fallback jq skeleton (no extractor beside the script) keeps no text" {
@@ -280,11 +298,11 @@ _hook() {
     export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
     printf '%s' '{"session_id":"s","error":"rate_limit","extra":"private","nested":{"foo":"codename"},"items":["in array"],"n":3}' | "$d/h.sh" hook StopFailure
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *private* ]]
-    [[ "$output" != *codename* ]]
-    [[ "$output" != *"in array"* ]]
-    [[ "$output" != *rate_limit* ]]
-    [[ "$output" == *'"<key>":3'* ]]
+    _absent "$output" 'private' || false
+    _absent "$output" 'codename' || false
+    _absent "$output" 'in array' || false
+    _absent "$output" 'rate_limit' || false
+    _present "$output" '"<key>":3' || false
 }
 
 @test "harness hook: long assistant message mentioning limits keeps only the limit sentence" {
@@ -292,10 +310,10 @@ _hook() {
     _hook '{"session_id":"s","last_assistant_message":"Here is how server error handling and rate limit retries work, password hunter2, tail: sk-ant-nope"}'
     _hook '{"session_id":"s","last_assistant_message":"long preamble about hunter2. You'"'"'ve hit your weekly limit · resets Jul 7 at 7am (America/Denver) and then more private words"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *hunter2* ]]
-    [[ "$output" != *"server error handling"* ]]
-    [[ "$output" != *"private words"* ]]
-    [[ "$output" != *"weekly limit"* ]]
+    _absent "$output" 'hunter2' || false
+    _absent "$output" 'server error handling' || false
+    _absent "$output" 'private words' || false
+    _absent "$output" 'weekly limit' || false
 }
 
 @test "harness hook: transcript_path becomes the fixed fake projects shape" {
@@ -307,11 +325,11 @@ _hook() {
 
 @test "harness scrubpane: redacts every line outside the allowlist" {
     run bash -c "printf '%s\n' 'my private prompt about hunter2' '│ > token sk-ant-abc │' '  ls /Users/someone/dev/x' '❯ 1. Yes' '  ? for shortcuts' | '$HARNESS' scrubpane"
-    [[ "$output" != *hunter2* ]]
-    [[ "$output" != *sk-ant* ]]
-    [[ "$output" != *someone* ]]
-    [[ "$output" == *"❯ 1. Yes"* ]]
-    [[ "$output" == *"? for shortcuts"* ]]
+    _absent "$output" 'hunter2' || false
+    _absent "$output" 'sk-ant' || false
+    _absent "$output" 'someone' || false
+    _present "$output" '❯ 1. Yes' || false
+    _present "$output" '? for shortcuts' || false
     [ "$(printf '%s\n' "$output" | grep -c '<redacted>')" = "3" ]
 }
 
@@ -333,7 +351,7 @@ _hook() {
     export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
     "$HARNESS" hook StopFailure < "$FX/stop_failure_payload.json"
     run "$HARNESS" show
-    [[ "$output" == *StopFailure* ]]
+    _present "$output" 'StopFailure' || false
     [ "$(stat -f %Lp "$BORG_SPIKE_DIR" 2>/dev/null || stat -c %a "$BORG_SPIKE_DIR")" = "700" ]
 }
 
@@ -387,10 +405,10 @@ _hook() {
     [ "$status" -eq 0 ]
     [ -f "$output" ]
     run cat "$output"
-    [[ "$output" == *"<redacted>"* ]]
-    [[ "$output" == *"1. Yes"* ]]
-    [[ "$output" != *hunter2* ]]
-    [[ "$output" != *someone* ]]
+    _present "$output" '<redacted>' || false
+    _present "$output" '1. Yes' || false
+    _absent "$output" 'hunter2' || false
+    _absent "$output" 'someone' || false
 }
 
 @test "extractor: keeps enum fields and strict limit sentence, drops everything else" {
@@ -398,44 +416,40 @@ _hook() {
     local in out
     in='{"type":"assistant","error":"rate_limit","isSidechain":false,"apiErrorStatus":429,"uuid":"4cfc980b-e51b-42da-9cd5-d75d0a33c88c","parentUuid":"d0165fec-e970-4833-91d8-7dfb071cebe6","cwd":"/Users/bob/dev/x","timestamp":"2026-07-05T17:59:00.619Z","gitBranch":"feat/secret","message":{"content":[{"type":"text","text":"You'"'"'ve hit your weekly limit · resets Jul 7 at 7am (America/Denver)"}]},"note":"token sk-ant-abc123 bob@example.com","long":"You'"'"'ve hit your weekly limit · resets 7am and my password is hunter2"}'
     out="$(printf '%s' "$in" | python3 -I "$SKEL" scrub)"
-    [[ "$out" == *'"error":"rate_limit"'* ]]
-    [[ "$out" == *'"apiErrorStatus":429'* ]]
-    [[ "$out" == *"weekly limit · resets Jul 7 at 7am (America/Denver)"* ]]
-    [[ "$out" == *"00000000-0000-4000-8000-000000000001"* ]]
-    [[ "$out" == *"00000000-0000-4000-8000-000000000002"* ]]
-    [[ "$out" != *4cfc980b* ]]
-    [[ "$out" != *bob* ]]
-    [[ "$out" != *sk-ant* ]]
-    [[ "$out" != *hunter2* ]]
-    [[ "$out" != *secret* ]]
-    [[ "$out" == *'"<key>":"<str>"'* ]]
+    _present "$out" '"error":"rate_limit"' || false
+    _present "$out" '"apiErrorStatus":429' || false
+    _present "$out" 'weekly limit · resets Jul 7 at 7am (America/Denver)' || false
+    _present "$out" '00000000-0000-4000-8000-000000000001' || false
+    _present "$out" '00000000-0000-4000-8000-000000000002' || false
+    _absent "$out" '4cfc980b' || false
+    _absent "$out" 'bob' || false
+    _absent "$out" 'sk-ant' || false
+    _absent "$out" 'hunter2' || false
+    _absent "$out" 'secret' || false
+    _present "$out" '"<key>":"<str>"' || false
 }
 
 @test "extractor: unlisted string keys and odd object keys never survive" {
     command -v python3 >/dev/null || skip "python3 not installed"
     run bash -c "printf '%s' '{\"customField\":\"hello\",\"/Users/bob/x\":1,\"level\":\"suggestion\",\"type\":\"has space and words\"}' | python3 -I '$SKEL' scrub"
-    [[ "$output" != *hello* ]]
-    [[ "$output" != *bob* ]]
-    [[ "$output" == *'"level":"suggestion"'* ]]
-    [[ "$output" == *'"type":"<str>"'* ]]
+    _absent "$output" 'hello' || false
+    _absent "$output" 'bob' || false
+    _present "$output" '"level":"suggestion"' || false
+    _present "$output" '"type":"<str>"' || false
 }
 
 @test "extractor: enum values outside the closed set or token-shaped are dropped" {
     command -v python3 >/dev/null || skip "python3 not installed"
-    run bash -c "printf %s "error":"made_up_kind" | python3 -I  --stdin"
-    [[ "$output" == *role:assistant* ]]
-    [[ "$output" != *made_up_kind* ]]
-    [[ "$output" != *hunter2* ]]
-    [[ "$output" != *acme* ]]
-    [[ "$output" != *AKIA* ]]
-    [[ "$output" != *sk-ant* ]]
+    local in='{"error":"made_up_kind","status":"hunter2-password-xyz","model":"acme-merger-plan","mode":"AKIAABCDEFGHIJ12","type":"sk-ant-abc123def456","role":"assistant"}'
+    run python3 -I "$SKEL" --stdin <<<"$in"
+    _present "$output" '"role":"assistant"' || false
+    _absent "$output" 'made_up_kind' 'hunter2' 'acme' 'AKIA' 'sk-ant' || false
 }
 
 @test "extractor: token-shaped and unknown keys become <key>" {
     command -v python3 >/dev/null || skip "python3 not installed"
-    run bash -c "printf %s "ghp_abcdefghijklmnopqrstuvwxyz0123456789":1 | python3 -I  --stdin"
-    [[ "$output" == *type:user* ]]
-    [[ "$output" != *ghp_* ]]
-    [[ "$output" != *hunter2* ]]
-    [[ "$output" != *acme* ]]
+    local in='{"ghp_abcdefghijklmnopqrstuvwxyz0123456789":1,"MY_SECRET_PW_hunter2":2,"acme_merger":3,"type":"user"}'
+    run python3 -I "$SKEL" --stdin <<<"$in"
+    _present "$output" '"type":"user"' || false
+    _absent "$output" 'ghp_' 'hunter2' 'acme' || false
 }
