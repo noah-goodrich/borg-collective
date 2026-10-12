@@ -12,7 +12,7 @@
   [2m— no repository in focus. cd into one, or run borg link <name>.[0m
 
 [1m▸ REPOSITORIES[0m  [2mthe collective · 7 repositories · 1 need attention[0m
-[1m PROJECT                     SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
+[1m REPOSITORY                  SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
 *echo                        [C]  [2midle        [0m 5d ago           –    –      – Echo is pinned.
  bravo                       [D]  [1;33mwaiting <<< [0m yesterday        –    –      – Bravo is waiting.

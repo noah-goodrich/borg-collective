@@ -26,8 +26,8 @@ from borg_core.nextpick import core as nextpick_core
 from borg_core.recon import core as recon_core
 
 
-class ProjectNotFound(Exception):
-    """Raised by `_focus` when the requested project is not in the registry.
+class RepositoryNotFound(Exception):
+    """Raised by `_focus` when the requested repository is not in the registry.
 
     `_focus` does NOT call a `_die*` helper itself -- it sits two frames deep inside `_document()`,
     which is shared by all four modes and must stay mode-agnostic. The single exception boundary in
@@ -35,9 +35,9 @@ class ProjectNotFound(Exception):
     place allowed to decide which `_die*` format applies.
     """
 
-    def __init__(self, project: str):
-        super().__init__(project)
-        self.project = project
+    def __init__(self, repository: str):
+        super().__init__(repository)
+        self.repository = repository
 
 
 def _die_json(message: str) -> NoReturn:
@@ -55,25 +55,25 @@ def _die_human(message: str) -> NoReturn:
     raise SystemExit(1)
 
 
-def _focus(project: str, registry: dict, now_epoch: int) -> dict | None:
-    """The `focus` block for a requested project, or None when no project was given.
+def _focus(repository: str, registry: dict, now_epoch: int) -> dict | None:
+    """The `focus` block for a requested repository, or None when no repository was given.
 
-    Looks `project` up in the FULL overlaid registry (NOT the --all-filtered map), so
-    `borg link --json <archived-project>` behaves like `borg link <archived-project>` does today.
-    Raises ProjectNotFound on a miss rather than dying itself -- see ProjectNotFound's docstring.
+    Looks `repository` up in the FULL overlaid registry (NOT the --all-filtered map), so
+    `borg link --json <archived-repository>` behaves like `borg link <archived-repository>` does today.
+    Raises RepositoryNotFound on a miss rather than dying itself -- see RepositoryNotFound's docstring.
     """
-    if not project:
+    if not repository:
         return None
-    projects = registry.get("projects") or {}
-    entry = projects.get(project)
+    repositories = registry.get("projects") or {}
+    entry = repositories.get(repository)
     if entry is None:
-        raise ProjectNotFound(project)
+        raise RepositoryNotFound(repository)
     # THE GROUP IS RESOLVED ONCE, HERE, and the two checkpoint reads share it. Resolving it inside
     # each reader would let the list and the head disagree if the registry changed between the two
-    # calls, and would walk `projects` twice for one answer.
-    sources = core.repo_sources(project, projects)
+    # calls, and would walk `repositories` twice for one answer.
+    sources = core.repo_sources(repository, repositories)
     return {
-        "name": project,
+        "name": repository,
         "entry": core.public_entry(entry, now_epoch),
         "plan": shell.read_plan(entry.get("path")),
         "checkpoints": shell.read_checkpoints(sources),
@@ -84,21 +84,21 @@ def _focus(project: str, registry: dict, now_epoch: int) -> dict | None:
 
 
 def _with_checkpoint_summaries(registry: dict) -> dict:
-    """The registry with every project's `summary` REPLACED by its latest checkpoint's, or null.
+    """The registry with every repository's `summary` REPLACED by its latest checkpoint's, or null.
 
     `borg link` no longer reads the registry's `summary` (summarize.py's transcript heuristic, which
     surfaced raw greetings and mid-sentence cuts) for display: the stored value is overwritten HERE,
-    in the copy this invocation renders, and never written back. A project with no checkpoint, or a
+    in the copy this invocation renders, and never written back. A repository with no checkpoint, or a
     checkpoint stating nothing, gets null and renders no summary. Expand step only: summarize.py and
     the registry writer are untouched, so other readers of the stored field are unaffected.
     """
-    projects = registry.get("projects") or {}
+    repositories = registry.get("projects") or {}
     derived = {}
-    for name, entry in projects.items():
+    for name, entry in repositories.items():
         if not isinstance(entry, dict):
             derived[name] = entry
             continue
-        summary = shell.read_checkpoint_summary(core.repo_sources(name, projects))
+        summary = shell.read_checkpoint_summary(core.repo_sources(name, repositories))
         derived[name] = {**entry, "summary": summary}
     return {**registry, "projects": derived}
 
@@ -121,7 +121,7 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: lis
 
     `--local` IS CHECKED HERE AND NOWHERE DEEPER, and as of AC3 it is checked TWICE, once per network
     path. shell.sweep is never called on the opted-down path, and neither is shell.start_fetch -- so
-    no adapter is discovered, no `since` is resolved, no projects file is staged and no `gh` is
+    no adapter is discovered, no `since` is resolved, no repositories file is staged and no `gh` is
     spawned. NOT "no subprocess": the paragraph above's `git remote get-url` still forks in
     repository scope, and the reap overlay's `tmux list-windows` still forks in either scope
     (shell.registry_with_state gates that one on `apply_reap and not reap_disabled()` -- BORG_NO_REAP
@@ -200,7 +200,7 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: lis
     sweep = (
         grid.no_sweep(["sweep: --local -- states come from what each manifest declares, nothing was fetched"])
         if local
-        else shell.sweep(grid.scoped_projects(registry, scope), now=moment)
+        else shell.sweep(grid.scoped_repositories(registry, scope), now=moment)
     )
     fetch = grid.no_fetch() if pending is None else shell.finish_fetch(pending)
     # HANDED BACK, NOT RE-FETCHED: the WAITING ON YOU rows are built from this very sweep (see `_waiting`).
@@ -218,7 +218,7 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: lis
     return block
 
 
-def _waiting(projects: dict, scope: dict, local: bool, tracks: list[dict]) -> dict:
+def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict]) -> dict:
     """The `waiting` key: the chooser's YOU rows, built by `borg next`'s own functions over THIS page's sweep.
 
     ONE ROUTER FOR "WHAT IS MINE" (decided by Noah 2026-10-09): `nextpick_cli.item_rows` is the call the chooser
@@ -230,9 +230,13 @@ def _waiting(projects: dict, scope: dict, local: bool, tracks: list[dict]) -> di
     """
     try:
         repo = str(scope.get("repository") or "")
-        scoped: dict = {repo: projects[repo]} if scope.get("kind") == "repository" and repo in projects else projects
-        by_project = recon_core.merge_by_project(tracks)
-        rows, _quiet, degraded, hidden = nextpick_cli.item_rows(scoped, local, False, swept=(by_project, None))
+        scoped: dict = (
+            {repo: repositories[repo]}
+            if scope.get("kind") == "repository" and repo in repositories
+            else repositories
+        )
+        by_repository = recon_core.merge_by_project(tracks)
+        rows, _quiet, degraded, hidden = nextpick_cli.item_rows(scoped, local, False, swept=(by_repository, None))
     # JUSTIFICATION: a side block must never take the page down; degrade and say why.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         rows, degraded, hidden = [], f"waiting rows failed: {exc}", {"agent": 0, "stale": 0, "overflow": 0}
@@ -247,12 +251,12 @@ def _waiting(projects: dict, scope: dict, local: bool, tracks: list[dict]) -> di
 # JUSTIFICATION: six independent inputs of one assembly step; a container would only relocate the names.
 # pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def _grid_and_waiting(
-    overlaid: dict, projects: dict, scope: dict, local: bool, moment: int, mode: str
+    overlaid: dict, repositories: dict, scope: dict, local: bool, moment: int, mode: str
 ) -> tuple[dict, dict | None]:
     """The `grid` block and the `waiting` block, the second built from the sweep the first performed."""
     tracks: list[dict] = []
     block = _grid(overlaid, scope, local, moment, tracks)
-    return block, (None if mode == "porcelain" else _waiting(projects, scope, local, tracks))
+    return block, (None if mode == "porcelain" else _waiting(repositories, scope, local, tracks))
 
 
 def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
@@ -271,7 +275,7 @@ def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
 
 
 # JUSTIFICATION: the assembly step of one document; every local is a distinct input to core.assemble.
-def _document(project: str, show_all: bool, mode: str, local: bool = False) -> dict:  # pylint: disable=too-many-locals
+def _document(repository: str, show_all: bool, mode: str, local: bool = False) -> dict:  # pylint: disable=too-many-locals
     """Assemble the `borg link` document for one invocation, consumed by `--json`, `--porcelain` and
     the one human renderer.
 
@@ -287,7 +291,7 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     re-executes it synchronously on every cursor move." Neither call site exists: `grep -n 'borg link'
     drone.zsh` returns exactly one hit, `drone link`'s single `exec` pass-through, and
     `grep -c -- '--preview' borg.zsh` is 0. There is no hot loop left in the tree, so the skip now
-    saves a 14-project `directives`/`assimilated` glob once per typed command. It is kept because it
+    saves a 14-repository `directives`/`assimilated` glob once per typed command. It is kept because it
     is already written and costs nothing, NOT because a measured caller needs it -- do not cite it as
     a latency protection without re-measuring first.
 
@@ -312,9 +316,9 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
 
     FIVE further judgment calls, unchanged from before this function became mode-aware: (i)
     `shell.now_epoch()` is called EXACTLY ONCE and threaded into registry_with_state, format_iso,
-    visible_projects, public_entry and cortex_pending -- a second clock read would let a countdown
+    visible_repositories, public_entry and cortex_pending -- a second clock read would let a countdown
     and a relative time in one document describe different instants; (ii) registry_with_state() is
-    called exactly ONCE (it forks tmux and globs every project's state.json; two calls give two
+    called exactly ONCE (it forks tmux and globs every repository's state.json; two calls give two
     snapshots and make the table, the order and the active count disagree -- the bug shell.py's
     registry_with_state docstring says the port fixed); (iii) `core.active_count` runs on the
     UNFILTERED overlaid registry, matching _borg_active_count (borg.zsh:115), which never applied the
@@ -322,44 +326,44 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     bare, inside `_aggregates`, alongside the state-overlaid `overlaid` here -- on purpose, because
     borg.zsh:163 feeds them borg_registry_read (the RAW registry), not the state-overlaid one; do not
     collapse it into one read; (v) `total_projects` is `len(overlaid.get("projects"))`, from the UNFILTERED
-    overlaid map -- NOT from `projects` (the --all-filtered map) or `order`.
+    overlaid map -- NOT from `repositories` (the --all-filtered map) or `order`.
     """
     moment = shell.now_epoch()
     overlaid = _with_checkpoint_summaries(shell.registry_with_state(now=moment))
-    projects = core.visible_projects(overlaid, show_all, moment)
-    order = core.order_projects(projects)
+    repositories = core.visible_repositories(overlaid, show_all, moment)
+    order = core.order_repositories(repositories)
 
-    # Scope is computed from the UNFILTERED overlaid registry, not `projects`: --all is a display
+    # Scope is computed from the UNFILTERED overlaid registry, not `repositories`: --all is a display
     # filter, and an archived repository is still the repository you are standing in. Resolving
     # scope against the filtered map would make `borg link` inside an archived repository silently
     # report orchestrator breadth.
     scope = core.scope_for(
         shell.cwd(),
         shell.orchestrator_root(),
-        shell.resolved_project_paths(overlaid),
+        shell.resolved_repository_paths(overlaid),
         local=local,
-        requested_project=project,
+        requested_repository=repository,
     )
 
-    # `bool(project) or ...` AND NOT A PURELY SCOPE-DERIVED TEST. scope_for honours a positional only
+    # `bool(repository) or ...` AND NOT A PURELY SCOPE-DERIVED TEST. scope_for honours a positional only
     # when it is IN THE REGISTRY; an unregistered name deliberately falls through to cwd resolution
     # and yields kind="orchestrator". Gating focus on scope alone therefore DELETES the
-    # ProjectNotFound path for `borg link ghost` from any cwd outside a registered repository -- exit
-    # 0 with a full board instead of exit 1. cli_contract.bats' "link <project> dies non-zero on a
-    # project that is not registered" and test_cli.py's three ProjectNotFound cases are the evidence,
+    # RepositoryNotFound path for `borg link ghost` from any cwd outside a registered repository -- exit
+    # 0 with a full board instead of exit 1. cli_contract.bats' "link <repository> dies non-zero on a
+    # repository that is not registered" and test_cli.py's three RepositoryNotFound cases are the evidence,
     # and they are untouched by AC2 on purpose.
-    need_focus = mode != "porcelain" and (bool(project) or scope["kind"] == "repository")
+    need_focus = mode != "porcelain" and (bool(repository) or scope["kind"] == "repository")
     # COMPUTED ABOVE THE AGGREGATE BLOCK, and the hoist is load-bearing rather than tidy. `_focus`
-    # raises ProjectNotFound before anything else runs, which is what keeps a tmux window name that
+    # raises RepositoryNotFound before anything else runs, which is what keeps a tmux window name that
     # is not a registry key as cheap as it is today (drone.zsh:964 calls this once per window). Below
-    # the aggregates, that same miss would first pay a 14-project directives-and-assimilated glob.
+    # the aggregates, that same miss would first pay a 14-repository directives-and-assimilated glob.
     #
-    # `project or scope["repository"]` IS THE FIX FOR THE MODAL HUMAN INVOCATION. `_focus`
-    # short-circuits on an empty positional, so passing `project` alone would make `cd <repo> &&
+    # `repository or scope["repository"]` IS THE FIX FOR THE MODAL HUMAN INVOCATION. `_focus`
+    # short-circuits on an empty positional, so passing `repository` alone would make `cd <repo> &&
     # borg link` -- no argument at all -- render the IN FOCUS placeholder, no `Status:` line, and
     # empty QUEUED/SHIPPED for a repository with directives on disk. The golden harness renders
     # repository context BOTH ways against the SAME golden so no future edit can un-fix it.
-    focus = _focus(project or scope.get("repository") or "", overlaid, moment) if need_focus else None
+    focus = _focus(repository or scope.get("repository") or "", overlaid, moment) if need_focus else None
 
     # `--json` IS SCOPE-INDEPENDENT, and that is the actual precondition for not bumping
     # DOCUMENT_VERSION. skills/borg-link/SKILL.md runs a bare `borg link --json | jq '.directives |=
@@ -372,16 +376,16 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     directives, assimilated = _aggregates(need_aggregate)
     # NOT gated with the aggregates any more: the cortex pause row hangs off a BOARD row, and the
     # board renders in both contexts. It is a single ~40-line file read (shell.cortex_pending), not a
-    # per-project glob, so it is priced with the render rather than with the aggregates.
+    # per-repository glob, so it is priced with the render rather than with the aggregates.
     cortex_pending = [] if mode == "porcelain" else shell.cortex_pending(now=moment)
 
-    block, waiting = _grid_and_waiting(overlaid, projects, scope, local, moment, mode)
+    block, waiting = _grid_and_waiting(overlaid, repositories, scope, local, moment, mode)
     return core.assemble(
         generated_at=core.format_iso(moment),
         show_all=show_all,
         total_projects=len(overlaid.get("projects") or {}),
         capacity=core.capacity(core.active_count(overlaid), shell.max_active()),
-        projects=projects,
+        projects=repositories,
         order=order,
         directives=directives,
         assimilated=assimilated,
@@ -415,7 +419,7 @@ def _emit(text: str) -> int:
     return 0
 
 
-def _run(project: str, show_all: bool, mode: str, local: bool = False) -> int:
+def _run(repository: str, show_all: bool, mode: str, local: bool = False) -> int:
     """Dispatch one `borg link` invocation; returns the process exit code.
 
     Mode precedence, strictly: json > porcelain > human. Renders to a SINGLE string and prints it
@@ -430,7 +434,7 @@ def _run(project: str, show_all: bool, mode: str, local: bool = False) -> int:
     test_render.py asserts that on the source text: a second call site is how "one front door" decays
     back into two modes of one command answering the same question with different data.
     """
-    doc = _document(project, show_all, mode, local)
+    doc = _document(repository, show_all, mode, local)
     if mode == "json":
         return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
@@ -475,11 +479,11 @@ def _build_parser() -> argparse.ArgumentParser:
     counting flags would make it five. The mode count is `_mode`'s return set and nothing else.
     """
     parser = argparse.ArgumentParser(prog="borg link", description="Emit the borg link document.")
-    parser.add_argument("project", nargs="?", default="")
+    parser.add_argument("repository", nargs="?", default="")
     parser.add_argument("--json", dest="json_only", action="store_true")
     parser.add_argument("--porcelain", dest="porcelain", action="store_true")
     # PARSED AND IGNORED SINCE AC2, AND IT MUST STAY THAT WAY. `--deep` collapsed into repository
-    # scope -- scope_for already resolves `borg link <project>` to {kind: repository}, so the one
+    # scope -- scope_for already resolves `borg link <repository>` to {kind: repository}, so the one
     # document says everything the deep dive said, and keeping it as a MODE would be a third context
     # rendering the same data, which is exactly what "the contexts differ in breadth only" forbids.
     # It stays in the parser because ONE LIVE COPY OF THE DISPATCHER PASSES IT, and it is the worst
@@ -489,7 +493,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # the anchor conversion described below put the literal into six PROSE sites (this comment, its
     # twin in test_cli.py, two lines of CLAUDE.md, and two directives under docs/plans/directives/);
     # a reader who greps the tree and counts is reading commentary, not callers. That arm serves
-    # every `borg link <project>` a human types and every `drone link`, so deleting the argument
+    # every `borg link <repository>` a human types and every `drone link`, so deleting the argument
     # makes argparse exit 2 on the most-typed invocation of the command.
     #
     # ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This comment, its twin in
@@ -499,7 +503,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # instead. The same edit dropped this comment's "which IS the fzf preview's path, re-executed on
     # every cursor move": `cmd_switch`'s `fzf` call has no `--preview` flag at all, so that hot loop
     # is not a weaker justification, it is a nonexistent one. The surviving justification is stronger
-    # anyway -- a human's own `borg link <project>` exiting 2.
+    # anyway -- a human's own `borg link <repository>` exiting 2.
     #
     # THE COUNT WAS CORRECTED IN AC2/S4. It used to say THREE copies, naming bin/link-parity-harness
     # and the byte-copy at ~/.claude/bin/link-parity-harness alongside borg.zsh. Neither ever passed
@@ -557,9 +561,9 @@ def main(argv: list[str] | None = None) -> None:
     `borg link: {message}` shape a machine consumer can rely on), `_die_human` for the three human
     modes. Both die formatters print to stderr and exit 1 with zero bytes on stdout -- A3 depends on
     `--json` never leaking a traceback onto stdout, so the catch here must be as broad as the human
-    path's always was. A syntactically-valid registry with a non-dict project entry (e.g.
+    path's always was. A syntactically-valid registry with a non-dict repository entry (e.g.
     `{"projects":{"foo":null}}`, a plausible partial-write artifact) raises AttributeError from
-    core.py's `entry.items()`/`entry.get()` -- not ValueError, not OSError, and NOT ProjectNotFound.
+    core.py's `entry.items()`/`entry.get()` -- not ValueError, not OSError, and NOT RepositoryNotFound.
     borg_core/registry/shell.py already wraps JSONDecodeError in ValueError, so corrupt JSON was
     never the uncovered case; a narrow `except (ValueError, OSError)` on the `--json` path left every
     entry-shape violation (null entry, list entry, string entry, non-dict `projects`, non-dict
@@ -596,8 +600,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.render_document:
             exit_code = _render_document_from_stdin(sys.stdin)
         else:
-            exit_code = _run(args.project, args.show_all, mode, args.local)
-    except ProjectNotFound as exc:
+            exit_code = _run(args.repository, args.show_all, mode, args.local)
+    except RepositoryNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.
     except Exception as exc:  # pylint: disable=broad-except
@@ -605,8 +609,8 @@ def main(argv: list[str] | None = None) -> None:
     raise SystemExit(exit_code)
 
 
-def _not_found_message(exc: ProjectNotFound) -> str:
-    return f"project '{exc.project}' not in registry. Run: borg add [path]"
+def _not_found_message(exc: RepositoryNotFound) -> str:
+    return f"repository '{exc.repository}' not in registry. Run: borg add [path]"
 
 
 if __name__ == "__main__":

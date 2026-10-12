@@ -10,7 +10,7 @@ repository rather than one, and `repository_slug`, which answers "which `owner/r
 directory?" the same way the recon github adapter does.
 
 WHY THIS DOES NOT IMPORT borg_core.link.core. `discover_registered` needs the registry's project
-paths, and `borg_core.link.core.project_paths` already extracts them (mirroring jq's
+paths, and `borg_core.link.core.repository_paths` already extracts them (mirroring jq's
 `[.key, (.value.path // "")] | @tsv`). Importing it would point an arrow from `manifest` at `link`,
 and `link` is about to become the CONSUMER of this package -- the arrow belongs the other way round.
 The local extraction is a handful of lines, far under pylint's `min-similarity-lines = 8`, and

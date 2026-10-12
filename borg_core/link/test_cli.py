@@ -37,13 +37,13 @@ def isolated_env(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _write_registry(root, projects):
+def _write_registry(root, repositories):
     registry_file = root / "borg-dir" / "registry.json"
-    registry_file.write_text(json.dumps({"projects": projects}), encoding="utf-8")
+    registry_file.write_text(json.dumps({"projects": repositories}), encoding="utf-8")
     return registry_file
 
 
-def _project_dir(root, name):
+def _repository_dir(root, name):
     directory = root / "ws" / name
     directory.mkdir(parents=True, exist_ok=True)
     return str(directory)
@@ -52,7 +52,7 @@ def _project_dir(root, name):
 def _delta_workspace(root):
     """Mirrors tests/cli_contract.bats's _link_build_deep_ws: plan 1/3 met, 5 checkpoints (name
     sort deliberately contradicts mtime), 2 directives, 1 assimilated."""
-    directory = Path(_project_dir(root, "delta"))
+    directory = Path(_repository_dir(root, "delta"))
     (directory / ".borg" / "checkpoints").mkdir(parents=True, exist_ok=True)
     (directory / "docs" / "plans" / "directives").mkdir(parents=True, exist_ok=True)
     (directory / "docs" / "plans" / "assimilated").mkdir(parents=True, exist_ok=True)
@@ -113,10 +113,10 @@ def _manifest_workspace(root, name="warehouse"):
     goldens pin the same file's rendered form, so a test that built its own rows could stay green
     while the fixture the goldens measure moved underneath it.
     """
-    programs = Path(_project_dir(root, name)) / ".borg" / "chains"
+    programs = Path(_repository_dir(root, name)) / ".borg" / "chains"
     programs.mkdir(parents=True, exist_ok=True)
     shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", programs)
-    return str(Path(_project_dir(root, name)))
+    return str(Path(_repository_dir(root, name)))
 
 
 def test_json_publishes_the_measured_picture_width_on_the_grid_block(isolated_env, capsys, monkeypatch):
@@ -212,7 +212,7 @@ def test_run_resolves_the_registry_from_borg_dir_with_no_env_override(isolated_e
     assert "solo" in doc["order"]
 
 
-def test_run_focus_block_for_a_named_project(isolated_env, capsys):
+def test_run_focus_block_for_a_named_repository(isolated_env, capsys):
     path = _delta_workspace(isolated_env)
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle"}})
 
@@ -248,8 +248,8 @@ def test_run_focus_block_for_a_named_project(isolated_env, capsys):
     assert "relative_activity" in focus["entry"]
 
 
-def test_run_focus_plan_is_null_when_the_project_has_no_project_plan(isolated_env, capsys):
-    path = _project_dir(isolated_env, "noplan")
+def test_run_focus_plan_is_null_when_the_repository_has_no_project_plan(isolated_env, capsys):
+    path = _repository_dir(isolated_env, "noplan")
     _write_registry(isolated_env, {"noplan": {"path": path, "status": "idle"}})
 
     cli._run("noplan", False, "json")  # pylint: disable=protected-access
@@ -260,20 +260,20 @@ def test_run_focus_plan_is_null_when_the_project_has_no_project_plan(isolated_en
     assert doc["focus"]["entry"] is not None
 
 
-def test_run_focus_unknown_project_raises_project_not_found(isolated_env):
+def test_run_focus_unknown_repository_raises_repository_not_found(isolated_env):
     # `_run`/`_document`/`_focus` stay mode-agnostic: they RAISE rather than dying. Only `main`'s
     # single exception boundary knows the mode and picks a `_die*` format -- see
-    # test_main_json_unknown_project_dies_with_the_deep_dive_message and
-    # test_main_human_mode_unknown_project_dies_via_die_human below.
+    # test_main_json_unknown_repository_dies_with_the_deep_dive_message and
+    # test_main_human_mode_unknown_repository_dies_via_die_human below.
     _write_registry(isolated_env, {})
 
-    with pytest.raises(cli.ProjectNotFound) as exc_info:
+    with pytest.raises(cli.RepositoryNotFound) as exc_info:
         cli._run("nope", False, "json")  # pylint: disable=protected-access
 
-    assert exc_info.value.project == "nope"
+    assert exc_info.value.repository == "nope"
 
 
-def test_main_json_unknown_project_dies_with_the_deep_dive_message(isolated_env, capsys):
+def test_main_json_unknown_repository_dies_with_the_deep_dive_message(isolated_env, capsys):
     _write_registry(isolated_env, {})
 
     with pytest.raises(SystemExit) as exc_info:
@@ -282,10 +282,10 @@ def test_main_json_unknown_project_dies_with_the_deep_dive_message(isolated_env,
     assert exc_info.value.code == 1
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "project 'nope' not in registry. Run: borg add [path]" in captured.err
+    assert "repository 'nope' not in registry. Run: borg add [path]" in captured.err
 
 
-def test_main_human_mode_unknown_project_dies_via_die_human(isolated_env, capsys):
+def test_main_human_mode_unknown_repository_dies_via_die_human(isolated_env, capsys):
     _write_registry(isolated_env, {})
 
     with pytest.raises(SystemExit) as exc_info:
@@ -295,10 +295,10 @@ def test_main_human_mode_unknown_project_dies_via_die_human(isolated_env, capsys
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err.startswith("\033[0;31m▸ ERROR:\033[0m")
-    assert "project 'nope' not in registry. Run: borg add [path]" in captured.err
+    assert "repository 'nope' not in registry. Run: borg add [path]" in captured.err
 
 
-def test_main_human_mode_clean_error_not_traceback_on_malformed_project_entry(isolated_env, capsys):
+def test_main_human_mode_clean_error_not_traceback_on_malformed_repository_entry(isolated_env, capsys):
     _write_registry(isolated_env, {"foo": None})
 
     with pytest.raises(SystemExit) as exc_info:
@@ -311,8 +311,8 @@ def test_main_human_mode_clean_error_not_traceback_on_malformed_project_entry(is
     assert "Traceback" not in captured.err
 
 
-def test_main_json_mode_clean_error_not_traceback_on_malformed_project_entry(isolated_env, capsys):
-    # Before this fix, `--json`'s narrow `except (ValueError, OSError)` let a null project entry's
+def test_main_json_mode_clean_error_not_traceback_on_malformed_repository_entry(isolated_env, capsys):
+    # Before this fix, `--json`'s narrow `except (ValueError, OSError)` let a null repository entry's
     # AttributeError (core.py's `entry.get()`/`entry.items()`) fall through as a raw traceback on
     # stdout -- verified live. `--json` must die exactly like the human modes: stderr only, empty
     # stdout, no "Traceback".
@@ -513,9 +513,9 @@ def test_render_document_refuses_to_be_combined_with_a_mode(isolated_env, capsys
 
 def test_repository_scope_calls_no_aggregate_collector_on_the_human_path(isolated_env, capsys, monkeypatch):
     # C1. The two aggregate collectors are a directory-glob-plus-markdown-read pass over EVERY
-    # registered project, and a NAMED invocation lands in repository scope, which must skip them
+    # registered repository, and a NAMED invocation lands in repository scope, which must skip them
     # exactly as the retired `deep` mode did. Mutating `need_aggregate` to `mode != "porcelain"`
-    # turns this red and puts a 14-project glob back on every `borg link <project>`.
+    # turns this red and puts a 14-repository glob back on every `borg link <repository>`.
     # (This used to justify the skip by "both hot loops (drone.zsh's per-tmux-window status table,
     # borg.zsh's per-keypress fzf preview) pass a NAME". Both were retired 2026-08-27, so the skip
     # now saves the glob once per typed command rather than per keypress. What lapsed is the size of
@@ -568,9 +568,9 @@ def test_focus_is_gathered_for_a_positional_and_for_repository_scope_but_never_f
     calls = {"n": 0}
     real_focus = cli._focus  # pylint: disable=protected-access
 
-    def counting_focus(project, registry, now_epoch):
+    def counting_focus(repository, registry, now_epoch):
         calls["n"] += 1
-        return real_focus(project, registry, now_epoch)
+        return real_focus(repository, registry, now_epoch)
 
     monkeypatch.setattr(cli, "_focus", counting_focus)
 
@@ -595,8 +595,8 @@ def test_focus_is_gathered_for_a_positional_and_for_repository_scope_but_never_f
     assert calls["n"] == 2
 
 
-def test_run_focus_finds_an_archived_project_even_without_all(isolated_env, capsys):
-    path = _project_dir(isolated_env, "delta")
+def test_run_focus_finds_an_archived_repository_even_without_all(isolated_env, capsys):
+    path = _repository_dir(isolated_env, "delta")
     _write_registry(isolated_env, {"delta": {"path": path, "status": "archived"}})
 
     exit_code = cli._run("delta", False, "json")  # pylint: disable=protected-access
@@ -608,8 +608,8 @@ def test_run_focus_finds_an_archived_project_even_without_all(isolated_env, caps
     assert "delta" not in doc["projects"]
 
 
-def test_main_parses_argv_including_a_dash_leading_project_and_wraps_a_corrupt_registry(isolated_env, capsys):
-    _write_registry(isolated_env, {"delta": {"path": _project_dir(isolated_env, "delta"), "status": "idle"}})
+def test_main_parses_argv_including_a_dash_leading_repository_and_wraps_a_corrupt_registry(isolated_env, capsys):
+    _write_registry(isolated_env, {"delta": {"path": _repository_dir(isolated_env, "delta"), "status": "idle"}})
 
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["--json"])
@@ -670,7 +670,7 @@ def test_document_scope_is_orchestrator_at_the_workspace_root(isolated_env, monk
     assert doc["scope"]["repository"] is None
 
 
-def test_document_explicit_project_dominates_cwd(isolated_env, monkeypatch):
+def test_document_explicit_repository_dominates_cwd(isolated_env, monkeypatch):
     # B3 end-to-end, through the real _document rather than the pure resolver: standing in alpha and
     # asking for beta must scope to BETA. Resolving breadth from cwd here would render alpha's facts
     # under beta's header, which is indistinguishable from a right one. `drone link` still passes
@@ -738,7 +738,7 @@ def test_json_carries_the_aggregates_in_every_scope(isolated_env, monkeypatch):
 def test_focus_follows_scope_when_no_positional_is_given(isolated_env, monkeypatch):
     """C3. `cd <repo> && borg link` -- the modal human invocation -- must render the repository's own
     card, its directives and its shipped plans. `_focus` short-circuits on an empty positional, so
-    passing `project` alone (rather than `project or scope["repository"]`) renders the IN FOCUS
+    passing `repository` alone (rather than `repository or scope["repository"]`) renders the IN FOCUS
     placeholder, no `Status:` line, and empty QUEUED/SHIPPED for a repository with files on disk."""
     alpha, _beta = _scope_registry(isolated_env)
     monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
@@ -755,25 +755,25 @@ def test_an_unregistered_positional_raises_before_any_aggregate_collector_runs(i
     """C4 + B8. `scope_for` honours a positional only when it is IN THE REGISTRY, so `borg link
     ghost` from the workspace root resolves to ORCHESTRATOR scope -- which is exactly the shape
     where a purely scope-derived `need_focus` would skip `_focus`, skip the raise, and exit 0 with a
-    full board instead of exit 1. `bool(project) or ...` preserves it.
+    full board instead of exit 1. `bool(repository) or ...` preserves it.
 
     The collectors are monkeypatched to RAISE rather than counted: `_focus` sits above them so a
     miss costs nothing, and moving the assignment back below the aggregate block makes an unknown
-    tmux window name pay a 14-project glob before it fails.
+    tmux window name pay a 14-repository glob before it fails.
     """
     _scope_registry(isolated_env)
     monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
     monkeypatch.chdir(isolated_env)
 
     def _boom(*_args, **_kwargs):
-        raise AssertionError("an aggregate collector ran before the ProjectNotFound raise")
+        raise AssertionError("an aggregate collector ran before the RepositoryNotFound raise")
 
     monkeypatch.setattr(shell, "collect_all_directives", _boom)
     monkeypatch.setattr(shell, "collect_all_assimilated", _boom)
 
-    with pytest.raises(cli.ProjectNotFound) as exc_info:
+    with pytest.raises(cli.RepositoryNotFound) as exc_info:
         cli._document("ghost", False, "human")  # pylint: disable=protected-access
-    assert exc_info.value.project == "ghost"
+    assert exc_info.value.repository == "ghost"
 
 
 def test_porcelain_computes_no_focus_no_aggregates_and_no_cortex_pending(isolated_env, monkeypatch):
@@ -824,7 +824,7 @@ def test_deep_is_accepted_and_ignored(isolated_env, capsys):
     """C6. `--deep` collapsed into repository scope but STAYS in the parser: one live copy of the
     dispatcher passes it -- borg.zsh's positional `link` arm, which you find by grepping
     `_link_py_args=(--deep)` -- and deleting the argument makes argparse exit 2 on every
-    `borg link <project>` a human types and on every `drone link`.
+    `borg link <repository>` a human types and on every `drone link`.
 
     ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This docstring, cli.py's twin comment
     and two lines of CLAUDE.md all pinned `borg.zsh:3111`, which matched neither main nor the branch
@@ -843,7 +843,7 @@ def test_deep_is_accepted_and_ignored(isolated_env, capsys):
     assert args.deep is True
     assert cli._mode(args) == "human"  # pylint: disable=protected-access
 
-    path = _project_dir(isolated_env, "delta")
+    path = _repository_dir(isolated_env, "delta")
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle", "summary": "Delta."}})
 
     with pytest.raises(SystemExit) as exc_info:
@@ -870,10 +870,10 @@ def test_mode_collapses_to_three_values(isolated_env):  # pylint: disable=unused
     assert cli._mode(parser.parse_args(["--porcelain", "--deep"])) == "porcelain"  # pylint: disable=protected-access
 
 
-def test_focus_of_an_empty_project_is_none(isolated_env):  # pylint: disable=unused-argument
+def test_focus_of_an_empty_repository_is_none(isolated_env):  # pylint: disable=unused-argument
     """`_focus`'s empty-positional guard became UNREACHABLE from `_document` in AC2: `need_focus` is
-    `bool(project) or scope["kind"] == "repository"`, and both arms guarantee a non-empty name by the
-    time `project or scope["repository"]` is evaluated. It stays because the function must be total
+    `bool(repository) or scope["kind"] == "repository"`, and both arms guarantee a non-empty name by the
+    time `repository or scope["repository"]` is evaluated. It stays because the function must be total
     for any future caller, and it is covered DIRECTLY rather than left to look like a live path --
     the same treatment `picture.link_ref` gives its unlinkable arm."""
     assert cli._focus("", {"projects": {}}, 0) is None  # pylint: disable=protected-access
@@ -909,7 +909,7 @@ def test_a_consumer_that_stops_reading_gets_no_traceback(monkeypatch):
 def test_document_scope_survives_an_archived_repository(isolated_env, monkeypatch):
     # --all is a DISPLAY filter; an archived repository is still the repository you are standing in.
     # Resolving scope against the filtered map would silently report orchestrator breadth here.
-    # The visibility filter is `entry.get("status") != "archived"` (core.visible_projects) -- NOT an
+    # The visibility filter is `entry.get("status") != "archived"` (core.visible_repositories) -- NOT an
     # `archived: true` boolean. An earlier version of this test wrote the boolean, which archives
     # nothing, so the entry stayed visible and the assertion could not distinguish scope-from-
     # `overlaid` (correct) from scope-from-`projects` (the filtered map). Assert the filter really
@@ -945,7 +945,7 @@ def test_json_publishes_a_refused_count_on_the_grid_block(isolated_env, capsys, 
     stays 0 and `manifests` stays empty, so nothing else on the block distinguishes "broken" from
     "absent".
     """
-    directory = _project_dir(isolated_env, "warehouse")
+    directory = _repository_dir(isolated_env, "warehouse")
     programs = Path(directory) / ".borg" / "chains"
     programs.mkdir(parents=True, exist_ok=True)
     # One row, missing `order` -- structurally a manifest, refused whole by `validate`.
@@ -976,7 +976,7 @@ def test_a_registry_of_readable_manifests_publishes_refused_zero(isolated_env, c
 
 def test_json_reports_a_stacks_manifest_with_its_stacks_path(isolated_env, capsys, monkeypatch):
     """A manifest in `.stacks/` is on the wire with the REAL file path, not a `.borg/chains` one."""
-    directory = _project_dir(isolated_env, "warehouse")
+    directory = _repository_dir(isolated_env, "warehouse")
     stacks = Path(directory) / ".stacks"
     stacks.mkdir()
     shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", stacks)
@@ -995,7 +995,7 @@ def test_a_stem_declared_in_both_roots_counts_as_refused_not_as_no_manifest(isol
     Without the count CHAINS prints the "run /borg-plan to scaffold one" sentence beside a
     manifest that exists twice, which is the false advice the `refused` key was added to end.
     """
-    directory = _project_dir(isolated_env, "warehouse")
+    directory = _repository_dir(isolated_env, "warehouse")
     for root in (".stacks", ".borg/chains"):
         target = Path(directory) / root
         target.mkdir(parents=True)
@@ -1020,7 +1020,7 @@ def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(
     and the validator's first error in SIGNALS, and CHAINS must say the manifest could not be read rather
     than print an emptiness sentence.
     """
-    directory = _project_dir(isolated_env, "warehouse")
+    directory = _repository_dir(isolated_env, "warehouse")
     target = Path(directory) / ".borg" / "chains"
     target.mkdir(parents=True)
     bad_row = {"order": "2", "ref": "o/r#2", "status": "stacked", "gate": {"kind": "decision", "blocked_by": "x"}}
@@ -1059,14 +1059,14 @@ def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
     from borg_core.nextpick import cli as nextpick_cli  # pylint: disable=import-outside-toplevel
     from borg_core.recon import core as recon_core  # pylint: disable=import-outside-toplevel
 
-    projects = {"alpha": {"path": "/nonexistent/alpha", "status": "idle", "last_activity": None, "pinned": False}}
+    repositories = {"alpha": {"path": "/nonexistent/alpha", "status": "idle", "last_activity": None, "pinned": False}}
     tracks = [{"source": "github", "ok": True, "items": [_open_pr(n) for n in range(1, 8)]
                + [_open_pr(20, draft=True), _open_pr(21, checks="fail")]}]
     scope = {"kind": "orchestrator", "repository": None, "local": False}
 
-    waiting = cli._waiting(projects, scope, False, tracks)  # pylint: disable=protected-access
+    waiting = cli._waiting(repositories, scope, False, tracks)  # pylint: disable=protected-access
     rows, _quiet, _degraded, hidden = nextpick_cli.item_rows(
-        projects, False, False, swept=(recon_core.merge_by_project(tracks), None)
+        repositories, False, False, swept=(recon_core.merge_by_project(tracks), None)
     )
 
     assert [r["ref"] for r in waiting["rows"]] == [r["ref"] for r in rows if r["owner"] == "YOU"]
@@ -1074,7 +1074,7 @@ def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
     assert waiting["hidden"] == hidden and hidden["overflow"] == 2 and hidden["agent"] == 2
     assert waiting["hidden_lines"] == ["+2 more decisions", "+2 agent tasks"]
 
-    page = cli.render.document({"projects": projects, "grid": {"manifests": []}, "waiting": waiting})
+    page = cli.render.document({"projects": repositories, "grid": {"manifests": []}, "waiting": waiting})
     body = [line for line in page.split("\x1b[1m▸ WAITING ON YOU")[1].split("\n")[1:] if line.strip()]
     assert len(body) == 5 + 2 + 1
     assert "+2 more decisions" in body[-3] and "+2 agent tasks" in body[-2]

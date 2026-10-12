@@ -180,19 +180,19 @@ def cwd() -> str:
         return ""
 
 
-def resolved_project_paths(registry: dict) -> list[tuple[str, str]]:
+def resolved_repository_paths(registry: dict) -> list[tuple[str, str]]:
     """Every (name, path) pair from the registry with each non-empty path realpath-normalized.
 
     The shell-tier half of core.scope_for: resolving symlinks is filesystem work, and BOTH sides of
     the prefix comparison must be resolved identically or the match silently fails. Missing paths
-    stay "" (core.project_paths already applies jq's `//` semantics) and scope_for skips them.
+    stay "" (core.repository_paths already applies jq's `//` semantics) and scope_for skips them.
 
     os.path.realpath does NOT stat -- a registry entry pointing at a deleted directory normalizes
     lexically and simply fails to match a live cwd, which is the correct outcome. No existence check
-    here: this runs on every invocation over the whole registry, and a stat per project would put
+    here: this runs on every invocation over the whole registry, and a stat per repository would put
     filesystem latency on the one path that has to stay reflexive.
     """
-    return [(name, os.path.realpath(path) if path else "") for name, path in core.project_paths(registry)]
+    return [(name, os.path.realpath(path) if path else "") for name, path in core.repository_paths(registry)]
 
 
 def reap_disabled() -> bool:
@@ -215,32 +215,32 @@ def _read_text(path: Path) -> str:
         return ""
 
 
-def _usable_path(project_path: str | None) -> Path | None:
-    """A project path that is worth touching, or None.
+def _usable_path(repository_path: str | None) -> Path | None:
+    """A repository path that is worth touching, or None.
 
     The literal string "null" is rejected as well as None and "": jq renders a JSON null that way and
     the shell guards `[[ -z "$ppath" || "$ppath" == "null" ]]` at every reader.
     """
-    if not project_path or project_path == "null":
+    if not repository_path or repository_path == "null":
         return None
-    return Path(project_path)
+    return Path(repository_path)
 
 
-def read_state(project_path: str | None, repo: object = paths.FORK_GIT) -> dict | None:
-    """A project's .borg/state.json as a dict, or None when there is nothing usable to merge.
+def read_state(repository_path: str | None, repo: object = paths.FORK_GIT) -> dict | None:
+    """A repository's .borg/state.json as a dict, or None when there is nothing usable to merge.
 
     None for: no path, the literal "null", a missing file, an empty file, invalid JSON, or a parsed
-    value that is not an object. The caller then leaves that project's registry entry untouched.
+    value that is not an object. The caller then leaves that repository's registry entry untouched.
 
     This used to be a divergence worth flagging. It no longer is: the shell's guard at
     lib/registry.zsh was `result=$(... | jq ...) || result="$result"`, a no-op that let ONE malformed
     state.json blank the entire registry for link/next/switch/init/reap/watch. That was fixed
-    separately, and both implementations now skip the bad project and keep the registry.
+    separately, and both implementations now skip the bad repository and keep the registry.
     """
-    directory = _usable_path(project_path)
+    directory = _usable_path(repository_path)
     if directory is None:
         return None
-    # New per-project path first, else legacy <dir>/.borg/state.json (AC5 expand). `repo` is the registry
+    # New per-repository path first, else legacy <dir>/.borg/state.json (AC5 expand). `repo` is the registry
     # entry's field: supplied, no git is forked; left at the default, paths asks git.
     state_file = paths.project_state_read_path(directory, repo)
     text = _read_text(state_file)
@@ -254,14 +254,14 @@ def read_state(project_path: str | None, repo: object = paths.FORK_GIT) -> dict 
 
 
 def collect_states(registry: dict) -> dict[str, dict]:
-    """Every project's state.json, keyed by project name; projects without one are absent."""
+    """Every repository's state.json, keyed by repository name; repositories without one are absent."""
     states: dict[str, dict] = {}
-    projects = registry.get("projects") or {}
-    for name, project_path in core.project_paths(registry):
+    repositories = registry.get("projects") or {}
+    for name, repository_path in core.repository_paths(registry):
         if not name:
             continue
-        # The registry's `repo` (null/missing -> path-only key) so N projects cost zero git forks.
-        state = read_state(project_path, (projects.get(name) or {}).get("repo"))
+        # The registry's `repo` (null/missing -> path-only key) so N repositories cost zero git forks.
+        state = read_state(repository_path, (repositories.get(name) or {}).get("repo"))
         if state is not None:
             states[name] = state
     return states
@@ -313,13 +313,13 @@ def _markdown_files(directory: Path) -> list[Path]:
     return sorted((p for p in found if not p.name.startswith(".")), key=lambda p: p.name)
 
 
-def read_directives(project_path: str | None) -> list[dict]:
-    """A project's own pending directives, mirroring _borg_read_directives (borg.zsh:125-137).
+def read_directives(repository_path: str | None) -> list[dict]:
+    """A repository's own pending directives, mirroring _borg_read_directives (borg.zsh:125-137).
 
     The shell emits a leading COUNT line on every path, including the failures ("0"); that is a TSV
     transport artifact, not a contract. Here the count is len().
     """
-    directory = _usable_path(project_path)
+    directory = _usable_path(repository_path)
     if directory is None:
         return []
     return [
@@ -328,18 +328,18 @@ def read_directives(project_path: str | None) -> list[dict]:
     ]
 
 
-def read_assimilated(project_path: str | None, max_items: int = 3) -> list[dict]:
-    """A project's most recently shipped plans, newest first.
+def read_assimilated(repository_path: str | None, max_items: int = 3) -> list[dict]:
+    """A repository's most recently shipped plans, newest first.
 
     DELIBERATE DEVIATION, the one PROJECT_PLAN.md mandates. The shell globs `(NOm)` (borg.zsh:147):
-    `om` sorts newest-first by mtime and `O` REVERSES it, so `borg link <project>` lists the three
+    `om` sorts newest-first by mtime and `O` REVERSES it, so `borg link <repository>` lists the three
     OLDEST assimilated plans under "Recently assimilated". The in-source comment "# newest first by
     mtime" is wrong, and the section disagrees with the overview's aggregate, which sorts by filename
     DESC. This sorts by FILENAME descending -- the same key the aggregate already uses -- which gives
     the JSON contract ONE ordering instead of two and survives a fresh `git clone`, where every file
     shares the checkout mtime and any mtime ordering is meaningless.
     """
-    directory = _usable_path(project_path)
+    directory = _usable_path(repository_path)
     if directory is None:
         return []
     files = _markdown_files(directory / "docs" / "plans" / "assimilated")
@@ -359,32 +359,32 @@ def read_assimilated(project_path: str | None, max_items: int = 3) -> list[dict]
 
 
 def collect_all_directives(registry: dict) -> list[dict]:
-    """Directives across every reachable project, mirroring _borg_collect_all_directives.
+    """Directives across every reachable repository, mirroring _borg_collect_all_directives.
 
     Iterates the RAW registry (borg.zsh:163 uses borg_registry_read, NOT the state-overlaid read), in
     JSON insertion order, which json.loads preserves and the rendered order depends on.
     """
     collected: list[dict] = []
-    for name, project_path in core.project_paths(registry):
-        if not name or not project_path or project_path == "null":
+    for name, repository_path in core.repository_paths(registry):
+        if not name or not repository_path or repository_path == "null":
             continue
-        for item in read_directives(project_path):
+        for item in read_directives(repository_path):
             collected.append({**item, "project": name})
     return collected
 
 
 def collect_all_assimilated(registry: dict, max_items: int = 3) -> list[dict]:
-    """The newest shipped plans across every reachable project, mirroring
+    """The newest shipped plans across every reachable repository, mirroring
     _borg_collect_all_assimilated (borg.zsh:190-214).
 
-    TWO-PHASE and must stay so: gather every candidate across ALL projects first, sort globally, then
+    TWO-PHASE and must stay so: gather every candidate across ALL repositories first, sort globally, then
     read titles and ship dates for the survivors only. It cannot delegate to read_assimilated,
-    because that sorts within one project and this sort is global -- and it is keyed on the filename
+    because that sorts within one repository and this sort is global -- and it is keyed on the filename
     WITH its ".md" suffix, because the shell sorts basenames, not slugs.
     """
     candidates: list[dict] = []
-    for name, project_path in core.project_paths(registry):
-        directory = _usable_path(project_path)
+    for name, repository_path in core.repository_paths(registry):
+        directory = _usable_path(repository_path)
         if not name or directory is None:
             continue
         for f in _markdown_files(directory / "docs" / "plans" / "assimilated"):
@@ -405,7 +405,7 @@ def collect_all_assimilated(registry: dict, max_items: int = 3) -> list[dict]:
 
 
 def _checkpoint_stores(sources: list[tuple[str, str]]) -> dict[str, Path]:
-    """Each source's existing `.borg/checkpoints` directory, keyed by project name.
+    """Each source's existing `.borg/checkpoints` directory, keyed by repository name.
 
     RESOLVED ONCE PER INVOCATION, and this is why it is its own function. Three things need a
     store's path -- the glob, the content hash, and the head's read -- and each resolving it
@@ -414,18 +414,18 @@ def _checkpoint_stores(sources: list[tuple[str, str]]) -> dict[str, Path]:
     directory are simply absent from the map, so every later lookup is guaranteed to hit.
     """
     stores: dict[str, Path] = {}
-    for project_name, project_path in sources:
-        directory = _usable_path(project_path)
+    for repository_name, repository_path in sources:
+        directory = _usable_path(repository_path)
         if directory is None:
             continue
         checkpoints = directory / ".borg" / "checkpoints"
         if checkpoints.is_dir():
-            stores[project_name] = checkpoints
+            stores[repository_name] = checkpoints
     return stores
 
 
 def _collect_checkpoints(stores: dict[str, Path]) -> list[tuple[str, str]]:
-    """Every `(filename, project_name)` across a repo group's stores.
+    """Every `(filename, repository_name)` across a repo group's stores.
 
     UNION-READ, NEVER A MERGE-WRITE. The directive this implements forbids consolidating the stores
     by moving files, and the reason is in `read_checkpoints`' own history: readers return filenames
@@ -434,15 +434,15 @@ def _collect_checkpoints(stores: dict[str, Path]) -> list[tuple[str, str]]:
     writes, zero renames, and nothing to roll back.
     """
     found: list[tuple[str, str]] = []
-    for project_name, store in stores.items():
+    for repository_name, store in stores.items():
         # JUSTIFICATION: a filesystem glob on a stdlib Path, not a cross-layer reach.
         for entry in store.glob("*.md"):  # pylint: disable=clean-arch-demeter
-            found.append((entry.name, project_name))
+            found.append((entry.name, repository_name))
     return found
 
 
 def _checkpoint_window(sources: list[tuple[str, str]], limit: int) -> tuple[list[tuple[str, str]], dict[str, Path]]:
-    """The `(filename, project)` rows a group displays -- ordered, content-deduped, capped -- plus
+    """The `(filename, repository)` rows a group displays -- ordered, content-deduped, capped -- plus
     the store map they were resolved against.
 
     THE ONE RESOLUTION BOTH READERS SHARE. `read_checkpoints` labels these rows and
@@ -454,7 +454,7 @@ def _checkpoint_window(sources: list[tuple[str, str]], limit: int) -> tuple[list
     """
     stores = _checkpoint_stores(sources)
 
-    def identity(filename: str, project_name: str) -> str | None:
+    def identity(filename: str, repository_name: str) -> str | None:
         """A row's content identity -- a digest of its body, or None when it cannot be read.
 
         HASHES THE BODY, not the size or the mtime. Checkpoints are prose written minutes apart by
@@ -462,7 +462,7 @@ def _checkpoint_window(sources: list[tuple[str, str]], limit: int) -> tuple[list
         separate them, and `core.order_checkpoints` documents why mtime is untrustworthy here
         anyway. Size would collide on edits that preserve length.
         """
-        body = _read_text(stores[project_name] / filename)
+        body = _read_text(stores[repository_name] / filename)
         if not body:
             return None
         # `body` is a local value this function just read, not a collaborator reached through
@@ -479,13 +479,13 @@ def _checkpoint_window(sources: list[tuple[str, str]], limit: int) -> tuple[list
 def read_checkpoints(sources: list[tuple[str, str]], limit: int = 3) -> list[str]:
     """The newest checkpoint labels across a repo group, newest first, capped at `limit`.
 
-    TAKES A GROUP, NOT A PATH. It used to take one project path and glob one directory, which made
+    TAKES A GROUP, NOT A PATH. It used to take one repository path and glob one directory, which made
     "the latest checkpoint" a function of which directory the caller asked about -- the measured
     harm, across 4 stores for one repo. `core.repo_sources` decides the group; this reads it.
 
     Mirrors borg.zsh:466's `find ... -maxdepth 1 -name '*.md' | sort -r | head -3` in everything the
     port preserved: a NAME sort, not an mtime sort, and filenames rather than paths, because the
-    renderer prints `${_cp##*/}`. What changes is the breadth of the `find`, plus the `@project`
+    renderer prints `${_cp##*/}`. What changes is the breadth of the `find`, plus the `@repository`
     byline `core.label_checkpoints` adds when -- and only when -- the group is ambiguous.
     """
     window, _ = _checkpoint_window(sources, limit)
@@ -500,16 +500,16 @@ def read_latest_checkpoint_head(sources: list[tuple[str, str]], lines: int = 20)
 
     RESOLVES THE WINNER'S OWN DIRECTORY, which is the half a union read is easy to get wrong. The
     previous version derived the filename from `read_checkpoints` and then opened it under the
-    project path it was handed. Once the list can span stores that becomes a genuine mismatch -- the
+    repository path it was handed. Once the list can span stores that becomes a genuine mismatch -- the
     name from one worktree, the body from another -- so the ordering is consumed here as
-    `(filename, project)` pairs and the project is mapped back to its own path. The head is
+    `(filename, repository)` pairs and the repository is mapped back to its own path. The head is
     therefore always the body of the row printed first, by construction rather than by coincidence.
     """
     window, stores = _checkpoint_window(sources, limit=1)
     if not window:
         return ""
-    filename, project_name = window[0]
-    text = _read_text(stores[project_name] / filename)
+    filename, repository_name = window[0]
+    text = _read_text(stores[repository_name] / filename)
     return "\n".join(text.split("\n")[:lines])
 
 
@@ -519,22 +519,22 @@ def read_checkpoint_summary(sources: list[tuple[str, str]]) -> str | None:
     SAME WINDOW AS THE HEAD, by construction: it goes through `_checkpoint_window` (the union read,
     name-ordered, content-deduped), so the summary describes the checkpoint printed first, never a
     second reader's idea of "latest". Reads the WHOLE body (not the 20-line head) because the
-    Accomplished fallback can sit below it. A project with no checkpoint has no summary.
+    Accomplished fallback can sit below it. A repository with no checkpoint has no summary.
     """
     window, stores = _checkpoint_window(sources, limit=1)
     if not window:
         return None
-    filename, project_name = window[0]
-    return core.checkpoint_summary(_read_text(stores[project_name] / filename))
+    filename, repository_name = window[0]
+    return core.checkpoint_summary(_read_text(stores[repository_name] / filename))
 
 
-def read_plan(project_path: str | None) -> dict | None:
+def read_plan(repository_path: str | None) -> dict | None:
     """The deep dive's Active Plan block, or None when there is no PROJECT_PLAN.md.
 
     Mirrors borg.zsh:451-461. Returns {"objective": str, "met": int, "total": int}; see
     core.plan_progress for the two-line `Progress:` rendering this deliberately does not reproduce.
     """
-    directory = _usable_path(project_path)
+    directory = _usable_path(repository_path)
     if directory is None:
         return None
     plan = directory / "PROJECT_PLAN.md"
@@ -626,10 +626,10 @@ def _read_sweep_fixture(path: str) -> dict:
     }
 
 
-def sweep(projects: dict, now: int | None = None) -> dict:
-    """Run the recon fan-out over `projects` and return `{swept, since, tracks, warnings}`.
+def sweep(repositories: dict, now: int | None = None) -> dict:
+    """Run the recon fan-out over `repositories` and return `{swept, since, tracks, warnings}`.
 
-    `projects` is the registry's `.projects` object ALREADY NARROWED TO THE SCOPED BREADTH by the
+    `repositories` is the registry's `.projects` object ALREADY NARROWED TO THE SCOPED BREADTH by the
     caller: one entry in repository scope, all of them in orchestrator scope. That narrowing is what
     makes AC1's two latency figures different numbers rather than one, and it is the caller's job
     because only the caller knows the scope.
@@ -637,7 +637,7 @@ def sweep(projects: dict, now: int | None = None) -> dict:
     THE MARK IS `link`'s OWN, NOT recon's, and that is the one thing about this function that must
     not be "simplified" back. `recon.shell.resolve_since` resolves "what changed since I last
     looked" -- newest checkpoint mtime, then the last-run marker, then 24h -- and BOTH of its top two
-    rungs vary with which projects are in scope and with how recently someone checkpointed. Reusing
+    rungs vary with which repositories are in scope and with how recently someone checkpointed. Reusing
     it made the same ref resolve to two contradictory confident states depending on whether you asked
     from inside a repository or from the workspace root, and made the WIDEST breadth get the
     NARROWEST freshness window. grid.DEFAULT_SWEEP_WINDOW_DAYS carries the measurement and the
@@ -693,9 +693,9 @@ def sweep(projects: dict, now: int | None = None) -> dict:
     with tempfile.TemporaryDirectory(prefix="borg-link.") as workdir:
         projects_file = os.path.join(workdir, "projects.json")
         try:
-            recon_shell.write_projects_file(projects, projects_file)
+            recon_shell.write_projects_file(repositories, projects_file)
         except (OSError, TypeError, ValueError) as exc:
-            return grid.no_sweep([f"sweep: could not stage the project list ({exc}) -- no adapter ran"])
+            return grid.no_sweep([f"sweep: could not stage the repository list ({exc}) -- no adapter ran"])
         tracks = recon_shell.fanout(since, projects_file, adapters, timeout=sweep_timeout())
     return {"swept": True, "since": since, "tracks": tracks, "warnings": grid.track_warnings(tracks)}
 
@@ -914,9 +914,9 @@ def cortex_pending(now: int | None = None) -> list[dict]:
     for wake in wakes:
         if not isinstance(wake, dict):
             continue
-        project = core.jq_interp(wake.get("project"))
-        if not project:
+        repository = core.jq_interp(wake.get("project"))
+        if not repository:
             continue
         reset_at = core.jq_interp(wake.get("reset_at"))
-        pending.append({"project": project, "reset_at": reset_at, "countdown": core.countdown(reset_at, moment)})
+        pending.append({"project": repository, "reset_at": reset_at, "countdown": core.countdown(reset_at, moment)})
     return pending

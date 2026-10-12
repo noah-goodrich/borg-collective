@@ -1966,12 +1966,12 @@ _link_build_overview_ws() {
         > "$root/alpha/docs/plans/assimilated/2026-02-03-alpha-new.md"
 }
 
-# `hotel`'s display_name is 26 CHARACTERS ON PURPOSE, past `render._COL_PROJECT`'s floor of 20. Every
+# `hotel`'s display_name is 26 CHARACTERS ON PURPOSE, past `render._COL_REPOSITORY`'s floor of 20. Every
 # name in every fixture used to be short, so no golden had ever rendered the overflow case -- and the
 # board's header, padded from the same constant the rows treated as a MINIMUM, silently stopped
 # describing its own columns for any name over 20. Two REAL registered projects trigger it today
 # (`pytest-coverage-impact` 22, `reveal-data-consistency` 23). This is the fixture that makes the
-# widened PROJECT column a golden fact rather than a unit-test one.
+# widened REPOSITORY column a golden fact rather than a unit-test one.
 #
 # Covers, in one render: the pin mark, the "waiting <<<" status decoration, all three source badges
 # ([C]/[X]/[D]), the "(no summary)" default, the 50-char summary cut WITH ellipsis, the display_name
@@ -2734,7 +2734,7 @@ EOF
 
     run_zsh_borg link
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No projects registered. Run: borg scan"* ]] || false
+    [[ "$output" == *"No repositories registered. Run: borg scan"* ]] || false
 }
 
 @test "contract: link overview prints the discovery tip when only one project is registered" {
@@ -2743,7 +2743,7 @@ EOF
 
     run_zsh_borg link
     [ "$status" -eq 0 ]
-    [[ "$output" == *"run 'borg scan' to discover projects from session history"* ]] || false
+    [[ "$output" == *"run 'borg scan' to discover repositories from session history"* ]] || false
 }
 
 # Distinct from the empty-registry branch above: projects EXIST but all are filtered out, so the
@@ -2756,7 +2756,7 @@ EOF
 
     run_zsh_borg link
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No projects to show. Run: borg link --all"* ]] || false
+    [[ "$output" == *"No repositories to show. Run: borg link --all"* ]] || false
 }
 
 @test "contract: link overview warns when active sessions exceed the default capacity" {
@@ -2948,7 +2948,7 @@ EOF
 
     run_zsh_borg link ghost-project
     [ "$status" -ne 0 ]
-    [[ "$output" == *"project 'ghost-project' not in registry"* ]] || false
+    [[ "$output" == *"repository 'ghost-project' not in registry"* ]] || false
     [[ "$output" == *"Run: borg add"* ]] || false
 }
 
@@ -3135,7 +3135,7 @@ EOF
 
     run bash -c "cd '${BATS_TEST_TMPDIR}/ws' && zsh '$BORG' link ghost-project 2>&1"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"project 'ghost-project' not in registry"* ]] || false
+    [[ "$output" == *"repository 'ghost-project' not in registry"* ]] || false
     [[ "$output" != *"▸ REPOSITORIES"* ]] || false
 }
 
@@ -4074,7 +4074,7 @@ EOF
 }
 
 # The fzf split-brain tripwire. After the flip, cmd_ls (borg.zsh:539-551 in the pre-flip numbering)
-# is the LAST surviving zsh copy of a sort whose authority now lives in core.order_projects. All
+# is the LAST surviving zsh copy of a sort whose authority now lives in core.order_repositories. All
 # three jq copies were byte-identical before the deletion, so there is no disagreement on flip day --
 # this is the tripwire for the day someone changes one sort and not the other.
 @test "contract: cmd_ls --porcelain column 1 still agrees with link --json .order after the flip" {

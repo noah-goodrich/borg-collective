@@ -30,7 +30,7 @@
   Seeded by the fixture.
 
 [1m▸ REPOSITORIES[0m  [2mthe collective · 7 repositories · 2 need attention[0m
-[1m PROJECT              SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
+[1m REPOSITORY           SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
 *platform             [C]  [0;32mactive      [0m 2h ago           –    3      – Scoped keypair auth rollout. [0;36m◀[0m
  atlas                [C]  [1;33mwaiting <<< [0m 5d ago           –    –      – Waiting on a schema decision.

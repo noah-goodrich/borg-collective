@@ -1,4 +1,4 @@
-  [2mTip: run 'borg scan' to discover projects from session history[0m
+  [2mTip: run 'borg scan' to discover repositories from session history[0m
 
   [2m_______________[0m
   [2m/|             /|[0m      [1mTHE BORG COLLECTIVE[0m
@@ -55,7 +55,7 @@
   body line 19
 
 [1m▸ REPOSITORIES[0m  [2mthe collective · 1 repository · 0 need attention[0m
-[1m PROJECT              SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
+[1m REPOSITORY           SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
  delta                [C]  [0;32mactive      [0m 3h ago           –    –      – Delta keeps the deep dive deterministic. [0;36m◀[0m
 
