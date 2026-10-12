@@ -133,7 +133,7 @@ _not_captured() {
 
 @test "fixtures leak test: no home path, secret, email or real UUID" {
     local bad
-    bad="$(grep -rEho '/Users/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?(/[A-Za-z0-9._-]+)?' "$FX" | grep -v '^/Users/noah/dev/example$' | grep -v '^/Users/noah/dev$' | grep -v '^/Users/noah$' || true)"
+    bad="$(grep -rEho '/Users/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?(/[A-Za-z0-9._-]+)?' "$FX" | grep -v "^/Users/example/dev/example$" | grep -v "^/Users/example/dev$" | grep -v "^/Users/example$" || true)"
     [ -z "$bad" ] || { echo "path: $bad"; false; }
     run grep -rEl '/home/[A-Za-z0-9._-]+|sk-ant|sk-[A-Za-z0-9]{20}|ghp_|AKIA|eyJ[A-Za-z0-9_-]{10}|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' "$FX"
     [ -z "$output" ] || { echo "secret/email in: $output"; false; }
@@ -468,7 +468,7 @@ print(m.enum_ok('notification_type', 'my_secret_plan'), m.enum_ok('notification_
     command -v python3 >/dev/null || skip "python3 not installed"
     _hook '{"session_id":"s","transcript_path":"/Users/bob/.claude/projects/-Users-bob-dev-x/abc.jsonl"}'
     run jq -r '.payload.transcript_path' "$BORG_SPIKE_DIR/payloads.jsonl"
-    [ "$output" = "/Users/noah/dev/example/.claude/projects/-Users-noah-dev-example/<sid>.jsonl" ]
+    [ "$output" = "/Users/example/dev/example/.claude/projects/-Users-example-dev-example/<sid>.jsonl" ]
 }
 
 @test "harness scrubpane: redacts every line outside the allowlist" {

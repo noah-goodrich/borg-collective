@@ -275,6 +275,23 @@ EOF"
     done
 }
 
+@test "record: tab and newline agent_id values are pinned" {
+    local v
+    mkdir -p "${EV%/*}"
+    for v in '\t' '\n' ' \t\n '; do
+        : >"$EV"
+        run bash -c "printf '%s' '{\"session_id\":\"$SID\",\"agent_id\":\"$v\"}' | '$BR' record agent_stop"
+        [ "$status" -eq 0 ]
+        run jq -e '.scope == "main" and .agent_id == null' "$EV"
+        [ "$status" -eq 0 ]
+    done
+    : >"$EV"
+    run bash -c "printf '%s' '{\"session_id\":\"$SID\",\"agent_id\":\" a1\\t\"}' | '$BR' record agent_stop"
+    [ "$status" -eq 0 ]
+    run jq -e '.agent_id == " a1\t"' "$EV"
+    [ "$status" -eq 0 ]
+}
+
 @test "container: BORG_IN_CONTAINER=1 records no pane and no pid, never calls tmux" {
     run bash -c "PATH='$FAKEBIN':\$PATH TMUX_PANE=%12 BORG_IN_CONTAINER=1 '$BR' record session_start <<'EOF'
 $(payload)
