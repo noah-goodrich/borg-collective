@@ -40,8 +40,14 @@ SCOUT="'borg-collective:borg-scout'"
         _run_script "await agent('find x', { label: 'scan', agentType: 'borg-collective:borg-$t' })"
         [ "$status" -eq 0 ] || { echo "borg-$t: $output"; false; }
     done
-    _run_script "await agent('q', { agentType: 'claude-code-guide' })"
+    _run_script "await agent('q', { agentType: 'claude-code-guide', effort: 'low' })"
     [ "$status" -eq 0 ]
+}
+
+@test "agentType claude-code-guide with no effort is denied" {
+    _run_script "await agent('q', { agentType: 'claude-code-guide' })"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"pins no effort"* ]] || false
 }
 
 @test "model + effort within the caps and no agentType is allowed" {
