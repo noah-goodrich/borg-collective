@@ -41,7 +41,11 @@ _ri_now() {
 }
 
 _ri_mtime() {
-    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || printf '0\n'
+    # GNU first: on GNU stat `-f` means filesystem status and prints junk. Same order as lib/reaper.sh.
+    local _m
+    _m="$(stat -c %Y "$1" 2>/dev/null)" || _m="$(stat -f %m "$1" 2>/dev/null)" || _m=0
+    case "$_m" in "" | *[!0-9]*) _m=0 ;; esac
+    printf '%s\n' "$_m"
 }
 
 _ri_projects_dir() {
@@ -53,13 +57,19 @@ _ri_locate() {
     local _sid="$1" _pd _t _d _f
     _pd="$(_ri_projects_dir)"
     _t="" _d=""
+    local _best=-1 _m
     for _f in "$_pd"/*/"$_sid".jsonl; do
-        [ -f "$_f" ] && { _t="$_f"; break; }
+        [ -f "$_f" ] || continue
+        _m="$(_ri_mtime "$_f")"
+        if [ "$_m" -gt "$_best" ]; then _best="$_m"; _t="$_f"; fi
     done
-    for _f in "$_pd"/*/"$_sid"; do
-        [ -d "$_f" ] && { _d="$_f"; break; }
-    done
-    [ -z "$_d" ] && [ -n "$_t" ] && [ -d "${_t%.jsonl}" ] && _d="${_t%.jsonl}"
+    if [ -n "$_t" ]; then
+        [ -d "${_t%.jsonl}" ] && _d="${_t%.jsonl}"
+    else
+        for _f in "$_pd"/*/"$_sid"; do
+            [ -d "$_f" ] && { _d="$_f"; break; }
+        done
+    fi
     printf '%s\t%s\n' "$_t" "$_d"
 }
 
@@ -70,10 +80,10 @@ _ri_empty() {
 }
 
 # git helpers: all fail soft and print nothing outside a repo.
-_ri_git_branch() { git -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
+_ri_git_branch() { git --no-optional-locks -C "$1" rev-parse --abbrev-ref HEAD 2>/dev/null; }
 _ri_git_dirty() {
     local _o
-    _o="$(git -C "$1" status --porcelain 2>/dev/null)" || { printf 'false\n'; return; }
+    _o="$(git --no-optional-locks -C "$1" status --porcelain 2>/dev/null)" || { printf 'false\n'; return; }
     if [ -n "$_o" ]; then printf 'true\n'; else printf 'false\n'; fi
 }
 
@@ -85,9 +95,17 @@ _ri_agent_stopped() {
     jq -e -n --arg a "$_aid" '[inputs | select(.ev == "agent_stop" and .agent_id == $a)] | length > 0' "$_ef" >/dev/null 2>&1
 }
 
+# True when the file's mtime is within BORG_RESUME_RUNNING_SEC of now.
+_ri_recent() {
+    local _now _mt
+    _now="$(_ri_now)"
+    _mt="$(_ri_mtime "$1")"
+    [ $((_now - _mt)) -lt "${BORG_RESUME_RUNNING_SEC:-300}" ]
+}
+
 # Status of one agent transcript. Usage: _ri_agent_status <sid> <agent_id> <file>
 _ri_agent_status() {
-    local _sid="$1" _aid="$2" _f="$3" _out _flag _rec _age _now _mt
+    local _sid="$1" _aid="$2" _f="$3" _out _flag _rec
     _out="$(resume_last_meaningful_with_close "$_f" 60 2>/dev/null)"
     if [ -n "$_out" ]; then
         _flag="${_out%%$'\t'*}"
@@ -98,7 +116,7 @@ _ri_agent_status() {
         if resume_record_is_interrupt "$_rec"; then
             printf 'interrupted_by_user\n'; return
         fi
-        if _ri_agent_stopped "$_sid" "$_aid"; then
+        if _ri_agent_stopped "$_sid" "$_aid" && ! _ri_recent "$_f"; then
             printf 'done\n'; return
         fi
         if printf '%s' "$_rec" | jq -e --arg flag "$_flag" '
@@ -110,10 +128,7 @@ _ri_agent_status() {
     elif _ri_agent_stopped "$_sid" "$_aid"; then
         printf 'done\n'; return
     fi
-    _now="$(_ri_now)"
-    _mt="$(_ri_mtime "$_f")"
-    _age=$((_now - _mt))
-    if [ "$_age" -lt "${BORG_RESUME_RUNNING_SEC:-300}" ]; then
+    if _ri_recent "$_f"; then
         printf 'running\n'
     else
         printf 'orphaned\n'
@@ -125,7 +140,7 @@ _ri_worktree_json() {
     local _p="$1" _b _c _d
     git -C "$_p" rev-parse --git-dir >/dev/null 2>&1 || { printf 'null\n'; return; }
     _b="$(_ri_git_branch "$_p")"
-    _c="$(git -C "$_p" log -1 --format='%h %s' 2>/dev/null)"
+    _c="$(git --no-optional-locks -C "$_p" log -1 --format='%h %s' 2>/dev/null)"
     _d="$(_ri_git_dirty "$_p")"
     jq -n -c --arg p "$_p" --arg b "$_b" --arg c "$_c" --argjson d "$_d" \
         '{path: $p, branch: (if $b == "" then null else $b end), last_commit: (if $c == "" then null else $c end), dirty: $d}'
@@ -133,28 +148,33 @@ _ri_worktree_json() {
 
 # One agent as a JSON object. Usage: _ri_agent_json <sid> <file> <kind> [owner_run]
 _ri_agent_json() {
-    local _sid="$1" _f="$2" _kind="$3" _owner="${4:-}" _base _aid _meta _status _cwd _wt
+    local _sid="$1" _f="$2" _kind="$3" _owner="${4:-}" _base _aid _meta _merr _status _cwd _wt
     _base="${_f##*/}"
     _aid="${_base#agent-}"
     _aid="${_aid%.jsonl}"
     _meta="${_f%.jsonl}.meta.json"
-    [ -f "$_meta" ] || _meta=/dev/null
+    _merr=false
+    if [ -f "$_meta" ]; then
+        jq -e 'type == "object"' "$_meta" >/dev/null 2>&1 || { _meta=/dev/null; _merr=true; }
+    else
+        _meta=/dev/null
+    fi
     _status="$(_ri_agent_status "$_sid" "$_aid" "$_f")"
     _cwd="$(head -n 1 "$_f" 2>/dev/null | jq -r '.cwd // empty' 2>/dev/null)"
     _wt=null
     if [ -n "$_cwd" ] && [ -d "$_cwd" ]; then
-        _wt="$(git -C "$_cwd" rev-parse --show-toplevel 2>/dev/null)"
+        _wt="$(git --no-optional-locks -C "$_cwd" rev-parse --show-toplevel 2>/dev/null)"
         # A linked worktree has a .git FILE; the main checkout has a .git directory.
         if [ -n "$_wt" ] && [ -f "$_wt/.git" ]; then _wt="$(_ri_worktree_json "$_wt")"; else _wt=null; fi
     fi
     jq -c -n --arg aid "$_aid" --arg kind "$_kind" --arg owner "$_owner" --arg status "$_status" \
-        --arg cwd "$_cwd" --arg path "$_f" --argjson wt "${_wt:-null}" --slurpfile meta "$_meta" '
+        --arg cwd "$_cwd" --arg path "$_f" --argjson merr "$_merr" --argjson wt "${_wt:-null}" --slurpfile meta "$_meta" '
         ($meta[0] // {}) as $m
         | {
             agent_id: $aid, kind: $kind, status: $status,
             agent_type: ($m.agentType // null), description: ($m.description // null),
             cwd: (if $cwd == "" then null else $cwd end),
-            brief_ref: {path: $path, line: 1},
+            brief_ref: {path: $path, line: 1}, meta_error: $merr,
             worktree: $wt
           }
         | if $owner != "" then . + {run_id: $owner} else . end' 2>/dev/null
@@ -165,11 +185,16 @@ _ri_agent_json() {
 # its state, so a killed agent that was re-run under a new agent id (same key) is ONE step, not two, and the
 # old agent is marked superseded rather than double-counted.
 _ri_workflow_json() {
-    local _sid="$1" _sd="$2" _wid="$3" _man _wdir _jr _agents _f _line _steps
+    local _sid="$1" _sd="$2" _wid="$3" _man _wdir _jr _agents _f _line _steps _merr
     _man="$_sd/workflows/$_wid.json"
     _wdir="$_sd/subagents/workflows/$_wid"
     _jr="$_wdir/journal.jsonl"
-    [ -f "$_man" ] || _man=/dev/null
+    _merr=false
+    if [ -f "$_man" ]; then
+        jq -e 'type == "object"' "$_man" >/dev/null 2>&1 || { _man=/dev/null; _merr=true; }
+    else
+        _man=/dev/null
+    fi
     [ -f "$_jr" ] || _jr=/dev/null
     _agents=""
     for _f in "$_wdir"/agent-*.jsonl; do
@@ -190,15 +215,15 @@ _ri_workflow_json() {
               | map({key, attempts, agent_id, state, last}))
           }' "$_jr" 2>/dev/null)"
     [ -n "$_steps" ] || _steps='{"ids":[],"steps":[]}'
-    printf '%s' "$_agents" | jq -c -s --arg wid "$_wid" --argjson j "$_steps" --slurpfile man "$_man" '
+    printf '%s' "$_agents" | jq -c -s --arg wid "$_wid" --argjson merr "$_merr" --argjson j "$_steps" --slurpfile man "$_man" '
         ($man[0] // null) as $m
         | $j.steps as $steps
         | ([$steps[] | .agent_id]) as $cur
         | (. | map(. + {superseded: (.agent_id as $a | ($j.ids | index($a)) != null and ($cur | index($a)) == null)})) as $ag
         | ($ag | map(select(.status == "errored" and (.superseded | not)))) as $err
         | ($m != null and ($m | has("result"))) as $hasres
-        | ($hasres and (($m.result | type) == "array" or ($m.result | type) == "object")
-            and ([$m.result | .. | nulls] | length > 0)) as $nullres
+        | ($hasres and ($m.result | type) == "array"
+            and ([$m.result[] | nulls] | length > 0)) as $nullres
         | ([$steps[] | select(.state == "unfinished")]) as $unf
         | ([$steps[] | select(.state == "done")]) as $done
         | ($ag | map(select(.status != "done" and (.superseded | not)))) as $notdone
@@ -208,7 +233,7 @@ _ri_workflow_json() {
            elif ($done | length) > 0 and ($unf | length) > 0 then "partial"
            else "unfinished" end) as $status
         | {
-            run_id: ($m.runId // $wid), manifest_id: $wid, kind: "workflow", status: $status,
+            run_id: ($m.runId // $wid), manifest_id: $wid, kind: "workflow", status: $status, meta_error: $merr,
             resumable: ($status == "partial" or $status == "unfinished" or $status == "finished_with_failures"),
             script_path: (if ($m.scriptPath // "") == "" then null else $m.scriptPath end),
             script_inline: (($m.scriptPath // "") == "" and ($m.script // "") != ""),
@@ -244,12 +269,14 @@ _ri_session_json() {
         _ph="$(tail -n 400 "$_t" | jq -R -r '
             (try fromjson catch null) | select(type == "object" and .type == "user" and ((.isSidechain // false) | not))
             | (.message.content // empty) | if type == "string" then . else ([.[]? | select(type == "object" and .type == "text") | .text] | join(" ")) end
-            | select(length > 0 and (startswith("[Request interrupted") | not) and (startswith("<") | not))
+            | gsub("\\s+"; " ") | sub("^ "; "")
+            | select(length > 0 and (startswith("[Request interrupted") | not) and (startswith("<") | not) and (startswith("[borg-resume ") | not))
             | .[0:200]' 2>/dev/null | tail -n 1)"
         _fp="$(head -n 60 "$_t" | jq -R -r '
             (try fromjson catch null) | select(type == "object" and .type == "user" and ((.isSidechain // false) | not))
             | (.message.content // empty) | if type == "string" then . else ([.[]? | select(type == "object" and .type == "text") | .text] | join(" ")) end
-            | select(length > 0 and (startswith("[Request interrupted") | not) and (startswith("<") | not))
+            | gsub("\\s+"; " ") | sub("^ "; "")
+            | select(length > 0 and (startswith("[Request interrupted") | not) and (startswith("<") | not) and (startswith("[borg-resume ") | not))
             | .[0:200]' 2>/dev/null | head -n 1)"
     fi
     _ck="" _br="" _dirty=false
@@ -318,13 +345,14 @@ borg_resume_inventory() {
     _wts=""
     if [ -n "$_cwd" ] && [ -d "$_cwd" ]; then
         # Linked worktrees of the session's repo (the first porcelain entry is the main checkout; skip it).
-        git -C "$_cwd" worktree list --porcelain 2>/dev/null | awk '/^worktree /{n++; if (n > 1) print substr($0, 10)}' >"${TMPDIR:-/tmp}/.ri_wt.$$" 2>/dev/null
+        _wl="$(git --no-optional-locks -C "$_cwd" worktree list --porcelain 2>/dev/null | awk '/^worktree /{n++; if (n > 1) print substr($0, 10)}')"
         while IFS= read -r _b; do
             [ -n "$_b" ] || continue
             _line="$(_ri_worktree_json "$_b")"
             [ "$_line" != "null" ] && _wts="${_wts}${_line}"$'\n'
-        done <"${TMPDIR:-/tmp}/.ri_wt.$$"
-        rm -f "${TMPDIR:-/tmp}/.ri_wt.$$"
+        done <<EOT
+$_wl
+EOT
     fi
 
     jq -n -c --arg sid "$_sid" --argjson session "$_session" \

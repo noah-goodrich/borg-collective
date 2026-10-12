@@ -14,6 +14,7 @@ setup() {
     # 2026-10-12 12:00:00 UTC
     export BORG_RESUME_NOW_EPOCH=1791806400
     unset BORG_RESUME_DISABLE BORG_NO_SESSION_HOOKS BORG_RESUME_RUNNING_SEC
+    export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
     export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
     SID="00000000-0000-4000-8000-0000000000aa"
     PD="${BORG_RESUME_PROJECTS_DIR}/-proj"
@@ -318,6 +319,7 @@ agq() { jq -r --arg a "$1" ".agents[] | select(.agent_id == \$a) | $2" <<<"$outp
     r_user "q" "${PD}/${SID}.jsonl"
     mk_agent a1 orphaned
     sed -i.bak "s#\"cwd\":\"${CWD}\"#\"cwd\":\"${wt}\"#" "${SUB}/agent-a1.jsonl"
+    TZ=UTC touch -t 202610121000 "${SUB}/agent-a1.jsonl"
     inv
     [ "$(jq -r '.worktrees | length' <<<"$output")" = 1 ]
     [ "$(jq -r '.worktrees[0].path' <<<"$output")" = "$wt" ]
@@ -359,3 +361,116 @@ agq() { jq -r --arg a "$1" ".agents[] | select(.agent_id == \$a) | $2" <<<"$outp
     run bash -c ". '${BATS_TEST_DIRNAME}/../lib/borg/resume-inventory.sh'"
     [ -z "$output" ]
 }
+
+# ---- review fixes ----------------------------------------------------------------------------
+
+@test "prompt_head is the head of a multi-line prompt, whitespace collapsed" {
+    local t="${PD}/${SID}.jsonl"
+    printf '{"type":"user","cwd":"%s","message":{"role":"user","content":"first line\\nsecond line\\n\\nthird"}}\n' "$CWD" >"$t"
+    inv
+    [ "$(jq -r .session.prompt_head <<<"$output")" = "first line second line third" ]
+    [ "$(jq -r .session.first_prompt_head <<<"$output")" = "first line second line third" ]
+}
+
+@test "an injected borg-resume prompt is never the prompt_head" {
+    local t="${PD}/${SID}.jsonl"
+    r_user "real task" "$t"
+    r_asst_end "$t"
+    r_user "[borg-resume r_abc123] continue" "$t"
+    inv
+    [ "$(jq -r .session.prompt_head <<<"$output")" = "real task" ]
+}
+
+@test "corrupt agent meta keeps the agent, with null metadata and meta_error" {
+    mk_agent a1 orphaned
+    printf '{"agentType":' >"${SUB}/agent-a1.meta.json"
+    inv
+    [ "$(agq a1 .status)" = orphaned ]
+    [ "$(agq a1 .agent_type)" = null ]
+    [ "$(agq a1 .meta_error)" = true ]
+}
+
+@test "truncated, empty and non-object manifests keep the workflow, with meta_error" {
+    local w
+    for w in wf_t1 wf_t2 wf_t3; do mkdir -p "${SD}/subagents/workflows/${w}"; done
+    printf '{"runId":"wf_t1","scr' >"${SD}/workflows/wf_t1.json"
+    : >"${SD}/workflows/wf_t2.json"
+    printf '[]' >"${SD}/workflows/wf_t3.json"
+    inv
+    for w in wf_t1 wf_t2 wf_t3; do
+        [ "$(wfq $w .meta_error)" = true ]
+        [ "$(wfq $w .status)" = unfinished ]
+        [ "$(wfq $w .resumable)" = true ]
+    done
+}
+
+@test "finished workflow whose result has a nested null is finished, not resumable" {
+    mkdir -p "${SD}/subagents/workflows/wf_n1"
+    printf '{"runId":"wf_n1","scriptPath":"/s.js","result":{"a":null,"b":1}}\n' >"${SD}/workflows/wf_n1.json"
+    inv
+    [ "$(wfq wf_n1 .status)" = finished ]
+    [ "$(wfq wf_n1 .resumable)" = false ]
+}
+
+@test "argument order: --json may come before or after the sid, a bare --json is a usage error" {
+    r_user "q" "${PD}/${SID}.jsonl"
+    run "$BIN" inventory --json "$SID"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .found <<<"$output")" = true ]
+    run "$BIN" inventory "$SID" --json
+    [ "$(jq -r .found <<<"$output")" = true ]
+    run "$BIN" inventory --json
+    [ "$status" -eq 2 ]
+}
+
+@test "agent_stop does not mask a transcript that is live again" {
+    mk_agent a1 toolpending
+    local ef
+    ef="$(. "${BATS_TEST_DIRNAME}/../lib/borg/resume-paths.sh"; borg_resume_events_file "$SID")"
+    mkdir -p "${ef%/*}"
+    printf '{"ev":"agent_stop","agent_id":"a1"}\n' >"$ef"
+    TZ=UTC touch -t 202610121158 "${SUB}/agent-a1.jsonl"
+    inv
+    [ "$(agq a1 .status)" = running ]
+}
+
+@test "newest transcript wins when a sid exists under two project dirs" {
+    mkdir -p "${BORG_RESUME_PROJECTS_DIR}/-old"
+    r_user "stale prompt" "${BORG_RESUME_PROJECTS_DIR}/-old/${SID}.jsonl"
+    TZ=UTC touch -t 202609010000 "${BORG_RESUME_PROJECTS_DIR}/-old/${SID}.jsonl"
+    r_user "fresh prompt" "${PD}/${SID}.jsonl"
+    inv
+    [ "$(jq -r .session.prompt_head <<<"$output")" = "fresh prompt" ]
+}
+
+# ---- captured shapes (tests/fixtures/resume) -------------------------------------------------
+
+cap_main() { cp "${FXR}/$1" "${PD}/${SID}.jsonl"; }
+
+@test "captured main_rate_limit and server_error_tail transcripts give turn_state errored" {
+    cap_main main_rate_limit.jsonl
+    inv
+    [ "$(jq -r .session.turn_state <<<"$output")" = errored ]
+    cap_main main_server_error_tail.jsonl
+    inv
+    [ "$(jq -r .session.turn_state <<<"$output")" = errored ]
+}
+
+@test "captured interrupt_user transcript gives turn_state interrupted" {
+    cap_main interrupt_user.jsonl
+    inv
+    [ "$(jq -r .session.turn_state <<<"$output")" = interrupted ]
+}
+
+@test "captured subagent transcript (user + attachments only) is orphaned when stale" {
+    r_user "q" "${PD}/${SID}.jsonl"
+    cp "${FXR}/subagents/agent-a0000000000000002.jsonl" "${FXR}/subagents/agent-a0000000000000002.meta.json" "$SUB/"
+    inv
+    TZ=UTC touch -t 202610121000 "${SUB}/agent-a0000000000000002.jsonl"
+    inv
+    [ "$(agq a0000000000000002 .status)" = orphaned ]
+    [ "$(agq a0000000000000002 .agent_type)" = general-purpose ]
+}
+
+# NOTE: agent-level interrupt detection (interrupted_by_user for a subagent) rests on a synthetic record only:
+# spike U15 is partial and the subagent interrupt marker is in its not_run_parts. Unverified against real data.
