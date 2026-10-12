@@ -8,16 +8,19 @@
 #     block or alter a turn;
 #   - JSON payloads are written ONLY as the output of scripts/resume-skeleton.py
 #     (--stdin), the single positive allowlist shared with the fixture extractor:
-#     JSON structure, numbers, booleans, known keys, enum values from closed sets,
+#     JSON structure, booleans, known keys, enum values from closed sets,
 #     fake ids, fake paths and a usage-limit sentence built from closed sets (kind,
 #     month, timezone) under a few text keys survive; every other string becomes "<str>"
 #     and every unknown key "<key>". If python3 is missing or errors, the hook writes a
 #     jq key skeleton instead (a fixed list of key names, every string "<str>");
-#   - session ids become fixed fake ids, so payloads from different sessions are NOT
-#     correlatable in the output;
+#   - numbers survive only under a few known numeric keys (token counts, status,
+#     durations, counts), clamped to a cap; every other number, and any in an array,
+#     becomes 0;
+#   - session ids map to a per-payload ordinal fake id, so payloads from different
+#     sessions are NOT correlatable in the output;
 #   - panes: EVERY line is redacted unless it matches an explicit allowlist of
 #     dialog / limit / composer-chrome lines.
-# Not guaranteed: that a number or boolean carries no information. Review output
+# Not guaranteed: that a boolean or a capped number carries no information. Review output
 # before committing anything; nothing here is committed automatically.
 #
 # Subcommands:
@@ -57,19 +60,33 @@ _spike_scrub_paths() {
 # outside a fixed list become "<key>"; every string becomes "<str>".
 _spike_skeleton_jq() {
     jq -c '
-      def known: ["hook_event_name","session_id","cwd","transcript_path","error",
+      def caps: {"input_tokens":10000000,"output_tokens":10000000,
+        "cache_creation_input_tokens":10000000,"cache_read_input_tokens":10000000,
+        "totalTokens":100000000,"apiErrorStatus":599,"durationMs":86400000,
+        "spawnDepth":100,"agentCount":1000,"totalToolCalls":100000};
+      def known: ["input_tokens","output_tokens","cache_creation_input_tokens",
+        "cache_read_input_tokens","totalTokens","apiErrorStatus","durationMs","spawnDepth",
+        "agentCount","totalToolCalls","hook_event_name","session_id","cwd","transcript_path","error",
         "error_details","last_assistant_message","source","agent_id","agent_type",
         "agent_transcript_path","notification_type","message","reason","tool_name",
         "stop_hook_active","permission_mode","model","prompt"];
       walk(if type == "object"
-             then with_entries(.key |= (if IN(known[]) then . else "<key>" end))
+             then with_entries(.key as $k
+                | (if (.value | type) == "number"
+                   then .value = (if caps[$k] then ([([.value, 0] | max | floor), caps[$k]] | min) else 0 end)
+                   else . end)
+                | .key |= (if IN(known[]) then . else "<key>" end))
+           elif type == "array" then map(if type == "number" then 0 else . end)
            elif type == "string" then "<str>"
-           else . end)' 2>/dev/null
+           else . end)
+      | if type == "number" then 0 else . end' 2>/dev/null
 }
 
 # JSON scrubber: scripts/resume-skeleton.py is the single source of truth.
 _spike_scrub_json() {
-    local py="${_spike_self%/*}/resume-skeleton.py" in out
+    local d py in out
+    case "$_spike_self" in */*) d="${_spike_self%/*}" ;; *) d="." ;; esac
+    py="$d/resume-skeleton.py"
     in="$(cat 2>/dev/null)"
     if command -v python3 >/dev/null 2>&1 && [ -f "$py" ]; then
         out="$(printf '%s' "$in" | python3 -I "$py" --stdin 2>/dev/null)" && [ -n "$out" ] \
@@ -86,10 +103,10 @@ _spike_pane_ok() {
     local kinds='weekly|session|daily|monthly|Opus|Sonnet|Haiku|weekly Opus|weekly Sonnet|weekly Haiku'
     local months='Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec'
     local zones='UTC|America/(New_York|Chicago|Denver|Phoenix|Los_Angeles|Anchorage|Toronto|Vancouver|Sao_Paulo)|Europe/(London|Dublin|Paris|Berlin|Madrid|Amsterdam)|Asia/(Tokyo|Seoul|Shanghai|Singapore|Kolkata|Dubai)|Australia/(Sydney|Melbourne)|Pacific/Auckland'
-    local lim="You.ve hit your ($kinds) limit( . resets ((($months) [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m)( \\(($zones)\\))?)?"
+    local lim="You've hit your ($kinds) limit( \. resets ((($months) [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m)( \\(($zones)\\))?)?"
     local tm='[0-9]{1,2}(:[0-9]{2})?[ap]m'
-    local choice="(❯ )?[1-9]\\. (Yes|No|No, exit|Yes, I trust this folder|Stop and wait for limit to reset|Wait here, then continue automatically at $tm|Add funds to continue with usage credits|Upgrade your plan|Switch to extra usage|Yes, and don.t ask again this session)"
-    local chrome="Welcome to Claude Code|\\? for shortcuts|>|❯|Bash command|Do you want to proceed\\?|What do you want to do\\?|Esc to cancel|Enter to confirm|Enter to confirm . Esc to cancel|Esc to cancel . Tab to amend|Security guide|Accessing workspace:|Claude Code.ll be able to read, edit, and execute files here\\.|(❯ )?(No, exit|Yes, I trust this folder)|(⚠ )?Usage limit reached . limit resets $tm|(⚠ )?Usage limit reached . continuing automatically at $tm . esc to cancel|Continuing automatically at $tm . esc to cancel|Press Enter to continue|ctrl.x ctrl.s to send now|(❯ )?Press up to edit queued messages|(⏵⏵ )?(accept edits|plan mode|bypass permissions|auto mode) on( \\(shift\\+tab to cycle\\))?( . esc to interrupt)?( . ← [0-9]+ agents?)?"
+    local choice="(❯ )?[1-9]\\. (Yes|No|No, exit|Yes, I trust this folder|Stop and wait for limit to reset|Wait here, then continue automatically at $tm|Add funds to continue with usage credits|Upgrade your plan|Switch to extra usage|Yes, and don't ask again this session)"
+    local chrome="Welcome to Claude Code|\\? for shortcuts|>|❯|Bash command|Do you want to proceed\\?|What do you want to do\\?|Esc to cancel|Enter to confirm|Enter to confirm \. Esc to cancel|Esc to cancel \. Tab to amend|Security guide|Accessing workspace:|Claude Code'll be able to read, edit, and execute files here\\.|(❯ )?(No, exit|Yes, I trust this folder)|(⚠ )?Usage limit reached \. limit resets $tm|(⚠ )?Usage limit reached \. continuing automatically at $tm \. esc to cancel|Continuing automatically at $tm \. esc to cancel|Press Enter to continue|ctrl.x ctrl.s to send now|(❯ )?Press up to edit queued messages|(⏵⏵ )?(accept edits|plan mode|bypass permissions|auto mode) on( \\(shift\\+tab to cycle\\))?( \. esc to interrupt)?( \. ← [0-9]+ agents?)?"
     [ -z "$t" ] && return 0
     [[ "$t" =~ ^($lim|$choice|$chrome)$ ]]
 }

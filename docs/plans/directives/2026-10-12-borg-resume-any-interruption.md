@@ -126,11 +126,11 @@ Session registry, immutable facts captured at `SessionStart` (hook-owned):
 
 ```
 {
-  "session_id": "b3dd...",
+  "session_id": "00000000-0000-4000-8000-000000000001",
   "source": "startup",
   "cwd": "/Users/noah/dev/example-project",
   "project": "example-project",
-  "mode": "drone",
+  "mode": "project",
   "in_container": false,
   "claude_pid": 41233,
   "claude_start": "Mon Oct 12 00:10:02 2026",
@@ -143,7 +143,7 @@ Session registry, immutable facts captured at `SessionStart` (hook-owned):
 
 - `source` is the SessionStart source (`startup`, `resume`, ...). A `--resume` relaunch writes a fresh registry for that sid, which is how the watcher verifies the session came back.
 - `transcript` is never stored; it is re-resolved on the host by globbing `/Users/noah/.claude/projects/*/<sid>.jsonl`, because containers see a different prefix.
-- `mode` comes from `_borg_session_mode` (orchestrator, drone, plain). `project` from the same cwd helper.
+- `mode` comes from `_borg_session_mode` (orchestrator, project); container-ness is the separate `in_container` field. `project` from the same cwd helper.
 - `claude_pid` is the hook's parent claude process (`$PPID`, unverified, U9) with its start time, used for the ownership check. Container sessions have no pid and no pane in the record.
 
 Watcher counters (`state/<sid>.json`, watcher-owned):
@@ -161,7 +161,7 @@ Watcher counters (`state/<sid>.json`, watcher-owned):
 Event line (one JSON object per line, under 4KB, `last_assistant_message` truncated to 600 chars):
 
 ```
-{"t":1791800000,"ev":"stop_failure","sid":"b3dd...",
+{"t":1791800000,"ev":"stop_failure","sid":"00000000-0000-4000-8000-000000000001",
  "scope":"main","agent_id":null,"error":"rate_limit",
  "msg":"You've hit your session limit · resets 7:10am (MT)",
  "tool_use_id":null}
@@ -174,7 +174,7 @@ Interruption record (`pending/<rid>.json`, `rid` = `r_` + 6 hex of sha1(sid, sco
 ```
 {
   "rid": "r_7f3a2c",
-  "sid": "b3dd...",
+  "sid": "00000000-0000-4000-8000-000000000001",
   "scope": "main",
   "class": "usage_limit",
   "action": "resume",
@@ -211,7 +211,7 @@ Rebuilt from disk at render time, cross-checked with the ledger:
 ## Detection and scheduling flow
 
 1. Hook path: `StopFailure` appends a `stop_failure` event. `record` runs the classifier immediately so the event already carries `class` and `resume_at`. Notification `quota_auto_resume_fired` appends `native_resume`.
-2. Scan path (every watcher pass, bounded to sessions with a registry row touched in the last 72h): for the main transcript and each non-`done` agent transcript (Agent-tool and workflow-owned), read the last 60 lines and find the last MEANINGFUL record (skip the bookkeeping allowlist: `last-prompt`, `permission-mode`, `pr-link`, `cost-state`, `file-history-snapshot`, `attachment`, and `system` records of subtype `stop_hook_summary`; `system:turn_duration` counts as a clean turn close). If it is a synthetic error not already attached to a record, create a `scan_error` event. If it is an interrupt marker, mark that scope `interrupted_by_user` (deliberate end). Scan workflow manifests and journals, including finished ones, for `finished_with_failures`. This path covers: `StopFailure` not firing for subagents, sleep records written after wake, and hook failures.
+2. Scan path (every watcher pass, bounded to sessions with a registry row touched in the last 72h): for the main transcript and each non-`done` agent transcript (Agent-tool and workflow-owned), read the last 60 lines and find the last MEANINGFUL record (skip the bookkeeping allowlist: `last-prompt`, `permission-mode`, `pr-link`, `cost-state`, `file-history-snapshot`, `attachment`, and `system` records of subtype `stop_hook_summary` and `turn_duration`; the S2 helper `resume_last_meaningful_with_close` returns that record together with a `trailing_clean_close` flag, true when a `system:turn_duration` follows it, which is how a clean turn close is detected). If it is a synthetic error not already attached to a record, create a `scan_error` event. If it is an interrupt marker, mark that scope `interrupted_by_user` (deliberate end). Scan workflow manifests and journals, including finished ones, for `finished_with_failures`. This path covers: `StopFailure` not firing for subagents, sleep records written after wake, and hook failures.
 3. Liveness path: for sessions with open work and no deliberate end (no `SessionEnd` of a deliberate reason, no `mark-closed`, no trailing interrupt marker), check the bound pane (`list-panes -a -F` including `#{@borg_sid}`, `pane_current_command`) and, for the host process, `claude_pid` alive with unchanged start time; for containers, `docker ps` for the drone container. Dead plus open work for 5 minutes (grace, with a notification and a cancel hint at minute 0) creates a `process_death` record.
 4. The watcher folds events into `pending/` records, computes `resume_at`, and for each due record runs the pre-flight gate (below) then injects.
 5. After injection it waits for confirmation (the transcript contains the user prompt tag `[borg-resume <rid>]`, or `ack` was run). No confirmation in 90s: re-verify idle proof, re-send with double Enter (the `borg-linkup-all` trick), at most 2 tries, then `failed` plus notify.
@@ -275,7 +275,7 @@ This resume was triggered automatically. Do not ask the user whether
 to continue. Resume now. Be brief.
 
 ## Step 0: check before acting
-- Run: borg-resume inventory b3ddaaa4 --json
+- Run: borg-resume inventory 00000000 --json
 - If the conversation already moved on past the interruption (the
   user gave a newer instruction, or these items were already
   resumed), skip this file, run the ack, and say so in one line.
@@ -415,7 +415,7 @@ Deliverables are code artifacts. Tests are listed separately. Every slice is pro
 
 ### S2 Classifier and reset parser
 
-- Deliverables: `lib/borg/resume-classify.sh` (error plus text to class and action; the bookkeeping allowlist; `is_interrupt_marker`; `last_meaningful_record`); reset-text parser with `BORG_RESUME_NOW_EPOCH` and zone handling via `TZ=<zone> date -j`.
+- Deliverables: `lib/borg/resume-classify.sh` (error plus text to class and action; the bookkeeping allowlist; `is_interrupt_marker`; `last_meaningful_record`); `last_meaningful_with_close` (the last meaningful record plus a `trailing_clean_close` flag, true when a `system:turn_duration` follows it; `turn_duration` is in the bookkeeping allowlist so it never hides a synthetic error, and S10 reads the flag, not the record, to tell a finished turn from open work); reset-text parser with `BORG_RESUME_NOW_EPOCH` and zone handling via `TZ=<zone> date -j` (a reset text with no zone uses the machine local zone; the relative form parses only the duration after `resets in`; the absolute form accepts an optional `at`); unknown `error` kinds fail closed to `notify_only` and are logged with the raw kind. Extras beyond the minimum: `resume_plan` (class, action, resume_at with the grace and backoff schedule) and small transcript helpers.
 - Tests: `tests/resume_classify.bats`, table-driven from the captured fixtures: each `error` value in the StopFailure list maps to the matrix class; "resets 7:10am (America/Denver)" and "resets Jul 7 at 7am (America/Denver)" and "resets in 3 hours" parse to the right epoch for fixed `NOW`; a time earlier than now rolls to tomorrow; unparseable falls to backoff; spend-limit and team-budget text map to `notify_only`; "Prompt is too long" maps to `prompt_too_long`; the captured `beb3b143` tail yields the synthetic `server_error` as the last meaningful record despite five trailing bookkeeping records; `[Request interrupted by user]` and `... for tool use]` are interrupt markers and a later user message cancels the marker.
 
 ### S3 Drone ledger mount

@@ -7,7 +7,8 @@ Extractor version: v3  (tests/fixtures/resume/fixtures.json records this per fix
 This is the single rule set for the repo: the capture hook
 (scripts/spike-resume-payloads.sh) pipes every payload through `--stdin`.
 Nothing here is a denylist. A value or key survives only if it is positively recognised:
-  - JSON structure, booleans, numbers and null;
+  - JSON structure, booleans and null;
+  - numbers, only under the keys in NUM_CAPS (clamped to a cap); every other number becomes 0;
   - object keys that are in the fixed KNOWN_KEYS list; every other key is renamed "<key>";
   - strings under a key in ENUM_RULES, only if they are in that key's closed set, or
     fullmatch its strict regex and are not credential-shaped (SUSPICIOUS_RE);
@@ -188,6 +189,21 @@ CANNED = {
     "API Error: Connection lost mid-response. The response above may be incomplete.",
 }
 
+# Numbers can encode text (char codes, a bigint), so they survive only under these keys,
+# clamped to [0, cap]. Numbers under any other key, and inside arrays, become 0.
+NUM_CAPS = {
+    "input_tokens": 10**7,
+    "output_tokens": 10**7,
+    "cache_creation_input_tokens": 10**7,
+    "cache_read_input_tokens": 10**7,
+    "totalTokens": 10**8,
+    "apiErrorStatus": 599,
+    "durationMs": 86400000,
+    "spawnDepth": 100,
+    "agentCount": 1000,
+    "totalToolCalls": 100000,
+}
+
 ID_KEYS = {
     "uuid",
     "parentUuid",
@@ -278,7 +294,16 @@ class Faker:
             return v
         return "<str>"
 
-    def walk(self, node, key=None):
+    def number(self, key, v):
+        cap = NUM_CAPS.get(key)
+        if cap is None:
+            return 0
+        try:
+            return min(max(int(v), 0), cap)
+        except (OverflowError, ValueError):
+            return 0
+
+    def walk(self, node, key=None, in_array=False):
         if isinstance(node, dict):
             out = {}
             for k, v in node.items():
@@ -286,10 +311,12 @@ class Faker:
                 out["<key>" if not known else k] = self.walk(v, k if known else None)
             return out
         if isinstance(node, list):
-            return [self.walk(v, key) for v in node]
+            return [self.walk(v, key, True) for v in node]
         if isinstance(node, str):
             return self.string(key, node)
-        return node
+        if isinstance(node, bool) or node is None:
+            return node
+        return self.number(None if in_array else key, node)
 
 
 def dumps(obj):

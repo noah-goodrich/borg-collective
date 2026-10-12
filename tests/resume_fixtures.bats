@@ -450,7 +450,7 @@ print(m.enum_ok('notification_type', 'my_secret_plan'), m.enum_ok('notification_
     _absent "$output" 'codename' || false
     _absent "$output" 'in array' || false
     _absent "$output" 'rate_limit' || false
-    _present "$output" '"<key>":3' || false
+    _present "$output" '"<key>":0' || false
 }
 
 @test "harness hook: long assistant message mentioning limits keeps only the limit sentence" {
@@ -671,4 +671,103 @@ _ext() {
             [ "$ext" = '{"text":"<str>"}' ] || { echo "disagree: $s"; false; }
         fi
     done
+}
+
+# --- S0a hardening follow-up: numbers, regex parity, version/CANNED, spaced path ---
+
+_fallback_copy() {
+    local d="$BATS_TEST_TMPDIR/lone"
+    mkdir -p "$d" && cp "$HARNESS" "$d/h.sh"
+    echo "$d/h.sh"
+}
+
+@test "extractor: char-code array and bigint carry no information" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local out
+    out="$(_ext '{"code":[104,117,110,116,101,114,50],"totalTokens":35545459348735774516549333126781192925303}')"
+    [ "$out" = '{"<key>":[0,0,0,0,0,0,0],"totalTokens":100000000}' ] || { echo "$out"; false; }
+    out="$(_ext '{"phone":5551234567,"usage":{"input_tokens":1200,"output_tokens":-5},"apiErrorStatus":429}')"
+    [ "$out" = '{"<key>":0,"usage":{"input_tokens":1200,"output_tokens":0},"apiErrorStatus":429}' ] || { echo "$out"; false; }
+    out="$(_ext '{"flag":true}')"
+    [ "$out" = '{"<key>":true}' ] || { echo "$out"; false; }
+}
+
+@test "extractor: numbers in arrays under a known numeric key become 0" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local out
+    out="$(_ext '{"input_tokens":[104,117],"durationMs":1.5e3}')"
+    [ "$out" = '{"input_tokens":[0,0],"durationMs":1500}' ] || { echo "$out"; false; }
+}
+
+@test "harness fallback jq skeleton: char-code array and bigint carry no information" {
+    local h
+    h="$(_fallback_copy)"
+    run bash -c "printf '%s' '{\"code\":[104,117]}' | '$h' scrub"
+    [ "$output" = '{"<key>":[0,0]}' ] || { echo "$output"; false; }
+    run bash -c "printf '%s' '{\"input_tokens\":1200,\"durationMs\":7.9,\"x\":7}' | '$h' scrub"
+    [ "$output" = '{"input_tokens":1200,"durationMs":7,"<key>":0}' ] || { echo "$output"; false; }
+    run bash -c "printf '%s' '{\"totalTokens\":35545459348735774516549333126781192925303}' | '$h' scrub"
+    [ "$output" = '{"totalTokens":100000000}' ] || { echo "$output"; false; }
+    run bash -c "printf '%s' '[104,117]' | '$h' scrub"
+    [ "$output" = '[0,0]' ] || { echo "$output"; false; }
+}
+
+@test "extractor: version lookalikes become <str>, a real version survives" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local out
+    out="$(_ext '{"version":"1.2.3-acme"}')"
+    [ "$out" = '{"version":"<str>"}' ] || { echo "$out"; false; }
+    out="$(_ext '{"version":"acme-merger"}')"
+    [ "$out" = '{"version":"<str>"}' ] || { echo "$out"; false; }
+    out="$(_ext '{"version":"2.1.97"}')"
+    [ "$out" = '{"version":"2.1.97"}' ] || { echo "$out"; false; }
+}
+
+@test "extractor: CANNED strings match exactly, near-misses become <str>" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local out s
+    for s in "Request timed out and secret" "API Error: something about acme" "Prompt is too long." "xPrompt is too long"; do
+        out="$(_ext "{\"error_details\":\"$s\"}")"
+        [ "$out" = '{"<key>":"<str>"}' ] || [ "$out" = '{"error_details":"<str>"}' ] || { echo "kept: $out"; false; }
+    done
+    out="$(_ext '{"error_details":"Request timed out"}')"
+    _present "$out" '"Request timed out"' || false
+}
+
+@test "harness settings: copy in a directory with a space, generated command runs when eval'd" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local d="$BATS_TEST_TMPDIR/sp ace" cmd
+    mkdir -p "$d" && cp "$HARNESS" "$d/h.sh" && cp "$SKEL" "$d/resume-skeleton.py" && chmod +x "$d/h.sh"
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    run "$d/h.sh" settings
+    [ "$status" -eq 0 ]
+    cmd="$(jq -r '.hooks.StopFailure[0].hooks[0].command' "$output")"
+    run bash -c "printf '%s' '{\"error\":\"rate_limit\"}' | { eval \"\$1\"; }" _ "$cmd"
+    [ "$status" -eq 0 ]
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _present "$output" '"error":"rate_limit"' || false
+}
+
+@test "harness scrub run by bare filename finds the extractor" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    run bash -c "cd '${HARNESS%/*}' && printf '%s' '{\"type\":\"user\",\"zzz\":\"x\"}' | bash spike-resume-payloads.sh scrub"
+    [ "$output" = '{"type":"user","<key>":"<str>"}' ] || { echo "$output"; false; }
+}
+
+@test "pane allowlist: apostrophe, middle dot and don't positions are literal" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local s pane ext
+    for s in "YouXve hit your weekly limit · resets 7am" \
+             "You've hit your weekly limit X resets 7am" \
+             "You've hit your weekly limit - resets 7am" \
+             "You've hit your weekly limit ·  resets 7am"; do
+        pane="$(printf '%s\n' "$s" | "$HARNESS" scrubpane)"
+        [ "$pane" = "<redacted>" ] || { echo "pane kept: $s"; false; }
+        ext="$(_ext "{\"text\":\"$s\"}")"
+        [ "$ext" = '{"text":"<str>"}' ] || { echo "extractor kept: $s"; false; }
+    done
+    pane="$(printf '%s\n' "1. Yes, and donXt ask again this session" | "$HARNESS" scrubpane)"
+    [ "$pane" = "<redacted>" ] || false
+    pane="$(printf '%s\n' "1. Yes, and don't ask again this session" | "$HARNESS" scrubpane)"
+    [ "$pane" = "1. Yes, and don't ask again this session" ] || false
 }
