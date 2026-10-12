@@ -68,9 +68,7 @@ behaviour are unchanged.
 
 Audit: `grep -n '>&2' hooks/*.sh`, each event checked against the "Exit code 2 behavior per event" table.
 
-- `hooks/borg-nanoprobe-log.sh` (SubagentStop): NANOPROBE EVIDENCE WARNING and ZERO-COMMIT messages go to stderr, exit
-  0. Same invisible shape. NOT fixed here: it has two warnings and a different consumer (the orchestrator is the reader
-  who needs it), and SubagentStop's `systemMessage` handling is not confirmed. Follow-up.
+- `hooks/borg-nanoprobe-log.sh` (SubagentStop): this was the same invisible shape (warnings on stderr, exit 0) and is now fixed. The hook emits one `systemMessage` JSON object on stdout carrying the NANOPROBE EVIDENCE WARNING and ZERO-WRITE (formerly ZERO-COMMIT) messages, and ZERO-WRITE is decided from the agent transcript (successful edits or git commit/push) for writer types only.
 - `hooks/borg-plan-promote.sh` (PreToolUse): prints `[borg] auto-promoted in-session plan ...` to stderr and exits 0.
   PreToolUse exit-0 stderr is not in the shown-to-user rows of that table. It is an informational courtesy, not a
   safety nudge. Follow-up, lowest priority.

@@ -113,26 +113,54 @@ _warn() {
     WARNINGS+="${WARNINGS:+$'\n\n'}$1"
 }
 
-# Warn orchestrator when a nanoprobe completes without citing its work.
-if [[ "$EVIDENCE_FOUND" == "false" && -n "$LAST_MSG" ]]; then
+# Only writer types are expected to leave file edits or commits behind. Read-only types (reviewer,
+# researcher, scout, ...) legitimately end with neither, so both checks below skip them.
+IS_WRITER=false
+case "$AGENT_TYPE" in
+    borg-collective:borg-nanoprobe|borg-collective:borg-grunt|borg-nanoprobe|borg-grunt) IS_WRITER=true ;;
+esac
+
+# Warn orchestrator when a writer nanoprobe completes without citing its work.
+if [[ "$IS_WRITER" == "true" && "$EVIDENCE_FOUND" == "false" && -n "$LAST_MSG" ]]; then
     _warn "▸ NANOPROBE EVIDENCE WARNING: ${AGENT_ID:0:8} completed without file-path citations.
   Review the transcript (${TRANSCRIPT_PATH:-unknown}) to confirm work was done."
 fi
 
-# ─── Zero-commit detection ────────────────────────────────────────────────────
-# An empty branch = a 0-write run (the 15-read/0-write/32k-abort failure). Flag it
-# loudly so the orchestrator re-spawns instead of believing the work landed.
-ZERO_COMMIT=false
-if [[ -n "$CWD" ]] && command -v git >/dev/null 2>&1 \
-   && git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    _base=$(git -C "$CWD" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null \
-            || git -C "$CWD" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo "")
-    if [[ -n "$_base" ]]; then
-        _n=$(git -C "$CWD" rev-list --count "${_base}..HEAD" 2>/dev/null || echo 0)
-        if [[ "$_n" -eq 0 ]] && ! git -C "$CWD" diff --quiet 2>/dev/null; then _n=1; fi
-        if [[ "$_n" -eq 0 ]]; then
+# ─── Zero-write detection ─────────────────────────────────────────────────────
+# Both warnings (EVIDENCE, ZERO-WRITE) apply to writer types only (borg-nanoprobe, borg-grunt).
+# ZERO-WRITE comes from the agent transcript (successful edits or git commit/push), never the payload
+# cwd, which is the parent session's. zero_commit is null when not applicable.
+# A 0-write run (the 15-read/0-write/32k-abort failure) is flagged loudly so the orchestrator
+# re-spawns instead of believing the work landed. The payload cwd is the PARENT session's cwd (a
+# nanoprobe works in its own worktree via git -C and removes it), so the repo cannot answer this;
+# the transcript can. Count file-edit tool calls plus Bash git commit/push, joining each tool_use to
+# its tool_result by tool_use_id and dropping only is_error results (a call with no result yet counts).
+# zero_commit: true = flagged, false = writes found, null = not applicable (non-writer or no transcript).
+ZERO_COMMIT=null
+if [[ "$IS_WRITER" == "true" && -n "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
+    # git, then any mix of -C <path> (bare or quoted), -c k=v and --long[=value], then commit|push; the
+    # lead-in may be start, whitespace, ; & | ( or a quote so `bash -c '...git commit...'` matches.
+    _git_re="(^|[[:space:];&|(\"'])git((\\s+-C\\s+(\"[^\"]*\"|'[^']*'|\\S+))|(\\s+-c\\s+\\S+)|(\\s+--[A-Za-z][A-Za-z-]*(=\\S+)?))*\\s+(commit|push)(\\s|\$|[\"'])"
+    # Line by line: one malformed line (fromjson?) or non-array content must not void the whole parse.
+    # A tool_use with no tool_result yet counts (the transcript lags); only an is_error result drops it.
+    _writes=$(jq -R -r -n --arg re "$_git_re" '
+        [inputs | fromjson? | (.message.content? // []) | if type == "array" then .[] else empty end
+            | select(type == "object")] as $blocks
+        | ([$blocks[] | select(.type == "tool_result" and (.is_error // false) == true) | .tool_use_id]) as $bad
+        | [$blocks[]
+            | select(.type == "tool_use" and (.id as $i | $bad | index($i) == null))
+            | select(
+                (.name | IN("Edit", "Write", "NotebookEdit", "MultiEdit"))
+                or (.name == "Bash" and ((.input.command // "") | test($re)))
+              )
+          ] | length
+    ' "$TRANSCRIPT_PATH" 2>/dev/null || true)
+    if [[ "$_writes" =~ ^[0-9]+$ ]]; then
+        if (( _writes == 0 )); then
             ZERO_COMMIT=true
-            _warn "▸ NANOPROBE ZERO-COMMIT: ${AGENT_ID:0:8} left branch empty (0 writes). Re-spawn with a tighter, single-deliverable brief."
+            _warn "▸ NANOPROBE ZERO-WRITE: ${AGENT_ID:0:8} made no file edits and no git commit/push (checked its transcript). Re-spawn with a tighter, single-deliverable brief."
+        else
+            ZERO_COMMIT=false
         fi
     fi
 fi
