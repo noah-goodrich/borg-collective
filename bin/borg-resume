@@ -9,6 +9,7 @@
 #   pause            create the DISABLED sentinel (nothing will inject; recording continues)
 #   unpause          remove it
 #   probe            print the session usage percent (own claude -p /usage sample, cached 120s)
+#   watch --once     one watcher pass: fold hook events + scan transcripts into pending/ records (slice S7)
 #   inventory <sid>  print the in-flight inventory as JSON (slice S5; --json is accepted, JSON is the only format)
 #
 # Later slices add watch, inventory, prompt, status and the rest. Hooks only APPEND; the watcher owns every
@@ -169,7 +170,7 @@ _br_record() {
 }
 
 _br_usage() {
-    printf 'usage: borg-resume <record <event> | pause | unpause | probe | inventory <sid> [--json]>\n' >&2
+    printf 'usage: borg-resume <record <event> | pause | unpause | probe | inventory <sid> [--json] | watch --once>\n' >&2
 }
 
 _br_main() {
@@ -219,6 +220,13 @@ _br_main() {
             . "$BORG_RESUME_LIBDIR/resume-classify.sh" && . "$BORG_RESUME_LIBDIR/resume-inventory.sh" || return 1
             command -v jq >/dev/null 2>&1 || { printf 'borg-resume: jq is required\n' >&2; return 1; }
             borg_resume_inventory "$_isid"
+            ;;
+        watch)
+            [ "${1:-}" = "--once" ] && [ $# -eq 1 ] || { _br_usage; return 2; }
+            # shellcheck source=/dev/null
+            . "$BORG_RESUME_LIBDIR/resume-classify.sh" && . "$BORG_RESUME_LIBDIR/resume-inventory.sh" &&
+                . "$BORG_RESUME_LIBDIR/resume-watch.sh" || return 1
+            borg_resume_watch_once
             ;;
         *)
             _br_usage

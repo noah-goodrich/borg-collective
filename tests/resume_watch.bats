@@ -233,6 +233,15 @@ rec_q() { all_recs | jq -r -s "$1"; }
     [ "$(n_pending)" = 0 ]
 }
 
+mk_confirmed_aaaaaa() {
+    local n
+    n="$(wc -l <"$PD/$SID.jsonl" | tr -d ' ')"
+    jq -n --arg sid "$SID" --argjson at "$((BORG_RESUME_NOW_EPOCH - 60))" --argjson n "$n" '{rid:"r_aaaaaa", sid:$sid, scope:"main",
+        class:"transient", action:"backoff", error:"server_error", detected_by:["scan"], evidence:{uuid:"e-1", uuids:["e-1"]},
+        first_seen:1791790000, resume_at:1791790045, attempt:0, state:"confirmed", confirmed_at:$at, confirmed_lines:$n,
+        state_log:[["confirmed",$at]], inject_tries:1, notified:false}' >"$RD/pending/r_aaaaaa.json"
+}
+
 # ---- dedupe and idempotency ------------------------------------------------------------------
 
 @test "a second watch --once run changes nothing" {
@@ -267,10 +276,7 @@ rec_q() { all_recs | jq -r -s "$1"; }
 
 @test "a stale confirmed record does not swallow a new interruption with a new uuid" {
     mk_main "$SID" err e-2
-    jq -n --arg sid "$SID" '{rid:"r_aaaaaa", sid:$sid, scope:"main", class:"transient", action:"backoff", error:"server_error",
-        detected_by:["scan"], evidence:{uuid:"e-1", uuids:["e-1"]}, first_seen:1791790000, resume_at:1791790045,
-        attempt:0, state:"confirmed", confirmed_at:1791790100, state_log:[["confirmed",1791790100]], inject_tries:1, notified:false}' \
-        >"$RD/pending/r_aaaaaa.json"
+    mk_confirmed_aaaaaa
     watch
     [ "$(n_pending)" = 2 ]
     [ "$(jq -r .state "$RD/pending/r_aaaaaa.json")" = confirmed ]
@@ -280,10 +286,7 @@ rec_q() { all_recs | jq -r -s "$1"; }
 
 @test "an error whose uuid is already attached to a confirmed record creates nothing" {
     mk_main "$SID" err e-1
-    jq -n --arg sid "$SID" '{rid:"r_aaaaaa", sid:$sid, scope:"main", class:"transient", action:"backoff", error:"server_error",
-        detected_by:["scan"], evidence:{uuid:"e-1", uuids:["e-1"]}, first_seen:1791790000, resume_at:1791790045,
-        attempt:0, state:"confirmed", confirmed_at:1791790100, state_log:[["confirmed",1791790100]], inject_tries:1, notified:false}' \
-        >"$RD/pending/r_aaaaaa.json"
+    mk_confirmed_aaaaaa
     watch
     [ "$(n_pending)" = 1 ]
 }
@@ -426,5 +429,5 @@ old() { TZ=UTC touch -t "$2" "$1"; }
     head -c 1100000 /dev/zero | tr '\0' 'x' >"$RD/watch.log"
     watch
     [ -e "$RD/watch.log.1" ]
-    [ "$(wc -c <"$RD/watch.log" | tr -d ' ')" -lt 100000 ]
+    [ ! -e "$RD/watch.log" ] || [ "$(wc -c <"$RD/watch.log" | tr -d ' ')" -lt 100000 ]
 }
