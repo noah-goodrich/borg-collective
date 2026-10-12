@@ -104,3 +104,57 @@ drow() {
     [ "$(printf '%s\n' "$output" | grep -c gggg8888)" -eq 1 ]
     [[ "$output" == *"new text"* ]] || false
 }
+
+# Run _borg_agents_collapse directly: extract the function from borg.zsh and feed it stdin.
+collapse() {
+    zsh -c 'eval "$(sed -n "/^_borg_agents_collapse() {/,/^}/p" "$1")"; _borg_agents_collapse' _ "$BORG"
+}
+
+@test "nanoprobes: a junk line between two valid rows does not hide the older row" {
+    drow hhhh1111 "older" "2026-10-10T10:00:00Z"
+    echo "not json at all" >> "$BORG_DIR/agents.jsonl"
+    drow hhhh2222 "newer" "2026-10-11T10:00:00Z"
+    run zsh "$BORG" nanoprobes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"hhhh1111"* ]] || false
+    [[ "$output" == *"hhhh2222"* ]] || false
+}
+
+@test "collapse: unparseable and non-object lines are dropped" {
+    run collapse <<< $'junk\n[1,2]\n{"id":"a","summary":"x"}'
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [[ "$output" == *'"id":"a"'* ]] || false
+}
+
+@test "collapse: interleaved ids keep first-seen newest-first order" {
+    run collapse <<< $'{"id":"b","summary":"b1"}\n{"id":"a","summary":"a1"}\n{"id":"b","summary":"b0"}\n{"id":"c","summary":"c1"}\n{"id":"a","summary":"a0"}'
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 3 ]
+    [ "$(printf '%s\n' "${lines[@]}" | jq -r .id | tr -d '\n')" = "bac" ]
+}
+
+@test "collapse: evidence fields come from the newest non-empty-summary row" {
+    run collapse <<< $'{"id":"a","summary":"","finished_at":"T2"}\n{"id":"a","summary":"real","evidence_found":true,"evidence_score":7,"finished_at":"T1"}\n{"id":"a","summary":"old","evidence_found":false,"evidence_score":1}'
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "$(printf '%s' "$output" | jq -r .summary)" = "real" ]
+    [ "$(printf '%s' "$output" | jq -r .evidence_score)" = "7" ]
+    [ "$(printf '%s' "$output" | jq -r .evidence_found)" = "true" ]
+    [ "$(printf '%s' "$output" | jq -r .finished_at)" = "T2" ]
+}
+
+@test "collapse: missing-id and empty-id rows pass through" {
+    run collapse <<< $'{"summary":"noid"}\n{"id":"","summary":"emptyid"}\n{"id":"a","summary":"x"}'
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 3 ]
+    [[ "$output" == *noid* ]] || false
+    [[ "$output" == *emptyid* ]] || false
+}
+
+@test "collapse: an id whose rows all have empty summaries shows its newest row" {
+    run collapse <<< $'{"id":"a","summary":"","finished_at":"T2"}\n{"id":"a","summary":"","finished_at":"T1"}'
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 1 ]
+    [ "$(printf '%s' "$output" | jq -r .finished_at)" = "T2" ]
+}

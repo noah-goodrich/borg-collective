@@ -2460,11 +2460,18 @@ _borg_nanoprobe_model_effort() {
 # Collapse newest-first agents JSONL (stdin) to one line per agent id, in first-seen order. Duplicates come from
 # a doubled log, a handback agent that stops twice (text row, then an empty-summary row), and SendMessage resumes.
 # Every field comes from the newest row except summary/evidence_found/evidence_score, which come from the newest
-# row with a non-empty summary (else the newest). Non-object lines and rows without an id pass through in place.
+# row with a non-empty summary (else the newest). Objects with a missing or empty id pass through in place.
+# Lines that do not parse as JSON objects are DROPPED: the listing jq program in cmd_nanoprobes aborts at the
+# first unparseable line, so passing junk through would silently hide every older row behind it.
+# Cost: this reads the whole stream before emitting anything (bounded by rotation to two generations of
+# BORG_LOG_CAP_BYTES). Fails open: if the jq program fails, the raw input is emitted unchanged.
 _borg_agents_collapse() {
-    jq -Rnr '
+    local input out
+    input=$(cat)
+    out=$(printf '%s\n' "$input" | jq -Rnr '
         def keyed: type == "object" and ((.id // "") | tostring | length) > 0;
-        [inputs | . as $raw | {raw: $raw, o: (try fromjson catch null)}] as $rows
+        [inputs | . as $raw | {raw: $raw, o: (try fromjson catch null)}
+            | select(.o | type == "object")] as $rows
         | (reduce ($rows[] | select(.o | keyed) | .o) as $o ({};
               if (.[$o.id | tostring] == null) and (($o.summary // "") != "")
               then .[$o.id | tostring] = $o else . end)) as $best
@@ -2480,7 +2487,8 @@ _borg_agents_collapse() {
                             | with_entries(select(.value != null)))) end | tojson)
             end;
             .out | select(. != null))
-    '
+    ') || { printf '%s\n' "$input"; return 0; }
+    [[ -z "$out" ]] || printf '%s\n' "$out"
 }
 
 cmd_nanoprobe_log() {
