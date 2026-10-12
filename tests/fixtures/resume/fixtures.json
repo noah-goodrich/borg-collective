@@ -1,0 +1,36 @@
+{
+  "version": 2,
+  "claude_version_target": "2.1.296",
+  "tags": {
+    "captured-skeleton": "built from a real record by scripts/resume-skeleton.py (allowlist extractor; entries carry the extractor version)",
+    "synthetic": "hand-built from observed record shapes; used only where no real record exists on the capture machine (see synthetic_reason)"
+  },
+  "note": "No captured-skeleton entries exist yet: captured-skeleton will come from S0b controlled spike sessions; private transcripts are never extracted into this repo. Every entry below is synthetic and says why. Flip an entry to captured-skeleton (add extractor: v2) when its skeleton is built; tests/resume_fixtures.bats then enforces the extractor version and the leak check.",
+  "fixtures": {
+    "main_rate_limit":        {"file": "main_rate_limit.jsonl",        "kind": "jsonl", "tag": "synthetic", "shape": "api_error_tail", "synthetic_reason": "skeleton not yet built; real weekly-limit record exists (apiErrorStatus 429); seed mirrors its shape"},
+    "main_rate_limit_session": {"file": "main_rate_limit_session.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "api_error_tail", "synthetic_reason": "session-phrasing limit: no real record found, only the weekly phrasing"},
+    "main_server_error_tail": {"file": "main_server_error_tail.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "api_error_then_bookkeeping", "synthetic_reason": "skeleton not yet built; real server_error with trailing bookkeeping exists"},
+    "main_authentication_failed": {"file": "main_authentication_failed.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "api_error_tail", "synthetic_reason": "skeleton not yet built; real authentication_failed record exists"},
+    "main_invalid_request":   {"file": "main_invalid_request.jsonl",   "kind": "jsonl", "tag": "synthetic", "shape": "api_error_tail", "synthetic_reason": "skeleton not yet built; real invalid_request (Prompt is too long, 400) records exist"},
+    "main_max_output_tokens": {"file": "main_max_output_tokens.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "api_error_tail", "synthetic_reason": "no real max_output_tokens record exists on this machine"},
+    "interrupt_user":         {"file": "interrupt_user.jsonl",         "kind": "jsonl", "tag": "synthetic", "shape": "interrupt_marker", "synthetic_reason": "skeleton not yet built; real interrupt records exist"},
+    "interrupt_tool_use":     {"file": "interrupt_tool_use.jsonl",     "kind": "jsonl", "tag": "synthetic", "shape": "interrupt_marker", "synthetic_reason": "skeleton not yet built; real interrupt records exist"},
+    "subagent_transcript":    {"file": "subagents/agent-a0b6facb8e5d1b6ac.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "subagent_first_record", "synthetic_reason": "skeleton not yet built; real subagent transcripts exist"},
+    "subagent_meta":          {"file": "subagents/agent-a0b6facb8e5d1b6ac.meta.json", "kind": "json", "tag": "synthetic", "shape": "subagent_meta", "synthetic_reason": "skeleton not yet built; keys match a real meta file"},
+    "workflow_manifest":      {"file": "workflows/wf_ab12cd.json",     "kind": "json", "tag": "synthetic", "shape": "workflow_manifest", "synthetic_reason": "skeleton not yet built; keys match a real manifest"},
+    "workflow_journal":       {"file": "workflows/wf_ab12cd.journal.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "workflow_journal", "synthetic_reason": "skeleton not yet built; record types match a real journal (launched/started/result)"},
+    "stop_failure_payload":   {"file": "stop_failure_payload.json",    "kind": "json", "tag": "synthetic", "shape": "hook_payload", "synthetic_reason": "no real hook payload exists: the harness was never installed live"},
+    "session_start_payload":  {"file": "session_start_payload.json",   "kind": "json", "tag": "synthetic", "shape": "hook_payload", "synthetic_reason": "no real hook payload exists: the harness was never installed live"},
+    "pane_composer":          {"file": "panes/composer.txt",           "kind": "text", "tag": "synthetic", "shape": "pane", "synthetic_reason": "no real pane captured; written to pass the harness pane allowlist unchanged"},
+    "pane_permission":        {"file": "panes/permission.txt",         "kind": "text", "tag": "synthetic", "shape": "pane", "synthetic_reason": "no real pane captured; written to pass the harness pane allowlist unchanged"},
+    "pane_limit":             {"file": "panes/limit.txt",              "kind": "text", "tag": "synthetic", "shape": "pane", "synthetic_reason": "no real pane captured; written to pass the harness pane allowlist unchanged"}
+  },
+  "required_captured": {
+    "S2": ["main_rate_limit", "main_server_error_tail", "main_authentication_failed", "main_invalid_request"],
+    "S4": ["stop_failure_payload", "session_start_payload"],
+    "S5": ["subagent_transcript", "subagent_meta", "workflow_manifest", "workflow_journal"],
+    "S7": ["main_rate_limit", "main_server_error_tail", "subagent_transcript"],
+    "S8": ["pane_composer", "pane_permission", "pane_limit"],
+    "S16": ["stop_failure_payload", "main_rate_limit"]
+  }
+}

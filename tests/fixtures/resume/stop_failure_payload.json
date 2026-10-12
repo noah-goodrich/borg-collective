@@ -1,0 +1,1 @@
+{"hook_event_name":"StopFailure","session_id":"00000000-0000-4000-8000-000000000001","cwd":"/Users/noah/dev/example","transcript_path":"/Users/noah/dev/example/.claude/projects/-Users-noah-dev-example/00000000-0000-4000-8000-000000000001.jsonl","error":"rate_limit","error_details":"429","last_assistant_message":"You've hit your session limit · resets 7:10am (America/Denver)"}

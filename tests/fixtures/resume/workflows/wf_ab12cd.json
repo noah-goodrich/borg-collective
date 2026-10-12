@@ -1,0 +1,1 @@
+{"runId":"wf_fake001","scriptPath":"/Users/noah/dev/example/.claude/workflows/scripts/example.js","script":"<str>","status":"completed","workflowName":"example","agentCount":2,"totalTokens":0,"totalToolCalls":0,"durationMs":0,"startTime":0,"summary":"<str>","result":"<str>","logs":[],"phases":[],"workflowProgress":[],"defaultModel":"sonnet","taskId":"<id-1>","timestamp":0}

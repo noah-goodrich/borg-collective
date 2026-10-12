@@ -1,0 +1,2 @@
+{"type":"user","uuid":"u-0401","isSidechain":true,"agentId":"a0b6facb8e5d1b6ac","sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/Users/noah/dev/example","message":{"role":"user","content":"<scrubbed:200 chars>"}}
+{"type":"assistant","uuid":"u-0402","isSidechain":true,"agentId":"a0b6facb8e5d1b6ac","sessionId":"00000000-0000-4000-8000-000000000001","isApiErrorMessage":true,"error":"rate_limit","message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"You've hit your weekly limit · resets Jul 7 at 7am (America/Denver)"}]}}

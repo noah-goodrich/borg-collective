@@ -1,0 +1,4 @@
+{"type":"launched"}
+{"type":"started","key":"v2:fake001","agentId":"a0000000000000001","label":"<str>","phase":"<str>"}
+{"type":"result","key":"v2:fake001","agentId":"a0000000000000001"}
+{"type":"started","key":"v2:fake002","agentId":"a0000000000000002","label":"<str>","phase":"<str>"}
