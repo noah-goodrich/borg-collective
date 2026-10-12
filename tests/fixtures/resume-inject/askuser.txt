@@ -1,0 +1,12 @@
+SYNTHETIC (no real capture): AskUserQuestion dialog.
+
+ ☐ Approach
+
+Which approach should I take?
+
+❯ 1. Option A
+     first choice
+  2. Option B
+  3. Type something.
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

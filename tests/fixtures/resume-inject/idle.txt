@@ -1,0 +1,8 @@
+SYNTHETIC: idle composer, empty, with the usual status line.
+
+earlier output
+
+────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────
+  ? for shortcuts

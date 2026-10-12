@@ -1,0 +1,12 @@
+SYNTHETIC (no real capture): plan approval dialog.
+
+ Ready to code?
+
+ Here is Claude plan:
+  step one
+
+ Would you like to proceed?
+
+ ❯ 1. Yes, and auto-accept edits
+   2. Yes, and manually approve edits
+   3. No, keep planning
