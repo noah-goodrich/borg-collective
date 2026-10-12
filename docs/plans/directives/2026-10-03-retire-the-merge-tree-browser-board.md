@@ -25,6 +25,7 @@ not a front door. The ruling that settled this is recorded in
 - `merge-tree/render.py` — the LEGACY renderer; writes `index.html`. `grep -c REVIEW_BUCKET` returns 4
 - `merge-tree/render_graph.py` — the Story-Lens renderer; reads `story.json` + `data.json`, writes `graph.html`
 - `merge-tree/spine.py` — the `story.json` skeleton generator (viz-2, #144)
+- `merge-tree/gather.py` — the recon-to-raw-gather bridge (#149) and `gather.raw.json`'s producer; added per R1 below, with `test_gather.py` and `fixtures/gather.raw.json`
 - `merge-tree/curate.py` — gather to `data.json`, including the awaiting-you derivation (viz-1, #125); its readers are
   `render.py`, `render_graph.py` and the board app
 - `merge-tree/app/` — the FastAPI "hub story lens" (`app.py`, `graph.py`, `static/`, `serve.sh`, `README.md`); loads
@@ -47,34 +48,30 @@ not a front door. The ruling that settled this is recorded in
   `2026-08-31-retire-merge-tree-programs-into-borg-core`
 - `merge-tree/test_coordinator.py`, `test_programs.py`, `test_s4_manifests.py`, `fixtures/programs/` — the tests for the
   two modules above
-- `merge-tree/fixtures/gather.raw.json` — the raw-gather fixture the curate, spine and gather tests share; delete only with
-  whichever of them goes last
+- (`merge-tree/fixtures/gather.raw.json` was listed here as shared by the curate, spine and gather tests; all three
+  readers went in the same PR, so it went with them.)
 
-### NEEDS A DECISION (the one that is not obvious)
+### DECIDED (R1, Noah, 2026-10-12): `gather.py` retires with the board
 
-`merge-tree/gather.py` is the producer of `gather.raw.json` (#149), the recon-to-raw-gather bridge. Its downstream
-consumers are `curate.py` and `spine.py`, both board-only — but `evals/s4-k3/run.sh` (E3) runs
-`borg recon --json | python3 gather.py` to check declared-edge provenance, and `borg.zsh` and
-`tests/cli_contract.bats` name it as a consumer of the `borg recon --json` machine surface. So it is board-fed code
-with a non-board caller. Either E3 is re-pointed at `borg_core/manifest` and `gather.py` goes with the board, or
-`gather.py` is kept as the eval's fixture builder. That choice belongs to this directive's first session, not to
-this inventory.
+`merge-tree/gather.py` was the producer of `gather.raw.json` (#149), the recon-to-raw-gather bridge. It was board-fed code with one non-board caller: `evals/s4-k3/run.sh` (E3) ran `borg recon --json | python3 gather.py` to check declared-edge provenance, and `borg.zsh` and `tests/cli_contract.bats` named it a consumer of the `borg recon --json` machine surface. Noah decided on 2026-10-12 that `gather.py` is retired with the board and E3 is re-pointed at `borg_core/manifest` (shell discovery, `core` edge derivation, `across.contested_refs`), keeping its assertions: the authored declared-edge count and zero contested refs.
+
+The `gather.py` row is therefore in the retire table: `merge-tree/gather.py`, `merge-tree/test_gather.py` and `merge-tree/fixtures/gather.raw.json` (all of the fixture's readers go with it) are deleted in the same PR as the rest.
 
 ## Acceptance Criteria
 
-- [ ] **R1 — The decision above is made and written down**, and the "needs a decision" row is resolved into one of
+- [x] **R1 — The decision above is made and written down**, and the "needs a decision" row is resolved into one of
   the two tables.
   - Verify: this file's inventory has no row under "NEEDS A DECISION".
-- [ ] **R2 — Every reader of a retiring file is gone in the same change.** `grep -rn` for each retired module name
+- [x] **R2 — Every reader of a retiring file is gone in the same change.** `grep -rn` for each retired module name
   across `Makefile`, `.github/workflows/`, `evals/`, `tests/`, `borg.zsh` and `docs/` returns only historical
   (severed/assimilated) prose.
   - Verify: the greps are run and their output recorded in the PR body.
-- [ ] **R3 — The coverage gate is edited deliberately.** `VIZ_COVERED` names exactly the modules that survive, and
+- [x] **R3 — The coverage gate is edited deliberately.** `VIZ_COVERED` names exactly the modules that survive, and
   `make test-viz` is green or the target is removed along with the CI `viz` job.
   - Verify: `make test-viz` and `make lint-viz`, or their documented removal.
-- [ ] **R4 — The coordinator path is untouched.** `borg chain list`, `plan` and `sync` behave as before.
+- [x] **R4 — The coordinator path is untouched.** `borg chain list`, `plan` and `sync` behave as before.
   - Verify: `bats tests/cli_contract.bats` and `merge-tree/test_coordinator.py` pass unchanged.
-- [ ] **R5 — Machine-local board state is addressed.** The `~/.local/state/borg/merge-tree` files are listed in the
+- [x] **R5 — Machine-local board state is addressed.** The `~/.local/state/borg/merge-tree` files are listed in the
   PR for the operator to delete by hand; the repo never removes state outside itself.
   - Verify: the PR body lists them.
 

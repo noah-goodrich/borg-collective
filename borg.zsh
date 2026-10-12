@@ -3089,7 +3089,7 @@ cmd_help() {
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
                           --chains-dir <path>    Explicit roots (suppresses the registry sweep)
-                          --recon <file> (plan only) recon/gather JSON for the reality check
+                          --recon <file> (plan only) recon JSON for the reality check
     scan                Discover projects from session history
     add [path] [--name <n>]  Register a project (defaults to $PWD, named by folder; --name overrides)
     rm <project>        Unregister a project
@@ -3118,7 +3118,8 @@ cmd_help() {
     2026-08-26 — recon retired as a human verb. 'borg link' sweeps every source itself, so
                  there is nothing a human still needs it for. The ENGINE is not retired:
                  'borg recon --json' and 'borg recon --adapters' are the machine surface
-                 /borg-recon and merge-tree/gather.py consume, and both still work.
+                 /borg-recon consumes, and both still work. (merge-tree/gather.py, a
+                 second consumer, retired 2026-10-12 with the browser board.)
     2026-08-31 — program renamed to chain. Same command, same actions, same flags; the word
                  "program" is retired in favour of "chain". Run: borg chain
     2026-10-04 — sever was an alias of 'down' (tears down everything) and never retired a directive.
@@ -3648,8 +3649,9 @@ case "${1:-help}" in
         #
         # RETIRED 2026-08-26 AS A HUMAN VERB, ENGINE INTACT (AC1). `borg link` folds the same
         # fan-out into its own document, so the human digest has no reason to exist -- but
-        # `--json` and `--adapters` have real machine consumers (skills/borg-recon/SKILL.md,
-        # merge-tree/gather.py, evals/s4-k3/run.sh) and AC1 never asked for the engine to die.
+        # `--json` and `--adapters` have a real machine consumer (skills/borg-recon/SKILL.md)
+        # and AC1 never asked for the engine to die. (merge-tree/gather.py and evals/s4-k3 E3 were
+        # consumers until the browser board retired 2026-10-12.)
         #
         # THE GATE LIVES IN borg_core/recon/cli.py::main(), not here. This arm's parse loop stays
         # ONLY for the two things argparse does not do: the `--list` alias for `--adapters`, and

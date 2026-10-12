@@ -133,8 +133,8 @@ run_zsh_borg() {
 # ── AC1: `recon` retires as a human-facing verb, engine intact (2026-08-26) ───
 # The 2026-08-10 removals above deleted whole commands. This one is narrower and the difference is
 # the whole test: the HUMAN digest retires, the MACHINE surface survives, because `borg recon --json`
-# and `borg recon --adapters` have real consumers (skills/borg-recon/SKILL.md, merge-tree/gather.py,
-# evals/s4-k3/run.sh) that AC1 never asked to break.
+# and `borg recon --adapters` have a real consumer (skills/borg-recon/SKILL.md) that AC1 never asked to break. (merge-tree/gather.py
+# and evals/s4-k3 E3 were consumers too until the browser board retired 2026-10-12.)
 
 @test "contract: bare recon exits non-zero and points at 'borg link' (AC1)" {
     run_zsh_borg recon
@@ -4013,7 +4013,7 @@ EOF
 # derived $REPO by stripping two exact prefixes (`git@github.com:` and `https://github.com/`). A
 # remote of the form https://x-access-token:<token>@github.com/owner/repo.git matches NEITHER, so the
 # whole URL -- including a live gho_ credential -- became $REPO and flowed into every item's `ref`,
-# and from there into data.json, story.json, and the rendered HTML.
+# and from there into the (since retired) merge-tree board's data.json, story.json, and rendered HTML.
 #
 # These extract the REAL sed expression from the shipped adapter and run it, rather than testing a
 # copied-out duplicate that could drift from the file it is meant to guard.
