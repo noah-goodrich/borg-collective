@@ -45,16 +45,19 @@ source "${HOME}/.claude/lib/borg-hooks.sh"
 MODE=$(_borg_session_mode "$CWD")
 
 # Agent-routing card, injected into BOTH session modes (the Queen launches the Workflow fan-outs).
-# Full guide: docs/agent-routing.md. Enforced for Workflow by hooks/borg-workflow-model-guard.sh.
-ROUTING_CARD="AGENT ROUTING — the expensive tier is opt-in; unpinned subagents inherit the session model AND effort.
-  scout (locate/search, read-only), grunt (fully-specified edit/run)  -> Haiku
-  nanoprobe (one task, judgment), researcher (web, one track)         -> Sonnet
-  reviewer (blind adversarial review)                                 -> Sonnet, high effort
-  general-purpose / no pin                                            -> Opus, LAST RESORT
-Agent tool: pass subagent_type (e.g. borg-collective:borg-scout).
-Workflow: EVERY agent() sets agentType (namespaced, borg-collective:borg-scout) OR model + effort.
-  CLAUDE_CODE_SUBAGENT_MODEL does not reach agent(). An unpinned call is denied by the guard hook;
-  /* inherit-ok */ inside the call means inheriting is intentional.
+# Full guide: docs/agent-routing.md. Enforced by hooks/borg-agent-model-guard.sh (Agent|Task) and
+# hooks/borg-workflow-model-guard.sh (Workflow).
+ROUTING_CARD="AGENT ROUTING — this session runs Opus (xhigh); every subagent it spawns must be BELOW that tier.
+  Agent tool, subagent_type (deny-by-default allowlist): borg-collective:borg-scout (read-only search),
+    -grunt (specified edit/run), -nanoprobe (one task, judgment), -researcher (web, one track),
+    -reviewer (blind review), -verifier, claude-code-guide.
+  Caps: model absent or sonnet/haiku; effort absent or low/medium/high. Denied: no subagent_type
+    (fork), general-purpose, Explore, Plan, claude, anything unlisted.
+  Workflow agent(): EVERY call sets an allowlisted agentType, or model sonnet/haiku AND effort
+    low/medium/high, as string literals in an inline options object. Variables, spreads, unparseable
+    scripts and unresolvable saved workflows are denied; there is no inherit escape hatch.
+  Only exception: research-tools:* agents (any model/effort), after a research-tools skill/command ran.
+  Kill switches: BORG_AGENT_MODEL_GUARD=0, BORG_WORKFLOW_MODEL_GUARD=0.
 Full guide: docs/agent-routing.md in the borg-collective repo."
 
 # ── Orchestrator-mode branch ─────────────────────────────────────────────────

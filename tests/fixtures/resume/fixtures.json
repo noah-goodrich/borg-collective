@@ -1,0 +1,235 @@
+{
+  "version": 3,
+  "claude_version_target": "2.1.296",
+  "tags": {
+    "captured-skeleton": "built from a real record by scripts/resume-skeleton.py (allowlist extractor; entries carry the extractor version)",
+    "synthetic": "hand-built from observed record shapes; used only where no real record exists on the capture machine (see synthetic_reason)"
+  },
+  "note": "S0b: captured-skeleton entries come from controlled spike sessions (private tmux server, haiku, local stub proxy) run through scripts/resume-skeleton.py (extractor v3); no private transcript is extracted. Remaining synthetic entries say why. Pane fixtures are produced by the harness pane allowlist, so unlisted lines read as redacted.",
+  "fixtures": {
+    "main_rate_limit": {
+      "file": "main_rate_limit.jsonl",
+      "kind": "jsonl",
+      "tag": "captured-skeleton",
+      "shape": "api_error_tail",
+      "extractor": "v3"
+    },
+    "main_rate_limit_session": {
+      "file": "main_rate_limit_session.jsonl",
+      "kind": "jsonl",
+      "tag": "captured-skeleton",
+      "shape": "api_error_tail",
+      "extractor": "v3"
+    },
+    "main_server_error_tail": {
+      "file": "main_server_error_tail.jsonl",
+      "kind": "jsonl",
+      "tag": "captured-skeleton",
+      "shape": "api_error_then_bookkeeping",
+      "extractor": "v3"
+    },
+    "main_authentication_failed": {
+      "file": "main_authentication_failed.jsonl",
+      "kind": "jsonl",
+      "tag": "captured-skeleton",
+      "shape": "api_error_tail",
+      "extractor": "v3"
+    },
+    "main_invalid_request": {
+      "file": "main_invalid_request.jsonl",
+      "kind": "jsonl",
+      "tag": "synthetic",
+      "shape": "api_error_tail",
+      "synthetic_reason": "no controlled session produced invalid_request (a local 400 stub yields error unknown); real Prompt-is-too-long records exist only in private transcripts"
+    },
+    "main_max_output_tokens": {
+      "file": "main_max_output_tokens.jsonl",
+      "kind": "jsonl",
+      "tag": "synthetic",
+      "shape": "api_error_tail",
+      "synthetic_reason": "no real max_output_tokens record exists on this machine"
+    },
+    "interrupt_user": {
+      "file": "interrupt_user.jsonl",
+      "kind": "jsonl",
+      "tag": "captured-skeleton",
+      "shape": "interrupt_marker",
+      "extractor": "v3"
+    },
+    "interrupt_tool_use": {
+      "file": "interrupt_tool_use.jsonl",
+      "kind": "jsonl",
+      "tag": "synthetic",
+      "shape": "interrupt_marker",
+      "synthetic_reason": "S0b only exercised Esc during generation (user marker); the for-tool-use variant was not reproduced"
+    },
+    "subagent_transcript": {
+      "file": "subagents/agent-a0000000000000002.jsonl",
+      "kind": "jsonl",
+      "tag": "captured-skeleton",
+      "shape": "subagent_first_record",
+      "extractor": "v3"
+    },
+    "subagent_meta": {
+      "file": "subagents/agent-a0000000000000002.meta.json",
+      "kind": "json",
+      "tag": "captured-skeleton",
+      "shape": "subagent_meta",
+      "extractor": "v3"
+    },
+    "workflow_manifest": {
+      "file": "workflows/wf_ab12cd.json",
+      "kind": "json",
+      "tag": "captured-skeleton",
+      "shape": "workflow_manifest",
+      "extractor": "v3"
+    },
+    "workflow_journal": {
+      "file": "workflows/wf_ab12cd.journal.jsonl",
+      "kind": "jsonl",
+      "tag": "captured-skeleton",
+      "shape": "workflow_journal",
+      "extractor": "v3"
+    },
+    "stop_failure_payload": {
+      "file": "stop_failure_payload.json",
+      "kind": "json",
+      "tag": "captured-skeleton",
+      "shape": "hook_payload",
+      "extractor": "v3"
+    },
+    "session_start_payload": {
+      "file": "session_start_payload.json",
+      "kind": "json",
+      "tag": "captured-skeleton",
+      "shape": "hook_payload",
+      "extractor": "v3"
+    },
+    "pane_composer": {
+      "file": "panes/composer.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "pane",
+      "extractor": "v3"
+    },
+    "pane_permission": {
+      "file": "panes/permission.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "pane",
+      "extractor": "v3"
+    },
+    "pane_limit": {
+      "file": "panes/limit.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "pane",
+      "extractor": "v3"
+    },
+    "workflow_journal_failed": {
+      "file": "workflows/wf_failed.journal.jsonl",
+      "kind": "jsonl",
+      "tag": "captured-skeleton",
+      "extractor": "v3",
+      "shape": "workflow_journal"
+    },
+    "pane_limit_auto_continue": {
+      "file": "panes/limit_auto_continue.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "extractor": "v3",
+      "shape": "pane"
+    },
+    "pane_trust_folder": {
+      "file": "panes/trust_folder.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "extractor": "v3",
+      "shape": "pane"
+    },
+    "events_clean_turn": {
+      "file": "events/clean_turn.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "event_names",
+      "extractor": "v3"
+    },
+    "events_esc_interrupt": {
+      "file": "events/esc_interrupt.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "event_names",
+      "extractor": "v3"
+    },
+    "events_queued_two_turns": {
+      "file": "events/queued_two_turns.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "event_names",
+      "extractor": "v3"
+    },
+    "events_subagent_api_error": {
+      "file": "events/subagent_api_error.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "event_names",
+      "extractor": "v3"
+    },
+    "events_main_limit_weekly": {
+      "file": "events/main_limit_weekly.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "event_names",
+      "extractor": "v3"
+    },
+    "pane_queued_composer": {
+      "file": "panes/queued_composer.txt",
+      "kind": "text",
+      "tag": "captured-skeleton",
+      "shape": "pane",
+      "extractor": "v3"
+    },
+    "workflow_manifest_failed": {
+      "file": "workflows/wf_failed.json",
+      "kind": "json",
+      "tag": "captured-skeleton",
+      "shape": "workflow_manifest",
+      "extractor": "v3"
+    }
+  },
+  "required_captured": {
+    "S2": [
+      "main_rate_limit",
+      "main_server_error_tail",
+      "main_authentication_failed",
+      "main_invalid_request"
+    ],
+    "S4": [
+      "stop_failure_payload",
+      "session_start_payload"
+    ],
+    "S5": [
+      "subagent_transcript",
+      "subagent_meta",
+      "workflow_manifest",
+      "workflow_journal",
+      "workflow_journal_failed"
+    ],
+    "S7": [
+      "main_rate_limit",
+      "main_server_error_tail",
+      "subagent_transcript"
+    ],
+    "S8": [
+      "pane_composer",
+      "pane_permission",
+      "pane_limit",
+      "pane_limit_auto_continue",
+      "pane_trust_folder"
+    ],
+    "S16": [
+      "stop_failure_payload",
+      "main_rate_limit"
+    ]
+  }
+}

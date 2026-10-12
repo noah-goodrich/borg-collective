@@ -54,11 +54,12 @@ output returns to the Conductor, which spawns the next.
 1. **Orchestrator-worker only; no inter-agent messaging.** Workers report to the Conductor; they never message
    each other. Agent Teams stay off.
 2. **Cost-ordered routing with explicit model tiers.** scout/grunt → Haiku; nanoprobe/researcher → Sonnet/med;
-   reviewer → Sonnet/high; general-purpose → inherited (last resort). Gate conditions are fully specified in
-   `docs/agent-routing.md`.
-3. **Session-model rule (post-2026-07-07).** The session default is now Opus 4.8; Fable 5 is opt-in. Inside a
-   `Workflow` script, **every `agent()` call carries an explicit `model:`** — a missing one silently inherits the
-   session model and is a bug. This supersedes the old "unspecified subagents run on Opus" assumption.
+   reviewer → Sonnet/high. `general-purpose` and untyped spawns are denied: use an allowlisted agentType, or
+   an explicit `model` + `effort`. Gate conditions are fully specified in `docs/agent-routing.md`.
+3. **Session-model rule (post-2026-07-07).** Orchestrator and drone sessions launch on Opus at `xhigh`; every
+   subagent must sit below that tier (Sonnet or Haiku, effort at most `high`), except research-tools agent types.
+   Inside a `Workflow` script, `agent()` calls use an allowlisted `agentType` or an explicit `model:` plus effort —
+   an untyped call is denied, not inherited. See `docs/agent-routing.md` for detail.
 4. **Nanoprobe worktree protocol.** Create a worktree at `~/.local/state/borg/worktrees/<repo>/<slug>` → work
    and commit inside it → push branch + open PR → remove the worktree. Never place worktrees inside `.borg/`.
    `borg reap-worktrees` auto-cleans stale ones.

@@ -1,0 +1,11 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/Users/noah/dev/example/.claude/projects/-Users-noah-dev-example/<sid>.jsonl",
+  "cwd": "/Users/noah/dev/example",
+  "<key>": {
+    "level": "<str>"
+  },
+  "hook_event_name": "StopFailure",
+  "error": "rate_limit",
+  "last_assistant_message": "You've hit your weekly limit · resets 5:10am (America/Denver)"
+}
