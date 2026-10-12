@@ -150,9 +150,9 @@ def cap_problems(model, effort, need_pin, agent_type=None):
         if need_pin:
             out.append("no effort: an unpinned call inherits the session's xhigh. Pass effort: 'low', "
                        "'medium' or 'high'")
-        elif agent_type in EFFORT_REQUIRED_TYPES:
+        elif isinstance(agent_type, str) and agent_type.strip() in EFFORT_REQUIRED_TYPES:
             out.append("%s pins no effort, so it inherits the session's xhigh. Pass effort: 'low' "
-                       "(or 'medium'/'high')" % agent_type)
+                       "(or 'medium'/'high')" % agent_type.strip())
     elif isinstance(effort, Dyn):
         out.append("effort must be a string literal (%s); use 'low', 'medium' or 'high'" % effort.why)
     elif not (isinstance(effort, str) and effort.strip().lower() in EFFORT_OK):
@@ -189,7 +189,8 @@ def main():
     for q in problems:
         sys.stderr.write("  - %s\n" % q)
     sys.stderr.write("Policy: orchestrator/drone sessions run Opus xhigh; subagents must be below that "
-                     "(Sonnet/Haiku, effort low/medium/high). Only research-tools:* is exempt, and only "
+                     "(Sonnet/Haiku, effort low/medium/high); claude-code-guide also needs effort low/medium/high. "
+                     "Only research-tools:* is exempt, and only "
                      "after a research-tools skill/command ran. Guide: docs/agent-routing.md. "
                      "Kill switch: BORG_AGENT_MODEL_GUARD=0.\n")
     return 2

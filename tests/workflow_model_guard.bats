@@ -339,3 +339,40 @@ CMD_RT='{"type":"user","message":{"role":"user","content":"<command-name>/resear
     [ -f "${BATS_TEST_DIRNAME}/../docs/agent-routing.md" ]
     [ ! -e "${BATS_TEST_DIRNAME}/../agents/ROUTING.md" ]
 }
+
+@test "a padded claude-code-guide agentType cannot skip the effort rule" {
+    _run_script "await agent('q', { agentType: ' claude-code-guide ' })"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"pins no effort"* ]] || false
+}
+
+@test "claude-code-guide with effort xhigh or max is denied" {
+    _run_script "await agent('q', { agentType: 'claude-code-guide', effort: 'xhigh' })"
+    [ "$status" -eq 2 ]
+    _run_script "await agent('q', { agentType: 'claude-code-guide', effort: 'max' })"
+    [ "$status" -eq 2 ]
+}
+
+@test "claude-code-guide with effort from a const holding low is allowed" {
+    _run_script "const E = 'low'; await agent('q', { agentType: 'claude-code-guide', effort: E })"
+    [ "$status" -eq 0 ]
+}
+
+@test "claude-code-guide with model haiku and effort low is allowed" {
+    _run_script "await agent('q', { agentType: 'claude-code-guide', model: 'haiku', effort: 'low' })"
+    [ "$status" -eq 0 ]
+}
+
+@test "borg-collective and research-tools agentTypes with no effort are not hit by the guide effort rule" {
+    _run_script "await agent('q', { agentType: 'borg-collective:borg-scout' })"
+    [ "$status" -eq 0 ]
+    _transcript "$SKILL_RT"
+    _run_script "await agent('p', { agentType: 'research-tools:research-lead' })" "${BATS_TEST_TMPDIR}/t.jsonl"
+    [ "$status" -eq 0 ]
+}
+
+@test "the deny policy text says claude-code-guide needs effort low/medium/high" {
+    _run_script "await agent('q', { model: 'opus', effort: 'low' })"
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"claude-code-guide also needs effort low/medium/high"* ]] || false
+}
