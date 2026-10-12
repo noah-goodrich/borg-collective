@@ -1,0 +1,7 @@
+TMUX_PANE=%0
+TMUX=set(socket-path,pid,session)
+ppid=75864
+pane_pid=75864
+pane_id_via_tmux=%0
+set_option_rc=0
+pane_option_after=probe-sid-1

@@ -6,7 +6,7 @@
 #
 # Usage:
 #   drone feature <project> <branch>  Create worktree + branch, launch Claude (Boris workflow)
-#   drone up [project]           Start container + create tmux window
+#   drone up [project] [--resume <sid>]  Start container + create tmux window (relaunch claude --resume)
 #   drone down [project]         Stop container + remove tmux window
 #   drone claude [project]       Launch Claude Code in project window
 #   drone sh [project]           Shell into project container
@@ -40,6 +40,8 @@ DRONE_SCRIPT_DIR="${0:A:h}"
 # Host-side lifecycle hooks (.devcontainer/borg-hooks/{pre-up,post-down}.sh).
 source "$DRONE_SCRIPT_DIR/lib/drone-hooks.zsh"
 source "$DRONE_SCRIPT_DIR/lib/state-root.zsh"
+# borg-resume ledger layout (borg_resume_dir, borg_resume_valid_sid): the same definitions the hooks use.
+source "$DRONE_SCRIPT_DIR/lib/borg/resume-paths.sh"
 
 _run_pre_up()    { run_borg_hook "$1" "$2" pre-up.sh strict || die "pre-up.sh failed for $2"; }
 _run_post_down() { run_borg_hook "$1" "$2" post-down.sh lenient; }
@@ -451,10 +453,37 @@ wait_for_container() {
     die "Timed out waiting for container to start after ${max}s."
 }
 
+# The claude launch line for a project pane. An optional session id appends --resume <sid>; callers
+# validate it first (borg_resume_valid_sid), so it never needs quoting here.
+_drone_claude_cmd() {
+    local cmd="claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}"
+    [[ -n "${1:-}" ]] && cmd="$cmd --resume $1"
+    print -r -- "$cmd"
+}
+
 # ── drone up ─────────────────────────────────────────────────────────────────
 
 cmd_up() {
-    _drone_resolve "${1:-}"
+    # Usage: drone up [project] [--resume <sid>]   (the flag may come before or after the project)
+    local _arg_project="" resume_sid="" _seen_resume=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --resume)
+                [[ $# -ge 2 ]] || die "Usage: drone up [project] --resume <session-id>"
+                resume_sid="$2"; _seen_resume=1; shift 2 ;;
+            --resume=*)
+                resume_sid="${1#--resume=}"; _seen_resume=1; shift ;;
+            -*) die "drone up: unknown option '$1'" ;;
+            *)  _arg_project="$1"; shift ;;
+        esac
+    done
+    if (( _seen_resume )); then
+        [[ "$resume_sid" != -* ]] && borg_resume_valid_sid "$resume_sid" || die "drone up: invalid session id for --resume"
+    fi
+    local claude_cmd
+    claude_cmd=$(_drone_claude_cmd "$resume_sid")
+
+    _drone_resolve "$_arg_project"
     local project_name="$_proj_name"
     local project_dir="$_proj_dir"
     local compose="$project_dir/$COMPOSE_FILE"
@@ -478,12 +507,13 @@ cmd_up() {
 
         if [[ -n "$live" ]]; then
             info "Project '$project_name' already open."
+            [[ -n "$resume_sid" ]] && warn "window already open; --resume ignored (close it first)"
             attach_or_switch "$live"
             return
         fi
 
         # Host-first: left pane runs claude, right pane is a shell at project_dir.
-        create_2pane_window "$wname" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" "$project_dir" ""
+        create_2pane_window "$wname" "$claude_cmd" "$project_dir" ""
         tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
         _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
         _drone_register "$project_dir" "$project_name" "$wname"
@@ -496,6 +526,10 @@ cmd_up() {
     # ── Devcontainer path ─────────────────────────────────────────────────────
 
     ensure_postgres
+
+    # The compose files bind-mount the host resume ledger. Create it first: a missing bind source is
+    # created by Docker as root, which the host-side watcher could not then write.
+    mkdir -p "$(borg_resume_dir)" 2>/dev/null || true
 
     # Detect if devcontainer definition changed since last build
     local _dc_hash _dc_hash_dir _dc_hash_file _build_flag=""
@@ -536,6 +570,7 @@ cmd_up() {
                 # Host-side panes are immune to container restart — no re-exec needed.
             fi
             info "Project '$project_name' already running."
+            [[ -n "$resume_sid" ]] && warn "window already open; --resume ignored (close it first)"
             _drone_apply_window_color "$live" "$(_drone_project_color "$project_name")"
             attach_or_switch "$live"
             return
@@ -562,7 +597,7 @@ cmd_up() {
 
     # Host-first: both panes are host shells at $project_dir.
     # Left (Claude) pane auto-launches `claude`; right pane stays as a shell prompt.
-    create_2pane_window "$wname" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" "$project_dir" ""
+    create_2pane_window "$wname" "$claude_cmd" "$project_dir" ""
     tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
     _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
     _drone_register "$project_dir" "$project_name" "$wname"
@@ -1365,6 +1400,8 @@ services:
       - dev.role=app
     volumes:
       - ~/.config/borg:/home/dev/.config/borg:cached
+      # borg-resume ledger (append-only events from in-container hooks). Only this dir, never ~/.claude.
+      - ~/.local/state/borg/resume:/home/dev/.local/state/borg/resume
     profiles:
       - borg
 
@@ -1431,6 +1468,9 @@ cmd_help() {
   COMMANDS
     feature <project> <branch>  Create worktree + branch, start window, launch Claude
     up [project]         Start container + create tmux window (uses $PWD if no arg)
+    up [project] --resume <sid>
+                         Same, relaunching claude --resume <sid>. Compose files bind-mount the host
+                         resume ledger; an existing drone gets the mount only after drone down + up
     down [project]       Stop container + remove tmux window
     claude [project]     Launch Claude Code in project window (runs drone up if needed)
     cortex [project]     Launch Cortex Code in project window (runs drone up if needed)
@@ -1475,7 +1515,7 @@ dbg "dispatch: SESSION=$SESSION"
 
 case "${1:-}" in
     feature)    cmd_feature "${2:-}" "${3:-}" ;;
-    up)         cmd_up "${2:-}" ;;
+    up)         shift; cmd_up "$@" ;;
     down)       cmd_down "${2:-}" ;;
     claude)     cmd_claude "${2:-}" ;;
     cortex)     cmd_cortex "${2:-}" ;;

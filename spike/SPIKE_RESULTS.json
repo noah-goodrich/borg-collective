@@ -106,21 +106,23 @@
     },
     {
       "id": "U9",
-      "question": "Can a hook's PPID or TMUX_PANE identify the claude pid and pane for host sessions, and does tmux set-option -p from a hook persist?",
+      "question": "Can a hook's PPID or TMUX_PANE identify the claude pid and pane for host sessions and for container (drone) sessions, and does tmux set-option -p from a hook persist?",
       "outcome": "partial",
-      "evidence": "A SessionStart hook payload carries the documented fields (tests/fixtures/resume/session_start_payload.json). In the first run, on the host in a private tmux server, the hook PPID equalled the claude pid and the tmux pane_pid, TMUX_PANE was the pane id, TMUX held the socket path, and tmux set-option -p from the hook persisted; that evidence was in private logs and is not committed. A SubagentStop appears with no preceding SubagentStart in the queued run (events/queued_two_turns.txt, names only), so scan and hook code should expect unpaired SubagentStop events.",
+      "evidence": "S3 re-ran this with committed evidence. Host, private tmux server, a process started as a pane child (as a hook child is): TMUX_PANE was the pane id, TMUX was set, the child's PPID equalled tmux pane_pid, and tmux set-option -p @borg_sid from that child persisted and was readable from outside the pane (spike/evidence/u9-host-tmux.txt). Container, throwaway container from the base image running the S0a hook harness: /.dockerenv present, TMUX and TMUX_PANE unset, no tmux server, so an in-container hook has no pane identity and cannot call tmux for the host pane; the SessionStart payload was still recorded (spike/evidence/u9-u10-container.txt). Container sessions therefore bind host-side or stay notify-only. A SubagentStop appears with no preceding SubagentStart in the queued run (events/queued_two_turns.txt, names only), so scan and hook code should expect unpaired SubagentStop events.",
       "evidence_paths": [
         "tests/fixtures/resume/session_start_payload.json",
-        "tests/fixtures/resume/events/queued_two_turns.txt"
+        "tests/fixtures/resume/events/queued_two_turns.txt",
+        "spike/evidence/u9-host-tmux.txt",
+        "spike/evidence/u9-u10-container.txt"
       ],
-      "fallback": "Resolve the pane by walking the process tree to a tmux pane_pid.",
+      "fallback": "Resolve the pane by walking the process tree to a tmux pane_pid on the host; container sessions record in_container:true with no pane and are notify-only.",
       "refuted_parts": [],
       "not_run_parts": [
-        "Host PPID/TMUX_PANE/TMUX identity and set-option -p persistence: observed, not committed, so unverified.",
-        "Container (drone) sessions: no drone container was started, to keep the run isolated from real project environments. S3 still has to establish pane identity inside a container.",
+        "That a real claude hook's PPID equals the claude pid: the probe ran as a pane child, not under a live claude session with hooks, to avoid quota spend. The first-run observation remains uncommitted.",
+        "A claude session inside a drone container with the real compose-rendered mount: only a throwaway container was used; no existing drone was touched.",
         "That the unpaired SubagentStop has an empty agent_type: not committed (event names only), so unverified."
       ],
-      "claude_version": "2.1.296",
+      "claude_version": "2.1.296 (S0b run); S3 probes ran no claude session",
       "date": "2026-10-12"
     },
     {
@@ -215,8 +217,19 @@
     },
     {
       "id": "U10",
-      "outcome": "unknown",
-      "note": "Not run (needs a drone container)."
+      "question": "Is the host resume ledger directory reachable and writable from inside a drone container through the bind mount the compose templates use?",
+      "outcome": "partial",
+      "evidence": "A throwaway container from the base image, user dev, with a host directory bind-mounted at /home/dev/.local/state/borg/resume (the exact target the templates use): borg_resume_dir resolved to that path from HOME, the container read a file the host seeded, appended a ledger line with borg_resume_append_line (rc 0), and the host saw the line owned by the host user. Mount-only, so ~/.claude is not exposed (spike/evidence/u9-u10-container.txt).",
+      "evidence_paths": [
+        "spike/evidence/u9-u10-container.txt"
+      ],
+      "fallback": "If a project cannot take the mount, spool through the already mounted ~/.config/borg (Decision 6 alternative) and keep container sessions notify-only.",
+      "refuted_parts": [],
+      "not_run_parts": [
+        "The mount as rendered by `drone up` for a real project: existing drones only get it after drone down/up, which was not done. Mechanism verified with docker run, not with a drone compose project."
+      ],
+      "claude_version": "n/a",
+      "date": "2026-10-12"
     },
     {
       "id": "U11",
