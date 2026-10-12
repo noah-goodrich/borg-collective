@@ -1,0 +1,8 @@
+SYNTHETIC: composer with a half-typed human draft.
+
+some earlier output
+
+────────────────────────────────────────────────────────────
+❯ half typed note
+────────────────────────────────────────────────────────────
+  ? for shortcuts

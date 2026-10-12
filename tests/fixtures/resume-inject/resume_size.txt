@@ -1,0 +1,9 @@
+SYNTHETIC (no real capture, U17): resume size dialog.
+
+ Resuming the full session will consume a substantial portion of your usage limits.
+ We recommend resuming from a summary.
+
+ ❯ 1. Resume from summary (recommended)
+   2. Resume full session as-is
+
+ Enter to confirm · Esc to cancel

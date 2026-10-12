@@ -1,0 +1,3 @@
+SYNTHETIC: no composer at all, plain output.
+
+building...
