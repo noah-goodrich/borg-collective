@@ -15,7 +15,7 @@ import os
 import re
 import subprocess
 
-import programs
+from borg_core.manifest import across, core, refs, shell
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # The directory was renamed `.borg/programs` -> `.borg/chains` (AC7 decision 2's other half: the
@@ -27,7 +27,6 @@ _LEGACY_DIR = os.path.join(REPO_ROOT, ".borg", "programs")
 PROGRAMS_DIR = _CHAINS_DIR if os.path.isdir(_CHAINS_DIR) else _LEGACY_DIR
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-FULL_REF_RE = re.compile(r"^[\w.-]+/[\w.-]+#\d+$")
 
 
 def _manifest_paths() -> list[str]:
@@ -48,7 +47,7 @@ def test_this_repo_declares_at_least_one_program():
 
 def test_every_manifest_validates_clean():
     for path in _manifest_paths():
-        errors = programs.validate(_load(path))
+        errors = core.validate(_load(path))
         assert errors == [], f"{os.path.basename(path)}: {errors}"
 
 
@@ -57,22 +56,27 @@ def test_program_id_matches_filename_and_is_a_slug():
     # is a kebab-case slug, and the filename tracks it so discovery and humans agree on the name.
     for path in _manifest_paths():
         stem = os.path.splitext(os.path.basename(path))[0]
+        # The RAW on-disk key, not `_id`: `borg_core/manifest/cli.py` scaffold documents `program` as
+        # part of the on-disk contract and AC7 retires the word as a NAME for new things, not the key.
+        # `_id` would pass for a file that omits it, which is not what this rule is about.
         program = str(_load(path).get("program") or "")
         assert program == stem, f"{os.path.basename(path)}: program {program!r} != filename stem"
         assert SLUG_RE.match(program), f"{program!r} is not a kebab-case slug"
 
 
-def test_every_row_ref_is_full_form():
-    # Full owner/repo#num refs are self-addressing (the gp keymap, chain renderers, dedup) — the
-    # short form has no owner and cannot be resolved off-machine.
+def test_every_declared_ref_is_addressable():
+    # Every declared ref must belong to a vocabulary borg can address: a full owner/repo#num, a Jira
+    # key or a link (`refs.ref_kind`). The short form has no owner and cannot be resolved off-machine,
+    # which is the one shape ref_kind answers "" for. This used to be a regex for the GitHub form
+    # alone, so it rejected the Jira and link rows core.validate admits and the writer will write.
     for path in _manifest_paths():
         doc = _load(path)
-        refs = [r.get("ref", "") for r in doc.get("rows", []) if isinstance(r, dict)]
+        declared = [r.get("ref", "") for r in doc.get("rows", []) if isinstance(r, dict)]
         apex = doc.get("apex")
         if isinstance(apex, dict) and apex.get("ref"):
-            refs.append(apex["ref"])
-        for ref in refs:
-            assert FULL_REF_RE.match(str(ref)), f"{os.path.basename(path)}: ref {ref!r} not owner/repo#num"
+            declared.append(apex["ref"])
+        for ref in declared:
+            assert refs.ref_kind(ref), f"{os.path.basename(path)}: ref {ref!r} is not a github, jira or link ref"
 
 
 def test_manifests_carry_a_desc_sentence():
@@ -84,16 +88,16 @@ def test_manifests_carry_a_desc_sentence():
 
 
 def test_discovery_finds_them_with_zero_warnings():
-    manifests, warnings = programs.discover([REPO_ROOT])
+    manifests, warnings = shell.discover([REPO_ROOT])
     assert warnings == [], warnings
-    found = {m["program"] for m in manifests}
+    found = {m["_id"] for m in manifests}
     expected = {os.path.splitext(os.path.basename(p))[0] for p in _manifest_paths()}
     assert expected <= found, f"discovery missed {expected - found}"
 
 
 def test_edges_derive_without_self_edges():
-    manifests, _ = programs.discover([REPO_ROOT])
-    edges = programs.edges_from(manifests)
+    manifests, _ = shell.discover([REPO_ROOT])
+    edges = across.edges_from(manifests)
     assert edges, "manifests declare no edges — a manifest that declares nothing is dead weight"
     for e in edges:
         assert e["parent"] != e["child"], f"self-edge: {e}"

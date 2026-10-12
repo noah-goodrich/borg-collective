@@ -17,9 +17,9 @@ failure mode is a file that is wrong on disk with the author already gone. The a
 CLAUDE.md says logic goes in a testable core and shell is a wrapper; this is the core, so the skills
 carry an invocation instead of a schema.
 
-NOT ADDED TO `merge-tree/coordinator.py`, which is where `borg chain list|plan|sync` still go. That
-module is what AC7 retires, so a fourth verb there would be built to be deleted. These land in
-`borg_core.manifest` beside the writer they use.
+NOT ADDED TO `merge-tree/coordinator.py`, which is where `borg chain list|plan|sync` go. That module
+supervises borg's copy against an external sync target and rewrites manifests through this package's
+writer; it is not a manifest editor. These land in `borg_core.manifest` beside the writer they use.
 
 ── THE READ HERE IS STRICT, AND THAT IS THE WHOLE DESIGN ────────────────────────────────────────────
 

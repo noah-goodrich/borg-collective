@@ -5,7 +5,7 @@ The merge-tree browser board (the `data.json` / `story.json` pipeline and the `i
 What remains here:
 
 - `coordinator.py` — the chain writer behind `borg chain list`, `plan` and `sync` (`borg.zsh` dispatches into it; `borg_core/reconcile/` cites it as the live reconcile writer).
-- `programs.py` — the manifest reader/writer `coordinator.py` imports. Its own retirement is filed: `docs/plans/directives/2026-08-31-retire-merge-tree-programs-into-borg-core.md`.
-- `test_coordinator.py`, `test_programs.py`, `test_s4_manifests.py`, `fixtures/programs/` — their tests, gated by `make test-viz` and the CI `viz` job.
+- Manifests are read and written through `borg_core/manifest` (`shell.discover`, `shell.write_manifest`); the second copy that used to live here, `programs.py`, was retired into it (`docs/plans/directives/2026-08-31-retire-merge-tree-programs-into-borg-core.md`).
+- `test_coordinator.py`, `test_s4_manifests.py` — its tests, gated by `make test-viz` and the CI `viz` job.
 - `SCHEMA.md` — the live part is the chain-manifest contract (`<project>/.borg/chains/*.json`); the `data.json` and `story.json` sections are historical.
 - `PROTOCOL.md` — the action-dispatch contract, historical alongside the board it served.
