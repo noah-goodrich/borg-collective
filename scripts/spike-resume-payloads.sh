@@ -87,8 +87,9 @@ _spike_pane_ok() {
     local months='Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec'
     local zones='UTC|America/(New_York|Chicago|Denver|Phoenix|Los_Angeles|Anchorage|Toronto|Vancouver|Sao_Paulo)|Europe/(London|Dublin|Paris|Berlin|Madrid|Amsterdam)|Asia/(Tokyo|Seoul|Shanghai|Singapore|Kolkata|Dubai)|Australia/(Sydney|Melbourne)|Pacific/Auckland'
     local lim="You.ve hit your ($kinds) limit( . resets ((($months) [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m)( \\(($zones)\\))?)?"
-    local choice='(❯ )?[1-9]\. (Yes|No|Stop and wait for limit to reset|Upgrade your plan|Switch to extra usage|Yes, and don.t ask again this session)'
-    local chrome='Welcome to Claude Code|\? for shortcuts|[>❯]|Bash command|Do you want to proceed\?|What do you want to do\?|Esc to cancel|Enter to confirm|Press Enter to continue|(⏵⏵ )?(accept edits|plan mode|bypass permissions) on( \(shift\+tab to cycle\))?'
+    local tm='[0-9]{1,2}(:[0-9]{2})?[ap]m'
+    local choice="(❯ )?[1-9]\\. (Yes|No|No, exit|Yes, I trust this folder|Stop and wait for limit to reset|Wait here, then continue automatically at $tm|Add funds to continue with usage credits|Upgrade your plan|Switch to extra usage|Yes, and don.t ask again this session)"
+    local chrome="Welcome to Claude Code|\\? for shortcuts|[>❯]|Bash command|Do you want to proceed\\?|What do you want to do\\?|Esc to cancel|Enter to confirm|Enter to confirm . Esc to cancel|Esc to cancel . Tab to amend|Security guide|Accessing workspace:|Claude Code.ll be able to read, edit, and execute files here\\.|(❯ )?(No, exit|Yes, I trust this folder)|(⚠ )?Usage limit reached . limit resets $tm|(⚠ )?Usage limit reached . continuing automatically at $tm . esc to cancel|Continuing automatically at $tm . esc to cancel|Press Enter to continue|(⏵⏵ )?(accept edits|plan mode|bypass permissions) on( \\(shift\\+tab to cycle\\))?"
     [ -z "$t" ] && return 0
     [[ "$t" =~ ^($lim|$choice|$chrome)$ ]]
 }

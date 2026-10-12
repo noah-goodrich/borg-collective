@@ -1,5 +1,22 @@
-Bash command
+
 <redacted>
-Do you want to proceed?
-❯ 1. Yes
-  2. No
+<redacted>
+<redacted>
+
+<redacted>
+
+<redacted>
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+<redacted>
+<redacted>
+<redacted>
+<redacted>
+<redacted>
+<redacted>
+ ❯ 1. Yes
+<redacted>
+<redacted>
+   3. No
+
+ Esc to cancel · Tab to amend
