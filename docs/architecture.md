@@ -59,7 +59,7 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **15 hooks**, **~14 lib files**, **16 skills**, **5 agents** (+ `docs/agent-routing.md`),
+writing: **15 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/agent-routing.md`),
 **4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
@@ -349,7 +349,7 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | break-glass | Manual | Explicit, logged override for a normally-blocked action |
 | simplify / fable-reviewer / no-unnecessary-read-perms | Manual / auto | Code + permission hygiene guardrails |
 
-The full, current roster (16 skills as of this writing) is always `ls skills/` — this table lists
+The full, current roster (17 skills as of this writing) is always `ls skills/` — this table lists
 role, not an exhaustive spec.
 
 ---
