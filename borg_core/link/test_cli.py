@@ -1076,5 +1076,6 @@ def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
 
     page = cli.render.document({"projects": projects, "grid": {"manifests": []}, "waiting": waiting})
     body = [line for line in page.split("\x1b[1m▸ WAITING ON YOU")[1].split("\n")[1:] if line.strip()]
-    assert len(body) == 5 + 2
-    assert "+2 more decisions" in body[-2] and "+2 agent tasks" in body[-1]
+    assert len(body) == 5 + 2 + 1
+    assert "+2 more decisions" in body[-3] and "+2 agent tasks" in body[-2]
+    assert "next" in body[-1]

@@ -1540,9 +1540,14 @@ def _waiting_body(doc: dict) -> list[str]:
             continue
         if line.startswith(render.SECTION_MARK):
             inside = False
-        if inside and line.strip():
+        if inside and line.strip() and not line.startswith("  next  "):
             out.append(line)
     return out
+
+
+def _page_tail(doc: dict, n: int = 5) -> list[str]:
+    """The last `n` non-blank lines of the page, plain -- what `borg link | tail -5` shows."""
+    return [line for line in plain(render.document(doc)).split("\n") if line.strip()][-n:]
 
 
 def test_waiting_on_you_is_always_present_and_says_so_when_empty():
@@ -1609,3 +1614,36 @@ def test_an_unlooked_manifest_with_no_refs_does_not_cloud_waiting_on_you():
     doc = _ready_doc([], state="unlooked", declared=0)
     doc["grid"]["manifests"][0]["nodes"] = {}
     assert _waiting_body(doc) == ["  — nothing waits on you"]
+def test_the_page_ends_on_one_next_action_with_a_runnable_command_for_a_yours_row():
+    """link-unification L3: `borg link | tail -5` holds the recommended action and its command.
+
+    MUTATION: drop `action` from the lines `_waiting_section` returns and this goes red. The first `yours`
+    row wins over a `mine` row that sorts before it.
+    """
+    doc = _ready_doc(["a/b#1", "o/r#2"], gates=[_gate("o/r#2", "decision", "Dana signs off")])
+    tail = _page_tail(doc)
+    assert tail[-1].startswith("  next  o/r#2")
+    assert tail[-1].endswith("gh pr view 2 -R o/r")
+    assert sum(1 for line in tail if line.startswith("  next  ")) == 1
+
+
+def test_the_next_action_falls_back_to_the_first_mine_row_then_to_a_nothing_ready_sentence():
+    """The documented order: yours, else mine, else a sentence. MUTATION: make `_first_mine` return None."""
+    assert _page_tail(_ready_doc(["a/b#1"]))[-1].endswith("gh pr view 1 -R a/b")
+    assert _page_tail(_ready_doc([]))[-1] == "  next  nothing is ready  borg next"
+    unlooked_tail = _page_tail(_ready_doc(["a/b#1"], state="unlooked"))[-1]
+    assert "nobody looked" in unlooked_tail
+    assert unlooked_tail.endswith("borg next")
+
+
+def test_the_next_action_never_puts_a_malformed_ref_on_a_command_line():
+    """A ref that is not `owner/repo#N` gets `borg next`, never an interpolated shell fragment."""
+    assert render._next_action_command("x; rm -rf /#1") == "borg next"  # pylint: disable=protected-access
+    assert render._next_action_command("o/r#7") == "gh pr view 7 -R o/r"  # pylint: disable=protected-access
+
+
+def test_the_next_action_line_is_the_same_in_both_scopes():
+    """One spine, no branch on scope: the final line is identical in orchestrator and repository scope."""
+    doc = _ready_doc(["o/r#2"], gates=[_gate("o/r#2", "decision", "Dana signs off")])
+    repo = {**doc, "scope": {"kind": "repository"}}
+    assert _page_tail(doc)[-1] == _page_tail(repo)[-1]

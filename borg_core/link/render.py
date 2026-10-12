@@ -78,6 +78,7 @@ so it does not surprise anyone later.
 
 from __future__ import annotations
 
+import re
 from typing import Callable
 
 from borg_core.link import core, grid, picture
@@ -1084,6 +1085,55 @@ def _waiting_line(item: dict, ref_w: int, proj_w: int) -> str:
     return f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['project']:<{proj_w}}  {text}{unblocks}\n"
 
 
+_GH_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([0-9]+)$")
+
+
+def _next_action_command(ref: str) -> str:
+    """A runnable command for one ref: `gh pr view N -R owner/repo` for an `owner/repo#N` ref, else
+    `borg next` (the chooser, which routes anything that is not a GitHub ref). The ref is matched
+    against a strict pattern before it reaches a command line, so a hand-typed ref cannot inject."""
+    if _GH_REF.match(ref):
+        # JUSTIFICATION: str.partition on a plain string; the Demeter rule reads it as a chain on a stranger.
+        repo, _, number = ref.partition("#")  # pylint: disable=clean-arch-demeter
+        return f"gh pr view {number} -R {repo}"
+    return "borg next"
+
+
+def _first_mine(doc: dict) -> tuple[str, str] | None:
+    """`(ref, project)` of the first agent-routable ready row across the manifests, or None."""
+    projects = doc.get("projects") or {}
+    for manifest in (doc.get("grid") or {}).get("manifests") or []:
+        for ref, _, group in _ready_rows(manifest):
+            if group == _GROUP_MINE:
+                return ref, _manifest_project(manifest, projects)
+    return None
+
+
+def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
+    """THE LAST LINE OF THE PAGE (link-unification L3: the answer in the final lines before the prompt).
+
+    ONE recommended next action and a command, derived only from data the document already carries, by
+    this rule: the first WAITING ON YOU item (a decision only the reader can make) if any; else the
+    first agent (`mine`) ready row; else a sentence saying nothing is ready (or that nobody looked,
+    when no manifest was resolved) followed by `borg next`, so the line always carries a runnable
+    command. It reads `doc` and nothing else, and has no branch on scope, so
+    orchestrator and repository pages print the same SHAPE of line.
+    """
+    if items:
+        top = items[0]
+        ref, project = (top["ref"] if top["linkable"] else top["text"]), top["project"]
+    else:
+        mine = _first_mine(doc)
+        if mine is None:
+            if unlooked:
+                looked = f"nobody looked; run {CYAN}borg link{NC} without --local"
+                return f"  {BOLD}next{NC}  {looked}  {CYAN}borg next{NC}\n"
+            return f"  {BOLD}next{NC}  {DIM}nothing is ready{NC}  {CYAN}borg next{NC}\n"
+        ref, project = mine
+    where = f" {DIM}({project}){NC}" if project else ""
+    return f"  {BOLD}next{NC}  {ref}{where}  {CYAN}{_next_action_command(ref)}{NC}\n"
+
+
 def _waiting_section(doc: dict) -> tuple[str, list[str]]:
     """WAITING ON YOU: what only you can move, last on the page where the eye lands.
 
@@ -1091,23 +1141,29 @@ def _waiting_section(doc: dict) -> tuple[str, list[str]]:
     an absent section (that supersedes X9's "absent, not empty"). The one distinction kept is the
     three-state NEXT already makes: when no manifest was resolved the page does not KNOW that nothing
     waits, and saying so would be false, so it says nobody looked. The chooser's hidden-count lines
-    (`+N more decisions`, `+N agent tasks`, `+N stale drafts`) follow the items verbatim.
+    (`+N more decisions`, `+N agent tasks`, `+N stale drafts`) follow the items verbatim, and the
+    section's final line is the single recommended next action (`_next_action_line`).
     """
     items, unlooked = _waiting(doc)
     waiting = doc.get("waiting") or {}
     tail = [f"  {DIM}{line}{NC}\n" for line in waiting.get("hidden_lines") or []]
     if waiting.get("degraded"):
         tail.append(_placeholder(f"rows degraded: {waiting['degraded']}"))
+    action = _next_action_line(doc, items, unlooked)
     if not items:
         if unlooked:
-            return "nobody looked", [_placeholder("no state on this page was resolved; run without --local."), *tail]
-        return "", [_placeholder("nothing waits on you"), *tail]
+            return "nobody looked", [
+                _placeholder("no state on this page was resolved; run without --local."),
+                *tail,
+                action,
+            ]
+        return "", [_placeholder("nothing waits on you"), *tail, action]
     note = _plural(len(items), "item", "items")
     if unlooked:
         note += " — and some refs nobody looked up"
     ref_w = max(len(item["label"]) for item in items)
     proj_w = max(len(item["project"]) for item in items)
-    return note, [*(_waiting_line(item, ref_w, proj_w) for item in items), *tail]
+    return note, [*(_waiting_line(item, ref_w, proj_w) for item in items), *tail, action]
 
 
 def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:
