@@ -188,7 +188,7 @@ cleared on status change, be excluded from all human-facing output, or be replac
 Python document. `_borg_print_briefing` builds it once with `_borg_py borg_core.link.cli --json`, projects that JSON
 into the prompt with one `jq`, and re-renders the same bytes through a new `--render-document` seam when the narrative
 is unavailable. The registry walk is deleted, not patched. Spec and rationale:
-`docs/plans/directives/2026-08-27-fold-brief-into-the-document.md`. Evidence is a subprocess count in
+`docs/plans/assimilated/2026-08-27-fold-brief-into-the-document.md`. Evidence is a subprocess count in
 `tests/link_sweep.bats` (`sweep: link --brief sweeps exactly as link does, counted rather than read`), which is the
 verification this directive's own acceptance criterion asked for.
 
@@ -232,6 +232,8 @@ node (`swept` / `declared` / `unknown`) and does not need `summary` to be trustw
 
 ### 5b — `/borg-recon` is the SECOND un-folded human digest (filed 2026-08-26, NOT FIXED)
 
+**MOVED 2026-10-12.** Noah decided not to build this now; it is filed on its own as `docs/plans/directives/2026-10-12-borg-recon-reads-the-link-document.md`, carrying this problem and its criterion. The text below is left as filed.
+
 `--brief` is not the only human surface that answers "what changed?" from outside `borg link`'s document.
 AC1 retired the `recon` VERB but deliberately kept the ENGINE, because `borg recon --json` has real machine
 consumers — and one of those consumers, `skills/borg-recon/SKILL.md`, is itself a **human-facing briefing**
@@ -268,9 +270,8 @@ parallel sweep with its own mark. Do that after Phase 5, not before — they sha
       — **MET 2026-08-27** by exactly that case, `sweep: link --brief sweeps exactly as link does, counted rather
       than read`: one `pullRequests(first:` plus one `issueOrPullRequest(number:` on each arm, side by side on one
       fixture. Four further cases force each `fallback_reason` branch and assert the document renders under each.
-- [ ] `/borg-recon` synthesizes `borg link`'s document rather than running its own sweep on its own mark
-      (Phase 5b; verify that a `/borg-recon` run leaves `$BORG_DIR/recon/last-run` unchanged, the mirror of
-      the AC1 cache case's existing assertion for `borg link`)
+- [~] `/borg-recon` synthesizes `borg link`'s document — **MOVED 2026-10-12** to
+      `docs/plans/directives/2026-10-12-borg-recon-reads-the-link-document.md` (Noah deferred Phase 5b, not built now)
 - [x] `borg doctor` reports headless `claude -p` reachability
 - [x] A project with a null `summary` and a set `waiting_reason` never displays the `waiting_reason` as its
       summary — covered by a `tests/briefing.bats` case that exercises `link --brief` (re-pointed at the document
@@ -282,8 +283,22 @@ parallel sweep with its own mark. Do that after Phase 5, not before — they sha
       just deleted. The replacement input is the grid's per-node provenance and READY set, which is the trade this
       phase's own closing paragraph argues for. Re-file it against the wire if the narrative measurably suffers.
 - [ ] No `IFS=$'\t' read` site in the repo can silently shift fields on an empty value
+      — **VERIFIED FAILING 2026-10-12.** Swept all 22 tab-IFS `read` sites outside docs. Every one is guarded (sentinel,
+      last-field-only, or a key that is non-empty by construction) except `bin/borg-notifyd`, in the `read -r project
+      proj_status window origin` loop of `check`: `tmux_window` defaults to an empty string, so an empty window collapses
+      and shifts `origin` into `window`, and the `origin == "container"` notification never fires. The site this directive
+      named in the briefing path is gone. Fix with a sentinel or a `\x1f` delimiter, then re-tick.
 - [ ] `borg ls` and `borg link` no longer surface a raw user greeting or a mid-sentence fragment as a summary
+      — **VERIFIED FAILING 2026-10-12.** `borg ls` is gone, but `borg link` still renders the registry `summary` (`borg_core/link`
+      `core._with_flat_summary`), and `summarize.py` still builds it as "Working on: <first message>" with only a
+      15-character floor and a slash-command/ack skip list (`is_substantive`), so a greeting such as "What's up buttercup?"
+      passes, and `extract_next_step` hard-cuts at 200 characters mid-sentence. Phase 3 was subsumed for the briefing only.
+      Needs option 1 or 3 of Phase 3 for `borg link`.
 - [ ] Full bats suite green
+      — **NOT VERIFIED 2026-10-12.** `bats tests/` on the host from a fresh worktree of e3ebb67 ran 1436 cases with 6
+      failures, all in the evals floor suites (`tests/eval_floor.bats` 513-517, `tests/eval_lifecycle_floor.bats` 528).
+      The first reports "no interpreter with an importable pytest"; the host has none, so this reads as environmental,
+      but it is unproven until the suite is run where pytest is installed.
 
 ## Non-goals
 
