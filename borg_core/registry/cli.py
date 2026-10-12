@@ -16,12 +16,9 @@ backward from argparse.
 
 `add` has since gained ONE flag, `--name <name>` (see `_split_name_flag`); every other token is still data.
 
-KNOWN BUG, preserved for parity (see tests/cli_contract.bats around the `add` tests): cmd_add in
-borg.zsh exits 1 whenever no Claude session is found for the newly-registered project, even though
-registration itself succeeded -- an accident of `set -e` tripping on the truthiness of its last
-line. Part 3's non-negotiables are parity first, improvements after, so `cmd_add` here
-deliberately returns the same exit code for the same condition. A future deliberate fix should
-flip this contract on purpose, not as a silent side effect of an unrelated change.
+`add` exits 0 whenever registration succeeds, with or without a Claude session. The zsh original
+exited 1 when no session existed, which broke `borg add <path> && <next>` for every new project;
+that was an accident of `set -e` and is not kept.
 """
 
 from __future__ import annotations
@@ -69,8 +66,8 @@ def _path_holders(projects: dict[str, dict], ppath: str) -> list[str]:
 
 
 def cmd_add(path_arg: str | None, name_arg: str | None = None) -> int:
-    """`borg add [path] [--name <name>]` -- register a project. Returns 1 if no Claude session is
-    found (known bug, preserved intentionally -- see module docstring), 0 otherwise.
+    """`borg add [path] [--name <name>]` -- register a project. Returns 0 when the project is
+    registered, whether or not a Claude session exists yet; 1 only on errors.
 
     The name defaults to the folder basename; `--name` overrides it (a monorepo subfolder is
     registered under a name that is not its basename). A path already registered under a DIFFERENT
@@ -119,8 +116,7 @@ def cmd_add(path_arg: str | None, name_arg: str | None = None) -> int:
 
     if session_id:
         print(f"Latest session: {session_id}")
-        return 0
-    return 1
+    return 0
 
 
 def cmd_rm(project: str | None) -> int:

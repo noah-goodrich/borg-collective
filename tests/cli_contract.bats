@@ -535,7 +535,7 @@ EOF
 # Worth flagging as a real, everyday-command bug for a follow-up fix — out of scope for a
 # test-coverage-only pass (constraints restrict this task to tests/cli_contract.bats).
 
-@test "contract: add registers a new project keyed by the directory basename (currently exits 1 -- known bug)" {
+@test "contract: add registers a new project keyed by the directory basename and exits 0" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -549,7 +549,7 @@ EOF
     mkdir -p "$proj_dir"
 
     run_zsh_borg add "$proj_dir"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 0 ]
     [[ "$output" == *"Registered: sample-project"* ]] || false
 
     run jq -e '.' "$BORG_REGISTRY"
@@ -591,7 +591,7 @@ EOF
     [ "$output" = "widgets" ]
 }
 
-@test "contract: add with no path argument registers the current directory (currently exits 1 -- known bug)" {
+@test "contract: add with no path argument registers the current directory and exits 0" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -605,7 +605,7 @@ EOF
     mkdir -p "$proj_dir"
 
     run zsh -c "cd '$proj_dir' && '$BORG' add"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 0 ]
     [[ "$output" == *"Registered: cwd-project"* ]] || false
 
     run jq -r '.projects["cwd-project"].path' "$BORG_REGISTRY"
