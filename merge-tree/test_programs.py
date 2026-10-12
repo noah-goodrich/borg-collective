@@ -55,9 +55,7 @@ class TestValidate:
     def test_every_offending_row_is_reported_in_one_pass(self):
         # The whole point of validate returning a list: a manifest with three problems is fixed in one
         # edit, not three runs.
-        errors = programs.validate(
-            _manifest([_row("1", ""), {"ref": "r#2"}, _row("3", "r#3", gate={"kind": "nope"})])
-        )
+        errors = programs.validate(_manifest([_row("1", ""), {"ref": "r#2"}, _row("3", "r#3", gate={"kind": "nope"})]))
         assert len(errors) >= 4
         assert any("rows[0]" in e for e in errors)
         assert any("rows[1]" in e and "order" in e for e in errors)
@@ -142,11 +140,7 @@ class TestDeriveEdges:
         assert len(repos) >= 3
 
     def test_the_merged_prerequisite_anchors_the_chain(self):
-        stacked = {
-            (e["parent"], e["child"])
-            for e in programs.derive_edges(_fixture())
-            if e["kind"] == "stacked"
-        }
+        stacked = {(e["parent"], e["child"]) for e in programs.derive_edges(_fixture()) if e["kind"] == "stacked"}
         assert ("acme/platform#801", "acme/platform#834") in stacked
 
     def test_every_row_gets_an_apex_edge_when_an_apex_exists(self):
@@ -168,9 +162,7 @@ class TestDeriveEdges:
 
     def test_output_is_deterministic_regardless_of_row_order(self):
         rows = [_row("1", "r#1"), _row("2", "r#2"), _row("3", "r#3")]
-        assert programs.derive_edges(_manifest(rows)) == programs.derive_edges(
-            _manifest(list(reversed(rows)))
-        )
+        assert programs.derive_edges(_manifest(rows)) == programs.derive_edges(_manifest(list(reversed(rows))))
 
     def test_an_empty_manifest_yields_no_edges(self):
         assert programs.derive_edges({"rows": []}) == []
@@ -193,9 +185,7 @@ class TestBlocksEdges:
     def test_a_blocked_by_ref_becomes_a_blocks_edge(self):
         m = _manifest([_row("1", "r#2", gate=self._gate("r#9"))])
         blocks = [e for e in programs.derive_edges(m) if e["kind"] == "blocks"]
-        assert blocks == [
-            {"parent": "r#9", "child": "r#2", "kind": "blocks", "source": "declared"}
-        ]
+        assert blocks == [{"parent": "r#9", "child": "r#2", "kind": "blocks", "source": "declared"}]
 
     def test_a_blocks_edge_may_cross_repos(self):
         m = _manifest([_row("1", "acme/warehouse#2", gate=self._gate("acme/platform#9"))])
@@ -220,23 +210,12 @@ class TestBlocksEdges:
     def test_blocked_by_ref_is_optional(self):
         assert programs.validate(_manifest([_row("1", "r#2", gate=self._gate())])) == []
 
-    def test_a_blocks_edge_does_not_group_the_two_into_one_workstream(self):
-        # spine.py keeps `blocks` out of CHAIN_KINDS deliberately: merging a blocker into its victim
-        # would lose the dependency it records.
-        import spine
-
+    def test_a_blocks_edge_is_kept_apart_from_the_chain_edge_kinds(self):
+        # A blocker must stay a `blocks` edge: a consumer that merged it into a chain (as the retired
+        # spine.py once refused to) would lose the dependency it records.
         m = _manifest([_row("1", "r#2", gate=self._gate("r#9"))])
-        gather = {
-            "items": [
-                {"ref": "r#2", "project": "P", "state": "OPEN"},
-                {"ref": "r#9", "project": "P", "state": "OPEN"},
-            ],
-            "edges": programs.derive_edges(m),
-        }
-        wss = spine.generate_skeleton(gather)["projects"][0]["workstreams"]
-        assert len(wss) == 2
-        assert ["r#9"] in [w["items"] for w in wss]
-        assert any(w["blocked_by"] == ["r#9"] for w in wss)
+        blocks = [e for e in programs.derive_edges(m) if e["kind"] == "blocks"]
+        assert [(e["parent"], e["child"]) for e in blocks] == [("r#9", "r#2")]
 
 
 class TestUnmappedGates:
@@ -266,7 +245,6 @@ class TestLooksLikeManifest:
         assert not programs.looks_like_manifest({"projects": {}})
         assert not programs.looks_like_manifest([])
         assert not programs.looks_like_manifest("string")
-
 
     def test_non_dict_rows_are_validation_errors_not_silently_dropped(self):
         # Opus review finding 8: {"rows": ["a#1", "b#1"]} used to load as a VALID manifest
@@ -437,7 +415,6 @@ class TestIndependence:
         here = os.path.dirname(__file__)
         paths = [
             os.path.join(here, "programs.py"),
-            os.path.join(here, "gather.py"),
             os.path.join(here, "coordinator.py"),
             __file__,
         ]
