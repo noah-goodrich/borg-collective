@@ -86,11 +86,11 @@ class TestRunTarget:
         d = _make_target(
             tmp_path,
             "ok",
-            '#!/bin/sh\ncat <<\'EOF\'\n{"ok": true, "rows": [{"ref": "r#1", "status": "merged"}]}\nEOF\n',
+            '#!/bin/sh\ncat <<\'EOF\'\n{"ok": true, "rows": [{"ref": "o/r#1", "status": "merged"}]}\nEOF\n',
         )
         target = os.path.join(d, "borg-sync-target-ok")
         result = coordinator.run_target(target, "plan", [])
-        assert result == {"ok": True, "rows": [{"ref": "r#1", "status": "merged"}]}
+        assert result == {"ok": True, "rows": [{"ref": "o/r#1", "status": "merged"}]}
 
     def test_a_nonzero_exit_is_reported_not_raised(self, tmp_path):
         d = _make_target(tmp_path, "bad", "#!/bin/sh\necho 'boom' >&2\nexit 1\n")
@@ -118,34 +118,34 @@ class TestRunTarget:
 class TestFlattenRows:
     def test_flattens_across_manifests_sorted_by_ref(self):
         rows = coordinator.flatten_rows(
-            [_manifest("a", [_row("1", "z#1")]), _manifest("b", [_row("1", "a#1")])]
+            [_manifest("a", [_row("1", "o/z#1")]), _manifest("b", [_row("1", "o/a#1")])]
         )
-        assert [r["ref"] for r in rows] == ["a#1", "z#1"]
+        assert [r["ref"] for r in rows] == ["o/a#1", "o/z#1"]
 
 
 class TestMergedButOpen:
     def test_flags_a_copy_marking_merged_when_recon_says_open(self):
-        rows = [{"program": "p", "ref": "r#1", "status": "merged"}]
-        findings = coordinator.merged_but_open(rows, {"r#1": "OPEN"}, "borg's copy")
+        rows = [{"program": "p", "ref": "o/r#1", "status": "merged"}]
+        findings = coordinator.merged_but_open(rows, {"o/r#1": "OPEN"}, "borg's copy")
         assert len(findings) == 1 and findings[0]["kind"] == "merged_but_open"
 
     def test_says_nothing_when_recon_agrees(self):
-        rows = [{"program": "p", "ref": "r#1", "status": "merged"}]
-        assert coordinator.merged_but_open(rows, {"r#1": "MERGED"}, "borg's copy") == []
+        rows = [{"program": "p", "ref": "o/r#1", "status": "merged"}]
+        assert coordinator.merged_but_open(rows, {"o/r#1": "MERGED"}, "borg's copy") == []
 
     def test_says_nothing_when_recon_has_no_opinion(self):
-        rows = [{"program": "p", "ref": "r#1", "status": "merged"}]
+        rows = [{"program": "p", "ref": "o/r#1", "status": "merged"}]
         assert coordinator.merged_but_open(rows, {}, "borg's copy") == []
 
 
 class TestThreeWayAudit:
     def test_no_target_skips_the_two_copy_comparisons(self):
-        borg_rows = [{"program": "p", "ref": "r#1", "status": "stacked"}]
+        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
         findings = coordinator.three_way_audit(borg_rows, target_report=None, recon_states={})
         assert findings == []
 
     def test_target_unreachable_is_its_own_finding(self):
-        borg_rows = [{"program": "p", "ref": "r#1", "status": "stacked"}]
+        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
         findings = coordinator.three_way_audit(
             borg_rows, target_report={"ok": False, "error": "timeout"}, recon_states={}
         )
@@ -155,43 +155,43 @@ class TestThreeWayAudit:
 
     def test_present_only_in_one_copy_is_named_on_both_sides(self):
         borg_rows = [
-            {"program": "p", "ref": "r#1", "status": "stacked"},
-            {"program": "p", "ref": "r#2", "status": "stacked"},
+            {"program": "p", "ref": "o/r#1", "status": "stacked"},
+            {"program": "p", "ref": "o/r#2", "status": "stacked"},
         ]
-        target_report = {"ok": True, "rows": [{"ref": "r#1", "status": "stacked"}, {"ref": "r#3", "status": "stacked"}]}
+        target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "stacked"}, {"ref": "o/r#3", "status": "stacked"}]}
         findings = coordinator.three_way_audit(borg_rows, target_report, recon_states={})
         kinds = {(f["kind"], f["ref"]) for f in findings}
-        assert ("present_only_in_borg", "r#2") in kinds
-        assert ("present_only_in_target", "r#3") in kinds
+        assert ("present_only_in_borg", "o/r#2") in kinds
+        assert ("present_only_in_target", "o/r#3") in kinds
 
     def test_status_disagreement_between_the_two_copies_is_reported(self):
-        borg_rows = [{"program": "p", "ref": "r#1", "status": "stacked"}]
-        target_report = {"ok": True, "rows": [{"ref": "r#1", "status": "review"}]}
+        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
+        target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "review"}]}
         findings = coordinator.three_way_audit(borg_rows, target_report, recon_states={})
-        assert any(f["kind"] == "status_disagreement" and f["ref"] == "r#1" for f in findings)
+        assert any(f["kind"] == "status_disagreement" and f["ref"] == "o/r#1" for f in findings)
 
     def test_agreement_produces_no_findings(self):
-        borg_rows = [{"program": "p", "ref": "r#1", "status": "stacked"}]
-        target_report = {"ok": True, "rows": [{"ref": "r#1", "status": "stacked"}]}
+        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
+        target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "stacked"}]}
         assert coordinator.three_way_audit(borg_rows, target_report, recon_states={}) == []
 
     def test_three_way_audit_never_mutates_anything(self, tmp_path):
         """PM7: 'never silently reconcile'. Running the audit must not touch the filesystem."""
         before = sorted(tmp_path.rglob("*"))
-        borg_rows = [{"program": "p", "ref": "r#1", "status": "stacked"}]
-        target_report = {"ok": True, "rows": [{"ref": "r#1", "status": "review"}]}
-        coordinator.three_way_audit(borg_rows, target_report, recon_states={"r#1": "OPEN"})
+        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
+        target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "review"}]}
+        coordinator.three_way_audit(borg_rows, target_report, recon_states={"o/r#1": "OPEN"})
         assert sorted(tmp_path.rglob("*")) == before
 
 
 class TestLocalAudit:
     def test_runs_with_no_target_and_no_subprocess(self):
-        manifests = [_manifest("p", [_row("1", "r#1", status="merged")])]
-        findings = coordinator.local_audit(manifests, {"r#1": "OPEN"})
+        manifests = [_manifest("p", [_row("1", "o/r#1", status="merged")])]
+        findings = coordinator.local_audit(manifests, {"o/r#1": "OPEN"})
         assert findings == [
             {
                 "kind": "merged_but_open",
-                "ref": "r#1",
+                "ref": "o/r#1",
                 "copy_says": "borg's copy marks it merged",
                 "reality_says": "recon reports OPEN",
             }
@@ -200,28 +200,28 @@ class TestLocalAudit:
 
 class TestReconStatesFrom:
     def test_first_occurrence_wins(self):
-        items = [{"ref": "r#1", "state": "OPEN"}, {"ref": "r#1", "state": "MERGED"}]
-        assert coordinator.recon_states_from(items) == {"r#1": "OPEN"}
+        items = [{"ref": "o/r#1", "state": "OPEN"}, {"ref": "o/r#1", "state": "MERGED"}]
+        assert coordinator.recon_states_from(items) == {"o/r#1": "OPEN"}
 
     def test_items_without_a_ref_or_state_are_skipped(self):
-        assert coordinator.recon_states_from([{"ref": "r#1"}, {"state": "OPEN"}]) == {}
+        assert coordinator.recon_states_from([{"ref": "o/r#1"}, {"state": "OPEN"}]) == {}
 
 
 class TestLoadReconItems:
     def test_accepts_a_bare_items_list(self, tmp_path):
         p = tmp_path / "items.json"
-        p.write_text(json.dumps([{"ref": "r#1"}]))
-        assert coordinator.load_recon_items(str(p)) == [{"ref": "r#1"}]
+        p.write_text(json.dumps([{"ref": "o/r#1"}]))
+        assert coordinator.load_recon_items(str(p)) == [{"ref": "o/r#1"}]
 
     def test_accepts_a_full_gather_doc(self, tmp_path):
         p = tmp_path / "gather.json"
-        p.write_text(json.dumps({"items": [{"ref": "r#1"}]}))
-        assert coordinator.load_recon_items(str(p)) == [{"ref": "r#1"}]
+        p.write_text(json.dumps({"items": [{"ref": "o/r#1"}]}))
+        assert coordinator.load_recon_items(str(p)) == [{"ref": "o/r#1"}]
 
     def test_accepts_a_reconciled_recon_doc(self, tmp_path):
         p = tmp_path / "recon.json"
-        p.write_text(json.dumps({"items_by_project": {"proj": [{"ref": "r#1"}]}}))
-        assert coordinator.load_recon_items(str(p)) == [{"ref": "r#1"}]
+        p.write_text(json.dumps({"items_by_project": {"proj": [{"ref": "o/r#1"}]}}))
+        assert coordinator.load_recon_items(str(p)) == [{"ref": "o/r#1"}]
 
     def test_none_path_yields_no_items(self):
         assert coordinator.load_recon_items(None) == []
@@ -229,7 +229,7 @@ class TestLoadReconItems:
 
 class TestSyncBorg:
     def _discovered(self, project_dir, program="prog-a"):
-        programs.write_manifest(str(project_dir), program, _manifest(program, [_row("1", "r#1")]))
+        programs.write_manifest(str(project_dir), program, _manifest(program, [_row("1", "o/r#1")]))
         manifests, _ = programs.discover([str(project_dir)])
         return manifests
 
@@ -241,7 +241,7 @@ class TestSyncBorg:
         assert os.path.exists(written[0])
 
     def test_a_manifest_with_no_path_stamp_is_skipped_not_raised(self):
-        manifests = [_manifest("prog-a", [_row("1", "r#1")])]
+        manifests = [_manifest("prog-a", [_row("1", "o/r#1")])]
         assert coordinator.sync_borg(manifests) == ([], [])
 
     def test_a_manifest_whose_filename_differs_from_its_program_rewrites_in_place(self, tmp_path):
@@ -252,7 +252,7 @@ class TestSyncBorg:
 
         pdir = tmp_path / "proj" / ".borg" / "programs"
         pdir.mkdir(parents=True)
-        m = _manifest("auth-hardening", [_row("1", "r#1")])
+        m = _manifest("auth-hardening", [_row("1", "o/r#1")])
         (pdir / "three-repo-program.json").write_text(_json.dumps(m))
         manifests, _ = programs.discover([str(tmp_path / "proj")])
         written, warnings = coordinator.sync_borg(manifests)
@@ -267,14 +267,14 @@ class TestSyncBorg:
 
         pdir = tmp_path / "proj" / ".borg" / "programs"
         pdir.mkdir(parents=True)
-        (pdir / "b.json").write_text(_json.dumps(_manifest("b", [_row("1", "r#1")])))
-        (pdir / "z.json").write_text(_json.dumps(_manifest("b", [_row("1", "r#2")])))
+        (pdir / "b.json").write_text(_json.dumps(_manifest("b", [_row("1", "o/r#1")])))
+        (pdir / "z.json").write_text(_json.dumps(_manifest("b", [_row("1", "o/r#2")])))
         manifests, _ = programs.discover([str(tmp_path / "proj")])
         written, warnings = coordinator.sync_borg(manifests)
         assert len(written) == 2
         assert sorted(f.name for f in pdir.iterdir()) == ["b.json", "z.json"]
-        assert _json.loads((pdir / "b.json").read_text())["rows"][0]["ref"] == "r#1"
-        assert _json.loads((pdir / "z.json").read_text())["rows"][0]["ref"] == "r#2"
+        assert _json.loads((pdir / "b.json").read_text())["rows"][0]["ref"] == "o/r#1"
+        assert _json.loads((pdir / "z.json").read_text())["rows"][0]["ref"] == "o/r#2"
         assert len(warnings) == 1 and '"b"' in warnings[0].replace("'", '"')
 
     def test_same_program_in_two_projects_writes_each_to_its_own_home(self, tmp_path):
@@ -292,7 +292,7 @@ class TestSyncBorg:
 class TestProjectDirOf:
     def test_recovers_project_root_from_the_discover_stamped_path(self, tmp_path):
         project_dir = str(tmp_path / "proj")
-        path = programs.write_manifest(project_dir, "prog-a", _manifest("prog-a", [_row("1", "r#1")]))
+        path = programs.write_manifest(project_dir, "prog-a", _manifest("prog-a", [_row("1", "o/r#1")]))
         manifests, _ = programs.discover([project_dir])
         assert manifests[0]["_path"] == path
         assert coordinator._project_dir_of(manifests[0]) == project_dir
@@ -306,7 +306,7 @@ class _Args:
 
 class TestCmdList:
     def test_reports_programs_and_row_counts(self, tmp_path, capsys):
-        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1")])
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         assert coordinator.cmd_list(_Args([d])) == 0
         out = capsys.readouterr().out
         assert "a: 1 row(s)" in out and "1 chain(s), 0 skipped" in out
@@ -330,7 +330,7 @@ class TestCmdPlan:
 
     def test_reports_findings_without_writing_anything(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1", status="merged")])
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1", status="merged")])
         before = sorted((tmp_path / "proj").rglob("*"))
         rc = coordinator.cmd_plan(_Args([d]))
         assert rc == 0
@@ -342,13 +342,13 @@ class TestCmdPlan:
 
     def test_checks_reality_against_a_recon_doc(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1", status="merged")])
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1", status="merged")])
         recon_path = tmp_path / "recon.json"
-        recon_path.write_text(json.dumps({"items": [{"ref": "r#1", "state": "OPEN"}]}))
+        recon_path.write_text(json.dumps({"items": [{"ref": "o/r#1", "state": "OPEN"}]}))
         rc = coordinator.cmd_plan(_Args([d], recon=str(recon_path)))
         assert rc == 0
         out = capsys.readouterr().out
-        assert "merged_but_open: r#1" in out
+        assert "merged_but_open: o/r#1" in out
 
 
 class TestCmdSync:
@@ -360,7 +360,7 @@ class TestCmdSync:
 
     def test_writes_borgs_copy_and_reports_no_target(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1")])
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         rc = coordinator.cmd_sync(_Args([d]))
         assert rc == 0
         out, err = capsys.readouterr()
@@ -371,10 +371,10 @@ class TestCmdSync:
         target_dir = _make_target(
             tmp_path,
             "ok",
-            '#!/bin/sh\ncat <<\'EOF\'\n{"ok": true, "rows": [{"ref": "r#1", "status": "merged"}]}\nEOF\n',
+            '#!/bin/sh\ncat <<\'EOF\'\n{"ok": true, "rows": [{"ref": "o/r#1", "status": "merged"}]}\nEOF\n',
         )
         monkeypatch.setenv(coordinator.ENV_VAR, target_dir)
-        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1")])
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         rc = coordinator.cmd_sync(_Args([d]))
         assert rc == 0
         out = capsys.readouterr().out
@@ -383,7 +383,7 @@ class TestCmdSync:
     def test_a_failed_target_dispatch_is_reported_and_nonzero(self, tmp_path, capsys, monkeypatch):
         target_dir = _make_target(tmp_path, "bad", "#!/bin/sh\nexit 1\n")
         monkeypatch.setenv(coordinator.ENV_VAR, target_dir)
-        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1")])
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         rc = coordinator.cmd_sync(_Args([d]))
         assert rc == 1
         assert "target dispatch failed" in capsys.readouterr().err
@@ -391,7 +391,7 @@ class TestCmdSync:
 
 class TestMain:
     def test_list_via_argv(self, tmp_path, capsys, monkeypatch):
-        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "r#1")])
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--programs-dir", d])
         assert coordinator.main() == 0
         assert "1 chain(s), 0 skipped" in capsys.readouterr().out
