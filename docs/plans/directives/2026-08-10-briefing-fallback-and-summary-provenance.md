@@ -294,11 +294,8 @@ parallel sweep with its own mark. Do that after Phase 5, not before — they sha
       15-character floor and a slash-command/ack skip list (`is_substantive`), so a greeting such as "What's up buttercup?"
       passes, and `extract_next_step` hard-cuts at 200 characters mid-sentence. Phase 3 was subsumed for the briefing only.
       Needs option 1 or 3 of Phase 3 for `borg link`.
-- [ ] Full bats suite green
-      — **NOT VERIFIED 2026-10-12.** `bats tests/` on the host from a fresh worktree of e3ebb67 ran 1436 cases with 6
-      failures, all in the evals floor suites (`tests/eval_floor.bats` 513-517, `tests/eval_lifecycle_floor.bats` 528).
-      The first reports "no interpreter with an importable pytest"; the host has none, so this reads as environmental,
-      but it is unproven until the suite is run where pytest is installed.
+- [x] Full bats suite green
+      — **VERIFIED 2026-10-12 by PR #313 CI**, the authoritative run: the `test` job runs the whole bats suite with the dev group installed ([job](https://github.com/noah-goodrich/borg-collective/actions/runs/38284748480/job/114930312695)), and the `contract-macos` job runs the macOS contract leg ([job](https://github.com/noah-goodrich/borg-collective/actions/runs/38284748480/job/114930312673)); both passed. The 6 earlier local failures (`tests/eval_floor.bats`, `tests/eval_lifecycle_floor.bats`) were those suites failing on purpose in a fresh worktree with no `.venv` ("no interpreter with an importable pytest").
 
 ## Non-goals
 
