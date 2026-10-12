@@ -5,6 +5,11 @@
 # to <state root>/agents.jsonl describing the run so the orchestrator can list
 # nanoprobes via `borg nanoprobes` and pull transcripts via `borg nanoprobe-log`.
 #
+# Summary source: the payload's last_assistant_message when non-empty. Background subagents end on a
+# tool_use with no text, so when it is empty the hook recovers the report from the tail of
+# agent_transcript_path (last assistant entry: text blocks, else SubagentHandback input.message, else
+# StructuredOutput input.summary/answer/reason/verdict or compact JSON). Empty stays empty on any failure.
+#
 # Evidence gate: scores last_assistant_message for file-path citations before
 # logging. Appends evidence_found + evidence_score to the JSONL record and emits
 # a systemMessage warning when evidence is absent, so the orchestrator can see at a glance
@@ -54,6 +59,33 @@ TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.agent_transcript_path // ""' 2>
 LAST_MSG=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // ""' 2>/dev/null || true)
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 [[ -z "$CWD" ]] && CWD="${PWD:-}"
+
+# ─── Summary recovery ─────────────────────────────────────────────────────────
+# last_assistant_message is the final assistant TEXT block. Background subagents end on a tool_use with
+# no text (SubagentHandback, or StructuredOutput for workflow/schema agents), so it arrives empty. Recover
+# the report from the tail of the transcript: the LAST assistant entry (the final line is often a user
+# tool_result). Lines are parsed one by one because the file is written asynchronously and the last line
+# may be torn. Any failure leaves LAST_MSG empty.
+if [[ -z "$LAST_MSG" && -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
+    RECOVERED=$(tail -n 40 "$TRANSCRIPT_PATH" 2>/dev/null | jq -Rrs '
+        [split("\n")[] | (fromjson? // empty) | select(type == "object" and .type == "assistant")] | last
+        | (.message.content // []) as $c
+        | if ($c | type) == "string" then $c
+          else
+            ([$c[]? | select(.type == "text") | .text] | join("\n")) as $text
+            | if $text != "" then $text
+              else
+                ([$c[]? | select(.type == "tool_use" and .name == "SubagentHandback")] | last) as $h
+                | ([$c[]? | select(.type == "tool_use" and .name == "StructuredOutput")] | last) as $s
+                | if $h != null and ($h.input.message | type) == "string" then $h.input.message
+                  elif $s != null then
+                    ([$s.input.summary, $s.input.answer, $s.input.reason, $s.input.verdict
+                      | select(type == "string" and . != "")] | first) // ($s.input | tojson)
+                  else "" end
+              end
+          end // ""' 2>/dev/null || true)
+    [[ -n "$RECOVERED" ]] && LAST_MSG="$RECOVERED"
+fi
 
 # Truncate summary to ~500 chars to keep the JSONL file scannable.
 if (( ${#LAST_MSG} > 500 )); then
