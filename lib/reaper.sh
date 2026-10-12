@@ -181,8 +181,13 @@ _borg_reap_worktrees() {
 
     [ -d "$wt_base" ] || return 0
 
-    local wt reason
+    # zsh re-declaring an already-set `local` PRINTS `name=value` to stdout, which would corrupt the
+    # path<TAB>reason record stream: declare everything once, here, never inside the loop. zsh also
+    # treats an unmatched glob as fatal, so enable nullglob there (a no-op elsewhere).
+    local wt reason wt_branch kind
+    [ -n "${ZSH_VERSION:-}" ] && setopt localoptions nullglob
     for wt in "$wt_base"/*/; do
+        wt="${wt%/}"
         [ -d "$wt" ] || continue
 
         # --no-optional-locks: a plain status may rewrite the index, bumping the very mtime the
@@ -192,10 +197,8 @@ _borg_reap_worktrees() {
         fi
 
         if _borg_worktree_is_stale "$repo" "$wt"; then
-            local wt_branch
             wt_branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
 
-            local kind
             kind=$(_borg_branch_merged "$repo" "$wt_branch") || kind=""
             case "$kind" in
                 ancestor) reason="branch merged";;

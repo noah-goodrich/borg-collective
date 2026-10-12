@@ -133,3 +133,51 @@ _gh_stub() {
     printf %s "$output" | grep -q "branch merged (squash)"
     [ ! -d "$wt" ]
 }
+
+# ── sourced into ZSH (the CLI's shell), not bash ─────────────────────────────
+
+_squash_two() {
+    WT1=$(_make_worktree feat-z1)
+    _commit_in "$WT1" a.txt a
+    WT2=$(_make_worktree feat-z2)
+    _commit_in "$WT2" b.txt b
+    _squash_merge feat-z1
+    _squash_merge feat-z2
+}
+
+@test "zsh: two reapable worktrees emit only path<TAB>reason records, exact count" {
+    _squash_two
+    run env BORG_REAP_DRY_RUN=1 zsh -c ". '$REAPER_SH'; _borg_reap_worktrees '$REPO'"
+    [ "$status" -eq 0 ]
+    [ "${#lines[@]}" -eq 2 ]
+    for l in "${lines[@]}"; do
+        printf '%s\n' "$l" | grep -qE "^/.+	.+$"
+    done
+}
+
+@test "zsh: printed worktree path has no trailing slash" {
+    _squash_two
+    run env BORG_REAP_DRY_RUN=1 zsh -c ". '$REAPER_SH'; _borg_reap_worktrees '$REPO'"
+    for l in "${lines[@]}"; do
+        p="${l%%	*}"
+        [ "${p%/}" = "$p" ]
+    done
+}
+
+@test "zsh: an empty repo dir under the state root is silent" {
+    mkdir -p "$WT_BASE/repo"
+    run zsh -c ". '$REAPER_SH'; _borg_reap_worktrees '$REPO' 2>&1; echo rc=\$?"
+    [ "$output" = "rc=0" ]
+}
+
+@test "CLI dry run: real names, exact count, nothing removed" {
+    _squash_two
+    printf '{"projects":{"repo":{"path":"%s","source":"cli","status":"idle"}}}' "$REPO" > "$BORG_REGISTRY"
+    run env BORG_REAP_DRY_RUN= zsh "${BATS_TEST_DIRNAME}/../borg.zsh" reap-worktrees --dry-run
+    [ "$status" -eq 0 ]
+    printf '%s' "$output" | grep -q "Would reap .*feat-z1.* in repo"
+    printf '%s' "$output" | grep -q "Would reap .*feat-z2.* in repo"
+    [ "$(printf '%s\n' "$output" | grep -c 'Would reap')" -eq 2 ]
+    printf '%s' "$output" | grep -q "2 worktree(s) would be removed"
+    [ -d "$WT1" ] && [ -d "$WT2" ]
+}
