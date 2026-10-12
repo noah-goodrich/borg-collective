@@ -54,7 +54,7 @@ teardown() {
 launch_fake() {
     local _s="${1:-t}"
     shift || true
-    tmux -L "$SOCK" new-session -d -s "$_s" -x 160 -y 50 env "$@" "${BATS_TEST_TMPDIR}/bin/claude"
+    tmux -L "$SOCK" new-session -d -s "$_s" -x "${LAUNCH_W:-160}" -y 50 env "$@" "${BATS_TEST_TMPDIR}/bin/claude"
     local _i=0
     while [ "$_i" -lt 50 ]; do
         tmux -L "$SOCK" capture-pane -p -t "$_s" 2>/dev/null | grep -q . && break
@@ -333,14 +333,18 @@ keylog() { cat "$FAKE_KEYLOG"; }
 }
 
 @test "line: blocking screens send nothing and defer or notify" {
-    local name state
+    local name want
     for name in permission limit limit_auto_continue trust_folder queued_composer; do
         launch_fake "s_$name" "FAKE_SCREEN=$FXP/$name.txt"
         bind "$SID" "s_$name"
         register "$SID" "$(panepid_of "s_$name")"
         run bash -c ". '$LIB'; borg_inject_line '$SID' 'hello'"
         [ "$status" -ne 0 ] || { echo "$name injected"; return 1; }
-        [[ "$output" == defer* || "$output" == notify* ]] || { echo "$name: $output"; return 1; }
+        case "$name" in
+            queued_composer) want="defer pane_busy" ;;
+            *) want="defer pane_dialog" ;;
+        esac
+        [ "$output" = "$want" ] || { echo "$name: $output (want $want)"; return 1; }
         bind "" "s_$name"
         tmux -L "$SOCK" kill-session -t "s_$name"
     done
@@ -350,6 +354,12 @@ keylog() { cat "$FAKE_KEYLOG"; }
         register "$SID" "$(panepid_of "s_$name")"
         run bash -c ". '$LIB'; borg_inject_line '$SID' 'hello'"
         [ "$status" -ne 0 ] || { echo "$name injected"; return 1; }
+        case "$name" in
+            draft) want="defer pane_draft" ;;
+            unknown) want="defer pane_unknown" ;;
+            *) want="defer pane_dialog" ;;
+        esac
+        [ "$output" = "$want" ] || { echo "$name: $output (want $want)"; return 1; }
         tmux -L "$SOCK" kill-session -t "s_$name"
     done
     [ ! -s "$FAKE_KEYLOG" ]
@@ -458,7 +468,7 @@ keylog() { cat "$FAKE_KEYLOG"; }
     run bash -c ". '$LIB'; borg_inject_line '$SID' 'hello'"
     [ "$status" -eq 10 ]
     ! keylog | grep -q SUBMIT
-    keylog | grep -q "u"
+    keylog | grep -qxF "$(printf '%q' $'\025')"
     run bash -c ". '$LIB'; borg_inject_pane_state '$(pane_of)'"
     [ "$output" = "idle_empty" ]
 }
@@ -486,4 +496,90 @@ keylog() { cat "$FAKE_KEYLOG"; }
         && borg_inject_classify_text < '$FXI/idle.txt'"
     [ "$status" -eq 0 ]
     [ "$output" = "idle_empty" ]
+}
+
+# ---- review fixes: pane mode proof, wrapped verification, clear-after-failure ----
+
+@test "line: a pane left in copy-mode defers and sends nothing" {
+    launch_fake t
+    bind "$SID"
+    register "$SID" "$(panepid_of)"
+    tmux -L "$SOCK" copy-mode -t t
+    run bash -c ". '$LIB'; borg_inject_line '$SID' 'hello'"
+    [ "$status" -eq 10 ]
+    [ "$output" = "defer pane_in_mode" ]
+    [ ! -s "$FAKE_KEYLOG" ]
+}
+
+@test "pane_ok: a missing pane is pane_gone, a healthy pane passes" {
+    launch_fake t
+    run bash -c ". '$LIB'; _bi_pane_ok '%999'"
+    [ "$status" -ne 0 ]
+    [ "$output" = "pane_gone" ]
+    run bash -c ". '$LIB'; _bi_pane_ok '$(pane_of)'"
+    [ "$status" -eq 0 ]
+}
+
+@test "line: synchronize-panes on defers and sends nothing" {
+    launch_fake t
+    local first
+    first="$(pane_of)"
+    tmux -L "$SOCK" split-window -t t -d sleep 60
+    tmux -L "$SOCK" set-option -w -t t synchronize-panes on
+    bind "$SID" "$first"
+    register "$SID" "$(panepid_of)"
+    run bash -c ". '$LIB'; borg_inject_line '$SID' 'hello'"
+    [ "$status" -eq 10 ]
+    [ "$output" = "defer pane_synchronized" ]
+    [ ! -s "$FAKE_KEYLOG" ]
+}
+
+@test "line: the real S6 line injects in a narrow pane where the long path wraps" {
+    local w line
+    export BORG_RESUME_DIR="${BATS_TEST_TMPDIR}/resume-with-a-fairly-long-state-directory-name/state"
+    mkdir -p "${BORG_RESUME_DIR}/sessions"
+    line="$(bash -c ". '${BATS_TEST_DIRNAME}/../lib/borg/resume-prompt.sh'; _rp_line r_7f3a2c usage_limit")"
+    [ "${#line}" -gt 150 ]
+    for w in 60 70 80; do
+        LAUNCH_W=$w launch_fake "n$w"
+        bind "$SID" "n$w"
+        register "$SID" "$(panepid_of "n$w")"
+        run bash -c ". '$LIB'; borg_inject_line '$SID' '$line'"
+        [ "$status" -eq 0 ] || { echo "width $w: $output"; return 1; }
+        keylog | grep -qF "SUBMIT [borg-resume r_7f3a2c]" || { echo "width $w: no submit"; return 1; }
+        bind "" "n$w"
+        tmux -L "$SOCK" kill-session -t "n$w"
+        : >"$FAKE_KEYLOG"
+    done
+}
+
+@test "line: verification failure always sends Ctrl+U, even when the composer still reads empty" {
+    launch_fake t FAKE_NOECHO=1
+    bind "$SID"
+    register "$SID" "$(panepid_of)"
+    run bash -c ". '$LIB'; borg_inject_line '$SID' 'hello'"
+    [ "$status" -eq 10 ]
+    [ "$output" = "defer verify_failed" ]
+    keylog | grep -qxF "$(printf '%q' $'\025')"
+    run grep -c SUBMIT "$FAKE_KEYLOG"
+    [ "$output" = "0" ]
+}
+
+@test "human_active: a failing list-clients is treated as active (fails closed)" {
+    printf '#!/bin/bash\nexit 1\n' >"${BATS_TEST_TMPDIR}/failtmux"
+    chmod +x "${BATS_TEST_TMPDIR}/failtmux"
+    unset BORG_RESUME_CLIENTS_CMD
+    export BORG_RESUME_TMUX_CMD="${BATS_TEST_TMPDIR}/failtmux"
+    run bash -c ". '$LIB'; borg_inject_human_active"
+    [ "$status" -eq 0 ]
+}
+
+@test "bind_container: an existing binding to another session is never overwritten" {
+    launch_fake t
+    tmux -L "$SOCK" set-option -w -t t @project_dir /work/proj
+    bind "99999999-0000-0000-0000-000000000000"
+    run bash -c ". '$LIB'; borg_inject_bind_container '$SID' /work/proj"
+    [ "$status" -ne 0 ]
+    run tmux -L "$SOCK" show-options -p -v -t t @borg_sid
+    [ "$output" = "99999999-0000-0000-0000-000000000000" ]
 }

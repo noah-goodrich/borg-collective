@@ -10,8 +10,15 @@
 #      alive, its start time matches claude_start, and it sits in the process tree of the pane
 #   4. capture-pane classifies the pane idle_empty (composer present and empty, no dialog, nothing busy)
 #   5. no attached tmux client had activity in the last BORG_RESUME_CLIENT_QUIET_SEC (30) seconds
-# Then it types the text with send-keys -l, RE-CAPTURES and requires exactly that text in an otherwise empty
-# composer, and only then sends a separate Enter. Any mismatch clears what was typed (Ctrl+U) and defers.
+#   6. the pane is in normal mode (pane_in_mode=0), not dead, and not synchronized with sibling panes; this is
+#      re-checked immediately before the text is typed and again before Enter
+# Then it types the text with send-keys -l, RE-CAPTURES and requires that text (compared with all whitespace
+# removed, so a hard-wrapped long path still matches) in an otherwise empty composer, and only then sends a
+# separate Enter. Any mismatch sends Ctrl+U, confirms the composer is empty again, and defers. There is no
+# double-Enter retry (deliberate: borg-usage-watch sends a single Enter too; a second Enter could submit a draft).
+# A failed tmux list-clients is treated as "human may be active" (defer), not as "no clients".
+# Positive idle detection beyond the marker lists here is S9's pre-flight gate; the askuser/plan/resume_size
+# fixtures are synthetic until real captures replace them (U17).
 #
 # Result protocol of borg_inject_line: one line on stdout, and an exit code.
 #   0   "injected pane=<id>"     12  "disabled"            (BORG_RESUME_DISABLE=1: everything stops)
@@ -64,6 +71,13 @@ _bi_sendkeys() {
 }
 
 _bi_now() { printf '%s\n' "${BORG_RESUME_NOW_EPOCH:-$(date +%s)}"; }
+
+# Remove ALL whitespace (comparison key for wrapped composer text).
+_bi_squash() {
+    local _q="${1//$'\xc2\xa0'/ }"
+    _q="${_q//[[:space:]]/}"
+    printf '%s' "$_q"
+}
 
 # Collapse runs of whitespace (including NBSP) and trim both ends.
 _bi_norm() {
@@ -214,16 +228,19 @@ borg_inject_find_pane() {
 # recent writes fit before calling this. Binding does NOT make the session injectable: see borg_inject_line.
 # Usage: borg_inject_bind_container <sid> <project_dir>
 borg_inject_bind_container() {
-    local _sid="$1" _dir="$2" _re="${BORG_RESUME_PANE_CMD_RE:-$_BI_CMD_RE}" _id _pdir _cmd _hit="" _n=0
+    local _sid="$1" _dir="$2" _re="${BORG_RESUME_PANE_CMD_RE:-$_BI_CMD_RE}" _id _pdir _cmd _bound _hit="" _hb="" _n=0
     borg_resume_valid_sid "$_sid" || return 1
     [ -n "$_dir" ] || return 1
-    while IFS='|' read -r _id _pdir _cmd; do
+    while IFS='|' read -r _id _pdir _bound _cmd; do
         [ -n "$_id" ] && [ "$_pdir" = "$_dir" ] || continue
         [[ "$_cmd" =~ $_re ]] || continue
         _hit="$_id"
+        _hb="$_bound"
         _n=$((_n + 1))
-    done < <(_bi_tmux list-panes -a -F '#{pane_id}|#{@project_dir}|#{pane_current_command}' 2>/dev/null)
+    done < <(_bi_tmux list-panes -a -F '#{pane_id}|#{@project_dir}|#{@borg_sid}|#{pane_current_command}' 2>/dev/null)
     [ "$_n" -eq 1 ] || return 1
+    # Never overwrite an existing binding.
+    [ -z "$_hb" ] || [ "$_hb" = "$_sid" ] || return 1
     _bi_tmux set-option -p -t "$_hit" @borg_sid "$_sid" >/dev/null 2>&1 || return 1
     printf '%s\n' "$_hit"
 }
@@ -266,18 +283,18 @@ borg_inject_owner_check() {
 
 # Exit 0 when an attached tmux client had activity within BORG_RESUME_CLIENT_QUIET_SEC (a human at the keys).
 borg_inject_human_active() {
-    local _quiet="${BORG_RESUME_CLIENT_QUIET_SEC:-30}" _now _a
+    local _quiet="${BORG_RESUME_CLIENT_QUIET_SEC:-30}" _now _a _out
     _now="$(_bi_now)"
+    if [ -n "${BORG_RESUME_CLIENTS_CMD:-}" ]; then
+        _out="$(bash -c "$BORG_RESUME_CLIENTS_CMD" 2>/dev/null)"
+    else
+        # A failing list-clients is unknown, not "no clients": report active so the caller defers.
+        _out="$(_bi_tmux list-clients -F '#{client_activity}' 2>/dev/null)" || return 0
+    fi
     while IFS= read -r _a; do
         case "$_a" in "" | *[!0-9]*) continue ;; esac
         [ $((_now - _a)) -lt "$_quiet" ] && return 0
-    done < <(
-        if [ -n "${BORG_RESUME_CLIENTS_CMD:-}" ]; then
-            bash -c "$BORG_RESUME_CLIENTS_CMD" 2>/dev/null
-        else
-            _bi_tmux list-clients -F '#{client_activity}' 2>/dev/null
-        fi
-    )
+    done <<<"$_out"
     return 1
 }
 
@@ -289,29 +306,56 @@ _bi_is_container() {
     [ -f "$_reg" ] && [ "$(jq -r '.in_container // false' "$_reg" 2>/dev/null)" = "true" ]
 }
 
-# Type <text> into <pane> and verify; submit only on an exact match. Echoes defer/notify lines like borg_inject_line.
+# Positive proof the pane is safe to type into: exists, not dead, not in copy/other mode, not synchronized.
+# Prints the failing reason (pane_gone, pane_dead, pane_in_mode, pane_synchronized, pane_unreadable) and returns 1.
+_bi_pane_ok() {
+    local _pane="$1" _id _mode _dead _sync _found=0 _out
+    _out="$(_bi_tmux list-panes -a -F '#{pane_id}|#{pane_in_mode}|#{pane_dead}|#{pane_synchronized}' 2>/dev/null)" || {
+        printf 'pane_unreadable\n'
+        return 1
+    }
+    while IFS='|' read -r _id _mode _dead _sync; do
+        [ "$_id" = "$_pane" ] || continue
+        _found=1
+        [ "$_dead" = "0" ] || { printf 'pane_dead\n'; return 1; }
+        [ "$_mode" = "0" ] || { printf 'pane_in_mode\n'; return 1; }
+        [ "$_sync" = "0" ] || { printf 'pane_synchronized\n'; return 1; }
+    done <<<"$_out"
+    [ "$_found" -eq 1 ] || { printf 'pane_gone\n'; return 1; }
+    return 0
+}
+
+# Type <text> into <pane> and verify; submit only on a whitespace-insensitive match. Echoes defer/notify lines.
 _bi_type_verify_submit() {
-    local _pane="$1" _text="$2" _want _cap _st _try
-    _want="$(_bi_norm "$_text")"
+    local _pane="$1" _text="$2" _want _cap _st _try _why
+    _want="$(_bi_squash "$_text")"
+    _why="$(_bi_pane_ok "$_pane")" || { printf 'defer %s\n' "$_why"; return 10; }
+    _st="$(borg_inject_pane_state "$_pane")"
+    [ "$_st" = "idle_empty" ] || { printf 'defer pane_%s\n' "$_st"; return 10; }
     _bi_sendkeys -l -t "$_pane" "$_text" || { printf 'defer send_failed\n'; return 10; }
-    # The composer repaints a moment after the keys land: poll a few times for the exact text before judging.
+    # The composer repaints a moment after the keys land: poll a few times for the text before judging.
     _try=0
     while :; do
         sleep "${BORG_RESUME_SEND_DELAY:-0.3}" 2>/dev/null || true
         _cap="$(_bi_tmux capture-pane -p -t "$_pane" 2>/dev/null)"
         _bi_classify <<<"$_cap"
         _try=$((_try + 1))
-        { [ "$_BI_STATE" = "draft" ] && [ "$_BI_TEXT" = "$_want" ]; } && break
+        { [ "$_BI_STATE" = "draft" ] && [ "$(_bi_squash "$_BI_TEXT")" = "$_want" ]; } && break
         [ "$_try" -lt "${BORG_RESUME_VERIFY_TRIES:-6}" ] || break
     done
-    if [ "$_BI_STATE" = "draft" ] && [ "$_BI_TEXT" = "$_want" ] && ! borg_inject_human_active; then
-        _bi_sendkeys -t "$_pane" Enter || { printf 'defer send_failed\n'; return 10; }
-        printf 'injected pane=%s\n' "$_pane"
-        return 0
+    if [ "$_BI_STATE" = "draft" ] && [ "$(_bi_squash "$_BI_TEXT")" = "$_want" ] && ! borg_inject_human_active; then
+        if _why="$(_bi_pane_ok "$_pane")"; then
+            _bi_sendkeys -t "$_pane" Enter || { printf 'defer send_failed\n'; return 10; }
+            printf 'injected pane=%s\n' "$_pane"
+            return 0
+        fi
+        printf 'notify clear_failed %s\n' "$_why"
+        return 11
     fi
-    if [ "$_BI_STATE" = "idle_empty" ]; then
-        printf 'defer verify_failed\n'
-        return 10
+    # Verification failed (or a human is active): always clear, then require an empty composer before deferring.
+    if ! _why="$(_bi_pane_ok "$_pane")"; then
+        printf 'notify clear_failed %s\n' "$_why"
+        return 11
     fi
     _bi_sendkeys -t "$_pane" C-u >/dev/null 2>&1
     sleep "${BORG_RESUME_SEND_DELAY:-0.3}" 2>/dev/null || true
@@ -358,6 +402,10 @@ borg_inject_line() {
     IFS='|' read -r _pane _ppid _ <<<"$_hit"
     if ! _why="$(borg_inject_owner_check "$_sid" "$_ppid")"; then
         printf 'defer ownership:%s\n' "$_why"
+        return 10
+    fi
+    if ! _why="$(_bi_pane_ok "$_pane")"; then
+        printf 'defer %s\n' "$_why"
         return 10
     fi
     _st="$(borg_inject_pane_state "$_pane")"
