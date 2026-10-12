@@ -149,8 +149,9 @@ The numbers here are fixed before any data exists; changing one after seeing dat
   > **Decided by Noah 2026-10-09 (PR #285):** WAITING ON YOU reads the chooser's YOU rows (borg_core/nextpick core), not only ▸ NEXT manifest routing, so link and next share one router for "what's mine".
 - [ ] AC5 — Screen 3 renders trains only from the stamper's render-time derivation and uses the ratified glyphs.
   - Verify: against a fixture with no keys and no rows, `/borg-link <repo>` prints no train rows; against a stamped fixture, an open PR with unmerged parents renders `○` and a merged PR renders `✔`.
-- [ ] AC6 — Full bats suite and the macOS contract leg stay green.
+- [x] AC6 — Full bats suite and the macOS contract leg stay green.
   - Verify: `make test` and the CI contract lane pass.
+  - Shipped: Verified on the CI run of https://github.com/noah-goodrich/borg-collective/pull/315 (all passed): test (https://github.com/noah-goodrich/borg-collective/actions/runs/38285020687/job/114931198861), python (https://github.com/noah-goodrich/borg-collective/actions/runs/38285020687/job/114931199015), lint (https://github.com/noah-goodrich/borg-collective/actions/runs/38285020687/job/114931198960), contract-macos (https://github.com/noah-goodrich/borg-collective/actions/runs/38285020687/job/114931198969). Context: the 6 local bats failures were tests/eval_floor.bats and tests/eval_lifecycle_floor.bats failing on purpose in a fresh worktree with no .venv; CI installs the dev group, so CI is the authoritative run.
 
 ## Ship definition and boundaries
 

@@ -26,8 +26,9 @@ Screen 2 of `docs/plans/directives/2026-10-05-board-chooser-and-trains-ux.md` (i
   - Verify: pytest over fixture logs: 19 rows at 100% shows nothing; 20 at 55% shows nothing; 20 at 60% shows it; 20 scripted rows at 100% shows nothing.
   - Evidence: `pytest:borg_core/nextpick/test_core.py`
   - Shipped: Shipped in https://github.com/noah-goodrich/borg-collective/pull/275. Proof: `test_gate_needs_min_rows`, `test_gate_below_threshold`, `test_gate_at_threshold`, `test_gate_ignores_scripted_rows`.
-- [ ] **AC4 — Nothing breaks.** `make test && make test-bats && make lint` are green. `borg help` is unchanged, since no command is added.
+- [x] **AC4 — Nothing breaks.** `make test && make test-bats && make lint` are green. `borg help` is unchanged, since no command is added.
   - Verify: the three make targets; the help-count case in `tests/cli_contract.bats` stays at its current value.
+  - CI: hand-ticked, no planstate evidence kind covers a CI run. Passed on https://github.com/noah-goodrich/borg-collective/pull/315: test (https://github.com/noah-goodrich/borg-collective/actions/runs/38285020687/job/114931198861), python (https://github.com/noah-goodrich/borg-collective/actions/runs/38285020687/job/114931199015), lint (https://github.com/noah-goodrich/borg-collective/actions/runs/38285020687/job/114931198960), contract-macos (https://github.com/noah-goodrich/borg-collective/actions/runs/38285020687/job/114931198969). Context: the 6 local bats failures were tests/eval_floor.bats and tests/eval_lifecycle_floor.bats failing on purpose in a fresh worktree with no .venv; CI installs the dev group, so CI is the authoritative run.
 
 ### Scope change, 2026-10-08 (Noah: "I'd rather make the rows match the mock and fix whatever underlying issues are causing the disconnect right now.")
 
