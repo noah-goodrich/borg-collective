@@ -126,11 +126,11 @@ Session registry, immutable facts captured at `SessionStart` (hook-owned):
 
 ```
 {
-  "session_id": "b3dd...",
+  "session_id": "00000000-0000-4000-8000-000000000001",
   "source": "startup",
   "cwd": "/Users/noah/dev/example-project",
   "project": "example-project",
-  "mode": "drone",
+  "mode": "project",
   "in_container": false,
   "claude_pid": 41233,
   "claude_start": "Mon Oct 12 00:10:02 2026",
@@ -143,7 +143,7 @@ Session registry, immutable facts captured at `SessionStart` (hook-owned):
 
 - `source` is the SessionStart source (`startup`, `resume`, ...). A `--resume` relaunch writes a fresh registry for that sid, which is how the watcher verifies the session came back.
 - `transcript` is never stored; it is re-resolved on the host by globbing `/Users/noah/.claude/projects/*/<sid>.jsonl`, because containers see a different prefix.
-- `mode` comes from `_borg_session_mode` (orchestrator, drone, plain). `project` from the same cwd helper.
+- `mode` comes from `_borg_session_mode` (orchestrator, project); container-ness is the separate `in_container` field. `project` from the same cwd helper.
 - `claude_pid` is the hook's parent claude process (`$PPID`, unverified, U9) with its start time, used for the ownership check. Container sessions have no pid and no pane in the record.
 
 Watcher counters (`state/<sid>.json`, watcher-owned):
@@ -161,7 +161,7 @@ Watcher counters (`state/<sid>.json`, watcher-owned):
 Event line (one JSON object per line, under 4KB, `last_assistant_message` truncated to 600 chars):
 
 ```
-{"t":1791800000,"ev":"stop_failure","sid":"b3dd...",
+{"t":1791800000,"ev":"stop_failure","sid":"00000000-0000-4000-8000-000000000001",
  "scope":"main","agent_id":null,"error":"rate_limit",
  "msg":"You've hit your session limit · resets 7:10am (MT)",
  "tool_use_id":null}
@@ -174,7 +174,7 @@ Interruption record (`pending/<rid>.json`, `rid` = `r_` + 6 hex of sha1(sid, sco
 ```
 {
   "rid": "r_7f3a2c",
-  "sid": "b3dd...",
+  "sid": "00000000-0000-4000-8000-000000000001",
   "scope": "main",
   "class": "usage_limit",
   "action": "resume",
@@ -275,7 +275,7 @@ This resume was triggered automatically. Do not ask the user whether
 to continue. Resume now. Be brief.
 
 ## Step 0: check before acting
-- Run: borg-resume inventory b3ddaaa4 --json
+- Run: borg-resume inventory 00000000 --json
 - If the conversation already moved on past the interruption (the
   user gave a newer instruction, or these items were already
   resumed), skip this file, run the ack, and say so in one line.

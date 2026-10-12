@@ -4,8 +4,7 @@
 
 load test_helper/setup
 
-SID="b3ddaaa4-9e51-43ad-8080-e49bb5e01560"
-SID2="0c1d2e3f-aaaa-bbbb-cccc-111122223333"
+SID="00000000-0000-4000-8000-000000000001"
 
 setup() {
     setup_temp_dirs
