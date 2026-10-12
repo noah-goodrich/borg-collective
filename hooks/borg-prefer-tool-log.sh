@@ -86,7 +86,8 @@ matched=$(PYTHONSAFEPATH=1 PYTHONPATH="$_core_root${PYTHONPATH:+:$PYTHONPATH}" p
 {
     mkdir -p "${LOG%/*}" 2>/dev/null
     # Retention: cap at 1 MiB, one previous generation (nothing reads this log back).
-    source "${HOME}/.claude/lib/borg-hooks.sh" >/dev/null 2>&1 && _borg_rotate_log "$LOG"
+    # bash 3.2: a failed `source` can be fatal under set -e; keep it in a subshell.
+    ( source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "$LOG" ) >/dev/null 2>&1 || true
     printf '%s\n' "$(printf '%s' "$matched" | jq -c --arg cmd "$cmd" --arg cwd "$cwd" \
         '{event:"bypass", prefer:.prefer, instead_of:.instead_of, layer:.layer, command:$cmd, cwd:$cwd}' 2>/dev/null)" >> "$LOG"
 } 2>/dev/null

@@ -165,7 +165,8 @@ LINE=$(jq -nc \
 [[ -n "$LINE" ]] || exit 0
 
 # Retention: cap at 1 MiB, one previous generation; `borg nanoprobes` reads the live file then .1.
-{ source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "$LOG_FILE"; } >/dev/null 2>&1 || true
+# bash 3.2: a failed `source` is fatal under set -e even inside `{ }`/`|| true`; a subshell contains it.
+( source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "$LOG_FILE" ) >/dev/null 2>&1 || true
 
 printf '%s\n' "$LINE" >> "$LOG_FILE" 2>/dev/null || true
 
