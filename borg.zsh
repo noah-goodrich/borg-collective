@@ -1677,8 +1677,9 @@ Be ready to answer questions about any project, help them switch focus, or dive 
 If they say 'go' or 'start' or 'engage', switch to the top-priority project.
 
 == ORCHESTRATION MODEL ==
-When the developer asks for project work, spawn the \`borg-nanoprobe\` agent via the Agent tool
-with \`background: true\`. Pass the project name, repo path, working branch, and task in the
+When the developer asks for project work, spawn the \`borg-collective:borg-nanoprobe\` agent via the Agent tool
+(subagent_type \`borg-collective:borg-nanoprobe\`); do not pass model, effort or background -- the agent
+frontmatter sets them. Pass the project name, repo path, working branch, and task in the
 invocation prompt. Do NOT use \`isolation: worktree\` — nanoprobes manage their own git worktrees
 inside the target repo at \`~/.local/state/borg/worktrees/<repo>/<slug>\`. Never edit project
 files from this orchestrator session — your role is to spawn / monitor / synthesize. The standard
@@ -2419,7 +2420,7 @@ cmd_nanoprobes() {
     log=$(_borg_operational_file agents.jsonl)
     if [[ ! -s "$log" && ! -s "$log.1" ]]; then
         info "No nanoprobes recorded yet."
-        info "Spawn one via the Agent tool with agent_type=borg-nanoprobe; SubagentStop logs here."
+        info "Spawn one via the Agent tool with subagent_type=borg-collective:borg-nanoprobe; SubagentStop logs here."
         return 0
     fi
 

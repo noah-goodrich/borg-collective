@@ -42,9 +42,9 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (14): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (15): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
-  bash-guard, borg-dispatch-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
+  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
 - Skills (16): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
   and 10 more (full list under Files below)
@@ -185,7 +185,8 @@ hooks/
     bash-guard.sh           PreToolUse (Bash) → destructive-pattern hard-block + RO pre-approval
     borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log
     borg-dispatch-guard.sh  PreToolUse (Agent/Workflow) → >=92% usage hard-stop veto (default-OFF)
-    borg-workflow-model-guard.sh  PreToolUse (Workflow) → denies agent() calls with no agentType/model pin (fail-open)
+    borg-agent-model-guard.sh     PreToolUse (Agent|Task) → deny-by-default subagent_type allowlist + sonnet/haiku, low-high caps
+    borg-workflow-model-guard.sh  PreToolUse (Workflow) → every agent() must pass the same allowlist/caps (fail-closed)
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
@@ -388,7 +389,7 @@ docs/
   but not yet wired into any project — no per-project cutover has happened.
 - **Nanoprobe orchestrator (drones vs nanoprobes)**: drones are persistent devcontainers (long-lived,
   one per project); nanoprobes are ephemeral Claude Code subagents (`agents/borg-nanoprobe.md`)
-  spawned by the orchestrator via the Agent tool with `background: true` (no harness worktree
+  spawned by the orchestrator via the Agent tool with subagent_type `borg-collective:borg-nanoprobe` (do not pass model, effort or background; the agent frontmatter sets them) (no harness worktree
   isolation — `isolation: worktree` caused hard failures when the orchestrator CWD is not a git
   repo). **Nanoprobes manage their own git worktrees** when the orchestrator supplies a branch name:
   `git -C <repo_path> worktree add ~/.local/state/borg/worktrees/<repo>/<slug> -b <branch>`.
