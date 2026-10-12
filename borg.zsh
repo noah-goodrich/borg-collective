@@ -2410,9 +2410,20 @@ cmd_cortex_resume() {
 # agents.jsonl rotates to agents.jsonl.1 at the retention cap (_borg_rotate_log): newest first means
 # the live file, then the one previous generation. Absent generations are skipped.
 _borg_agents_newest_first() {
-    [[ -s "$1" ]] && _borg_reverse_lines "$1"
-    [[ -s "$1.1" ]] && _borg_reverse_lines "$1.1"
-    return 0
+    {
+        [[ -s "$1" ]] && _borg_reverse_lines "$1"
+        [[ -s "$1.1" ]] && _borg_reverse_lines "$1.1"
+        return 0
+    } | _borg_agents_drop_untyped
+}
+
+# Drop rows whose agent_type is exactly "" (Claude Code internal agents logged before the hook skipped them).
+# Rows without the key, or with "?", are kept: they cannot be identified as internal agents.
+# Non-object lines pass through unchanged.
+_borg_agents_drop_untyped() {
+    jq -rR '. as $l | (try fromjson catch null) as $o
+        | select((($o | type) != "object") or (($o.agent_type // null) != ""))
+        | $l' 2>/dev/null
 }
 
 cmd_nanoprobes() {
