@@ -1,0 +1,10 @@
+dockerenv=yes
+user=dev uid=1000 HOME=/home/dev
+TMUX_PANE=unset TMUX=unset XDG_STATE_HOME=unset
+tmux_bin=/usr/bin/tmux python3=/usr/local/bin/python3 jq=/usr/bin/jq
+hook_ppid=1 parent_comm=bash
+hook_rc=0
+spike_files=payloads.jsonl 
+ledger_dir=/home/dev/.local/state/borg/resume exists=yes
+append_rc=0
+seed_seen_in_container={"ev":"host_seed"}

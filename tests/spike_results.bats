@@ -77,14 +77,16 @@ _violations() {
     [ -z "$output" ]
 }
 
-@test "non-gating spikes are recorded as unknown" {
-    run jq -e '.non_gating | all(.outcome == "unknown")' "$RES"
+@test "non-gating spikes are unknown, or a run one with evidence and an honest gap" {
+    run jq -e '.non_gating | all(.outcome == "unknown"
+        or (.outcome == "partial" and ((.evidence_paths // []) | length) > 0 and ((.not_run_parts // []) | length) > 0)
+        or (.outcome == "pass" and ((.evidence_paths // []) | length) > 0 and ((.not_run_parts // []) | length) == 0))' "$RES"
     [ "$status" -eq 0 ]
 }
 
 @test "evidence paths point at existing files" {
     local p
-    for p in $(jq -r '.spikes[].evidence_paths[]?' "$RES"); do
+    for p in $(jq -r '(.spikes + .non_gating)[].evidence_paths[]?' "$RES"); do
         [ -e "$ROOT/$p" ] || { echo "missing $p"; false; }
     done
 }
