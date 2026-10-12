@@ -121,6 +121,103 @@ MOCK
     [ "$status" -eq 0 ]
 }
 
-@test "borg down calls the shared mark-closed helper" {
-    grep -q "_borg_mark_closed" "${BATS_TEST_DIRNAME}/../borg.zsh"
+
+# ---- review fixes: project-name charset, dir matching, ordering, borg down behavior -----------
+
+regfull() {
+    printf '{"session_id":"%s","project":"%s","cwd":"%s","tmux":{"project_dir":"%s"}}\n' \
+        "$1" "$2" "$3" "$4" > "$BORG_RESUME_DIR/sessions/$1.json"
+}
+
+@test "mark-closed matches a project name containing dots" {
+    local sid="0b1e2c3d-4f5a-6b7c-8d9e-0a1b2c3d4e61"
+    reg "$sid" "my.app v2"
+    run "$BIN" mark-closed "my.app v2"
+    [ "$status" -eq 0 ]
+    [ -s "$(evs "$sid")" ]
+    [ ! -e "$(evs "$SID3")" ]
+}
+
+@test "mark-closed matches a subdir cwd through the project dir" {
+    local sid="0b1e2c3d-4f5a-6b7c-8d9e-0a1b2c3d4e62"
+    regfull "$sid" src "/dev/pr/src" ""
+    run "$BIN" mark-closed pr /dev/pr
+    [ "$status" -eq 0 ]
+    [ -s "$(evs "$sid")" ]
+    [ ! -e "$(evs "$SID3")" ]
+}
+
+@test "mark-closed matches the /workspace container case through tmux.project_dir" {
+    local sid="0b1e2c3d-4f5a-6b7c-8d9e-0a1b2c3d4e63"
+    regfull "$sid" workspace /workspace /dev/pr
+    run "$BIN" mark-closed pr /dev/pr
+    [ "$status" -eq 0 ]
+    [ -s "$(evs "$sid")" ]
+}
+
+@test "mark-closed does not match a sibling dir sharing a prefix" {
+    local sid="0b1e2c3d-4f5a-6b7c-8d9e-0a1b2c3d4e64"
+    regfull "$sid" other /dev/pr-two/src /dev/pr-two
+    run "$BIN" mark-closed pr /dev/pr
+    [ ! -e "$(evs "$sid")" ]
+}
+
+@test "mark-closed with zero matches says so on stderr and exits 0" {
+    run "$BIN" mark-closed nothing-here
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"no session matched"* ]]
+}
+
+@test "mark-closed is skipped when the last event is already a mark, re-marked after a later session_end" {
+    "$BIN" mark-closed "$SID1"
+    "$BIN" mark-closed "$SID1"
+    [ "$(wc -l < "$(evs "$SID1")" | tr -d ' ')" = 1 ]
+    printf '{"t":1791806500,"ev":"session_end","sid":"%s","scope":"main","reason":"other"}\n' "$SID1" >> "$(evs "$SID1")"
+    "$BIN" mark-closed "$SID1"
+    [ "$(wc -l < "$(evs "$SID1")" | tr -d ' ')" = 3 ]
+    [ "$(tail -n 1 "$(evs "$SID1")" | jq -r .via)" = "mark_closed" ]
+}
+
+@test "drone down marks again after teardown when the dying claude wrote session_end other" {
+    _stub_infra
+    cat > "$MOCK_BIN/docker" <<'MOCK'
+#!/usr/bin/env bash
+echo "docker $*" >> "$TRACE"
+case "$*" in *" -p "*) printf '{"t":1791806500,"ev":"session_end","sid":"%s","scope":"main","reason":"other"}\n' "$SID1" >> "$BORG_RESUME_DIR/events/$SID1.jsonl" ;; esac
+exit 0
+MOCK
+    chmod +x "$MOCK_BIN/docker"
+    mkdir -p "$PROJ/.devcontainer" && : > "$PROJ/.devcontainer/docker-compose.yml"
+    export SID1
+    run "$DRONE" down amber-fox-labs
+    [ "$status" -eq 0 ]
+    [ "$(tail -n 1 "$(evs "$SID1")" | jq -r .via)" = "mark_closed" ]
+}
+
+@test "borg down marks only on the drone-down fallback, with name and dir" {
+    local stub="$BATS_TEST_TMPDIR/resume-stub" log="$BATS_TEST_TMPDIR/stub.log"
+    printf '#!/usr/bin/env bash\necho "$*" >> "%s"\n' "$log" > "$stub"
+    chmod +x "$stub"
+    run zsh -c '
+        eval "$(sed -n "/^_borg_mark_closed()/,/^}/p;/^cmd_down()/,/^}/p" "$1")"
+        BORG_TMUX_SESSION=s BORG_RESUME_BIN="$2"
+        info() { :; }
+        borg_tmux_alive() { return 0; }
+        _borg_has_recent_checkpoint() { return 0; }
+        _borg_offer_checkpoint() { :; }
+        _borg_stop_shared_supabase() { :; }
+        docker() { :; }
+        drone() { [[ "$2" == good ]]; }
+        tmux() {
+            case "$1" in
+                list-windows) printf "orchestrator\ngood\nbad\nnodir\n" ;;
+                show-option) case "$3" in
+                    s:good) echo /dev/good.app ;; s:bad) echo /dev/bad ;; *) return 1 ;; esac ;;
+            esac
+            return 0
+        }
+        cmd_down
+    ' _ "${BATS_TEST_DIRNAME}/../borg.zsh" "$stub"
+    [ "$status" -eq 0 ]
+    [ "$(cat "$log")" = "mark-closed bad /dev/bad" ]
 }

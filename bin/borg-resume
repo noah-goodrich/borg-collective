@@ -211,7 +211,7 @@ _br_record() {
 
 _br_usage() {
     printf 'usage: borg-resume <record <event> | pause | unpause | probe | inventory <sid> [--json]' >&2
-    printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout] | mark-closed <project|sid>>\n' >&2
+    printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout] | mark-closed <project|sid> [dir]>\n' >&2
 }
 
 _br_main() {
@@ -283,7 +283,7 @@ _br_main() {
             [ -n "${1:-}" ] || { _br_usage; return 2; }
             # shellcheck source=/dev/null
             . "$BORG_RESUME_LIBDIR/resume-close.sh" 2>/dev/null || return 1
-            borg_resume_mark_closed "$1"
+            borg_resume_mark_closed "$1" "${2:-}"
             ;;
         *)
             _br_usage

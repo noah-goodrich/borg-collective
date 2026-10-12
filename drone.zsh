@@ -625,7 +625,7 @@ cmd_up() {
 _drone_mark_closed() {
     local bin="${BORG_RESUME_BIN:-$DRONE_SCRIPT_DIR/bin/borg-resume}"
     [[ -x "$bin" ]] || return 0
-    "$bin" mark-closed "$1" >/dev/null 2>&1 || true
+    "$bin" mark-closed "$1" "${2:-}" >/dev/null 2>&1 || true
     return 0
 }
 
@@ -635,7 +635,7 @@ cmd_down() {
     local project_dir="$_proj_dir"
     local compose="$project_dir/$COMPOSE_FILE"
 
-    _drone_mark_closed "$project_name"
+    _drone_mark_closed "$project_name" "$project_dir"
     dbg "cmd_down: project=$project_name dir=$project_dir"
 
     local live
@@ -652,6 +652,9 @@ cmd_down() {
         docker compose -p "$project_name" -f "$compose" down
         _run_post_down "$project_dir" "$project_name"
     fi
+
+    # Second mark: a dying claude may have written its own session_end after the first one (sticky-close rule).
+    _drone_mark_closed "$project_name" "$project_dir"
 
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         local remaining

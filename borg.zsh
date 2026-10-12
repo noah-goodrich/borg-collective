@@ -1165,7 +1165,7 @@ _borg_stop_shared_supabase() {
 _borg_mark_closed() {
     local bin="${BORG_RESUME_BIN:-$BORG_HOME/bin/borg-resume}"
     [[ -x "$bin" ]] || return 0
-    "$bin" mark-closed "$1" >/dev/null 2>&1 || true
+    "$bin" mark-closed "$1" "${2:-}" >/dev/null 2>&1 || true
     return 0
 }
 
@@ -1189,8 +1189,11 @@ cmd_down() {
             _borg_has_recent_checkpoint "$pdir" "$checkpoint_threshold_hours" \
                 || _borg_offer_checkpoint "$wname" "$pdir" "" "$checkpoint_threshold_hours"
             info "Stopping $wname..."
-            _borg_mark_closed "${pdir:t}"
-            drone down "$wname" 2>/dev/null || tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
+            # drone down marks the project itself (before and after teardown); mark here only on the fallback.
+            if ! drone down "$wname" 2>/dev/null; then
+                _borg_mark_closed "${pdir:t}" "$pdir"
+                tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
+            fi
         else
             tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
         fi
