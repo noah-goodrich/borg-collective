@@ -28,7 +28,7 @@
 >
 > **AC1 did NOT tick with AC2 and AC3.** Both its verify clauses pass, but `borg link --brief` still never reaches
 > `borg_core.link.cli`, so one verb has two truth levels — see `PROJECT_PLAN.md` and Phases 5/5b of
-> `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md`.
+> `docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md`.
 
 **tl;dr** — `render.document(doc)` becomes the single human entry point: a fixed **seven-section spine** whose `▸`
 headers are byte-identical in both contexts, where `scope` narrows the ROW SET of the four scope-dependent sections and

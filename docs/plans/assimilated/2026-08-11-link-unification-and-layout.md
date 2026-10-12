@@ -50,7 +50,7 @@ the skill ignores it.
   - D2 was corrected on 2026-08-11: terminal output auto-scrolls, so the eye lands at the **bottom**. Anything
     printed first is in the cheapest region, not the most valuable. The Borg cube is therefore **fine where it
     is** and must not be removed.
-- [ ] L4 — Idle projects collapse to a count line rather than one row each, and the directive-title extraction
+- [~] L4 — **WITHDRAWN 2026-08-12** (see the revision note above). Idle projects collapse to a count line rather than one row each, and the directive-title extraction
       no longer emits `---` for horizontal rules or frontmatter delimiters.
   - Verify: `borg link | sed 's/\x1b\[[0-9;]*m//g' | grep -c -- '---$'` returns 0; idle projects are not printed
     one-per-line.

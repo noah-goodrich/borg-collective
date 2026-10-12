@@ -59,7 +59,7 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **15 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/agent-routing.md`),
+writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/agent-routing.md`),
 **4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
@@ -95,6 +95,9 @@ writing: **15 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/a
         borg-workflow-model-guard.sh  PreToolUse (Workflow) → agent() allowlist/caps, fail-closed
         borg-nanoprobe-log.sh   SubagentStop → append nanoprobe completion to agents.jsonl
         borg-verifier-guard.sh  PreToolUse (Bash) → verifier: git/gh reads
+        borg-resume-hook.sh     Events → borg-resume ledger (append-only)
+        borg-memory-read-log.sh PostToolUse (Read) → logs memory reads
+        borg-prefer-tool-log.sh PostToolUse (Bash) → logs prefer-tool bypasses
         bash-guard.sh, borg-supabase-guard.sh, notify.sh,
         pre-commit-remind.sh, tool-count-nudge.sh  Smaller guardrail/reminder hooks
     skills/

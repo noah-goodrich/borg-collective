@@ -1,6 +1,6 @@
 # Directive: Fix `borg link --brief` — silent fallback, field collapse, and summary provenance
 
-*Filed: 2026-08-10 · Status: OPEN*
+*Filed: 2026-08-10 · Status: CLOSED 2026-10-12*
 *Found while running `borg link --brief` from an orchestrator session on the work machine (macOS, v0.8.9).*
 *Companion evidence: the observed output is reproduced verbatim below — re-run the command to confirm.*
 
@@ -201,7 +201,7 @@ line. The rest of this section is left as filed, for the record of what the defe
 
 
 
-*Filed by S4 of the one-front-door plan (`docs/plans/directives/2026-08-25-link-front-door-hardened-spec.md`).
+*Filed by S4 of the one-front-door plan (`docs/plans/assimilated/2026-08-25-link-front-door-hardened-spec.md`).
 S4 is recording this gap, not closing it: the fix is a rewrite of `_borg_print_briefing`, which this
 directive owns.*
 
@@ -282,14 +282,14 @@ parallel sweep with its own mark. Do that after Phase 5, not before — they sha
       `skills/borg-link/SKILL.md` edits; re-reading checkpoints in zsh would reinstate the second derivation Phase 5
       just deleted. The replacement input is the grid's per-node provenance and READY set, which is the trade this
       phase's own closing paragraph argues for. Re-file it against the wire if the narrative measurably suffers.
-- [ ] No `IFS=$'\t' read` site in the repo can silently shift fields on an empty value
-      — **VERIFIED FAILING 2026-10-12.** Swept all 22 tab-IFS `read` sites outside docs. Every one is guarded (sentinel,
+- [x] No `IFS=$'\t' read` site in the repo can silently shift fields on an empty value
+      — **VERIFIED FAILING 2026-10-12, then FIXED by PR #324 and re-verified the same day:** `bin/borg-notifyd` now joins its fields on the ASCII unit separator and reads with `IFS=$'\x1f'`, which keeps an empty `window`. Original finding: swept all 22 tab-IFS `read` sites outside docs. Every one is guarded (sentinel,
       last-field-only, or a key that is non-empty by construction) except `bin/borg-notifyd`, in the `read -r project
       proj_status window origin` loop of `check`: `tmux_window` defaults to an empty string, so an empty window collapses
       and shifts `origin` into `window`, and the `origin == "container"` notification never fires. The site this directive
       named in the briefing path is gone. Fix with a sentinel or a `\x1f` delimiter, then re-tick.
-- [ ] `borg ls` and `borg link` no longer surface a raw user greeting or a mid-sentence fragment as a summary
-      — **VERIFIED FAILING 2026-10-12.** `borg ls` is gone, but `borg link` still renders the registry `summary` (`borg_core/link`
+- [x] `borg ls` and `borg link` no longer surface a raw user greeting or a mid-sentence fragment as a summary
+      — **VERIFIED FAILING 2026-10-12, then FIXED by PR #329:** `borg_core/link/core.py` `checkpoint_summary` now derives the summary from the latest checkpoint, else none. Original finding: `borg ls` is gone, but `borg link` still renders the registry `summary` (`borg_core/link`
       `core._with_flat_summary`), and `summarize.py` still builds it as "Working on: <first message>" with only a
       15-character floor and a slash-command/ack skip list (`is_substantive`), so a greeting such as "What's up buttercup?"
       passes, and `extract_next_step` hard-cuts at 200 characters mid-sentence. Phase 3 was subsumed for the briefing only.
