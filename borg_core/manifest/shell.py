@@ -597,10 +597,7 @@ def scaffold_root(repository_dir: str, override: str = "") -> tuple[str, str]:
     borg_exists = os.path.isdir(borg)
     needs_probe = override not in placement.ROOT_CHOICES and not stacks_exists and not borg_exists
     return placement.choose_scaffold_root(
-        override,
-        stacks_exists,
-        borg_exists,
-        needs_probe and _borg_dir_is_ignored(repository_dir),
+        override, stacks_exists, borg_exists, needs_probe and _borg_dir_is_ignored(repository_dir),
         (stacks, borg),
     )
 

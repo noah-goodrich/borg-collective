@@ -320,7 +320,9 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
             # file under neither `.borg/chains` nor `.borg/programs`, dropped at exit 0. That is the
             # confident-empty shape this tree keeps removing, so it is reported.
             if source_path and not project_dir:
-                warnings.append(f"skipped {source_path}: not under .borg/chains or .borg/programs")
+                warnings.append(
+                    f"skipped {source_path}: not under .borg/chains or .borg/programs"
+                )
             continue
         if program in seen and seen[program] != source_path:
             # Keyed by SOURCE FILE, not project dir (opus round 2, finding 1): two files in the SAME
@@ -345,7 +347,9 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
             continue
         # Rewrite each manifest's OWN file (basename of _path), never a program-derived name: a
         # manifest whose filename differs from its program id must not spawn a second copy.
-        written.append(programs.write_manifest(project_dir, program, manifest, filename=os.path.basename(source_path)))
+        written.append(
+            programs.write_manifest(project_dir, program, manifest, filename=os.path.basename(source_path))
+        )
     return written, warnings
 
 

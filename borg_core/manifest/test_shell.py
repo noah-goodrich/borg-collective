@@ -916,7 +916,7 @@ def test_partition_errors_splits_row_scoped_from_structural():
 # ── write_manifest ───────────────────────────────────────────────────────────
 #
 # The writer is the ONE fatal path in shell.py. These cases pin the asymmetry the module docstring
-# argues for: a read degrades and names what it dropped, a write refuses whole and hands back why.
+# argues for: a read refuses the one bad file and names why, a write refuses whole and hands back why.
 
 
 def test_a_written_manifest_round_trips_through_the_reader(tmp_path):

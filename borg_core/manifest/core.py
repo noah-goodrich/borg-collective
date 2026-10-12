@@ -301,8 +301,9 @@ def _validate_gate(gate: Any, ref: str, label: str) -> list[str]:
 
     AN UNRECOGNIZED KIND IS THE ROUTER'S PROBLEM; AN ABSENT ONE IS A DEFECT. `kind` used to be closed
     to `GATE_KINDS`, which meant a typo'd `review` was a row-scoped error and -- after
-    docs/plans/directives/2026-08-27-degrade-the-row-not-the-manifest.md made degradation row-level --
-    silently DELETED the row. That is strictly worse than the outcome the renderer already built for
+    docs/plans/directives/2026-08-27-degrade-the-row-not-the-manifest.md made the reader salvage by row
+    (since reversed: the loader now refuses the whole file) -- silently DELETED the row.
+    That is strictly worse than the outcome the renderer already built for
     it: `render._route` sends any kind it does not recognize to the `unsure` group, which names the
     kind on the page. So the row loads, ranks, draws and routes, and the human sees the word they
     mistyped instead of a gap.

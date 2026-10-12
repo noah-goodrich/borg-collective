@@ -158,7 +158,7 @@ def test_a_duplicate_ref_is_rejected_and_names_the_earlier_index():
 def test_an_unrecognized_gate_kind_is_the_routers_problem_not_the_validators():
     """MUTATION: restore `if kind not in GATE_KINDS: errors.append(...)`.
 
-    An unrecognized kind then becomes a row-scoped error again, `_drop_invalid_rows` DELETES the row,
+    An unrecognized kind then becomes a row-scoped error again, the loader refuses the WHOLE FILE,
     and `render._GROUP_UNSURE` -- the group built to say "the router does not know this kind" --
     becomes unreachable through the front door for the second time.
     """

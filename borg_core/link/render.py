@@ -662,9 +662,9 @@ def _grid_placeholder(grid_block: dict) -> str:
     in any repository." That sentence is not merely unhelpful, it is FALSE, and it points the reader
     at scaffolding a second manifest beside the broken one. The `▸ SIGNALS` warning naming the real
     reason is a dim line at the bottom of the page; this section is where the reader is looking.
-    `2026-08-27-degrade-the-row-not-the-manifest` fixed exactly this shape for the PARTIAL case (12
-    declared refs became 5, and CHAINS read as though the repository simply had none) and could not
-    reach the whole-file case, because a whole-file refusal leaves nothing to degrade.
+    `2026-08-27-degrade-the-row-not-the-manifest` once softened this shape for the PARTIAL case by salvaging
+    rows; that salvage is gone, so a file with any invalid row is now refused whole and lands here too
+    (12 declared refs becoming 5 was the old failure; now it is none, and this sentence says so).
 
     ITS SENTENCE NAMES NO PLACE, and that is what lets it sit above the scope arm. `refused` is
     counted for whatever scope resolved -- one repository's directory in repository scope, the whole

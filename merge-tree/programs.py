@@ -49,7 +49,6 @@ class Refusal(str):
     """
 
 
-
 # Closed vocabulary, deliberately. `decision` means a human must *choose*; `verification` means
 # someone must *run* something. The distinction matters because a `verification` with declared
 # outcomes is never a blocker on a *person* — anyone can run it — so it must not be routed to the

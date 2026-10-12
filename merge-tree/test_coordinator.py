@@ -117,7 +117,9 @@ class TestRunTarget:
 
 class TestFlattenRows:
     def test_flattens_across_manifests_sorted_by_ref(self):
-        rows = coordinator.flatten_rows([_manifest("a", [_row("1", "o/z#1")]), _manifest("b", [_row("1", "o/a#1")])])
+        rows = coordinator.flatten_rows(
+            [_manifest("a", [_row("1", "o/z#1")]), _manifest("b", [_row("1", "o/a#1")])]
+        )
         assert [r["ref"] for r in rows] == ["o/a#1", "o/z#1"]
 
 
@@ -147,17 +149,16 @@ class TestThreeWayAudit:
         findings = coordinator.three_way_audit(
             borg_rows, target_report={"ok": False, "error": "timeout"}, recon_states={}
         )
-        assert findings == [{"kind": "target_unreachable", "ref": "", "copy_says": "", "reality_says": "timeout"}]
+        assert findings == [
+            {"kind": "target_unreachable", "ref": "", "copy_says": "", "reality_says": "timeout"}
+        ]
 
     def test_present_only_in_one_copy_is_named_on_both_sides(self):
         borg_rows = [
             {"program": "p", "ref": "o/r#1", "status": "stacked"},
             {"program": "p", "ref": "o/r#2", "status": "stacked"},
         ]
-        target_report = {
-            "ok": True,
-            "rows": [{"ref": "o/r#1", "status": "stacked"}, {"ref": "o/r#3", "status": "stacked"}],
-        }
+        target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "stacked"}, {"ref": "o/r#3", "status": "stacked"}]}
         findings = coordinator.three_way_audit(borg_rows, target_report, recon_states={})
         kinds = {(f["kind"], f["ref"]) for f in findings}
         assert ("present_only_in_borg", "o/r#2") in kinds
@@ -457,10 +458,10 @@ class TestMain:
 class TestIndependenceAndBoundary:
     """PM6/PM8: the coordinator delegates every write and knows nothing about the external schema."""
 
-    FORBIDDEN_CALLS = ('subprocess.run(["gh"', "'gh pr", '"gh pr', "gh issue", "gh pr edit", "gh pr create")
+    FORBIDDEN_CALLS = ("subprocess.run([\"gh\"", "'gh pr", '"gh pr', "gh issue", "gh pr edit", "gh pr create")
     # PM6: "no external-schema field names" — the stacked-PR program's own key shape (SCHEMA.md's
     # "row key" table: `repo` + `number`, distinct from borg's `ref`) and its writer's name.
-    FORBIDDEN_FIELDS = ("stamp_tool", '"number":', "'number':", "repo_number", "pr_body", "PR_BODY_TEMPLATE")
+    FORBIDDEN_FIELDS = ("stamp_tool", "\"number\":", "'number':", "repo_number", "pr_body", "PR_BODY_TEMPLATE")
 
     def test_no_gh_invocation_anywhere_in_the_coordinator(self):
         with open(coordinator.__file__) as fh:
