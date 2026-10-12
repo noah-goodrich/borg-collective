@@ -45,6 +45,7 @@ the skill ignores it.
 - [ ] L3 — Output is bottom-anchored per the corrected **D2**: inventory and context first, the answer in the
       final 3-5 lines before the prompt.
   - Verify: `borg link | tail -5` contains the recommended next action and its command.
+  - **Settled 2026-10-12 (open, fails today):** position is ruled, content is not. `2026-10-05-board-chooser-and-trains-ux.md` ("link-unification L3 ... defers to it") rules that L3 wins on position, so `▸ WAITING ON YOU` sits last. On origin/main (e3ebb67, worktree code) `borg link | tail -5` is a blank line, the `▸ WAITING ON YOU` header, `— nothing waits on you` and `+1 agent tasks`: the answer block is last, but it carries no recommended next action and no command, because `▸ NEXT` and `▸ SIGNALS` print above it. Not fixed here; the open question is whether the bottom block should carry the next action or L3 should be reworded to "the bottom block is WAITING ON YOU".
   - D2 was corrected on 2026-08-11: terminal output auto-scrolls, so the eye lands at the **bottom**. Anything
     printed first is in the cheapest region, not the most valuable. The Borg cube is therefore **fine where it
     is** and must not be removed.
@@ -53,11 +54,13 @@ the skill ignores it.
   - Verify: `borg link | sed 's/\x1b\[[0-9;]*m//g' | grep -c -- '---$'` returns 0; idle projects are not printed
     one-per-line.
   - Measured 2026-08-10: **30 of 46** directive bullets rendered as `---`, and they sat in the landing region.
-- [ ] L5 — Re-measure against **D1** and record the line count in the PR body whether or not it fits one screen.
+- [x] L5 — Re-measure against **D1** and record the line count in the PR body whether or not it fits one screen.
       Baseline is **83 lines**. If it still doesn't fit, say so rather than moving the goalposts.
   - Verify: `borg link | wc -l`.
+  - **Measured 2026-10-12:** 90 lines (NO_COLOR=1, origin/main e3ebb67, 20 registered projects, run from the worktree with BORG_HOME unset so `borg.zsh` resolves its own `borg_core`). Down from the 160-line baseline but it does not fit one 24-line screen; stated, not excused.
 - [ ] L6 — Regression: full bats suite and the macOS contract leg stay green. `tests/cli_contract.bats` gains a
       case for `--json` validity.
+  - **Measured 2026-10-12 (open):** `make test` is green (1678 passed, coverage gate met). `bats tests/` is 1430 ok and 6 not ok on this host: five in `tests/eval_floor.bats` (premise broken: no host interpreter with an importable pytest) and `evals/lifecycle-manifests: the harness's own floor suite passes clean` in `tests/eval_lifecycle_floor.bats`. All six look environmental (the stated fix is `pip install --group dev`) but were not re-run with pytest available, so L6 is not ticked. A `--json` validity case was not located by name in `tests/cli_contract.bats`; confirm before ticking.
 
 ## Scope Boundaries
 - NOT the awaiting-you tier (`viz-1`), the spine generator (`viz-2`), or chains/ranking (`viz-3`).
