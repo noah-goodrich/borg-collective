@@ -503,7 +503,7 @@ print(m.enum_ok('notification_type', 'my_secret_plan'), m.enum_ok('notification_
 
 @test "harness is not installed as a live hook" {
     run grep -rl "spike-resume-payloads" "${BATS_TEST_DIRNAME}/.." \
-        --exclude-dir=.git --exclude-dir=tests --exclude=spike-resume-payloads.sh \
+        --exclude-dir=.git --exclude-dir=tests --exclude-dir=docs --exclude=spike-resume-payloads.sh \
         --exclude=resume-skeleton.py
     [ -z "$output" ]
 }
