@@ -2424,17 +2424,37 @@ cmd_nanoprobes() {
         return 0
     fi
 
-    # Newest first; format: short_id  agent_type  summary  finished_at
+    # Newest first; format: short_id  agent_type  model  effort  summary  finished_at
+    # Declared once: a repeated zsh `local` of an already-set variable prints it.
+    local me model effort
+    printf "  %-10s %-18s %-20s %-8s %-80s %s\n" "ID" "TYPE" "MODEL" "EFFORT" "SUMMARY" "FINISHED"
     _borg_agents_newest_first "$log" | head -50 | jq -r '
         [
             (.id // "")[0:8],
             (.agent_type // "?"),
             ((.summary // "") | gsub("\n"; " ") | .[0:80]),
-            (.finished_at // "")
+            (.finished_at // ""),
+            (.transcript_path // "")
         ] | join("\u001f")
-    ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype summary finished; do
-        printf "  %-10s %-18s %-80s %s\n" "$sid" "$atype" "$summary" "$finished"
+    ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype summary finished tpath; do
+        me=$(_borg_nanoprobe_model_effort "$tpath")
+        model="${me%%$'\t'*}"
+        effort="${me#*$'\t'}"
+        printf "  %-10s %-18s %-20s %-8s %-80s %s\n" "$sid" "$atype" "$model" "$effort" "$summary" "$finished"
     done
+}
+
+# Print "<model>\t<effort>" from the first assistant entry of a transcript; "-" for anything absent
+# (missing file, no assistant entry, no effort recorded). Effort lives at the entry's top-level
+# `effort` (falling back to `perTurnEffort`); model at .message.model.
+_borg_nanoprobe_model_effort() {
+    local tpath="$1" out=""
+    if [[ -n "$tpath" && -f "$tpath" ]]; then
+        out=$(jq -r 'select(.type == "assistant") |
+            [(.message.model // "-"), (.effort // .perTurnEffort // "-")] | @tsv' "$tpath" 2>/dev/null | head -1)
+    fi
+    [[ -n "$out" ]] || out=$'-\t-'
+    printf '%s' "$out"
 }
 
 cmd_nanoprobe_log() {

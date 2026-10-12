@@ -1,0 +1,3 @@
+{"type":"user","message":{"role":"user","content":"hi"}}
+{"type":"assistant","model":"claude-sonnet-5-5","effort":"high","message":{"model":"claude-sonnet-5-5","role":"assistant"}}
+{"type":"assistant","effort":"low","message":{"model":"claude-opus-5-5"}}
