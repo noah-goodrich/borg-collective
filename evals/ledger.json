@@ -12,6 +12,14 @@
         "lib/promote-next.sh"
       ]
     },
+    "evals/session-load": {
+      "covers": [
+        "evals/session-load/**",
+        "skills/**",
+        "hooks/**",
+        "scripts/build-plugin.sh"
+      ]
+    },
     "evals/s4-k3": {
       "covers": [
         "evals/s4-k3/**",
@@ -40,6 +48,10 @@
       "review_by": "2027-01-31"
     },
     "agents/borg-scout": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything)",
+      "review_by": "2027-01-31"
+    },
+    "agents/borg-verifier": {
       "waiver": "Phase 4 long-tail review (evals-for-everything)",
       "review_by": "2027-01-31"
     },

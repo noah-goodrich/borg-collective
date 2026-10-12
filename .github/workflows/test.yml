@@ -123,6 +123,9 @@ jobs:
     # render_graph.py at 88% -- but `testpaths = ["borg_core"]` meant pytest never collected them.
     # They were written, committed, and then never run by anything. A regression in the infoviz
     # renderer would have shipped green.
+    #
+    # The renderers retired 2026-10-12 with the browser board; this job now gates what is left of
+    # merge-tree/ (coordinator.py, programs.py and their three test files).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

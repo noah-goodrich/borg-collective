@@ -773,26 +773,25 @@ def test_no_module_references_an_external_plugin_or_a_sibling_checkout():
     assert offenders == [], f"independence violations: {offenders}"
 
 
-# ── row-level degradation: a bad row must not cost the file ───────────────────────────────────────
+# ── whole-file refusal: ANY invalid row refuses the file, and only that file ────────────────────
 #
-# Before this, ANY validation error dropped the whole manifest. Measured on the AC2 fixtures at the
-# time: one mistyped `gate.kind` took the orchestrator grid from 12 declared refs to 5 — seven rows
-# vanished from `▸ CHAINS` because of one word in one field, and the page kept its confident frame.
-# See docs/plans/directives/2026-08-27-degrade-the-row-not-the-manifest.md.
+# This section used to pin row-level SALVAGE (`2026-08-27-degrade-the-row-not-the-manifest`). Noah
+# reversed it on 2026-09-01 (`docs/plans/assimilated/2026-09-01-refuse-the-manifest-stop-salvaging-
+# rows.md`): with validate-on-write and expand -> migrate -> contract an invalid row is an anomaly to
+# REPORT, not to paper over, and a salvaged read feeding a write deletes declared rows from disk.
+# The cases below keep their subjects and now assert the refusal.
 #
-# THE DEFECT THESE CASES USE IS NO LONGER A MISTYPED `kind`, and the swap is the point of the follow-
-# up change: an unrecognized kind is now a ROUTER concern, so the row loads and routes to `unsure`
-# instead of being dropped. A gate that names no settlement has no such renderer-side answer, so it
-# is the defect that still costs its row — and it exercises the identical partition/drop path.
+# The defect is a gate that names no settlement: `gate.resolved_by is required`.
 
 _BAD_GATE = {"kind": "decision", "blocked_by": "someone"}
 
 
-def test_one_invalid_row_costs_the_row_and_not_the_file(tmp_path):
-    """MUTATION: restore `if errors: return None, ...` in `_load_manifest`.
+def test_one_invalid_row_refuses_the_file_and_not_the_page(tmp_path):
+    """MUTATION: restore row salvage in `_load_manifest` (drop the bad row, return the survivors).
 
-    The survivors load, rank and render; the warning names the count so a reader can tell "3 rows"
-    from "4 rows and I am showing you 3".
+    The bad file loads NOTHING (no row of it reaches the grid), and the warning names the file and the
+    validator's own first message. A second, good file in the same sweep still loads: one bad file
+    never blanks the page.
     """
     doc = _manifest(
         [
@@ -803,36 +802,32 @@ def test_one_invalid_row_costs_the_row_and_not_the_file(tmp_path):
         ]
     )
     p = _write_manifest(tmp_path, "repo", "a.json", doc)
-    manifests, warnings = shell.discover([p])
+    good = _write_manifest(tmp_path, "repo-two", "ok.json", _manifest([_row("1", "o/r#9")]))
+    manifests, warnings = shell.discover([p, good])
 
-    assert len(manifests) == 1, "the file survives"
-    refs = [r["ref"] for r in manifests[0]["rows"]]
-    assert refs == ["o/r#1", "o/r#3", "o/r#4"], "only the offending row is gone"
-
+    assert [m["rows"][0]["ref"] for m in manifests] == ["o/r#9"], "only the good file loads, whole"
     assert len(warnings) == 1
-    assert "1 of 4 rows dropped" in warnings[0]
+    assert "invalid manifest" in warnings[0]
     assert "gate.resolved_by is required" in warnings[0], "the validator's own message is carried verbatim"
     assert "a.json" in warnings[0], "and the file is named"
+    assert "rows dropped" not in warnings[0]
 
 
-def test_a_warning_survives_alongside_a_loaded_manifest(tmp_path):
-    """The caller used to append the warning only when the manifest was None.
+def test_a_refused_manifest_returns_none_and_a_warning_never_both(tmp_path):
+    """`_load_manifest` answers `(None, warning)` for a partly-invalid file, never `(manifest, warning)`.
 
-    MUTATION: restore `if manifest is None: warnings.append(warning)`. The rows still drop, the
-    picture still goes short, and the one message explaining why is swallowed — a silent version of
-    the bug this whole directive exists to remove.
+    MUTATION: restore row salvage and `manifest` comes back non-None next to its warning.
     """
-    p = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", gate=_BAD_GATE)]))
-    manifests, warnings = shell.discover([p])
-    assert manifests and warnings, "BOTH, not one or the other"
+    repo = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", gate=_BAD_GATE)]))
+    p = os.path.join(shell.manifest_dir(repo), "a.json")
+    manifest, warning = shell._load_manifest(p, "a.json")
+    assert manifest is None
+    assert "a.json" in warning and "gate.resolved_by is required" in warning
+    assert shell.discover([repo]) == ([], [warning])
 
 
-def test_a_manifest_whose_every_row_fails_is_still_dropped_whole(tmp_path):
-    """MUTATION: drop the `if not kept` guard — an empty manifest loads and renders a headed blank.
-
-    There is no page to render and nothing is gained by pretending. The message stays the original
-    `invalid manifest` one, not the row-drop one.
-    """
+def test_a_manifest_whose_every_row_fails_is_refused_whole(tmp_path):
+    """Every row bad is the degenerate case of the same refusal; the message is the `invalid manifest` one."""
     p = _write_manifest(
         tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1", gate=_BAD_GATE), _row("2", "o/r#2", gate=_BAD_GATE)])
     )
@@ -842,8 +837,8 @@ def test_a_manifest_whose_every_row_fails_is_still_dropped_whole(tmp_path):
     assert "rows dropped" not in warnings[0]
 
 
-def test_a_structural_failure_still_drops_the_file(tmp_path):
-    """MUTATION: treat every error as row-scoped.
+def test_a_structural_failure_still_refuses_the_file(tmp_path):
+    """A structural error refuses the file like any other.
 
     `apex: ...` describes a SIBLING KEY, not a row, so there is no subset of rows you could keep and
     still be describing what the author wrote. This is the case a naive fix slips through: every row
@@ -878,16 +873,10 @@ def test_a_non_manifest_is_rejected_before_validation_ever_runs(tmp_path):
     assert "not a manifest (no rows list)" in warnings[0]
 
 
-def test_survivors_are_revalidated_so_a_loaded_manifest_is_always_valid(tmp_path):
-    """MUTATION: return `doc` without re-running `core.validate`.
+def test_a_duplicate_ref_refuses_the_file_whole(tmp_path):
+    """A duplicate ref is a cross-row error; salvage used to drop one copy and re-validate the survivors.
 
-    Duplicate detection is CROSS-ROW — `_validate_row` flags the SECOND occurrence and leaves the
-    first alone — so dropping a row can clear an error on a row that was kept, and can also leave
-    one. Re-validating is how "a loaded manifest is a valid manifest" survives; every downstream
-    consumer assumes it and none of them re-check.
-
-    Here rows 1 and 2 duplicate `o/r#1`, so row 1 is flagged. Dropping it leaves rows 0 and 2, which
-    validate — and the surviving manifest must contain no duplicate.
+    MUTATION: restore row salvage and rows 0 and 2 load (the old `1 of 3 rows dropped` answer).
     """
     p = _write_manifest(
         tmp_path,
@@ -896,12 +885,9 @@ def test_survivors_are_revalidated_so_a_loaded_manifest_is_always_valid(tmp_path
         _manifest([_row("1", "o/r#1"), _row("2", "o/r#1"), _row("3", "o/r#2")]),
     )
     manifests, warnings = shell.discover([p])
-    assert len(manifests) == 1
-    refs = [r["ref"] for r in manifests[0]["rows"]]
-    assert refs == ["o/r#1", "o/r#2"]
-    assert len(refs) == len(set(refs)), "no duplicate survives"
-    assert core.validate(manifests[0]) == [], "the loaded manifest validates"
-    assert "1 of 3 rows dropped" in warnings[0]
+    assert manifests == []
+    assert len(warnings) == 1 and "invalid manifest" in warnings[0]
+    assert "rows dropped" not in warnings[0]
 
 
 def test_partition_errors_splits_row_scoped_from_structural():
@@ -930,7 +916,7 @@ def test_partition_errors_splits_row_scoped_from_structural():
 # ── write_manifest ───────────────────────────────────────────────────────────
 #
 # The writer is the ONE fatal path in shell.py. These cases pin the asymmetry the module docstring
-# argues for: a read degrades and names what it dropped, a write refuses whole and hands back why.
+# argues for: a read refuses the one bad file and names why, a write refuses whole and hands back why.
 
 
 def test_a_written_manifest_round_trips_through_the_reader(tmp_path):
@@ -1126,15 +1112,16 @@ def test_narrowing_does_not_match_a_sibling_by_prefix(tmp_path):
     assert len(shell.refused_manifest_paths(warnings, two)) == 1
 
 
-def test_a_partially_dropped_manifest_is_not_a_refusal(tmp_path):
-    # It DID load. Counting it would make CHAINS print "could not be read" above a rendered chain.
+def test_a_partially_invalid_manifest_is_a_refusal(tmp_path):
+    # It used to load with its good row and count as NOT refused. Now any invalid row refuses the file, so
+    # CHAINS says "could not be read" and no chain renders from it.
     doc = _manifest([_row("1", "o/r#1"), _row("2", "shorthand#2")])
     repository = _write_manifest(tmp_path, "repo", "partial.json", doc)
     manifests, warnings = shell.discover([repository])
 
-    assert len(manifests) == 1, "precondition: the file loaded with its good row"
-    assert "rows dropped" in warnings[0]
-    assert shell.refused_manifest_paths(warnings) == []
+    assert manifests == [], "precondition: nothing of the file loads"
+    refused = shell.refused_manifest_paths(warnings)
+    assert len(refused) == 1 and refused[0].endswith("partial.json")
 
 
 # ── E2a: the eight structural ref properties, offline, over a two-repository tree ─────────────────

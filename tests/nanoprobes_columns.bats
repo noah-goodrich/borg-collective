@@ -44,3 +44,10 @@ row() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"cccc3333"* ]] || false
 }
+
+@test "nanoprobes: a row carrying model/effort renders them without the transcript" {
+    printf '{"id":"dddd4444-0000-0000-0000-000000000000","agent_type":"borg-nanoprobe","summary":"s","finished_at":"2026-10-11T10:00:00Z","transcript_path":"/nonexistent/pruned.jsonl","model":"claude-sonnet-5-5","effort":"high"}\n' >> "$BORG_DIR/agents.jsonl"
+    run zsh "$BORG" nanoprobes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"dddd4444"*"claude-sonnet-5-5"*"high"* ]] || false
+}

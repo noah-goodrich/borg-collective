@@ -49,14 +49,15 @@ true of everything except that one name. The next reader should FINISH the move 
 the seam was arbitrary and start filing single-manifest functions here.
 
 PORTS, NOT IMPORTS. `edges_from` is merge-tree/programs.py's function of the same name;
-`contested_refs` is the contested-ref half of merge-tree/gather.py's `apply_program_projects`, split
-away from the item re-keying that stays over there. Ported rather than imported, and that is forced
+`contested_refs` is the contested-ref half of the deleted merge-tree/gather.py's `apply_program_projects`
+(ported from it; gather.py retired 2026-10-12 with the browser board). Ported rather than imported, and that is forced
 twice over exactly as core.py records: `merge-tree` carries a hyphen so it can never be a Python
 package name, and pyproject.toml pins `allowed_prefixes = ["borg_core", "__future__"]`, so an import
 would fail `make lint` even if the path resolved.
 
-BOTH merge-tree COPIES STAY LIVE AND UNTOUCHED. This is AC7's EXPAND phase: the new form ships and no
-caller is repointed. Repointing merge-tree/gather.py and merge-tree/coordinator.py is the CONTRACT
+THE merge-tree/programs.py COPY STAYS LIVE AND UNTOUCHED (gather.py, the other former caller, is deleted).
+This is AC7's EXPAND phase: the new form ships and no caller is repointed. Repointing
+merge-tree/coordinator.py is the CONTRACT
 phase, and it may not happen until the shorthand refs in merge-tree/test_coordinator.py have been
 migrated to satisfy this side's stricter ref vocabulary. Until then two implementations coexist by
 design, and they are not identical: `contested_refs` carries three deliberate divergences from the
@@ -122,7 +123,7 @@ def contested_refs(manifests: list[dict[str, Any]]) -> list[str]:
     """Refs that more than one manifest claims as its OWN work: one sorted line per collision.
 
     Every line reads exactly `"<ref>: kept by <first-claimant>, also claimed by <later-claimant>"`.
-    That shape is a PORT and is pinned on both sides -- merge-tree/test_gather.py asserts the
+    That shape is a PORT and is pinned on both sides -- the deleted merge-tree/test_gather.py asserted the
     identical form, and AC6's eval harness calls each entry a "contested line" -- so it is a wire
     format to preserve, not prose to improve.
 

@@ -325,6 +325,47 @@ EOF
     [[ "$output" != *"summary: None"* ]] || false
 }
 
+# ── The prompt carries the CHECKPOINT's summary, not the registry's ───────────────────────────
+#
+# `borg link` derives a project's summary from its latest checkpoint FILE. `--brief` projects the same
+# document, so its prompt must carry that text. The registry row here holds a greeting (what
+# summarize.py stored from a transcript) to prove the stored field is not what reaches the prompt.
+
+@test "briefing: the prompt carries the latest checkpoint's tl;dr, not the registry summary" {
+    export PROMPT_FILE="${BATS_TEST_TMPDIR}/prompt.txt"
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = "-p" ] && printf '%s' "$2" > "$PROMPT_FILE"
+echo "NARRATIVE"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    local ws="${BATS_TEST_TMPDIR}/ws/cp-project"
+    mkdir -p "$ws/.borg/checkpoints"
+    printf '**tl;dr** — Shipped the checkpoint-derived summary.\n\n## 2. Accomplished\n\n- Other.\n' \
+        > "$ws/.borg/checkpoints/2026-08-01-0900.md"
+    cat > "$BORG_REGISTRY" <<EOF
+{
+  "projects": {
+    "cp-project": {
+      "path": "$ws",
+      "status": "idle",
+      "source": "cli",
+      "last_activity": "2026-08-01T00:00:00Z",
+      "summary": "What's up buttercup?"
+    }
+  }
+}
+EOF
+
+    run "$BORG_CMD" link --brief --local
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run cat "$PROMPT_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"Shipped the checkpoint-derived summary."* ]] || false
+    [[ "$output" != *"buttercup"* ]] || false
+}
+
 # ── Empty registry ─────────────────────────────────────────────────────────────
 #
 # SAME ASSERTION, NEW ORIGIN (2026-08-27). The hint used to come from a registry read that found no
@@ -587,7 +628,7 @@ EOF
 # BUILD (`_borg_py ... --json` produces nothing) or the fallback page fails to RENDER
 # (`--render-document` fails). Both used to `warn` — which writes to STDOUT, see its definition beside
 # `info`/`die` at the top of borg.zsh — and return 0. That is the silent-failure shape
-# docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists to
+# docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists to
 # remove, and the fallback rung reintroduced it at the last rung of the ladder that implements it.
 #
 # THE ASSERTIONS READ SEPARATED STREAMS, NOT `$output`, AND THAT IS THE POINT OF THIS BLOCK.

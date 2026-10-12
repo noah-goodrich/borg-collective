@@ -13,9 +13,9 @@ be a Python package name, and pyproject.toml:76 pins
 path resolved.
 
 THE PORT HAS DELIBERATELY DIVERGED from the copy that still lives in merge-tree/programs.py, which
-is itself still live (merge-tree/coordinator.py rewrites manifests through its writer and
-merge-tree/gather.py derives the viz graph from it). The differences, so the next editor of either
-copy can see them: this side validates `after` and derives edges from it (the writer over there
+is itself still live (merge-tree/coordinator.py rewrites manifests through its writer; the
+other former caller, merge-tree/gather.py, retired with the browser board). The differences, so the
+next editor of either copy can see them: this side validates `after` and derives edges from it (the writer over there
 accepts an `after` of any shape and derives nothing from it, so its write gate is WEAKER than this
 read gate -- a manifest it happily writes can be rejected here), this side deduplicates edges within
 a manifest, this side requires every declared ref to be a FULL `owner/repo#num`, this side no longer
@@ -301,8 +301,9 @@ def _validate_gate(gate: Any, ref: str, label: str) -> list[str]:
 
     AN UNRECOGNIZED KIND IS THE ROUTER'S PROBLEM; AN ABSENT ONE IS A DEFECT. `kind` used to be closed
     to `GATE_KINDS`, which meant a typo'd `review` was a row-scoped error and -- after
-    docs/plans/directives/2026-08-27-degrade-the-row-not-the-manifest.md made degradation row-level --
-    silently DELETED the row. That is strictly worse than the outcome the renderer already built for
+    docs/plans/directives/2026-08-27-degrade-the-row-not-the-manifest.md made the reader salvage by row
+    (since reversed: the loader now refuses the whole file) -- silently DELETED the row.
+    That is strictly worse than the outcome the renderer already built for
     it: `render._route` sends any kind it does not recognize to the `unsure` group, which names the
     kind on the page. So the row loads, ranks, draws and routes, and the human sees the word they
     mistyped instead of a gap.

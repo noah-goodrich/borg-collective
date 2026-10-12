@@ -149,7 +149,7 @@ def test_add_row_refuses_an_invalid_manifest_and_the_bad_row_survives(repository
     `shell._load_manifest` drops a failing row and returns the survivors, which is right for
     rendering. Through a write path it means a verb asked to ADD one row DELETES another, with a
     warning as the only trace -- exactly what
-    `docs/plans/directives/2026-09-01-refuse-the-manifest-stop-salvaging-rows.md` says to make
+    `docs/plans/assimilated/2026-09-01-refuse-the-manifest-stop-salvaging-rows.md` says to make
     structurally impossible.
 
     MUTATION: point `_read_for_write` at `shell.discover` and this goes red on the surviving-row
@@ -171,8 +171,8 @@ def test_add_row_refuses_an_invalid_manifest_and_the_bad_row_survives(repository
     assert not any(row["ref"] == "o/r#3" for row in after["rows"]), "and nothing was added"
 
 
-def test_the_salvaging_reader_would_have_dropped_that_row(repository):
-    """The contrast twin, so the test above is a claim about a REAL alternative and not a strawman."""
+def test_the_reader_refuses_the_whole_file_rather_than_dropping_that_row(repository):
+    """The read-side twin: discover no longer salvages, so no caller can write back a shortened manifest."""
     _run("scaffold", "--repository", repository, "--name", "demo")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "build")
     doc = _read(repository)
@@ -181,8 +181,9 @@ def test_the_salvaging_reader_would_have_dropped_that_row(repository):
         json.dump(doc, handle, indent=2, sort_keys=True)
 
     manifests, warnings = shell.discover([repository])
-    assert [row["ref"] for row in manifests[0]["rows"]] == ["o/r#1"], "discover keeps only the valid row"
-    assert any("dropped" in warning for warning in warnings)
+    assert manifests == [], "discover refuses the file whole"
+    assert any("invalid manifest" in warning for warning in warnings)
+    assert [row["ref"] for row in _read(repository)["rows"]] == ["o/r#1", "o/r#2"], "and the disk is untouched"
 
 
 def test_add_row_refuses_a_missing_manifest_by_name(repository, capsys):

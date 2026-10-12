@@ -11,15 +11,18 @@
 #   - with no agentType: model sonnet/haiku AND effort low/medium/high.
 # A model/effort given alongside an allowlisted agentType must meet the same caps.
 #
-# Input: tool_input.script (inline), else the file at tool_input.scriptPath, else the saved workflow
-# tool_input.name (resolved in <cwd and parents>/.claude/workflows and ~/.claude/workflows).
+# Input: tool_input.script (inline), the file at tool_input.scriptPath, and the saved workflow tool_input.name
+# (resolved in <cwd and parents>/.claude/workflows and ~/.claude/workflows). Every source present is checked,
+# since which one the runtime prefers when several are given is not known here.
 #
 # CONTRACT — fail CLOSED. The script is tokenized (strings, comments, regex literals and nested template
 # literals are understood, so prose containing "agent(" is not a call). Denied with exit 2 and the fix on
 # stderr: any non-compliant call; options that are not an object literal (variable, spread, expression);
 # agentType/model/effort that are not string literals (a const holding a literal is resolved); agent
-# referenced without being called (alias, callback); a script that cannot be parsed; a scriptPath or saved
-# name that cannot be resolved. Fails OPEN only when the call is not ours to judge (missing python3, empty
+# referenced without being called (alias, callback); every indirect route to agent (backslash escapes in
+# identifiers, eval/Function/constructor/import/require, globalThis/global/self/window/this/arguments); a
+# script that cannot be parsed; a scriptPath or saved name that cannot be resolved. A local binding named
+# agent (const/let, arrow or function parameter, for-head, catch) is skipped inside its scope. Fails OPEN only when the call is not ours to judge (missing python3, empty
 # or malformed stdin, another tool). There is no inline escape hatch. Kill switch:
 # BORG_WORKFLOW_MODEL_GUARD=0. The policy block below is byte-identical in hooks/borg-agent-model-guard.sh
 # (a bats test diffs them).
@@ -44,6 +47,9 @@ ALLOWED_TYPES = (
     "borg-collective:borg-verifier",
     "claude-code-guide",
 )
+# Built-in types whose definition pins no effort: they inherit the session's xhigh, so a call must
+# carry an effort. (No model is required: the built-in already runs Haiku.)
+EFFORT_REQUIRED_TYPES = ("claude-code-guide",)
 RESEARCH_PREFIX = "research-tools:"
 EFFORT_OK = ("low", "medium", "high")
 MODEL_RE = re.compile(r"^(sonnet|haiku|claude-sonnet-[a-z0-9._-]+|claude-haiku-[a-z0-9._-]+)$")
@@ -145,7 +151,7 @@ def type_problem(t, research_ok):
     return "subagent type '%s' is not on the allowlist. Use one of: %s" % (t, USE_INSTEAD)
 
 
-def cap_problems(model, effort, need_pin):
+def cap_problems(model, effort, need_pin, agent_type=None):
     """model/effort are None when absent, else the value as given. need_pin: absent is itself a fault."""
     out = []
     if model is None:
@@ -160,6 +166,9 @@ def cap_problems(model, effort, need_pin):
         if need_pin:
             out.append("no effort: an unpinned call inherits the session's xhigh. Pass effort: 'low', "
                        "'medium' or 'high'")
+        elif isinstance(agent_type, str) and agent_type.strip() in EFFORT_REQUIRED_TYPES:
+            out.append("%s pins no effort, so it inherits the session's xhigh. Pass effort: 'low' "
+                       "(or 'medium'/'high')" % agent_type.strip())
     elif isinstance(effort, Dyn):
         out.append("effort must be a string literal (%s); use 'low', 'medium' or 'high'" % effort.why)
     elif not (isinstance(effort, str) and effort.strip().lower() in EFFORT_OK):
@@ -185,6 +194,9 @@ class Tok(object):
 
 OPEN = "([{"
 CLOSE = ")]}"
+LINE_BREAK_RE = re.compile("[\n\r  ]")
+CONTROL_WORDS = set(["if", "while", "for", "switch", "with", "catch", "function", "return", "typeof", "await",
+                     "yield", "new", "delete", "void", "in", "of", "instanceof", "do", "else"])
 REGEX_AFTER_WORDS = set(["return", "typeof", "case", "in", "of", "delete", "void", "throw", "new",
                          "else", "do", "yield", "await", "instanceof"])
 REGEX_AFTER_PUNCT = set(["(", ",", "=", ":", "[", "!", "&", "|", "?", "{", ";", "+", "-", "*", "%", "<",
@@ -206,8 +218,8 @@ def tokenize(src, i, in_expr):
             i += 1
             continue
         if c == "/" and src.startswith("//", i):
-            j = src.find("\n", i)
-            i = n if j < 0 else j
+            m = LINE_BREAK_RE.search(src, i)
+            i = n if m is None else m.start()
             continue
         if c == "/" and src.startswith("/*", i):
             j = src.find("*/", i + 2)
@@ -257,6 +269,9 @@ def tokenize(src, i, in_expr):
             toks.append(Tok("tpl", None if exprs else "".join(buf), i, exprs))
             i = j + 1
             continue
+        if c == "\\":
+            raise ParseError("a backslash escape outside a string at line %d can spell an identifier such as "
+                             "agent" % line_of(src, i))
         if c.isalpha() or c == "_" or c == "$":
             j = i + 1
             while j < n and (src[j].isalnum() or src[j] in "_$"):
@@ -273,9 +288,11 @@ def tokenize(src, i, in_expr):
             continue
         if c == "/":
             prev = toks[-1] if toks else None
-            is_re = (prev is None
-                     or (prev.kind == "p" and prev.val in REGEX_AFTER_PUNCT)
-                     or (prev.kind == "id" and prev.val in REGEX_AFTER_WORDS))
+            postfix = (prev is not None and prev.kind == "p" and prev.val in ("+", "-") and len(toks) >= 2
+                       and toks[-2].kind == "p" and toks[-2].val == prev.val and toks[-2].pos == prev.pos - 1)
+            is_re = not postfix and (prev is None
+                                     or (prev.kind == "p" and prev.val in REGEX_AFTER_PUNCT)
+                                     or (prev.kind == "id" and prev.val in REGEX_AFTER_WORDS))
             if is_re:
                 j = i + 1
                 in_class = False
@@ -384,11 +401,45 @@ def is_p(t, v):
     return t is not None and t.kind == "p" and t.val == v
 
 
+def binding_names(lists, src):
+    """Names bound anywhere other than a plain `const NAME = ...` declarator: let/var, arrow and function or
+    method parameters, for heads, catch and destructuring patterns. A constant whose name is bound again
+    anywhere is never resolved, because which binding a use refers to is a scope question this guard does
+    not answer. Over-collecting only turns a resolved literal into a denial."""
+    names = set()
+    for lst in lists:
+        for k, t in enumerate(lst):
+            nxt = lst[k + 1] if k + 1 < len(lst) else None
+            if t.kind == "id" and is_p(nxt, "=>"):
+                names.add(t.val)
+            if is_id(t, "let", "var") and nxt is not None and nxt.kind == "id":
+                names.add(nxt.val)
+            if t.kind != "p" or t.val not in OPEN:
+                continue
+            close = match(lst, k)
+            prev = lst[k - 1] if k else None
+            prev2 = lst[k - 2] if k >= 2 else None
+            after = lst[close + 1] if close + 1 < len(lst) else None
+            after2 = lst[close + 2] if close + 2 < len(lst) else None
+            if t.val == "(":
+                bound = (is_p(after, "=>") or is_id(prev, "function", "catch", "for") or is_id(prev2, "function")
+                         or (prev is not None and prev.kind == "id" and prev.val not in CONTROL_WORDS
+                             and is_p(after, "{")))
+            else:
+                bound = is_id(prev, "const", "let", "var") or (is_p(after, "=") and not is_p(after2, "="))
+            if bound:
+                names.update(x.val for x in lst[k + 1:close] if x.kind == "id")
+    return names
+
+
 def collect_consts(lists, src):
-    """name -> string for names declared exactly once with a string literal and never reassigned."""
+    """name -> string for names declared exactly once, with `const`, as a string literal, and bound nowhere
+    else (see binding_names). let/var are never resolved: they can be reassigned in ways (`&&=`, destructuring)
+    that a token scan cannot rule out."""
     decl = {}
     counts = {}
     tainted = set()
+    bound = binding_names(lists, src)
     for lst in lists:
         for k, t in enumerate(lst):
             if t.kind != "id" or not is_p(lst[k + 1] if k + 1 < len(lst) else None, "="):
@@ -397,7 +448,7 @@ def collect_consts(lists, src):
             if is_p(nn, "="):
                 continue
             prev = lst[k - 1] if k else None
-            if prev is not None and prev.kind == "id" and prev.val in ("const", "let", "var"):
+            if is_id(prev, "const"):
                 counts[t.val] = counts.get(t.val, 0) + 1
                 after = lst[k + 3] if k + 3 < len(lst) else None
                 simple_end = (after is None or (after.kind == "p" and after.val in (";", ",", ")", "}"))
@@ -408,7 +459,7 @@ def collect_consts(lists, src):
                     tainted.add(t.val)
             else:
                 tainted.add(t.val)
-    return dict((k, v) for k, v in decl.items() if counts.get(k) == 1 and k not in tainted)
+    return dict((k, v) for k, v in decl.items() if counts.get(k) == 1 and k not in tainted and k not in bound)
 
 
 def literal(vtoks, consts):
@@ -449,6 +500,12 @@ def analyze_call(lst, k, consts, src, research_state):
             if is_p(h, "["):
                 problems.append("options contain a computed key, so the pin cannot be checked")
                 continue
+            if is_p(h, "*"):
+                problems.append("options contain a generator method, so the pin cannot be checked")
+                continue
+            if is_id(h, "get", "set", "async") and len(part) > 1 and part[1].kind in ("id", "str"):
+                props[part[1].val] = part
+                continue
             if h.kind not in ("id", "str", "num"):
                 continue
             if len(part) == 1:
@@ -473,7 +530,7 @@ def analyze_call(lst, k, consts, src, research_state):
             if tp:
                 problems.append(tp.replace("subagent_type", "agentType"))
             elif not research:
-                problems.extend(cap_problems(model, effort, False))
+                problems.extend(cap_problems(model, effort, False, agent_type))
         else:
             problems.extend(cap_problems(model, effort, True))
             if problems:
@@ -491,6 +548,233 @@ def analyze_call(lst, k, consts, src, research_state):
     return ["%s: %s" % (where, "; ".join(problems))]
 
 
+# Every route to the real agent() other than a direct call: code evaluation, the global object (which holds
+# agent when it is a global), `this` (the global object outside a method) and `arguments` (which holds it
+# when the runtime passes agent as a parameter). GLOBAL_ROUTES are denied as standalone identifiers; as a
+# member name (`opts.window`) or an object key (`{ window: 30 }`) they cannot reach the global object.
+# PROPERTY_ROUTES are dangerous precisely as member names, so they are denied everywhere, including as an exact
+# string key (`[]["constructor"]`). A computed member built from string pieces (`x["constr" + "uctor"]`) is
+# denied too, because it can spell any of them.
+GLOBAL_ROUTES = {
+    "eval": "evaluates code the guard cannot see",
+    "Function": "builds code the guard cannot see",
+    "require": "loads code the guard cannot see",
+    "import": "loads code the guard cannot see",
+    "globalThis": "the global object can reach agent() indirectly",
+    "global": "the global object can reach agent() indirectly",
+    "self": "the global object can reach agent() indirectly",
+    "window": "the global object can reach agent() indirectly",
+    "frames": "the global object can reach agent() indirectly",
+    "this": "outside a method `this` is the global object, which can reach agent() indirectly",
+    "arguments": "`arguments` can hold agent() itself",
+}
+PROPERTY_ROUTES = {
+    "constructor": "reaches the Function constructor, which builds code the guard cannot see",
+    "caller": "a caller frame can hold agent() itself",
+    "callee": "a caller frame can hold agent() itself",
+    "prepareStackTrace": "stack frames expose the global object and caller functions",
+    "getThis": "stack frames expose the global object and caller functions",
+    "getFunction": "stack frames expose the global object and caller functions",
+}
+
+
+def route_problem(lst, k, src):
+    """A problem string when token k is a banned route to agent(), else None."""
+    t = lst[k]
+    prev = lst[k - 1] if k else None
+    nxt = lst[k + 1] if k + 1 < len(lst) else None
+    where = "line %d" % line_of(src, t.pos)
+    if t.kind in ("str", "tpl") and t.val in PROPERTY_ROUTES:
+        return "%s: the string '%s' is not allowed: %s" % (where, t.val, PROPERTY_ROUTES[t.val])
+    if t.kind == "id" and t.val in PROPERTY_ROUTES:
+        return "%s: '%s' is not allowed: %s" % (where, t.val, PROPERTY_ROUTES[t.val])
+    if t.kind == "id" and t.val in GLOBAL_ROUTES:
+        member = is_p(prev, ".")
+        key = is_p(nxt, ":") and (is_p(prev, "{") or is_p(prev, ","))
+        if not member and not key:
+            return "%s: '%s' is not allowed: %s" % (where, t.val, GLOBAL_ROUTES[t.val])
+    indexing = prev is not None and (prev.kind in ("str", "tpl") or is_p(prev, ")") or is_p(prev, "]")
+                                     or (prev.kind == "id" and prev.val not in REGEX_AFTER_WORDS))
+    if is_p(t, "[") and indexing:
+        inner = lst[k + 1:match(lst, k)]
+        if (any(is_p(x, "+") for x in inner) and any(x.kind in ("str", "tpl") for x in inner)) or any(
+                x.kind == "tpl" and x.val is None for x in inner):
+            return "%s: a computed member name built from strings can spell a banned route" % where
+    return None
+
+
+def stmt_end(lst, k, src):
+    """Last index of the expression or statement starting at k: just before the first , ; : ) ] } at depth 0,
+    or before a line break at depth 0 (ASI). Ending early only narrows a scope, which is the safe direction."""
+    depth = 0
+    for m in range(k, len(lst)):
+        t = lst[m]
+        if m > k and depth == 0 and LINE_BREAK_RE.search(src, lst[m - 1].pos, t.pos):
+            return m - 1
+        if t.kind != "p":
+            continue
+        if t.val in OPEN:
+            depth += 1
+        elif t.val in CLOSE:
+            if depth == 0:
+                return m - 1
+            depth -= 1
+        elif t.val in (",", ";", ":") and depth == 0:
+            return m - 1
+    return len(lst) - 1
+
+
+def body_end(lst, k, src):
+    """Last index of a function, arrow or loop body starting at k (a block, or one expression/statement)."""
+    if k < len(lst) and is_p(lst[k], "{"):
+        return match(lst, k)
+    return stmt_end(lst, k, src)
+
+
+def innermost_opener(lst, k):
+    """Index of the innermost bracket still open at k, or None at top level."""
+    depth = 0
+    for m in range(k - 1, -1, -1):
+        t = lst[m]
+        if t.kind != "p":
+            continue
+        if t.val in CLOSE:
+            depth += 1
+        elif t.val in OPEN:
+            if depth == 0:
+                return m
+            depth -= 1
+    return None
+
+
+def is_id(t, *vals):
+    return t is not None and t.kind == "id" and t.val in vals
+
+
+def shadow_ranges(lst, src):
+    """(start, end) token ranges in which `agent` names a local binding, never the Workflow agent().
+
+    Conservative by construction: only const/let declarators, arrow and function parameters, for (const|let)
+    heads and catch parameters count, each scoped to its block or body. `var` is excluded because it can
+    redeclare the very parameter the runtime injects. A missed binding costs a false deny, never a bypass.
+    """
+    ranges = []
+    for k, t in enumerate(lst):
+        if not is_id(t, "agent"):
+            continue
+        prev = lst[k - 1] if k else None
+        nxt = lst[k + 1] if k + 1 < len(lst) else None
+        if is_p(nxt, "=>") and not is_p(prev, "."):
+            ranges.append((k, body_end(lst, k + 2, src)))
+            continue
+        if is_id(prev, "const", "let"):
+            head = k - 2
+            for_head = head >= 1 and is_p(lst[head], "(") and (
+                is_id(lst[head - 1], "for") or (head >= 2 and is_id(lst[head - 1], "await")
+                                                and is_id(lst[head - 2], "for")))
+            if for_head:
+                ranges.append((k, body_end(lst, match(lst, head) + 1, src)))
+            elif is_p(nxt, "=") or is_p(nxt, ";") or is_p(nxt, ","):
+                o = innermost_opener(lst, k)
+                if o is None:
+                    ranges.append((0, len(lst) - 1))
+                elif is_p(lst[o], "{"):
+                    ranges.append((o, match(lst, o)))
+            continue
+        target = (any(is_p(prev, v) for v in ("{", ",", ":", "["))
+                  and any(is_p(nxt, v) for v in ("}", ",", "=", "]")))
+        o = innermost_opener(lst, k) if target else None
+        if o is not None and lst[o].val in "{[":
+            r = pattern_scope(lst, o, k, src)
+            if r is not None:
+                ranges.append(r)
+            continue
+        if not ((is_p(prev, "(") or is_p(prev, ",")) and (is_p(nxt, ",") or is_p(nxt, ")") or is_p(nxt, "="))):
+            continue
+        o = innermost_opener(lst, k)
+        if o is None or not is_p(lst[o], "("):
+            continue
+        close = match(lst, o)
+        after = lst[close + 1] if close + 1 < len(lst) else None
+        before = lst[o - 1] if o else None
+        before2 = lst[o - 2] if o >= 2 else None
+        if is_p(after, "=>"):
+            ranges.append((k, body_end(lst, close + 2, src)))
+        elif is_p(after, "{") and (is_id(before, "function") or is_id(before2, "function")):
+            ranges.append((k, match(lst, close + 1)))
+        elif is_p(after, "{") and is_id(before, "catch") and is_p(prev, "(") and is_p(nxt, ")"):
+            ranges.append((k, match(lst, close + 1)))
+        elif (is_p(after, "{") and before is not None and before.kind == "id" and before.val not in CONTROL_WORDS
+              and not LINE_BREAK_RE.search(src, lst[close].pos, after.pos)):
+            # A method definition, `name(agent) {` on one line. Outside an object or class body that is a
+            # syntax error, so it cannot be a call followed by a block.
+            ranges.append((k, match(lst, close + 1)))
+    return ranges
+
+
+def pattern_scope(lst, o, k, src):
+    """Scope of `agent` bound by the destructuring pattern opened at o, or None when o is not a pattern.
+
+    Only a top-level pattern counts: one declared by const/let (scoped to its block or for loop) or one that
+    is itself an arrow parameter (scoped to the body). `x = {agent}` and a default `(p = {agent}) =>` are
+    object literals that read the real agent, so they never qualify."""
+    before = lst[o - 1] if o else None
+    if is_id(before, "const", "let"):
+        oo = innermost_opener(lst, o - 1)
+        if oo is None:
+            return (0, len(lst) - 1)
+        if is_p(lst[oo], "{"):
+            return (oo, match(lst, oo))
+        if is_p(lst[oo], "(") and oo >= 1 and (is_id(lst[oo - 1], "for") or (
+                oo >= 2 and is_id(lst[oo - 1], "await") and is_id(lst[oo - 2], "for"))):
+            return (k, body_end(lst, match(lst, oo) + 1, src))
+        return None
+    close = match(lst, o)
+    after = lst[close + 1] if close + 1 < len(lst) else None
+    if not ((is_p(before, "(") or is_p(before, ",")) and (is_p(after, ",") or is_p(after, ")") or is_p(after, "="))):
+        return None
+    oo = innermost_opener(lst, o)
+    if oo is None or not is_p(lst[oo], "("):
+        return None
+    pclose = match(lst, oo)
+    if pclose + 1 < len(lst) and is_p(lst[pclose + 1], "=>"):
+        return (k, body_end(lst, pclose + 2, src))
+    return None
+
+
+def check_list(lst, consts, src, research_state, inherited, out):
+    ranges = [] if inherited else shadow_ranges(lst, src)
+    for k, t in enumerate(lst):
+        shadowed = inherited or any(s <= k <= e for s, e in ranges)
+        route = route_problem(lst, k, src)
+        if route:
+            out.append(route)
+            continue
+        if t.kind == "tpl":
+            for sub in t.exprs:
+                check_list(sub, consts, src, research_state, shadowed, out)
+            continue
+        if t.kind != "id" or t.val != "agent" or shadowed:
+            continue
+        prev = lst[k - 1] if k else None
+        nxt = lst[k + 1] if k + 1 < len(lst) else None
+        if is_id(prev, "function"):
+            continue
+        if is_p(nxt, "("):
+            out.extend(analyze_call(lst, k, consts, src, research_state))
+        elif is_p(prev, "."):
+            out.append("line %d: a property named agent is read without being called, and it may hold the "
+                       "Workflow agent(); call agent(prompt, { ... }) directly or rename the property"
+                       % line_of(src, t.pos))
+        elif is_p(nxt, ":") and (is_p(prev, "{") or is_p(prev, ",")):
+            continue
+        else:
+            out.append("line %d: agent is referenced without being called (alias, callback, "
+                       ".call/.bind, destructuring), so its options cannot be checked. Call "
+                       "agent(prompt, { ... }) directly; if this is a local variable, declare it with "
+                       "const/let or as a parameter, or rename it" % line_of(src, t.pos))
+
+
 def check_script(src, research_state):
     toks, _ = tokenize(src, 0, False)
     lists = list(token_lists(toks))
@@ -498,24 +782,7 @@ def check_script(src, research_state):
         check_balanced(lst, src)
     consts = collect_consts(lists, src)
     out = []
-    for lst in lists:
-        for k, t in enumerate(lst):
-            if t.kind != "id" or t.val != "agent":
-                continue
-            prev = lst[k - 1] if k else None
-            nxt = lst[k + 1] if k + 1 < len(lst) else None
-            if prev is not None and prev.kind == "id" and prev.val == "function":
-                continue
-            if is_p(nxt, "("):
-                out.extend(analyze_call(lst, k, consts, src, research_state))
-            elif is_p(prev, "."):
-                continue
-            elif is_p(nxt, ":") and (is_p(prev, "{") or is_p(prev, ",")):
-                continue
-            else:
-                out.append("line %d: agent is referenced without being called (alias, callback, "
-                           ".call/.bind, destructuring), so its options cannot be checked. Call "
-                           "agent(prompt, { ... }) directly" % line_of(src, t.pos))
+    check_list(toks, consts, src, research_state, False, out)
     return out
 
 
@@ -551,7 +818,8 @@ def deny(origin, problems):
     sys.stderr.write("Policy: orchestrator/drone sessions run Opus xhigh; every agent() must be below that: "
                      "an allowlisted agentType (borg-collective:borg-scout/-grunt/-nanoprobe/-researcher/"
                      "-reviewer/-verifier, claude-code-guide), or with no agentType model 'sonnet'/'haiku' "
-                     "AND effort 'low'/'medium'/'high'. research-tools:* is exempt, only after a "
+                     "AND effort low/medium/high; claude-code-guide also needs effort low/medium/high. "
+                     "research-tools:* is exempt, only after a "
                      "research-tools skill/command ran. No escape hatch. Guide: docs/agent-routing.md. "
                      "Kill switch: BORG_WORKFLOW_MODEL_GUARD=0.\n")
     return 2
@@ -567,17 +835,20 @@ def main():
     ti = data.get("tool_input")
     if not isinstance(ti, dict):
         ti = {}
+    # Every source the call names is checked: which one the runtime prefers when several are present is not
+    # something this guard knows, so it must not pick one.
     script, spath, name = ti.get("script"), ti.get("scriptPath"), ti.get("name")
+    sources = []
     if isinstance(script, str) and script.strip():
-        src, origin = script, "inline script"
-    elif isinstance(spath, str) and spath.strip():
+        sources.append((script, "inline script"))
+    if isinstance(spath, str) and spath.strip():
         origin = "scriptPath %s" % spath
         try:
-            src = read_file(os.path.expanduser(spath))
+            sources.append((read_file(os.path.expanduser(spath)), origin))
         except Exception as exc:
             return deny(origin, ["scriptPath cannot be read (%s), so the script cannot be checked. Pass "
                                  "the script inline or fix the path" % exc])
-    elif isinstance(name, str) and name.strip():
+    if isinstance(name, str) and name.strip():
         origin = "saved workflow '%s'" % name
         cwd = data.get("cwd") if isinstance(data.get("cwd"), str) and data.get("cwd") else os.getcwd()
         found = find_saved(name.strip(), cwd)
@@ -586,21 +857,22 @@ def main():
                                  "~/.claude/workflows, so it cannot be checked. Pass the script inline or "
                                  "scriptPath" % name])
         try:
-            src = read_file(found)
+            sources.append((read_file(found), origin))
         except Exception as exc:
             return deny(origin, ["saved workflow file %s cannot be read (%s)" % (found, exc)])
-    else:
+    if not sources:
         return deny("no script", ["the Workflow call has no script, scriptPath or name, so there is "
                                   "nothing to check"])
     research_state = [None, data.get("transcript_path")]
-    try:
-        problems = check_script(src, research_state)
-    except ParseError as exc:
-        return deny(origin, ["the script cannot be parsed (%s), and this guard fails closed. Fix the "
-                             "syntax" % exc])
-    if not problems:
-        return 0
-    return deny(origin, problems)
+    for src, origin in sources:
+        try:
+            problems = check_script(src, research_state)
+        except ParseError as exc:
+            return deny(origin, ["the script cannot be parsed (%s), and this guard fails closed. Fix the "
+                                 "syntax" % exc])
+        if problems:
+            return deny(origin, problems)
+    return 0
 
 
 try:

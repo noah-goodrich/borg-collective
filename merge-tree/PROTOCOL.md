@@ -1,5 +1,7 @@
 # PR Control Hub — action-dispatch protocol
 
+> **Historical (2026-10-12).** The browser board this protocol served (`render.py`, `render_graph.py`, `curate.py`, `spine.py`, `gather.py`, `app/`) was retired; nothing in the tree renders or reads `data.json` or `story.json` any more. Kept as the record of the design.
+
 Ratified in [borg#97](https://github.com/noah-goodrich/borg-collective/issues/97). This is the contract between the
 rendered hub (a menu) and the orchestrator (the executor): how a `ref` + recommended action becomes a concrete
 command that actually runs.

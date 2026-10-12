@@ -31,6 +31,9 @@ ALLOWED_TYPES = (
     "borg-collective:borg-verifier",
     "claude-code-guide",
 )
+# Built-in types whose definition pins no effort: they inherit the session's xhigh, so a call must
+# carry an effort. (No model is required: the built-in already runs Haiku.)
+EFFORT_REQUIRED_TYPES = ("claude-code-guide",)
 RESEARCH_PREFIX = "research-tools:"
 EFFORT_OK = ("low", "medium", "high")
 MODEL_RE = re.compile(r"^(sonnet|haiku|claude-sonnet-[a-z0-9._-]+|claude-haiku-[a-z0-9._-]+)$")
@@ -132,7 +135,7 @@ def type_problem(t, research_ok):
     return "subagent type '%s' is not on the allowlist. Use one of: %s" % (t, USE_INSTEAD)
 
 
-def cap_problems(model, effort, need_pin):
+def cap_problems(model, effort, need_pin, agent_type=None):
     """model/effort are None when absent, else the value as given. need_pin: absent is itself a fault."""
     out = []
     if model is None:
@@ -147,6 +150,9 @@ def cap_problems(model, effort, need_pin):
         if need_pin:
             out.append("no effort: an unpinned call inherits the session's xhigh. Pass effort: 'low', "
                        "'medium' or 'high'")
+        elif isinstance(agent_type, str) and agent_type.strip() in EFFORT_REQUIRED_TYPES:
+            out.append("%s pins no effort, so it inherits the session's xhigh. Pass effort: 'low' "
+                       "(or 'medium'/'high')" % agent_type.strip())
     elif isinstance(effort, Dyn):
         out.append("effort must be a string literal (%s); use 'low', 'medium' or 'high'" % effort.why)
     elif not (isinstance(effort, str) and effort.strip().lower() in EFFORT_OK):
@@ -176,14 +182,15 @@ def main():
         model = ti.get("model")
         effort = ti.get("effort")
         problems.extend(cap_problems(None if model in (None, "") else model,
-                                     None if effort in (None, "") else effort, False))
+                                     None if effort in (None, "") else effort, False, st))
     if not problems:
         return 0
     sys.stderr.write("borg agent model guard: Agent call denied.\n")
     for q in problems:
         sys.stderr.write("  - %s\n" % q)
     sys.stderr.write("Policy: orchestrator/drone sessions run Opus xhigh; subagents must be below that "
-                     "(Sonnet/Haiku, effort low/medium/high). Only research-tools:* is exempt, and only "
+                     "(Sonnet/Haiku, effort low/medium/high); claude-code-guide also needs effort low/medium/high. "
+                     "Only research-tools:* is exempt, and only "
                      "after a research-tools skill/command ran. Guide: docs/agent-routing.md. "
                      "Kill switch: BORG_AGENT_MODEL_GUARD=0.\n")
     return 2

@@ -18,17 +18,6 @@ log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] $*" >> "$LOG" }
 
 mkdir -p "$LOG_DIR"
 
-for dep in fswatch jq osascript; do
-    command -v "$dep" &>/dev/null || { log "ERROR: $dep not found in PATH"; exit 1 }
-done
-
-[[ -f "$HOME/.claude/lib/borg-hooks.sh" ]] || { log "ERROR: lib/borg-hooks.sh not found (run borg setup)"; exit 1 }
-source "$HOME/.claude/lib/borg-hooks.sh"
-
-[[ -f "$REGISTRY" ]] || { log "ERROR: registry not found: $REGISTRY"; exit 1 }
-
-log "started. watching $REGISTRY"
-
 typeset -A last_status
 
 fire() {
@@ -41,10 +30,13 @@ fire() {
 check() {
     local silent="${1:-}"  # pass any non-empty string to record state without firing
     local lines
-    lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\t\(.value.status // "idle")\t\(.value.tmux_window // "")\t\(.value.notify_origin // "")"' \
+    # Fields are joined with the ASCII unit separator (\u001f), NOT a tab. A tab is IFS whitespace, so
+    # `read` collapses adjacent tabs and an empty tmux_window shifts notify_origin into `window`.
+    # A non-whitespace IFS character keeps empty fields. Order: project, status, window, origin.
+    lines=$(jq -r '.projects // {} | to_entries[] | "\(.key)\u001f\(.value.status // "idle")\u001f\(.value.tmux_window // "")\u001f\(.value.notify_origin // "")"' \
         "$REGISTRY" 2>/dev/null) || return 0
     local -A seen
-    while IFS=$'\t' read -r project proj_status window origin; do
+    while IFS=$'\x1f' read -r project proj_status window origin; do
         seen[$project]=1
         local prev="${last_status[$project]:-}"
         last_status[$project]="$proj_status"
@@ -55,6 +47,21 @@ check() {
         [[ -z "${seen[$key]:-}" ]] && unset "last_status[$key]"
     done
 }
+
+# Test seam: tests/notifyd.bats sources this file with BORG_NOTIFYD_LIB_ONLY=1 to get log/fire/check
+# without the dependency probes, the registry requirement or the fswatch loop below.
+[[ -n "${BORG_NOTIFYD_LIB_ONLY:-}" ]] && return 0
+
+for dep in fswatch jq osascript; do
+    command -v "$dep" &>/dev/null || { log "ERROR: $dep not found in PATH"; exit 1 }
+done
+
+[[ -f "$HOME/.claude/lib/borg-hooks.sh" ]] || { log "ERROR: lib/borg-hooks.sh not found (run borg setup)"; exit 1 }
+source "$HOME/.claude/lib/borg-hooks.sh"
+
+[[ -f "$REGISTRY" ]] || { log "ERROR: registry not found: $REGISTRY"; exit 1 }
+
+log "started. watching $REGISTRY"
 
 # Silent initial snapshot — record current state without firing to avoid startup floods
 check silent

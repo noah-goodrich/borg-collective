@@ -22,7 +22,7 @@ Two independent tools that compose:
 - **borg** — Session coordination, recommendations, boundaries. Runs on host.
 - **drone** — Container lifecycle, tmux windows, pane layouts. Forked from dev.sh. Runs on host.
 
-## Current State (v2, release v0.9.0)
+## Current State (v2, release v0.9.3)
 
 ### Implemented
 - Core borg CLI: init, claude, next, link, switch, scan, add, rm, help, and the
@@ -42,14 +42,14 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (15): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (17): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
-  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
+  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
-- Skills (16): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
-  and 10 more (full list under Files below)
-- Agents (5, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
-  borg-reviewer, borg-scout (routing guide: docs/agent-routing.md)
+- Skills (17): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
+  pane, and 10 more (full list under Files below)
+- Agents (6, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
+  borg-reviewer, borg-scout, borg-verifier (routing guide: docs/agent-routing.md)
 - Usage guardian: 85% checkpoint sweep (bin/borg-usage-watch) + `borg-dispatch-guard.sh`
   >=92% hard-stop veto on new Agent/Workflow dispatch — both fail-open, dispatch-guard is
   default-OFF (`BORG_USAGE_HALT_ENABLED=1` to arm)
@@ -189,10 +189,12 @@ hooks/
     borg-workflow-model-guard.sh  PreToolUse (Workflow) → every agent() must pass the same allowlist/caps (fail-closed)
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
+    borg-verifier-guard.sh  PreToolUse (Bash) → verifier: git/gh reads
+    borg-resume-hook.sh     Events → borg-resume ledger (append-only)
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
     tool-count-nudge.sh     PostToolUse → review reminder every 75 tool calls
-skills/ (16)
+skills/ (17)
     adhd-guardrails/        Cognitive load guardrails (always active)
     borg-plan/              Project planning + Collective review
     borg-assimilate/        Shipping checklist + Collective review + execution
@@ -209,12 +211,14 @@ skills/ (16)
     fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
     no-unnecessary-read-perms/  Suppress redundant read-permission prompts (always active)
     simplify/               Review session-touched code for reuse/quality/efficiency, then fix
-agents/ (5, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
+    pane/                   Split the current tmux pane in a given direction
+agents/ (6, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
     borg-nanoprobe.md       Default worker: one discrete unit of work, manages its own worktree
     borg-grunt.md           Narrow mechanical task executor
     borg-researcher.md      Read-heavy investigation/research subagent
     borg-reviewer.md        Independent review/verdict subagent
     borg-scout.md           Lightweight recon/discovery subagent
+    borg-verifier.md        Read-only pre-merge evaluator (PASS/FAIL)
 install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
 lib/launchd-label.zsh       THE launchd label resolver (see "launchd labels" under Key Patterns)
 launchd/                    Templates; Label is `{{LABEL}}`, installed as <label>.plist
@@ -401,6 +405,7 @@ docs/
   Lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (a `SubagentStop` hook) which appends one
   JSONL line per completion to `~/.config/borg/agents.jsonl` (`id`, `agent_type`, `transcript_path`,
   `summary` from `last_assistant_message`, hard-coded `status: "completed"`, `finished_at`, `cwd`).
+  Claude Code internal agents (empty `agent_type`) are skipped by the `".+"` matcher and an in-hook guard.
   Inspect runs with `borg nanoprobes` (alias `np`) and pull transcripts with
   `borg nanoprobe-log <id-prefix>`. The agent file installs to `~/.claude/agents/borg-nanoprobe.md`
   via `borg setup`, where both Claude Code and Cortex Code discover it.
@@ -752,3 +757,4 @@ docs/
   contents, or an ambient identity, verify the ASSUMPTION on the CI platform, not just the assertion
   on your own machine — reproduce it in a container matching the runner (including the binary you're
   trying to hide) before trusting a green run.
+- **macOS `/bin/bash` 3.2: a failed `source` is fatal under `set -e`, even inside `{ ...; } || true`**: `borg-nanoprobe-log.sh` (`set -euo pipefail`) exited 1 BEFORE appending its row on a machine with no `~/.claude/lib` (plugin installed, `borg setup` never run) or with `borg-hooks.sh` present but its sibling `reaper.sh` missing. The other two log hooks (`borg-memory-read-log.sh`, `borg-prefer-tool-log.sh`) lack `-e`, so the change there is hardening. Run best-effort sources in a subshell, `( source ... && ... ) >/dev/null 2>&1 || true`; the three log hooks now do. When `reaper.sh` is missing the rotation is skipped for that call, but the row is still appended. Linux bash 4+ does not reproduce it, so only the contract-macos lane exercises `tests/hook_rotate_subshell.bats`, which must invoke `/bin/bash hook` explicitly (the `env bash` shebang resolves to Homebrew bash) and must reset `~/.claude/lib`, which `setup_temp_dirs` pre-populates.

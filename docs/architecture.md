@@ -59,7 +59,7 @@ This prevents corruption from concurrent hook executions.
 
 The repo has grown past a size where a full file listing stays accurate for long — run
 `ls hooks/ lib/ skills/ agents/ launchd/ bin/` for the current, complete inventory. As of this
-writing: **15 hooks**, **~14 lib files**, **16 skills**, **5 agents** (+ `docs/agent-routing.md`),
+writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/agent-routing.md`),
 **4 launchd plists**, plus `bin/` pollers (`borg-usage-watch`, `borg-cortex-watch`,
 `borg-vinculum-watch`, `borg-notifyd`, `run-in`).
 
@@ -94,6 +94,10 @@ writing: **15 hooks**, **~14 lib files**, **16 skills**, **5 agents** (+ `docs/a
         borg-agent-model-guard.sh  PreToolUse (Agent|Task) → subagent_type allowlist + model/effort caps
         borg-workflow-model-guard.sh  PreToolUse (Workflow) → agent() allowlist/caps, fail-closed
         borg-nanoprobe-log.sh   SubagentStop → append nanoprobe completion to agents.jsonl
+        borg-verifier-guard.sh  PreToolUse (Bash) → verifier: git/gh reads
+        borg-resume-hook.sh     Events → borg-resume ledger (append-only)
+        borg-memory-read-log.sh PostToolUse (Read) → logs memory reads
+        borg-prefer-tool-log.sh PostToolUse (Bash) → logs prefer-tool bypasses
         bash-guard.sh, borg-supabase-guard.sh, notify.sh,
         pre-commit-remind.sh, tool-count-nudge.sh  Smaller guardrail/reminder hooks
     skills/
@@ -349,7 +353,7 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | break-glass | Manual | Explicit, logged override for a normally-blocked action |
 | simplify / fable-reviewer / no-unnecessary-read-perms | Manual / auto | Code + permission hygiene guardrails |
 
-The full, current roster (16 skills as of this writing) is always `ls skills/` — this table lists
+The full, current roster (17 skills as of this writing) is always `ls skills/` — this table lists
 role, not an exhaustive spec.
 
 ---
@@ -386,8 +390,8 @@ I last looked?" across every registered project.
 **`recon` is not a human-facing verb.** It retired 2026-08-26 (AC1 of the one-front-door plan):
 `borg link` folds the same fan-out into its own document, so a human never needs to run the sweep
 directly. Running bare `borg recon` dies with a pointer at `borg link`. What survives is the
-**machine surface** — `borg recon --json` (consumed by the `/borg-recon` skill and
-`merge-tree/gather.py`) and `borg recon --adapters` — because the engine was never the thing AC1
+**machine surface** — `borg recon --json` (consumed by the `/borg-recon` skill; the
+`merge-tree/gather.py` consumer retired with the browser board) and `borg recon --adapters` — because the engine was never the thing AC1
 asked to remove. The gate lives in `borg_core/recon/cli.py::main()`, guarding the `_run()` call on
 `args.json_only or args.adapters` — the module that implements the command owns the invariant.
 `borg.zsh`'s `recon)` arm is a pure pass-through, plus the two things `argparse` does not do

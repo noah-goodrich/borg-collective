@@ -1,5 +1,7 @@
 # PR Control Hub — `data.json` schema (v2, ratified)
 
+> **Browser board retired 2026-10-12.** The `data.json` and `story.json` sections below describe a pipeline (`gather.py`, `curate.py`, `spine.py`, `render.py`, `render_graph.py`) that no longer exists and are kept as history. The live part of this file is "Program manifests (`<project>/.borg/chains/*.json`)", which `borg_core/manifest` and `coordinator.py` still honour.
+
 Ratified in [borg#97](https://github.com/noah-goodrich/borg-collective/issues/97) through a joint design thread
 between the work-machine and personal-machine orchestrators. This document is the contract; `render.py` is a pure
 consumer of it.
@@ -13,8 +15,7 @@ it lets adapters stay dumb, curation stay re-runnable, and durable reasoning sur
 |---|---|---|---|
 | PR / issue / Jira state | GitHub, Jira via recon | Ephemeral — re-gathered per run | Source of truth for *now*. |
 | `data.json` | Gather + curation pass | Disposable, rebuildable | A curated **projection**, never hand-edited. |
-| `story.json` **skeleton** | `spine.py`, from the gather | Disposable | Grouping, membership, `blocked_by`, state. |
-| `story.json` **judgment** | hand-maintained (`story.overlay.json`) | Durable | `priority`, `summary`, `title`. |
+| `story.json` (retired) | was `spine.py` plus a hand overlay | Gone | See "The spine" below. |
 | Annotations | hand/tool-maintained, machine-local | Durable, machine-scoped | The *why*. See "Annotations" below. |
 
 (Recon fan-out reference: [borg#95](https://github.com/noah-goodrich/borg-collective/issues/95).
@@ -134,60 +135,9 @@ add fields the gather didn't produce). A `history[]` list, if present, renders a
 - No GitHub Project mirroring logic lives in `render.py` — that's a separate, optional push path
   (hub-as-source, board-as-mirror) discussed in borg#97 but not part of this schema.
 
-## The spine (`story.json`) — provenance
+## The spine (`story.json`) — retired
 
-**This section exists because the answer used to be "nobody knows".** `story.json` had no generator: nothing in
-the repo wrote it, `render_graph.py` only read it, and neither this file nor `PROTOCOL.md` said where it came
-from. It was authored by hand in a session on **2026-07-28T16:15Z** and froze there. Thirteen days later it had
-never heard of `infra-repo#1102`/`#1103` — the exact PRs an orchestrator session then spent 51 seconds of
-model time reconstructing by hand. A stale spine is worse than no spine, because it looks authoritative.
-
-    gather.raw.json ──> spine.py ──> story.json
-                            ^
-                  story.overlay.json (judgment)
-
-Refresh it with **`make spine`** (or `python3 merge-tree/spine.py`).
-
-### What is derived vs. what a human writes
-
-| Derived every run (skeleton) | Persisted in the overlay (judgment) |
-|---|---|
-| project `id` (slug of the gather's project name) | project `name`, `priority`, `summary` |
-| workstream membership, from `stacked`/`apex` edges | workstream `title`, `next_action` |
-| workstream `state`, from member item states | project/workstream `owner` |
-| `blocked_by`, from `blocks` edges | |
-
-**Chain edges group; blocking edges do not.** `stacked`/`apex` mean "these items are one unit of work", so they
-merge into a workstream. `blocks` is a dependency *between* workstreams — merging on it would collapse a blocker
-into its own victim and lose the dependency. Items in no chain become single-item workstreams, which is a real
-answer: a standalone PR is a workstream of one.
-
-### The overlay's stable keys
-
-Projects key on the **slug** of the gather's project name (`"GRP - Project alpha"` → `grp-project-alpha`);
-`slugify` is idempotent so re-slugging never drifts. Workstreams key on their **lexicographically smallest member
-ref**.
-
-That workstream key has a **known limit, stated rather than hidden**: if the anchor item leaves the workstream,
-the key changes and that workstream's judgment is orphaned rather than migrated. Hashing the full member set
-would be worse — it changes whenever *any* member joins or leaves, which happens constantly. Anchoring on one ref
-means judgment survives the common case (a PR joins an existing chain) and is lost only in the rarer one.
-Orphaned judgment is **reported**, never silently dropped.
-
-### Two timestamps, on purpose
-
-`meta.generated_at` ages the **skeleton**; each project's `summary_authored_at` ages its **prose** independently.
-The summary is simultaneously the highest-value and the most perishable content in the spine, so a fresh skeleton
-wrapped around two-week-old prose must be detectable as exactly that rather than reading as current.
-
-### Orphan reporting
-
-Every run reports four categories, because they fail differently:
-
-- `unknown_projects` / `unknown_workstreams` — **new** structure the overlay has never seen. Rendering these
-  silently with blank prose is how `infra-repo#1102` stayed invisible.
-- `stale_projects` / `stale_workstreams` — judgment whose anchor is gone. Prose someone wrote that no longer
-  attaches to anything, surfaced before it is lost.
+`story.json` was the persisted grouping the browser board read, generated by `spine.py` from `gather.py`s raw gather plus a hand-kept `story.overlay.json` of judgment. Both generators and every reader were deleted 2026-10-12 with the board (see docs/plans/assimilated/2026-10-03-retire-the-merge-tree-browser-board.md). Nothing under `borg_core/` ever read it; `borg link` computes its grid from the manifests on every invocation. The design record for the spine survives in docs/plans/severed/ and docs/plans/assimilated/.
 
 ## Program manifests (`<project>/.borg/chains/*.json`) — borg's declared edges
 
@@ -196,7 +146,7 @@ tool's file format; borg must behave identically on a machine that has no other 
 
 ### Why it exists
 
-`gather.derive_stacked_edges` recovers `stacked` edges from branch topology — a stacked PR's base branch is its
+`gather.derive_stacked_edges` (deleted with the board; `core.derive_edges` is the live derivation) recovers `stacked` edges from branch topology — a stacked PR's base branch is its
 parent's head branch. But **a base branch is a repo-local name**, so every derived edge is repo-local by
 construction. The cross-*repo* case, which is the entire point of the graph, is not derivable from any mechanical
 signal: nothing in git or the GitHub API says `platform#834` must merge before `warehouse#302`. That ordering exists

@@ -813,3 +813,23 @@ def test_deleted_cwd_degrades_to_orchestrator_not_a_wrong_repository(isolated_en
     scope = core.scope_for("", "/Users/noah/dev", paths)
     assert scope["kind"] == "orchestrator"
     assert scope["repository"] is None
+
+
+# ── checkpoint-derived summary ───────────────────────────────────────────────
+
+
+def test_read_checkpoint_summary_reads_the_newest_checkpoint_of_the_group(isolated_env):
+    parent = _project(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", "**tl;dr** — Old news.\n")])
+    worktree = _project(isolated_env, "bc-wt", checkpoints=[("2026-09-19-1200.md", "**tl;dr** — The latest.\n")])
+    assert shell.read_checkpoint_summary([("bc", parent), ("bc-wt", worktree)]) == "The latest."
+
+
+def test_read_checkpoint_summary_is_none_without_a_checkpoint(isolated_env):
+    assert shell.read_checkpoint_summary([("p", _project(isolated_env, "p"))]) is None
+    assert shell.read_checkpoint_summary([("p", None)]) is None
+
+
+def test_read_checkpoint_summary_reads_below_the_twenty_line_head(isolated_env):
+    body = "# cp\n" + "filler\n" * 30 + "## Accomplished\n\n- Found it far down.\n"
+    path = _project(isolated_env, "p", checkpoints=[("2026-09-18-1200.md", body)])
+    assert shell.read_checkpoint_summary([("p", path)]) == "Found it far down."

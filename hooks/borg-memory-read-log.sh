@@ -43,7 +43,8 @@ OLD_LOG="${XDG_CONFIG_HOME:-$HOME/.config}/borg/memory-hits.log"
 { [ -e "$STATE_DIR/memory-hits.log" ] || [ ! -f "$OLD_LOG" ] || cp "$OLD_LOG" "$STATE_DIR/memory-hits.log"; } 2>/dev/null || true
 
 # Retention: cap at 1 MiB, one previous generation; memory-hits-report reads .1 then the live file.
-{ source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "${STATE_DIR}/memory-hits.log"; } >/dev/null 2>&1 || true
+# bash 3.2: a failed `source` is fatal under set -e even inside `{ }`/`|| true`; a subshell contains it.
+( source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "${STATE_DIR}/memory-hits.log" ) >/dev/null 2>&1 || true
 
 { printf '%s\t%s\t%s\t%s\t%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SESSION_ID" "$PROJECT_DIR" "$FILE_NAME" "$BYTES" \

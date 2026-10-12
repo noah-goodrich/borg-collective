@@ -24,7 +24,7 @@ setup() {
 #!/bin/sh
 printf '%s\n' "$*" >> "$TMUX_STUB_LOG"
 case "$1" in
-    display) printf '%%12\t41200\tborg\texample\t3\t1\t/work/example\n' ;;
+    display) printf '%%12\t%s\tborg\texample\t3\t1\t/work/example\n' "${FAKE_PANE_PID:-41200}" ;;
 esac
 exit 0
 STUB
@@ -222,11 +222,11 @@ payload() {
 # ---------- tmux pane facts ----------
 
 @test "pane: session_start with TMUX_PANE records pane facts and sets @borg_sid" {
-    run bash -c "PATH='$FAKEBIN':\$PATH TMUX_PANE=%12 '$BR' record session_start <<'EOF'
+    run bash -c "PATH='$FAKEBIN':\$PATH TMUX_PANE=%12 TMUX=/tmp/sock,1,0 FAKE_PANE_PID=$$ '$BR' record session_start <<'EOF'
 $(payload)
 EOF"
     [ "$status" -eq 0 ]
-    run jq -e '.tmux.pane_id == "%12" and .tmux.pane_pid == 41200 and .tmux.session == "borg" and .tmux.window == "example" and .tmux.window_index == 3 and .tmux.pane_index == 1 and .tmux.project_dir == "/work/example" and .in_container == false' "$REG"
+    run jq -e --argjson pp "$$" '.tmux.pane_id == "%12" and .tmux.pane_pid == $pp and .tmux.session == "borg" and .tmux.window == "example" and .tmux.window_index == 3 and .tmux.pane_index == 1 and .tmux.project_dir == "/work/example" and .in_container == false' "$REG"
     [ "$status" -eq 0 ]
     run jq -e '(.claude_pid | type) == "number" and (.claude_start | type) == "string" and (.claude_start | length) > 0' "$REG"
     [ "$status" -eq 0 ]
@@ -250,6 +250,29 @@ $(payload)
 EOF"
     [ "$status" -eq 0 ]
     [ ! -e "$TMUX_STUB_LOG" ]
+}
+
+@test "pane: claude_start is trimmed of leading and trailing whitespace" {
+    printf '#!/bin/sh\nprintf "  Mon Oct 12 06:00:00 2026   \\n"\n' >"$FAKEBIN/ps"
+    chmod +x "$FAKEBIN/ps"
+    run bash -c "PATH='$FAKEBIN':\$PATH TMUX_PANE=%12 '$BR' record session_start <<'EOF'
+$(payload)
+EOF"
+    [ "$status" -eq 0 ]
+    run jq -e '.claude_start == "Mon Oct 12 06:00:00 2026"' "$REG"
+    [ "$status" -eq 0 ]
+}
+
+@test "record: an empty or whitespace agent_id counts as absent" {
+    local v
+    mkdir -p "${EV%/*}"
+    for v in "" "   "; do
+        : >"$EV"
+        run bash -c "printf '%s' '{\"session_id\":\"$SID\",\"agent_id\":\"$v\"}' | '$BR' record agent_stop"
+        [ "$status" -eq 0 ]
+        run jq -e '.scope == "main" and .agent_id == null' "$EV"
+        [ "$status" -eq 0 ]
+    done
 }
 
 @test "container: BORG_IN_CONTAINER=1 records no pane and no pid, never calls tmux" {

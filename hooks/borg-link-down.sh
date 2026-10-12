@@ -51,6 +51,7 @@ ROUTING_CARD="AGENT ROUTING — this session runs Opus (xhigh); every subagent i
   Agent tool, subagent_type (deny-by-default allowlist): borg-collective:borg-scout (read-only search),
     -grunt (specified edit/run), -nanoprobe (one task, judgment), -researcher (web, one track),
     -reviewer (blind review), -verifier, claude-code-guide.
+  claude-code-guide requires effort low/medium/high (it pins none; bare spawns are denied).
   Caps: model absent or sonnet/haiku; effort absent or low/medium/high. Denied: no subagent_type
     (fork), general-purpose, Explore, Plan, claude, anything unlisted.
   Workflow agent(): EVERY call sets an allowlisted agentType, or model sonnet/haiku AND effort

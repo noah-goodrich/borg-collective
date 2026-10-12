@@ -6,7 +6,7 @@
 #
 # Usage:
 #   drone feature <project> <branch>  Create worktree + branch, launch Claude (Boris workflow)
-#   drone up [project]           Start container + create tmux window
+#   drone up [project] [--resume <sid>]  Start container + create tmux window (relaunch claude --resume)
 #   drone down [project]         Stop container + remove tmux window
 #   drone claude [project]       Launch Claude Code in project window
 #   drone sh [project]           Shell into project container
@@ -40,6 +40,8 @@ DRONE_SCRIPT_DIR="${0:A:h}"
 # Host-side lifecycle hooks (.devcontainer/borg-hooks/{pre-up,post-down}.sh).
 source "$DRONE_SCRIPT_DIR/lib/drone-hooks.zsh"
 source "$DRONE_SCRIPT_DIR/lib/state-root.zsh"
+# borg-resume ledger layout (borg_resume_dir, borg_resume_valid_sid): the same definitions the hooks use.
+source "$DRONE_SCRIPT_DIR/lib/borg/resume-paths.sh"
 
 _run_pre_up()    { run_borg_hook "$1" "$2" pre-up.sh strict || die "pre-up.sh failed for $2"; }
 _run_post_down() { run_borg_hook "$1" "$2" post-down.sh lenient; }
@@ -240,18 +242,27 @@ _drone_apply_window_color() {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-get_project_container() {
-    local dir="${1:-$(pwd)}"
-    local name="${dir##*/}"
-    docker ps --filter "label=com.docker.compose.project=$name" \
-              --filter "label=dev.role=app" \
-              --format '{{.Names}}' 2>/dev/null | head -1 \
-    || docker compose -p "$name" -f "$dir/$COMPOSE_FILE" ps --format '{{.Names}}' 2>/dev/null | head -1
+# The label value docker compose stamps for `-p <name>` (compose-go project name normalization):
+# lowercased, only [a-z0-9_-] kept. A name that normalizes to empty matches nothing.
+_compose_project_label() {
+    local n="${(L)1}"
+    print -r -- "${n//[^a-z0-9_-]/}"
 }
 
+# Both lookups take the PROJECT name (the one passed to `docker compose -p`), never the folder basename.
+# Usage: get_project_container <project_name> <project_dir>
+get_project_container() {
+    local name
+    name=$(_compose_project_label "$1")
+    docker ps --filter "label=com.docker.compose.project=$name" \
+              --filter "label=dev.role=app" \
+              --format '{{.Names}}' 2>/dev/null | head -1
+}
+
+# Usage: get_service_name <project_name>
 get_service_name() {
-    local dir="${1:-$(pwd)}"
-    local name="${dir##*/}"
+    local name
+    name=$(_compose_project_label "$1")
     docker ps --filter "label=com.docker.compose.project=$name" \
               --filter "label=dev.role=app" \
               --format '{{.Label "com.docker.compose.service"}}' 2>/dev/null | head -1
@@ -359,7 +370,7 @@ run_post_create_command() {
     [[ -n "$post_cmd" ]] || return 0
     local compose="$project_dir/$COMPOSE_FILE"
     local service
-    service=$(get_service_name "$project_dir")
+    service=$(get_service_name "$project_name")
     _read_devcontainer_exec_config "$project_dir"
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
@@ -383,7 +394,7 @@ run_post_start_command() {
     dbg "run_post_start_command: $post_cmd"
     local compose="$project_dir/$COMPOSE_FILE"
     local service
-    service=$(get_service_name "$project_dir")
+    service=$(get_service_name "$project_name")
     _read_devcontainer_exec_config "$project_dir"
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
@@ -433,12 +444,12 @@ attach_or_switch() {
 }
 
 wait_for_container() {
-    local dir="$1"
+    local name="$1" dir="$2"
     dbg "wait_for_container: polling (max 30s)..."
     local i=0 max=30
     while (( i < max )); do
         local c
-        c=$(get_project_container "$dir")
+        c=$(get_project_container "$name" "$dir")
         if [[ -n "$c" ]]; then
             dbg "wait_for_container: found '$c' after ${i}s"
             echo "$c"
@@ -451,10 +462,37 @@ wait_for_container() {
     die "Timed out waiting for container to start after ${max}s."
 }
 
+# The claude launch line for a project pane. An optional session id appends --resume <sid>; callers
+# validate it first (borg_resume_valid_sid), so it never needs quoting here.
+_drone_claude_cmd() {
+    local cmd="claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}"
+    [[ -n "${1:-}" ]] && cmd="$cmd --resume $1"
+    print -r -- "$cmd"
+}
+
 # ── drone up ─────────────────────────────────────────────────────────────────
 
 cmd_up() {
-    _drone_resolve "${1:-}"
+    # Usage: drone up [project] [--resume <sid>]   (the flag may come before or after the project)
+    local _arg_project="" resume_sid="" _seen_resume=0
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --resume)
+                [[ $# -ge 2 ]] || die "Usage: drone up [project] --resume <session-id>"
+                resume_sid="$2"; _seen_resume=1; shift 2 ;;
+            --resume=*)
+                resume_sid="${1#--resume=}"; _seen_resume=1; shift ;;
+            -*) die "drone up: unknown option '$1'" ;;
+            *)  _arg_project="$1"; shift ;;
+        esac
+    done
+    if (( _seen_resume )); then
+        [[ "$resume_sid" != -* ]] && borg_resume_valid_sid "$resume_sid" || die "drone up: invalid session id for --resume"
+    fi
+    local claude_cmd
+    claude_cmd=$(_drone_claude_cmd "$resume_sid")
+
+    _drone_resolve "$_arg_project"
     local project_name="$_proj_name"
     local project_dir="$_proj_dir"
     local compose="$project_dir/$COMPOSE_FILE"
@@ -478,12 +516,13 @@ cmd_up() {
 
         if [[ -n "$live" ]]; then
             info "Project '$project_name' already open."
+            [[ -n "$resume_sid" ]] && warn "window already open; --resume ignored (close it first)"
             attach_or_switch "$live"
             return
         fi
 
         # Host-first: left pane runs claude, right pane is a shell at project_dir.
-        create_2pane_window "$wname" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" "$project_dir" ""
+        create_2pane_window "$wname" "$claude_cmd" "$project_dir" ""
         tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
         _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
         _drone_register "$project_dir" "$project_name" "$wname"
@@ -496,6 +535,10 @@ cmd_up() {
     # ── Devcontainer path ─────────────────────────────────────────────────────
 
     ensure_postgres
+
+    # The compose files bind-mount the host resume ledger. Create it first: a missing bind source is
+    # created by Docker as root, which the host-side watcher could not then write.
+    mkdir -p "$(borg_resume_dir)" 2>/dev/null || true
 
     # Detect if devcontainer definition changed since last build
     local _dc_hash _dc_hash_dir _dc_hash_file _build_flag=""
@@ -519,7 +562,7 @@ cmd_up() {
             # Fall through to create new window
         else
             local container
-            container=$(get_project_container "$project_dir")
+            container=$(get_project_container "$project_name" "$project_dir")
             if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
                 if [[ -n "$_build_flag" ]]; then
                     info "Rebuilding container for $project_name..."
@@ -529,13 +572,14 @@ cmd_up() {
                 run_initialize_command "$project_dir"
                 _run_pre_up "$project_dir" "$project_name"
                 docker compose -p "$project_name" -f "$compose" up -d $_build_flag
-                container=$(wait_for_container "$project_dir")
+                container=$(wait_for_container "$project_name" "$project_dir")
                 _save_devcontainer_hash
                 run_post_create_command "$project_name" "$project_dir"
                 run_post_start_command "$project_name" "$project_dir"
                 # Host-side panes are immune to container restart — no re-exec needed.
             fi
             info "Project '$project_name' already running."
+            [[ -n "$resume_sid" ]] && warn "window already open; --resume ignored (close it first)"
             _drone_apply_window_color "$live" "$(_drone_project_color "$project_name")"
             attach_or_switch "$live"
             return
@@ -544,25 +588,25 @@ cmd_up() {
 
     # Create new project window
     local container
-    container=$(get_project_container "$project_dir")
+    container=$(get_project_container "$project_name" "$project_dir")
     if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
         info "Starting containers for $project_name..."
         run_initialize_command "$project_dir"
         _run_pre_up "$project_dir" "$project_name"
         docker compose -p "$project_name" -f "$compose" up -d $_build_flag
-        container=$(wait_for_container "$project_dir")
+        container=$(wait_for_container "$project_name" "$project_dir")
         mkdir -p "$_dc_hash_dir" && [[ -n "$_dc_hash" ]] && echo "$_dc_hash" > "$_dc_hash_file" || true
     fi
 
     local service
-    service=$(get_service_name "$project_dir")
+    service=$(get_service_name "$project_name")
     info "Container: $container  Service: $service"
     run_post_create_command "$project_name" "$project_dir"
     run_post_start_command "$project_name" "$project_dir"
 
     # Host-first: both panes are host shells at $project_dir.
     # Left (Claude) pane auto-launches `claude`; right pane stays as a shell prompt.
-    create_2pane_window "$wname" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" "$project_dir" ""
+    create_2pane_window "$wname" "$claude_cmd" "$project_dir" ""
     tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
     _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
     _drone_register "$project_dir" "$project_name" "$wname"
@@ -576,12 +620,22 @@ cmd_up() {
 
 # ── drone down ────────────────────────────────────────────────────────────────
 
+# Deliberate close: tell borg-resume this project was torn down on purpose. Best-effort and silent; it can never
+# fail the teardown. borg-resume itself honors BORG_RESUME_DISABLE. BORG_RESUME_BIN overrides the binary (tests).
+_drone_mark_closed() {
+    local bin="${BORG_RESUME_BIN:-$DRONE_SCRIPT_DIR/bin/borg-resume}"
+    [[ -x "$bin" ]] || return 0
+    "$bin" mark-closed "$1" "${2:-}" >/dev/null 2>&1 || true
+    return 0
+}
+
 cmd_down() {
     _drone_resolve "${1:-}"
     local project_name="$_proj_name"
     local project_dir="$_proj_dir"
     local compose="$project_dir/$COMPOSE_FILE"
 
+    _drone_mark_closed "$project_name" "$project_dir"
     dbg "cmd_down: project=$project_name dir=$project_dir"
 
     local live
@@ -598,6 +652,9 @@ cmd_down() {
         docker compose -p "$project_name" -f "$compose" down
         _run_post_down "$project_dir" "$project_name"
     fi
+
+    # Second mark: a dying claude may have written its own session_end after the first one (sticky-close rule).
+    _drone_mark_closed "$project_name" "$project_dir"
 
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         local remaining
@@ -638,7 +695,7 @@ _cycle_project() {
     docker compose -p "$project_name" -f "$compose" up -d
 
     local container
-    container=$(wait_for_container "$project_dir")
+    container=$(wait_for_container "$project_name" "$project_dir")
 
     if [[ "$mode" == "rebuild" ]]; then
         local _dc_hash _dc_hash_dir _dc_hash_file
@@ -697,7 +754,7 @@ _cmd_cycle() {
         current_window=$(tmux display-message -p '#W')
         pdir=$(tmux show-option -t "$SESSION:$current_window" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" && -d "$pdir" ]]; then
-            _cycle_project "${pdir##*/}" "$pdir" "$mode"
+            _cycle_project "$(_drone_project_of "$current_window")" "$pdir" "$mode"
             return
         fi
     fi
@@ -837,9 +894,7 @@ cmd_sh() {
     [[ -f "$compose" ]] || die "No $COMPOSE_FILE found in $project_dir"
 
     local service
-    service=$(docker ps --filter "label=com.docker.compose.project=$project_name" \
-                        --filter "label=dev.role=app" \
-                        --format '{{.Label "com.docker.compose.service"}}' 2>/dev/null | head -1)
+    service=$(get_service_name "$project_name")
     [[ -n "$service" ]] || die "No running app container found for $project_name. Run: drone up $project_name"
 
     _read_devcontainer_exec_config "$project_dir"
@@ -880,18 +935,18 @@ cmd_exec() {
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
 
     local container service
-    container=$(get_project_container "$project_dir")
+    container=$(get_project_container "$project_name" "$project_dir")
     if [[ -z "$container" ]]; then
         warn "$project_name: container down — running drone up"
         ensure_postgres
         run_initialize_command "$project_dir"
         _run_pre_up "$project_dir" "$project_name"
         docker compose -p "$project_name" -f "$compose" up -d
-        container=$(wait_for_container "$project_dir")
+        container=$(wait_for_container "$project_name" "$project_dir")
         run_post_create_command "$project_name" "$project_dir"
         run_post_start_command "$project_name" "$project_dir"
     fi
-    service=$(get_service_name "$project_dir")
+    service=$(get_service_name "$project_name")
     [[ -n "$service" ]] || die "$project_name: no app service found"
 
     docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" "$@"
@@ -974,12 +1029,13 @@ cmd_toggle() {
             local pdir
             pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
             if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
-                local container shell service exec_cmd
-                container=$(get_project_container "$pdir") || true
+                local container shell service exec_cmd pname
+                pname=$(_drone_project_of "$wname")
+                container=$(get_project_container "$pname" "$pdir") || true
                 if [[ -n "$container" ]]; then
                     shell=$(get_shell "$container")
-                    service=$(get_service_name "$pdir")
-                    exec_cmd=$(build_exec_cmd "${pdir##*/}" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
+                    service=$(get_service_name "$pname")
+                    exec_cmd=$(build_exec_cmd "$pname" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
                     tmux send-keys -t "$side" "$exec_cmd" Enter
                 fi
             elif [[ -n "$pdir" ]]; then
@@ -1044,12 +1100,13 @@ cmd_pane() {
     local pdir
     pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
     if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
-        local container shell service exec_cmd
-        container=$(get_project_container "$pdir") || true
+        local container shell service exec_cmd pname
+        pname=$(_drone_project_of "$wname")
+        container=$(get_project_container "$pname" "$pdir") || true
         if [[ -n "$container" ]]; then
             shell=$(get_shell "$container")
-            service=$(get_service_name "$pdir")
-            exec_cmd=$(build_exec_cmd "${pdir##*/}" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
+            service=$(get_service_name "$pname")
+            exec_cmd=$(build_exec_cmd "$pname" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
             tmux send-keys -t "$new_pane" "$exec_cmd" Enter
         fi
     elif [[ -n "$pdir" ]]; then
@@ -1365,6 +1422,8 @@ services:
       - dev.role=app
     volumes:
       - ~/.config/borg:/home/dev/.config/borg:cached
+      # borg-resume ledger (append-only events from in-container hooks). Only this dir, never ~/.claude.
+      - ~/.local/state/borg/resume:/home/dev/.local/state/borg/resume
     profiles:
       - borg
 
@@ -1431,6 +1490,9 @@ cmd_help() {
   COMMANDS
     feature <project> <branch>  Create worktree + branch, start window, launch Claude
     up [project]         Start container + create tmux window (uses $PWD if no arg)
+    up [project] --resume <sid>
+                         Same, relaunching claude --resume <sid>. Compose files bind-mount the host
+                         resume ledger; an existing drone gets the mount only after drone down + up
     down [project]       Stop container + remove tmux window
     claude [project]     Launch Claude Code in project window (runs drone up if needed)
     cortex [project]     Launch Cortex Code in project window (runs drone up if needed)
@@ -1475,7 +1537,7 @@ dbg "dispatch: SESSION=$SESSION"
 
 case "${1:-}" in
     feature)    cmd_feature "${2:-}" "${3:-}" ;;
-    up)         cmd_up "${2:-}" ;;
+    up)         shift; cmd_up "$@" ;;
     down)       cmd_down "${2:-}" ;;
     claude)     cmd_claude "${2:-}" ;;
     cortex)     cmd_cortex "${2:-}" ;;

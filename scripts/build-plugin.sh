@@ -282,6 +282,9 @@ _build_self_contained_hook "$HOOKS_SRC/borg-link-up.sh"      "$HOOKS_DST/borg-li
 _build_self_contained_hook "$HOOKS_SRC/borg-notify.sh"       "$HOOKS_DST/borg-notify.sh"       1
 _build_self_contained_hook "$HOOKS_SRC/borg-plan-promote.sh" "$HOOKS_DST/borg-plan-promote.sh" 1
 # borg-nanoprobe-log.sh has no lib source — copy as-is with guard.
+# Its SubagentStop matcher below is ".+" (JSON cannot hold this comment): Claude Code internal agents fire
+# SubagentStop with agent_type "", and a regex matcher never matches an empty agent_type, so the hook never
+# starts for them.
 _build_self_contained_hook "$HOOKS_SRC/borg-nanoprobe-log.sh" "$HOOKS_DST/borg-nanoprobe-log.sh" 0
 # borg-dispatch-guard.sh is self-contained (reads samples file only) — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-dispatch-guard.sh" "$HOOKS_DST/borg-dispatch-guard.sh" 0
@@ -291,6 +294,9 @@ _build_self_contained_hook "$HOOKS_SRC/borg-workflow-model-guard.sh" "$HOOKS_DST
 # borg-agent-model-guard.sh is self-contained (python3, stdin JSON + transcript only) — copy as-is.
 _build_self_contained_hook "$HOOKS_SRC/borg-agent-model-guard.sh" "$HOOKS_DST/borg-agent-model-guard.sh" 0
 _build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-supabase-guard.sh" 0
+# borg-verifier-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-verifier.md
+# grants Bash, and this hook is what makes that grant read-only; tests/verifier_guard.bats pins the pair.
+_build_self_contained_hook "$HOOKS_SRC/borg-verifier-guard.sh" "$HOOKS_DST/borg-verifier-guard.sh" 0
 # borg-memory-read-log.sh is self-contained (parses stdin JSON only) — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-memory-read-log.sh" "$HOOKS_DST/borg-memory-read-log.sh" 0
 # borg-prefer-tool-log.sh is NOT self-contained: it delegates to borg_core.extensions.cli rather
@@ -299,6 +305,14 @@ _build_self_contained_hook "$HOOKS_SRC/borg-memory-read-log.sh" "$HOOKS_DST/borg
 # present — so in a plugin-only install with no borg_core it does not run, and an empty
 # prefer-tool.jsonl there means "not instrumented", not "no bypasses". Copied as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-prefer-tool-log.sh" "$HOOKS_DST/borg-prefer-tool-log.sh" 0
+
+# borg-resume-hook.sh is a self-contained forwarder (sources nothing). Copied as-is and WITHOUT the "borg on PATH"
+# guard the other hooks get: drone containers run it too, and it already no-ops when ~/.claude/bin/borg-resume is
+# absent. It is fail-open and prints nothing.
+_copy_if_changed "$HOOKS_SRC/borg-resume-hook.sh" "$HOOKS_DST/borg-resume-hook.sh" "hooks/borg-resume-hook.sh"
+if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-resume-hook.sh" ]]; then
+    chmod +x "$HOOKS_DST/borg-resume-hook.sh"
+fi
 
 # ── Phase 3: Agent definition ─────────────────────────────────────────────────
 
@@ -342,6 +356,7 @@ _info "Phase 4: hooks.json"
 # bash-guard and pre-commit-remind fire only on Bash tool calls.
 # borg-plan-promote fires on Edit/Write/NotebookEdit.
 # All others fire on every invocation of their event (matcher: "").
+# borg-resume-hook.sh (S4) is registered for 8 events, timeout 5, and never on Stop or UserPromptSubmit.
 HOOKS_JSON='{
   "hooks": {
     "SessionStart": [
@@ -352,6 +367,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-link-down.sh",
             "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" SessionStart",
+            "timeout": 5
           }
         ]
       }
@@ -396,6 +421,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-notify.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "idle_prompt|permission_prompt|quota_auto_resume_.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" Notification",
+            "timeout": 5
           }
         ]
       }
@@ -470,6 +505,26 @@ HOOKS_JSON='{
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-verifier-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" PreToolUse",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -502,16 +557,72 @@ HOOKS_JSON='{
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" PostToolUse",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SubagentStop": [
       {
-        "matcher": "",
+        "matcher": ".+",
         "hooks": [
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-nanoprobe-log.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" SubagentStop",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" SubagentStart",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" StopFailure",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" SessionEnd",
+            "timeout": 5
           }
         ]
       }
