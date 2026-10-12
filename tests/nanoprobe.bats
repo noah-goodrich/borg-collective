@@ -199,3 +199,24 @@ _empty_branch_repo() {
     [ "$(jq -r .id "$LOG_FILE")" = "agent-log12345" ]
     [ "$(jq -r .evidence_found "$LOG_FILE")" = "false" ]
 }
+
+# ─── model + effort recorded at stop time (survives transcript pruning) ──────
+
+_probe_input_tpath() {
+    printf '{"agent_id":"agent-me1","agent_type":"borg-nanoprobe","agent_transcript_path":"%s","last_assistant_message":"done","cwd":"%s"}' \
+        "$1" "${BATS_TEST_TMPDIR}"
+}
+
+@test "nanoprobe log records model and effort from the transcript's first assistant entry" {
+    run bash "$BORG_NANOPROBE_LOG" <<< "$(_probe_input_tpath "${BATS_TEST_DIRNAME}/fixtures/nanoprobes/with-effort.jsonl")"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .model "$LOG_FILE")" = "claude-sonnet-5-5" ]
+    [ "$(jq -r .effort "$LOG_FILE")" = "high" ]
+}
+
+@test "nanoprobe log with a missing transcript still writes the row, with null model and effort" {
+    run bash "$BORG_NANOPROBE_LOG" <<< "$(_probe_input_tpath "/nonexistent/x.jsonl")"
+    [ "$status" -eq 0 ]
+    [ "$(jq -s 'length' "$LOG_FILE")" -eq 1 ]
+    [ "$(jq -r 'has("model") and has("effort") and .model == null and .effort == null' "$LOG_FILE")" = "true" ]
+}

@@ -2432,14 +2432,20 @@ cmd_nanoprobes() {
         [
             (.id // "")[0:8],
             (.agent_type // "?"),
+            (.model // ""),
+            (.effort // ""),
             ((.summary // "") | gsub("\n"; " ") | .[0:80]),
             (.finished_at // ""),
             (.transcript_path // "")
         ] | join("\u001f")
-    ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype summary finished tpath; do
-        me=$(_borg_nanoprobe_model_effort "$tpath")
-        model="${me%%$'\t'*}"
-        effort="${me#*$'\t'}"
+    ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype model effort summary finished tpath; do
+        # Rows written since the hook began recording model/effort carry them; older rows fall back
+        # to the transcript (blank once Claude Code prunes it).
+        if [[ -z "$model" || -z "$effort" ]]; then
+            me=$(_borg_nanoprobe_model_effort "$tpath")
+            [[ -n "$model" ]] || model="${me%%$'\t'*}"
+            [[ -n "$effort" ]] || effort="${me#*$'\t'}"
+        fi
         printf "  %-10s %-18s %-20s %-8s %-80s %s\n" "$sid" "$atype" "$model" "$effort" "$summary" "$finished"
     done
 }
