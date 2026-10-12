@@ -88,21 +88,28 @@ a repository, and it must be able to SKIP with a named reason on a machine that 
 
 ## Acceptance criteria
 
-- [ ] **SL1 — The harness observes a real session.** `evals/session-load/run.sh` starts a headless session and reports
+- [x] **SL1 — The harness observes a real session.** `evals/session-load/run.sh` starts a headless session and reports
       the skill set and fired hooks that session saw. Verify: the harness names its interpreter/CLI resolution the way
       E2a does (`BORG_EVAL_PYTHON`-style override, then a repo-local default, then bare), and SKIPs only when the
       RESOLVED CLI is absent, naming it.
-- [ ] **SL2 — Exactly-once is asserted with an authored number and a named shortfall.** Verify: forcing a duplicate
+- [x] **SL2 — Exactly-once is asserted with an authored number and a named shortfall.** Verify: forcing a duplicate
       (planted second version dir) turns the harness red with both counts in the message; the clean install exits 0.
-- [ ] **SL3 — All four invisible surfaces above are covered, each in both directions.** Verify:
+- [x] **SL3 — All four invisible surfaces above are covered, each in both directions.** Verify:
       `tests/session_load_floor.bats` has a case per surface per direction, and deleting any floor from `run.sh` turns
       that file red. Run the mutation; a floor whose absence keeps every gate green is not a floor.
-- [ ] **SL4 — Nothing regresses the 31 existing cases.** Verify: `bats tests/plugin_dedup.bats
+- [x] **SL4 — Nothing regresses the 31 existing cases.** Verify: `bats tests/plugin_dedup.bats
       tests/setup_skill_cleanup.bats` green, unchanged. This directive adds an altitude; it does not rewrite the
       unit layer.
-- [ ] **SL5 — The CoCo double-fire is decided, not discovered.** Verify: either the harness asserts one execution per
+- [x] **SL5 — The CoCo double-fire is decided, not discovered.** Verify: either the harness asserts one execution per
       logical event across both CLIs, or this directive records the deliberate decision that CoCo fires independently
       and says why. An unowned answer here is the defect, not the double-fire.
+      **Decided by Noah, 2026-10-12: CoCo fires its hooks independently, and there is no CoCo harness code.** Why: the
+      two CLIs are separate sessions with separate hook registries, so one `SessionStart` in each is two logical events,
+      not one event delivered twice, and "once per logical event" holds per CLI. The two executions only touch the same
+      registry when both CLIs run in one project, which is two sessions the user started, not a registration defect.
+      CoCo cannot load plugins (it gets literal-path registration from `_borg_register_hook`), so a cross-CLI assertion
+      would need a second harness on a CLI whose headless output we do not control, to police a case that is by design.
+      `evals/session-load/run.sh` therefore drives `claude` only and says so in its header.
 
 ## Risks
 
@@ -128,3 +135,4 @@ a repository, and it must be able to SKIP with a named reason on a machine that 
   gate stays green. SL3 requires running that mutation rather than asserting it.
 - `CLAUDE.md` says "Skills (16)"; the tree has 17. Not this directive's scope, noted so the next reader does not
   re-measure it.
+- **Built 2026-10-12** (`evals/session-load/run.sh`, `check.py`, oracle `tests/session_load_floor.bats`). Isolation is `XDG_CONFIG_HOME` and `XDG_STATE_HOME` redirected into the eval's `out/` tree, HOME left real so the installed plugin set and OAuth are what the session sees. Two measured facts shaped the checker: `user-invocable: false` skills (`adhd-guardrails`) are not listed by a session, and a bare `simplify` is Claude Code's bundled skill, not an extension collision unless a symlink of that name exists under the claude home. `hook_started` events carry the event name but not the command, so the borg share is the observed count minus the non-borg hooks that settings.json and the other plugins register.

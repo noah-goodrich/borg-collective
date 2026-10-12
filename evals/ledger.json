@@ -12,6 +12,14 @@
         "lib/promote-next.sh"
       ]
     },
+    "evals/session-load": {
+      "covers": [
+        "evals/session-load/**",
+        "skills/**",
+        "hooks/**",
+        "scripts/build-plugin.sh"
+      ]
+    },
     "evals/s4-k3": {
       "covers": [
         "evals/s4-k3/**",
