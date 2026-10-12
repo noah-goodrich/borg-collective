@@ -291,6 +291,9 @@ _build_self_contained_hook "$HOOKS_SRC/borg-workflow-model-guard.sh" "$HOOKS_DST
 # borg-agent-model-guard.sh is self-contained (python3, stdin JSON + transcript only) — copy as-is.
 _build_self_contained_hook "$HOOKS_SRC/borg-agent-model-guard.sh" "$HOOKS_DST/borg-agent-model-guard.sh" 0
 _build_self_contained_hook "$HOOKS_SRC/borg-supabase-guard.sh" "$HOOKS_DST/borg-supabase-guard.sh" 0
+# borg-verifier-guard.sh is self-contained (python3, stdin JSON only) — copy as-is. agents/borg-verifier.md
+# grants Bash, and this hook is what makes that grant read-only; tests/verifier_guard.bats pins the pair.
+_build_self_contained_hook "$HOOKS_SRC/borg-verifier-guard.sh" "$HOOKS_DST/borg-verifier-guard.sh" 0
 # borg-memory-read-log.sh is self-contained (parses stdin JSON only) — copy as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-memory-read-log.sh" "$HOOKS_DST/borg-memory-read-log.sh" 0
 # borg-prefer-tool-log.sh is NOT self-contained: it delegates to borg_core.extensions.cli rather
@@ -467,6 +470,16 @@ HOOKS_JSON='{
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-supabase-guard.sh",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-verifier-guard.sh",
             "timeout": 5
           }
         ]

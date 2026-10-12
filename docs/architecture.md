@@ -94,6 +94,7 @@ writing: **15 hooks**, **~14 lib files**, **16 skills**, **5 agents** (+ `docs/a
         borg-agent-model-guard.sh  PreToolUse (Agent|Task) → subagent_type allowlist + model/effort caps
         borg-workflow-model-guard.sh  PreToolUse (Workflow) → agent() allowlist/caps, fail-closed
         borg-nanoprobe-log.sh   SubagentStop → append nanoprobe completion to agents.jsonl
+        borg-verifier-guard.sh  PreToolUse (Bash) → verifier: git/gh reads
         bash-guard.sh, borg-supabase-guard.sh, notify.sh,
         pre-commit-remind.sh, tool-count-nudge.sh  Smaller guardrail/reminder hooks
     skills/
