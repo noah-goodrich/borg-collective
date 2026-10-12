@@ -13,6 +13,7 @@
 #   watch --once     one watcher pass: fold hook events + scan transcripts into pending/ records (slice S7)
 #   inventory <sid>  print the in-flight inventory as JSON (slice S5; --json is accepted, JSON is the only format)
 #   prompt <rid>     render prompts/<rid>.md, or with --line / --compact-line the injection strings (slice S6)
+#   mark-closed <project|sid>  append a deliberate-close event (like SessionEnd prompt_input_exit); slice S3b
 #
 # Later slices add watch, inventory, prompt, status and the rest. Hooks only APPEND; the watcher owns every
 # state transition. Bash 3.2 safe, jq is the only non-coreutils dependency.
@@ -210,7 +211,7 @@ _br_record() {
 
 _br_usage() {
     printf 'usage: borg-resume <record <event> | pause | unpause | probe | inventory <sid> [--json]' >&2
-    printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout]>\n' >&2
+    printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout] | mark-closed <project|sid>>\n' >&2
 }
 
 _br_main() {
@@ -277,6 +278,12 @@ _br_main() {
             local _prc=$?
             [ "$_prc" -eq 2 ] && _br_usage
             return "$_prc"
+            ;;
+        mark-closed)
+            [ -n "${1:-}" ] || { _br_usage; return 2; }
+            # shellcheck source=/dev/null
+            . "$BORG_RESUME_LIBDIR/resume-close.sh" 2>/dev/null || return 1
+            borg_resume_mark_closed "$1"
             ;;
         *)
             _br_usage

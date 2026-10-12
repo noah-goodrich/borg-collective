@@ -1160,6 +1160,15 @@ _borg_stop_shared_supabase() {
         || warn "supabase stop failed — stop it manually: cd $stillpoint_dir && supabase stop"
 }
 
+# Deliberate close: best-effort borg-resume marker so the watcher never resumes a project torn down on purpose.
+# Never fails the caller; borg-resume honors BORG_RESUME_DISABLE. BORG_RESUME_BIN overrides the binary (tests).
+_borg_mark_closed() {
+    local bin="${BORG_RESUME_BIN:-$BORG_HOME/bin/borg-resume}"
+    [[ -x "$bin" ]] || return 0
+    "$bin" mark-closed "$1" >/dev/null 2>&1 || true
+    return 0
+}
+
 cmd_down() {
     info "Severing link to the Collective..."
 
@@ -1180,6 +1189,7 @@ cmd_down() {
             _borg_has_recent_checkpoint "$pdir" "$checkpoint_threshold_hours" \
                 || _borg_offer_checkpoint "$wname" "$pdir" "" "$checkpoint_threshold_hours"
             info "Stopping $wname..."
+            _borg_mark_closed "${pdir:t}"
             drone down "$wname" 2>/dev/null || tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
         else
             tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
