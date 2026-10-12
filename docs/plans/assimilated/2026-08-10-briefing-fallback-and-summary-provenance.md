@@ -201,7 +201,7 @@ line. The rest of this section is left as filed, for the record of what the defe
 
 
 
-*Filed by S4 of the one-front-door plan (`docs/plans/directives/2026-08-25-link-front-door-hardened-spec.md`).
+*Filed by S4 of the one-front-door plan (`docs/plans/assimilated/2026-08-25-link-front-door-hardened-spec.md`).
 S4 is recording this gap, not closing it: the fix is a rewrite of `_borg_print_briefing`, which this
 directive owns.*
 
