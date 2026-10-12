@@ -513,6 +513,21 @@ def read_latest_checkpoint_head(sources: list[tuple[str, str]], lines: int = 20)
     return "\n".join(text.split("\n")[:lines])
 
 
+def read_checkpoint_summary(sources: list[tuple[str, str]]) -> str | None:
+    """The summary stated by the group's newest checkpoint, or None when there is none to read.
+
+    SAME WINDOW AS THE HEAD, by construction: it goes through `_checkpoint_window` (the union read,
+    name-ordered, content-deduped), so the summary describes the checkpoint printed first, never a
+    second reader's idea of "latest". Reads the WHOLE body (not the 20-line head) because the
+    Accomplished fallback can sit below it. A project with no checkpoint has no summary.
+    """
+    window, stores = _checkpoint_window(sources, limit=1)
+    if not window:
+        return None
+    filename, project_name = window[0]
+    return core.checkpoint_summary(_read_text(stores[project_name] / filename))
+
+
 def read_plan(project_path: str | None) -> dict | None:
     """The deep dive's Active Plan block, or None when there is no PROJECT_PLAN.md.
 

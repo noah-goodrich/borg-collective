@@ -83,6 +83,26 @@ def _focus(project: str, registry: dict, now_epoch: int) -> dict | None:
     }
 
 
+def _with_checkpoint_summaries(registry: dict) -> dict:
+    """The registry with every project's `summary` REPLACED by its latest checkpoint's, or null.
+
+    `borg link` no longer reads the registry's `summary` (summarize.py's transcript heuristic, which
+    surfaced raw greetings and mid-sentence cuts) for display: the stored value is overwritten HERE,
+    in the copy this invocation renders, and never written back. A project with no checkpoint, or a
+    checkpoint stating nothing, gets null and renders no summary. Expand step only: summarize.py and
+    the registry writer are untouched, so other readers of the stored field are unaffected.
+    """
+    projects = registry.get("projects") or {}
+    derived = {}
+    for name, entry in projects.items():
+        if not isinstance(entry, dict):
+            derived[name] = entry
+            continue
+        summary = shell.read_checkpoint_summary(core.repo_sources(name, projects))
+        derived[name] = {**entry, "summary": summary}
+    return {**registry, "projects": derived}
+
+
 def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: list | None = None) -> dict:
     """The `grid` block: discover manifests globally, select them scoped, sweep at the scope's breadth.
 
@@ -305,7 +325,7 @@ def _document(project: str, show_all: bool, mode: str, local: bool = False) -> d
     overlaid map -- NOT from `projects` (the --all-filtered map) or `order`.
     """
     moment = shell.now_epoch()
-    overlaid = shell.registry_with_state(now=moment)
+    overlaid = _with_checkpoint_summaries(shell.registry_with_state(now=moment))
     projects = core.visible_projects(overlaid, show_all, moment)
     order = core.order_projects(projects)
 

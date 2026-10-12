@@ -6,7 +6,7 @@
 #   E2a manifest round-trip contract, via pytest: the one case that is deterministic on EVERY
 #       machine — no network, no `gh`, no second repository, no model
 #   E2  live refs: every declared ref resolves on GitHub (no typo'd rows)
-#   E3  gather integration: declared edges flow, zero contested refs
+#   E3  declared-edge provenance (borg_core/manifest): declared edges flow, zero contested refs
 #
 # E4/E5 (the /pr-description chain-position pair) RELOCATED 2026-09-03 to claude-plugins,
 # evals/pr-description/. See the tombstone above the floors for why, and for why the model mode
@@ -201,7 +201,7 @@ E2A_MIN=15
 if ! "$PYTHON" -c "import pytest" >/dev/null 2>&1; then
     # GUARDED ON THE INPUT THE CASE ACTUALLY NEEDS, which is an importable pytest and not merely an
     # interpreter. E2 and E3 shell into bare `python3` and are right to — `merge-tree/programs.py`
-    # and `gather.py` import only stdlib, so any stock interpreter runs them — but E2a needs a
+    # and `borg_core/manifest` import only stdlib, so any stock interpreter runs them — but E2a needs a
     # THIRD-PARTY DEV DEPENDENCY, which no interpreter carries by construction. "python3 is on PATH"
     # is therefore a different fact from "this case can execute", and a harness that checks the
     # first and then reports FAIL prints the manifest contract's name for what is a missing package:
@@ -329,35 +329,29 @@ PY
     NETWORK_RAN=$((NETWORK_RAN+1))
 fi
 
-# ── E3: gather integration ───────────────────────────────────────────────────────────────────────
-# GitHub is this case's INPUT, not its assertion. Both asserted quantities are pure functions of the
-# discovered manifests: `edge_provenance.declared` counts declared edges in the merged set
-# regardless of items, and `program_contested_refs` is built before the item loop runs at all. This
-# case therefore passes against a completely failed sweep — measured. The live `borg recon` call is
-# removable, and replacing it with a hand-authored recon fixture is the deferred half of AC6.
+# ── E3: declared-edge provenance (borg_core/manifest) ────────────────────────────────────────────
+# RE-POINTED 2026-10-12 from `borg recon --json | python3 merge-tree/gather.py` when the merge-tree
+# browser board retired (docs/plans/directives/2026-10-03-retire-the-merge-tree-browser-board.md, R1).
+# Both asserted quantities were always pure functions of the discovered manifests, so the recon feed
+# was incidental; this now calls borg_core/manifest directly: shell.discover for discovery,
+# across.edges_from for the declared edges (core.derive_edges per manifest, unioned), and
+# across.contested_refs for collisions.
 #
-# ONE TRAP BEFORE THAT REWRITE. `program_contested_refs` reads each manifest's top-level `program`
-# key and SKIPS any manifest without one. borg_core's discovery writes `_id` and is pinned never to
-# invent `program`, so once AC7 finishes retiring the word this assertion can no longer fail and
-# `program_regrouped_items` collapses to zero — green because the code stopped running. A rewrite
-# onto borg_core must assert a ported `contested_refs()` reading `_id`, or carry a tripwire that
-# goes red the day the retired key disappears.
-echo "== E3: gather integration (live recon) =="
+# THE TRAP THE OLD CASE CARRIED IS CLOSED. gather.py read each manifest's top-level `program` key and
+# skipped any manifest without one, so once the word retired the assertion could not fail. The
+# borg_core side identifies a claimant by argument index and labels it with `_id`, never `program`.
+echo "== E3: declared-edge provenance (borg_core/manifest) =="
 if [ "$SKIP_NETWORK" -eq 1 ]; then
-    # E3 IS A NETWORK CASE TOO, which the case header above already concedes by calling GitHub its
-    # input: `borg recon` fans out over the adapters, and this repository's reference adapter shells
-    # `gh`. That the assertion survives a completely failed sweep (measured) does not make the sweep
-    # offline — it makes the case's coupling incidental, which is a claim about the deferred rewrite
-    # and not a licence to reach the wire under a flag that says not to.
-    skip "E3 gather: --skip-network (borg recon fans out over the github adapter)"
-elif ! command -v borg >/dev/null 2>&1; then
-    skip "E3 gather: borg is not on PATH"
+    # KEPT UNDER --skip-network ON PURPOSE. The re-point removed the recon sweep, so this case no
+    # longer reads the wire; it still skips here so the offline mode (`make eval`) is exactly what it
+    # was before: E2a alone. Dropping the skip is a separate decision about the offline floor.
+    skip "E3 edges: --skip-network (kept from when E3 fanned out over the github adapter)"
 else
     # THE SECOND REPOSITORY IS NOW STAGED, NOT REQUIRED. This case used to skip unless
     # BORG_EVAL_STILLPOINT named a real checkout, which made it unrunnable on any machine that
     # happened not to have that repository cloned -- and the machines are three (personal,
     # <employer>, stillpoint), so "present locally" was never a property of the case, only of the
-    # laptop. What E3 asserts is that DECLARED EDGES FLOW through gather and that no ref is
+    # laptop. What E3 asserts is that DECLARED EDGES FLOW through borg_core/manifest and that no ref is
     # contested; the identity of the repositories carrying those manifests is incidental to both
     # halves. So it stages a two-repository tree from committed fixtures.
     #
@@ -374,7 +368,7 @@ else
     programs_dir_args=()
     for fixture_repo in platform warehouse; do
         mkdir -p "$fixture_root/$fixture_repo/.borg/programs"
-        programs_dir_args+=(--programs-dir "$fixture_root/$fixture_repo")
+        programs_dir_args+=("$fixture_root/$fixture_repo")
     done
     cp "$SCRIPT_DIR/fixtures/programs/atlas-cutover.json" \
        "$fixture_root/platform/.borg/programs/"
@@ -393,38 +387,42 @@ else
     # platform#903 -> warehouse#912 and platform#902 -> warehouse#923, merge-tree ignores it and
     # emits the lane-consecutive warehouse#911 -> #912 and #922 -> #923 instead. That is AC7
     # decision (3)'s reader/writer divergence in nine rows, and it is the reason this number is
-    # safe across AC7's repoint of gather.py: the count survives, only the membership moves. If a
+    # safe across AC7's repoint: the count survives, only the membership moves. If a
     # future change makes the totals differ, THIS COMMENT is the thing that was wrong, not the
     # fixture.
     E3_AUTHORED_EDGES=15
     E3_EXACT=1
     for repository in "${REPOS[@]:1}"; do
-        programs_dir_args+=(--programs-dir "$repository")
+        programs_dir_args+=("$repository")
         E3_EXACT=0
     done
-    # `&&`, not `;`. With a semicolon the assertion ran even when gather.py had failed, reading
-    # whatever e3-gather.json a previous run left behind — a false PASS over stale evidence.
-    E3=$(cd "$REPO/merge-tree" && borg recon --json --since 2026-08-01T00:00:00Z 2>/dev/null | \
-         python3 gather.py --in - --out "$OUT/e3-gather.json" \
-           "${programs_dir_args[@]}" 2>"$OUT/e3-stderr.txt" && \
-         python3 -c "
-import json
-g = json.load(open('$OUT/e3-gather.json'))
-prov = g['meta']['edge_provenance']
-declared, contested = prov['declared'], g['meta']['program_contested_refs']
+    # One in-process call, so there is no pipeline whose first stage can fail while the assertion
+    # reads stale output. PYTHONPATH is set explicitly because the interpreter may be a stock
+    # `python3` that has not installed borg_core. Warnings from `discover` are part of the verdict:
+    # a refused manifest is an edge count that silently shrank.
+    E3=$(PYTHONPATH="$REPO" "$PYTHON" -c "
+import sys
+from borg_core.manifest import across, shell
+dirs = sys.argv[1:]
 exact, authored = $E3_EXACT, $E3_AUTHORED_EDGES
+manifests, warnings = shell.discover(dirs)
+declared = len(across.edges_from(manifests))
+contested = across.contested_refs(manifests)
 verdict = declared == authored if exact else declared >= authored
 mode = 'exact' if exact else 'floor'
-print(f\"declared={declared} authored={authored} ({mode}) contested={contested} dangling={len(prov['dangling_endpoints'])}\")
+print(f\"declared={declared} authored={authored} ({mode}) contested={contested} warnings={len(warnings)}\")
 if not verdict:
     print(f\"  declared edge count {declared} != authored {authored}\" if exact
           else f\"  declared edge count {declared} below authored floor {authored}\")
-exit(0 if verdict and contested == [] else 1)
-")
+for line in warnings:
+    print(f\"  warning: {line}\")
+sys.exit(0 if verdict and contested == [] and warnings == [] else 1)
+" "${programs_dir_args[@]}" 2>"$OUT/e3-stderr.txt")
     E3_RC=$?
     echo "  $E3"
-    [ "$E3_RC" -eq 0 ] && ok "E3 gather: declared edges flow, zero contested" || bad "E3 gather"
-    NETWORK_RAN=$((NETWORK_RAN+1))
+    [ "$E3_RC" -eq 0 ] && ok "E3 edges: declared edges flow, zero contested" || bad "E3 edges"
+    # NOT counted in NETWORK_RAN: E3 reads no wire any more, so it must not satisfy the network-mode floor
+    # (tests/eval_floor.bats "the network-mode floor fires when the sweep is asked for and gh is absent").
 fi
 
 # THE `TIMEOUT` ARRAY AND ITS GUARD LEFT WITH E4/E5 and this is deliberately a pointer rather than

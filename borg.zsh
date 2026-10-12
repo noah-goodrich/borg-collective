@@ -1010,16 +1010,26 @@ cmd_reap() {
 
 # Remove stale borg-managed nanoprobe worktrees for one or all registered repos.
 # A worktree is stale when its branch is merged into the default branch OR when it
-# is older than BORG_REAP_STALE_HOURS (default 12h). Only worktrees under
+# is older than BORG_REAP_STALE_HOURS (default 12h). "Merged" includes squash merges
+# (tree-equality against origin's default branch, plus a `gh` merged-PR lookup, which the CLI
+# enables via BORG_REAP_GH=1; hooks never do). Only worktrees under
 # ~/.local/state/borg/worktrees/ are ever touched. Uncommitted-change worktrees are
 # always skipped.
 #
 # Usage:
 #   borg reap-worktrees            # reap across all registered repos
 #   borg reap-worktrees <project>  # reap for one registered project
+#   borg reap-worktrees --dry-run [project]  # print "Would reap ..." lines, remove nothing
 cmd_reap_worktrees() {
-    local target_project="${1:-}"
+    local target_project="" dry_run=0 arg
     local repo_paths=()
+    for arg in "$@"; do
+        case "$arg" in
+            --dry-run) dry_run=1 ;;
+            -*) die "reap-worktrees: unknown flag '$arg' (usage: borg reap-worktrees [--dry-run] [project])" ;;
+            *) target_project="$arg" ;;
+        esac
+    done
 
     if [[ -n "$target_project" ]]; then
         local ppath
@@ -1045,13 +1055,20 @@ cmd_reap_worktrees() {
         # last, always one of two hardcoded strings) cannot shift anything after it.
         while IFS=$'\t' read -r wt reason; do
             [[ -z "$wt" ]] && continue
-            info "Reaped worktree ${BOLD}${wt##*/}${NC} in ${repo##*/} (${reason})"
+            if (( dry_run )); then
+                info "Would reap ${BOLD}${wt##*/}${NC} in ${repo##*/} (${reason})"
+            else
+                info "Reaped worktree ${BOLD}${wt##*/}${NC} in ${repo##*/} (${reason})"
+            fi
             total=$((total + 1))
-        done < <(_borg_reap_worktrees "$repo")
+        done < <(BORG_REAP_GH=1 BORG_REAP_DRY_RUN=$dry_run _borg_reap_worktrees "$repo")
     done
 
     if (( total == 0 )); then
         info "No stale borg worktrees found."
+    elif (( dry_run )); then
+        echo
+        info "$total worktree(s) would be removed (dry run; nothing removed)"
     else
         echo
         info "$total stale worktree(s) removed (threshold: ${BORG_REAP_STALE_HOURS:-12}h)"
@@ -1717,9 +1734,10 @@ _borg_launch_in_tmux() {
     fi
 
     if [[ -n "${TMUX:-}" ]]; then
-        ( cd "$BORG_ORCHESTRATOR_ROOT" && "$@" )
+        local rc=0
+        ( cd "$BORG_ORCHESTRATOR_ROOT" && "$@" ) || rc=$?
         [[ -n "$cleanup_file" ]] && rm -f "$cleanup_file"
-        return
+        return "$rc"
     fi
 
     # Write a launcher script so tmux send-keys only types one short command
@@ -2410,9 +2428,20 @@ cmd_cortex_resume() {
 # agents.jsonl rotates to agents.jsonl.1 at the retention cap (_borg_rotate_log): newest first means
 # the live file, then the one previous generation. Absent generations are skipped.
 _borg_agents_newest_first() {
-    [[ -s "$1" ]] && _borg_reverse_lines "$1"
-    [[ -s "$1.1" ]] && _borg_reverse_lines "$1.1"
-    return 0
+    {
+        [[ -s "$1" ]] && _borg_reverse_lines "$1"
+        [[ -s "$1.1" ]] && _borg_reverse_lines "$1.1"
+        return 0
+    } | _borg_agents_drop_untyped
+}
+
+# Drop rows whose agent_type is exactly "" (Claude Code internal agents logged before the hook skipped them).
+# Rows without the key, or with "?", are kept: they cannot be identified as internal agents.
+# Non-object lines pass through unchanged.
+_borg_agents_drop_untyped() {
+    jq -rR '. as $l | (try fromjson catch null) as $o
+        | select((($o | type) != "object") or (($o.agent_type // null) != ""))
+        | $l' 2>/dev/null
 }
 
 cmd_nanoprobes() {
@@ -2428,18 +2457,24 @@ cmd_nanoprobes() {
     # Declared once: a repeated zsh `local` of an already-set variable prints it.
     local me model effort
     printf "  %-10s %-18s %-20s %-8s %-80s %s\n" "ID" "TYPE" "MODEL" "EFFORT" "SUMMARY" "FINISHED"
-    _borg_agents_newest_first "$log" | head -50 | jq -r '
+    _borg_agents_newest_first "$log" | _borg_agents_collapse | head -50 | jq -r '
         [
             (.id // "")[0:8],
             (.agent_type // "?"),
+            (.model // ""),
+            (.effort // ""),
             ((.summary // "") | gsub("\n"; " ") | .[0:80]),
             (.finished_at // ""),
             (.transcript_path // "")
         ] | join("\u001f")
-    ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype summary finished tpath; do
-        me=$(_borg_nanoprobe_model_effort "$tpath")
-        model="${me%%$'\t'*}"
-        effort="${me#*$'\t'}"
+    ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype model effort summary finished tpath; do
+        # Rows written since the hook began recording model/effort carry them; older rows fall back
+        # to the transcript (blank once Claude Code prunes it).
+        if [[ -z "$model" || -z "$effort" ]]; then
+            me=$(_borg_nanoprobe_model_effort "$tpath")
+            [[ -n "$model" ]] || model="${me%%$'\t'*}"
+            [[ -n "$effort" ]] || effort="${me#*$'\t'}"
+        fi
         printf "  %-10s %-18s %-20s %-8s %-80s %s\n" "$sid" "$atype" "$model" "$effort" "$summary" "$finished"
     done
 }
@@ -2455,6 +2490,40 @@ _borg_nanoprobe_model_effort() {
     fi
     [[ -n "$out" ]] || out=$'-\t-'
     printf '%s' "$out"
+}
+
+# Collapse newest-first agents JSONL (stdin) to one line per agent id, in first-seen order. Duplicates come from
+# a doubled log, a handback agent that stops twice (text row, then an empty-summary row), and SendMessage resumes.
+# Every field comes from the newest row except summary/evidence_found/evidence_score, which come from the newest
+# row with a non-empty summary (else the newest). Objects with a missing or empty id pass through in place.
+# Lines that do not parse as JSON objects are DROPPED: the listing jq program in cmd_nanoprobes aborts at the
+# first unparseable line, so passing junk through would silently hide every older row behind it.
+# Cost: this reads the whole stream before emitting anything (bounded by rotation to two generations of
+# BORG_LOG_CAP_BYTES). Fails open: if the jq program fails, the raw input is emitted unchanged.
+_borg_agents_collapse() {
+    local input out
+    input=$(cat)
+    out=$(printf '%s\n' "$input" | jq -Rnr '
+        def keyed: type == "object" and ((.id // "") | tostring | length) > 0;
+        [inputs | . as $raw | {raw: $raw, o: (try fromjson catch null)}
+            | select(.o | type == "object")] as $rows
+        | (reduce ($rows[] | select(.o | keyed) | .o) as $o ({};
+              if (.[$o.id | tostring] == null) and (($o.summary // "") != "")
+              then .[$o.id | tostring] = $o else . end)) as $best
+        | foreach $rows[] as $r ({seen: {}, out: null};
+            if ($r.o | keyed) | not then .out = $r.raw
+            elif .seen[$r.o.id | tostring] then .out = null
+            else
+                .seen[$r.o.id | tostring] = true
+                | ($best[$r.o.id | tostring]) as $b
+                | .out = (if $b == null then $r.o
+                    else (($r.o | del(.summary, .evidence_found, .evidence_score))
+                        + ($b | {summary, evidence_found, evidence_score}
+                            | with_entries(select(.value != null)))) end | tojson)
+            end;
+            .out | select(. != null))
+    ') || { printf '%s\n' "$input"; return 0; }
+    [[ -z "$out" ]] || printf '%s\n' "$out"
 }
 
 cmd_nanoprobe_log() {
@@ -3089,7 +3158,7 @@ cmd_help() {
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
                           --chains-dir <path>    Explicit roots (suppresses the registry sweep)
-                          --recon <file> (plan only) recon/gather JSON for the reality check
+                          --recon <file> (plan only) recon JSON for the reality check
     scan                Discover projects from session history
     add [path] [--name <n>]  Register a project (defaults to $PWD, named by folder; --name overrides)
     rm <project>        Unregister a project
@@ -3108,7 +3177,7 @@ cmd_help() {
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     spend               Main-vs-subagent spend split + trend (this machine; --project/--by-model/--last)
     reap                Persist idle to stale active/waiting sessions (no live window)
-    reap-worktrees [p]  Remove stale borg-managed nanoprobe worktrees (all repos or one)
+    reap-worktrees [--dry-run] [p]  Remove stale/merged (incl. squash) nanoprobe worktrees
     doctor              Verify the 4 launchd agents + headless claude -p reachability
     help                Show this message
 
@@ -3118,7 +3187,8 @@ cmd_help() {
     2026-08-26 — recon retired as a human verb. 'borg link' sweeps every source itself, so
                  there is nothing a human still needs it for. The ENGINE is not retired:
                  'borg recon --json' and 'borg recon --adapters' are the machine surface
-                 /borg-recon and merge-tree/gather.py consume, and both still work.
+                 /borg-recon consumes, and both still work. (merge-tree/gather.py, a
+                 second consumer, retired 2026-10-12 with the browser board.)
     2026-08-31 — program renamed to chain. Same command, same actions, same flags; the word
                  "program" is retired in favour of "chain". Run: borg chain
     2026-10-04 — sever was an alias of 'down' (tears down everything) and never retired a directive.
@@ -3648,8 +3718,9 @@ case "${1:-help}" in
         #
         # RETIRED 2026-08-26 AS A HUMAN VERB, ENGINE INTACT (AC1). `borg link` folds the same
         # fan-out into its own document, so the human digest has no reason to exist -- but
-        # `--json` and `--adapters` have real machine consumers (skills/borg-recon/SKILL.md,
-        # merge-tree/gather.py, evals/s4-k3/run.sh) and AC1 never asked for the engine to die.
+        # `--json` and `--adapters` have a real machine consumer (skills/borg-recon/SKILL.md)
+        # and AC1 never asked for the engine to die. (merge-tree/gather.py and evals/s4-k3 E3 were
+        # consumers until the browser board retired 2026-10-12.)
         #
         # THE GATE LIVES IN borg_core/recon/cli.py::main(), not here. This arm's parse loop stays
         # ONLY for the two things argparse does not do: the `--list` alias for `--adapters`, and

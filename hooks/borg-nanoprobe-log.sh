@@ -16,6 +16,9 @@
 #   2 — path:line citation found (e.g. "lib/borg-hooks.sh:42")
 #   3 — path:line citations + git diff present in worktree
 #
+# Claude Code internal agents (prompt suggestions, away summaries, compaction; agent_type "") are skipped:
+# the plugin matcher is ".+" and the guard after AGENT_TYPE is parsed covers registrations without one.
+#
 # This hook is informational. It NEVER blocks the session — exit 0 on every path,
 # including write failures or malformed payloads.
 #
@@ -49,11 +52,48 @@ INPUT=$(cat /dev/stdin 2>/dev/null || true)
 command -v jq >/dev/null 2>&1 || exit 0
 
 AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // ""' 2>/dev/null || true)
-AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // ""' 2>/dev/null || true)
+AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r 'if .agent_type == null then "?" else .agent_type end' 2>/dev/null || true)
+# Only a PRESENT, empty agent_type marks a Claude Code internal agent. A missing or null key is an unknown
+# payload shape (for example Cortex Code, whose registration in borg.zsh has no matcher): logged as "?".
+# An empty one the matcher lets through must not reach the evidence/zero-commit warnings or the log.
+[[ -z "$AGENT_TYPE" ]] && exit 0
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.agent_transcript_path // ""' 2>/dev/null || true)
 LAST_MSG=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // ""' 2>/dev/null || true)
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 [[ -z "$CWD" ]] && CWD="${PWD:-}"
+
+# ─── Summary recovery ─────────────────────────────────────────────────────────
+# last_assistant_message is the final assistant TEXT block. Background subagents end on a tool_use with
+# no text (SubagentHandback, or StructuredOutput for workflow/schema agents), so it arrives empty. Recover
+# the report from the tail of the transcript (agent_transcript_path): the LAST assistant message. One API
+# message is written as one line per content block, so every entry sharing the last entry's message.id is
+# joined (the last entry alone when it has no id). Preference order: text blocks, else SubagentHandback
+# input.message, else StructuredOutput input.summary/answer/reason/verdict, else compact JSON of the input.
+# The final line is often a user tool_result. Lines are parsed one by one because the file is written
+# asynchronously and the last line may be torn. Any failure leaves LAST_MSG empty. The evidence score
+# below is computed from the recovered text too.
+if [[ -z "$LAST_MSG" && -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
+    RECOVERED=$(tail -n 80 "$TRANSCRIPT_PATH" 2>/dev/null | jq -Rrs '
+        [split("\n")[] | (fromjson? // empty) | select(type == "object" and .type == "assistant")] as $all
+        | ($all | last) as $lastE
+        | (if ($lastE.message.id // "") != "" then [$all[] | select(.message.id == $lastE.message.id)]
+           else [$lastE] end) as $entries
+        | [$entries[] | (.message.content // []) | if type == "string" then [{type: "text", text: .}] else . end
+           | .[]?] as $c
+        | ([$c[] | select(.type == "text") | .text] | join("\n")) as $text
+        | if $text != "" then $text
+          else
+            ([$c[] | select(.type == "tool_use" and .name == "SubagentHandback")] | last) as $h
+            | ([$c[] | select(.type == "tool_use" and .name == "StructuredOutput")] | last) as $s
+            | if $h != null and ($h.input.message | type) == "string" then $h.input.message
+              elif $h != null then ($h.input | tojson)
+              elif $s != null then
+                ([$s.input.summary, $s.input.answer, $s.input.reason, $s.input.verdict
+                  | select(type == "string" and . != "")] | first) // ($s.input | tojson)
+              else "" end
+          end // ""' 2>/dev/null || true)
+    [[ -n "$RECOVERED" ]] && LAST_MSG="$RECOVERED"
+fi
 
 # Truncate summary to ~500 chars to keep the JSONL file scannable.
 if (( ${#LAST_MSG} > 500 )); then
@@ -106,26 +146,54 @@ _warn() {
     WARNINGS+="${WARNINGS:+$'\n\n'}$1"
 }
 
-# Warn orchestrator when a nanoprobe completes without citing its work.
-if [[ "$EVIDENCE_FOUND" == "false" && -n "$LAST_MSG" ]]; then
+# Only writer types are expected to leave file edits or commits behind. Read-only types (reviewer,
+# researcher, scout, ...) legitimately end with neither, so both checks below skip them.
+IS_WRITER=false
+case "$AGENT_TYPE" in
+    borg-collective:borg-nanoprobe|borg-collective:borg-grunt|borg-nanoprobe|borg-grunt) IS_WRITER=true ;;
+esac
+
+# Warn orchestrator when a writer nanoprobe completes without citing its work.
+if [[ "$IS_WRITER" == "true" && "$EVIDENCE_FOUND" == "false" && -n "$LAST_MSG" ]]; then
     _warn "▸ NANOPROBE EVIDENCE WARNING: ${AGENT_ID:0:8} completed without file-path citations.
   Review the transcript (${TRANSCRIPT_PATH:-unknown}) to confirm work was done."
 fi
 
-# ─── Zero-commit detection ────────────────────────────────────────────────────
-# An empty branch = a 0-write run (the 15-read/0-write/32k-abort failure). Flag it
-# loudly so the orchestrator re-spawns instead of believing the work landed.
-ZERO_COMMIT=false
-if [[ -n "$CWD" ]] && command -v git >/dev/null 2>&1 \
-   && git -C "$CWD" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    _base=$(git -C "$CWD" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null \
-            || git -C "$CWD" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo "")
-    if [[ -n "$_base" ]]; then
-        _n=$(git -C "$CWD" rev-list --count "${_base}..HEAD" 2>/dev/null || echo 0)
-        if [[ "$_n" -eq 0 ]] && ! git -C "$CWD" diff --quiet 2>/dev/null; then _n=1; fi
-        if [[ "$_n" -eq 0 ]]; then
+# ─── Zero-write detection ─────────────────────────────────────────────────────
+# Both warnings (EVIDENCE, ZERO-WRITE) apply to writer types only (borg-nanoprobe, borg-grunt).
+# ZERO-WRITE comes from the agent transcript (successful edits or git commit/push), never the payload
+# cwd, which is the parent session's. zero_commit is null when not applicable.
+# A 0-write run (the 15-read/0-write/32k-abort failure) is flagged loudly so the orchestrator
+# re-spawns instead of believing the work landed. The payload cwd is the PARENT session's cwd (a
+# nanoprobe works in its own worktree via git -C and removes it), so the repo cannot answer this;
+# the transcript can. Count file-edit tool calls plus Bash git commit/push, joining each tool_use to
+# its tool_result by tool_use_id and dropping only is_error results (a call with no result yet counts).
+# zero_commit: true = flagged, false = writes found, null = not applicable (non-writer or no transcript).
+ZERO_COMMIT=null
+if [[ "$IS_WRITER" == "true" && -n "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
+    # git, then any mix of -C <path> (bare or quoted), -c k=v and --long[=value], then commit|push; the
+    # lead-in may be start, whitespace, ; & | ( or a quote so `bash -c '...git commit...'` matches.
+    _git_re="(^|[[:space:];&|(\"'])git((\\s+-C\\s+(\"[^\"]*\"|'[^']*'|\\S+))|(\\s+-c\\s+\\S+)|(\\s+--[A-Za-z][A-Za-z-]*(=\\S+)?))*\\s+(commit|push)(\\s|\$|[\"'])"
+    # Line by line: one malformed line (fromjson?) or non-array content must not void the whole parse.
+    # A tool_use with no tool_result yet counts (the transcript lags); only an is_error result drops it.
+    _writes=$(jq -R -r -n --arg re "$_git_re" '
+        [inputs | fromjson? | (.message.content? // []) | if type == "array" then .[] else empty end
+            | select(type == "object")] as $blocks
+        | ([$blocks[] | select(.type == "tool_result" and (.is_error // false) == true) | .tool_use_id]) as $bad
+        | [$blocks[]
+            | select(.type == "tool_use" and (.id as $i | $bad | index($i) == null))
+            | select(
+                (.name | IN("Edit", "Write", "NotebookEdit", "MultiEdit"))
+                or (.name == "Bash" and ((.input.command // "") | test($re)))
+              )
+          ] | length
+    ' "$TRANSCRIPT_PATH" 2>/dev/null || true)
+    if [[ "$_writes" =~ ^[0-9]+$ ]]; then
+        if (( _writes == 0 )); then
             ZERO_COMMIT=true
-            _warn "▸ NANOPROBE ZERO-COMMIT: ${AGENT_ID:0:8} left branch empty (0 writes). Re-spawn with a tighter, single-deliverable brief."
+            _warn "▸ NANOPROBE ZERO-WRITE: ${AGENT_ID:0:8} made no file edits and no git commit/push (checked its transcript). Re-spawn with a tighter, single-deliverable brief."
+        else
+            ZERO_COMMIT=false
         fi
     fi
 fi
@@ -136,6 +204,23 @@ if [[ -n "$WARNINGS" ]]; then
 fi
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Model + effort from the transcript's first assistant entry (same selection as borg.zsh's
+# _borg_nanoprobe_model_effort). Recorded now because Claude Code prunes transcripts after ~30 days.
+# Absent file or field yields JSON null; never drops the row.
+MODEL_JSON=null
+EFFORT_JSON=null
+if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
+    _me=$(jq -c 'select(.type == "assistant") |
+        [(.message.model // null), (.effort // .perTurnEffort // null)]' "$TRANSCRIPT_PATH" 2>/dev/null \
+        | head -1 || true)
+    if [[ -n "$_me" ]]; then
+        MODEL_JSON=$(printf '%s' "$_me" | jq -c '.[0]' 2>/dev/null || echo null)
+        EFFORT_JSON=$(printf '%s' "$_me" | jq -c '.[1]' 2>/dev/null || echo null)
+        [[ -n "$MODEL_JSON" ]] || MODEL_JSON=null
+        [[ -n "$EFFORT_JSON" ]] || EFFORT_JSON=null
+    fi
+fi
 
 # Atomic append: build the line in jq, then >> the file. Drop the line silently
 # on any jq error — never block the session.
@@ -149,6 +234,8 @@ LINE=$(jq -nc \
     --argjson evidence_found "$EVIDENCE_FOUND" \
     --argjson evidence_score "$EVIDENCE_SCORE" \
     --argjson zero_commit "$ZERO_COMMIT" \
+    --argjson model "$MODEL_JSON" \
+    --argjson effort "$EFFORT_JSON" \
     '{
         id: $id,
         agent_type: $type,
@@ -159,13 +246,16 @@ LINE=$(jq -nc \
         cwd: $cwd,
         evidence_found: $evidence_found,
         evidence_score: $evidence_score,
-        zero_commit: $zero_commit
+        zero_commit: $zero_commit,
+        model: $model,
+        effort: $effort
     }' 2>/dev/null || true)
 
 [[ -n "$LINE" ]] || exit 0
 
 # Retention: cap at 1 MiB, one previous generation; `borg nanoprobes` reads the live file then .1.
-{ source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "$LOG_FILE"; } >/dev/null 2>&1 || true
+# bash 3.2: a failed `source` is fatal under set -e even inside `{ }`/`|| true`; a subshell contains it.
+( source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "$LOG_FILE" ) >/dev/null 2>&1 || true
 
 printf '%s\n' "$LINE" >> "$LOG_FILE" 2>/dev/null || true
 

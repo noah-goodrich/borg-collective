@@ -244,10 +244,10 @@ def test_one_manifest_cannot_contest_itself_but_two_sharing_a_label_do():
 
 
 def _contested_by_program_key(manifests):
-    """merge-tree/gather.py's rule, transcribed just far enough to demonstrate its skip.
+    """The deleted merge-tree/gather.py's rule, transcribed just far enough to demonstrate its skip.
 
     This is the oracle for the defect, not a helper anyone should reuse: it reads `manifest["program"]`
-    and `continue`s past a manifest without one, exactly as the live copy does. Transcribed rather
+    and `continue`s past a manifest without one, exactly as the (since deleted) original did. Transcribed rather
     than imported because `merge-tree` carries a hyphen and can never be a Python package name.
     """
     by_ref: dict[str, str] = {}

@@ -23,6 +23,8 @@ services:
       # Host-first Claude: ~/.claude is no longer mounted into the container
       # (Claude runs on host; container is a `drone exec` dispatch target).
       - ~/.config/borg:/home/dev/.config/borg:cached
+      # borg-resume ledger (append-only events from in-container hooks). Only this dir, never ~/.claude.
+      - ~/.local/state/borg/resume:/home/dev/.local/state/borg/resume
 
     working_dir: __WORKSPACE__
     user: dev

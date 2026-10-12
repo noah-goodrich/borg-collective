@@ -175,6 +175,24 @@ _zone_epoch() { _rc_epoch_in_zone "$1" "$2" "$3"; }
     [ "$output" = "$((BORG_RESUME_NOW_EPOCH + 172800))" ]
 }
 
+@test "relative phrasing: comma-separated units" {
+    run resume_parse_reset "resets in 3 hours, 20 minutes"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$((BORG_RESUME_NOW_EPOCH + 12000))" ]
+    run resume_parse_reset "resets in 3 hours, and 20 minutes (limit window)"
+    [ "$output" = "$((BORG_RESUME_NOW_EPOCH + 12000))" ]
+}
+
+@test "M1b oracle: relative resets match an independent date(1) computation" {
+    local want
+    want="$(date -u -r "$((BORG_RESUME_NOW_EPOCH + 7500))" +%s 2>/dev/null || date -u -d "@$((BORG_RESUME_NOW_EPOCH + 7500))" +%s)"
+    run resume_parse_reset "resets in 2 hours, 5 minutes"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$want" ]
+    run resume_parse_reset "resets in 1 day, 2 hours, 3 minutes"
+    [ "$output" = "$((BORG_RESUME_NOW_EPOCH + 86400 + 7200 + 180))" ]
+}
+
 @test "short zone labels resolve (MT is America/Denver)" {
     _need_tz
     BORG_RESUME_NOW_EPOCH="$(_zone_epoch America/Denver 2026-10-12 06:00)"

@@ -134,19 +134,12 @@ _run_split() {
     HOOK_RC=$?
 }
 
-# A clone with an upstream and nothing ahead of it: the zero-commit condition.
-_empty_branch_repo() {
-    local origin="${BATS_TEST_TMPDIR}/origin.git" work="${BATS_TEST_TMPDIR}/work"
-    git init -q --bare "$origin"
-    git clone -q "$origin" "$work" 2>/dev/null
-    git -C "$work" config user.email "test@test.com"
-    git -C "$work" config user.name "Test"
-    echo a > "$work/a.txt"
-    git -C "$work" add a.txt
-    git -C "$work" commit -q -m init
-    git -C "$work" push -q origin HEAD 2>/dev/null
-    git -C "$work" branch -q --set-upstream-to="origin/$(git -C "$work" rev-parse --abbrev-ref HEAD)" 2>/dev/null
-    printf '%s' "$work"
+# A writer-type payload whose transcript holds one successful Read and no write: the zero-write condition.
+_read_only_input() {
+    local tx="${BATS_TEST_TMPDIR}/ro.jsonl"
+    jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"tu1",name:"Read",input:{file_path:"a.txt"}}]}}' > "$tx"
+    jq -nc --arg m "$1" --arg i "$2" --arg p "$tx" \
+        '{agent_id:$i,agent_type:"borg-nanoprobe",agent_transcript_path:$p,last_assistant_message:$m,cwd:"/parent"}'
 }
 
 @test "nanoprobe warnings: missing evidence arrives as systemMessage JSON on stdout, stderr empty" {
@@ -158,28 +151,24 @@ _empty_branch_repo() {
     [ ! -s "${BATS_TEST_TMPDIR}/hook.err" ]
 }
 
-@test "nanoprobe warnings: zero-commit arrives as systemMessage, plain text" {
-    local work
-    work=$(_empty_branch_repo)
-    _run_split "$(_probe_input "Edited lib/foo.sh:10 nothing landed." "agent-zero1234" "$work")"
+@test "nanoprobe warnings: zero-write arrives as systemMessage, plain text" {
+    _run_split "$(_read_only_input "Edited lib/foo.sh:10 nothing landed." "agent-zero1234")"
     [ "$HOOK_RC" -eq 0 ]
     local msg
     msg=$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)
-    _has "$msg" "NANOPROBE ZERO-COMMIT: agent-ze"
+    _has "$msg" "NANOPROBE ZERO-WRITE: agent-ze"
     _lacks "$msg" "EVIDENCE WARNING"
     [ ! -s "${BATS_TEST_TMPDIR}/hook.err" ]
 }
 
 @test "nanoprobe warnings: both conditions yield ONE object carrying both, with no ANSI" {
-    local work
-    work=$(_empty_branch_repo)
-    _run_split "$(_probe_input "All done." "agent-both1234" "$work")"
+    _run_split "$(_read_only_input "All done." "agent-both1234")"
     [ "$HOOK_RC" -eq 0 ]
     [ "$(printf '%s' "$HOOK_OUT" | jq -s length)" -eq 1 ]
     local msg esc
     msg=$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)
     _has "$msg" "EVIDENCE WARNING"
-    _has "$msg" "ZERO-COMMIT"
+    _has "$msg" "ZERO-WRITE"
     esc=$'\033'
     _lacks "$HOOK_OUT" "$esc"
     _lacks "$msg" "$esc"
@@ -198,4 +187,25 @@ _empty_branch_repo() {
     _run_split "$(_probe_input "All done." "agent-log12345")"
     [ "$(jq -r .id "$LOG_FILE")" = "agent-log12345" ]
     [ "$(jq -r .evidence_found "$LOG_FILE")" = "false" ]
+}
+
+# ─── model + effort recorded at stop time (survives transcript pruning) ──────
+
+_probe_input_tpath() {
+    printf '{"agent_id":"agent-me1","agent_type":"borg-nanoprobe","agent_transcript_path":"%s","last_assistant_message":"done","cwd":"%s"}' \
+        "$1" "${BATS_TEST_TMPDIR}"
+}
+
+@test "nanoprobe log records model and effort from the transcript's first assistant entry" {
+    run bash "$BORG_NANOPROBE_LOG" <<< "$(_probe_input_tpath "${BATS_TEST_DIRNAME}/fixtures/nanoprobes/with-effort.jsonl")"
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .model "$LOG_FILE")" = "claude-sonnet-5-5" ]
+    [ "$(jq -r .effort "$LOG_FILE")" = "high" ]
+}
+
+@test "nanoprobe log with a missing transcript still writes the row, with null model and effort" {
+    run bash "$BORG_NANOPROBE_LOG" <<< "$(_probe_input_tpath "/nonexistent/x.jsonl")"
+    [ "$status" -eq 0 ]
+    [ "$(jq -s 'length' "$LOG_FILE")" -eq 1 ]
+    [ "$(jq -r 'has("model") and has("effort") and .model == null and .effort == null' "$LOG_FILE")" = "true" ]
 }

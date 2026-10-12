@@ -1,58 +1,11 @@
-# merge-tree — PR control hub
+# merge-tree — chain coordinator
 
-A cross-repo, cross-machine "control hub": one self-contained HTML page that surfaces every in-flight PR / issue /
-Jira item across all repos and projects, curated into four buckets (needs-you, active-chains, standalone,
-collapsed-noise) and paired with a recommended next action the orchestrator can dispatch. `data.json` is the
-source of truth; `render.py` is a pure `data.json → index.html` view with no external dependencies (python3
-stdlib only: `json`/`os`/`html`/`datetime`/`argparse`/`collections`). The gather that produces `data.json` is the
-recon fan-out primitive ([borg#95](https://github.com/noah-goodrich/borg-collective/issues/95)); this repo owns
-only the shared renderer + protocol so every machine runs the same code against its own local data
-([borg#97](https://github.com/noah-goodrich/borg-collective/issues/97)).
+The merge-tree browser board (the `data.json` / `story.json` pipeline and the `index.html` / `graph.html` / FastAPI "hub story lens" views) was **retired 2026-10-12**: `borg link` is the only place chains are drawn. See `docs/plans/directives/2026-10-03-retire-the-merge-tree-browser-board.md` for the inventory and the decision record. `curate.py`, `render.py`, `render_graph.py`, `spine.py`, `gather.py` and `app/` are gone; the machine-local state under `~/.local/state/borg/merge-tree` (`BORG_MERGE_TREE_DIR`) is no longer read by anything and may be deleted by hand.
 
-## Run it
+What remains here:
 
-```
-python3 merge-tree/render.py
-```
-
-By default this reads `<STATE>/data.json` and the optional `<STATE>/annotations.local.json`, and writes
-`<STATE>/index.html`, where `<STATE>` is `$BORG_MERGE_TREE_DIR` if set, else
-`~/.local/state/borg/merge-tree`. Per-machine data (`data.json`, `annotations.local.json`, the rendered
-`index.html`) lives at that state path, not in this repo — only the renderer + protocol are shared code.
-
-Override individual paths without touching the env var:
-
-```
-python3 merge-tree/render.py --data /path/to/data.json --out /path/to/index.html
-```
-
-The render succeeds with `annotations.local.json` absent, empty, or malformed — annotations are optional and
-machine-local by design (see SCHEMA.md).
-
-## Graph view
-
-```
-python3 merge-tree/render_graph.py
-```
-
-Reads the same `data.json` (+ optional `annotations.local.json`) and writes `<STATE>/graph.html`: an interactive,
-self-contained (inline SVG + vanilla JS, no CDN) node-link dependency graph with three drill-down levels (project
-field-of-play → stack sub-graph → full per-item info panel), project/repo filters, and a chain-isolation control.
-`index.html` links to it ("Graph view →") and it links back ("← List view").
-
-## Files
-
-- `render.py` — the list/bucket renderer.
-- `render_graph.py` — the interactive dependency-graph renderer.
-- `SCHEMA.md` — the ratified `data.json` contract and the three-layer model (source state / disposable projection
-  / durable machine-local annotations).
-- `PROTOCOL.md` — the action-dispatch contract (`actions[ref] = {label, command, class}`) and the
-  readonly-vs-confirm guardrail, which reuses the existing bash-guard classification rather than inventing a new
-  one.
-
-## Further reading
-
-- [borg#97](https://github.com/noah-goodrich/borg-collective/issues/97) — the design thread that ratified this
-  schema and protocol.
-- [borg#95](https://github.com/noah-goodrich/borg-collective/issues/95) — the recon fan-out primitive that gathers
-  and normalizes the raw items this hub curates (merged/closed).
+- `coordinator.py` — the chain writer behind `borg chain list`, `plan` and `sync` (`borg.zsh` dispatches into it; `borg_core/reconcile/` cites it as the live reconcile writer).
+- `programs.py` — the manifest reader/writer `coordinator.py` imports. Its own retirement is filed: `docs/plans/directives/2026-08-31-retire-merge-tree-programs-into-borg-core.md`.
+- `test_coordinator.py`, `test_programs.py`, `test_s4_manifests.py`, `fixtures/programs/` — their tests, gated by `make test-viz` and the CI `viz` job.
+- `SCHEMA.md` — the live part is the chain-manifest contract (`<project>/.borg/chains/*.json`); the `data.json` and `story.json` sections are historical.
+- `PROTOCOL.md` — the action-dispatch contract, historical alongside the board it served.

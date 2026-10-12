@@ -176,10 +176,11 @@ one level deeper:
   checkpoint claims in-flight work on a project that `relative_activity` shows has gone idle, name
   the disagreement plainly and recommend the fix, the way `/borg-recon` does. Use judgment on
   `relative_activity` — there is no fixed day threshold in the data.
-- **Empty summaries are the normal case, not an error.** `summary` is null on nearly every project
-  until someone runs `--refresh`. Degrade in this order: `summary` → `waiting_reason` →
+- **Empty summaries are the normal case, not an error.** `summary` comes from the project's latest
+  checkpoint (its tl;dr, else the first Accomplished bullet), so it is null only when the project has
+  no checkpoint. Degrade in this order: `summary` → `waiting_reason` →
   `relative_activity` → `focus.checkpoint_head`. Never print "(no summary)" for a whole column; if
-  the board has no summaries, say so once and suggest `borg link --refresh` on the host.
+  the board has no summaries, say so once and suggest `/borg-link-up` in those projects to write a checkpoint; `--refresh` no longer fills `summary`.
 - **Collapse, don't transcribe.** 121 directives across 9 projects is a number plus the top few
   titles, not a list.
 - **`scope` still does not narrow the aggregates — but AS OF AC2, `focus` FOLLOWS IT.**
