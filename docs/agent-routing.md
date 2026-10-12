@@ -13,7 +13,7 @@
   - `claude-code-guide`
   - `research-tools:*`, only in a session where a research-tools skill was invoked (below)
 - **Denied:** no type at all (a fork), `general-purpose`, `Explore`, `Plan`, `fork`, `claude`, `borg-collective:ROUTING`, un-namespaced specialist names, and any unlisted type. Each deny message names what to use instead (for example, `Explore` becomes `borg-collective:borg-scout` for read-only search).
-- **Caps on allowed types.** A per-call `model` must be absent or `sonnet` / `haiku` (or a `claude-sonnet-*` / `claude-haiku-*` id). A per-call `effort` must be absent or `low` / `medium` / `high`. `opus`, `fable`, `inherit`, `xhigh`, `max` are denied. The specialists carry their own cheap `model:` / `effort:` frontmatter, so the default is already compliant.
+- **Caps on allowed types.** A per-call `model` must be absent or `sonnet` / `haiku` (or a `claude-sonnet-*` / `claude-haiku-*` id). A per-call `effort` must be absent or `low` / `medium` / `high`. `opus`, `fable`, `inherit`, `xhigh`, `max` are denied. The specialists carry their own cheap `model:` / `effort:` frontmatter, so the default is already compliant. The one exception is `claude-code-guide`, which has no effort in its definition: a call without `effort` is denied (no model is required). It is a built-in (Haiku) that pins no effort, so it would inherit the session's xhigh; the guards REQUIRE an explicit `effort` of `low` / `medium` / `high` on it. Preferred call: `Agent {subagent_type:"claude-code-guide", effort:"low"}`; in a Workflow, `agent(p, {agentType: "claude-code-guide", effort: "low"})`.
 - **research-tools exception.** `research-tools:*` types may run Opus at any effort, because research quality is worth the spend. They are allowed only when the session transcript shows a research-tools skill invoked (a `Skill` tool call whose skill starts with `research-tools:`) or a research slash command (`/research-tools:research`, `/deep-research`, `/brainstorm`, including the bare forms). Without that, they are denied.
 
 Kill switches (debugging only): `BORG_AGENT_MODEL_GUARD=0`, `BORG_WORKFLOW_MODEL_GUARD=0`.
@@ -38,7 +38,7 @@ Pick the cheapest tier that fits.
 - **borg-nanoprobe**: one discrete task that needs judgment (implement, fix, write a test). Split multi-concern work first. Also the replacement for `general-purpose` and `Plan`.
 - **borg-researcher**: from-zero web research on ONE track. Do not use it for facts already in the repo.
 - **borg-reviewer**: independent blind adversarial review. It arrives cold; do not prime it with the author's reasoning.
-- **borg-verifier**: verification of a deliverable against its acceptance criteria.
+- **borg-verifier**: verification of a deliverable against its acceptance criteria. Read-only by enforcement: `hooks/borg-verifier-guard.sh` (PreToolUse, Bash) lets it run any verification command but holds git and gh to a read-only allowlist and denies constructs it cannot see through. It is a no-op for every other caller.
 - **claude-code-guide**: questions about Claude Code itself.
 - **borg-scout has read-only file tools only (no Bash).** Route git and GitHub lookups ("state of PR X?", "what changed in commit Y?") to an agent that has Bash: borg-grunt for a fully-specified command, borg-nanoprobe when judgment is needed. A scoped read-only shell for the scout is tracked in `docs/plans/directives/2026-10-10-scout-shell-allowlist.md`.
 
@@ -73,8 +73,9 @@ The `Agent`-tool matrix does not apply automatically inside a `Workflow` script:
 
 `hooks/borg-workflow-model-guard.sh` checks this by tokenizing the script, and it **fails closed**:
 
-- The options argument must be an inline object literal; `agentType`, `model` and `effort` must be string literals (a `const` holding a literal is resolved). Variables, spreads, computed keys and expressions are denied.
-- `agent` referenced without being called (alias, `.map(agent)`, destructuring) is denied.
+- The options argument must be an inline object literal; `agentType`, `model` and `effort` must be string literals (a `const` holding a literal is resolved, unless the same name is bound again anywhere, as a parameter, loop variable or destructuring target; `let`/`var` are never resolved). Variables, spreads, computed keys, getters and expressions are denied.
+- `agent` referenced without being called (alias, `.map(agent)`, destructuring) is denied. A local binding named `agent` (a `const`/`let`, an arrow or function parameter, a `for (const agent of ...)` head, a `catch (agent)`) is not the Workflow `agent()` and is allowed inside its scope; `var agent` is not, because it can redeclare the injected parameter.
+- Every other route to `agent()` is denied wherever it appears: backslash escapes in identifiers, `eval`, `Function`, `.constructor`, `import`/`require`, and the global object (`globalThis`, `global`, `self`, `window`, `this`, `arguments`).
 - A script that cannot be parsed, a `scriptPath` that cannot be read, and a saved-workflow `name` that cannot be found in `.claude/workflows` (project, then parents) or `~/.claude/workflows` are denied. Saved workflows and `scriptPath` files are checked like inline scripts.
 - There is no inline escape hatch (the old inherit-on-purpose comment is gone).
 - Prose that merely contains `agent(` (template-literal prompts, strings, comments, regex literals) is not a call and is not flagged.
@@ -86,6 +87,7 @@ Stage guidance:
 - Analysis, synthesis, drafting: `agentType: 'borg-collective:borg-nanoprobe'`
 - From-zero web research: `agentType: 'borg-collective:borg-researcher'`
 - Blind review or merge gate: `agentType: 'borg-collective:borg-reviewer'`
+- Claude Code questions: `agentType: "claude-code-guide", effort: "low"` (effort is required; it pins none and would inherit xhigh)
 - Ad hoc, no specialist fits: `model: 'sonnet', effort: 'medium'`
 
 - **Compose with the specialists.** A specialist brings both its cheap model and its system prompt; prefer it over a bare `model` pin.

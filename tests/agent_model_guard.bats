@@ -95,8 +95,22 @@ _agent() {
         _agent "{\"subagent_type\":\"borg-collective:borg-$t\"}"
         [ "$status" -eq 0 ] || { echo "borg-$t: $output"; false; }
     done
-    _agent '{"subagent_type":"claude-code-guide"}'
+    _agent '{"subagent_type":"claude-code-guide","effort":"low"}'
     [ "$status" -eq 0 ]
+}
+
+@test "claude-code-guide with no effort is denied and the message names the fix" {
+    _agent '{"subagent_type":"claude-code-guide"}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"pins no effort"* ]] || false
+    [[ "$output" == *"effort: 'low'"* ]] || false
+}
+
+@test "claude-code-guide with effort low is allowed and with xhigh is still denied" {
+    _agent '{"subagent_type":"claude-code-guide","effort":"low"}'
+    [ "$status" -eq 0 ]
+    _agent '{"subagent_type":"claude-code-guide","effort":"xhigh"}'
+    [ "$status" -eq 2 ]
 }
 
 @test "the legacy Task tool name is guarded too" {
@@ -255,6 +269,8 @@ MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result
     grep -q "xhigh" "$doc"
     grep -q "research-tools" "$doc"
     grep -q "borg-collective:borg-verifier" "$doc"
+    grep -q 'subagent_type:"claude-code-guide", effort:"low"' "$doc"
+    grep -q 'agentType: "claude-code-guide", effort: "low"' "$doc"
     ! grep -q "opus\[1m\]" "$doc"
     ! grep -q "inherit-ok" "$doc"
 }
@@ -264,6 +280,7 @@ MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result
     grep -q "deny-by-default allowlist" "$hook"
     grep -q "sonnet/haiku" "$hook"
     grep -q "research-tools" "$hook"
+    grep -q "claude-code-guide requires effort" "$hook"
     ! grep -q "inherit-ok" "$hook"
 }
 
