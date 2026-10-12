@@ -48,8 +48,9 @@ _br_in_container() {
 
 # Build the event line: ONE compact JSON object, or nothing when the payload is unusable (no string session_id, or
 # an id outside the filename-safe charset, checked here so a TAB or newline can never smuggle in a second field).
-# Every field tolerates absence. Every string field is capped at 256 chars, except msg at 600, so a line stays
-# well under the 4KB that O_APPEND writes are atomic for.
+# Every field tolerates absence. A stop_failure is always scope main (U1: its agent_id is unverified). Every string
+# field is capped at 256 chars, except msg at 600, so a line stays well under the 4KB that O_APPEND writes are
+# atomic for.
 _br_build_event() {
     local _ev="$1" _t="$2"
     jq -c --arg ev "$_ev" --argjson t "$_t" '
@@ -57,7 +58,8 @@ _br_build_event() {
         def c: if . == null then null else .[0:256] end;
         (.session_id | s) as $sid
         | select($sid != null and ($sid | test("^[A-Za-z0-9_-]{1,128}\\z")))
-        | (.agent_id | s | c | if . != null and test("^\\s*\\z") then null else . end) as $aid
+        | (.agent_id | s | c | if . != null and test("^\\s*\\z") then null else . end) as $aid_raw
+        | (if $ev == "stop_failure" then null else $aid_raw end) as $aid
         | {
             t: $t,
             ev: $ev,
@@ -159,7 +161,9 @@ _br_record() {
     _built="$(printf '%s' "$_payload" | _br_build_event "$_ev" "$_t")"
     [ -n "$_built" ] || return 0
     _line="$_built"
-    _sid="$(printf '%s' "$_line" | jq -r .sid 2>/dev/null)"
+    # sid is the third key of the compact line and already passed the charset check in the builder: no second jq.
+    _sid="${_line#*\"sid\":\"}"
+    _sid="${_sid%%\"*}"
     borg_resume_valid_sid "$_sid" || return 0
     borg_resume_append_line "$(borg_resume_events_file "$_sid")" "$_line"
     if [ "$_ev" = "session_start" ]; then

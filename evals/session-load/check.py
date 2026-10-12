@@ -23,7 +23,7 @@ from pathlib import Path
 # into the plugin's hooks.json (tests/session_load_floor.bats pins these against that file). Only the
 # events a headless `-p` session fires on its own are listed; Notification and the tool events need
 # a TTY or a tool call.
-AUTHORED_HOOKS = {"SessionStart": 1, "Stop": 2}
+AUTHORED_HOOKS = {"SessionStart": 2, "Stop": 2}
 PLUGIN_NAME = "borg-collective"
 
 

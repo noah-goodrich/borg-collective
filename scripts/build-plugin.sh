@@ -300,6 +300,14 @@ _build_self_contained_hook "$HOOKS_SRC/borg-memory-read-log.sh" "$HOOKS_DST/borg
 # prefer-tool.jsonl there means "not instrumented", not "no bypasses". Copied as-is with guard.
 _build_self_contained_hook "$HOOKS_SRC/borg-prefer-tool-log.sh" "$HOOKS_DST/borg-prefer-tool-log.sh" 0
 
+# borg-resume-hook.sh is a self-contained forwarder (sources nothing). Copied as-is and WITHOUT the "borg on PATH"
+# guard the other hooks get: drone containers run it too, and it already no-ops when ~/.claude/bin/borg-resume is
+# absent. It is fail-open and prints nothing.
+_copy_if_changed "$HOOKS_SRC/borg-resume-hook.sh" "$HOOKS_DST/borg-resume-hook.sh" "hooks/borg-resume-hook.sh"
+if [[ "$DRY_RUN" -eq 0 && -f "$HOOKS_DST/borg-resume-hook.sh" ]]; then
+    chmod +x "$HOOKS_DST/borg-resume-hook.sh"
+fi
+
 # ── Phase 3: Agent definition ─────────────────────────────────────────────────
 
 _info "Phase 3: Agents"
@@ -342,6 +350,7 @@ _info "Phase 4: hooks.json"
 # bash-guard and pre-commit-remind fire only on Bash tool calls.
 # borg-plan-promote fires on Edit/Write/NotebookEdit.
 # All others fire on every invocation of their event (matcher: "").
+# borg-resume-hook.sh (S4) is registered for 8 events, timeout 5, and never on Stop or UserPromptSubmit.
 HOOKS_JSON='{
   "hooks": {
     "SessionStart": [
@@ -352,6 +361,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-link-down.sh",
             "timeout": 15
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh SessionStart",
+            "timeout": 5
           }
         ]
       }
@@ -396,6 +415,16 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-notify.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "idle_prompt|permission_prompt|quota_auto_resume_.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh Notification",
+            "timeout": 5
           }
         ]
       }
@@ -470,6 +499,16 @@ HOOKS_JSON='{
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh PreToolUse",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -502,6 +541,16 @@ HOOKS_JSON='{
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Agent|Workflow",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh PostToolUse",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "SubagentStop": [
@@ -512,6 +561,52 @@ HOOKS_JSON='{
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-nanoprobe-log.sh",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh SubagentStop",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh SubagentStart",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh StopFailure",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh SessionEnd",
+            "timeout": 5
           }
         ]
       }
