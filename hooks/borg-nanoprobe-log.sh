@@ -205,6 +205,23 @@ fi
 
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+# Model + effort from the transcript's first assistant entry (same selection as borg.zsh's
+# _borg_nanoprobe_model_effort). Recorded now because Claude Code prunes transcripts after ~30 days.
+# Absent file or field yields JSON null; never drops the row.
+MODEL_JSON=null
+EFFORT_JSON=null
+if [[ -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
+    _me=$(jq -c 'select(.type == "assistant") |
+        [(.message.model // null), (.effort // .perTurnEffort // null)]' "$TRANSCRIPT_PATH" 2>/dev/null \
+        | head -1 || true)
+    if [[ -n "$_me" ]]; then
+        MODEL_JSON=$(printf '%s' "$_me" | jq -c '.[0]' 2>/dev/null || echo null)
+        EFFORT_JSON=$(printf '%s' "$_me" | jq -c '.[1]' 2>/dev/null || echo null)
+        [[ -n "$MODEL_JSON" ]] || MODEL_JSON=null
+        [[ -n "$EFFORT_JSON" ]] || EFFORT_JSON=null
+    fi
+fi
+
 # Atomic append: build the line in jq, then >> the file. Drop the line silently
 # on any jq error — never block the session.
 LINE=$(jq -nc \
@@ -217,6 +234,8 @@ LINE=$(jq -nc \
     --argjson evidence_found "$EVIDENCE_FOUND" \
     --argjson evidence_score "$EVIDENCE_SCORE" \
     --argjson zero_commit "$ZERO_COMMIT" \
+    --argjson model "$MODEL_JSON" \
+    --argjson effort "$EFFORT_JSON" \
     '{
         id: $id,
         agent_type: $type,
@@ -227,7 +246,9 @@ LINE=$(jq -nc \
         cwd: $cwd,
         evidence_found: $evidence_found,
         evidence_score: $evidence_score,
-        zero_commit: $zero_commit
+        zero_commit: $zero_commit,
+        model: $model,
+        effort: $effort
     }' 2>/dev/null || true)
 
 [[ -n "$LINE" ]] || exit 0
