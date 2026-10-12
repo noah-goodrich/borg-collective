@@ -162,7 +162,8 @@ def extract_next_step(assistant_messages: list[str]) -> str:
         # Split on sentence boundaries
         sentences = re.split(r"(?<=[.!?])\s+", last)
         sentences = [
-            s.strip() for s in sentences
+            s.strip()
+            for s in sentences
             if 15 < len(s.strip()) < 200
             and not s.strip().startswith("Estimated tokens")
             and not s.strip().startswith("Cost:")
@@ -258,15 +259,15 @@ Transcript:
         result = subprocess.run(
             [
                 "claude",
-                "-p", prompt,
-                "--model", "haiku",
-                "--bare",
+                "-p",
+                prompt,
+                "--model",
+                "haiku",
                 "--no-session-persistence",
             ],
             capture_output=True,
             text=True,
-            timeout=15,
-            env={**os.environ, "CLAUDE_CODE_SIMPLE": "1"},
+            timeout=30,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()[:500]

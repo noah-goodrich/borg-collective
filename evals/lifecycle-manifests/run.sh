@@ -146,11 +146,14 @@ fi
 # without credentials and would keep the two cases indistinguishable. It runs ONLY when the sweep
 # was requested: under `--skip-model` a probe would spend a model call to decide nothing.
 model_off=""
+# Pinned, never inherited: this eval grades orchestrator-session skills, so it runs the production tier.
+EVAL_MODEL=opus
+EVAL_EFFORT=xhigh
 if [ "$SKIP_MODEL" -eq 1 ]; then
     model_off="--skip-model"
 elif ! command -v claude >/dev/null 2>&1; then
     model_off="claude unavailable"
-elif ! probe="$(claude -p 'reply with the single word READY and nothing else' 2>&1)" \
+elif ! probe="$(claude -p 'reply with the single word READY and nothing else' --model "$EVAL_MODEL" --effort "$EVAL_EFFORT" 2>&1)" \
      || ! printf '%s' "$probe" | grep -q 'READY'; then
     echo "claude is present but not usable: $(printf '%s' "$probe" | head -1)" >&2
     model_off="claude unavailable"
@@ -205,7 +208,7 @@ _run_skill() {
     prompt="$(_eval_prompt "$cmd" "$obj")"
     _eval_prompt_mentions_no_manifest "$prompt" || return 2
     ( cd "$dir" && PATH="$BIN:$REPO/.venv/bin" BORG_ROOT="$REPO" \
-        claude -p "$prompt" --permission-mode acceptEdits >/dev/null 2>&1 )
+        claude -p "$prompt" --model "$EVAL_MODEL" --effort "$EVAL_EFFORT" --permission-mode acceptEdits >/dev/null 2>&1 )
 }
 
 _valid_manifest_count() {

@@ -153,8 +153,8 @@ _memory_payload() {
         > "$NEW/agents.jsonl"
     run zsh "${BATS_TEST_DIRNAME}/../borg.zsh" nanoprobes
     [ "$status" -eq 0 ]
-    [[ "${lines[0]}" == *"bbbbbbbb"* ]]
-    [[ "${lines[1]}" == *"aaaaaaaa"* ]]
+    [[ "${lines[1]}" == *"bbbbbbbb"* ]]
+    [[ "${lines[2]}" == *"aaaaaaaa"* ]]
     run zsh "${BATS_TEST_DIRNAME}/../borg.zsh" nanoprobe-log aaaaaaaa
     [ "$status" -eq 0 ]
     [[ "$output" == *"rotated run"* ]]

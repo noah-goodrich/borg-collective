@@ -483,7 +483,7 @@ cmd_up() {
         fi
 
         # Host-first: left pane runs claude, right pane is a shell at project_dir.
-        create_2pane_window "$wname" "claude" "$project_dir" ""
+        create_2pane_window "$wname" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" "$project_dir" ""
         tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
         _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
         _drone_register "$project_dir" "$project_name" "$wname"
@@ -562,7 +562,7 @@ cmd_up() {
 
     # Host-first: both panes are host shells at $project_dir.
     # Left (Claude) pane auto-launches `claude`; right pane stays as a shell prompt.
-    create_2pane_window "$wname" "claude" "$project_dir" ""
+    create_2pane_window "$wname" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" "$project_dir" ""
     tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
     _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
     _drone_register "$project_dir" "$project_name" "$wname"
@@ -736,7 +736,7 @@ cmd_claude() {
     case "$current_cmd" in
         zsh|bash|sh|fish|dash|"")
             info "Launching Claude in $project_name..."
-            tmux send-keys -t "$claude_pane" "claude" Enter
+            tmux send-keys -t "$claude_pane" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" Enter
             ;;
         *)
             info "Claude pane already busy ($current_cmd) — focusing without relaunch."
@@ -818,7 +818,7 @@ cmd_feature() {
         borg add "$work_dir" 2>/dev/null || true
         local claude_pane
         claude_pane=$(get_left_pane "$window_name")
-        tmux send-keys -t "$claude_pane" "claude" Enter
+        tmux send-keys -t "$claude_pane" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" Enter
         attach_or_switch "$window_name"
         tmux select-pane -t "$claude_pane"
         tmux resize-pane -Z -t "$claude_pane"
