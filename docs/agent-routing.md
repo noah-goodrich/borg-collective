@@ -6,7 +6,7 @@
 
 **Orchestrator and drone sessions run Opus at xhigh. Every subagent they spawn must be BELOW that tier: Sonnet or Haiku, effort at most `high`.** The single exception is research-tools.
 
-- **Session tier.** `borg` and `drone` launches pin Opus at xhigh via `--model` / `--effort`; override with `BORG_CLAUDE_MODEL` / `BORG_CLAUDE_EFFORT`. `/effort max` is a per-session choice. (The old claim that the session default is `opus[1m]` from `settings.json` is gone: the launch flags are the source of truth.)
+- **Session tier.** The orchestrator and drone session tier (Opus at xhigh or max effort) comes from the user's own launch or settings; the `borg` and `drone` launchers start a plain `claude` and do not pin it. `/effort max` is a per-session choice.
 - **Why a guard, not a convention.** An unpinned subagent inherits the session model AND effort, so it would run Opus xhigh. `CLAUDE_CODE_SUBAGENT_MODEL` does not reach `Agent`-tool forks or Workflow `agent()` calls. Effort matters as much as model: cache reads cost the same on Opus and Sonnet, so a high-effort Sonnet agent can still be expensive.
 - **Deny-by-default allowlist** of `subagent_type` (Agent tool) / `agentType` (Workflow `agent()`):
   - `borg-collective:borg-scout`, `borg-collective:borg-grunt`, `borg-collective:borg-nanoprobe`, `borg-collective:borg-researcher`, `borg-collective:borg-reviewer`, `borg-collective:borg-verifier`

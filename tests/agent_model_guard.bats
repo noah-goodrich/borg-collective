@@ -254,7 +254,6 @@ MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result
     local doc="${BATS_TEST_DIRNAME}/../docs/agent-routing.md"
     grep -q "xhigh" "$doc"
     grep -q "research-tools" "$doc"
-    grep -q "BORG_CLAUDE_MODEL" "$doc"
     grep -q "borg-collective:borg-verifier" "$doc"
     ! grep -q "opus\[1m\]" "$doc"
     ! grep -q "inherit-ok" "$doc"
