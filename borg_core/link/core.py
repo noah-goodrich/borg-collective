@@ -49,6 +49,7 @@ TSV_EMPTY_SENTINEL = "-"
 # docstring). Not a parameter: it is a property of the assembler, not an input any caller chooses.
 # Bumped 1 -> 2 in Phase 3: `total_projects` was added as a required top-level wire key (see
 # assemble's docstring for why it cannot be derived from `order` or `projects`).
+# `summary` now comes from the latest checkpoint (PR #329); stays 2: the key was already nullable, nothing narrowed.
 DOCUMENT_VERSION = 2
 
 # The human table's three-key sort (project_sort_key) ranks status ascending: waiting < active <
