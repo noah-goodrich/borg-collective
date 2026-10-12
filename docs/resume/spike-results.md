@@ -23,6 +23,12 @@ Machine-readable results: `spike/SPIKE_RESULTS.json`. Captured-skeleton fixtures
 | U16 | pane after a limit             | partial |
 | U17 | resume size dialog             | unknown |
 
+S0c prerequisite (not a numbered spike; recorded as `launchd_probe` in the JSON). Evidence: `spike/launchd-probe-evidence.txt`. Until a pass is recorded, limit-class resume stays deferred and notify-only.
+
+| Id             | Topic                          | Outcome |
+|----------------|--------------------------------|---------|
+| launchd_probe  | claude probe under launchd     | pass    |
+
 `partial` gaps, in short: U1 subagent-origin payload fields (agent_id, agent_type) have no committed payload fixture; U2 `error_details` is absent (refuted part, fallback is text parsing); U6 session-id continuity and U9 host identity were read from private logs; U8 literal-null return was not tried; U13 dialog-input behaviour and the dropped first Enter have no committed capture; U15 Ctrl+X Ctrl+K and the for-tool-use marker were not shown; U16 Esc dismissal and the Notification check in the persistent-dialog state have no committed capture.
 
 ## Findings

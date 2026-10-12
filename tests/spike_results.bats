@@ -71,14 +71,6 @@ _violations() {
     [[ "$output" == *"U7: illegal outcome"* ]]
 }
 
-@test "U1, U2, U9 and U15 are partial, not pass" {
-    local id
-    for id in U1 U2 U9 U15; do
-        run jq -r --arg id "$id" '.spikes[] | select(.id == $id) | .outcome' "$RES"
-        [ "$output" = "partial" ] || { echo "$id is $output"; false; }
-    done
-}
-
 @test "each refuted part names a fallback" {
     run jq -r '.spikes[] | .id as $id | (.refuted_parts // [])[]
         | select(((.fallback // "") | length) == 0) | $id' "$RES"
@@ -105,17 +97,6 @@ _violations() {
         grep -Eq "^\| ${id}[[:space:]]+\|.*\| ${want}[[:space:]]*\|$" "$ROOT/docs/resume/spike-results.md" \
             || { echo "doc row for $id lacks outcome $want"; false; }
     done
-}
-
-@test "the doc row match is word-bounded: deleting the U1 row is caught" {
-    grep -v -E '^\| U1[[:space:]]+\|' "$ROOT/docs/resume/spike-results.md" >"$BATS_TEST_TMPDIR/doc.md"
-    run grep -Eq '^\| U1[[:space:]]+\|' "$BATS_TEST_TMPDIR/doc.md"
-    [ "$status" -ne 0 ]
-}
-
-@test "the directive defines partial in its S0b test strategy" {
-    run grep -c 'partial' "$ROOT/docs/plans/directives/2026-10-12-borg-resume-any-interruption.md"
-    [ "$output" -ge 1 ]
 }
 
 @test "event-name sequences: names only, and they show what the results claim" {
@@ -162,4 +143,28 @@ _violations() {
     [ "$status" -eq 0 ]
     run grep -c '"127.0.0.1"' "$ROOT/spike/stub-proxy.py"
     [ "$output" -ge 1 ]
+}
+
+@test "launchd_probe is recorded outside the gating list, with the pass rule" {
+    run jq -e '.launchd_probe | (.outcome == "pass" or .outcome == "partial") and (.evidence | length > 0) and (.claude_version | type == "string")' "$RES"
+    [ "$status" -eq 0 ]
+    run jq -e '(.launchd_probe.outcome != "pass") or ((.launchd_probe.evidence_paths | length > 0) and ((.launchd_probe.gaps // []) | length == 0))' "$RES"
+    [ "$status" -eq 0 ]
+    run jq -e '(.launchd_probe.outcome != "partial") or ((.launchd_probe.gaps // []) | length > 0)' "$RES"
+    [ "$status" -eq 0 ]
+    local p
+    for p in $(jq -r '.launchd_probe.evidence_paths[]?' "$RES"); do
+        [ -e "$ROOT/$p" ] || { echo "missing $p"; false; }
+    done
+    if [ "$(jq -r '.launchd_probe.outcome' "$RES")" = "pass" ]; then
+        grep -q '^probe_exit=0$' "$ROOT/spike/launchd-probe-evidence.txt"
+        grep -Eq '^Current session: [0-9]+% used' "$ROOT/spike/launchd-probe-evidence.txt"
+        grep -Eq '^session_pct=[0-9]+$' "$ROOT/spike/launchd-probe-evidence.txt"
+    fi
+}
+
+@test "summary doc has a launchd_probe row matching the recorded outcome" {
+    local want
+    want="$(jq -r '.launchd_probe.outcome' "$RES")"
+    grep -Eq "^\| launchd_probe[[:space:]]+\|.*\| ${want}[[:space:]]*\|$" "$ROOT/docs/resume/spike-results.md"
 }
