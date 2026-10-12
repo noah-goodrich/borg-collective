@@ -240,18 +240,27 @@ _drone_apply_window_color() {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+# The label value docker compose stamps for `-p <name>`: lowercased, only [a-z0-9_-] kept.
+_compose_project_label() {
+    local n="${(L)1}"
+    print -r -- "${n//[^a-z0-9_-]/}"
+}
+
+# Both lookups take the PROJECT name (the one passed to `docker compose -p`), never the folder basename.
+# Usage: get_project_container <project_name> <project_dir>
 get_project_container() {
-    local dir="${1:-$(pwd)}"
-    local name="${dir##*/}"
+    local name dir="${2:-$(pwd)}"
+    name=$(_compose_project_label "$1")
     docker ps --filter "label=com.docker.compose.project=$name" \
               --filter "label=dev.role=app" \
               --format '{{.Names}}' 2>/dev/null | head -1 \
-    || docker compose -p "$name" -f "$dir/$COMPOSE_FILE" ps --format '{{.Names}}' 2>/dev/null | head -1
+    || docker compose -p "$1" -f "$dir/$COMPOSE_FILE" ps --format '{{.Names}}' 2>/dev/null | head -1
 }
 
+# Usage: get_service_name <project_name>
 get_service_name() {
-    local dir="${1:-$(pwd)}"
-    local name="${dir##*/}"
+    local name
+    name=$(_compose_project_label "$1")
     docker ps --filter "label=com.docker.compose.project=$name" \
               --filter "label=dev.role=app" \
               --format '{{.Label "com.docker.compose.service"}}' 2>/dev/null | head -1
@@ -359,7 +368,7 @@ run_post_create_command() {
     [[ -n "$post_cmd" ]] || return 0
     local compose="$project_dir/$COMPOSE_FILE"
     local service
-    service=$(get_service_name "$project_dir")
+    service=$(get_service_name "$project_name")
     _read_devcontainer_exec_config "$project_dir"
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
@@ -383,7 +392,7 @@ run_post_start_command() {
     dbg "run_post_start_command: $post_cmd"
     local compose="$project_dir/$COMPOSE_FILE"
     local service
-    service=$(get_service_name "$project_dir")
+    service=$(get_service_name "$project_name")
     _read_devcontainer_exec_config "$project_dir"
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
@@ -433,12 +442,12 @@ attach_or_switch() {
 }
 
 wait_for_container() {
-    local dir="$1"
+    local name="$1" dir="$2"
     dbg "wait_for_container: polling (max 30s)..."
     local i=0 max=30
     while (( i < max )); do
         local c
-        c=$(get_project_container "$dir")
+        c=$(get_project_container "$name" "$dir")
         if [[ -n "$c" ]]; then
             dbg "wait_for_container: found '$c' after ${i}s"
             echo "$c"
@@ -519,7 +528,7 @@ cmd_up() {
             # Fall through to create new window
         else
             local container
-            container=$(get_project_container "$project_dir")
+            container=$(get_project_container "$project_name" "$project_dir")
             if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
                 if [[ -n "$_build_flag" ]]; then
                     info "Rebuilding container for $project_name..."
@@ -529,7 +538,7 @@ cmd_up() {
                 run_initialize_command "$project_dir"
                 _run_pre_up "$project_dir" "$project_name"
                 docker compose -p "$project_name" -f "$compose" up -d $_build_flag
-                container=$(wait_for_container "$project_dir")
+                container=$(wait_for_container "$project_name" "$project_dir")
                 _save_devcontainer_hash
                 run_post_create_command "$project_name" "$project_dir"
                 run_post_start_command "$project_name" "$project_dir"
@@ -544,18 +553,18 @@ cmd_up() {
 
     # Create new project window
     local container
-    container=$(get_project_container "$project_dir")
+    container=$(get_project_container "$project_name" "$project_dir")
     if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
         info "Starting containers for $project_name..."
         run_initialize_command "$project_dir"
         _run_pre_up "$project_dir" "$project_name"
         docker compose -p "$project_name" -f "$compose" up -d $_build_flag
-        container=$(wait_for_container "$project_dir")
+        container=$(wait_for_container "$project_name" "$project_dir")
         mkdir -p "$_dc_hash_dir" && [[ -n "$_dc_hash" ]] && echo "$_dc_hash" > "$_dc_hash_file" || true
     fi
 
     local service
-    service=$(get_service_name "$project_dir")
+    service=$(get_service_name "$project_name")
     info "Container: $container  Service: $service"
     run_post_create_command "$project_name" "$project_dir"
     run_post_start_command "$project_name" "$project_dir"
@@ -638,7 +647,7 @@ _cycle_project() {
     docker compose -p "$project_name" -f "$compose" up -d
 
     local container
-    container=$(wait_for_container "$project_dir")
+    container=$(wait_for_container "$project_name" "$project_dir")
 
     if [[ "$mode" == "rebuild" ]]; then
         local _dc_hash _dc_hash_dir _dc_hash_file
@@ -697,7 +706,7 @@ _cmd_cycle() {
         current_window=$(tmux display-message -p '#W')
         pdir=$(tmux show-option -t "$SESSION:$current_window" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" && -d "$pdir" ]]; then
-            _cycle_project "${pdir##*/}" "$pdir" "$mode"
+            _cycle_project "$(_drone_project_of "$current_window")" "$pdir" "$mode"
             return
         fi
     fi
@@ -880,18 +889,18 @@ cmd_exec() {
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
 
     local container service
-    container=$(get_project_container "$project_dir")
+    container=$(get_project_container "$project_name" "$project_dir")
     if [[ -z "$container" ]]; then
         warn "$project_name: container down — running drone up"
         ensure_postgres
         run_initialize_command "$project_dir"
         _run_pre_up "$project_dir" "$project_name"
         docker compose -p "$project_name" -f "$compose" up -d
-        container=$(wait_for_container "$project_dir")
+        container=$(wait_for_container "$project_name" "$project_dir")
         run_post_create_command "$project_name" "$project_dir"
         run_post_start_command "$project_name" "$project_dir"
     fi
-    service=$(get_service_name "$project_dir")
+    service=$(get_service_name "$project_name")
     [[ -n "$service" ]] || die "$project_name: no app service found"
 
     docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" "$@"
@@ -974,12 +983,13 @@ cmd_toggle() {
             local pdir
             pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
             if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
-                local container shell service exec_cmd
-                container=$(get_project_container "$pdir") || true
+                local container shell service exec_cmd pname
+                pname=$(_drone_project_of "$wname")
+                container=$(get_project_container "$pname" "$pdir") || true
                 if [[ -n "$container" ]]; then
                     shell=$(get_shell "$container")
-                    service=$(get_service_name "$pdir")
-                    exec_cmd=$(build_exec_cmd "${pdir##*/}" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
+                    service=$(get_service_name "$pname")
+                    exec_cmd=$(build_exec_cmd "$pname" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
                     tmux send-keys -t "$side" "$exec_cmd" Enter
                 fi
             elif [[ -n "$pdir" ]]; then
@@ -1044,12 +1054,13 @@ cmd_pane() {
     local pdir
     pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
     if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
-        local container shell service exec_cmd
-        container=$(get_project_container "$pdir") || true
+        local container shell service exec_cmd pname
+        pname=$(_drone_project_of "$wname")
+        container=$(get_project_container "$pname" "$pdir") || true
         if [[ -n "$container" ]]; then
             shell=$(get_shell "$container")
-            service=$(get_service_name "$pdir")
-            exec_cmd=$(build_exec_cmd "${pdir##*/}" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
+            service=$(get_service_name "$pname")
+            exec_cmd=$(build_exec_cmd "$pname" "$pdir/$COMPOSE_FILE" "$service" "$shell" "$pdir")
             tmux send-keys -t "$new_pane" "$exec_cmd" Enter
         fi
     elif [[ -n "$pdir" ]]; then
