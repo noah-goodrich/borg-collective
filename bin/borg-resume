@@ -55,7 +55,7 @@ _br_build_event() {
         def c: if . == null then null else .[0:256] end;
         (.session_id | s) as $sid
         | select($sid != null and ($sid | test("^[A-Za-z0-9_-]{1,128}\\z")))
-        | (.agent_id | s | c) as $aid
+        | (.agent_id | s | c | if . != null and test("^\\s*\\z") then null else . end) as $aid
         | {
             t: $t,
             ev: $ev,
@@ -114,6 +114,7 @@ _br_write_registry() {
         _cpid="$PPID"
         _cstart="$(LC_ALL=C ps -o lstart= -p "$_cpid" 2>/dev/null)"
         _cstart="${_cstart#"${_cstart%%[![:space:]]*}"}"
+        _cstart="${_cstart%"${_cstart##*[![:space:]]}"}"
         _br_pane_facts "$_sid"
     fi
 
