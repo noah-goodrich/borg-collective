@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
-"""coordinator.py — `borg program`: supervisor between borg's own program manifests and any
-external system tracking the same programs. PM6/PM7.
+"""coordinator.py — `borg chain`: supervisor between borg's own chain manifests and any
+external system tracking the same chains. PM6/PM7.
 
 WHAT THIS IS NOT. This module writes nothing on GitHub, renders no PR body, and knows no field
 name from any external schema. It resolves intent, dispatches each write to its OWN native writer,
-and reports disagreement. See directive `2026-08-18-program-manifests-as-borg-edge-source.md`,
+and reports disagreement. See the 2026-08-18 directive on manifests as a borg edge source,
 "Two copies, on purpose" — the coordinator is the entire mitigation for drift between them, so it
 must stay honest about drift rather than resolving it.
+
+ONE READER, ONE WRITER (AC7). Manifests are read through `borg_core.manifest.shell.discover`, the
+reader `borg link`, `add-row`, `close` and `resolve` also use, and written back through
+`shell.write_manifest`, the only writer. This module used to carry a second copy of both and the two
+disagreed about what a valid manifest is; there is one now. A manifest's identity is the `_id`
+borg_core stamps on it (a declared top-level key read verbatim when the author wrote one, else the
+filename stem), and `.stacks/` is swept alongside `.borg/chains/` and the legacy
+`.borg/programs/`.
 
 THE DISCOVERED TARGET. Exactly like a recon adapter (`BORG_RECON_ADAPTER_PATH`), the external
 writer is discovered, never hardcoded: an executable named `borg-sync-target-<name>` on
@@ -18,9 +26,15 @@ repo — this directive defines the interface, not the file):
 
     borg-sync-target-<name> plan|sync
 
-  stdin:  {"manifests": [<borg-native manifest, see SCHEMA.md>, ...]}
+  stdin:  {"manifests": [<declared manifest body, see SCHEMA.md>, ...]}
   stdout: one JSON object:
           {"ok": bool, "rows": [{"ref": "owner/repo#num", "status": "..."}], "note": "..."}
+
+  THE PAYLOAD IS THE DECLARED BODY AND NOTHING ELSE (`core.declared_body`): exactly the keys the
+  author wrote, with every `_`-prefixed key (`_path`, `_id`, whatever borg derives later) stripped.
+  WIRE CHANGE, 2026-10-12: the payload no longer carries a `program` key synthesized from the
+  filename. The key is present only when the manifest's author wrote one, so a shim that identified
+  manifests by it must tolerate its absence.
 
   `plan` MUST NOT write anything — it is the target's own dry run. `sync` performs the write (PR
   bodies, apex issues, whatever the target owns) as a side effect. Any translation between borg's
@@ -41,7 +55,7 @@ import subprocess
 import sys
 from typing import Any
 
-import programs
+from borg_core.manifest import core, shell
 
 ENV_VAR = "BORG_SYNC_TARGET_PATH"
 TARGET_PREFIX = "borg-sync-target-"
@@ -93,9 +107,11 @@ def run_target(target_path: str, action: str, manifests: list[dict[str, Any]], t
     than raising. A broken shim must degrade the audit to "target unreachable", never crash the
     coordinator that is supposed to be watching for drift.
     """
-    # `_path` is discover()'s internal stamp, not part of the documented stdin contract — and it
-    # carries machine-local absolute paths the target has no business seeing.
-    payload = json.dumps({"manifests": [{k: v for k, v in m.items() if k != "_path"} for m in manifests]})
+    # Every `_`-prefixed key is discover()'s internal stamp, not part of the documented stdin contract
+    # — `_path` carries machine-local absolute paths the target has no business seeing. The strip is
+    # core.declared_body, the one definition the writer uses too, so "which keys are derived" cannot
+    # disagree between what goes to disk and what goes over the wire.
+    payload = json.dumps({"manifests": [core.declared_body(m) for m in manifests]})
     try:
         proc = subprocess.run(
             [target_path, action],
@@ -124,18 +140,31 @@ def run_target(target_path: str, action: str, manifests: list[dict[str, Any]], t
 
 
 def flatten_rows(manifests: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """One row per (program, ref, status) triple across all manifests, byte-stable."""
+    """One row per (chain, ref, status) triple across all manifests, byte-stable."""
     rows = [
         {
-            "program": str(m.get("program") or ""),
+            "chain": _id_of(m),
             "ref": str(row.get("ref") or "").strip(),
             "status": str(row.get("status") or "").strip(),
         }
         for m in manifests
-        for row in programs._rows(m)
+        for row in core.manifest_rows(m)
         if str(row.get("ref") or "").strip()
     ]
-    return sorted(rows, key=lambda r: (r["ref"], r["program"]))
+    return sorted(rows, key=lambda r: (r["ref"], r["chain"]))
+
+
+def _id_of(manifest: dict[str, Any]) -> str:
+    """A manifest's identity: the `_id` borg_core stamped, else the stem of the `_path` it was read from.
+
+    The stem fallback is for a dict that carries a source path but no `_id` (a hand-built one); a dict
+    with neither yields "", which `sync_borg` treats as "never came from disk". It must NOT read the
+    retired top-level key: that is what made a manifest with none look anonymous and be skipped.
+    """
+    identity = str(manifest.get("_id") or "").strip()
+    if identity:
+        return identity
+    return os.path.splitext(os.path.basename(str(manifest.get("_path") or "")))[0]
 
 
 def _by_ref(rows: list[dict[str, str]]) -> dict[str, dict[str, str]]:
@@ -290,26 +319,29 @@ def load_recon_items(path: str | None) -> list[dict[str, Any]]:
 
 
 def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
-    """Rewrite each manifest through borg's OWN native writer (`programs.write_manifest`).
+    """Rewrite each manifest through borg's OWN native writer (`shell.write_manifest`).
 
-    Returns `(written_paths, warnings)`. Each manifest is written back to ITS OWN project root,
-    derived from the `_path` discover() stamped onto it. The earlier design keyed a shared map by
-    `program` name — so two projects declaring the same program name collapsed to one entry, and
-    the loser's manifest was silently written into the OTHER project's `.borg/programs/` (the exact
-    multi-repo pattern S4 proposes: the same program manifest landed in each owning repo). Keying
-    per-manifest makes that overwrite structurally impossible; the duplicate-name condition itself
-    is still surfaced as a named warning because two same-named manifests will fight over edges
-    downstream, and only a human knows which is right. Idempotent: re-validates and rewrites
-    atomically even when nothing changed.
+    Returns `(written_paths, warnings)`. Each manifest is written back to ITS OWN file, in whichever
+    root holds it (`.stacks/`, `.borg/chains/` or the legacy `.borg/programs/`), found from the `_path`
+    discover() stamped onto it. The earlier design keyed a shared map by chain name — so two projects
+    declaring the same name collapsed to one entry, and the loser's manifest was silently written into
+    the OTHER project's directory (the exact multi-repo pattern S4 proposes: the same manifest landed
+    in each owning repo). Keying per-manifest makes that overwrite structurally impossible; the
+    duplicate-name condition itself is still surfaced as a named warning because two same-named
+    manifests will fight over edges downstream, and only a human knows which is right. Idempotent:
+    re-validates and rewrites atomically even when nothing changed.
+
+    The writer persists the DECLARED body only: no `_id`, no `_path`, and no top-level key the author
+    did not write.
     """
     written: list[str] = []
     warnings: list[str] = []
     seen: dict[str, str] = {}
     for manifest in manifests:
-        program = str(manifest.get("program") or "")
+        chain = _id_of(manifest)
         project_dir = _project_dir_of(manifest)
         source_path = str(manifest.get("_path") or "")
-        if not program or not project_dir:
+        if not chain or not project_dir:
             # NAMED ONLY WHEN THERE IS SOMETHING TO NAME, and the distinction is deliberate.
             #
             # A manifest with NO `_path` never came from `discover` (which always stamps it), so it
@@ -317,40 +349,56 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
             # `test_a_manifest_with_no_path_stamp_is_skipped_not_raised` pins that silence.
             #
             # A manifest WITH a `_path` that `_project_dir_of` cannot resolve is the opposite: a real
-            # file under neither `.borg/chains` nor `.borg/programs`, dropped at exit 0. That is the
+            # file under none of the three manifest directories, dropped at exit 0. That is the
             # confident-empty shape this tree keeps removing, so it is reported.
             if source_path and not project_dir:
-                warnings.append(
-                    f"skipped {source_path}: not under .borg/chains or .borg/programs"
-                )
+                warnings.append(f"skipped {source_path}: not under .borg/chains, .borg/programs or .stacks")
             continue
-        if program in seen and seen[program] != source_path:
+        if chain in seen and seen[chain] != source_path:
             # Keyed by SOURCE FILE, not project dir (opus round 2, finding 1): two files in the SAME
-            # project declaring one program is just as real a contention as two projects — and the
-            # filename passthrough below is what stops the second one silently overwriting the first.
+            # project declaring one id is just as real a contention as two projects — and the
+            # in-place rewrite below is what stops the second one silently overwriting the first.
             warnings.append(
-                f"chain {program!r} is declared twice ({seen[program]} and {source_path}) — "
+                f"chain {chain!r} is declared twice ({seen[chain]} and {source_path}) — "
                 f"each file rewritten in place, but they will contend downstream"
             )
-        seen.setdefault(program, source_path)
-        # NO WRITE MAY REDUCE A MANIFEST'S ROW COUNT ON DISK. Whatever `discover` returned is written back
-        # below, so a manifest that reached here with rows removed in memory would permanently delete
-        # them, at exit 0, under "wrote N manifest(s)". `programs.discover` refuses such a file whole
-        # today; this guard makes the guarantee structural instead of dependent on that.
-        on_disk = _rows_on_disk(source_path)
-        in_memory = len(manifest.get("rows") or [])
-        if in_memory < on_disk:
-            warnings.append(
-                f"refused to rewrite {source_path}: would reduce it from {on_disk} to {in_memory} row(s); "
-                f"no write may drop a declared row"
-            )
-            continue
-        # Rewrite each manifest's OWN file (basename of _path), never a program-derived name: a
-        # manifest whose filename differs from its program id must not spawn a second copy.
-        written.append(
-            programs.write_manifest(project_dir, program, manifest, filename=os.path.basename(source_path))
-        )
+        seen.setdefault(chain, source_path)
+        path, warning = _rewrite_in_place(manifest, project_dir, source_path)
+        if warning:
+            warnings.append(warning)
+        else:
+            written.append(path)
     return written, warnings
+
+
+def _rewrite_in_place(manifest: dict[str, Any], project_dir: str, source_path: str) -> tuple[str, str]:
+    """`(written_path, "")` or `("", warning)` for one manifest read from `source_path`.
+
+    NO WRITE MAY REDUCE A MANIFEST'S ROW COUNT ON DISK. Whatever `discover` returned is written back
+    below, so a manifest that reached here with rows removed in memory would permanently delete them,
+    at exit 0, under "wrote N manifest(s)". `shell.discover` refuses such a file whole today; this
+    guard makes the guarantee structural instead of dependent on that.
+
+    The file is rewritten where it LIVES (`directory=` its own dirname, name = its own basename),
+    never at a name derived from the chain id: a manifest whose filename differs from its id must not
+    spawn a second copy, and a `.stacks/` manifest written under `.borg/chains/` would be declared in
+    both roots, which the next read refuses by name. A manifest the writer refuses becomes a SYNC
+    WARNING rather than a traceback; nothing is written for it.
+    """
+    on_disk = _rows_on_disk(source_path)
+    in_memory = len(manifest.get("rows") or [])
+    if in_memory < on_disk:
+        return "", (
+            f"refused to rewrite {source_path}: would reduce it from {on_disk} to {in_memory} row(s); "
+            f"no write may drop a declared row"
+        )
+    try:
+        written = shell.write_manifest(
+            project_dir, manifest, os.path.basename(source_path), directory=os.path.dirname(source_path)
+        )
+    except shell.InvalidManifest as exc:
+        return "", f"refused to rewrite {source_path}: {exc}"
+    return written, ""
 
 
 def _rows_on_disk(path: str) -> int:
@@ -368,14 +416,15 @@ def _project_dir_of(manifest: dict[str, Any]) -> str:
     path = str(manifest.get("_path") or "")
     if not path:
         return ""
-    # path = <project_dir>/.borg/{chains,programs}/<program>.json
+    # path = <project_dir>/{.borg/chains,.borg/programs,.stacks}/<name>.json
     #
-    # BOTH NAMES, because this recovers a root by SPLITTING ON THE DIRECTORY NAME and the directory
-    # was renamed (AC7). A single-name split against the other name returns the WHOLE PATH unchanged
-    # -- `rsplit` with no match yields the original -- so `sync_borg` would then treat the manifest
-    # file itself as a project root and write outside the tree. That fails silently: the caller only
-    # checks `if not project_dir`, and a non-empty wrong answer passes.
-    for name in (".borg" + os.sep + "chains", ".borg" + os.sep + "programs"):
+    # ALL THREE NAMES, because this recovers a root by SPLITTING ON THE DIRECTORY NAME and the
+    # directory has had more than one (AC7 renamed one, and `.stacks/` is the tool-neutral second
+    # root). A single-name split against another name returns the WHOLE PATH unchanged -- `rsplit`
+    # with no match yields the original -- so `sync_borg` would then treat the manifest file itself as
+    # a project root and write outside the tree. That fails silently: the caller only checks
+    # `if not project_dir`, and a non-empty wrong answer passes.
+    for name in (".borg" + os.sep + "chains", ".borg" + os.sep + "programs", shell.STACKS_DIRNAME):
         marker = os.sep + name + os.sep
         if marker in path:
             return path.rsplit(marker, 1)[0]
@@ -383,25 +432,27 @@ def _project_dir_of(manifest: dict[str, Any]) -> str:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    manifests, warnings = programs.discover(args.programs_dir)
+    manifests, warnings = shell.discover(args.chains_dir)
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
-    for m in sorted(manifests, key=lambda m: str(m.get("program"))):
-        rows = programs._rows(m)
-        print(f"{m.get('program')}: {len(rows)} row(s)")
+    for m in sorted(manifests, key=_id_of):
+        print(f"{_id_of(m)}: {len(core.manifest_rows(m))} row(s)")
     print(f"{len(manifests)} chain(s), {len(warnings)} skipped")
     return 0
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
-    manifests, warnings = programs.discover(args.programs_dir)
+    manifests, warnings = shell.discover(args.chains_dir)
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
-    # PM6: plan exits non-zero only on malformed input — a skipped MANIFEST is malformed input, a
-    # directory-level note (absent project path in the registry sweep) is not. Either way the audit
-    # for every valid manifest still runs and prints (PM2: one bad manifest must not blank the
-    # spine); the file-level failure is reflected in the exit code AFTER the findings print.
-    fatal = [w for w in warnings if isinstance(w, programs.Refusal)]
+    # PM6: plan exits non-zero only on malformed input — a refused MANIFEST is malformed input, a
+    # directory-level note (absent project path in the registry sweep) is not, and neither is a stray
+    # JSON file with no rows list, which is skipped with a named note. Either way the audit for every
+    # valid manifest still runs and prints (PM2: one bad manifest must not blank the spine); the
+    # file-level failure is reflected in the exit code AFTER the findings print. WHICH warnings are
+    # fatal is `shell.refused_manifest_paths`, the one classifier `borg link` uses — not a second
+    # one kept here, which is the reader/reader divergence AC7 exists to end.
+    fatal = shell.refused_manifest_paths(warnings)
     if fatal:
         print(f"plan: {len(fatal)} malformed manifest(s) — see above", file=sys.stderr)
 
@@ -433,14 +484,14 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
-    manifests, warnings = programs.discover(args.programs_dir)
+    manifests, warnings = shell.discover(args.chains_dir)
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
-    # Refuse only on FILE-level warnings (a malformed manifest must never half-sync). Directory-level
+    # Refuse only on FILE-level refusals (a malformed manifest must never half-sync). Directory-level
     # notes — a registry row whose project is absent on this machine — leave nothing to half-write,
     # and refusing on them would make one stale registry entry veto the whole sync (PM9: the
     # personal machine must work with a different project set).
-    fatal = [w for w in warnings if isinstance(w, programs.Refusal)]
+    fatal = shell.refused_manifest_paths(warnings)
     if fatal:
         print(f"sync: {len(fatal)} malformed manifest(s) — refusing to sync", file=sys.stderr)
         return 1
@@ -473,11 +524,11 @@ def main() -> int:
         sp.add_argument(
             "--chains-dir",
             "--programs-dir",  # legacy spelling; accepted until the contract phase drops it
-            dest="programs_dir",
+            dest="chains_dir",
             action="append",
             default=[],
             metavar="PROJECT_DIR",
-            help="project root to sweep for .borg/chains/*.json (repeatable)",
+            help="project root to sweep for .stacks/*.json and .borg/chains/*.json (repeatable)",
         )
         if name == "plan":
             sp.add_argument(

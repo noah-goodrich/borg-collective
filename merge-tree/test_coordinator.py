@@ -9,20 +9,38 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import stat
 
 import pytest
 
 import coordinator
-import programs
+from borg_core.manifest import shell
 
 
 def _row(order, ref, status="stacked", **extra):
     return {"order": order, "ref": ref, "status": status, **extra}
 
 
-def _manifest(program, rows):
-    return {"program": program, "rows": rows}
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _manifest(chain, rows):
+    """An in-memory manifest shaped like `shell.discover` output: identity under `_id`, none declared."""
+    return {"_id": chain, "rows": rows}
+
+
+def _write_stacks(tmp_path, project, stem, rows, **declared):
+    """The tool-neutral second root: `<project>/.stacks/<stem>.json`, no `program` key unless declared."""
+    d = tmp_path / project / ".stacks"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{stem}.json").write_text(json.dumps({"rows": rows, **declared}))
+    return str(tmp_path / project)
+
+
+def _tree_bytes(root):
+    """`{relative path: bytes}` for every file under `root`: the oracle for "nothing was written"."""
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
 
 
 def _write_manifest_dir(tmp_path, project, stem, rows, directory="chains", **declared):
@@ -128,31 +146,40 @@ class TestFlattenRows:
             [_manifest("a", [_row("1", "o/z#1")]), _manifest("b", [_row("1", "o/a#1")])]
         )
         assert [r["ref"] for r in rows] == ["o/a#1", "o/z#1"]
+        assert [r["chain"] for r in rows] == ["b", "a"]
+
+    def test_identity_is_the_stamped_id_not_a_declared_program_key(self):
+        manifest = {"_id": "from-the-reader", "program": "declared", "rows": [_row("1", "o/r#1")]}
+        assert [r["chain"] for r in coordinator.flatten_rows([manifest])] == ["from-the-reader"]
+
+    def test_a_dict_with_a_source_path_but_no_id_is_identified_by_its_filename_stem(self):
+        manifest = {"_path": "/x/.borg/chains/stem-only.json", "rows": [_row("1", "o/r#1")]}
+        assert [r["chain"] for r in coordinator.flatten_rows([manifest])] == ["stem-only"]
 
 
 class TestMergedButOpen:
     def test_flags_a_copy_marking_merged_when_recon_says_open(self):
-        rows = [{"program": "p", "ref": "o/r#1", "status": "merged"}]
+        rows = [{"chain": "p", "ref": "o/r#1", "status": "merged"}]
         findings = coordinator.merged_but_open(rows, {"o/r#1": "OPEN"}, "borg's copy")
         assert len(findings) == 1 and findings[0]["kind"] == "merged_but_open"
 
     def test_says_nothing_when_recon_agrees(self):
-        rows = [{"program": "p", "ref": "o/r#1", "status": "merged"}]
+        rows = [{"chain": "p", "ref": "o/r#1", "status": "merged"}]
         assert coordinator.merged_but_open(rows, {"o/r#1": "MERGED"}, "borg's copy") == []
 
     def test_says_nothing_when_recon_has_no_opinion(self):
-        rows = [{"program": "p", "ref": "o/r#1", "status": "merged"}]
+        rows = [{"chain": "p", "ref": "o/r#1", "status": "merged"}]
         assert coordinator.merged_but_open(rows, {}, "borg's copy") == []
 
 
 class TestThreeWayAudit:
     def test_no_target_skips_the_two_copy_comparisons(self):
-        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
+        borg_rows = [{"chain": "p", "ref": "o/r#1", "status": "stacked"}]
         findings = coordinator.three_way_audit(borg_rows, target_report=None, recon_states={})
         assert findings == []
 
     def test_target_unreachable_is_its_own_finding(self):
-        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
+        borg_rows = [{"chain": "p", "ref": "o/r#1", "status": "stacked"}]
         findings = coordinator.three_way_audit(
             borg_rows, target_report={"ok": False, "error": "timeout"}, recon_states={}
         )
@@ -162,8 +189,8 @@ class TestThreeWayAudit:
 
     def test_present_only_in_one_copy_is_named_on_both_sides(self):
         borg_rows = [
-            {"program": "p", "ref": "o/r#1", "status": "stacked"},
-            {"program": "p", "ref": "o/r#2", "status": "stacked"},
+            {"chain": "p", "ref": "o/r#1", "status": "stacked"},
+            {"chain": "p", "ref": "o/r#2", "status": "stacked"},
         ]
         target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "stacked"}, {"ref": "o/r#3", "status": "stacked"}]}
         findings = coordinator.three_way_audit(borg_rows, target_report, recon_states={})
@@ -172,20 +199,20 @@ class TestThreeWayAudit:
         assert ("present_only_in_target", "o/r#3") in kinds
 
     def test_status_disagreement_between_the_two_copies_is_reported(self):
-        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
+        borg_rows = [{"chain": "p", "ref": "o/r#1", "status": "stacked"}]
         target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "review"}]}
         findings = coordinator.three_way_audit(borg_rows, target_report, recon_states={})
         assert any(f["kind"] == "status_disagreement" and f["ref"] == "o/r#1" for f in findings)
 
     def test_agreement_produces_no_findings(self):
-        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
+        borg_rows = [{"chain": "p", "ref": "o/r#1", "status": "stacked"}]
         target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "stacked"}]}
         assert coordinator.three_way_audit(borg_rows, target_report, recon_states={}) == []
 
     def test_three_way_audit_never_mutates_anything(self, tmp_path):
         """PM7: 'never silently reconcile'. Running the audit must not touch the filesystem."""
         before = sorted(tmp_path.rglob("*"))
-        borg_rows = [{"program": "p", "ref": "o/r#1", "status": "stacked"}]
+        borg_rows = [{"chain": "p", "ref": "o/r#1", "status": "stacked"}]
         target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "review"}]}
         coordinator.three_way_audit(borg_rows, target_report, recon_states={"o/r#1": "OPEN"})
         assert sorted(tmp_path.rglob("*")) == before
@@ -237,7 +264,7 @@ class TestLoadReconItems:
 class TestSyncBorg:
     def _discovered(self, project_dir, stem="prog-a"):
         _write_manifest_dir(project_dir.parent, project_dir.name, stem, [_row("1", "o/r#1")])
-        manifests, _ = programs.discover([str(project_dir)])
+        manifests, _ = shell.discover([str(project_dir)])
         return manifests
 
     def test_writes_each_manifest_via_the_native_writer(self, tmp_path):
@@ -259,9 +286,9 @@ class TestSyncBorg:
 
         pdir = tmp_path / "proj" / ".borg" / "chains"
         pdir.mkdir(parents=True)
-        m = _manifest("auth-hardening", [_row("1", "o/r#1")])
+        m = {"program": "auth-hardening", "rows": [_row("1", "o/r#1")]}
         (pdir / "three-repo-program.json").write_text(_json.dumps(m))
-        manifests, _ = programs.discover([str(tmp_path / "proj")])
+        manifests, _ = shell.discover([str(tmp_path / "proj")])
         written, warnings = coordinator.sync_borg(manifests)
         assert written == [str(pdir / "three-repo-program.json")]
         assert sorted(f.name for f in pdir.iterdir()) == ["three-repo-program.json"]
@@ -274,9 +301,9 @@ class TestSyncBorg:
 
         pdir = tmp_path / "proj" / ".borg" / "chains"
         pdir.mkdir(parents=True)
-        (pdir / "b.json").write_text(_json.dumps(_manifest("b", [_row("1", "o/r#1")])))
-        (pdir / "z.json").write_text(_json.dumps(_manifest("b", [_row("1", "o/r#2")])))
-        manifests, _ = programs.discover([str(tmp_path / "proj")])
+        (pdir / "b.json").write_text(_json.dumps({"program": "b", "rows": [_row("1", "o/r#1")]}))
+        (pdir / "z.json").write_text(_json.dumps({"program": "b", "rows": [_row("1", "o/r#2")]}))
+        manifests, _ = shell.discover([str(tmp_path / "proj")])
         written, warnings = coordinator.sync_borg(manifests)
         assert len(written) == 2
         assert sorted(f.name for f in pdir.iterdir()) == ["b.json", "z.json"]
@@ -286,12 +313,12 @@ class TestSyncBorg:
 
     def test_a_manifest_that_declares_no_program_is_written_and_listed_by_its_stem(self, tmp_path, capsys):
         # THE TEST A NAIVE REPOINT TURNS RED. A file with no `program` key reaches sync_borg carrying an
-        # identity derived from its filename (today `program`, from programs.discover; after the swap
-        # `_id`, from shell.discover). A coordinator that reads the wrong key sees "" for every such
+        # identity derived from its filename (`_id`, from shell.discover). A coordinator that reads the
+        # retired `program` key instead sees "" for every such
         # file and `continue`s past it with no warning -- zero files written, exit 0. Written to disk
         # with NO program key, so nothing in the fixture supplies the identity production must derive.
         d = _write_manifest_dir(tmp_path, "proj", "stem-only", [_row("1", "o/r#1")])
-        manifests, _ = programs.discover([d])
+        manifests, _ = shell.discover([d])
         written, warnings = coordinator.sync_borg(manifests)
         assert written == [str(tmp_path / "proj" / ".borg" / "chains" / "stem-only.json")]
         assert warnings == []
@@ -303,7 +330,7 @@ class TestSyncBorg:
         # One legacy case kept deliberately: `.borg/programs` is the pre-AC7 spelling and still resolves
         # until the contract phase drops it. Sync must rewrite the file where it LIVES, not migrate it.
         d = _write_manifest_dir(tmp_path, "proj", "old", [_row("1", "o/r#1")], directory="programs")
-        manifests, _ = programs.discover([d])
+        manifests, _ = shell.discover([d])
         written, warnings = coordinator.sync_borg(manifests)
         legacy = tmp_path / "proj" / ".borg" / "programs"
         assert written == [str(legacy / "old.json")] and warnings == []
@@ -325,14 +352,14 @@ class TestProjectDirOf:
     def test_recovers_project_root_from_the_discover_stamped_path(self, tmp_path):
         project_dir = _write_manifest_dir(tmp_path, "proj", "prog-a", [_row("1", "o/r#1")])
         path = str(tmp_path / "proj" / ".borg" / "chains" / "prog-a.json")
-        manifests, _ = programs.discover([project_dir])
+        manifests, _ = shell.discover([project_dir])
         assert manifests[0]["_path"] == path
         assert coordinator._project_dir_of(manifests[0]) == project_dir
 
 
 class _Args:
-    def __init__(self, programs_dir, recon=None):
-        self.programs_dir = programs_dir
+    def __init__(self, chains_dir, recon=None):
+        self.chains_dir = chains_dir
         self.recon = recon
 
 
@@ -419,28 +446,12 @@ class TestCmdSync:
         over) must not overwrite the three-row file. MUTATION: delete the row-count guard in `sync_borg`.
         """
         _, path, before = self._bad_row_project(tmp_path)
-        salvaged = {"program": "a", "_path": str(path), "rows": [_row("1", "o/r#1"), _row("3", "o/r#3")]}
+        salvaged = {"_id": "a", "_path": str(path), "rows": [_row("1", "o/r#1"), _row("3", "o/r#3")]}
 
         written, warnings = coordinator.sync_borg([salvaged])
 
         assert written == []
         assert any("no write may drop a declared row" in w for w in warnings), warnings
-        assert path.read_bytes() == before
-
-    def test_a_typed_refusal_is_fatal_for_write_whatever_its_wording(self, tmp_path, monkeypatch):
-        """A refusal is fatal for sync always, not when its message happens to contain `.json`.
-
-        The old filter was `".json" in w`. MUTATION: restore it and this goes red, because the message
-        below names no file extension while still being a refusal.
-        """
-        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        _, path, before = self._bad_row_project(tmp_path)
-        salvaged = {"program": "a", "_path": str(path), "rows": [_row("1", "o/r#1")]}
-        monkeypatch.setattr(
-            coordinator.programs, "discover", lambda dirs: ([salvaged], [programs.Refusal("refused a chain")])
-        )
-
-        assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 1
         assert path.read_bytes() == before
 
     def test_writes_borgs_copy_and_reports_no_target(self, tmp_path, capsys, monkeypatch):
@@ -476,6 +487,13 @@ class TestCmdSync:
 
 class TestMain:
     def test_list_via_argv(self, tmp_path, capsys, monkeypatch):
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
+        monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--chains-dir", d])
+        assert coordinator.main() == 0
+        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
+
+    def test_the_legacy_flag_spelling_is_still_accepted(self, tmp_path, capsys, monkeypatch):
+        # tests/cli_contract.bats pins `--programs-dir` as a spelling `borg chain` forwards untouched.
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--programs-dir", d])
         assert coordinator.main() == 0
@@ -529,6 +547,7 @@ class TestProjectDirOfUnrecognised:
     def test_both_recognised_names_still_resolve(self):
         assert coordinator._project_dir_of({"_path": "/tmp/x/.borg/chains/p.json"}) == "/tmp/x"
         assert coordinator._project_dir_of({"_path": "/tmp/x/.borg/programs/p.json"}) == "/tmp/x"
+        assert coordinator._project_dir_of({"_path": "/tmp/x/.stacks/p.json"}) == "/tmp/x"
 
     def test_sync_borg_NAMES_a_dropped_manifest_instead_of_losing_it(self, tmp_path):
         """A bare `continue` lost a manifest at exit 0 -- the confident-empty shape again.
@@ -536,13 +555,205 @@ class TestProjectDirOfUnrecognised:
         MUTATION: delete the `warnings.append` in `sync_borg`'s guard and this goes red.
         """
         written, warnings = coordinator.sync_borg(
-            [{"program": "p", "_path": str(tmp_path / ".borg" / "elsewhere" / "p.json"), "rows": []}]
+            [{"_id": "p", "_path": str(tmp_path / ".borg" / "elsewhere" / "p.json"), "rows": []}]
         )
         assert written == []
-        assert any("not under .borg/chains or .borg/programs" in w for w in warnings), warnings
+        assert any("not under .borg/chains, .borg/programs or .stacks" in w for w in warnings), warnings
         assert any("p.json" in w for w in warnings), warnings
 
     def test_a_manifest_with_no_path_at_all_stays_silent(self):
         """The other side of the same guard: nothing came from disk, so nothing was lost."""
-        written, warnings = coordinator.sync_borg([{"program": "p", "rows": []}])
+        written, warnings = coordinator.sync_borg([{"_id": "p", "rows": []}])
         assert (written, warnings) == ([], [])
+
+
+_BAD_GATE = {"kind": "decision", "blocked_by": "someone"}
+
+
+def _refusal_project(tmp_path, kind):
+    """A project holding one GOOD manifest and one the reader refuses for `kind`; returns the project."""
+    project = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
+    chains = tmp_path / "proj" / ".borg" / "chains"
+    if kind == "unreadable json":
+        (chains / "bad.json").write_text("{not json")
+    elif kind == "invalid manifest":
+        rows = [_row("1", "o/r#2", gate=_BAD_GATE), _row("2", "o/r#3")]
+        (chains / "bad.json").write_text(json.dumps({"rows": rows}))
+    elif kind == "declared in both roots":
+        _write_stacks(tmp_path, "proj", "dup", [_row("1", "o/r#4")])
+        (chains / "dup.json").write_text(json.dumps({"rows": [_row("1", "o/r#5")]}))
+    else:
+        raise AssertionError(kind)
+    return project
+
+
+class TestRefusalsThroughTheRealReader:
+    """Fatality is `shell.refused_manifest_paths`, and every case here builds its warnings by running
+    `shell.discover` over real files. The typed-`Refusal` test this replaces monkeypatched a class that
+    no longer exists in the reader; building the warning by hand is how it came to pass while the real
+    wording drifted. MUTATION: replace `fatal` in cmd_sync or cmd_plan with `[]` and these go red."""
+
+    @pytest.mark.parametrize("kind", ["unreadable json", "invalid manifest", "declared in both roots"])
+    def test_every_refusal_class_is_fatal_for_sync_and_plan_and_writes_nothing(
+        self, tmp_path, capsys, monkeypatch, kind
+    ):
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = _refusal_project(tmp_path, kind)
+        _, warnings = shell.discover([project])
+        assert shell.refused_manifest_paths(warnings), f"the fixture produced no refusal: {warnings}"
+        before = _tree_bytes(tmp_path)
+
+        assert coordinator.cmd_sync(_Args([project])) == 1
+        assert coordinator.cmd_plan(_Args([project])) == 1
+
+        assert _tree_bytes(tmp_path) == before, "a refused sweep must not rewrite even the good manifest"
+        assert "wrote" not in capsys.readouterr().out
+
+    def test_a_registered_path_that_is_absent_is_a_note_and_not_a_refusal(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
+        gone = str(tmp_path / "gone")
+
+        assert coordinator.cmd_sync(_Args([gone, project])) == 0
+        assert coordinator.cmd_plan(_Args([gone, project])) == 0
+
+        out, err = capsys.readouterr()
+        assert "wrote 1 manifest(s)" in out
+        assert "does not exist" in err
+
+    def test_a_stray_json_file_is_skipped_with_a_named_note_and_neither_plan_nor_sync_fails(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        # DECISION 1 (Noah, 2026-10-12): borg_core's rule, not a coordinator-only classifier. A file with
+        # no rows list declares no rows, so skipping it cannot lose data; the row-count guard and the
+        # whole-file refusal still protect every real manifest.
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
+        stray = tmp_path / "proj" / ".borg" / "chains" / "settings.json"
+        stray.write_text('{"theme": "dark"}')
+
+        assert coordinator.cmd_plan(_Args([project])) == 0
+        plan_out, plan_err = capsys.readouterr()
+        assert "settings.json" in plan_err and "not a manifest (no rows list)" in plan_err
+        assert "plan: 1 chain(s)" in plan_out and "CAVEAT" not in plan_out
+
+        assert coordinator.cmd_sync(_Args([project])) == 0
+        assert "wrote 1 manifest(s)" in capsys.readouterr().out
+        assert stray.read_text() == '{"theme": "dark"}'
+
+    def test_a_shorthand_ref_manifest_is_refused_by_list_and_plan(self, tmp_path, capsys, monkeypatch):
+        # The validator swap is the intended AC7 outcome: `borg link` already refuses this shape.
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = _write_manifest_dir(tmp_path, "proj", "short", [_row("1", "r#22")])
+
+        assert coordinator.cmd_list(_Args([project])) == 0
+        out, err = capsys.readouterr()
+        assert "MANIFEST SKIPPED" in err and "0 chain(s), 1 skipped" in out
+
+        assert coordinator.cmd_plan(_Args([project])) == 1
+
+
+class TestStacksRoot:
+    """DECISION 3 (Noah, 2026-10-12): list, plan and sync cover both roots, and sync rewrites a `.stacks/`
+    manifest in place."""
+
+    def test_list_and_plan_cover_the_stacks_root(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = _write_stacks(tmp_path, "proj", "tool-neutral", [_row("1", "o/r#1"), _row("2", "o/r#2")])
+
+        assert coordinator.cmd_list(_Args([project])) == 0
+        assert "tool-neutral: 2 row(s)" in capsys.readouterr().out
+        assert coordinator.cmd_plan(_Args([project])) == 0
+        assert "plan: 1 chain(s), 2 row(s)" in capsys.readouterr().out
+
+    def test_sync_rewrites_a_stacks_manifest_in_place_and_creates_no_second_file(self, tmp_path, capsys, monkeypatch):
+        # A second copy under `.borg/chains/` would be declared in BOTH roots, which the next read
+        # refuses by name and which makes the following sync exit 1.
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = _write_stacks(tmp_path, "proj", "tool-neutral", [_row("1", "o/r#1")])
+        target = tmp_path / "proj" / ".stacks" / "tool-neutral.json"
+        compact = target.read_text()
+
+        assert coordinator.cmd_sync(_Args([project])) == 0
+
+        assert target.read_text() != compact and target.read_text().startswith("{\n  ")
+        assert not (tmp_path / "proj" / ".borg").exists(), "a second copy was created beside the first"
+        _, warnings = shell.discover([project])
+        assert warnings == []
+        assert coordinator.cmd_sync(_Args([project])) == 0, "the rewritten tree must sync again"
+
+
+class TestWhatTheWriterPersists:
+    def _synced(self, tmp_path, monkeypatch, directory="chains", **declared):
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = _write_manifest_dir(tmp_path, "proj", "plain", [_row("1", "o/r#1")], directory, **declared)
+        assert coordinator.cmd_sync(_Args([project])) == 0
+        return tmp_path / "proj" / ".borg" / directory / "plain.json"
+
+    def test_written_bytes_gain_no_derived_or_retired_key(self, tmp_path, monkeypatch):
+        written = json.loads(self._synced(tmp_path, monkeypatch).read_text())
+        assert set(written) == {"rows"}, f"the writer added keys the author never wrote: {set(written)}"
+
+    def test_a_key_the_author_wrote_survives_the_rewrite(self, tmp_path, monkeypatch):
+        written = json.loads(self._synced(tmp_path, monkeypatch, program="mine", desc="kept").read_text())
+        assert (written["program"], written["desc"]) == ("mine", "kept")
+
+    def test_a_manifest_holding_en_dashes_round_trips_byte_identical(self, tmp_path, monkeypatch):
+        # Today's sync dirties viz-program.json with `\\u2013` escapes; ensure_ascii=False is the fix.
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        original = (pathlib.Path(REPO_ROOT) / ".borg" / "chains" / "viz-program.json").read_bytes()
+        assert "\u2013".encode() in original
+        chains = tmp_path / "proj" / ".borg" / "chains"
+        chains.mkdir(parents=True)
+        (chains / "viz-program.json").write_bytes(original)
+
+        assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 0
+
+        assert (chains / "viz-program.json").read_bytes() == original
+
+    def test_the_sync_target_payload_is_the_declared_body_only(self, tmp_path, monkeypatch):
+        # DECISION 2 (Noah, 2026-10-12): `program` is dropped from the wire. A key appears only when the
+        # author wrote it, and no `_`-prefixed key ever does.
+        capture = tmp_path / "stdin.json"
+        target_dir = _make_target(
+            tmp_path, "capture", "#!/bin/sh\ncat > '" + str(capture) + "'\necho '{\"ok\": true, \"rows\": []}'\n"
+        )
+        monkeypatch.setenv(coordinator.ENV_VAR, target_dir)
+        plain = _write_manifest_dir(tmp_path, "one", "plain", [_row("1", "o/r#1")])
+        declared = _write_manifest_dir(tmp_path, "two", "other", [_row("1", "o/r#2")], program="declared-id")
+
+        assert coordinator.cmd_sync(_Args([plain, declared])) == 0
+
+        sent = json.loads(capture.read_text())["manifests"]
+        assert sorted(sorted(m) for m in sent) == [["program", "rows"], ["rows"]]
+        assert not [key for m in sent for key in m if key.startswith("_")]
+
+    def test_run_target_strips_every_underscore_key_not_just_the_path(self, tmp_path):
+        capture = tmp_path / "stdin.json"
+        target_dir = _make_target(
+            tmp_path, "capture", "#!/bin/sh\ncat > '" + str(capture) + "'\necho '{\"ok\": true}'\n"
+        )
+        target = os.path.join(target_dir, "borg-sync-target-capture")
+        coordinator.run_target(target, "plan", [{"_id": "x", "_path": "/p", "_later": 1, "rows": []}])
+        assert json.loads(capture.read_text()) == {"manifests": [{"rows": []}]}
+
+
+class TestOneChainRegisteredTwice:
+    def test_body_identical_manifests_in_two_registered_paths_collapse_to_one_chain(
+        self, tmp_path, capsys, monkeypatch
+    ):
+        # DECISION 4 (Noah, 2026-10-12): borg_core's rule, accepted. A git worktree is a second checkout of
+        # every tracked manifest, and listing or rewriting it twice is wrong whatever it is called. The
+        # second copy is neither listed nor rewritten, with no warning -- the grid dedups the same way.
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        first = _write_manifest_dir(tmp_path, "first", "shared", [_row("1", "o/r#1")])
+        second = _write_manifest_dir(tmp_path, "second", "shared", [_row("1", "o/r#1")])
+        second_file = tmp_path / "second" / ".borg" / "chains" / "shared.json"
+        second_before = second_file.read_bytes()
+
+        assert coordinator.cmd_list(_Args([first, second])) == 0
+        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
+
+        assert coordinator.cmd_sync(_Args([first, second])) == 0
+        assert "wrote 1 manifest(s)" in capsys.readouterr().out
+        assert second_file.read_bytes() == second_before
