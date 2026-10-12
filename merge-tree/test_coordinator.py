@@ -25,10 +25,17 @@ def _manifest(program, rows):
     return {"program": program, "rows": rows}
 
 
-def _write_manifest_dir(tmp_path, project, program, rows):
-    d = tmp_path / project / ".borg" / "programs"
+def _write_manifest_dir(tmp_path, project, stem, rows, directory="chains", **declared):
+    """A project whose `.borg/<directory>/<stem>.json` declares `rows` and, by default, NO `program` key.
+
+    The key is left out on purpose. Every fixture here used to set `program` itself, so the code under
+    test never had to DERIVE the manifest's identity from the filename -- which is the one thing the
+    borg_core reader does, and the reason a repoint that read `m.get("program")` would have passed all
+    of them while syncing nothing. A test that needs a declared id passes `program=...` explicitly.
+    """
+    d = tmp_path / project / ".borg" / directory
     d.mkdir(parents=True, exist_ok=True)
-    (d / f"{program}.json").write_text(json.dumps(_manifest(program, rows)))
+    (d / f"{stem}.json").write_text(json.dumps({"rows": rows, **declared}))
     return str(tmp_path / project)
 
 
@@ -228,8 +235,8 @@ class TestLoadReconItems:
 
 
 class TestSyncBorg:
-    def _discovered(self, project_dir, program="prog-a"):
-        programs.write_manifest(str(project_dir), program, _manifest(program, [_row("1", "o/r#1")]))
+    def _discovered(self, project_dir, stem="prog-a"):
+        _write_manifest_dir(project_dir.parent, project_dir.name, stem, [_row("1", "o/r#1")])
         manifests, _ = programs.discover([str(project_dir)])
         return manifests
 
@@ -250,7 +257,7 @@ class TestSyncBorg:
         # two copies of one program that then diverge silently. Sync must rewrite the source file.
         import json as _json
 
-        pdir = tmp_path / "proj" / ".borg" / "programs"
+        pdir = tmp_path / "proj" / ".borg" / "chains"
         pdir.mkdir(parents=True)
         m = _manifest("auth-hardening", [_row("1", "o/r#1")])
         (pdir / "three-repo-program.json").write_text(_json.dumps(m))
@@ -265,7 +272,7 @@ class TestSyncBorg:
         # not overwrite each other, and the contention is named.
         import json as _json
 
-        pdir = tmp_path / "proj" / ".borg" / "programs"
+        pdir = tmp_path / "proj" / ".borg" / "chains"
         pdir.mkdir(parents=True)
         (pdir / "b.json").write_text(_json.dumps(_manifest("b", [_row("1", "o/r#1")])))
         (pdir / "z.json").write_text(_json.dumps(_manifest("b", [_row("1", "o/r#2")])))
@@ -276,6 +283,31 @@ class TestSyncBorg:
         assert _json.loads((pdir / "b.json").read_text())["rows"][0]["ref"] == "o/r#1"
         assert _json.loads((pdir / "z.json").read_text())["rows"][0]["ref"] == "o/r#2"
         assert len(warnings) == 1 and '"b"' in warnings[0].replace("'", '"')
+
+    def test_a_manifest_that_declares_no_program_is_written_and_listed_by_its_stem(self, tmp_path, capsys):
+        # THE TEST A NAIVE REPOINT TURNS RED. A file with no `program` key reaches sync_borg carrying an
+        # identity derived from its filename (today `program`, from programs.discover; after the swap
+        # `_id`, from shell.discover). A coordinator that reads the wrong key sees "" for every such
+        # file and `continue`s past it with no warning -- zero files written, exit 0. Written to disk
+        # with NO program key, so nothing in the fixture supplies the identity production must derive.
+        d = _write_manifest_dir(tmp_path, "proj", "stem-only", [_row("1", "o/r#1")])
+        manifests, _ = programs.discover([d])
+        written, warnings = coordinator.sync_borg(manifests)
+        assert written == [str(tmp_path / "proj" / ".borg" / "chains" / "stem-only.json")]
+        assert warnings == []
+        assert coordinator.cmd_list(_Args([d])) == 0
+        out = capsys.readouterr().out
+        assert "stem-only: 1 row(s)" in out and "None" not in out
+
+    def test_the_legacy_programs_directory_is_still_read_and_rewritten_in_place(self, tmp_path):
+        # One legacy case kept deliberately: `.borg/programs` is the pre-AC7 spelling and still resolves
+        # until the contract phase drops it. Sync must rewrite the file where it LIVES, not migrate it.
+        d = _write_manifest_dir(tmp_path, "proj", "old", [_row("1", "o/r#1")], directory="programs")
+        manifests, _ = programs.discover([d])
+        written, warnings = coordinator.sync_borg(manifests)
+        legacy = tmp_path / "proj" / ".borg" / "programs"
+        assert written == [str(legacy / "old.json")] and warnings == []
+        assert not (tmp_path / "proj" / ".borg" / "chains").exists()
 
     def test_same_program_in_two_projects_writes_each_to_its_own_home(self, tmp_path):
         # Opus review MERGE-BLOCKER: the old program-keyed map wrote the loser's manifest into
@@ -291,8 +323,8 @@ class TestSyncBorg:
 
 class TestProjectDirOf:
     def test_recovers_project_root_from_the_discover_stamped_path(self, tmp_path):
-        project_dir = str(tmp_path / "proj")
-        path = programs.write_manifest(project_dir, "prog-a", _manifest("prog-a", [_row("1", "o/r#1")]))
+        project_dir = _write_manifest_dir(tmp_path, "proj", "prog-a", [_row("1", "o/r#1")])
+        path = str(tmp_path / "proj" / ".borg" / "chains" / "prog-a.json")
         manifests, _ = programs.discover([project_dir])
         assert manifests[0]["_path"] == path
         assert coordinator._project_dir_of(manifests[0]) == project_dir
@@ -312,7 +344,7 @@ class TestCmdList:
         assert "a: 1 row(s)" in out and "1 chain(s), 0 skipped" in out
 
     def test_names_a_skipped_manifest_but_still_succeeds(self, tmp_path, capsys):
-        d = tmp_path / "proj" / ".borg" / "programs"
+        d = tmp_path / "proj" / ".borg" / "chains"
         d.mkdir(parents=True)
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_list(_Args([str(tmp_path / "proj")])) == 0
@@ -323,7 +355,7 @@ class TestCmdList:
 class TestCmdPlan:
     def test_exits_nonzero_on_malformed_input(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        d = tmp_path / "proj" / ".borg" / "programs"
+        d = tmp_path / "proj" / ".borg" / "chains"
         d.mkdir(parents=True)
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_plan(_Args([str(tmp_path / "proj")])) == 1
@@ -353,7 +385,7 @@ class TestCmdPlan:
 
 class TestCmdSync:
     def test_refuses_to_sync_malformed_input(self, tmp_path):
-        d = tmp_path / "proj" / ".borg" / "programs"
+        d = tmp_path / "proj" / ".borg" / "chains"
         d.mkdir(parents=True)
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 1
@@ -362,7 +394,7 @@ class TestCmdSync:
         """A project whose one manifest has three rows, the middle one invalid; returns (project, file, bytes)."""
         bad = _row("2", "o/r#2", gate={"kind": "decision", "blocked_by": "someone"})
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1"), bad, _row("3", "o/r#3")])
-        path = tmp_path / "proj" / ".borg" / "programs" / "a.json"
+        path = tmp_path / "proj" / ".borg" / "chains" / "a.json"
         return d, path, path.read_bytes()
 
     def test_sync_over_a_manifest_with_one_invalid_row_leaves_every_row_on_disk(self, tmp_path, capsys, monkeypatch):
