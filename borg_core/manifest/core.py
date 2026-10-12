@@ -13,9 +13,9 @@ be a Python package name, and pyproject.toml:76 pins
 path resolved.
 
 THE PORT HAS DELIBERATELY DIVERGED from the copy that still lives in merge-tree/programs.py, which
-is itself still live (merge-tree/coordinator.py rewrites manifests through its writer and
-merge-tree/gather.py derives the viz graph from it). The differences, so the next editor of either
-copy can see them: this side validates `after` and derives edges from it (the writer over there
+is itself still live (merge-tree/coordinator.py rewrites manifests through its writer; the
+other former caller, merge-tree/gather.py, retired with the browser board). The differences, so the
+next editor of either copy can see them: this side validates `after` and derives edges from it (the writer over there
 accepts an `after` of any shape and derives nothing from it, so its write gate is WEAKER than this
 read gate -- a manifest it happily writes can be rejected here), this side deduplicates edges within
 a manifest, this side requires every declared ref to be a FULL `owner/repo#num`, this side no longer

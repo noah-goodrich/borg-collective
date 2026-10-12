@@ -13,7 +13,7 @@ borg next --switch           Recommend AND switch to that project
 borg switch                  fzf picker → jump to tmux window
 borg switch <name>           Jump directly (skips fzf)
 
-borg recon --json            Machine surface only: reconciled sweep JSON (/borg-recon, gather.py)
+borg recon --json            Machine surface only: reconciled sweep JSON (/borg-recon)
 borg recon --adapters        List the source adapters discovered on this machine
                              The human digest retired 2026-08-26 — borg link sweeps now
 

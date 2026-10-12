@@ -386,8 +386,8 @@ I last looked?" across every registered project.
 **`recon` is not a human-facing verb.** It retired 2026-08-26 (AC1 of the one-front-door plan):
 `borg link` folds the same fan-out into its own document, so a human never needs to run the sweep
 directly. Running bare `borg recon` dies with a pointer at `borg link`. What survives is the
-**machine surface** — `borg recon --json` (consumed by the `/borg-recon` skill and
-`merge-tree/gather.py`) and `borg recon --adapters` — because the engine was never the thing AC1
+**machine surface** — `borg recon --json` (consumed by the `/borg-recon` skill; the
+`merge-tree/gather.py` consumer retired with the browser board) and `borg recon --adapters` — because the engine was never the thing AC1
 asked to remove. The gate lives in `borg_core/recon/cli.py::main()`, guarding the `_run()` call on
 `args.json_only or args.adapters` — the module that implements the command owns the invariant.
 `borg.zsh`'s `recon)` arm is a pure pass-through, plus the two things `argparse` does not do

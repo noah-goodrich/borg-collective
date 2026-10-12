@@ -104,7 +104,7 @@ run_zsh_borg() {
 
 # A registry row with `"summary": null` is what `borg add` writes before any debrief. d9e27f6 ran it
 # through `str()` at assembly, so the board printed the word None where "(no summary)" belongs.
-@test "contract: a null summary prints (no summary) on the board, never None" {
+@test "contract: a null summary prints no placeholder and no None on the board" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle","summary":null}}}' \
         > "$BORG_REGISTRY"
@@ -112,8 +112,82 @@ run_zsh_borg() {
     run_zsh_borg link --local
     [ "$status" -eq 0 ]
     plain="$(printf '%s' "$output" | sed $'s/\x1b\\[[0-9;]*m//g')"
-    [[ "$plain" == *"(no summary)"* ]] || false
+    [[ "$plain" != *"(no summary)"* ]] || false
     [[ "$plain" != *"None"* ]] || false
+}
+
+# ── A project's summary comes from its latest CHECKPOINT, or it has none ──────────────────────────────
+#
+# Each case registers a `summary` the way summarize.py would have stored it. The registry value is the
+# decoy: `borg link` must never display it. The checkpoint FILES are real, written under the project's
+# path, so these cases fail if production reads anything but the file.
+
+@test "contract: a project whose stored summary is a greeting and which has no checkpoint renders no summary" {
+    _link_mock_tmux ""
+    local ws="${BATS_TEST_TMPDIR}/ws/greeter"
+    mkdir -p "$ws"
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{"greeter":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
+EOF
+
+    run_zsh_borg link --local
+    [ "$status" -eq 0 ]
+    local plain
+    plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
+    [[ "$plain" == *"greeter"* ]] || false
+    [[ "$plain" != *"buttercup"* ]] || false
+    [[ "$plain" != *"(no summary)"* ]] || false
+
+    run_zsh_borg link greeter --local
+    [ "$status" -eq 0 ]
+    plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
+    [[ "$plain" != *"buttercup"* ]] || false
+    [[ "$plain" != *"Summary"* ]] || false
+}
+
+@test "contract: a project with a checkpoint renders its tl;dr, flattened, without bold markers" {
+    _link_mock_tmux ""
+    local ws="${BATS_TEST_TMPDIR}/ws/shipper"
+    mkdir -p "$ws/.borg/checkpoints"
+    printf '**tl;dr** — Shipped the **summary** change;\nnext is the contract step.\n\n## 2. Accomplished\n\n- Not this.\n' \
+        > "$ws/.borg/checkpoints/2026-08-02-1000.md"
+    printf '**tl;dr** — An older checkpoint.\n' > "$ws/.borg/checkpoints/2026-08-01-1000.md"
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{"shipper":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
+EOF
+
+    run_zsh_borg link shipper --local
+    [ "$status" -eq 0 ]
+    local plain
+    plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
+    local block
+    block=$(printf '%s\n' "$plain" | sed -n '/^  Summary$/,/^$/p')
+    [[ "$block" == *"Shipped the summary change; next is the contract step."* ]] || false
+    [[ "$block" != *"**"* ]] || false
+    [[ "$plain" != *"buttercup"* ]] || false
+    [[ "$block" != *"An older checkpoint"* ]] || false
+}
+
+@test "contract: a checkpoint with no tl;dr falls back to the first Accomplished bullet" {
+    _link_mock_tmux ""
+    local ws="${BATS_TEST_TMPDIR}/ws/bulleter"
+    mkdir -p "$ws/.borg/checkpoints"
+    printf '# Checkpoint\n\n## 1. Goal\n\n- Not this one.\n\n## 2. Accomplished\n\n- Landed the reader.\n- Second thing.\n' \
+        > "$ws/.borg/checkpoints/2026-08-02-1000.md"
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{"bulleter":{"path":"$ws","source":"cli","status":"idle","summary":"What's up buttercup?"}}}
+EOF
+
+    run_zsh_borg link bulleter --local
+    [ "$status" -eq 0 ]
+    local plain
+    plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
+    local block
+    block=$(printf '%s\n' "$plain" | sed -n '/^  Summary$/,/^$/p')
+    [[ "$block" == *"Landed the reader."* ]] || false
+    [[ "$block" != *"Second thing."* ]] || false
+    [[ "$block" != *"Not this one."* ]] || false
+    [[ "$plain" != *"buttercup"* ]] || false
 }
 
 @test "contract: briefing was removed and points at 'borg link --brief'" {
@@ -133,8 +207,8 @@ run_zsh_borg() {
 # ── AC1: `recon` retires as a human-facing verb, engine intact (2026-08-26) ───
 # The 2026-08-10 removals above deleted whole commands. This one is narrower and the difference is
 # the whole test: the HUMAN digest retires, the MACHINE surface survives, because `borg recon --json`
-# and `borg recon --adapters` have real consumers (skills/borg-recon/SKILL.md, merge-tree/gather.py,
-# evals/s4-k3/run.sh) that AC1 never asked to break.
+# and `borg recon --adapters` have a real consumer (skills/borg-recon/SKILL.md) that AC1 never asked to break. (merge-tree/gather.py
+# and evals/s4-k3 E3 were consumers too until the browser board retired 2026-10-12.)
 
 @test "contract: bare recon exits non-zero and points at 'borg link' (AC1)" {
     run_zsh_borg recon
@@ -1832,6 +1906,30 @@ _assert_link_golden() {
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
 
+# `borg link` takes a project's summary from its latest CHECKPOINT FILE and never from the registry's
+# `summary` (the transcript heuristic's output). A fixture that put the string in the registry would
+# supply the value production must derive, which proves nothing -- so this rewrites the fixture the
+# registry above just wrote: every project's `summary` becomes a real `**tl;dr** -- ...` checkpoint at
+# <path>/.borg/checkpoints/, and the registry key is DELETED so a reader that still consulted it would
+# render nothing. A project with a null path is given a directory under cpws/ to hold its checkpoint.
+_link_seed_checkpoints() {
+    local name dir
+    jq -r '.projects | to_entries[] | select(.value.summary | type == "string") | .key' "$BORG_REGISTRY" \
+        | while read -r name; do
+            dir=$(jq -r --arg n "$name" '.projects[$n].path // empty' "$BORG_REGISTRY")
+            [ -n "$dir" ] || dir="${BATS_TEST_TMPDIR}/cpws/$name"
+            mkdir -p "$dir/.borg/checkpoints"
+            {
+                printf '**tl;dr** — '
+                jq -j --arg n "$name" '.projects[$n].summary' "$BORG_REGISTRY"
+                printf '\n\n## 1. Goal\n\nSeeded by the fixture.\n'
+            } > "$dir/.borg/checkpoints/2026-08-01-0900.md"
+            jq --arg n "$name" --arg d "$dir" \
+                '.projects[$n] |= (del(.summary) | .path = $d)' "$BORG_REGISTRY" > "$BORG_REGISTRY.tmp" \
+                && mv "$BORG_REGISTRY.tmp" "$BORG_REGISTRY"
+        done
+}
+
 # --porcelain and the deep dive print raw timestamps, so these are fixed dates. `alpha`'s summary is
 # deliberately past 80 chars: _borg_link_porcelain cuts at 80 with NO ellipsis (the overview cuts at
 # 50 WITH one), and the two limits have been silently different since the command was written.
@@ -1866,6 +1964,7 @@ _link_registry_porcelain() {
   }
 }
 EOF
+    _link_seed_checkpoints
 }
 
 # Workspaces backing the overview's two AGGREGATE sections. The fourth assimilated file exists so
@@ -1939,6 +2038,7 @@ _link_registry_overview() {
   }
 }
 EOF
+    _link_seed_checkpoints
 }
 
 # Deep-dive workspace: every optional section populated at once.
@@ -1988,7 +2088,8 @@ EOF
     printf '# Checkpoint four\n\nBody four.\n'  > "$d/.borg/checkpoints/2026-08-04-1000.md"
     {
         printf '# Checkpoint five\n'
-        for i in {2..25}; do printf 'body line %02d\n' "$i"; done
+        printf '**tl;dr** — Delta keeps the deep dive deterministic.\n\n'
+        for i in {3..25}; do printf 'body line %02d\n' "$i"; done
     } > "$d/.borg/checkpoints/2026-08-05-1000.md"
     # Newest name gets the oldest mtime and vice versa: proves the sort is by name, not mtime.
     touch -t 202601010000 "$d/.borg/checkpoints/2026-08-05-1000.md"
@@ -2037,7 +2138,6 @@ _link_registry_deep() {
       "source": "cli",
       "status": "active",
       "last_activity": "$t_delta",
-      "summary": "Delta keeps the deep dive deterministic.",
       "claude_session_id": "sess-delta-0001",
       "tmux_window": "delta"
     }
@@ -2189,6 +2289,7 @@ _link_registry_grid() {
   }
 }
 EOF
+    _link_seed_checkpoints
 }
 
 # The whole grid arrangement in one call, tmux mock included so it cannot be forgotten. The four
@@ -2442,6 +2543,7 @@ _link_registry_control_chars() {
   }
 }
 EOF
+    _link_seed_checkpoints
 }
 
 @test "contract: the picker feed stays one 5-field record per project through tab and newline" {
@@ -2777,7 +2879,8 @@ EOF
     [[ "$plain" == *"Last active:  (never)"* ]] || false
     [[ "$plain" == *"tmux window:  (none)"* ]] || false
     [[ "$plain" == *"Session ID:   (unknown)"* ]] || false
-    [[ "$plain" == *"(no summary)"* ]] || false
+    [[ "$plain" != *"(no summary)"* ]] || false
+    [[ "$plain" != *"Summary"* ]] || false
     [[ "$plain" != *"Path:"* ]] || false
     [[ "$plain" != *"Active Plan"* ]] || false
     [[ "$plain" != *"Recent Checkpoints"* ]] || false
@@ -2804,6 +2907,7 @@ EOF
     _link_mock_tmux ""
     printf '%s' '{"projects":{"wordy":{"path":null,"source":"cli","status":"idle","summary":"This summary is deliberately far longer than seventy columns so that the fold pipeline has to break it across at least three separate rendered lines."}}}' \
         > "$BORG_REGISTRY"
+    _link_seed_checkpoints
 
     run_zsh_borg link wordy
     [ "$status" -eq 0 ]
@@ -4013,7 +4117,7 @@ EOF
 # derived $REPO by stripping two exact prefixes (`git@github.com:` and `https://github.com/`). A
 # remote of the form https://x-access-token:<token>@github.com/owner/repo.git matches NEITHER, so the
 # whole URL -- including a live gho_ credential -- became $REPO and flowed into every item's `ref`,
-# and from there into data.json, story.json, and the rendered HTML.
+# and from there into the (since retired) merge-tree board's data.json, story.json, and rendered HTML.
 #
 # These extract the REAL sed expression from the shipped adapter and run it, rather than testing a
 # copied-out duplicate that could drift from the file it is meant to guard.

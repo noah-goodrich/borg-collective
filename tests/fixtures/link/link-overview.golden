@@ -16,7 +16,7 @@
 ──────────────────────────────────────────────────────────────────────────────────────────
 *echo                        [C]  [2midle        [0m 5d ago           –    –      – Echo is pinned.
  bravo                       [D]  [1;33mwaiting <<< [0m yesterday        –    –      – Bravo is waiting.
- charlie                     [X]  [0;32mactive      [0m 3h ago           –    –      – (no summary)
+ charlie                     [X]  [0;32mactive      [0m 3h ago           –    –      –
  golf                        [C]  [2midle        [0m never            –    –      – Golf has never been active.
  hotel-renamed-and-then-some [C]  [2midle        [0m 2d ago           –    –      – Hotel renders under its display_name.
  alpha                       [C]  [2midle        [0m 2h ago           –    –      – Alpha carries a long summary so the fifty characte...

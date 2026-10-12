@@ -1,4 +1,4 @@
-.PHONY: clean test test-bats lint format test-viz lint-viz format-viz spine eval eval-live eval-changed eval-live-changed
+.PHONY: clean test test-bats lint format test-viz lint-viz format-viz eval eval-live eval-changed eval-live-changed
 
 # TWO Python surfaces, deliberately separate — do not merge them.
 #
@@ -10,9 +10,11 @@
 # a different shape (no layered domain/usecase split to enforce) and its own coverage reality.
 #
 # But "out of scope" had turned into "ungated". merge-tree/ carried 124 passing tests written by the
-# directive's Part 2 -- curate.py at 99%, render_graph.py at 88% -- and `testpaths = ["borg_core"]`
-# meant pytest never collected them, so no gate ran them and nothing would have caught a regression.
-# These targets close that without dragging merge-tree into borg_core's rules.
+# directive's Part 2 -- curate.py at 99%, render_graph.py at 88% (both since retired) -- and
+# `testpaths = ["borg_core"]` meant pytest never collected them, so no gate ran them and nothing would
+# have caught a regression. These targets close that without dragging merge-tree into borg_core's rules.
+# The browser board was retired 2026-10-12; the survivors are the chain coordinator and programs.py,
+# gated by test_coordinator, test_programs and test_s4_manifests.
 #
 # borg_core/ doesn't exist until Part 3's first commit -- test/lint no-op gracefully (not a failure)
 # until then, same as pytest legitimately collecting zero tests.
@@ -65,19 +67,16 @@ format:
 	fi
 
 # ── viz/infoviz program (merge-tree/) ────────────────────────────────────────────────────────────
-# Separate coverage floor from borg_core's 90%: render.py is the LEGACY renderer that viz-1 slates
-# for deletion once REVIEW_BUCKET is ported out of it, so it sits at 0% by design and would drag any
-# whole-tree number down. The floor is therefore set on the modules that are actually live.
+# Separate coverage floor from borg_core's 90%, set on the modules that are actually live.
 
 # THE INCLUDE LIST IS ASSERTED TO EXIST BEFORE IT IS USED, and that guard is the whole point of the
 # VIZ_COVERED variable. `coverage report --include=` SILENTLY IGNORES a pattern that matches nothing:
 # measured, `--include="a.py,ghost.py"` on a tree holding only a.py reports a.py at 100% and prints a
-# healthy TOTAL, with no warning and exit 0. So deleting a module named here shrinks the gate from six
-# modules to five and the number goes UP. `2026-08-31-retire-merge-tree-programs-into-borg-core` names
+# healthy TOTAL, with no warning and exit 0. So deleting a module named here shrinks the gate by one
+# module and the number goes UP. `2026-08-31-retire-merge-tree-programs-into-borg-core` names
 # this as one of four traps that "ship green", and it is the one that disarms the gate measuring the
 # very code that retirement moves. A missing module is now a loud failure instead.
-VIZ_COVERED = merge-tree/curate.py merge-tree/render_graph.py merge-tree/spine.py \
-              merge-tree/gather.py merge-tree/programs.py merge-tree/coordinator.py
+VIZ_COVERED = merge-tree/programs.py merge-tree/coordinator.py
 
 test-viz:
 	@if [ -d merge-tree ]; then \
@@ -107,13 +106,6 @@ format-viz:
 	else \
 		echo "merge-tree/ not present -- nothing to format"; \
 	fi
-
-# ── S6 (viz-2): the one documented command that refreshes the spine end to end ───────────────────
-# Regenerates story.json's skeleton from the latest gather while preserving judgment from the
-# overlay. Safe to run at any time: the skeleton always wins on structure, the overlay always wins
-# on prose, and anything unjudged is reported rather than silently rendered blank.
-spine:
-	python3 merge-tree/spine.py
 
 # ── AC6: the eval harness ────────────────────────────────────────────────────────────────────────
 # `make eval` IS THE SAFE ONE, AND SAFE NOW MEANS OFFLINE RATHER THAN MERELY MODEL-FREE. It forwards

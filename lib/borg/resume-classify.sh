@@ -312,7 +312,7 @@ def is_interrupt: (.type == "user")
 def is_turn_close: .type == "system" and .subtype == "turn_duration";
 def is_bookkeeping:
   (.type as $t
-   | ["last-prompt","permission-mode","pr-link","cost-state","file-history-snapshot","attachment"]
+   | ["last-prompt","permission-mode","pr-link","cost-state","file-history-snapshot","attachment","mode","atis-latch"]
    | index($t) != null)
   or (.type == "system" and .subtype == "stop_hook_summary")
   or is_turn_close;

@@ -1,0 +1,16 @@
+launchd probe evidence (S0c), Claude Code 2.1.296, 2026-10-12.
+Job: temporary user-domain launchd job, label borg.spike.s0c-probe-tmp, no RunAtLoad, started with launchctl kickstart, then booted out and its plist deleted (launchctl list shows no match afterwards).
+Job body: spike/launchd-probe-job.sh (committed). It unsets USER first, then runs bin/borg-resume probe with BORG_RESUME_PROBE_VERBOSE=1, which echoes the matched usage line to stderr. Job stdout and stderr were both captured, verbatim below.
+Not captured: a bare claude -p /usage run without USER, so the claim that it prints nothing in that case is not separately demonstrated; this run shows the probe succeeds with USER unset (the self-heal path).
+
+--- job output (verbatim) ---
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+TMUX=unset
+USER=unset
+Current session: 43% used · resets Oct 12 at 1:59pm (America/Denver)
+session_pct=43
+probe_exit=0
+
+--- launchctl print excerpt (verbatim) ---
+	state = not running
+	last exit code = 0
