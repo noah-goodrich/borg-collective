@@ -38,8 +38,7 @@ def test_cmd_add_registers_new_project_keyed_by_basename(isolated_env, capsys):
     registry = shell.read_registry()
     assert registry["projects"]["sample-project"]["path"] == str(proj_dir)
     assert registry["projects"]["sample-project"]["source"] == "cli"
-    # KNOWN BUG (parity, not a regression): exits 1 when no Claude session is found.
-    assert exit_code == 1
+    assert exit_code == 0  # registration succeeded; a missing Claude session is not an error
 
 
 def test_cmd_add_with_no_path_registers_current_directory(isolated_env, capsys, monkeypatch):
@@ -51,7 +50,7 @@ def test_cmd_add_with_no_path_registers_current_directory(isolated_env, capsys, 
 
     out = capsys.readouterr().out
     assert "Registered: cwd-project" in out
-    assert exit_code == 1
+    assert exit_code == 0
 
 
 def test_cmd_add_with_discoverable_session_exits_0_and_prints_latest_session(isolated_env, capsys):
@@ -179,7 +178,7 @@ def test_main_dispatches_add(isolated_env, capsys):
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["add", str(proj_dir)])
 
-    assert exc_info.value.code == 1  # known-bug parity: no session found
+    assert exc_info.value.code == 0
     out = capsys.readouterr().out
     assert "Registered: via-main" in out
 
@@ -218,7 +217,7 @@ def test_main_ignores_extra_positional_arguments_like_zsh_did(isolated_env, caps
     with pytest.raises(SystemExit) as exc_info:
         cli.main(["add", str(proj_dir), "some", "extra", "tokens"])
 
-    assert exc_info.value.code == 1  # known-bug parity path, not an argparse usage error
+    assert exc_info.value.code == 0  # not an argparse usage error
     out = capsys.readouterr().out
     assert "Registered: extra-args-ok" in out
     registry = shell.read_registry()

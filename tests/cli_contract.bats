@@ -520,22 +520,11 @@ EOF
 # always "succeeds" (realpath falls back to echoing the raw string on failure). So unlike rm/pin/
 # unpin/color, there is no clean-failure-on-bad-arg contract to test for `add`.
 #
-# KNOWN BUG (found during this integration pass, not by the drafting group — verified directly
-# against a real zsh interpreter outside bats/mocking, same reproduction shape as the pre-existing
-# "claude already inside tmux" bug elsewhere in this file, so it is not a mocking artifact). cmd_add's
-# very last line is a bare, non-if/while `[[ -n "$session_id" ]] && info "Latest session: $session_id"`.
-# For a freshly-added project with no discoverable Claude session history (the common case — this is
-# the FIRST thing you run before ever opening Claude Code in that directory), $session_id is empty, so
-# that line's own exit status is 1 ("false"), and because borg.zsh runs under `set -e`, errexit trips
-# immediately — `borg add` on a brand-new project always exits 1 even though the registration itself
-# (visible in both the "Registered: ..." output and the registry file below) fully succeeded. This
-# pins the CURRENT (buggy) exit-1 contract on purpose, matching this file's established pattern for
-# real-but-out-of-scope-to-fix bugs: a future fix (e.g. `[[ -n "$session_id" ]] && info "..."; true`)
-# should show up here as a status-code flip to 0, not as a silent, undetected regression either way.
-# Worth flagging as a real, everyday-command bug for a follow-up fix — out of scope for a
-# test-coverage-only pass (constraints restrict this task to tests/cli_contract.bats).
+# FORMER BUG, fixed on purpose (issue #306): cmd_add used to exit 1 for a freshly-added project with no
+# Claude session (the common case), so `borg add <path> && ...` silently skipped the second command. It
+# now exits 0 whenever registration succeeds; a genuine failure (the --name collision below) still exits 1.
 
-@test "contract: add registers a new project keyed by the directory basename (currently exits 1 -- known bug)" {
+@test "contract: add registers a new project keyed by the directory basename and exits 0 with no Claude session" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -549,7 +538,7 @@ EOF
     mkdir -p "$proj_dir"
 
     run_zsh_borg add "$proj_dir"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 0 ]
     [[ "$output" == *"Registered: sample-project"* ]] || false
 
     run jq -e '.' "$BORG_REGISTRY"
@@ -563,7 +552,7 @@ EOF
     [ "$output" = "cli" ]
 }
 
-@test "contract: add --name registers under that name; a path held under another name is a no-op, or exit 1 with --name" {
+@test "contract: add --name registers under that name; a path held under another name is a no-op (exit 0), or a real error (exit 1) with --name" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -591,7 +580,7 @@ EOF
     [ "$output" = "widgets" ]
 }
 
-@test "contract: add with no path argument registers the current directory (currently exits 1 -- known bug)" {
+@test "contract: add with no path argument registers the current directory and exits 0 with no Claude session" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -605,7 +594,7 @@ EOF
     mkdir -p "$proj_dir"
 
     run zsh -c "cd '$proj_dir' && '$BORG' add"
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 0 ]
     [[ "$output" == *"Registered: cwd-project"* ]] || false
 
     run jq -r '.projects["cwd-project"].path' "$BORG_REGISTRY"
