@@ -17,8 +17,8 @@
 #      that scope, so liveness adds nothing there), or an unfinished non-interrupted agent / workflow (S5 inventory).
 #   3. Look for POSITIVE evidence of death, never mere silence: the registry claude_pid is gone or alive with a
 #      different start time (pid reuse); or, with no pid facts, the pane bound by @borg_sid is at a shell. Unknown
-#      (no facts, tmux answers nothing, conflicting panes) creates nothing. Container sessions are checked with a
-#      docker ps (BORG_RESUME_DOCKER_CMD stub): container gone is notify-only, docker unreachable or unhealthy defers.
+#      (no facts, tmux answers nothing, conflicting panes) creates nothing. Container sessions are
+#      never declared dead (U9 container identity is unestablished; S3 must record it): verdict unknown.
 #   4. Create ONE record per (session, scope) through the watcher's own _rw_ingest, so the evidence-uuid idempotency
 #      key holds. Dead plus open work is class process_death, resume_at = now + BORG_RESUME_LIVENESS_GRACE_SEC (300),
 #      with an early notice (outbox line in notify.jsonl) carrying the cancel hint at minute 0. Causes: crash (pane
@@ -32,22 +32,23 @@
 #      BORG_RESUME_STALL_MIN (10) minutes and either a permission_prompt event arrived after confirmation or the
 #      pane classifies as a dialog becomes `stalled` (terminal) with a notice naming the window.
 #
-# Notices are appended to $(borg_resume_dir)/notify.jsonl (an outbox; delivery is the gate/notifier slice, not here).
-# Not here: relaunch (S11), the gate and injection (S9), launchd (S12).
+# Notices: ONE per session per detection, appended to $(borg_resume_dir)/notify.jsonl (bounded) AND delivered host-side
+# via _borg_osa_notify. Not here: relaunch (S11), the gate and injection (S9), launchd (S12).
 #
-# Env stubs for tests: BORG_RESUME_PANES_CMD (list-panes lines), BORG_RESUME_TMUX_CMD, BORG_RESUME_DOCKER_CMD,
+# Env stubs for tests: BORG_RESUME_PANES_CMD (list-panes lines), BORG_RESUME_TMUX_CMD, BORG_RESUME_NOTIFY_CMD,
 # BORG_RESUME_BOOT_EPOCH. Tuning: BORG_RESUME_LIVENESS_GRACE_SEC, BORG_RESUME_REBOOT_PER_HOUR, BORG_RESUME_WF_IDLE_SEC,
-# BORG_RESUME_STALL_MIN, BORG_RESUME_DOCKER_TIMEOUT_SEC (8).
+# BORG_RESUME_STALL_MIN, BORG_RESUME_NOTIFY_KEEP (200).
 
 # shellcheck disable=SC2016,SC2154
 _RL_SHELL_RE='^-?(zsh|bash|sh|fish|dash|ksh|tcsh)$'
 _rl_panes_loaded=0
 _rl_panes_rc=1
 _rl_panes_out=""
-_rl_dk_loaded=0
-_rl_dk_rc=1
-_rl_dk_out=""
 _rl_reboot_new=0
+_rl_new_n=0
+_rl_new_resume=0
+_rl_new_cause=""
+_rl_new_ra=""
 
 _rl_log() { _rw_log "liveness: $*"; }
 
@@ -69,7 +70,39 @@ _rl_notify() {
     _line="$(jq -n -c --argjson t "$(_rc_now)" --arg kind "$1" --arg sid "$2" --arg rid "$3" --arg p "$_proj" \
         --arg w "$_win" --arg m "${4:0:500}" \
         '{t: $t, kind: $kind, sid: $sid, rid: $rid, project: $p, window: $w, msg: $m}' 2>/dev/null)"
-    [ -n "$_line" ] && borg_resume_append_line "$(borg_resume_dir)/notify.jsonl" "$_line"
+    if [ -n "$_line" ]; then
+        borg_resume_append_line "$(borg_resume_dir)/notify.jsonl" "$_line"
+        _rl_trim_outbox "$(borg_resume_dir)/notify.jsonl"
+    fi
+    _rl_deliver "${_proj:-borg-resume}" "${4:0:500}"
+    return 0
+}
+
+# Keep the outbox bounded: past 2x BORG_RESUME_NOTIFY_KEEP (default 200) lines, keep the last KEEP.
+_rl_trim_outbox() {
+    local _keep _tmp
+    _keep="$(_rl_int "${BORG_RESUME_NOTIFY_KEEP:-}" 200)"
+    [ "$(wc -l <"$1" | tr -d ' ')" -gt $((_keep * 2)) ] || return 0
+    _tmp="$1.trim.$$"
+    if tail -n "$_keep" "$1" >"$_tmp" 2>/dev/null; then mv -f "$_tmp" "$1"; fi
+    return 0
+}
+
+# Host-side delivery through the existing _borg_osa_notify (lib/borg-hooks.sh). BORG_RESUME_NOTIFY_CMD overrides
+# it (tests; receives title, subtitle, message as arguments). Never fails the pass.
+_rl_deliver() {
+    if [ -n "${BORG_RESUME_NOTIFY_CMD:-}" ]; then
+        bash -c "$BORG_RESUME_NOTIFY_CMD" _ "Borg Resume" "$1" "$2" >/dev/null 2>&1 || true
+        return 0
+    fi
+    if ! declare -F _borg_osa_notify >/dev/null 2>&1; then
+        # shellcheck source=/dev/null
+        . "${BORG_RESUME_LIBDIR:?}/../borg-hooks.sh" 2>/dev/null || {
+            _rl_log "notify: borg-hooks.sh missing"
+            return 0
+        }
+    fi
+    _borg_osa_notify "Borg Resume" "$1" "$2" >/dev/null 2>&1 || true
     return 0
 }
 
@@ -180,7 +213,7 @@ _rl_boot_epoch() {
         printf '%s\n' "$BORG_RESUME_BOOT_EPOCH"
         return 0
     fi
-    _b="$(sysctl -n kern.boottime 2>/dev/null | sed -n 's/.*sec = \([0-9]*\).*/\1/p')"
+    _b="$(/usr/sbin/sysctl -n kern.boottime 2>/dev/null | sed -n 's/.*sec = \([0-9]*\).*/\1/p')"
     [ -n "$_b" ] || _b="$(date -d "$(uptime -s 2>/dev/null)" +%s 2>/dev/null)"
     [ -n "$_b" ] || return 1
     printf '%s\n' "$_b"
@@ -221,68 +254,27 @@ EOF
     printf '%s\n' "$_kind"
 }
 
-# Run a shell command line with a timeout. Sets _rl_dk_out and _rl_dk_rc (124 on timeout).
-_rl_docker_load() {
-    local _cmd _t _tmp _pid _i=0 _max
-    [ "$_rl_dk_loaded" = 1 ] && return 0
-    _rl_dk_loaded=1
-    _cmd="${BORG_RESUME_DOCKER_CMD:-docker ps --filter label=dev.role=app --format '{{.Names}}|{{.Status}}'}"
-    _t="$(_rl_int "${BORG_RESUME_DOCKER_TIMEOUT_SEC:-}" 8)"
-    _max=$((_t * 10))
-    _tmp="$(mktemp "${TMPDIR:-/tmp}/borg-rl.XXXXXX")" || { _rl_dk_rc=1; return 0; }
-    bash -c "$_cmd" >"$_tmp" 2>/dev/null &
-    _pid=$!
-    while kill -0 "$_pid" 2>/dev/null; do
-        if [ "$_i" -ge "$_max" ]; then
-            kill "$_pid" 2>/dev/null
-            wait "$_pid" 2>/dev/null
-            _rl_dk_rc=124
-            _rl_dk_out=""
-            rm -f "$_tmp"
-            return 0
-        fi
-        sleep 0.1
-        _i=$((_i + 1))
-    done
-    wait "$_pid"
-    _rl_dk_rc=$?
-    _rl_dk_out="$(cat "$_tmp" 2>/dev/null)"
-    rm -f "$_tmp"
-    return 0
-}
-
 # Verdict for a session: alive | unknown | dead <cause> | defer <why>.
 # Usage: _rl_verdict <pid> <start> <in_container> <project> <sid> <has_tmux_fact>
 _rl_verdict() {
-    local _pid="$1" _start="$2" _cont="$3" _proj="$4" _sid="$5" _hastmux="$6" _live _boot _sepoch _pk _line _hit=""
-    if [ "$_cont" = true ]; then
-        [ -n "$_proj" ] || { printf 'unknown\n'; return 0; }
-        _rl_docker_load
-        [ "$_rl_dk_rc" -eq 0 ] || { printf 'defer docker_unreachable\n'; return 0; }
-        while IFS= read -r _line; do
-            case "$_line" in *"$_proj"*) _hit="$_line" ;; esac
-        done <<EOF
-$_rl_dk_out
-EOF
-        if [ -z "$_hit" ]; then
-            printf 'dead container_down\n'
-            return 0
-        fi
-        case "$_hit" in
-            *[Uu]nhealthy* | *[Rr]estarting* | *[Pp]aused*) printf 'defer docker_unhealthy\n' ;;
-            *) printf 'unknown\n' ;;
-        esac
-        return 0
-    fi
+    local _pid="$1" _start="$2" _cont="$3" _proj="$4" _sid="$5" _hastmux="$6" _live _boot _sepoch _pk
+    # Container identity (U9) is not established, so a container session is never declared dead from here: S3
+    # must record a container id or label first. Positive evidence only.
+    [ "$_cont" = true ] && { printf 'unknown\n'; return 0; }
 
     case "$_pid" in
         "" | *[!0-9]*) _pid="" ;;
         0) _pid="" ;;
     esac
     if [ -n "$_pid" ] && [ -n "$_start" ]; then
-        _live="$(_rl_norm "$(LC_ALL=C ps -o lstart= -p "$_pid" 2>/dev/null)")"
+        _live="$(_rl_norm "$(LC_ALL=C /bin/ps -o lstart= -p "$_pid" 2>/dev/null)")"
         if [ -n "$_live" ] && [ "$_live" = "$(_rl_norm "$_start")" ]; then
             printf 'alive\n'
+            return 0
+        fi
+        # An unusable ps (empty answer) is not proof of death: confirm with kill -0 before calling it dead.
+        if [ -z "$_live" ] && kill -0 "$_pid" 2>/dev/null; then
+            printf 'unknown\n'
             return 0
         fi
         # Dead. Refine the cause: a boot after the process started is a reboot (D1).
@@ -324,24 +316,44 @@ EOF
 # Create (once) a record for (sid, scope) through the watcher's ingest and decorate it.
 # Usage: _rl_create <sid> <scope> <cause> <error> <text> <uuid>
 _rl_create() {
-    local _sid="$1" _scope="$2" _cause="$3" _err="$4" _text="$5" _uuid="$6" _f _before _rid _ra _msg _proj
+    local _sid="$1" _scope="$2" _cause="$3" _err="$4" _text="$5" _uuid="$6" _f _before _ra _act
+    # A scope with an ACTIVE record (limit-class, scan or hook made) is never reclassified by liveness: it only
+    # adds its detector, so class, error and reset_text stay and the fail-closed usage probe still applies.
+    if _f="$(_rw_find_active "$_sid" "$_scope")" && [ -n "$_f" ]; then
+        _rw_update "$_f" '.detected_by = ((.detected_by + ["liveness"]) | unique)' || true
+        return 0
+    fi
     _before="$_rw_n_created"
     _rw_ingest "$_sid" "$_scope" liveness "$_err" "$_text" "$_uuid" "" "$(_rc_now)"
     [ "$_rw_n_created" -gt "$_before" ] || return 0
     _f="$(_rw_find_uuid "$_uuid")" || return 0
-    _rid="$(jq -r .rid "$_f")"
     _ra="$(jq -r '.resume_at // empty' "$_f")"
+    _act="$(jq -r .action "$_f")"
     _rw_update "$_f" --arg c "$_cause" '.cause = $c' || return 0
-    _proj="$(jq -r '.project // empty' "$(borg_resume_registry_file "$_sid")" 2>/dev/null)"
-    if [ "$(jq -r .action "$_f")" = notify ]; then
-        _msg="borg-resume: session ${_proj:-$_sid} ended with open work ($_cause) and cannot be relaunched"
-        _msg="$_msg automatically; resume it by hand: claude --resume $_sid"
-    else
-        _msg="borg-resume: session ${_proj:-$_sid} ended with open work ($_cause, scope $_scope); will relaunch"
-        _msg="$_msg with --resume at epoch ${_ra:-?} unless cancelled. Cancel: borg-resume mark-closed ${_proj:-$_sid}"
-    fi
-    _rl_notify early_notice "$_sid" "$_rid" "$_msg"
+    # The notice is coalesced: one per session per detection (see _rl_flush_notice).
+    _rl_new_n=$((_rl_new_n + 1))
+    _rl_new_cause="$_cause"
+    _rl_new_ra="$_ra"
+    [ "$_act" = notify ] || _rl_new_resume=1
     [ "$_cause" = reboot ] && _rl_reboot_new=1
+    return 0
+}
+
+# Send ONE notice for the records created for this session in this detection, with the exact manual command.
+_rl_flush_notice() {
+    local _sid="$1" _proj _msg
+    [ "$_rl_new_n" -gt 0 ] || return 0
+    _proj="$(jq -r '.project // empty' "$(borg_resume_registry_file "$_sid")" 2>/dev/null)"
+    if [ "$_rl_new_resume" = 1 ]; then
+        _msg="borg-resume: session ${_proj:-$_sid} ended with open work ($_rl_new_cause, $_rl_new_n scope(s)); will"
+        _msg="$_msg relaunch with --resume at epoch ${_rl_new_ra:-?} unless cancelled. Cancel: borg-resume"
+        _msg="$_msg mark-closed ${_proj:-$_sid}"
+    else
+        _msg="borg-resume: session ${_proj:-$_sid} ended with open work ($_rl_new_cause) and cannot be relaunched"
+        _msg="$_msg automatically; resume it by hand: claude --resume $_sid"
+    fi
+    _rl_notify early_notice "$_sid" "" "$_msg"
+    _rl_new_n=0 _rl_new_resume=0
     return 0
 }
 
@@ -357,9 +369,10 @@ _rl_stage_reboot() {
     _last=""
     for _f in "$(borg_resume_dir)"/pending/*.json; do
         [ -f "$_f" ] || continue
-        [ "$(jq -r 'select(.cause == "reboot" and (.state | IN("scheduled", "new"))) | .staged // false' "$_f" \
-            2>/dev/null)" = false ] || {
-            _ra="$(jq -r 'select(.cause == "reboot" and .staged == true) | .resume_at // empty' "$_f" 2>/dev/null)"
+        [ "$(jq -r 'select(((.cause // "") | endswith("reboot")) and (.state | IN("scheduled", "new")))
+            | .staged // false' "$_f" 2>/dev/null)" = false ] || {
+            _ra="$(jq -r 'select(((.cause // "") | endswith("reboot")) and .staged == true)
+                | .resume_at // empty' "$_f" 2>/dev/null)"
             [ -n "$_ra" ] && { [ -z "$_last" ] || [ "$_ra" -gt "$_last" ]; } && _last="$_ra"
             continue
         }
@@ -402,9 +415,18 @@ _rl_death_uuid() { # <scope> <pid> <start> <sid>
     printf 'pd:%s:%s:%s\n' "${1//[^A-Za-z0-9_:-]/_}" "$2" "$_h"
 }
 
+# One session; creations are tallied and announced with ONE coalesced notice.
 _rl_session() {
+    _rl_new_n=0 _rl_new_resume=0
+    _rl_session_body "$1"
+    _rl_flush_notice "$1"
+    return 0
+}
+
+_rl_session_body() {
     local _sid="$1" _end _reg _facts _pid _start _cont _proj _hastmux _loc _t _sd _ts _verdict _cause _inv
-    local _scopes="" _scope _f _aid _wid _status _runid _jr _jmt _now _idle _uuid _wf_dead _owner_err _se _txt _wfs
+    local _mmt _slack _apath _scopes="" _scope _f _aid _wid _status _runid _jr _jmt _now _idle _uuid _owner_err
+    local _se _txt _wfs
     _cause=""
     _end="$(_rl_end_state "$_sid")"
     if [ "$_end" != open ]; then
@@ -430,11 +452,23 @@ EOF
         open) _scopes="main" ;;
     esac
     _wfs=""
-    if [ -n "$_sd" ]; then
+    # A main-scope interrupt marker is a deliberate stop for the whole session: agents and workflows add nothing
+    # (U15, whether an agent's own transcript carries the marker, is unspiked).
+    if [ -n "$_sd" ] && [ "$_ts" != interrupt ]; then
         _inv="$(borg_resume_inventory "$_sid" 2>/dev/null)"
         if [ "$_ts" != open ]; then
-            _scopes="$(printf '%s' "$_inv" | jq -r '.agents[]? | select(.status == "running" or .status == "orphaned")
-                | "agent:" + .agent_id')"
+            # An orphaned agent counts only if main did not move on after it: its last write must be within
+            # BORG_RESUME_RUNNING_SEC of main's last write (a stale leftover from hours ago is not open work).
+            _mmt="$(_ri_mtime "$_t")"
+            _slack="$(_rl_int "${BORG_RESUME_RUNNING_SEC:-}" 300)"
+            while IFS="$_RW_SEP" read -r _aid _apath; do
+                [ -n "$_aid" ] || continue
+                [ $(($(_ri_mtime "$_apath") + _slack)) -ge "$_mmt" ] || continue
+                _scopes="${_scopes}agent:${_aid} "
+            done <<EOF
+$(printf '%s' "$_inv" | jq -r --arg s "$_RW_SEP" '.agents[]? | select(.status == "running" or .status == "orphaned")
+                | [.agent_id, .brief_ref.path] | join($s)')
+EOF
         fi
         _wfs="$(printf '%s' "$_inv" | jq -r '.workflows[]? | select(.status == "partial" or .status == "unfinished")
             | .run_id + " " + .manifest_id')"
@@ -567,7 +601,7 @@ borg_resume_liveness_pass() {
         # shellcheck source=/dev/null
         . "${BORG_RESUME_LIBDIR:?}/inject.sh" 2>/dev/null || return 0
     fi
-    _rl_panes_loaded=0 _rl_dk_loaded=0 _rl_reboot_new=0
+    _rl_panes_loaded=0 _rl_reboot_new=0 _rl_new_n=0 _rl_new_resume=0
     _d="$(borg_resume_dir)"
     _hours="$(_rl_int "${BORG_RESUME_SCAN_HOURS:-}" 72)"
     _cut=$(($(_rc_now) - _hours * 3600))

@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Liveness detector for borg-resume (slice S10), driven through borg-resume watch --once.
-# Everything is synthetic: stubbed tmux list-panes (BORG_RESUME_PANES_CMD), docker ps (BORG_RESUME_DOCKER_CMD),
+# Everything is synthetic: stubbed tmux list-panes (BORG_RESUME_PANES_CMD), notices (BORG_RESUME_NOTIFY_CMD),
 # tmux (BORG_RESUME_TMUX_CMD), boot time and clock. No real claude, tmux, docker, launchd or state dir.
 
 setup() {
@@ -18,7 +18,7 @@ setup() {
     export BORG_RESUME_BOOT_EPOCH=$((NOW - 86400 * 30))
     export BORG_RESUME_PANES_CMD='true'
     export BORG_RESUME_TMUX_CMD='false'
-    export BORG_RESUME_DOCKER_CMD='true'
+    export BORG_RESUME_NOTIFY_CMD="printf \"%s\\n\" \"\$3\" >>\"\$BATS_TEST_TMPDIR/delivered\""
     export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1
     RD="$BORG_RESUME_DIR"
     SID="00000000-0000-4000-8000-0000000000aa"
@@ -55,14 +55,27 @@ mk_regx() {
 # registry of a session whose claude died at DEADPID (started an hour ago)
 mk_dead() { mk_regx "$1" "$DEADPID" "$(lstart_of $((NOW - 3600)))" "${2:-proj}" "${3:-project}"; }
 
-t_user() { printf '{"type":"user","uuid":"u-%s","cwd":"%s","message":{"role":"user","content":"hello"}}\n' "$RANDOM" "$CWD" >>"$1"; }
-t_asst_end() { printf '{"type":"assistant","uuid":"a-%s","message":{"role":"assistant","stop_reason":"end_turn","content":[{"type":"text","text":"ok"}]}}\n' "$RANDOM" >>"$1"; }
-t_tool() { printf '{"type":"assistant","uuid":"t-%s","message":{"role":"assistant","stop_reason":"tool_use","content":[{"type":"tool_use","id":"x","name":"Agent","input":{}}]}}\n' "$RANDOM" >>"$1"; }
-t_err() { # <file> <uuid> [error] [text]
-    printf '{"type":"assistant","uuid":"%s","isApiErrorMessage":true,"error":"%s","message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"%s"}]}}\n' \
-        "$2" "${3:-server_error}" "${4:-API Error: 500}" >>"$1"
+t_user() {
+    printf '{"type":"user","uuid":"u-%s","cwd":"%s","message":{"role":"user","content":"hello"}}\n' \
+        "$RANDOM" "$CWD" >>"$1"
 }
-t_int() { printf '{"type":"user","uuid":"i-%s","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}\n' "$RANDOM" >>"$1"; }
+t_asst_end() {
+    printf '{"type":"assistant","uuid":"a-%s","message":{"role":"assistant","stop_reason":"end_turn",' "$RANDOM" >>"$1"
+    printf '"content":[{"type":"text","text":"ok"}]}}\n' >>"$1"
+}
+t_tool() {
+    printf '{"type":"assistant","uuid":"t-%s","message":{"role":"assistant","stop_reason":"tool_use",' "$RANDOM" >>"$1"
+    printf '"content":[{"type":"tool_use","id":"x","name":"Agent","input":{}}]}}\n' >>"$1"
+}
+t_err() { # <file> <uuid> [error] [text]
+    printf '{"type":"assistant","uuid":"%s","isApiErrorMessage":true,"error":"%s",' "$2" "${3:-server_error}" >>"$1"
+    printf '"message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"%s"}]}}\n' \
+        "${4:-API Error: 500}" >>"$1"
+}
+t_int() {
+    printf '{"type":"user","uuid":"i-%s","message":{"role":"user","content":[{"type":"text",' "$RANDOM" >>"$1"
+    printf '"text":"[Request interrupted by user]"}]}}\n' >>"$1"
+}
 t_close() { printf '{"type":"system","subtype":"turn_duration"}\n' >>"$1"; }
 # <sid> <kind> ; kinds: open (agent in flight) | idle (finished) | int | err_closed | tool
 mk_tr() {
@@ -278,26 +291,12 @@ n_recs() { all_recs | jq -s 'length'; }
     [ "$(rec_q '.[0].cause')" = tmux_down ]
 }
 
-@test "container session, docker healthy but the container is gone: notify_only" {
+@test "container session is never declared dead (container identity U9 is unestablished): no record" {
     mk_tr "$SID" open
-    mk_regx "$SID" 0 "" myproj project true
-    export BORG_RESUME_DOCKER_CMD="printf 'other-app|Up 2 hours\n'"
-    watch
-    [ "$(n_recs)" = 1 ]
-    [ "$(rec_q '.[0].class')" = notify_only ]
-    [ "$(rec_q '.[0].cause')" = container_down ]
-}
-
-@test "container session, docker unhealthy or unreachable defers: no record, retried next pass" {
-    mk_tr "$SID" open
-    mk_regx "$SID" 0 "" myproj project true
-    export BORG_RESUME_DOCKER_CMD='exit 1'
+    mk_regx "$SID" 0 "" workspace project true
     watch
     [ "$(n_recs)" = 0 ]
-    export BORG_RESUME_DOCKER_CMD="printf 'myproj-app|Up 2 hours (unhealthy)\n'"
-    watch
-    [ "$(n_recs)" = 0 ]
-    export BORG_RESUME_DOCKER_CMD="printf 'myproj-app|Up 2 hours\n'"
+    mk_regx "$SID" "$DEADPID" "$(lstart_of $((NOW - 3600)))" myproj project true
     watch
     [ "$(n_recs)" = 0 ]
 }
@@ -431,7 +430,8 @@ mk_confirmed() { # confirmed 15 minutes ago, 10 transcript lines at the time
     mk_confirmed
     export BORG_RESUME_PANES_CMD="printf '%%7|$SID|555|claude\n'"
     export BORG_RESUME_TMUX_CMD="$BATS_TEST_TMPDIR/fake-tmux"
-    printf '#!/bin/sh\nprintf "Do you want to proceed?\\n 1. Yes\\n 2. No\\n Esc to cancel\\n"\n' >"$BATS_TEST_TMPDIR/fake-tmux"
+    printf '%s\n' '#!/bin/sh' \
+        'printf "Do you want to proceed?\n 1. Yes\n 2. No\n Esc to cancel\n"' >"$BATS_TEST_TMPDIR/fake-tmux"
     chmod +x "$BATS_TEST_TMPDIR/fake-tmux"
     watch
     [ "$(rec_q '.[0].state')" = stalled ]
@@ -457,4 +457,71 @@ mk_confirmed() { # confirmed 15 minutes ago, 10 transcript lines at the time
     mk_dead "$SID"
     BORG_RESUME_DISABLE=1 run "$BIN" watch --once
     [ "$(n_recs)" = 0 ]
+}
+
+# ---- review fixes -----------------------------------------------------------------------------
+
+mk_agent() { # <sid> <agent-id> <mtime>
+    mkdir -p "$PD/$1/subagents"
+    : >"$PD/$1/subagents/agent-$2.jsonl"
+    t_user "$PD/$1/subagents/agent-$2.jsonl"
+    t_tool "$PD/$1/subagents/agent-$2.jsonl"
+    set_mtime "$PD/$1/subagents/agent-$2.jsonl" "$3"
+}
+
+@test "Esc with an agent in flight then pane kill: no agent or workflow record (deliberate stop)" {
+    mk_tr "$SID" int
+    mk_agent "$SID" a1 $((NOW - 3600))
+    mk_dead "$SID"
+    watch
+    [ "$(n_recs)" = 0 ]
+}
+
+@test "Esc with a workflow in flight then pane kill: no record" {
+    mk_wf
+    t_int "$PD/$SID.jsonl"
+    mk_dead "$SID"
+    watch
+    [ "$(n_recs)" = 0 ]
+}
+
+@test "a stale orphaned agent from hours before main moved on is not open work" {
+    mk_tr "$SID" idle
+    mk_agent "$SID" a1 $((NOW - 36000))
+    mk_dead "$SID"
+    watch
+    [ "$(n_recs)" = 0 ]
+}
+
+@test "limit-failed workflow plus a dead owner: liveness never reclassifies the limit record" {
+    mk_wf
+    t_err "$PD/$SID.jsonl" e-9 rate_limit "You have hit your session limit - resets 7:10pm (UTC)"
+    mk_dead "$SID"
+    watch
+    [ "$(rec_q 'map(select(.scope == "workflow:wf_x1")) | length')" = 1 ]
+    [ "$(rec_q 'map(select(.scope == "workflow:wf_x1"))[0].class')" = usage_limit ]
+    [ "$(rec_q 'map(select(.scope == "workflow:wf_x1"))[0].error')" = rate_limit ]
+    [ "$(rec_q 'map(select(.scope == "workflow:wf_x1"))[0].reset_text != null')" = true ]
+}
+
+@test "notices are coalesced to one per session and delivered host-side" {
+    mk_tr "$SID" idle
+    mk_agent "$SID" a1 $((NOW - 3600))
+    mk_agent "$SID" a2 $((NOW - 3600))
+    mk_dead "$SID" myproj
+    watch
+    [ "$(n_recs)" = 2 ]
+    [ "$(wc -l <"$RD/notify.jsonl" | tr -d ' ')" = 1 ]
+    [ "$(wc -l <"$BATS_TEST_TMPDIR/delivered" | tr -d ' ')" = 1 ]
+    run cat "$BATS_TEST_TMPDIR/delivered"
+    [[ "$output" == *"mark-closed myproj"* ]]
+}
+
+@test "the notify outbox stays bounded" {
+    mk_tr "$SID" open
+    mk_dead "$SID"
+    export BORG_RESUME_NOTIFY_KEEP=3
+    for i in 1 2 3 4 5 6 7 8; do printf '{"t":1,"kind":"x"}\n' >>"$RD/notify.jsonl"; done
+    watch
+    [ "$(wc -l <"$RD/notify.jsonl" | tr -d ' ')" -le 4 ]
 }
