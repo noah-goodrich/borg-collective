@@ -33,8 +33,8 @@ and all three repos, redeploys borg, and finishes with `borg doctor` so you know
 healthy, not just "pulled."
 
 ```zsh
-# 1. Pull dotfiles first and re-run its installer (identity/config sync + LaunchAgents, incl.
-#    the dev-postgres auto-start agent that local project databases depend on).
+# 1. Pull dotfiles first and re-run its installer (config sync
+#    only; it registers no LaunchAgents - see bullets below).
 git -C ~/.config/dotfiles pull --ff-only && bash ~/.config/dotfiles/install.sh
 
 # 2. Pull all three remaining repos on main, fast-forward only
@@ -48,8 +48,10 @@ cd ~/dev/borg-collective && ./install.sh        # or: borg setup
 borg version && claude plugin list | grep borg-collective && borg doctor
 ```
 
-- **Step 3 is required:** borg's CLI/libs run from the source clone (a pull refreshes those live), but hooks + the
-  bash lib + skills + agents are **copied** into `~/.claude` and only refresh on `install.sh` / `borg setup`.
+- **Step 3 is required:** borg's CLI/libs run from the source clone (a pull refreshes those live), but hooks and
+  bin utilities are **copied** into `~/.claude` and only refresh on `install.sh` / `borg setup`. `borg setup` also
+  builds the plugin that carries the skills, agents and hook registration; `claude-plugins` is a live directory
+  source, so keep its checkout on `main`.
 - **Claude Code plugins are *supposed to* update automatically:** `code-governance`, `research-tools`, etc. should
   auto-update from the pulled `~/dev/claude-plugins` via the `noah-local` marketplace (`autoUpdate: true`). Same for
   `noah-personal` from `~/dev/claude-plugins-private` via `noah-private` (`autoUpdate: true`). **But `autoUpdate` is
@@ -66,65 +68,50 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 - **`claude-plugins` mirror can drift behind `borg-collective` source:** the plugin is built from a synced mirror,
   not the canonical source repo. If the mirror lags a merge to `borg-collective`, `claude plugin list` can report a
   version that *looks* like parity while the plugin is actually missing a newly shipped hook/skill/agent. When in
-  doubt, check the mirror's last sync against `borg-collective`'s latest tag, not just the version string.
-- **Step 4's `borg doctor` is the real health verification step** — it checks all four launchd agents
-  (notifyd, cortex-wake, usage-watch, reap) for registration, exit status, and output freshness in one
-  shot. A clean pull + `install.sh` with no `borg doctor` check is an unverified update; always finish
-  with it.
-- **Step 1 (dotfiles) closes a real gap:** the flow previously pulled borg-collective / claude-plugins /
-  claude-plugins-private / cairn but never dotfiles, so LaunchAgent changes there (e.g. the dev-postgres
-  auto-start agent) silently never landed on already-set-up machines.
+  doubt, verify parity by checking that the installed plugin contains `hooks/borg-agent-model-guard.sh`, not the
+  version string alone.
+- **`borg setup` rebuilds that mirror on every run** (`scripts/build-plugin.sh` writes into
+  `~/dev/claude-plugins/borg-collective/`). A `DRIFT` warning means the committed mirror is behind source; the
+  local rebuild is correct but uncommitted. After the install, check `git -C ~/dev/claude-plugins status`, and
+  restore or stash that directory before the next pull if the machine must not diverge.
+- **Step 4's `borg doctor` is the real health verification step** — it checks the launchd agents for
+  registration, exit status, and output freshness, plus a live headless `claude -p` call (log in to `claude`
+  first), per-container clock skew, and a version-floor table that fails when `gh` is older than 2.97.0 (run
+  `brew upgrade gh`). It can exit 1. A clean pull + `install.sh` with no `borg doctor` check is an unverified
+  update; always finish with it.
+- **Step 1 (dotfiles) syncs config only.** Its `install.sh` no longer registers LaunchAgents. The optional agents
+  (dev-postgres auto-start, `claude-tcc-heal`) ship as `.plist.tmpl` templates: symlink the ones you want into
+  `~/.config/borg/extensions/launchd/` before running borg's `./install.sh`, which renders and installs them.
 
 > **2026-07-08:** additions picked up by a plain pull + setup = the `code-governance` plugin (capability-index +
 > reconcile-req) and the distilled `research` skill.
 > **2026-07-08 (later):** the private marketplace exists now — `claude-plugins-private` repo → `noah-private`
 > marketplace → `noah-personal` plugin (employer-specific skills, e.g. `noah-weekly-status`). Clone + register per
 > Phases 1 / 3c / 3e below.
-> **2026-07-09:** `install.sh` now installs the `borg-usage-watch` LaunchAgent by default (opt out with
-> `BORG_USAGE_WATCH=0 ./install.sh`) and verifies it produces a fresh sample after bootstrap. New command
-> `borg doctor` checks all four launchd agents (notifyd, cortex-wake, usage-watch, reap) for registration,
-> exit status, and output freshness — run it any time an agent seems blind or unhealthy.
+> **2026-07-09:** `install.sh` installs the `borg-usage-watch` LaunchAgent by default (opt out with
+> `BORG_USAGE_WATCH=0 ./install.sh`) and verifies it produces a fresh sample after bootstrap. `borg doctor`
+> checks the launchd agents plus the rows described above — run it any time an agent seems blind or unhealthy.
 
-### What's new since 2026-07-09
+### What's new (setup-relevant, as of 2026-10-12)
 
-- **2026-08-08: cairn fully decommissioned.** The Postgres+pgvector knowledge-graph service (DB, container,
-  hooks, CLI, and the `borg-collective#94` Stop-hook heartbeat) has been removed outright — not just
-  disabled. Its corpus now lives in per-project `.borg/knowledge/*.md` markdown, grep-reachable with no
-  service required; a fresh pull removes Phase 4 (below) entirely, there's nothing left to run. **If a
-  session was already running when the pull landed, its Stop hook may still reference the deleted
-  `borg-cairn-heartbeat.sh` and log a harmless "No such file or directory" — restart the Claude Code
-  session after this pull to clear it; nothing else is affected.** See `CLAUDE.md`'s "Cairn decommission"
-  entry under Learned for the full rationale (measured near-zero cross-project recall value).
-- **2026-08-08: `borg sever` now stops the shared Supabase stack.** Fixed a gap (#110) where severing a
-  project left the shared `supabase_*_stillpoint` containers running; `cmd_down` now calls
-  `_borg_stop_shared_supabase` (idempotent, fail-open) as part of the sever flow. Nothing to run — behavior
-  change only.
-- **2026-07-27:** the update flow now pulls `~/.config/dotfiles` first (was missing) — its
-  `install.sh` re-registers LaunchAgents, including the dev-postgres auto-start agent that local
-  project databases need. This doc is now the single canonical work-machine reference (fresh setup
-  AND updates); `~/.config/dotfiles/docs/work-machine-setup.md` covers only the dotfiles
-  identity/config-sync slice.
-
-  - **dotfiles #12:** dev-postgres auto-start LaunchAgent (delivered by the update flow's dotfiles
-    pull + `install.sh`).
-  - **borg-collective #94:** cairn heartbeat Stop hook + hail/link status callouts (rebuilt from
-    source by `install.sh` / `borg setup`). **Superseded 2026-08-08** — the cairn heartbeat hook was
-    removed outright in the decommission above; hail/link status callouts now read local
-    `.borg/knowledge/*.md` instead.
-
-- **borg-collective is now v0.8.9** (was 0.8.6 on 2026-07-09; `VERSION` file + plugin manifest both
-  confirmed). The `claude-plugins` mirror of the plugin is rebuilt to match (0.8.9) with a full
-  synthetic-session guard, so hooks stay quiet during internal `/usage` polling and other non-interactive
-  probe sessions.
-- **`bash-guard` security hardening** — closed four Tier-A pre-approval bypasses (`rm`/`chmod` token
-  matching, force-push + settings-write normalization, wrapper-prefix and bare-`&` segment bypasses).
-  Nothing to run — just be aware guard behavior changed if a previously-allowed one-liner now prompts.
-- **`borg doctor` and the `borg-usage-watch` LaunchAgent** (introduced 2026-07-09, see note above) have
-  since had bug fixes: bare 0%-session line parsing, a stderr-leak fix so `borg-link-down` never splices
-  a shell error into its JSON output, and delivery-spike resolution for the usage guardian.
-- **`drone scaffold --supabase-shared`** — a second, opt-in scaffold path for a shared-local-Supabase
-  setup (join a fixed always-on Supabase Docker network instead of a per-project instance). Inert unless
-  you explicitly use the `--supabase-shared` flag; does not change default `--supabase` behavior.
+- **Python 3.11+ is now required.** `borg next` and `borg link` import `datetime.UTC` and fail with an
+  `ImportError` on the Xcode CLT python 3.9. Phase 0 installs `python@3.13`.
+- **Model tiers and routing.** Orchestrator and drone launches pin `--model`/`--effort`, and the plugin's
+  Agent/Workflow model guards deny untyped spawns. See Phase 3 for the account requirements and kill switches.
+- **Dotfiles `install.sh` registers no LaunchAgents.** Optional agents are `.plist.tmpl` templates symlinked
+  into `~/.config/borg/extensions/launchd/`; borg's `install.sh` renders them. Labels follow
+  `<prefix>.borg.<agent>` (see Phase 3).
+- **`borg doctor` is stricter.** It adds a live headless `claude -p` row, container clock-skew rows and a
+  version-floor table (`gh` >= 2.97.0), and it can exit 1.
+- **`borg sever` is retired.** Use `borg down`, which tears down every tmux window, the shared Postgres and the
+  shared Supabase stack.
+- **cairn is gone (2026-08-08).** Nothing to run; its corpus lives in per-project `.borg/knowledge/*.md`. A
+  session started before the pull may log a harmless "No such file or directory" from the deleted
+  `borg-cairn-heartbeat.sh` Stop hook — restart Claude Code to clear it.
+- **Plugin version equals `borg --version`.** `bash-guard` has been hardened against pre-approval bypasses, so a
+  previously-allowed one-liner may now prompt.
+- **`drone scaffold --supabase-shared`** is an opt-in path that joins the shared always-on Supabase network; the
+  default `--supabase` behavior is unchanged.
 
 ---
 
@@ -141,7 +128,7 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 # Required CLI tools for borg + general dev
-brew install jq fzf tmux git gh ripgrep neovim fswatch
+brew install jq fzf tmux git gh ripgrep neovim fswatch python@3.13
 
 # Container runtime — choose ONE. This work machine runs Podman (docker is a thin client over
 # podman-machine-default). Podman does NOT auto-start at login — see Phase 4 and "Ongoing".
@@ -155,6 +142,11 @@ brew install node && npm install -g @anthropic-ai/claude-code
 # Authenticate GitHub CLI (needed for gh + GH_TOKEN)
 gh auth login
 ```
+
+> **borg needs python3 >= 3.11.** `borg next` and `borg link` import `datetime.UTC`, so they die with an
+> `ImportError` on the Xcode CLT python 3.9. `borg.zsh` rebuilds `PATH` from scratch
+> (`$HOME/.local/bin:/opt/homebrew/bin:...:/usr/bin`), so the Homebrew python above wins automatically; a pyenv or
+> corporate python is invisible to borg unless you set `BORG_PATH_PREFIX` to its bin directory.
 
 ---
 
@@ -177,6 +169,13 @@ bash ~/.config/dotfiles/install.sh
 
 **[ASSUMPTION]** dotfiles `install.sh` sets up `~/.zshrc`, tmux config, and sources `secrets.zsh`. If
 absent, `borg setup` warns about missing dotfiles but still proceeds.
+
+When `claude` is installed, dotfiles `install.sh` also registers the `noah-local` marketplace and installs every
+plugin in `~/dev/claude-plugins` — this runs here, before `borg setup` builds the borg-collective mirror. So
+`claude-plugins` must already be cloned and `claude` installed (Phase 0) before this step; `noah-private` still
+needs 3c and 3e. The dotfiles `CLAUDE.md` imports `@~/.claude/borg-managed.md`, which only `borg setup` writes, so
+that import dangles harmlessly until Phase 3 completes. The `bash-guard` and notify hooks also come only from
+`borg setup`.
 
 ---
 
@@ -240,9 +239,22 @@ borg setup
 > appear, ignore the warning.
 
 `install.sh` installs
-`~/.local/bin/{borg,drone,borg-notifyd,borg-cortex-watch,borg-vinculum-watch,borg-usage-watch}` +
-LaunchAgents. `borg setup` deploys hooks, skills, agents (incl. `borg-nanoprobe`), bin utilities, the
-tmux keybinding, runs `borg scan`, and writes `~/.config/borg/config.zsh`.
+`~/.local/bin/{borg,drone,borg-notifyd,borg-cortex-watch,borg-vinculum-watch,borg-usage-watch,borg-memory-gate}`
++ LaunchAgents. `borg setup` deploys hooks and bin utilities, builds the plugin that carries skills and agents
+(incl. `borg-nanoprobe`) and hook registration, adds the tmux keybinding, runs `borg scan`, and writes
+`~/.config/borg/config.zsh` and `~/.claude/borg-managed.md`.
+
+LaunchAgent labels are `<prefix>.borg.<agent>`. The prefix comes from `$LAUNCHD_LABEL_PREFIX` or the first line of
+`~/.config/launchd-prefix`; with neither, the label is plain `borg.<agent>` (resolver: `lib/launchd-label.zsh`).
+`install.sh` also:
+
+- installs `borg-memory-gate` with a daily agent;
+- writes the `pr-watch` agent but does not arm it — set `BORG_PR_WATCH_ENABLED=1` to bootstrap it;
+- renders any `.plist.tmpl` extension templates from `~/.config/borg/extensions/launchd/` (extension labels are
+  `<prefix>.<name>`, or `local.<name>` with no prefix);
+- migrates legacy-labelled agents to the resolved label.
+
+`borg setup` can also offer to `brew install` missing recommended tools (jq, fzf, neovim) — answer `Y`.
 
 The `borg-usage-watch` LaunchAgent samples `claude -p "/usage"` every 120s to observe session/week
 usage percentages (observe-only — no checkpointing, no dispatch veto). It costs **$0**: verified via
@@ -266,14 +278,27 @@ also removes an already-bootstrapped agent so the flag takes effect on re-run).
 # (the plugin owns hook registration — hooks don't fire without it)
 # borg setup (already run in 3a) publishes the plugin package automatically, so this should succeed.
 claude plugin install borg-collective@noah-local
-claude plugin list | grep borg-collective       # expect: borg-collective@noah-local  0.8.9
-borg version                                     # should print the same version number (e.g. 0.8.9)
+claude plugin list | grep borg-collective       # same version as below
+borg version                                     # must match the plugin
 ```
 
-> `borg setup` (run automatically by `install.sh`) publishes the plugin package into
-> `$HOME/dev/claude-plugins/borg-collective/` and ensures the `borg-collective` entry is present in the
-> marketplace manifest — so `claude plugin install borg-collective@noah-local` works on the first run
-> without any manual marketplace editing.
+> `borg setup` (run automatically by `install.sh`) rebuilds the plugin package into
+> `$HOME/dev/claude-plugins/borg-collective/` on every run and ensures the `borg-collective` entry is present in
+> the marketplace manifest — so `claude plugin install borg-collective@noah-local` works on the first run
+> without any manual marketplace editing. The plugin version equals `borg --version`. After Phase 3, run
+> `claude plugin update borg-collective@noah-local` and restart Claude Code so the freshly built plugin loads.
+>
+> A `DRIFT` warning from the build means the committed mirror is behind source; the local rebuild is correct but
+> uncommitted. Run `git -C ~/dev/claude-plugins status` after the install, and restore or stash that directory
+> before the next pull if the machine must not diverge. Verify parity by checking that the installed plugin
+> contains `hooks/borg-agent-model-guard.sh`, not by the version string alone.
+
+> **Model tiers and routing.** The account needs Opus at `xhigh` effort, plus Sonnet and Haiku. `borg init`,
+> `borg claude` and drone launches run `claude --model ${BORG_CLAUDE_MODEL:-opus} --effort
+> ${BORG_CLAUDE_EFFORT:-xhigh}`, so keep Claude Code current enough to accept `--effort`. The plugin hook
+> `hooks/borg-agent-model-guard.sh` denies Agent spawns that are untyped, `general-purpose`, `Explore`, `Plan` or
+> not in the allowed list, and the Workflow guard fails closed. Kill switches: `BORG_AGENT_MODEL_GUARD=0` and
+> `BORG_WORKFLOW_MODEL_GUARD=0`. Both guards need `python3` and fail open without it.
 
 ```zsh
 # 3e. Install the private personal plugin (employer-specific skills) from the noah-private marketplace.
@@ -306,7 +331,7 @@ borg link                                # project dashboard
 borg add ~/dev                           # register orchestrator root if not auto-discovered
 claude plugin list | grep borg-collective
 borg next                                # recommendation engine
-borg doctor                              # verify the 4 launchd agents (registered/exit/fresh output)
+borg doctor                              # agents, claude -p, clock, gh floor
 borg init                                # optional: morning briefing + orchestrator session
 ```
 
