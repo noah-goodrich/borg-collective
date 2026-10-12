@@ -9,6 +9,7 @@
 #   pause            create the DISABLED sentinel (nothing will inject; recording continues)
 #   unpause          remove it
 #   probe            print the session usage percent (own claude -p /usage sample, cached 120s)
+#   inventory <sid>  print the in-flight inventory as JSON (slice S5; --json is accepted, JSON is the only format)
 #
 # Later slices add watch, inventory, prompt, status and the rest. Hooks only APPEND; the watcher owns every
 # state transition. Bash 3.2 safe, jq is the only non-coreutils dependency.
@@ -168,7 +169,7 @@ _br_record() {
 }
 
 _br_usage() {
-    printf 'usage: borg-resume <record <event> | pause | unpause | probe>\n' >&2
+    printf 'usage: borg-resume <record <event> | pause | unpause | probe | inventory <sid> [--json]>\n' >&2
 }
 
 _br_main() {
@@ -200,6 +201,24 @@ _br_main() {
             # shellcheck source=/dev/null
             . "$BORG_RESUME_LIBDIR/resume-probe.sh" 2>/dev/null || return 1
             borg_resume_probe
+            ;;
+        inventory)
+            local _isid="" _ia
+            for _ia in "$@"; do
+                case "$_ia" in
+                    --json) ;;
+                    -*) _br_usage; return 2 ;;
+                    *) [ -z "$_isid" ] && _isid="$_ia" ;;
+                esac
+            done
+            if [ $# -eq 0 ] || { [ -z "$_isid" ] && [ "$*" = "--json" ]; }; then
+                _br_usage
+                return 2
+            fi
+            # shellcheck source=/dev/null
+            . "$BORG_RESUME_LIBDIR/resume-classify.sh" && . "$BORG_RESUME_LIBDIR/resume-inventory.sh" || return 1
+            command -v jq >/dev/null 2>&1 || { printf 'borg-resume: jq is required\n' >&2; return 1; }
+            borg_resume_inventory "$_isid"
             ;;
         *)
             _br_usage

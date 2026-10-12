@@ -49,6 +49,7 @@ TSV_EMPTY_SENTINEL = "-"
 # docstring). Not a parameter: it is a property of the assembler, not an input any caller chooses.
 # Bumped 1 -> 2 in Phase 3: `total_projects` was added as a required top-level wire key (see
 # assemble's docstring for why it cannot be derived from `order` or `projects`).
+# `summary` now comes from the latest checkpoint (PR #329); stays 2: the key was already nullable, nothing narrowed.
 DOCUMENT_VERSION = 2
 
 # The human table's three-key sort (project_sort_key) ranks status ascending: waiting < active <
@@ -785,6 +786,54 @@ def capacity(active: int, limit: int) -> dict:
     """The capacity block feeding borg.zsh:406-411's warning, with a strict `>` comparison mirroring
     `(( active_count > BORG_MAX_ACTIVE ))` at borg.zsh:407."""
     return {"active": active, "limit": limit, "over_limit": active > limit}
+
+
+_TLDR_LABEL = re.compile(r"^\s*\*\*tl;dr\*\*\s*[-–—:]*\s*", re.IGNORECASE)
+_BULLET = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+_HEADING = re.compile(r"^\s*#{1,6}\s+(.*)$")
+
+
+def _paragraph(lines: list[str], start: int) -> str:
+    """The text from `lines[start]` to the next blank line, heading or bullet, joined with spaces."""
+    parts = [lines[start]]
+    for line in lines[start + 1 :]:
+        if not line.strip() or _HEADING.match(line) or _BULLET.match(line):
+            break
+        parts.append(line)
+    return " ".join(part.strip() for part in parts)
+
+
+def checkpoint_summary(text: str) -> str | None:
+    """The one-line summary a checkpoint states about itself, or None when it states none.
+
+    A project's summary is DERIVED FROM ITS LATEST CHECKPOINT, an artifact /borg-link-up already
+    writes, rather than from a transcript heuristic (summarize.py) that surfaced raw greetings and
+    mid-sentence cuts. Order: the `**tl;dr** -- ...` paragraph; else the first bullet (or first
+    paragraph) under the `Accomplished` heading; else None. None is a real answer: the row then
+    carries status and relative time only.
+
+    Returns FLAT text with the markdown bold markers removed. Pure: takes the body, does no I/O.
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if _TLDR_LABEL.match(line):
+            return _clean_summary(_paragraph([_TLDR_LABEL.sub("", line, count=1)] + lines[index + 1 :], 0))
+    for index, line in enumerate(lines):
+        if not _HEADING.match(line) or "accomplished" not in line.lower():
+            continue
+        for offset in range(index + 1, len(lines)):
+            if _HEADING.match(lines[offset]):
+                break
+            if lines[offset].strip():
+                first = _BULLET.sub("", lines[offset], count=1)
+                return _clean_summary(_paragraph([first] + lines[offset + 1 :], 0))
+    return None
+
+
+def _clean_summary(text: str) -> str | None:
+    """Strip bold markers, flatten whitespace, collapse runs; empty becomes None."""
+    flat = " ".join(flatten_summary(text.replace("**", "")).split())
+    return flat or None
 
 
 def _with_flat_summary(entry):
