@@ -64,7 +64,9 @@ if [[ "$1" == "compose" ]]; then
 fi
 if [[ "$1" == "ps" ]]; then
     want=""
-    for a in "$@"; do [[ "$a" == label=com.docker.compose.project=* ]] && want="${a#label=com.docker.compose.project=}"; done
+    for a in "$@"; do
+        [[ "$a" == label=com.docker.compose.project=* ]] && want="${a#label=com.docker.compose.project=}"
+    done
     if [[ -s "$STARTED" && "$want" == "$(cat "$STARTED")" ]]; then
         case "$*" in *Label*) echo "app" ;; *) echo "app-1" ;; esac
     fi
@@ -101,12 +103,22 @@ _register() {  # name dir [tmux_window]
     grep -q 'label=com.docker.compose.project=widgets_featurex' "$TRACE"
 }
 
-@test "sh looks the service up under the registry name" {
-    _register widgets-feature "$DIR"
-    echo widgets-feature > "$STARTED"
-    run "$DRONE" sh widgets-feature
-    grep -q 'label=com.docker.compose.project=widgets-feature' "$TRACE"
-    ! grep -q 'label=com.docker.compose.project=widgets-wt-12' "$TRACE"
+@test "sh normalizes an uppercase dotted registry name before the lookup" {
+    _register Widgets_Feature.X "$DIR"
+    echo widgets_featurex > "$STARTED"
+    run "$DRONE" sh Widgets_Feature.X
+    [[ "$output" != *"No running app container"* ]]
+    grep -q 'label=com.docker.compose.project=widgets_featurex' "$TRACE"
+    ! grep -q 'label=com.docker.compose.project=Widgets_Feature.X' "$TRACE"
+}
+
+@test "exec finds the container under a name that needs normalization" {
+    _register Widgets_Feature.X "$DIR"
+    echo widgets_featurex > "$STARTED"
+    run "$DRONE" exec Widgets_Feature.X -- true
+    [[ "$output" != *"not running"* ]]
+    grep -q 'label=com.docker.compose.project=widgets_featurex' "$TRACE"
+    ! grep -q 'label=com.docker.compose.project=Widgets_Feature.X' "$TRACE"
 }
 
 @test "restart with no argument inside a window uses the registry name, not the folder" {
@@ -114,6 +126,10 @@ _register() {  # name dir [tmux_window]
     echo wf > "$WINDOWS"
     echo "$DIR" > "$BATS_TEST_TMPDIR/pdir.wf"
     run "$DRONE" restart
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Timed out"* ]]
     grep -q 'docker compose -p widgets-feature ' "$TRACE"
     ! grep -q 'docker compose -p widgets-wt-12 ' "$TRACE"
+    grep -q 'label=com.docker.compose.project=widgets-feature' "$TRACE"
+    ! grep -q 'label=com.docker.compose.project=widgets-wt-12' "$TRACE"
 }

@@ -240,7 +240,8 @@ _drone_apply_window_color() {
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-# The label value docker compose stamps for `-p <name>`: lowercased, only [a-z0-9_-] kept.
+# The label value docker compose stamps for `-p <name>` (compose-go project name normalization):
+# lowercased, only [a-z0-9_-] kept. A name that normalizes to empty matches nothing.
 _compose_project_label() {
     local n="${(L)1}"
     print -r -- "${n//[^a-z0-9_-]/}"
@@ -249,12 +250,11 @@ _compose_project_label() {
 # Both lookups take the PROJECT name (the one passed to `docker compose -p`), never the folder basename.
 # Usage: get_project_container <project_name> <project_dir>
 get_project_container() {
-    local name dir="${2:-$(pwd)}"
+    local name
     name=$(_compose_project_label "$1")
     docker ps --filter "label=com.docker.compose.project=$name" \
               --filter "label=dev.role=app" \
-              --format '{{.Names}}' 2>/dev/null | head -1 \
-    || docker compose -p "$1" -f "$dir/$COMPOSE_FILE" ps --format '{{.Names}}' 2>/dev/null | head -1
+              --format '{{.Names}}' 2>/dev/null | head -1
 }
 
 # Usage: get_service_name <project_name>
@@ -846,9 +846,7 @@ cmd_sh() {
     [[ -f "$compose" ]] || die "No $COMPOSE_FILE found in $project_dir"
 
     local service
-    service=$(docker ps --filter "label=com.docker.compose.project=$project_name" \
-                        --filter "label=dev.role=app" \
-                        --format '{{.Label "com.docker.compose.service"}}' 2>/dev/null | head -1)
+    service=$(get_service_name "$project_name")
     [[ -n "$service" ]] || die "No running app container found for $project_name. Run: drone up $project_name"
 
     _read_devcontainer_exec_config "$project_dir"
