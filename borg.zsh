@@ -2425,6 +2425,8 @@ cmd_nanoprobes() {
     fi
 
     # Newest first; format: short_id  agent_type  model  effort  summary  finished_at
+    # Declared once: a repeated zsh `local` of an already-set variable prints it.
+    local me model effort
     printf "  %-10s %-18s %-20s %-8s %-80s %s\n" "ID" "TYPE" "MODEL" "EFFORT" "SUMMARY" "FINISHED"
     _borg_agents_newest_first "$log" | head -50 | jq -r '
         [
@@ -2435,7 +2437,6 @@ cmd_nanoprobes() {
             (.transcript_path // "")
         ] | join("\u001f")
     ' 2>/dev/null | while IFS=$'\x1f' read -r sid atype summary finished tpath; do
-        local me model effort
         me=$(_borg_nanoprobe_model_effort "$tpath")
         model="${me%%$'\t'*}"
         effort="${me#*$'\t'}"
