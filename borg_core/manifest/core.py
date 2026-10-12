@@ -198,7 +198,7 @@ ORDERING_EDGE_KINDS = ("stacked", "blocks")
 _ORDER_DIGITS = re.compile(r"(\d+)")
 
 
-def _rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+def manifest_rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """The manifest's rows, or an empty list. Never raises on a malformed value."""
     rows = manifest.get("rows")
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
@@ -465,10 +465,10 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     instead of N runs. Callers must treat a non-empty result as fatal BEFORE writing anything -- a
     malformed manifest that half-writes is worse than one that is rejected.
 
-    Iterates the RAW rows list, NOT _rows(): _rows filters non-dict entries so tolerant READERS never
+    Iterates the RAW rows list, NOT manifest_rows(): manifest_rows filters non-dict entries so tolerant READERS never
     crash, and validation must do the exact opposite and report them. `{"rows": ["a#1", "b#1"]}` is a
     plausible hand-authoring typo that would otherwise validate clean, load through discovery, and
-    declare nothing -- silently. A future refactor that shares _rows() here "for consistency"
+    declare nothing -- silently. A future refactor that shares manifest_rows() here "for consistency"
     reintroduces that bug.
     """
     if not isinstance(manifest.get("rows"), list):
@@ -521,10 +521,10 @@ def next_order_in_lane(manifest: dict[str, Any], lane: str, skip_index: int = -1
     Prerequisites are excluded because they are not in the numbered sequence: `_sort_key` puts them
     in bucket 0, ahead of every numbered row, and a lane holding only prerequisites therefore starts
     its numbering at 1. `skip_index` lets a row being MOVED avoid counting itself, and it indexes
-    `_rows`' filtered view -- the same enumeration `_sort_key` is handed here.
+    `manifest_rows`' filtered view -- the same enumeration `_sort_key` is handed here.
     """
     highest = 0
-    for index, row in enumerate(_rows(manifest)):
+    for index, row in enumerate(manifest_rows(manifest)):
         if index == skip_index or (_text(row.get("lane")) or DEFAULT_LANE) != lane:
             continue
         bucket, position, _ = _sort_key(row, index)
@@ -540,14 +540,14 @@ def lanes(manifest: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     are excluded, and that exclusion is a LOAD-BEARING PRECONDITION, not tidiness: _stacked_edges,
     _after_edges, _apex_edges and _blocks_edges all index `row["ref"]` directly with no `.get`, which
     is safe only because this function already dropped refless rows and derive_edges builds its row
-    list by flattening this output rather than calling _rows(). validate has already reported them.
+    list by flattening this output rather than calling manifest_rows(). validate has already reported them.
 
     Lane names come back in `sorted()` order, NOT declaration order -- a live two-lane manifest yields
     `contract` before `cutover`. That is a public property of the return value; derive_edges re-sorts
     its edges anyway, but a consumer iterating lanes() sees alphabetical.
     """
     grouped: dict[str, list[tuple[tuple[int, int, int], dict[str, Any]]]] = {}
-    for i, row in enumerate(_rows(manifest)):
+    for i, row in enumerate(manifest_rows(manifest)):
         if not _text(row.get("ref")):
             continue
         lane = _text(row.get("lane")) or DEFAULT_LANE
@@ -686,11 +686,11 @@ def gates(manifest: dict[str, Any]) -> list[dict[str, str]]:
     careful enough to name their blocker. The plan's own named risk is a mis-set gate routing a
     human decision to an agent; reading the wrong function gets there with nothing mis-set at all.
 
-    Reads through _rows() (tolerant) while validate reads the raw list (strict). The asymmetry is the
+    Reads through manifest_rows() (tolerant) while validate reads the raw list (strict). The asymmetry is the
     design: reporting must never crash on data validation has already condemned.
     """
     out = []
-    for row in _rows(manifest):
+    for row in manifest_rows(manifest):
         gate = row.get("gate")
         if not isinstance(gate, dict):
             continue
@@ -743,7 +743,7 @@ def row_refs(manifest: dict[str, Any]) -> list[str]:
     Same `_text` coercion and same exactness as declared_refs; see parse_ref for why nothing is
     normalized.
     """
-    return sorted({ref for ref in (_text(row.get("ref")) for row in _rows(manifest)) if ref})
+    return sorted({ref for ref in (_text(row.get("ref")) for row in manifest_rows(manifest)) if ref})
 
 
 def declared_refs(manifest: dict[str, Any]) -> list[str]:
@@ -766,7 +766,7 @@ def declared_refs(manifest: dict[str, Any]) -> list[str]:
     rows reordered should produce byte-identical output.
     """
     refs: list[str] = []
-    for row in _rows(manifest):
+    for row in manifest_rows(manifest):
         refs.append(_text(row.get("ref")))
         gate = row.get("gate")
         if isinstance(gate, dict):
