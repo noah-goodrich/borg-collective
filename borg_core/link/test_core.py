@@ -1095,3 +1095,31 @@ def test_a_new_consumer_reading_the_document_inherits_the_guarantee():
     )
     for entry in doc["projects"].values():
         assert not set(entry["summary"]) & {"\t", "\n", "\r"}
+
+
+# ── checkpoint_summary ───────────────────────────────────────────────────────
+
+
+def test_checkpoint_summary_takes_the_tldr_paragraph_flat_and_unbolded():
+    text = "**tl;dr** — Shipped the **thing**,\nand next is the other.\n\n## 2. Accomplished\n\n- Not this.\n"
+    assert core.checkpoint_summary(text) == "Shipped the thing, and next is the other."
+
+
+@pytest.mark.parametrize("label", ["**tl;dr** -", "**tl;dr**:", "**TL;DR** –", "**tl;dr**"])
+def test_checkpoint_summary_accepts_the_label_variants(label):
+    assert core.checkpoint_summary(f"{label} Body text.\n") == "Body text."
+
+
+def test_checkpoint_summary_falls_back_to_the_first_accomplished_bullet():
+    text = "# cp\n\n## 1. Goal\n\n- Not this.\n\n## 2. Accomplished\n\n- First.\n  continued\n- Second.\n"
+    assert core.checkpoint_summary(text) == "First. continued"
+
+
+def test_checkpoint_summary_accepts_a_bold_paragraph_under_accomplished():
+    text = "## 2. Accomplished\n\n**Reviewed two PRs.**\n\nMore detail.\n"
+    assert core.checkpoint_summary(text) == "Reviewed two PRs."
+
+
+@pytest.mark.parametrize("text", ["", "# only a heading\n\nprose\n", "## Accomplished\n\n## Next\n- x\n", "**tl;dr** —\n"])
+def test_checkpoint_summary_is_none_when_the_checkpoint_states_nothing(text):
+    assert core.checkpoint_summary(text) is None

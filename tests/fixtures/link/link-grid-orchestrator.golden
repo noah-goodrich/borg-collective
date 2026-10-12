@@ -17,7 +17,7 @@
 *platform             [C]  [0;32mactive      [0m 2h ago           –    3      – Scoped keypair auth rollout.
  atlas                [C]  [1;33mwaiting <<< [0m 5d ago           –    –      – Waiting on a schema decision.
  warehouse            [D]  [1;33mwaiting <<< [0m yesterday        1    –      1 Key cutover blocked on the rollout run.
- infra                [X]  [0;32mactive      [0m 3h ago           –    –      – (no summary)
+ infra                [X]  [0;32mactive      [0m 3h ago           –    –      –
  archive-tools        [C]  [2midle        [0m never            –    –      – Nothing here since the fork.
  relay                [C]  [2midle        [0m 2d ago           –    –      – Relay has no summary yet.
  ledger               [C]  [2midle        [0m 30m ago          –    –      – Nightly close reconciliation.

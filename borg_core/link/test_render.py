@@ -1217,14 +1217,14 @@ def test_porcelain_flattens_before_the_80_char_cut():
     assert field == ("w" * 40 + " " + "x" * 60)[:80]
 
 
-def test_a_null_summary_renders_the_default_in_the_board_row_and_empty_in_porcelain():
+def test_a_null_summary_renders_nothing_in_the_board_row_and_empty_in_porcelain():
     """Registry rows carry `"summary": null`. Through the real pipeline the board row must say
-    "(no summary)" and porcelain must carry an empty field; the string None appears in neither."""
+    nothing (no placeholder: status and time only) and porcelain must carry an empty field; None appears in neither."""
     entry = _as_document_carries(
         {"source": "cli", "status": "idle", "relative_activity": "1h", "last_activity": "1h", "summary": None}
     )
     row = render._overview_row("alpha", entry, {})  # pylint: disable=protected-access
-    assert "(no summary)" in row
+    assert "(no summary)" not in row
     assert "None" not in row
     doc = _doc(order=["alpha"], projects={"alpha": entry})
     field = render.porcelain(doc).rstrip("\n").split("\t")[4]
@@ -1600,8 +1600,8 @@ def test_the_board_counts_a_projects_routed_next_rows_and_dashes_the_rest():
     assert render._routing_counts(doc) == {"alpha": {"yours": 2, "mine": 0, "unsure": 1}}  # pylint: disable=protected-access
     rows = {line.split()[0]: line for line in plain(render.document(doc)).split("\n") if line[1:6] in ("alpha", "beta ")}
     assert "YOURS" in plain(render.document(doc))
-    assert " 2    –      1 " in rows["alpha"]
-    assert " –    –      – " in rows["beta"]
+    assert " 2    –      1" in rows["alpha"]
+    assert " –    –      –" in rows["beta"]
 
 
 def test_an_unlooked_manifest_with_no_refs_does_not_cloud_waiting_on_you():
