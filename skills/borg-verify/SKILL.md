@@ -42,13 +42,13 @@ Before spawning the reviewer, collect:
 
 ## Step 2: Spawn ONE Independent Reviewer
 
-Spawn a single fresh `borg-nanoprobe` subagent in **reviewer mode**. Pass ONLY:
+Spawn a single fresh subagent with `subagent_type: "borg-collective:borg-verifier"` (Sonnet/high, read-only: no Edit/Write). Pass ONLY:
 
 - The full diff text (not the worker's transcript or reasoning).
 - The ACs list (or "none").
 - The verification command (or "none").
 - The project name (for `drone exec`).
-- The reviewer prompt below (inline — no separate agent file needed).
+- The reviewer prompt below (inline).
 
 **Reviewer prompt (pass verbatim as the subagent's task):**
 
@@ -120,7 +120,7 @@ Read the reviewer's JSON output. Apply the gate:
 
 **FAIL**
 - Block merge. Do NOT call `gh pr merge`.
-- Report to the worker (or spawn a fresh fixer nanoprobe) with `findings` as the task brief.
+- Report to the worker (or spawn a fresh fixer `borg-collective:borg-nanoprobe`) with `findings` as the task brief.
 - After the fix, re-run /borg-verify on the updated diff.
 - **CEILING: 2 fix iterations maximum.** Track with a counter starting at 0.
   - Iteration 1 FAIL → fix attempt 1 → re-verify.

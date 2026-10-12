@@ -43,6 +43,10 @@
       "waiver": "Phase 4 long-tail review (evals-for-everything)",
       "review_by": "2027-01-31"
     },
+    "agents/borg-verifier": {
+      "waiver": "Phase 4 long-tail review (evals-for-everything)",
+      "review_by": "2027-01-31"
+    },
     "skills/adhd-guardrails": {
       "waiver": "always-on guidance with no observable output to grade; revisit in the Phase 4 waiver review",
       "review_by": "2027-01-31"
