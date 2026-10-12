@@ -33,6 +33,7 @@ import importlib
 import json
 import os
 import re
+import stat
 import subprocess
 import types
 
@@ -2214,3 +2215,75 @@ def test_every_pure_module_in_this_package_is_on_the_domain_list():
         if roots <= pure_roots and os.path.basename(name) not in _domain_list():
             unlisted.append(name)
     assert unlisted == [], f"pure modules missing from [tool.clean-arch.module_map] Domain: {unlisted}"
+
+
+# ── PR #341 fix round 1: authored `_` keys, file mode, temp-file cleanup ─────────────────────────
+
+
+def test_the_writer_keeps_an_authored_underscore_key_and_still_drops_the_loader_stamps(tmp_path):
+    # `core.declared_body` used to strip EVERY `_`-prefixed key, so an author's `_comment` died on any
+    # rewrite. Only the two keys the loader stamps are reserved.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    doc = {**_manifest([_row("1", "o/r#1")]), "_comment": "mine", "_note": 7}
+    shell.write_manifest(repository, doc, "chain")
+    loaded, _ = shell.discover([repository])
+    assert loaded[0]["_comment"] == "mine" and "_id" in loaded[0] and "_path" in loaded[0]
+
+    rewritten = shell.write_manifest(repository, loaded[0], "chain")
+    on_disk = json.loads(open(rewritten, encoding="utf-8").read())
+    assert on_disk == {"rows": [_row("1", "o/r#1")], "_comment": "mine", "_note": 7}
+
+
+def test_declared_body_reserves_exactly_the_loader_stamped_keys():
+    assert core.LOADER_STAMPED_KEYS == ("_id", "_path")
+    body = core.declared_body({"rows": [], "_id": "x", "_path": "/p", "_comment": "c", "program": "p"})
+    assert body == {"rows": [], "_comment": "c", "program": "p"}
+
+
+@pytest.mark.parametrize("mode", [0o644, 0o664, 0o600, 0o640])
+def test_a_rewrite_keeps_the_existing_files_permission_bits(tmp_path, mode):
+    # mkstemp creates 0600 and os.replace keeps it, so a 0644 manifest used to come back 0600.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    os.chmod(path, mode)
+
+    shell.write_manifest(repository, _manifest([_row("1", "o/r#1"), _row("2", "o/r#2")]), "chain")
+    assert stat.S_IMODE(os.stat(path).st_mode) == mode
+
+
+@pytest.mark.parametrize("umask", [0o022, 0o077])
+def test_a_brand_new_file_gets_666_masked_by_the_umask(tmp_path, umask):
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    previous = os.umask(umask)
+    try:
+        path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o666 & ~umask
+
+
+def test_any_exception_not_only_oserror_removes_the_temp_file(tmp_path):
+    # An unserializable value raises TypeError from json.dump, which the old `except OSError` let
+    # through with the `.write-*.json.tmp` still sitting in a tracked directory.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    doc = {**_manifest([_row("1", "o/r#1")]), "weird": object()}
+    with pytest.raises(TypeError):
+        shell.write_manifest(repository, doc, "chain")
+    directory = shell.manifest_dir(repository)
+    assert [n for n in os.listdir(directory) if n.endswith(".tmp")] == []
+    assert not os.path.exists(os.path.join(directory, "chain.json"))
+
+
+def test_a_failed_replace_removes_the_temp_file_and_leaves_the_original(tmp_path, monkeypatch):
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    before = open(path, "rb").read()
+
+    def boom(*_args):
+        raise OSError("replace refused")
+
+    monkeypatch.setattr(shell.os, "replace", boom)
+    with pytest.raises(OSError):
+        shell.write_manifest(repository, _manifest([_row("1", "o/r#1"), _row("2", "o/r#2")]), "chain")
+    assert [n for n in os.listdir(os.path.dirname(path)) if n.endswith(".tmp")] == []
+    assert open(path, "rb").read() == before

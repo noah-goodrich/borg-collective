@@ -31,7 +31,8 @@ repo — this directive defines the interface, not the file):
           {"ok": bool, "rows": [{"ref": "owner/repo#num", "status": "..."}], "note": "..."}
 
   THE PAYLOAD IS THE DECLARED BODY AND NOTHING ELSE (`core.declared_body`): exactly the keys the
-  author wrote, with every `_`-prefixed key (`_path`, `_id`, whatever borg derives later) stripped.
+  author wrote, minus the two keys the loader stamps (`_id`, `_path`), which are reserved. Every other
+  key, `_`-prefixed or not, is passed through.
   WIRE CHANGE, 2026-10-12: the payload no longer carries a `program` key synthesized from the
   filename. The key is present only when the manifest's author wrote one, so a shim that identified
   manifests by it must tolerate its absence.
@@ -107,10 +108,10 @@ def run_target(target_path: str, action: str, manifests: list[dict[str, Any]], t
     than raising. A broken shim must degrade the audit to "target unreachable", never crash the
     coordinator that is supposed to be watching for drift.
     """
-    # Every `_`-prefixed key is discover()'s internal stamp, not part of the documented stdin contract
+    # `_id` and `_path` are discover()'s internal stamps, not part of the documented stdin contract
     # — `_path` carries machine-local absolute paths the target has no business seeing. The strip is
     # core.declared_body, the one definition the writer uses too, so "which keys are derived" cannot
-    # disagree between what goes to disk and what goes over the wire.
+    # disagree between what goes to disk and what goes over the wire. An author's own `_comment` is theirs.
     payload = json.dumps({"manifests": [core.declared_body(m) for m in manifests]})
     try:
         proc = subprocess.run(

@@ -233,11 +233,11 @@ mandatory: a blocker naming nothing that would unpark it is the defect the field
 
 ### The sync-target payload (`borg chain plan|sync`)
 
-`coordinator.py` hands a discovered `borg-sync-target-<name>` executable `{"manifests": [...]}` on stdin. Each entry is the **declared body** of one manifest (`core.declared_body`): exactly the keys the author wrote, with every `_`-prefixed key (`_path`, `_id`, anything borg derives later) removed.
+`coordinator.py` hands a discovered `borg-sync-target-<name>` executable `{"manifests": [...]}` on stdin. Each entry is the **declared body** of one manifest (`core.declared_body`): exactly the keys the author wrote. **Top-level `_id` and `_path` are reserved for the loader** (it stamps both onto a loaded document): they are removed from the payload and are never written to disk. Every other top-level key, `_`-prefixed or not (a `_comment` or `_note`, say), is kept, in the payload and on every rewrite.
 
 **Wire change, 2026-10-12:** the payload no longer carries a top-level `program` key synthesized from the filename. A `program` key is present only when the manifest's author wrote one, so a target that identified a manifest by `m["program"]` must tolerate its absence (key on the `ref`s, or derive an identity from the manifest). The shape under "Shape" above is therefore what a target receives, minus any key the file does not contain.
 
-The same rule governs what `borg chain sync` writes back: the declared body only, in place, in whichever root holds the file (`.stacks/`, `.borg/chains/` or the legacy `.borg/programs/`), with no `_id`, no `_path` and no injected `program`.
+The same rule governs what `borg chain sync` writes back: the declared body only, in place, in whichever root holds the file (`.stacks/`, `.borg/chains/` or the legacy `.borg/programs/`), with no `_id`, no `_path` and no injected `program`. Authored `_`-prefixed keys survive the rewrite, and the file keeps its permission bits (a brand-new file gets `0666` masked by the umask).
 
 ### Edge provenance
 

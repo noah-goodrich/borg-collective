@@ -766,16 +766,16 @@ class TestWhatTheWriterPersists:
 
         sent = json.loads(capture.read_text())["manifests"]
         assert sorted(sorted(m) for m in sent) == [["program", "rows"], ["rows"]]
-        assert not [key for m in sent for key in m if key.startswith("_")]
+        assert not [key for m in sent for key in m if key in ("_id", "_path")]
 
-    def test_run_target_strips_every_underscore_key_not_just_the_path(self, tmp_path):
+    def test_run_target_strips_the_loader_stamps_and_keeps_an_authored_underscore_key(self, tmp_path):
         capture = tmp_path / "stdin.json"
         target_dir = _make_target(
             tmp_path, "capture", "#!/bin/sh\ncat > '" + str(capture) + "'\necho '{\"ok\": true}'\n"
         )
         target = os.path.join(target_dir, "borg-sync-target-capture")
-        coordinator.run_target(target, "plan", [{"_id": "x", "_path": "/p", "_later": 1, "rows": []}])
-        assert json.loads(capture.read_text()) == {"manifests": [{"rows": []}]}
+        coordinator.run_target(target, "plan", [{"_id": "x", "_path": "/p", "_comment": 1, "rows": []}])
+        assert json.loads(capture.read_text()) == {"manifests": [{"_comment": 1, "rows": []}]}
 
 
 class TestOneChainRegisteredTwice:
@@ -797,3 +797,26 @@ class TestOneChainRegisteredTwice:
         assert coordinator.cmd_sync(_Args([first, second])) == 0
         assert "wrote 1 manifest(s)" in capsys.readouterr().out
         assert second_file.read_bytes() == second_before
+
+
+class TestSyncKeepsWhatTheAuthorWrote:
+    """PR #341 fix round 1: two regressions inherited from the shared writer, now reached by `borg chain sync`."""
+
+    def _project(self, tmp_path, **declared):
+        return _write_manifest_dir(tmp_path, "proj", "plain", [_row("1", "o/r#1")], **declared)
+
+    def test_sync_preserves_an_authored_underscore_key_and_persists_no_stamp(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = self._project(tmp_path, _comment="hand-written", _note=["a", "b"])
+        assert coordinator.cmd_sync(_Args([project])) == 0
+        written = json.loads((tmp_path / "proj" / ".borg" / "chains" / "plain.json").read_text())
+        assert written == {"rows": [_row("1", "o/r#1")], "_comment": "hand-written", "_note": ["a", "b"]}
+        assert "_id" not in written and "_path" not in written
+
+    def test_sync_keeps_a_0644_manifest_0644(self, tmp_path, monkeypatch):
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        project = self._project(tmp_path)
+        target = tmp_path / "proj" / ".borg" / "chains" / "plain.json"
+        os.chmod(target, 0o644)
+        assert coordinator.cmd_sync(_Args([project])) == 0
+        assert stat.S_IMODE(os.stat(target).st_mode) == 0o644

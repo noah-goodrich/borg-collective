@@ -219,8 +219,13 @@ def looks_like_manifest(doc: Any) -> bool:
     return isinstance(doc, dict) and isinstance(doc.get("rows"), list)
 
 
+# The two keys `shell._load_manifest` stamps onto a loaded document. RESERVED for the loader: an author never
+# writes them, and nothing that came off disk may carry them back onto it.
+LOADER_STAMPED_KEYS = ("_id", "_path")
+
+
 def declared_body(manifest: dict[str, Any]) -> dict[str, Any]:
-    """A manifest's declared body: every key the AUTHOR wrote, and no key this package derived.
+    """A manifest's declared body: every key the AUTHOR wrote, and no key the loader stamped.
 
     ONE definition of "derived", used by both directions of the round trip. `_manifest_identity`
     needs it to compare two copies of one declaration; `shell.write_manifest` needs it so a document
@@ -229,16 +234,18 @@ def declared_body(manifest: dict[str, Any]) -> dict[str, Any]:
     exactly `_path`, so every synced file gained a permanent `"_id"` that nothing rejects and nothing
     reads. The only symptom was a `git diff` on a tracked directory.
 
-    PREFIX RULE, NOT A NAME LIST. A list would have to be updated in this file every time the loader
-    learns to stamp something, and the failure mode of forgetting is silent persistence of the new
-    key. `_`-prefixed means derived, everywhere in this package, and `manifest_dir`'s docstring
-    already relies on that convention holding.
+    A NAME LIST, NOT A PREFIX RULE. This stripped every `_`-prefixed key until PR #341's review: an
+    author's own `_comment` or `_note` (JSON has no comments, so people reach for exactly that) was
+    deleted by any `add-row`, `close` or `borg chain sync`, a loss origin/main's sync did not have.
+    The prefix rule guarded against a future stamp being persisted, but the price was paid today, in
+    data the author wrote. The loader stamps two keys and `LOADER_STAMPED_KEYS` names them; a loader
+    that learns a third must add it there, and `test_the_writer_persists_no_derived_key` feeds the
+    writer the reader's own output, so forgetting is a red test and not a silent leak.
 
     `merge-tree/coordinator.py::run_target` builds the payload for an out-of-repo sync shim through
-    this function too, so the shim receives exactly the declared body the writer persists and no
-    derived key (it used to strip `_path` alone and so leaked `_id`).
+    this function too, so the shim receives exactly the declared body the writer persists.
     """
-    return {k: v for k, v in manifest.items() if not k.startswith("_")}
+    return {k: v for k, v in manifest.items() if k not in LOADER_STAMPED_KEYS}
 
 
 def _validate_apex(apex: Any) -> list[str]:
