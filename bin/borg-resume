@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# borg-resume -- durable interruption ledger for Claude sessions (slice S1: ledger core and kill switch).
+# borg-resume -- durable interruption ledger for Claude sessions (S1 ledger, S7 watcher, S7b ack and defer).
 #
-# Verbs in this slice:
+# Verbs:
 #   record <event>   called by a hook with the hook payload on stdin. Appends ONE fact to
 #                    events/<sid>.jsonl; for session_start it also writes the registry
 #                    sessions/<sid>.json (replaced atomically on each session_start) and binds the tmux pane (@borg_sid).
@@ -14,8 +14,10 @@
 #   inventory <sid>  print the in-flight inventory as JSON (slice S5; --json is accepted, JSON is the only format)
 #   prompt <rid>     render prompts/<rid>.md, or with --line / --compact-line the injection strings (slice S6)
 #   mark-closed <project|sid>  append a deliberate-close event (like SessionEnd prompt_input_exit); slice S3b
+#   ack <rid>        append an ack event for a record (the model runs it when done); slice S7b
+#   defer <rid> [<until>] [--reason <w>]  append a defer event; the watcher reschedules the record; slice S7b
 #
-# Later slices add watch, inventory, prompt, status and the rest. Hooks only APPEND; the watcher owns every
+# Later slices add status, run, cancel and the rest. Hooks only APPEND; the watcher owns every
 # state transition. Bash 3.2 safe, jq is the only non-coreutils dependency.
 
 # No set -e on purpose: the record path must be fail-open.
@@ -183,6 +185,28 @@ _br_write_registry() {
     printf '%s\n' "$_reg" | borg_resume_write_atomic "$(borg_resume_registry_file "$_sid")"
 }
 
+# Detection step 1: a stop_failure line is classified at record time so the fact already carries class, action and
+# resume_at (S2 resume_plan, attempt 0; the watcher recomputes with the real attempt count and stays the authority).
+# Fail-open: any trouble returns the line unchanged. Costs one jq plus the classifier, no network.
+_br_classify_line() {
+    local _l="$1" _jf _err _msg _plan _class _action _ra _out
+    # shellcheck source=/dev/null
+    . "$BORG_RESUME_LIBDIR/resume-classify.sh" 2>/dev/null || { printf '%s' "$_l"; return 0; }
+    _jf='[(.error // "unknown"), ((.msg // "") | gsub("[\\n\\r]"; " "))] | join("\u001f")'
+    IFS=$'\x1f' read -r _err _msg <<EOF
+$(printf '%s' "$_l" | jq -r "$_jf" 2>/dev/null)
+EOF
+    _plan="$(resume_plan "${_err:-unknown}" "$_msg" 0 2>/dev/null)"
+    _class="${_plan%% *}"
+    _plan="${_plan#* }"
+    _action="${_plan%% *}"
+    _ra="${_plan#* }"
+    case "$_class$_action" in "" | *[!a-z_]*) printf '%s' "$_l"; return 0 ;; esac
+    _out="${_l%\}},\"class\":\"$_class\",\"action\":\"$_action\""
+    case "$_ra" in "" | *[!0-9]*) ;; *) _out="$_out,\"resume_at\":$_ra" ;; esac
+    printf '%s}' "$_out"
+}
+
 _br_record() {
     local _ev="${1:-}" _payload _t _built _sid _line
     _br_known_event "$_ev" || return 0
@@ -198,6 +222,7 @@ _br_record() {
     _built="$(printf '%s' "$_payload" | _br_build_event "$_ev" "$_t")"
     [ -n "$_built" ] || return 0
     _line="$_built"
+    [ "$_ev" = "stop_failure" ] && _line="$(_br_classify_line "$_line")"
     # sid is the third key of the compact line and already passed the charset check in the builder: no second jq.
     _sid="${_line#*\"sid\":\"}"
     _sid="${_sid%%\"*}"
@@ -211,7 +236,8 @@ _br_record() {
 
 _br_usage() {
     printf 'usage: borg-resume <record <event> | pause | unpause | probe | inventory <sid> [--json]' >&2
-    printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout] | mark-closed <project|sid> [dir]>\n' >&2
+    printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout] | mark-closed <project|sid> [dir]' >&2
+    printf ' | ack <rid> | defer <rid> [<until>] [--reason <word>]>\n' >&2
 }
 
 _br_main() {
@@ -284,6 +310,14 @@ _br_main() {
             # shellcheck source=/dev/null
             . "$BORG_RESUME_LIBDIR/resume-close.sh" 2>/dev/null || return 1
             borg_resume_mark_closed "$1" "${2:-}"
+            ;;
+        ack | defer)
+            # shellcheck source=/dev/null
+            . "$BORG_RESUME_LIBDIR/resume-verbs.sh" 2>/dev/null || return 1
+            "borg_resume_$_cmd" "$@"
+            local _vrc=$?
+            [ "$_vrc" -eq 2 ] && _br_usage
+            return "$_vrc"
             ;;
         *)
             _br_usage
