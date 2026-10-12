@@ -1,7 +1,9 @@
 #!/usr/bin/env bats
 # macOS /bin/bash 3.2 treats a failed `source` as fatal under `set -e` even inside `{ ...; } || true`.
-# Each hook's best-effort retention source must therefore run in a subshell. Linux bash 4+ does not
-# reproduce the abort, so only the contract-macos CI lane exercises these cases.
+# That abort applied to borg-nanoprobe-log.sh, the only one of the three log hooks with `set -e`; the other two
+# (memory-read-log, prefer-tool-log) lack -e, so the subshell there is hardening. When reaper.sh is missing the
+# rotation is skipped for that call, but the row is still appended.
+# The abort only reproduces on bash 3.x, so those cases skip elsewhere; the rotation-at-cap case runs everywhere.
 
 load test_helper/setup
 
@@ -13,6 +15,13 @@ setup() {
     export BORG_DIR="${BATS_TEST_TMPDIR}/borg"
     mkdir -p "$HOME/.claude"
     # setup_temp_dirs pre-populates ~/.claude/lib; _prepare_lib resets it per case
+}
+
+_require_bash3() {
+    case "$(/bin/bash -c 'echo $BASH_VERSION')" in
+        3.*) ;;
+        *) skip "the abort only reproduces on macOS bash 3.2; /bin/bash here is not 3.x, so green is not coverage" ;;
+    esac
 }
 
 # <mode> where mode is nolib or noreaper
@@ -45,6 +54,7 @@ _run_prefer() {
 }
 
 @test "nanoprobe-log under /bin/bash: no ~/.claude/lib still appends the row" {
+    _require_bash3
     _prepare_lib nolib
     _run_nanoprobe
     [ "$status" -eq 0 ]
@@ -52,6 +62,7 @@ _run_prefer() {
 }
 
 @test "nanoprobe-log under /bin/bash: reaper.sh missing still appends the row" {
+    _require_bash3
     _prepare_lib noreaper
     _run_nanoprobe
     [ "$status" -eq 0 ]
@@ -59,6 +70,7 @@ _run_prefer() {
 }
 
 @test "memory-read-log under /bin/bash: no ~/.claude/lib still logs the hit" {
+    _require_bash3
     _prepare_lib nolib
     _run_memory
     [ "$status" -eq 0 ]
@@ -66,6 +78,7 @@ _run_prefer() {
 }
 
 @test "memory-read-log under /bin/bash: reaper.sh missing still logs the hit" {
+    _require_bash3
     _prepare_lib noreaper
     _run_memory
     [ "$status" -eq 0 ]
@@ -73,6 +86,7 @@ _run_prefer() {
 }
 
 @test "prefer-tool-log under /bin/bash: no ~/.claude/lib still logs the bypass" {
+    _require_bash3
     _prepare_lib nolib
     _run_prefer
     [ "$status" -eq 0 ]
@@ -80,8 +94,20 @@ _run_prefer() {
 }
 
 @test "prefer-tool-log under /bin/bash: reaper.sh missing still logs the bypass" {
+    _require_bash3
     _prepare_lib noreaper
     _run_prefer
     [ "$status" -eq 0 ]
     grep -q '"event":"bypass"' "$XDG_STATE_HOME/borg/prefer-tool.jsonl"
+}
+
+@test "nanoprobe-log under /bin/bash: full lib at the cap still rotates inside the subshell" {
+    mkdir -p "$XDG_STATE_HOME/borg"
+    printf "{\"id\":\"old\"}\n" > "$XDG_STATE_HOME/borg/agents.jsonl"
+    export BORG_LOG_CAP_BYTES=1
+    _run_nanoprobe
+    [ "$status" -eq 0 ]
+    [ -f "$XDG_STATE_HOME/borg/agents.jsonl.1" ]
+    grep -q "old" "$XDG_STATE_HOME/borg/agents.jsonl.1"
+    grep -q "a1" "$XDG_STATE_HOME/borg/agents.jsonl"
 }
