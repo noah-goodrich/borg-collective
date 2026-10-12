@@ -18,7 +18,7 @@ hash -r 2>/dev/null || true
 
 set -e
 
-BORG_VERSION="v0.9.2"
+BORG_VERSION="v0.9.3"
 BORG_HOME="${BORG_HOME:-${0:A:h}}"  # directory containing this script (for lib/, hooks/, skills/)
 BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"  # workspace root where projects live; orchestrator session runs here
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
@@ -1160,6 +1160,15 @@ _borg_stop_shared_supabase() {
         || warn "supabase stop failed — stop it manually: cd $stillpoint_dir && supabase stop"
 }
 
+# Deliberate close: best-effort borg-resume marker so the watcher never resumes a project torn down on purpose.
+# Never fails the caller; borg-resume honors BORG_RESUME_DISABLE. BORG_RESUME_BIN overrides the binary (tests).
+_borg_mark_closed() {
+    local bin="${BORG_RESUME_BIN:-$BORG_HOME/bin/borg-resume}"
+    [[ -x "$bin" ]] || return 0
+    "$bin" mark-closed "$1" "${2:-}" >/dev/null 2>&1 || true
+    return 0
+}
+
 cmd_down() {
     info "Severing link to the Collective..."
 
@@ -1180,7 +1189,11 @@ cmd_down() {
             _borg_has_recent_checkpoint "$pdir" "$checkpoint_threshold_hours" \
                 || _borg_offer_checkpoint "$wname" "$pdir" "" "$checkpoint_threshold_hours"
             info "Stopping $wname..."
-            drone down "$wname" 2>/dev/null || tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
+            # drone down marks the project itself (before and after teardown); mark here only on the fallback.
+            if ! drone down "$wname" 2>/dev/null; then
+                _borg_mark_closed "${pdir:t}" "$pdir"
+                tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
+            fi
         else
             tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
         fi
@@ -1506,7 +1519,7 @@ EOF
         info "Building morning briefing..."
 
         # Capture stderr to a file under the state root instead of /dev/null (was silent — see
-        # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
+        # docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
         # path being taken with NO indication of why is the defect this whole function exists to fix.
         local claude_rc=0
         local claude_stderr_file="$(_borg_state_root)/briefing-stderr.log"
@@ -1571,7 +1584,7 @@ EOF
         # A FAILED FALLBACK RENDER IS THE LOUDEST FAILURE IN THIS FUNCTION, NOT THE QUIETEST. This
         # line used to end in `|| true`, which meant the ONE path that guarantees the user always
         # gets a page could print nothing and still exit 0 — the silent-fallback shape
-        # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1
+        # docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1
         # exists to remove ("make the failure loud"), reintroduced at the last step of the ladder
         # that implements it. Every branch above names its cause; so does this one. The reason line
         # is redirected to STDERR because `warn` itself writes to STDOUT (see its definition beside
@@ -2874,7 +2887,7 @@ cmd_doctor() {
 
     # Headless `claude -p` reachability — the narrative half of `borg link --brief`. This is what
     # makes a dead LLM path a health-check finding instead of something noticed by reading thin
-    # output (docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md, defect
+    # output (docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md, defect
     # 1). NOT a launchd agent, so REG/FRESH are n/a here; EXIT carries the actual claude exit code.
     printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "CHECK" "REG" "EXIT" "FRESH" "STATUS"
     printf '%0.s─' {1..70}; echo

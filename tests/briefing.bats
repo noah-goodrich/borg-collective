@@ -628,7 +628,7 @@ EOF
 # BUILD (`_borg_py ... --json` produces nothing) or the fallback page fails to RENDER
 # (`--render-document` fails). Both used to `warn` — which writes to STDOUT, see its definition beside
 # `info`/`die` at the top of borg.zsh — and return 0. That is the silent-failure shape
-# docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists to
+# docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1 exists to
 # remove, and the fallback rung reintroduced it at the last rung of the ladder that implements it.
 #
 # THE ASSERTIONS READ SEPARATED STREAMS, NOT `$output`, AND THAT IS THE POINT OF THIS BLOCK.

@@ -149,7 +149,7 @@ def test_add_row_refuses_an_invalid_manifest_and_the_bad_row_survives(repository
     `shell._load_manifest` drops a failing row and returns the survivors, which is right for
     rendering. Through a write path it means a verb asked to ADD one row DELETES another, with a
     warning as the only trace -- exactly what
-    `docs/plans/directives/2026-09-01-refuse-the-manifest-stop-salvaging-rows.md` says to make
+    `docs/plans/assimilated/2026-09-01-refuse-the-manifest-stop-salvaging-rows.md` says to make
     structurally impossible.
 
     MUTATION: point `_read_for_write` at `shell.discover` and this goes red on the surviving-row

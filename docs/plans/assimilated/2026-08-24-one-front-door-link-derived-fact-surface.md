@@ -57,7 +57,7 @@ e2e/eval harness that keeps it honest.
     repository-scope prompt breadth, and both no-page rungs (build and fallback render) being loud on **stderr** and
     non-zero out. Deliberately not stated as a count — the count was wrong by three within a day of being written,
     twice, in two files.
-    `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5** is closed and its
+    `docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md` **Phase 5** is closed and its
     **Phase 3** subsumed. **Phase 5b** (`/borg-recon`, the second un-folded human digest) is a skill rather than a
     command, blocks neither verify clause nor the stated goal, and stays filed separately.
   - **The first fold reintroduced the defect once, inside itself, and the tick is only honest with the remediation
@@ -427,7 +427,7 @@ e2e/eval harness that keeps it honest.
     hook dispatch and the installed skill set — a different harness, not a case in `evals/s4-k3/run.sh`, and one
     whose negative ("a skill registered twice") requires mutating an install. So it is filed rather than gated, in
     the same voice AC7 uses for the rename it defers: **FILED 2026-09-03** as
-    `docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md`, carrying a
+    `docs/plans/assimilated/2026-09-02-session-load-eval-skill-registration-and-hooks.md`, carrying a
     `*Parent plan:*` line back here. That discharges this decision. **It does NOT tick AC6, and the reason is the
     third verify gate rather than this clause** — see decision (8).
   - **(7) The pairing convention moves out of the criterion body for the same reason, and E2 is its named
@@ -571,7 +571,7 @@ observation here rather than as a directive, since it belongs to whoever next to
   decisions on. If the corpus ever passes ~20 rows in one manifest, this boundary is due a re-read, not a re-quote.
 - NOT building: evals beyond the three lifecycle skills in AC5.
 - NOT building: AC6's session-load case. AC6 files it — filed 2026-09-03 as
-  `docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md`. See AC6 decision (6): it
+  `docs/plans/assimilated/2026-09-02-session-load-eval-skill-registration-and-hooks.md`. See AC6 decision (6): it
   needs a session-lifecycle harness that does not exist, and a criterion clause naming one would be unfalsifiable.
 - If done early: ship what we have, don't expand scope.
 
