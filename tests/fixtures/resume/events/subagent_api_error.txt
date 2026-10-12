@@ -1,0 +1,7 @@
+SessionStart
+PreToolUse
+SubagentStart
+PostToolUse
+StopFailure
+StopFailure
+SessionEnd

@@ -1,0 +1,7 @@
+{"type":"user","uuid":"u-0101","sessionId":"00000000-0000-4000-8000-000000000001","message":{"role":"user","content":"<scrubbed:30 chars>"}}
+{"type":"assistant","uuid":"u-0102","sessionId":"00000000-0000-4000-8000-000000000001","isApiErrorMessage":true,"error":"server_error","truncatedAfterOutput":true,"message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"API Error: server_error"}]}}
+{"type":"permission-mode","permissionMode":"default","sessionId":"00000000-0000-4000-8000-000000000001"}
+{"type":"pr-link","sessionId":"00000000-0000-4000-8000-000000000001"}
+{"type":"system","subtype":"stop_hook_summary","uuid":"u-0105","sessionId":"00000000-0000-4000-8000-000000000001"}
+{"type":"system","subtype":"turn_duration","uuid":"u-0106","sessionId":"00000000-0000-4000-8000-000000000001","durationMs":1000}
+{"type":"cost-state","sessionId":"00000000-0000-4000-8000-000000000001"}

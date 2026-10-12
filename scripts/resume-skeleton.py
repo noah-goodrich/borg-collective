@@ -2,7 +2,7 @@
 """resume-skeleton.py -- allowlist extractor that turns a real Claude Code record
 into a public-repo-safe CAPTURED SKELETON (resume design, slice S0a).
 
-Extractor version: v2  (tests/fixtures/resume/fixtures.json records this per fixture)
+Extractor version: v3  (tests/fixtures/resume/fixtures.json records this per fixture)
 
 This is the single rule set for the repo: the capture hook
 (scripts/spike-resume-payloads.sh) pipes every payload through `--stdin`.
@@ -34,7 +34,7 @@ import json
 import re
 import sys
 
-VERSION = "v2"
+VERSION = "v3"
 
 
 def _s(*vals):
@@ -73,6 +73,11 @@ ENUM_RULES = {
         "custom-title",
         "agent-name",
         "progress",
+        "launched",
+        "started",
+        "failed",
+        "atis-latch",
+        "mode",
     ),
     "subtype": _s(
         "stop_hook_summary",

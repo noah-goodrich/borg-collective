@@ -293,7 +293,7 @@ Workflows
   (2 owned agents errored; see resume note below)
 
 Agents (Agent tool only; interrupted-by-user ones are omitted)
-- a0b6facb8e5d1b6ac  nanoprobe  "Write contributor docs"  errored
+- a0000000000000002  nanoprobe  "Write contributor docs"  errored
   worktree: <path>  branch: <branch>  dirty: yes, 3 commits ahead
   brief: <transcript path>, line 1
 - (3 agents already done, nothing to do)
@@ -360,7 +360,7 @@ Permissions for unattended runs: the prompt runs `borg-resume`, `Workflow`, `Sen
 Principle: the decisive behaviors must be exercised against REAL payloads and a real tmux, not only against fixtures derived from the same assumptions.
 
 - Fixture provenance. Every fixture in `tests/fixtures/resume/` is tagged in `fixtures.json` as `captured` (taken from a real Claude Code 2.1.296 run or a real transcript, scrubbed) or `synthetic`. A bats meta-test lists the fixtures each slice declares as `required_captured`, and fails if any is missing or tagged synthetic. S4 (hook), S7 (watcher) and S16 (E2E) therefore cannot go green on synthetic payloads alone.
-- Spike results gate downstream slices. S0b runs the gating spikes and writes `spike/SPIKE_RESULTS.json` (id, outcome `pass|fail|unknown`, claude version, date, evidence path). Later slices' tests read it: a slice that depends on spike U6 asserts its outcome is `pass`, or asserts the documented fallback path was chosen. S5 and S6 do not start until U6, U7, U8, U1 and U15 are recorded; S8 until U9, U13 and U16; S11 until U17.
+- Spike results gate downstream slices. S0b runs the gating spikes and writes `spike/SPIKE_RESULTS.json` (id, outcome `pass|fail|unknown|partial`, claude version, date, evidence paths; `partial` means part of the question is established and the rest is listed in `not_run_parts` or `refuted_parts`, and a `pass` entry must have non-empty `evidence_paths` and empty `not_run_parts` and `refuted_parts`). Later slices' tests read it: a slice that depends on spike U6 asserts its outcome is `pass`, or asserts the documented fallback path was chosen. S5 and S6 do not start until U6, U7, U8, U1 and U15 are recorded; S8 until U9, U13 and U16; S11 until U17.
 - Real-tmux tests. The injector and relaunch bats run against a private tmux server (`tmux -L borgtest`) hosting a fake `claude` script that prints captured composer, permission-dialog, AskUserQuestion, plan-approval, limit-dialog, resume-size-dialog and draft-in-composer screens. This exercises real `send-keys`, `capture-pane`, pane options and `list-clients`. Tests that need tmux skip with a named reason when it is absent.
 - Real-claude smoke lane (local, not CI): `tests/smoke/resume_real.sh` runs the real `claude` binary with an isolated settings file that installs the logging hook, against (a) a local stub HTTP server returning a 429 `rate_limit_error` via the base-URL override, to capture a real `StopFailure` payload and synthetic record, and (b) a deliberately invalid model to capture `model_not_found`. Whether the stub proxy produces the same `StopFailure` as a true usage limit is itself spike U2.
 - Negative cases are first-class: permission dialog, draft in composer, human typing (recent `client_activity`), limit dialog, reused pane id, tmux restart, Esc then pane kill, skipped agent, Ctrl+X Ctrl+K, re-spawned agent with a new agent_id, concurrent hook upsert plus watcher counter update.
@@ -401,7 +401,7 @@ Deliverables are code artifacts. Tests are listed separately. Every slice is pro
 
 - Deliverables: `spike/SPIKE_RESULTS.json` populated by running the gating spikes on 2.1.296; `docs/resume/spike-results.md` summarizing evidence paths.
 - Gating spikes (blocking the slices named in Test strategy): U1 and U2 (StopFailure for subagents and for 429), U6 (`--resume` keeps the session id and replays workflow results), U7 (`resumeFromRunId` accepted), U8 (journal shape for killed and null-result agents), U9 (pane and pid identity in hooks), U13 (send-keys queue behavior), U15 (Stop on Esc, Ctrl+X Ctrl+K, interrupt marker in agent transcripts), U16 (what the pane looks like after a limit and whether a dialog persists), U17 (resume-size dialog and its keys). Non-gating spikes are recorded as `unknown` and tracked.
-- Tests: `tests/spike_results.bats` asserts the file exists, parses, and has an entry for each gating id; it does not assert `pass` (a `fail` outcome selects the documented fallback in the design).
+- Tests: `tests/spike_results.bats` asserts the file exists, parses, and has an entry for each gating id; it does not assert `pass` (a `fail` or `partial` outcome selects the documented fallback in the design). It does assert the `pass` rule above: a `pass` entry with gaps or without evidence fails the test, and the summary doc must carry a table row per id with the matching outcome.
 
 ### S0c Launchd claude viability (hard prerequisite for auto-injection)
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env bats
 # Classifier, reset parser and transcript helpers for borg-resume (slice S2).
-# Table-driven from tests/fixtures/resume/. Clock is pinned with BORG_RESUME_NOW_EPOCH.
+# Table-driven from tests/fixtures/resume-classify/ (hand-built records; the captured skeletons live in tests/fixtures/resume/). Clock is pinned with BORG_RESUME_NOW_EPOCH.
 
 setup() {
-    FX="${BATS_TEST_DIRNAME}/fixtures/resume"
+    FX="${BATS_TEST_DIRNAME}/fixtures/resume-classify"
     LIB="${BATS_TEST_DIRNAME}/../lib/borg/resume-classify.sh"
     command -v jq >/dev/null || skip "jq not installed"
     # shellcheck disable=SC1090
