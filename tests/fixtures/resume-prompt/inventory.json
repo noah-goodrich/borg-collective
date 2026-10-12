@@ -1,0 +1,49 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "found": true,
+  "session": {
+    "transcript": "/proj/00000000-0000-4000-8000-000000000001.jsonl",
+    "cwd": "/work/example",
+    "turn_state": "errored",
+    "error": "rate_limit",
+    "prompt_head": "Refactor the parser `now` $(touch /tmp/pwn) \u001b[31mred\u001b[0m and ``` close",
+    "first_prompt_head": "Start the parser refactor",
+    "checkpoint": "/work/example/.borg/checkpoints/2026-10-12-parser.md",
+    "git": {"branch": "feat/parser", "dirty": true}
+  },
+  "agents": [
+    {"agent_id": "a0000000000000002", "kind": "agent", "status": "errored", "agent_type": "nanoprobe",
+     "description": "Write contributor docs $(id) `x`", "cwd": "/work/wt-docs",
+     "brief_ref": {"path": "/proj/s/subagents/agent-a0000000000000002.jsonl", "line": 1},
+     "worktree": {"path": "/work/wt-docs", "branch": "docs/contrib", "last_commit": "abc1234 docs: wip", "dirty": true}},
+    {"agent_id": "a0000000000000003", "kind": "agent", "status": "orphaned", "agent_type": "reviewer",
+     "description": "Review the diff", "cwd": "/work/example",
+     "brief_ref": {"path": "/proj/s/subagents/agent-a0000000000000003.jsonl", "line": 1},
+     "worktree": null},
+    {"agent_id": "a0000000000000004", "kind": "agent", "status": "done", "agent_type": "grunt",
+     "description": "Already finished", "brief_ref": {"path": "/p/4.jsonl", "line": 1}, "worktree": null},
+    {"agent_id": "a0000000000000005", "kind": "agent", "status": "interrupted_by_user", "agent_type": "grunt",
+     "description": "User skipped this", "brief_ref": {"path": "/p/5.jsonl", "line": 1}, "worktree": null},
+    {"agent_id": "a0000000000000006", "kind": "agent", "status": "running", "agent_type": "grunt",
+     "description": "Still going", "brief_ref": {"path": "/p/6.jsonl", "line": 1}, "worktree": null}
+  ],
+  "workflows": [
+    {"run_id": "wf_ab12cd", "manifest_id": "wf_ab12cd", "kind": "workflow", "status": "unfinished", "resumable": true,
+     "script_path": "/work/example/flows/build.js", "script_inline": false, "unfinished_steps": ["v2:s1"],
+     "agents": [{"agent_id": "wfagent0000000001", "kind": "workflow_agent", "status": "errored", "run_id": "wf_ab12cd"}]},
+    {"run_id": "wf_cd34ef", "manifest_id": "wf_cd34ef", "kind": "workflow", "status": "finished_with_failures",
+     "resumable": true, "script_path": "/work/example/flows/review.js", "script_inline": false,
+     "unfinished_steps": ["v2:a", "v2:b"],
+     "agents": [{"agent_id": "wfagent0000000002", "kind": "workflow_agent", "status": "errored", "run_id": "wf_cd34ef"},
+                {"agent_id": "wfagent0000000003", "kind": "workflow_agent", "status": "errored", "run_id": "wf_cd34ef"}]},
+    {"run_id": "wf_inline1", "manifest_id": "wf_inline1", "kind": "workflow", "status": "partial", "resumable": true,
+     "script_path": null, "script_inline": true, "unfinished_steps": ["v2:z"], "agents": []},
+    {"run_id": "wf_fin001", "manifest_id": "wf_fin001", "kind": "workflow", "status": "finished", "resumable": false,
+     "script_path": "/work/example/flows/done.js", "script_inline": false, "unfinished_steps": [], "agents": []},
+    {"run_id": "wf_usr001", "manifest_id": "wf_usr001", "kind": "workflow", "status": "interrupted_by_user",
+     "resumable": false, "script_path": "/work/example/flows/skipped.js", "script_inline": false,
+     "unfinished_steps": [], "agents": [{"agent_id": "wfagent0000000009", "kind": "workflow_agent",
+     "status": "interrupted_by_user", "run_id": "wf_usr001"}]}
+  ],
+  "worktrees": []
+}
