@@ -54,8 +54,7 @@ _zone_epoch() { _rc_epoch_in_zone "$1" "$2" "$3"; }
         "verification_required||notify_only notify" \
         "billing_error||notify_only notify" \
         "cloud_credential_error||notify_only notify" \
-        "model_not_found||notify_only notify" \
-        "brand_new_error||transient backoff"; do
+        "model_not_found||notify_only notify"; do
         err="${row%%|*}"
         local rest="${row#*|}"
         local text="${rest%%|*}"
@@ -67,6 +66,20 @@ _zone_epoch() { _rc_epoch_in_zone "$1" "$2" "$3"; }
             return 1
         }
     done
+}
+
+@test "unknown error kinds fail closed to notify_only and log the raw kind" {
+    run bash -c ". \"$LIB\"; resume_classify_error brand_new_error 2>&1 >/dev/null"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"brand_new_error"* ]]
+    run bash -c ". \"$LIB\"; resume_classify_error brand_new_error 2>/dev/null"
+    [ "$output" = "notify_only notify" ]
+    run bash -c ". \"$LIB\"; resume_plan brand_new_error '' 0 2>/dev/null"
+    [ "$output" = "notify_only notify -" ]
+    run bash -c ". \"$LIB\"; resume_classify_error '' 2>/dev/null"
+    [ "$output" = "notify_only notify" ]
+    run bash -c ". \"$LIB\"; resume_classify_error overloaded 2>&1"
+    [ "$output" = "transient backoff" ]
 }
 
 @test "spend-limit and team-budget text map to notify_only even on rate_limit" {
@@ -178,6 +191,100 @@ _zone_epoch() { _rc_epoch_in_zone "$1" "$2" "$3"; }
     [ "$output" = "$(_zone_epoch UTC 2026-10-12 00:00)" ] || [ "$output" = "$(_zone_epoch UTC 2026-10-13 00:00)" ]
 }
 
+# ---- reset parser: independent oracle (hard-coded epochs, not computed by the library) -----
+
+@test "oracle: 7:10am Denver at 12:00Z is 13:10Z the same day" {
+    _need_tz
+    run resume_parse_reset "resets 7:10am (America/Denver)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1791810600" ]
+}
+
+@test "oracle: dated reset in the past rolls to next year (Jul 7 2027, 07:00 MDT)" {
+    _need_tz
+    BORG_RESUME_NOW_EPOCH=1791820800
+    run resume_parse_reset "resets Jul 7 at 7am (America/Denver)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1814965200" ]
+}
+
+@test "oracle: in-zone date differs from the UTC date (Tokyo is already Oct 13)" {
+    _need_tz
+    [ -f /usr/share/zoneinfo/Asia/Tokyo ] || skip "tzdata incomplete"
+    BORG_RESUME_NOW_EPOCH=1791847800
+    run resume_parse_reset "resets 9am (Asia/Tokyo)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1791849600" ]
+}
+
+@test "oracle: in-zone date differs from the UTC date (Denver is still Oct 12)" {
+    _need_tz
+    BORG_RESUME_NOW_EPOCH=1791860400
+    run resume_parse_reset "resets 7am (America/Denver)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1791896400" ]
+}
+
+@test "oracle: a reset exactly equal to now rolls to tomorrow" {
+    _need_tz
+    BORG_RESUME_NOW_EPOCH=1791810600
+    run resume_parse_reset "resets 7:10am (America/Denver)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1791897000" ]
+    run resume_parse_reset "resets Oct 12 at 7:10am (America/Denver)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1823346600" ]
+}
+
+@test "oracle: every month name maps to its month (15th at 12pm UTC)" {
+    local row mon want
+    for row in "Jan|1800014400" "Feb|1802692800" "Mar|1805112000" "Apr|1807790400" "May|1810382400" \
+        "Jun|1813060800" "Jul|1815652800" "Aug|1818331200" "Sep|1821009600" "Oct|1792065600" \
+        "Nov|1794744000" "Dec|1797336000"; do
+        mon="${row%%|*}"
+        want="${row#*|}"
+        run resume_parse_reset "resets $mon 15 at 12pm (UTC)"
+        [ "$status" -eq 0 ]
+        [ "$output" = "$want" ] || {
+            echo "FAIL $mon -> $output (want $want)"
+            return 1
+        }
+    done
+}
+
+@test "zone-less reset text uses the machine's local zone" {
+    _need_tz
+    [ -f /usr/share/zoneinfo/Asia/Tokyo ] || skip "tzdata incomplete"
+    TZ=America/Denver run resume_parse_reset "resets 7:10am"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1791810600" ]
+    TZ=Asia/Tokyo run resume_parse_reset "resets 7:10am"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1791843000" ]
+}
+
+@test "absolute form accepts an optional 'at'" {
+    _need_tz
+    run resume_parse_reset "resets at 7:10am (America/Denver)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1791810600" ]
+    run resume_parse_reset "resets at 7:10am (MT)"
+    [ "$status" -eq 0 ]
+    [ "$output" = "1791810600" ]
+}
+
+@test "relative form parses only the duration after 'resets in'" {
+    run resume_parse_reset "Limit reached in 5 hr window - resets in 3 hours"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$((1791806400 + 10800))" ]
+    run resume_parse_reset "resets in 3 hours (5 hr window)"
+    [ "$output" = "$((1791806400 + 10800))" ]
+    run resume_parse_reset "resets in 1 hour and 30 minutes"
+    [ "$output" = "$((1791806400 + 5400))" ]
+    run resume_parse_reset "5 hours used - resets in soon"
+    [ "$status" -eq 1 ]
+}
+
 @test "unparseable text and bad zones fail with rc 1" {
     run resume_parse_reset "You've hit your limit"
     [ "$status" -eq 1 ]
@@ -247,8 +354,10 @@ _zone_epoch() { _rc_epoch_in_zone "$1" "$2" "$3"; }
 @test "interrupt marker text matcher" {
     resume_is_interrupt_marker "[Request interrupted by user]"
     resume_is_interrupt_marker "[Request interrupted by user for tool use]"
-    ! resume_is_interrupt_marker "please continue"
-    ! resume_is_interrupt_marker "[Request interrupted by user] and more"
+    run resume_is_interrupt_marker "please continue"
+    [ "$status" -ne 0 ]
+    run resume_is_interrupt_marker "[Request interrupted by user] and more"
+    [ "$status" -ne 0 ]
 }
 
 @test "interrupt fixtures: plain and for tool use are trailing markers" {
@@ -280,8 +389,12 @@ _zone_epoch() { _rc_epoch_in_zone "$1" "$2" "$3"; }
 }
 
 @test "a marker given as a plain string content is detected" {
-    resume_record_is_interrupt '{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"}}'
-    ! resume_record_is_interrupt '{"type":"assistant","message":{"role":"assistant","content":"[Request interrupted by user]"}}'
+    local u='{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"}}'
+    local a='{"type":"assistant","message":{"role":"assistant","content":"[Request interrupted by user]"}}'
+    run resume_record_is_interrupt "$u"
+    [ "$status" -eq 0 ]
+    run resume_record_is_interrupt "$a"
+    [ "$status" -ne 0 ]
 }
 
 # ---- bookkeeping allowlist and last meaningful record -------------------------------------
@@ -296,9 +409,14 @@ _zone_epoch() { _rc_epoch_in_zone "$1" "$2" "$3"; }
     done
     resume_record_is_bookkeeping '{"type":"system","subtype":"stop_hook_summary"}'
     resume_record_is_bookkeeping '{"type":"system","subtype":"turn_duration"}'
-    ! resume_record_is_bookkeeping '{"type":"system","subtype":"other"}'
-    ! resume_record_is_bookkeeping '{"type":"assistant"}'
-    ! resume_record_is_bookkeeping '{"type":"user"}'
+    run resume_record_is_bookkeeping '{"type":"system","subtype":"other"}'
+    [ "$status" -ne 0 ]
+    run resume_record_is_bookkeeping '{"type":"system"}'
+    [ "$status" -ne 0 ]
+    run resume_record_is_bookkeeping '{"type":"assistant"}'
+    [ "$status" -ne 0 ]
+    run resume_record_is_bookkeeping '{"type":"user"}'
+    [ "$status" -ne 0 ]
 }
 
 @test "synthetic server_error is the last meaningful record despite five trailing bookkeeping records" {
@@ -307,8 +425,51 @@ _zone_epoch() { _rc_epoch_in_zone "$1" "$2" "$3"; }
     rec="$(resume_last_meaningful_record "$FX/main_server_error_tail.jsonl")"
     fields="$(resume_synthetic_error "$rec")"
     [ "${fields%%$'\t'*}" = "server_error" ]
-    resume_record_is_clean_close '{"type":"system","subtype":"turn_duration"}'
-    ! resume_record_is_clean_close "$rec"
+    run resume_record_is_clean_close '{"type":"system","subtype":"turn_duration"}'
+    [ "$status" -eq 0 ]
+    run resume_record_is_clean_close "$rec"
+    [ "$status" -ne 0 ]
+}
+
+# ---- trailing clean close -----------------------------------------------------------------
+
+@test "with_close: a turn_duration after the last meaningful record sets the flag" {
+    run resume_last_meaningful_with_close "$FX/main_server_error_tail.jsonl"
+    [ "$status" -eq 0 ]
+    [ "${output%%$'\t'*}" = "true" ]
+    [ "$(resume_synthetic_error "${output#*$'\t'}" | cut -f1)" = "server_error" ]
+}
+
+@test "with_close: no turn_duration after the record leaves the flag false" {
+    local t="$BATS_TEST_TMPDIR/noclose.jsonl"
+    grep -v turn_duration "$FX/main_server_error_tail.jsonl" >"$t"
+    run resume_last_meaningful_with_close "$t"
+    [ "$status" -eq 0 ]
+    [ "${output%%$'\t'*}" = "false" ]
+}
+
+@test "with_close: a turn_duration from an earlier turn does not count" {
+    local t="$BATS_TEST_TMPDIR/prev.jsonl"
+    printf '%s\n' '{"type":"assistant","uuid":"a1"}' '{"type":"system","subtype":"turn_duration"}' \
+        '{"type":"user","uuid":"u2","message":{"content":"next"}}' '{"type":"assistant","uuid":"a2"}' \
+        '{"type":"cost-state"}' >"$t"
+    run resume_last_meaningful_with_close "$t"
+    [ "$status" -eq 0 ]
+    [ "${output%%$'\t'*}" = "false" ]
+    [[ "$output" == *'"uuid":"a2"'* ]]
+    printf '%s\n' '{"type":"system","subtype":"turn_duration"}' '{"type":"last-prompt"}' >>"$t"
+    run resume_last_meaningful_with_close "$t"
+    [ "${output%%$'\t'*}" = "true" ]
+    [[ "$output" == *'"uuid":"a2"'* ]]
+}
+
+@test "with_close: missing file and bookkeeping-only files return nonzero" {
+    run resume_last_meaningful_with_close "$BATS_TEST_TMPDIR/missing.jsonl"
+    [ "$status" -ne 0 ]
+    local t="$BATS_TEST_TMPDIR/onlybk.jsonl"
+    printf '%s\n' '{"type":"system","subtype":"turn_duration"}' >"$t"
+    run resume_last_meaningful_with_close "$t"
+    [ "$status" -ne 0 ]
 }
 
 @test "sleep-interrupted tail: error followed by bookkeeping only" {

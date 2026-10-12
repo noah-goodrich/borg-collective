@@ -12,6 +12,8 @@
 #   resume_record_is_interrupt JSON          -> rc 0 for a user record carrying the marker
 #   resume_record_is_bookkeeping JSON        -> rc 0 for a bookkeeping (non-meaningful) record
 #   resume_last_meaningful_record FILE [N]   -> last meaningful record of the last N lines (60)
+#   resume_last_meaningful_with_close FILE [N] -> "<true|false><TAB><record>"; true when a turn_duration
+#                                                 (clean turn close) follows that record
 #   resume_last_meaningful_line FILE [N]     -> its 1-based line number in FILE
 #   resume_tail_interrupted FILE [N]         -> rc 0 when that record is an interrupt marker
 #   resume_synthetic_error JSON              -> "<error><TAB><text><TAB><truncated>" or rc 1
@@ -40,7 +42,8 @@ resume_classify_error() {
     low="$(_rc_lower "$text")"
 
     case "$low" in
-        *"spend limit"* | *"spending limit"* | *"monthly limit"* | *"monthly spend"* | *"team budget"* | *"budget limit"* | *"budget has been"*)
+        *"spend limit"* | *"spending limit"* | *"monthly limit"* | *"monthly spend"* | *"team budget"* | \
+            *"budget limit"* | *"budget has been"*)
             echo "notify_only notify"
             return 0
             ;;
@@ -62,11 +65,14 @@ resume_classify_error() {
                 *) echo "notify_only notify" ;;
             esac
             ;;
-        authentication_failed | oauth_org_not_allowed | account_on_hold | verification_required | billing_error | cloud_credential_error | model_not_found)
+        authentication_failed | oauth_org_not_allowed | account_on_hold | verification_required | billing_error | \
+            cloud_credential_error | model_not_found)
             echo "notify_only notify"
             ;;
         *)
-            echo "transient backoff"
+            # Unknown kinds fail closed: notify a human rather than retry something unclassified.
+            printf 'borg-resume: unknown error kind %q, failing closed to notify_only\n' "${1:-}" >&2
+            echo "notify_only notify"
             ;;
     esac
 }
@@ -80,7 +86,10 @@ _rc_gnu_date() { date -d @0 +%s >/dev/null 2>&1; }
 
 # _rc_fmt_in_zone ZONE EPOCH FORMAT
 _rc_fmt_in_zone() {
-    if _rc_gnu_date; then
+    if [ -z "$1" ]; then
+        # no zone: the machine's local zone
+        if _rc_gnu_date; then date -d "@$2" "+$3"; else date -r "$2" "+$3"; fi
+    elif _rc_gnu_date; then
         TZ="$1" date -d "@$2" "+$3"
     else
         TZ="$1" date -r "$2" "+$3"
@@ -89,7 +98,14 @@ _rc_fmt_in_zone() {
 
 # _rc_epoch_in_zone ZONE YYYY-MM-DD HH:MM  -> epoch
 _rc_epoch_in_zone() {
-    if _rc_gnu_date; then
+    if [ -z "$1" ]; then
+        # no zone: the machine's local zone
+        if _rc_gnu_date; then
+            date -d "$2 $3:00" +%s 2>/dev/null
+        else
+            date -j -f "%Y-%m-%d %H:%M:%S" "$2 $3:00" +%s 2>/dev/null
+        fi
+    elif _rc_gnu_date; then
         TZ="$1" date -d "$2 $3:00" +%s 2>/dev/null
     else
         TZ="$1" date -j -f "%Y-%m-%d %H:%M:%S" "$2 $3:00" +%s 2>/dev/null
@@ -125,14 +141,15 @@ _rc_month_num() {
     esac
 }
 
-# "in 3 hours", "in 45 minutes", "in 1 hour 30 minutes", "in 2 days"
+# The duration after "resets in": "3 hours", "45 minutes", "1 hour 30 minutes", "2 days". Parses the
+# leading run of "<N> <unit>" pairs only; anything after it (a window note, say) is ignored.
 _rc_parse_relative() {
     local rest="$1" total=0 found=0 n unit mult
-    local re='^[^0-9]*([0-9]+) *(day|hour|hr|minute|min|second|sec)s?(.*)$'
+    local re='^[ ,]*(and +)?([0-9]+) *(day|hour|hr|minute|min|second|sec)s?(.*)$'
     while [[ "$rest" =~ $re ]]; do
-        n="${BASH_REMATCH[1]}"
-        unit="${BASH_REMATCH[2]}"
-        rest="${BASH_REMATCH[3]}"
+        n="${BASH_REMATCH[2]}"
+        unit="${BASH_REMATCH[3]}"
+        rest="${BASH_REMATCH[4]}"
         case "$unit" in
             day) mult=86400 ;;
             hour | hr) mult=3600 ;;
@@ -153,19 +170,23 @@ resume_parse_reset() {
     now="$(_rc_now)"
 
     case "$low" in
-        *"resets in "* | *"reset in "*)
-            _rc_parse_relative "${low#*in }"
+        *"resets in "*)
+            _rc_parse_relative "${low#*resets in }"
+            return $?
+            ;;
+        *"reset in "*)
+            _rc_parse_relative "${low#*reset in }"
             return $?
             ;;
     esac
 
-    local re_abs='resets? +(([a-z]{3})[a-z]* +([0-9]{1,2}),? +(at +)?)?([0-9]{1,2})(:([0-9]{2}))? *(am|pm)'
+    local re_abs='resets? +(at +)?(([a-z]{3})[a-z]* +([0-9]{1,2}),? +(at +)?)?([0-9]{1,2})(:([0-9]{2}))? *(am|pm)'
     [[ "$low" =~ $re_abs ]] || return 1
-    mon="${BASH_REMATCH[2]}"
-    day="${BASH_REMATCH[3]}"
-    hour="${BASH_REMATCH[5]}"
-    min="${BASH_REMATCH[7]:-00}"
-    ampm="${BASH_REMATCH[8]}"
+    mon="${BASH_REMATCH[3]}"
+    day="${BASH_REMATCH[4]}"
+    hour="${BASH_REMATCH[6]}"
+    min="${BASH_REMATCH[8]:-00}"
+    ampm="${BASH_REMATCH[9]}"
 
     hour=$((10#$hour))
     [ "$hour" -ge 1 ] && [ "$hour" -le 12 ] || return 1
@@ -185,7 +206,7 @@ resume_parse_reset() {
     if [ -n "$zone" ]; then
         _rc_zone_ok "$zname" || return 1
     else
-        zname="${TZ:-}"
+        zname=""
     fi
 
     local hhmm
@@ -282,28 +303,38 @@ resume_is_interrupt_marker() {
 
 # jq predicates shared by the record helpers. $r is one transcript record.
 _RC_JQ_DEFS='
-def texts: (.message.content // empty) | if type == "string" then [.] else [.[]? | select(type == "object" and .type == "text") | .text] end;
-def is_interrupt: (.type == "user") and ([texts] | flatten | map(select(. == "[Request interrupted by user]" or . == "[Request interrupted by user for tool use]")) | length > 0);
+def texts: (.message.content // empty)
+  | if type == "string" then [.] else [.[]? | select(type == "object" and .type == "text") | .text] end;
+def is_interrupt: (.type == "user")
+  and ([texts] | flatten
+       | map(select(. == "[Request interrupted by user]" or . == "[Request interrupted by user for tool use]"))
+       | length > 0);
+def is_turn_close: .type == "system" and .subtype == "turn_duration";
 def is_bookkeeping:
-  (.type as $t | ["last-prompt","permission-mode","pr-link","cost-state","file-history-snapshot","attachment"] | index($t) != null)
-  or (.type == "system" and (.subtype == "stop_hook_summary" or .subtype == "turn_duration"));
+  (.type as $t
+   | ["last-prompt","permission-mode","pr-link","cost-state","file-history-snapshot","attachment"]
+   | index($t) != null)
+  or (.type == "system" and .subtype == "stop_hook_summary")
+  or is_turn_close;
 '
 
 resume_record_is_interrupt() {
     printf '%s' "${1:-}" | jq -e "$_RC_JQ_DEFS is_interrupt" >/dev/null 2>&1
 }
 
-# turn_duration is skipped by last_meaningful_record (the real sleep-interrupted tail has one after
-# the synthetic error); use this to see it as a turn-close marker when a caller needs that.
+# turn_duration is bookkeeping (skipped by last_meaningful_record: the real sleep-interrupted tail has one
+# after the synthetic error). It is also the clean turn-close marker; resume_last_meaningful_with_close
+# reports whether one follows the last meaningful record.
 resume_record_is_clean_close() {
-    printf '%s' "${1:-}" | jq -e '.type == "system" and .subtype == "turn_duration"' >/dev/null 2>&1
+    printf '%s' "${1:-}" | jq -e "$_RC_JQ_DEFS is_turn_close" >/dev/null 2>&1
 }
 
 resume_record_is_bookkeeping() {
     printf '%s' "${1:-}" | jq -e "$_RC_JQ_DEFS is_bookkeeping" >/dev/null 2>&1
 }
 
-# "<lineno><TAB><json>" of the last meaningful record in the last N lines of FILE.
+# "<close><TAB><lineno><TAB><json>" of the last meaningful record in the last N lines of FILE; close is
+# 1 when a turn_duration record follows it, else 0.
 _rc_last_meaningful() {
     local file="${1:-}" n="${2:-60}" total skip
     [ -f "$file" ] || return 1
@@ -315,14 +346,20 @@ _rc_last_meaningful() {
     tail -n "$n" "$file" | jq -R -r --argjson off "$skip" "$_RC_JQ_DEFS"'
         (try fromjson catch null) as $r
         | select($r != null and ($r | type) == "object")
-        | select($r | is_bookkeeping | not)
-        | "\(input_line_number + $off)\t\($r | tojson)"' | tail -n 1
+        | if ($r | is_turn_close) then "C"
+          elif ($r | is_bookkeeping) then empty
+          else "M\t\(input_line_number + $off)\t\($r | tojson)" end' |
+        awk -F '\t' '
+            $1 == "M" { last = substr($0, 3); cc = 0 }
+            $1 == "C" { cc = 1 }
+            END { if (last != "") print cc "\t" last }'
 }
 
 resume_last_meaningful_record() {
     local out
     out="$(_rc_last_meaningful "$@")" || return 1
     [ -n "$out" ] || return 1
+    out="${out#*$'\t'}"
     printf '%s\n' "${out#*$'\t'}"
 }
 
@@ -330,7 +367,19 @@ resume_last_meaningful_line() {
     local out
     out="$(_rc_last_meaningful "$@")" || return 1
     [ -n "$out" ] || return 1
+    out="${out#*$'\t'}"
     printf '%s\n' "${out%%$'\t'*}"
+}
+
+# "<true|false><TAB><record>": the last meaningful record plus trailing_clean_close.
+resume_last_meaningful_with_close() {
+    local out flag
+    out="$(_rc_last_meaningful "$@")" || return 1
+    [ -n "$out" ] || return 1
+    flag=false
+    [ "${out%%$'\t'*}" = "1" ] && flag=true
+    out="${out#*$'\t'}"
+    printf '%s\t%s\n' "$flag" "${out#*$'\t'}"
 }
 
 resume_tail_interrupted() {
