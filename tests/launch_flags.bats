@@ -38,9 +38,9 @@ MOCK
     [ "$status" -eq 0 ]
 }
 
-@test "drone: every interactive claude launch (4 sites) carries the flags" {
+@test "drone: every interactive claude launch (3 sites: _drone_claude_cmd, claude, feature) carries the flags" {
     run grep -cE '"claude --model \$\{BORG_CLAUDE_MODEL:-opus\} --effort \$\{BORG_CLAUDE_EFFORT:-xhigh\}"' "$DRONE_SRC"
-    [ "$output" -eq 4 ]
+    [ "$output" -eq 3 ]
 }
 
 @test "drone: no bare claude launch remains" {
