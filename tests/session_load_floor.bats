@@ -47,14 +47,14 @@ _check() {
 }
 
 @test "surface 1 fires: a second versioned plugin dir is red with both counts" {
-    _events 2 - 1 2 > "$BATS_TEST_TMPDIR/e.jsonl"
+    _events 2 - 2 2 > "$BATS_TEST_TMPDIR/e.jsonl"
     _check "$BATS_TEST_TMPDIR/e.jsonl"
     [ "$status" -eq 1 ]
     [[ "$output" == *"plugin borg-collective: observed 2 of 1 authored"* ]] || false
 }
 
 @test "surface 1 holds: one plugin dir is green, 'skills: observed N of N authored'" {
-    _events 1 - 1 2 > "$BATS_TEST_TMPDIR/e.jsonl"
+    _events 1 - 2 2 > "$BATS_TEST_TMPDIR/e.jsonl"
     _check "$BATS_TEST_TMPDIR/e.jsonl"
     [ "$status" -eq 0 ]
     [[ "$output" == *"CHECK pass skills plugin borg-collective: loaded once"* ]] || false
@@ -63,30 +63,30 @@ _check() {
 
 @test "surface 2 fires: an extension symlink colliding with a plugin skill is registered twice" {
     ln -s "$BORG_HOME/skills/borg-plan" "$CH/skills/borg-plan"
-    _events 1 borg-plan 1 2 > "$BATS_TEST_TMPDIR/e.jsonl"
+    _events 1 borg-plan 2 2 > "$BATS_TEST_TMPDIR/e.jsonl"
     _check "$BATS_TEST_TMPDIR/e.jsonl"
     [ "$status" -eq 1 ]
     [[ "$output" == *"skill borg-plan: surplus, observed 2 of 1 authored"* ]] || false
 }
 
 @test "surface 2 holds: the bundled bare simplify with no symlink is not a collision" {
-    _events 1 simplify 1 2 > "$BATS_TEST_TMPDIR/e.jsonl"
+    _events 1 simplify 2 2 > "$BATS_TEST_TMPDIR/e.jsonl"
     _check "$BATS_TEST_TMPDIR/e.jsonl"
     [ "$status" -eq 0 ]
 }
 
 @test "surface 3 fires: one logical event executing twice is red with both counts" {
-    _events 1 - 2 2 > "$BATS_TEST_TMPDIR/e.jsonl"
+    _events 1 - 3 2 > "$BATS_TEST_TMPDIR/e.jsonl"
     _check "$BATS_TEST_TMPDIR/e.jsonl"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"hooks SessionStart: surplus, fired 2 of 1 authored"* ]] || false
+    [[ "$output" == *"hooks SessionStart: surplus, fired 3 of 2 authored"* ]] || false
 }
 
 @test "surface 3 holds: exactly the authored count per event is green; a missing hook is a named shortfall" {
-    _events 1 - 1 2 > "$BATS_TEST_TMPDIR/e.jsonl"
+    _events 1 - 2 2 > "$BATS_TEST_TMPDIR/e.jsonl"
     _check "$BATS_TEST_TMPDIR/e.jsonl"
     [ "$status" -eq 0 ]
-    _events 1 - 1 1 > "$BATS_TEST_TMPDIR/s.jsonl"
+    _events 1 - 2 1 > "$BATS_TEST_TMPDIR/s.jsonl"
     _check "$BATS_TEST_TMPDIR/s.jsonl"
     [ "$status" -eq 1 ]
     [[ "$output" == *"hooks Stop: shortfall, fired 1 of 2 authored"* ]] || false
@@ -95,16 +95,16 @@ _check() {
 @test "surface 4 fires: a literal-path hook entry in settings.json beside the plugin's is named" {
     printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"","hooks":[{"type":"command","command":"/h/.claude/hooks/borg-link-down.sh"}]}]}}' \
         > "$CH/settings.json"
-    _events 1 - 2 2 > "$BATS_TEST_TMPDIR/e.jsonl"
+    _events 1 - 3 2 > "$BATS_TEST_TMPDIR/e.jsonl"
     _check "$BATS_TEST_TMPDIR/e.jsonl"
     [ "$status" -eq 1 ]
-    [[ "$output" == *"fired 2 of 1 authored"* ]] || false
+    [[ "$output" == *"fired 3 of 2 authored"* ]] || false
     [[ "$output" == *"borg-link-down.sh"* ]] || false
 }
 
 @test "surface 4 holds: a non-borg settings.json hook is baseline, not a surplus" {
     printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"/h/session-log.sh"}]}]}}' > "$CH/settings.json"
-    _events 1 - 1 3 > "$BATS_TEST_TMPDIR/e.jsonl"
+    _events 1 - 2 3 > "$BATS_TEST_TMPDIR/e.jsonl"
     _check "$BATS_TEST_TMPDIR/e.jsonl"
     [ "$status" -eq 0 ]
 }
@@ -145,11 +145,11 @@ _live() {
 }
 
 @test "run.sh live: a clean canned session exits 0; a planted duplicate exits 1 with both counts" {
-    _events 1 - 1 2 > "$BATS_TEST_TMPDIR/clean.jsonl"
+    _events 1 - 2 2 > "$BATS_TEST_TMPDIR/clean.jsonl"
     _stub_claude "$BATS_TEST_TMPDIR/clean.jsonl"
     _live "$BATS_TEST_TMPDIR/claude"
     [ "$status" -eq 0 ]
-    _events 2 - 1 2 > "$BATS_TEST_TMPDIR/dup.jsonl"
+    _events 2 - 2 2 > "$BATS_TEST_TMPDIR/dup.jsonl"
     _stub_claude "$BATS_TEST_TMPDIR/dup.jsonl"
     _live "$BATS_TEST_TMPDIR/claude"
     [ "$status" -eq 1 ]
@@ -164,7 +164,7 @@ _live() {
 }
 
 @test "run.sh live: --skills-only grades no hooks and --hooks-only grades no skills" {
-    _events 1 - 1 2 > "$BATS_TEST_TMPDIR/clean.jsonl"
+    _events 1 - 2 2 > "$BATS_TEST_TMPDIR/clean.jsonl"
     _stub_claude "$BATS_TEST_TMPDIR/clean.jsonl"
     _live "$BATS_TEST_TMPDIR/claude" --skills-only
     [ "$status" -eq 0 ]
