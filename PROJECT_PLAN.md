@@ -11,15 +11,21 @@ Screen 2 of `docs/plans/directives/2026-10-05-board-chooser-and-trains-ux.md` (i
 
 ## Acceptance Criteria
 
-- [ ] **AC1 — `--switch` unchanged; the chooser lists candidates.** The first commit adds a characterisation case: `borg next --switch` against a populated fixture registry, with the window target asserted. It lands green on unchanged code and stays green, unchanged, through every later commit. `borg next --pick 1` against the same fixture lists one row per candidate. A project with a manifest carries an owner of yours, mine or unsure; one without carries blank cells. The chooser runs only when `-t 0 && -t 1`; otherwise `borg next` prints today's output.
+- [x] **AC1 — `--switch` unchanged; the chooser lists candidates.** The first commit adds a characterisation case: `borg next --switch` against a populated fixture registry, with the window target asserted. It lands green on unchanged code and stays green, unchanged, through every later commit. `borg next --pick 1` against the same fixture lists one row per candidate. A project with a manifest carries an owner of yours, mine or unsure; one without carries blank cells. The chooser runs only when `-t 0 && -t 1`; otherwise `borg next` prints today's output. *(flipped by link-up: bats:tests/next_chooser.bats exited 0)*
   - Verify: `bats tests/next_chooser.bats`; `git diff` of the characterisation case between its first commit and the final head is empty.
-- [ ] **AC2 — Every `borg next` run appends one row to `next-recs.jsonl`.**
+  - Evidence: `bats:tests/next_chooser.bats`
+  - Shipped: Shipped in https://github.com/noah-goodrich/borg-collective/pull/274 and https://github.com/noah-goodrich/borg-collective/pull/275. Proof: next_chooser.bats cases `next --switch: tied top scores go to the OLDEST last_activity; archived pin is excluded`, `next --pick 1: switches to the top row and logs a scripted chooser row`, and `chooser: --pick and --switch never draw the chooser even with the seam set`; the characterisation cases are unchanged since 5fc0122 (only the tmux mock setup was widened).
+- [x] **AC2 — Every `borg next` run appends one row to `next-recs.jsonl`.** *(flipped by link-up: bats:tests/next_chooser.bats exited 0)*
   - **Location:** `<paths.state_root()>/next-recs.jsonl`, written from the Python core after `retention.rotate_log`, and fail-open.
   - **Fields:** those listed in the directive (`ts`, `session`, `shown`, `top3`, `rec`, `opened`, `opened_after_s`, `active`, `switch`, `chooser`), plus `scripted`, which is true for `--pick` runs so scripted picks never count as your choices.
   - **Non-chooser rows:** `chooser: false` rows carry `shown: false` and null `rec`, `opened` and `opened_after_s`.
   - Verify: pytest on the pure row builder; bats, with `XDG_STATE_HOME` set explicitly in setup, asserts one well-formed row each for `--pick 1`, `--switch`, and a non-TTY bare run.
-- [ ] **AC3 — The suggestion is shown only once it has been earned.** The gate is a follow rate of at least 60% over at least 20 rows with `chooser: true` and `scripted: false`. Below that, the suggestion is computed and logged with `shown: false` and never drawn.
+  - Evidence: `bats:tests/next_chooser.bats`
+  - Shipped: Shipped in https://github.com/noah-goodrich/borg-collective/pull/274. Proof: next_chooser.bats cases `next --pick 1: switches to the top row and logs a scripted chooser row`, `next --switch: logs one chooser:false row with null rec and opened`, `next (non-TTY bare run): prints the recommendation and logs a chooser:false row`; pytest `test_log_row_shape_and_top3` and `test_log_row_non_chooser_blanks_shown_rec_opened` in borg_core/nextpick/test_core.py.
+- [x] **AC3 — The suggestion is shown only once it has been earned.** The gate is a follow rate of at least 60% over at least 20 rows with `chooser: true` and `scripted: false`. Below that, the suggestion is computed and logged with `shown: false` and never drawn. *(flipped by link-up: pytest:borg_core/nextpick/test_core.py exited 0)*
   - Verify: pytest over fixture logs: 19 rows at 100% shows nothing; 20 at 55% shows nothing; 20 at 60% shows it; 20 scripted rows at 100% shows nothing.
+  - Evidence: `pytest:borg_core/nextpick/test_core.py`
+  - Shipped: Shipped in https://github.com/noah-goodrich/borg-collective/pull/275. Proof: `test_gate_needs_min_rows`, `test_gate_below_threshold`, `test_gate_at_threshold`, `test_gate_ignores_scripted_rows`.
 - [ ] **AC4 — Nothing breaks.** `make test && make test-bats && make lint` are green. `borg help` is unchanged, since no command is added.
   - Verify: the three make targets; the help-count case in `tests/cli_contract.bats` stays at its current value.
 
@@ -27,9 +33,11 @@ Screen 2 of `docs/plans/directives/2026-10-05-board-chooser-and-trains-ux.md` (i
 
 In a smoke test, the shipped chooser listed one row per project, with next step, owner and ready all blank. The cells were blank because they were read from manifests, and only 2 of 16 projects have any manifest rows. The mock shows one row per piece of work, each with an owner and readiness. These criteria close that gap with data borg already sweeps live, and no manifest backfill.
 
-- [ ] **AC5 — The sweep sees every open PR and its readiness.** `recon-adapter-github` includes every OPEN PR in a swept repo whatever the since-mark. Today stillpoint-labs/ingle#394 is open and missing. Each item gains additive fields `draft`, `checks` (`pass`, `fail`, `pending` or `none`), `mergeable` and `review_decision`.
+- [x] **AC5 — The sweep sees every open PR and its readiness.** `recon-adapter-github` includes every OPEN PR in a swept repo whatever the since-mark. Today stillpoint-labs/ingle#394 is open and missing. Each item gains additive fields `draft`, `checks` (`pass`, `fail`, `pending` or `none`), `mergeable` and `review_decision`. *(flipped by link-up: bats:tests/recon_adapter_github.bats exited 0)*
   - Verify: bats through a `gh` stub: an open PR last updated before the since-mark is present; the four new fields map from the stub's GraphQL; merged and closed PRs still honour the since-mark.
-- [ ] **AC6 — Rows are work items with an owner and readiness.** A pure `nextpick` function builds one row per actionable item:
+  - Evidence: `bats:tests/recon_adapter_github.bats`
+  - Shipped: Shipped in https://github.com/noah-goodrich/borg-collective/pull/277. Proof: recon_adapter_github.bats cases `adapter: an open PR last updated before the mark is present`, `adapter: a merged PR before the mark is absent, and an open PR in both lists is not doubled`, `adapter: checks maps statusCheckRollup state, and a missing rollup is none`, `adapter: draft, mergeable and review_decision pass through as GitHub reports them`.
+- [x] **AC6 — Rows are work items with an owner and readiness.** A pure `nextpick` function builds one row per actionable item: *(flipped by link-up: pytest:borg_core/nextpick/test_core.py exited 0)*
   - **Waiting session:** "reply to session", owner YOU, ready ✔ with its age.
   - **Open PR, not draft, not conflicting, checks pass or none (no CI configured), no changes requested; UNKNOWN mergeability counts as mergeable because GitHub reports it while still computing:** "merge #N", owner YOU, ready ✔.
   - **Checks pending:** "#N CI", owner AGENT, ready "… run".
@@ -42,6 +50,8 @@ In a smoke test, the shipped chooser listed one row per project, with next step,
 
   Owner is decided by these rules, never by PR author, since every PR is authored as Noah. The item column is the PR title (short) or plan name until trains exist. Projects with no rows are listed in `quiet`. The ranking stays `cmd_next`'s project order, and items within a project follow the rule order above.
   - Verify: pytest for every rule, including a project with several items and a quiet project.
+  - Evidence: `pytest:borg_core/nextpick/test_core.py`
+  - Shipped: Shipped in https://github.com/noah-goodrich/borg-collective/pull/277 (rules) and https://github.com/noah-goodrich/borg-collective/pull/283 (YOU cap). Proof: `test_work_items_pr_rule_precedence`, `test_work_items_ignores_closed_prs_and_author`, `test_work_items_several_prs_order_you_first_then_agent_by_number`, `test_work_items_waiting_session_first`, `test_work_items_plan_row_and_suppression`, `test_work_items_checkpoint_fallback_and_quiet_and_order`.
 - [ ] **AC7 — The skill and the terminal view both show item rows.** `borg next --rows --json` emits item rows; `/borg-next` and the TTY chooser render them in the mock's columns (project · item, next step, owner, ready) with quiet projects collapsed; `--open` opens the item's project.
   - Verify: bats on `--rows --json` against fixtures; a smoke run of `/borg-next-preview` on the real registry shows at least one YOU row and one AGENT row.
 
