@@ -19,15 +19,25 @@ workstream. Every new reader has to learn which sense is in play per call site.
 ## Measured scope
 
 PROJECT_PLAN's Scope Boundaries estimates "~500 occurrences across 57+ files plus the registry schema key and
-`.borg-project` markers." Re-measured 2026-08-31 over tracked `*.py` / `*.zsh` / `*.sh` / `*.bats`:
+`.borg-project` markers." Re-measured 2026-10-12 at commit `a2744df` over tracked `*.py` / `*.zsh` / `*.sh` / `*.bats`:
 
 ```
-git ls-files "*.py" "*.zsh" "*.sh" "*.bats" | xargs grep -oiE "project(s)?" | wc -l   ->  3142
-git ls-files "*.py" "*.zsh" "*.sh" "*.bats" | xargs grep -liE "project"    | wc -l   ->    97
+git ls-files "*.py" "*.zsh" "*.sh" "*.bats" \
+  | xargs grep -oiE "project(s)?" | wc -l   ->  3911
+git ls-files "*.py" "*.zsh" "*.sh" "*.bats" \
+  | xargs grep -liE "project" | wc -l       ->   148
 ```
 
-**3142 occurrences across 97 of 139 tracked code files** — roughly six times the plan's estimate, and it does not
-include markdown. Heaviest: `drone.zsh` (307), `tests/cli_contract.bats` (247), `borg.zsh` (232),
+**3911 occurrences across 148 of 295 tracked code files** — roughly eight times the plan's estimate, and it does not
+include markdown. Heaviest: `drone.zsh` (469), `borg.zsh` (306), `tests/cli_contract.bats` (286),
+`borg_core/link/test_core.py` (134), `borg_core/link/test_shell.py` (118), `borg_core/link/core.py` (112).
+
+The site inventory classifies all 3911 (2605 repository, 1023 contract, 183 external, 48 noise, 45 workstream, 7
+ambiguous): `assets/2026-10-12-project-rename-inventory.md` and its `.tsv`. `noise` is the English word projection or
+projected, or the verb "to project", which is not the noun at all; `repository` (2605) is the edit scope.
+
+History, measured 2026-08-31 (the tree has grown since; superseded by the figures above): 3142 occurrences across 97
+of 139 tracked code files. Heaviest then: `drone.zsh` (307), `tests/cli_contract.bats` (247), `borg.zsh` (232),
 `borg_core/link/test_core.py` (85), `borg_core/link/test_shell.py` (80), `borg_core/link/core.py` (77).
 
 Three surfaces are not a sed pass:
@@ -46,8 +56,9 @@ Three surfaces are not a sed pass:
 Rename the *repository* sense of `project` to `repository`, leaving the *workstream* sense alone. Sequence it so
 each step is independently green:
 
-1. **Classify before renaming.** Produce the site inventory: for each of the 97 files, which occurrences mean
-   repository and which mean workstream. This is the actual work; the edit is mechanical afterward.
+1. **Classify before renaming.** Produce the site inventory (done, see Acceptance criteria): for each of the 97 files
+   (148 at the 2026-10-12 re-measure), which occurrences mean repository and which mean workstream. This is the
+   actual work; the edit is mechanical afterward.
 2. **Registry key last, behind a reader that accepts both.** Ship a reader tolerant of `projects` and
    `repositories`, let it run, then migrate the file, then drop the tolerance.
 3. **`.borg-project` marker: decide whether to rename it at all.** A marker filename is not a user-facing surface,
@@ -58,9 +69,15 @@ each step is independently green:
 
 ## Acceptance criteria
 
-- [ ] **A site inventory exists** classifying every occurrence as repository-sense or workstream-sense, with the
+- [x] **A site inventory exists** classifying every occurrence as repository-sense or workstream-sense, with the
       workstream-sense sites listed explicitly so a later reader can see they were considered, not missed.
   - Verify: the inventory's total reconciles with the measured 3142, and a spot-check of 20 random sites agrees.
+  - Done 2026-10-12: `assets/2026-10-12-project-rename-inventory.md` (+ `.tsv`), pinned to `a2744df`. Reconciles
+    against the re-measured 3911 (the 3142 above predates tree growth), row by row; three blind spot-checks of 20
+    (seeds 11, 29, 47, committed under `assets/`) agreed 60 of 60. A later pass added the `noise` sense and moved 48
+    rows into it (from repository 9, external 30, ambiguous 9). Open for a human, not blocking this criterion: 7
+    ambiguous rows and the judgment calls listed under "Known limits" in the inventory, which fix what the rename PRs
+    may touch.
 - [ ] **The repository-sense rename lands** across `borg_core/`, `lib/`, `hooks/`, `borg.zsh`, `drone.zsh` and tests.
   - Verify: `make test` at the coverage floor, `make lint` exit 0, `bats tests/` green after each step, not just at
     the end.

@@ -1,0 +1,20 @@
+lib/desktop.zsh	5	1	Project	external	Claude Desktop's own Project feature
+drone.zsh	748	1	project	repository	registered repo / its dir or name
+borg.zsh	3168	1	project	repository	registered repo / user-facing text
+borg_core/link/render.py	1018	2	projects	contract	registry/document JSON key `projects`/`project`
+borg_core/link/test_core.py	528	1	project	repository	registered repo entry / its name
+borg_core/link/cli.py	234	2	project	repository	registered repo / identifier or prose about one
+hooks/borg-notify.sh	29	2	project	repository	project dir/name found from CWD
+tests/plan_promote.bats	127	1	PROJECT	contract	PROJECT_PLAN.md filename
+borg_core/link/core.py	228	1	project	repository	registered repo / identifier or prose about one
+borg.zsh	533	1	projects	repository	registered repo / user-facing text
+borg.zsh	629	2	project	repository	registered repo / user-facing text
+tests/briefing.bats	323	2	project	repository	PROJECT: label in prompt text + fixture repo name
+drone.zsh	578	2	project	repository	registered repo / its dir or name
+borg_core/nextpick/core.py	128	2	project	repository	ranked registry entry / repo
+borg.zsh	2404	1	project	contract	wakes JSON .project field
+borg_core/registry/test_cli.py	72	1	projects	contract	registry JSON key projects
+drone.zsh	345	1	project	repository	registered repo / its dir or name
+drone.zsh	1269	1	project	repository	registered repo / its dir or name
+drone.zsh	9	1	project	repository	registered repo / its dir or name
+evals/lifecycle-manifests/run.sh	269	1	project	repository	eval helper building a repo fixture

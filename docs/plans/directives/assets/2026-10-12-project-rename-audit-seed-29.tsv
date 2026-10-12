@@ -1,0 +1,20 @@
+borg_core/link/render.py	677	1	project	repository	registered repo / identifier or prose about one
+drone.zsh	909	1	project	repository	registered repo / its dir or name
+evals/session-load/run.sh	36	1	project	repository	project-mode session = repo cwd session
+borg_core/link/test_render.py	559	1	projects	repository	registered repo / registry entry (name, path or dir)
+borg_core/recon/test_core.py	221	1	project	repository	registry entry / repo dir (code or test name)
+borg_core/link/test_render.py	1591	1	projects	repository	registered repo / registry entry (name, path or dir)
+install.sh	516	1	project	repository	drone down arg
+drone.zsh	1129	1	project	repository	registered repo / its dir or name
+borg_core/link/core.py	197	1	project	repository	registered repo / identifier or prose about one
+docs/infoviz/harness/build-specimens.py	113	2	project	repository	fixture registry repo name
+hooks/borg-notify.sh	40	1	PROJECT	repository	project dir/name found from CWD
+borg.zsh	630	2	project	repository	registered repo / user-facing text
+borg.zsh	1707	1	project	repository	registered repo / user-facing text
+drone.zsh	245	1	project	external	docker compose project name/label
+drone.zsh	504	2	project	repository	registered repo / its dir or name
+drone.zsh	1312	1	project	repository	registered repo / its dir or name
+borg_core/recon/test_core.py	370	1	project	repository	registry entry / repo dir (code or test name)
+borg_core/link/test_core.py	161	1	projects	contract	registry/link JSON key projects
+tests/next_chooser.bats	53	1	projects	contract	registry/link --json/wire key or fixture pinning it
+tests/state.bats	17	2	project	repository	invented repo name myproject
