@@ -131,14 +131,26 @@ _rw_find_uuid() {
     ' 2>/dev/null | head -n 1 | grep .
 }
 
-# The ACTIVE record file for (sid, scope), if any.
+# The MERGEABLE record file for (sid, scope), if any. A confirmed record is excluded on purpose: it awaits its
+# done rules and another record of the scope may be the real merge target.
 _rw_find_active() {
     local _s="$1" _c="$2" _files
     _files="$(_rw_files pending)"
     [ -n "$_files" ] || return 1
     printf '%s\n' "$_files" | tr '\n' '\0' | xargs -0 jq -r --arg s "$_s" --arg c "$_c" "
-        select(.sid == \$s and .scope == \$c and (.state | IN($_RW_ACTIVE))) | input_filename
+        select(.sid == \$s and .scope == \$c and (.state | IN($_RW_MERGEABLE))) | input_filename
     " 2>/dev/null | head -n 1 | grep .
+}
+
+# A recent uuid-less notify_only record (hook-only evidence) in done/ for (sid, scope), if any.
+_rw_find_uuidless_notify() {
+    local _s="$1" _c="$2" _t="$3" _files
+    _files="$(_rw_files "done")"
+    [ -n "$_files" ] || return 1
+    printf '%s\n' "$_files" | tr '\n' '\0' | xargs -0 jq -r --arg s "$_s" --arg c "$_c" --argjson t "$_t" '
+        select(.sid == $s and .scope == $c and .state == "notify_only" and (.evidence.uuid == null)
+               and ((.first_seen // 0) >= $t - 21600)) | input_filename
+    ' 2>/dev/null | head -n 1 | grep .
 }
 
 # How many records (any state) exist for (sid, scope); drives the attempt counter.
@@ -193,12 +205,15 @@ _rw_state_ensure() {
 # ingest: ONE entry point for both detectors
 # ---------------------------------------------------------------------------------------------
 
-# _rw_ingest <sid> <scope> <source: hook|scan> <error> <text> <uuid-or-empty> <line-or-empty>
+# _rw_ingest <sid> <scope> <source: hook|scan> <error> <text> <uuid-or-empty> <line-or-empty> <error-epoch-or-empty>
 _rw_ingest() {
     local _sid="$1" _scope="$2" _src="$3" _err="${4:-unknown}" _text="${5:-}" _uuid="${6:-}" _line="${7:-}"
-    local _now _plan _class _action _ra _f _st _rid _attempt _state _rt _dir _prev
+    local _ets="${8:-}" _now _plan _class _action _ra _f _rid _attempt _state _rt _dir _prev
     [ -n "$_err" ] || _err="unknown"
     _now="$(_rc_now)"
+    # Plan and first_seen use the ERROR's own time: a late detection must not push an absolute reset a day out.
+    case "$_ets" in "" | *[!0-9]*) _ets="$_now" ;; esac
+    [ "$_ets" -le "$_now" ] || _ets="$_now"
 
     if [ -n "$_uuid" ]; then
         if _f="$(_rw_find_uuid "$_uuid")"; then
@@ -214,22 +229,26 @@ _rw_ingest() {
             esac
             return 0
         fi
+        # A hook-only notify record (no uuid, already in done/) takes the scan's uuid instead of a twin.
+        if _f="$(_rw_find_uuidless_notify "$_sid" "$_scope" "$_ets")"; then
+            _rw_update "$_f" --arg s "$_src" --arg u "$_uuid" --argjson l "${_line:-null}" '
+                .detected_by = ((.detected_by + [$s]) | unique)
+                | .evidence.uuid = $u | .evidence.uuids = (((.evidence.uuids // []) + [$u]) | unique)
+                | .evidence.transcript_line = (if $l == null then .evidence.transcript_line else $l end)'
+            _rw_log "converged uuid=$_uuid into ${_f##*/}"
+            return 0
+        fi
     fi
 
     _attempt=0
     _f=""
-    if _f="$(_rw_find_active "$_sid" "$_scope")"; then
-        _st="$(jq -r .state "$_f" 2>/dev/null)"
-        case "$_st" in
-            confirmed) _f="" ;;
-        esac
-    fi
+    _f="$(_rw_find_active "$_sid" "$_scope")" || _f=""
     if [ -z "$_f" ]; then
         _attempt="$(_rw_count_key "$_sid" "$_scope")"
     else
         _attempt="$(jq -r '.attempt // 0' "$_f" 2>/dev/null)"
     fi
-    _plan="$(resume_plan "$_err" "$_text" "$_attempt" 2>/dev/null)"
+    _plan="$(BORG_RESUME_NOW_EPOCH="$_ets" resume_plan "$_err" "$_text" "$_attempt" 2>/dev/null)"
     _class="${_plan%% *}"
     _plan="${_plan#* }"
     _action="${_plan%% *}"
@@ -258,7 +277,7 @@ _rw_ingest() {
                         .state = "notify_only" | .state_log += [["notify_only", $now]] else . end)
                else . end)' || return 0
         _rw_n_merged=$((_rw_n_merged + 1))
-        _rw_log "merged sid=$_sid scope=$_scope src=$_src uuid=${_uuid:-none} -> $(basename "$_f" .json)"
+        _rw_log "merged sid=$_sid scope=$_scope src=$_src uuid=${_uuid:-none} -> ${_f##*/}"
         return 0
     fi
 
@@ -271,14 +290,15 @@ _rw_ingest() {
     fi
     jq -n -c --arg rid "$_rid" --arg sid "$_sid" --arg scope "$_scope" --arg class "$_class" --arg action "$_action" \
         --arg err "$_err" --arg rt "$_rt" --arg src "$_src" --arg uuid "$_uuid" --argjson line "$_line" \
-        --argjson now "$_now" --argjson ra "$_ra" --argjson attempt "$_attempt" --arg state "$_state" '
+        --argjson now "$_now" --argjson ets "$_ets" --argjson ra "$_ra" \
+        --argjson attempt "$_attempt" --arg state "$_state" '
         {
             rid: $rid, sid: $sid, scope: $scope, class: $class, action: $action, error: $err,
             reset_text: (if $rt == "" then null else $rt end),
             detected_by: [$src],
             evidence: {transcript_line: $line, uuid: (if $uuid == "" then null else $uuid end),
                        uuids: (if $uuid == "" then [] else [$uuid] end)},
-            first_seen: $now, resume_at: $ra, attempt: $attempt,
+            first_seen: $ets, resume_at: $ra, attempt: $attempt,
             state: $state, state_log: [[$state, $now]], inject_tries: 0, notified: false
         }' | borg_resume_write_atomic "$(borg_resume_dir)/$_dir/$_rid.json" || return 0
     _rw_state_ensure "$_sid"
@@ -310,10 +330,11 @@ _rw_close_interrupted() {
 # ---------------------------------------------------------------------------------------------
 
 # Classify the tail of a transcript for (sid, scope). Prints one of:
-#   error<US>error<US>text<US>uuid<US>line (US = unit separator 0x1f, so empty fields survive read) | interrupt | none
+#   error<US>error<US>text<US>uuid<US>line<US>epoch (US = unit separator 0x1f, so empty fields survive read)
+#   | interrupt | none (transcript reachable, no error at its tail) | absent (no transcript to look at)
 _rw_tail_verdict() {
-    local _file="$1" _out _rec _se _e _tx _uuid _line
-    [ -f "$_file" ] || { printf 'none\n'; return 0; }
+    local _file="$1" _out _rec _se _e _tx _uuid _line _ts
+    [ -f "$_file" ] || { printf 'absent\n'; return 0; }
     _out="$(resume_last_meaningful_with_close "$_file" 60 2>/dev/null)"
     [ -n "$_out" ] || { printf 'none\n'; return 0; }
     _rec="${_out#*$'\t'}"
@@ -324,7 +345,9 @@ _rw_tail_verdict() {
         _tx="${_tx%$'\t'*}"
         _line="$(resume_last_meaningful_line "$_file" 60 2>/dev/null)"
         _uuid="$(printf '%s' "$_rec" | jq -r --arg l "$_line" '.uuid // ("L" + $l)' 2>/dev/null)"
-        printf 'error%s%s%s%s%s%s%s%s\n' "$_RW_SEP" "$_e" "$_RW_SEP" "$_tx" "$_RW_SEP" "$_uuid" "$_RW_SEP" "$_line"
+        _ts="$(printf '%s' "$_rec" | jq -r '(.timestamp // empty) | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601' 2>/dev/null)"
+        printf 'error%s%s%s%s%s%s%s%s%s%s\n' "$_RW_SEP" "$_e" "$_RW_SEP" "$_tx" "$_RW_SEP" "$_uuid" "$_RW_SEP" \
+            "$_line" "$_RW_SEP" "$_ts"
         return 0
     fi
     if resume_record_is_interrupt "$_rec"; then
@@ -336,14 +359,14 @@ _rw_tail_verdict() {
 
 # Apply a verdict to a scope.
 _rw_apply_verdict() {
-    local _sid="$1" _scope="$2" _src="$3" _v="$4" _kind _e _tx _uuid _line
+    local _sid="$1" _scope="$2" _src="$3" _v="$4" _kind _e _tx _uuid _line _ts
     _kind="${_v%%"$_RW_SEP"*}"
     case "$_kind" in
         error)
-            IFS="$_RW_SEP" read -r _kind _e _tx _uuid _line <<EOF
+            IFS="$_RW_SEP" read -r _kind _e _tx _uuid _line _ts <<EOF
 $_v
 EOF
-            _rw_ingest "$_sid" "$_scope" "$_src" "$_e" "$_tx" "$_uuid" "$_line"
+            _rw_ingest "$_sid" "$_scope" "$_src" "$_e" "$_tx" "$_uuid" "$_line" "$_ts"
             ;;
         interrupt) _rw_close_interrupted "$_sid" "$_scope" ;;
     esac
@@ -354,7 +377,8 @@ EOF
 # reachable its tail decides (error -> the real uuid, interrupt marker -> nothing); otherwise the event alone
 # makes a record without a uuid, which a later scan merges into.
 _rw_fold_hooks() {
-    local _sid="$1" _ef _sf _cursor _total _loc _t _sd _line _scope _aid _e _m _file _v _kind _lines
+    local _sid="$1" _ef _sf _cursor _total _loc _t _sd _line _scope _aid _e _m _file _v _kind _lines _et _cut
+    _cut=$(($(_rc_now) - ${BORG_RESUME_SCAN_HOURS:-72} * 3600))
     _ef="$(borg_resume_events_file "$_sid")"
     [ -f "$_ef" ] || return 0
     _sf="$(_rw_state_file "$_sid")"
@@ -384,7 +408,18 @@ _rw_fold_hooks() {
         _kind="${_v%%"$_RW_SEP"*}"
         case "$_kind" in
             error | interrupt) _rw_apply_verdict "$_sid" "$_scope" hook "$_v" ;;
-            *) _rw_ingest "$_sid" "$_scope" hook "$_e" "$_m" "" "" ;;
+            absent)
+                # No transcript to check: the event alone is the evidence, unless it is stale. A missing
+                # agent_id is NOT taken to mean main when a transcript says otherwise (U1), see "none".
+                _et="$(printf '%s' "$_line" | jq -r '.t // 0')"
+                case "$_et" in "" | *[!0-9]*) _et=0 ;; esac
+                if [ "$_et" -ge "$_cut" ]; then
+                    _rw_ingest "$_sid" "$_scope" hook "$_e" "$_m" "" "" "$_et"
+                else
+                    _rw_log "dropped stale hook event sid=$_sid scope=$_scope t=$_et"
+                fi
+                ;;
+            *) _rw_log "dropped hook event sid=$_sid scope=$_scope: transcript tail shows no error (scan decides)" ;;
         esac
     done <<EOF
 $_lines
@@ -399,7 +434,7 @@ EOF
 
 # Scan path for one session: main transcript, Agent-tool agents, workflows (finished ones included).
 _rw_scan_session() {
-    local _sid="$1" _loc _t _sd _f _aid _v _wid _path _seen _wj _status _runid _ef _efile _eagents
+    local _sid="$1" _loc _t _sd _f _aid _v _wid _path _seen _wj _status _runid _efile _eagents _skipped
     _loc="$(_ri_locate "$_sid")"
     _t="${_loc%%$'\t'*}"
     _sd="${_loc#*$'\t'}"
@@ -443,9 +478,16 @@ _rw_scan_session() {
                     *)
                         # Only a finished run that hides failures is a detection without an errored agent;
                         # partial/unfinished with no error is a dead-process question for the liveness slice.
-                        if [ "$_status" = finished_with_failures ]; then
+                        # A step the user skipped or killed (its owner agent ended with the interrupt marker)
+                        # is a deliberate end, not a failure to resume.
+                        _skipped="$(printf '%s' "$_wj" | jq -r '
+                            ([.steps[]? | select(.state == "unfinished") | .agent_id]) as $u
+                            | [.agents[]? | select(.status == "interrupted_by_user"
+                                   and (.agent_id as $a | $u | index($a) != null))]
+                            | length')"
+                        if [ "$_status" = finished_with_failures ] && [ "${_skipped:-0}" = 0 ]; then
                             _rw_ingest "$_sid" "workflow:$_runid" scan unknown \
-                                "workflow finished with failed or null steps" "wf:$_runid" ""
+                                "workflow finished with failed or null steps" "wf:$_runid" "" "" "$(_ri_mtime "$_path")"
                         fi
                         ;;
                 esac
@@ -528,7 +570,8 @@ _rw_move_terminal() {
         [ -f "$_f" ] || continue
         _st="$(jq -r .state "$_f" 2>/dev/null)"
         case "$_st" in
-            "" | null | new | scheduled | deferred | injecting | injected | confirmed) continue ;;
+            done | superseded | cancelled | capped | notify_only | expired | failed | stalled) ;;
+            *) continue ;;
         esac
         _dest="$(borg_resume_dir)/done/${_f##*/}"
         mkdir -p "${_dest%/*}" 2>/dev/null

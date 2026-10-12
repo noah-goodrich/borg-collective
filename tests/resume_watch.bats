@@ -431,3 +431,104 @@ old() { TZ=UTC touch -t "$2" "$1"; }
     [ -e "$RD/watch.log.1" ]
     [ ! -e "$RD/watch.log" ] || [ "$(wc -c <"$RD/watch.log" | tr -d ' ')" -lt 100000 ]
 }
+
+# ---- review fixes: merge target, hook evidence, notify convergence, workflows, error time ----
+
+@test "confirmed + scheduled + a third new uuid merges into the scheduled record" {
+    mk_main "$SID" err e-2
+    watch
+    mk_confirmed_aaaaaa
+    sed -i.bak s/r_aaaaaa/r_000000/ "$RD/pending/r_aaaaaa.json"
+    mv "$RD/pending/r_aaaaaa.json" "$RD/pending/r_000000.json"
+    rm -f "$RD"/pending/*.bak
+    t_err "$PD/$SID.jsonl" e-3
+    BORG_RESUME_NOW_EPOCH=$((BORG_RESUME_NOW_EPOCH + 100)) run "$BIN" watch --once
+    [ "$(n_pending)" = 2 ]
+    [ "$(rec_q "map(select(.state == \"scheduled\")) | length")" = 1 ]
+    [ "$(rec_q "map(select(.state == \"scheduled\")) | .[0].evidence.uuids | sort | join(\",\")")" = "e-2,e-3" ]
+}
+
+@test "hook event whose reachable transcript tail is clean creates nothing" {
+    mk_main "$SID" done
+    hook_stop_failure "$SID"
+    watch
+    [ "$(n_pending)" = 0 ]
+    [ "$(n_done)" = 0 ]
+}
+
+@test "hook event with agent_id and a clean agent transcript creates nothing" {
+    mk_main "$SID" done
+    sub="$PD/$SID/subagents"
+    mkdir -p "$sub"
+    : >"$sub/agent-a1.jsonl"
+    t_user "$sub/agent-a1.jsonl"
+    t_asst_end "$sub/agent-a1.jsonl"
+    hook_stop_failure "$SID" server_error "API Error: 500" a1
+    watch
+    [ "$(n_pending)" = 0 ]
+}
+
+@test "agent death with a hook lacking agent_id yields ONE record (the scan agent:<id> one), not a phantom main" {
+    mk_main "$SID" done
+    sub="$PD/$SID/subagents"
+    mkdir -p "$sub"
+    : >"$sub/agent-a1.jsonl"
+    t_user "$sub/agent-a1.jsonl"
+    t_err "$sub/agent-a1.jsonl" ea-1
+    hook_stop_failure "$SID"
+    watch
+    [ "$(n_pending)" = 1 ]
+    [ "$(rec_q ".[0].scope")" = "agent:a1" ]
+}
+
+@test "a stale hook event older than the scan window with no transcript creates nothing" {
+    jq -c -n --arg sid "$SID" --argjson t "$((BORG_RESUME_NOW_EPOCH - 10 * 86400))" \
+        "{t:\$t, ev:\"stop_failure\", sid:\$sid, scope:\"main\", agent_id:null, error:\"server_error\", msg:\"x\"}" \
+        >"$RD/events/$SID.jsonl"
+    mk_reg "$SID"
+    watch
+    [ "$(n_pending)" = 0 ]
+    [ "$(n_done)" = 0 ]
+}
+
+@test "notify-class hook-only record converges with the later scan (one record, uuid attached)" {
+    hook_stop_failure "$SID" authentication_failed "Login expired"
+    watch
+    [ "$(n_done)" = 1 ]
+    [ "$(rec_q ".[0].evidence.uuid")" = null ]
+    mk_main "$SID" auth
+    BORG_RESUME_NOW_EPOCH=$((BORG_RESUME_NOW_EPOCH + 5)) run "$BIN" watch --once
+    [ "$(n_done)" = 1 ]
+    [ "$(n_pending)" = 0 ]
+    [ "$(rec_q ".[0].evidence.uuid")" = e-1 ]
+}
+
+@test "a finished workflow with a user-skipped step is not resumed" {
+    mk_main "$SID" done
+    wd="$PD/$SID/subagents/workflows/wf_skip1"
+    mkdir -p "$PD/$SID/workflows" "$wd"
+    printf "{\"runId\":\"wf_skip1\",\"scriptPath\":\"/x/s.js\",\"result\":[\"ok\"],\"status\":\"completed\"}\n" \
+        >"$PD/$SID/workflows/wf_skip1.json"
+    {
+        printf "{\"type\":\"started\",\"key\":\"k1\",\"agentId\":\"aS\"}\n"
+        printf "{\"type\":\"started\",\"key\":\"k2\",\"agentId\":\"aT\"}\n"
+        printf "{\"type\":\"result\",\"key\":\"k2\",\"agentId\":\"aT\",\"result\":\"ok\"}\n"
+    } >"$wd/journal.jsonl"
+    : >"$wd/agent-aS.jsonl"
+    t_user "$wd/agent-aS.jsonl"
+    t_int "$wd/agent-aS.jsonl"
+    watch
+    [ "$(n_pending)" = 0 ]
+    [ "$(n_done)" = 0 ]
+}
+
+@test "late detection: the reset is computed at the error time, not the detection time" {
+    f="$PD/$SID.jsonl"
+    : >"$f"
+    t_user "$f"
+    printf "{\"type\":\"assistant\",\"uuid\":\"e-9\",\"timestamp\":\"2026-10-12T14:00:00.000Z\",\"isApiErrorMessage\":true,\"error\":\"rate_limit\",\"message\":{\"role\":\"assistant\",\"model\":\"<synthetic>\",\"content\":[{\"type\":\"text\",\"text\":\"You have hit your session limit - resets 3pm (UTC)\"}]}}\n" >>"$f"
+    mk_reg "$SID"
+    BORG_RESUME_NOW_EPOCH=$((BORG_RESUME_NOW_EPOCH + 8 * 3600)) run "$BIN" watch --once
+    [ "$(rec_q ".[0].resume_at")" = "$((1791817200 + 120))" ]
+    [ "$(rec_q ".[0].first_seen")" = 1791813600 ]
+}
