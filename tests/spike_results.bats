@@ -1,8 +1,9 @@
 #!/usr/bin/env bats
 # Spike results contract (resume design, slice S0b). Asserts the results file exists,
-# parses, and has one entry per gating spike. It does NOT assert any outcome is
-# confirmed: a refuted outcome selects the documented fallback in the design, so each
-# refuted entry (or refuted part) must name one.
+# parses, and has one entry per gating spike, with the design's outcome vocabulary
+# (pass | fail | unknown, plus partial). It does NOT assert any outcome is pass: a fail
+# or partial outcome selects the documented fallback in the design. A pass entry must
+# carry evidence_paths and no gaps; anything with a gap is partial.
 
 setup() {
     ROOT="${BATS_TEST_DIRNAME}/.."
@@ -27,24 +28,60 @@ setup() {
     [ "$output" = "10" ]
 }
 
-@test "every entry has a legal outcome, evidence and the tested version and date" {
-    run jq -e '.claude_version == "2.1.296" and (.date | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$"))
-        and (.spikes | all(.outcome as $o | ["confirmed","refuted","not-run"] | index($o) != null)
-             and all((.evidence | type == "string") and (.evidence | length) > 0)
-             and all(.fallback | type == "string"))' "$RES"
+# The outcome contract, as one jq filter (prints one line per violation). It is also run
+# against deliberately broken copies below, so the rule itself is under test.
+_violations() {
+    jq -r '.spikes[] | .id as $id | .outcome as $o
+        | ((.not_run_parts // []) | length) as $nr | ((.refuted_parts // []) | length) as $rf
+        | ((.evidence_paths // []) | length) as $ev
+        | (if (["pass","fail","unknown","partial"] | index($o)) == null then "\($id): illegal outcome \(.outcome)" else empty end),
+          (if .outcome == "pass" and ($ev == 0 or $nr > 0 or $rf > 0) then "\($id): pass needs evidence_paths and no not_run_parts or refuted_parts" else empty end),
+          (if .outcome == "partial" and ($ev == 0 or ($nr + $rf) == 0) then "\($id): partial needs evidence_paths and a gap" else empty end),
+          (if .outcome == "fail" and ((.fallback // "") | length) == 0 then "\($id): fail needs a fallback" else empty end),
+          (if .outcome == "unknown" and $nr == 0 then "\($id): unknown needs not_run_parts saying why" else empty end),
+          (if (.claude_version | type) != "string" or ((.date // "") | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") | not) then "\($id): missing claude_version or date" else empty end),
+          (if ((.evidence // "") | length) == 0 or ((.fallback | type) != "string") then "\($id): missing evidence text or fallback" else empty end)' "$@"
+}
+
+@test "every entry has a legal outcome, per-entry version and date, and honours the pass rule" {
+    run _violations "$RES"
+    [ -z "$output" ] || { echo "$output"; false; }
+    run jq -e '.outcomes == ["pass","fail","unknown","partial"]' "$RES"
     [ "$status" -eq 0 ]
 }
 
-@test "each refuted entry or refuted part names a fallback" {
-    run jq -r '.spikes[] | select(.outcome == "refuted" and ((.fallback // "") | length) == 0) | .id' "$RES"
-    [ -z "$output" ]
-    run jq -r '.spikes[] | .id as $id | (.refuted_parts // [])[]
-        | select(((.fallback // "") | length) == 0) | $id' "$RES"
-    [ -z "$output" ]
+@test "the pass rule catches a pass entry that carries a gap" {
+    jq '(.spikes[] | select(.id == "U1") | .not_run_parts) = ["something not run"]' "$RES" >"$BATS_TEST_TMPDIR/m1.json"
+    run _violations "$BATS_TEST_TMPDIR/m1.json"
+    [[ "$output" == *"U1: pass needs"* ]]
+    jq '(.spikes[] | select(.id == "U1") | .refuted_parts) = [{"claim":"x","fallback":"y"}]' "$RES" >"$BATS_TEST_TMPDIR/m2.json"
+    run _violations "$BATS_TEST_TMPDIR/m2.json"
+    [[ "$output" == *"U1: pass needs"* ]]
 }
 
-@test "each not-run entry says why" {
-    run jq -r '.spikes[] | select(.outcome == "not-run" and ((.not_run_parts // []) | length) == 0) | .id' "$RES"
+@test "the pass rule catches a pass entry without evidence_paths" {
+    jq 'del(.spikes[] | select(.id == "U1") | .evidence_paths)' "$RES" >"$BATS_TEST_TMPDIR/m3.json"
+    run _violations "$BATS_TEST_TMPDIR/m3.json"
+    [[ "$output" == *"U1: pass needs"* ]]
+}
+
+@test "the design vocabulary is enforced: the old words are illegal" {
+    jq '(.spikes[] | select(.id == "U1") | .outcome) = "confirmed"' "$RES" >"$BATS_TEST_TMPDIR/m4.json"
+    run _violations "$BATS_TEST_TMPDIR/m4.json"
+    [[ "$output" == *"U1: illegal outcome"* ]]
+}
+
+@test "U2, U9 and U15 are partial, not pass" {
+    local id
+    for id in U2 U9 U15; do
+        run jq -r --arg id "$id" '.spikes[] | select(.id == $id) | .outcome' "$RES"
+        [ "$output" = "partial" ] || { echo "$id is $output"; false; }
+    done
+}
+
+@test "each refuted part names a fallback" {
+    run jq -r '.spikes[] | .id as $id | (.refuted_parts // [])[]
+        | select(((.fallback // "") | length) == 0) | $id' "$RES"
     [ -z "$output" ]
 }
 
@@ -60,12 +97,55 @@ setup() {
     done
 }
 
-@test "summary doc exists and lists every gating id" {
-    local id
+@test "summary doc has a table row with the matching outcome for every gating id" {
+    local id want
     [ -f "$ROOT/docs/resume/spike-results.md" ]
     for id in $GATING; do
-        grep -q "$id" "$ROOT/docs/resume/spike-results.md" || { echo "doc lacks $id"; false; }
+        want="$(jq -r --arg id "$id" '.spikes[] | select(.id == $id) | .outcome' "$RES")"
+        grep -Eq "^\| ${id}[[:space:]]+\|.*\| ${want}[[:space:]]*\|$" "$ROOT/docs/resume/spike-results.md" \
+            || { echo "doc row for $id lacks outcome $want"; false; }
     done
+}
+
+@test "the doc row match is word-bounded: deleting the U1 row is caught" {
+    grep -v -E '^\| U1[[:space:]]+\|' "$ROOT/docs/resume/spike-results.md" >"$BATS_TEST_TMPDIR/doc.md"
+    run grep -Eq '^\| U1[[:space:]]+\|' "$BATS_TEST_TMPDIR/doc.md"
+    [ "$status" -ne 0 ]
+}
+
+@test "the directive defines partial in its S0b test strategy" {
+    run grep -c 'partial' "$ROOT/docs/plans/directives/2026-10-12-borg-resume-any-interruption.md"
+    [ "$output" -ge 1 ]
+}
+
+@test "event-name sequences: names only, and they show what the results claim" {
+    local ev="$ROOT/tests/fixtures/resume/events" f
+    for f in "$ev"/*.txt; do
+        run grep -Evx 'SessionStart|SessionEnd|Stop|StopFailure|SubagentStart|SubagentStop|Notification|PreToolUse|PostToolUse' "$f"
+        [ -z "$output" ] || { echo "$f has a non-event-name line"; false; }
+    done
+    grep -qx Stop "$ev/clean_turn.txt"
+    run grep -cx Stop "$ev/esc_interrupt.txt"
+    [ "$output" = "0" ]
+    run grep -cx Stop "$ev/queued_two_turns.txt"
+    [ "$output" = "2" ]
+    grep -qx StopFailure "$ev/subagent_api_error.txt"
+    grep -qx SubagentStart "$ev/subagent_api_error.txt"
+    run grep -cx SubagentStop "$ev/subagent_api_error.txt"
+    [ "$output" = "0" ]
+    run grep -cx Notification "$ev/main_limit_weekly.txt"
+    [ "$output" = "0" ]
+}
+
+@test "failed-run workflow manifest: status completed with null results" {
+    run jq -e '.status == "completed" and (.result | type == "array" and length > 0 and all(. == null))' \
+        "$ROOT/tests/fixtures/resume/workflows/wf_failed.json"
+    [ "$status" -eq 0 ]
+}
+
+@test "queued composer pane fixture shows the queue hint" {
+    grep -q 'to send now' "$ROOT/tests/fixtures/resume/panes/queued_composer.txt"
+    grep -q 'Press up to edit queued messages' "$ROOT/tests/fixtures/resume/panes/queued_composer.txt"
 }
 
 @test "captured-skeleton fixtures from the spikes carry the extractor version" {
@@ -77,7 +157,8 @@ setup() {
 
 @test "stub proxy parses and binds loopback only" {
     command -v python3 >/dev/null || skip "python3 not installed"
-    run python3 -I -m py_compile "$ROOT/spike/stub-proxy.py"
+    run python3 -I -c 'import py_compile, sys; py_compile.compile(sys.argv[1], cfile=sys.argv[2], doraise=True)' \
+        "$ROOT/spike/stub-proxy.py" "$BATS_TEST_TMPDIR/stub-proxy.pyc"
     [ "$status" -eq 0 ]
     run grep -c '"127.0.0.1"' "$ROOT/spike/stub-proxy.py"
     [ "$output" -ge 1 ]

@@ -4,120 +4,237 @@
   "claude_version": "2.1.296",
   "date": "2026-10-12",
   "model": "haiku",
-  "method": "private tmux server (-L borg-spike), throwaway working dirs, tiny prompts, local stub proxy (spike/stub-proxy.py) via ANTHROPIC_BASE_URL for 429/529/500/401 and usage-limit responses, S0a harness settings file via --settings, plus a private unscrubbed logger for key names, env and process ancestry (never committed). Raw logs stayed in a scratch dir; committed evidence is the scrubbed fixtures under tests/fixtures/resume/.",
-  "outcomes": ["confirmed", "refuted", "not-run"],
+  "method": "private tmux server (-L borg-spike), throwaway working dirs, tiny prompts, local stub proxy (spike/stub-proxy.py) via ANTHROPIC_BASE_URL for 429/529/500/401 and usage-limit responses, S0a harness settings file via --settings. Committed evidence is scrubbed: fixtures under tests/fixtures/resume/ and event-name sequences (names and order only) under tests/fixtures/resume/events/, recorded by the harness hook (which now includes Stop). Raw logs from the first run were private scratch and are not committed; claims that rest only on them are not recorded as established.",
+  "outcomes": [
+    "pass",
+    "fail",
+    "unknown",
+    "partial"
+  ],
   "spikes": [
     {
       "id": "U1",
       "question": "Does StopFailure fire for subagent API errors, and does the payload carry agent_id?",
-      "outcome": "confirmed",
-      "evidence": "A stub-scripted Agent tool call whose subagent request got 429 produced one StopFailure with agent_id and agent_type (error rate_limit) plus two main-loop StopFailure events. The same payload shape without agent_id is the main loop. SubagentStart fired; SubagentStop did not fire for the failed subagent in this run (U3, non-gating, one run).",
-      "evidence_paths": ["tests/fixtures/resume/stop_failure_payload.json", "tests/fixtures/resume/subagents/agent-a0b6facb8e5d1b6ac.jsonl", "spike/stub-proxy.py"],
+      "outcome": "pass",
+      "evidence": "A stub-scripted Agent tool call whose subagent request got 429 produced one StopFailure with agent_id and agent_type (error rate_limit) plus a main-loop StopFailure. SubagentStart fired and SubagentStop did not fire for the failed subagent: the event-name sequence of a repeat run is committed (events/subagent_api_error.txt).",
+      "evidence_paths": [
+        "tests/fixtures/resume/stop_failure_payload.json",
+        "tests/fixtures/resume/subagents/agent-a0000000000000002.jsonl",
+        "spike/stub-proxy.py",
+        "tests/fixtures/resume/events/subagent_api_error.txt"
+      ],
       "fallback": "Scan path (last meaningful transcript record) covers subagents if StopFailure is ever absent.",
       "refuted_parts": [],
-      "not_run_parts": []
+      "not_run_parts": [],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U2",
       "question": "Does StopFailure fire for the usage limit (429) in the main loop, does error_details carry a structured reset, and does a local 429 stub reproduce it?",
-      "outcome": "confirmed",
+      "outcome": "partial",
       "evidence": "With subscription auth and a stub that sets unified rate-limit headers, the main loop printed the real weekly and session limit sentences and StopFailure fired with error rate_limit. The synthetic transcript record has isApiErrorMessage true, error rate_limit, apiErrorStatus 429. With a fake API key instead (no subscription auth) the stub yields only a generic 429 line, so the limit sentence needs the subscription path. The error_details key is absent from the payload for 429, 500, 529 and 401; 500 and 529 map to error server_error, 401 to authentication_failed, a plain 400 to unknown.",
-      "evidence_paths": ["tests/fixtures/resume/main_rate_limit.jsonl", "tests/fixtures/resume/main_rate_limit_session.jsonl", "tests/fixtures/resume/main_server_error_tail.jsonl", "tests/fixtures/resume/main_authentication_failed.jsonl", "tests/fixtures/resume/stop_failure_payload.json"],
+      "evidence_paths": [
+        "tests/fixtures/resume/main_rate_limit.jsonl",
+        "tests/fixtures/resume/main_rate_limit_session.jsonl",
+        "tests/fixtures/resume/main_server_error_tail.jsonl",
+        "tests/fixtures/resume/main_authentication_failed.jsonl",
+        "tests/fixtures/resume/stop_failure_payload.json"
+      ],
       "fallback": "Parse the reset from last_assistant_message (or the synthetic record text) with the S2 grammar; fall back to backoff when it does not parse.",
       "refuted_parts": [
-        {"claim": "error_details includes a structured reset", "fallback": "The reset exists only as text in last_assistant_message; parse it, else backoff."}
+        {
+          "claim": "error_details includes a structured reset",
+          "fallback": "The reset exists only as text in last_assistant_message; parse it, else backoff."
+        }
       ],
-      "not_run_parts": []
+      "not_run_parts": [],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U6",
       "question": "Does claude --resume keep the same session id, and can Workflow then replay saved results?",
-      "outcome": "confirmed",
-      "evidence": "A three-agent workflow was run, claude was killed with SIGKILL while agent b was running, then claude --resume with the same id ran in print mode: the reported session_id was unchanged and the transcript file and workflow directory were reused. Agent a replayed from the journal with no new started record.",
-      "evidence_paths": ["tests/fixtures/resume/workflows/wf_ab12cd.journal.jsonl", "tests/fixtures/resume/workflows/wf_ab12cd.json"],
+      "outcome": "partial",
+      "evidence": "A three-agent workflow was run and claude was killed with SIGKILL while agent b was running; claude --resume with the same id then ran in print mode, reused the workflow directory and replayed agent a from the journal with no new started record (committed journal and manifest). The unchanged session_id after --resume was read from print-mode output that is not committed.",
+      "evidence_paths": [
+        "tests/fixtures/resume/workflows/wf_ab12cd.journal.jsonl",
+        "tests/fixtures/resume/workflows/wf_ab12cd.json"
+      ],
       "fallback": "If the id changed, use the fallback prompt path (fresh session, state in the prompt).",
       "refuted_parts": [],
-      "not_run_parts": []
+      "not_run_parts": [
+        "session_id unchanged after --resume: observed in print-mode output, no committed capture, so unverified."
+      ],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U7",
       "question": "Does a fresh Workflow call accept resumeFromRunId in 2.1.296?",
-      "outcome": "confirmed",
+      "outcome": "pass",
       "evidence": "Workflow with the same scriptPath and resumeFromRunId of the killed run was accepted and completed in the same run directory (same runId, status completed, agentCount 3). It was called from the resumed session, as documented (same-session only).",
-      "evidence_paths": ["tests/fixtures/resume/workflows/wf_ab12cd.json", "tests/fixtures/resume/workflows/wf_ab12cd.journal.jsonl"],
+      "evidence_paths": [
+        "tests/fixtures/resume/workflows/wf_ab12cd.json",
+        "tests/fixtures/resume/workflows/wf_ab12cd.journal.jsonl"
+      ],
       "fallback": "Relaunch the script from scratch with the prior results in the prompt.",
       "refuted_parts": [],
-      "not_run_parts": []
+      "not_run_parts": [],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U8",
       "question": "What is the journal shape for killed and null-result agents, and does resumeFromRunId re-run them?",
-      "outcome": "confirmed",
-      "evidence": "A killed agent leaves a started record and no result or failed record. An agent that hit a stubbed 429 inside parallel() is journaled as a failed record (a record type the design did not list; no result key), the run finishes with status completed and a result array of nulls, so a finished manifest hides failures. On resume both the killed agent and the failed agents were re-run under new agent ids, completed ones replayed from cache, and the manifest result was overwritten with the good values. A null result is not cached.",
-      "evidence_paths": ["tests/fixtures/resume/workflows/wf_ab12cd.journal.jsonl", "tests/fixtures/resume/workflows/wf_failed.journal.jsonl"],
+      "outcome": "partial",
+      "evidence": "A killed agent leaves a started record and no result or failed record. An agent that hit a stubbed 429 inside parallel() is journaled as a failed record (a type the design did not list; no result key), and the manifest of that run (workflows/wf_failed.json) shows status completed with a result array of nulls, so a finished manifest hides failures. On resume the killed agent and the failed agents were re-run under new agent ids, completed ones replayed from cache, and the manifest result was overwritten with the good values (workflows/wf_ab12cd.json is the resumed manifest). A null result is not cached.",
+      "evidence_paths": [
+        "tests/fixtures/resume/workflows/wf_ab12cd.journal.jsonl",
+        "tests/fixtures/resume/workflows/wf_failed.journal.jsonl",
+        "tests/fixtures/resume/workflows/wf_failed.json"
+      ],
       "fallback": "Inventory treats started-without-result and failed as unfinished; treat a finished manifest with null entries in result as unfinished.",
       "refuted_parts": [],
-      "not_run_parts": ["An agent whose own code returns a literal null (only API-failure nulls were produced)."]
+      "not_run_parts": [
+        "An agent whose own code returns a literal null (only API-failure nulls were produced)."
+      ],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U9",
       "question": "Can a hook's PPID or TMUX_PANE identify the claude pid and pane for host sessions, and does tmux set-option -p from a hook persist?",
-      "outcome": "confirmed",
-      "evidence": "On the host in a private tmux server the hook's PPID equalled the claude pid and the tmux pane_pid, TMUX_PANE was the pane id and TMUX held the private socket path. set-option -p from the hook (using the socket from TMUX) returned 0 and the pane options were readable from outside afterwards. Internal subagents with an empty agent_type also fire SubagentStop (4 in one idle session), so scan and hook code must filter them.",
-      "evidence_paths": ["tests/fixtures/resume/session_start_payload.json"],
+      "outcome": "partial",
+      "evidence": "A SessionStart hook payload carries the documented fields (tests/fixtures/resume/session_start_payload.json). In the first run, on the host in a private tmux server, the hook PPID equalled the claude pid and the tmux pane_pid, TMUX_PANE was the pane id, TMUX held the socket path, and tmux set-option -p from the hook persisted; that evidence was in private logs and is not committed. Internal subagents with an empty agent_type also fire SubagentStop (visible in events/queued_two_turns.txt), so scan and hook code must filter them.",
+      "evidence_paths": [
+        "tests/fixtures/resume/session_start_payload.json",
+        "tests/fixtures/resume/events/queued_two_turns.txt"
+      ],
       "fallback": "Resolve the pane by walking the process tree to a tmux pane_pid.",
       "refuted_parts": [],
-      "not_run_parts": ["Container (drone) sessions: no drone container was started, to keep the run isolated from real project environments. S3 still has to establish pane identity inside a container."]
+      "not_run_parts": [
+        "Host PPID/TMUX_PANE/TMUX identity and set-option -p persistence: observed, not committed, so unverified.",
+        "Container (drone) sessions: no drone container was started, to keep the run isolated from real project environments. S3 still has to establish pane identity inside a container."
+      ],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U13",
       "question": "Does send-keys input to a busy session queue, and does text sent while a permission dialog is open act on the dialog?",
-      "outcome": "confirmed",
-      "evidence": "Text plus Enter sent while a long turn was generating was shown as queued (with a send-now hint and an edit-queued hint), did not interrupt, and ran after the turn finished. With a file-write permission dialog open (forced by an ask rule in the temp settings), typing text then Enter selected the default option Yes and the write happened, so injected keys do act on the dialog. One case also showed a first Enter dropped after a mode change and the typed text merged into the composer, so submit needs a verify step.",
-      "evidence_paths": ["tests/fixtures/resume/panes/permission.txt"],
-      "fallback": "Not needed: the permission-dialog block stays mandatory and the busy-queue path is allowed.",
+      "outcome": "partial",
+      "evidence": "Text plus Enter sent while a long turn was generating was shown as queued (pane fixture panes/queued_composer.txt: the send-now hint and the edit-queued line), did not interrupt, and ran after the turn finished: the event sequence shows a second Stop for the queued turn (events/queued_two_turns.txt). Not established by committed evidence: that text typed while a permission dialog is open acts on the dialog, and the dropped first Enter after a mode change.",
+      "evidence_paths": [
+        "tests/fixtures/resume/panes/permission.txt",
+        "tests/fixtures/resume/panes/queued_composer.txt",
+        "tests/fixtures/resume/events/queued_two_turns.txt"
+      ],
+      "fallback": "The permission-dialog block stays mandatory and the busy-queue path is allowed; submit needs a verify step.",
       "refuted_parts": [],
-      "not_run_parts": []
+      "not_run_parts": [
+        "Text typed while a permission dialog is open acting on the dialog: observed in the first run, no committed capture, so unverified.",
+        "A first Enter dropped after a mode change, merging text into the composer: observed, no committed capture, so unverified."
+      ],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U15",
       "question": "Does Stop fire on Esc, does the interrupt marker end the transcript, and which record closes a clean turn?",
-      "outcome": "confirmed",
-      "evidence": "Esc during generation: no Stop hook fired, and the transcript's last record was the user record [Request interrupted by user] with no stop_hook_summary or turn_duration after it. A clean turn ends system:stop_hook_summary then system:turn_duration. Ctrl+X Ctrl+K and Esc with idle main and running background agents had no observable effect in two tries each (agents ran to completion), so the chord was not demonstrated.",
-      "evidence_paths": ["tests/fixtures/resume/interrupt_user.jsonl"],
+      "outcome": "partial",
+      "evidence": "Esc during generation: the session event sequence has no Stop (events/esc_interrupt.txt), while an uninterrupted turn in the same setup does fire Stop (events/clean_turn.txt, the positive control). The interrupted transcript ends with the user record [Request interrupted by user] and no stop_hook_summary or turn_duration after it. A clean turn ends system:stop_hook_summary then system:turn_duration. Ctrl+X Ctrl+K and Esc with idle main and running background agents had no observable effect via send-keys, so the chord was not demonstrated.",
+      "evidence_paths": [
+        "tests/fixtures/resume/interrupt_user.jsonl",
+        "tests/fixtures/resume/events/esc_interrupt.txt",
+        "tests/fixtures/resume/events/clean_turn.txt"
+      ],
       "fallback": "Scan path treats the trailing interrupt marker as the deliberate-end signal, as designed.",
       "refuted_parts": [],
-      "not_run_parts": ["Ctrl+X Ctrl+K stopping background agents and the marker in agent transcripts (chord had no effect via send-keys).", "The for-tool-use interrupt variant."]
+      "not_run_parts": [
+        "Ctrl+X Ctrl+K stopping background agents and the marker in agent transcripts (chord had no effect via send-keys).",
+        "The for-tool-use interrupt variant."
+      ],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U16",
       "question": "What does the pane look like after a main-loop limit, does a dialog persist, and is there a safe dismiss key?",
-      "outcome": "confirmed",
-      "evidence": "With the stub limit and the default settings here, native auto-continue was on: the pane returned to an empty composer with a footer line Usage limit reached and Continuing automatically at the reset time, esc to cancel. With autoContinueAtUsageLimit false, a persistent dialog What do you want to do? stayed on screen (30s+) with four options: Stop and wait for limit to reset (default), Wait here then continue automatically, Add funds, Upgrade. Esc dismissed it to an empty composer. No Notification (idle_prompt) fired in either state within about two minutes.",
-      "evidence_paths": ["tests/fixtures/resume/panes/limit.txt", "tests/fixtures/resume/panes/limit_auto_continue.txt"],
+      "outcome": "partial",
+      "evidence": "With the stub limit and the default settings here, native auto-continue was on: the pane returned to an empty composer with a footer showing Usage limit reached and Continuing automatically at the reset time, esc to cancel. With autoContinueAtUsageLimit false a persistent dialog What do you want to do? stayed on screen with four options (Stop and wait for limit to reset first, then Wait here, Add funds, Upgrade); panes/limit.txt is that dialog. After the limit, an unmatched Notification hook saw no Notification and no Stop for about 2.5 minutes (events/main_limit_weekly.txt: StopFailure only), in the auto-continue state.",
+      "evidence_paths": [
+        "tests/fixtures/resume/panes/limit.txt",
+        "tests/fixtures/resume/panes/limit_auto_continue.txt",
+        "tests/fixtures/resume/events/main_limit_weekly.txt"
+      ],
       "fallback": "Dialog means notify-only; if injection is ever needed, Esc is the only dismiss key observed to be safe.",
       "refuted_parts": [],
-      "not_run_parts": []
+      "not_run_parts": [
+        "Esc dismissing the persistent dialog to an empty composer: observed in the first run, no committed capture, so unverified.",
+        "Notification behaviour in the persistent-dialog state (auto-continue off): only the auto-continue state has committed event evidence."
+      ],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     },
     {
       "id": "U17",
       "question": "Exact text, option order and keys of the claude --resume size dialog, and the trust-folder prompt.",
-      "outcome": "not-run",
+      "outcome": "unknown",
       "evidence": "The resume size dialog did not appear: resuming a roughly 60k-token controlled session straight after exit, and again after backdating the transcript file mtime by a day, went directly to the composer. The threshold (size, age or cache state) is unknown, and building a session large enough would cost far more than the spike budget. The trust-folder prompt WAS captured: workspace line, safety question, options No, exit (default) and Yes, I trust this folder, footer Enter to confirm, Esc to cancel; Down then Enter accepts.",
-      "evidence_paths": ["tests/fixtures/resume/panes/trust_folder.txt"],
+      "evidence_paths": [
+        "tests/fixtures/resume/panes/trust_folder.txt"
+      ],
       "fallback": "Until captured, S11 treats any unrecognised pane after relaunch as not idle and does not inject (notify-only).",
       "refuted_parts": [],
-      "not_run_parts": ["Resume size dialog: could not be triggered in this environment."]
+      "not_run_parts": [
+        "Resume size dialog: could not be triggered in this environment."
+      ],
+      "claude_version": "2.1.296",
+      "date": "2026-10-12"
     }
   ],
   "non_gating": [
-    {"id": "U3", "outcome": "unknown", "note": "SubagentStop did not fire for a subagent that died of a stubbed 429 in one run; it does carry agent_transcript_path when it fires."},
-    {"id": "U4", "outcome": "unknown", "note": "Not run."},
-    {"id": "U5", "outcome": "unknown", "note": "Not run."},
-    {"id": "U10", "outcome": "unknown", "note": "Not run (needs a drone container)."},
-    {"id": "U11", "outcome": "unknown", "note": "Incidental: autoContinueAtUsageLimit behaved as on by default in this environment (U16)."},
-    {"id": "U12", "outcome": "unknown", "note": "Not run."},
-    {"id": "U14", "outcome": "unknown", "note": "Not run."},
-    {"id": "U18", "outcome": "unknown", "note": "No Notification event fired in any session, so matcher anchoring could not be observed."}
-  ]
+    {
+      "id": "U3",
+      "outcome": "unknown",
+      "note": "SubagentStop did not fire for a subagent that died of a stubbed 429 (events/subagent_api_error.txt, one run). It carries agent_transcript_path when it does fire."
+    },
+    {
+      "id": "U4",
+      "outcome": "unknown",
+      "note": "Not run."
+    },
+    {
+      "id": "U5",
+      "outcome": "unknown",
+      "note": "Not run."
+    },
+    {
+      "id": "U10",
+      "outcome": "unknown",
+      "note": "Not run (needs a drone container)."
+    },
+    {
+      "id": "U11",
+      "outcome": "unknown",
+      "note": "Incidental: autoContinueAtUsageLimit behaved as on by default in this environment (U16)."
+    },
+    {
+      "id": "U12",
+      "outcome": "unknown",
+      "note": "Not run."
+    },
+    {
+      "id": "U14",
+      "outcome": "unknown",
+      "note": "Not run."
+    },
+    {
+      "id": "U18",
+      "outcome": "unknown",
+      "note": "No Notification event fired in any committed session (events/main_limit_weekly.txt used an unmatched hook), so matcher anchoring could not be observed."
+    }
+  ],
+  "outcome_rules": "pass: evidence_paths is non-empty and both not_run_parts and refuted_parts are empty. partial: some of the question is established (see evidence_paths) and the rest is in not_run_parts or refuted_parts. fail: the premise was refuted and a fallback is named. unknown: not established; not_run_parts says why."
 }

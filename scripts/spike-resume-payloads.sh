@@ -40,7 +40,7 @@ _spike_self="${BASH_SOURCE[0]:-$0}"
 _spike_dir="${BORG_SPIKE_DIR:-${TMPDIR:-/tmp}/borg-resume-spike}"
 
 # Events the design wants to observe, with the matcher used for each.
-_spike_events="StopFailure SessionStart SessionEnd SubagentStart SubagentStop Notification PreToolUse PostToolUse"
+_spike_events="Stop StopFailure SessionStart SessionEnd SubagentStart SubagentStop Notification PreToolUse PostToolUse"
 
 # Path scrubber, used for pane lines only (JSON paths are faked by the extractor).
 _spike_scrub_paths() {
@@ -89,15 +89,22 @@ _spike_pane_ok() {
     local lim="You.ve hit your ($kinds) limit( . resets ((($months) [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m)( \\(($zones)\\))?)?"
     local tm='[0-9]{1,2}(:[0-9]{2})?[ap]m'
     local choice="(❯ )?[1-9]\\. (Yes|No|No, exit|Yes, I trust this folder|Stop and wait for limit to reset|Wait here, then continue automatically at $tm|Add funds to continue with usage credits|Upgrade your plan|Switch to extra usage|Yes, and don.t ask again this session)"
-    local chrome="Welcome to Claude Code|\\? for shortcuts|[>❯]|Bash command|Do you want to proceed\\?|What do you want to do\\?|Esc to cancel|Enter to confirm|Enter to confirm . Esc to cancel|Esc to cancel . Tab to amend|Security guide|Accessing workspace:|Claude Code.ll be able to read, edit, and execute files here\\.|(❯ )?(No, exit|Yes, I trust this folder)|(⚠ )?Usage limit reached . limit resets $tm|(⚠ )?Usage limit reached . continuing automatically at $tm . esc to cancel|Continuing automatically at $tm . esc to cancel|Press Enter to continue|(⏵⏵ )?(accept edits|plan mode|bypass permissions) on( \\(shift\\+tab to cycle\\))?"
+    local chrome="Welcome to Claude Code|\\? for shortcuts|>|❯|Bash command|Do you want to proceed\\?|What do you want to do\\?|Esc to cancel|Enter to confirm|Enter to confirm . Esc to cancel|Esc to cancel . Tab to amend|Security guide|Accessing workspace:|Claude Code.ll be able to read, edit, and execute files here\\.|(❯ )?(No, exit|Yes, I trust this folder)|(⚠ )?Usage limit reached . limit resets $tm|(⚠ )?Usage limit reached . continuing automatically at $tm . esc to cancel|Continuing automatically at $tm . esc to cancel|Press Enter to continue|ctrl.x ctrl.s to send now|(❯ )?Press up to edit queued messages|(⏵⏵ )?(accept edits|plan mode|bypass permissions|auto mode) on( \\(shift\\+tab to cycle\\))?( . esc to interrupt)?( . ← [0-9]+ agents?)?"
     [ -z "$t" ] && return 0
     [[ "$t" =~ ^($lim|$choice|$chrome)$ ]]
 }
 
+# Locale independence: matching is done on a copy where NBSP is a space, the middle dot is an
+# ASCII dot and the curly apostrophe is a straight one (byte sequences, so the result does not
+# depend on LC_ALL). Regex dots in the allowlist then only ever stand for single ASCII bytes.
+_spike_nbsp=$(printf '\302\240')
+_spike_mdot=$(printf '\302\267')
+_spike_rsq=$(printf '\342\200\231')
+
 _spike_scrub_pane() {
     local line t
     while IFS= read -r line || [ -n "$line" ]; do
-        t="$(printf '%s' "$line" | sed -E -e 's/(│|╭|╮|╰|╯|─|━|═|┌|┐|└|┘|├|┤)+/ /g' -e 's/^[[:space:]]+//' -e 's/[[:space:]]+$//')"
+        t="$(printf '%s' "$line" | sed -E -e "s/$_spike_nbsp/ /g" -e "s/$_spike_mdot/./g" -e "s/$_spike_rsq/'/g" -e 's/(│|╭|╮|╰|╯|─|━|═|┌|┐|└|┘|├|┤)+/ /g' -e 's/^[[:space:]]+//' -e 's/[[:space:]]+$//')"
         if _spike_pane_ok "$t"; then
             printf '%s\n' "$line" | _spike_scrub_paths
         else

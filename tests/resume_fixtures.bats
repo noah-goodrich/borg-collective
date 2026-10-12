@@ -72,7 +72,7 @@ _not_captured() {
     [ "$status" -ne 0 ]
 }
 
-@test "shape: every main_* error fixture ends in a typed api error record" {
+@test "shape: every main_* error fixture carries exactly one typed api error record" {
     local f
     for f in main_rate_limit main_rate_limit_session main_authentication_failed main_invalid_request main_max_output_tokens main_server_error_tail; do
         run jq -s -e '[.[] | select(.isApiErrorMessage == true)] | length == 1 and (.[0] | (.error | type == "string") and has("apiErrorStatus"))' "$FX/$f.jsonl"
@@ -89,12 +89,12 @@ _not_captured() {
     [ "$output" = "1" ]
 }
 
-@test "shape: api_error_tail ends in a synthetic error record" {
+@test "shape: the first api error record in main_rate_limit is a 429 assistant record" {
     run jq -s -e '[.[] | select(.isApiErrorMessage == true)] | .[0] | .type == "assistant" and .apiErrorStatus == 429 and (.error | type == "string")' "$FX/main_rate_limit.jsonl"
     [ "$status" -eq 0 ]
 }
 
-@test "shape: error followed by bookkeeping records" {
+@test "shape: error followed by more than two non-assistant bookkeeping records" {
     run jq -s -e '(map(.isApiErrorMessage // false) | index(true)) as $i | $i != null and (length - $i) > 2 and (.[$i+1:] | all(.type != "assistant"))' "$FX/main_server_error_tail.jsonl"
     [ "$status" -eq 0 ]
 }
@@ -108,9 +108,9 @@ _not_captured() {
 }
 
 @test "shape: subagent first record and meta" {
-    run jq -s -e '.[0] | .type == "user" and .isSidechain == true and (.agentId|length>0) and (.sessionId|length>0) and (.cwd|length>0)' "$FX/subagents/agent-a0b6facb8e5d1b6ac.jsonl"
+    run jq -s -e '.[0] | .type == "user" and .isSidechain == true and (.agentId|length>0) and (.sessionId|length>0) and (.cwd|length>0)' "$FX/subagents/agent-a0000000000000002.jsonl"
     [ "$status" -eq 0 ]
-    run jq -e 'has("agentType") and has("description") and has("toolUseId") and has("spawnDepth")' "$FX/subagents/agent-a0b6facb8e5d1b6ac.meta.json"
+    run jq -e 'has("agentType") and has("description") and has("toolUseId") and has("spawnDepth")' "$FX/subagents/agent-a0000000000000002.meta.json"
     [ "$status" -eq 0 ]
 }
 
@@ -164,6 +164,33 @@ _not_captured() {
     [[ "$output" == *main_invalid_request* ]]
     run _not_captured S4
     [ -z "$output" ]
+}
+
+@test "pane fixtures pass the pane allowlist unchanged under LC_ALL=C and C.UTF-8" {
+    local f l
+    for l in C C.UTF-8; do
+        for f in $(jq -r '.fixtures[] | select(.shape == "pane") | .file' "$MAN"); do
+            run env LC_ALL=$l "$HARNESS" scrubpane < "$FX/$f"
+            [ "$output" = "$(cat "$FX/$f")" ] || { echo "$f changed under $l"; false; }
+        done
+    done
+}
+
+@test "harness scrubpane: NBSP, middle dot and curly apostrophe are handled in any locale" {
+    local l
+    for l in C C.UTF-8; do
+        run env LC_ALL=$l bash -c "printf '\342\235\257\302\240\n' | '$HARNESS' scrubpane"
+        [ "$output" = "$(printf '\342\235\257\302\240')" ] || { echo "NBSP prompt redacted under $l"; false; }
+        run env LC_ALL=$l bash -c "printf 'You\342\200\231ve hit your weekly limit \302\267 resets 7am (America/Denver)\n' | '$HARNESS' scrubpane"
+        [[ "$output" != "<redacted>" ]] || { echo "limit line redacted under $l"; false; }
+    done
+}
+
+@test "harness settings: Stop is wired" {
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    run "$HARNESS" settings
+    run jq -e '.hooks.Stop[0].hooks[0].command | endswith("hook Stop")' "$output"
+    [ "$status" -eq 0 ]
 }
 
 @test "provenance gate logic flags undeclared slices" {
@@ -498,7 +525,7 @@ print(m.enum_ok('notification_type', 'my_secret_plan'), m.enum_ok('notification_
     run "$HARNESS" settings
     [ "$status" -eq 0 ]
     [ "$output" = "$BORG_SPIKE_DIR/settings.spike.json" ]
-    run jq -e '(.hooks | keys | sort) == ["Notification","PostToolUse","PreToolUse","SessionEnd","SessionStart","StopFailure","SubagentStart","SubagentStop"]
+    run jq -e '(.hooks | keys | sort) == ["Notification","PostToolUse","PreToolUse","SessionEnd","SessionStart","Stop","StopFailure","SubagentStart","SubagentStop"]
         and (.hooks.PreToolUse[0].matcher == "Agent|Workflow")
         and ([.hooks[][0].hooks[0].timeout] | all(. == 5))' "$BORG_SPIKE_DIR/settings.spike.json"
     [ "$status" -eq 0 ]
