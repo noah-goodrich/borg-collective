@@ -209,9 +209,9 @@ _empty_branch_repo() {
     [ ! -s "$LOG_FILE" ]
 }
 
-@test "nanoprobe log skips a payload with no agent_type key" {
-    run bash "$BORG_NANOPROBE_LOG" <<< "{\"agent_id\":\"internal-2\",\"last_assistant_message\":\"x\",\"cwd\":\"${BATS_TEST_TMPDIR}\"}"
+@test "nanoprobe log records a payload with no agent_type key as agent_type ?" {
+    run bash "$BORG_NANOPROBE_LOG" <<< "{\"agent_id\":\"unknown-1\",\"last_assistant_message\":\"x\",\"cwd\":\"${BATS_TEST_TMPDIR}\"}"
     [ "$status" -eq 0 ]
-    [ -z "$output" ]
-    [ ! -s "$LOG_FILE" ]
+    [ -s "$LOG_FILE" ]
+    [ "$(jq -r .agent_type "$LOG_FILE")" = "?" ]
 }

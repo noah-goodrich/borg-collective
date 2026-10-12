@@ -271,8 +271,13 @@ MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result
     grep -q "agentType, or model + effort" "${BATS_TEST_DIRNAME}/../skills/fable-reviewer/SKILL.md"
 }
 
-@test "wiring: SubagentStop nanoprobe-log matcher is .+ so internal agents never start the hook" {
-    run grep -B6 -A2 'borg-nanoprobe-log.sh"' "$BUILD_PLUGIN"
+@test "wiring: the BUILT plugin gives the SubagentStop nanoprobe-log entry matcher .+" {
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/dev"
+    export PLUGIN_DIR_OVERRIDE="${BATS_TEST_TMPDIR}/claude-plugins/borg-collective"
+    [[ "$PLUGIN_DIR_OVERRIDE" == "$BATS_TEST_TMPDIR"/* ]] || false
+    run bash "$BUILD_PLUGIN"
     [ "$status" -eq 0 ]
-    [[ "$output" == *'"matcher": ".+"'* ]] || false
+    run jq -r '[.hooks.SubagentStop[] | select(any(.hooks[]; .command | contains("borg-nanoprobe-log.sh"))) | .matcher] | join(",")' "$PLUGIN_DIR_OVERRIDE/hooks/hooks.json"
+    [ "$status" -eq 0 ]
+    [ "$output" = ".+" ]
 }

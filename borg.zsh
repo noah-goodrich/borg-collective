@@ -2418,7 +2418,8 @@ _borg_agents_newest_first() {
 }
 
 # Drop rows whose agent_type is exactly "" (Claude Code internal agents logged before the hook skipped them).
-# Non-object lines and objects without an agent_type key pass through unchanged.
+# Rows without the key, or with "?", are kept: they cannot be identified as internal agents.
+# Non-object lines pass through unchanged.
 _borg_agents_drop_untyped() {
     jq -rR '. as $l | (try fromjson catch null) as $o
         | select((($o | type) != "object") or (($o.agent_type // null) != ""))
