@@ -1089,13 +1089,13 @@ _GH_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([0-9]+)$")
 
 
 def _next_action_command(ref: str) -> str:
-    """A runnable command for one ref: `gh browse N --repo owner/repo` for an `owner/repo#N` ref, else
+    """A runnable command for one ref: `gh pr view N -R owner/repo` for an `owner/repo#N` ref, else
     `borg next` (the chooser, which routes anything that is not a GitHub ref). The ref is matched
     against a strict pattern before it reaches a command line, so a hand-typed ref cannot inject."""
     if _GH_REF.match(ref):
         # JUSTIFICATION: str.partition on a plain string; the Demeter rule reads it as a chain on a stranger.
         repo, _, number = ref.partition("#")  # pylint: disable=clean-arch-demeter
-        return f"gh browse {number} --repo {repo}"
+        return f"gh pr view {number} -R {repo}"
     return "borg next"
 
 
@@ -1115,7 +1115,8 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
     ONE recommended next action and a command, derived only from data the document already carries, by
     this rule: the first WAITING ON YOU item (a decision only the reader can make) if any; else the
     first agent (`mine`) ready row; else a sentence saying nothing is ready (or that nobody looked,
-    when no manifest was resolved). It reads `doc` and nothing else, and has no branch on scope, so
+    when no manifest was resolved) followed by `borg next`, so the line always carries a runnable
+    command. It reads `doc` and nothing else, and has no branch on scope, so
     orchestrator and repository pages print the same SHAPE of line.
     """
     if items:
@@ -1125,8 +1126,9 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
         mine = _first_mine(doc)
         if mine is None:
             if unlooked:
-                return f"  {BOLD}next{NC}  nobody looked; run {CYAN}borg link{NC} without --local\n"
-            return f"  {BOLD}next{NC}  {DIM}nothing is ready{NC}\n"
+                looked = f"nobody looked; run {CYAN}borg link{NC} without --local"
+                return f"  {BOLD}next{NC}  {looked}  {CYAN}borg next{NC}\n"
+            return f"  {BOLD}next{NC}  {DIM}nothing is ready{NC}  {CYAN}borg next{NC}\n"
         ref, project = mine
     where = f" {DIM}({project}){NC}" if project else ""
     return f"  {BOLD}next{NC}  {ref}{where}  {CYAN}{_next_action_command(ref)}{NC}\n"

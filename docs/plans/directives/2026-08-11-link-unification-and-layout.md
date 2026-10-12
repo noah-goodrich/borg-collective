@@ -42,10 +42,11 @@ the skill ignores it.
       PATH — the drone-container case that motivated the original design.
   - Verify: `SKILL.md` instructs running `borg link --json` first; the file-read section is clearly marked as the
     fallback and states its trigger condition.
-- [ ] L3 — Output is bottom-anchored per the corrected **D2**: inventory and context first, the answer in the
+- [x] L3 — Output is bottom-anchored per the corrected **D2**: inventory and context first, the answer in the
       final 3-5 lines before the prompt.
   - Verify: `borg link | tail -5` contains the recommended next action and its command.
   - **Settled 2026-10-12 (open, fails today):** position is ruled, content is not. `2026-10-05-board-chooser-and-trains-ux.md` ("link-unification L3 ... defers to it") rules that L3 wins on position, so `▸ WAITING ON YOU` sits last. On origin/main (e3ebb67, worktree code) `borg link | tail -5` is a blank line, the `▸ WAITING ON YOU` header, `— nothing waits on you` and `+1 agent tasks`: the answer block is last, but it carries no recommended next action and no command, because `▸ NEXT` and `▸ SIGNALS` print above it. Not fixed here; the open question is whether the bottom block should carry the next action or L3 should be reworded to "the bottom block is WAITING ON YOU".
+  - **Ticked 2026-10-12 by https://github.com/noah-goodrich/borg-collective/pull/325:** the page now ends on one `next` line that always carries a runnable command (`gh pr view N -R owner/repo` for a strict ref, else `borg next`). Measured `borg link | tail -5` after the change: a blank-free tail of the `▸ WAITING ON YOU` header, `— nothing waits on you`, `+1 agent tasks`, and the final line `next  nothing is ready  borg next`.
   - D2 was corrected on 2026-08-11: terminal output auto-scrolls, so the eye lands at the **bottom**. Anything
     printed first is in the cheapest region, not the most valuable. The Borg cube is therefore **fine where it
     is** and must not be removed.
