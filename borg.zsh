@@ -1717,9 +1717,10 @@ _borg_launch_in_tmux() {
     fi
 
     if [[ -n "${TMUX:-}" ]]; then
-        ( cd "$BORG_ORCHESTRATOR_ROOT" && "$@" )
+        local rc=0
+        ( cd "$BORG_ORCHESTRATOR_ROOT" && "$@" ) || rc=$?
         [[ -n "$cleanup_file" ]] && rm -f "$cleanup_file"
-        return
+        return "$rc"
     fi
 
     # Write a launcher script so tmux send-keys only types one short command

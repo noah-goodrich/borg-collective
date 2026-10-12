@@ -1456,21 +1456,9 @@ EOF
     [ "$output" -ge 1 ]
 }
 
-# KNOWN BUG (found while writing this contract test -- not introduced by it, verified directly
-# against borg.zsh outside bats/mocking with `env -i ... TMUX=... zsh borg.zsh claude`, so it is
-# not a mocking artifact). When `borg claude` runs from a shell that is ALREADY inside a tmux
-# session ($TMUX set -- the common case in this environment, which runs almost everything under
-# tmux with a Ctrl+Space prefix), cmd_claude reaches _borg_launch_in_tmux and correctly execs the
-# resolved `claude --continue` binary (proven below), but the function's tail --
-#     [[ -n "$cleanup_file" ]] && rm -f "$cleanup_file"
-#     return
-# -- always fails for cmd_claude specifically, because cmd_claude (unlike cmd_init) never sets
-# cleanup_file. An empty guard makes that line's own exit status 1 ("false"), and because borg.zsh
-# runs under `set -e`, errexit trips before the explicit `return` is reached -- so the function,
-# and the whole script, exits 1 even though claude itself succeeded. This test pins the CURRENT
-# (buggy) contract on purpose: a future fix should show up here as a status-code flip to 0, not as
-# a silent, undetected regression either way.
-@test "contract: claude reaches and execs claude --continue when already inside tmux (currently exits 1 -- known bug)" {
+# Formerly pinned a known bug: _borg_launch_in_tmux returned the status of its cleanup `[[ ]]` test
+# (1 when cmd_claude had no prompt file) instead of claude's. Fixed; this now pins exit 0.
+@test "contract: claude reaches and execs claude --continue when already inside tmux" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     export TRACE="${BATS_TEST_TMPDIR}/trace.log"
@@ -1487,7 +1475,7 @@ EOF
     chmod +x "$MOCK_BIN/claude"
 
     run_zsh_borg claude
-    [ "$status" -eq 1 ]
+    [ "$status" -eq 0 ]
     [[ "$output" == *"Resuming orchestrator"* ]] || false
     run grep -c "claude --model opus --effort xhigh --continue" "$TRACE"
     [ "$status" -eq 0 ]
