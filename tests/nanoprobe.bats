@@ -134,21 +134,6 @@ _run_split() {
     HOOK_RC=$?
 }
 
-# A clone with an upstream and nothing ahead of it: the zero-commit condition.
-_empty_branch_repo() {
-    local origin="${BATS_TEST_TMPDIR}/origin.git" work="${BATS_TEST_TMPDIR}/work"
-    git init -q --bare "$origin"
-    git clone -q "$origin" "$work" 2>/dev/null
-    git -C "$work" config user.email "test@test.com"
-    git -C "$work" config user.name "Test"
-    echo a > "$work/a.txt"
-    git -C "$work" add a.txt
-    git -C "$work" commit -q -m init
-    git -C "$work" push -q origin HEAD 2>/dev/null
-    git -C "$work" branch -q --set-upstream-to="origin/$(git -C "$work" rev-parse --abbrev-ref HEAD)" 2>/dev/null
-    printf '%s' "$work"
-}
-
 @test "nanoprobe warnings: missing evidence arrives as systemMessage JSON on stdout, stderr empty" {
     _run_split "$(_probe_input "I completed the task successfully." "agent-noev1234")"
     [ "$HOOK_RC" -eq 0 ]
@@ -219,11 +204,10 @@ _typed_input() {
     _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "ZERO-WRITE"
 }
 
-@test "zero-write: a reviewer in a cwd with no commits ahead is not flagged, zero_commit null" {
-    local work tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    work=$(_empty_branch_repo)
+@test "zero-write: a reviewer with no writes is not flagged, zero_commit null" {
+    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
     _tx "$tx" Read tu1 false
-    _run_split "$(_typed_input borg-collective:borg-reviewer "$tx" "Reviewed lib/foo.sh:10 fine." "agent-rev12345" "$work")"
+    _run_split "$(_typed_input borg-collective:borg-reviewer "$tx" "Reviewed lib/foo.sh:10 fine." "agent-rev12345")"
     [ -z "$HOOK_OUT" ]
     [ "$(jq -r '.zero_commit | type' "$LOG_FILE")" = "null" ]
 }

@@ -127,19 +127,25 @@ fi
 # A 0-write run (the 15-read/0-write/32k-abort failure) is flagged loudly so the orchestrator
 # re-spawns instead of believing the work landed. The payload cwd is the PARENT session's cwd (a
 # nanoprobe works in its own worktree via git -C and removes it), so the repo cannot answer this;
-# the transcript can. Count successful file-edit tool calls plus successful Bash git commit/push,
-# joining each tool_use to its tool_result by tool_use_id and dropping is_error results.
+# the transcript can. Count file-edit tool calls plus Bash git commit/push, joining each tool_use to
+# its tool_result by tool_use_id and dropping only is_error results (a call with no result yet counts).
 # zero_commit: true = flagged, false = writes found, null = not applicable (non-writer or no transcript).
 ZERO_COMMIT=null
 if [[ "$IS_WRITER" == "true" && -n "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
-    _writes=$(jq -rs '
-        [.[] | (.message.content? // []) | if type == "array" then .[] else empty end] as $blocks
-        | ([$blocks[] | select(.type == "tool_result" and (.is_error // false) != true) | .tool_use_id]) as $ok
+    # git, then any mix of -C <path> (bare or quoted), -c k=v and --long[=value], then commit|push; the
+    # lead-in may be start, whitespace, ; & | ( or a quote so `bash -c '...git commit...'` matches.
+    _git_re="(^|[[:space:];&|(\"'])git((\\s+-C\\s+(\"[^\"]*\"|'[^']*'|\\S+))|(\\s+-c\\s+\\S+)|(\\s+--[A-Za-z][A-Za-z-]*(=\\S+)?))*\\s+(commit|push)(\\s|\$|[\"'])"
+    # Line by line: one malformed line (fromjson?) or non-array content must not void the whole parse.
+    # A tool_use with no tool_result yet counts (the transcript lags); only an is_error result drops it.
+    _writes=$(jq -R -r -n --arg re "$_git_re" '
+        [inputs | fromjson? | (.message.content? // []) | if type == "array" then .[] else empty end
+            | select(type == "object")] as $blocks
+        | ([$blocks[] | select(.type == "tool_result" and (.is_error // false) == true) | .tool_use_id]) as $bad
         | [$blocks[]
-            | select(.type == "tool_use" and (.id as $i | $ok | index($i) != null))
+            | select(.type == "tool_use" and (.id as $i | $bad | index($i) == null))
             | select(
                 (.name | IN("Edit", "Write", "NotebookEdit", "MultiEdit"))
-                or (.name == "Bash" and ((.input.command // "") | test("(^|[;&|]|\\s)git(\\s+-C\\s+\\S+)?\\s+(commit|push)(\\s|$)")))
+                or (.name == "Bash" and ((.input.command // "") | test($re)))
               )
           ] | length
     ' "$TRANSCRIPT_PATH" 2>/dev/null || true)
