@@ -65,6 +65,13 @@ resume_classify_error() {
                 *) echo "notify_only notify" ;;
             esac
             ;;
+        process_death)
+            # Liveness (S10): the process or pane is gone with open work. Not an API error; scheduled by resume_plan.
+            echo "process_death resume"
+            ;;
+        tmux_down | container_down)
+            echo "notify_only notify"
+            ;;
         authentication_failed | oauth_org_not_allowed | account_on_hold | verification_required | billing_error | \
             cloud_credential_error | model_not_found)
             echo "notify_only notify"
@@ -276,6 +283,9 @@ resume_plan() {
             else
                 echo "$class notify -"
             fi
+            ;;
+        process_death)
+            echo "$class resume $((now + ${BORG_RESUME_LIVENESS_GRACE_SEC:-300}))"
             ;;
         max_output_tokens)
             echo "$class resume $((now + 15))"

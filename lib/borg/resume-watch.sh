@@ -773,6 +773,12 @@ borg_resume_watch_once() {
         [ "$(_ri_mtime "$_f")" -ge "$_cut" ] || continue
         _rw_scan_session "$_sid"
     done
+    # S10 liveness detector (lib/borg/resume-liveness.sh): dead process or pane with open work, sticky close, stall
+    # watchdog. Runs before the confirmed pass so a stall wins over the 30-minute timeout.
+    if [ -n "${BORG_RESUME_LIBDIR:-}" ] && [ -f "$BORG_RESUME_LIBDIR/resume-liveness.sh" ]; then
+        # shellcheck source=/dev/null
+        . "$BORG_RESUME_LIBDIR/resume-liveness.sh" && borg_resume_liveness_pass
+    fi
     # S9 gate (lib/borg/resume-gate.sh): confirmation before the confirmed rules, the pre-flight gate after them.
     command -v borg_resume_gate_confirm_pass >/dev/null 2>&1 && borg_resume_gate_confirm_pass
     _rw_confirmed_pass
