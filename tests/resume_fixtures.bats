@@ -470,7 +470,7 @@ print(m.enum_ok('notification_type', 'my_secret_plan'), m.enum_ok('notification_
     "$HARNESS" hook StopFailure < "$FX/stop_failure_payload.json"
     run "$HARNESS" show
     _present "$output" 'StopFailure' || false
-    [ "$(stat -f %Lp "$BORG_SPIKE_DIR" 2>/dev/null || stat -c %a "$BORG_SPIKE_DIR")" = "700" ]
+    [ "$(stat -c %a "$BORG_SPIKE_DIR" 2>/dev/null || stat -f %Lp "$BORG_SPIKE_DIR")" = "700" ]
 }
 
 @test "harness hook: garbage and empty stdin still exit 0 silently" {
