@@ -1,7 +1,8 @@
 """Tests for borg_core.registry.cli — the dispatch layer (add/rm argument handling, exit codes).
 
-Mirrors the parity contract pinned in tests/cli_contract.bats, including the KNOWN BUG where
-`borg add` exits 1 when no Claude session is found for the newly-registered project.
+Mirrors the parity contract pinned in tests/cli_contract.bats: `borg add` exits 0 whenever
+registration succeeds, with or without a Claude session (issue #306); real failures, such as
+adding a path already held under another name, still exit non-zero.
 """
 
 import os
@@ -622,3 +623,16 @@ def test_main_parses_name_in_both_spellings_and_rejects_a_bare_flag(isolated_env
         cli.main(["add", str(first), "--name"])
     assert raised.value.code == 1
     assert "--name needs a value" in capsys.readouterr().err
+
+
+def test_main_add_path_under_other_name_still_exits_nonzero(isolated_env, capsys):
+    proj = isolated_env / "proj"
+    proj.mkdir()
+    with pytest.raises(SystemExit) as ok:
+        cli.main(["add", str(proj), "--name", "one"])
+    assert ok.value.code == 0
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(["add", str(proj), "--name", "two"])
+
+    assert exc_info.value.code == 1

@@ -566,6 +566,7 @@ EOF
     mkdir -p "$proj_dir"
 
     run_zsh_borg add "$proj_dir" --name widgets
+    [ "$status" -eq 0 ]
     [[ "$output" == *"Registered: widgets"* ]] || false
 
     run_zsh_borg add "$proj_dir"
