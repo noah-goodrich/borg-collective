@@ -13,7 +13,7 @@
   - `claude-code-guide`
   - `research-tools:*`, only in a session where a research-tools skill was invoked (below)
 - **Denied:** no type at all (a fork), `general-purpose`, `Explore`, `Plan`, `fork`, `claude`, `borg-collective:ROUTING`, un-namespaced specialist names, and any unlisted type. Each deny message names what to use instead (for example, `Explore` becomes `borg-collective:borg-scout` for read-only search).
-- **Caps on allowed types.** A per-call `model` must be absent or `sonnet` / `haiku` (or a `claude-sonnet-*` / `claude-haiku-*` id). A per-call `effort` must be absent or `low` / `medium` / `high`. `opus`, `fable`, `inherit`, `xhigh`, `max` are denied. The specialists carry their own cheap `model:` / `effort:` frontmatter, so the default is already compliant.
+- **Caps on allowed types.** A per-call `model` must be absent or `sonnet` / `haiku` (or a `claude-sonnet-*` / `claude-haiku-*` id). A per-call `effort` must be absent or `low` / `medium` / `high`. `opus`, `fable`, `inherit`, `xhigh`, `max` are denied. The specialists carry their own cheap `model:` / `effort:` frontmatter, so the default is already compliant. The one exception is `claude-code-guide`, which has no effort in its definition: a call without `effort` is denied (no model is required).
 - **research-tools exception.** `research-tools:*` types may run Opus at any effort, because research quality is worth the spend. They are allowed only when the session transcript shows a research-tools skill invoked (a `Skill` tool call whose skill starts with `research-tools:`) or a research slash command (`/research-tools:research`, `/deep-research`, `/brainstorm`, including the bare forms). Without that, they are denied.
 
 Kill switches (debugging only): `BORG_AGENT_MODEL_GUARD=0`, `BORG_WORKFLOW_MODEL_GUARD=0`.
@@ -39,7 +39,7 @@ Pick the cheapest tier that fits.
 - **borg-researcher**: from-zero web research on ONE track. Do not use it for facts already in the repo.
 - **borg-reviewer**: independent blind adversarial review. It arrives cold; do not prime it with the author's reasoning.
 - **borg-verifier**: verification of a deliverable against its acceptance criteria.
-- **claude-code-guide**: questions about Claude Code itself.
+- **claude-code-guide**: questions about Claude Code itself. It is a built-in (Haiku) that pins no effort, so it inherits the session's xhigh: the guards REQUIRE an explicit `effort` of `low` / `medium` / `high` on it. Preferred call: `Agent {subagent_type:"claude-code-guide", effort:"low"}`; in a Workflow, `agent(p, {agentType: "claude-code-guide", effort: "low"})`. A bare spawn is denied.
 - **borg-scout has read-only file tools only (no Bash).** Route git and GitHub lookups ("state of PR X?", "what changed in commit Y?") to an agent that has Bash: borg-grunt for a fully-specified command, borg-nanoprobe when judgment is needed. A scoped read-only shell for the scout is tracked in `docs/plans/directives/2026-10-10-scout-shell-allowlist.md`.
 
 ## Decision tree
@@ -86,6 +86,7 @@ Stage guidance:
 - Analysis, synthesis, drafting: `agentType: 'borg-collective:borg-nanoprobe'`
 - From-zero web research: `agentType: 'borg-collective:borg-researcher'`
 - Blind review or merge gate: `agentType: 'borg-collective:borg-reviewer'`
+- Claude Code questions: `agentType: "claude-code-guide", effort: "low"` (effort is required; it pins none and would inherit xhigh)
 - Ad hoc, no specialist fits: `model: 'sonnet', effort: 'medium'`
 
 - **Compose with the specialists.** A specialist brings both its cheap model and its system prompt; prefer it over a bare `model` pin.
