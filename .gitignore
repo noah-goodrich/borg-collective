@@ -41,3 +41,4 @@ templates/supabase/.borg/
 # three weeks, arming the gate in every clone. See the removal commit.
 .gate-armed
 evals/lifecycle-manifests/out/
+evals/session-load/out/
