@@ -200,8 +200,8 @@ echo "== E2a: manifest round-trip contract (pytest, offline) =="
 E2A_MIN=15
 if ! "$PYTHON" -c "import pytest" >/dev/null 2>&1; then
     # GUARDED ON THE INPUT THE CASE ACTUALLY NEEDS, which is an importable pytest and not merely an
-    # interpreter. E2 and E3 shell into bare `python3` and are right to — `merge-tree/programs.py`
-    # and `borg_core/manifest` import only stdlib, so any stock interpreter runs them — but E2a needs a
+    # interpreter. E2 and E3 run `borg_core/manifest` under `$PYTHON` with PYTHONPATH set, and are right
+    # to need nothing else — it imports only stdlib, so any stock interpreter runs them — but E2a needs a
     # THIRD-PARTY DEV DEPENDENCY, which no interpreter carries by construction. "python3 is on PATH"
     # is therefore a different fact from "this case can execute", and a harness that checks the
     # first and then reports FAIL prints the manifest contract's name for what is a missing package:
@@ -300,18 +300,28 @@ elif ! gh auth status >/dev/null 2>&1; then
     # case must not make, and the reason a bare CI runner saw all 17 refs as bad.
     skip "E2 refs: gh is not authenticated (a 401 is indistinguishable from a dead ref)"
 else
-    E2_FAILS=$(cd "$REPO/merge-tree" && python3 - "${REPOS[@]}" <<'PY'
+    # THE SAME READER AS E3 AND AS `borg link`, with PYTHONPATH set like E3's: the interpreter may be a
+    # stock `python3` that has not installed borg_core. Only refs of kind github (`refs.ref_kind`) are
+    # asked about: a Jira key or a link row has no `#` to split on and no PR to view.
+    # A REFUSED MANIFEST IS A FAILURE, not a smaller sweep -- its refs never reach the loop, so
+    # `checked=N` would shrink and read as a clean run. Directory-level notes (a repository that is
+    # absent on this machine) are printed and are not failures.
+    E2_FAILS=$(PYTHONPATH="$REPO" "$PYTHON" - "${REPOS[@]}" <<'PY'
 import subprocess
 import sys
-import programs
-manifests, _ = programs.discover(sys.argv[1:])
+from borg_core.manifest import core, refs as manifest_refs, shell
+manifests, warnings = shell.discover(sys.argv[1:])
+refused = shell.refused_manifest_paths(warnings)
+for line in warnings:
+    print(f"warning: {line}")
 refs = set()
 for m in manifests:
-    for r in m.get("rows", []):
+    for r in core.manifest_rows(m):
         refs.add(r["ref"])
     apex = m.get("apex")
     if isinstance(apex, dict) and apex.get("ref"):
         refs.add(apex["ref"])
+refs = {ref for ref in refs if manifest_refs.ref_kind(ref) == manifest_refs.GITHUB}
 bad = []
 for ref in sorted(refs):
     repo, num = ref.rsplit("#", 1)
@@ -319,8 +329,8 @@ for ref in sorted(refs):
                        capture_output=True, text=True, timeout=30)
     if p.returncode != 0:
         bad.append(ref)
-print(f"checked={len(refs)} unresolved={bad}")
-sys.exit(1 if bad else 0)
+print(f"checked={len(refs)} unresolved={bad} refused={refused}")
+sys.exit(1 if bad or refused else 0)
 PY
 )
     E2_RC=$?

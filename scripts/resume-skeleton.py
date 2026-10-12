@@ -232,7 +232,7 @@ PATH_KEYS = {"cwd", "projectPath", "scriptPath", "transcript_path", "agent_trans
 
 UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 ISO_RE = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$")
-FAKE_HOME = "/Users/noah/dev/example"
+FAKE_HOME = "/Users/example/dev/example"
 
 
 def enum_ok(key, v):
@@ -276,7 +276,7 @@ class Faker:
 
     def path(self, key, v):
         if key == "transcript_path" or key == "agent_transcript_path":
-            return FAKE_HOME + "/.claude/projects/-Users-noah-dev-example/<sid>.jsonl"
+            return FAKE_HOME + "/.claude/projects/-Users-example-dev-example/<sid>.jsonl"
         if key == "scriptPath":
             return FAKE_HOME + "/.claude/workflows/scripts/example.js"
         return FAKE_HOME

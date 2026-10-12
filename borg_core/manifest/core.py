@@ -5,24 +5,23 @@ environment reads, no clock reads. Every function here takes already-gathered da
 returns plain data structures or strings. All I/O (filesystem reads, subprocess calls, environment
 and clock lookups) lives in shell.py, which calls into this module for the actual logic.
 
-Ports the pure half of merge-tree/programs.py:40-271 -- GATE_KINDS, PREREQ_ORDERS, DEFAULT_LANE,
-looks_like_manifest, validate, lanes, derive_edges, unmapped_gates and their private helpers.
-PORTED, NOT IMPORTED, and that is forced twice over: `merge-tree` carries a hyphen so it can never
-be a Python package name, and pyproject.toml:76 pins
+Ports the pure half of merge-tree/programs.py (deleted in AC7; it survives in git history) --
+GATE_KINDS, PREREQ_ORDERS, DEFAULT_LANE, looks_like_manifest, validate, lanes, derive_edges,
+unmapped_gates and their private helpers. PORTED, NOT IMPORTED, and that is forced twice over:
+`merge-tree` carries a hyphen so it can never be a Python package name, and pyproject.toml pins
 `allowed_prefixes = ["borg_core", "__future__"]`, so an import would fail `make lint` even if the
-path resolved.
+path resolved. The arrow now runs the other way: merge-tree/coordinator.py imports this package.
 
-THE PORT HAS DELIBERATELY DIVERGED from the copy that still lives in merge-tree/programs.py, which
-is itself still live (merge-tree/coordinator.py rewrites manifests through its writer; the
-other former caller, merge-tree/gather.py, retired with the browser board). The differences, so the
-next editor of either copy can see them: this side validates `after` and derives edges from it (the writer over there
-accepts an `after` of any shape and derives nothing from it, so its write gate is WEAKER than this
-read gate -- a manifest it happily writes can be rejected here), this side deduplicates edges within
-a manifest, this side requires every declared ref to be a FULL `owner/repo#num`, this side no longer
-closes `gate.kind` to GATE_KINDS (see _validate_gate: an unrecognized kind is a ROUTER concern here
-and a validation error over there, so this read gate is the WEAKER of the two on that one field --
-the only axis where the asymmetry runs that direction), and this side does not use the retired
-"program" vocabulary in any name. Retiring one of the two copies is AC7's problem, not this module's.
+THERE IS ONE IMPLEMENTATION NOW, and these are the ways the port had diverged from the copy it replaced,
+kept because each is the reason this side's rules are what they are: this side validates `after` and
+derives edges from it (the old writer accepted an `after` of any shape and derived nothing from it, so
+its write gate was WEAKER than this read gate -- a manifest it happily wrote could be rejected here),
+this side deduplicates edges within a manifest, this side requires every declared ref to be a FULL
+`owner/repo#num`, this side no longer closes `gate.kind` to GATE_KINDS (see _validate_gate: an
+unrecognized kind is a ROUTER concern here and was a validation error over there), and this side
+does not use the retired "program" vocabulary in any name. Retiring the other copy was AC7's problem
+and is done: `shell.write_manifest` validates with `validate` below, so what the writer accepts the
+reader loads.
 
 WHY DECLARED EDGES EXIST AT ALL. Branch topology only ever links PRs inside ONE repository -- a base
 branch is a repository-local name -- so nothing mechanical says `stillpoint#48` must merge before
@@ -161,7 +160,7 @@ GATE_KINDS = {"decision", "verification"}
 # with no declared position among themselves. They keep their file order (see _sort_key).
 #
 # THE DASHES ARE FOUR DISTINCT VALUES: ASCII HYPHEN-MINUS (U+002D), EN DASH (U+2013), EM DASH
-# (U+2014) and the empty string. Copied byte-for-byte from merge-tree/programs.py:48, not retyped,
+# (U+2014) and the empty string. Copied byte-for-byte from the deleted merge-tree/programs.py, not retyped,
 # and pinned by a codepoint assertion in test_core.py because the glyphs are visually
 # indistinguishable at a glance. Every prerequisite row in both live manifests uses U+2013
 # exclusively (7 of 16 rows), so an editor pass or a "normalize the punctuation" reflex that rewrote
@@ -198,7 +197,7 @@ ORDERING_EDGE_KINDS = ("stacked", "blocks")
 _ORDER_DIGITS = re.compile(r"(\d+)")
 
 
-def _rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+def manifest_rows(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     """The manifest's rows, or an empty list. Never raises on a malformed value."""
     rows = manifest.get("rows")
     return [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
@@ -220,8 +219,13 @@ def looks_like_manifest(doc: Any) -> bool:
     return isinstance(doc, dict) and isinstance(doc.get("rows"), list)
 
 
+# The two keys `shell._load_manifest` stamps onto a loaded document. RESERVED for the loader: an author never
+# writes them, and nothing that came off disk may carry them back onto it.
+LOADER_STAMPED_KEYS = ("_id", "_path")
+
+
 def declared_body(manifest: dict[str, Any]) -> dict[str, Any]:
-    """A manifest's declared body: every key the AUTHOR wrote, and no key this package derived.
+    """A manifest's declared body: every key the AUTHOR wrote, and no key the loader stamped.
 
     ONE definition of "derived", used by both directions of the round trip. `_manifest_identity`
     needs it to compare two copies of one declaration; `shell.write_manifest` needs it so a document
@@ -230,16 +234,18 @@ def declared_body(manifest: dict[str, Any]) -> dict[str, Any]:
     exactly `_path`, so every synced file gained a permanent `"_id"` that nothing rejects and nothing
     reads. The only symptom was a `git diff` on a tracked directory.
 
-    PREFIX RULE, NOT A NAME LIST. A list would have to be updated in this file every time the loader
-    learns to stamp something, and the failure mode of forgetting is silent persistence of the new
-    key. `_`-prefixed means derived, everywhere in this package, and `manifest_dir`'s docstring
-    already relies on that convention holding.
+    A NAME LIST, NOT A PREFIX RULE. This stripped every `_`-prefixed key until PR #341's review: an
+    author's own `_comment` or `_note` (JSON has no comments, so people reach for exactly that) was
+    deleted by any `add-row`, `close` or `borg chain sync`, a loss origin/main's sync did not have.
+    The prefix rule guarded against a future stamp being persisted, but the price was paid today, in
+    data the author wrote. The loader stamps two keys and `LOADER_STAMPED_KEYS` names them; a loader
+    that learns a third must add it there, and `test_the_writer_persists_no_derived_key` feeds the
+    writer the reader's own output, so forgetting is a red test and not a silent leak.
 
-    Note `merge-tree/coordinator.py:98` does this same strip by hand to build the payload for an
-    out-of-repo sync shim, and is NOT yet routed here -- it still names `_path` alone. Repointing it
-    is the retirement's job; until then that shim receives an `_id` this writer no longer writes.
+    `merge-tree/coordinator.py::run_target` builds the payload for an out-of-repo sync shim through
+    this function too, so the shim receives exactly the declared body the writer persists.
     """
-    return {k: v for k, v in manifest.items() if not k.startswith("_")}
+    return {k: v for k, v in manifest.items() if k not in LOADER_STAMPED_KEYS}
 
 
 def _validate_apex(apex: Any) -> list[str]:
@@ -381,12 +387,11 @@ def _validate_after(row: dict[str, Any], ref: str, label: str) -> list[str]:
 
     `after: null` is treated as absent, matching how _validate_gate treats a null gate.
 
-    THE WRITE GATE IS WEAKER THAN THIS READ GATE, and that asymmetry is worth knowing about:
-    merge-tree/programs.py -- still live, still rewriting every manifest in place through its own
-    writer -- validates no `after` at all, so it will happily write `"after": "o/r#2"` (a bare
-    string) which this rejects, dropping the ENTIRE file at shell._load_manifest. Today's live
-    manifests carry no `after`, so it is latent. See the module docstring for the full divergence
-    list.
+    THE WRITE GATE USED TO BE WEAKER THAN THIS READ GATE, and the asymmetry is gone: the writer this
+    replaced (merge-tree/programs.py) validated no `after` at all, so it would happily write
+    `"after": "o/r#2"` (a bare string) which this rejects, dropping the ENTIRE file at
+    shell._load_manifest. `shell.write_manifest` validates with this function, so that shape is now
+    refused on the way in. See the module docstring for the full divergence list.
     """
     after = row.get("after")
     if after is None:
@@ -465,10 +470,10 @@ def validate(manifest: dict[str, Any]) -> list[str]:
     instead of N runs. Callers must treat a non-empty result as fatal BEFORE writing anything -- a
     malformed manifest that half-writes is worse than one that is rejected.
 
-    Iterates the RAW rows list, NOT _rows(): _rows filters non-dict entries so tolerant READERS never
+    Iterates the RAW rows list, NOT manifest_rows(): manifest_rows filters non-dict entries so tolerant READERS never
     crash, and validation must do the exact opposite and report them. `{"rows": ["a#1", "b#1"]}` is a
     plausible hand-authoring typo that would otherwise validate clean, load through discovery, and
-    declare nothing -- silently. A future refactor that shares _rows() here "for consistency"
+    declare nothing -- silently. A future refactor that shares manifest_rows() here "for consistency"
     reintroduces that bug.
     """
     if not isinstance(manifest.get("rows"), list):
@@ -521,10 +526,10 @@ def next_order_in_lane(manifest: dict[str, Any], lane: str, skip_index: int = -1
     Prerequisites are excluded because they are not in the numbered sequence: `_sort_key` puts them
     in bucket 0, ahead of every numbered row, and a lane holding only prerequisites therefore starts
     its numbering at 1. `skip_index` lets a row being MOVED avoid counting itself, and it indexes
-    `_rows`' filtered view -- the same enumeration `_sort_key` is handed here.
+    `manifest_rows`' filtered view -- the same enumeration `_sort_key` is handed here.
     """
     highest = 0
-    for index, row in enumerate(_rows(manifest)):
+    for index, row in enumerate(manifest_rows(manifest)):
         if index == skip_index or (_text(row.get("lane")) or DEFAULT_LANE) != lane:
             continue
         bucket, position, _ = _sort_key(row, index)
@@ -540,14 +545,14 @@ def lanes(manifest: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
     are excluded, and that exclusion is a LOAD-BEARING PRECONDITION, not tidiness: _stacked_edges,
     _after_edges, _apex_edges and _blocks_edges all index `row["ref"]` directly with no `.get`, which
     is safe only because this function already dropped refless rows and derive_edges builds its row
-    list by flattening this output rather than calling _rows(). validate has already reported them.
+    list by flattening this output rather than calling manifest_rows(). validate has already reported them.
 
     Lane names come back in `sorted()` order, NOT declaration order -- a live two-lane manifest yields
     `contract` before `cutover`. That is a public property of the return value; derive_edges re-sorts
     its edges anyway, but a consumer iterating lanes() sees alphabetical.
     """
     grouped: dict[str, list[tuple[tuple[int, int, int], dict[str, Any]]]] = {}
-    for i, row in enumerate(_rows(manifest)):
+    for i, row in enumerate(manifest_rows(manifest)):
         if not _text(row.get("ref")):
             continue
         lane = _text(row.get("lane")) or DEFAULT_LANE
@@ -686,11 +691,11 @@ def gates(manifest: dict[str, Any]) -> list[dict[str, str]]:
     careful enough to name their blocker. The plan's own named risk is a mis-set gate routing a
     human decision to an agent; reading the wrong function gets there with nothing mis-set at all.
 
-    Reads through _rows() (tolerant) while validate reads the raw list (strict). The asymmetry is the
+    Reads through manifest_rows() (tolerant) while validate reads the raw list (strict). The asymmetry is the
     design: reporting must never crash on data validation has already condemned.
     """
     out = []
-    for row in _rows(manifest):
+    for row in manifest_rows(manifest):
         gate = row.get("gate")
         if not isinstance(gate, dict):
             continue
@@ -743,7 +748,7 @@ def row_refs(manifest: dict[str, Any]) -> list[str]:
     Same `_text` coercion and same exactness as declared_refs; see parse_ref for why nothing is
     normalized.
     """
-    return sorted({ref for ref in (_text(row.get("ref")) for row in _rows(manifest)) if ref})
+    return sorted({ref for ref in (_text(row.get("ref")) for row in manifest_rows(manifest)) if ref})
 
 
 def declared_refs(manifest: dict[str, Any]) -> list[str]:
@@ -766,7 +771,7 @@ def declared_refs(manifest: dict[str, Any]) -> list[str]:
     rows reordered should produce byte-identical output.
     """
     refs: list[str] = []
-    for row in _rows(manifest):
+    for row in manifest_rows(manifest):
         refs.append(_text(row.get("ref")))
         gate = row.get("gate")
         if isinstance(gate, dict):

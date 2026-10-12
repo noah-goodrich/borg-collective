@@ -1,17 +1,17 @@
 # Directive: borg-resume v2: fire on any interruption
 
-*Filed: 2026-10-12 · Status: Proposed*
+*Filed: 2026-10-12 · Status: Approved (2026-10-12, Noah)*
 
 ## tl;dr
 
 - Today borg-resume only fires if a live model turn notices a failed Workflow. When the main loop itself dies on a limit, no turn exists, so it never fires. PR #290 swaps the scheduler to CronCreate, which is still model-invoked, session-scoped, and Workflow-only.
-- The fix moves detection and scheduling out of the model. A few rare-event hooks (`StopFailure`, `SessionStart`, `SessionEnd`, `SubagentStart/Stop`, `Notification`, and `Pre/PostToolUse` on `Agent|Workflow` only) append facts to a durable per-session ledger under `/Users/noah/.local/state/borg/resume/`. A launchd watcher (`borg-resume watch`, every 30s, modeled on `borg-cortex-watch`) folds those facts into interruption records, decides when each is due, and injects a one-line prompt with `tmux send-keys`.
+- The fix moves detection and scheduling out of the model. A few rare-event hooks (`StopFailure`, `SessionStart`, `SessionEnd`, `SubagentStart/Stop`, `Notification`, and `Pre/PostToolUse` on `Agent|Workflow` only) append facts to a durable per-session ledger under `~/.local/state/borg/resume/`. A launchd watcher (`borg-resume watch`, every 30s, modeled on `borg-cortex-watch`) folds those facts into interruption records, decides when each is due, and injects a one-line prompt with `tmux send-keys`.
 - The one mechanism that makes it deterministic: hooks only APPEND events (plus one write-once registry file per session), and a single-instance watcher owns every state transition and every counter. Two independent detectors feed it (hook events and a transcript/journal/liveness scan), so a missed hook, a SIGKILL, or a reboot still produces a record. Both converge on one record per (session, scope), which is the idempotency key. Transcripts are ground truth; hooks are accelerators.
 - Injection is gated on POSITIVE evidence, never on absence of activity. The watcher injects only into a pane that is bound to the session id (tmux pane option `@borg_sid`), whose claude process provably owns the session, whose composer is provably empty with no dialog showing, and whose attached human is not typing. If any of that cannot be proven the record stays deferred and Noah is notified; there is no "inject anyway" path.
 - What was in flight is reconstructed from disk at resume time, not trusted from the hook payload: the first record of each `subagents/agent-*.jsonl` is the original brief, its `.meta.json` has `toolUseId`, `agentType`, `model`, and the workflow manifest `wf_<id>.json` has `scriptPath`. Workflow-owned agents (under `subagents/workflows/wf_<id>/`) are resumed only through their workflow, never through `SendMessage`.
 - Deliberate ends are detected, not assumed: a trailing `[Request interrupted by user*]` record in the main or an agent transcript closes the turn as `interrupted_by_user`, so Esc, a skipped agent, and Ctrl+X Ctrl+K are never resumed, even if the pane is closed afterwards.
 - Safety: kill switch (`BORG_RESUME_DISABLE=1` or the `DISABLED` sentinel), 3 consecutive no-progress resumes per session then stop-and-notify, a cap of 2 concurrently auto-resumed sessions, a fail-closed usage probe for limit-class records, `borg resume status|cancel|pause|run`, notify-only outside tmux. No new runtime dependency (bash, jq, tmux, launchd).
-- Build: 17 slices, each at most 2 deliverables. Real payloads and transcripts are captured first (S0a/S0b) and gate the slices that depend on them; a local real-claude smoke lane backs the stubbed bats suite.
+- Build: 23 slice rows (S0a to S16 plus S3b, S7b, CLEANUP-1a and CLEANUP-2), each at most 2 deliverables. Real payloads and transcripts are captured first (S0a/S0b) and gate the slices that depend on them; a local real-claude smoke lane backs the stubbed bats suite.
 
 ## Ground truth this design stands on
 
@@ -66,7 +66,7 @@ Columns: Auto is yes, notify, capped, or excluded. Details per row are in the bu
 - Crash, pane closed, reboot, Docker wedge: no hook fires. The liveness scan finds sessions with open work whose process or pane is gone and which have no deliberate end. Open work is derived from the transcript tail (last meaningful record is not a clean turn close and not an interrupt marker) or an unfinished, non-interrupted agent or workflow. Relaunch with `claude --resume <sid>`, verify the session id, then inject.
 - Workflow killed: manifest has no `result`, journal has `started` without `result`, and the journal has been idle for 5 minutes with no live owner session, or the owner session logged a limit error.
 - Auth and billing (`authentication_failed`, `oauth_org_not_allowed`, `account_on_hold`, `verification_required`, `billing_error`, `cloud_credential_error`, `model_not_found`, monthly spend or team budget text): notify with the exact message, never inject.
-- Excluded (deliberate): Esc, Ctrl-C, user skipping an agent, Ctrl+X Ctrl+K (all leave a trailing `[Request interrupted by user*]` record). Also excluded: `SessionEnd` reasons `prompt_input_exit`, `clear`, `logout`, and anything closed by `drone down` or `borg sever`. An interrupt followed by closing the pane is still excluded, because the marker, not the pane state, decides.
+- Excluded (deliberate): Esc, Ctrl-C, user skipping an agent, Ctrl+X Ctrl+K (all leave a trailing `[Request interrupted by user*]` record). Also excluded: `SessionEnd` reasons `prompt_input_exit`, `clear`, `logout`, and anything closed by `drone down` or `borg down`. An interrupt followed by closing the pane is still excluded, because the marker, not the pane state, decides.
 - Pane not provably idle: permission dialog, AskUserQuestion, plan approval, limit dialog, a half-typed human draft, or a human typing right now. The record stays `deferred`, Noah is notified once with the window name and `borg resume run <rid>`, and the watcher keeps re-checking each pass until the age limit. It never injects without proof.
 
 ## Components
@@ -79,7 +79,7 @@ Columns: Auto is yes, notify, capped, or excluded. Details per row are in the bu
 6. `borg.zsh` verb `borg resume ...` delegating to `bin/borg-resume`, and a `borg doctor` check.
 7. Skill `skills/borg-resume/SKILL.md` rewritten as the manual and fallback path (see PR #290 section).
 
-Installed layout (what launchd and hooks actually see): `/Users/noah/.claude/bin/borg-resume` plus `/Users/noah/.claude/lib/borg/*.sh`. `bin/borg-resume` resolves its libs relative to its own resolved path (`../lib/borg`), overridable with `BORG_RESUME_LIBDIR` for tests. `install.sh` installs the lib files explicitly, and a bats test copies the files into a temp layout and runs the watcher from there with a minimal launchd-like `PATH`.
+Installed layout (what launchd and hooks actually see): `~/.claude/bin/borg-resume` plus `~/.claude/lib/borg/*.sh`. `bin/borg-resume` resolves its libs relative to its own resolved path (`../lib/borg`), overridable with `BORG_RESUME_LIBDIR` for tests. `install.sh` installs the lib files explicitly, and a bats test copies the files into a temp layout and runs the watcher from there with a minimal launchd-like `PATH`.
 
 ### Hook wiring (hooks.json via `scripts/build-plugin.sh` Phase 4)
 
@@ -103,7 +103,7 @@ Installed layout (what launchd and hooks actually see): `/Users/noah/.claude/bin
 
 ## Data formats
 
-All under `${XDG_STATE_HOME:-$HOME/.local/state}/borg/resume/` (`/Users/noah/.local/state/borg/resume/`), resolved with `_borg_state_root`. Overridable with `BORG_RESUME_DIR` for tests.
+All under `${XDG_STATE_HOME:-$HOME/.local/state}/borg/resume/` (`~/.local/state/borg/resume/`), resolved with `_borg_state_root`. Overridable with `BORG_RESUME_DIR` for tests.
 
 ```
 resume/
@@ -128,7 +128,7 @@ Session registry, immutable facts captured at `SessionStart` (hook-owned):
 {
   "session_id": "00000000-0000-4000-8000-000000000001",
   "source": "startup",
-  "cwd": "/Users/noah/dev/example-project",
+  "cwd": "/Users/example/dev/example-project",
   "project": "example-project",
   "mode": "project",
   "in_container": false,
@@ -137,12 +137,12 @@ Session registry, immutable facts captured at `SessionStart` (hook-owned):
   "tmux": {"pane_id": "%12", "pane_pid": 41200,
            "session": "borg", "window": "example-project",
            "window_index": 3, "pane_index": 1,
-           "project_dir": "/Users/noah/dev/example-project"}
+           "project_dir": "/Users/example/dev/example-project"}
 }
 ```
 
 - `source` is the SessionStart source (`startup`, `resume`, ...). A `--resume` relaunch writes a fresh registry for that sid, which is how the watcher verifies the session came back.
-- `transcript` is never stored; it is re-resolved on the host by globbing `/Users/noah/.claude/projects/*/<sid>.jsonl`, because containers see a different prefix.
+- `transcript` is never stored; it is re-resolved on the host by globbing `~/.claude/projects/*/<sid>.jsonl`, because containers see a different prefix.
 - `mode` comes from `_borg_session_mode` (orchestrator, project); container-ness is the separate `in_container` field. `project` from the same cwd helper.
 - `claude_pid` is the hook's parent claude process (`$PPID`, unverified, U9) with its start time, used for the ownership check. Container sessions have no pid and no pane in the record.
 
@@ -231,7 +231,7 @@ Rebuilt from disk at render time, cross-checked with the ledger:
 
 ### Pane binding and idle proof
 
-Binding. At `SessionStart` the hook runs `tmux set-option -p -t "$TMUX_PANE" @borg_sid <sid>` (host sessions). The watcher resolves a session's pane ONLY by `tmux list-panes -a -F '#{pane_id} #{@borg_sid} #{pane_pid} #{pane_current_command}'` and selecting the pane whose `@borg_sid` equals the sid. A tmux server restart wipes the options and renumbers ids, so a stale registry `pane_id` can never match a different live session. For container (drone) sessions there is no `$TMUX_PANE`; the watcher binds host-side: it sets `@borg_sid` on the drone window's pane only when the window (by `@project_dir`) has exactly one claude pane, the drone container is healthy, and the transcript's recent writes are consistent with it. With two or more claude panes in the window the session stays unbound and the outcome is notify-only. The rightmost-claude-pane rule and window-name lookups (`borg sever`, `borg_tmux_find_window`) are used only to tell Noah where the session probably is in a notification, never to choose an injection target.
+Binding. At `SessionStart` the hook runs `tmux set-option -p -t "$TMUX_PANE" @borg_sid <sid>` (host sessions). The watcher resolves a session's pane ONLY by `tmux list-panes -a -F '#{pane_id} #{@borg_sid} #{pane_pid} #{pane_current_command}'` and selecting the pane whose `@borg_sid` equals the sid. A tmux server restart wipes the options and renumbers ids, so a stale registry `pane_id` can never match a different live session. For container (drone) sessions there is no `$TMUX_PANE`; the watcher binds host-side: it sets `@borg_sid` on the drone window's pane only when the window (by `@project_dir`) has exactly one claude pane, the drone container is healthy, and the transcript's recent writes are consistent with it. With two or more claude panes in the window the session stays unbound and the outcome is notify-only. The rightmost-claude-pane rule and window-name lookups (`borg_tmux_find_window`) are used only to tell Noah where the session probably is in a notification, never to choose an injection target.
 
 Ownership. Before every injection the watcher verifies, for host sessions, that the registry `claude_pid` is alive with the recorded start time and sits in the process tree of the pane's `pane_pid`. For container sessions it verifies the drone container is up and the transcript is that session's file. A failed check leaves the record `deferred` (or sends it to the liveness path if the process is dead).
 
@@ -246,7 +246,7 @@ If the pane is at the limit dialog, the watcher does NOT send a dismissal key un
 
 ### Relaunch (process death only)
 
-- Never build a shell string from transcript or payload text. The `sid` must match the UUID regex, and `cwd` must be an existing directory that is a registered project dir, a known worktree of one, or under `BORG_RESUME_CWD_ALLOW` (default `/Users/noah/dev`). Anything else is `notify_only`.
+- Never build a shell string from transcript or payload text. The `sid` must match the UUID regex, and `cwd` must be an existing directory that is a registered project dir, a known worktree of one, or under `BORG_RESUME_CWD_ALLOW` (default `~/dev`). Anything else is `notify_only`.
 - Pane gone, tmux up: orchestrator uses the `_borg_launch_in_tmux` path with `--resume <sid>`; drones use `drone up <project> --resume <sid>` (new flag, S3). Where the watcher itself creates a window it uses tmux's argv form (`tmux new-window -d -c "$cwd" -- claude --resume "$sid"`) so no shell parses the values.
 - Pane alive at a shell prompt (`zsh`, empty prompt proven by `capture-pane`): send one line built with `printf %q` for both values: `cd <quoted-cwd> && claude --resume <quoted-sid>`.
 - After launch the watcher polls `capture-pane` and handles the screens it may meet BEFORE any injection. The resume-size dialog ("Resuming the full session will consume a substantial portion of your usage limits...") is answered with the option that resumes the FULL session, because the summary option may fork the session id and break same-session Workflow resume (default; Decision 11 lets Noah choose the other way, and the exact keys are fixed by spike U17). The trust-folder prompt and any permission prompt are not answered: the record goes `notify_only` and the pane is left for the human. An unrecognized screen is also `notify_only`.
@@ -260,7 +260,7 @@ Injected into the pane (one line, no newlines, sanitized like `borg-vinculum-wat
 
 ```
 [borg-resume r_7f3a2c] Your work was interrupted (usage limit, now
-reset). Read /Users/noah/.local/state/borg/resume/prompts/r_7f3a2c.md
+reset). Read ~/.local/state/borg/resume/prompts/r_7f3a2c.md
 and carry it out, then run: borg-resume ack r_7f3a2c
 ```
 
@@ -332,7 +332,7 @@ Variants chosen by `class`:
 - `prompt_too_long`: the first injected line is `/compact`, and the file is only injected after the compact boundary appears.
 - `process_death`: header says the process was restarted with `--resume`; Step 0 adds "check `git status` in the cwd for half-written files".
 
-Permissions for unattended runs: the prompt runs `borg-resume`, `Workflow`, `SendMessage`, and `Agent`. `install.sh` merges these allowlist entries into the global settings idempotently with jq (never project-level): `Bash(/Users/noah/.claude/bin/borg-resume:*)`, `Bash(borg-resume:*)`, `Read(/Users/noah/.local/state/borg/resume/**)`. `borg doctor` fails loudly if they are missing. Because this touches the global `settings.json`, it needs Noah's explicit OK (Decision 10). `Workflow`, `SendMessage`, and `Agent` are not added to the allowlist; if they would prompt, the post-confirmation watchdog reports `stalled`.
+Permissions for unattended runs: the prompt runs `borg-resume`, `Workflow`, `SendMessage`, and `Agent`. `install.sh` merges these allowlist entries into the global settings idempotently with jq (never project-level): `Bash(~/.claude/bin/borg-resume:*)`, `Bash(borg-resume:*)`, `Read(~/.local/state/borg/resume/**)`. `borg doctor` fails loudly if they are missing. Because this touches the global `settings.json`, it needs Noah's explicit OK (Decision 10). `Workflow`, `SendMessage`, and `Agent` are not added to the allowlist; if they would prompt, the post-confirmation watchdog reports `stalled`.
 
 ## Safety rules
 
@@ -341,7 +341,7 @@ Permissions for unattended runs: the prompt runs `borg-resume`, `Workflow`, `Sen
 - Concurrency cap: at most 2 sessions actively auto-resumed at once (Pre-flight gate).
 - Kill switch: `BORG_RESUME_DISABLE=1` (checked by hooks and watcher), the `DISABLED` sentinel (`borg resume pause`, survives launchd where env cannot change), and `.borg/no-resume` per project. Recording is also off when disabled by env; with the sentinel, recording continues but nothing injects.
 - Notify-only classes: auth, billing, spend limit, model not found, repeated prompt-too-long, any record past max age, outside tmux, pane unbound or not provably idle for 10 minutes (notified once, still re-checked), a dialog-state pane, cap hit, failed confirmation, stalled resume, unrecognized launch screen, forked session id. Notification uses `_borg_osa_notify` (host side only, since container hooks cannot reach Notification Center) and states the exact manual command.
-- Deliberate exit protection: `SessionEnd` reasons `prompt_input_exit`, `clear`, `logout` end the session deliberately, and a trailing interrupt marker ends a scope deliberately. `drone down` and `borg sever` call `borg-resume mark-closed <project>`. A session with no end record, or `other`, and open work and no interrupt marker, is treated as a death.
+- Deliberate exit protection: `SessionEnd` reasons `prompt_input_exit`, `clear`, `logout` end the session deliberately, and a trailing interrupt marker ends a scope deliberately. `drone down` and `borg down` (the close paths; `borg sever` was retired on 2026-10-04) call `borg-resume mark-closed <project>`. A session with no end record, or `other`, and open work and no interrupt marker, is treated as a death.
 - Sticky close (S3b, binding on S7/S10): a `via=mark_closed` session_end stays in force against a later `session_end` with reason `other` or a trailing `stop_failure` (a dying claude can write both after teardown); only a later `session_start` for the same sid clears it. `drone down` marks before and after teardown (a mark is skipped when the last event is already a mark), and `mark-closed <project> [dir]` matches by registry project, or cwd / tmux.project_dir equal to or under the dir. S10 needs an ordering fixture: mark_closed followed by session_end `other`.
 - Guardian: resume does not depend on `usage-guardian.json` being alive. It never raises the guardian's sweep; the sweep's `/borg-link-up` keeps its once-per-window behavior.
 - Privacy and size: events keep 600 chars of assistant text; prompts and the ledger stay local; `watch.log` rotates at 1MiB.
@@ -378,10 +378,12 @@ Deliverables are code artifacts. Tests are listed separately. Every slice is pro
 | S1 | Ledger core + kill switch | S0a |
 | S2 | Classifier + reset parser | S0a |
 | S3 | Drone ledger mount | S1 |
+| S3b | Mark-closed + teardown wiring | S1, S3 |
 | S4 | Hook script + wiring | S1,S2,S3,S0b |
 | S5 | Inventory builder | S0b,S1,S2 |
 | S6 | Prompt renderer | S5, S2 |
 | S7 | Watcher: fold + scan | S1,S2,S5 |
+| S7b | Watcher follow-up fixes | S7 |
 | S8 | Inject lib + pane proof | S0b,S1,S4 |
 | S9 | Pre-flight gate + confirm | S6,S7,S8,S0c |
 | S10 | Liveness detector | S7, S8 |
@@ -391,12 +393,14 @@ Deliverables are code artifacts. Tests are listed separately. Every slice is pro
 | S14 | CLI verbs | S1, S9 |
 | S15 | Skill rewrite + #290 | S4, S9, S14 |
 | S16 | E2E + real-claude smoke | S11,S13,S15 |
+| CLEANUP-1a | Review fixes to S1, S2 | S1, S2 |
+| CLEANUP-2 | Doc and fixture cleanup | none |
 
 ### S0a Capture harness and fixture manifest
 
 - Deliverables: `scripts/spike-resume-payloads.sh` (installs a temporary logging hook for all candidate events into a temp settings file and prints captured payloads, plus pane captures via `capture-pane`); `tests/fixtures/resume/` with `fixtures.json` provenance tags.
 - Fixtures: scrubbed CAPTURES where a real one exists on this machine (main transcript ending in synthetic `rate_limit`, the sleep-interrupted `beb3b143` transcript tail, `server_error`, `authentication_failed`, `invalid_request`, a user-interrupt ending, subagent trees with `.meta.json`, workflow trees with manifest and journal, pane captures of composer/permission/limit dialogs); `synthetic` entries only where no capture is possible (`max_output_tokens`, weekly-phrasing variants), each marked as such.
-- Proof: `tests/resume_fixtures.bats` validates each fixture with jq against a shape checklist and verifies the provenance tags and the `required_captured` list per slice. Fixtures are scrubbed (no real paths beyond `/Users/noah/dev/example`).
+- Proof: `tests/resume_fixtures.bats` validates each fixture with jq against a shape checklist and verifies the provenance tags and the `required_captured` list per slice. Fixtures are scrubbed (no real paths beyond `/Users/example/dev/example`).
 
 ### S0b Gating spike run
 
@@ -505,6 +509,21 @@ Deliverables are code artifacts. Tests are listed separately. Every slice is pro
 
 ## Decisions
 
+Disposition (approved 2026-10-12, Noah, lean defaults):
+
+- D1 approved: staged relaunch after reboot, max 3 per hour, orchestrator first.
+- D2 approved: max age 48h from `resume_at`, with a 7-day ceiling from `first_seen`.
+- D3 approved: one automatic `/compact` on prompt-too-long, behind a flag, default on.
+- D4 approved: resume a user-closed pane with work in flight after a 5-minute grace.
+- D5 approved: S0c first (done).
+- D6 approved: bind mount.
+- D7, D8, D12 approved at their lean answers (no, never, no).
+- D9 approved: weekly limit auto-resumes with two notifications; `BORG_RESUME_WEEKLY=notify` overrides.
+- D10 PENDING: not approved. Nothing may edit the global settings.json until Noah gives an explicit OK.
+- D11 approved: full session at the `--resume` size dialog; blocked on spike U17, so unrecognized dialogs stay notify-only.
+
+Kill switch: the `DISABLED` sentinel pauses injection only; `BORG_RESUME_DISABLE=1` stops everything.
+
 1. Auto-relaunch after a full reboot (tmux server gone)? Lean: stage it, cap 3 per hour, orchestrator first, rest by `borg resume run`. A reboot can strand a dozen sessions; relaunching all at once recreates the Docker VM wedge and a usage stampede.
 2. Max age for a record? Lean: 48h from `resume_at`, with the 7-day ceiling for parsed limit resets. A resume days after a non-limit interruption would run on stale context; past the age the record notifies instead.
 3. Prompt-too-long: auto `/compact` then resume, or notify only? Lean: try `/compact` once, notify on failure. It is the only exhaustion case with a known remedy, but it is spike-dependent (U12).
@@ -517,6 +536,23 @@ Deliverables are code artifacts. Tests are listed separately. Every slice is pro
 10. Merge the three `borg-resume` allowlist entries into the global settings.json from `install.sh`? Lean: yes; without them an unattended resume stalls at a Bash permission prompt. This is the only change to global settings and needs Noah's explicit OK.
 11. At the `claude --resume` size dialog, resume the full session or from a summary? Lean: full, because the summary may fork the session id and break same-session Workflow resume; it costs more usage. If the summary option is chosen, the workflow path is the manifest-script re-run.
 12. Refactor `borg-usage-watch` to source the shared inject lib? Lean: not in this effort; revisit once the guardian has run healthy for a week.
+
+## Deferred hardening
+
+Recorded so these follow-ups are not lost. None is in scope for the slices already merged.
+
+S7 (watcher):
+
+- Lock TOCTOU: needs the holder process start time, or an atomic rename of the stale lock dir.
+- Retention tombstones and the scan-window mtime handling.
+- Attempt-counter derivation and `truncatedAfterOutput` pass-through (needs a directive decision).
+- The hook cursor must advance only after a successful ingest.
+- Tmp-file sweep, and registry retention for live sessions.
+
+S4 (hook):
+
+- Add the `hooks/borg-resume-hook.sh` entry to the hooks list in CLAUDE.md.
+- S12 must install `borg-resume` and `lib/borg` into `~/.claude`.
 
 ## Risks
 

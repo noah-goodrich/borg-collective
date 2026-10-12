@@ -29,9 +29,11 @@ Every positive case is paired with a negative case proving the condition discrim
 from __future__ import annotations
 
 import ast
+import importlib
 import json
 import os
 import re
+import stat
 import subprocess
 import types
 
@@ -141,8 +143,12 @@ def test_manifest_dir_is_the_one_location():
 
 
 def test_no_public_name_in_the_package_carries_the_retired_word():
-    for module in (core, errors, refs, shell):
-        offenders = [name for name in vars(module) if not name.startswith("_") and "program" in name.lower()]
+    # Over EVERY module in the package, derived by `_package_module_names`. The four-name tuple that
+    # stood here (core, errors, refs, shell) exempted across.py, cli.py and placement.py, so a
+    # `programs_dir()` landing in any of them would have shipped green through the gate AC7 installed.
+    for name in _package_module_names():
+        module = _import_package_module(name)
+        offenders = [n for n in vars(module) if not n.startswith("_") and "program" in n.lower()]
         assert offenders == [], f"{module.__name__}: {offenders}"
 
 
@@ -672,10 +678,26 @@ def _package_module_names():
     both constraints below are true of every shipped file rather than of an interesting subset.
     """
     here = os.path.dirname(os.path.abspath(__file__))
-    names = sorted(name for name in os.listdir(here) if name.endswith(".py") and not name.startswith("test_"))
+    names = []
+    for root, dirs, files in os.walk(here):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        names += [
+            os.path.relpath(os.path.join(root, f), here)
+            for f in files
+            if f.endswith(".py") and not f.startswith("test_")
+        ]
+    names.sort()
     assert names, f"the module glob enumerated nothing under {here}"
     assert "across.py" in names, f"the module the old hardcoded tuples forgot must be derived: {names}"
     return names
+
+
+def _import_package_module(relative_path):
+    """The module object for one path `_package_module_names` returned (`core.py`, `sub/x.py`)."""
+    dotted = relative_path[: -len(".py")].replace(os.sep, ".")
+    if dotted.endswith("__init__"):
+        dotted = dotted[: -len("__init__")].rstrip(".")
+    return importlib.import_module(".".join(part for part in ("borg_core.manifest", dotted) if part))
 
 
 def _module_level_dotted_names(module_name):
@@ -771,6 +793,25 @@ def test_no_module_references_an_external_plugin_or_a_sibling_checkout():
                 if "/dev/" in literal.replace("/dev/null", ""):
                     offenders.append(f"{name}:{lineno} -> {literal}")
     assert offenders == [], f"independence violations: {offenders}"
+
+
+def test_no_fixture_references_an_external_plugin():
+    """The fixture half of the independence rule `merge-tree/test_programs.py` carried.
+
+    Scans `borg_core/manifest/fixtures/` and NOT `.borg/chains/`: viz-program.json legitimately names
+    `addon-plugins` (a row's `why`), and the tracked chains are borg's own data rather than a fixture a
+    test authored. The directory is asserted non-empty first, because a scan over nothing is green.
+    """
+    directory = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+    names = sorted(os.listdir(directory))
+    assert "three-repo-program.json" in names, names
+    forbidden = ("addon-plugins", "stack-program", "stamp_tool")
+    offenders = []
+    for name in names:
+        with open(os.path.join(directory, name), encoding="utf-8") as handle:
+            body = handle.read()
+        offenders += [f"{name}: {token}" for token in forbidden if token in body]
+    assert offenders == [], f"external-plugin references in fixtures: {offenders}"
 
 
 # ── whole-file refusal: ANY invalid row refuses the file, and only that file ────────────────────
@@ -2048,3 +2089,201 @@ def test_scaffold_root_probe_names_a_file_so_a_contents_only_ignore_still_counts
     contents = _git_repository(tmp_path, "contents")
     _ignore(contents, ".borg/chains/*")
     assert shell.scaffold_root(contents)[0] == os.path.join(contents, ".stacks")
+
+
+# ── the writer round-trips through the reader, over the real corpus (AC3) ───────────────────────────
+#
+# Rehomed from merge-tree/test_programs.py (deleted in AC7), which validated ONE on-disk fixture and one hand-built
+# manifest. The property AC3 states is "anything the writer accepts, the reader loads", and a property
+# is checked over the documents that actually exist, not over one the test author wrote to pass.
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_THREE_REPO_FIXTURE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures", "three-repo-program.json")
+
+
+def _corpus_paths():
+    """Every manifest file the repository ships, as absolute paths, sorted.
+
+    Four sources: the three-repository fixture, the S4 eval fixtures, borg's own tracked chains, and the
+    `borg link` fixtures. The link fixtures include documents `core.validate` REFUSES on purpose, so
+    `_round_trip_corpus` filters on the validator rather than listing names; it must not filter the
+    others, which are all expected to validate.
+    """
+    paths = [_THREE_REPO_FIXTURE]
+    for relative in (
+        os.path.join("evals", "s4-k3", "fixtures", "programs"),
+        os.path.join(".borg", "chains"),
+        os.path.join("tests", "fixtures", "link", "manifests"),
+    ):
+        directory = os.path.join(_REPO_ROOT, relative)
+        if os.path.isdir(directory):
+            paths += [os.path.join(directory, n) for n in sorted(os.listdir(directory)) if n.endswith(".json")]
+    return paths
+
+
+def _round_trip_corpus():
+    corpus = []
+    for path in _corpus_paths():
+        with open(path, encoding="utf-8") as fh:
+            doc = json.load(fh)
+        if core.validate(doc) == []:
+            corpus.append((path, doc))
+    return corpus
+
+
+def test_the_round_trip_corpus_is_not_empty_and_names_its_known_members():
+    # A parametrize over an empty list collects zero cases and passes. The corpus is asserted here, once,
+    # so a moved fixture directory fails loudly instead of turning the round-trip test into a no-op.
+    names = {os.path.basename(path) for path, _ in _round_trip_corpus()}
+    assert {"three-repo-program.json", "viz-program.json", "atlas-cutover.json"} <= names, sorted(names)
+
+
+@pytest.mark.parametrize("path", [path for path, _ in _round_trip_corpus()], ids=os.path.basename)
+def test_whatever_the_writer_accepts_the_reader_loads_unchanged(tmp_path, path):
+    with open(path, encoding="utf-8") as fh:
+        doc = json.load(fh)
+    written = shell.write_manifest(str(tmp_path), doc, "round-trip")
+    manifests, warnings = shell.discover([str(tmp_path)])
+    assert warnings == []
+    assert len(manifests) == 1
+    assert core.declared_body(manifests[0]) == core.declared_body(doc)
+    assert os.path.dirname(written) == shell.manifest_dir(str(tmp_path))
+
+
+def test_a_manifest_holding_en_dashes_round_trips_byte_identical(tmp_path):
+    # viz-program.json is tracked with literal U+2013 order values. The old writer escaped them to
+    # `–`, so a sync that changed nothing dirtied a tracked file; `ensure_ascii=False` is the fix
+    # and this is the only test holding it to byte equality rather than to parsed equality.
+    path = os.path.join(_REPO_ROOT, ".borg", "chains", "viz-program.json")
+    with open(path, "rb") as fh:
+        original = fh.read()
+    assert "–".encode() in original, "the fixture no longer carries an en-dash; pick another"
+    doc = json.loads(original.decode("utf-8"))
+    written = shell.write_manifest(str(tmp_path), doc, "viz-program")
+    with open(written, "rb") as fh:
+        assert fh.read() == original
+
+
+def test_the_on_disk_three_repository_fixture_validates_and_matches_the_rebuilt_one():
+    # borg_core/manifest/test_core.py rebuilds this fixture in Python by design, so nothing else reads
+    # the file merge-tree shipped. Compare EDGES, not the document: the apex label drifted between the
+    # two copies ('auth hardening program' on disk, 'auth hardening tracker' there) and a label is not
+    # an edge.
+    from borg_core.manifest import test_core  # pylint: disable=import-outside-toplevel
+
+    with open(_THREE_REPO_FIXTURE, encoding="utf-8") as fh:
+        on_disk = json.load(fh)
+    assert core.validate(on_disk) == []
+    assert core.derive_edges(on_disk) == core.derive_edges(test_core._fixture())
+
+
+# ── the clean-arch Domain list is derived, not remembered ───────────────────────────────────────────
+
+
+def _domain_list():
+    import tomllib
+
+    with open(os.path.join(_REPO_ROOT, "pyproject.toml"), "rb") as fh:
+        return set(tomllib.load(fh)["tool"]["clean-arch"]["module_map"]["Domain"])
+
+
+def test_every_domain_entry_in_pyproject_names_a_file_that_exists():
+    # The linter classifies by BASENAME and RETURNS EARLY on a name it cannot classify, so a typo or a
+    # stale entry is a module with zero import enforcement under a green `make lint`.
+    present = {n for _, _, files in os.walk(os.path.join(_REPO_ROOT, "borg_core")) for n in files}
+    assert sorted(_domain_list() - present) == []
+
+
+def test_every_pure_module_in_this_package_is_on_the_domain_list():
+    # The reverse direction, and the one that bites: a new pure module added to this package and not to
+    # pyproject.toml is exempt from the import rules without any signal. "Pure" is read off the source,
+    # as the set of top-level import roots staying inside {typing, re, borg_core, __future__}.
+    pure_roots = {"__future__", "typing", "re", "borg_core"}
+    here = os.path.dirname(os.path.abspath(__file__))
+    unlisted = []
+    for name in _package_module_names():
+        if os.path.basename(name) == "__init__.py":
+            continue
+        with open(os.path.join(here, name), encoding="utf-8") as fh:
+            tree = ast.parse(fh.read())
+        roots = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                roots |= {alias.name.split(".")[0] for alias in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                roots.add(node.module.split(".")[0])
+        if roots <= pure_roots and os.path.basename(name) not in _domain_list():
+            unlisted.append(name)
+    assert unlisted == [], f"pure modules missing from [tool.clean-arch.module_map] Domain: {unlisted}"
+
+
+# ── PR #341 fix round 1: authored `_` keys, file mode, temp-file cleanup ─────────────────────────
+
+
+def test_the_writer_keeps_an_authored_underscore_key_and_still_drops_the_loader_stamps(tmp_path):
+    # `core.declared_body` used to strip EVERY `_`-prefixed key, so an author's `_comment` died on any
+    # rewrite. Only the two keys the loader stamps are reserved.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    doc = {**_manifest([_row("1", "o/r#1")]), "_comment": "mine", "_note": 7}
+    shell.write_manifest(repository, doc, "chain")
+    loaded, _ = shell.discover([repository])
+    assert loaded[0]["_comment"] == "mine" and "_id" in loaded[0] and "_path" in loaded[0]
+
+    rewritten = shell.write_manifest(repository, loaded[0], "chain")
+    on_disk = json.loads(open(rewritten, encoding="utf-8").read())
+    assert on_disk == {"rows": [_row("1", "o/r#1")], "_comment": "mine", "_note": 7}
+
+
+def test_declared_body_reserves_exactly_the_loader_stamped_keys():
+    assert core.LOADER_STAMPED_KEYS == ("_id", "_path")
+    body = core.declared_body({"rows": [], "_id": "x", "_path": "/p", "_comment": "c", "program": "p"})
+    assert body == {"rows": [], "_comment": "c", "program": "p"}
+
+
+@pytest.mark.parametrize("mode", [0o644, 0o664, 0o600, 0o640])
+def test_a_rewrite_keeps_the_existing_files_permission_bits(tmp_path, mode):
+    # mkstemp creates 0600 and os.replace keeps it, so a 0644 manifest used to come back 0600.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    os.chmod(path, mode)
+
+    shell.write_manifest(repository, _manifest([_row("1", "o/r#1"), _row("2", "o/r#2")]), "chain")
+    assert stat.S_IMODE(os.stat(path).st_mode) == mode
+
+
+@pytest.mark.parametrize("umask", [0o022, 0o077])
+def test_a_brand_new_file_gets_666_masked_by_the_umask(tmp_path, umask):
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    previous = os.umask(umask)
+    try:
+        path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    finally:
+        os.umask(previous)
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o666 & ~umask
+
+
+def test_any_exception_not_only_oserror_removes_the_temp_file(tmp_path):
+    # An unserializable value raises TypeError from json.dump, which the old `except OSError` let
+    # through with the `.write-*.json.tmp` still sitting in a tracked directory.
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    doc = {**_manifest([_row("1", "o/r#1")]), "weird": object()}
+    with pytest.raises(TypeError):
+        shell.write_manifest(repository, doc, "chain")
+    directory = shell.manifest_dir(repository)
+    assert [n for n in os.listdir(directory) if n.endswith(".tmp")] == []
+    assert not os.path.exists(os.path.join(directory, "chain.json"))
+
+
+def test_a_failed_replace_removes_the_temp_file_and_leaves_the_original(tmp_path, monkeypatch):
+    repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
+    path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
+    before = open(path, "rb").read()
+
+    def boom(*_args):
+        raise OSError("replace refused")
+
+    monkeypatch.setattr(shell.os, "replace", boom)
+    with pytest.raises(OSError):
+        shell.write_manifest(repository, _manifest([_row("1", "o/r#1"), _row("2", "o/r#2")]), "chain")
+    assert [n for n in os.listdir(os.path.dirname(path)) if n.endswith(".tmp")] == []
+    assert open(path, "rb").read() == before

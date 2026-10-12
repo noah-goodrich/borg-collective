@@ -48,20 +48,19 @@ callers while this commit is an expand phase. So "one manifest lives in core, ma
 true of everything except that one name. The next reader should FINISH the move rather than conclude
 the seam was arbitrary and start filing single-manifest functions here.
 
-PORTS, NOT IMPORTS. `edges_from` is merge-tree/programs.py's function of the same name;
+PORTS, NOT IMPORTS. `edges_from` was merge-tree/programs.py's function of the same name (deleted in AC7);
 `contested_refs` is the contested-ref half of the deleted merge-tree/gather.py's `apply_program_projects`
 (ported from it; gather.py retired 2026-10-12 with the browser board). Ported rather than imported, and that is forced
 twice over exactly as core.py records: `merge-tree` carries a hyphen so it can never be a Python
 package name, and pyproject.toml pins `allowed_prefixes = ["borg_core", "__future__"]`, so an import
 would fail `make lint` even if the path resolved.
 
-THE merge-tree/programs.py COPY STAYS LIVE AND UNTOUCHED (gather.py, the other former caller, is deleted).
-This is AC7's EXPAND phase: the new form ships and no caller is repointed. Repointing
-merge-tree/coordinator.py is the CONTRACT
-phase, and it may not happen until the shorthand refs in merge-tree/test_coordinator.py have been
-migrated to satisfy this side's stricter ref vocabulary. Until then two implementations coexist by
-design, and they are not identical: `contested_refs` carries three deliberate divergences from the
-copy it ports, each documented on the function with the failure it exists to prevent.
+THE merge-tree/programs.py COPY IS GONE, and so is gather.py, the other former caller. This package
+shipped first (AC7's EXPAND phase), the shorthand refs in merge-tree/test_coordinator.py were migrated to
+this side's stricter ref vocabulary, and merge-tree/coordinator.py and merge-tree/test_s4_manifests.py
+were then repointed here (the CONTRACT phase), so there is one implementation. `contested_refs` still
+carries three deliberate divergences from the gather.py copy it ported, each documented on the function
+with the failure it exists to prevent.
 """
 
 from __future__ import annotations

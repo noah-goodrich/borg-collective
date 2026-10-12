@@ -49,11 +49,11 @@ _spike_events="Stop StopFailure SessionStart SessionEnd SubagentStart SubagentSt
 _spike_scrub_paths() {
     local home="${HOME:-}" home_sed=()
     if [ -n "$home" ] && [ "$home" != "/" ]; then
-        home_sed=(-e "s#${home}#/Users/noah/dev/example#g")
+        home_sed=(-e "s#${home}#/Users/example/dev/example#g")
     fi
     sed ${home_sed[@]+"${home_sed[@]}"} \
-        -e 's#/Users/[A-Za-z0-9._-]*\(/[^" 	:,)]*\)\{0,\}#/Users/noah/dev/example#g' \
-        -e 's#/home/[A-Za-z0-9._-]*\(/[^" 	:,)]*\)\{0,\}#/Users/noah/dev/example#g'
+        -e 's#/Users/[A-Za-z0-9._-]*\(/[^" 	:,)]*\)\{0,\}#/Users/example/dev/example#g' \
+        -e 's#/home/[A-Za-z0-9._-]*\(/[^" 	:,)]*\)\{0,\}#/Users/example/dev/example#g'
 }
 
 # Fallback skeleton (no python3, or the extractor failed): structure only. Object keys

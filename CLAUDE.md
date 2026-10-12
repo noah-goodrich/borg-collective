@@ -497,8 +497,9 @@ docs/
   not carry a `.borg/`; a stem declared in both is refused by name, never picked, an in-place edit
   writes back to the file it found, two roots that are one directory (a symlink) are read once, and an
   unreadable root or parent is a named warning, never silence (`scaffold`, the one creator, refuses by
-  name rather than create beside a root it cannot read). `borg_core` reads both roots, while `borg chain`
-  (`merge-tree/programs.py`) still reads only `.borg/chains`.
+  name rather than create beside a root it cannot read). `borg_core` and `borg chain` both read both roots
+  (`merge-tree/coordinator.py` reads through `borg_core.manifest`; `merge-tree/programs.py` is gone), and
+  `borg chain sync` rewrites a `.stacks/` manifest in place.
 - **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
   `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
   `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS` — with **no branch on
@@ -634,7 +635,8 @@ docs/
   validator while `coordinator.py` and `gather.py` still used the old one — that commit was the
   expand phase, and repointing them is the contract phase, which may not happen until the **57**
   shorthand ref occurrences in `merge-tree/test_coordinator.py` have been migrated to satisfy the
-  stricter rules. **Migrate only what the SURVIVING validator rejects.** An artifact that fails only
+  stricter rules (that sequence has since run to the end: fixtures migrated, `coordinator.py` repointed,
+  `merge-tree/programs.py` deleted, 2026-10-12). **Migrate only what the SURVIVING validator rejects.** An artifact that fails only
   the validator being deleted needs no migration at all — it is resolved by the contraction. The
   first draft of this rule listed `warehouse-rollout.json`'s `kind: "review"` as a prerequisite; it
   is clean under `core.validate` and fails only merge-tree's `GATE_KINDS` closure, which borg_core
