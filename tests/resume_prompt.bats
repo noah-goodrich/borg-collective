@@ -213,3 +213,15 @@ golden() {
     run "$BIN" prompt
     [ "$status" -eq 2 ]
 }
+
+@test "without --inventory the S5 builder is used (unknown session renders a minimal prompt)" {
+    export BORG_RESUME_PROJECTS_DIR="${BATS_TEST_TMPDIR}/projects"
+    mkdir -p "$BORG_RESUME_PROJECTS_DIR"
+    stage usage_limit
+    run "$BIN" prompt "$RID"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$(pfile)" ]
+    grep -q "Main task: unknown" "$(pfile)"
+    grep -q "borg-resume ack r_7f3a2c" "$(pfile)"
+    [ -z "$(ls -A "$BORG_RESUME_DIR/prompts" | grep inventory)" ]
+}
