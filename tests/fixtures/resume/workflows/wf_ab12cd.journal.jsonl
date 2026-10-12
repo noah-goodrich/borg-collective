@@ -1,0 +1,3 @@
+{"event":"started","agent":"agent-1","t":1791800000}
+{"event":"result","agent":"agent-1","t":1791800010,"result":"<scrubbed:5 chars>"}
+{"event":"started","agent":"agent-2","t":1791800011}

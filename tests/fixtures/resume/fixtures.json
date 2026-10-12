@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "claude_version_target": "2.1.296",
+  "note": "All entries are synthetic seeds modeled on the documented record shapes. Later slices replace them with scrubbed captures and flip the tag to captured.",
+  "fixtures": {
+    "main_rate_limit":        {"file": "main_rate_limit.jsonl",        "kind": "jsonl", "tag": "synthetic", "shape": "api_error_tail"},
+    "main_server_error_tail": {"file": "main_server_error_tail.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "api_error_then_bookkeeping"},
+    "interrupt_user":         {"file": "interrupt_user.jsonl",         "kind": "jsonl", "tag": "synthetic", "shape": "interrupt_marker"},
+    "interrupt_tool_use":     {"file": "interrupt_tool_use.jsonl",     "kind": "jsonl", "tag": "synthetic", "shape": "interrupt_marker"},
+    "subagent_transcript":    {"file": "subagents/agent-a0b6facb8e5d1b6ac.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "subagent_first_record"},
+    "subagent_meta":          {"file": "subagents/agent-a0b6facb8e5d1b6ac.meta.json", "kind": "json", "tag": "synthetic", "shape": "subagent_meta"},
+    "workflow_manifest":      {"file": "workflows/wf_ab12cd.json",     "kind": "json", "tag": "synthetic", "shape": "workflow_manifest"},
+    "workflow_journal":       {"file": "workflows/wf_ab12cd.journal.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "workflow_journal"},
+    "stop_failure_payload":   {"file": "stop_failure_payload.json",    "kind": "json", "tag": "synthetic", "shape": "hook_payload"},
+    "session_start_payload":  {"file": "session_start_payload.json",   "kind": "json", "tag": "synthetic", "shape": "hook_payload"},
+    "pane_composer":          {"file": "panes/composer.txt",           "kind": "text", "tag": "synthetic", "shape": "pane"},
+    "pane_permission":        {"file": "panes/permission.txt",         "kind": "text", "tag": "synthetic", "shape": "pane"},
+    "pane_limit":             {"file": "panes/limit.txt",              "kind": "text", "tag": "synthetic", "shape": "pane"}
+  },
+  "required_captured": {
+    "S2": ["main_rate_limit", "main_server_error_tail"],
+    "S4": ["stop_failure_payload", "session_start_payload"],
+    "S5": ["subagent_transcript", "subagent_meta", "workflow_manifest", "workflow_journal"],
+    "S7": ["main_rate_limit", "main_server_error_tail", "subagent_transcript"],
+    "S8": ["pane_composer", "pane_permission", "pane_limit"],
+    "S16": ["stop_failure_payload", "main_rate_limit"]
+  }
+}

@@ -1,0 +1,4 @@
+You've hit your session limit · resets 7:10am (America/Denver)
+What do you want to do?
+❯ 1. Stop and wait for limit to reset
+  2. Upgrade your plan

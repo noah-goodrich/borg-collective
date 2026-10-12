@@ -1,0 +1,2 @@
+{"type":"user","uuid":"u-0001","sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/Users/noah/dev/example","message":{"role":"user","content":"<scrubbed:42 chars>"}}
+{"type":"assistant","uuid":"u-0002","sessionId":"00000000-0000-4000-8000-000000000001","cwd":"/Users/noah/dev/example","isApiErrorMessage":true,"error":"rate_limit","message":{"role":"assistant","model":"<synthetic>","content":[{"type":"text","text":"You've hit your session limit · resets 7:10am (America/Denver)"}]}}
