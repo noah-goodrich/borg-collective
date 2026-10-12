@@ -49,7 +49,13 @@ _rp_class_phrase() {
         usage_limit) printf 'usage limit, now reset' ;;
         transient) printf 'API error, retried automatically' ;;
         max_output_tokens) printf 'output token limit' ;;
-        prompt_too_long) printf 'context was too long and has been compacted' ;;
+        prompt_too_long)
+            if resume_prompt_compact_enabled; then
+                printf 'context was too long and has been compacted'
+            else
+                printf 'context was too long and automatic compaction is off; do not resume, defer'
+            fi
+            ;;
         process_death) printf 'the process was restarted with --resume' ;;
         *) return 1 ;;
     esac
@@ -58,7 +64,7 @@ _rp_class_phrase() {
 _rp_find_record() {
     local _rid="$1" _d _f
     _d="$(borg_resume_dir)"
-    for _f in "$_d/pending/$_rid.json" "$_d/done/$_rid.json"; do
+    for _f in "$_d/pending/$_rid.json"; do
         if [ -f "$_f" ]; then
             printf '%s\n' "$_f"
             return 0
@@ -78,37 +84,38 @@ _rp_line() {
         "$_rid" "$_phrase" "$_pf" "$_rid"
 }
 
-# Render the markdown file body to stdout. Usage: _rp_render <record-file> <inventory-file> <compact:1|0>
+# Render the markdown file body to stdout. Usage: _rp_render <record-file> <inventory-file> <compact:true|false> <rid> <sid>
 _rp_render() {
     local _rec="$1" _inv="$2" _compact="$3" _cap
     _cap="${BORG_RESUME_CAP:-3}"
     case "$_cap" in '' | *[!0-9]*) _cap=3 ;; esac
-    jq -r -n --slurpfile rec "$_rec" --slurpfile inv "$_inv" --argjson compact "$_compact" --argjson cap "$_cap" '
+    jq -r -n --slurpfile rec "$_rec" --slurpfile inv "$_inv" --argjson compact "$_compact" --argjson cap "$_cap" --arg vrid "$4" --arg vsid "$5" '
         $rec[0] as $r | $inv[0] as $i
         | ($i.session // {}) as $s
         # ---- sanitizers: control chars out, one line, wrapped, fenced -------------------------------
-        | def clean: (. // "") | tostring | gsub("[\\x00-\\x1f\\x7f]"; " ") | gsub(" +"; " ") | sub("^ "; "") | sub(" $"; "");
+        | def clean: (. // "") | tostring | gsub("[\\x00-\\x1f\\x7f-\\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]"; " ") | gsub(" +"; " ") | sub("^ "; "") | sub(" $"; "");
         def wrap: [scan(".{1,88}")];
         def fence($t):
             ($t | clean | wrap) as $w
             | (($w | join("") | [scan("`+") | length] | max) // 0) as $m
             | (([3, $m + 1] | max) as $n | ("`" * $n)) as $f
             | if ($w | length) == 0 then empty else ("  " + $f + "text"), ($w[] | "  " + .), ("  " + $f) end;
-        def id: if type == "string" and test("^[A-Za-z0-9_-]{1,128}$") then . else "<invalid-id>" end;
-        def ref: if type == "string" and test("^[A-Za-z0-9_./@+:-]{1,120}$") then . else "unknown" end;
-        def word: if type == "string" and test("^[A-Za-z0-9_.:-]{1,40}$") then . else "unknown" end;
-        def path: if type == "string" and test("^[A-Za-z0-9_./@+:~ -]{1,300}$") and (test("\\$|`") | not) then .
+        def id: if type == "string" and test("\\A[A-Za-z0-9_-]{1,128}\\z") then . else "<invalid-id>" end;
+        def ref: if type == "string" and test("\\A[A-Za-z0-9_./@+:-]{1,120}\\z") then . else "unknown" end;
+        def word: if type == "string" and test("\\A[A-Za-z0-9_.:-]{1,40}\\z") then . else "unknown" end;
+        def path: if type == "string" and test("\\A[A-Za-z0-9_./@+:~ -]{1,300}\\z") and (test("\\$|`") | not) then .
                   else "<path withheld: unsafe characters, see inventory>" end;
         def q: tojson;
         def plural($n; $w): "\($n) \($w)" + (if $n == 1 then "" else "s" end);
         # ---- facts ------------------------------------------------------------------------------------
         ($r.class // "") as $class
-        | ($r.rid | id) as $rid
-        | ($r.sid | id) as $sid
+        | ($vrid | id) as $rid
+        | ($vsid | id) as $sid
         | ([($i.agents // [])[] | select(.kind == "agent" and (.status == "errored" or .status == "orphaned"))]) as $ag
         | ([($i.agents // [])[] | select(.kind == "agent" and .status == "done")] | length) as $ndone
         | ([($i.agents // [])[] | select(.kind == "agent" and .status == "running")] | length) as $nrun
-        | ([($i.workflows // [])[] | select(.status == "unfinished" or .status == "partial" or .status == "finished_with_failures")]) as $wf
+        | ([($i.workflows // [])[] | select(.resumable != false and (.status == "unfinished" or .status == "partial" or .status == "finished_with_failures"))]) as $wf
+        | ([$wf[] | select(.status == "finished_with_failures")] | length) as $nfwf
         | ($s.prompt_head // $s.first_prompt_head // "") as $task
         | (if $r.scope == "main" or ($r.scope // "") == "" then true else false end) as $mainscope
         | ("main" + (if ($ag | length) > 0 then " + " + plural($ag | length; "agent") else "" end)
@@ -121,13 +128,13 @@ _rp_render() {
           "",
           "Interrupted: \($cname | word), scope \($scope)",
           "When: \($when).",
-          (if $class == "usage_limit" then "Cause cleared: yes (the watcher fires only after the limit resets). Reset text, as data:"
-           elif $class == "transient" then "An API error interrupted this; it was retried automatically. Cause cleared: yes."
+          (if $class == "usage_limit" then "The usage limit should have reset by now. Reset text, as data:"
+           elif $class == "transient" then "An API error interrupted this; it was retried automatically."
            elif $class == "max_output_tokens" then "The reply hit the output token limit. Work in smaller steps; write files incrementally."
            elif $class == "prompt_too_long" then
                (if $compact then "The context was too long; /compact was run before this prompt.\nIf the context is still too long, stop and tell the user."
                 else "The context was too long and the automatic /compact is disabled\n(BORG_RESUME_AUTO_COMPACT=0)." end)
-           elif $class == "process_death" then "The claude process died and was restarted with --resume. Cause cleared: yes."
+           elif $class == "process_death" then "The claude process died and was restarted with --resume."
            else "Interruption class: \($cname | word)." end),
           (if $class == "usage_limit" then fence($r.reset_text // "") else empty end),
           (if $class == "prompt_too_long" and ($compact | not) then
@@ -175,18 +182,23 @@ _rp_render() {
           (if ($wf | length) > 0 then
               "Workflows (resumed ONLY this way, never with SendMessage):",
               ($wf[] |
-                  if .script_path != null then
+                  if .script_path != null and (.script_path | path | startswith("<")) then
+                      "- \(.run_id | id): script path unsafe, read it from the inventory",
+                      "  (borg-resume inventory \($sid) --json), then resume this run id with that script."
+                  elif .script_path != null then
                       "- Workflow({ scriptPath: \(.script_path | path | q), resumeFromRunId: \(.run_id | id | q) })"
                   else
                       "- \(.run_id | id): no scriptPath on disk. Write the manifest script field",
                       "  (workflows/\(.manifest_id | id).json in the session dir) to a file first, then:",
                       "  Workflow({ scriptPath: <that file>, resumeFromRunId: \(.run_id | id | q) })"
                   end),
-              "  Completed agents return cached. Failed agents were re-run on resume in the",
-              "  spike (U8 is partial: a null result is not cached). If it fails with",
-              "  \"nothing to resume\", or the finished run still returns nulls, do a",
-              "  new run with the same args (they are in the workflow manifest)",
-              "  and tell the user.",
+              "  Completed agents return cached.",
+              (if $nfwf > 0 then
+                  "  For a run that finished with failures, a null result is not cached. If the",
+                  "  resume fails with \"nothing to resume\", or still returns nulls, do a",
+                  "  new run with the same args (they are in the workflow manifest)",
+                  "  and tell the user."
+               else empty end),
               ""
            else empty end),
           (if ($ag | length) > 0 then
@@ -201,7 +213,7 @@ _rp_render() {
               "  recreate the branch.\"",
               ""
            else empty end),
-          (if $mainscope or $task != "" then
+          (if $mainscope then
               "Main task: continue the last task above from the checkpoint. Do not", "restart finished steps."
            else empty end),
           "",
@@ -215,7 +227,7 @@ _rp_render() {
 }
 
 borg_resume_prompt() {
-    local _rid="" _inv="" _mode="file" _a _rf _class _rc _tmp _out _compact
+    local _rid="" _inv="" _mode="file" _a _rf _class _rc=0 _tmp="" _out _compact _state _rsid _rrid
     while [ $# -gt 0 ]; do
         _a="$1"
         shift
@@ -240,6 +252,13 @@ borg_resume_prompt() {
         printf 'borg-resume: class %s is notify-only, nothing to inject\n' "${_class:-unknown}" >&2
         return 3
     }
+    _state="$(jq -r '.state // empty' "$_rf" 2>/dev/null)"
+    case "$_state" in
+        done | acked | superseded | expired | cancelled | canceled | deferred)
+            printf 'borg-resume: record %s is %s, nothing to inject\n' "$_rid" "$_state" >&2
+            return 3
+            ;;
+    esac
     resume_prompt_compact_enabled && _compact=true || _compact=false
 
     case "$_mode" in
@@ -256,22 +275,34 @@ borg_resume_prompt() {
             ;;
     esac
 
+    _rsid="$(jq -r '.sid // empty' "$_rf" 2>/dev/null)"
+    _rrid="$(jq -r '.rid // empty' "$_rf" 2>/dev/null)"
+    [ "$_rrid" = "$_rid" ] || { printf 'borg-resume: record rid does not match %s\n' "$_rid" >&2; return 1; }
+    borg_resume_valid_sid "$_rsid" || { printf 'borg-resume: record has no valid sid\n' >&2; return 1; }
+
     if [ -z "$_inv" ]; then
-        _tmp="$(jq -r '.sid // empty' "$_rf" 2>/dev/null)"
-        borg_resume_valid_sid "$_tmp" || { printf 'borg-resume: record has no valid sid\n' >&2; return 1; }
-        _out="$(borg_resume_inventory "$_tmp")"
-        _inv="$(borg_resume_dir)/prompts/.inventory.$$"
-        mkdir -p "${_inv%/*}" && printf '%s\n' "$_out" >"$_inv" || return 1
-        _rc=0
-        _rp_render "$_rf" "$_inv" "$_compact" >"$_inv.md" || _rc=$?
-        rm -f "$_inv"
-        [ "$_rc" -eq 0 ] || { rm -f "$_inv.md"; return 1; }
-        _out="$(cat "$_inv.md")"
-        rm -f "$_inv.md"
+        mkdir -p "$(borg_resume_dir)/prompts" || return 1
+        _tmp="$(borg_resume_dir)/prompts/.inventory.$$"
+        # shellcheck disable=SC2064
+        trap "rm -f '$_tmp'" EXIT INT TERM
+        borg_resume_inventory "$_rsid" >"$_tmp" || { printf 'borg-resume: inventory failed\n' >&2; return 1; }
+        _inv="$_tmp"
     else
         [ -f "$_inv" ] || { printf 'borg-resume: no inventory file %s\n' "$_inv" >&2; return 1; }
-        _out="$(_rp_render "$_rf" "$_inv" "$_compact")" || return 1
     fi
+    jq -e '.found == true and (.session | type == "object")' "$_inv" >/dev/null 2>&1 || {
+        printf 'borg-resume: inventory unavailable for %s (empty or found:false)\n' "$_rsid" >&2
+        [ -z "$_tmp" ] || rm -f "$_tmp"
+        return 1
+    }
+    if [ "$(jq -r '.session.turn_state // empty' "$_inv")" = "interrupted_by_user" ]; then
+        printf 'borg-resume: session was interrupted by the user, never resumed\n' >&2
+        [ -z "$_tmp" ] || rm -f "$_tmp"
+        return 3
+    fi
+    _out="$(_rp_render "$_rf" "$_inv" "$_compact" "$_rid" "$_rsid")" || _rc=1
+    [ -z "$_tmp" ] || rm -f "$_tmp"
+    [ "$_rc" -eq 0 ] || return 1
     [ -n "$_out" ] || return 1
     if [ "$_mode" = "stdout" ]; then
         printf '%s\n' "$_out"

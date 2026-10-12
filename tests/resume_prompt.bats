@@ -298,7 +298,6 @@ golden() {
     export BORG_RESUME_AUTO_COMPACT=0
     run "$BIN" prompt "$RID" --line
     [ "$status" -eq 0 ]
-    absent "has been compacted" <(printf '%s' "$output") 2>/dev/null || true
     case "$output" in *"has been compacted"*) return 1 ;; esac
 }
 

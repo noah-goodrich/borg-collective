@@ -51,9 +51,9 @@ Workflows (resumed ONLY this way, never with SendMessage):
 - wf_inline1: no scriptPath on disk. Write the manifest script field
   (workflows/wf_inline1.json in the session dir) to a file first, then:
   Workflow({ scriptPath: <that file>, resumeFromRunId: "wf_inline1" })
-  Completed agents return cached. Failed agents were re-run on resume in the
-  spike (U8 is partial: a null result is not cached). If it fails with
-  "nothing to resume", or the finished run still returns nulls, do a
+  Completed agents return cached.
+  For a run that finished with failures, a null result is not cached. If the
+  resume fails with "nothing to resume", or still returns nulls, do a
   new run with the same args (they are in the workflow manifest)
   and tell the user.
 
