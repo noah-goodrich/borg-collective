@@ -14,6 +14,8 @@ setup() {
     cat >"$STUBDIR/claude" <<'STUB'
 #!/bin/sh
 printf '%s\n' "$*" >> "$STUB_LOG"
+printf 'ENV USER=%s NSH=%s NSR=%s\n' "$USER" "$BORG_NO_SESSION_HOOKS" "$BORG_NO_SPEND_RECORD" >> "$STUB_LOG"
+[ -n "$USER" ] || exit 0
 printf 'Current session: 37%% used · resets 4pm (America/Denver)\nCurrent week (all models): 12%% used\n'
 STUB
     chmod +x "$STUBDIR/claude"
@@ -33,6 +35,29 @@ STUB
         BORG_RESUME_LIBDIR="$BORG_RESUME_LIBDIR" BORG_CLAUDE_BIN="$STUBDIR/claude" STUB_LOG="$STUB_LOG" "$BR" probe
     [ "$status" -eq 0 ]
     [ "$output" = "37" ]
+    grep -Eq '^ENV USER=[^ ]+ NSH=1 NSR=1$' "$STUB_LOG"
+}
+
+@test "an unset USER is self-healed and the no-hooks/no-spend flags reach the child" {
+    run env -u USER BORG_CLAUDE_BIN="$STUBDIR/claude" "$BR" probe
+    [ "$status" -eq 0 ]
+    [ "$output" = "37" ]
+    grep -Eq '^ENV USER=[^ ]+ NSH=1 NSR=1$' "$STUB_LOG"
+}
+
+@test "a hung claude is killed at the timeout and the probe fails closed" {
+    printf '#!/bin/sh\nexec sleep 30\n' >"$STUBDIR/hang"
+    chmod +x "$STUBDIR/hang"
+    BORG_RESUME_PROBE_TIMEOUT=1 BORG_CLAUDE_BIN="$STUBDIR/hang" run "$BR" probe
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"timed out"* ]]
+    [ ! -f "$BORG_RESUME_DIR/usage-probe.json" ]
+}
+
+@test "BORG_RESUME_USAGE_CMD is ignored without BORG_RESUME_DIR" {
+    run env -u BORG_RESUME_DIR HOME="$BATS_TEST_TMPDIR/h" BORG_CLAUDE_BIN="$STUBDIR/claude" \
+        BORG_RESUME_USAGE_CMD='printf "Current session: 99%% used\n"' "$BR" probe
+    [ "$output" != "99" ]
 }
 
 @test "BORG_RESUME_USAGE_CMD stubs the sampler" {
@@ -45,7 +70,7 @@ STUB
     BORG_CLAUDE_BIN="$STUBDIR/claude" run "$BR" probe
     BORG_CLAUDE_BIN="$STUBDIR/claude" run "$BR" probe
     [ "$output" = "37" ]
-    [ "$(wc -l <"$STUB_LOG" | tr -d ' ')" = "1" ]
+    [ "$(grep -c -- "-p /usage" "$STUB_LOG")" = "1" ]
     [ -f "$BORG_RESUME_DIR/usage-probe.json" ]
     run jq -e '.session_pct == 37 and (.at | type == "number")' "$BORG_RESUME_DIR/usage-probe.json"
     [ "$status" -eq 0 ]
@@ -57,7 +82,7 @@ STUB
     mv "$BATS_TEST_TMPDIR/c.json" "$BORG_RESUME_DIR/usage-probe.json"
     BORG_CLAUDE_BIN="$STUBDIR/claude" run "$BR" probe
     [ "$output" = "37" ]
-    [ "$(wc -l <"$STUB_LOG" | tr -d ' ')" = "2" ]
+    [ "$(grep -c -- "-p /usage" "$STUB_LOG")" = "2" ]
 }
 
 @test "missing claude binary fails non-zero with a clear message" {

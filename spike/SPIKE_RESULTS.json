@@ -243,11 +243,10 @@
     "slice": "S0c",
     "question": "Does bin/borg-resume probe, via the absolute claude binary, exit 0 and parse Current session: N% used from inside a launchd job?",
     "outcome": "pass",
-    "evidence": "A temporary user-domain job (unique label, removed afterwards) started with launchctl kickstart ran borg-resume probe under the launchd PATH /usr/bin:/bin:/usr/sbin:/sbin with no TMUX; the probe parsed an integer session percentage and exited 0, and launchctl reported last exit code 0. The usage guardian job was not touched and its last exit code is 0.",
+    "evidence": "A temporary user-domain job (label borg.spike.s0c-probe-tmp, removed afterwards) started with launchctl kickstart ran borg-resume probe under the launchd PATH /usr/bin:/bin:/usr/sbin:/sbin with no TMUX and USER unset; raw output shows the matched line Current session: 43% used, session_pct=43, probe_exit=0, and launchctl reported last exit code 0. The usage guardian job was not touched and its last exit code is 0.",
     "evidence_paths": [
       "spike/launchd-probe-evidence.txt",
-      "lib/borg/resume-probe.sh",
-      "tests/resume_probe.bats"
+      "spike/launchd-probe-job.sh"
     ],
     "gaps": [],
     "fallback": "Without a recorded pass, limit-class resume stays deferred and notify-only (S9 fails closed).",
