@@ -163,3 +163,22 @@ _violations() {
     run grep -c '"127.0.0.1"' "$ROOT/spike/stub-proxy.py"
     [ "$output" -ge 1 ]
 }
+
+@test "launchd_probe is recorded outside the gating list, with the pass rule" {
+    run jq -e '.launchd_probe | (.outcome == "pass" or .outcome == "partial") and (.evidence | length > 0) and (.claude_version | type == "string")' "$RES"
+    [ "$status" -eq 0 ]
+    run jq -e '(.launchd_probe.outcome != "pass") or ((.launchd_probe.evidence_paths | length > 0) and ((.launchd_probe.gaps // []) | length == 0))' "$RES"
+    [ "$status" -eq 0 ]
+    run jq -e '(.launchd_probe.outcome != "partial") or ((.launchd_probe.gaps // []) | length > 0)' "$RES"
+    [ "$status" -eq 0 ]
+    local p
+    for p in $(jq -r '.launchd_probe.evidence_paths[]?' "$RES"); do
+        [ -e "$ROOT/$p" ] || { echo "missing $p"; false; }
+    done
+}
+
+@test "summary doc has a launchd_probe row matching the recorded outcome" {
+    local want
+    want="$(jq -r '.launchd_probe.outcome' "$RES")"
+    grep -Eq "^\| launchd_probe[[:space:]]+\|.*\| ${want}[[:space:]]*\|$" "$ROOT/docs/resume/spike-results.md"
+}

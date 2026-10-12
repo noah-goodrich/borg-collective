@@ -1,0 +1,11 @@
+launchd probe evidence (S0c), Claude Code 2.1.296, 2026-10-12.
+Job: temporary user-domain launchd job (unique label, no RunAtLoad), started with launchctl kickstart, then booted out and its plist deleted.
+Command: bin/borg-resume probe, through the absolute claude binary, with only the environment launchd provides.
+Captured job stdout:
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+TMUX=unset
+USER=<set>
+session_pct=<parsed integer, redacted>
+probe_exit=0
+launchctl print after the run: state = not running, last exit code = 0.
+usage guardian (borg.usage-watch) last exit code in launchctl list: 0 (not touched).

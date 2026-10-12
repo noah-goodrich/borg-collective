@@ -8,6 +8,7 @@
 #                    nothing, and never blocks: it is called from a hook, so every failure is swallowed.
 #   pause            create the DISABLED sentinel (nothing will inject; recording continues)
 #   unpause          remove it
+#   probe            print the session usage percent (own claude -p /usage sample, cached 120s)
 #
 # Later slices add watch, inventory, prompt, status and the rest. Hooks only APPEND; the watcher owns every
 # state transition. Bash 3.2 safe, jq is the only non-coreutils dependency.
@@ -167,7 +168,7 @@ _br_record() {
 }
 
 _br_usage() {
-    printf 'usage: borg-resume <record <event> | pause | unpause>\n' >&2
+    printf 'usage: borg-resume <record <event> | pause | unpause | probe>\n' >&2
 }
 
 _br_main() {
@@ -194,6 +195,11 @@ _br_main() {
         unpause)
             rm -f "$(borg_resume_sentinel)" || return 1
             printf 'borg-resume unpaused\n'
+            ;;
+        probe)
+            # shellcheck source=/dev/null
+            . "$BORG_RESUME_LIBDIR/resume-probe.sh" 2>/dev/null || return 1
+            borg_resume_probe
             ;;
         *)
             _br_usage

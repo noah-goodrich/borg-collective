@@ -239,5 +239,20 @@
       "note": "No Notification event fired in any committed session (events/main_limit_weekly.txt used an unmatched hook), so matcher anchoring could not be observed."
     }
   ],
+  "launchd_probe": {
+    "slice": "S0c",
+    "question": "Does bin/borg-resume probe, via the absolute claude binary, exit 0 and parse Current session: N% used from inside a launchd job?",
+    "outcome": "pass",
+    "evidence": "A temporary user-domain job (unique label, removed afterwards) started with launchctl kickstart ran borg-resume probe under the launchd PATH /usr/bin:/bin:/usr/sbin:/sbin with no TMUX; the probe parsed an integer session percentage and exited 0, and launchctl reported last exit code 0. The usage guardian job was not touched and its last exit code is 0.",
+    "evidence_paths": [
+      "spike/launchd-probe-evidence.txt",
+      "lib/borg/resume-probe.sh",
+      "tests/resume_probe.bats"
+    ],
+    "gaps": [],
+    "fallback": "Without a recorded pass, limit-class resume stays deferred and notify-only (S9 fails closed).",
+    "claude_version": "2.1.296",
+    "date": "2026-10-12"
+  },
   "outcome_rules": "pass: evidence_paths is non-empty and both not_run_parts and refuted_parts are empty. partial: some of the question is established (see evidence_paths) and the rest is in not_run_parts or refuted_parts. fail: the premise was refuted and a fallback is named. unknown: not established; not_run_parts says why."
 }
