@@ -5,13 +5,8 @@
 # to <state root>/agents.jsonl describing the run so the orchestrator can list
 # nanoprobes via `borg nanoprobes` and pull transcripts via `borg nanoprobe-log`.
 #
-# Summary source: the payload's last_assistant_message when non-empty. Background subagents end on a
-# tool_use with no text, so when it is empty the hook recovers the report from the tail of
-# agent_transcript_path (the last assistant message, all entries sharing its message.id: text blocks, else SubagentHandback input.message, else
-# StructuredOutput input.summary/answer/reason/verdict or compact JSON). Empty stays empty on any failure.
-#
-# Evidence gate: scores the summary text (last_assistant_message, or the transcript recovery when that is
-# empty) for file-path citations before logging. Appends evidence_found + evidence_score to the JSONL record and emits
+# Evidence gate: scores last_assistant_message for file-path citations before
+# logging. Appends evidence_found + evidence_score to the JSONL record and emits
 # a systemMessage warning when evidence is absent, so the orchestrator can see at a glance
 # which nanoprobes completed without citing their work.
 #
@@ -63,10 +58,13 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 # ─── Summary recovery ─────────────────────────────────────────────────────────
 # last_assistant_message is the final assistant TEXT block. Background subagents end on a tool_use with
 # no text (SubagentHandback, or StructuredOutput for workflow/schema agents), so it arrives empty. Recover
-# the report from the tail of the transcript: the LAST assistant message. One API message is written as one
-# line per content block, so every entry sharing the last entry's message.id is joined (the last entry alone
-# when it has no id). The final line is often a user tool_result. Lines are parsed one by one because the file is written asynchronously and the last line
-# may be torn. Any failure leaves LAST_MSG empty.
+# the report from the tail of the transcript (agent_transcript_path): the LAST assistant message. One API
+# message is written as one line per content block, so every entry sharing the last entry's message.id is
+# joined (the last entry alone when it has no id). Preference order: text blocks, else SubagentHandback
+# input.message, else StructuredOutput input.summary/answer/reason/verdict, else compact JSON of the input.
+# The final line is often a user tool_result. Lines are parsed one by one because the file is written
+# asynchronously and the last line may be torn. Any failure leaves LAST_MSG empty. The evidence score
+# below is computed from the recovered text too.
 if [[ -z "$LAST_MSG" && -n "$TRANSCRIPT_PATH" && -f "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
     RECOVERED=$(tail -n 80 "$TRANSCRIPT_PATH" 2>/dev/null | jq -Rrs '
         [split("\n")[] | (fromjson? // empty) | select(type == "object" and .type == "assistant")] as $all
@@ -98,7 +96,7 @@ else
 fi
 
 # ─── Evidence scoring ─────────────────────────────────────────────────────────
-# Score the summary text (last_assistant_message, or the transcript recovery when that is empty) for proof that work was actually done.
+# Score the last_assistant_message for proof that work was actually done.
 # Pattern: path:line  e.g.  lib/borg-hooks.sh:42  or  hooks/foo.sh:123
 _score_evidence() {
     local msg="$1" cwd="$2" score=0
