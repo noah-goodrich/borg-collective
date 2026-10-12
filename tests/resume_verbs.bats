@@ -29,7 +29,8 @@ mk_rec() {
 mk_confirmed() { # <rid> <confirmed_at>
     mk_rec "$1" confirmed
     local f="$RD/pending/$1.json"
-    jq -c --argjson at "$2" '.confirmed_at = $at | .confirmed_lines = 0' "$f" >"$f.t" && mv "$f.t" "$f"
+    jq -c --argjson at "$2" '.confirmed_at = $at | .confirmed_lines = 0
+        | .state_log += [["injected", ($at - 30)], ["confirmed", $at]]' "$f" >"$f.t" && mv "$f.t" "$f"
 }
 
 # ---- ack ---------------------------------------------------------------------------------------
@@ -84,11 +85,30 @@ mk_confirmed() { # <rid> <confirmed_at>
     [ "$(jq -r .done_reason "$RD/done/r_cccccc.json")" = ack ]
 }
 
-@test "an ack older than the confirmation does not close the record" {
+@test "an ack older than the injection does not close the record" {
     mk_confirmed r_cccccc $((BORG_RESUME_NOW_EPOCH + 60))
     BORG_RESUME_NOW_EPOCH=$((BORG_RESUME_NOW_EPOCH - 600)) run "$BIN" ack r_cccccc
     run "$BIN" watch --once
     [ "$(jq -r .state "$RD/pending/r_cccccc.json")" = confirmed ]
+}
+
+@test "an ack that lands before the watcher's first confirmation pass still closes it" {
+    mk_rec r_cccccc confirmed
+    f="$RD/pending/r_cccccc.json"
+    jq -c --argjson t "$BORG_RESUME_NOW_EPOCH" '.state_log += [["injected", ($t - 120)]]' "$f" >"$f.t" && mv "$f.t" "$f"
+    BORG_RESUME_NOW_EPOCH=$((BORG_RESUME_NOW_EPOCH - 100)) run "$BIN" ack r_cccccc
+    [ "$status" -eq 0 ]
+    run "$BIN" watch --once
+    [ "$(jq -r .done_reason "$RD/done/r_cccccc.json")" = ack ]
+    [ "$(jq -r '.consecutive // 0' "$RD/state/$SID.json")" = 0 ]
+}
+
+@test "a garbage line in events does not hide an ack" {
+    mk_confirmed r_cccccc $((BORG_RESUME_NOW_EPOCH - 60))
+    printf 'not json\n' >"$EV"
+    "$BIN" ack r_cccccc
+    "$BIN" watch --once
+    [ "$(jq -r .done_reason "$RD/done/r_cccccc.json")" = ack ]
 }
 
 # ---- defer: command syntax ---------------------------------------------------------------------
@@ -144,13 +164,6 @@ mk_confirmed() { # <rid> <confirmed_at>
     [ "$(jq -r .resume_at "$RD/pending/r_aaaaaa.json")" = $((BORG_RESUME_NOW_EPOCH + 900)) ]
 }
 
-@test "defer until is clamped to the 7 day ceiling from first_seen" {
-    mk_rec r_aaaaaa deferred
-    "$BIN" defer r_aaaaaa $((BORG_RESUME_NOW_EPOCH + 30 * 86400))
-    "$BIN" watch --once
-    [ "$(jq -r .resume_at "$RD/pending/r_aaaaaa.json")" = $((1791790000 + 7 * 86400)) ]
-}
-
 @test "defer until in the past is raised to now" {
     mk_rec r_aaaaaa scheduled
     "$BIN" defer r_aaaaaa 1000
@@ -168,6 +181,60 @@ mk_confirmed() { # <rid> <confirmed_at>
     [ "$(jq -r .defer_count "$RD/pending/r_aaaaaa.json")" = 1 ]
 }
 
+@test "defer is capped: the fourth defer closes the record and every defer bumps consecutive" {
+    mk_rec r_aaaaaa scheduled
+    for i in 1 2 3; do
+        "$BIN" defer r_aaaaaa --reason dispatch_guard
+        "$BIN" watch --once
+    done
+    f="$RD/pending/r_aaaaaa.json"
+    [ "$(jq -r .defer_count "$f")" = 3 ]
+    [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 3 ]
+    "$BIN" defer r_aaaaaa --reason dispatch_guard
+    "$BIN" watch --once
+    [ ! -f "$f" ]
+    [ "$(jq -r .state "$RD/done/r_aaaaaa.json")" = capped ]
+}
+
+@test "non-limit defer is clamped to first_seen plus 48h, a limit-class one gets 7 days" {
+    mk_rec r_aaaaaa deferred
+    "$BIN" defer r_aaaaaa $((BORG_RESUME_NOW_EPOCH + 30 * 86400))
+    "$BIN" watch --once
+    [ "$(jq -r .resume_at "$RD/pending/r_aaaaaa.json")" = $((1791790000 + 48 * 3600)) ]
+    mk_rec r_bbbbbb deferred
+    jq -c '.class = "usage_limit"' "$RD/pending/r_bbbbbb.json" >"$RD/t" && mv "$RD/t" "$RD/pending/r_bbbbbb.json"
+    "$BIN" defer r_bbbbbb $((BORG_RESUME_NOW_EPOCH + 30 * 86400))
+    "$BIN" watch --once
+    [ "$(jq -r .resume_at "$RD/pending/r_bbbbbb.json")" = $((1791790000 + 7 * 86400)) ]
+}
+
+@test "defer never moves resume_at earlier than the existing schedule" {
+    mk_rec r_aaaaaa scheduled
+    f="$RD/pending/r_aaaaaa.json"
+    jq -c --argjson t "$((BORG_RESUME_NOW_EPOCH + 3600))" '.resume_at = $t' "$f" >"$f.t" && mv "$f.t" "$f"
+    "$BIN" defer r_aaaaaa --reason denied
+    "$BIN" watch --once
+    [ "$(jq -r .resume_at "$f")" = $((BORG_RESUME_NOW_EPOCH + 3600)) ]
+}
+
+@test "defer reason free text is sanitized, not rejected" {
+    mk_rec r_aaaaaa confirmed
+    run "$BIN" defer r_aaaaaa --reason "dispatch guard denied."
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .reason "$EV")" = "dispatch_guard_denied." ]
+}
+
+@test "defer until parsing: +08m is base 10, empty and overlong values are rejected" {
+    mk_rec r_aaaaaa confirmed
+    run "$BIN" defer r_aaaaaa +08m
+    [ "$status" -eq 0 ]
+    [ "$(jq -r .until "$EV")" = $((BORG_RESUME_NOW_EPOCH + 480)) ]
+    run "$BIN" defer r_aaaaaa --until ""
+    [ "$status" -eq 2 ]
+    run "$BIN" defer r_aaaaaa +9999999999999999999d
+    [ "$status" -eq 2 ]
+}
+
 @test "defer never touches a terminal record or an unknown rid" {
     mk_rec r_dddddd done "done"
     jq -c '.state = "done"' "$RD/done/r_dddddd.json" >"$RD/done/t" && mv "$RD/done/t" "$RD/done/r_dddddd.json"
@@ -176,6 +243,9 @@ mk_confirmed() { # <rid> <confirmed_at>
     run "$BIN" watch --once
     [ "$status" -eq 0 ]
     [ "$(jq -r .state "$RD/done/r_dddddd.json")" = done ]
+    [ "$(jq -r '.state_log | length' "$RD/done/r_dddddd.json")" = 1 ]
+    [ "$(jq -r '.defer_cursor' "$RD/state/$SID.json")" = 2 ]
+    [ "$(jq -r '.defer_count // 0' "$RD/done/r_dddddd.json")" = 0 ]
 }
 
 # ---- record: immediate classify ----------------------------------------------------------------
@@ -212,8 +282,24 @@ sf() { # <error> <msg>
     [ "$status" -eq 0 ]
 }
 
-@test "record stays fail-open and silent when classification cannot run" {
-    BORG_RESUME_LIBDIR="${BATS_TEST_TMPDIR}/nolib" run sf server_error "x"
+@test "record stays fail-open and silent when only the classifier is unavailable" {
+    lib="${BATS_TEST_TMPDIR}/lib"
+    mkdir -p "$lib"
+    cp "${BATS_TEST_DIRNAME}/../lib/borg/resume-paths.sh" "$lib/"
+    BORG_RESUME_LIBDIR="$lib" run sf server_error "x"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    run jq -e '.ev == "stop_failure" and (has("class") | not)' "$EV"
+    [ "$status" -eq 0 ]
+}
+
+@test "record stop_failure with an absolute reset text stays under the hook latency budget" {
+    start="$(date +%s)"
+    run sf rate_limit "You have hit your weekly limit - resets Jul 7 at 7am (America/Denver)"
+    end="$(date +%s)"
+    [ "$status" -eq 0 ]
+    [ $((end - start)) -le 2 ]
+    run jq -e '.class == "usage_limit" and (.resume_at | type) == "number"' "$EV"
     [ "$status" -eq 0 ]
 }
 

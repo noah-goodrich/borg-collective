@@ -53,11 +53,15 @@ _bv_parse_until() {
             _n="${_u#+}"
             _n="${_n%"$_unit"}"
             case "$_n" in "" | *[!0-9]*) return 1 ;; esac
+            [ "${#_n}" -le 9 ] || return 1
             case "$_unit" in s) _mul=1 ;; m) _mul=60 ;; h) _mul=3600 ;; *) _mul=86400 ;; esac
-            printf '%s\n' $(($(_bv_now) + _n * _mul))
+            printf '%s\n' $(($(_bv_now) + 10#$_n * _mul))
             ;;
         "" | *[!0-9]*) return 1 ;;
-        *) printf '%s\n' "$_u" ;;
+        *)
+            [ "${#_u}" -le 12 ] || return 1
+            printf '%s\n' "$_u"
+            ;;
     esac
 }
 
@@ -76,18 +80,31 @@ _bv_emit() {
     borg_resume_append_line "$(borg_resume_events_file "$(printf '%s' "$_line" | jq -r .sid)")" "$_line"
 }
 
+
+# Find the record and append the event; one retry covers the watcher moving pending/ -> done/ between the two steps.
+_bv_record_event() { # <ev> <rid> [until] [reason]
+    local _rf _try=0
+    while [ "$_try" -lt 2 ]; do
+        if _rf="$(_bv_find_record "$2")" && _bv_emit "$1" "$_rf" "${3:-}" "${4:-}"; then
+            return 0
+        fi
+        _try=$((_try + 1))
+        sleep 0.1 2>/dev/null
+    done
+    return 1
+}
+
 borg_resume_ack() {
-    local _rid="${1:-}" _rf
+    local _rid="${1:-}"
     _bv_valid_rid "$_rid" && [ $# -eq 1 ] || return 2
     borg_resume_disabled_env && return 0
     command -v jq >/dev/null 2>&1 || { printf 'borg-resume: jq is required\n' >&2; return 1; }
-    _rf="$(_bv_find_record "$_rid")" || { printf 'borg-resume: no record %s\n' "$_rid" >&2; return 1; }
-    _bv_emit ack "$_rf" || { printf 'borg-resume: could not record the ack for %s\n' "$_rid" >&2; return 1; }
+    _bv_record_event ack "$_rid" || { printf 'borg-resume: could not record the ack for %s\n' "$_rid" >&2; return 1; }
     return 0
 }
 
 borg_resume_defer() {
-    local _rid="${1:-}" _rf _until="" _reason="" _a _resolved
+    local _rid="${1:-}" _until="" _reason="" _a _resolved _have_until=0
     _bv_valid_rid "$_rid" || return 2
     shift
     while [ $# -gt 0 ]; do
@@ -100,26 +117,28 @@ borg_resume_defer() {
                 shift
                 ;;
             --until)
-                [ $# -gt 0 ] || return 2
+                [ $# -gt 0 ] && [ "$_have_until" -eq 0 ] || return 2
                 _until="$1"
+                _have_until=1
                 shift
                 ;;
             -*) return 2 ;;
             *)
-                [ -z "$_until" ] || return 2
+                [ "$_have_until" -eq 0 ] || return 2
                 _until="$_a"
+                _have_until=1
                 ;;
         esac
     done
-    if [ -n "$_until" ]; then
+    if [ "$_have_until" -eq 1 ]; then
         _resolved="$(_bv_parse_until "$_until")" || return 2
         _until="$_resolved"
     fi
-    case "$_reason" in *[!A-Za-z0-9_.:-]*) return 2 ;; esac
+    # The caller is a model: never lose a defer over free text. Squash to the safe charset and cap the length.
+    _reason="$(printf '%s' "$_reason" | tr -c 'A-Za-z0-9_.:-' '_' | cut -c1-64)"
     borg_resume_disabled_env && return 0
     command -v jq >/dev/null 2>&1 || { printf 'borg-resume: jq is required\n' >&2; return 1; }
-    _rf="$(_bv_find_record "$_rid")" || { printf 'borg-resume: no record %s\n' "$_rid" >&2; return 1; }
-    _bv_emit defer "$_rf" "$_until" "$_reason" || {
+    _bv_record_event defer "$_rid" "$_until" "$_reason" || {
         printf 'borg-resume: could not record the defer for %s\n' "$_rid" >&2
         return 1
     }

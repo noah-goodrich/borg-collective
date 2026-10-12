@@ -24,7 +24,8 @@
 # `ack` and `defer` events: an ack closes a confirmed record (_rw_has_ack), a defer reschedules (_rw_fold_defers).
 #
 # Env: BORG_RESUME_RETAIN_DAYS (14, floored at 4 so it always exceeds the 72h scan window),
-# BORG_RESUME_CONFIRM_DONE_SEC (1800), BORG_RESUME_CONFIRM_PROGRESS_LINES (25), BORG_RESUME_SCAN_HOURS (72).
+# BORG_RESUME_CONFIRM_DONE_SEC (1800), BORG_RESUME_CONFIRM_PROGRESS_LINES (25), BORG_RESUME_SCAN_HOURS (72),
+# BORG_RESUME_DEFER_SEC (900), BORG_RESUME_DEFER_MAX (3), BORG_RESUME_MAX_AGE_HOURS (48; defer ceiling).
 
 # shellcheck disable=SC2016
 _RW_ACTIVE='"new","scheduled","deferred","injecting","injected","confirmed"'
@@ -433,12 +434,17 @@ EOF
 }
 
 # Defer path (S7b): fold new `defer` events (written by `borg-resume defer`) of one session. A defer reschedules an
-# ACTIVE record as `deferred` with resume_at = until (default: event time + BORG_RESUME_DEFER_SEC, 900), never
-# earlier than now and never later than the 7 day ceiling from first_seen (D2); the 48h age expiry itself is S9's.
-# A defer of a confirmed record drops the confirmation, so the prompt can be injected again. Terminal records and
-# unknown rids are ignored. Own cursor (defer_cursor) so each event is applied exactly once.
+# ACTIVE record as `deferred` with resume_at = max(until, now, current resume_at) (default until: event time +
+# BORG_RESUME_DEFER_SEC, 900): a defer only ever pushes later. The ceiling is the D2 age rule: first_seen + 7 days
+# for limit-class records, first_seen + BORG_RESUME_MAX_AGE_HOURS (48) for everything else; the 48h expiry itself is
+# S9's. Defers are bounded: each applied defer counts toward the session's `consecutive`, and once a record has
+# BORG_RESUME_DEFER_MAX (3) defers the next one closes it `capped` instead of looping. A defer of a confirmed
+# record drops the confirmation so the prompt can be injected again. Terminal records and unknown rids are
+# ignored. Own cursor (defer_cursor): each event is applied once, and the cursor stops before a line whose update
+# failed so it is retried next pass.
 _rw_fold_defers() {
-    local _sid="$1" _ef _sf _cursor _total _lines _line _rid _f _until _ev_t _reason _now _def
+    local _sid="$1" _ef _sf _cursor _total _lines _line _rid _f _until _ev_t _reason _now _def _max _age _n _ok
+    local _applied
     _ef="$(borg_resume_events_file "$_sid")"
     [ -f "$_ef" ] || return 0
     _sf="$(_rw_state_file "$_sid")"
@@ -448,13 +454,24 @@ _rw_fold_defers() {
     _total="$(wc -l <"$_ef" | tr -d ' ')"
     [ "$_total" -gt "$_cursor" ] || return 0
     _lines="$(tail -n +$((_cursor + 1)) "$_ef" | head -n $((_total - _cursor)) |
-        jq -c -R 'fromjson? | select(type == "object" and .ev == "defer" and (.rid | type) == "string")' 2>/dev/null)"
-    [ -n "$_lines" ] || return 0
+        jq -c -R 'input_line_number as $n | (fromjson? // empty)
+            | select(type == "object" and .ev == "defer" and (.rid | type) == "string") | . + {_n: $n}' 2>/dev/null)"
+    if [ -z "$_lines" ]; then
+        # No defer lines: still advance, so the file is not rescanned in full on every pass.
+        [ -f "$_sf" ] && _rw_update "$_sf" --argjson c "$_total" '.defer_cursor = $c'
+        return 0
+    fi
     _now="$(_rc_now)"
     _def="${BORG_RESUME_DEFER_SEC:-900}"
     case "$_def" in "" | *[!0-9]*) _def=900 ;; esac
+    _max="${BORG_RESUME_DEFER_MAX:-3}"
+    case "$_max" in "" | *[!0-9]*) _max=3 ;; esac
+    _age="${BORG_RESUME_MAX_AGE_HOURS:-48}"
+    case "$_age" in "" | *[!0-9]*) _age=48 ;; esac
+    _applied=$_total
     while IFS= read -r _line; do
         [ -n "$_line" ] || continue
+        _n="$(printf '%s' "$_line" | jq -r ._n)"
         _rid="$(printf '%s' "$_line" | jq -r .rid)"
         borg_resume_valid_sid "$_rid" || continue
         _f="$(borg_resume_dir)/pending/$_rid.json"
@@ -469,20 +486,36 @@ _rw_fold_defers() {
         _reason="$(printf '%s' "$_line" | jq -r '.reason // empty')"
         case "$_ev_t" in "" | *[!0-9]*) _ev_t="$_now" ;; esac
         case "$_until" in "" | *[!0-9]*) _until=$((_ev_t + _def)) ;; esac
-        _rw_update "$_f" --argjson u "$_until" --argjson now "$_now" --arg r "$_reason" '
-            ([([$u, $now] | max), ((.first_seen // $now) + 604800)] | min) as $ra
-            | .state = "deferred" | .resume_at = $ra
-            | .defer_count = ((.defer_count // 0) + 1)
-            | .defer_reason = (if $r == "" then null else $r end)
-            | del(.confirmed_at, .confirmed_lines)
-            | .state_log += [["deferred", $now, (if $r == "" then "defer" else $r end)]]' || continue
+        _rw_state_ensure "$_sid"
+        _ok=1
+        if [ "$(jq -r '.defer_count // 0' "$_f" 2>/dev/null)" -ge "$_max" ]; then
+            _rw_update "$_f" --argjson now "$_now" '.state = "capped" | .done_reason = "defer_cap"
+                | .state_log += [["capped", $now, "defer_cap"]]' &&
+                _rw_update "$_sf" '.consecutive += 1' || _ok=0
+            [ "$_ok" -eq 1 ] && _rw_log "defer cap reached, $_rid capped"
+        else
+            _rw_update "$_f" --argjson u "$_until" --argjson now "$_now" --argjson age "$_age" --arg r "$_reason" '
+                (.first_seen // $now) as $fs
+                | (if .class == "usage_limit" then $fs + 604800 else $fs + ($age * 3600) end) as $ceil
+                | ([([$u, $now, (.resume_at // 0)] | max), $ceil] | min) as $ra
+                | .state = "deferred" | .resume_at = $ra
+                | .defer_count = ((.defer_count // 0) + 1)
+                | .defer_reason = (if $r == "" then null else $r end)
+                | del(.confirmed_at, .confirmed_lines)
+                | .state_log += [["deferred", $now, (if $r == "" then "defer" else $r end)]]' &&
+                _rw_update "$_sf" '.consecutive += 1' || _ok=0
+            [ "$_ok" -eq 1 ] && _rw_log "defer applied $_rid until=$_until reason=${_reason:-none}"
+        fi
+        if [ "$_ok" -eq 0 ]; then
+            _applied=$((_cursor + _n - 1))
+            break
+        fi
         _rw_n_merged=$((_rw_n_merged + 1))
-        _rw_log "defer applied $_rid until=$_until reason=${_reason:-none}"
     done <<EOF
 $_lines
 EOF
     _rw_state_ensure "$_sid"
-    _rw_update "$_sf" --argjson c "$_total" '.defer_cursor = $c'
+    _rw_update "$_sf" --argjson c "$_applied" '.defer_cursor = $c'
     return 0
 }
 
@@ -559,13 +592,21 @@ _rw_has_ack() {
     local _sid="$1" _rid="$2" _since="$3" _ef
     _ef="$(borg_resume_events_file "$_sid")"
     [ -f "$_ef" ] || return 1
-    jq -e -n --arg r "$_rid" --argjson s "$_since" '[inputs | select(.ev == "ack" and .rid == $r and (.t // 0) >= $s)]
-        | length > 0' \
+    jq -e -R -n --arg r "$_rid" --argjson s "$_since" '[inputs | fromjson?
+        | select(type == "object" and .ev == "ack" and .rid == $r and (.t // 0) >= $s)] | length > 0' \
         "$_ef" >/dev/null 2>&1
 }
 
+# An ack only counts when it is newer than the last injection attempt or defer of the record (state_log entries
+# injecting, injected, deferred; first_seen when there are none), NOT than the watcher's first sighting of the
+# confirmation: the S6 "already moved on" path acks within seconds, before the watcher flips the record.
+_rw_ack_since() {
+    jq -r '[(.state_log // [])[] | select(.[0] == "injecting" or .[0] == "injected" or .[0] == "deferred") | .[1]]
+        | (max // .first_seen // 0)' "$1" 2>/dev/null
+}
+
 _rw_confirmed_pass() {
-    local _f _rid _sid _scope _at _cl _now _lines _file _loc _t _sd _need _after _prog _reason _sf
+    local _f _rid _sid _scope _at _cl _now _lines _file _loc _t _sd _need _after _prog _reason _sf _since
     _now="$(_rc_now)"
     _need="${BORG_RESUME_CONFIRM_PROGRESS_LINES:-25}"
     _after="${BORG_RESUME_CONFIRM_DONE_SEC:-1800}"
@@ -594,7 +635,9 @@ _rw_confirmed_pass() {
         fi
         _prog=$((_lines - _cl))
         _reason=""
-        if _rw_has_ack "$_sid" "$_rid" "$_at"; then
+        _since="$(_rw_ack_since "$_f")"
+        case "$_since" in "" | null | *[!0-9]*) _since="$_at" ;; esac
+        if _rw_has_ack "$_sid" "$_rid" "$_since"; then
             _reason=ack
         elif [ "$_prog" -ge "$_need" ]; then
             _reason=progress
