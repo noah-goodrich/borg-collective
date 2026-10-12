@@ -252,6 +252,29 @@ EOF"
     [ ! -e "$TMUX_STUB_LOG" ]
 }
 
+@test "pane: claude_start is trimmed of leading and trailing whitespace" {
+    printf '#!/bin/sh\nprintf "  Mon Oct 12 06:00:00 2026   \\n"\n' >"$FAKEBIN/ps"
+    chmod +x "$FAKEBIN/ps"
+    run bash -c "PATH='$FAKEBIN':\$PATH TMUX_PANE=%12 '$BR' record session_start <<'EOF'
+$(payload)
+EOF"
+    [ "$status" -eq 0 ]
+    run jq -e '.claude_start == "Mon Oct 12 06:00:00 2026"' "$REG"
+    [ "$status" -eq 0 ]
+}
+
+@test "record: an empty or whitespace agent_id counts as absent" {
+    local v
+    mkdir -p "${EV%/*}"
+    for v in "" "   "; do
+        : >"$EV"
+        run bash -c "printf '%s' '{\"session_id\":\"$SID\",\"agent_id\":\"$v\"}' | '$BR' record agent_stop"
+        [ "$status" -eq 0 ]
+        run jq -e '.scope == "main" and .agent_id == null' "$EV"
+        [ "$status" -eq 0 ]
+    done
+}
+
 @test "container: BORG_IN_CONTAINER=1 records no pane and no pid, never calls tmux" {
     run bash -c "PATH='$FAKEBIN':\$PATH TMUX_PANE=%12 BORG_IN_CONTAINER=1 '$BR' record session_start <<'EOF'
 $(payload)
