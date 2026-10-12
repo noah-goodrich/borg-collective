@@ -184,7 +184,7 @@ Runs `borg recon --json` (the `--json` is mandatory; a bare `borg recon` exits 1
 a prioritized, by-project briefing with Yours-vs-Mine action lists and a recommended parallel
 kickoff batch. Source-agnostic — adapters are injected, never hardcoded.
 
-Caveat, filed not fixed (see `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md`,
+Caveat, filed not fixed (see `docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md`,
 Phase 5b): this skill sweeps on recon's own since-ladder and ADVANCES `$BORG_DIR/recon/last-run`,
 while `borg link` cuts a fixed 90-day window and never writes that marker. The two answer over
 different windows.

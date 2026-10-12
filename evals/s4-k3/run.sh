@@ -331,7 +331,7 @@ fi
 
 # ── E3: declared-edge provenance (borg_core/manifest) ────────────────────────────────────────────
 # RE-POINTED 2026-10-12 from `borg recon --json | python3 merge-tree/gather.py` when the merge-tree
-# browser board retired (docs/plans/directives/2026-10-03-retire-the-merge-tree-browser-board.md, R1).
+# browser board retired (docs/plans/assimilated/2026-10-03-retire-the-merge-tree-browser-board.md, R1).
 # Both asserted quantities were always pure functions of the discovered manifests, so the recon feed
 # was incidental; this now calls borg_core/manifest directly: shell.discover for discovery,
 # across.edges_from for the declared edges (core.derive_edges per manifest, unioned), and

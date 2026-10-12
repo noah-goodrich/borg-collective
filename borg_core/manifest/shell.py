@@ -255,7 +255,7 @@ def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
 
     THE FILE IS REFUSED WHOLE. A manifest with ANY invalid row loads as `(None, warning)`; no row is ever
     dropped on the way in. This reverses `2026-08-27-degrade-the-row-not-the-manifest` (see
-    `docs/plans/directives/2026-09-01-refuse-the-manifest-stop-salvaging-rows.md`): salvage was right
+    `docs/plans/assimilated/2026-09-01-refuse-the-manifest-stop-salvaging-rows.md`): salvage was right
     while invalid rows were routine, and wrong once every borg writer validates (`write_manifest`) and
     schema changes run expand -> migrate -> contract. What is left is an anomaly -- a hand-edit, a
     merge, another tool -- and quietly salvaging an anomaly papers over a defect. It also let a

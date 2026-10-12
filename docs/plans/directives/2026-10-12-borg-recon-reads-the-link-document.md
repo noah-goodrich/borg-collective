@@ -1,7 +1,7 @@
 # Directive: /borg-recon synthesizes the borg link document instead of running its own sweep
 
 *Filed: 2026-10-12 · Status: Proposed, NOT BUILT (Noah decided 2026-10-12 to defer) · Owner: Noah*
-*Split out of Phase 5b of `docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md`, where it was filed 2026-08-26.*
+*Split out of Phase 5b of `docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md`, where it was filed 2026-08-26.*
 
 **tl;dr** — `/borg-recon` is a human briefing that runs its own sweep through `borg recon --json`, on its own time window, and advances `$BORG_DIR/recon/last-run` as a side effect. `borg link` never touches that marker. This directive makes `/borg-recon` a synthesis layer over `borg link`'s document so there is one input and no hidden state change. It is filed and deferred, not scheduled.
 
@@ -32,4 +32,4 @@ Noah decided on 2026-10-12 not to build this now. The declared-not-fixed state a
 
 ## Origin
 
-`docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md`, Phase 5b.
+`docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md`, Phase 5b.

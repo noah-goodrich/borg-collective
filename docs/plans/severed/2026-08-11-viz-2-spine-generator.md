@@ -8,7 +8,7 @@ merge-tree browser board it fed is retired.*
 > **Ruling, Noah, 2026-10-03.** The merge-tree browser board is RETIRED; `borg link` is the only place chains are
 > drawn, and the manifest grid (`.borg/chains/*.json` plus the live sweep) is the canonical chain model. This was
 > One Front Door's intent ("the single front door") and its teardown was never filed; it is filed now as
-> `docs/plans/directives/2026-10-03-retire-the-merge-tree-browser-board.md`. S1, S2, S3 and S5 are built and stay
+> `docs/plans/assimilated/2026-10-03-retire-the-merge-tree-browser-board.md`. S1, S2, S3 and S5 are built and stay
 > built. S4 (spine staleness warning), the unmet half of S6 (wiring `make spine` to the bridge) and S7
 > (re-baselining the board's renderer output) have no remaining purpose, because each exists to keep a
 > `story.json` fresh for a board nobody will open. They are severed with this file and carried nowhere.

@@ -1489,7 +1489,7 @@ EOF
         info "Building morning briefing..."
 
         # Capture stderr to a file under the state root instead of /dev/null (was silent — see
-        # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
+        # docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md). The fallback
         # path being taken with NO indication of why is the defect this whole function exists to fix.
         local claude_rc=0
         local claude_stderr_file="$(_borg_state_root)/briefing-stderr.log"
@@ -1554,7 +1554,7 @@ EOF
         # A FAILED FALLBACK RENDER IS THE LOUDEST FAILURE IN THIS FUNCTION, NOT THE QUIETEST. This
         # line used to end in `|| true`, which meant the ONE path that guarantees the user always
         # gets a page could print nothing and still exit 0 — the silent-fallback shape
-        # docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1
+        # docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md Phase 1
         # exists to remove ("make the failure loud"), reintroduced at the last step of the ladder
         # that implements it. Every branch above names its cause; so does this one. The reason line
         # is redirected to STDERR because `warn` itself writes to STDOUT (see its definition beside
@@ -2805,7 +2805,7 @@ cmd_doctor() {
 
     # Headless `claude -p` reachability — the narrative half of `borg link --brief`. This is what
     # makes a dead LLM path a health-check finding instead of something noticed by reading thin
-    # output (docs/plans/directives/2026-08-10-briefing-fallback-and-summary-provenance.md, defect
+    # output (docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md, defect
     # 1). NOT a launchd agent, so REG/FRESH are n/a here; EXIT carries the actual claude exit code.
     printf "${BOLD} %-14s %-10s %-8s %-10s %s${NC}\n" "CHECK" "REG" "EXIT" "FRESH" "STATUS"
     printf '%0.s─' {1..70}; echo

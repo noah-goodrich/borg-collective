@@ -776,7 +776,7 @@ def test_no_module_references_an_external_plugin_or_a_sibling_checkout():
 # ── whole-file refusal: ANY invalid row refuses the file, and only that file ────────────────────
 #
 # This section used to pin row-level SALVAGE (`2026-08-27-degrade-the-row-not-the-manifest`). Noah
-# reversed it on 2026-09-01 (`docs/plans/directives/2026-09-01-refuse-the-manifest-stop-salvaging-
+# reversed it on 2026-09-01 (`docs/plans/assimilated/2026-09-01-refuse-the-manifest-stop-salvaging-
 # rows.md`): with validate-on-write and expand -> migrate -> contract an invalid row is an anomaly to
 # REPORT, not to paper over, and a salvaged read feeding a write deletes declared rows from disk.
 # The cases below keep their subjects and now assert the refusal.

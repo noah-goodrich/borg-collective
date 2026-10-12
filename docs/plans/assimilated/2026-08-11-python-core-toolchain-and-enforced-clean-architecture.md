@@ -289,7 +289,7 @@ undisciplined-shipping problem in a second language, and therefore evidence *for
 Two corrections found while starting the `link` step:
 
 - **`link` is blocked, not next.** A separate, independent, unstarted directive
-  (`docs/plans/directives/2026-08-11-link-unification-and-layout.md`) redesigns `cmd_link`'s
+  (`docs/plans/assimilated/2026-08-11-link-unification-and-layout.md`) redesigns `cmd_link`'s
   output contract (`--json`, bottom-anchored layout, idle collapse) while it's still in zsh.
   Porting today's `cmd_link` to Python now would likely be thrown away once that directive lands.
   Revisit `link`'s Python port only after that directive ships.
