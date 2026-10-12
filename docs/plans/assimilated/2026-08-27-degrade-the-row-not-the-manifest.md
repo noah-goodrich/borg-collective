@@ -1,6 +1,6 @@
 # Directive: A bad row must not cost the whole manifest
 
-> **REVERSED 2026-10-12 by [`2026-09-01-refuse-the-manifest-stop-salvaging-rows`](../directives/2026-09-01-refuse-the-manifest-stop-salvaging-rows.md)** (decided by Noah 2026-09-01). Read-side row salvage is gone: a manifest with any invalid row now loads as `(None, warning)`, the refusal covers that one file only, and `▸ SIGNALS` names its path and first error. Everything below records the decision as it stood when it shipped.
+> **REVERSED 2026-10-12 by [`2026-09-01-refuse-the-manifest-stop-salvaging-rows`](2026-09-01-refuse-the-manifest-stop-salvaging-rows.md)** (decided by Noah 2026-09-01). Read-side row salvage is gone: a manifest with any invalid row now loads as `(None, warning)`, the refusal covers that one file only, and `▸ SIGNALS` names its path and first error. Everything below records the decision as it stood when it shipped.
 
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface*
 *Filed: 2026-08-27*

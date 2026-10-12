@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Session-load eval: does a REAL headless session see each borg skill exactly once, and fire each
 # borg lifecycle hook exactly once per logical event?  Directive:
-# docs/plans/directives/2026-09-02-session-load-eval-skill-registration-and-hooks.md (SL1-SL5)
+# docs/plans/assimilated/2026-09-02-session-load-eval-skill-registration-and-hooks.md (SL1-SL5)
 #
 #   CHECKER   offline  -> check.py grades a synthesized clean session (passes) and the same session
 #                         with a planted duplicate skill + second plugin dir (must go red, naming both
