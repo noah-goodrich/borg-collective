@@ -19,13 +19,23 @@
   [1mSummary[0m
   Scoped keypair auth rollout.
 
+  [1mRecent Checkpoints[0m
+    [0;36m2026-08-01-0900.md[0m
+
+  [1mLatest Checkpoint[0m
+  **tl;dr** — Scoped keypair auth rollout.
+  
+  ## 1. Goal
+  
+  Seeded by the fixture.
+
 [1m▸ REPOSITORIES[0m  [2mthe collective · 7 repositories · 2 need attention[0m
 [1m PROJECT              SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
 ──────────────────────────────────────────────────────────────────────────────────────────
 *platform             [C]  [0;32mactive      [0m 2h ago           –    3      – Scoped keypair auth rollout. [0;36m◀[0m
  atlas                [C]  [1;33mwaiting <<< [0m 5d ago           –    –      – Waiting on a schema decision.
  warehouse            [D]  [1;33mwaiting <<< [0m yesterday        –    –      – Key cutover blocked on the rollout run.
- infra                [X]  [0;32mactive      [0m 3h ago           –    –      – (no summary)
+ infra                [X]  [0;32mactive      [0m 3h ago           –    –      –
  archive-tools        [C]  [2midle        [0m never            –    –      – Nothing here since the fork.
  relay                [C]  [2midle        [0m 2d ago           –    –      – Relay has no summary yet.
  ledger               [C]  [2midle        [0m 30m ago          –    –      – Nightly close reconciliation.

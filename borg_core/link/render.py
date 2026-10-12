@@ -398,7 +398,7 @@ def _overview_row(
     # parity with the jq.
     status = str(core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS))
     last_activity = str(core.jq_default(entry.get("relative_activity"), ""))
-    summary_short = _overview_summary_cut(str(core.jq_default(entry.get("summary"), "(no summary)")))
+    summary_short = _overview_summary_cut(str(core.jq_default(entry.get("summary"), "")))
     display = _board_display(name, entry)
     pin_mark = "*" if entry.get("pinned") is True else " "
     status_display = "waiting <<<" if status == "waiting" else status
@@ -406,7 +406,8 @@ def _overview_row(
     line = (
         f"{pin_mark}{display:<{width}} {_src_badge(source):<{_COL_SRC}} "
         f"{_status_color(status)}{status_display:<{_COL_STATUS}}{NC} "
-        f"{last_activity:<{_COL_LAST_ACTIVE}} {_route_cells(counts)} {summary_short}{mark}\n"
+        f"{last_activity:<{_COL_LAST_ACTIVE}} {_route_cells(counts)}"
+        f"{' ' + summary_short if summary_short else ''}{mark}\n"
     )
     countdown = cortex_by_project.get(name)
     if countdown:
@@ -533,7 +534,7 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     path = core.jq_default(entry.get("path"), "null")
     status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
     last_activity = core.jq_default(entry.get("last_activity"), "(never)")
-    summary = str(core.jq_default(entry.get("summary"), "(no summary)"))
+    summary = str(core.jq_default(entry.get("summary"), ""))
     session_id = core.jq_default(entry.get("claude_session_id"), "(unknown)")
     tmux_window = core.jq_default(entry.get("tmux_window"), "(none)")
 
@@ -549,8 +550,10 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     out.append(_label("Last active:", str(last_activity)))
     out.append(_label("tmux window:", str(tmux_window)))
     out.append(_label("Session ID:", str(session_id)))
-    out.append("\n")
-    out.append(_summary_block(summary))
+    # No checkpoint states a summary => the block is OMITTED, not filled with a placeholder.
+    if summary:
+        out.append("\n")
+        out.append(_summary_block(summary))
 
     plan = focus.get("plan")
     if plan is not None:

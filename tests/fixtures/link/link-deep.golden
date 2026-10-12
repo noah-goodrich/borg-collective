@@ -34,7 +34,8 @@
 
   [1mLatest Checkpoint[0m
   # Checkpoint five
-  body line 02
+  **tl;dr** — Delta keeps the deep dive deterministic.
+  
   body line 03
   body line 04
   body line 05
@@ -52,7 +53,6 @@
   body line 17
   body line 18
   body line 19
-  body line 20
 
 [1m▸ REPOSITORIES[0m  [2mthe collective · 1 repository · 0 need attention[0m
 [1m PROJECT              SRC  STATUS       LAST ACTIVE  YOURS MINE UNSURE SUMMARY[0m
