@@ -42,9 +42,9 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (15): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (16): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
-  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard,
+  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
 - Skills (16): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
   and 10 more (full list under Files below)
@@ -189,6 +189,7 @@ hooks/
     borg-workflow-model-guard.sh  PreToolUse (Workflow) → every agent() must pass the same allowlist/caps (fail-closed)
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
+    borg-verifier-guard.sh  PreToolUse (Bash) → verifier: git/gh reads
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
     tool-count-nudge.sh     PostToolUse → review reminder every 75 tool calls
