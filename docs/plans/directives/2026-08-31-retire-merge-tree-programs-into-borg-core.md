@@ -97,18 +97,23 @@ Any of these ships green. They are the reason this is a directive.
 
 ## Acceptance criteria
 
-- [ ] **One implementation.** `merge-tree/programs.py` no longer exists; nothing imports it.
+- [x] **One implementation.** `merge-tree/programs.py` no longer exists; nothing imports it.
   - Verify: `grep -rn "import programs"` returns nothing; `make test-viz` and `make test` green.
-- [ ] **No sync can delete a declared row.** A test builds a manifest with one invalid row, runs the sync path, and
+  - Evidence (PR #341): `merge-tree/programs.py` and `test_programs.py` are deleted; `grep -rn "import programs"` over `*.py`, `*.sh`, `*.zsh` and the Makefile returns nothing; `make test` (1726 passed, 94%), `make test-viz` (coordinator.py 95%) and `make lint`, `make lint-viz` are green on the branch.
+- [x] **No sync can delete a declared row.** A test builds a manifest with one invalid row, runs the sync path, and
       asserts the row is still on disk afterward.
   - Verify: the test is red before the fix, by mutation.
-- [ ] **The writer round-trips through the reader.** Anything the writer accepts, the reader loads — the asymmetry
+  - Evidence (PR #341): `test_sync_borg_will_not_write_back_a_manifest_with_rows_missing_in_memory` pins the row-count guard (red when the `_rows_on_disk` guard is deleted), and `TestRefusalsThroughTheRealReader::test_every_refusal_class_is_fatal_for_sync_and_plan_and_writes_nothing` builds unreadable JSON, an invalid manifest and a both-roots stem through the real `shell.discover` and asserts `plan` and `sync` exit 1 with the file untouched (red when either `fatal` list is emptied). One refused manifest still blocks the whole run (all-or-nothing, Noah's decision 5, 2026-10-12): that was PR #330's design and is kept.
+- [x] **The writer round-trips through the reader.** Anything the writer accepts, the reader loads — the asymmetry
       `core.py`'s docstring names is gone.
   - Verify: a property-style round-trip test over the fixture corpus.
-- [ ] **Coverage still measures the moved code.** The `--include` list names the new location and the floor holds.
+  - Evidence (PR #341): `test_whatever_the_writer_accepts_the_reader_loads_unchanged` is parametrized over the real corpus (`test_the_round_trip_corpus_is_not_empty_and_names_its_known_members` stops it collapsing to zero cases), plus `test_a_written_manifest_round_trips_through_the_reader` and the byte-identity test for the en-dash manifest. Fix round 1 added the permission-bit round trip (`test_a_rewrite_keeps_the_existing_files_permission_bits`) and the authored-`_`-key round trip (`test_the_writer_keeps_an_authored_underscore_key_and_still_drops_the_loader_stamps`).
+- [x] **Coverage still measures the moved code.** The `--include` list names the new location and the floor holds.
   - Verify: delete a ported function's tests locally and confirm the gate goes red.
-- [ ] **The retired word is out of `merge-tree/`** and out of what the writer writes.
+  - Evidence and its honest scope (PR #341): `VIZ_COVERED` now names `coordinator.py`, and `make test-viz` fails loudly if a named module is missing or a `merge-tree/*.py` module is not named, so the list cannot shrink silently. The moved code itself, `borg_core/manifest`, is measured by `make test`'s package-wide `--fail-under=90` over `borg_core` (94% on this branch). The Verify clause as written CANNOT go red: the moved code is covered redundantly, by its own `borg_core/manifest` tests and by the coordinator tests, so deleting one ported test moves no number across either floor (tried: deleting `test_sync_borg_will_not_write_back_a_manifest_with_rows_missing_in_memory` leaves the gate green). Only deleting whole classes moves it (the sync, plan and list classes take `coordinator.py` to 52% and `make test-viz` exits 2). Ticked because the include list names the new location and the floor holds, which is what the criterion states, not because the per-function check works.
+- [x] **The retired word is out of `merge-tree/`** and out of what the writer writes.
   - Verify: AC7's grep clause; plus a test that a written manifest gains no `_id` and no injected `program`.
+  - Evidence (PR #341): `TestTheRetiredWordIsOutOfMergeTree::test_no_non_test_module_uses_it_outside_the_allowlist` is the grep clause; `test_the_writer_persists_no_derived_key`, `test_the_writer_never_injects_the_retired_word` and `TestWhatTheWriterPersists::test_written_bytes_gain_no_derived_or_retired_key` pin the written bytes. Fix round 1 narrowed what counts as derived: only the loader-stamped `_id` and `_path` are stripped (`core.LOADER_STAMPED_KEYS`), so an authored `_comment` survives, and `merge-tree/SCHEMA.md` documents the two as reserved.
 
 ## Notes
 

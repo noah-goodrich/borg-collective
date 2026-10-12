@@ -1,8 +1,8 @@
 """Unit tests for borg_core.manifest.core (the pure domain layer).
 
 Calling convention: in-process only, plain data in and plain data out. No filesystem, no fixture
-files on disk -- the three-repository manifest that merge-tree/test_programs.py loads from
-fixtures/programs/three-repo-program.json is built by `_fixture()` below instead. Two reasons: this
+files on disk -- the three-repository manifest that fixtures/three-repo-program.json holds (read by
+test_shell.py, which may touch the filesystem) is built by `_fixture()` below instead. Two reasons: this
 package's test surface is two modules, and an on-disk fixture drags in the REPO_ROOT path-depth trap
 that merge-tree/test_s4_manifests.py documents, where a moved file silently discovers zero manifests
 and the failure reads as "the feature is missing" rather than "the test moved".
@@ -43,7 +43,7 @@ def _gate(ref=None, **over):
 def _fixture():
     """The three-repository manifest, rebuilt fresh each call so no test can mutate another's input.
 
-    Content-equivalent to merge-tree/fixtures/programs/three-repo-program.json: an apex, two lanes,
+    Content-equivalent to fixtures/three-repo-program.json: an apex, two lanes,
     a merged prerequisite anchoring one of them, a lane whose declared order spans three
     repositories, one `decision` gate and one `verification` gate, both prose-only.
     """
@@ -1485,3 +1485,33 @@ def test_next_order_in_lane_skips_the_row_being_moved():
 def test_next_order_in_lane_ignores_non_dict_rows():
     m = {"rows": ["not a row", _order_row("o/r#1", "a", "1")]}
     assert core.next_order_in_lane(m, "a") == "2"
+
+
+# ── rehomed from merge-tree/test_programs.py, deleted in AC7 ─────────────────────────────────────────
+
+
+def test_manifest_rows_keeps_only_dict_rows_and_is_empty_for_a_non_list():
+    # The public accessor merge-tree/coordinator.py reads through. It was the private `_rows`, and the
+    # coordinator reached into programs.py's private twin; a name a consumer imports is a contract.
+    assert core.manifest_rows({"rows": ["stray", {"ref": "o/r#1"}, 7, None]}) == [{"ref": "o/r#1"}]
+    for malformed in ({}, {"rows": None}, {"rows": "o/r#1"}, {"rows": {"ref": "o/r#1"}}):
+        assert core.manifest_rows(malformed) == []
+
+
+def test_every_edge_kind_derive_edges_emits_is_a_declared_kind():
+    # The emitter-vs-consumer wire. derive_edges writes the `kind` token and levels()/ready_set() read
+    # it through ORDERING_EDGE_KINDS, so a rename on the emitting side that the consumer does not follow
+    # empties the ordering without raising. This replaces the spine workstream wire test deleted in #318
+    # and the vacuous `a blocks edge is kept apart` test that went with programs.py.
+    manifest = _manifest(
+        [
+            _row("1", "o/r#1", "a"),
+            _row("2", "o/r#2", "a"),
+            _row("1", "o/r#3", "b", gate=_gate("o/r#1")),
+        ],
+        apex={"ref": "o/t#1", "label": "tracker"},
+    )
+    emitted = {edge["kind"] for edge in core.derive_edges(manifest)}
+    assert emitted == {"stacked", "blocks", "apex"}
+    assert set(core.ORDERING_EDGE_KINDS) < emitted
+    assert emitted - set(core.ORDERING_EDGE_KINDS) == {"apex"}

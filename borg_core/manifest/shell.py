@@ -4,7 +4,7 @@ Every function here that touches the filesystem, subprocess, the environment or 
 this module. Logic (parsing, validating, ranking, selecting) is delegated to core.py -- this module
 never reimplements it.
 
-Ports the I/O half of merge-tree/programs.py:274-331 (its `programs_dir`, `discover`) and adds the
+Ports the I/O half of the deleted merge-tree/programs.py (its `programs_dir`, `discover`, writer) and adds the
 two entry points the one-front-door `link` needs: `discover_registered`, which globs EVERY registered
 repository rather than one, and `repository_slug`, which answers "which `owner/repo` is this
 directory?" the same way the recon github adapter does.
@@ -38,6 +38,7 @@ whole and hand the reasons back. Do not "make this consistent" by softening the 
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import stat
@@ -271,7 +272,7 @@ def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
 
     TWO DERIVED KEYS ARE ADDED, both underscore-prefixed so the declared body stays exactly what is
     on disk: `_path`, which must always reflect where this copy was read from (the literal key name
-    is a cross-module contract -- merge-tree's writer strips exactly that key), and `_id`, the
+    is a cross-module contract -- merge-tree/coordinator.py reads it to find the file to rewrite), and `_id`, the
     manifest's identity for display. `_id` reads a declared top-level `program` key VERBATIM when
     there is one, because that is what is on disk, and falls back to the filename stem. What it does
     NOT do is write a `program` key back into the document: reading a retired word is unavoidable,
@@ -652,16 +653,38 @@ def write_manifest(repository_dir: str, manifest: dict, name: str, directory: st
     stem = os.path.basename(name)
     path = os.path.join(directory, stem if stem.endswith(".json") else f"{stem}.json")
 
+    mode = _target_mode(path)
     handle, tmp_path = tempfile.mkstemp(dir=directory, prefix=".write-", suffix=".json.tmp")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as fh:
             json.dump(core.declared_body(manifest), fh, indent=2, sort_keys=True, ensure_ascii=False)
             fh.write("\n")
+        os.chmod(tmp_path, mode)
         os.replace(tmp_path, path)
-    except OSError:
-        os.unlink(tmp_path)
+    except BaseException:
+        # ANY failure, not only OSError: a TypeError from `json.dump` on an unserializable value used to
+        # skip the unlink and leave a `.write-*.json.tmp` in a tracked directory. The temp is ours alone
+        # (private mkstemp name), so a missing one is the only error worth swallowing here.
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp_path)
         raise
     return path
+
+
+def _target_mode(path: str) -> int:
+    """The permission bits a rewrite must give the file: the existing file's, else what `open()` would.
+
+    `mkstemp` creates 0600 and `os.replace` keeps the temp file's mode, so without this a rewrite turned a
+    0644 manifest into 0600 -- unreadable to a second user or through a bind-mounted devcontainer, and a
+    `git diff` mode change on a tracked file. A brand-new file gets `0o666` masked by the process umask,
+    which is exactly what `open(path, "w")` would have created.
+    """
+    try:
+        return stat.S_IMODE(os.stat(path).st_mode)
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        return 0o666 & ~umask
 
 
 def manifest_id(directory: str, name: str) -> str:

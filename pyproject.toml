@@ -20,6 +20,9 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["borg_core"]
+# merge-tree/ imports borg_core.manifest (its one reader), and `coverage run -m pytest` puts the cwd on
+# sys.path by itself but a bare `pytest merge-tree` does not. The repo root is named so both spellings work.
+pythonpath = ["."]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

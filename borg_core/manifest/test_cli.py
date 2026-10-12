@@ -912,3 +912,31 @@ def test_scaffold_names_a_stacks_path_that_is_a_file(repository, capsys, root):
     assert _run("scaffold", "--repository", repository, "--name", "demo", *extra) == 1
     err = capsys.readouterr().err
     assert "not a directory" in err and shell.STACKS_DIRNAME in err and "Errno" not in err
+
+
+# ── authored `_`-prefixed keys survive an in-place edit (PR #341 fix round 1) ────────────────────
+def _author_a_comment(repository):
+    _run("scaffold", "--repository", repository, "--name", "demo")
+    doc = _read(repository)
+    doc.update({"_comment": "hand-written, not derived", "_note": ["kept", "too"]})
+    with open(_path(repository), "w", encoding="utf-8") as handle:
+        json.dump(doc, handle)
+
+
+def _assert_comment_kept_and_stamps_absent(repository):
+    doc = _read(repository)
+    assert doc["_comment"] == "hand-written, not derived" and doc["_note"] == ["kept", "too"]
+    assert "_id" not in doc and "_path" not in doc
+
+
+def test_add_row_preserves_an_authored_underscore_key(repository):
+    _author_a_comment(repository)
+    assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 0
+    _assert_comment_kept_and_stamps_absent(repository)
+
+
+def test_close_preserves_an_authored_underscore_key(repository):
+    _author_a_comment(repository)
+    _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1")
+    assert _run("close", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 0
+    _assert_comment_kept_and_stamps_absent(repository)

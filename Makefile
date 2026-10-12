@@ -13,8 +13,8 @@
 # directive's Part 2 -- curate.py at 99%, render_graph.py at 88% (both since retired) -- and
 # `testpaths = ["borg_core"]` meant pytest never collected them, so no gate ran them and nothing would
 # have caught a regression. These targets close that without dragging merge-tree into borg_core's rules.
-# The browser board was retired 2026-10-12; the survivors are the chain coordinator and programs.py,
-# gated by test_coordinator, test_programs and test_s4_manifests.
+# The browser board was retired 2026-10-12 and programs.py was retired into borg_core/manifest (AC7); the
+# survivor is the chain coordinator, gated by test_coordinator and test_s4_manifests.
 #
 # borg_core/ doesn't exist until Part 3's first commit -- test/lint no-op gracefully (not a failure)
 # until then, same as pytest legitimately collecting zero tests.
@@ -76,7 +76,7 @@ format:
 # module and the number goes UP. `2026-08-31-retire-merge-tree-programs-into-borg-core` names
 # this as one of four traps that "ship green", and it is the one that disarms the gate measuring the
 # very code that retirement moves. A missing module is now a loud failure instead.
-VIZ_COVERED = merge-tree/programs.py merge-tree/coordinator.py
+VIZ_COVERED = merge-tree/coordinator.py
 
 test-viz:
 	@if [ -d merge-tree ]; then \
@@ -85,6 +85,14 @@ test-viz:
 			[ -f "$$f" ] || { echo "coverage gate names a module that does not exist: $$f"; \
 				echo "  coverage would IGNORE it silently and shrink the gate. Update VIZ_COVERED deliberately."; \
 				exit 1; }; \
+		done; \
+		for f in merge-tree/*.py; do \
+			case "$$f" in */test_*.py) continue ;; esac; \
+			case " $(VIZ_COVERED) " in *" $$f "*) ;; \
+				*) echo "merge-tree module is not named in VIZ_COVERED: $$f"; \
+					echo "  the gate would not measure it. Add it to VIZ_COVERED, or move it out of merge-tree/."; \
+					exit 1 ;; \
+			esac; \
 		done; \
 		coverage run --source=merge-tree -m pytest merge-tree/ || test $$? -eq 5; \
 		coverage report -m --include='$(shell echo $(VIZ_COVERED) | tr " " ",")' --fail-under=85; \
