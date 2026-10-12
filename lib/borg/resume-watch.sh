@@ -773,7 +773,10 @@ borg_resume_watch_once() {
         [ "$(_ri_mtime "$_f")" -ge "$_cut" ] || continue
         _rw_scan_session "$_sid"
     done
+    # S9 gate (lib/borg/resume-gate.sh): confirmation before the confirmed rules, the pre-flight gate after them.
+    command -v borg_resume_gate_confirm_pass >/dev/null 2>&1 && borg_resume_gate_confirm_pass
     _rw_confirmed_pass
+    command -v borg_resume_gate_due_pass >/dev/null 2>&1 && borg_resume_gate_due_pass
     _rw_move_terminal
     _rw_retention
     if [ $((_rw_n_created + _rw_n_merged + _rw_n_closed + _rw_n_done)) -gt 0 ]; then

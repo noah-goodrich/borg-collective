@@ -10,7 +10,7 @@
 #   pause            create the DISABLED sentinel (nothing will inject; recording continues)
 #   unpause          remove it
 #   probe            print the session usage percent (own claude -p /usage sample, cached 120s)
-#   watch --once     one watcher pass: fold hook events + scan transcripts into pending/ records (slice S7)
+#   watch --once     one watcher pass: fold, scan (S7), then pre-flight gate + confirmation (S9)
 #   inventory <sid>  print the in-flight inventory as JSON (slice S5; --json is accepted, JSON is the only format)
 #   prompt <rid>     render prompts/<rid>.md, or with --line / --compact-line the injection strings (slice S6)
 #   mark-closed <project|sid>  append a deliberate-close event (like SessionEnd prompt_input_exit); slice S3b
@@ -292,7 +292,8 @@ _br_main() {
             [ "${1:-}" = "--once" ] && [ $# -eq 1 ] || { _br_usage; return 2; }
             # shellcheck source=/dev/null
             . "$BORG_RESUME_LIBDIR/resume-classify.sh" && . "$BORG_RESUME_LIBDIR/resume-inventory.sh" &&
-                . "$BORG_RESUME_LIBDIR/resume-watch.sh" || return 1
+                . "$BORG_RESUME_LIBDIR/resume-watch.sh" && . "$BORG_RESUME_LIBDIR/resume-prompt.sh" &&
+                . "$BORG_RESUME_LIBDIR/resume-gate.sh" || return 1
             borg_resume_watch_once
             ;;
         prompt)

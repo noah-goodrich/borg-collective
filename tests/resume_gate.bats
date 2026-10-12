@@ -432,7 +432,7 @@ rf_rid() { basename "$(ls "$RD"/pending/*.json "$RD"/done/*.json 2>/dev/null | h
     mk_rec r_main "$SID" main transient scheduled "$((T0 + 100000))"
     printf '{"type":"user","uuid":"au","message":{"role":"user","content":"x"}}\n' >"$sd/agent-a2.jsonl"
     t_err "$sd/agent-a2.jsonl" "e-agent-2"
-    mk_rec r_ag2 "$SID" "agent:a2" transient scheduled "$T0" "$T0"
+    mk_rec r_ag2 "$SID" "agent:a2" transient scheduled "$T0" "$T0" '.evidence = {transcript_line:2, uuid:"e-agent-2", uuids:["e-agent-2"]}'
     jq -n -c --argjson t "$((T0 + 10))" '{type:"assistant", timestamp:($t | todate), uuid:"sm1",
         message:{role:"assistant", content:[{type:"tool_use", name:"SendMessage", id:"toolu_3",
         input:{to:"a2", message:"continue"}}]}}' >>"$PD/$SID.jsonl"
@@ -717,25 +717,26 @@ mk_injected() { # <rid> [injected_at offset]
     [ "$(rf r_x .state)" = done ]
 }
 
-@test "confirmation: no evidence in 90s is a no-progress; re-verify and re-send, then failed with a notification" {
+@test "confirmation: no evidence in 90s is a no-progress; re-verify and re-send once, then failed with a notification" {
     mk_main "$SID"
     mk_injected r_x
     at 80
     watch
     [ "$(rf r_x .state)" = injected ]
+    [ "$(n_inject)" = 0 ]
     at 100
     watch
     [ "$(n_inject)" = 1 ]
     [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 1 ]
-    at 140
-    watch
-    [ "$(n_inject)" = 1 ]
     [ "$(rf r_x .state)" = injected ]
     [ "$(rf r_x .inject_tries)" = 2 ]
+    [ "$(n_notify)" = 0 ]
     at 300
     watch
     [ "$(rf r_x .state)" = failed ]
+    [ "$(rf r_x .done_reason)" = confirm_timeout ]
     [ "$(n_notify)" = 1 ]
+    [ "$(n_inject)" = 1 ]
     [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 2 ]
 }
 

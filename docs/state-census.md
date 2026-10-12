@@ -69,6 +69,7 @@ wallpapering this census exists to prevent.
 | `.borg/skill-extensions` | dynamic | `borg_core/extensions/shell.py` | `layer_paths` joins `.borg / kind`, so no literal exists |
 | `.borg/agent-extensions` | dynamic | `borg_core/extensions/shell.py` | same `layer_paths` join, agent side |
 | `.borg/skills` | store | `hooks/borg-link-up.sh` | project-local skills; also `hooks/borg-link-down.sh` |
+| `.borg/no-resume` | store | `lib/borg/resume-gate.sh` | per-project opt-out marker: a file here keeps borg-resume from injecting into that project's sessions |
 | `.borg/knowledge` | retired | - | cairn's export, 1106 tracked files KEPT; the promise to grep it was deleted from CLAUDE.md 2026-09-28. See `docs/plans/directives/assets/2026-09-28-state-audit-adversarial.md` |
 | `.borg/elsewhere` | prose | - | not a store: a path in `merge-tree/test_coordinator.py`'s fixture for a manifest OUTSIDE the manifest dir |
 | `.borg/anything` | prose | - | not a store: a docstring example in `borg_core/manifest/shell.py` naming a path that is never opened |
