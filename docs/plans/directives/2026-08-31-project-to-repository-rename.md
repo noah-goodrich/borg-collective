@@ -32,8 +32,9 @@ git ls-files "*.py" "*.zsh" "*.sh" "*.bats" \
 include markdown. Heaviest: `drone.zsh` (469), `borg.zsh` (306), `tests/cli_contract.bats` (286),
 `borg_core/link/test_core.py` (134), `borg_core/link/test_shell.py` (118), `borg_core/link/core.py` (112).
 
-The site inventory classifies all 3911 (2614 repository, 1023 contract, 213 external, 45 workstream, 16 ambiguous):
-`assets/2026-10-12-project-rename-inventory.md` and its `.tsv`.
+The site inventory classifies all 3911 (2605 repository, 1023 contract, 183 external, 48 noise, 45 workstream, 7
+ambiguous): `assets/2026-10-12-project-rename-inventory.md` and its `.tsv`. `noise` is the English word projection or
+projected, or the verb "to project", which is not the noun at all; `repository` (2605) is the edit scope.
 
 History, measured 2026-08-31 (the tree has grown since; superseded by the figures above): 3142 occurrences across 97
 of 139 tracked code files. Heaviest then: `drone.zsh` (307), `tests/cli_contract.bats` (247), `borg.zsh` (232),
@@ -55,8 +56,9 @@ Three surfaces are not a sed pass:
 Rename the *repository* sense of `project` to `repository`, leaving the *workstream* sense alone. Sequence it so
 each step is independently green:
 
-1. **Classify before renaming.** Produce the site inventory (done, see Acceptance criteria): for each of the 97 files (148 at the 2026-10-12 re-measure), which occurrences mean
-   repository and which mean workstream. This is the actual work; the edit is mechanical afterward.
+1. **Classify before renaming.** Produce the site inventory (done, see Acceptance criteria): for each of the 97 files
+   (148 at the 2026-10-12 re-measure), which occurrences mean repository and which mean workstream. This is the
+   actual work; the edit is mechanical afterward.
 2. **Registry key last, behind a reader that accepts both.** Ship a reader tolerant of `projects` and
    `repositories`, let it run, then migrate the file, then drop the tolerance.
 3. **`.borg-project` marker: decide whether to rename it at all.** A marker filename is not a user-facing surface,
@@ -72,8 +74,10 @@ each step is independently green:
   - Verify: the inventory's total reconciles with the measured 3142, and a spot-check of 20 random sites agrees.
   - Done 2026-10-12: `assets/2026-10-12-project-rename-inventory.md` (+ `.tsv`), pinned to `a2744df`. Reconciles
     against the re-measured 3911 (the 3142 above predates tree growth), row by row; three blind spot-checks of 20
-    (seeds 11, 29, 47) agreed 60 of 60. Open for a human, not blocking this criterion: 16 ambiguous rows and the
-    judgment calls listed under "Known limits" in the inventory, which fix what the rename PRs may touch.
+    (seeds 11, 29, 47, committed under `assets/`) agreed 60 of 60. A later pass added the `noise` sense and moved 48
+    rows into it (from repository 9, external 30, ambiguous 9). Open for a human, not blocking this criterion: 7
+    ambiguous rows and the judgment calls listed under "Known limits" in the inventory, which fix what the rename PRs
+    may touch.
 - [ ] **The repository-sense rename lands** across `borg_core/`, `lib/`, `hooks/`, `borg.zsh`, `drone.zsh` and tests.
   - Verify: `make test` at the coverage floor, `make lint` exit 0, `bats tests/` green after each step, not just at
     the end.

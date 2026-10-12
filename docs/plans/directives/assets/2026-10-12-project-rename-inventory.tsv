@@ -167,33 +167,33 @@ borg.zsh	1245	1	projects	contract	registry JSON key projects
 borg.zsh	1260	1	projects	contract	registry JSON key projects
 borg.zsh	1263	1	projects	repository	registered repo / user-facing text
 borg.zsh	1267	1	projects	repository	registered repo / user-facing text
-borg.zsh	1291	1	projects	ambiguous	English verb "projects" (JSON), not the noun
+borg.zsh	1291	1	projects	noise	noise: verb to project; was ambiguous
 borg.zsh	1297	1	project	repository	registered repo / user-facing text
 borg.zsh	1365	1	projects	contract	link --json document key total_projects
 borg.zsh	1366	1	projects	contract	link --json document key total_projects
 borg.zsh	1366	2	project	repository	registered repo / user-facing text
-borg.zsh	1368	1	projects	ambiguous	English verb "projects", not the noun
+borg.zsh	1368	1	projects	noise	noise: verb to project; was ambiguous
 borg.zsh	1370	1	projects	contract	link --json document key total_projects
 borg.zsh	1376	1	projects	repository	registered repo / user-facing text
 borg.zsh	1380	1	project	repository	registered repo / user-facing text
-borg.zsh	1382	1	project	ambiguous	"projection" the jq filter, not the noun
+borg.zsh	1382	1	project	noise	noise: projection; was ambiguous
 borg.zsh	1392	1	project	repository	registered repo / user-facing text
 borg.zsh	1393	1	project	repository	registered repo / user-facing text
-borg.zsh	1403	1	project	ambiguous	"projection" the jq filter, not the noun
-borg.zsh	1414	1	project	ambiguous	"projection" stderr log name, not the noun
+borg.zsh	1403	1	project	noise	noise: projection; was ambiguous
+borg.zsh	1414	1	project	noise	noise: projection; was ambiguous
 borg.zsh	1439	1	PROJECTS	repository	narrative prompt text for a registered repo
 borg.zsh	1440	1	projects	contract	link --json document key projects
 borg.zsh	1441	1	PROJECT	repository	narrative prompt text for a registered repo
 borg.zsh	1455	1	PROJECT	repository	registered repo / user-facing text
-borg.zsh	1475	1	PROJECT	repository	registered repo / user-facing text
-borg.zsh	1476	1	project	ambiguous	"projection", not the noun
-borg.zsh	1485	1	project	ambiguous	"projection" fallback reason text, not the noun
+borg.zsh	1475	1	PROJECT	noise	noise: projection; was repository
+borg.zsh	1476	1	project	noise	noise: projection; was ambiguous
+borg.zsh	1485	1	project	noise	noise: projection; was ambiguous
 borg.zsh	1492	1	project	repository	registered repo / user-facing text
 borg.zsh	1495	1	project	repository	registered repo / user-facing text
 borg.zsh	1498	1	projects	repository	registered repo / user-facing text
 borg.zsh	1499	1	project	repository	registered repo / user-facing text
 borg.zsh	1501	1	projects	repository	registered repo / user-facing text
-borg.zsh	1514	1	project	ambiguous	"projection" failure, not the noun
+borg.zsh	1514	1	project	noise	noise: projection; was ambiguous
 borg.zsh	1625	1	Project	repository	registered repo / user-facing text
 borg.zsh	1627	1	projects	contract	registry JSON key projects
 borg.zsh	1641	1	projects	repository	registered repo / user-facing text
@@ -300,7 +300,7 @@ borg.zsh	3653	1	project	repository	registered repo / user-facing text
 borg.zsh	3662	1	project	repository	registered repo / user-facing text
 borg.zsh	3671	1	project	repository	registered repo / user-facing text
 borg.zsh	3676	1	project	repository	registered repo / user-facing text
-borg.zsh	3684	1	projects	repository	registered repo / user-facing text
+borg.zsh	3684	1	projects	noise	noise: verb to project; was repository
 borg.zsh	3749	1	projects	contract	recon CLI flag --projects
 borg.zsh	3749	2	projects	contract	recon CLI flag --projects
 borg.zsh	3789	1	project	contract	CLI flag --migrate-project-state
@@ -387,7 +387,7 @@ borg_core/link/cli.py	384	1	projects	repository	registered repo / identifier or 
 borg_core/link/cli.py	384	2	projects	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	418	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	433	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/cli.py	447	1	projects	repository	registered repo / identifier or prose about one
+borg_core/link/cli.py	447	1	projects	noise	noise: verb to project; was repository
 borg_core/link/cli.py	478	1	project	repository	local var/param or prose naming a repo
 borg_core/link/cli.py	482	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	492	1	project	repository	registered repo / identifier or prose about one
@@ -520,8 +520,8 @@ borg_core/link/grid.py	11	1	project	repository	one repo's manifest
 borg_core/link/grid.py	28	1	project	external	pyproject.toml clean-arch map
 borg_core/link/grid.py	107	1	projects	repository	scoped registry repos
 borg_core/link/grid.py	142	1	project	repository	list of registered repos
-borg_core/link/grid.py	167	1	project	external	English verb 'projected', not the noun
-borg_core/link/grid.py	246	1	project	external	English verb 'projected', not the noun
+borg_core/link/grid.py	167	1	project	noise	noise: projected; was external
+borg_core/link/grid.py	246	1	project	noise	noise: projected; was external
 borg_core/link/grid.py	591	1	projects	repository	function name for scoped registry repos
 borg_core/link/grid.py	592	1	projects	contract	registry JSON key `projects`
 borg_core/link/grid.py	600	1	projects	repository	local var of registry entries
@@ -534,8 +534,8 @@ borg_core/link/grid.py	878	1	projects	contract	total_projects key in link --json
 borg_core/link/grid.py	898	1	project	repository	repo heading on the page
 borg_core/link/grid.py	903	1	project	repository	the repo that owns the manifest
 borg_core/link/grid.py	904	1	project	repository	the repo that owns the manifest
-borg_core/link/grid.py	917	1	project	external	English verb 'projected', not the noun
-borg_core/link/grid.py	925	1	project	external	English noun 'projection', not ours
+borg_core/link/grid.py	917	1	project	noise	noise: projected; was external
+borg_core/link/grid.py	925	1	project	noise	noise: projection; was external
 borg_core/link/picture.py	11	1	project	external	pyproject.toml
 borg_core/link/picture.py	314	1	project	workstream	a chain/manifest's overall state
 borg_core/link/picture.py	620	1	project	workstream	first manifest/chain in picture
@@ -779,7 +779,7 @@ borg_core/link/test_cli.py	331	1	projects	contract	registry key projects is non-
 borg_core/link/test_cli.py	333	1	projects	contract	registry/link JSON key projects
 borg_core/link/test_cli.py	359	1	projects	contract	registry key projects is non-object
 borg_core/link/test_cli.py	361	1	projects	contract	registry/link JSON key projects
-borg_core/link/test_cli.py	410	1	projects	ambiguous	English verb 'projects it into', not the noun
+borg_core/link/test_cli.py	410	1	projects	noise	noise: verb to project; was ambiguous
 borg_core/link/test_cli.py	516	1	project	repository	registered repo entry / name in test or comment
 borg_core/link/test_cli.py	518	1	project	repository	registered repo entry / name in test or comment
 borg_core/link/test_cli.py	518	2	project	repository	registered repo entry / name in test or comment
@@ -982,13 +982,13 @@ borg_core/link/test_grid.py	1076	1	projects	repository	registry entry / repo dir
 borg_core/link/test_grid.py	1083	1	projects	contract	registry JSON key projects
 borg_core/link/test_grid.py	1242	1	project	contract	recon Item JSON key in adapter output fixture
 borg_core/link/test_grid.py	1352	1	projects	repository	scoped registry entries (repos)
-borg_core/link/test_grid.py	1449	1	project	external	English verb (project away), not the noun
-borg_core/link/test_grid.py	2074	1	project	external	English noun projection, not our term
+borg_core/link/test_grid.py	1449	1	project	noise	noise: verb to project; was external
+borg_core/link/test_grid.py	2074	1	project	noise	noise: projection; was external
 borg_core/link/test_grid.py	2138	1	projects	contract	link --json key total_projects
 borg_core/link/test_grid.py	2302	1	project	workstream	project spans several repositories
 borg_core/link/test_grid.py	2303	1	project	workstream	project spans several repositories
 borg_core/link/test_grid.py	2304	1	project	workstream	project spans several repositories
-borg_core/link/test_grid.py	2370	1	project	external	English noun projection, not our term
+borg_core/link/test_grid.py	2370	1	project	noise	noise: projection; was external
 borg_core/link/test_overlay.py	9	1	projects	contract	registry/link doc key projects
 borg_core/link/test_picture.py	597	1	project	external	pyproject.toml
 borg_core/link/test_picture.py	844	1	project	workstream	a chain/manifest's overall state
@@ -1217,7 +1217,7 @@ borg_core/manifest/core.py	11	1	project	external	pyproject.toml filename
 borg_core/manifest/core.py	49	1	project	workstream	a chain describes a cross-repo project
 borg_core/manifest/core.py	49	2	project	workstream	a project has a ticket and document
 borg_core/manifest/core.py	62	1	project	workstream	ratified vocabulary: project = cross-repo work
-borg_core/manifest/core.py	726	1	project	external	English word: projected away
+borg_core/manifest/core.py	726	1	project	noise	noise: projected; was external
 borg_core/manifest/core.py	742	1	project	workstream	another project's grid
 borg_core/manifest/core.py	743	1	project	workstream	cross-project blocker
 borg_core/manifest/core.py	795	1	project	workstream	another project's tracker
@@ -1276,7 +1276,7 @@ borg_core/manifest/test_shell.py	435	1	projects	contract	registry JSON key proje
 borg_core/manifest/test_shell.py	454	1	projects	contract	registry JSON key projects in fixture
 borg_core/manifest/test_shell.py	484	1	projects	contract	registry JSON key projects in fixture
 borg_core/manifest/test_shell.py	668	1	project	external	pyproject.toml
-borg_core/manifest/test_shell.py	1365	1	project	external	English verb "projected", not the domain word
+borg_core/manifest/test_shell.py	1365	1	project	noise	noise: projected; was external
 borg_core/manifest/test_shell.py	1796	1	projects	ambiguous	legacy merge-tree fn apply_program_projects; sense unclear
 borg_core/manifest/test_shell.py	2186	1	project	external	pyproject.toml
 borg_core/manifest/test_shell.py	2190	1	project	external	pyproject.toml
@@ -1647,11 +1647,11 @@ borg_core/recon/test_core.py	370	1	project	repository	registry entry / repo dir 
 borg_core/recon/test_core.py	371	1	projects	contract	--projects recon filter flag
 borg_core/recon/test_core.py	373	1	project	repository	registry entry / repo dir (code or test name)
 borg_core/recon/test_core.py	374	1	project	repository	registry entry / repo dir (code or test name)
-borg_core/recon/test_core.py	377	1	project	repository	registry entry / repo dir (code or test name)
+borg_core/recon/test_core.py	377	1	project	noise	noise: projected; was repository
 borg_core/recon/test_core.py	377	2	projects	repository	registry entry / repo dir (code or test name)
-borg_core/recon/test_core.py	378	1	project	repository	registry entry / repo dir (code or test name)
-borg_core/recon/test_core.py	379	1	project	repository	registry entry / repo dir (code or test name)
-borg_core/recon/test_core.py	380	1	project	repository	registry entry / repo dir (code or test name)
+borg_core/recon/test_core.py	378	1	project	noise	noise: projected; was repository
+borg_core/recon/test_core.py	379	1	project	noise	noise: projected; was repository
+borg_core/recon/test_core.py	380	1	project	noise	noise: projected; was repository
 borg_core/recon/test_core.py	403	1	project	contract	recon contradiction project key
 borg_core/recon/test_shell.py	109	1	project	repository	nonexistent repo dir in fixture
 borg_core/recon/test_shell.py	157	1	project	repository	nonexistent repo dir in fixture
@@ -2954,8 +2954,8 @@ tests/bash_guard.bats	726	1	project	contract	.borg-project marker filename
 tests/bash_guard.bats	727	1	project	contract	.borg-project marker filename
 tests/bash_guard.bats	736	1	project	contract	.borg-project marker filename
 tests/bash_guard.bats	737	1	project	contract	.borg-project marker filename
-tests/briefing.bats	6	1	project	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	16	1	projects	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	6	1	project	noise	noise: projected; was external
+tests/briefing.bats	16	1	projects	noise	noise: verb to project; was external
 tests/briefing.bats	20	1	projects	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	23	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	36	1	projects	contract	registry/link --json/wire key or fixture pinning it
@@ -2986,44 +2986,44 @@ tests/briefing.bats	267	1	projects	contract	registry/link --json/wire key or fix
 tests/briefing.bats	268	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	269	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	281	1	project	repository	registered repo / registry entry (name, path or dir)
-tests/briefing.bats	291	1	project	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	291	1	project	noise	noise: projection; was external
 tests/briefing.bats	307	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	308	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	309	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	323	1	PROJECT	repository	PROJECT: label in prompt text + fixture repo name
 tests/briefing.bats	323	2	project	repository	PROJECT: label in prompt text + fixture repo name
 tests/briefing.bats	330	1	project	repository	registered repo / registry entry (name, path or dir)
-tests/briefing.bats	330	2	projects	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	330	2	projects	noise	noise: verb to project; was external
 tests/briefing.bats	343	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	349	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	350	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	376	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	377	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	378	1	project	repository	registered repo / registry entry (name, path or dir)
-tests/briefing.bats	379	1	project	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	379	1	project	noise	noise: projection; was external
 tests/briefing.bats	383	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	390	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	390	2	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	390	3	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	391	1	projects	contract	registry/link --json/wire key or fixture pinning it
-tests/briefing.bats	394	1	project	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	394	1	project	noise	noise: projected; was external
 tests/briefing.bats	397	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	410	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/briefing.bats	411	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	412	1	project	repository	registered repo / registry entry (name, path or dir)
-tests/briefing.bats	431	1	project	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	431	1	project	noise	noise: projection; was external
 tests/briefing.bats	452	1	projects	contract	registry/link --json/wire key or fixture pinning it
-tests/briefing.bats	493	1	project	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	504	1	project	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	507	1	project	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	512	1	project	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	518	1	project	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	537	1	PROJECT	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	549	1	project	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	551	1	PROJECT	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	552	1	project	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	493	1	project	noise	noise: projection; was external
+tests/briefing.bats	504	1	project	noise	noise: projection; was external
+tests/briefing.bats	507	1	project	noise	noise: projection; was external
+tests/briefing.bats	512	1	project	noise	noise: projection; was external
+tests/briefing.bats	518	1	project	noise	noise: projection; was external
+tests/briefing.bats	537	1	PROJECT	noise	noise: projection; was external
+tests/briefing.bats	549	1	project	noise	noise: projection; was external
+tests/briefing.bats	551	1	PROJECT	noise	noise: projection; was external
+tests/briefing.bats	552	1	project	noise	noise: projection; was external
 tests/briefing.bats	554	1	project	repository	registered repo / registry entry (name, path or dir)
-tests/briefing.bats	569	1	PROJECT	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	569	1	PROJECT	noise	noise: projected; was external
 tests/briefing.bats	570	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	572	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	576	1	projects	repository	registered repo / registry entry (name, path or dir)
@@ -3040,8 +3040,8 @@ tests/briefing.bats	621	1	PROJECT	repository	PROJECT: prompt label + fixture rep
 tests/briefing.bats	621	2	project	repository	PROJECT: prompt label + fixture repo name
 tests/briefing.bats	622	1	PROJECT	repository	PROJECT: prompt label + fixture repo name
 tests/briefing.bats	622	2	project	repository	PROJECT: prompt label + fixture repo name
-tests/briefing.bats	690	1	project	external	English verb 'projection/projected', unrelated to the noun
-tests/briefing.bats	727	1	project	external	English verb 'projection/projected', unrelated to the noun
+tests/briefing.bats	690	1	project	noise	noise: projection; was external
+tests/briefing.bats	727	1	project	noise	noise: projection; was external
 tests/claude.bats	27	1	project	external	helper returning Claude's projects subdir
 tests/claude.bats	28	1	project	external	helper returning Claude's projects subdir
 tests/claude.bats	30	1	projects	external	Claude Code ~/.claude/projects dir
@@ -3269,7 +3269,7 @@ tests/cli_contract.bats	2980	1	project	repository	registered repo / user-facing 
 tests/cli_contract.bats	2981	1	PROJECT	contract	PROJECT_PLAN.md filename or fixture content
 tests/cli_contract.bats	3000	1	projects	contract	JSON key (registry/link doc/spend/wakes)
 tests/cli_contract.bats	3021	1	project	repository	registered repo / user-facing or test prose
-tests/cli_contract.bats	3039	1	projects	repository	registered repo / user-facing or test prose
+tests/cli_contract.bats	3039	1	projects	noise	noise: verb to project; was repository
 tests/cli_contract.bats	3124	1	project	repository	registered repo / user-facing or test prose
 tests/cli_contract.bats	3136	1	project	repository	registered repo / user-facing or test prose
 tests/cli_contract.bats	3138	1	project	repository	registered repo / user-facing or test prose
@@ -3288,7 +3288,7 @@ tests/cli_contract.bats	3500	1	projects	contract	JSON key (registry/link doc/spe
 tests/cli_contract.bats	3523	1	projects	contract	link --json key total_projects
 tests/cli_contract.bats	3524	1	projects	contract	link --json key total_projects
 tests/cli_contract.bats	3524	2	project	repository	registered repo / user-facing or test prose
-tests/cli_contract.bats	3528	1	projects	repository	registered repo / user-facing or test prose
+tests/cli_contract.bats	3528	1	projects	noise	noise: verb to project; was repository
 tests/cli_contract.bats	3534	1	projects	contract	JSON key (registry/link doc/spend/wakes)
 tests/cli_contract.bats	3538	1	projects	repository	registered repo / user-facing or test prose
 tests/cli_contract.bats	3555	1	projects	contract	JSON key (registry/link doc/spend/wakes)
@@ -3462,9 +3462,9 @@ tests/lifecycle.bats	453	1	project	repository	test repo dir / session mode for a
 tests/lifecycle.bats	522	1	project	repository	test repo dir / session mode for a repo
 tests/lifecycle.bats	531	1	project	repository	test repo dir / session mode for a repo
 tests/link_sweep.bats	40	1	project	repository	registered repos in sweep
-tests/link_sweep.bats	45	1	project	external	English word: jq projection
+tests/link_sweep.bats	45	1	project	noise	noise: projection; was external
 tests/link_sweep.bats	76	1	projects	contract	registry JSON key projects
-tests/link_sweep.bats	160	1	project	external	English word: jq projection
+tests/link_sweep.bats	160	1	project	noise	noise: projection; was external
 tests/link_sweep.bats	211	1	projects	repository	grid.scoped_projects repo entries
 tests/link_sweep.bats	239	1	projects	contract	registry JSON key projects
 tests/link_sweep.bats	389	1	project	repository	registered repo
