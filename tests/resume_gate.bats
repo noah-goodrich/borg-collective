@@ -35,6 +35,10 @@ setup() {
     cat >"${BATS_TEST_TMPDIR}/bin/inject" <<STUB
 #!/bin/bash
 printf '%s\t%s\n' "\$1" "\$2" >>"$ILOG"
+if [ -f "${BATS_TEST_TMPDIR}/inject.append" ]; then
+    jq -n -c --arg t "\$2" '{type:"user",uuid:"race1",message:{role:"user",content:\$t}}' \\
+        >>"\$(cat "${BATS_TEST_TMPDIR}/inject.append")"
+fi
 cat "${BATS_TEST_TMPDIR}/inject.out"
 exit "\$(cat "${BATS_TEST_TMPDIR}/inject.rc")"
 STUB
@@ -737,7 +741,39 @@ mk_injected() { # <rid> [injected_at offset]
     [ "$(rf r_x .done_reason)" = confirm_timeout ]
     [ "$(n_notify)" = 1 ]
     [ "$(n_inject)" = 1 ]
-    [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 2 ]
+    [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 1 ]
+}
+
+@test "confirmation: a tag line written DURING the inject call is still seen (baseline taken before)" {
+    mk_main "$SID"
+    printf '%s' "$PD/$SID.jsonl" >"${BATS_TEST_TMPDIR}/inject.append"
+    at 0
+    watch
+    at 60
+    watch
+    local rid
+    rid="$(rf_rid)"
+    [ "$(rf "$rid" .state)" = injected ]
+    at 70
+    watch
+    [ "$(rf "$rid" .state)" = confirmed ]
+    [ "$(rf "$rid" .confirmed_by)" = tag ]
+}
+
+@test "an injection counts toward consecutive, so a failing resume loop reaches the cap" {
+    mk_main "$SID"
+    mk_state "$SID" '.consecutive = 2'
+    at 0
+    watch
+    at 60
+    watch
+    [ "$(n_inject)" = 1 ]
+    [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 3 ]
+    mk_rec r_again "$SID" main transient scheduled "$((T0 + 100))" "$((T0 + 100))"
+    at 200
+    watch
+    [ "$(rf r_again .state)" = capped ]
+    [ "$(n_inject)" = 1 ]
 }
 
 @test "confirmed becomes done on 25 lines of progress and on the 30 minute timeout" {

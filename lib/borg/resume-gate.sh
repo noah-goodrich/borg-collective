@@ -473,11 +473,12 @@ _rg_map_fail() { # <rc> <out>
 }
 
 # After a successful injection of the normal prompt: lead -> injected, followers follow it.
-_rg_on_injected() { # <sid> <main-transcript>
+_rg_on_injected() { # <sid> <main-transcript> <lines-before-inject>
     local _lead _lrid _lines _f
     _lead="$(_rg_lead)"
     _lrid="$(jq -r .rid "$_lead")"
-    _lines="$(_rg_lines "$2")"
+    # The baseline is the count taken BEFORE the injector ran, so a user record claude wrote at once is not hidden.
+    _lines="${3:-$(_rg_lines "$2")}"
     _rg_to "$_lead" injected "" ".injected_at = \$now | .inject_lines = $_lines
         | .inject_tries = ((.inject_tries // 0) + 1) | del(.gate_reason, .idle_since)"
     while IFS= read -r _f; do
@@ -488,7 +489,8 @@ _rg_on_injected() { # <sid> <main-transcript>
 $_RG_GROUP
 EOF
     _rw_state_ensure "$1"
-    _rw_update "$(_rw_state_file "$1")" '.injections_today += 1 | .resumed_total += 1'
+    # consecutive counts every resume injection; it is reset only by measured progress or an ack (resume-watch.sh).
+    _rw_update "$(_rw_state_file "$1")" '.injections_today += 1 | .resumed_total += 1 | .consecutive += 1'
     _RG_NINJ=$((_RG_NINJ + 1))
     _rg_log "injected $_lrid sid=$1"
 }
@@ -550,7 +552,7 @@ _rg_compact_step() { # <lead-file> <sid> <main-transcript>
 
 # Gate and, if every check passes, inject for the group in _RG_GROUP (lead first).
 _rg_run_group() { # <sid>
-    local _sid="$1" _lead _lrid _limit=0 _f _cwd _pct _fails _n _msg _line _rc _t _active _nact _max _hm
+    local _pre _sid="$1" _lead _lrid _limit=0 _f _cwd _pct _fails _n _msg _line _rc _t _active _nact _max _hm
     _lead="$(_rg_lead)"
     _lrid="$(jq -r .rid "$_lead")"
     _t="$(_rg_main_transcript "$_sid")"
@@ -651,10 +653,11 @@ EOF
         _rg_each _rg_defer render_failed $(($(_rc_now) + 60))
         return 0
     fi
+    _pre="$(_rg_lines "$_t")"
     _rg_do_inject "$_sid" "$_line"
     _rc=$?
     if [ "$_rc" -eq 0 ]; then
-        _rg_on_injected "$_sid" "$_t"
+        _rg_on_injected "$_sid" "$_t" "$_pre"
     else
         _rg_map_fail "$_rc" "$_RG_OUT"
     fi
@@ -834,8 +837,6 @@ borg_resume_gate_confirm_pass() {
         fi
         if [ $((_now - _inj)) -ge "$_wait" ]; then
             # No evidence in the window: a no-progress resume. Re-verify and re-send once, then fail.
-            _rw_state_ensure "$_sid"
-            _rw_update "$(_rw_state_file "$_sid")" '.consecutive += 1'
             if [ "$(jq -r '.inject_tries // 0' "$_f")" -ge 2 ]; then
                 _rg_to "$_f" failed confirm_timeout
                 _rg_note "$_f" failed "Resume never confirmed ($_rid). Check the window or retry: borg resume run $_rid"
