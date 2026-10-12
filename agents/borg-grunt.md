@@ -5,7 +5,7 @@ description: >
   tests/builds, read/grep logs, rote refactor) with NO judgment calls or scope expansion. The
   orchestrator holds the plan; the grunt executes it exactly.
 tools: Bash, Read, Edit, Write, Grep, Glob
-model: haiku
+model: claude-haiku-5-5
 effort: low
 maxTurns: 20
 background: true

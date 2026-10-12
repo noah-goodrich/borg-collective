@@ -1,0 +1,2 @@
+{"type":"assistant","uuid":"u-0301","sessionId":"00000000-0000-4000-8000-000000000001","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"Bash","input":{}}]}}
+{"type":"user","uuid":"u-0302","sessionId":"00000000-0000-4000-8000-000000000001","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}

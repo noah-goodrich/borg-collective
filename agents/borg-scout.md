@@ -5,7 +5,7 @@ description: >
   naming conventions" questions by returning locations and short excerpts — never whole files.
   A cheap alternative to routing read-only search work to the inherited Opus main model.
 tools: Read, Grep, Glob
-model: haiku
+model: claude-haiku-5-5
 effort: low
 maxTurns: 20
 background: true
