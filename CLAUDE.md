@@ -46,10 +46,10 @@ Two independent tools that compose:
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
   bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
-- Skills (16): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
-  and 10 more (full list under Files below)
-- Agents (5, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
-  borg-reviewer, borg-scout (routing guide: docs/agent-routing.md)
+- Skills (17): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
+  pane, and 10 more (full list under Files below)
+- Agents (6, ephemeral nanoprobe roster): borg-grunt, borg-nanoprobe, borg-researcher,
+  borg-reviewer, borg-scout, borg-verifier (routing guide: docs/agent-routing.md)
 - Usage guardian: 85% checkpoint sweep (bin/borg-usage-watch) + `borg-dispatch-guard.sh`
   >=92% hard-stop veto on new Agent/Workflow dispatch — both fail-open, dispatch-guard is
   default-OFF (`BORG_USAGE_HALT_ENABLED=1` to arm)
@@ -193,7 +193,7 @@ hooks/
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
     tool-count-nudge.sh     PostToolUse → review reminder every 75 tool calls
-skills/ (16)
+skills/ (17)
     adhd-guardrails/        Cognitive load guardrails (always active)
     borg-plan/              Project planning + Collective review
     borg-assimilate/        Shipping checklist + Collective review + execution
@@ -210,12 +210,14 @@ skills/ (16)
     fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
     no-unnecessary-read-perms/  Suppress redundant read-permission prompts (always active)
     simplify/               Review session-touched code for reuse/quality/efficiency, then fix
-agents/ (5, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
+    pane/                   Split the current tmux pane in a given direction
+agents/ (6, ephemeral nanoprobe roster; routing guide is docs/agent-routing.md)
     borg-nanoprobe.md       Default worker: one discrete unit of work, manages its own worktree
     borg-grunt.md           Narrow mechanical task executor
     borg-researcher.md      Read-heavy investigation/research subagent
     borg-reviewer.md        Independent review/verdict subagent
     borg-scout.md           Lightweight recon/discovery subagent
+    borg-verifier.md        Read-only pre-merge evaluator (PASS/FAIL)
 install.sh                  Installer: deps, symlinks, hooks, skills, launchd agents, tmux keybinding
 lib/launchd-label.zsh       THE launchd label resolver (see "launchd labels" under Key Patterns)
 launchd/                    Templates; Label is `{{LABEL}}`, installed as <label>.plist
