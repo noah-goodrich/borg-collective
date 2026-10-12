@@ -3,24 +3,39 @@
 # spike-resume-payloads.sh harness contract.
 #
 # Provenance gate: RESUME_REQUIRE_CAPTURED=S4 (or S4,S7) fails unless every fixture that
-# slice lists in required_captured is tagged captured. Unset, that gate is informational
-# so the seeded synthetic fixtures do not block this slice.
+# slice lists in required_captured is tagged captured-skeleton. Unset, that gate is
+# informational so the synthetic fixtures do not block this slice.
 
 setup() {
     FX="${BATS_TEST_DIRNAME}/fixtures/resume"
     MAN="$FX/fixtures.json"
     HARNESS="${BATS_TEST_DIRNAME}/../scripts/spike-resume-payloads.sh"
+    SKEL="${BATS_TEST_DIRNAME}/../scripts/resume-skeleton.py"
+    EXTRACTOR_VERSION="v1"
     command -v jq >/dev/null || skip "jq not installed"
 }
 
 _not_captured() {
     jq -r --arg s "$1" '. as $m | ($m.required_captured[$s] // ["__undeclared__"])[]
-        | select(($m.fixtures[.].tag // "missing") != "captured")' "$MAN"
+        | select(($m.fixtures[.].tag // "missing") != "captured-skeleton")' "$MAN"
 }
 
-@test "manifest parses and every fixture is tagged captured or synthetic" {
-    run jq -e '[.fixtures[].tag] | all(. == "captured" or . == "synthetic")' "$MAN"
+@test "manifest parses and every fixture is tagged captured-skeleton or synthetic" {
+    run jq -e '[.fixtures[].tag] | all(. == "captured-skeleton" or . == "synthetic")' "$MAN"
     [ "$status" -eq 0 ]
+}
+
+@test "captured-skeleton entries name the extractor version, synthetic entries say why" {
+    run jq -r --arg v "$EXTRACTOR_VERSION" '.fixtures | to_entries[]
+        | select((.value.tag == "captured-skeleton" and .value.extractor != $v)
+              or (.value.tag == "synthetic" and ((.value.synthetic_reason // "") | length) == 0))
+        | .key' "$MAN"
+    [ -z "$output" ]
+}
+
+@test "extractor version in the script matches the tests" {
+    run grep -c "^VERSION = \"$EXTRACTOR_VERSION\"" "$SKEL"
+    [ "$output" = "1" ]
 }
 
 @test "every manifest entry points at an existing file" {
@@ -46,13 +61,35 @@ _not_captured() {
 @test "jsonl fixtures: every line is a JSON object" {
     local f
     for f in $(jq -r '.fixtures[] | select(.kind=="jsonl") | .file' "$MAN"); do
-        run jq -e 'type == "object"' "$FX/$f"
+        run jq -s -e 'all(type == "object")' "$FX/$f"
         [ "$status" -eq 0 ] || { echo "bad jsonl $f"; false; }
     done
 }
 
+@test "jsonl object check fails on an interior non-object line" {
+    printf '%s\n' '{"a":1}' '[1]' '{"b":2}' > "$BATS_TEST_TMPDIR/bad.jsonl"
+    run jq -s -e 'all(type == "object")' "$BATS_TEST_TMPDIR/bad.jsonl"
+    [ "$status" -ne 0 ]
+}
+
+@test "shape: every main_* error fixture ends in a typed api error record" {
+    local f
+    for f in main_rate_limit main_rate_limit_session main_authentication_failed main_invalid_request main_max_output_tokens; do
+        run jq -s -e '.[-1] | .isApiErrorMessage == true and (.error | type == "string") and has("apiErrorStatus")' "$FX/$f.jsonl"
+        [ "$status" -eq 0 ] || { echo "bad $f"; false; }
+    done
+    run jq -s -e 'map(.error) | . == ["rate_limit"]' "$FX/main_rate_limit.jsonl"
+}
+
+@test "shape: weekly and session limit phrasings both present" {
+    run grep -c "weekly limit" "$FX/main_rate_limit.jsonl"
+    [ "$output" = "1" ]
+    run grep -c "session limit" "$FX/main_rate_limit_session.jsonl"
+    [ "$output" = "1" ]
+}
+
 @test "shape: api_error_tail ends in a synthetic error record" {
-    run jq -s -e '.[-1] | .type == "assistant" and .isApiErrorMessage == true and (.error | type == "string")' "$FX/main_rate_limit.jsonl"
+    run jq -s -e '.[-1] | .type == "assistant" and .isApiErrorMessage == true and .apiErrorStatus == 429 and (.error | type == "string")' "$FX/main_rate_limit.jsonl"
     [ "$status" -eq 0 ]
 }
 
@@ -72,14 +109,14 @@ _not_captured() {
 @test "shape: subagent first record and meta" {
     run jq -s -e '.[0] | .type == "user" and .isSidechain == true and (.agentId|length>0) and (.sessionId|length>0) and (.cwd|length>0)' "$FX/subagents/agent-a0b6facb8e5d1b6ac.jsonl"
     [ "$status" -eq 0 ]
-    run jq -e 'has("agentType") and has("description") and has("model") and has("spawnDepth") and has("toolUseId")' "$FX/subagents/agent-a0b6facb8e5d1b6ac.meta.json"
+    run jq -e 'has("agentType") and has("description") and has("model") and has("spawnDepth")' "$FX/subagents/agent-a0b6facb8e5d1b6ac.meta.json"
     [ "$status" -eq 0 ]
 }
 
 @test "shape: workflow manifest and journal" {
-    run jq -e 'has("runId") and has("scriptPath") and has("script") and has("args")' "$FX/workflows/wf_ab12cd.json"
+    run jq -e 'has("runId") and has("scriptPath") and has("script") and has("status") and has("agentCount")' "$FX/workflows/wf_ab12cd.json"
     [ "$status" -eq 0 ]
-    run jq -s -e 'all(has("event")) and (map(.event) | index("started") != null)' "$FX/workflows/wf_ab12cd.journal.jsonl"
+    run jq -s -e 'all(has("type")) and (map(.type) | index("started") != null) and (map(.type) | index("launched") != null)' "$FX/workflows/wf_ab12cd.journal.jsonl"
     [ "$status" -eq 0 ]
 }
 
@@ -93,10 +130,32 @@ _not_captured() {
     [ "$status" -eq 0 ]
 }
 
-@test "fixtures are scrubbed: no real user paths" {
+@test "fixtures leak test: no home path, secret, email or real UUID" {
     local bad
-    bad="$(grep -rEho '/Users/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?(/[A-Za-z0-9._-]+)?' "$FX" | grep -v '^/Users/noah/dev/example$' | grep -v '^/Users/noah/dev$' || true)"
-    [ -z "$bad" ] || { echo "$bad"; false; }
+    bad="$(grep -rEho '/Users/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?(/[A-Za-z0-9._-]+)?' "$FX" | grep -v '^/Users/noah/dev/example$' | grep -v '^/Users/noah/dev$' | grep -v '^/Users/noah$' || true)"
+    [ -z "$bad" ] || { echo "path: $bad"; false; }
+    run grep -rEl '/home/[A-Za-z0-9._-]+|sk-ant|sk-[A-Za-z0-9]{20}|ghp_|AKIA|eyJ[A-Za-z0-9_-]{10}|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' "$FX"
+    [ -z "$output" ] || { echo "secret/email in: $output"; false; }
+    bad="$(grep -rEho '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' "$FX" | grep -v '^00000000-0000-4000-8000-[0-9]\{12\}$' || true)"
+    [ -z "$bad" ] || { echo "real-looking uuid: $bad"; false; }
+}
+
+@test "fixtures leak test: no UUID from the local transcript store appears in a fixture" {
+    local store="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}" ids
+    [ -d "$store" ] || skip "no local transcript store"
+    ids="$(ls "$store" "$store"/* 2>/dev/null | grep -Eo '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' | sort -u)"
+    [ -n "$ids" ] || skip "no session ids in the local store"
+    printf '%s\n' "$ids" > "$BATS_TEST_TMPDIR/ids"
+    run grep -rFl -f "$BATS_TEST_TMPDIR/ids" "$FX"
+    [ -z "$output" ] || { echo "real session id in: $output"; false; }
+}
+
+@test "pane fixtures pass the harness pane allowlist unchanged" {
+    local f
+    for f in composer permission limit; do
+        run "$HARNESS" scrubpane < "$FX/panes/$f.txt"
+        [ "$output" = "$(cat "$FX/panes/$f.txt")" ] || { echo "pane $f changed"; false; }
+    done
 }
 
 @test "provenance gate logic flags synthetic fixtures" {
@@ -144,6 +203,76 @@ _not_captured() {
     [[ "$output" != *secret* ]]
 }
 
+@test "harness hook: token in error_details is redacted" {
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    printf '%s' '{"session_id":"s","error":"rate_limit","error_details":"token sk-ant-abc123 for /Users/noah/dev/example"}' \
+        | "$HARNESS" hook StopFailure
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *sk-ant* ]]
+    [[ "$output" != *abc123* ]]
+    [[ "$output" == *'"error":"rate_limit"'* ]]
+}
+
+@test "harness hook: secret-looking value under an unlisted key is redacted" {
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    printf '%s' '{"session_id":"s","extra":"sk-ant-zzz999","who":"me@example.com"}' | "$HARNESS" hook Notification
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *zzz999* ]]
+    [[ "$output" != *me@example.com* ]]
+}
+
+@test "harness hook: long assistant message mentioning limits keeps only the limit sentence" {
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    printf '%s' '{"session_id":"s","last_assistant_message":"Here is how server error handling and rate limit retries work, password hunter2, tail: sk-ant-nope"}' \
+        | "$HARNESS" hook StopFailure
+    printf '%s' '{"session_id":"s","last_assistant_message":"long preamble about hunter2. You'"'"'ve hit your weekly limit · resets Jul 7 at 7am (America/Denver) and then more private words"}' \
+        | "$HARNESS" hook StopFailure
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *hunter2* ]]
+    [[ "$output" != *"server error handling"* ]]
+    [[ "$output" != *"private words"* ]]
+    [[ "$output" == *"weekly limit · resets Jul 7 at 7am (America/Denver)"* ]]
+}
+
+@test "harness hook: transcript_path keeps its projects/<slug>/<sid>.jsonl shape" {
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    printf '%s' '{"session_id":"s","transcript_path":"/Users/bob/.claude/projects/-Users-bob-dev-x/abc.jsonl"}' | "$HARNESS" hook SessionStart
+    run jq -r '.payload.transcript_path' "$BORG_SPIKE_DIR/payloads.jsonl"
+    [ "$output" = "/Users/noah/dev/example/.claude/projects/-Users-noah-dev-example/abc.jsonl" ]
+}
+
+@test "harness scrubpane: redacts every line outside the allowlist" {
+    run bash -c "printf '%s\n' 'my private prompt about hunter2' '│ > token sk-ant-abc │' '  ls /Users/someone/dev/x' '❯ 1. Yes' '  ? for shortcuts' | '$HARNESS' scrubpane"
+    [[ "$output" != *hunter2* ]]
+    [[ "$output" != *sk-ant* ]]
+    [[ "$output" != *someone* ]]
+    [[ "$output" == *"❯ 1. Yes"* ]]
+    [[ "$output" == *"? for shortcuts"* ]]
+    [ "$(printf '%s\n' "$output" | grep -c '<redacted>')" = "3" ]
+}
+
+@test "harness scrubpane: limit line with trailing text is redacted" {
+    run bash -c "printf '%s\n' 'You'\\''ve hit your session limit · resets 7am (America/Denver) plus hunter2' | '$HARNESS' scrubpane"
+    [ "$output" = "<redacted>" ]
+}
+
+@test "harness: hook command is shell-quoted for paths with spaces" {
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike dir"
+    run "$HARNESS" settings
+    run jq -r '.hooks.StopFailure[0].hooks[0].command' "$output"
+    [[ "$output" == *"hook StopFailure" ]]
+    run bash -c "eval \"set -- $output\"; [ -x \"\$1\" ]"
+    [ "$status" -eq 0 ]
+}
+
+@test "harness: show prints captured payloads, scratch dir is mode 700" {
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    "$HARNESS" hook StopFailure < "$FX/stop_failure_payload.json"
+    run "$HARNESS" show
+    [[ "$output" == *StopFailure* ]]
+    [ "$(stat -f %Lp "$BORG_SPIKE_DIR" 2>/dev/null || stat -c %a "$BORG_SPIKE_DIR")" = "700" ]
+}
+
 @test "harness hook: garbage and empty stdin still exit 0 silently" {
     export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
     run bash -c "printf 'not json{' | '$HARNESS' hook Notification"
@@ -173,22 +302,56 @@ _not_captured() {
 }
 
 @test "harness is not installed as a live hook" {
-    run grep -rl "spike-resume-payloads" "${BATS_TEST_DIRNAME}/../hooks" "${BATS_TEST_DIRNAME}/../install.sh"
+    run grep -rl "spike-resume-payloads" "${BATS_TEST_DIRNAME}/.." \
+        --exclude-dir=.git --exclude-dir=tests --exclude=spike-resume-payloads.sh \
+        --exclude=resume-skeleton.py
     [ -z "$output" ]
 }
 
-@test "harness snap: captures a private tmux pane, scrubbed" {
+@test "harness snap: captures a private tmux pane, allowlisted" {
     command -v tmux >/dev/null || skip "tmux not installed"
     export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
-    local sock="borgspike$$" pane out
-    tmux -L "$sock" new-session -d -s t "echo /Users/someone/dev/secret; sleep 30"
-    sleep 0.7
+    local sock="borgspike$$" pane out i
+    tmux -L "$sock" new-session -d -s t "echo 'my private prompt hunter2 /Users/someone/dev/secret'; echo '❯ 1. Yes'; sleep 30"
     pane="$(tmux -L "$sock" list-panes -t t -F '#{pane_id}' | head -1)"
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+        tmux -L "$sock" capture-pane -p -t "$pane" 2>/dev/null | grep -q "1. Yes" && break
+        sleep 0.25
+    done
     run env BORG_SPIKE_TMUX_SOCK="$sock" "$HARNESS" snap "$pane" demo
     tmux -L "$sock" kill-server 2>/dev/null || true
     [ "$status" -eq 0 ]
     [ -f "$output" ]
     run cat "$output"
-    [[ "$output" == *"/Users/noah/dev/example"* ]]
+    [[ "$output" == *"<redacted>"* ]]
+    [[ "$output" == *"1. Yes"* ]]
+    [[ "$output" != *hunter2* ]]
     [[ "$output" != *someone* ]]
+}
+
+@test "extractor: keeps enum fields and strict limit sentence, drops everything else" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local in out
+    in='{"type":"assistant","error":"rate_limit","isSidechain":false,"apiErrorStatus":429,"uuid":"4cfc980b-e51b-42da-9cd5-d75d0a33c88c","parentUuid":"d0165fec-e970-4833-91d8-7dfb071cebe6","cwd":"/Users/bob/dev/x","timestamp":"2026-07-05T17:59:00.619Z","gitBranch":"feat/secret","message":{"content":[{"type":"text","text":"You'"'"'ve hit your weekly limit · resets Jul 7 at 7am (America/Denver)"}]},"note":"token sk-ant-abc123 bob@example.com","long":"You'"'"'ve hit your weekly limit · resets 7am and my password is hunter2"}'
+    out="$(printf '%s' "$in" | python3 -I "$SKEL" scrub)"
+    [[ "$out" == *'"error":"rate_limit"'* ]]
+    [[ "$out" == *'"apiErrorStatus":429'* ]]
+    [[ "$out" == *"weekly limit · resets Jul 7 at 7am (America/Denver)"* ]]
+    [[ "$out" == *"00000000-0000-4000-8000-000000000001"* ]]
+    [[ "$out" == *"00000000-0000-4000-8000-000000000002"* ]]
+    [[ "$out" != *4cfc980b* ]]
+    [[ "$out" != *bob* ]]
+    [[ "$out" != *sk-ant* ]]
+    [[ "$out" != *hunter2* ]]
+    [[ "$out" != *secret* ]]
+    [[ "$out" == *'"long":"<str>"'* ]]
+}
+
+@test "extractor: unlisted string keys and odd object keys never survive" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    run bash -c "printf '%s' '{\"customField\":\"hello\",\"/Users/bob/x\":1,\"level\":\"suggestion\",\"type\":\"has space and words\"}' | python3 -I '$SKEL' scrub"
+    [[ "$output" != *hello* ]]
+    [[ "$output" != *bob* ]]
+    [[ "$output" == *'"level":"suggestion"'* ]]
+    [[ "$output" == *'"type":"<str>"'* ]]
 }
