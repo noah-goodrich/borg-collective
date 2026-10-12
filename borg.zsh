@@ -1010,16 +1010,26 @@ cmd_reap() {
 
 # Remove stale borg-managed nanoprobe worktrees for one or all registered repos.
 # A worktree is stale when its branch is merged into the default branch OR when it
-# is older than BORG_REAP_STALE_HOURS (default 12h). Only worktrees under
+# is older than BORG_REAP_STALE_HOURS (default 12h). "Merged" includes squash merges
+# (tree-equality against origin's default branch, plus a `gh` merged-PR lookup, which the CLI
+# enables via BORG_REAP_GH=1; hooks never do). Only worktrees under
 # ~/.local/state/borg/worktrees/ are ever touched. Uncommitted-change worktrees are
 # always skipped.
 #
 # Usage:
 #   borg reap-worktrees            # reap across all registered repos
 #   borg reap-worktrees <project>  # reap for one registered project
+#   borg reap-worktrees --dry-run [project]  # print "Would reap ..." lines, remove nothing
 cmd_reap_worktrees() {
-    local target_project="${1:-}"
+    local target_project="" dry_run=0 arg
     local repo_paths=()
+    for arg in "$@"; do
+        case "$arg" in
+            --dry-run) dry_run=1 ;;
+            -*) die "reap-worktrees: unknown flag '$arg' (usage: borg reap-worktrees [--dry-run] [project])" ;;
+            *) target_project="$arg" ;;
+        esac
+    done
 
     if [[ -n "$target_project" ]]; then
         local ppath
@@ -1045,13 +1055,20 @@ cmd_reap_worktrees() {
         # last, always one of two hardcoded strings) cannot shift anything after it.
         while IFS=$'\t' read -r wt reason; do
             [[ -z "$wt" ]] && continue
-            info "Reaped worktree ${BOLD}${wt##*/}${NC} in ${repo##*/} (${reason})"
+            if (( dry_run )); then
+                info "Would reap ${BOLD}${wt##*/}${NC} in ${repo##*/} (${reason})"
+            else
+                info "Reaped worktree ${BOLD}${wt##*/}${NC} in ${repo##*/} (${reason})"
+            fi
             total=$((total + 1))
-        done < <(_borg_reap_worktrees "$repo")
+        done < <(BORG_REAP_GH=1 BORG_REAP_DRY_RUN=$dry_run _borg_reap_worktrees "$repo")
     done
 
     if (( total == 0 )); then
         info "No stale borg worktrees found."
+    elif (( dry_run )); then
+        echo
+        info "$total worktree(s) would be removed (dry run; nothing removed)"
     else
         echo
         info "$total stale worktree(s) removed (threshold: ${BORG_REAP_STALE_HOURS:-12}h)"
@@ -3108,7 +3125,7 @@ cmd_help() {
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     spend               Main-vs-subagent spend split + trend (this machine; --project/--by-model/--last)
     reap                Persist idle to stale active/waiting sessions (no live window)
-    reap-worktrees [p]  Remove stale borg-managed nanoprobe worktrees (all repos or one)
+    reap-worktrees [--dry-run] [p]  Remove stale/merged (incl. squash) nanoprobe worktrees
     doctor              Verify the 4 launchd agents + headless claude -p reachability
     help                Show this message
 

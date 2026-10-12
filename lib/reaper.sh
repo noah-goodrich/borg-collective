@@ -6,7 +6,7 @@
 #   BORG_REAP_STALE_HOURS — staleness threshold in hours (default 12)
 #   _borg_should_reap <status> <last_activity_iso> <has_live_window: 1|0>
 #   _borg_worktree_is_stale <repo_path> <worktree_path>
-#   _borg_reap_worktrees <repo_path>
+#   _borg_reap_worktrees <repo_path>   (BORG_REAP_DRY_RUN=1: print, remove nothing; BORG_REAP_GH=1: allow gh)
 
 BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}"
 
@@ -63,6 +63,59 @@ _borg_should_reap() {
 # 2482 on another, both correct for where they were read. Grep the expression instead.
 BORG_WORKTREE_STATE_DIR="${BORG_WORKTREE_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/borg/worktrees}"
 
+# The ref a branch is judged against: refs/remotes/origin/<default> when it resolves (the local default
+# branch can lag origin by many commits), else the local default branch. Prints the ref name.
+# Args: <repo_path>
+_borg_default_ref() {
+    local repo="$1" db
+    db=$(git -C "$repo" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+    if [ -z "$db" ]; then
+        db=$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null) || db="main"
+    fi
+    if git -C "$repo" rev-parse --verify -q "refs/remotes/origin/${db}^{commit}" >/dev/null 2>&1; then
+        printf 'refs/remotes/origin/%s\n' "$db"
+    else
+        printf '%s\n' "$db"
+    fi
+}
+
+# THE "is merged" predicate, shared by the stale check and the reason string so they cannot disagree.
+# Args: <repo_path> <branch>
+# Returns 0 and prints "ancestor" or "squash" when the branch is merged; returns 1 (prints nothing) otherwise.
+#   1. ancestor: the branch tip is reachable from the default ref (merge commits, fast-forwards).
+#   2. squash: `git merge-tree --write-tree <default> <branch>` yields exactly the default ref's tree, i.e. the
+#      branch adds nothing. This repo squash-merges every PR, so (1) never fires for it. A conflict or a
+#      different tree means NOT merged (the safe direction); an old git without --write-tree falls through.
+#   3. gh (only when BORG_REAP_GH=1, never from hooks): a merged PR exists for the branch. Any failure = no.
+# A branch whose tip equals the default tip is a fresh branch with no work, never "merged".
+_borg_branch_merged() {
+    local repo="$1" branch="$2" dref br_sha d_sha d_tree m_tree
+    dref=$(_borg_default_ref "$repo")
+    br_sha=$(git -C "$repo" rev-parse "$branch" 2>/dev/null) || return 1
+    d_sha=$(git -C "$repo" rev-parse "$dref" 2>/dev/null) || return 1
+    [ -n "$br_sha" ] && [ -n "$d_sha" ] && [ "$br_sha" != "$d_sha" ] || return 1
+
+    if git -C "$repo" merge-base --is-ancestor "$branch" "$dref" 2>/dev/null; then
+        printf 'ancestor\n'
+        return 0
+    fi
+
+    d_tree=$(git -C "$repo" rev-parse "${dref}^{tree}" 2>/dev/null) || d_tree=""
+    m_tree=$(git -C "$repo" merge-tree --write-tree "$dref" "$branch" 2>/dev/null | sed -n 1p) || m_tree=""
+    if [ -n "$d_tree" ] && [ "$m_tree" = "$d_tree" ]; then
+        printf 'squash\n'
+        return 0
+    fi
+
+    if [ "${BORG_REAP_GH:-}" = "1" ]; then
+        local n
+        n=$(cd "$repo" 2>/dev/null && gh pr list --state merged --head "$branch" --json number --jq length 2>/dev/null) \
+            || n=""
+        case "$n" in ''|*[!0-9]*) ;; *) if [ "$n" -ge 1 ]; then printf 'squash\n'; return 0; fi;; esac
+    fi
+    return 1
+}
+
 # Predicate: is this worktree stale?
 # Args: <repo_path> <worktree_path>
 # Returns 0 (stale) when the branch has been merged into the default branch (i.e.
@@ -77,22 +130,12 @@ _borg_worktree_is_stale() {
     local wt_branch
     wt_branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null) || return 1
 
+    if _borg_branch_merged "$repo" "$wt_branch" >/dev/null; then
+        return 0
+    fi
+
     local default_branch
-    default_branch=$(git -C "$repo" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
-        | sed 's|refs/remotes/origin/||')
-    if [ -z "$default_branch" ]; then
-        default_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null) || default_branch="main"
-    fi
-
-    local wt_sha default_sha
-    wt_sha=$(git -C "$repo" rev-parse "$wt_branch" 2>/dev/null) || true
-    default_sha=$(git -C "$repo" rev-parse "$default_branch" 2>/dev/null) || true
-
-    if [ -n "$wt_sha" ] && [ -n "$default_sha" ] && [ "$wt_sha" != "$default_sha" ]; then
-        if git -C "$repo" merge-base --is-ancestor "$wt_branch" "$default_branch" 2>/dev/null; then
-            return 0
-        fi
-    fi
+    default_branch=$(_borg_default_ref "$repo")
 
     # Never reap on age while the branch holds work that exists nowhere else: commits not on
     # its upstream, or (no upstream) commits not on the default branch.
@@ -152,30 +195,25 @@ _borg_reap_worktrees() {
             local wt_branch
             wt_branch=$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
 
-            local default_branch
-            default_branch=$(git -C "$repo" symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
-                | sed 's|refs/remotes/origin/||')
-            if [ -z "$default_branch" ]; then
-                default_branch=$(git -C "$repo" rev-parse --abbrev-ref HEAD 2>/dev/null) || default_branch="main"
+            local kind
+            kind=$(_borg_branch_merged "$repo" "$wt_branch") || kind=""
+            case "$kind" in
+                ancestor) reason="branch merged";;
+                squash) reason="branch merged (squash)";;
+                *) reason="stale (>${BORG_REAP_STALE_HOURS:-12}h)";;
+            esac
+
+            if [ "${BORG_REAP_DRY_RUN:-}" = "1" ]; then
+                printf '%s\t%s\n' "$wt" "$reason"
+                continue
             fi
-
-            local wt_sha default_sha
-            wt_sha=$(git -C "$repo" rev-parse "$wt_branch" 2>/dev/null) || true
-            default_sha=$(git -C "$repo" rev-parse "$default_branch" 2>/dev/null) || true
-
-            if [ -n "$wt_sha" ] && [ -n "$default_sha" ] && [ "$wt_sha" != "$default_sha" ] && \
-                    git -C "$repo" merge-base --is-ancestor "$wt_branch" "$default_branch" 2>/dev/null; then
-                reason="branch merged"
-            else
-                reason="stale (>${BORG_REAP_STALE_HOURS:-12}h)"
-            fi
-
             if git -C "$repo" worktree remove --force "$wt" 2>/dev/null; then
                 printf '%s\t%s\n' "$wt" "$reason"
             fi
         fi
     done
 
+    [ "${BORG_REAP_DRY_RUN:-}" = "1" ] && return 0
     git -C "$repo" worktree prune 2>/dev/null || true
 
     if [ -d "$wt_base" ]; then
