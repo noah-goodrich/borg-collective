@@ -9,8 +9,8 @@ WHY THESE FIVE BELONG TOGETHER. `validate` returns formatted strings, and two co
 structure back out of them -- `partition_errors` maps an error back to the row index at fault (no
 read path calls it since the refusal change), `shell._write_refusal` wants the offending value to
 offer a `did you mean`. The tokens those parses key on (`rows[`, `, got `) are interpolated by the
-producers in core.py and split by the readers here, so producer and parser have to stay in one place or the format becomes an undeclared contract
-that a reword breaks silently. core.py imports the tokens; nothing else needs them.
+producers in core.py and split by the readers here, so producer and parser have to stay in one place or the format becomes an undeclared
+contract that a reword breaks silently. core.py imports the tokens; nothing else needs them.
 
 PURE. No imports at all.
 """
