@@ -251,16 +251,23 @@ def unreadable_roots(repository_dir: str) -> list[str]:
 
 
 def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
-    """One manifest file as `(manifest, warning)`. BOTH can now be meaningful at once.
+    """One manifest file as `(manifest, warning)`: a valid manifest and no warning, or `(None, warning)`.
 
-    That is a contract change and it is the point: a manifest whose rows partly validate returns the
-    surviving rows AND a warning naming what was dropped (see `_drop_invalid_rows`). A caller must
-    therefore test the warning and the manifest INDEPENDENTLY -- `if manifest is None: append(warning)`
-    silently swallows the message on exactly the case it was added for.
+    THE FILE IS REFUSED WHOLE. A manifest with ANY invalid row loads as `(None, warning)`; no row is ever
+    dropped on the way in. This reverses `2026-08-27-degrade-the-row-not-the-manifest` (see
+    `docs/plans/directives/2026-09-01-refuse-the-manifest-stop-salvaging-rows.md`): salvage was right
+    while invalid rows were routine, and wrong once every borg writer validates (`write_manifest`) and
+    schema changes run expand -> migrate -> contract. What is left is an anomaly -- a hand-edit, a
+    merge, another tool -- and quietly salvaging an anomaly papers over a defect. It also let a
+    read-modify-write verb delete a declared row from disk.
+
+    The refusal covers THIS FILE ONLY and never raises: one bad file must not blank the page, so the
+    caller gets a named warning (path plus the validator's own messages, first error first) and the
+    other files still load. `core.partition_errors` lost its only caller here; it is kept, tested, for
+    a writer that wants to map an error back to a row index.
 
     Three distinct skips, each NAMED: unreadable/malformed JSON, valid JSON that is not a manifest
-    (a stray `settings.json` in the directory), and a manifest that fails validation, whose errors
-    are joined into the warning rather than swallowed.
+    (a stray `settings.json` in the directory), and a manifest that fails validation.
 
     TWO DERIVED KEYS ARE ADDED, both underscore-prefixed so the declared body stays exactly what is
     on disk: `_path`, which must always reflect where this copy was read from (the literal key name
@@ -280,64 +287,18 @@ def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
         return None, f"{path}: not a manifest (no rows list) -- skipped"
 
     errors = core.validate(doc)
-    warning = ""
     if errors:
-        doc, warning = _drop_invalid_rows(doc, path, errors)
-        if doc is None:
-            return None, warning
+        return None, _invalid_manifest(path, errors)
 
     doc["_id"] = str(doc.get("program") or "").strip() or os.path.splitext(name)[0]
     doc["_path"] = path
-    return doc, warning
-
-
-def _drop_invalid_rows(doc: dict, path: str, errors: list[str]) -> tuple[dict | None, str]:
-    """A manifest with its failing rows removed, or `(None, warning)` when nothing can be salvaged.
-
-    ONE BAD ROW MUST NOT COST THE FILE. Before this, any validation error dropped the whole manifest:
-    a single missing `gate.resolved_by` in row 3 deleted rows 1..14 from the grid, and `▸ CHAINS` then
-    rendered its "no manifest declares work here" placeholder as though the repository simply had
-    none. Measured on the AC2 fixtures at the time: 12 declared refs became 5. A reader could not
-    distinguish *nothing declared* from *everything hidden by one typo*.
-
-    THE FILE IS STILL DROPPED WHOLE in three cases, and each is a case with no partial answer:
-      * a STRUCTURAL error (`rows: missing or not a list`, `apex: ...`) -- it describes the container
-        or a sibling key, so there is no subset of rows that would make the file mean what its author
-        wrote;
-      * EVERY row failing -- there is no page to render and nothing is gained by pretending;
-      * survivors that STILL do not validate (below).
-
-    RE-VALIDATED AFTER THE DROP, and that is not belt-and-braces. Duplicate detection is
-    cross-row: `_validate_row` flags the SECOND occurrence of a ref and leaves the first alone, so
-    removing a row can legitimately clear an error on a row that was kept. Re-running is how the
-    contract "a loaded manifest is a valid manifest" survives -- every downstream consumer assumes it,
-    and none of them re-check.
-
-    The warning names the count and carries the validator's own messages verbatim: a reader has to be
-    able to tell "this project has 7 rows" from "this project has 8 rows and I am showing you 7".
-    """
-    bad_rows, structural = core.partition_errors(errors)
-    joined = "; ".join(errors)
-    rows = doc.get("rows") or []
-    if structural or not bad_rows:
-        return None, _invalid_manifest(path, errors)
-
-    kept = [row for index, row in enumerate(rows) if index not in bad_rows]
-    if not kept:
-        return None, _invalid_manifest(path, errors)
-
-    doc["rows"] = kept
-    residual = core.validate(doc)
-    if residual:
-        return None, _invalid_manifest(path, residual)
-    return doc, f"{path}: {len(bad_rows)} of {len(rows)} rows dropped -- {joined}"
+    return doc, ""
 
 
 # The two warning shapes that mean "a file here looks like a manifest and could not be used": the
-# unreadable/invalid-JSON skip in `_load_manifest` and every `invalid manifest` arm of
-# `_drop_invalid_rows`. Not the `not a manifest (no rows list)` skip, which describes a stray
-# `settings.json` sitting in the directory rather than a manifest that failed, and not the
-# `N of M rows dropped` arm, which is a manifest that DID load.
+# unreadable/invalid-JSON skip and the `invalid manifest` refusal, both in `_load_manifest`. Not the
+# `not a manifest (no rows list)` skip, which describes a stray `settings.json` sitting in the
+# directory rather than a manifest that failed.
 _INVALID_MANIFEST = ": invalid manifest -- "
 _UNREADABLE = ": unreadable or invalid JSON ("
 _REFUSAL_MARKERS = (_INVALID_MANIFEST, _UNREADABLE)
@@ -362,7 +323,7 @@ def refused_manifest_paths(warnings: list[str], under: str = "") -> list[str]:
     """The manifest paths a discovery pass refused, optionally narrowed to one repository.
 
     LIVES HERE, NEXT TO THE FORMAT IT PARSES, for the reason `core.partition_errors` gives about its
-    own: `_load_manifest` and `_drop_invalid_rows` build these strings a dozen lines up, and a
+    own: `_load_manifest` builds these strings a dozen lines up, and a
     consumer that wants the paths back has to know the shape. Putting the parse in `link/render.py`
     would make the message format an undeclared cross-package contract -- the shape that breaks
     silently the first time someone rewords an error string. Reword one here and this moves with it.
@@ -440,10 +401,8 @@ def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
 
         for name, path in listing:
             manifest, warning = _load_manifest(path, name)
-            # A WARNING NOW ACCOMPANIES A LOADED MANIFEST, so this can no longer be `if manifest is
-            # None`. A partially-salvaged file returns BOTH -- the rows that validated and a warning
-            # naming the ones dropped -- and gating the append on the manifest being None would
-            # silently swallow exactly the message that explains why the picture is short.
+            # A loaded manifest carries no warning and a refused one carries only its warning; the
+            # test stays on the warning itself so a future partial answer cannot swallow its message.
             if warning:
                 warnings.append(warning)
             if manifest is None:
@@ -652,8 +611,8 @@ def write_manifest(repository_dir: str, manifest: dict, name: str, directory: st
     The function writes wherever it is told.
 
     THE ONE PLACE THIS MODULE'S "nothing here is ever fatal" RULE DOES NOT APPLY, and the asymmetry
-    is the point. A reader that dies on one bad file blanks the whole grid, so reads degrade: a bad
-    row is dropped, named in a warning, and the surviving rows still render. A WRITE has the opposite
+    is the point. A reader that dies on one bad file blanks the whole grid, so a read refuses the
+    one bad FILE, named in a warning, and every other file still renders. A WRITE has the opposite
     failure mode -- a document that is wrong on the way in is wrong on disk forever, and the author
     is standing right there able to fix it. So this validates all, then refuses whole: `InvalidManifest`
     before anything is opened, never a partial file. Callers surface the reasons; they do not salvage.

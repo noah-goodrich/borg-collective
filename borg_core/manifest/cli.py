@@ -23,18 +23,13 @@ module is what AC7 retires, so a fourth verb there would be built to be deleted.
 
 ── THE READ HERE IS STRICT, AND THAT IS THE WHOLE DESIGN ────────────────────────────────────────────
 
-`shell._load_manifest` SALVAGES: a row that fails validation is dropped, the survivors are returned,
-and a warning names the loss. That is right for RENDERING -- one bad row must not blank the grid, and
-the measured cost of the old whole-file drop was 12 declared refs becoming 5.
-
-It is catastrophic for READ-MODIFY-WRITE. Salvage on the way in plus `write_manifest` on the way out
-means a row the author declared is deleted from disk by a verb that was asked to add a different one,
-with the validator's own warning as the only trace. `refuse-the-manifest-stop-salvaging-rows` names
-exactly that: "make it structurally impossible for a sync to delete a row the author declared."
+`shell._load_manifest` now refuses a file with ANY invalid row (the 2026-09-01 reversal of row salvage), so the
+read-modify-write hazard that used to live here -- a row the author declared deleted from disk by a verb asked to
+add a different one -- is closed at the reader too. `refuse-the-manifest-stop-salvaging-rows` names the goal:
+"make it structurally impossible for a sync to delete a row the author declared."
 
 So `_read_for_write` re-implements neither the loader nor the validator: it reads the raw bytes,
-validates whole, and REFUSES whole. The asymmetry mirrors `write_manifest`'s own -- reads for
-rendering degrade, reads for writing refuse -- and the reason is the same one that docstring gives:
+validates whole, and REFUSES whole, as `write_manifest` does and for the reason that docstring gives:
 a wrong document on the way in is wrong on disk forever, and the author is standing right there.
 
 A consequence worth stating: these verbs cannot repair a manifest that is already invalid. They
