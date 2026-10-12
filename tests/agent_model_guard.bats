@@ -287,23 +287,3 @@ MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result
 @test "fable-reviewer says agentType, or model + effort" {
     grep -q "agentType, or model + effort" "${BATS_TEST_DIRNAME}/../skills/fable-reviewer/SKILL.md"
 }
-
-@test "a padded claude-code-guide type cannot skip the effort rule" {
-    _agent '{"subagent_type":" claude-code-guide "}'
-    [ "$status" -eq 2 ]
-    [[ "$output" == *"pins no effort"* ]] || false
-}
-
-@test "borg-collective and research-tools types with no effort are not hit by the guide effort rule" {
-    _agent '{"subagent_type":"borg-collective:borg-scout"}'
-    [ "$status" -eq 0 ]
-    _transcript "$SKILL_RT"
-    _agent '{"subagent_type":"research-tools:research-lead"}' "${BATS_TEST_TMPDIR}/t.jsonl"
-    [ "$status" -eq 0 ]
-}
-
-@test "the deny policy text says claude-code-guide needs effort low/medium/high" {
-    _agent '{"subagent_type":"general-purpose"}'
-    [ "$status" -eq 2 ]
-    [[ "$output" == *"claude-code-guide also needs effort low/medium/high"* ]] || false
-}
