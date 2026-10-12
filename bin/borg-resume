@@ -3,8 +3,8 @@
 #
 # Verbs in this slice:
 #   record <event>   called by a hook with the hook payload on stdin. Appends ONE fact to
-#                    events/<sid>.jsonl; for session_start it also writes the write-once registry
-#                    sessions/<sid>.json and binds the tmux pane (@borg_sid). ALWAYS exits 0, prints
+#                    events/<sid>.jsonl; for session_start it also writes the registry
+#                    sessions/<sid>.json (replaced atomically on each session_start) and binds the tmux pane (@borg_sid). ALWAYS exits 0, prints
 #                    nothing, and never blocks: it is called from a hook, so every failure is swallowed.
 #   pause            create the DISABLED sentinel (nothing will inject; recording continues)
 #   unpause          remove it
@@ -35,35 +35,42 @@ _br_known_event() {
     return 1
 }
 
+# BORG_IN_CONTAINER=0 forces host mode and 1 forces container mode; when unset, /.dockerenv decides.
 _br_in_container() {
-    [ "${BORG_IN_CONTAINER:-}" = "1" ] || [ -f /.dockerenv ]
+    case "${BORG_IN_CONTAINER:-}" in
+        0) return 1 ;;
+        1) return 0 ;;
+    esac
+    [ -f /.dockerenv ]
 }
 
-# Build the event line. One jq call; prints "<sid><TAB><compact json>" or nothing when the payload is unusable.
-# Every field is read with // empty semantics and tolerates absence. msg is capped at 600 chars.
+# Build the event line: ONE compact JSON object, or nothing when the payload is unusable (no string session_id, or
+# an id outside the filename-safe charset, checked here so a TAB or newline can never smuggle in a second field).
+# Every field tolerates absence. Every string field is capped at 256 chars, except msg at 600, so a line stays
+# well under the 4KB that O_APPEND writes are atomic for.
 _br_build_event() {
     local _ev="$1" _t="$2"
-    jq -rc --arg ev "$_ev" --argjson t "$_t" '
+    jq -c --arg ev "$_ev" --argjson t "$_t" '
         def s: if type == "string" then . else null end;
+        def c: if . == null then null else .[0:256] end;
         (.session_id | s) as $sid
-        | select($sid != null)
-        | (.agent_id | s) as $aid
+        | select($sid != null and ($sid | test("^[A-Za-z0-9_-]{1,128}\\z")))
+        | (.agent_id | s | c) as $aid
         | {
             t: $t,
             ev: $ev,
             sid: $sid,
             scope: (if $aid != null then "agent:" + $aid else "main" end),
             agent_id: $aid,
-            error: (.error | s),
+            error: (.error | s | c),
             msg: ((.last_assistant_message // .message // .msg | s) | if . == null then null else .[0:600] end),
-            tool_use_id: (.tool_use_id | s),
-            run_id: ((.run_id // .tool_response.runId // .tool_input.resumeFromRunId) | s),
-            script_path: ((.script_path // .tool_input.scriptPath) | s),
-            agent_type: ((.agent_type // .tool_input.subagent_type) | s),
-            reason: ((.reason // .source) | s)
+            tool_use_id: (.tool_use_id | s | c),
+            run_id: ((.run_id // .tool_response.runId // .tool_input.resumeFromRunId) | s | c),
+            script_path: ((.script_path // .tool_input.scriptPath) | s | c),
+            agent_type: ((.agent_type // .tool_input.subagent_type) | s | c),
+            reason: ((.reason // .source) | s | c)
           }
         | with_entries(select(.value != null or .key == "agent_id" or .key == "error" or .key == "msg" or .key == "tool_use_id"))
-        | $sid + "\t" + tojson
     ' 2>/dev/null
 }
 
@@ -89,21 +96,16 @@ EOF
 # The SessionStart-only registry write. Immutable facts, tmp + mv, replaced atomically by a later session_start
 # for the same sid. No other handler ever calls this.
 _br_write_registry() {
-    local _sid="$1" _payload="$2" _reg _cwd _src _in_c _root _mode _proj _cpid _cstart
+    local _sid="$1" _payload="$2" _reg _cwd _src _in_c _mode _proj _cpid _cstart
     _cwd="$(printf '%s' "$_payload" | jq -r '.cwd // empty' 2>/dev/null)"
     _src="$(printf '%s' "$_payload" | jq -r '.source // empty' 2>/dev/null)"
     _in_c=false
     _br_in_container && _in_c=true
-    _root="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"
-    while [ "${#_root}" -gt 1 ] && [ "${_root%/}" != "$_root" ]; do _root="${_root%/}"; done
     _proj="${_cwd%/}"
     _proj="${_proj##*/}"
-    if [ -n "$_cwd" ] && [ "${_cwd%/}" = "$_root" ]; then
-        _mode="orchestrator"
-    elif [ "$_in_c" = true ]; then
-        _mode="drone"
-    else
-        _mode="plain"
+    _mode=""
+    if [ -n "$_cwd" ]; then
+        _mode="$( . "$BORG_RESUME_LIBDIR/../borg-hooks.sh" >/dev/null 2>&1 && _borg_session_mode "$_cwd" 2>/dev/null)"
     fi
 
     _cpid="" _cstart=""
@@ -126,7 +128,7 @@ _br_write_registry() {
             source: ($source | e),
             cwd: ($cwd | e),
             project: ($project | e),
-            mode: $mode,
+            mode: ($mode | e),
             in_container: $in_c,
             claude_pid: ($cpid | n),
             claude_start: ($cstart | e),
@@ -153,8 +155,8 @@ _br_record() {
     esac
     _built="$(printf '%s' "$_payload" | _br_build_event "$_ev" "$_t")"
     [ -n "$_built" ] || return 0
-    _sid="${_built%%$'\t'*}"
-    _line="${_built#*$'\t'}"
+    _line="$_built"
+    _sid="$(printf '%s' "$_line" | jq -r .sid 2>/dev/null)"
     borg_resume_valid_sid "$_sid" || return 0
     borg_resume_append_line "$(borg_resume_events_file "$_sid")" "$_line"
     if [ "$_ev" = "session_start" ]; then

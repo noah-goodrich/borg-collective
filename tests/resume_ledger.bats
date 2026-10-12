@@ -11,7 +11,9 @@ setup() {
     command -v jq >/dev/null 2>&1 || skip "jq not installed"
     export BORG_RESUME_DIR="${BATS_TEST_TMPDIR}/resume"
     export BORG_RESUME_LIBDIR="${BATS_TEST_DIRNAME}/../lib/borg"
-    unset BORG_RESUME_DISABLE BORG_NO_SESSION_HOOKS BORG_IN_CONTAINER TMUX_PANE
+    unset BORG_RESUME_DISABLE BORG_NO_SESSION_HOOKS TMUX_PANE
+    # Force host mode so the suite also passes inside a container (/.dockerenv exists there).
+    export BORG_IN_CONTAINER=0
     BR="${BATS_TEST_DIRNAME}/../bin/borg-resume"
     EV="$BORG_RESUME_DIR/events/$SID.jsonl"
     REG="$BORG_RESUME_DIR/sessions/$SID.json"
@@ -51,6 +53,37 @@ payload() {
     [ "$status" -eq 0 ]
     run jq -e '.scope == "agent:a1" and .agent_id == "a1" and (.msg | length) == 600' "$EV"
     [ "$status" -eq 0 ]
+}
+
+@test "record: a Workflow-shaped payload maps run_id, script_path and agent_type" {
+    run bash -c "printf '%s' '{\"session_id\":\"$SID\",\"tool_response\":{\"runId\":\"run-0001\"},\"tool_input\":{\"scriptPath\":\"/work/example/wf.js\",\"subagent_type\":\"reviewer\"}}' | '$BR' record agent_start"
+    [ "$status" -eq 0 ]
+    run jq -e '.run_id == "run-0001" and .script_path == "/work/example/wf.js" and .agent_type == "reviewer"' "$EV"
+    [ "$status" -eq 0 ]
+    run bash -c "printf '%s' '{\"session_id\":\"$SID\",\"run_id\":\"run-0002\",\"script_path\":\"/p\",\"agent_type\":\"t\",\"tool_input\":{\"resumeFromRunId\":\"x\"}}' | '$BR' record agent_stop"
+    run jq -e -s '.[1].run_id == "run-0002" and .[1].script_path == "/p" and .[1].agent_type == "t"' "$EV"
+    [ "$status" -eq 0 ]
+}
+
+@test "record: every string field is capped at 256 chars" {
+    long="$(printf 'y%.0s' $(seq 1 700))"
+    run bash -c "printf '%s' '{\"session_id\":\"$SID\",\"agent_id\":\"$long\",\"error\":\"$long\",\"tool_use_id\":\"$long\",\"run_id\":\"$long\",\"script_path\":\"$long\",\"agent_type\":\"$long\",\"reason\":\"$long\"}' | '$BR' record agent_stop"
+    [ "$status" -eq 0 ]
+    run jq -e '[.agent_id, .error, .tool_use_id, .run_id, .script_path, .agent_type, .reason] | all(length == 256)' "$EV"
+    [ "$status" -eq 0 ]
+    [ "$(wc -c <"$EV" | tr -d ' ')" -lt 4096 ]
+}
+
+@test "record: a TAB or newline in the session id is rejected, nothing is written" {
+    run bash -c "printf '%s' '{\"session_id\":\"a\\tb\"}' | '$BR' record stop_failure"
+    [ "$status" -eq 0 ]
+    run bash -c "printf '%s' '{\"session_id\":\"a\\nb\"}' | '$BR' record stop_failure"
+    [ "$status" -eq 0 ]
+    run bash -c "printf '%s' '{\"session_id\":\"$SID\\n\"}' | '$BR' record stop_failure"
+    [ "$status" -eq 0 ]
+    [ ! -e "$BORG_RESUME_DIR/events/a.jsonl" ]
+    [ ! -e "$EV" ]
+    [ -z "$(find "$BORG_RESUME_DIR" -type f 2>/dev/null)" ]
 }
 
 @test "record: newlines in payload text stay inside one line" {
@@ -122,7 +155,7 @@ payload() {
     [ "$status" -eq 0 ]
 }
 
-@test "registry: a second session_start replaces it atomically and leaves no tmp files" {
+@test "registry: a second session_start replaces it and leaves no tmp files" {
     payload "$SID" /work/one | "$BR" record session_start
     run jq -r '.cwd' "$REG"
     [ "$output" = "/work/one" ]
@@ -133,17 +166,39 @@ payload() {
     [ -z "$(ls "$BORG_RESUME_DIR/sessions" | grep tmp || true)" ]
 }
 
-@test "registry: the orchestrator root is mode orchestrator, other cwd is plain" {
+@test "registry: a reader never sees a partial registry while it is being replaced" {
+    longdir="/work/$(printf 'd%.0s' $(seq 1 3000))"
+    payload "$SID" /work/first | "$BR" record session_start
+    (
+        for i in $(seq 1 40); do
+            payload "$SID" "$longdir$i" | "$BR" record session_start
+        done
+        : >"$BATS_TEST_TMPDIR/writer.done"
+    ) &
+    bad=0
+    reads=0
+    while [ ! -e "$BATS_TEST_TMPDIR/writer.done" ]; do
+        if ! jq -e '.session_id' "$REG" >/dev/null 2>&1; then
+            bad=$((bad + 1))
+        fi
+        reads=$((reads + 1))
+    done
+    wait
+    [ "$reads" -gt 0 ]
+    [ "$bad" -eq 0 ]
+}
+
+@test "registry: the orchestrator root is mode orchestrator, other cwd is project" {
     export BORG_ORCHESTRATOR_ROOT="/work/root"
     payload "$SID" /work/root | "$BR" record session_start
     run jq -r '.mode' "$REG"
     [ "$output" = "orchestrator" ]
     payload "$SID" /work/root/sub | "$BR" record session_start
     run jq -r '.mode' "$REG"
-    [ "$output" = "plain" ]
+    [ "$output" = "project" ]
 }
 
-@test "registry: concurrent registry upserts and watcher counter updates lose neither" {
+@test "registry: ownership split smoke test, hook-owned and watcher-owned files do not interfere" {
     . "$BORG_RESUME_LIBDIR/resume-paths.sh"
     STATE="$BORG_RESUME_DIR/state/$SID.json"
     (
@@ -173,6 +228,8 @@ EOF"
     [ "$status" -eq 0 ]
     run jq -e '.tmux.pane_id == "%12" and .tmux.pane_pid == 41200 and .tmux.session == "borg" and .tmux.window == "example" and .tmux.window_index == 3 and .tmux.pane_index == 1 and .tmux.project_dir == "/work/example" and .in_container == false' "$REG"
     [ "$status" -eq 0 ]
+    run jq -e '(.claude_pid | type) == "number" and (.claude_start | type) == "string" and (.claude_start | length) > 0' "$REG"
+    [ "$status" -eq 0 ]
     run grep -F "set-option -p -t %12 @borg_sid $SID" "$TMUX_STUB_LOG"
     [ "$status" -eq 0 ]
 }
@@ -201,7 +258,7 @@ $(payload)
 EOF"
     [ "$status" -eq 0 ]
     [ ! -e "$TMUX_STUB_LOG" ]
-    run jq -e '.in_container == true and .mode == "drone" and .tmux == null and .claude_pid == null' "$REG"
+    run jq -e '.in_container == true and .mode == "project" and .tmux == null and .claude_pid == null' "$REG"
     [ "$status" -eq 0 ]
     [ -f "$EV" ]
 }
@@ -254,6 +311,23 @@ EOF"
     [ "$status" -eq 0 ]
     [ ! -e "$EV" ]
     [ ! -e "$REG" ]
+}
+
+@test "kill switch: BORG_NO_SESSION_HOOKS other than 1 does not suppress" {
+    run bash -c "BORG_NO_SESSION_HOOKS=0 '$BR' record session_start <<'EOF'
+$(payload)
+EOF"
+    [ "$status" -eq 0 ]
+    [ -f "$EV" ]
+}
+
+@test "container: BORG_IN_CONTAINER=0 forces host mode" {
+    run bash -c "BORG_IN_CONTAINER=0 '$BR' record session_start <<'EOF'
+$(payload)
+EOF"
+    [ "$status" -eq 0 ]
+    run jq -e '.in_container == false' "$REG"
+    [ "$status" -eq 0 ]
 }
 
 @test "paths: default state dir is under XDG_STATE_HOME/borg/resume" {

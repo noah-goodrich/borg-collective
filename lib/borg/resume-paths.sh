@@ -29,7 +29,6 @@ borg_resume_valid_sid() {
 
 borg_resume_events_file() { printf '%s/events/%s.jsonl\n' "$(borg_resume_dir)" "$1"; }
 borg_resume_registry_file() { printf '%s/sessions/%s.json\n' "$(borg_resume_dir)" "$1"; }
-borg_resume_state_file() { printf '%s/state/%s.json\n' "$(borg_resume_dir)" "$1"; }
 borg_resume_sentinel() { printf '%s/DISABLED\n' "$(borg_resume_dir)"; }
 
 # Kill switch, env half: BORG_RESUME_DISABLE=1 stops recording AND injecting.
@@ -42,20 +41,17 @@ borg_resume_paused() {
     [ -e "$(borg_resume_sentinel)" ]
 }
 
-# The hook-suppression flag used by every other borg hook.
+# The hook-suppression flag, with the semantics of hooks/borg-link-down.sh: only the value 1 suppresses.
 borg_resume_no_session_hooks() {
-    [ -n "${BORG_NO_SESSION_HOOKS:-}" ]
+    [ "${BORG_NO_SESSION_HOOKS:-}" = "1" ]
 }
 
 # Append ONE line to a file. The line is written with a single printf (one write(2) on an O_APPEND fd), which
-# POSIX makes atomic for lines under PIPE_BUF; events are capped well below the 4KB the platforms guarantee.
-# Embedded newlines are refused so a line can never be torn into two records.
+# POSIX makes atomic for lines under PIPE_BUF; callers cap every string field at 256 chars (msg at 600) so events
+# stay well below the 4KB the platforms guarantee. A compact JSON line has no raw newline, so none is checked for.
 # Usage: borg_resume_append_line <file> <line>
 borg_resume_append_line() {
     local _f="$1" _line="$2"
-    case "$_line" in
-        *$'\n'*) return 1 ;;
-    esac
     mkdir -p "${_f%/*}" 2>/dev/null || return 1
     { printf '%s\n' "$_line" >>"$_f"; } 2>/dev/null
 }
