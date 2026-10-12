@@ -1242,7 +1242,7 @@ EOF
 
     run_zsh_borg init
     [ "$status" -eq 0 ]
-    run grep -c "claude --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
@@ -1289,7 +1289,7 @@ EOF
     run grep -c "claude -p" "$TRACE"
     [ "$output" -ge 1 ]
     # And init still completes its actual job.
-    run grep -c "claude --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
@@ -1362,7 +1362,7 @@ EOF
     run grep -c "claude -p" "$TRACE"
     [ "$output" -eq 0 ]
     # And init still completes its actual job.
-    run grep -c "claude --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
@@ -1425,7 +1425,7 @@ EOF
     run_zsh_borg claude
     [ "$status" -eq 1 ]
     [[ "$output" == *"Resuming orchestrator"* ]] || false
-    run grep -c "claude --continue" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --continue" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }

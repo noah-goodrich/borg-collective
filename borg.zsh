@@ -1694,13 +1694,13 @@ use it to confirm the main-loop share is shrinking over time (numbers are for th
     printf '%s' "$prompt" > "$prompt_file"
 
     info "Hailing frequencies open — resume any time with: borg claude"
-    _borg_launch_in_tmux "$prompt_file" claude --name "borg-orchestrator" --append-system-prompt-file "$prompt_file"
+    _borg_launch_in_tmux "$prompt_file" claude --model "${BORG_CLAUDE_MODEL:-opus}" --effort "${BORG_CLAUDE_EFFORT:-xhigh}" --name "borg-orchestrator" --append-system-prompt-file "$prompt_file"
 }
 
 cmd_claude() {
     # Resume the most recent orchestrator session
     info "Resuming orchestrator..."
-    _borg_launch_in_tmux claude --continue
+    _borg_launch_in_tmux claude --model "${BORG_CLAUDE_MODEL:-opus}" --effort "${BORG_CLAUDE_EFFORT:-xhigh}" --continue
 }
 
 # Launch a command inside the borg tmux session.
