@@ -291,7 +291,7 @@ CMD_RT='{"type":"user","message":{"role":"user","content":"<command-name>/resear
     [ "$status" -eq 2 ]
 }
 
-@test "inline script wins over a name" {
+@test "an inline script is checked even when a name is also given" {
     run bash -c "printf '%s' '{\"tool_name\":\"Workflow\",\"tool_input\":{\"name\":\"my-flow\",\"script\":\"agent(1)\"}}' | '$BASH_BIN' '$HOOK' 2>&1"
     [ "$status" -eq 2 ]
 }
@@ -332,4 +332,101 @@ CMD_RT='{"type":"user","message":{"role":"user","content":"<command-name>/resear
 @test "routing guide lives in docs/, not agents/ (agents/ files register as spawnable types)" {
     [ -f "${BATS_TEST_DIRNAME}/../docs/agent-routing.md" ]
     [ ! -e "${BATS_TEST_DIRNAME}/../agents/ROUTING.md" ]
+}
+
+# --- indirect references (2026-10-12 follow-up to #287) ------------------------------------------
+# Every way to reach the real agent() other than a direct call is cut at its source: escapes in
+# identifiers, code evaluation, the global object, `this` and `arguments`.
+
+_wf_allow() {
+    _run_script "$1"
+    [ "$status" -eq 0 ] || { echo "expected allow, got $status: $output"; false; }
+}
+
+_wf_deny() {
+    _run_script "$1"
+    [ "$status" -eq 2 ] || { echo "expected deny, got $status: $output"; false; }
+}
+
+@test "deny: obfuscated references to agent" {
+    _wf_deny 'agent("p")'
+    _wf_deny 'eval("agent(\"p\")")'
+    _wf_deny 'globalThis["ag"+"ent"]("p")'
+    _wf_deny 'const a = globalThis.agent; await a("p")'
+    _wf_deny 'const {agent: a} = globalThis; await a("p")'
+    _wf_deny 'const {agent: a} = this; await a("p")'
+    _wf_deny 'const f = Function("return agent")(); await f("p")'
+    _wf_deny 'const F = [].constructor.constructor; await F("return agent")()("p")'
+    _wf_deny 'const a = arguments[0]; await a("p")'
+    _wf_deny 'const w = self; await w["agent"]("p")'
+    _wf_deny 'const m = await import("x")'
+    _wf_deny 'const m = require("x")'
+}
+
+@test "allow: a local binding named agent is not the Workflow agent()" {
+    _wf_allow 'const rows = xs.map(agent => agent.name)'
+    _wf_allow 'for (const agent of agents) { log(agent) }'
+    _wf_allow 'const names = list.map((agent, i) => agent.label + i)'
+    _wf_allow 'xs.forEach(agent => { log(agent) })'
+    _wf_allow 'try { x() } catch (agent) { log(agent) }'
+    _wf_allow 'function f(agent) { return agent.id }'
+    _wf_allow 'if (ok) { const agent = rows[0]; log(agent.summary) }'
+    _wf_allow 'const s = xs.map(agent => `${agent.name}!`)'
+    _wf_allow 'for await (const agent of stream) { log(agent) }'
+    _wf_allow $'const rows = xs.map(agent =>\n  agent.name)'
+}
+
+@test "deny: an expression-bodied arrow ends at a line break (no-semicolon style)" {
+    _wf_deny $'const f = agent => agent.x\nawait agent("p")'
+    _wf_deny $'for (const agent of xs) log(agent)\nawait agent("p")'
+}
+
+@test "deny: blind-review round 1 bypasses" {
+    _wf_deny 'const r = ok ? agent => 1 : agent("p")'
+    _wf_deny "const effort = 'low'; const run = (p, effort) => agent(p, { model: 'sonnet', effort })"
+    _wf_deny "let model = 'sonnet'; [model] = ['opus']; agent('p', { model, effort: 'low' })"
+    _wf_deny "let effort = 'low'; effort &&= 'xhigh'; agent('p', { model: 'sonnet', effort })"
+    _wf_deny 'await []["constructor"]["constructor"]("return agent")()("p")'
+    _wf_deny 'await []["constr" + "uctor"]'
+    _wf_deny 'i++ / 2; await agent("p"); const z = 1 / 2'
+    _wf_deny "agent('p', { agentType: 'borg-collective:borg-scout', get model() { return 'opus' } })"
+    _wf_deny "agent('p', { agentType: 'borg-collective:borg-scout', *model() { yield 'opus' } })"
+    _wf_deny $'// note\ragent("p")'
+    _wf_deny $'// note agent("p")'
+    _wf_deny 'const f = (x = {agent}) => x'
+    _wf_deny 'const o = {agent}'
+}
+
+@test "deny: every source is checked when a call names several" {
+    local f="${BATS_TEST_TMPDIR}/bad.js"
+    printf '%s\n' "await agent('p')" > "$f"
+    _run_json "$(jq -nc --arg p "$f" \
+        '{tool_name:"Workflow", tool_input:{script:"await agent(\"p\", {agentType:\"borg-collective:borg-scout\"})", scriptPath:$p}}')"
+    [ "$status" -eq 2 ]
+}
+
+@test "allow: blind-review round 1 false denies" {
+    _wf_allow "const size = { window: 30 }.window"
+    _wf_allow "const opts = { window: 30 }; log(opts.window)"
+    _wf_allow 'const o = { run(agent) { return agent.id } }'
+    _wf_allow 'function* g(agent) { yield agent.id }'
+    _wf_allow 'const f = ({ agent }) => agent.id'
+    _wf_allow 'const { agent } = row; log(agent.id)'
+    _wf_allow 'const [agent] = rows; log(agent)'
+    _wf_allow "const MODEL = 'sonnet'; await agent('p', { model: MODEL, effort: 'low' })"
+    _wf_allow "function body(x) { return ['', HEAD, 'tail ' + x].join('\\n') }"
+}
+
+@test "deny: property and stack-frame routes to agent" {
+    _wf_deny 'const a = helpers.agent; await a("p")'
+    _wf_deny 'function f() { return f.caller }'
+    _wf_deny 'Error.prepareStackTrace = (e, s) => s'
+}
+
+@test "deny: a local binding does not cover code outside its scope" {
+    _wf_deny 'xs.map(agent => agent.name); await agent("p")'
+    _wf_deny 'for (const agent of xs) log(agent); const a = agent'
+    _wf_deny 'const f = (x = agent) => x'
+    _wf_deny 'if (ok) { const agent = 1 } const a = agent'
+    _wf_deny 'var agent; await agent("p")'
 }
