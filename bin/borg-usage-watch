@@ -139,8 +139,38 @@ mkdir -p "$STATE_DIR"
 # generation (_borg_rotate_log, lib/borg-hooks.sh). Fail-open: a missing lib means no rotation.
 # Rotation happens immediately before each append, never at startup: the sample row lands in the
 # fresh file in the same call, so `tail -n 1` readers (dispatch-guard, _probe_due) never see a gap.
-_USAGE_WATCH_ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)"
-{ source "${BORG_ROOT:-$_USAGE_WATCH_ROOT}/lib/borg-hooks.sh"; } >/dev/null 2>&1 || true
+# Resolve $0 through symlinks first: launchd runs the INSTALLED link (~/.local/bin/borg-usage-watch
+# -> <repo>/bin/borg-usage-watch), and dirname of the link points at ~/.local, not the repo. And guard
+# every source with [[ -r ]]: on macOS bash 3.2 a `source` of a missing file aborts a non-interactive
+# shell even inside `{ ...; } || true`, which made this job exit 1 with empty stderr on every fire.
+_uw_self="$0"
+while [[ -L "$_uw_self" ]]; do
+    _uw_link="$(readlink "$_uw_self")"
+    case "$_uw_link" in
+        /*) _uw_self="$_uw_link" ;;
+        *)  _uw_self="$(dirname -- "$_uw_self")/$_uw_link" ;;
+    esac
+done
+_USAGE_WATCH_ROOT="$(CDPATH='' cd -- "$(dirname -- "$_uw_self")/.." && pwd -P)"
+_UW_LIB="${BORG_ROOT:-$_USAGE_WATCH_ROOT}/lib"
+if [[ -r "$_UW_LIB/borg-hooks.sh" ]]; then
+    { source "$_UW_LIB/borg-hooks.sh"; } >/dev/null 2>&1 || true
+fi
+# Prefer an absolute path (shared resolver); if unresolvable keep the bare name so the existing
+# binary_not_found path still reports it.
+if [[ "$CLAUDE_BIN" == "claude" || "$CLAUDE_BIN" == /* ]] && [[ -r "$_UW_LIB/borg/claude-bin.sh" ]]; then
+    { source "$_UW_LIB/borg/claude-bin.sh"; } >/dev/null 2>&1 || true
+    if type borg_resolve_claude_bin >/dev/null 2>&1; then
+        if [[ "$CLAUDE_BIN" == /* ]]; then
+            BORG_CLAUDE_BIN="$CLAUDE_BIN"
+        else
+            unset BORG_CLAUDE_BIN
+        fi
+        if borg_resolve_claude_bin; then
+            CLAUDE_BIN="$BORG_CLAUDE_BIN"
+        fi
+    fi
+fi
 _rotate() { type _borg_rotate_log >/dev/null 2>&1 && _borg_rotate_log "$1"; return 0; }
 
 log() {

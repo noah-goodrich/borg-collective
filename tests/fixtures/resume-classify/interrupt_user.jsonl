@@ -1,0 +1,2 @@
+{"type":"assistant","uuid":"u-0201","sessionId":"00000000-0000-4000-8000-000000000001","message":{"role":"assistant","content":[{"type":"text","text":"<scrubbed:10 chars>"}]}}
+{"type":"user","uuid":"u-0202","sessionId":"00000000-0000-4000-8000-000000000001","message":{"role":"user","content":[{"type":"text","text":"[Request interrupted by user]"}]}}

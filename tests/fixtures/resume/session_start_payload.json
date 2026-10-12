@@ -1,0 +1,9 @@
+{
+  "session_id": "00000000-0000-4000-8000-000000000001",
+  "transcript_path": "/Users/noah/dev/example/.claude/projects/-Users-noah-dev-example/<sid>.jsonl",
+  "cwd": "/Users/noah/dev/example",
+  "<key>": "<str>",
+  "hook_event_name": "SessionStart",
+  "source": "startup",
+  "model": "claude-haiku-5-5"
+}

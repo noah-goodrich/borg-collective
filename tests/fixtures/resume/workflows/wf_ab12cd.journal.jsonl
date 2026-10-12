@@ -1,0 +1,8 @@
+{"type":"launched"}
+{"type":"started","key":"v2:fake001","agentId":"a0000000000000002","label":"<str>","phase":"<str>"}
+{"type":"result","key":"v2:fake001","agentId":"a0000000000000002","result":"<str>"}
+{"type":"started","key":"v2:fake003","agentId":"a0000000000000004","label":"<str>","phase":"<str>"}
+{"type":"started","key":"v2:fake003","agentId":"a0000000000000005","label":"<str>","phase":"<str>"}
+{"type":"result","key":"v2:fake003","agentId":"a0000000000000005","result":"<str>"}
+{"type":"started","key":"v2:fake006","agentId":"a0000000000000007","label":"<str>","phase":"<str>"}
+{"type":"result","key":"v2:fake006","agentId":"a0000000000000007","result":"<str>"}

@@ -52,3 +52,4 @@ completed `agent()` calls are already cached under the run id, so nothing is los
   as a separate layer — the usage guardian (`bin/borg-usage-watch`) reads server-authoritative headroom via
   `claude -p "/usage"` in a subprocess and checkpoints active drones before the cap. So the account limit is no longer
   unpredictable from outside the session; this skill catches only what slips through between polls.
+- Successor design: docs/plans/directives/2026-10-12-borg-resume-any-interruption.md
