@@ -23,18 +23,13 @@ module is what AC7 retires, so a fourth verb there would be built to be deleted.
 
 ── THE READ HERE IS STRICT, AND THAT IS THE WHOLE DESIGN ────────────────────────────────────────────
 
-`shell._load_manifest` SALVAGES: a row that fails validation is dropped, the survivors are returned,
-and a warning names the loss. That is right for RENDERING -- one bad row must not blank the grid, and
-the measured cost of the old whole-file drop was 12 declared refs becoming 5.
-
-It is catastrophic for READ-MODIFY-WRITE. Salvage on the way in plus `write_manifest` on the way out
-means a row the author declared is deleted from disk by a verb that was asked to add a different one,
-with the validator's own warning as the only trace. `refuse-the-manifest-stop-salvaging-rows` names
-exactly that: "make it structurally impossible for a sync to delete a row the author declared."
+`shell._load_manifest` now refuses a file with ANY invalid row (the 2026-09-01 reversal of row salvage), so the
+read-modify-write hazard that used to live here -- a row the author declared deleted from disk by a verb asked to
+add a different one -- is closed at the reader too. `refuse-the-manifest-stop-salvaging-rows` names the goal:
+"make it structurally impossible for a sync to delete a row the author declared."
 
 So `_read_for_write` re-implements neither the loader nor the validator: it reads the raw bytes,
-validates whole, and REFUSES whole. The asymmetry mirrors `write_manifest`'s own -- reads for
-rendering degrade, reads for writing refuse -- and the reason is the same one that docstring gives:
+validates whole, and REFUSES whole, as `write_manifest` does and for the reason that docstring gives:
 a wrong document on the way in is wrong on disk forever, and the author is standing right there.
 
 A consequence worth stating: these verbs cannot repair a manifest that is already invalid. They
@@ -108,9 +103,7 @@ def _read_for_write(repository_dir: str, name: str) -> tuple[dict[str, Any], str
         raise shell.InvalidManifest(f"{name}: top level is {type(doc).__name__}, not an object", [])
     errors = core.validate(doc)
     if errors:
-        raise shell.InvalidManifest(
-            f"{name}: refusing to rewrite an invalid manifest — {'; '.join(errors)}", errors
-        )
+        raise shell.InvalidManifest(f"{name}: refusing to rewrite an invalid manifest — {'; '.join(errors)}", errors)
     return doc, os.path.dirname(path)
 
 
@@ -186,13 +179,17 @@ def _unauthorable_ref(ref: str) -> str:
     if not kind:
         return ""  # `_row_ref_error` already refuses an unknown-kind ref, with a better message.
     if kind not in refs.TRACKED_REF_KINDS:
-        return (f"refusing to author a {kind} ref: {ref}. Reference kinds are context a human "
-                f"attaches, not work this writer declares.")
+        return (
+            f"refusing to author a {kind} ref: {ref}. Reference kinds are context a human "
+            f"attaches, not work this writer declares."
+        )
     if kind in _resolvable_kinds():
         return ""
-    return (f"refusing to author a {kind} ref: {ref}. This machine has no resolver for {kind}, so "
-            f"the row would never resolve and would wedge every row behind it, silently. Install a "
-            f"recon-adapter-{kind} first, or hand-author the row.")
+    return (
+        f"refusing to author a {kind} ref: {ref}. This machine has no resolver for {kind}, so "
+        f"the row would never resolve and would wedge every row behind it, silently. Install a "
+        f"recon-adapter-{kind} first, or hand-author the row."
+    )
 
 
 def _unknown_lane(manifest: dict[str, Any], lane: str) -> str:
@@ -219,8 +216,10 @@ def _unknown_lane(manifest: dict[str, Any], lane: str) -> str:
     declared = sorted({_lane_of(row.get("lane")) for row in rows if isinstance(row, dict)})
     if lane in declared:
         return ""
-    return (f"unknown lane {lane!r}; declared lanes are {', '.join(repr(x) for x in declared)}. "
-            f"Pass --new-lane to start a new one.")
+    return (
+        f"unknown lane {lane!r}; declared lanes are {', '.join(repr(x) for x in declared)}. "
+        f"Pass --new-lane to start a new one."
+    )
 
 
 def _next_order(manifest: dict[str, Any], lane: str, skip_index: int = -1) -> str:
@@ -355,8 +354,12 @@ def _cmd_add_row(args: argparse.Namespace) -> int:
         # borrowing another comment's figure is how a stale number acquires a second home: that one
         # describes a corpus this tree no longer has, and re-quoting it made it look re-verified.
         prerequisite = str(row.get("order") or "").strip() in core.PREREQ_ORDERS
-        for key, value in (("lane", lane if args.lane else ""), ("order", args.order),
-                           ("why", args.why), ("status", args.status)):
+        for key, value in (
+            ("lane", lane if args.lane else ""),
+            ("order", args.order),
+            ("why", args.why),
+            ("status", args.status),
+        ):
             if value:
                 row[key] = value
         if moving and not args.order and not prerequisite:
@@ -415,7 +418,7 @@ def _declared_plan_slug(repository_dir: str) -> str:
     for line in lines:
         if not line.startswith("- Plan-slug:"):
             continue
-        value = line[len("- Plan-slug:"):].strip()
+        value = line[len("- Plan-slug:") :].strip()
         if len(value) >= 2 and value.startswith("`") and value.endswith("`"):
             value = value[1:-1].strip()
         if value:
@@ -463,8 +466,7 @@ def _cmd_resolve(args: argparse.Namespace) -> int:
     # sibling program's manifest at exactly the moment the wanted one was refused.
     stems = [os.path.splitext(n)[0] for n in names + refused]
     refused_stems = [os.path.splitext(n)[0] for n in refused]
-    refusal = (f"refused (declared in both roots): {', '.join(refused_stems)}; "
-               f"candidates are {', '.join(stems)}")
+    refusal = f"refused (declared in both roots): {', '.join(refused_stems)}; candidates are {', '.join(stems)}"
 
     if len(stems) == 1 and not refused:
         print(stems[0])
@@ -519,13 +521,18 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--name", default="", help="manifest file stem under .stacks/ or .borg/chains/")
     parser.add_argument("--ref", default="", help="the row's ref (add-row, close)")
     parser.add_argument("--lane", default="", help=f"lane name (add-row; default {core.DEFAULT_LANE})")
-    parser.add_argument("--new-lane", action="store_true",
-                        help="permit a lane not already declared (add-row); a typo never says this")
+    parser.add_argument(
+        "--new-lane", action="store_true", help="permit a lane not already declared (add-row); a typo never says this"
+    )
     parser.add_argument("--order", default=_ORDER_UNSET, help="declared order; derived from the lane when omitted")
     parser.add_argument("--why", default="", help="one line on why this row exists (add-row)")
     parser.add_argument("--status", default="", help=f"{core.STATE_OPEN}|{core.STATE_MERGED}|{core.STATE_CLOSED}")
-    parser.add_argument("--root", default="", choices=("", *placement.ROOT_CHOICES),
-                        help="where scaffold creates a new manifest; derived when omitted (scaffold)")
+    parser.add_argument(
+        "--root",
+        default="",
+        choices=("", *placement.ROOT_CHOICES),
+        help="where scaffold creates a new manifest; derived when omitted (scaffold)",
+    )
     parser.add_argument("--apex", default="", help="apex ref (scaffold)")
     parser.add_argument("--title", default="", help="apex title (scaffold)")
     parser.add_argument("--desc", default="", help="one-line program description (scaffold)")
@@ -552,8 +559,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.verb in ("add-row", "close") and not args.ref:
         print(f"{args.verb}: --ref is required", file=sys.stderr)
         return 2
-    handlers = {"scaffold": _cmd_scaffold, "add-row": _cmd_add_row, "close": _cmd_close,
-                "resolve": _cmd_resolve}
+    handlers = {"scaffold": _cmd_scaffold, "add-row": _cmd_add_row, "close": _cmd_close, "resolve": _cmd_resolve}
     if args.verb == "close" and not args.status:
         args.status = core.STATE_MERGED
     try:

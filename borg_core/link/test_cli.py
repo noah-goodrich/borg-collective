@@ -1012,6 +1012,38 @@ def test_a_stem_declared_in_both_roots_counts_as_refused_not_as_no_manifest(isol
     assert "to scaffold one" not in page and "in the registry yet" not in page
 
 
+def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(isolated_env, capsys, monkeypatch):
+    """AC3 of refuse-the-manifest-stop-salvaging-rows, against a REAL file through the real sweep.
+
+    MUTATION: restore row salvage in `shell._load_manifest` and the file loads (refused == 0, rows on the
+    grid) with a "rows dropped" warning, so every assertion here goes red. The refusal must name the path
+    and the validator's first error in SIGNALS, and CHAINS must say the manifest could not be read rather
+    than print an emptiness sentence.
+    """
+    directory = _project_dir(isolated_env, "warehouse")
+    target = Path(directory) / ".borg" / "chains"
+    target.mkdir(parents=True)
+    bad_row = {"order": "2", "ref": "o/r#2", "status": "stacked", "gate": {"kind": "decision", "blocked_by": "x"}}
+    good_row = {"order": "1", "ref": "o/r#1", "status": "stacked"}
+    refused_file = target / "broken.json"
+    refused_file.write_text(json.dumps({"program": "broken", "rows": [good_row, bad_row]}))
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    grid_block = json.loads(capsys.readouterr().out)["grid"]
+    assert grid_block["manifests"] == [] and grid_block["refused"] == 1
+
+    assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
+    page = capsys.readouterr().out
+    signals = page[page.index("SIGNALS") :]
+    assert str(refused_file) in signals, "SIGNALS names the refused file path"
+    assert "gate.resolved_by is required" in signals, "and the validator first error"
+    assert "1 manifest could not be read" in page, "CHAINS shows the fourth diagnosis"
+    assert "to scaffold one" not in page and "in the registry yet" not in page
+    assert "rows dropped" not in page
+
+
 # ── WAITING ON YOU shares ONE router with `borg next` ────────────────────────────────────────────
 
 

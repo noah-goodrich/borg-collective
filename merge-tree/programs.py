@@ -37,6 +37,19 @@ import os
 import re
 from typing import Any
 
+
+class Refusal(str):
+    """A `discover` warning that means one manifest FILE was refused (unreadable, not a manifest, invalid).
+
+    A str subclass so every consumer that prints or joins warnings is unchanged, but TYPED so a caller
+    decides whether a write may proceed by `isinstance`, never by sniffing the message. It replaces
+    coordinator.py substring test (`".json" in w`), which classified by an accident of wording: any
+    refusal whose message did not happen to contain a path would have let `sync` write on. A refusal is
+    fatal for a write, always (2026-09-01 refuse-the-manifest-stop-salvaging-rows).
+    """
+
+
+
 # Closed vocabulary, deliberately. `decision` means a human must *choose*; `verification` means
 # someone must *run* something. The distinction matters because a `verification` with declared
 # outcomes is never a blocker on a *person* — anyone can run it — so it must not be routed to the
@@ -326,16 +339,16 @@ def discover(project_dirs: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
                 with open(path) as fh:
                     doc = json.load(fh)
             except (OSError, ValueError) as exc:
-                warnings.append(f"{path}: unreadable or invalid JSON ({exc})")
+                warnings.append(Refusal(f"{path}: unreadable or invalid JSON ({exc})"))
                 continue
 
             if not looks_like_manifest(doc):
-                warnings.append(f"{path}: not a program manifest (no rows list) — skipped")
+                warnings.append(Refusal(f"{path}: not a program manifest (no rows list) — skipped"))
                 continue
 
             errors = validate(doc)
             if errors:
-                warnings.append(f"{path}: invalid manifest — {'; '.join(errors)}")
+                warnings.append(Refusal(f"{path}: invalid manifest — {'; '.join(errors)}"))
                 continue
 
             doc.setdefault("program", os.path.splitext(name)[0])

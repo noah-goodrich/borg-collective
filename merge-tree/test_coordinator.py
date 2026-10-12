@@ -117,9 +117,7 @@ class TestRunTarget:
 
 class TestFlattenRows:
     def test_flattens_across_manifests_sorted_by_ref(self):
-        rows = coordinator.flatten_rows(
-            [_manifest("a", [_row("1", "o/z#1")]), _manifest("b", [_row("1", "o/a#1")])]
-        )
+        rows = coordinator.flatten_rows([_manifest("a", [_row("1", "o/z#1")]), _manifest("b", [_row("1", "o/a#1")])])
         assert [r["ref"] for r in rows] == ["o/a#1", "o/z#1"]
 
 
@@ -149,16 +147,17 @@ class TestThreeWayAudit:
         findings = coordinator.three_way_audit(
             borg_rows, target_report={"ok": False, "error": "timeout"}, recon_states={}
         )
-        assert findings == [
-            {"kind": "target_unreachable", "ref": "", "copy_says": "", "reality_says": "timeout"}
-        ]
+        assert findings == [{"kind": "target_unreachable", "ref": "", "copy_says": "", "reality_says": "timeout"}]
 
     def test_present_only_in_one_copy_is_named_on_both_sides(self):
         borg_rows = [
             {"program": "p", "ref": "o/r#1", "status": "stacked"},
             {"program": "p", "ref": "o/r#2", "status": "stacked"},
         ]
-        target_report = {"ok": True, "rows": [{"ref": "o/r#1", "status": "stacked"}, {"ref": "o/r#3", "status": "stacked"}]}
+        target_report = {
+            "ok": True,
+            "rows": [{"ref": "o/r#1", "status": "stacked"}, {"ref": "o/r#3", "status": "stacked"}],
+        }
         findings = coordinator.three_way_audit(borg_rows, target_report, recon_states={})
         kinds = {(f["kind"], f["ref"]) for f in findings}
         assert ("present_only_in_borg", "o/r#2") in kinds
@@ -358,6 +357,59 @@ class TestCmdSync:
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 1
 
+    def _bad_row_project(self, tmp_path):
+        """A project whose one manifest has three rows, the middle one invalid; returns (project, file, bytes)."""
+        bad = _row("2", "o/r#2", gate={"kind": "decision", "blocked_by": "someone"})
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1"), bad, _row("3", "o/r#3")])
+        path = tmp_path / "proj" / ".borg" / "programs" / "a.json"
+        return d, path, path.read_bytes()
+
+    def test_sync_over_a_manifest_with_one_invalid_row_leaves_every_row_on_disk(self, tmp_path, capsys, monkeypatch):
+        """No write may reduce a manifest's row count on disk (refuse-the-manifest-stop-salvaging-rows).
+
+        End to end through `cmd_sync`, the real discovery and the real writer. MUTATION: make `sync_borg`
+        write back a salvaged manifest (drop the invalid row from the discovered dict and skip the refusal)
+        and the file shrinks from three rows to two, at exit 0 -- this goes red.
+        """
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        d, path, before = self._bad_row_project(tmp_path)
+
+        assert coordinator.cmd_sync(_Args([d])) == 1, "a refused file refuses the sync"
+        assert path.read_bytes() == before, "byte-identical: nothing was rewritten"
+        assert len(json.loads(path.read_text())["rows"]) == 3
+        assert "wrote" not in capsys.readouterr().out
+
+    def test_sync_borg_will_not_write_back_a_manifest_with_rows_missing_in_memory(self, tmp_path):
+        """The structural guard, independent of what discovery returned or warned.
+
+        A discovered dict with the invalid row already removed (what a salvaging reader would hand
+        over) must not overwrite the three-row file. MUTATION: delete the row-count guard in `sync_borg`.
+        """
+        _, path, before = self._bad_row_project(tmp_path)
+        salvaged = {"program": "a", "_path": str(path), "rows": [_row("1", "o/r#1"), _row("3", "o/r#3")]}
+
+        written, warnings = coordinator.sync_borg([salvaged])
+
+        assert written == []
+        assert any("no write may drop a declared row" in w for w in warnings), warnings
+        assert path.read_bytes() == before
+
+    def test_a_typed_refusal_is_fatal_for_write_whatever_its_wording(self, tmp_path, monkeypatch):
+        """A refusal is fatal for sync always, not when its message happens to contain `.json`.
+
+        The old filter was `".json" in w`. MUTATION: restore it and this goes red, because the message
+        below names no file extension while still being a refusal.
+        """
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        _, path, before = self._bad_row_project(tmp_path)
+        salvaged = {"program": "a", "_path": str(path), "rows": [_row("1", "o/r#1")]}
+        monkeypatch.setattr(
+            coordinator.programs, "discover", lambda dirs: ([salvaged], [programs.Refusal("refused a chain")])
+        )
+
+        assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 1
+        assert path.read_bytes() == before
+
     def test_writes_borgs_copy_and_reports_no_target(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
@@ -405,10 +457,10 @@ class TestMain:
 class TestIndependenceAndBoundary:
     """PM6/PM8: the coordinator delegates every write and knows nothing about the external schema."""
 
-    FORBIDDEN_CALLS = ("subprocess.run([\"gh\"", "'gh pr", '"gh pr', "gh issue", "gh pr edit", "gh pr create")
+    FORBIDDEN_CALLS = ('subprocess.run(["gh"', "'gh pr", '"gh pr', "gh issue", "gh pr edit", "gh pr create")
     # PM6: "no external-schema field names" — the stacked-PR program's own key shape (SCHEMA.md's
     # "row key" table: `repo` + `number`, distinct from borg's `ref`) and its writer's name.
-    FORBIDDEN_FIELDS = ("stamp_tool", "\"number\":", "'number':", "repo_number", "pr_body", "PR_BODY_TEMPLATE")
+    FORBIDDEN_FIELDS = ("stamp_tool", '"number":', "'number':", "repo_number", "pr_body", "PR_BODY_TEMPLATE")
 
     def test_no_gh_invocation_anywhere_in_the_coordinator(self):
         with open(coordinator.__file__) as fh:

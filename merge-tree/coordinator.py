@@ -320,9 +320,7 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
             # file under neither `.borg/chains` nor `.borg/programs`, dropped at exit 0. That is the
             # confident-empty shape this tree keeps removing, so it is reported.
             if source_path and not project_dir:
-                warnings.append(
-                    f"skipped {source_path}: not under .borg/chains or .borg/programs"
-                )
+                warnings.append(f"skipped {source_path}: not under .borg/chains or .borg/programs")
             continue
         if program in seen and seen[program] != source_path:
             # Keyed by SOURCE FILE, not project dir (opus round 2, finding 1): two files in the SAME
@@ -333,12 +331,32 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
                 f"each file rewritten in place, but they will contend downstream"
             )
         seen.setdefault(program, source_path)
+        # NO WRITE MAY REDUCE A MANIFEST'S ROW COUNT ON DISK. Whatever `discover` returned is written back
+        # below, so a manifest that reached here with rows removed in memory would permanently delete
+        # them, at exit 0, under "wrote N manifest(s)". `programs.discover` refuses such a file whole
+        # today; this guard makes the guarantee structural instead of dependent on that.
+        on_disk = _rows_on_disk(source_path)
+        in_memory = len(manifest.get("rows") or [])
+        if in_memory < on_disk:
+            warnings.append(
+                f"refused to rewrite {source_path}: would reduce it from {on_disk} to {in_memory} row(s); "
+                f"no write may drop a declared row"
+            )
+            continue
         # Rewrite each manifest's OWN file (basename of _path), never a program-derived name: a
         # manifest whose filename differs from its program id must not spawn a second copy.
-        written.append(
-            programs.write_manifest(project_dir, program, manifest, filename=os.path.basename(source_path))
-        )
+        written.append(programs.write_manifest(project_dir, program, manifest, filename=os.path.basename(source_path)))
     return written, warnings
+
+
+def _rows_on_disk(path: str) -> int:
+    """How many rows the manifest file at `path` declares right now; 0 when it cannot be read as one."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            rows = json.load(handle).get("rows")
+    except (OSError, ValueError, AttributeError):
+        return 0
+    return len(rows) if isinstance(rows, list) else 0
 
 
 def _project_dir_of(manifest: dict[str, Any]) -> str:
@@ -379,7 +397,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     # directory-level note (absent project path in the registry sweep) is not. Either way the audit
     # for every valid manifest still runs and prints (PM2: one bad manifest must not blank the
     # spine); the file-level failure is reflected in the exit code AFTER the findings print.
-    fatal = [w for w in warnings if ".json" in w]
+    fatal = [w for w in warnings if isinstance(w, programs.Refusal)]
     if fatal:
         print(f"plan: {len(fatal)} malformed manifest(s) — see above", file=sys.stderr)
 
@@ -418,7 +436,7 @@ def cmd_sync(args: argparse.Namespace) -> int:
     # notes — a registry row whose project is absent on this machine — leave nothing to half-write,
     # and refusing on them would make one stale registry entry veto the whole sync (PM9: the
     # personal machine must work with a different project set).
-    fatal = [w for w in warnings if ".json" in w]
+    fatal = [w for w in warnings if isinstance(w, programs.Refusal)]
     if fatal:
         print(f"sync: {len(fatal)} malformed manifest(s) — refusing to sync", file=sys.stderr)
         return 1
