@@ -6,28 +6,33 @@
 #   - it is NEVER installed as a live hook by this repo;
 #   - the `hook` subcommand always exits 0 and prints nothing, so it can never
 #     block or alter a turn;
-#   - it never writes secrets or conversation text. JSON: every free-text key is
-#     redacted (see _spike_text_keys), only the exact usage-limit sentence and a few
-#     fixed system messages survive, and any string that looks like a token or an
-#     email is redacted whatever its key. Panes: EVERY line is redacted unless it
-#     matches an explicit allowlist of dialog / limit / composer-chrome lines.
-#     Paths and the home dir are collapsed.
+#   - JSON payloads are written ONLY as the output of scripts/resume-skeleton.py
+#     (--stdin), the single positive allowlist shared with the fixture extractor:
+#     JSON structure, numbers, booleans, known keys, enum values from closed sets,
+#     fake ids, fake paths and the exact usage-limit sentence survive; every other
+#     string becomes "<str>" and every unknown key "<key>". If python3 is missing or
+#     errors, the hook writes a jq key skeleton instead (a fixed list of key names,
+#     every string "<str>");
+#   - session ids become fixed fake ids, so payloads from different sessions are NOT
+#     correlatable in the output;
+#   - panes: EVERY line is redacted unless it matches an explicit allowlist of
+#     dialog / limit / composer-chrome lines.
+# Not guaranteed: that a number or boolean carries no information. Review output
+# before committing anything; nothing here is committed automatically.
 #
 # Subcommands:
-#   hook <event>              read a hook payload on stdin, append it (scrubbed)
+#   hook <event>              read a hook payload on stdin, append it (allowlisted)
 #   snap <pane> [label]       capture-pane of <pane> into the scratch dir (allowlisted)
 #   settings [file]           write a TEMPORARY settings file wiring every candidate
 #                             event to this script; prints its path. Use it with
 #                             `claude --settings <file>`; nothing global is touched.
-#   scrub                     filter stdin JSON to stdout with the JSON scrubber
+#   scrub                     filter stdin JSON to stdout (extractor, else jq skeleton)
 #   scrubpane                 filter stdin pane text to stdout with the pane allowlist
 #   show                      print the captured payloads (jq -c, one per line)
 #   dir                       print the scratch dir
 #
 # Env:
 #   BORG_SPIKE_DIR   scratch dir (default: ${TMPDIR:-/tmp}/borg-resume-spike, mode 700)
-#   BORG_SPIKE_KEEP_TEXT=1  keep free-text values verbatim for `hook`/`scrub` (path- and
-#                           secret-scrubbed only). Local debugging; never commit output.
 #
 # Bash 3.2 compatible. No set -e: failures must not propagate out of the hook.
 
@@ -37,63 +42,40 @@ _spike_dir="${BORG_SPIKE_DIR:-${TMPDIR:-/tmp}/borg-resume-spike}"
 # Events the design wants to observe, with the matcher used for each.
 _spike_events="StopFailure SessionStart SessionEnd SubagentStart SubagentStop Notification PreToolUse PostToolUse"
 
-# Path scrubber: any /Users/<name>[/...] collapses to /Users/noah/dev/example, the home
-# dir (if set) is replaced first. @@HOME@@ is a private marker for paths whose suffix
-# was already rebuilt by the JSON scrubber; it is resolved last.
+# Path scrubber, used for pane lines only (JSON paths are faked by the extractor).
 _spike_scrub_paths() {
-    local home="${HOME:-}" users home_sed=()
-    users='s#/Users/[A-Za-z0-9._-]*\(/[^" 	:,)]*\)\{0,\}#/Users/noah/dev/example#g'
+    local home="${HOME:-}" home_sed=()
     if [ -n "$home" ] && [ "$home" != "/" ]; then
         home_sed=(-e "s#${home}#/Users/noah/dev/example#g")
     fi
     sed ${home_sed[@]+"${home_sed[@]}"} \
-        -e "$users" \
-        -e 's#/home/[A-Za-z0-9._-]*\(/[^" 	:,)]*\)\{0,\}#/Users/noah/dev/example#g' \
-        -e 's#@@HOME@@#/Users/noah/dev/example#g'
+        -e 's#/Users/[A-Za-z0-9._-]*\(/[^" 	:,)]*\)\{0,\}#/Users/noah/dev/example#g' \
+        -e 's#/home/[A-Za-z0-9._-]*\(/[^" 	:,)]*\)\{0,\}#/Users/noah/dev/example#g'
 }
 
-# Free-text keys: their string values are redacted unless they are the exact
-# usage-limit sentence (or a fixed system message). Objects/arrays under them are
-# replaced wholesale.
-_spike_text_keys='["last_assistant_message","msg","message","prompt","content","text",
-  "description","tool_input","tool_response","result","title","error_details",
-  "error_message","details","detail","reason","stderr","stdout","output","command",
-  "query","input","summary","instructions","body","args","lastPrompt","last_prompt",
-  "custom_title","customTitle","user_message","response","data","notification",
-  "stack","trace","cause","file_path","path","url","name","label"]'
+# Fallback skeleton (no python3, or the extractor failed): structure only. Object keys
+# outside a fixed list become "<key>"; every string becomes "<str>".
+_spike_skeleton_jq() {
+    jq -c '
+      def known: ["hook_event_name","session_id","cwd","transcript_path","error",
+        "error_details","last_assistant_message","source","agent_id","agent_type",
+        "agent_transcript_path","notification_type","message","reason","tool_name",
+        "stop_hook_active","permission_mode","model","prompt"];
+      walk(if type == "object"
+             then with_entries(.key |= (if IN(known[]) then . else "<key>" end))
+           elif type == "string" then "<str>"
+           else . end)' 2>/dev/null
+}
 
-# JSON scrubber. Strict by construction:
-#   - free-text keys (list above) are redacted;
-#   - the limit keeper returns ONLY the matched usage-limit sentence, never the string
-#     it was found in;
-#   - any string anywhere that looks like a credential or an email is redacted;
-#   - transcript_path keeps the /.claude/projects/<slug>/<sid>.jsonl shape.
+# JSON scrubber: scripts/resume-skeleton.py is the single source of truth.
 _spike_scrub_json() {
-    local keep="${BORG_SPIKE_KEEP_TEXT:-0}"
-    jq -c --arg keep "$keep" --argjson tk "$_spike_text_keys" '
-      def limit_re: "You[\u0027\u2019]ve hit your [A-Za-z]{3,12}( [A-Za-z]{3,12})? limit \u00b7 resets ([A-Z][a-z]{2} [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m( \\([A-Za-z_]+/[A-Za-z_]+\\))?";
-      def canned: IN("Prompt is too long","Request timed out","Login expired \u00b7 Please run /login");
-      def secretish: test("sk-[A-Za-z0-9_-]{6,}|ghp_[A-Za-z0-9]{6,}|AKIA[0-9A-Z]{8,}|xox[a-z]-[A-Za-z0-9-]{6,}|eyJ[A-Za-z0-9_-]{10,}|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|(password|passwd|secret|token|api[_-]?key)[=: ]+[^ ]+"; "i");
-      def keep_limit: (match(limit_re).string) // null;
-      def redact: if (type != "string") then .
-                  elif canned then .
-                  else (keep_limit) // "<scrubbed:\(length) chars>" end;
-      def tp: if type == "string" then
-                (capture("/\\.claude/projects/[^/]*/(?<sid>[^/]*)\\.jsonl$") // null)
-                | if . == null then "@@HOME@@" else "@@HOME@@/.claude/projects/-Users-noah-dev-example/\(.sid).jsonl" end
-              else . end;
-      walk(
-        if type == "object" then
-          with_entries(
-            if (.key | IN($tk[])) and ($keep != "1")
-            then .value |= (if type == "string" then redact
-                            elif type == "object" or type == "array" then "<scrubbed:\(tojson | length) chars>"
-                            else . end)
-            elif (.key == "transcript_path" or .key == "agent_transcript_path") then .value |= tp
-            elif (.value | type) == "string" and (.value | secretish) then .value = "<scrubbed:secret>"
-            else . end)
-        else . end)
-    ' 2>/dev/null | _spike_scrub_paths
+    local py="${_spike_self%/*}/resume-skeleton.py" in out
+    in="$(cat 2>/dev/null)"
+    if command -v python3 >/dev/null 2>&1 && [ -f "$py" ]; then
+        out="$(printf '%s' "$in" | python3 -I "$py" --stdin 2>/dev/null)" && [ -n "$out" ] \
+            && { printf '%s\n' "$out"; return 0; }
+    fi
+    printf '%s' "$in" | _spike_skeleton_jq
 }
 
 # Pane allowlist: a line survives only if, with box-drawing chars stripped and trimmed,

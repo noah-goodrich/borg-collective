@@ -11,7 +11,7 @@ setup() {
     MAN="$FX/fixtures.json"
     HARNESS="${BATS_TEST_DIRNAME}/../scripts/spike-resume-payloads.sh"
     SKEL="${BATS_TEST_DIRNAME}/../scripts/resume-skeleton.py"
-    EXTRACTOR_VERSION="v1"
+    EXTRACTOR_VERSION="v2"
     command -v jq >/dev/null || skip "jq not installed"
 }
 
@@ -192,10 +192,14 @@ _not_captured() {
     [ "$status" -eq 0 ]
 }
 
-@test "harness hook: keeps limit sentence, redacts other text and user paths" {
+_hook() {
     export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
-    printf '%s' '{"session_id":"s","cwd":"/Users/someone/dev/secret","prompt":"my private prompt","last_assistant_message":"hit your session limit · resets 7am"}' \
-        | "$HARNESS" hook UserPromptSubmit
+    printf '%s' "$1" | "$HARNESS" hook StopFailure
+}
+
+@test "harness hook: keeps the strict limit sentence, redacts other text and user paths" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"session_id":"s","cwd":"/Users/someone/dev/secret","prompt":"my private prompt","last_assistant_message":"You'"'"'ve hit your session limit · resets 7am"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
     [[ "$output" == *"resets 7am"* ]]
     [[ "$output" != *"private prompt"* ]]
@@ -203,42 +207,102 @@ _not_captured() {
     [[ "$output" != *secret* ]]
 }
 
-@test "harness hook: token in error_details is redacted" {
-    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
-    printf '%s' '{"session_id":"s","error":"rate_limit","error_details":"token sk-ant-abc123 for /Users/noah/dev/example"}' \
-        | "$HARNESS" hook StopFailure
+@test "harness hook: plain private text in error_details is redacted (no secret shape)" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"session_id":"s","error":"rate_limit","error_details":"customer Acme owes money"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *sk-ant* ]]
-    [[ "$output" != *abc123* ]]
+    [[ "$output" != *Acme* ]]
     [[ "$output" == *'"error":"rate_limit"'* ]]
 }
 
-@test "harness hook: secret-looking value under an unlisted key is redacted" {
-    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
-    printf '%s' '{"session_id":"s","extra":"sk-ant-zzz999","who":"me@example.com"}' | "$HARNESS" hook Notification
+@test "harness hook: unlisted keys with plain text are dropped" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"extra_note":"Customer Acme owes 50k","error_info":"private plan about merger","agent_type":"my private agent name"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    [[ "$output" != *zzz999* ]]
-    [[ "$output" != *me@example.com* ]]
+    [[ "$output" != *Acme* ]]
+    [[ "$output" != *merger* ]]
+    [[ "$output" != *"private agent"* ]]
+    [[ "$output" != *extra_note* ]]
+}
+
+@test "harness hook: strings in arrays and under nested unlisted keys are dropped" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"items":["my private text in array"],"nested":{"foo":"internal codename ingle"}}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *"private text"* ]]
+    [[ "$output" != *codename* ]]
+    [[ "$output" != *ingle* ]]
+}
+
+@test "harness hook: case variant of a free-text key is dropped" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"LastAssistantMessage":"private words","Last_Assistant_Message":"more private words"}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *"private words"* ]]
+}
+
+@test "harness hook: Bearer, URL, AIza and sk_live credentials are dropped under any key" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"a":"Bearer abcdef1234567890","message":"postgres://user:pw@host/db","error_details":"AIzaSyA1234567890abcdefghij","b":"sk_live_abc123XYZ"}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *Bearer* ]]
+    [[ "$output" != *postgres* ]]
+    [[ "$output" != *AIza* ]]
+    [[ "$output" != *sk_live* ]]
+}
+
+@test "harness hook: /private/var, /tmp, spaced and Windows paths are dropped" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"a":"/private/var/folders/xx/secret-project","message":"/tmp/secretproj/file.txt","error_details":"/Users/bob/My Docs/tax return/x.pdf","b":"C:\\Users\\bob\\taxes\\x.pdf"}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *secret-project* ]]
+    [[ "$output" != *secretproj* ]]
+    [[ "$output" != *"tax return"* ]]
+    [[ "$output" != *bob* ]]
+    [[ "$output" != *taxes* ]]
+}
+
+@test "harness hook: token-shaped enum values and keys are dropped" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"error":"sk-ant-abc123def456","status":"hunter2-password-xyz","model":"acme-merger-plan","mode":"AKIAABCDEFGHIJ12","ghp_abcdefghijklmnopqrstuvwxyz0123456789":1,"MY_SECRET_PW_hunter2":2}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *sk-ant* ]]
+    [[ "$output" != *hunter2* ]]
+    [[ "$output" != *acme* ]]
+    [[ "$output" != *AKIA* ]]
+    [[ "$output" != *ghp_* ]]
+    [[ "$output" != *SECRET* ]]
+}
+
+@test "harness hook: fallback jq skeleton (no extractor beside the script) keeps no text" {
+    local d="$BATS_TEST_TMPDIR/lone"
+    mkdir -p "$d" && cp "$HARNESS" "$d/h.sh"
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    printf '%s' '{"session_id":"s","error":"rate_limit","extra":"private","nested":{"foo":"codename"},"items":["in array"],"n":3}' | "$d/h.sh" hook StopFailure
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    [[ "$output" != *private* ]]
+    [[ "$output" != *codename* ]]
+    [[ "$output" != *"in array"* ]]
+    [[ "$output" != *rate_limit* ]]
+    [[ "$output" == *'"<key>":3'* ]]
 }
 
 @test "harness hook: long assistant message mentioning limits keeps only the limit sentence" {
-    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
-    printf '%s' '{"session_id":"s","last_assistant_message":"Here is how server error handling and rate limit retries work, password hunter2, tail: sk-ant-nope"}' \
-        | "$HARNESS" hook StopFailure
-    printf '%s' '{"session_id":"s","last_assistant_message":"long preamble about hunter2. You'"'"'ve hit your weekly limit · resets Jul 7 at 7am (America/Denver) and then more private words"}' \
-        | "$HARNESS" hook StopFailure
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"session_id":"s","last_assistant_message":"Here is how server error handling and rate limit retries work, password hunter2, tail: sk-ant-nope"}'
+    _hook '{"session_id":"s","last_assistant_message":"long preamble about hunter2. You'"'"'ve hit your weekly limit · resets Jul 7 at 7am (America/Denver) and then more private words"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
     [[ "$output" != *hunter2* ]]
     [[ "$output" != *"server error handling"* ]]
     [[ "$output" != *"private words"* ]]
-    [[ "$output" == *"weekly limit · resets Jul 7 at 7am (America/Denver)"* ]]
+    [[ "$output" != *"weekly limit"* ]]
 }
 
-@test "harness hook: transcript_path keeps its projects/<slug>/<sid>.jsonl shape" {
-    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
-    printf '%s' '{"session_id":"s","transcript_path":"/Users/bob/.claude/projects/-Users-bob-dev-x/abc.jsonl"}' | "$HARNESS" hook SessionStart
+@test "harness hook: transcript_path becomes the fixed fake projects shape" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"session_id":"s","transcript_path":"/Users/bob/.claude/projects/-Users-bob-dev-x/abc.jsonl"}'
     run jq -r '.payload.transcript_path' "$BORG_SPIKE_DIR/payloads.jsonl"
-    [ "$output" = "/Users/noah/dev/example/.claude/projects/-Users-noah-dev-example/abc.jsonl" ]
+    [ "$output" = "/Users/noah/dev/example/.claude/projects/-Users-noah-dev-example/<sid>.jsonl" ]
 }
 
 @test "harness scrubpane: redacts every line outside the allowlist" {
@@ -344,7 +408,7 @@ _not_captured() {
     [[ "$out" != *sk-ant* ]]
     [[ "$out" != *hunter2* ]]
     [[ "$out" != *secret* ]]
-    [[ "$out" == *'"long":"<str>"'* ]]
+    [[ "$out" == *'"<key>":"<str>"'* ]]
 }
 
 @test "extractor: unlisted string keys and odd object keys never survive" {
@@ -354,4 +418,24 @@ _not_captured() {
     [[ "$output" != *bob* ]]
     [[ "$output" == *'"level":"suggestion"'* ]]
     [[ "$output" == *'"type":"<str>"'* ]]
+}
+
+@test "extractor: enum values outside the closed set or token-shaped are dropped" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    run bash -c "printf %s "error":"made_up_kind" | python3 -I  --stdin"
+    [[ "$output" == *role:assistant* ]]
+    [[ "$output" != *made_up_kind* ]]
+    [[ "$output" != *hunter2* ]]
+    [[ "$output" != *acme* ]]
+    [[ "$output" != *AKIA* ]]
+    [[ "$output" != *sk-ant* ]]
+}
+
+@test "extractor: token-shaped and unknown keys become <key>" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    run bash -c "printf %s "ghp_abcdefghijklmnopqrstuvwxyz0123456789":1 | python3 -I  --stdin"
+    [[ "$output" == *type:user* ]]
+    [[ "$output" != *ghp_* ]]
+    [[ "$output" != *hunter2* ]]
+    [[ "$output" != *acme* ]]
 }
