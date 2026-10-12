@@ -22,7 +22,7 @@ setup() {
     export BORG_RESUME_LIBDIR="$ROOT/lib/borg"
     export BORG_RESUME_DIR="$BATS_TEST_TMPDIR/resume"
     export BORG_IN_CONTAINER=0
-    unset BORG_RESUME_DISABLE BORG_NO_SESSION_HOOKS TMUX_PANE
+    unset BORG_RESUME_DISABLE BORG_NO_SESSION_HOOKS TMUX_PANE TMUX
     EV="$BORG_RESUME_DIR/events/$SID.jsonl"
     REG="$BORG_RESUME_DIR/sessions/$SID.json"
     TMUX_LOG="$BATS_TEST_TMPDIR/tmux.calls"
@@ -31,11 +31,12 @@ setup() {
 #!/bin/sh
 printf '%s\n' "\$*" >>"$TMUX_LOG"
 case "\$1" in
-    display) printf '%%12\t4100\tborg\texample\t3\t1\t/work/example\n' ;;
+    display) printf '%%12\t%s\tborg\texample\t3\t1\t/work/example\n' "\$(cat "$BATS_TEST_TMPDIR/pane_pid")" ;;
 esac
 exit 0
 EOF
     chmod +x "$BATS_TEST_TMPDIR/stubbin/tmux"
+    printf '%s' "$$" >"$BATS_TEST_TMPDIR/pane_pid"
     export PATH="$BATS_TEST_TMPDIR/stubbin:$PATH"
 }
 
@@ -113,7 +114,8 @@ _payload() { # <hook_event_name> [extra jq object]
 }
 
 @test "PreToolUse and PostToolUse carry tool_use_id and workflow ids into the event" {
-    run _fire PreToolUse "$(_payload PreToolUse '{"tool_name":"Workflow","tool_use_id":"toolu_9","tool_input":{"scriptPath":"/work/example/wf.js","resumeFromRunId":"wf_1"}}')"
+    run _fire PreToolUse "$(_payload PreToolUse '{"tool_name":"Workflow","tool_use_id":"toolu_9",
+        "tool_input":{"scriptPath":"/work/example/wf.js","resumeFromRunId":"wf_1"}}')"
     [ "$status" -eq 0 ]
     run jq -e '.ev == "dispatch_intent" and .tool_use_id == "toolu_9" and .script_path == "/work/example/wf.js"
         and .run_id == "wf_1"' "$EV"
@@ -123,7 +125,8 @@ _payload() { # <hook_event_name> [extra jq object]
 # ---- U1: scope is never derived from the StopFailure agent_id ----------------------------------------------------
 
 @test "U1: a StopFailure carrying agent_id still records scope main and a null agent_id" {
-    run _fire StopFailure "$(_payload StopFailure '{"error":"rate_limit","agent_id":"a9","last_assistant_message":"x"}')"
+    run _fire StopFailure "$(_payload StopFailure '{"error":"rate_limit","agent_id":"a9",
+        "last_assistant_message":"x"}')"
     [ "$status" -eq 0 ]
     run jq -e '.scope == "main" and .agent_id == null' "$EV"
     [ "$status" -eq 0 ]
@@ -199,7 +202,8 @@ _payload() { # <hook_event_name> [extra jq object]
 }
 
 @test "with HOME unset the hook exits 0 and writes nothing" {
-    run env -u HOME PATH="$PATH" bash -c "printf '%s' '$(_payload StopFailure '{"error":"rate_limit"}')' | '$HOOK' StopFailure"
+    run env -u HOME PATH="$PATH" bash -c "printf '%s' '$(_payload StopFailure '{"error":"rate_limit"}')' \
+        | '$HOOK' StopFailure"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
@@ -230,7 +234,7 @@ _payload() { # <hook_event_name> [extra jq object]
 # ---- tmux: SessionStart only, host only --------------------------------------------------------------------------
 
 @test "only SessionStart invokes tmux (host, TMUX_PANE set)" {
-    export TMUX_PANE="%12"
+    export TMUX_PANE="%12" TMUX=/tmp/sock,1,0
     local ce
     for ce in SessionEnd SubagentStart SubagentStop StopFailure PreToolUse PostToolUse Notification; do
         run _fire "$ce" "$(_payload "$ce" '{"notification_type":"idle_prompt","agent_id":"a1"}')"
@@ -247,12 +251,78 @@ _payload() { # <hook_event_name> [extra jq object]
 }
 
 @test "container: no tmux call, no pane in the registry, the session is marked in_container (notify-only per U9)" {
-    export TMUX_PANE="%12"
+    export TMUX_PANE="%12" TMUX=/tmp/sock,1,0
     BORG_IN_CONTAINER=1 run _fire SessionStart "$(_payload SessionStart '{"source":"startup"}')"
     [ "$status" -eq 0 ]
     [ -z "$output" ]
     [ ! -s "$TMUX_LOG" ]
     run jq -e '.in_container == true and .tmux == null and .claude_pid == null' "$REG"
+    [ "$status" -eq 0 ]
+}
+
+# ---- claude identity and pane binding ----------------------------------------------------------------------------
+
+# _fire_as <argv0> <ClaudeEvent> <json>: run the hook as a child of a process whose argv0 is <argv0>, the way claude
+# parents its hooks. The parent writes its own pid to $BATS_TEST_TMPDIR/parent.pid.
+_fire_as() {
+    printf '%s' "$3" >"$BATS_TEST_TMPDIR/payload.json"
+    ( exec -a "$1" bash -c 'echo $$ >"$1"; "$2" "$3" <"$4"; :' _ \
+        "$BATS_TEST_TMPDIR/parent.pid" "$HOOK" "$2" "$BATS_TEST_TMPDIR/payload.json" )
+}
+
+@test "host registry claude_pid is the hook's parent (alive at record time), not the hook shell" {
+    run _fire_as claude SessionStart "$(_payload SessionStart '{"source":"startup"}')"
+    [ "$status" -eq 0 ]
+    local parent
+    parent="$(cat "$BATS_TEST_TMPDIR/parent.pid")"
+    run jq -e --argjson p "$parent" '.claude_pid == $p and (.claude_start | type == "string")' "$REG"
+    [ "$status" -eq 0 ]
+}
+
+@test "pane binding needs TMUX as well as TMUX_PANE" {
+    export TMUX_PANE="%12"
+    run _fire_as claude SessionStart "$(_payload SessionStart '{"source":"startup"}')"
+    [ "$status" -eq 0 ]
+    [ ! -s "$TMUX_LOG" ]
+    run jq -e '.tmux == null' "$REG"
+    [ "$status" -eq 0 ]
+}
+
+@test "a headless claude -p session sharing TMUX_PANE does not steal the pane binding" {
+    export TMUX_PANE="%12" TMUX=/tmp/sock,1,0
+    run _fire_as "claude" SessionStart "$(_payload SessionStart '{"source":"startup"}')"
+    [ "$status" -eq 0 ]
+    run grep -c "set-option" "$TMUX_LOG"
+    [ "$output" = "1" ]
+    SID="00000000-0000-4000-8000-000000000002"
+    run _fire_as "claude -p" SessionStart "$(_payload SessionStart '{"source":"startup"}')"
+    [ "$status" -eq 0 ]
+    run grep -c "set-option" "$TMUX_LOG"
+    [ "$output" = "1" ]
+    run grep -c "$SID" "$TMUX_LOG"
+    [ "$output" = "0" ]
+    run jq -e '.tmux == null and .claude_pid != null' "$BORG_RESUME_DIR/sessions/$SID.json"
+    [ "$status" -eq 0 ]
+}
+
+@test "a claude outside the pane's process tree is not bound" {
+    export TMUX_PANE="%12" TMUX=/tmp/sock,1,0
+    printf '%s' "999999" >"$BATS_TEST_TMPDIR/pane_pid"
+    run _fire_as claude SessionStart "$(_payload SessionStart '{"source":"startup"}')"
+    [ "$status" -eq 0 ]
+    run grep -c "set-option" "$TMUX_LOG"
+    [ "$output" = "0" ]
+    run jq -e '.tmux == null' "$REG"
+    [ "$status" -eq 0 ]
+}
+
+@test "container detection honors the dockerenv marker file (override path)" {
+    unset BORG_IN_CONTAINER
+    : >"$BATS_TEST_TMPDIR/dockerenv"
+    BORG_DOCKERENV_FILE="$BATS_TEST_TMPDIR/dockerenv" run _fire SessionStart \
+        "$(_payload SessionStart '{"source":"startup"}')"
+    [ "$status" -eq 0 ]
+    run jq -e '.in_container == true and .claude_pid == null' "$REG"
     [ "$status" -eq 0 ]
 }
 
@@ -280,7 +350,8 @@ _best_ms() { # <ClaudeEvent> <payload>
         [ "$ms" -le $((100 * scale)) ]
     done
     for ce in PreToolUse PostToolUse; do
-        ms="$(_best_ms "$ce" "$(_payload "$ce" '{"tool_name":"Agent","tool_use_id":"toolu_1","tool_input":{"subagent_type":"x"}}')")"
+        ms="$(_best_ms "$ce" "$(_payload "$ce" '{"tool_name":"Agent","tool_use_id":"toolu_1",
+            "tool_input":{"subagent_type":"x"}}')")"
         echo "# $ce: ${ms}ms (budget $((50 * scale))ms)" >&3
         [ "$ms" -le $((50 * scale)) ]
     done
@@ -309,10 +380,12 @@ _build() {
 
 @test "wiring: hooks.json registers the resume hook for exactly the eight intended events, timeout 5" {
     _build
-    run jq -r '[.hooks | to_entries[] | .key as $ev | .value[] | select(.hooks[].command | endswith("borg-resume-hook.sh StopFailure")
+    run jq -r '[.hooks | to_entries[] | .key as $ev | .value[]
+        | select(.hooks[].command | endswith("borg-resume-hook.sh StopFailure")
         or contains("borg-resume-hook.sh")) | $ev] | unique | join(",")' "$HJ"
     [ "$output" = "Notification,PostToolUse,PreToolUse,SessionEnd,SessionStart,StopFailure,SubagentStart,SubagentStop" ]
-    run jq -e '[.hooks[][] | .hooks[] | select(.command | contains("borg-resume-hook.sh")) | .timeout] | all(. == 5)' "$HJ"
+    run jq -e '[.hooks[][] | .hooks[]
+        | select(.command | contains("borg-resume-hook.sh")) | .timeout] | all(. == 5)' "$HJ"
     [ "$status" -eq 0 ]
 }
 
@@ -325,7 +398,8 @@ _build() {
 
 @test "wiring: matchers are Agent|Workflow on Pre/PostToolUse and the regex on Notification" {
     _build
-    run jq -r '[.hooks.PreToolUse[], .hooks.PostToolUse[] | select(.hooks[0].command | contains("borg-resume-hook")) | .matcher]
+    run jq -r '[.hooks.PreToolUse[], .hooks.PostToolUse[]
+        | select(.hooks[0].command | contains("borg-resume-hook")) | .matcher]
         | unique | join(",")' "$HJ"
     [ "$output" = "Agent|Workflow" ]
     run jq -r '.hooks.Notification[] | select(.hooks[0].command | contains("borg-resume-hook")) | .matcher' "$HJ"

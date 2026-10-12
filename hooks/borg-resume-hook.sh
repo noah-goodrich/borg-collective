@@ -48,7 +48,8 @@ case "$_ev" in
     *) exit 0 ;;
 esac
 
-{ printf '%s' "$_payload" | "$_bin" record "$_le" >/dev/null 2>&1; } 2>/dev/null
+# claude is this script's parent; borg-resume runs as our child, so hand the pid over explicitly.
+{ printf '%s' "$_payload" | BORG_RESUME_CLAUDE_PID="$PPID" "$_bin" record "$_le" >/dev/null 2>&1; } 2>/dev/null
 _rc=$?
 if [ "$_rc" -ne 0 ]; then
     _dir="${BORG_RESUME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/borg/resume}"

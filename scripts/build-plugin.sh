@@ -369,7 +369,7 @@ HOOKS_JSON='{
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh SessionStart",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" SessionStart",
             "timeout": 5
           }
         ]
@@ -423,7 +423,7 @@ HOOKS_JSON='{
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh Notification",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" Notification",
             "timeout": 5
           }
         ]
@@ -505,7 +505,7 @@ HOOKS_JSON='{
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh PreToolUse",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" PreToolUse",
             "timeout": 5
           }
         ]
@@ -547,7 +547,7 @@ HOOKS_JSON='{
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh PostToolUse",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" PostToolUse",
             "timeout": 5
           }
         ]
@@ -569,7 +569,7 @@ HOOKS_JSON='{
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh SubagentStop",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" SubagentStop",
             "timeout": 5
           }
         ]
@@ -581,7 +581,7 @@ HOOKS_JSON='{
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh SubagentStart",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" SubagentStart",
             "timeout": 5
           }
         ]
@@ -593,7 +593,7 @@ HOOKS_JSON='{
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh StopFailure",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" StopFailure",
             "timeout": 5
           }
         ]
@@ -605,7 +605,7 @@ HOOKS_JSON='{
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh SessionEnd",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/borg-resume-hook.sh\" SessionEnd",
             "timeout": 5
           }
         ]
