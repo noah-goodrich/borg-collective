@@ -15,8 +15,8 @@
     {
       "id": "U1",
       "question": "Does StopFailure fire for subagent API errors, and does the payload carry agent_id?",
-      "outcome": "pass",
-      "evidence": "A stub-scripted Agent tool call whose subagent request got 429 produced one StopFailure with agent_id and agent_type (error rate_limit) plus a main-loop StopFailure. SubagentStart fired and SubagentStop did not fire for the failed subagent: the event-name sequence of a repeat run is committed (events/subagent_api_error.txt).",
+      "outcome": "partial",
+      "evidence": "A stub-scripted Agent tool call whose subagent request got 429 produced StopFailure events (error rate_limit) and SubagentStart fired but SubagentStop did not fire for the failed subagent: the event-name sequence is committed (events/subagent_api_error.txt). The committed StopFailure payload fixture is main-loop origin and has no agent_id or agent_type.",
       "evidence_paths": [
         "tests/fixtures/resume/stop_failure_payload.json",
         "tests/fixtures/resume/subagents/agent-a0000000000000002.jsonl",
@@ -25,7 +25,9 @@
       ],
       "fallback": "Scan path (last meaningful transcript record) covers subagents if StopFailure is ever absent.",
       "refuted_parts": [],
-      "not_run_parts": [],
+      "not_run_parts": [
+        "StopFailure payload carrying agent_id and agent_type for a subagent-origin failure: seen in private logs, no scrubbed subagent-origin payload fixture is committed, so unverified. S4 and S5 must not rely on agent_id in the payload until it is captured."
+      ],
       "claude_version": "2.1.296",
       "date": "2026-10-12"
     },
@@ -106,7 +108,7 @@
       "id": "U9",
       "question": "Can a hook's PPID or TMUX_PANE identify the claude pid and pane for host sessions, and does tmux set-option -p from a hook persist?",
       "outcome": "partial",
-      "evidence": "A SessionStart hook payload carries the documented fields (tests/fixtures/resume/session_start_payload.json). In the first run, on the host in a private tmux server, the hook PPID equalled the claude pid and the tmux pane_pid, TMUX_PANE was the pane id, TMUX held the socket path, and tmux set-option -p from the hook persisted; that evidence was in private logs and is not committed. Internal subagents with an empty agent_type also fire SubagentStop (visible in events/queued_two_turns.txt), so scan and hook code must filter them.",
+      "evidence": "A SessionStart hook payload carries the documented fields (tests/fixtures/resume/session_start_payload.json). In the first run, on the host in a private tmux server, the hook PPID equalled the claude pid and the tmux pane_pid, TMUX_PANE was the pane id, TMUX held the socket path, and tmux set-option -p from the hook persisted; that evidence was in private logs and is not committed. A SubagentStop appears with no preceding SubagentStart in the queued run (events/queued_two_turns.txt, names only), so scan and hook code should expect unpaired SubagentStop events.",
       "evidence_paths": [
         "tests/fixtures/resume/session_start_payload.json",
         "tests/fixtures/resume/events/queued_two_turns.txt"
@@ -115,7 +117,8 @@
       "refuted_parts": [],
       "not_run_parts": [
         "Host PPID/TMUX_PANE/TMUX identity and set-option -p persistence: observed, not committed, so unverified.",
-        "Container (drone) sessions: no drone container was started, to keep the run isolated from real project environments. S3 still has to establish pane identity inside a container."
+        "Container (drone) sessions: no drone container was started, to keep the run isolated from real project environments. S3 still has to establish pane identity inside a container.",
+        "That the unpaired SubagentStop has an empty agent_type: not committed (event names only), so unverified."
       ],
       "claude_version": "2.1.296",
       "date": "2026-10-12"

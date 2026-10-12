@@ -51,29 +51,29 @@ _violations() {
 }
 
 @test "the pass rule catches a pass entry that carries a gap" {
-    jq '(.spikes[] | select(.id == "U1") | .not_run_parts) = ["something not run"]' "$RES" >"$BATS_TEST_TMPDIR/m1.json"
+    jq '(.spikes[] | select(.id == "U7") | .not_run_parts) = ["something not run"]' "$RES" >"$BATS_TEST_TMPDIR/m1.json"
     run _violations "$BATS_TEST_TMPDIR/m1.json"
-    [[ "$output" == *"U1: pass needs"* ]]
-    jq '(.spikes[] | select(.id == "U1") | .refuted_parts) = [{"claim":"x","fallback":"y"}]' "$RES" >"$BATS_TEST_TMPDIR/m2.json"
+    [[ "$output" == *"U7: pass needs"* ]]
+    jq '(.spikes[] | select(.id == "U7") | .refuted_parts) = [{"claim":"x","fallback":"y"}]' "$RES" >"$BATS_TEST_TMPDIR/m2.json"
     run _violations "$BATS_TEST_TMPDIR/m2.json"
-    [[ "$output" == *"U1: pass needs"* ]]
+    [[ "$output" == *"U7: pass needs"* ]]
 }
 
 @test "the pass rule catches a pass entry without evidence_paths" {
-    jq 'del(.spikes[] | select(.id == "U1") | .evidence_paths)' "$RES" >"$BATS_TEST_TMPDIR/m3.json"
+    jq 'del(.spikes[] | select(.id == "U7") | .evidence_paths)' "$RES" >"$BATS_TEST_TMPDIR/m3.json"
     run _violations "$BATS_TEST_TMPDIR/m3.json"
-    [[ "$output" == *"U1: pass needs"* ]]
+    [[ "$output" == *"U7: pass needs"* ]]
 }
 
 @test "the design vocabulary is enforced: the old words are illegal" {
-    jq '(.spikes[] | select(.id == "U1") | .outcome) = "confirmed"' "$RES" >"$BATS_TEST_TMPDIR/m4.json"
+    jq '(.spikes[] | select(.id == "U7") | .outcome) = "confirmed"' "$RES" >"$BATS_TEST_TMPDIR/m4.json"
     run _violations "$BATS_TEST_TMPDIR/m4.json"
-    [[ "$output" == *"U1: illegal outcome"* ]]
+    [[ "$output" == *"U7: illegal outcome"* ]]
 }
 
-@test "U2, U9 and U15 are partial, not pass" {
+@test "U1, U2, U9 and U15 are partial, not pass" {
     local id
-    for id in U2 U9 U15; do
+    for id in U1 U2 U9 U15; do
         run jq -r --arg id "$id" '.spikes[] | select(.id == $id) | .outcome' "$RES"
         [ "$output" = "partial" ] || { echo "$id is $output"; false; }
     done
