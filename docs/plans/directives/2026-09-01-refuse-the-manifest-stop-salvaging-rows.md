@@ -58,16 +58,16 @@ it**, so the reversal cannot ship a state where files are refused and the page s
 
 ## Acceptance criteria
 
-- [ ] **No read salvages rows.** A manifest with any invalid row loads as `(None, warning)`.
+- [x] **No read salvages rows.** A manifest with any invalid row loads as `(None, warning)`.
   - Verify: the partial-drop arm of `_drop_invalid_rows` has no caller; `test_a_partially_dropped_manifest_is_not_a_
     refusal` and the salvage cases in `borg_core/manifest/test_shell.py` are rewritten to assert refusal, and the
     rewrite is visible in the diff rather than deleted.
-- [ ] **No write can reduce the row count on disk.** Including `borg chain sync` over a manifest with a bad row.
+- [x] **No write can reduce the row count on disk.** Including `borg chain sync` over a manifest with a bad row.
   - Verify: the test in step 3, red by mutation — restore the substring `fatal` filter and it must fail.
-- [ ] **The page says which file and why.** A refused manifest names its path and its first error in `▸ SIGNALS`, and
+- [x] **The page says which file and why.** A refused manifest names its path and its first error in `▸ SIGNALS`, and
       `▸ CHAINS` shows the fourth diagnosis rather than an emptiness sentence.
   - Verify: shipped in `d7767ee`; re-assert here against a real refused file end to end.
-- [ ] **The reversal is recorded where the old decision is found.** A pointer in
+- [x] **The reversal is recorded where the old decision is found.** A pointer in
       `docs/plans/assimilated/2026-08-27-degrade-the-row-not-the-manifest.md` naming this directive.
   - Verify: grep the assimilated file for this filename.
 
@@ -101,3 +101,11 @@ it**, so the reversal cannot ship a state where files are refused and the page s
   ("decide `sync_borg`'s row semantics deliberately") is answered by the "The change" section above. That
   retirement's next step is therefore its own step 4, the fixture migration, then the repoint — nothing is waiting on
   a person.
+
+## Shipped
+
+- Decided on the record (step 1): `_drop_invalid_rows` is deleted; `core.partition_errors` is KEPT (tested, no read-path caller) because it is the only thing that maps an error back to a row index, which a future writer-side report can use. Delete it if no such caller exists by the time `programs.py` is retired.
+- Step 2: `merge-tree/programs.py` now tags file-level discovery warnings with the typed `Refusal` str subclass, and `coordinator.py` tests `isinstance`, not `".json" in w`; `sync_borg` also refuses any write that would lower a file row count (structural guard, independent of the reader).
+- Step 3: `TestCmdSync` in `merge-tree/test_coordinator.py`, each red by mutation (guard removed; substring filter restored). The reader rewrite is red against the old `shell.py`.
+- Scope of "No write can reduce the row count on disk", stated as exactly as the code allows. Every write path is guarded against shortening a file by an invalid-row refusal: `sync_borg` refuses a write that would lower the on-disk row count; `add-row` and `close` read through `_read_for_write`, which refuses an invalid file whole; `scaffold` never overwrites an existing manifest. It is NOT a guarantee against concurrent writers: `borg_core/manifest/shell.py` `write_manifest` takes no lock and does no compare-and-swap (its `mkstemp` + `os.replace` makes each write atomic, not each read-modify-write), so two CONCURRENT `add-row`/`close` runs can both read the same file and the second replace drops the first one's row. That race predates this change and is filed as [`2026-10-12-manifest-writer-lost-update-guard`](2026-10-12-manifest-writer-lost-update-guard.md).
+- `borg chain sync` still reformats a file `borg_core` refuses: `merge-tree/programs.py` `validate` is weaker than `core.validate`, so it can accept a file the front door refuses and rewrite it through `programs.write_manifest`. No rows are lost (the row-count guard above holds), only the formatting changes. This ends when `programs.py` retires.

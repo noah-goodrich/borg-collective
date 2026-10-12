@@ -358,6 +358,59 @@ class TestCmdSync:
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 1
 
+    def _bad_row_project(self, tmp_path):
+        """A project whose one manifest has three rows, the middle one invalid; returns (project, file, bytes)."""
+        bad = _row("2", "o/r#2", gate={"kind": "decision", "blocked_by": "someone"})
+        d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1"), bad, _row("3", "o/r#3")])
+        path = tmp_path / "proj" / ".borg" / "programs" / "a.json"
+        return d, path, path.read_bytes()
+
+    def test_sync_over_a_manifest_with_one_invalid_row_leaves_every_row_on_disk(self, tmp_path, capsys, monkeypatch):
+        """No write may reduce a manifest's row count on disk (refuse-the-manifest-stop-salvaging-rows).
+
+        End to end through `cmd_sync`, the real discovery and the real writer. MUTATION: make `sync_borg`
+        write back a salvaged manifest (drop the invalid row from the discovered dict and skip the refusal)
+        and the file shrinks from three rows to two, at exit 0 -- this goes red.
+        """
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        d, path, before = self._bad_row_project(tmp_path)
+
+        assert coordinator.cmd_sync(_Args([d])) == 1, "a refused file refuses the sync"
+        assert path.read_bytes() == before, "byte-identical: nothing was rewritten"
+        assert len(json.loads(path.read_text())["rows"]) == 3
+        assert "wrote" not in capsys.readouterr().out
+
+    def test_sync_borg_will_not_write_back_a_manifest_with_rows_missing_in_memory(self, tmp_path):
+        """The structural guard, independent of what discovery returned or warned.
+
+        A discovered dict with the invalid row already removed (what a salvaging reader would hand
+        over) must not overwrite the three-row file. MUTATION: delete the row-count guard in `sync_borg`.
+        """
+        _, path, before = self._bad_row_project(tmp_path)
+        salvaged = {"program": "a", "_path": str(path), "rows": [_row("1", "o/r#1"), _row("3", "o/r#3")]}
+
+        written, warnings = coordinator.sync_borg([salvaged])
+
+        assert written == []
+        assert any("no write may drop a declared row" in w for w in warnings), warnings
+        assert path.read_bytes() == before
+
+    def test_a_typed_refusal_is_fatal_for_write_whatever_its_wording(self, tmp_path, monkeypatch):
+        """A refusal is fatal for sync always, not when its message happens to contain `.json`.
+
+        The old filter was `".json" in w`. MUTATION: restore it and this goes red, because the message
+        below names no file extension while still being a refusal.
+        """
+        monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
+        _, path, before = self._bad_row_project(tmp_path)
+        salvaged = {"program": "a", "_path": str(path), "rows": [_row("1", "o/r#1")]}
+        monkeypatch.setattr(
+            coordinator.programs, "discover", lambda dirs: ([salvaged], [programs.Refusal("refused a chain")])
+        )
+
+        assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 1
+        assert path.read_bytes() == before
+
     def test_writes_borgs_copy_and_reports_no_target(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])

@@ -1384,7 +1384,7 @@ def test_an_unrecognized_kind_reaches_unsure_through_the_real_loader(tmp_path):
     """A6 THROUGH THE FRONT DOOR. MUTATION: restore `if kind not in GATE_KINDS` in `_validate_gate`.
 
     THE CASE ABOVE HANDS `_next_tally` A GATE DICT; this one starts from the shipped fixture FILE and
-    goes through `manifest_shell.discover` -- validate, `_drop_invalid_rows`, `gates()`, `ready_refs`,
+    goes through `manifest_shell.discover` -- validate, `gates()`, `ready_refs`,
     `_route`. That distinction is the whole point: for two ACs `unsure` was reachable only by handing
     the router a string. First the validator closed `gate.kind` to `GATE_KINDS` and
     `shell._load_manifest` dropped the WHOLE FILE; then PR #173 made degradation row-level, which
