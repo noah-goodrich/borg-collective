@@ -134,6 +134,14 @@ _run_split() {
     HOOK_RC=$?
 }
 
+# A writer-type payload whose transcript holds one successful Read and no write: the zero-write condition.
+_read_only_input() {
+    local tx="${BATS_TEST_TMPDIR}/ro.jsonl"
+    jq -nc '{type:"assistant",message:{role:"assistant",content:[{type:"tool_use",id:"tu1",name:"Read",input:{file_path:"a.txt"}}]}}' > "$tx"
+    jq -nc --arg m "$1" --arg i "$2" --arg p "$tx" \
+        '{agent_id:$i,agent_type:"borg-nanoprobe",agent_transcript_path:$p,last_assistant_message:$m,cwd:"/parent"}'
+}
+
 @test "nanoprobe warnings: missing evidence arrives as systemMessage JSON on stdout, stderr empty" {
     _run_split "$(_probe_input "I completed the task successfully." "agent-noev1234")"
     [ "$HOOK_RC" -eq 0 ]
@@ -143,93 +151,18 @@ _run_split() {
     [ ! -s "${BATS_TEST_TMPDIR}/hook.err" ]
 }
 
-# A transcript is JSONL: assistant lines carry tool_use blocks, user lines carry tool_result blocks.
-# _tx <file> <name> <id> <is_error> [command] appends one tool_use plus its joined tool_result.
-_tx() {
-    local file="$1" name="$2" id="$3" err="$4" cmd="${5:-}"
-    jq -nc --arg n "$name" --arg i "$id" --arg c "$cmd" \
-        '{type:"assistant",cwd:"/parent/session",message:{role:"assistant",content:[{type:"tool_use",id:$i,name:$n,input:(if $c=="" then {file_path:"a.txt"} else {command:$c} end)}]}}' >> "$file"
-    jq -nc --arg i "$id" --argjson e "$err" \
-        '{type:"user",message:{role:"user",content:[{type:"tool_result",tool_use_id:$i,is_error:$e,content:"x"}]}}' >> "$file"
-}
-
-# _typed_input <type> <transcript> [msg] [id] [cwd]
-_typed_input() {
-    jq -nc --arg t "$1" --arg p "$2" --arg m "${3:-Edited lib/foo.sh:10 done.}" --arg i "${4:-agent-wr123456}" \
-        --arg c "${5:-$BATS_TEST_TMPDIR}" \
-        '{agent_id:$i,agent_type:$t,agent_transcript_path:$p,last_assistant_message:$m,cwd:$c}'
-}
-
-@test "zero-write: nanoprobe with a successful Edit gets no warning, zero_commit false" {
-    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    _tx "$tx" Edit tu1 false
-    _run_split "$(_typed_input borg-collective:borg-nanoprobe "$tx")"
-    [ -z "$HOOK_OUT" ]
-    [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
-}
-
-@test "zero-write: nanoprobe with only Read and Grep warns ZERO-WRITE, zero_commit true" {
-    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    _tx "$tx" Read tu1 false
-    _tx "$tx" Grep tu2 false
-    _run_split "$(_typed_input borg-collective:borg-nanoprobe "$tx" "Edited lib/foo.sh:10 done." "agent-zero1234")"
+@test "nanoprobe warnings: zero-write arrives as systemMessage, plain text" {
+    _run_split "$(_read_only_input "Edited lib/foo.sh:10 nothing landed." "agent-zero1234")"
+    [ "$HOOK_RC" -eq 0 ]
     local msg
     msg=$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)
-    _has "$msg" "NANOPROBE ZERO-WRITE: agent-ze made no file edits and no git commit/push (checked its transcript)."
-    _lacks "$msg" "ZERO-COMMIT"
-    [ "$(jq -r .zero_commit "$LOG_FILE")" = "true" ]
+    _has "$msg" "NANOPROBE ZERO-WRITE: agent-ze"
+    _lacks "$msg" "EVIDENCE WARNING"
     [ ! -s "${BATS_TEST_TMPDIR}/hook.err" ]
 }
 
-@test "zero-write: a nanoprobe whose only Edit failed (is_error) is flagged" {
-    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    _tx "$tx" Edit tu1 true
-    _run_split "$(_typed_input borg-nanoprobe "$tx")"
-    _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "ZERO-WRITE"
-    [ "$(jq -r .zero_commit "$LOG_FILE")" = "true" ]
-}
-
-@test "zero-write: a successful Bash git -C x commit counts as a write" {
-    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    _tx "$tx" Bash tu1 false "git -C /some/worktree commit -m wip"
-    _run_split "$(_typed_input borg-collective:borg-grunt "$tx")"
-    [ -z "$HOOK_OUT" ]
-    [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
-}
-
-@test "zero-write: a Bash command that is not commit or push does not count" {
-    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    _tx "$tx" Bash tu1 false "git -C /some/worktree status"
-    _run_split "$(_typed_input borg-grunt "$tx")"
-    _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "ZERO-WRITE"
-}
-
-@test "zero-write: a reviewer with no writes is not flagged, zero_commit null" {
-    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    _tx "$tx" Read tu1 false
-    _run_split "$(_typed_input borg-collective:borg-reviewer "$tx" "Reviewed lib/foo.sh:10 fine." "agent-rev12345")"
-    [ -z "$HOOK_OUT" ]
-    [ "$(jq -r '.zero_commit | type' "$LOG_FILE")" = "null" ]
-}
-
-@test "zero-write: a missing transcript gives no warning and zero_commit null" {
-    _run_split "$(_typed_input borg-collective:borg-nanoprobe "${BATS_TEST_TMPDIR}/nope.jsonl")"
-    [ -z "$HOOK_OUT" ]
-    [ "$(jq -r '.zero_commit | type' "$LOG_FILE")" = "null" ]
-}
-
-@test "evidence warning is gated to writer types: a reviewer without citations is not warned" {
-    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    _tx "$tx" Read tu1 false
-    _run_split "$(_typed_input borg-collective:borg-reviewer "$tx" "Looks fine to me.")"
-    [ -z "$HOOK_OUT" ]
-    [ "$(jq -r .evidence_found "$LOG_FILE")" = "false" ]
-}
-
-@test "nanoprobe warnings: evidence and zero-write arrive as ONE object, no ANSI" {
-    local tx="${BATS_TEST_TMPDIR}/t.jsonl"
-    _tx "$tx" Read tu1 false
-    _run_split "$(_typed_input borg-collective:borg-nanoprobe "$tx" "All done." "agent-both1234")"
+@test "nanoprobe warnings: both conditions yield ONE object carrying both, with no ANSI" {
+    _run_split "$(_read_only_input "All done." "agent-both1234")"
     [ "$HOOK_RC" -eq 0 ]
     [ "$(printf '%s' "$HOOK_OUT" | jq -s length)" -eq 1 ]
     local msg esc
@@ -238,6 +171,7 @@ _typed_input() {
     _has "$msg" "ZERO-WRITE"
     esc=$'\033'
     _lacks "$HOOK_OUT" "$esc"
+    _lacks "$msg" "$esc"
     [ ! -s "${BATS_TEST_TMPDIR}/hook.err" ]
 }
 

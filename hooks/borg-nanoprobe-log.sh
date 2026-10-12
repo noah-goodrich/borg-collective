@@ -16,10 +16,6 @@
 #   2 — path:line citation found (e.g. "lib/borg-hooks.sh:42")
 #   3 — path:line citations + git diff present in worktree
 #
-# Both warnings (EVIDENCE, ZERO-WRITE) apply to writer types only (borg-nanoprobe, borg-grunt).
-# ZERO-WRITE comes from the agent transcript (successful edits or git commit/push), never the payload
-# cwd, which is the parent session's. zero_commit is null when not applicable.
-#
 # This hook is informational. It NEVER blocks the session — exit 0 on every path,
 # including write failures or malformed payloads.
 #
@@ -124,6 +120,9 @@ if [[ "$IS_WRITER" == "true" && "$EVIDENCE_FOUND" == "false" && -n "$LAST_MSG" ]
 fi
 
 # ─── Zero-write detection ─────────────────────────────────────────────────────
+# Both warnings (EVIDENCE, ZERO-WRITE) apply to writer types only (borg-nanoprobe, borg-grunt).
+# ZERO-WRITE comes from the agent transcript (successful edits or git commit/push), never the payload
+# cwd, which is the parent session's. zero_commit is null when not applicable.
 # A 0-write run (the 15-read/0-write/32k-abort failure) is flagged loudly so the orchestrator
 # re-spawns instead of believing the work landed. The payload cwd is the PARENT session's cwd (a
 # nanoprobe works in its own worktree via git -C and removes it), so the repo cannot answer this;
