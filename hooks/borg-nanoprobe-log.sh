@@ -16,6 +16,9 @@
 #   2 — path:line citation found (e.g. "lib/borg-hooks.sh:42")
 #   3 — path:line citations + git diff present in worktree
 #
+# Claude Code internal agents (prompt suggestions, away summaries, compaction; agent_type "") are skipped:
+# the plugin matcher is ".+" and the guard after AGENT_TYPE is parsed covers registrations without one.
+#
 # This hook is informational. It NEVER blocks the session — exit 0 on every path,
 # including write failures or malformed payloads.
 #
@@ -50,6 +53,9 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // ""' 2>/dev/null || true)
 AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // ""' 2>/dev/null || true)
+# The CoCo registration in borg.zsh has no matcher; any empty agent_type the matcher lets through must not
+# reach the evidence/zero-commit warnings or the log.
+[[ -z "$AGENT_TYPE" ]] && exit 0
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.agent_transcript_path // ""' 2>/dev/null || true)
 LAST_MSG=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // ""' 2>/dev/null || true)
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)

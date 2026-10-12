@@ -270,3 +270,9 @@ MENTION='{"type":"user","message":{"role":"user","content":[{"type":"tool_result
 @test "fable-reviewer says agentType, or model + effort" {
     grep -q "agentType, or model + effort" "${BATS_TEST_DIRNAME}/../skills/fable-reviewer/SKILL.md"
 }
+
+@test "wiring: SubagentStop nanoprobe-log matcher is .+ so internal agents never start the hook" {
+    run grep -B6 -A2 'borg-nanoprobe-log.sh"' "$BUILD_PLUGIN"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *'"matcher": ".+"'* ]] || false
+}

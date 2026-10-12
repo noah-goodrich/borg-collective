@@ -401,6 +401,7 @@ docs/
   Lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (a `SubagentStop` hook) which appends one
   JSONL line per completion to `~/.config/borg/agents.jsonl` (`id`, `agent_type`, `transcript_path`,
   `summary` from `last_assistant_message`, hard-coded `status: "completed"`, `finished_at`, `cwd`).
+  Claude Code internal agents (empty `agent_type`) are skipped by the `".+"` matcher and an in-hook guard.
   Inspect runs with `borg nanoprobes` (alias `np`) and pull transcripts with
   `borg nanoprobe-log <id-prefix>`. The agent file installs to `~/.claude/agents/borg-nanoprobe.md`
   via `borg setup`, where both Claude Code and Cortex Code discover it.

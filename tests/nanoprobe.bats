@@ -199,3 +199,19 @@ _empty_branch_repo() {
     [ "$(jq -r .id "$LOG_FILE")" = "agent-log12345" ]
     [ "$(jq -r .evidence_found "$LOG_FILE")" = "false" ]
 }
+
+# ─── internal agents (empty agent_type) are skipped ───────────────────────────
+
+@test "nanoprobe log skips an empty agent_type: no row, no warnings" {
+    run bash "$BORG_NANOPROBE_LOG" <<< "{\"agent_id\":\"internal-1\",\"agent_type\":\"\",\"agent_transcript_path\":\"\",\"last_assistant_message\":\"Recap of the session.\",\"cwd\":\"${BATS_TEST_TMPDIR}\"}"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    [ ! -s "$LOG_FILE" ]
+}
+
+@test "nanoprobe log skips a payload with no agent_type key" {
+    run bash "$BORG_NANOPROBE_LOG" <<< "{\"agent_id\":\"internal-2\",\"last_assistant_message\":\"x\",\"cwd\":\"${BATS_TEST_TMPDIR}\"}"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    [ ! -s "$LOG_FILE" ]
+}

@@ -44,3 +44,17 @@ row() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"cccc3333"* ]] || false
 }
+
+@test "nanoprobes: an empty-agent_type row is hidden from the list and from nanoprobe-log" {
+    row dddd4444 "/nonexistent/x.jsonl"
+    printf '{"id":"eeee5555-0000-0000-0000-000000000000","agent_type":"","summary":"away recap","finished_at":"2026-10-11T11:00:00Z","transcript_path":""}\n' >> "$BORG_DIR/agents.jsonl"
+    run zsh "$BORG" nanoprobes
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"dddd4444"* ]] || false
+    [[ "$output" != *"eeee5555"* ]] || false
+    [[ "$output" != *"away recap"* ]] || false
+    run zsh "$BORG" nanoprobe-log eeee5555
+    [ "$status" -ne 0 ]
+    run zsh "$BORG" nanoprobe-log dddd4444
+    [ "$status" -eq 0 ]
+}
