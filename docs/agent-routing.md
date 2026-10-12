@@ -73,8 +73,9 @@ The `Agent`-tool matrix does not apply automatically inside a `Workflow` script:
 
 `hooks/borg-workflow-model-guard.sh` checks this by tokenizing the script, and it **fails closed**:
 
-- The options argument must be an inline object literal; `agentType`, `model` and `effort` must be string literals (a `const` holding a literal is resolved). Variables, spreads, computed keys and expressions are denied.
-- `agent` referenced without being called (alias, `.map(agent)`, destructuring) is denied.
+- The options argument must be an inline object literal; `agentType`, `model` and `effort` must be string literals (a `const` holding a literal is resolved, unless the same name is bound again anywhere, as a parameter, loop variable or destructuring target; `let`/`var` are never resolved). Variables, spreads, computed keys, getters and expressions are denied.
+- `agent` referenced without being called (alias, `.map(agent)`, destructuring) is denied. A local binding named `agent` (a `const`/`let`, an arrow or function parameter, a `for (const agent of ...)` head, a `catch (agent)`) is not the Workflow `agent()` and is allowed inside its scope; `var agent` is not, because it can redeclare the injected parameter.
+- Every other route to `agent()` is denied wherever it appears: backslash escapes in identifiers, `eval`, `Function`, `.constructor`, `import`/`require`, and the global object (`globalThis`, `global`, `self`, `window`, `this`, `arguments`).
 - A script that cannot be parsed, a `scriptPath` that cannot be read, and a saved-workflow `name` that cannot be found in `.claude/workflows` (project, then parents) or `~/.claude/workflows` are denied. Saved workflows and `scriptPath` files are checked like inline scripts.
 - There is no inline escape hatch (the old inherit-on-purpose comment is gone).
 - Prose that merely contains `agent(` (template-literal prompts, strings, comments, regex literals) is not a call and is not flagged.
