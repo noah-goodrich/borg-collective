@@ -20,8 +20,8 @@
 # trailing_clean_close: an error followed by a turn_duration record is still an interruption.
 #
 # Not here (later slices): injection (S8), the pre-flight gate and supersede checks (S9), liveness of dead
-# processes and panes (S10), launchd install (S12), ack/defer verbs (S7b; an `ack` event naming the rid is
-# honored if one appears in the ledger).
+# processes and panes (S10), launchd install (S12). The ack/defer verbs (S7b, lib/borg/resume-verbs.sh) append
+# `ack` and `defer` events: an ack closes a confirmed record (_rw_has_ack), a defer reschedules (_rw_fold_defers).
 #
 # Env: BORG_RESUME_RETAIN_DAYS (14, floored at 4 so it always exceeds the 72h scan window),
 # BORG_RESUME_CONFIRM_DONE_SEC (1800), BORG_RESUME_CONFIRM_PROGRESS_LINES (25), BORG_RESUME_SCAN_HOURS (72).
@@ -432,6 +432,60 @@ EOF
     return 0
 }
 
+# Defer path (S7b): fold new `defer` events (written by `borg-resume defer`) of one session. A defer reschedules an
+# ACTIVE record as `deferred` with resume_at = until (default: event time + BORG_RESUME_DEFER_SEC, 900), never
+# earlier than now and never later than the 7 day ceiling from first_seen (D2); the 48h age expiry itself is S9's.
+# A defer of a confirmed record drops the confirmation, so the prompt can be injected again. Terminal records and
+# unknown rids are ignored. Own cursor (defer_cursor) so each event is applied exactly once.
+_rw_fold_defers() {
+    local _sid="$1" _ef _sf _cursor _total _lines _line _rid _f _until _ev_t _reason _now _def
+    _ef="$(borg_resume_events_file "$_sid")"
+    [ -f "$_ef" ] || return 0
+    _sf="$(_rw_state_file "$_sid")"
+    _cursor=0
+    [ -f "$_sf" ] && _cursor="$(jq -r '.defer_cursor // 0' "$_sf" 2>/dev/null)"
+    case "$_cursor" in "" | *[!0-9]*) _cursor=0 ;; esac
+    _total="$(wc -l <"$_ef" | tr -d ' ')"
+    [ "$_total" -gt "$_cursor" ] || return 0
+    _lines="$(tail -n +$((_cursor + 1)) "$_ef" | head -n $((_total - _cursor)) |
+        jq -c -R 'fromjson? | select(type == "object" and .ev == "defer" and (.rid | type) == "string")' 2>/dev/null)"
+    [ -n "$_lines" ] || return 0
+    _now="$(_rc_now)"
+    _def="${BORG_RESUME_DEFER_SEC:-900}"
+    case "$_def" in "" | *[!0-9]*) _def=900 ;; esac
+    while IFS= read -r _line; do
+        [ -n "$_line" ] || continue
+        _rid="$(printf '%s' "$_line" | jq -r .rid)"
+        borg_resume_valid_sid "$_rid" || continue
+        _f="$(borg_resume_dir)/pending/$_rid.json"
+        [ -f "$_f" ] || continue
+        [ "$(jq -r .sid "$_f" 2>/dev/null)" = "$_sid" ] || continue
+        case "$(jq -r .state "$_f" 2>/dev/null)" in
+            new | scheduled | deferred | injecting | injected | confirmed) ;;
+            *) continue ;;
+        esac
+        _ev_t="$(printf '%s' "$_line" | jq -r '.t // 0')"
+        _until="$(printf '%s' "$_line" | jq -r '.until // empty')"
+        _reason="$(printf '%s' "$_line" | jq -r '.reason // empty')"
+        case "$_ev_t" in "" | *[!0-9]*) _ev_t="$_now" ;; esac
+        case "$_until" in "" | *[!0-9]*) _until=$((_ev_t + _def)) ;; esac
+        _rw_update "$_f" --argjson u "$_until" --argjson now "$_now" --arg r "$_reason" '
+            ([([$u, $now] | max), ((.first_seen // $now) + 604800)] | min) as $ra
+            | .state = "deferred" | .resume_at = $ra
+            | .defer_count = ((.defer_count // 0) + 1)
+            | .defer_reason = (if $r == "" then null else $r end)
+            | del(.confirmed_at, .confirmed_lines)
+            | .state_log += [["deferred", $now, (if $r == "" then "defer" else $r end)]]' || continue
+        _rw_n_merged=$((_rw_n_merged + 1))
+        _rw_log "defer applied $_rid until=$_until reason=${_reason:-none}"
+    done <<EOF
+$_lines
+EOF
+    _rw_state_ensure "$_sid"
+    _rw_update "$_sf" --argjson c "$_total" '.defer_cursor = $c'
+    return 0
+}
+
 # Scan path for one session: main transcript, Agent-tool agents, workflows (finished ones included).
 _rw_scan_session() {
     local _sid="$1" _loc _t _sd _f _aid _v _wid _path _seen _wj _status _runid _efile _eagents _skipped
@@ -666,6 +720,7 @@ borg_resume_watch_once() {
         _sid="${_sid%.jsonl}"
         borg_resume_valid_sid "$_sid" || continue
         _rw_fold_hooks "$_sid"
+        _rw_fold_defers "$_sid"
     done
     for _f in "$_d"/sessions/*.json; do
         [ -f "$_f" ] || continue
