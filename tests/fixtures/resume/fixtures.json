@@ -5,7 +5,7 @@
     "captured-skeleton": "built from a real record by scripts/resume-skeleton.py (allowlist extractor; entries carry the extractor version)",
     "synthetic": "hand-built from observed record shapes; used only where no real record exists on the capture machine (see synthetic_reason)"
   },
-  "note": "No captured-skeleton entries exist yet: building them reads real transcripts and was blocked in the authoring environment. Every entry below is synthetic and says why. Flip an entry to captured-skeleton (add extractor: v1) when its skeleton is built; tests/resume_fixtures.bats then enforces the extractor version and the leak check.",
+  "note": "No captured-skeleton entries exist yet: captured-skeleton will come from S0b controlled spike sessions; private transcripts are never extracted into this repo. Every entry below is synthetic and says why. Flip an entry to captured-skeleton (add extractor: v1) when its skeleton is built; tests/resume_fixtures.bats then enforces the extractor version and the leak check.",
   "fixtures": {
     "main_rate_limit":        {"file": "main_rate_limit.jsonl",        "kind": "jsonl", "tag": "synthetic", "shape": "api_error_tail", "synthetic_reason": "skeleton not yet built; real weekly-limit record exists (apiErrorStatus 429); seed mirrors its shape"},
     "main_rate_limit_session": {"file": "main_rate_limit_session.jsonl", "kind": "jsonl", "tag": "synthetic", "shape": "api_error_tail", "synthetic_reason": "session-phrasing limit: no real record found, only the weekly phrasing"},
