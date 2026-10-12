@@ -9,10 +9,10 @@
 #   - JSON payloads are written ONLY as the output of scripts/resume-skeleton.py
 #     (--stdin), the single positive allowlist shared with the fixture extractor:
 #     JSON structure, numbers, booleans, known keys, enum values from closed sets,
-#     fake ids, fake paths and the exact usage-limit sentence survive; every other
-#     string becomes "<str>" and every unknown key "<key>". If python3 is missing or
-#     errors, the hook writes a jq key skeleton instead (a fixed list of key names,
-#     every string "<str>");
+#     fake ids, fake paths and a usage-limit sentence built from closed sets (kind,
+#     month, timezone) under a few text keys survive; every other string becomes "<str>"
+#     and every unknown key "<key>". If python3 is missing or errors, the hook writes a
+#     jq key skeleton instead (a fixed list of key names, every string "<str>");
 #   - session ids become fixed fake ids, so payloads from different sessions are NOT
 #     correlatable in the output;
 #   - panes: EVERY line is redacted unless it matches an explicit allowlist of
@@ -83,7 +83,10 @@ _spike_scrub_json() {
 # lines. Everything else (conversation text, commands, file names) becomes <redacted>.
 _spike_pane_ok() {
     local t="$1"
-    local lim='You.ve hit your [A-Za-z]{3,12}( [A-Za-z]{3,12})? limit( . resets (([A-Z][a-z]{2} [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m)( \([A-Za-z_]+/[A-Za-z_]+\))?)?'
+    local kinds='weekly|session|daily|monthly|Opus|Sonnet|Haiku|weekly Opus|weekly Sonnet|weekly Haiku'
+    local months='Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec'
+    local zones='UTC|America/(New_York|Chicago|Denver|Phoenix|Los_Angeles|Anchorage|Toronto|Vancouver|Sao_Paulo)|Europe/(London|Dublin|Paris|Berlin|Madrid|Amsterdam)|Asia/(Tokyo|Seoul|Shanghai|Singapore|Kolkata|Dubai)|Australia/(Sydney|Melbourne)|Pacific/Auckland'
+    local lim="You.ve hit your ($kinds) limit( . resets ((($months) [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m)( \\(($zones)\\))?)?"
     local choice='(❯ )?[1-9]\. (Yes|No|Stop and wait for limit to reset|Upgrade your plan|Switch to extra usage|Yes, and don.t ask again this session)'
     local chrome='Welcome to Claude Code|\? for shortcuts|[>❯]|Bash command|Do you want to proceed\?|What do you want to do\?|Esc to cancel|Enter to confirm|Press Enter to continue|(⏵⏵ )?(accept edits|plan mode|bypass permissions) on( \(shift\+tab to cycle\))?'
     [ -z "$t" ] && return 0

@@ -250,6 +250,116 @@ _hook() {
     _absent "$output" 'private text' || false
     _absent "$output" 'codename' || false
     _absent "$output" 'ingle' || false
+    rm -f "$BORG_SPIKE_DIR/payloads.jsonl"
+    _hook '{"content":["bare array private words","second private words"]}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _absent "$output" 'bare array' 'second private' || false
+    _present "$output" '"content":["<str>","<str>"]' || false
+}
+
+@test "harness hook: limit-shaped sentence with free text in kind, month or timezone is dropped" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local s
+    for s in "You've hit your Acme merger limit · resets 7am" \
+             "You've hit your weekly limit · resets Foo 3 at 7am" \
+             "You've hit your weekly limit · resets 7am (Customer_Acme_Owes_Fifty_Thousand_Dollars/Secret_Merger_Plan_Codename_Ingle)"; do
+        rm -f "$BORG_SPIKE_DIR/payloads.jsonl"
+        _hook "{\"last_assistant_message\":\"$s\"}"
+        run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+        _present "$output" '"last_assistant_message":"<str>"' || false
+    done
+    rm -f "$BORG_SPIKE_DIR/payloads.jsonl"
+    _hook '{"zzz":"You'"'"'ve hit your weekly limit · resets 7am"}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _absent "$output" 'weekly limit' || false
+    _present "$output" '"<key>":"<str>"' || false
+}
+
+@test "harness scrubpane: limit-shaped lines with free text in kind, month or timezone are redacted" {
+    local s
+    for s in "You've hit your Acme merger limit · resets 7am" \
+             "You've hit your weekly limit · resets Foo 3 at 7am" \
+             "You've hit your weekly limit · resets 7am (Customer_Acme_Owes_Fifty_Thousand_Dollars/Secret_Merger_Plan_Codename_Ingle)"; do
+        run bash -c "printf '%s\n' \"\$1\" | '$HARNESS' scrubpane" _ "$s"
+        [ "$output" = "<redacted>" ] || { echo "kept: $s"; false; }
+    done
+    run bash -c "printf '%s\n' \"\$1\" | '$HARNESS' scrubpane" _ "You've hit your weekly limit · resets Jul 7 at 7am (America/Denver)"
+    _present "$output" 'America/Denver' || false
+}
+
+@test "harness hook: closed-set model and notification_type survive, lookalikes do not" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"model":"claude-opus-4-7[1m]","notification_type":"idle_prompt"}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _present "$output" '"model":"claude-opus-4-7[1m]"' || false
+    _present "$output" '"notification_type":"idle_prompt"' || false
+    local k v
+    for k in model defaultModel; do
+        for v in claude-acme-merger-plan claude-bob-owes-money; do
+            rm -f "$BORG_SPIKE_DIR/payloads.jsonl"
+            _hook "{\"$k\":\"$v\"}"
+            run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+            _absent "$output" "$v" || false
+            _present "$output" "\"$k\":\"<str>\"" || false
+        done
+    done
+    rm -f "$BORG_SPIKE_DIR/payloads.jsonl"
+    _hook '{"notification_type":"acme_merger_plan_x"}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _absent "$output" 'acme' || false
+}
+
+@test "harness hook: credential-shape guard alone rejects a model-shaped secret" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    run python3 -B -I -c "
+import importlib.util, sys
+sys.dont_write_bytecode = True
+s =importlib.util.spec_from_file_location('rs', '$SKEL')
+m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+m.ENUM_RULES['notification_type'] = m.re.compile(r'.+')
+print(m.enum_ok('notification_type', 'my_secret_plan'), m.enum_ok('notification_type', 'my_plain_plan'))
+"
+    [ "$output" = "False True" ]
+    _hook '{"notification_type":"my_secret_plan"}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _absent "$output" 'secret_plan' || false
+}
+
+@test "harness hook: ISO timestamps come back as the fixed fake series" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    _hook '{"timestamp":"2031-05-06T07:08:09.123Z"}'
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _present "$output" '"timestamp":"2026-01-01T00:00:01.000Z"' || false
+    _absent "$output" '2031' || false
+}
+
+@test "harness hook: python3 present but failing falls back to the jq skeleton" {
+    local d="$BATS_TEST_TMPDIR/failpy"
+    mkdir -p "$d/bin"
+    cp "$HARNESS" "$d/h.sh"
+    printf '%s\n' 'import sys' 'sys.exit(3)' > "$d/resume-skeleton.py"
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    run bash -c "printf '%s' '{\"session_id\":\"s\",\"extra\":\"private\",\"error\":\"rate_limit\"}' | '$d/h.sh' hook StopFailure"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _absent "$output" 'private' 'rate_limit' || false
+    _present "$output" '"session_id":"<str>"' || false
+}
+
+@test "harness hook: PATH without python3 writes the jq skeleton, exits 0 silently" {
+    local d="$BATS_TEST_TMPDIR/nopy" t
+    mkdir -p "$d"
+    for t in jq date cat mkdir chmod sed tr; do
+        ln -sf "$(command -v "$t")" "$d/$t"
+    done
+    export BORG_SPIKE_DIR="$BATS_TEST_TMPDIR/spike"
+    run /usr/bin/env PATH="$d" /bin/bash -c "printf '%s' '{\"session_id\":\"s\",\"extra\":\"private\"}' | /bin/bash '$HARNESS' hook StopFailure"
+    [ "$status" -eq 0 ]
+    [ -z "$output" ]
+    run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+    _absent "$output" 'private' || false
+    _present "$output" '"session_id":"<str>"' || false
 }
 
 @test "harness hook: case variant of a free-text key is dropped" {
@@ -261,17 +371,25 @@ _hook() {
 
 @test "harness hook: Bearer, URL, AIza and sk_live credentials are dropped under any key" {
     command -v python3 >/dev/null || skip "python3 not installed"
-    _hook '{"a":"Bearer abcdef1234567890","message":"postgres://user:pw@host/db","error_details":"AIzaSyA1234567890abcdefghij","b":"sk_live_abc123XYZ"}'
+    _hook '{"ka1":"Bearer abcdef1234567890","message":"postgres://user:pw@host/db","error_details":"AIzaSyA1234567890abcdefghij","kb2":"sk_live_abc123XYZ"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
     _absent "$output" 'Bearer' || false
     _absent "$output" 'postgres' || false
     _absent "$output" 'AIza' || false
     _absent "$output" 'sk_live' || false
+    # one probe per record so a collapsing "<key>" cannot hide a survivor
+    local p
+    for p in 'Bearer abcdef1234567890' 'postgres://user:pw@host/db' 'AIzaSyA1234567890abcdefghij' 'sk_live_abc123XYZ'; do
+        rm -f "$BORG_SPIKE_DIR/payloads.jsonl"
+        _hook "{\"message\":\"$p\",\"text\":\"$p\",\"error\":\"$p\"}"
+        run cat "$BORG_SPIKE_DIR/payloads.jsonl"
+        _absent "$output" "$p" || false
+    done
 }
 
 @test "harness hook: /private/var, /tmp, spaced and Windows paths are dropped" {
     command -v python3 >/dev/null || skip "python3 not installed"
-    _hook '{"a":"/private/var/folders/xx/secret-project","message":"/tmp/secretproj/file.txt","error_details":"/Users/bob/My Docs/tax return/x.pdf","b":"C:\\Users\\bob\\taxes\\x.pdf"}'
+    _hook '{"kc3":"/private/var/folders/xx/secret-project","message":"/tmp/secretproj/file.txt","error_details":"/Users/bob/My Docs/tax return/x.pdf","kd4":"C:\\Users\\bob\\taxes\\x.pdf"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
     _absent "$output" 'secret-project' || false
     _absent "$output" 'secretproj' || false
@@ -452,4 +570,75 @@ _hook() {
     run python3 -I "$SKEL" --stdin <<<"$in"
     _present "$output" '"type":"user"' || false
     _absent "$output" 'ghp_' 'hunter2' 'acme' || false
+}
+
+_ext() {
+    printf '%s' "$1" | python3 -I "$SKEL" --stdin
+}
+
+@test "extractor: limit-shaped free text in kind, month or timezone becomes <str>" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local s out
+    for s in "You've hit your Acme merger limit · resets 7am" \
+             "You've hit your weekly limit · resets Foo 3 at 7am" \
+             "You've hit your weekly limit · resets 7am (Customer_Acme_Owes_Fifty_Thousand_Dollars/Secret_Merger_Plan_Codename_Ingle)"; do
+        out="$(_ext "{\"text\":\"$s\"}")"
+        [ "$out" = '{"text":"<str>"}' ] || { echo "kept: $out"; false; }
+    done
+}
+
+@test "extractor: a valid limit sentence survives only under a text key" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local out
+    out="$(_ext "{\"zzz\":\"You've hit your weekly limit · resets 7am\"}")"
+    [ "$out" = '{"<key>":"<str>"}' ] || { echo "$out"; false; }
+    out="$(_ext "{\"text\":\"You've hit your weekly Opus limit · resets Dec 31 at 11:30pm (Asia/Tokyo)\"}")"
+    _present "$out" 'weekly Opus limit · resets Dec 31 at 11:30pm (Asia/Tokyo)' || false
+}
+
+@test "extractor: model and notification_type lookalikes become <str>, real values survive" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local out
+    out="$(_ext '{"model":"claude-acme-merger-plan","defaultModel":"claude-bob-owes-money","notification_type":"acme_merger_plan_x"}')"
+    [ "$out" = '{"model":"<str>","defaultModel":"<str>","notification_type":"<str>"}' ] || { echo "$out"; false; }
+    out="$(_ext '{"model":"claude-sonnet-4-6","defaultModel":"<synthetic>","notification_type":"quota_auto_resume_started"}')"
+    _present "$out" '"model":"claude-sonnet-4-6"' || false
+    _present "$out" '"notification_type":"quota_auto_resume_started"' || false
+}
+
+@test "extractor: bare string arrays and distinct unknown keys all become <str>" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local out
+    out="$(_ext '{"items":["private one","private two"]}')"
+    [ "$out" = '{"<key>":["<str>","<str>"]}' ] || { echo "$out"; false; }
+    out="$(_ext '{"k2":{"k3":["beta text"]}}')"
+    [ "$out" = '{"<key>":{"<key>":["<str>"]}}' ] || { echo "$out"; false; }
+    out="$(_ext '{"content":["bare one","bare two"]}')"
+    [ "$out" = '{"content":["<str>","<str>"]}' ] || { echo "$out"; false; }
+}
+
+@test "extractor: ISO timestamps become the fixed fake series" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local out
+    out="$(_ext '{"timestamp":"2031-05-06T07:08:09.123Z","endTime":"2031-05-06T07:08:10.123Z"}')"
+    [ "$out" = '{"timestamp":"2026-01-01T00:00:01.000Z","endTime":"2026-01-01T00:00:02.000Z"}' ] || { echo "$out"; false; }
+}
+
+@test "pane allowlist and extractor accept and reject the same limit lines" {
+    command -v python3 >/dev/null || skip "python3 not installed"
+    local s pane ext
+    for s in "You've hit your session limit · resets 7am" \
+             "You've hit your weekly limit · resets Jul 7 at 7am (America/Denver)" \
+             "You've hit your Sonnet limit · resets 9:30pm (UTC)" \
+             "You've hit your Acme limit · resets 7am" \
+             "You've hit your weekly limit · resets Foo 7 at 7am" \
+             "You've hit your weekly limit · resets 7am (America/Nowhere)"; do
+        pane="$(printf '%s\n' "$s" | "$HARNESS" scrubpane)"
+        ext="$(_ext "{\"text\":\"$s\"}")"
+        if [ "$pane" = "$s" ]; then
+            _present "$ext" "$s" || false
+        else
+            [ "$ext" = '{"text":"<str>"}' ] || { echo "disagree: $s"; false; }
+        fi
+    done
 }

@@ -8,11 +8,12 @@ This is the single rule set for the repo: the capture hook
 (scripts/spike-resume-payloads.sh) pipes every payload through `--stdin`.
 Nothing here is a denylist. A value or key survives only if it is positively recognised:
   - JSON structure, booleans, numbers and null;
-  - object keys that are in KNOWN_KEYS and not credential-shaped; every other key is
-    renamed "<key>";
-  - strings under a key in ENUM_RULES, only if they are in that key's closed set (or
-    fullmatch its strict regex) and are not credential-shaped;
-  - an exact usage-limit sentence that fullmatches LIMIT_RE;
+  - object keys that are in the fixed KNOWN_KEYS list; every other key is renamed "<key>";
+  - strings under a key in ENUM_RULES, only if they are in that key's closed set, or
+    fullmatch its strict regex and are not credential-shaped (SUSPICIOUS_RE);
+  - the usage-limit sentence, only under a LIMIT_KEYS key and only when it fullmatches
+    the closed grammar LIMIT_RE (closed sets for kind, month and timezone; digits for the
+    rest), so no free text can ride inside it;
   - an exact string from CANNED (fixed Claude Code system messages, no user data);
   - identifiers (UUIDs, agent ids, request ids) are NOT kept: they map to fixed fake
     values, stable within one run so parent/child links still line up;
@@ -106,8 +107,22 @@ ENUM_RULES = {
         "Stop",
         "PreCompact",
     ),
-    "notification_type": re.compile(r"[a-z]+(_[a-z]+){0,4}"),
-    "model": re.compile(r"claude-[a-z0-9]+(-[a-z0-9]+){0,5}(\[[0-9a-z]{1,6}\])?|<synthetic>"),
+    "notification_type": _s(
+        "idle_prompt",
+        "permission_prompt",
+        "auth_success",
+        "elicitation_dialog",
+        "quota_auto_resume_scheduled",
+        "quota_auto_resume_started",
+        "quota_auto_resume_succeeded",
+        "quota_auto_resume_failed",
+        "quota_auto_resume_cancelled",
+    ),
+    "model": re.compile(
+        r"claude-(opus|sonnet|haiku|fable)-[0-9]{1,2}(-[0-9]{1,2})?(-[0-9]{8})?(\[1m\])?"
+        r"|claude-3(-[57])?-(opus|sonnet|haiku)(-[0-9]{8})?"
+        r"|(opus|sonnet|haiku|fable)(\[1m\])?|<synthetic>"
+    ),
     "version": re.compile(r"[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,4}"),
 }
 ENUM_RULES["stopReason"] = ENUM_RULES["stop_reason"]
@@ -140,11 +155,22 @@ KNOWN_KEYS = frozenset(
     stopReason endTime createdAt updatedAt projectPath""".split()
 )
 
-LIMIT_RE = re.compile(
-    r"You've hit your ([A-Za-z]{3,12}( [A-Za-z]{3,12})?) limit \u00b7 resets "
-    r"([A-Z][a-z]{2} [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m"
-    r"( \([A-Za-z_]+/[A-Za-z_]+\))?"
+LIMIT_KINDS = "weekly|session|daily|monthly|Opus|Sonnet|Haiku|weekly Opus|weekly Sonnet|weekly Haiku"
+LIMIT_MONTHS = "Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec"
+LIMIT_ZONES = (
+    "UTC|America/(New_York|Chicago|Denver|Phoenix|Los_Angeles|Anchorage|Toronto|Vancouver|Sao_Paulo)"
+    "|Europe/(London|Dublin|Paris|Berlin|Madrid|Amsterdam)"
+    "|Asia/(Tokyo|Seoul|Shanghai|Singapore|Kolkata|Dubai)"
+    "|Australia/(Sydney|Melbourne)|Pacific/Auckland"
 )
+# Closed grammar: scripts/spike-resume-payloads.sh repeats these lists for the pane
+# allowlist; tests/resume_fixtures.bats checks both accept and reject the same probes.
+LIMIT_RE = re.compile(
+    r"You've hit your (%s) limit \u00b7 resets "
+    r"((%s) [0-9]{1,2} at )?[0-9]{1,2}(:[0-9]{2})?[ap]m"
+    r"( \((%s)\))?" % (LIMIT_KINDS, LIMIT_MONTHS, LIMIT_ZONES)
+)
+LIMIT_KEYS = frozenset(["text", "last_assistant_message", "message", "content"])
 
 CANNED = {
     "Prompt is too long",
@@ -190,11 +216,11 @@ FAKE_HOME = "/Users/noah/dev/example"
 
 def enum_ok(key, v):
     rule = ENUM_RULES.get(key)
-    if rule is None or SUSPICIOUS_RE.search(v):
+    if rule is None:
         return False
     if isinstance(rule, frozenset):
         return v in rule
-    return rule.fullmatch(v) is not None
+    return SUSPICIOUS_RE.search(v) is None and rule.fullmatch(v) is not None
 
 
 class Faker:
@@ -235,7 +261,7 @@ class Faker:
         return FAKE_HOME
 
     def string(self, key, v):
-        if v == "" or v in CANNED or LIMIT_RE.fullmatch(v):
+        if v == "" or v in CANNED or (key in LIMIT_KEYS and LIMIT_RE.fullmatch(v)):
             return v
         if key in ID_KEYS:
             return self.ident(v)
