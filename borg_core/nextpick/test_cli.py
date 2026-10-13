@@ -123,7 +123,7 @@ def _plan_registry(tmp_path: Path) -> dict:
 def _wire(monkeypatch, registry, items=None, note=None, log_rows=()):
     seen = []
 
-    def fake_recon(_projects, local):
+    def fake_recon(_repositories, local):
         seen.append(local)
         return ({} if local else (items or {})), note
 
@@ -239,17 +239,19 @@ def test_recon_items_groups_items_and_flags_a_failed_source(monkeypatch):
         {"source": "github", "ok": True, "items": [{"project": "a", "ref": "o/r#1"}]},
         {"source": "slack", "ok": False, "items": []},
     ]
-    monkeypatch.setattr(shell.link_shell, "sweep", lambda projects: {"swept": True, "tracks": tracks})
+    monkeypatch.setattr(shell.link_shell, "sweep", lambda repositories: {"swept": True, "tracks": tracks})
     items, note = shell.recon_items({"a": {}, "z": {"status": "archived"}}, False)
     assert items == {"a": [{"project": "a", "ref": "o/r#1"}]}
     assert note == "sweep source failed: slack"
 
 
 def test_recon_items_unswept_and_raising_sweeps_degrade(monkeypatch):
-    monkeypatch.setattr(shell.link_shell, "sweep", lambda projects: {"swept": False, "tracks": [], "warnings": ["w1"]})
+    monkeypatch.setattr(
+        shell.link_shell, "sweep", lambda repositories: {"swept": False, "tracks": [], "warnings": ["w1"]}
+    )
     assert shell.recon_items({"a": {}}, False) == ({}, "w1")
 
-    def boom(_projects):
+    def boom(_repositories):
         raise OSError("down")
 
     monkeypatch.setattr(shell.link_shell, "sweep", boom)
@@ -261,7 +263,7 @@ def test_recon_items_never_writes_the_last_run_marker(monkeypatch):
         raise AssertionError("marker written")
 
     monkeypatch.setattr(shell.link_shell.recon_shell, "write_last_run_marker", marker)
-    monkeypatch.setattr(shell.link_shell, "sweep", lambda projects: {"swept": True, "tracks": []})
+    monkeypatch.setattr(shell.link_shell, "sweep", lambda repositories: {"swept": True, "tracks": []})
     assert shell.recon_items({"a": {}}, False) == ({}, None)
 
 
@@ -276,8 +278,8 @@ def test_read_plans_finds_root_and_docs_plans(tmp_path):
     (tmp_path / "r" / "PROJECT_PLAN.md").write_text("# Project Plan: Root\n")
     (tmp_path / "d" / "docs" / "plans").mkdir(parents=True)
     (tmp_path / "d" / "docs" / "plans" / "PROJECT_PLAN.md").write_text("# Project Plan: Deep\n")
-    projects = {"r": {"path": str(tmp_path / "r")}, "d": {"path": str(tmp_path / "d")}, "n": {"path": "null"}}
-    got = shell.read_plans(projects, ["r", "d", "n", "missing"])
+    repositories = {"r": {"path": str(tmp_path / "r")}, "d": {"path": str(tmp_path / "d")}, "n": {"path": "null"}}
+    got = shell.read_plans(repositories, ["r", "d", "n", "missing"])
     assert {k: v["name"] for k, v in got.items()} == {"r": "Root", "d": "Deep"}
 
 
@@ -343,7 +345,7 @@ def test_rows_json_checkpoint_fallback_keeps_a_row_out_of_quiet(state, monkeypat
 
 
 def _crowded(tmp_path: Path, count: int = 8) -> tuple[dict, dict]:
-    """Two projects sharing one repo plus a lone one; `count` YOU PRs on `solo`, one stale draft on `a`."""
+    """Two repositories sharing one repo plus a lone one; `count` YOU PRs on `solo`, one stale draft on `a`."""
     registry = {
         "projects": {
             "a": {"status": "idle", "last_activity": "2026-09-01", "path": str(tmp_path / "a"), "repo": "/g"},

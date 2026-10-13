@@ -187,7 +187,7 @@ def test_collect_states_skips_repositories_without_usable_state(isolated_env):
 
 
 def _seed_new_state(directory, repo, body):
-    target = paths.project_state_file(directory, repo)
+    target = paths.repository_state_file(directory, repo)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(body, encoding="utf-8")
 
@@ -230,7 +230,7 @@ def test_collect_states_null_or_missing_repo_is_path_only_key(isolated_env):
 
 def test_state_read_path_falls_back_to_legacy_when_new_is_absent(isolated_env):
     directory = _repository(isolated_env, "fallback")
-    assert paths.project_state_read_path(directory, None) == isolated_env / "fallback" / ".borg" / "state.json"
+    assert paths.repository_state_read_path(directory, None) == isolated_env / "fallback" / ".borg" / "state.json"
 
 
 # ── registry_with_state ──────────────────────────────────────────────────────

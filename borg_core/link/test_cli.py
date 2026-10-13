@@ -1066,7 +1066,7 @@ def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
 
     waiting = cli._waiting(repositories, scope, False, tracks)  # pylint: disable=protected-access
     rows, _quiet, _degraded, hidden = nextpick_cli.item_rows(
-        repositories, False, False, swept=(recon_core.merge_by_project(tracks), None)
+        repositories, False, False, swept=(recon_core.merge_by_repository(tracks), None)
     )
 
     assert [r["ref"] for r in waiting["rows"]] == [r["ref"] for r in rows if r["owner"] == "YOU"]

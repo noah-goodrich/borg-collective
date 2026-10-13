@@ -3,7 +3,7 @@
 *Directive: [2026-08-31-project-to-repository-rename](../2026-08-31-project-to-repository-rename.md), first acceptance criterion.*
 *Pinned to commit `a2744df` (main, 2026-10-12). Companion data: `2026-10-12-project-rename-inventory.tsv`.*
 
-This is the classification the directive calls "the actual work". Every occurrence of `project` or `projects` (case-insensitive) in tracked `*.py`, `*.zsh`, `*.sh` and `*.bats` files at `a2744df` has one row in the TSV, with a sense. The first pass used five senses; a second pass (2026-10-12) added a sixth, `noise`, and moved 48 rows into it. The rename started with R1 (PR #350); see "Relabels after R1". Line numbers are pinned to `a2744df` and drift as main moves; anchor on file plus the quoted code, not the number.
+This is the classification the directive calls "the actual work". Every occurrence of `project` or `projects` (case-insensitive) in tracked `*.py`, `*.zsh`, `*.sh` and `*.bats` files at `a2744df` has one row in the TSV, with a sense. The first pass used five senses; a second pass (2026-10-12) added a sixth, `noise`, and moved 48 rows into it. The rename started with R1 (PR #350) and continued with R2 (PR #352); see "Relabels after R1" and "Relabels after R2". Line numbers are pinned to `a2744df` and drift as main moves; anchor on file plus the quoted code, not the number.
 
 ## Method
 
@@ -31,15 +31,15 @@ git ls-files "*.py" "*.zsh" "*.sh" "*.bats" \
 
 | sense      | rows | share |
 |------------|------|-------|
-| repository | 2566 | 65.6% |
-| contract   | 1035 | 26.5% |
-| external   | 183  | 4.7%  |
+| repository | 2538 | 64.9% |
+| contract   | 1060 | 27.1% |
+| external   | 186  | 4.8%  |
 | workstream | 72   | 1.8%  |
 | noise      | 48   | 1.2%  |
 | ambiguous  | 7    | 0.2%  |
 | total      | 3911 | 100%  |
 
-Before the noise pass the table read repository 2614, contract 1023, external 213, workstream 45, ambiguous 16. The 48 noise rows came from repository (9), external (30) and ambiguous (9); contract and workstream lost none. The R1 relabel (PR #350, 2026-10-12) then moved 27 rows from repository to workstream and 12 from repository to contract; see "Relabels after R1" below. The pin is still `a2744df`: R1 renamed code but this table does not follow the renames, so a row R1 renamed keeps its `repository` label.
+Before the noise pass the table read repository 2614, contract 1023, external 213, workstream 45, ambiguous 16. The 48 noise rows came from repository (9), external (30) and ambiguous (9); contract and workstream lost none. The R1 relabel (PR #350, 2026-10-12) then moved 27 rows from repository to workstream and 12 from repository to contract; see "Relabels after R1" below. The pin is still `a2744df`: R1 renamed code but this table does not follow the renames, so a row R1 renamed keeps its `repository` label. The R2 relabel (PR #352, 2026-10-12) then moved 27 rows from repository to contract and 3 from repository to external, and 2 rows from contract to repository; see "Relabels after R2" below. The same rule holds: a row R2 renamed keeps its `repository` label.
 
 By shard (files, rows, then rows per sense):
 
@@ -58,7 +58,9 @@ By shard (files, rows, then rows per sense):
 | 10    | 18    | 290  | 135  | 5    | 36  | 110 | 0   | 4     |
 | 11    | 31    | 307  | 156  | 18   | 66  | 64  | 0   | 3     |
 | 12    | 53    | 148  | 61   | 9    | 36  | 37  | 5   | 0     |
-| all   | 148   | 3911 | 2566 | 72   | 183 | 1035| 7   | 48    |
+| all   | 148   | 3911 | 2538 | 72   | 186 | 1060| 7   | 48    |
+
+The shard rows above are the classification record and follow the R1 relabel only. The R2 relabel moved 30 rows out of repository and 2 back in, in files of shards 3 to 12, and the TSV does not record shard membership, so the shard rows no longer sum to the `all` row: they total repository 2566, contract 1035 and external 183.
 
 Heaviest files: `drone.zsh` 469, `borg.zsh` 306, `tests/cli_contract.bats` 286, `borg_core/link/test_core.py` 134, `borg_core/link/test_shell.py` 118, `borg_core/link/core.py` 112, `borg_core/link/render.py` 110.
 
@@ -191,24 +193,24 @@ Counts by file: `tests/briefing.bats` 19, `borg.zsh` 10, `borg_core/link/grid.py
 
 Not noise, kept as classified: `pyproject` (25 rows, external), `projectPath` in `scripts/resume-skeleton.py` (161, 231; external, Claude's own session key), `myproject`, `aproject`, `nosuchproject` (19 rows), `ProjectNotFound` (15 rows), `testprojectdirof...` (2 rows) and the other identifiers that contain the noun as a component.
 
-## Contract-sense breakdown (1035 rows)
+## Contract-sense breakdown (1060 rows)
 
 A contract name is one that other code, hooks, the plugin or on-disk data read, so renaming it needs a migration or a deprecation path. The table groups the rows by the identifier the match sits inside, derived from the code on each line rather than from the note column.
 
 | contract name                         | rows |
 |---------------------------------------|------|
-| `projects` (key, flag, jq path)       | 584  |
-| `project` (field or value, see below) | 167  |
+| `projects` (key, flag, jq path)       | 582  |
+| `project` (field or value, see below) | 172  |
 | `PROJECT_PLAN.md` and `PROJECT_PLAN`  | 107  |
 | `total_projects` (link --json)        | 55   |
 | `.borg-project` marker                | 35   |
-| projects.json / `projects_file`       | 23   |
+| projects.json / `projects_file`       | 28   |
 | `items_by_project` (recon doc)        | 17   |
 | `@project_*`, `tmux.project_dir`      | 15   |
 | env vars (see below)                  | 14   |
-| other identifiers embedding a name    | 12   |
+| other identifiers embedding a name    | 29   |
 | `__PROJECT_NAME__` placeholders       | 6    |
-| total                                 | 1035 |
+| total                                 | 1060 |
 
 - **The registry key is most of the first row.** 584 rows read `projects`, and the token-level grouping cannot separate the registry key from the `borg link --json` document key and the recon `--projects` flag, which share the spelling. By the shard notes the registry key, its jq paths and its fixtures dominate; the flag is the smaller group.
 - **Env vars:** `BORG_WORK_PROJECTS` 10 rows, `BORG_PROJECT_NAME` 4 rows.
@@ -218,10 +220,11 @@ A contract name is one that other code, hooks, the plugin or on-disk data read, 
 - **Template placeholders** (6 rows) can be renamed only together with the files under `templates/` and `drone.zsh`.
 - **Debatable contract calls the shards flagged** and that a human should confirm before treating them as frozen: tmux window options `@project_dir`/`@project_name` (internal to tmux but possibly read elsewhere), the `recon --projects` flag and the adapter `projects.json` file (renameable behind a deprecation alias), the `"Project Plan: Delta/Nox"` fixture bodies, and the `project` key in cortex-wakes fixtures (not checked against Cortex's own spelling).
 
-## External-sense breakdown (183 rows)
+## External-sense breakdown (186 rows)
 
 - `~/.claude/projects` and Claude Code's per-cwd session and memory directories, `claude_project_dir` helpers, the Claude `project_*.md` memory file names: about 110 rows.
 - `pyproject` / `pyproject.toml`: about 25 rows.
+- R2 added 3 rows (PR #352): the retired zsh function names `_recon_merge_by_project` and `_recon_project_contradictions` quoted in `borg_core/recon/core.py`, and cairn's own phrase "cross-project restatement" in `borg_core/census/core.py`.
 - The English-word false positives that shards 5, 8, 9, 10 and 11 filed here ("projection", "projected", and three uses of the verb) are gone: 30 rows moved to `noise`. What is left of that family is `projectPath`, Claude's own session key in `scripts/resume-skeleton.py` (2 rows).
 - Docker compose project label/name (about 17), Supabase `project_id` / `--project-ref` / remote project (about 14), Cortex projects dir (about 8), plus single rows for Jira's project key, `cargo locate-project`, cairn's project search and Claude Desktop's Project feature.
 
@@ -251,17 +254,28 @@ R1 (PR #350) renamed the repository sense of `project` in `borg_core/link` and t
 - **Callee renamed in R2 (7 rows, stay `repository`).** R1 left these because the name belongs to a function R2 renames: `recon_core.merge_by_project` (`borg_core/link/cli.py:234`, `borg_core/link/test_cli.py:1069`), `paths.project_state_read_path` and `paths.project_state_file` (`borg_core/link/shell.py:245`, `borg_core/link/test_shell.py` 190 and 233) and `recon_shell.write_projects_file` (`borg_core/link/test_grid.py` 701 and 713). Their note reads "callee renamed in R2".
 - **Not touched.** Rows R1 renamed keep their `repository` label, and so do the few R1 left in prose (`tests/link_sweep.bats` comments, the `ghost-project` fixture name) and `borg_core/manifest/shell.py`, which is outside R1.
 
+## Relabels after R2
+
+R2 (PR #352) renamed the repository sense of `project` in `borg_core` outside `link/`, plus the 7 call sites in `borg_core/link` noted above, and relabelled the rows it judged were not `repository`. Only the `sense` and `note` columns of 42 rows changed (35 relabelled or re-noted, 7 callee notes extended); keys, line numbers and the row count are untouched. Every changed note cites #352.
+
+- **Contract, kept (27 rows, were repository).** `projects_file` in `borg_core/recon/cli.py` (5 rows) names the `projects.json` file handed to adapters; the `project=` kwargs in `borg_core/recon/test_core.py` (5 rows) build an Item wire key; the `migrate-project-state` flag and message prefix in `borg_core/statemigrate/project_cli.py` (6 rows) are a command-surface name; the module paths `project_cli`, `project_core` and `project_shell` in `borg_core/statemigrate/` and their tests (10 rows) are invoked from `borg.zsh`, so renaming them needs an R4 edit; `borg_core/paths.py:102` (1 row) is the file name `tests/project_state.bats`.
+- **External, kept (3 rows, were repository).** `_recon_merge_by_project` and `_recon_project_contradictions` in `borg_core/recon/core.py` (253, 293) are retired zsh function names quoted in docstrings; `borg_core/census/core.py:9` is cairn's own phrase "cross-project restatement".
+- **Repository, kept for R3 and R4 (3 rows, note extended).** `_borg_project_state_key` and `_borg_project_state_file` quoted in `borg_core/paths.py` (101, 128) are `lib/` shell names that R3 renames; `local project=` quoted in `borg_core/registry/cli.py:9` is `borg.zsh` code that R4 renames.
+- **Contract to repository (2 rows).** `def write_projects_file` in `borg_core/recon/shell.py` is the definition of a callee R2 renames (the 7 rows noted "callee renamed in R2" call it), and `core.rank(projects)` in `borg_core/nextpick/test_core.py` is a use of a local that the rename needed. Both were mislabelled contract.
+- **Callee rows (7, note extended).** The "callee renamed in R2" rows stay `repository`; their note now cites #352.
+- **New matches.** None in `borg_core` outside `link/`: every match on `origin/main` maps to an inventory row by file and line text. The 36 matches in `borg_core/link` that do not map are on lines R1 reworded.
+
 ## Known limits
 
 - **The classification is rule-based.** Each shard classifier applied rules to the text around each match and overrode by site. Nobody read all 3911 rows; the repository rows (2605, the edit scope) are the default and are the least checked. 45 of the 60 audited rows were repository and all 45 agreed, which bounds nothing tighter than a spot-check.
 - **Substring noise is now settled; verb noise is found by pattern, not by reading.** A mechanical check of the code on each line finds 63 rows where the match still sits inside a longer word: 27 external (`pyproject` 25, `projectPath` 2) and 36 repository (`ProjectNotFound` 15, `myproject` 15, `nosuchproject` 3, `testprojectdirof...` 2, `aproject` 1). They are identifiers that contain the noun as a component and stay. The other 38 such rows were English words and are noise. The verb case has no such mechanical test: the 10 verb rows were found by scanning every row for verb-shaped context (see "Noise pass"), so a verb use in a context that scan does not recognise could still sit in the repository rows. Reclassifying one later is a one-row edit.
-- **`--migrate-project-state` is classed inconsistently.** 18 rows on lines that mention the flag or its Python spelling are repository and 1 is contract. It is a CLI flag, so it may need a deprecation alias like the other contract names. Decide once before the rename.
+- **`--migrate-project-state` is classed inconsistently.** 18 rows on lines that mention the flag or its Python spelling are repository and 1 is contract. It is a CLI flag, so it may need a deprecation alias like the other contract names. Decide once before the rename. R2 (PR #352) decided it: the flag and its `migrate-project-state:` message prefix stay, so those 6 rows in `borg_core/statemigrate/project_cli.py` are now contract.
 - **`PROJECT_PLAN.md` is contract by decision of the classifiers**, not the directive. The directive does not mention renaming it; treat the 107 rows as frozen unless that changes.
 - **Line numbers drift.** They are exact at `a2744df` only. Use `file` plus the quoted code to relocate a row on a newer tree.
 
 ## What this means for the rename PRs
 
-- **`repository` is the edit scope for the next rename PR: 2566 rows,** about two thirds of the occurrences. The other 1345 rows (contract 1035, external 183, workstream 72, noise 48, ambiguous 7) must not be touched by a mechanical pass. The noise rows are the ones a naive word-boundary-free replacement would damage first.
+- **`repository` is the edit scope for the next rename PR: 2538 rows,** about two thirds of the occurrences. The other 1373 rows (contract 1060, external 186, workstream 72, noise 48, ambiguous 7) must not be touched by a mechanical pass. The noise rows are the ones a naive word-boundary-free replacement would damage first.
 - **Contract names migrate separately,** each behind a reader that accepts both spellings, per the directive: the registry key `projects` last, after every reader tolerates `repositories`. The `--json` document keys (`projects`, `total_projects`, row key `project`) are a wire change for the `borg-link` skill and need a `DOCUMENT_VERSION` decision.
 - **`.borg-project` and `PROJECT_PLAN.md` are decisions, not edits,** per the directive's third change item.
 - **Resolve the 7 ambiguous rows and the flagged judgment calls first;** they are a few dozen rows and each one changes what a rename script may touch.

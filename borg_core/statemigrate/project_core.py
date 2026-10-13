@@ -1,4 +1,4 @@
-"""PURE planner for the per-directory `.borg/state.json` -> per-project state-root migration. No I/O.
+"""PURE planner for the per-directory `.borg/state.json` -> per-repository state-root migration. No I/O.
 
 The shell layer (`project_shell.py`) observes each legacy file and its destination and hands this module
 the observation; this module answers whether the precondition holds, what to do per file, and whether
@@ -15,7 +15,7 @@ KEEP_NEW = "keep-new"
 SKIP = "skip"
 
 
-class Project(NamedTuple):
+class Repository(NamedTuple):
     """One registry entry as the precondition sees it."""
 
     name: str
@@ -45,10 +45,10 @@ class Action(NamedTuple):
     remove_legacy: bool
 
 
-def precondition(projects: list[Project]) -> list[str]:
+def precondition(repositories: list[Repository]) -> list[str]:
     """Names of git-backed entries with a null/empty `repo`. Non-empty means REFUSE: a key computed
     before `backfill-repo` would be `local-<path12>` and orphan the state once the repo is filled."""
-    return sorted(p.name for p in projects if p.git_backed and not p.repo)
+    return sorted(p.name for p in repositories if p.git_backed and not p.repo)
 
 
 def op_for(entry: Entry) -> str:

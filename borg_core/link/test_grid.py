@@ -698,7 +698,7 @@ def test_a_wrongly_shaped_sweep_fixture_degrades_without_raising(isolated, monke
 
 
 def test_a_repository_list_that_cannot_be_staged_warns_instead_of_raising(isolated, monkeypatch):
-    """`write_projects_file` json.dumps the registry entries, and a registry is not schema-checked.
+    """`write_repositories_file` json.dumps the registry entries, and a registry is not schema-checked.
 
     A hand-edited entry holding a value json cannot serialize raises TypeError from inside the staging
     step -- before any adapter runs, and from a code path every `borg link` executes. Unguarded that
@@ -710,7 +710,7 @@ def test_a_repository_list_that_cannot_be_staged_warns_instead_of_raising(isolat
     _adapter(adapters, "probe", 'echo \'{"source":"probe","summary":"ok","items":[]}\'')
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
     monkeypatch.setattr(
-        "borg_core.recon.shell.write_projects_file",
+        "borg_core.recon.shell.write_repositories_file",
         lambda repositories, path: (_ for _ in ()).throw(TypeError("Object of type set is not JSON serializable")),
     )
     monkeypatch.chdir(dirs["delta"])

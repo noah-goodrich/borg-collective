@@ -80,41 +80,41 @@ def test_write_registry_is_atomic_no_leftover_tmp_file(isolated_env):
     assert files == [shell.registry_path()]
 
 
-def test_write_registry_accepts_an_empty_projects_object(isolated_env):
+def test_write_registry_accepts_an_empty_repositories_object(isolated_env):
     shell.write_registry({"projects": {}})
     assert shell.read_registry() == {"projects": {}}
 
 
-def test_registry_has_true_for_existing_project(isolated_env):
+def test_registry_has_true_for_existing_repository(isolated_env):
     shell.write_registry({"projects": {"troth": {"path": "/troth"}}})
     assert shell.registry_has("troth") is True
 
 
-def test_registry_has_false_for_missing_project(isolated_env):
+def test_registry_has_false_for_missing_repository(isolated_env):
     shell.write_registry({"projects": {}})
     assert shell.registry_has("ghost") is False
 
 
-def test_registry_merge_inserts_new_project(isolated_env):
-    shell.registry_merge("new-project", {"path": "/new"})
-    assert shell.read_registry()["projects"]["new-project"] == {"path": "/new"}
+def test_registry_merge_inserts_new_repository(isolated_env):
+    shell.registry_merge("new-repository", {"path": "/new"})
+    assert shell.read_registry()["projects"]["new-repository"] == {"path": "/new"}
 
 
-def test_registry_merge_upserts_existing_project_preserving_other_fields(isolated_env):
+def test_registry_merge_upserts_existing_repository_preserving_other_fields(isolated_env):
     shell.write_registry({"projects": {"p": {"path": "/old", "pinned": True}}})
     shell.registry_merge("p", {"path": "/new"})
     assert shell.read_registry()["projects"]["p"] == {"path": "/new", "pinned": True}
 
 
-def test_registry_remove_deletes_project(isolated_env):
+def test_registry_remove_deletes_repository(isolated_env):
     shell.write_registry({"projects": {"keep": {"path": "/k"}, "drop": {"path": "/d"}}})
     shell.registry_remove("drop")
-    projects = shell.read_registry()["projects"]
-    assert "drop" not in projects
-    assert "keep" in projects
+    repositories = shell.read_registry()["projects"]
+    assert "drop" not in repositories
+    assert "keep" in repositories
 
 
-def test_registry_remove_missing_project_is_a_no_op(isolated_env):
+def test_registry_remove_missing_repository_is_a_no_op(isolated_env):
     shell.write_registry({"projects": {"keep": {"path": "/k"}}})
     shell.registry_remove("ghost")
     assert shell.read_registry() == {"projects": {"keep": {"path": "/k"}}}
@@ -160,7 +160,7 @@ def test_claude_project_dir_is_under_home_claude_projects(monkeypatch, tmp_path)
 
 def test_claude_latest_session_id_returns_none_when_dir_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    assert shell.claude_latest_session_id("/no/such/project") is None
+    assert shell.claude_latest_session_id("/no/such/repository") is None
 
 
 def test_claude_latest_session_id_returns_none_when_no_jsonl_files(monkeypatch, tmp_path):

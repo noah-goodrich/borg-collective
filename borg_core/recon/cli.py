@@ -53,50 +53,50 @@ def _select_adapters(sources_filter: str) -> list[tuple[str, str]]:
     return adapters
 
 
-def _collect_contradictions(projects: dict, by_project: dict[str, list[dict]]) -> list[dict]:
-    """Detect stale-blocker contradictions for every project with items and checkpoint blockers."""
+def _collect_contradictions(repositories: dict, by_repository: dict[str, list[dict]]) -> list[dict]:
+    """Detect stale-blocker contradictions for every repository with items and checkpoint blockers."""
     contradictions: list[dict] = []
-    for project, project_info in projects.items():
-        items = by_project.get(project, [])
+    for repository, repository_info in repositories.items():
+        items = by_repository.get(repository, [])
         if not items:
             continue
-        blockers = shell.read_checkpoint_blockers(project_info.get("path", ""))
+        blockers = shell.read_checkpoint_blockers(repository_info.get("path", ""))
         if not blockers:
             continue
-        contradictions.extend(core.project_contradictions(project, blockers, items))
+        contradictions.extend(core.repository_contradictions(repository, blockers, items))
     return contradictions
 
 
-def _filter_by_project(by_project: dict[str, list[dict]], keep_names: list[str] | None) -> dict[str, list[dict]]:
-    """Make --projects authoritative even if an adapter over-returns items for other projects."""
+def _filter_by_repository(by_repository: dict[str, list[dict]], keep_names: list[str] | None) -> dict[str, list[dict]]:
+    """Make --projects authoritative even if an adapter over-returns items for other repositories."""
     if not keep_names:
-        return by_project
+        return by_repository
     keep = set(keep_names)
-    return {k: v for k, v in by_project.items() if k in keep}
+    return {k: v for k, v in by_repository.items() if k in keep}
 
 
-def _run_sweep(resolved_since: str, projects_file: str, adapters: list[tuple[str, str]], projects: dict) -> dict:
+def _run_sweep(resolved_since: str, projects_file: str, adapters: list[tuple[str, str]], repositories: dict) -> dict:
     """Run the fan-out + reconcile pipeline and assemble the reconciled doc."""
     tracks = shell.fanout(resolved_since, projects_file, adapters)
     tracks, source_contradictions = core.dedup_cross_source(tracks)
-    by_project = core.merge_by_project(tracks)
+    by_repository = core.merge_by_repository(tracks)
     sources_json = core.build_sources_summary(tracks)
-    contradictions = source_contradictions + _collect_contradictions(projects, by_project)
+    contradictions = source_contradictions + _collect_contradictions(repositories, by_repository)
     generated_at = timefmt.now_iso()
-    return core.assemble(resolved_since, generated_at, sources_json, by_project, contradictions)
+    return core.assemble(resolved_since, generated_at, sources_json, by_repository, contradictions)
 
 
-def _sweep(since: str, sources_filter: str, projects: dict, projects_names: list[str] | None) -> dict:
+def _sweep(since: str, sources_filter: str, repositories: dict, repositories_names: list[str] | None) -> dict:
     """Resolve `since`, select adapters, fan out, reconcile, persist the last-run marker."""
-    project_dirs = [v.get("path", "") for v in projects.values() if v.get("path")]
-    resolved_since = shell.resolve_since(since, project_dirs)
+    repository_dirs = [v.get("path", "") for v in repositories.values() if v.get("path")]
+    resolved_since = shell.resolve_since(since, repository_dirs)
     adapters = _select_adapters(sources_filter)
 
     with tempfile.TemporaryDirectory(prefix="borg-recon.") as workdir:
         projects_file = os.path.join(workdir, "projects.json")
-        shell.write_projects_file(projects, projects_file)
-        doc = _run_sweep(resolved_since, projects_file, adapters, projects)
-        doc["items_by_project"] = _filter_by_project(doc["items_by_project"], projects_names)
+        shell.write_repositories_file(repositories, projects_file)
+        doc = _run_sweep(resolved_since, projects_file, adapters, repositories)
+        doc["items_by_project"] = _filter_by_repository(doc["items_by_project"], repositories_names)
         shell.write_last_run_marker(resolved_since)
 
     return doc
@@ -105,7 +105,7 @@ def _sweep(since: str, sources_filter: str, projects: dict, projects_names: list
 def _run(
     since: str,
     sources_filter: str,
-    projects_filter: str,
+    repositories_filter: str,
     json_only: bool,
     list_only: bool,
 ) -> int:
@@ -117,10 +117,12 @@ def _run(
     if not os.path.isfile(registry_file):
         _die(f"no registry at {registry_file}")
 
-    projects_names = [p.strip() for p in projects_filter.split(",") if p.strip()] if projects_filter else None
-    projects = shell.load_registry_projects(registry_file, projects_names)
+    repositories_names = (
+        [p.strip() for p in repositories_filter.split(",") if p.strip()] if repositories_filter else None
+    )
+    repositories = shell.load_registry_repositories(registry_file, repositories_names)
 
-    doc = _sweep(since, sources_filter, projects, projects_names)
+    doc = _sweep(since, sources_filter, repositories, repositories_names)
 
     if json_only:
         print(jsonlib.dumps(doc))
