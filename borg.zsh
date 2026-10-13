@@ -3355,8 +3355,8 @@ cmd_help() {
     archived            Hidden from default ls (shown with --all)
 
   CONFIG
-    ~/.config/borg/config.zsh       Work/life boundaries, limits
-    ~/.config/borg/registry.json    Session registry
+    ~/.config/borg/config.zsh          Work/life boundaries, limits
+    ~/.config/borg/registry.json       Session registry
     <repository>/.borg/checkpoints/    Per-repository session checkpoints (via /borg-link-up)
 
   ENVIRONMENT
@@ -3785,7 +3785,7 @@ _borg_link_dispatch() {
         # never triggers it" asserts the human path really does splice the warning onto stdout.
         # (Anchored by test name: that file's line numbers drift on every insertion.)
         borg_desktop_scan 2>/dev/null || true
-        # CRITICAL: do NOT forward the positional in porcelain mode. `link --porcelain nosuchproject`
+        # CRITICAL: do NOT forward the positional in porcelain mode. `link --porcelain nosuchrepository`
         # exits 0 with the listing today; forwarding it would build a focus block and die instead.
         _link_py_args=(--porcelain)
         (( _link_all )) && _link_py_args+=(--all)
