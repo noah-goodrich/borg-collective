@@ -102,7 +102,11 @@ t_line() { printf '{"type":"user","uuid":"u-%s","message":{"role":"user","conten
     touch -t 202001010000 "$PD/$SID.jsonl"
     mk_rec r_s usage_limit confirmed "$T0" \
         '.confirmed_at = 1791806400 | .confirmed_lines = 2 | .last_growth_at = 1791806400'
-    printf '{"t":%s,"ev":"permission_prompt","sid":"%s","scope":"main"}\n' "$((T0 + 60))" "$SID" >"$RD/events/$SID.jsonl"
+    printf '{"t":%s,"ev":"permission_prompt","sid":"%s","scope":"main"}\n' "$((T0 + 60))" "$SID" \
+        >"$RD/events/$SID.jsonl"
+    mkdir -p "$RD/state"
+    jq -n -c '{consecutive:0, resumed_total:0, injections_today:0, day:"2026-10-12", last_progress_lines:0,
+        hook_cursor:0}' >"$RD/state/$SID.json"
     at 700
     watch
     [ "$(rf r_s .state)" = stalled ]
@@ -171,10 +175,13 @@ t_line() { printf '{"type":"user","uuid":"u-%s","message":{"role":"user","conten
 @test "gate: pane_closed and reboot causes are never injected either" {
     printf '{"type":"user","uuid":"u1"}\n' >"$PD/$SID.jsonl"
     mk_rec r_p process_death scheduled "$((T0 - 10))" '.cause = "pane_closed"'
-    mk_rec r_b process_death scheduled "$((T0 - 10))" '.cause = "reboot" | .scope = "agent:a1"'
+    mk_rec r_b process_death scheduled "$((T0 - 10))" '.cause = "reboot" | .scope = "workflow:wf1"'
     watch
     [ ! -s "$ILOG" ]
     [ "$(rf r_p .state)" = deferred ]
+    at 400
+    watch
+    [ ! -s "$ILOG" ]
     [ "$(rf r_b .gate_reason)" = no_pane ]
 }
 

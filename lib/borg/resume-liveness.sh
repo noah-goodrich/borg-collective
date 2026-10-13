@@ -28,16 +28,16 @@
 #   5. Workflows: manifest without result, journal `started` without `result`, journal idle
 #      BORG_RESUME_WF_IDLE_SEC (300) with an owner proven dead -> workflow:<run> record; or the owner's transcript
 #      ends in a rate_limit synthetic error -> a workflow:<run> usage_limit record (resume at the reset).
-#   6. Stall watchdog (directive step 6): a `confirmed` record whose transcript has not grown for
-#      BORG_RESUME_STALL_MIN (10) minutes and either a permission_prompt event arrived after confirmation or the
-#      pane classifies as a dialog becomes `stalled` (terminal) with a notice naming the window.
+#   6. No stall watchdog here (RECONCILE-6): the S9 gate owns confirmed -> stalled (directive S9), using the shared
+#      "moving" rule in resume-shared.sh. A process_death record is never injected by the gate; it is handed to the
+#      S11 relaunch hook point (borg_resume_relaunch_hook) and defers with no_pane until then.
 #
 # Notices: ONE per session per detection, appended to $(borg_resume_dir)/notify.jsonl (bounded) AND delivered host-side
 # via _borg_osa_notify. Not here: relaunch (S11), the gate and injection (S9), launchd (S12).
 #
 # Env stubs for tests: BORG_RESUME_PANES_CMD (list-panes lines), BORG_RESUME_TMUX_CMD, BORG_RESUME_NOTIFY_CMD,
 # BORG_RESUME_BOOT_EPOCH. Tuning: BORG_RESUME_LIVENESS_GRACE_SEC, BORG_RESUME_REBOOT_PER_HOUR, BORG_RESUME_WF_IDLE_SEC,
-# BORG_RESUME_STALL_MIN, BORG_RESUME_NOTIFY_KEEP (200).
+# BORG_RESUME_NOTIFY_KEEP (200).
 
 # shellcheck disable=SC2016,SC2154
 _RL_SHELL_RE='^-?(zsh|bash|sh|fish|dash|ksh|tcsh)$'
@@ -52,59 +52,18 @@ _rl_new_ra=""
 
 _rl_log() { _rw_log "liveness: $*"; }
 
+# Notices go through the ONE shared path (resume-shared.sh: bounded notify.jsonl outbox + host delivery + dedup).
+# shellcheck source=/dev/null
+command -v borg_resume_notify >/dev/null 2>&1 || . "${BASH_SOURCE[0]%/*}/resume-shared.sh" 2>/dev/null
+
+# Usage: _rl_notify <kind> <sid> <rid> <message> [key]
+_rl_notify() { borg_resume_notify "$@"; }
+
 _rl_int() { # <value> <default>
     case "$1" in "" | *[!0-9]*) printf '%s\n' "$2" ;; *) printf '%s\n' "$1" ;; esac
 }
 
 _rl_norm() { printf '%s' "$1" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//'; }
-
-# Append one notice to the outbox. Usage: _rl_notify <kind> <sid> <rid> <message>
-_rl_notify() {
-    local _reg _proj _win _line
-    _reg="$(borg_resume_registry_file "$2")"
-    _proj="" _win=""
-    if [ -f "$_reg" ]; then
-        _proj="$(jq -r '.project // empty' "$_reg" 2>/dev/null)"
-        _win="$(jq -r '.tmux.window // empty' "$_reg" 2>/dev/null)"
-    fi
-    _line="$(jq -n -c --argjson t "$(_rc_now)" --arg kind "$1" --arg sid "$2" --arg rid "$3" --arg p "$_proj" \
-        --arg w "$_win" --arg m "${4:0:500}" \
-        '{t: $t, kind: $kind, sid: $sid, rid: $rid, project: $p, window: $w, msg: $m}' 2>/dev/null)"
-    if [ -n "$_line" ]; then
-        borg_resume_append_line "$(borg_resume_dir)/notify.jsonl" "$_line"
-        _rl_trim_outbox "$(borg_resume_dir)/notify.jsonl"
-    fi
-    _rl_deliver "${_proj:-borg-resume}" "${4:0:500}"
-    return 0
-}
-
-# Keep the outbox bounded: past 2x BORG_RESUME_NOTIFY_KEEP (default 200) lines, keep the last KEEP.
-_rl_trim_outbox() {
-    local _keep _tmp
-    _keep="$(_rl_int "${BORG_RESUME_NOTIFY_KEEP:-}" 200)"
-    [ "$(wc -l <"$1" | tr -d ' ')" -gt $((_keep * 2)) ] || return 0
-    _tmp="$1.trim.$$"
-    if tail -n "$_keep" "$1" >"$_tmp" 2>/dev/null; then mv -f "$_tmp" "$1"; fi
-    return 0
-}
-
-# Host-side delivery through the existing _borg_osa_notify (lib/borg-hooks.sh). BORG_RESUME_NOTIFY_CMD overrides
-# it (tests; receives title, subtitle, message as arguments). Never fails the pass.
-_rl_deliver() {
-    if [ -n "${BORG_RESUME_NOTIFY_CMD:-}" ]; then
-        bash -c "$BORG_RESUME_NOTIFY_CMD" _ "Borg Resume" "$1" "$2" >/dev/null 2>&1 || true
-        return 0
-    fi
-    if ! declare -F _borg_osa_notify >/dev/null 2>&1; then
-        # shellcheck source=/dev/null
-        . "${BORG_RESUME_LIBDIR:?}/../borg-hooks.sh" 2>/dev/null || {
-            _rl_log "notify: borg-hooks.sh missing"
-            return 0
-        }
-    fi
-    _borg_osa_notify "Borg Resume" "$1" "$2" >/dev/null 2>&1 || true
-    return 0
-}
 
 # ---------------------------------------------------------------------------------------------
 # end state (deliberate ends, sticky close)
@@ -352,7 +311,7 @@ _rl_flush_notice() {
         _msg="borg-resume: session ${_proj:-$_sid} ended with open work ($_rl_new_cause) and cannot be relaunched"
         _msg="$_msg automatically; resume it by hand: claude --resume $_sid"
     fi
-    _rl_notify early_notice "$_sid" "" "$_msg"
+    _rl_notify early_notice "$_sid" "" "$_msg" "early_notice:$_sid:${_rl_new_cause}:${_rl_new_ra:-0}"
     _rl_new_n=0 _rl_new_resume=0
     return 0
 }
@@ -533,63 +492,6 @@ EOF
 }
 
 # ---------------------------------------------------------------------------------------------
-# stall watchdog
-# ---------------------------------------------------------------------------------------------
-
-_rl_stall_pass() {
-    local _f _sid _scope _at _cl _now _stall _loc _t _sd _file _lines _mt _pe _pane _pid _st _rid _win _why _sf
-    _now="$(_rc_now)"
-    _stall=$(($(_rl_int "${BORG_RESUME_STALL_MIN:-}" 10) * 60))
-    for _f in "$(borg_resume_dir)"/pending/*.json; do
-        [ -f "$_f" ] || continue
-        [ "$(jq -r .state "$_f" 2>/dev/null)" = confirmed ] || continue
-        _rid="$(jq -r .rid "$_f")"
-        _sid="$(jq -r .sid "$_f")"
-        _scope="$(jq -r .scope "$_f")"
-        _at="$(jq -r '.confirmed_at // empty' "$_f")"
-        case "$_at" in "" | *[!0-9]*) continue ;; esac
-        [ $((_now - _at)) -ge "$_stall" ] || continue
-        _loc="$(_ri_locate "$_sid")"
-        _t="${_loc%%$'\t'*}"
-        _sd="${_loc#*$'\t'}"
-        _file="$_t"
-        case "$_scope" in
-            agent:*) _file="$_sd/subagents/agent-${_scope#agent:}.jsonl" ;;
-        esac
-        [ -f "$_file" ] || continue
-        _mt="$(_ri_mtime "$_file")"
-        [ $((_now - _mt)) -ge "$_stall" ] || continue
-        _cl="$(jq -r '.confirmed_lines // empty' "$_f")"
-        _lines="$(wc -l <"$_file" | tr -d ' ')"
-        case "$_cl" in "" | *[!0-9]*) ;; *) [ "$_lines" -gt "$_cl" ] && continue ;; esac
-        _rw_has_ack "$_sid" "$_rid" "$_at" && continue
-        _why=""
-        _pe="$(borg_resume_events_file "$_sid")"
-        if [ -f "$_pe" ] && jq -e -R -n --argjson a "$_at" '[inputs | fromjson? | select(type == "object"
-            and .ev == "permission_prompt" and (.t // 0) >= $a)] | length > 0' "$_pe" >/dev/null 2>&1; then
-            _why="permission_prompt"
-        else
-            _rl_panes_load
-            _pane="$(borg_inject_find_pane "$_sid" 2>/dev/null)" && {
-                _pid="${_pane%%|*}"
-                _st="$(borg_inject_pane_state "$_pid" 2>/dev/null)"
-                [ "$_st" = dialog ] && _why="dialog"
-            }
-        fi
-        [ -n "$_why" ] || continue
-        _rw_update "$_f" --argjson now "$_now" --arg w "$_why" '.state = "stalled" | .done_reason = $w
-            | .state_log += [["stalled", $now, $w]]' || continue
-        _win="$(jq -r '.tmux.window // empty' "$(borg_resume_registry_file "$_sid")" 2>/dev/null)"
-        _rl_notify stalled "$_sid" "$_rid" \
-            "borg-resume: resume $_rid is stalled (${_why}); the session is waiting on you in window ${_win:-unknown}"
-        _sf="$(_rw_state_file "$_sid")"
-        [ -f "$_sf" ] && _rw_update "$_sf" '.consecutive += 1'
-        _rl_log "stalled $_rid reason=$_why"
-    done
-    return 0
-}
-
-# ---------------------------------------------------------------------------------------------
 # entry point
 # ---------------------------------------------------------------------------------------------
 
@@ -614,6 +516,5 @@ borg_resume_liveness_pass() {
         _rl_session "$_sid"
     done
     _rl_stage_reboot
-    _rl_stall_pass
     return 0
 }
