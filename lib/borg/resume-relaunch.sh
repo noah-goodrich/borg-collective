@@ -411,3 +411,44 @@ borg_resume_relaunch_hook() { # <rid> <cause> <file>
     fi
     return 0
 }
+
+# ---------------------------------------------------------------------------------------------
+# S16: hand a relaunched session on to the normal gate flow.
+#
+# The relaunch hook leaves a record in `relaunching` after a VERIFIED same-session relaunch, and nothing else ever moved
+# it: the revived claude sat at an empty composer with no prompt and the record was stuck. This pass, called at the top
+# of the gate's due pass, flips every `relaunching` record of a session whose pane is now proven alive and owned back to
+# `scheduled` (due now, `relaunched: true`). The gate then treats it like any other record: the dead-owner dispatch
+# skips it, the S6 prompt is rendered and borg_inject_line (full pane proof) types it. The relaunch already bumped the
+# S9 counters; the injection bumps them once more, one tick per action. A session that is not alive and owned yet stays
+# `relaunching` (the S9 concurrency window ignores it after an hour).
+borg_resume_relaunched_pass() {
+    local _f _sid _now _seen=" " _ports
+    _now="$(_rc_now)"
+    for _f in "$(borg_resume_dir)"/pending/*.json; do
+        [ -f "$_f" ] || continue
+        [ "$(jq -r .state "$_f" 2>/dev/null)" = relaunching ] || continue
+        [ "$(jq -r '.relaunched // false' "$_f" 2>/dev/null)" = false ] || continue
+        _sid="$(jq -r .sid "$_f" 2>/dev/null)"
+        case "$_seen" in
+            *" $_sid=no "*) continue ;;
+            *" $_sid=yes "*) ;;
+            *)
+                _rr_find "$_sid"
+                _ports=""
+                [ "$_rr_kind" = claude ] && [ "$_rr_n" -eq 1 ] &&
+                    _ports="$(_bi_list_panes | awk -F'|' -v p="$_rr_pane" '$1 == p {print $3}')"
+                if [ -n "$_ports" ] && borg_inject_owner_check "$_sid" "$_ports" >/dev/null 2>&1; then
+                    _seen="${_seen}${_sid}=yes "
+                else
+                    _seen="${_seen}${_sid}=no "
+                    continue
+                fi
+                ;;
+        esac
+        _rw_update "$_f" --argjson now "$_now" '.relaunched = true | .resume_at = $now | .state = "scheduled"
+            | .state_log += [["scheduled", $now, "relaunched"]]'
+        _rr_log "session alive and owned again, handed to the gate: ${_f##*/}"
+    done
+    return 0
+}

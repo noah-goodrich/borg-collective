@@ -357,7 +357,7 @@ _rg_dispatch_dead() { # <sid>
     done
     while IFS= read -r _f; do
         [ -n "$_f" ] || continue
-        if [ "$(jq -r .class "$_f")" != process_death ]; then
+        if [ "$(jq -r .class "$_f")" != process_death ] || [ "$(jq -r '.relaunched // false' "$_f")" = true ]; then
             _keep="${_keep}${_f}"$'\n'
         elif [ "$_busy" = 1 ]; then
             _rg_to "$_f" relaunching relaunch_sibling
@@ -369,6 +369,21 @@ _rg_dispatch_dead() { # <sid>
 $_RG_GROUP
 EOF
     _RG_GROUP="${_keep%$'\n'}"
+}
+
+# S16: a limit hit usually fails workflow agents too, so one session gets a usage_limit record (due at the reset) AND a
+# transient workflow record (due in seconds). Injecting for the sooner one would type into a session that is still
+# blocked, hit the limit again and burn a consecutive slot. A not-yet-due usage_limit sibling therefore holds the
+# session's other records; they go out together (the lead prompt lists every scope) once the reset has passed.
+_rg_held_by_limit() { # <file> <sid> <now>
+    local _o
+    for _o in "$(borg_resume_dir)"/pending/*.json; do
+        [ -f "$_o" ] && [ "$_o" != "$1" ] || continue
+        jq -e --arg s "$2" --argjson n "$3" '.sid == $s and .class == "usage_limit"
+            and (.state | IN("new", "scheduled", "deferred")) and ((.resume_at // 0) > $n)' \
+            "$_o" >/dev/null 2>&1 && return 0
+    done
+    return 1
 }
 
 # Static pass for one record. Appends "sid<US>file" to _RG_READY when it should be considered for injection.
@@ -383,6 +398,7 @@ _rg_static() { # <file>
     _rg_weekly "$_f" || return 0
     [ "$_f_ra" -le "$_now" ] || return 0
     [ "$(jq -r '.gate_next // 0' "$_f")" -le "$_now" ] || return 0
+    _rg_held_by_limit "$_f" "$_f_sid" "$_now" && return 0
 
     if _reason="$(_rg_superseded "$_f")"; then
         _rg_to "$_f" superseded "$_reason"
@@ -789,6 +805,7 @@ borg_resume_gate_due_pass() {
     _rg_shared_loaded || return 0
     _rg_sync_members
     borg_resume_paused && return 0
+    command -v borg_resume_relaunched_pass >/dev/null 2>&1 && borg_resume_relaunched_pass
     _RG_READY=""
     _RG_NINJ=0
     _lines=""
