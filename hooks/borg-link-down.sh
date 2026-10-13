@@ -35,8 +35,8 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 
 # Empty CWD, or CWD="/" (e.g. a launchd timer with no WorkingDirectory set):
-# "/" can never be a real borg project, so treat it the same as empty and
-# bail before any project-resolution is attempted.
+# "/" can never be a real borg repository, so treat it the same as empty and
+# bail before any repository-resolution is attempted.
 [[ -z "$CWD" || "$CWD" == "/" ]] && exit 0
 
 # shellcheck source=../lib/borg-hooks.sh
@@ -63,8 +63,8 @@ Full guide: docs/agent-routing.md in the borg-collective repo."
 
 # ── Orchestrator-mode branch ─────────────────────────────────────────────────
 # When CWD is the workspace root (default $HOME/dev), render a scannable
-# cross-project overview AS additionalContext. Write nothing to the registry —
-# the orchestrator session is not a project session.
+# cross-repository overview AS additionalContext. Write nothing to the registry —
+# the orchestrator session is not a repository session.
 _orch_humanize_age() {
     local ts="$1"
     [[ -z "$ts" ]] && { printf 'never'; return; }
@@ -110,7 +110,7 @@ _orch_next_hint() {
 if [[ "$MODE" == "orchestrator" ]]; then
     OVERVIEW=""
     if [[ -f "$BORG_REGISTRY" ]]; then
-        # Read registry for identity fields, then overlay state.json for each project.
+        # Read registry for identity fields, then overlay state.json for each repository.
         # Build TSV: name, status, last_activity, path — sorted by last_activity desc.
         _raw_tsv=$(jq -r '
             .projects // {} | to_entries
@@ -120,13 +120,13 @@ if [[ "$MODE" == "orchestrator" ]]; then
             | @tsv
         ' "$BORG_REGISTRY" 2>/dev/null || true)
 
-        _projects_tsv=""
+        _repositories_tsv=""
         while IFS=$'\t' read -r _name _path _repo; do
             [[ -z "$_name" ]] && continue
             [[ "$_path" == "-" ]] && _path=""
             _status="idle"
             _last=""
-            # New per-project path first, else legacy (AC5 expand); the registry's repo spares a git fork.
+            # New per-repository path first, else legacy (AC5 expand); the registry's repo spares a git fork.
             _sf=""
             [[ -n "$_path" ]] && _sf=$(_borg_state_read_path "$_path" "$_repo")
             if [[ -n "$_sf" && -f "$_sf" ]]; then
@@ -137,24 +137,24 @@ if [[ "$MODE" == "orchestrator" ]]; then
             # whitespace) collapses consecutive separators, so an empty _last (field 3 of 4, NOT
             # the last field) would shift _path into _last and leave _path empty. Same class of
             # bug as the sentinel pattern below (~line 260) — keep every column populated here too.
-            _projects_tsv+=$(printf '%s\t%s\t%s\t%s' "$_name" "$_status" "${_last:--}" "$_path")$'\n'
+            _repositories_tsv+=$(printf '%s\t%s\t%s\t%s' "$_name" "$_status" "${_last:--}" "$_path")$'\n'
         done <<< "$_raw_tsv"
 
         # Sort by last_activity desc (ISO timestamps sort lexicographically)
-        _projects_tsv=$(printf '%s' "$_projects_tsv" | sort -t$'\t' -k3 -r 2>/dev/null || printf '%s' "$_projects_tsv")
+        _repositories_tsv=$(printf '%s' "$_repositories_tsv" | sort -t$'\t' -k3 -r 2>/dev/null || printf '%s' "$_repositories_tsv")
 
-        _proj_count=$(printf '%s' "$_projects_tsv" | grep -c . 2>/dev/null || echo 0)
-        OVERVIEW+="Orchestrator session — you are the QUEEN (${_proj_count} projects)"$'\n\n'
-        if [[ -n "$_projects_tsv" ]]; then
+        _proj_count=$(printf '%s' "$_repositories_tsv" | grep -c . 2>/dev/null || echo 0)
+        OVERVIEW+="Orchestrator session — you are the QUEEN (${_proj_count} repositories)"$'\n\n'
+        if [[ -n "$_repositories_tsv" ]]; then
             while IFS=$'\t' read -r _name _status _last _path; do
                 [[ -z "$_name" ]] && continue
                 [[ "$_last" == "-" ]] && _last=""
                 _age=$(_orch_humanize_age "$_last")
                 _hint=$(_orch_next_hint "$_path")
                 OVERVIEW+="  • ${_name} [${_status}] — ${_age} — ${_hint}"$'\n'
-            done <<< "$_projects_tsv"
+            done <<< "$_repositories_tsv"
         else
-            OVERVIEW+="  (no projects registered — run 'borg add <path>' or 'borg scan')"$'\n'
+            OVERVIEW+="  (no repositories registered — run 'borg add <path>' or 'borg scan')"$'\n'
         fi
     else
         OVERVIEW="Orchestrator session — registry not initialized. Run 'borg setup'."
@@ -170,12 +170,12 @@ if [[ "$MODE" == "orchestrator" ]]; then
     exit 0
 fi
 
-# ── Project-mode (existing behavior) ─────────────────────────────────────────
+# ── Repository-mode (existing behavior) ──────────────────────────────────────
 
-PROJECT=$(_borg_find_project "$CWD")
+REPOSITORY=$(_borg_find_repository "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
+PROJ_DIR=$(_borg_resolve_proj_dir "$REPOSITORY" "$CWD")
 
 # ── 0. CLAUDE.md integrity check ─────────────────────────────────────────────
 # Skip inside containers — ~/.claude is bind-mounted from the host, and applying
@@ -188,10 +188,10 @@ if [[ ! -f /.dockerenv ]]; then
 fi
 
 # ── 1. State update ──────────────────────────────────────────────────────────
-# Write status=active, last_activity, and claude_session_id to the per-project
+# Write status=active, last_activity, and claude_session_id to the per-repository
 # state.json (not the shared registry).
 
-_borg_proj_repo "$PROJECT" "$PROJ_DIR"
+_borg_proj_repo "$REPOSITORY" "$PROJ_DIR"
 _cur_state=$(_borg_state_read "$PROJ_DIR" ${_REPO+"$_REPO"})
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg sid "$SESSION_ID" \
@@ -200,12 +200,12 @@ _new_state=$(printf '%s' "$_cur_state" | jq \
      (if $sid != "" then .claude_session_id = $sid else . end)')
 _borg_state_write "$PROJ_DIR" "$_new_state" ${_REPO+"$_REPO"} || true
 
-# ── 1b. Per-project skill overlay ────────────────────────────────────────────
+# ── 1b. Per-repository skill overlay ─────────────────────────────────────────
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
-PROJECT_SKILLS_DIR="$CWD/.borg/skills"
-if [[ -d "$PROJECT_SKILLS_DIR" ]]; then
+REPOSITORY_SKILLS_DIR="$CWD/.borg/skills"
+if [[ -d "$REPOSITORY_SKILLS_DIR" ]]; then
     mkdir -p "$CLAUDE_SKILLS_DIR"
-    for _skill_dir in "$PROJECT_SKILLS_DIR"/*/; do
+    for _skill_dir in "$REPOSITORY_SKILLS_DIR"/*/; do
         [[ -d "$_skill_dir" ]] || continue
         _skill_name="${_skill_dir%/}"
         _skill_name="${_skill_name##*/}"
@@ -250,7 +250,7 @@ Before writing any code this session:
 1. Switch to Opus: /model opus
 2. Enter Plan Mode: Shift+Tab
 3. Run /borg-plan to establish objectives and acceptance criteria
-4. Confirm the plan (creates PROJECT_PLAN.md in the project root)
+4. Confirm the plan (creates PROJECT_PLAN.md in the repository root)
 5. Exit Plan Mode: Shift+Tab
 6. Switch to Sonnet: /model sonnet
 7. Only then begin implementation
@@ -279,7 +279,7 @@ died in. See docs/plans/directives/2026-08-08-cairn-decommission-and-uncondition
 Phase 1.6 for the pre-registered null and what to do about it.")
 fi
 
-# Capacity warning — count active/waiting by scanning per-project state.json files.
+# Capacity warning — count active/waiting by scanning per-repository state.json files.
 # Reaper-aware: a stale active/waiting session (no live tmux window AND no recent
 # activity) is treated as idle and excluded, matching the CLI capacity count.
 if [[ -f "$BORG_REGISTRY" ]]; then
@@ -313,9 +313,9 @@ if [[ -f "$BORG_REGISTRY" ]]; then
            (.value.repo // "")]
         | @tsv' "$BORG_REGISTRY" 2>/dev/null || true)
     if (( _active_count > _max_active )); then
-        CONTEXT_PARTS+=("⚠ CAPACITY WARNING: $_active_count projects active/waiting (limit: $_max_active).
+        CONTEXT_PARTS+=("⚠ CAPACITY WARNING: $_active_count repositories active/waiting (limit: $_max_active).
 Too many concurrent threads degrades quality and increases context-switching overhead.
-Complete or pause a project before starting new work.")
+Complete or pause a repository before starting new work.")
     fi
 fi
 
@@ -323,7 +323,7 @@ fi
 UNCOMMITTED_FLAG=$(jq -r '.has_uncommitted_changes // false' \
     "$(_borg_state_read_path "$PROJ_DIR" ${_REPO+"$_REPO"})" 2>/dev/null || echo "false")
 if [[ "$UNCOMMITTED_FLAG" == "true" ]]; then
-    CONTEXT_PARTS+=("REMINDER: Last session ended with uncommitted changes in $PROJECT.
+    CONTEXT_PARTS+=("REMINDER: Last session ended with uncommitted changes in $REPOSITORY.
 Run 'git status' to see what's pending. Consider /simplify and committing before new work.")
 fi
 
@@ -336,7 +336,7 @@ CLOCK_DIVERGED=$(jq -r '.clock_divergence.detected // false' \
 if [[ "$CLOCK_DIVERGED" == "true" ]]; then
     CLOCK_DELTA=$(jq -r '.clock_divergence.delta_seconds // 0' \
         "$(_borg_state_read_path "$PROJ_DIR" ${_REPO+"$_REPO"})" 2>/dev/null || echo "0")
-    CONTEXT_PARTS+=("⚠ CLOCK DIVERGENCE DETECTED for $PROJECT (~${CLOCK_DELTA}s skew).
+    CONTEXT_PARTS+=("⚠ CLOCK DIVERGENCE DETECTED for $REPOSITORY (~${CLOCK_DELTA}s skew).
 The last checkpoint's filename timestamp and its on-disk mtime disagree by more than 5
 minutes — a strong signal the container/VM clock is out of sync with real time (common
 after a laptop sleep/resume freezes the Podman VM clock). Commit times, checkpoint
@@ -344,7 +344,7 @@ timestamps, and state.json timestamps from this environment may be unreliable un
 clock is corrected. Consider 'drone restart' or restarting the devcontainer to resync.")
 fi
 
-# Active directives for this project — inject filename + objective line only (no full bodies)
+# Active directives for this repository — inject filename + objective line only (no full bodies)
 DIRECTIVES_DIR="$CWD/docs/plans/directives"
 if [[ -d "$DIRECTIVES_DIR" ]]; then
     _directive_lines=""
@@ -368,7 +368,7 @@ if [[ -d "$DIRECTIVES_DIR" ]]; then
         fi
     done < <(find "$DIRECTIVES_DIR" -maxdepth 1 -name "*.md" -print0 2>/dev/null | sort -z)
     if [[ -n "$_directive_lines" ]]; then
-        CONTEXT_PARTS+=("Active directives for $PROJECT (check these before starting new work):
+        CONTEXT_PARTS+=("Active directives for $REPOSITORY (check these before starting new work):
 
 ${_directive_lines%$'\n'}")
     fi
@@ -403,7 +403,7 @@ verbatim to SendMessage. Never hardcode an address — not here, not in a checkp
 
 CONTEXT_PARTS+=("$ROUTING_CARD")
 
-# Latest checkpoint for this project — written by /borg-link-up
+# Latest checkpoint for this repository — written by /borg-link-up
 CHECKPOINT_FILE=""
 if [[ -d "$CWD/.borg/checkpoints" ]]; then
     CHECKPOINT_FILE=$(find "$CWD/.borg/checkpoints" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)
@@ -427,7 +427,7 @@ if [[ -n "$CHECKPOINT_FILE" && -f "$CHECKPOINT_FILE" ]]; then
         # The standing line labels it so a future session treats quoted external strings as
         # data, not instructions — the marking half of the prompt-injection defense; the
         # skills' quotation rule is the other half.
-        CONTEXT_PARTS+=("Latest checkpoint for $PROJECT ($CP_BASENAME):
+        CONTEXT_PARTS+=("Latest checkpoint for $REPOSITORY ($CP_BASENAME):
 
 $CHECKPOINT
 

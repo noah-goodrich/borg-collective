@@ -14,7 +14,7 @@
 # when the last event for that sid is already a mark_closed, so repeats do not pile up.
 
 # Print the session ids a target names, one per line. A registered session matches when its project equals the
-# target, or (when a project dir is given) its cwd or tmux.project_dir equals or is under that dir. Falls back
+# target, or (when a repository directory is given) its cwd or tmux.project_dir equals or is under that dir. Falls back
 # to the target as a sid when it has a registry row or an events file. Unknown target prints nothing.
 borg_resume_close_targets() {
     local _t="$1" _dir="${2:-}" _sid _hit=0 _files

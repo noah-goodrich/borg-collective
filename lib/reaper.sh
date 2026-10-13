@@ -12,7 +12,7 @@ BORG_REAP_STALE_HOURS="${BORG_REAP_STALE_HOURS:-12}"
 
 # ── Session staleness predicate ───────────────────────────────────────────────
 
-# Predicate: should this project's active/waiting status be reaped to idle?
+# Predicate: should this repository's active/waiting status be reaped to idle?
 # Args: <status> <last_activity_iso> <has_live_window: 1|0>
 # Returns 0 (reap) when status is active/waiting AND no live window AND
 # last_activity is missing or older than BORG_REAP_STALE_HOURS. Returns 1 (keep).

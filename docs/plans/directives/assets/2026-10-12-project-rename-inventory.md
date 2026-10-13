@@ -3,7 +3,7 @@
 *Directive: [2026-08-31-project-to-repository-rename](../2026-08-31-project-to-repository-rename.md), first acceptance criterion.*
 *Pinned to commit `a2744df` (main, 2026-10-12). Companion data: `2026-10-12-project-rename-inventory.tsv`.*
 
-This is the classification the directive calls "the actual work". Every occurrence of `project` or `projects` (case-insensitive) in tracked `*.py`, `*.zsh`, `*.sh` and `*.bats` files at `a2744df` has one row in the TSV, with a sense. The first pass used five senses; a second pass (2026-10-12) added a sixth, `noise`, and moved 48 rows into it. The rename started with R1 (PR #350) and continued with R2 (PR #352); see "Relabels after R1" and "Relabels after R2". Line numbers are pinned to `a2744df` and drift as main moves; anchor on file plus the quoted code, not the number.
+This is the classification the directive calls "the actual work". Every occurrence of `project` or `projects` (case-insensitive) in tracked `*.py`, `*.zsh`, `*.sh` and `*.bats` files at `a2744df` has one row in the TSV, with a sense. The first pass used five senses; a second pass (2026-10-12) added a sixth, `noise`, and moved 48 rows into it. The rename started with R1 (PR #350) and continued with R2 (PR #352); see "Relabels after R1", "Relabels after R2" and "Relabels after R3". Line numbers are pinned to `a2744df` and drift as main moves; anchor on file plus the quoted code, not the number.
 
 ## Method
 
@@ -31,15 +31,15 @@ git ls-files "*.py" "*.zsh" "*.sh" "*.bats" \
 
 | sense      | rows | share |
 |------------|------|-------|
-| repository | 2538 | 64.9% |
-| contract   | 1060 | 27.1% |
+| repository | 2533 | 64.8% |
+| contract   | 1065 | 27.2% |
 | external   | 186  | 4.8%  |
 | workstream | 72   | 1.8%  |
 | noise      | 48   | 1.2%  |
 | ambiguous  | 7    | 0.2%  |
 | total      | 3911 | 100%  |
 
-Before the noise pass the table read repository 2614, contract 1023, external 213, workstream 45, ambiguous 16. The 48 noise rows came from repository (9), external (30) and ambiguous (9); contract and workstream lost none. The R1 relabel (PR #350, 2026-10-12) then moved 27 rows from repository to workstream and 12 from repository to contract; see "Relabels after R1" below. The pin is still `a2744df`: R1 renamed code but this table does not follow the renames, so a row R1 renamed keeps its `repository` label. The R2 relabel (PR #352, 2026-10-12) then moved 27 rows from repository to contract and 3 from repository to external, and 2 rows from contract to repository; see "Relabels after R2" below. The same rule holds: a row R2 renamed keeps its `repository` label.
+Before the noise pass the table read repository 2614, contract 1023, external 213, workstream 45, ambiguous 16. The 48 noise rows came from repository (9), external (30) and ambiguous (9); contract and workstream lost none. The R1 relabel (PR #350, 2026-10-12) then moved 27 rows from repository to workstream and 12 from repository to contract; see "Relabels after R1" below. The pin is still `a2744df`: R1 renamed code but this table does not follow the renames, so a row R1 renamed keeps its `repository` label. The R2 relabel (PR #352, 2026-10-12) then moved 27 rows from repository to contract and 3 from repository to external, and 2 rows from contract to repository; see "Relabels after R2" below. The same rule holds: a row R2 renamed keeps its `repository` label. The R3 relabel (PR #357, 2026-10-13) then moved 5 rows from repository to contract; see "Relabels after R3" below.
 
 By shard (files, rows, then rows per sense):
 
@@ -58,7 +58,7 @@ By shard (files, rows, then rows per sense):
 | 10    | 18    | 290  | 135  | 5    | 36  | 110 | 0   | 4     |
 | 11    | 31    | 307  | 156  | 18   | 66  | 64  | 0   | 3     |
 | 12    | 53    | 148  | 61   | 9    | 36  | 37  | 5   | 0     |
-| all   | 148   | 3911 | 2538 | 72   | 186 | 1060| 7   | 48    |
+| all   | 148   | 3911 | 2533 | 72   | 186 | 1065| 7   | 48    |
 
 The shard rows above are the classification record and follow the R1 relabel only. The R2 relabel moved 30 rows out of repository and 2 back in, in files of shards 3 to 12, and the TSV does not record shard membership, so the shard rows no longer sum to the `all` row: they total repository 2566, contract 1035 and external 183.
 
@@ -193,14 +193,14 @@ Counts by file: `tests/briefing.bats` 19, `borg.zsh` 10, `borg_core/link/grid.py
 
 Not noise, kept as classified: `pyproject` (25 rows, external), `projectPath` in `scripts/resume-skeleton.py` (161, 231; external, Claude's own session key), `myproject`, `aproject`, `nosuchproject` (19 rows), `ProjectNotFound` (15 rows), `testprojectdirof...` (2 rows) and the other identifiers that contain the noun as a component.
 
-## Contract-sense breakdown (1060 rows)
+## Contract-sense breakdown (1065 rows)
 
 A contract name is one that other code, hooks, the plugin or on-disk data read, so renaming it needs a migration or a deprecation path. The table groups the rows by the identifier the match sits inside, derived from the code on each line rather than from the note column.
 
 | contract name                         | rows |
 |---------------------------------------|------|
 | `projects` (key, flag, jq path)       | 582  |
-| `project` (field or value, see below) | 172  |
+| `project` (field or value, see below) | 173  |
 | `PROJECT_PLAN.md` and `PROJECT_PLAN`  | 107  |
 | `total_projects` (link --json)        | 55   |
 | `.borg-project` marker                | 35   |
@@ -208,9 +208,9 @@ A contract name is one that other code, hooks, the plugin or on-disk data read, 
 | `items_by_project` (recon doc)        | 17   |
 | `@project_*`, `tmux.project_dir`      | 15   |
 | env vars (see below)                  | 14   |
-| other identifiers embedding a name    | 29   |
+| other identifiers embedding a name    | 33   |
 | `__PROJECT_NAME__` placeholders       | 6    |
-| total                                 | 1060 |
+| total                                 | 1065 |
 
 - **The registry key is most of the first row.** 584 rows read `projects`, and the token-level grouping cannot separate the registry key from the `borg link --json` document key and the recon `--projects` flag, which share the spelling. By the shard notes the registry key, its jq paths and its fixtures dominate; the flag is the smaller group.
 - **Env vars:** `BORG_WORK_PROJECTS` 10 rows, `BORG_PROJECT_NAME` 4 rows.
@@ -265,6 +265,13 @@ R2 (PR #352) renamed the repository sense of `project` in `borg_core` outside `l
 - **Callee rows (7, note extended).** The "callee renamed in R2" rows stay `repository`; their note now cites #352.
 - **New matches.** None in `borg_core` outside `link/`: every match on `origin/main` maps to an inventory row by file and line text. The 36 matches in `borg_core/link` that do not map are on lines R1 reworded.
 
+## Relabels after R3
+
+R3 (PR #357) renamed the repository sense of `project` in `lib/` and `hooks/` and relabelled the 5 rows it judged were contract. Only the `sense` and `note` columns of those 5 rows changed; keys, line numbers and the row count are untouched. Every changed note cites #357. As after R1 and R2, the pin stays `a2744df` and a row R3 renamed keeps its `repository` label.
+
+- **Contract, kept (5 rows, were repository).** The session-mode value `project` in `lib/borg-hooks.sh` (86, 100) is persisted by `bin/borg-resume` as the `mode` field of the session registry, so it keeps its name; `PROJECT=` in the marker-walk command in `hooks/bash-guard.sh` (291) must stay byte-identical to `skills/borg-link/SKILL.md` and `tests/bash_guard.bats`; the `<project|sid> [project_dir]` placeholders in `lib/borg/resume-close.sh` (4, 4) quote the usage text in `bin/borg-resume`, which is outside R3. The prose comment at line 17 ("when a repository directory is given") was first kept as contract by mistake; it means a repository directory, so it is reworded and its row is back to `repository`.
+- **New matches (42, no row).** The inventory scans only `*.py`, `*.zsh`, `*.sh` and `*.bats`, so the extensionless `lib/recon/adapters/recon-adapter-github` (32 matches) and the `lib/borg/*.sh` lines added after the pin (10 matches) have no row. 17 adapter matches are repository sense and were renamed; the other 25 are contract (the `--projects` flag, `projects.json`, the Item `project` key, the session registry `.project` and `.tmux.project_dir` fields, the tmux `@project_dir` option). The `bin/` scripts have the same gap and no assigned step.
+
 ## Known limits
 
 - **The classification is rule-based.** Each shard classifier applied rules to the text around each match and overrode by site. Nobody read all 3911 rows; the repository rows (2605, the edit scope) are the default and are the least checked. 45 of the 60 audited rows were repository and all 45 agreed, which bounds nothing tighter than a spot-check.
@@ -275,7 +282,7 @@ R2 (PR #352) renamed the repository sense of `project` in `borg_core` outside `l
 
 ## What this means for the rename PRs
 
-- **`repository` is the edit scope for the next rename PR: 2538 rows,** about two thirds of the occurrences. The other 1373 rows (contract 1060, external 186, workstream 72, noise 48, ambiguous 7) must not be touched by a mechanical pass. The noise rows are the ones a naive word-boundary-free replacement would damage first.
+- **`repository` is the edit scope for the next rename PR: 2533 rows,** about two thirds of the occurrences. The other 1378 rows (contract 1065, external 186, workstream 72, noise 48, ambiguous 7) must not be touched by a mechanical pass. The noise rows are the ones a naive word-boundary-free replacement would damage first.
 - **Contract names migrate separately,** each behind a reader that accepts both spellings, per the directive: the registry key `projects` last, after every reader tolerates `repositories`. The `--json` document keys (`projects`, `total_projects`, row key `project`) are a wire change for the `borg-link` skill and need a `DOCUMENT_VERSION` decision.
 - **`.borg-project` and `PROJECT_PLAN.md` are decisions, not edits,** per the directive's third change item.
 - **Resolve the 7 ambiguous rows and the flagged judgment calls first;** they are a few dozen rows and each one changes what a rename script may touch.

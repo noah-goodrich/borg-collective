@@ -10,14 +10,14 @@ source "$HOME/.claude/lib/borg-hooks.sh"
 
 INPUT=$(cat /dev/stdin 2>/dev/null || true)
 CWD=$(echo "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
-PROJECT=$(basename "${CWD:-$(pwd)}")
+REPOSITORY=$(basename "${CWD:-$(pwd)}")
 
 WINDOW="" PANE_TTY=""
 if [[ -n "${TMUX:-}" && -n "${TMUX_PANE:-}" ]]; then
     WINDOW=$(tmux display-message -t "$TMUX_PANE" -p "#{window_name}" 2>/dev/null || true)
     PANE_TTY=$(tmux display-message -t "$TMUX_PANE" -p "#{pane_tty}" 2>/dev/null || true)
 fi
-SUBTITLE="${WINDOW:+$WINDOW — }$PROJECT"
+SUBTITLE="${WINDOW:+$WINDOW — }$REPOSITORY"
 
 _borg_osa_notify "Claude Code" "$SUBTITLE" "Ready for input"
 
