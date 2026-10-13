@@ -23,7 +23,7 @@ _rd_now() {
 }
 
 _rd_mtime() {
-    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null
+    stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null
 }
 
 _rd_iso_epoch() {
