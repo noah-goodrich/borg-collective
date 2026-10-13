@@ -9,7 +9,7 @@ Public-repo note: this file is public. Sensitive specifics (the highest-risk ite
 - A lifecycle research pass (2026-10-13) compared three strategies for plan, implement, test, review, deploy and monitor: adopt a platform (Beads, Gas City, Superpowers), compose borg with FOSS per stage, or focus borg and delete. Noah chose a HYBRID: borg stays the spine, plus a short list of cheap, stateless adoptions. Every state-store addition (Beads, Backlog.md, Gas City) is deferred behind a spike with a kill gate. Obsidian is a no. Every adoption is paired with a deletion PR. Experiments ran first (E1 to E4); this directive is the two-week plan built on their results.
 - The measured problem is not missing tooling, it is where the effort goes. In the 60 days to 2026-10-13, 79% of 321 merged PRs were infra (borg-collective, claude-plugins, dotfiles). Only 13.7% had an independent verdict before merge, all of it in borg-collective and all in the last two days; product repos got 0%. The waiting queue is two-thirds product with a median age of about 105 days, and it contains the highest-risk open product item, a long-open fix tracked in a private channel (details deliberately kept out of this public file).
 - So two product slices come first and are not infra: P0a, the single highest-risk open item (due day 2, with an escalation path), and P0b, a sweep of the other stale product PRs. Everything else is subordinate to them and to a new infra budget rule (product feature or fix PRs at least 40% of merged feature, fix and deletion PRs over the two weeks, measured with a stated command).
-- The stateless adoptions, in value-per-effort order: verify-by-default on every dispatched PR including product repos (S1); a test-first prompt cherry-picked into nanoprobe briefs (S2); production probes (S3) and a free-tier error tracker (S4); a path-gated CI reviewer pilot on one stillpoint-labs repo with a kill criterion (S5); reveal's deploy workflow extracted and adopted by one more repo, no new skill (S6); a one-week trial of native cross-session agents that gates deleting only the orchestrator-to-drone path of vinculum and the matching part of `borg link` liveness (S7).
+- The stateless adoptions, in value-per-effort order: verify-by-default on every dispatched PR including product repos (S1); a test-first prompt cherry-picked into nanoprobe briefs (S2); production probes (S3) and a free-tier error tracker (S4); a path-gated CI reviewer pilot on one stillpoint-labs repo with a kill criterion (S5); deployment rolled into `/borg-assimilate` as a step that calls a shared reusable workflow extracted from reveal's and adopted by one more repo, with no separate deploy command or skill (S6); a one-week trial of native cross-session agents that gates deleting only the orchestrator-to-drone path of vinculum and the matching part of `borg link` liveness (S7).
 - The deletions slices (S8 inventory, S9 deletions) are the guard against borg's add-without-remove habit: an adoption is not done until its deletion PR is open, and only items an inventory proves unused are deleted.
 - Reliability and friction: a small flake-fix slice (F1) so the verifier and the gates are trustworthy, and a friction-not-addressed section with revisit triggers.
 - Housekeeping: correct the stale "96% main loop" cost claim in the token-cost skill to the measured share (H1), clear stale blocked background sessions (H2), close or run the Obsidian lens (H3).
@@ -62,7 +62,7 @@ Effort is S (under half a day), M (about a day), L (2 to 3 days). Week 1 is days
 | H3 | Obsidian close-or-run | borg-collective | S | 1 |
 | S4 | Error tracker | stillpoint-labs | M | 2 |
 | S5 | CI reviewer pilot | stillpoint-labs | M | 2 |
-| S6 | Shared deploy workflow | stillpoint-labs | L | 2 |
+| S6 | Deploy as an assimilate step | stillpoint-labs | L | 2 |
 | S9 | Deletions | borg-collective | L | 2 |
 
 Dependencies: P0a first, due day 2, ahead of everything. S1 after F1 (the verifier needs trustworthy gates). S2 after S1 (same file). S4 after S3 and D6. S9 after S8; the vinculum (orchestrator-to-drone path only) and link-liveness deletions also wait for the S7 verdict, which must land by day 9; each adoption slice's deletion PR is listed in its own deliverables and is tracked by S9. S5 and S6 are independent of each other.
@@ -139,14 +139,15 @@ Evidence: E3. Exactly as E3 recommends, on one stillpoint-labs repo (D8).
 - Kill criterion (decided before the pilot starts, applied after 10 path-matching PRs or 4 weeks, whichever comes first): remove the workflow if fewer than half of posted comments were useful or acted-on ("useful" is the LENIENT standard applied to blocker and major comments only, as in E3's 76%; E3's strict precision was 11%, accepted because the severity filter and cap are what keep the cost bounded), or if any PR drew more than 3 comments, or if it produced zero true catches across the window. If fewer than 10 path-matching PRs occur in 4 weeks, extend once by 4 weeks, then decide on what exists. Removal is a one-file deletion PR prepared in advance.
 - Done when: the workflow is live on the pilot repo with the kill date written in the PR body. Deletion PR named: none for stillpoint-labs; the human review time it is meant to save is measured in the acceptance criteria.
 
-### S6 Shared deploy workflow
+### S6 Deploy as a step of /borg-assimilate
 
-Evidence: audit (reveal's reusable pipeline is the only real one: ordered jobs, Fly bluegreen with health gate and rollback, Cloudflare Pages deploy). There is no `/borg-deploy` skill and none is created.
+Evidence: audit (reveal's reusable pipeline is the only real one: ordered jobs, Fly bluegreen with health gate and rollback, Cloudflare Pages deploy). Noah's direction (2026-10-13): `/borg-assimilate` was always meant to be the deploy command, so all deploy behavior rolls into it. There is no `/borg-deploy` skill and none is created; no separate deploy command is added.
 
 - Deliverable 1: make reveal's reusable deploy workflow callable from another repo (parameterize app names, health URL, build sha check; document inputs in the file header), consumed at a pinned SHA (D9).
-- Deliverable 2: adopt it in one more repo (default ingle) in a PR that DELETES that repo's inlined copy of the same steps; the PR is the deletion PR for this slice.
-- Tests: actionlint on both workflows; a preview or dry-run deploy of the second repo; a forced health-gate failure proving the rollback path still runs; the second repo's post-deploy sha assertion still passes.
-- Done when: both repos deploy through one definition and the second repo's workflow file is shorter. Review gate: S5 does not apply to these PRs unless the pilot repo is the second consumer.
+- Deliverable 2: add a deploy step to `skills/borg-assimilate/SKILL.md`, after the merge in its shipping step: assimilate calls the shared reusable workflow, waits on its health gate, runs the post-deploy probes from S3 (health with build sha, sign-in page, auth-callback origin, MCP version), and reports the outcome; a failed gate leaves the workflow's automatic rollback in effect and assimilate reports it as a blocker. Repos with no deploy workflow skip the step silently.
+- Deliverable 3: adopt it in one more repo (default ingle) in a PR that DELETES that repo's inlined copy of the same steps; the PR is the deletion PR for this slice.
+- Tests: actionlint on both workflows; a bats test that the assimilate skill's deploy step names the shared workflow, the health-gate wait, the S3 probes and the report; a preview or dry-run deploy of the second repo run through assimilate; a forced health-gate failure proving the rollback path still runs; the second repo's post-deploy sha assertion still passes.
+- Done when: both repos deploy through one definition, invoked from `/borg-assimilate`, and the second repo's workflow file is shorter. Review gate: S5 does not apply to these PRs unless the pilot repo is the second consumer.
 
 ### S7 Native agents trial (gates deletions)
 
@@ -173,7 +174,7 @@ Each adoption names its deletion PR. Candidates, each conditional on S8 (or S7 o
 - Directive-state deriver and the status vocabulary: delete the deriver and the competing status words only if S8 shows nothing consumes them AND #262 is not building on them (its Review-by and lapse logic reads directive state). If #262 proceeds, defer this row.
 - Hard-wired pr-watch (single-repo launchd job and bin script): delete if nothing consumes its notifications; the PR control hub design (#97, never built) is closed as severed in the same PR.
 - Cairn residue: the remaining references in the test flow matrix and docs.
-- Per-repo deploy copies: delivered by S6 deliverable 2.
+- Per-repo deploy copies: delivered by S6 deliverable 3.
 - Zero-fire hooks: whichever of the 17 hook scripts S8 proves unused, deleted together in ONE batched, revertable PR with one commit per hook, so any single hook can be reverted by cherry-picking its commit while the infra PR count stays low.
 - Orchestrator-to-drone use of vinculum and the overlapping part of `borg link` liveness: only after S7 passes, and only that path; drone-to-orchestrator and cross-session pubsub stay.
 - Dormant skills (`/borg-review`, repo-review): only if S8 shows zero use over a window of at least 30 days; otherwise keep.
@@ -249,7 +250,7 @@ Caveat: PR count is not effort-weighted, and part of the pilot product repo's me
 - [ ] AC5 The production probe ran green for 24 hours, both replay fixtures and the dead-endpoint fixture fail it, and stopping the runner produced an alert on the notification channel. Evidence: the probe workflow run list, the stub-server bats results, and the received alert.
 - [ ] AC6 One error visible through the tracker's MCP. Evidence: the S4 PR note with the event id.
 - [ ] AC7 The CI reviewer is live on the pilot repo with a written kill date, pinned by full SHA, and has produced at least one posted run. Evidence: the workflow file's uses line; a PR with the reviewer comment.
-- [ ] AC8 Two repos deploy through the shared workflow and the second repo's inlined copy is deleted. Evidence: the S6 PR diff stat; a green deploy run on each.
+- [ ] AC8 Two repos deploy through the shared workflow, driven by `/borg-assimilate`, and the second repo's inlined copy is deleted. Evidence: the S6 PR diff stat; a green deploy run on each.
 - [ ] AC9 The native agents trial has a recorded verdict against the six criteria by day 9, with sample minimums met or the verdict marked insufficient. Evidence: the trial log summary and the S7 verdict PR.
 - [ ] AC10 The fire inventory exists and the deletion record lists what was deleted with PR numbers. Evidence: the dated asset under docs/plans/assets/; git log for the deletion PRs.
 - [ ] AC11 Rule 1 and Rule 2 of the infra budget hold at day 14. Evidence: the measurement commands' output pasted in the closing checkpoint.
@@ -284,7 +285,7 @@ From the friction scan of 101 checkpoints (theme counts are checkpoints mentioni
 - PKCE synthetic login (D7). Trigger: a second auth-path incident, or a free test mailbox.
 - Merge-queue tooling (Refinery-style serialized rebase and merge): trigger is rebase toil recurring after the queue shrinks; GitHub's native merge queue is not available here.
 - OpenTelemetry export into a local dashboard: trigger is a concrete cost-dashboard demand; the spend ledger already works.
-- Fly review apps and a Renovate preset: after S6, as a follow-on to the shared workflow if a third consumer appears.
+- Fly review apps and a Renovate preset: after S6, as a follow-on to the shared workflow, still driven from `/borg-assimilate`, if a third consumer appears.
 - Rolling the CI reviewer to a second repo: only if S5 passes its kill criterion.
 
 ## Risks
@@ -340,6 +341,7 @@ Each finding was checked against the research evidence before acting.
 | B8 | minor | Dangling and unchecked references | applied |
 
 - B1 applied: confirmed the repo is public. The item, its repo and PR number, and the security-posture wording were removed; the specifics live in the private triage sheet and the private repo's own PR. Caveat for Noah: the earlier revision stays reachable in this PR's commit history and the PR was open when filed; scrubbing that needs a force-push or a fresh PR, which is Noah's call.
+- Direction (2026-10-13, Noah): deployment is a step of `/borg-assimilate`, not a separate command or skill; S6 and AC8 re-scoped accordingly, no other slice changed.
 - B2 applied: P0 is split into P0a (day 2, escalation, dated risk acceptance only) and P0b (sweep, lower priority, stillpoint-labs only; the noah-goodrich PRs are out of Rule 1).
 - B3 applied: dead-man's switch off the runner, explicit alert channel, grace for best-effort cron, dead-runner acceptance test. Declined in part: the finding asks why Gatus was dropped. It stays dropped because the tested Gatus build cannot read a Location header; the replacement for its validation is the fixture suite in S3.
 - B4 applied: deletions excluded, hook deletions batched into one PR, S3 to S6 excluded from the product side, feature and fix PRs only, Rule 2 excludes tests and fixtures, feasibility precomputed (needs about 6 product PRs of about 15).
