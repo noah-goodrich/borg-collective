@@ -3,13 +3,13 @@
 #
 # There is ONE shared local Supabase stack, owned by the stillpoint repo
 # ($BORG_STILLPOINT_SUPABASE_DIR, default $HOME/dev/stillpoint). Containers are named
-# supabase_*_stillpoint. Every other project attaches to it over the external
+# supabase_*_stillpoint. Every other repository attaches to it over the external
 # supabase_network_stillpoint Docker network; only stillpoint's own borg-hooks/pre-up.sh (or a
 # human working directly in the stillpoint repo) may boot, stop, or reset it.
 #
-# 2026-07-24 outage: a drone ran `supabase start` from a non-stillpoint project directory to
+# 2026-07-24 outage: a drone ran `supabase start` from a non-stillpoint repository directory to
 # "un-wedge" a stack, which booted a COMPETING local stack that collided on host ports
-# 54321/54322 and took the shared stack down for every project. Docs alone did not prevent this —
+# 54321/54322 and took the shared stack down for every repository. Docs alone did not prevent this —
 # this hook is the hard guard.
 #
 # DENY (exit 2, reason on stderr) when EITHER:
@@ -59,7 +59,7 @@ STILLPOINT_DIR="${STILLPOINT_DIR%/}"
 
 _deny() {
     # shellcheck disable=SC2016  # backtick is literal markdown formatting, not substitution
-    printf 'borg supabase guard: %s\n\nThis project shares the single stillpoint Supabase stack. Booting/killing a local stack collides on ports 54321/54322 and takes the shared stack down for every project. To reset/reseed LOCAL data, run it from the stillpoint repo (~/dev/stillpoint). `supabase db push`/migrations against Cloud are fine.\n' \
+    printf 'borg supabase guard: %s\n\nThis repository shares the single stillpoint Supabase stack. Booting/killing a local stack collides on ports 54321/54322 and takes the shared stack down for every repository. To reset/reseed LOCAL data, run it from the stillpoint repo (~/dev/stillpoint). `supabase db push`/migrations against Cloud are fine.\n' \
         "$1" >&2
     exit 2
 }

@@ -35,16 +35,16 @@ _borg_sha12() {
     { shasum -a 256 2>/dev/null || sha256sum; } | cut -c1-12
 }
 
-# Key naming one project DIRECTORY's machine-local state: <repo12>-<path12>, or local-<path12> outside a git
+# Key naming one repository DIRECTORY's machine-local state: <repo12>-<path12>, or local-<path12> outside a git
 # repo. path12 = sha256 of the PHYSICAL directory path (pwd -P, no trailing slash); repo12 = sha256 of
 # `git rev-parse --path-format=absolute --git-common-dir`. Per directory (worktrees of one repo can be in
 # different statuses at once), namespaced by repo. Siblings, byte-identical: borg_core/paths.py::
-# project_state_key and the other shell copy. Rationale lives in the Python docstring.
-# Usage: _borg_project_state_key <dir> [repo]
+# repository_state_key and the other shell copy. Rationale lives in the Python docstring.
+# Usage: _borg_repository_state_key <dir> [repo]
 # The optional 2nd arg (even empty) is the registry entry's `repo` field: it replaces the git fork, and
-# empty means outside git (path-only key). Omit it to fork git. Python sibling: project_state_key(dir, repo).
-_borg_project_state_key() {
-    local _d="${1:?_borg_project_state_key: dir required}" _phys _repo _tail="" _base _anc
+# empty means outside git (path-only key). Omit it to fork git. Python sibling: repository_state_key(dir, repo).
+_borg_repository_state_key() {
+    local _d="${1:?_borg_repository_state_key: dir required}" _phys _repo _tail="" _base _anc
     while [ "${#_d}" -gt 1 ] && [ "${_d%/}" != "$_d" ]; do _d="${_d%/}"; done
     # A missing directory still resolves like Python's realpath: physicalise the deepest existing ancestor.
     _anc="$_d"
@@ -72,8 +72,8 @@ _borg_project_state_key() {
     fi
 }
 
-# <state root>/projects/<key>/state.json for a project directory. Creates nothing.
-# Usage: _borg_project_state_file <dir> [repo]    (repo: see _borg_project_state_key)
-_borg_project_state_file() {
-    printf '%s/projects/%s/state.json\n' "$(_borg_state_root)" "$(_borg_project_state_key "${1:?_borg_project_state_file: dir required}" ${2+"$2"})"
+# <state root>/projects/<key>/state.json for a repository directory. Creates nothing.
+# Usage: _borg_repository_state_file <dir> [repo]    (repo: see _borg_repository_state_key)
+_borg_repository_state_file() {
+    printf '%s/projects/%s/state.json\n' "$(_borg_state_root)" "$(_borg_repository_state_key "${1:?_borg_repository_state_file: dir required}" ${2+"$2"})"
 }

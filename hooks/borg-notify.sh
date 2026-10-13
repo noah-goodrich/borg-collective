@@ -21,12 +21,12 @@ MESSAGE=$(echo "$INPUT" | jq -r '.message // ""' 2>/dev/null || echo "")
 # shellcheck source=../lib/borg-hooks.sh
 source "${HOME}/.claude/lib/borg-hooks.sh"
 
-# Orchestrator-mode sessions do not flip status=waiting on any project.
+# Orchestrator-mode sessions do not flip status=waiting on any repository.
 if [[ "$(_borg_session_mode "$CWD")" == "orchestrator" ]]; then
     exit 0
 fi
 
-PROJECT=$(_borg_find_project "$CWD")
+REPOSITORY=$(_borg_find_repository "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 # Origin tag lets borg-notifyd suppress its own popup when notify.sh already fired on the host.
@@ -34,10 +34,10 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 ORIGIN=host
 _borg_is_container && ORIGIN=container
 
-PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
+PROJ_DIR=$(_borg_resolve_proj_dir "$REPOSITORY" "$CWD")
 
 # Write status=waiting + notification context to state.json.
-_borg_proj_repo "$PROJECT" "$PROJ_DIR"
+_borg_proj_repo "$REPOSITORY" "$PROJ_DIR"
 _cur_state=$(_borg_state_read "$PROJ_DIR" ${_REPO+"$_REPO"})
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg now "$NOW" \

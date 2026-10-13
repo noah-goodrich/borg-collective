@@ -2514,7 +2514,7 @@ evals/session-load/run.sh	163	1	project	repository	fixture repo dir named projec
 hooks/bash-guard.sh	276	1	project	contract	.borg-project marker filename
 hooks/bash-guard.sh	277	1	project	contract	.borg-project marker filename
 hooks/bash-guard.sh	291	1	project	contract	.borg-project marker filename
-hooks/bash-guard.sh	291	2	PROJECT	repository	PROJECT= var holding marker contents (repo name)
+hooks/bash-guard.sh	291	2	PROJECT	contract	contract: PROJECT= line of the canonical marker-walk command pinned by skills/borg-link/SKILL.md and tests/bash_guard.bats; kept in R3 (#357)
 hooks/bash-guard.sh	291	3	project	contract	.borg-project marker filename
 hooks/bash-guard.sh	520	1	project	external	cargo locate-project subcommand
 hooks/borg-link-down.sh	9	1	PROJECT	contract	PROJECT_PLAN.md filename
@@ -2633,9 +2633,9 @@ lib/borg-hooks.sh	17	2	project	contract	.borg-project marker filename
 lib/borg-hooks.sh	21	1	project	repository	registered repo dir (state helper)
 lib/borg-hooks.sh	24	1	project	contract	.borg-project marker filename
 lib/borg-hooks.sh	25	1	project	contract	.borg-project marker filename
-lib/borg-hooks.sh	86	1	project	repository	session-mode token 'project' vs orchestrator
+lib/borg-hooks.sh	86	1	project	contract	contract: literal session-mode value 'project', persisted by bin/borg-resume as the registry mode field; kept in R3 (#357)
 lib/borg-hooks.sh	87	1	project	repository	project-mode session = a repo directory
-lib/borg-hooks.sh	100	1	project	repository	session-mode token 'project' vs orchestrator
+lib/borg-hooks.sh	100	1	project	contract	contract: literal session-mode value 'project', persisted by bin/borg-resume as the registry mode field; kept in R3 (#357)
 lib/borg-hooks.sh	104	1	project	repository	registered repo dir (state helper)
 lib/borg-hooks.sh	107	1	project	repository	registered repo dir (state helper)
 lib/borg-hooks.sh	122	1	project	repository	registered repo dir (state helper)
@@ -2675,10 +2675,10 @@ lib/borg-hooks.sh	267	1	project	repository	registered repo dir (state helper)
 lib/borg-hooks.sh	269	1	project	repository	registered repo dir (state helper)
 lib/borg-hooks.sh	270	1	project	repository	registered repo dir (state helper)
 lib/borg-hooks.sh	274	1	project	repository	registered repo dir (state helper)
-lib/borg/resume-close.sh	4	1	project	repository	borg-resume mark-closed arg: project name/dir
-lib/borg/resume-close.sh	4	2	project	repository	borg-resume mark-closed arg: project name/dir
+lib/borg/resume-close.sh	4	1	project	contract	contract: usage placeholder quoting bin/borg-resume (mark-closed <project|sid> [dir]); bin/ is outside R3; kept in R3 (#357)
+lib/borg/resume-close.sh	4	2	project	contract	contract: usage placeholder quoting bin/borg-resume (mark-closed <project|sid> [dir]); bin/ is outside R3; kept in R3 (#357)
 lib/borg/resume-close.sh	16	1	project	contract	resume registry field .project
-lib/borg/resume-close.sh	17	1	project	repository	project dir given by caller
+lib/borg/resume-close.sh	17	1	project	repository	renamed in R3 (#357)
 lib/borg/resume-close.sh	17	2	project	contract	resume registry field tmux.project_dir
 lib/borg/resume-close.sh	32	1	project	contract	resume registry fields .project / tmux.project_dir
 lib/borg/resume-close.sh	32	2	project	contract	resume registry fields .project / tmux.project_dir

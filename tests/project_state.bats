@@ -27,8 +27,8 @@ setup() {
 _py() {
     PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import repository_state_file as f; print(f(sys.argv[1]))' "$1"
 }
-_bash() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_project_state_file "$2"' _ "$ROOT" "$1"; }
-_zsh() { zsh -c 'source "$1/lib/state-root.zsh" && _borg_project_state_file "$2"' _ "$ROOT" "$1"; }
+_bash() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_repository_state_file "$2"' _ "$ROOT" "$1"; }
+_zsh() { zsh -c 'source "$1/lib/state-root.zsh" && _borg_repository_state_file "$2"' _ "$ROOT" "$1"; }
 
 _agree() {
     local p b z

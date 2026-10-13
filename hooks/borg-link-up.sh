@@ -2,14 +2,14 @@
 # borg-link-up.sh — Claude Code / Cortex Code Stop hook
 # "Link up" to the collective: flush state from the session when it ends.
 #
-# Project sessions:
+# Repository sessions:
 # - State update (state.json): status=idle, claude_session_id, last_activity
 # - Tracks has_uncommitted_changes for next session's reminder
-# - Cleans up per-project skill overlays symlinked during link-down
+# - Cleans up per-repository skill overlays symlinked during link-down
 # - Nudges on exit if no checkpoint was recorded this session ("run /borg-link-up next time")
 #
 # Orchestrator sessions (CWD == $BORG_ORCHESTRATOR_ROOT):
-# - No registry writes, no uncommitted-changes scans, no per-project nudges. Early exit.
+# - No registry writes, no uncommitted-changes scans, no per-repository nudges. Early exit.
 #
 # Does NOT generate LLM debriefs. Checkpoints are user-authored via /borg-link-up
 # (the skill). Registered as a Stop hook in settings.json for both Claude Code and CoCo.
@@ -34,7 +34,7 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 # shellcheck source=../lib/borg-hooks.sh
 source "${HOME}/.claude/lib/borg-hooks.sh"
 
-# Orchestrator-mode sessions touch no per-project state: no registry writes,
+# Orchestrator-mode sessions touch no per-repository state: no registry writes,
 # uncommitted-changes scans, or checkpoint nudges. Checkpoints written via
 # /borg-link-up during the session already live at $CWD/.borg/checkpoints/<ts>.md —
 # that is the durable record; nothing further to do here.
@@ -68,10 +68,10 @@ _warn() {
     WARNINGS+="${WARNINGS:+$'\n\n'}$msg"
 }
 
-PROJECT=$(_borg_find_project "$CWD")
+REPOSITORY=$(_borg_find_repository "$CWD")
 NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-PROJ_DIR=$(_borg_resolve_proj_dir "$PROJECT" "$CWD")
+PROJ_DIR=$(_borg_resolve_proj_dir "$REPOSITORY" "$CWD")
 
 # Check for uncommitted changes (warn via systemMessage; store flag in state.json)
 UNCOMMITTED=""
@@ -82,7 +82,7 @@ if command -v git >/dev/null 2>&1; then
 fi
 
 if [[ -n "$UNCOMMITTED" ]]; then
-    _warn "▸ WARNING: ${PROJECT} has uncommitted changes
+    _warn "▸ WARNING: ${REPOSITORY} has uncommitted changes
   Run /simplify then commit before your next session." "$UNCOMMITTED"
     DIRTY_FLAG=true
 else
@@ -121,7 +121,7 @@ fi
 
 # Write status=idle + session fields + has_uncommitted_changes + clock_divergence to
 # state.json (same atomic tmp+mv write this hook already uses for every other field).
-_borg_proj_repo "$PROJECT" "$PROJ_DIR"
+_borg_proj_repo "$REPOSITORY" "$PROJ_DIR"
 _cur_state=$(_borg_state_read "$PROJ_DIR" ${_REPO+"$_REPO"})
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg sid "$SESSION_ID" \
@@ -135,11 +135,11 @@ _new_state=$(printf '%s' "$_cur_state" | jq \
      (if $sid != "" then .claude_session_id = $sid else . end)')
 _borg_state_write "$PROJ_DIR" "$_new_state" ${_REPO+"$_REPO"} || true
 
-# Per-project skill overlay cleanup
+# Per-repository skill overlay cleanup
 CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
-PROJECT_SKILLS_DIR="$CWD/.borg/skills"
-if [[ -d "$PROJECT_SKILLS_DIR" ]]; then
-    for _skill_dir in "$PROJECT_SKILLS_DIR"/*/; do
+REPOSITORY_SKILLS_DIR="$CWD/.borg/skills"
+if [[ -d "$REPOSITORY_SKILLS_DIR" ]]; then
+    for _skill_dir in "$REPOSITORY_SKILLS_DIR"/*/; do
         [[ -d "$_skill_dir" ]] || continue
         _skill_name="${_skill_dir%/}"
         _skill_name="${_skill_name##*/}"
@@ -156,7 +156,7 @@ CHECKPOINT_DIR="$CWD/.borg/checkpoints"
 if [[ -d "$CHECKPOINT_DIR" ]]; then
     _recent_cp=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "*.md" -mmin -60 2>/dev/null | head -1 || true)
     if [[ -z "$_recent_cp" ]]; then
-        _warn "▸ No checkpoint in the last hour for ${PROJECT}
+        _warn "▸ No checkpoint in the last hour for ${REPOSITORY}
   Run /borg-link-up next session to save state for future resumption."
     fi
 fi

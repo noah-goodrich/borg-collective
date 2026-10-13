@@ -4,13 +4,13 @@
 # Registry is a pure discovery index: path, source, tmux_window, summary,
 # pinned, archived. Volatile session state (status, last_activity,
 # claude_session_id, has_uncommitted_changes, waiting_reason, notify_origin)
-# lives in per-project .borg/state.json files.
+# lives in per-repository .borg/state.json files.
 # Use borg_registry_with_state / borg_registry_get_with_state for reads that
 # need volatile fields (borg link, borg next, etc.).
 
 # Source shared reaper predicate (single home; also sourced by lib/borg-hooks.sh).
 source "${${(%):-%x}:A:h}/reaper.sh"
-# Per-project state-file resolvers (borg_state_read_path below reads the new location first).
+# Per-repository state-file resolvers (borg_state_read_path below reads the new location first).
 source "${${(%):-%x}:A:h}/state-root.zsh"
 
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
@@ -47,37 +47,37 @@ borg_registry_list() {
 }
 
 borg_registry_get() {
-    local project="$1"
-    borg_registry_read | jq -c --arg p "$project" '.projects[$p] // empty'
+    local repository="$1"
+    borg_registry_read | jq -c --arg p "$repository" '.projects[$p] // empty'
 }
 
 borg_registry_has() {
-    local project="$1"
-    borg_registry_read | jq -e --arg p "$project" '.projects | has($p)' &>/dev/null
+    local repository="$1"
+    borg_registry_read | jq -e --arg p "$repository" '.projects | has($p)' &>/dev/null
 }
 
-# Set a single key on a project entry
+# Set a single key on a repository entry
 borg_registry_set() {
-    local project="$1" key="$2" value="$3"
+    local repository="$1" key="$2" value="$3"
     borg_registry_read | jq \
-        --arg p "$project" \
+        --arg p "$repository" \
         --arg k "$key" \
         --argjson v "$value" \
         '.projects[$p][$k] = $v' | _borg_registry_write
 }
 
-# Merge a JSON object into a project entry (upserts all fields)
+# Merge a JSON object into a repository entry (upserts all fields)
 borg_registry_merge() {
-    local project="$1" json="$2"
+    local repository="$1" json="$2"
     borg_registry_read | jq \
-        --arg p "$project" \
+        --arg p "$repository" \
         --argjson data "$json" \
         'if .projects[$p] then .projects[$p] += $data else .projects[$p] = $data end' \
         | _borg_registry_write
 }
 
 borg_registry_add() {
-    local project="$1"
+    local repository="$1"
     local ppath="${2:-null}"
     local source="${3:-cli}"
     local tmux_session="${4:-null}"
@@ -97,23 +97,23 @@ borg_registry_add() {
             summary: null
         }')
 
-    borg_registry_merge "$project" "$json"
+    borg_registry_merge "$repository" "$json"
 }
 
 borg_registry_remove() {
-    local project="$1"
-    borg_registry_read | jq --arg p "$project" 'del(.projects[$p])' | _borg_registry_write
+    local repository="$1"
+    borg_registry_read | jq --arg p "$repository" 'del(.projects[$p])' | _borg_registry_write
 }
 
-# Update status + last_activity timestamp in the project's state.json.
+# Update status + last_activity timestamp in the repository's state.json.
 # Deprecated: prefer writing to state.json directly from hooks. Kept for
 # backward-compat callers (e.g. tests).
 borg_registry_set_status() {
-    local project="$1" proj_status="$2"
+    local repository="$1" proj_status="$2"
     local now ppath cur new
     now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     local prepo
-    IFS=$'\t' read -r ppath prepo < <(borg_registry_read | jq -r --arg p "$project" \
+    IFS=$'\t' read -r ppath prepo < <(borg_registry_read | jq -r --arg p "$repository" \
         '.projects[$p] | [(.path // ""), (.repo // "" | if type == "string" then . else "" end)] | @tsv')
     if [[ -z "$ppath" || "$ppath" == "null" ]]; then
         return 0
@@ -124,20 +124,20 @@ borg_registry_set_status() {
     borg_state_write "$ppath" "$new" "$prepo"
 }
 
-# ─── Per-project state helpers (zsh) ─────────────────────────────────────────
+# ─── Per-repository state helpers (zsh) ──────────────────────────────────────
 # Mirrors the bash helpers in lib/borg-hooks.sh; keep signatures in sync.
 
 borg_state_file() {
     printf '%s/.borg/state.json\n' "${1:?borg_state_file: dir required}"
 }
 
-# The state.json to READ: the per-project state-root copy if it exists, else the legacy
+# The state.json to READ: the per-repository state-root copy if it exists, else the legacy
 # <dir>/.borg/state.json (also when neither exists). AC5 expand: readers accept both before any writer
-# moves; writers use _borg_project_state_file. Optional 2nd arg = the registry entry's `repo`
-# field, which spares the git fork (see _borg_project_state_key). Mirrors _borg_state_read_path in borg-hooks.sh.
+# moves; writers use _borg_repository_state_file. Optional 2nd arg = the registry entry's `repo`
+# field, which spares the git fork (see _borg_repository_state_key). Mirrors _borg_state_read_path in borg-hooks.sh.
 borg_state_read_path() {
     local new
-    new=$(_borg_project_state_file "$@")
+    new=$(_borg_repository_state_file "$@")
     if [[ -f "$new" ]]; then
         printf '%s\n' "$new"
     else
@@ -157,12 +157,12 @@ borg_state_read() {
     fi
 }
 
-# Atomic write to the per-project state-root path (AC5 step c: legacy <dir>/.borg/state.json is never
+# Atomic write to the per-repository state-root path (AC5 step c: legacy <dir>/.borg/state.json is never
 # written) — strip control chars, reject empty result, tmp+mv. Optional 3rd arg = registry `repo`.
 borg_state_write() {
     local dir="$1" json="$2"
     local sf
-    sf=$(_borg_project_state_file "$dir" ${3+"$3"})
+    sf=$(_borg_repository_state_file "$dir" ${3+"$3"})
     /bin/mkdir -p "${sf:h}"
     local tmp="${sf}.tmp.$$"
     printf '%s' "$json" | tr -d '\000-\010\013\014\016-\037' > "$tmp"
@@ -170,14 +170,14 @@ borg_state_write() {
     /bin/mv "$tmp" "$sf"
 }
 
-# Read the full registry and overlay each project's state.json fields on top.
+# Read the full registry and overlay each repository's state.json fields on top.
 # Returns the same JSON shape as borg_registry_read but with volatile fields
 # (status, last_activity, claude_session_id, has_uncommitted_changes,
 # waiting_reason, notify_origin) populated from state.json where it exists.
-# Projects without a state.json retain whatever the registry holds for those
+# Repositories without a state.json retain whatever the registry holds for those
 # fields (typically from legacy data or borg scan seeding).
 #
-# The reaper overlay runs last (display-path, non-destructive): any project that
+# The reaper overlay runs last (display-path, non-destructive): any repository that
 # is active/waiting with no live-session evidence is downgraded to "idle" in the
 # returned JSON only — state.json on disk is untouched. `borg reap` does the
 # durable persist. Pass a non-empty BORG_NO_REAP to skip the overlay (used by
@@ -195,20 +195,20 @@ borg_registry_with_state() {
     # cannot shift anything after it, and is guarded below regardless.
     while IFS=$'\t' read -r name ppath prepo; do
         [[ -z "$name" || -z "$ppath" || "$ppath" == "-" || "$ppath" == "null" ]] && continue
-        # New per-project path first, else legacy; the registry's repo spares one git fork per project.
+        # New per-repository path first, else legacy; the registry's repo spares one git fork per repository.
         sfile=$(borg_state_read_path "$ppath" "$prepo")
         [[ -f "$sfile" ]] || continue
         state=$(/bin/cat "$sfile" 2>/dev/null || true)
         [[ -z "$state" ]] && continue
         # `|| result="$result"` USED TO BE HERE and was a no-op that silently blanked the registry.
         # Command substitution assigns BEFORE the `||` runs, so once jq failed, `result` was already
-        # the empty string and the fallback reassigned empty to empty. jq fails on any project whose
+        # the empty string and the fallback reassigned empty to empty. jq fails on any repository whose
         # .borg/state.json is not valid JSON (--argjson refuses it) -- a partial write from a hook, a
         # killed session, a hand edit. ONE such file emptied the WHOLE registry for every consumer of
-        # borg_registry_with_state: `borg link` printed "No projects registered. Run: borg scan",
+        # borg_registry_with_state: `borg link` printed "No repositories registered. Run: borg scan",
         # and next/switch/init/reap/watch saw nothing either. Verified by probe before this fix.
         # Merge into a scratch variable and only adopt it when jq actually produced something, so a
-        # bad state.json costs that ONE project its overlay instead of costing the registry.
+        # bad state.json costs that ONE repository its overlay instead of costing the registry.
         merged=$(printf '%s' "$result" | jq \
             --arg p "$name" \
             --argjson s "$state" \
@@ -225,7 +225,7 @@ borg_registry_with_state() {
         | jq -r '.projects | to_entries[]
             | [.key, (if (.value.path // "") == "" then "-" else .value.path end), (.value.repo // "")]
             | @tsv' 2>/dev/null)
-    # Default status to "idle" for any project that has neither a state.json nor a registry status
+    # Default status to "idle" for any repository that has neither a state.json nor a registry status
     result=$(printf '%s\n' "$result" | jq '.projects |= with_entries(.value.status //= "idle")')
     if [[ -z "${BORG_NO_REAP:-}" ]]; then
         result=$(printf '%s' "$result" | borg_reap_overlay)
@@ -233,10 +233,10 @@ borg_registry_with_state() {
     printf '%s\n' "$result"
 }
 
-# Like borg_registry_get but overlays state.json for the named project.
+# Like borg_registry_get but overlays state.json for the named repository.
 borg_registry_get_with_state() {
-    local project="$1"
-    borg_registry_with_state | jq -c --arg p "$project" '.projects[$p] // empty'
+    local repository="$1"
+    borg_registry_with_state | jq -c --arg p "$repository" '.projects[$p] // empty'
 }
 
 # ─── Reaper: downgrade stale active/waiting sessions to idle ──────────────────
@@ -248,7 +248,7 @@ _borg_live_windows() {
 }
 
 # Filter: read registry-with-state JSON on stdin, emit the same JSON with every
-# reapable project's status downgraded to "idle". Non-destructive — operates on
+# reapable repository's status downgraded to "idle". Non-destructive — operates on
 # the JSON stream only. The original status is preserved under ._reaped_from so
 # callers can report what was auto-downgraded.
 borg_reap_overlay() {
@@ -262,16 +262,16 @@ borg_reap_overlay() {
     # maps the sentinels back to empty/derived values.
     while IFS=$'\t' read -r name tw st last; do
         [[ -z "$name" ]] && continue
-        # tmux window defaults to the project name when the registry leaves it null
+        # tmux window defaults to the repository name when the registry leaves it null
         [[ "$tw" == "-" || -z "$tw" || "$tw" == "null" ]] && tw="$name"
         [[ "$last" == "-" ]] && last=""
         live=0
         # -F, not just -x. A window name is DATA, never a pattern: without -F, `grep -x` still treats
-        # it as a basic regex, so a project whose tmux_window is `troth.site` matches a live window
-        # named `troth-site` and is reported alive when its session is dead. Domain-named projects are
+        # it as a basic regex, so a repository whose tmux_window is `troth.site` matches a live window
+        # named `troth-site` and is reported alive when its session is dead. Domain-named repositories are
         # exactly the shape that hits it. -qxF is already this repo's convention (lib/secrets.zsh:22,
         # borg.zsh:3058); these window comparisons were the outliers.
-        # Either form: the registry's window OR the project name (borg_core.link.core.window_is_live).
+        # Either form: the registry's window OR the repository name (borg_core.link.core.window_is_live).
         if [[ -n "$live_windows" ]] && { printf '%s\n' "$live_windows" | /usr/bin/grep -qxF "$tw" \
             || printf '%s\n' "$live_windows" | /usr/bin/grep -qxF "$name"; }; then
             live=1
@@ -294,10 +294,10 @@ borg_reap_overlay() {
     printf '%s' "$json"
 }
 
-# Persist reaping to disk: for every project the reaper would downgrade, write
+# Persist reaping to disk: for every repository the reaper would downgrade, write
 # status=idle into its state.json (atomic tmp+mv via borg_state_write). Emits one
-# line per reaped project: "<name>\t<old-status>". Idempotent — a no-op on a
-# project with no live window but already idle, and on live/recent sessions.
+# line per reaped repository: "<name>\t<old-status>". Idempotent — a no-op on a
+# repository with no live window but already idle, and on live/recent sessions.
 borg_reap_persist() {
     local overlaid name ppath prepo from cur new count=0 sf
     # Build the overlay against the *un-reaped* view so _reaped_from is populated.
@@ -324,12 +324,12 @@ borg_reap_persist() {
     return 0
 }
 
-# Should this scanned path be skipped instead of registered as a new project?
+# Should this scanned path be skipped instead of registered as a new repository?
 # Skip when:
 #   - empty path
 #   - path is the workspace root itself (e.g. ~/dev)
 #   - path no longer exists on disk (renamed / deleted folders)
-#   - path is a subpath of an already-registered project (e.g. nested template dirs
+#   - path is a subpath of an already-registered repository (e.g. nested template dirs
 #     that show up in session history because Claude was invoked from inside them)
 # Returns 0 = skip, 1 = register.
 borg_scan_path_should_skip() {

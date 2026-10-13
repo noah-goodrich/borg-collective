@@ -98,7 +98,7 @@ def repository_state_key(directory: str | os.PathLike[str], repo: object = FORK_
     worktrees sort together and a later step can group them without parsing paths. Hashes, not
     slugs: paths carry spaces and slashes, and a slug of two different paths can collide.
 
-    Siblings, byte-identical output required: `_borg_project_state_key` in lib/borg-hooks.sh and
+    Siblings, byte-identical output required: `_borg_repository_state_key` in lib/borg-hooks.sh and
     lib/state-root.zsh (pinned by tests/project_state.bats).
 
     `repo` is the fast path for registry-driven readers: pass the registry entry's `repo` field (the
@@ -125,7 +125,7 @@ def repository_state_key(directory: str | os.PathLike[str], repo: object = FORK_
 
 def repository_state_file(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> Path:
     """`<state root>/projects/<key>/state.json` for a repository directory. One `git rev-parse` unless
-    `repo` is supplied (see `repository_state_key`); creates nothing. Siblings: `_borg_project_state_file`
+    `repo` is supplied (see `repository_state_key`); creates nothing. Siblings: `_borg_repository_state_file`
     in lib/borg-hooks.sh and lib/state-root.zsh."""
     return state_root() / "projects" / repository_state_key(directory, repo) / "state.json"
 

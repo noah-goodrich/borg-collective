@@ -7,7 +7,7 @@
 # without blocking.
 #
 # Gates:
-#   1. Project-mode only (not orchestrator).
+#   1. Repository-mode only (not orchestrator).
 #   2. Edit target must be inside the repo working tree.
 #   3. cwd must be a git repo (used to find repo root).
 #   4. No existing PROJECT_PLAN.md at either canonical location.
@@ -45,7 +45,7 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 
 [[ -z "$CWD" || -z "$SESSION_ID" ]] && exit 0
 
-# ── Gate 1: project-mode only ────────────────────────────────────────────────
+# ── Gate 1: repository-mode only ─────────────────────────────────────────────
 
 source "${HOME}/.claude/lib/borg-hooks.sh" 2>/dev/null || exit 0
 
@@ -69,7 +69,7 @@ esac
 
 [[ -z "$_target_path" ]] && exit 0
 
-# Skip edits targeting .claude/ dirs or global config (outside project)
+# Skip edits targeting .claude/ dirs or global config (outside repository)
 case "$_target_path" in
     "${HOME}/.claude/"*|"${XDG_CONFIG_HOME:-$HOME/.config}/"*)
         exit 0

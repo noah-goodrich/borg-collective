@@ -66,15 +66,15 @@ borg_tmux_window_exists() {
     borg_tmux_windows | /usr/bin/grep -qxF "$name"
 }
 
-# The LIVE tmux window for a project under EITHER form: the registry's short name ($2, optional) or
-# the project name (windows opened before short names existed). Prints it and returns 0; returns 1
+# The LIVE tmux window for a repository under EITHER form: the registry's short name ($2, optional) or
+# the repository name (windows opened before short names existed). Prints it and returns 0; returns 1
 # when neither is live. Short name wins when both are live. Python twin: link.core.window_is_live.
 borg_tmux_find_window() {
-    local project="$1" short="${2:-}"
+    local repository="$1" short="${2:-}"
     if [[ -n "$short" && "$short" != "null" ]] && borg_tmux_window_exists "$short"; then
         print -r -- "$short"
-    elif borg_tmux_window_exists "$project"; then
-        print -r -- "$project"
+    elif borg_tmux_window_exists "$repository"; then
+        print -r -- "$repository"
     else
         return 1
     fi

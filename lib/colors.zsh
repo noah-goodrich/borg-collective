@@ -1,15 +1,15 @@
 #!/usr/bin/env zsh
-# lib/colors.zsh — project tmux window color helpers
+# lib/colors.zsh — repository tmux window color helpers
 
 _BORG_COLOR_PALETTE=(cyan green yellow magenta blue red white)
 
-# Return the tmux color for a project (registry → hash fallback).
-_borg_project_color() {
-    local project="$1" color
-    color=$(borg_registry_read | jq -r --arg p "$project" '.projects[$p].color // empty' 2>/dev/null)
+# Return the tmux color for a repository (registry → hash fallback).
+_borg_repository_color() {
+    local repository="$1" color
+    color=$(borg_registry_read | jq -r --arg p "$repository" '.projects[$p].color // empty' 2>/dev/null)
     if [[ -z "$color" ]]; then
         local hash=0 c
-        for c in ${(s::)project}; do hash=$(( (hash * 31 + #c) % ${#_BORG_COLOR_PALETTE} )); done
+        for c in ${(s::)repository}; do hash=$(( (hash * 31 + #c) % ${#_BORG_COLOR_PALETTE} )); done
         color="${_BORG_COLOR_PALETTE[$((hash + 1))]}"
     fi
     echo "$color"
