@@ -191,6 +191,69 @@ _write_long_checkpoint() {
     [[ "$ctx" == *"LEGACY_SENTINEL"* ]] || false
 }
 
+# ─── the checkpoint injected is the DIRECTORY'S OWN, never a sibling worktree's (2026-10-13) ───────────────
+#
+# Two worktrees of one repository, registered under one `repo` key, each with its own checkpoint, the SIBLING'S
+# newer by filename. A union across the repo group (what `borg link` read until 2026-10-13) would hand the older
+# worktree's session the sibling's "Next Session" and tell it to do the other checkout's work. The hook reads
+# `$CWD/.borg/checkpoints` and nowhere else; this pins that, because the rule is invisible when the siblings
+# happen to agree.
+_two_worktrees() {
+    export WT_A="${BATS_TEST_TMPDIR}/wt-a" WT_B="${BATS_TEST_TMPDIR}/wt-b"
+    mkdir -p "$WT_A/.borg/checkpoints" "$WT_B/.borg/checkpoints"
+    printf '## 4. Blockers\nnone\n\n## 5. Next Session\nA_OWN_SENTINEL finish the A branch\n' \
+        > "$WT_A/.borg/checkpoints/2026-10-12-0900.md"
+    printf '## 4. Blockers\nnone\n\n## 5. Next Session\nB_SIBLING_SENTINEL finish the B branch\n' \
+        > "$WT_B/.borg/checkpoints/2026-10-13-1200.md"
+    cat > "$BORG_REGISTRY" <<EOF
+{"projects":{
+  "wt-a":{"path":"${WT_A}","status":"idle","source":"cli","repo":"/shared/repo/.git"},
+  "wt-b":{"path":"${WT_B}","status":"idle","source":"cli","repo":"/shared/repo/.git"}}}
+EOF
+}
+
+@test "start hook injects the directory's own latest checkpoint, never a sibling worktree's" {
+    _two_worktrees
+
+    run bash "$BORG_START" <<< "$(_start_input "$WT_A")"
+    [ "$status" -eq 0 ]
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"A_OWN_SENTINEL finish the A branch"* ]] || false
+    [[ "$ctx" == *"Latest checkpoint for wt-a (2026-10-12-0900.md)"* ]] || false
+    [[ "$ctx" != *"B_SIBLING_SENTINEL"* ]] || false
+    [[ "$ctx" != *"2026-10-13-1200.md"* ]] || false
+
+    run bash "$BORG_START" <<< "$(_start_input "$WT_B")"
+    [ "$status" -eq 0 ]
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"B_SIBLING_SENTINEL finish the B branch"* ]] || false
+    [[ "$ctx" != *"A_OWN_SENTINEL"* ]] || false
+}
+
+@test "start hook injects no checkpoint into a worktree that has none, even when a sibling does" {
+    _two_worktrees
+    rm -r "$WT_A/.borg/checkpoints"
+
+    run bash "$BORG_START" <<< "$(_start_input "$WT_A")"
+    [ "$status" -eq 0 ]
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" != *"Latest checkpoint for"* ]] || false
+    [[ "$ctx" != *"B_SIBLING_SENTINEL"* ]] || false
+}
+
+@test "start hook labels its directives block as the repository's, not the directory's" {
+    _two_worktrees
+    mkdir -p "$WT_A/docs/plans/directives"
+    printf '# Repo directive\n\n## Objective\n\nDIRECTIVE_SENTINEL do the repository thing\n' \
+        > "$WT_A/docs/plans/directives/2026-10-01-repo.md"
+
+    run bash "$BORG_START" <<< "$(_start_input "$WT_A")"
+    [ "$status" -eq 0 ]
+    ctx=$(echo "$output" | jq -r '.hookSpecificOutput.additionalContext')
+    [[ "$ctx" == *"Active directives for the repository (read from wt-a's checkout"* ]] || false
+    [[ "$ctx" == *"DIRECTIVE_SENTINEL do the repository thing"* ]] || false
+}
+
 @test "start hook includes uncommitted-changes reminder when flag set" {
     # Set the flag in state.json
     mkdir -p "${TEST_CWD}/.borg"

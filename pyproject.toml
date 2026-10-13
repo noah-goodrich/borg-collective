@@ -123,6 +123,10 @@ allowed_prefixes = ["borg_core", "__future__"]
 # the impurity the linter would wave through, including the aliased `from pathlib import Path as P`
 # spelling a name blacklist misses.
 #
+# `worktree.py` (the worktree page) is here on the same terms as `across.py`: a SPLIT from core.py, which sat at 969
+# lines against pylint's 1000-line ceiling. It imports nothing outside `__future__`, and
+# borg_core/link/test_worktree.py pins that by AST walk.
+#
 # `borg_core/planstate/core.py` NEEDED NO NEW ENTRY, and that is worth saying rather than leaving
 # for someone to rediscover: the map is keyed by BASENAME, so `core.py` already classifies every
 # package's pure module, present and future. The package's impure siblings (`shell.py`, `derive.py`,
@@ -133,7 +137,7 @@ allowed_prefixes = ["borg_core", "__future__"]
 # that has no business in a module whose whole claim is that a plan file cannot reach a subprocess
 # through it.
 [tool.clean-arch.module_map]
-Domain = ["across.py", "core.py", "errors.py", "grid.py", "picture.py", "refs.py", "render.py", "placement.py"]
+Domain = ["across.py", "core.py", "errors.py", "grid.py", "picture.py", "refs.py", "render.py", "placement.py", "worktree.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]

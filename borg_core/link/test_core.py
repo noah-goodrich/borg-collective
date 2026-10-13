@@ -913,10 +913,24 @@ def test_scope_for_prefix_match_respects_path_component_boundaries():
     assert scope["repository"] == "ingle-site"
 
 
-def test_scope_for_unregistered_cwd_falls_back_to_orchestrator():
+def test_scope_for_unregistered_cwd_is_marked_unregistered_and_never_the_overview():
+    """A cwd that is neither the Queen root nor inside a registered path is NOT the Queen (2026-10-13).
+
+    `kind` stays "orchestrator" on the wire (no consumer branching on it is surprised); the additive
+    `unregistered` key is what the renderer reads to print the hint page instead of the overview.
+    MUTATION: return the bare scope for this case and the key is missing, so the page is the overview again.
+    """
     scope = core.scope_for("/Users/noah/somewhere/else", ROOT, PATHS)
     assert scope["kind"] == "orchestrator"
     assert scope["repository"] is None
+    assert scope["unregistered"] is True
+
+
+def test_scope_for_the_queen_root_and_the_overview_flag_are_not_unregistered():
+    """The key is present ONLY when true, so no scope that existed before carries it."""
+    assert "unregistered" not in core.scope_for(ROOT, ROOT, PATHS)
+    assert "unregistered" not in core.scope_for("/Users/noah/somewhere/else", ROOT, PATHS, overview=True)
+    assert "unregistered" not in core.scope_for(PATHS[0][1], ROOT, PATHS)
 
 
 def test_scope_for_subdirectory_of_orchestrator_root_is_not_the_orchestrator():
@@ -924,6 +938,7 @@ def test_scope_for_subdirectory_of_orchestrator_root_is_not_the_orchestrator():
     # subdirectory of the workspace root is not the orchestrator session -- it is simply unscoped.
     scope = core.scope_for("/Users/noah/dev/scratch", ROOT, PATHS)
     assert scope["kind"] == "orchestrator"
+    assert scope["unregistered"] is True
 
 
 def test_scope_for_ignores_registry_entries_with_no_path():
@@ -1123,3 +1138,14 @@ def test_checkpoint_summary_accepts_a_bold_paragraph_under_accomplished():
 @pytest.mark.parametrize("text", ["", "# only a heading\n\nprose\n", "## Accomplished\n\n## Next\n- x\n", "**tl;dr** —\n"])
 def test_checkpoint_summary_is_none_when_the_checkpoint_states_nothing(text):
     assert core.checkpoint_summary(text) is None
+
+
+def test_scope_for_overview_forces_the_queen_view_from_a_repository_cwd():
+    """`borg link --overview` from a worktree. MUTATION: drop the early return and the cwd (or the positional)
+    resolves a repository again."""
+    inside = "/Users/noah/dev/ingle/src"
+    assert core.scope_for(inside, ROOT, PATHS)["kind"] == "repository"
+    forced = core.scope_for(inside, ROOT, PATHS, overview=True)
+    assert forced == {"kind": "orchestrator", "repository": None, "local": False}
+    assert core.scope_for(inside, ROOT, PATHS, requested_repository="ingle", overview=True)["kind"] == "orchestrator"
+    assert core.scope_for(inside, ROOT, PATHS, local=True, overview=True)["local"] is True

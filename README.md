@@ -45,7 +45,7 @@ borg init   # morning briefing + launch orchestrator session
 | `borg init` | Morning briefing + launch orchestrator Claude session |
 | `borg` / `borg next` | What needs attention? Switch to it. |
 | `borg claude` | Resume orchestrator Claude session |
-| `borg link [project]` | **Primary overview.** No arg = dashboard; with a project = deep dive (checkpoint, plan) |
+| `borg link [project]` | **Front door.** At the Queen's root (the workspace root) it is the cross-repository overview; anywhere else, or with a project, it is a page about that one directory (identity, session, its own checkpoints, what waits on it). `--overview` forces the overview from any directory |
 | `borg switch [query]` | fzf picker → jump to project tmux window |
 | `borg recon --json` | Machine surface only: the reconciled sweep document. Human digest retired — use `borg link` |
 | `borg nanoprobes` (`np`) | List recent nanoprobe runs (subagents) |
