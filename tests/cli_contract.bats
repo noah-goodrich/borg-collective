@@ -376,6 +376,9 @@ EOF
     # 28 SINCE 2026-10-12: `resume` (borg-resume v2, slice S14: status, cancel, run, pause) is the next deliberate
     # addition and a thin delegate to bin/borg-resume. The floor reading above still holds.
     #
+    # 29 SINCE 2026-10-13: `pr` (gate, merge-train) is a deliberate addition, a thin delegate to
+    # borg_core/gh/cli.py (shell-command-hygiene directive, slice V1). The floor reading still holds.
+    #
     # THE CRITERION IS STILL MET, and that is why the constant moves rather than the assertion.
     # AC1 asked for "net one command shorter than at plan start" — 27 at plan start, so anything
     # at or below 26 satisfies it, and the comment above already records that this is a FLOOR on
@@ -385,7 +388,7 @@ EOF
     # answer is on the line above. Keep it exact.
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
     [ "$status" -eq 0 ]
-    [ "$output" = "28" ]
+    [ "$output" = "29" ]
 }
 
 # The count alone reaches 26 if someone deletes `doctor` instead of `recon` — and four dispatch
