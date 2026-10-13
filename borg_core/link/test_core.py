@@ -135,7 +135,7 @@ def test_window_is_live_accepts_either_form(entry, live, expect_live):
     assert core.window_is_live("widget-factory", entry, live) is expect_live
 
 
-def test_reap_overlay_does_not_downgrade_a_project_whose_long_named_window_is_live():
+def test_reap_overlay_does_not_downgrade_a_repository_whose_long_named_window_is_live():
     registry = {"projects": {"widget-factory": _stale_active(tmux_window="wf")}}
     result = core.reap_overlay(registry, ["widget-factory"], NOW, 12)
     assert result["projects"]["widget-factory"]["status"] == "active"
@@ -161,7 +161,7 @@ def test_reap_overlay_maps_the_tsv_sentinel_in_last_activity():
     assert result["projects"]["p"]["status"] == "idle"
 
 
-def test_reap_overlay_leaves_unreapable_projects_alone():
+def test_reap_overlay_leaves_unreapable_repositories_alone():
     registry = {"projects": {"p": {"status": "idle", "last_activity": None}}}
     result = core.reap_overlay(registry, [], NOW, 12)
     assert "_reaped_from" not in result["projects"]["p"]
@@ -324,12 +324,12 @@ def test_active_count_counts_waiting_and_active_only():
     assert core.active_count(registry) == 2
 
 
-def test_project_paths_preserves_insertion_order_and_blanks_nulls():
+def test_repository_paths_preserves_insertion_order_and_blanks_nulls():
     registry = {"projects": {"z": {"path": "/z"}, "a": {"path": None}, "m": {}}}
-    assert core.project_paths(registry) == [("z", "/z"), ("a", ""), ("m", "")]
+    assert core.repository_paths(registry) == [("z", "/z"), ("a", ""), ("m", "")]
 
 
-def test_resolve_window_falls_back_to_the_project_name():
+def test_resolve_window_falls_back_to_the_repository_name():
     for value in (None, "", "null", "-"):
         assert core.resolve_window("proj", {"tmux_window": value}) == "proj"
     assert core.resolve_window("proj", {}) == "proj"
@@ -417,7 +417,7 @@ def test_order_checkpoints_is_name_descending():
     assert core.order_checkpoints([]) == []
 
 
-def test_label_checkpoints_caps_and_omits_the_byline_for_one_project():
+def test_label_checkpoints_caps_and_omits_the_byline_for_one_repository():
     found = [(f"2026-08-0{n}.md", "p") for n in (5, 4, 3, 1)]
     assert core.label_checkpoints(found) == ["2026-08-05.md", "2026-08-04.md", "2026-08-03.md"]
     assert core.label_checkpoints(found, limit=1) == ["2026-08-05.md"]
@@ -432,7 +432,7 @@ def test_label_checkpoints_adds_the_byline_only_when_the_group_is_ambiguous():
     assert core.label_checkpoints(spanning) == ["2026-08-05.md @sp", "2026-08-04.md @sp-feat"]
 
 
-def test_order_checkpoints_breaks_a_filename_collision_on_project_name():
+def test_order_checkpoints_breaks_a_filename_collision_on_repository_name():
     # THE MEASURED HARM: one filename in two stores with different bodies. Both rows survive, in an
     # order set by the data rather than by collection order -- reversing the input must not move it.
     collision = [("2026-09-25-1704.md", "sp-feat"), ("2026-09-25-1704.md", "sp")]
@@ -451,19 +451,19 @@ def test_order_checkpoints_breaks_a_filename_collision_on_project_name():
 
 def test_repo_sources_returns_the_focus_alone_when_the_entry_has_no_repo():
     # The expand phase: a pre-backfill entry must behave exactly as it did before the field existed.
-    projects = {"sp": {"path": "/dev/sp"}, "sp-feat": {"path": "/dev/sp-feat"}}
-    assert core.repo_sources("sp", projects) == [("sp", "/dev/sp")]
+    repositories = {"sp": {"path": "/dev/sp"}, "sp-feat": {"path": "/dev/sp-feat"}}
+    assert core.repo_sources("sp", repositories) == [("sp", "/dev/sp")]
 
 
 def test_repo_sources_groups_every_worktree_of_one_clone_focus_first():
     common = "/dev/sp/.git"
-    projects = {
+    repositories = {
         "sp-feat": {"path": "/dev/sp-feat", "repo": common},
         "sp": {"path": "/dev/sp", "repo": common},
         "sp-e2e": {"path": "/dev/sp-e2e", "repo": common},
         "other": {"path": "/dev/other", "repo": "/dev/other/.git"},
     }
-    assert core.repo_sources("sp-feat", projects) == [
+    assert core.repo_sources("sp-feat", repositories) == [
         ("sp-feat", "/dev/sp-feat"),
         ("sp", "/dev/sp"),
         ("sp-e2e", "/dev/sp-e2e"),
@@ -473,11 +473,11 @@ def test_repo_sources_groups_every_worktree_of_one_clone_focus_first():
 def test_repo_sources_does_not_group_two_independent_clones_of_one_github_repo():
     # Distinct clones have distinct common dirs, and their working state IS genuinely separate --
     # this is why the key is the common dir and not the owner/repo slug.
-    projects = {
+    repositories = {
         "sp": {"path": "/dev/sp", "repo": "/dev/sp/.git"},
         "sp-clone": {"path": "/tmp/sp", "repo": "/tmp/sp/.git"},
     }
-    assert core.repo_sources("sp", projects) == [("sp", "/dev/sp")]
+    assert core.repo_sources("sp", repositories) == [("sp", "/dev/sp")]
 
 
 def test_repo_sources_ordering_is_independent_of_registry_key_order():
@@ -511,8 +511,8 @@ def test_dedupe_checkpoints_does_not_hash_a_unique_filename():
     ordered = [("2026-09-25.md", "sp"), ("2026-09-18.md", "sp-feat")]
     calls = []
 
-    def identity(filename, project):
-        calls.append((filename, project))
+    def identity(filename, repository):
+        calls.append((filename, repository))
         return "x"
 
     assert core.dedupe_checkpoints(ordered, identity) == ordered
@@ -523,9 +523,9 @@ def test_dedupe_checkpoints_hashes_each_row_at_most_once():
     ordered = [("a.md", "p1"), ("a.md", "p2"), ("a.md", "p3")]
     calls = []
 
-    def identity(filename, project):
-        calls.append(project)
-        return project  # all distinct, so all three are kept
+    def identity(filename, repository):
+        calls.append(repository)
+        return repository  # all distinct, so all three are kept
 
     assert core.dedupe_checkpoints(ordered, identity) == ordered
     assert sorted(calls) == ["p1", "p2", "p3"]
@@ -553,11 +553,11 @@ def test_dedupe_checkpoints_keeps_a_duplicate_of_an_unreadable_row():
 
 
 def test_repo_sources_skips_entries_with_no_path():
-    projects = {
+    repositories = {
         "sp": {"path": "/dev/sp", "repo": "/dev/sp/.git"},
         "ghost": {"repo": "/dev/sp/.git"},
     }
-    assert core.repo_sources("sp", projects) == [("sp", "/dev/sp")]
+    assert core.repo_sources("sp", repositories) == [("sp", "/dev/sp")]
 
 
 PLAN = """# Project Plan: X
@@ -650,7 +650,7 @@ def test_jq_interp(value, expected):
 # ── Phase 2: document primitives ─────────────────────────────────────────────
 
 
-def _porcelain_projects():
+def _porcelain_repositories():
     """Mirrors tests/cli_contract.bats's `_link_registry_porcelain` fixture (reached from
     `_link_setup_porcelain`). Anchored by helper NAME, not line number -- the numbers in this tree
     were all invalidated once by a 90-line insertion at the top of that file."""
@@ -665,28 +665,28 @@ def _porcelain_projects():
     }
 
 
-def test_order_projects_matches_the_jq_three_key_sort():
-    projects = _porcelain_projects()
-    visible = {name: entry for name, entry in projects.items() if entry["status"] != "archived"}
-    assert core.order_projects(visible) == ["echo", "bravo", "charlie", "golf", "foxtrot", "alpha"]
+def test_order_repositories_matches_the_jq_three_key_sort():
+    repositories = _porcelain_repositories()
+    visible = {name: entry for name, entry in repositories.items() if entry["status"] != "archived"}
+    assert core.order_repositories(visible) == ["echo", "bravo", "charlie", "golf", "foxtrot", "alpha"]
 
 
-def test_order_projects_treats_string_true_as_unpinned():
-    projects = {
+def test_order_repositories_treats_string_true_as_unpinned():
+    repositories = {
         "a": {"status": "idle", "pinned": "true", "last_activity": "2026-08-01T00:00:00Z"},
         "b": {"status": "idle", "pinned": 1, "last_activity": "2026-08-02T00:00:00Z"},
         "c": {"status": "idle", "pinned": True, "last_activity": "2026-08-03T00:00:00Z"},
     }
     # Only "c" is a real JSON boolean true, so it sorts first; "a" and "b" stay in the unpinned
     # bucket and are ordered by their last_activity like any other unpinned row.
-    assert core.order_projects(projects) == ["c", "a", "b"]
+    assert core.order_repositories(repositories) == ["c", "a", "b"]
 
 
-def test_project_sort_key_activity_sentinel_only_replaces_jq_falsy():
-    missing = core.project_sort_key({"status": "idle"})
-    explicit_null = core.project_sort_key({"status": "idle", "last_activity": None})
-    empty_string = core.project_sort_key({"status": "idle", "last_activity": ""})
-    unparseable = core.project_sort_key({"status": "idle", "last_activity": "2026-1-01T00:00:00Z"})
+def test_repository_sort_key_activity_sentinel_only_replaces_jq_falsy():
+    missing = core.repository_sort_key({"status": "idle"})
+    explicit_null = core.repository_sort_key({"status": "idle", "last_activity": None})
+    empty_string = core.repository_sort_key({"status": "idle", "last_activity": ""})
+    unparseable = core.repository_sort_key({"status": "idle", "last_activity": "2026-1-01T00:00:00Z"})
 
     assert missing[2] == "0"
     assert explicit_null[2] == "0"
@@ -695,21 +695,21 @@ def test_project_sort_key_activity_sentinel_only_replaces_jq_falsy():
     assert unparseable[2] == "2026-1-01T00:00:00Z"  # raw string, never epoch-parsed, never raises
 
 
-def test_visible_projects_filters_archived_and_show_all_restores_it():
-    registry = {"projects": _porcelain_projects()}
+def test_visible_repositories_filters_archived_and_show_all_restores_it():
+    registry = {"projects": _porcelain_repositories()}
     now = 1_800_000_000
 
-    hidden = core.visible_projects(registry, False, now)
+    hidden = core.visible_repositories(registry, False, now)
     assert "delta" not in hidden
     assert len(hidden) == 6
 
-    shown = core.visible_projects(registry, True, now)
+    shown = core.visible_repositories(registry, True, now)
     assert "delta" in shown
     assert len(shown) == 7
-    assert core.order_projects(shown)[-1] == "delta"  # archived sorts last (rank 3)
+    assert core.order_repositories(shown)[-1] == "delta"  # archived sorts last (rank 3)
 
 
-def test_visible_projects_strips_internal_keys_and_adds_relative_activity():
+def test_visible_repositories_strips_internal_keys_and_adds_relative_activity():
     now = 1_800_007_200  # 7200s after the entry's last_activity
     entry = {
         "status": "idle",
@@ -718,20 +718,20 @@ def test_visible_projects_strips_internal_keys_and_adds_relative_activity():
     }
     registry = {"projects": {"proj": entry}}
 
-    public = core.visible_projects(registry, False, now)["proj"]
+    public = core.visible_repositories(registry, False, now)["proj"]
     assert "_reaped_from" not in public
     assert public["relative_activity"] == "2h ago"
 
 
 def test_assemble_emits_the_thirteen_keys_and_keeps_order_and_projects_in_lockstep():
-    projects = {"a": {"status": "idle"}, "b": {"status": "idle"}}
+    repositories = {"a": {"status": "idle"}, "b": {"status": "idle"}}
     order = ["b", "a"]
     doc = core.assemble(
         generated_at="2026-08-13T00:00:00Z",
         show_all=False,
         total_projects=2,
         capacity=core.capacity(0, 3),
-        projects=projects,
+        projects=repositories,
         order=order,
         directives=[],
         assimilated=[],
@@ -771,7 +771,7 @@ def test_assemble_emits_the_thirteen_keys_and_keeps_order_and_projects_in_lockst
         show_all=False,
         total_projects=2,
         capacity=core.capacity(0, 3),
-        projects=projects,
+        projects=repositories,
         order=["b"],
         directives=[],
         assimilated=[],
@@ -932,24 +932,24 @@ def test_scope_for_ignores_registry_entries_with_no_path():
     assert scope["repository"] == "ingle"
 
 
-def test_scope_for_explicit_project_dominates_cwd():
+def test_scope_for_explicit_repository_dominates_cwd():
     # B3, found independently by all three reviewers. `borg link ingle` from inside
     # borg-collective must scope to ingle -- otherwise it sweeps borg-collective and renders those
     # nodes under ingle's header. A wrong answer, not a missing one.
-    scope = core.scope_for("/Users/noah/dev/borg-collective", ROOT, PATHS, requested_project="ingle")
+    scope = core.scope_for("/Users/noah/dev/borg-collective", ROOT, PATHS, requested_repository="ingle")
     assert scope["repository"] == "ingle"
 
 
-def test_scope_for_explicit_project_dominates_even_from_the_orchestrator_root():
-    scope = core.scope_for(ROOT, ROOT, PATHS, requested_project="ingle")
+def test_scope_for_explicit_repository_dominates_even_from_the_orchestrator_root():
+    scope = core.scope_for(ROOT, ROOT, PATHS, requested_repository="ingle")
     assert scope["kind"] == "repository"
     assert scope["repository"] == "ingle"
 
 
-def test_scope_for_unknown_requested_project_falls_through_to_cwd():
+def test_scope_for_unknown_requested_repository_falls_through_to_cwd():
     # scope must not invent a repository the registry has never heard of; _focus raises
-    # ProjectNotFound for this case and that is the single place the error belongs.
-    scope = core.scope_for("/Users/noah/dev/ingle", ROOT, PATHS, requested_project="nosuchproject")
+    # RepositoryNotFound for this case and that is the single place the error belongs.
+    scope = core.scope_for("/Users/noah/dev/ingle", ROOT, PATHS, requested_repository="nosuchrepository")
     assert scope["repository"] == "ingle"
 
 
@@ -1036,7 +1036,7 @@ def test_assemble_flattens_summary_once_at_the_chokepoint():
 
 
 def test_assemble_leaves_an_entry_without_a_summary_exactly_as_it_was():
-    """Adding the key would change what the wire carries for a project that never had it."""
+    """Adding the key would change what the wire carries for a repository that never had it."""
     entry = {"status": "idle"}
     doc = core.assemble(
         generated_at="t", show_all=False, total_projects=1, capacity={},
@@ -1049,7 +1049,7 @@ def test_assemble_leaves_an_entry_without_a_summary_exactly_as_it_was():
 
 @pytest.mark.parametrize("absent", [None, False])
 def test_assemble_leaves_a_null_summary_null(absent):
-    """The registry writes `"summary": null` for a project with none yet. `is None`, not falsiness:
+    """The registry writes `"summary": null` for a repository with none yet. `is None`, not falsiness:
     this is what a `--json` consumer reads, and `str(None)` once put the string "None" on the wire."""
     doc = core.assemble(
         generated_at="t", show_all=False, total_projects=1, capacity={},

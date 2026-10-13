@@ -208,7 +208,7 @@ EOF
 # declared rung cannot answer for.
 #
 # WHY sierra IS THE CWD AND tango HOSTS THE MANIFEST. Repository scope narrows the SWEEP to sierra's
-# registry entry alone (grid.scoped_projects), so testorg/tango#7 and #8 are outside the sweep BY
+# registry entry alone (grid.scoped_repositories), so testorg/tango#7 and #8 are outside the sweep BY
 # CONSTRUCTION — not by a time window that drifts, and not by the adapter's `first: 30` cap. A
 # window-based fixture would be a race; this one cannot be. It also preserves B6's shape: discovery
 # is global, selection is scoped.

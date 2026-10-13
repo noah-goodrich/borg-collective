@@ -348,7 +348,7 @@ borg_core/link/cli.py	233	1	projects	repository	registered repo / identifier or 
 borg_core/link/cli.py	233	2	projects	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	233	3	projects	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	234	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/cli.py	234	2	project	repository	registered repo / identifier or prose about one
+borg_core/link/cli.py	234	2	project	repository	callee renamed in R2
 borg_core/link/cli.py	235	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	250	1	projects	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	255	1	projects	repository	registered repo / identifier or prose about one
@@ -383,7 +383,7 @@ borg_core/link/cli.py	375	1	project	repository	registered repo / identifier or p
 borg_core/link/cli.py	378	1	projects	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	382	1	projects	contract	borg link --json key total_projects
 borg_core/link/cli.py	382	2	projects	contract	registry/document JSON key `projects`/`project`
-borg_core/link/cli.py	384	1	projects	repository	registered repo / identifier or prose about one
+borg_core/link/cli.py	384	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/cli.py	384	2	projects	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	418	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/cli.py	433	1	project	repository	registered repo / identifier or prose about one
@@ -456,7 +456,7 @@ borg_core/link/core.py	357	1	project	repository	registered repo / identifier or 
 borg_core/link/core.py	365	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	432	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	435	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/core.py	444	1	project	repository	checkpoint dict key holding repo name
+borg_core/link/core.py	444	1	project	contract	R1 judged contract: checkpoint record key mirrors the --json field
 borg_core/link/core.py	449	1	projects	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	450	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	468	1	project	repository	registered repo / identifier or prose about one
@@ -492,18 +492,18 @@ borg_core/link/core.py	782	3	projects	repository	registered repo / identifier or
 borg_core/link/core.py	809	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	843	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	888	1	projects	contract	borg link --json key total_projects
-borg_core/link/core.py	890	1	projects	repository	registered repo / identifier or prose about one
+borg_core/link/core.py	890	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/core.py	903	1	projects	contract	registry/document JSON key `projects`/`project`
 borg_core/link/core.py	905	1	projects	contract	JSON/registry key via dot path
-borg_core/link/core.py	907	1	projects	repository	registered repo / identifier or prose about one
-borg_core/link/core.py	907	2	projects	repository	registered repo / identifier or prose about one
+borg_core/link/core.py	907	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
+borg_core/link/core.py	907	2	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/core.py	908	1	projects	contract	JSON/registry key via dot path
-borg_core/link/core.py	910	1	projects	repository	local var/param or prose naming a repo
-borg_core/link/core.py	911	1	projects	repository	local var/param or prose naming a repo
+borg_core/link/core.py	910	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
+borg_core/link/core.py	911	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/core.py	913	1	projects	contract	borg link --json key total_projects
-borg_core/link/core.py	914	1	projects	repository	registered repo / identifier or prose about one
+borg_core/link/core.py	914	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/core.py	915	1	projects	contract	JSON/registry key via dot path
-borg_core/link/core.py	916	1	projects	repository	registered repo / identifier or prose about one
+borg_core/link/core.py	916	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/core.py	917	1	projects	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	919	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	922	1	projects	contract	registry/document JSON key `projects`/`project`
@@ -512,7 +512,7 @@ borg_core/link/core.py	947	1	projects	contract	borg link --json key total_projec
 borg_core/link/core.py	947	2	projects	contract	borg link --json key total_projects
 borg_core/link/core.py	953	1	projects	repository	registered repo / identifier or prose about one
 borg_core/link/core.py	957	1	projects	contract	registry/document JSON key `projects`/`project`
-borg_core/link/core.py	957	2	projects	repository	registered repo / identifier or prose about one
+borg_core/link/core.py	957	2	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/grid.py	1	1	project	repository	a repo's manifest topology
 borg_core/link/grid.py	4	1	project	external	pyproject.toml clean-arch map
 borg_core/link/grid.py	10	1	project	repository	every registered repo
@@ -529,22 +529,22 @@ borg_core/link/grid.py	600	2	projects	contract	registry JSON key `projects`
 borg_core/link/grid.py	602	1	projects	repository	local var of registry entries
 borg_core/link/grid.py	603	1	projects	repository	local var of registry entries
 borg_core/link/grid.py	616	1	projects	contract	registry JSON key `projects`
-borg_core/link/grid.py	634	1	project	repository	another registered repo's grid
+borg_core/link/grid.py	634	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/link/grid.py	878	1	projects	contract	total_projects key in link --json document
-borg_core/link/grid.py	898	1	project	repository	repo heading on the page
-borg_core/link/grid.py	903	1	project	repository	the repo that owns the manifest
-borg_core/link/grid.py	904	1	project	repository	the repo that owns the manifest
+borg_core/link/grid.py	898	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/grid.py	903	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/grid.py	904	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/link/grid.py	917	1	project	noise	noise: projected; was external
 borg_core/link/grid.py	925	1	project	noise	noise: projection; was external
 borg_core/link/picture.py	11	1	project	external	pyproject.toml
-borg_core/link/picture.py	314	1	project	workstream	a chain/manifest's overall state
-borg_core/link/picture.py	620	1	project	workstream	first manifest/chain in picture
+borg_core/link/picture.py	314	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/picture.py	620	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/link/render.py	52	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	90	1	PROJECT	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	91	1	PROJECT	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	94	1	projects	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	103	1	PROJECT	repository	registered repo / identifier or prose about one
-borg_core/link/render.py	135	1	projects	repository	registered repo / identifier or prose about one
+borg_core/link/render.py	135	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/render.py	150	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	210	1	PROJECT	contract	PROJECT_PLAN.md filename
 borg_core/link/render.py	248	1	project	repository	registered repo / identifier or prose about one
@@ -581,7 +581,7 @@ borg_core/link/render.py	605	1	projects	contract	borg link --json key total_proj
 borg_core/link/render.py	605	2	projects	contract	borg link --json key total_projects
 borg_core/link/render.py	607	1	projects	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	607	2	projects	contract	registry/document JSON key `projects`/`project`
-borg_core/link/render.py	610	1	projects	repository	registered repo / identifier or prose about one
+borg_core/link/render.py	610	1	projects	contract	R1 judged contract: assemble(projects=...) kwarg mirrors the --json key
 borg_core/link/render.py	613	1	projects	contract	borg link --json key total_projects
 borg_core/link/render.py	614	1	projects	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	616	1	projects	repository	registered repo / identifier or prose about one
@@ -595,16 +595,16 @@ borg_core/link/render.py	652	1	project	repository	registered repo / identifier o
 borg_core/link/render.py	652	2	project	contract	registry/document JSON key `projects`/`project`
 borg_core/link/render.py	653	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	654	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/render.py	665	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/render.py	677	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/render.py	703	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/render.py	706	1	project	repository	x
-borg_core/link/render.py	710	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/render.py	738	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/render.py	740	1	projects	repository	registered repo / identifier or prose about one
+borg_core/link/render.py	665	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/render.py	677	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/render.py	703	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/render.py	706	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/render.py	710	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/render.py	738	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/render.py	740	1	projects	workstream	chain manifest: reworded to chain in #350
 borg_core/link/render.py	753	1	project	repository	registered repo / identifier or prose about one
-borg_core/link/render.py	764	1	project	repository	user-facing noun in manifest count text
-borg_core/link/render.py	764	2	projects	repository	user-facing noun in manifest count text
+borg_core/link/render.py	764	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/render.py	764	2	projects	workstream	chain manifest: reworded to chain in #350
 borg_core/link/render.py	818	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	846	1	project	repository	registered repo / identifier or prose about one
 borg_core/link/render.py	884	1	project	repository	registered repo / identifier or prose about one
@@ -667,7 +667,7 @@ borg_core/link/shell.py	233	1	project	repository	registered repo / registry entr
 borg_core/link/shell.py	238	1	project	repository	registered repo / registry entry (name, path or dir)
 borg_core/link/shell.py	240	1	project	repository	registered repo / registry entry (name, path or dir)
 borg_core/link/shell.py	243	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/shell.py	245	1	project	repository	registered repo / registry entry (name, path or dir)
+borg_core/link/shell.py	245	1	project	repository	callee renamed in R2
 borg_core/link/shell.py	257	1	project	repository	registered repo / registry entry (name, path or dir)
 borg_core/link/shell.py	257	2	project	repository	registered repo / registry entry (name, path or dir)
 borg_core/link/shell.py	257	3	projects	repository	registered repo / registry entry (name, path or dir)
@@ -818,7 +818,7 @@ borg_core/link/test_cli.py	1051	1	project	contract	recon Item key project
 borg_core/link/test_cli.py	1062	1	projects	repository	registered repo entry / name in test or comment
 borg_core/link/test_cli.py	1067	1	projects	repository	registered repo entry / name in test or comment
 borg_core/link/test_cli.py	1069	1	projects	repository	registered repo entry / name in test or comment
-borg_core/link/test_cli.py	1069	2	project	repository	registered repo entry / name in test or comment
+borg_core/link/test_cli.py	1069	2	project	repository	callee renamed in R2
 borg_core/link/test_cli.py	1077	1	projects	contract	registry/link JSON key projects
 borg_core/link/test_cli.py	1077	2	projects	repository	registered repo entry / name in test or comment
 borg_core/link/test_core.py	5	1	PROJECT	contract	PROJECT_PLAN.md filename
@@ -958,14 +958,14 @@ borg_core/link/test_core.py	1096	1	projects	contract	registry/link JSON key proj
 borg_core/link/test_grid.py	148	1	projects	repository	registry entry / repo dir (code or test name)
 borg_core/link/test_grid.py	149	1	projects	contract	registry JSON key projects
 borg_core/link/test_grid.py	149	2	projects	repository	param holding registry entries
-borg_core/link/test_grid.py	289	1	project	repository	registry entry / repo dir (code or test name)
+borg_core/link/test_grid.py	289	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/link/test_grid.py	295	1	projects	contract	registry JSON key projects
 borg_core/link/test_grid.py	700	1	project	repository	registry entry / repo dir (code or test name)
-borg_core/link/test_grid.py	701	1	projects	repository	registry entry / repo dir (code or test name)
-borg_core/link/test_grid.py	713	1	projects	repository	registry entry / repo dir (code or test name)
+borg_core/link/test_grid.py	701	1	projects	repository	callee renamed in R2
+borg_core/link/test_grid.py	713	1	projects	repository	callee renamed in R2
 borg_core/link/test_grid.py	714	1	projects	repository	registry entry / repo dir (code or test name)
 borg_core/link/test_grid.py	721	1	project	repository	user-facing warning text about registered repos
-borg_core/link/test_grid.py	765	1	project	repository	registry entry / repo dir (code or test name)
+borg_core/link/test_grid.py	765	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/link/test_grid.py	771	1	projects	contract	registry JSON key projects
 borg_core/link/test_grid.py	862	1	project	repository	registry entry / repo dir (code or test name)
 borg_core/link/test_grid.py	867	1	projects	repository	test-local adapter-input capture file name
@@ -985,13 +985,13 @@ borg_core/link/test_grid.py	1352	1	projects	repository	scoped registry entries (
 borg_core/link/test_grid.py	1449	1	project	noise	noise: verb to project; was external
 borg_core/link/test_grid.py	2074	1	project	noise	noise: projection; was external
 borg_core/link/test_grid.py	2138	1	projects	contract	link --json key total_projects
-borg_core/link/test_grid.py	2302	1	project	workstream	project spans several repositories
-borg_core/link/test_grid.py	2303	1	project	workstream	project spans several repositories
-borg_core/link/test_grid.py	2304	1	project	workstream	project spans several repositories
+borg_core/link/test_grid.py	2302	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_grid.py	2303	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_grid.py	2304	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/link/test_grid.py	2370	1	project	noise	noise: projection; was external
 borg_core/link/test_overlay.py	9	1	projects	contract	registry/link doc key projects
 borg_core/link/test_picture.py	597	1	project	external	pyproject.toml
-borg_core/link/test_picture.py	844	1	project	workstream	a chain/manifest's overall state
+borg_core/link/test_picture.py	844	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/link/test_render.py	31	1	projects	contract	registry/link --json/wire key or fixture pinning it
 borg_core/link/test_render.py	33	1	projects	contract	registry/link --json/wire key or fixture pinning it
 borg_core/link/test_render.py	59	1	projects	repository	registered repo / registry entry (name, path or dir)
@@ -1000,15 +1000,15 @@ borg_core/link/test_render.py	60	1	projects	repository	registered repo / registr
 borg_core/link/test_render.py	61	1	projects	contract	registry/link --json/wire key or fixture pinning it
 borg_core/link/test_render.py	64	1	projects	repository	registered repo / registry entry (name, path or dir)
 borg_core/link/test_render.py	159	1	projects	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	170	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	172	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	201	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	210	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	211	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	219	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	229	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	237	1	project	repository	registered repo / registry entry (name, path or dir)
-borg_core/link/test_render.py	249	1	project	repository	registered repo / registry entry (name, path or dir)
+borg_core/link/test_render.py	170	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_render.py	172	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_render.py	201	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_render.py	210	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_render.py	211	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_render.py	219	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_render.py	229	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_render.py	237	1	project	workstream	chain manifest: reworded to chain in #350
+borg_core/link/test_render.py	249	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/link/test_render.py	258	1	projects	contract	registry/link --json/wire key or fixture pinning it
 borg_core/link/test_render.py	259	1	projects	repository	registered repo / registry entry (name, path or dir)
 borg_core/link/test_render.py	261	1	projects	contract	registry/link --json/wire key or fixture pinning it
@@ -1094,7 +1094,7 @@ borg_core/link/test_shell.py	176	1	projects	repository	registered repo entry / i
 borg_core/link/test_shell.py	177	1	project	repository	test helper building a repo dir
 borg_core/link/test_shell.py	178	1	project	repository	test helper building a repo dir
 borg_core/link/test_shell.py	180	1	projects	contract	registry/link JSON key projects
-borg_core/link/test_shell.py	190	1	project	repository	per-repo state path helper
+borg_core/link/test_shell.py	190	1	project	repository	callee renamed in R2
 borg_core/link/test_shell.py	196	1	project	repository	test helper building a repo dir
 borg_core/link/test_shell.py	203	1	project	repository	test helper building a repo dir
 borg_core/link/test_shell.py	206	1	project	repository	test helper building a repo dir
@@ -1104,7 +1104,7 @@ borg_core/link/test_shell.py	219	1	projects	contract	registry/link JSON key proj
 borg_core/link/test_shell.py	224	1	project	repository	test helper building a repo dir
 borg_core/link/test_shell.py	228	1	projects	contract	registry/link JSON key projects
 borg_core/link/test_shell.py	232	1	project	repository	test helper building a repo dir
-borg_core/link/test_shell.py	233	1	project	repository	per-repo state path helper
+borg_core/link/test_shell.py	233	1	project	repository	callee renamed in R2
 borg_core/link/test_shell.py	239	1	projects	repository	registered repo entry / its name
 borg_core/link/test_shell.py	241	1	projects	contract	registry/link JSON key projects
 borg_core/link/test_shell.py	241	2	projects	repository	variable holding registry entries
@@ -1224,7 +1224,7 @@ borg_core/manifest/core.py	795	1	project	workstream	another project's tracker
 borg_core/manifest/refs.py	199	1	project	contract	recon Item key project
 borg_core/manifest/shell.py	12	1	project	repository	registry's repo paths
 borg_core/manifest/shell.py	13	1	project	repository	link.core.project_paths: repo paths
-borg_core/manifest/shell.py	316	1	project	repository	user-facing text: repo manifests
+borg_core/manifest/shell.py	316	1	project	workstream	chain manifest: reworded to chain in #350
 borg_core/manifest/shell.py	430	1	projects	contract	registry JSON key `projects`
 borg_core/manifest/shell.py	431	1	projects	contract	registry JSON key `projects`
 borg_core/manifest/shell.py	437	1	PROJECTS	repository	registry declares repos
@@ -3281,9 +3281,9 @@ tests/cli_contract.bats	3168	1	project	repository	registered repo / user-facing 
 tests/cli_contract.bats	3247	1	projects	repository	registered repo / user-facing or test prose
 tests/cli_contract.bats	3373	1	project	repository	registered repo / user-facing or test prose
 tests/cli_contract.bats	3438	1	project	repository	registered repo / user-facing or test prose
-tests/cli_contract.bats	3449	1	project	repository	registered repo / user-facing or test prose
+tests/cli_contract.bats	3449	1	project	workstream	chain manifest: reworded to chain in #350
 tests/cli_contract.bats	3470	1	projects	contract	JSON key (registry/link doc/spend/wakes)
-tests/cli_contract.bats	3474	1	project	repository	registered repo / user-facing or test prose
+tests/cli_contract.bats	3474	1	project	workstream	chain manifest: reworded to chain in #350
 tests/cli_contract.bats	3500	1	projects	contract	JSON key (registry/link doc/spend/wakes)
 tests/cli_contract.bats	3523	1	projects	contract	link --json key total_projects
 tests/cli_contract.bats	3524	1	projects	contract	link --json key total_projects

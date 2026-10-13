@@ -49,7 +49,7 @@ directive title or summary containing a literal `\\n` or `\\t` was EXPANDED. The
 went through `printf %s` and were NOT. Python's `print()` expands neither. No golden covers this; it
 is not reproduced here.
 
-LOCALE COLLATION NOTE, matching core.sort_assimilated's docstring: any per-project or aggregate
+LOCALE COLLATION NOTE, matching core.sort_assimilated's docstring: any per-repository or aggregate
 directive listing here inherits shell._markdown_files' codepoint-order glob, not zsh's/coreutils'
 locale-collated order. Measured zero-impact across every real filename this repo has seen; recorded
 so it does not surprise anyone later.
@@ -87,11 +87,11 @@ from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 # Overview column widths, hoisted so the header line and every row format string share ONE source
 # of truth and cannot drift apart (borg.zsh:329, :371-372).
 #
-# `_COL_PROJECT` IS A FLOOR, NOT A WIDTH, AND SAYING SO IS THE FIX. It was used as a minimum via
-# `{display:<{_COL_PROJECT}}` with no truncation anywhere, so a name longer than 20 pushed SRC,
+# `_COL_REPOSITORY` IS A FLOOR, NOT A WIDTH, AND SAYING SO IS THE FIX. It was used as a minimum via
+# `{display:<{_COL_REPOSITORY}}` with no truncation anywhere, so a name longer than 20 pushed SRC,
 # STATUS, LAST ACTIVE and SUMMARY right by the overflow while the header line -- padded from the same
 # constant -- did NOT move, and stopped describing its own rows on EVERY render in both scopes. Two
-# registered projects trigger it today (`pytest-coverage-impact` 22, `reveal-data-consistency` 23).
+# registered repositories trigger it today (`pytest-coverage-impact` 22, `reveal-data-consistency` 23).
 #
 # WIDENED RATHER THAN TRUNCATED, ON THE READER'S TERMS AND NOT A CONSUMER'S: truncation destroys the
 # one field on the row that is also an ARGUMENT (`pytest-coverage-impa…` is not typeable into `borg
@@ -100,7 +100,7 @@ from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 # every hit `grep -rn 'borg link' drone.zsh borg.zsh lib/ hooks/ skills/` returns is prose, a `--json` read, `drone
 # link`'s `exec`, or skills/borg-switch's `borg link --local --all` -- THIS board's one automated reader, and it
 # wants a list of names, not a column. (A draft cited `drone status`'s `grep -m1 'Status:'` -- retired 2026-08-27.)
-_COL_PROJECT = 20
+_COL_REPOSITORY = 20
 _COL_SRC = 4
 _COL_STATUS = 12
 _COL_LAST_ACTIVE = 12
@@ -147,7 +147,7 @@ def _fold_s(text: str, width: int = 70) -> list[str]:
     `width` (the space stays on the emitted line); hard-break at exactly `width` when the window
     contains no space at all.
 
-    Pinned by cli_contract.bats's "link <project> deep dive wraps and indents a summary longer than
+    Pinned by cli_contract.bats's "link <repository> deep dive wraps and indents a summary longer than
     70 columns": every continuation line must match `^  [^ ]` -- a continuation must never begin
     with a space. (Anchored by TEST NAME, not by line number. A 90-line insertion at the top of
     cli_contract.bats silently invalidated every `cli_contract.bats:<N>` pointer in this tree once
@@ -245,7 +245,7 @@ def _checkpoint_head_block(head: str) -> str:
 
 
 def porcelain(doc: dict) -> str:
-    """`--porcelain`: one TSV row per visible project, no color, no padding, no header.
+    """`--porcelain`: one TSV row per visible repository, no color, no padding, no header.
 
     Empty or fully-filtered -> "" -- absolutely nothing, not even a trailing newline (pinned by
     cli_contract.bats's "link --porcelain prints nothing at all on an empty registry").
@@ -262,11 +262,11 @@ def porcelain(doc: dict) -> str:
     enters Python at all. So every consequence that earlier text attributed to this function -- the
     phantom fzf row, `cut -f1` handing prose to `_borg_do_switch` -- belongs to `cmd_ls --porcelain`,
     where it was live and where it is now fixed (the flatten and the `printf '%s' | jq` correction in
-    `cmd_ls`, pinned by cli_contract.bats's "the picker feed stays one 5-field record per project
+    `cmd_ls`, pinned by cli_contract.bats's "the picker feed stays one 5-field record per repository
     through tab and newline" -- a title narrowed from "tab, newline and CR" because its counting
     oracle cannot kill a CR-only mutant). THE TWO IMPLEMENTATIONS ALREADY DIVERGE, which is why the
     mix-up was not harmless: on an empty registry this one prints nothing while `cmd_ls --porcelain`
-    prints a human "No projects registered" sentence, and both behaviours are pinned. The enumeration
+    prints a human "No repositories registered" sentence, and both behaviours are pinned. The enumeration
     that found the stale claims, and the one to re-run before calling this file clean, is a grep of
     this module for `picker` and `switch`.
 
@@ -282,10 +282,10 @@ def porcelain(doc: dict) -> str:
     call sites use and for the same reason: the budget must measure the characters the field carries.
     """
     order = doc.get("order") or []
-    projects = doc.get("projects") or {}
+    repositories = doc.get("projects") or {}
     rows = []
     for name in order:
-        entry = projects[name]
+        entry = repositories[name]
         source = core.jq_default(entry.get("source"), "cli")
         status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
         last_activity = core.jq_default(entry.get("last_activity"), "")
@@ -321,7 +321,7 @@ def _overview_summary_cut(summary: str) -> str:
 
     EMBEDDED WHITESPACE CONTROL CHARACTERS ARE FLATTENED TO SPACES HERE, BEFORE THE CUT (F1, second
     renderer): a fixed-width table cannot survive one, exactly the way it cannot survive an over-long
-    project name. `core.flatten_summary` is the canonical statement of the character set, of all three
+    repository name. `core.flatten_summary` is the canonical statement of the character set, of all three
     call sites and how each breaks, and of the retraction that none of this is about the picker.
 
     FLATTEN BEFORE CUTTING, NOT AFTER -- the same ordering `_summary_block` uses, pinned there by
@@ -350,20 +350,20 @@ def _board_display(name: str, entry: dict) -> str:
     return str(entry.get("display_name") or name)
 
 
-def _board_width(order: list[str], projects: dict) -> int:
-    """The PROJECT column's width for one render: `_COL_PROJECT`, or the longest name if longer.
+def _board_width(order: list[str], repositories: dict) -> int:
+    """The REPOSITORY column's width for one render: `_COL_REPOSITORY`, or the longest name if longer.
 
     THE FLOOR KEEPS THE COMMON CASE BYTE-STABLE -- every fixture name and the real registry's modal
-    case is under 20, so this returns 20 and no golden moves. See `_COL_PROJECT` for why widening
+    case is under 20, so this returns 20 and no golden moves. See `_COL_REPOSITORY` for why widening
     beats truncating.
     """
-    return max([_COL_PROJECT, *(len(_board_display(name, projects.get(name) or {})) for name in order)])
+    return max([_COL_REPOSITORY, *(len(_board_display(name, repositories.get(name) or {})) for name in order)])
 
 
 def _route_cells(counts: dict[str, int] | None) -> str:
     """The yours / mine / unsure cells for one board row: the count, or an en dash when there is none.
 
-    A project with no routed `▸ NEXT` rows has `counts` of None, and a bucket of zero prints the same
+    A repository with no routed `▸ NEXT` rows has `counts` of None, and a bucket of zero prints the same
     dash, so "nothing in this bucket" has one spelling.
     """
     return " ".join(
@@ -376,12 +376,12 @@ def _route_cells(counts: dict[str, int] | None) -> str:
 def _overview_row(
     name: str,
     entry: dict,
-    cortex_by_project: dict[str, str],
+    cortex_by_repository: dict[str, str],
     mark: str = "",
-    width: int = _COL_PROJECT,
+    width: int = _COL_REPOSITORY,
     counts: dict[str, int] | None = None,
 ) -> str:
-    """One board row, plus its cortex pause continuation when the project has a pending wake.
+    """One board row, plus its cortex pause continuation when the repository has a pending wake.
 
     `mark` IS APPENDED INSIDE THE ROW'S OWN f-STRING and defaults to "", which keeps every byte of
     this function identical for a caller that does not pass one. It exists so the scoped `◀` lands on
@@ -410,7 +410,7 @@ def _overview_row(
         f"{last_activity:<{_COL_LAST_ACTIVE}} {_route_cells(counts)}"
         f"{' ' + summary_short if summary_short else ''}{mark}\n"
     )
-    countdown = cortex_by_project.get(name)
+    countdown = cortex_by_repository.get(name)
     if countdown:
         # DERIVED FROM `width`, NOT THE 23 SPACES THIS USED TO HARDCODE -- a literal correct for
         # exactly one column width and silently wrong for every other, which is the two-sources-of-
@@ -449,7 +449,7 @@ def _ship_date_suffix(item: dict) -> str:
     return f" ({ship_date})" if ship_date else ""
 
 
-def _bullet_lines(items: list[dict], show_project: bool) -> list[str]:
+def _bullet_lines(items: list[dict], show_repository: bool) -> list[str]:
     """The bullet loop for QUEUED **and** SHIPPED. One function, because they are one line.
 
     THEY WERE TWO UNTIL AC2 TOOK THE LAST DIFFERENCE OUT. The zsh original printed a distinct header
@@ -459,12 +459,12 @@ def _bullet_lines(items: list[dict], show_project: bool) -> list[str]:
     a directive anyway -- `_ship_date_suffix` reads an absent key as "". Keeping them apart would
     mean two places to change the bullet shape and one of them getting missed.
 
-    `show_project` follows the document's BREADTH, not the section: `[platform] Scope keypair
+    `show_repository` follows the document's BREADTH, not the section: `[platform] Scope keypair
     rotation` is information in the orchestrator context and noise in platform's own.
     """
     out = []
     for item in items:
-        prefix = f"[{item['project']}] " if show_project else ""
+        prefix = f"[{item['project']}] " if show_repository else ""
         out.append(f"    {DIM}- {prefix}{item['title']}{_ship_date_suffix(item)}{NC}\n")
     return out
 
@@ -503,15 +503,15 @@ def _section(title: str, note: str, lines: list[str]) -> list[str]:
 
 
 def _header_section(doc: dict) -> tuple[str, list[str]]:
-    """The cube, and the discovery tip above it when the registry holds at most one project.
+    """The cube, and the discovery tip above it when the registry holds at most one repository.
 
-    The tip is gated on the UNFILTERED `total_projects`, NOT on `len(order)` -- one visible project
+    The tip is gated on the UNFILTERED `total_projects`, NOT on `len(order)` -- one visible repository
     plus one archived one is two, and must not print it (borg.zsh:286-290). It is also NOT mutually
-    exclusive with the board's all-archived placeholder: a lone archived project prints both.
+    exclusive with the board's all-archived placeholder: a lone archived repository prints both.
     """
     lines: list[str] = []
     if doc.get("total_projects", 0) <= 1:
-        lines.append(f"  {DIM}Tip: run 'borg scan' to discover projects from session history{NC}\n")
+        lines.append(f"  {DIM}Tip: run 'borg scan' to discover repositories from session history{NC}\n")
     lines.extend(_cube_lines())
     return "", lines
 
@@ -593,8 +593,8 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     redraw and "the fzf preview's own orientation": `watch` is not in the case dispatch and exits 1
     with "unknown command", and `cmd_switch`'s fzf call has no `--preview` at all (B15 pins
     `grep -c -- '--preview-window' borg.zsh` at 0) -- both retired 2026-08-27. ONE named consumer
-    survives, skills/borg-switch/SKILL.md's `borg link --local --all`, run from a project session's
-    cwd precisely to get a cross-project list; narrowing this section to the scoped repository would
+    survives, skills/borg-switch/SKILL.md's `borg link --local --all`, run from a repository session's
+    cwd precisely to get a cross-repository list; narrowing this section to the scoped repository would
     hand it a one-row table.
 
     The remaining reason is the one that was always underneath the consumer list: the page has
@@ -604,29 +604,29 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     """
     total_projects = doc.get("total_projects", 0)
     order = doc.get("order") or []
-    projects = doc.get("projects") or {}
+    repositories = doc.get("projects") or {}
 
     # Gated on the UNFILTERED count, NOT len(order). See core.assemble's docstring: an empty registry
     # and an all-archived one both emit order=[]/projects={}, but must print two different sentences.
     # Both sentences are the zsh original's verbatim, minus the leading `▸` -- every assertion on
     # them in this tree is a substring test, which is what makes dropping the marker free.
     if total_projects == 0:
-        return "", [_placeholder("No projects registered. Run: borg scan")]
+        return "", [_placeholder("No repositories registered. Run: borg scan")]
     if not order:
-        return "", [_placeholder("No projects to show. Run: borg link --all")]
+        return "", [_placeholder("No repositories to show. Run: borg link --all")]
 
     # "Need attention" is the WAITING count, which is not `capacity.active`: capacity counts every
     # session holding a slot (active AND waiting) against BORG_MAX_ACTIVE and belongs in SIGNALS,
     # while this note answers "how many of these rows are blocked on me". The two are different
     # numbers on the same registry and the goldens carry both.
-    waiting = sum(1 for name in order if str(core.jq_default(projects[name].get("status"), "")) == "waiting")
+    waiting = sum(1 for name in order if str(core.jq_default(repositories[name].get("status"), "")) == "waiting")
     note = f"the collective · {_plural(len(order), 'repository', 'repositories')} · {waiting} need attention"
 
     # MEASURED ONCE AND HANDED TO BOTH the header and every row, which is the only arrangement in
     # which the header cannot stop describing its rows.
-    width = _board_width(order, projects)
+    width = _board_width(order, repositories)
     lines = [
-        f"{BOLD} {'PROJECT':<{width}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
+        f"{BOLD} {'REPOSITORY':<{width}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
         f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} "
         + " ".join(f"{group.upper():>{w}}" for group, w in zip(_ROUTE_GROUPS, _COL_ROUTE))
         + f" SUMMARY{NC}\n",
@@ -637,21 +637,21 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     scoped = _scoped_name(doc)
     for name in order:
         mark = f" {CYAN}◀{NC}" if name == scoped else ""
-        lines.append(_overview_row(name, projects[name], countdowns, mark, width, routed.get(name)))
+        lines.append(_overview_row(name, repositories[name], countdowns, mark, width, routed.get(name)))
     return note, lines
 
 
 def _cortex_countdowns(doc: dict) -> dict[str, str]:
-    """`{project: countdown}`, FIRST WAKE WINS, matching borg.zsh:374's awk join.
+    """`{repository: countdown}`, FIRST WAKE WINS, matching borg.zsh:374's awk join.
 
-    First-wins rather than last: two pending wakes for one project is a state file that was appended
+    First-wins rather than last: two pending wakes for one repository is a state file that was appended
     to twice, and the earlier one is the one that fires.
     """
     countdowns: dict[str, str] = {}
     for pending in doc.get("cortex_pending") or []:
-        project = pending.get("project")
-        if project not in countdowns:
-            countdowns[project] = pending.get("countdown", "")
+        repository = pending.get("project")
+        if repository not in countdowns:
+            countdowns[repository] = pending.get("countdown", "")
     return countdowns
 
 
@@ -662,7 +662,7 @@ def _grid_placeholder(grid_block: dict) -> str:
     REFUSED IS TESTED FIRST, BEFORE SCOPE, and that order is the whole point of the arm. A manifest
     that failed to load is not among `manifests` -- it was refused whole -- so every later arm
     reports on a repository that looks manifest-less and says so: `borg link` in a repository whose
-    only manifest has one bad row rendered "no project manifests in the registry yet. Run /borg-plan
+    only manifest has one bad row rendered "no chain manifests in the registry yet. Run /borg-plan
     in any repository." That sentence is not merely unhelpful, it is FALSE, and it points the reader
     at scaffolding a second manifest beside the broken one. The `▸ SIGNALS` warning naming the real
     reason is a dim line at the bottom of the page; this section is where the reader is looking.
@@ -674,7 +674,7 @@ def _grid_placeholder(grid_block: dict) -> str:
     counted for whatever scope resolved -- one repository's directory in repository scope, the whole
     registry in orchestrator scope -- so a wording like "manifests are HERE but could not be read"
     would be false on the orchestrator page, and moving the arm below scope to dodge that would let
-    the registry-wide sentence claim "no project manifests in the registry yet" while three of them
+    the registry-wide sentence claim "no chain manifests in the registry yet" while three of them
     sit on disk unreadable. Saying only that they could not be read is true in both, which is why the
     arm can stay where correctness wants it.
 
@@ -700,14 +700,14 @@ def _grid_placeholder(grid_block: dict) -> str:
             "see the reasons below, then fix and re-run."
         )
     if grid_block.get("scope_kind") != "repository":
-        return "no project manifests in the registry yet. Run /borg-plan in any repository."
+        return "no chain manifests in the registry yet. Run /borg-plan in any repository."
     if not grid_block.get("slug"):
         return "this directory has no GitHub origin — nothing to scope a chain to."
-    return f"no project manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."
+    return f"no chain manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."
 
 
 def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str, int]) -> list[str]:
-    """One project's CHAINS block: its heading, the picture, then one detail block per node.
+    """One chain's CHAINS block: its heading, the picture, then one detail block per node.
 
     THE DETAIL BLOCKS ARE IN NODE-ID ORDER, which is picture reading order (manifest, level, column)
     and NOT the wire's `(seq, ref)`. A reader moving between the picture and the details must never
@@ -735,9 +735,9 @@ def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str,
 
 def _grid_section(doc: dict) -> tuple[str, list[str]]:
     """CHAINS: the declared cross-repository topology, one picture and one detail block set per
-    project, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
+    chain, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
 
-    The note is UNCONDITIONAL, even when no manifest was selected: `0 projects · 0 refs · 0
+    The note is UNCONDITIONAL, even when no manifest was selected: `0 chains · 0 refs · 0
     unresolved · swept back to <mark>` is the honest reading of a repository with nothing declared,
     and it is what separates that from a repository nobody swept.
 
@@ -750,7 +750,7 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     from what the sentence claimed. No golden could see it: `sweep-acme.json` pins a bare
     `"since": "2026-05-28"` with no relationship to any clock, which reads harmlessly either way.
 
-    A WINDOW BOUND AND A SWEEP TIME ARE TWO DIFFERENT SENTENCES -- this project's recurring trap --
+    A WINDOW BOUND AND A SWEEP TIME ARE TWO DIFFERENT SENTENCES -- this repository's recurring trap --
     so the fix is to say which one this is, not to swap in the other. The sweep TIME is not reported
     here and need not be: the sweep runs inside the same `cli._document` pass that stamps
     `generated_at`, so "when was this swept" is already the page's own freshness, while "how far back
@@ -761,7 +761,7 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     since = str(grid_block.get("since") or "")
     freshness = f"swept back to {since}" if grid_block.get("swept") and since else "not swept"
     note = (
-        f"{_plural(len(manifests), 'project', 'projects')}"
+        f"{_plural(len(manifests), 'chain', 'chains')}"
         f" · {grid_block.get('declared', 0)} refs"
         f" · {grid_block.get('unresolved', 0)} unresolved"
         f" · {freshness}"
@@ -815,7 +815,7 @@ def _route(kind: str) -> str:
     AN UNRECOGNIZED KIND GETS ITS OWN GROUP RATHER THAN A DEFAULT SIDE, and that is the owner's call
     recorded in the AC4 spec. BOTH defaults are lies: routing it to `mine` risks an agent acting on a
     decision (the plan's named risk), and routing it to `yours` silently asserts the author meant a
-    decision when the router has no idea. A third group says the true thing. Third time this project
+    decision when the router has no idea. A third group says the true thing. Third time this repository
     has landed on the same rule -- an unknown is a state, not a default; cf. `?` for unverified
     provenance and `unlooked` for an unresolvable READY set.
 
@@ -843,7 +843,7 @@ def _route(kind: str) -> str:
     that from being an accident rather than a decision. NOTHING HERE DEFAULTS TO A REAL SIDE any more
     -- the `.get` below falls to `_GROUP_UNSURE`, which `_next_section` NAMES on the page -- so
     widening `GATE_KINDS` without adding a `_GATE_ROUTING` entry is no longer the loud failure this
-    paragraph used to describe. It is the quiet one: a kind this project DECLARES it understands would
+    paragraph used to describe. It is the quiet one: a kind this repository DECLARES it understands would
     be reported to the reader as unroutable. `test_the_router_covers_every_declared_gate_kind` asserts
     the subset for exactly that reason, and states it the same way.
     """
@@ -881,7 +881,7 @@ def _next_row(node: dict, gate: dict) -> str:
 
 def _ready_rows(manifest: dict) -> list[tuple[str, dict, str]]:
     """`(ref, gate, group)` for one manifest's READY set, in display order. The ONE routing walk:
-    NEXT, the WAITING ON YOU block and the board's per-project counts all read it, so the three can
+    NEXT, the WAITING ON YOU block and the board's per-repository counts all read it, so the three can
     never route the same row to different owners.
 
     Returns nothing for an `unlooked` manifest; a caller that must tell "unlooked" from "empty" reads
@@ -990,18 +990,18 @@ def _next_section(doc: dict) -> tuple[str, list[str]]:
     return note, lines
 
 
-def _manifest_project(manifest: dict, projects: dict) -> str:
-    """The registered project whose directory CONTAINS this manifest's file, or "" when none does.
+def _manifest_repository(manifest: dict, repositories: dict) -> str:
+    """The registered repository whose directory CONTAINS this manifest's file, or "" when none does.
 
-    The longest matching path wins, so a project registered inside another still owns its own
+    The longest matching path wins, so a repository registered inside another still owns its own
     manifests. Plain string prefixes on purpose: this module is pure, and the registry's `path` and a
     manifest's `path` are both absolute strings the discovery step already produced from that same
-    registry. A manifest nobody contains has no project, and is simply absent from the counts.
+    registry. A manifest nobody contains has no repository, and is simply absent from the counts.
     """
     where = str(manifest.get("path") or "")
     best = ""
     best_len = -1
-    for name, entry in projects.items():
+    for name, entry in repositories.items():
         root = str((entry or {}).get("path") or "").rstrip("/")
         if root and where.startswith(root + "/") and len(root) > best_len:
             best, best_len = name, len(root)
@@ -1009,16 +1009,16 @@ def _manifest_project(manifest: dict, projects: dict) -> str:
 
 
 def _routing_counts(doc: dict) -> dict[str, dict[str, int]]:
-    """`{project: {yours, mine, unsure}}`: how many of that project's `▸ NEXT` rows route to each owner.
+    """`{repository: {yours, mine, unsure}}`: how many of that repository's `▸ NEXT` rows route to each owner.
 
-    A project with no routed rows is ABSENT, and the board prints dashes for it. Counts are the READY
+    A repository with no routed rows is ABSENT, and the board prints dashes for it. Counts are the READY
     set routed by `_ready_rows`, i.e. exactly the rows `▸ NEXT` prints, so the board and NEXT cannot
     disagree about a number.
     """
-    projects = doc.get("projects") or {}
+    repositories = doc.get("projects") or {}
     counts: dict[str, dict[str, int]] = {}
     for manifest in (doc.get("grid") or {}).get("manifests") or []:
-        name = _manifest_project(manifest, projects)
+        name = _manifest_repository(manifest, repositories)
         if not name:
             continue
         for _, _, group in _ready_rows(manifest):
@@ -1039,7 +1039,7 @@ def _chooser_item(row: dict) -> dict:
     label = hash_mark + number if hash_mark else str(row.get("item") or "session")
     detail = str(row.get("item") or "")
     text = f"{row.get('next_step') or ''}  {detail}".strip() if ref else str(row.get("next_step") or "")
-    return {"ref": ref or label, "label": label, "linkable": bool(ref), "project": str(row.get("project") or ""),
+    return {"ref": ref or label, "label": label, "linkable": bool(ref), "repository": str(row.get("project") or ""),
             "text": text, "unblocks": 0}
 
 
@@ -1051,7 +1051,7 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
     them. Manifest decisions are `▸ NEXT`'s `yours` rows, deduplicated by ref. No rank beyond that order.
     NO AGE: nothing in the document says when a row began waiting; a made-up age would be mock data.
     """
-    projects = doc.get("projects") or {}
+    repositories = doc.get("projects") or {}
     items = [_chooser_item(row) for row in (doc.get("waiting") or {}).get("rows") or []]
     seen = {item["ref"] for item in items}
     unlooked = False
@@ -1062,27 +1062,27 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
             unlooked = unlooked or bool(manifest.get("nodes"))
             continue
         nodes = manifest.get("nodes") or {}
-        project = _manifest_project(manifest, projects)
+        repository = _manifest_repository(manifest, repositories)
         for ref, gate, group in _ready_rows(manifest):
             if group != _GROUP_YOURS or ref in seen:
                 continue
             node = nodes.get(ref) or {}
             text = gate.get("blocked_by") or node.get("title") or node.get("why") or ref
             items.append(
-                {"ref": ref, "label": ref, "linkable": True, "project": project, "text": text,
+                {"ref": ref, "label": ref, "linkable": True, "repository": repository, "text": text,
                  "unblocks": len(node.get("children") or [])}
             )
     return items, unlooked
 
 
-def _waiting_line(item: dict, ref_w: int, proj_w: int) -> str:
-    """One waiting item on one line: marker, ref, project, the sentence, what it unblocks."""
+def _waiting_line(item: dict, ref_w: int, repo_w: int) -> str:
+    """One waiting item on one line: marker, ref, repository, the sentence, what it unblocks."""
     text = item["text"] if len(item["text"]) <= _WAITING_TEXT else item["text"][: _WAITING_TEXT - 1] + "…"
     text = text.rstrip()
     pad_ref = " " * (ref_w - len(item["label"]))
     shown_ref = picture.link_ref(item["ref"], item["label"]) if item["linkable"] else item["label"]
     unblocks = f"  {DIM}unblocks {item['unblocks']}{NC}" if item["unblocks"] else ""
-    return f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['project']:<{proj_w}}  {text}{unblocks}\n"
+    return f"  {YELLOW}▶{NC} {shown_ref}{pad_ref}  {item['repository']:<{repo_w}}  {text}{unblocks}\n"
 
 
 _GH_REF = re.compile(r"^([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)#([0-9]+)$")
@@ -1100,12 +1100,12 @@ def _next_action_command(ref: str) -> str:
 
 
 def _first_mine(doc: dict) -> tuple[str, str] | None:
-    """`(ref, project)` of the first agent-routable ready row across the manifests, or None."""
-    projects = doc.get("projects") or {}
+    """`(ref, repository)` of the first agent-routable ready row across the manifests, or None."""
+    repositories = doc.get("projects") or {}
     for manifest in (doc.get("grid") or {}).get("manifests") or []:
         for ref, _, group in _ready_rows(manifest):
             if group == _GROUP_MINE:
-                return ref, _manifest_project(manifest, projects)
+                return ref, _manifest_repository(manifest, repositories)
     return None
 
 
@@ -1121,7 +1121,7 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
     """
     if items:
         top = items[0]
-        ref, project = (top["ref"] if top["linkable"] else top["text"]), top["project"]
+        ref, repository = (top["ref"] if top["linkable"] else top["text"]), top["repository"]
     else:
         mine = _first_mine(doc)
         if mine is None:
@@ -1129,8 +1129,8 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
                 looked = f"nobody looked; run {CYAN}borg link{NC} without --local"
                 return f"  {BOLD}next{NC}  {looked}  {CYAN}borg next{NC}\n"
             return f"  {BOLD}next{NC}  {DIM}nothing is ready{NC}  {CYAN}borg next{NC}\n"
-        ref, project = mine
-    where = f" {DIM}({project}){NC}" if project else ""
+        ref, repository = mine
+    where = f" {DIM}({repository}){NC}" if repository else ""
     return f"  {BOLD}next{NC}  {ref}{where}  {CYAN}{_next_action_command(ref)}{NC}\n"
 
 
@@ -1162,12 +1162,12 @@ def _waiting_section(doc: dict) -> tuple[str, list[str]]:
     if unlooked:
         note += " — and some refs nobody looked up"
     ref_w = max(len(item["label"]) for item in items)
-    proj_w = max(len(item["project"]) for item in items)
-    return note, [*(_waiting_line(item, ref_w, proj_w) for item in items), *tail, action]
+    repo_w = max(len(item["repository"]) for item in items)
+    return note, [*(_waiting_line(item, ref_w, repo_w) for item in items), *tail, action]
 
 
 def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:
-    """`(rows, show_project)` for one scope-dependent list: the focused repository's in repository
+    """`(rows, show_repository)` for one scope-dependent list: the focused repository's in repository
     scope, the registry-wide aggregate otherwise.
 
     ONE FUNCTION KEYED ON THE FIELD NAME, because QUEUED and SHIPPED narrow by the identical rule and
@@ -1180,10 +1180,10 @@ def _scoped_rows(doc: dict, key: str) -> tuple[list[dict], bool]:
 
 def _queued_section(doc: dict) -> tuple[str, list[str]]:
     """QUEUED: filed-but-not-started directives, at the document's breadth."""
-    directives, show_project = _scoped_rows(doc, "directives")
+    directives, show_repository = _scoped_rows(doc, "directives")
     if not directives:
         return "", [_placeholder("nothing queued. Run /borg-plan to file one.")]
-    return _plural(len(directives), "directive", "directives"), _bullet_lines(directives, show_project)
+    return _plural(len(directives), "directive", "directives"), _bullet_lines(directives, show_repository)
 
 
 def _shipped_section(doc: dict) -> tuple[str, list[str]]:
@@ -1192,10 +1192,10 @@ def _shipped_section(doc: dict) -> tuple[str, list[str]]:
     NO NOTE, unlike QUEUED's count: `shell.collect_all_assimilated` caps at three, so a count here
     would read as a total and be one.
     """
-    assimilated, show_project = _scoped_rows(doc, "assimilated")
+    assimilated, show_repository = _scoped_rows(doc, "assimilated")
     if not assimilated:
         return "", [_placeholder("nothing shipped yet.")]
-    return "", _bullet_lines(assimilated, show_project)
+    return "", _bullet_lines(assimilated, show_repository)
 
 
 def _resolution_line(grid_block: dict) -> list[str]:
@@ -1215,7 +1215,7 @@ def _resolution_line(grid_block: dict) -> list[str]:
 
 
 def _cycle_lines(grid_block: dict) -> list[str]:
-    """One sentence per project whose declared edges contain a cycle.
+    """One sentence per repository whose declared edges contain a cycle.
 
     `manifest_core._rank_nodes` breaks a cycle by admitting the smallest remaining ref rather than
     raising, so a cyclic manifest still ranks and still draws -- minus the edges that do not descend,

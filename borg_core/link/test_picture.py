@@ -841,7 +841,7 @@ def test_a_closed_node_is_distinguishable_from_a_merged_one():
 
 # ── AC4 PRECONDITION: the glyph is gated on PROVENANCE ────────────────────────────────────────────
 # Measured on the live stillpoint/.borg/chains/ingle-t1-cutover.json: 12 nodes declared "merged",
-# 2 unknown, and a glance strip of twelve green checkmarks asserting a project is essentially done
+# 2 unknown, and a glance strip of twelve green checkmarks asserting a chain is essentially done
 # entirely from a hand-typed field no sweep and no fetch ever saw. These cases pin all three sites
 # the precondition names, because fixing one and missing another leaves the page contradicting
 # itself -- which is precisely what `state_word` was doing before this change.

@@ -83,8 +83,9 @@ each step is independently green:
     the end.
 - [ ] **The registry migrates without a flag day.** A borg install upgraded mid-session keeps working.
   - Verify: a test that reads a pre-migration registry and a post-migration registry through the same code path.
-- [ ] **The `.borg-project` decision is recorded** in CLAUDE.md with its reason, whichever way it goes.
+- [x] **The `.borg-project` decision is recorded** in CLAUDE.md with its reason, whichever way it goes.
   - Verify: the decision text exists and names the plugin-distribution constraint.
+  - Done 2026-10-12 (rename PR R1): CLAUDE.md, Key Patterns, "Vocabulary: `repository` is the code word for a git repo". The filename is kept permanently, together with the `borg link --json` keys and `BORG_PROJECT_NAME`, and the entry names the plugin-distribution constraint.
 - [ ] **The plugin's MARKER-WALK block and the deployed skill agree with the repo**, since `borg setup` is not the
       only delivery path any more.
   - Verify: the deployed-artifact drift check, or a byte comparison of the two copies.

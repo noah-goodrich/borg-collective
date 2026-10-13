@@ -26,8 +26,8 @@ def isolated_env(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _project(root, name, *, state=None, plan=None, directives=(), assimilated=(), checkpoints=()):
-    """Build a project workspace and return its path as a string."""
+def _repository(root, name, *, state=None, plan=None, directives=(), assimilated=(), checkpoints=()):
+    """Build a repository workspace and return its path as a string."""
     directory = root / name
     directory.mkdir(parents=True, exist_ok=True)
     if state is not None:
@@ -157,25 +157,25 @@ def test_read_state_rejects_unusable_paths(isolated_env, bad):
 
 
 def test_read_state_missing_file(isolated_env):
-    assert shell.read_state(_project(isolated_env, "nostate")) is None
+    assert shell.read_state(_repository(isolated_env, "nostate")) is None
 
 
 def test_read_state_reads_a_valid_file(isolated_env):
-    path = _project(isolated_env, "good", state='{"status":"active"}')
+    path = _repository(isolated_env, "good", state='{"status":"active"}')
     assert shell.read_state(path) == {"status": "active"}
 
 
 @pytest.mark.parametrize("body", ["", "NOT JSON AT ALL", "[1,2,3]", '"a string"'])
 def test_read_state_rejects_unusable_content(isolated_env, body):
     # A non-object root is as unusable as invalid JSON: the shell's `--argjson` would take an array
-    # but the merge `.projects[$p] += $s` would then fail, so both sides skip the project.
-    path = _project(isolated_env, "bad", state=body)
+    # but the merge `.projects[$p] += $s` would then fail, so both sides skip the repository.
+    path = _repository(isolated_env, "bad", state=body)
     assert shell.read_state(path) is None
 
 
-def test_collect_states_skips_projects_without_usable_state(isolated_env):
-    good = _project(isolated_env, "good", state='{"status":"active"}')
-    bad = _project(isolated_env, "bad", state="NOT JSON")
+def test_collect_states_skips_repositories_without_usable_state(isolated_env):
+    good = _repository(isolated_env, "good", state='{"status":"active"}')
+    bad = _repository(isolated_env, "bad", state="NOT JSON")
     registry = {
         "projects": {
             "good": {"path": good},
@@ -193,23 +193,23 @@ def _seed_new_state(directory, repo, body):
 
 
 def test_read_state_new_path_wins_over_legacy(isolated_env):
-    directory = _project(isolated_env, "both", state='{"status":"legacy"}')
+    directory = _repository(isolated_env, "both", state='{"status":"legacy"}')
     _seed_new_state(directory, None, '{"status":"new"}')
     assert shell.read_state(directory, None) == {"status": "new"}
     assert shell.read_state(directory) == {"status": "new"}  # default: forks git, same file outside git
 
 
 def test_read_state_new_only_and_legacy_only(isolated_env):
-    new_only = _project(isolated_env, "newonly")
+    new_only = _repository(isolated_env, "newonly")
     _seed_new_state(new_only, None, '{"status":"new"}')
     assert shell.read_state(new_only, None) == {"status": "new"}
-    legacy_only = _project(isolated_env, "legacyonly", state='{"status":"legacy"}')
+    legacy_only = _repository(isolated_env, "legacyonly", state='{"status":"legacy"}')
     assert shell.read_state(legacy_only, None) == {"status": "legacy"}
 
 
 def test_collect_states_uses_registry_repo_and_forks_no_git(isolated_env, monkeypatch):
-    # The registry's `repo` is the key's repo half, so N projects must cost ZERO git forks.
-    directory = _project(isolated_env, "fast", state='{"status":"legacy"}')
+    # The registry's `repo` is the key's repo half, so N repositories must cost ZERO git forks.
+    directory = _repository(isolated_env, "fast", state='{"status":"legacy"}')
     _seed_new_state(directory, "/some/common/dir", '{"status":"new"}')
 
     def no_fork(*args, **kwargs):
@@ -221,7 +221,7 @@ def test_collect_states_uses_registry_repo_and_forks_no_git(isolated_env, monkey
 
 
 def test_collect_states_null_or_missing_repo_is_path_only_key(isolated_env):
-    directory = _project(isolated_env, "nullrepo", state='{"status":"legacy"}')
+    directory = _repository(isolated_env, "nullrepo", state='{"status":"legacy"}')
     _seed_new_state(directory, "/some/common/dir", '{"status":"git-keyed"}')
     _seed_new_state(directory, None, '{"status":"path-only"}')
     for entry in ({"path": directory, "repo": None}, {"path": directory}):
@@ -229,21 +229,21 @@ def test_collect_states_null_or_missing_repo_is_path_only_key(isolated_env):
 
 
 def test_state_read_path_falls_back_to_legacy_when_new_is_absent(isolated_env):
-    directory = _project(isolated_env, "fallback")
+    directory = _repository(isolated_env, "fallback")
     assert paths.project_state_read_path(directory, None) == isolated_env / "fallback" / ".borg" / "state.json"
 
 
 # ── registry_with_state ──────────────────────────────────────────────────────
 
 
-def _write_registry(root, projects):
+def _write_registry(root, repositories):
     registry_file = root / "borg-dir" / "registry.json"
-    registry_file.write_text(json.dumps({"projects": projects}), encoding="utf-8")
+    registry_file.write_text(json.dumps({"projects": repositories}), encoding="utf-8")
     return registry_file
 
 
 def test_registry_with_state_overlays_and_reaps(isolated_env, monkeypatch):
-    path = _project(isolated_env, "proj", state='{"status":"active","last_activity":"2020-01-01T00:00:00Z"}')
+    path = _repository(isolated_env, "proj", state='{"status":"active","last_activity":"2020-01-01T00:00:00Z"}')
     _write_registry(isolated_env, {"proj": {"path": path}})
     monkeypatch.setattr(shell, "live_windows", lambda: [])
 
@@ -252,8 +252,8 @@ def test_registry_with_state_overlays_and_reaps(isolated_env, monkeypatch):
     assert result["projects"]["proj"]["_reaped_from"] == "active"
 
 
-def test_registry_with_state_keeps_a_live_project_active(isolated_env, monkeypatch):
-    path = _project(isolated_env, "proj", state='{"status":"active","last_activity":"2020-01-01T00:00:00Z"}')
+def test_registry_with_state_keeps_a_live_repository_active(isolated_env, monkeypatch):
+    path = _repository(isolated_env, "proj", state='{"status":"active","last_activity":"2020-01-01T00:00:00Z"}')
     _write_registry(isolated_env, {"proj": {"path": path}})
     monkeypatch.setattr(shell, "live_windows", lambda: ["proj"])
 
@@ -261,7 +261,7 @@ def test_registry_with_state_keeps_a_live_project_active(isolated_env, monkeypat
 
 
 def test_registry_with_state_honors_apply_reap_false(isolated_env, monkeypatch):
-    path = _project(isolated_env, "proj", state='{"status":"active","last_activity":"2020-01-01T00:00:00Z"}')
+    path = _repository(isolated_env, "proj", state='{"status":"active","last_activity":"2020-01-01T00:00:00Z"}')
     _write_registry(isolated_env, {"proj": {"path": path}})
     monkeypatch.setattr(shell, "live_windows", lambda: [])
 
@@ -269,7 +269,7 @@ def test_registry_with_state_honors_apply_reap_false(isolated_env, monkeypatch):
 
 
 def test_registry_with_state_env_wins_over_the_kwarg(isolated_env, monkeypatch):
-    path = _project(isolated_env, "proj", state='{"status":"active","last_activity":"2020-01-01T00:00:00Z"}')
+    path = _repository(isolated_env, "proj", state='{"status":"active","last_activity":"2020-01-01T00:00:00Z"}')
     _write_registry(isolated_env, {"proj": {"path": path}})
     monkeypatch.setattr(shell, "live_windows", lambda: [])
     monkeypatch.setenv("BORG_NO_REAP", "1")
@@ -278,9 +278,9 @@ def test_registry_with_state_env_wins_over_the_kwarg(isolated_env, monkeypatch):
 
 
 def test_registry_with_state_survives_one_malformed_state_json(isolated_env, monkeypatch):
-    # The zsh twin of this used to blank the WHOLE registry; both now skip the bad project only.
-    good = _project(isolated_env, "good", state='{"status":"idle"}')
-    bad = _project(isolated_env, "bad", state="NOT JSON")
+    # The zsh twin of this used to blank the WHOLE registry; both now skip the bad repository only.
+    good = _repository(isolated_env, "good", state='{"status":"idle"}')
+    bad = _repository(isolated_env, "bad", state="NOT JSON")
     _write_registry(isolated_env, {"good": {"path": good}, "bad": {"path": bad}})
     monkeypatch.setattr(shell, "live_windows", lambda: [])
 
@@ -292,7 +292,7 @@ def test_registry_with_state_survives_one_malformed_state_json(isolated_env, mon
 def test_registry_with_state_uses_the_injected_now_for_the_reap_decision(isolated_env, monkeypatch):
     epoch = 1_700_000_000
     last_activity = core.format_iso(epoch)
-    path = _project(isolated_env, "proj", state=f'{{"status":"active","last_activity":"{last_activity}"}}')
+    path = _repository(isolated_env, "proj", state=f'{{"status":"active","last_activity":"{last_activity}"}}')
     _write_registry(isolated_env, {"proj": {"path": path}})
     monkeypatch.setattr(shell, "live_windows", lambda: [])
     monkeypatch.setenv("BORG_REAP_STALE_HOURS", "1")
@@ -320,7 +320,7 @@ def test_readers_return_empty_for_unusable_paths(isolated_env, bad):
 
 
 def test_read_directives_returns_slug_and_title(isolated_env):
-    path = _project(
+    path = _repository(
         isolated_env,
         "p",
         directives=[("2026-01-02-b.md", "# Second\n"), ("2026-01-01-a.md", "# First\n")],
@@ -332,11 +332,11 @@ def test_read_directives_returns_slug_and_title(isolated_env):
 
 
 def test_read_directives_empty_when_the_directory_is_absent(isolated_env):
-    assert shell.read_directives(_project(isolated_env, "bare")) == []
+    assert shell.read_directives(_repository(isolated_env, "bare")) == []
 
 
 def test_read_assimilated_is_filename_descending_and_capped(isolated_env):
-    path = _project(
+    path = _repository(
         isolated_env,
         "p",
         assimilated=[
@@ -356,7 +356,7 @@ def test_read_assimilated_is_filename_descending_and_capped(isolated_env):
 def test_read_assimilated_reads_each_survivor_exactly_once(isolated_env, monkeypatch):
     # AC4: read_assimilated used to call _read_text(Path(e["path"])) twice per survivor -- once for
     # title, once for ship_date. Fails before this fix (2 reads/file); passes after (1 read/file).
-    path = _project(
+    path = _repository(
         isolated_env,
         "p",
         assimilated=[
@@ -378,17 +378,17 @@ def test_read_assimilated_reads_each_survivor_exactly_once(isolated_env, monkeyp
     assert calls["n"] == 2
 
 
-def test_collect_all_directives_prefixes_the_project_and_keeps_registry_order(isolated_env):
-    zed = _project(isolated_env, "zed", directives=[("d1.md", "# Zed one\n")])
-    amy = _project(isolated_env, "amy", directives=[("d1.md", "# Amy one\n")])
+def test_collect_all_directives_prefixes_the_repository_and_keeps_registry_order(isolated_env):
+    zed = _repository(isolated_env, "zed", directives=[("d1.md", "# Zed one\n")])
+    amy = _repository(isolated_env, "amy", directives=[("d1.md", "# Amy one\n")])
     registry = {"projects": {"zed": {"path": zed}, "amy": {"path": amy}, "skip": {"path": None}}}
 
     result = shell.collect_all_directives(registry)
     assert [(e["project"], e["title"]) for e in result] == [("zed", "Zed one"), ("amy", "Amy one")]
 
 
-def test_collect_all_assimilated_sorts_globally_across_projects(isolated_env):
-    one = _project(
+def test_collect_all_assimilated_sorts_globally_across_repositories(isolated_env):
+    one = _repository(
         isolated_env,
         "one",
         assimilated=[
@@ -396,7 +396,7 @@ def test_collect_all_assimilated_sorts_globally_across_projects(isolated_env):
             ("2026-02-03-new.md", "# New\nShipped: 2026-02-03\n"),
         ],
     )
-    two = _project(isolated_env, "two", assimilated=[("2026-02-02-mid.md", "# Mid\nShipped: 2026-02-02\n")])
+    two = _repository(isolated_env, "two", assimilated=[("2026-02-02-mid.md", "# Mid\nShipped: 2026-02-02\n")])
     registry = {"projects": {"one": {"path": one}, "two": {"path": two}}}
 
     result = shell.collect_all_assimilated(registry)
@@ -408,7 +408,7 @@ def test_collect_all_assimilated_sorts_globally_across_projects(isolated_env):
 
 
 def test_collect_all_assimilated_respects_max_items(isolated_env):
-    one = _project(
+    one = _repository(
         isolated_env,
         "one",
         assimilated=[("a.md", "# A\n"), ("b.md", "# B\n"), ("c.md", "# C\n")],
@@ -417,14 +417,14 @@ def test_collect_all_assimilated_respects_max_items(isolated_env):
     assert len(shell.collect_all_assimilated(registry, max_items=2)) == 2
 
 
-def test_collectors_skip_unreachable_projects(isolated_env):
+def test_collectors_skip_unreachable_repositories(isolated_env):
     registry = {"projects": {"gone": {"path": str(isolated_env / "does-not-exist")}}}
     assert shell.collect_all_directives(registry) == []
     assert shell.collect_all_assimilated(registry) == []
 
 
 @pytest.mark.parametrize(
-    "projects",
+    "repositories",
     [
         {"": {"path": "/somewhere"}},
         {"named": {"path": None}},
@@ -432,10 +432,10 @@ def test_collectors_skip_unreachable_projects(isolated_env):
         {"named": {}},
     ],
 )
-def test_collectors_and_collect_states_skip_unusable_entries(isolated_env, projects):
+def test_collectors_and_collect_states_skip_unusable_entries(isolated_env, repositories):
     # The shell guards each of these explicitly (`[[ -z "$name" || -z "$ppath" || ... ]]`), and every
-    # guard is its own branch — an empty project KEY is legal JSON and reaches them.
-    registry = {"projects": projects}
+    # guard is its own branch — an empty repository KEY is legal JSON and reaches them.
+    registry = {"projects": repositories}
     assert shell.collect_all_directives(registry) == []
     assert shell.collect_all_assimilated(registry) == []
     assert shell.collect_states(registry) == {}
@@ -445,7 +445,7 @@ def test_collectors_and_collect_states_skip_unusable_entries(isolated_env, proje
 
 
 def test_read_checkpoints_is_name_descending_and_capped(isolated_env):
-    path = _project(
+    path = _repository(
         isolated_env,
         "p",
         checkpoints=[(f"2026-08-0{n}-1000.md", f"# cp {n}\n") for n in range(1, 6)],
@@ -458,7 +458,7 @@ def test_read_checkpoints_is_name_descending_and_capped(isolated_env):
 
 
 def test_read_checkpoints_empty_without_the_directory(isolated_env):
-    assert shell.read_checkpoints([("bare", _project(isolated_env, "bare"))]) == []
+    assert shell.read_checkpoints([("bare", _repository(isolated_env, "bare"))]) == []
 
 
 def test_read_checkpoints_empty_for_an_empty_group(isolated_env):
@@ -468,14 +468,14 @@ def test_read_checkpoints_empty_for_an_empty_group(isolated_env):
 def test_read_checkpoints_skips_an_unusable_source_and_keeps_the_rest(isolated_env):
     # A group is only as good as its worst entry, and a registry does carry dead paths. One bad
     # source must not blank the group -- the union degrades to the stores it can actually read.
-    good = _project(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
+    good = _repository(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
     assert shell.read_checkpoints([("sp", good), ("gone", "null")]) == ["2026-09-18-1200.md"]
     assert shell.read_checkpoints([("gone", "null"), ("sp", good)]) == ["2026-09-18-1200.md"]
 
 
 def test_read_checkpoints_unions_a_repo_group_newest_first(isolated_env):
-    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
-    child = _project(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# child\n")])
+    parent = _repository(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
+    child = _repository(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# child\n")])
     assert shell.read_checkpoints([("sp", parent), ("sp-feat", child)]) == [
         "2026-09-25-1704.md @sp-feat",
         "2026-09-18-1200.md @sp",
@@ -486,8 +486,8 @@ def test_read_checkpoints_keeps_both_sides_of_a_filename_collision(isolated_env)
     # THE policy-repo CASE, end to end. `.borg/` is gitignored there, so one filename in
     # two stores is two independent writes with different bodies. NOTHING IS MOVED OR RENAMED: a
     # merge-write would destroy one of them, so both rows are read and labelled instead.
-    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "# parent body\n")])
-    child = _project(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
+    parent = _repository(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "# parent body\n")])
+    child = _repository(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
     assert shell.read_checkpoints([("sp", parent), ("sp-feat", child)]) == [
         "2026-09-25-1704.md @sp",
         "2026-09-25-1704.md @sp-feat",
@@ -500,8 +500,8 @@ def test_read_checkpoints_collapses_a_tracked_checkpoint_copied_into_a_worktree(
     # 114 of 115 on the live registry. They are ONE document and must render as one row, with no
     # byline, because a sibling holding a git-tracked copy adds no information to disambiguate.
     body = "# the same checkpoint\n"
-    parent = _project(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)])
-    worktree = _project(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
+    parent = _repository(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)])
+    worktree = _repository(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
     assert shell.read_checkpoints([("bc", parent), ("bc-shim", worktree)]) == ["2026-09-18-1200.md"]
 
 
@@ -510,8 +510,8 @@ def test_read_checkpoints_does_not_let_duplicates_push_out_real_history(isolated
     # checkpoints fall off the page. Deduping first is what keeps the window meaningful.
     body = "# tracked\n"
     older = [(f"2026-09-1{n}-1200.md", f"# real {n}\n") for n in (1, 2, 3)]
-    parent = _project(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)] + older)
-    worktree = _project(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
+    parent = _repository(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)] + older)
+    worktree = _repository(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
     assert shell.read_checkpoints([("bc", parent), ("bc-shim", worktree)]) == [
         "2026-09-18-1200.md",
         "2026-09-13-1200.md",
@@ -523,8 +523,8 @@ def test_read_checkpoints_keeps_both_rows_when_one_body_is_unreadable(isolated_e
     # An empty (or unreadable) checkpoint has no content identity, so no equality can be
     # established and BOTH rows are kept. A permissions error or a truncated write must not silently
     # collapse two stores into one row -- that would hide history rather than deduplicate it.
-    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "")])
-    child = _project(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# real\n")])
+    parent = _repository(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "")])
+    child = _repository(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# real\n")])
     assert shell.read_checkpoints([("sp", parent), ("sp-feat", child)]) == [
         "2026-09-25-1704.md @sp",
         "2026-09-25-1704.md @sp-feat",
@@ -534,8 +534,8 @@ def test_read_checkpoints_keeps_both_rows_when_one_body_is_unreadable(isolated_e
 def test_read_latest_checkpoint_head_follows_the_deduped_winner(isolated_env):
     # The head must agree with the row printed first even when deduping changed which row that is.
     body = "# the same checkpoint\n"
-    parent = _project(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)])
-    worktree = _project(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
+    parent = _repository(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", body)])
+    worktree = _repository(isolated_env, "bc-shim", checkpoints=[("2026-09-18-1200.md", body)])
     sources = [("bc-shim", worktree), ("bc", parent)]
     assert shell.read_checkpoints(sources) == ["2026-09-18-1200.md"]
     assert shell.read_latest_checkpoint_head(sources) == body
@@ -543,15 +543,15 @@ def test_read_latest_checkpoint_head_follows_the_deduped_winner(isolated_env):
 
 def test_read_checkpoints_omits_the_byline_when_only_one_store_has_any(isolated_env):
     # A sibling worktree is registered but never checkpointed. It contributes no rows, so the page
-    # is byte-identical to a single-project registry -- ambiguity is decided on what was FOUND.
-    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
-    bare = _project(isolated_env, "sp-feat")
+    # is byte-identical to a single-repository registry -- ambiguity is decided on what was FOUND.
+    parent = _repository(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent\n")])
+    bare = _repository(isolated_env, "sp-feat")
     assert shell.read_checkpoints([("sp", parent), ("sp-feat", bare)]) == ["2026-09-18-1200.md"]
 
 
 def test_read_latest_checkpoint_head_caps_the_lines(isolated_env):
     body = "\n".join(f"line {n}" for n in range(1, 31)) + "\n"
-    path = _project(isolated_env, "p", checkpoints=[("2026-08-01-1000.md", body)])
+    path = _repository(isolated_env, "p", checkpoints=[("2026-08-01-1000.md", body)])
     head = shell.read_latest_checkpoint_head([("p", path)], lines=20)
     assert head.split("\n")[0] == "line 1"
     assert head.split("\n")[-1] == "line 20"
@@ -559,23 +559,23 @@ def test_read_latest_checkpoint_head_caps_the_lines(isolated_env):
 
 
 def test_read_latest_checkpoint_head_empty_without_checkpoints(isolated_env):
-    assert shell.read_latest_checkpoint_head([("bare", _project(isolated_env, "bare"))]) == ""
+    assert shell.read_latest_checkpoint_head([("bare", _repository(isolated_env, "bare"))]) == ""
 
 
 def test_read_latest_checkpoint_head_reads_the_winning_store_not_the_first_source(isolated_env):
     # THE HALF A UNION READ GETS WRONG: the newest name lives in the SECOND source, so resolving the
     # body under the first source's directory would pair one worktree's filename with another's
     # body. The head must be the body of the row `read_checkpoints` prints first.
-    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent body\n")])
-    child = _project(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
+    parent = _repository(isolated_env, "sp", checkpoints=[("2026-09-18-1200.md", "# parent body\n")])
+    child = _repository(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
     sources = [("sp", parent), ("sp-feat", child)]
     assert shell.read_checkpoints(sources)[0] == "2026-09-25-1704.md @sp-feat"
     assert shell.read_latest_checkpoint_head(sources) == "# child body\n"
 
 
 def test_read_latest_checkpoint_head_picks_one_side_of_a_collision_deterministically(isolated_env):
-    parent = _project(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "# parent body\n")])
-    child = _project(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
+    parent = _repository(isolated_env, "sp", checkpoints=[("2026-09-25-1704.md", "# parent body\n")])
+    child = _repository(isolated_env, "sp-feat", checkpoints=[("2026-09-25-1704.md", "# child body\n")])
     forward = shell.read_latest_checkpoint_head([("sp", parent), ("sp-feat", child)])
     reversed_ = shell.read_latest_checkpoint_head([("sp-feat", child), ("sp", parent)])
     assert forward == reversed_ == "# parent body\n"
@@ -583,12 +583,12 @@ def test_read_latest_checkpoint_head_picks_one_side_of_a_collision_deterministic
 
 def test_read_plan_returns_objective_and_progress(isolated_env):
     plan = "# P\n\n## Objective\n\nShip the thing.\n\n- [x] one\n- [ ] two\n"
-    path = _project(isolated_env, "p", plan=plan)
+    path = _repository(isolated_env, "p", plan=plan)
     assert shell.read_plan(path) == {"objective": "Ship the thing.", "met": 1, "total": 2}
 
 
 def test_read_plan_none_without_a_plan_file(isolated_env):
-    assert shell.read_plan(_project(isolated_env, "bare")) is None
+    assert shell.read_plan(_repository(isolated_env, "bare")) is None
 
 
 # ── cortex wakes ─────────────────────────────────────────────────────────────
@@ -671,7 +671,7 @@ def test_read_text_returns_empty_for_a_directory(isolated_env):
 
 
 def test_markdown_glob_includes_directories_like_the_zsh_glob(isolated_env):
-    path = _project(isolated_env, "p", directives=[("real.md", "# Real\n")])
+    path = _repository(isolated_env, "p", directives=[("real.md", "# Real\n")])
     (isolated_env / "p" / "docs" / "plans" / "directives" / "adir.md").mkdir()
     titles = [d["title"] for d in shell.read_directives(path)]
     assert titles == ["", "Real"]
@@ -680,7 +680,7 @@ def test_markdown_glob_includes_directories_like_the_zsh_glob(isolated_env):
 def test_markdown_glob_excludes_dot_prefixed_files_like_the_zsh_glob(isolated_env):
     # F4: pathlib's glob has no dotfile-hiding behavior, so `*.md` matched `.draft.md` while zsh's
     # `*.md(N)` never did -- an unreviewed widening from the port. Pinned to zsh's answer: hidden.
-    path = _project(
+    path = _repository(
         isolated_env,
         "p",
         directives=[("real.md", "# Real\n"), (".draft.md", "# Hidden Draft\n")],
@@ -722,7 +722,7 @@ def test_module_reads_no_environment_at_import_time():
     assert os.environ.get("BORG_REAP_STALE_HOURS") is None or True
 
 
-# --- orchestrator_root / cwd / resolved_project_paths (S1) -------------------------------------
+# --- orchestrator_root / cwd / resolved_repository_paths (S1) -------------------------------------
 
 
 def test_orchestrator_root_defaults_to_dev_when_unset(isolated_env, monkeypatch):
@@ -769,7 +769,7 @@ def test_cwd_is_realpath_normalized(isolated_env, monkeypatch, tmp_path):
     assert shell.cwd() == os.path.realpath(str(real))
 
 
-def test_resolved_project_paths_normalizes_and_preserves_blanks(isolated_env, tmp_path):
+def test_resolved_repository_paths_normalizes_and_preserves_blanks(isolated_env, tmp_path):
     real = tmp_path / "real-repo"
     real.mkdir()
     link = tmp_path / "linked-repo"
@@ -780,18 +780,18 @@ def test_resolved_project_paths_normalizes_and_preserves_blanks(isolated_env, tm
             "pathless": {"path": None},
         }
     }
-    resolved = dict(shell.resolved_project_paths(registry))
+    resolved = dict(shell.resolved_repository_paths(registry))
     assert resolved["linked"] == os.path.realpath(str(real))
     # jq's `//` semantics: a null path becomes "", and scope_for skips it rather than matching "/".
     assert resolved["pathless"] == ""
 
 
-def test_resolved_project_paths_does_not_require_the_path_to_exist(isolated_env):
+def test_resolved_repository_paths_does_not_require_the_path_to_exist(isolated_env):
     # realpath is lexical, not a stat. A registry entry pointing at a deleted directory must
-    # normalize quietly and simply fail to match -- never raise, never cost a stat per project on
+    # normalize quietly and simply fail to match -- never raise, never cost a stat per repository on
     # the one path that has to stay reflexive.
     registry = {"projects": {"gone": {"path": "/nonexistent/deleted/repo"}}}
-    assert shell.resolved_project_paths(registry) == [("gone", "/nonexistent/deleted/repo")]
+    assert shell.resolved_repository_paths(registry) == [("gone", "/nonexistent/deleted/repo")]
 
 
 def test_cwd_returns_empty_when_the_directory_was_deleted(isolated_env, monkeypatch, tmp_path):
@@ -819,17 +819,17 @@ def test_deleted_cwd_degrades_to_orchestrator_not_a_wrong_repository(isolated_en
 
 
 def test_read_checkpoint_summary_reads_the_newest_checkpoint_of_the_group(isolated_env):
-    parent = _project(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", "**tl;dr** — Old news.\n")])
-    worktree = _project(isolated_env, "bc-wt", checkpoints=[("2026-09-19-1200.md", "**tl;dr** — The latest.\n")])
+    parent = _repository(isolated_env, "bc", checkpoints=[("2026-09-18-1200.md", "**tl;dr** — Old news.\n")])
+    worktree = _repository(isolated_env, "bc-wt", checkpoints=[("2026-09-19-1200.md", "**tl;dr** — The latest.\n")])
     assert shell.read_checkpoint_summary([("bc", parent), ("bc-wt", worktree)]) == "The latest."
 
 
 def test_read_checkpoint_summary_is_none_without_a_checkpoint(isolated_env):
-    assert shell.read_checkpoint_summary([("p", _project(isolated_env, "p"))]) is None
+    assert shell.read_checkpoint_summary([("p", _repository(isolated_env, "p"))]) is None
     assert shell.read_checkpoint_summary([("p", None)]) is None
 
 
 def test_read_checkpoint_summary_reads_below_the_twenty_line_head(isolated_env):
     body = "# cp\n" + "filler\n" * 30 + "## Accomplished\n\n- Found it far down.\n"
-    path = _project(isolated_env, "p", checkpoints=[("2026-09-18-1200.md", body)])
+    path = _repository(isolated_env, "p", checkpoints=[("2026-09-18-1200.md", body)])
     assert shell.read_checkpoint_summary([("p", path)]) == "Found it far down."

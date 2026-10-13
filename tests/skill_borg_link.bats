@@ -30,6 +30,9 @@ SKILL="${BORG_HOME}/skills/borg-link/SKILL.md"
     [ "$status" -eq 0 ]
     [[ "$output" == *"## Fallback"* ]] || false
     [[ "$output" == *"not in registry"* ]] || false
+    [[ "$output" == *"repository '<name>' not in registry"* ]] || false
+    [[ "$output" == *"RepositoryNotFound"* ]] || false
+    [[ "$output" != *"ProjectNotFound"* ]] || false
     [[ "$output" == *"rc="* ]] || false
     [[ "$output" == *"has_live_window"* ]] || false
     [[ "$output" == *"null"* ]] || false

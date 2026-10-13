@@ -1,4 +1,4 @@
-"""The manifest GRID: a project's declared topology resolved against a live source sweep.
+"""The manifest GRID: a repository's declared topology resolved against a live source sweep.
 
 Pure -- no os, no subprocess, no environment, no clock, no filesystem. Same Domain rules as
 borg_core/link/core.py, and pylint enforces them here too (pyproject's clean-arch module map names
@@ -7,8 +7,8 @@ escaping one).
 
 WHY THIS IS NOT IN core.py. It started there, and the sweep fold pushed that module past pylint's
 1000-line ceiling in one step -- which was the honest signal rather than a threshold to suppress.
-`core.py` answers "what does the registry say about every project": entries, ordering, capacity,
-relative times, the overview document. This answers "what does one project's manifest declare, and
+`core.py` answers "what does the registry say about every repository": entries, ordering, capacity,
+relative times, the overview document. This answers "what does one repository's manifest declare, and
 what is the live state of every ref it names". Two questions, two shapes of data, one shared
 coercion. Nothing here is imported BY core.py -- `assemble` takes the finished `grid` block as an
 opaque argument -- so there is no cycle and no layering inversion; `borg_core.link.core` is imported
@@ -104,7 +104,7 @@ def _grid_text(value: object) -> str:
 # (`select((.updatedAt|split("T")[0]) >= $since)`), so anything that merged before it returns NO item
 # and the node falls through to the hand-authored `status`.
 #
-# Worse, that mark MOVED WITH SCOPE, because the checkpoint rung globs the scoped projects. Measured
+# Worse, that mark MOVED WITH SCOPE, because the checkpoint rung globs the scoped repositories. Measured
 # against real checkouts, a real registry and a real filtering adapter: `borg link --json alpha` (one
 # 6-day-old checkpoint) reported `testorg/alpha#11` as `merged`/`swept`, while `borg link --json`
 # from the workspace root -- wider breadth, and the widest breadth took the NEWEST checkpoint across
@@ -139,7 +139,7 @@ def no_sweep(warnings: list[str] | None = None) -> dict:
     """The sweep result for "no adapter ran", carrying the reason.
 
     ONE constructor for the shape, called from four places that all mean different things -- `--local`
-    opted down, no adapters on the search path, a fixture that would not parse, a project list that
+    opted down, no adapters on the search path, a fixture that would not parse, a repository list that
     would not stage. Each supplies its own warning; none of them may invent a `since`, because a mark
     nobody swept against is a claim about freshness that is not true.
     """
@@ -588,7 +588,7 @@ def selected_refs(manifests: list[dict]) -> list[str]:
     return sorted({ref for manifest in manifests for ref in manifest_core.declared_refs(manifest)})
 
 
-def scoped_projects(registry: dict, scope: dict) -> dict:
+def scoped_repositories(registry: dict, scope: dict) -> dict:
     """The registry's `.projects` narrowed to the scope's SWEEP BREADTH.
 
     This function is the entire difference between AC1's two measured latencies -- 0.69s for one
@@ -597,10 +597,10 @@ def scoped_projects(registry: dict, scope: dict) -> dict:
     yields `{}` rather than falling back to everything: silently widening a narrowed sweep is how a
     reflexive command becomes a 2.3s one with nothing on screen to say why.
     """
-    projects = registry.get("projects") or {}
+    repositories = registry.get("projects") or {}
     if scope.get("kind") != "repository":
-        return dict(projects)
-    entry = projects.get(scope.get("repository") or "")
+        return dict(repositories)
+    entry = repositories.get(scope.get("repository") or "")
     return {scope["repository"]: entry} if isinstance(entry, dict) else {}
 
 
@@ -631,7 +631,7 @@ def select_manifests(manifests: list[dict], scope: dict, slug: str) -> tuple[lis
 
     AN UNRESOLVABLE SLUG SELECTS NOTHING, and says so. The tempting degrade -- fall back to showing
     every discovered manifest -- is exactly the B3 failure class this front door exists to remove: it
-    would render another project's entire grid under this repository's header, a wrong answer rather
+    would render another chain's entire grid under this repository's header, a wrong answer rather
     than a missing one. A directory with no git origin, a plain subdirectory of a checkout, or a
     registry entry with no path all land here.
     """
@@ -895,13 +895,13 @@ def ready_refs(manifest: dict, nodes: dict[str, dict]) -> dict:
 
 def _manifest_repos(manifest: dict) -> list[str]:
     """Every `owner/repo` this manifest's ROWS name, deduplicated and sorted. AC2 renders it as the
-    "repos:" line under a project's heading.
+    "repos:" line under a chain's heading.
 
     OVER row_refs, NOT declared_refs, and it is the same rule select_for_repository scopes on
     (manifest_core.row_refs' docstring carries the argument in full). The rows ARE the work; an apex is
     a tracker and an `after`/`blocked_by_ref` entry is a pointer at work happening somewhere else.
-    Listing those would tell a reader this project spans a repository it merely references -- and
-    would do it under a heading that already claims the project, which is the wrong-answer-under-a-
+    Listing those would tell a reader this chain spans a repository it merely references -- and
+    would do it under a heading that already claims the chain, which is the wrong-answer-under-a-
     confident-header class the front door exists to remove.
 
     A ref parse_ref rejects contributes NOTHING rather than a blank entry: ref_slug returns "" for it,

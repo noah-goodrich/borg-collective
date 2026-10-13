@@ -235,11 +235,11 @@ sentences and getting them backwards is the known trap.
 **Trigger — this is the whole condition. Do not paraphrase it, and do not fall back for any other
 reason.**
 
-The probe must re-run the SAME command Step 1 used, including the project argument if there was
-one. `ProjectNotFound` is only raised when a project name is passed (`borg_core/link/cli.py:61`); an
-argument-less overview call can never hit the `not in registry` row, so a probe that drops the
-argument makes that row unreachable. If Step 1's failing call was the overview (no project), that
-row simply won't fire for it — that is correct, not a bug.
+The probe must re-run the SAME command Step 1 used, including the repository argument if there was
+one. `RepositoryNotFound` is only raised when a repository name is passed (in `_focus`,
+`borg_core/link/cli.py`); an argument-less overview call can never hit the `not in registry` row, so
+a probe that drops the argument makes that row unreachable. If Step 1's failing call was the overview
+(no repository), that row simply won't fire for it — that is correct, not a bug.
 
 Capture every branch input in one call (no `$()`, per repo rule). Substitute `<project>` with the
 same argument (or nothing, for an overview) that Step 1 used:
@@ -266,9 +266,9 @@ On `rc=0`, read `.version` from `/tmp/borg-link.out` with `jq .version /tmp/borg
 
 Why each row:
 
-- `not in registry` is the CLI telling you the project genuinely does not exist
-  (`borg link: project '<name>' not in registry. Run: borg add [path]`). Falling back there would
-  hand-roll a page for a project that isn't real. Report the CLI's message and stop.
+- `not in registry` is the CLI telling you the repository genuinely does not exist
+  (`borg link: repository '<name>' not in registry. Run: borg add [path]`). Falling back there would
+  hand-roll a page for a repository that isn't real. Report the CLI's message and stop.
 - Every other non-zero exit means the engine could not answer — `borg` is not on PATH (the drone
   case), the registry is unreadable, or the CLI crashed. On ALL of these stdout is **zero bytes**:
   never parse partial output, never branch on stderr shape beyond the two substring checks above.

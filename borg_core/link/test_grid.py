@@ -145,8 +145,8 @@ def _git_repository(directory: Path, slug: str) -> str:
     return str(directory)
 
 
-def _write_registry(root: Path, projects: dict) -> None:
-    (root / "borg-dir" / "registry.json").write_text(json.dumps({"projects": projects}), encoding="utf-8")
+def _write_registry(root: Path, repositories: dict) -> None:
+    (root / "borg-dir" / "registry.json").write_text(json.dumps({"projects": repositories}), encoding="utf-8")
 
 
 def _write_manifest(repository_dir: str, name: str, manifest: dict) -> Path:
@@ -286,7 +286,7 @@ def test_selection_is_scoped_even_though_discovery_is_not(isolated, monkeypatch)
     """A repository declaring NO row in the manifest selects nothing, and says why.
 
     The other half of B6. Discovery is global, so the manifest is found from `echo` too; selection
-    must then reject it rather than render another project's whole grid under this repository's
+    must then reject it rather than render another chain's whole grid under this repository's
     header, which is the B3 wrong-answer class this front door exists to remove.
     """
     _four_repository_registry(isolated)
@@ -697,7 +697,7 @@ def test_a_wrongly_shaped_sweep_fixture_degrades_without_raising(isolated, monke
     assert [m["id"] for m in grid["manifests"]] == ["cross-repository"]
 
 
-def test_a_project_list_that_cannot_be_staged_warns_instead_of_raising(isolated, monkeypatch):
+def test_a_repository_list_that_cannot_be_staged_warns_instead_of_raising(isolated, monkeypatch):
     """`write_projects_file` json.dumps the registry entries, and a registry is not schema-checked.
 
     A hand-edited entry holding a value json cannot serialize raises TypeError from inside the staging
@@ -711,14 +711,14 @@ def test_a_project_list_that_cannot_be_staged_warns_instead_of_raising(isolated,
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
     monkeypatch.setattr(
         "borg_core.recon.shell.write_projects_file",
-        lambda projects, path: (_ for _ in ()).throw(TypeError("Object of type set is not JSON serializable")),
+        lambda repositories, path: (_ for _ in ()).throw(TypeError("Object of type set is not JSON serializable")),
     )
     monkeypatch.chdir(dirs["delta"])
 
     grid = cli._document("", False, "json", local=False)["grid"]
 
     assert grid["swept"] is False
-    assert any("could not stage the project list" in w for w in grid["warnings"])
+    assert any("could not stage the repository list" in w for w in grid["warnings"])
     assert [m["id"] for m in grid["manifests"]] == ["cross-repository"]
 
 
@@ -762,7 +762,7 @@ def test_a_repository_with_no_git_origin_selects_nothing_and_says_so(isolated, m
     """No origin means no `owner/repo`, and no `owner/repo` means nothing can be scoped to it.
 
     The tempting degrade -- show every discovered manifest -- is the B3 wrong-answer class: another
-    project's entire grid rendered under this repository's header.
+    chain's entire grid rendered under this repository's header.
     """
     dirs = _four_repository_registry(isolated)
     bare = isolated / "ws" / "foxtrot"
@@ -859,12 +859,12 @@ def test_the_link_budget_reaches_the_adapter_and_recon_keeps_its_own(isolated, m
 def test_repository_scope_sweeps_one_repository_and_orchestrator_scope_sweeps_all(isolated, monkeypatch):
     """The scope narrows the SWEEP, which is the whole difference between AC1's 0.69s and its 2.30s.
 
-    Asserted on the project list the adapter is actually handed, because that file is the only place
+    Asserted on the repository list the adapter is actually handed, because that file is the only place
     the breadth becomes observable -- the adapter reads it and nothing else.
     """
     dirs = _four_repository_registry(isolated)
     adapters = isolated / "adapters"
-    seen = isolated / "projects-seen.json"
+    seen = isolated / "repositories-seen.json"
     _adapter(
         adapters,
         "probe",
@@ -892,7 +892,7 @@ def test_an_explicit_positional_narrows_the_sweep_the_way_it_narrows_the_scope(i
     """
     dirs = _four_repository_registry(isolated)
     adapters = isolated / "adapters"
-    seen = isolated / "projects-seen.json"
+    seen = isolated / "repositories-seen.json"
     _adapter(adapters, "probe", f'cp "$4" "{seen}"; echo \'{{"source":"probe","summary":"ok","items":[]}}\'')
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
     monkeypatch.chdir(dirs["delta"])
@@ -958,8 +958,8 @@ def test_every_mode_carries_a_grid(isolated, monkeypatch):
     monkeypatch.chdir(dirs["delta"])
 
     for mode in ("json", "porcelain", "deep", "overview"):
-        project = "delta" if mode == "deep" else ""
-        grid = cli._document(project, False, mode, local=True)["grid"]
+        repository = "delta" if mode == "deep" else ""
+        grid = cli._document(repository, False, mode, local=True)["grid"]
         assert grid["manifests"], f"{mode} lost the grid"
 
 
@@ -1065,15 +1065,15 @@ def test_no_sweep_never_invents_a_since():
     assert link_grid.no_sweep(["because"])["warnings"] == ["because"]
 
 
-def test_scoped_projects_never_widens_a_narrowed_sweep():
+def test_scoped_repositories_never_widens_a_narrowed_sweep():
     """A repository named in the scope but absent from the registry yields {}, not everything.
 
     Silently widening is how a reflexive command becomes a 2.3s one with nothing on screen to say why.
     """
     registry = {"projects": {"a": {"path": "/a"}, "b": {"path": "/b"}}}
-    assert link_grid.scoped_projects(registry, {"kind": "repository", "repository": "b"}) == {"b": {"path": "/b"}}
-    assert link_grid.scoped_projects(registry, {"kind": "repository", "repository": "zz"}) == {}
-    assert sorted(link_grid.scoped_projects(registry, {"kind": "orchestrator"})) == ["a", "b"]
+    assert link_grid.scoped_repositories(registry, {"kind": "repository", "repository": "b"}) == {"b": {"path": "/b"}}
+    assert link_grid.scoped_repositories(registry, {"kind": "repository", "repository": "zz"}) == {}
+    assert sorted(link_grid.scoped_repositories(registry, {"kind": "orchestrator"})) == ["a", "b"]
 
 
 def test_repository_dir_rejects_jqs_null_sentinel():
@@ -1349,7 +1349,7 @@ def test_the_sweep_mark_does_not_move_with_scope_or_with_checkpoint_mtimes(isola
     """THE BLOCKER REGRESSION. One ref must not resolve to two confident states by scope.
 
     The first pass reused `recon.shell.resolve_since`, whose top rung is the newest
-    `.borg/checkpoints/*.md` mtime across the SCOPED projects. Two consequences, both reproduced
+    `.borg/checkpoints/*.md` mtime across the SCOPED repositories. Two consequences, both reproduced
     against real checkouts and a real filtering adapter: repository scope and orchestrator scope
     handed the adapter DIFFERENT marks (the wider breadth taking the newer checkpoint, hence the
     NARROWER window), and a freshly-checkpointed repository collapsed its own window to today. The
@@ -2299,9 +2299,9 @@ def test_a_manifest_block_carries_its_desc_and_repo_slugs():
     """G3. MUTATION: drop `desc` or `repos` from `grid_manifest`'s dict.
 
     `repos` is over row_refs, NOT declared_refs, and the apex here is what proves it: `o/tracker#9`
-    lives in `o/tracker`, a repository this project does not span. Listing it would tell a reader the
-    project reaches a repository it merely files its tracker in -- under a heading that already claims
-    the project. Sorted and deduplicated, so two rows in one repository contribute one entry.
+    lives in `o/tracker`, a repository this chain does not span. Listing it would tell a reader the
+    chain reaches a repository it merely files its tracker in -- under a heading that already claims
+    the chain. Sorted and deduplicated, so two rows in one repository contribute one entry.
     """
     manifest = {
         "program": "spanning",

@@ -56,12 +56,12 @@ def _doc(**overrides) -> dict:
     # `flatten_summary` once, at the chokepoint, so a fixture handing a renderer a raw control
     # character tests a state no document can produce. Mirroring the one line rather than calling
     # `assemble` keeps `_doc`'s shape overridable field by field, which most cases rely on.
-    projects = base.get("projects")
-    if isinstance(projects, dict):
+    repositories = base.get("projects")
+    if isinstance(repositories, dict):
         base["projects"] = {
             name: ({**entry, "summary": link_core.flatten_summary(entry["summary"])}
                    if isinstance(entry, dict) and isinstance(entry.get("summary"), str) else entry)
-            for name, entry in projects.items()
+            for name, entry in repositories.items()
         }
     return base
 
@@ -156,7 +156,7 @@ def test_an_empty_section_renders_exactly_one_placeholder_line():
         assert len(body[title]) == 1, f"{title} rendered {body[title]}"
         assert body[title][0].startswith("  — "), body[title][0]
     # REPOSITORIES on an empty registry is the same rule with the zsh original's own sentence.
-    assert body["REPOSITORIES"] == ["  — No projects registered. Run: borg scan"]
+    assert body["REPOSITORIES"] == ["  — No repositories registered. Run: borg scan"]
 
 
 # ── R5: three diagnoses, not one sentence ─────────────────────────────────────────────────────────
@@ -167,9 +167,9 @@ def test_an_empty_section_renders_exactly_one_placeholder_line():
 # alone -- which is how the spec states this ladder -- passes against a hand-built block while the
 # third arm is unreachable in production, because orchestrator scope has no slug by contract.
 _CHAINS_CASES = [
-    ({"scope_kind": "orchestrator", "slug": ""}, "no project manifests in the registry yet"),
+    ({"scope_kind": "orchestrator", "slug": ""}, "no chain manifests in the registry yet"),
     ({"scope_kind": "repository", "slug": ""}, "no GitHub origin"),
-    ({"scope_kind": "repository", "slug": "acme/ledger"}, "no project manifest declares work in acme/ledger"),
+    ({"scope_kind": "repository", "slug": "acme/ledger"}, "no chain manifest declares work in acme/ledger"),
     # FOURTH ARM, and it carries a slug precisely so it cannot pass by falling through to an earlier
     # one: a refused manifest in a fully-resolved repository is the case every other arm reports as
     # manifest-less.
@@ -198,7 +198,7 @@ def test_the_four_chains_placeholders_are_actually_distinct():
 def test_a_refused_manifest_is_not_reported_as_no_manifest_at_all():
     """The arm's whole reason to exist, stated as the sentence it must NOT print.
 
-    A repository whose only manifest was refused used to render "no project manifests in the registry
+    A repository whose only manifest was refused used to render "no chain manifests in the registry
     yet. Run /borg-plan in any repository." -- false, and it points the reader at scaffolding a second
     manifest beside the broken one. Asserting the absence rather than only the presence is what stops
     a future reordering of the ladder from silently restoring the old answer.
@@ -207,8 +207,8 @@ def test_a_refused_manifest_is_not_reported_as_no_manifest_at_all():
     doc["grid"].update({"scope_kind": "repository", "slug": "acme/ledger", "refused": 2})
     page = render.document(doc)
     assert "2 manifests could not be read" in page
-    assert "no project manifests in the registry yet" not in page
-    assert "no project manifest declares work in acme/ledger" not in page
+    assert "no chain manifests in the registry yet" not in page
+    assert "no chain manifest declares work in acme/ledger" not in page
 
 
 def test_a_refused_count_of_zero_falls_through_to_the_older_arms():
@@ -216,7 +216,7 @@ def test_a_refused_count_of_zero_falls_through_to_the_older_arms():
     every `--json` document written before this arm existed -- must read exactly as it did."""
     doc = _doc()
     doc["grid"].update({"scope_kind": "repository", "slug": "acme/ledger", "refused": 0})
-    assert "no project manifest declares work in acme/ledger" in render.document(doc)
+    assert "no chain manifest declares work in acme/ledger" in render.document(doc)
     doc_without = _doc()
     doc_without["grid"].update({"scope_kind": "repository", "slug": "acme/ledger"})
     assert render.document(doc_without) == render.document(doc)
@@ -226,7 +226,7 @@ def test_the_refused_arm_outranks_the_registry_wide_sentence():
     """PINS THE LADDER'S ORDER at the one place it is observable.
 
     `refused` is counted for whatever scope resolved -- the whole registry in orchestrator scope --
-    so an orchestrator page with unreadable manifests on disk must not print "no project manifests in
+    so an orchestrator page with unreadable manifests on disk must not print "no chain manifests in
     the registry yet". Every other placeholder case is repository-scoped, so without this the arm
     could be moved below the scope check and no test would notice.
     """
@@ -234,7 +234,7 @@ def test_the_refused_arm_outranks_the_registry_wide_sentence():
     doc["grid"].update({"scope_kind": "orchestrator", "slug": "", "refused": 3})
     page = render.document(doc)
     assert "3 manifests could not be read" in page
-    assert "no project manifests in the registry yet" not in page
+    assert "no chain manifests in the registry yet" not in page
 
 
 def test_orchestrator_scope_never_reaches_the_no_origin_diagnosis():
@@ -246,7 +246,7 @@ def test_orchestrator_scope_never_reaches_the_no_origin_diagnosis():
     doc["grid"].update({"scope_kind": "orchestrator", "slug": ""})
     out = render.document(doc)
     assert "no GitHub origin" not in out
-    assert "no project manifests in the registry yet" in out
+    assert "no chain manifests in the registry yet" in out
 
 
 # ── R6: the two sentences the empty-registry early returns used to print ───────────────────────────
@@ -256,11 +256,11 @@ def test_empty_registry_and_all_archived_print_their_two_sentences():
     """Adapted from the three assertions that used to sit on `render.overview`. The sentences are
     verbatim; only the leading `▸` is gone, so `▸ ` stays an unambiguous section marker."""
     empty = render.document(_doc(total_projects=0))
-    assert "No projects registered. Run: borg scan" in empty
+    assert "No repositories registered. Run: borg scan" in empty
 
     all_archived = render.document(_doc(total_projects=2, order=[], projects={}))
-    assert "No projects to show. Run: borg link --all" in all_archived
-    assert "No projects registered" not in all_archived
+    assert "No repositories to show. Run: borg link --all" in all_archived
+    assert "No repositories registered" not in all_archived
 
 
 def test_discovery_tip_gated_on_total_projects_not_len_order():
@@ -279,7 +279,7 @@ def test_discovery_tip_gated_on_total_projects_not_len_order():
 def test_lone_archived_prints_both_tip_and_all_filtered_sentence():
     out = render.document(_doc(total_projects=1, order=[], projects={}))
     assert "Tip: run 'borg scan'" in out
-    assert "No projects to show. Run: borg link --all" in out
+    assert "No repositories to show. Run: borg link --all" in out
 
 
 # ── R7/R8: what scope narrows, and what it must not ───────────────────────────────────────────────
@@ -287,7 +287,7 @@ def test_lone_archived_prints_both_tip_and_all_filtered_sentence():
 
 def test_the_board_is_registry_wide_in_repository_scope():
     """REPOSITORIES is the one section breadth does NOT touch. skills/borg-switch runs
-    `borg link --local --all` from a project session's cwd and reads the whole table out of it;
+    `borg link --local --all` from a repository session's cwd and reads the whole table out of it;
     borg.zsh's 5s watch redraw does the same. Narrowing it makes both a one-row list."""
     projects = {
         "p": {"source": "cli", "status": "active", "relative_activity": "2h ago", "summary": "Mine."},
@@ -304,7 +304,7 @@ def test_the_board_is_registry_wide_in_repository_scope():
 
 
 def test_queued_reads_focus_directives_in_repository_scope_and_the_aggregate_otherwise():
-    """The `[project]` tag follows the breadth: information in the orchestrator context, noise in
+    """The `[repository]` tag follows the breadth: information in the orchestrator context, noise in
     the repository's own."""
     aggregate = [{"project": "other", "title": "Someone else's directive"}]
     scoped = [{"title": "My directive"}]
@@ -497,15 +497,15 @@ def test_the_grid_state_token_is_never_the_registry_status_fallback():
 # ── shared bullet loops, capacity, cortex ─────────────────────────────────────────────────────────
 
 
-def test_queued_and_shipped_share_one_bullet_loop_differing_only_by_the_project_tag():
+def test_queued_and_shipped_share_one_bullet_loop_differing_only_by_the_repository_tag():
     """QUEUED and SHIPPED were two byte-identical-except-for-the-tag loops until AC2 took the last
     difference out: the zsh original's per-block header lines are gone, and `_ship_date_suffix` reads
     an ABSENT key as "" -- so a directive and a shipped plan render through the same call."""
     directives = [{"project": "a", "title": "One"}]
     assimilated = [{"project": "a", "title": "Shipped", "ship_date": "2026-01-01"}]
 
-    tagged = render._bullet_lines(directives, show_project=True)  # pylint: disable=protected-access
-    untagged = render._bullet_lines(directives, show_project=False)  # pylint: disable=protected-access
+    tagged = render._bullet_lines(directives, show_repository=True)  # pylint: disable=protected-access
+    untagged = render._bullet_lines(directives, show_repository=False)  # pylint: disable=protected-access
     assert len(tagged) == len(untagged) == 1
     assert "[a]" in tagged[0]
     assert "[a]" not in untagged[0]
@@ -513,7 +513,7 @@ def test_queued_and_shipped_share_one_bullet_loop_differing_only_by_the_project_
 
     # A directive carries no ship date, and its bullet must not grow an empty "()" for the lack.
     assert "(" not in plain(untagged[0])
-    shipped = render._bullet_lines(assimilated, show_project=False)  # pylint: disable=protected-access
+    shipped = render._bullet_lines(assimilated, show_repository=False)  # pylint: disable=protected-access
     assert plain(shipped[0]) == "    - Shipped (2026-01-01)\n"
 
     # No `Directives:` / `Recently assimilated:` header survives -- the count lives on the section
@@ -551,12 +551,12 @@ def test_board_row_variants_capacity_and_cortex_all_render():
 
 
 def test_the_board_header_still_describes_its_rows_when_a_name_overflows_the_column():
-    """MUTATION: pad the header and the rows from `_COL_PROJECT` again instead of `_board_width`.
+    """MUTATION: pad the header and the rows from `_COL_REPOSITORY` again instead of `_board_width`.
 
-    `_COL_PROJECT` was used as a MINIMUM (`{display:<{_COL_PROJECT}}`) with no truncation anywhere,
+    `_COL_REPOSITORY` was used as a MINIMUM (`{display:<{_COL_REPOSITORY}}`) with no truncation anywhere,
     so a name longer than 20 pushed SRC / STATUS / LAST ACTIVE / SUMMARY right by the overflow while
     the header line, padded from the same constant, did not move. Every column label then sat over
-    the wrong column, on EVERY render in both scopes. Two registered projects trigger it today
+    the wrong column, on EVERY render in both scopes. Two registered repositories trigger it today
     (`pytest-coverage-impact` 22, `reveal-data-consistency` 23), which is why no fixture ever saw it:
     every fixture name is short.
 
@@ -566,10 +566,10 @@ def test_the_board_header_still_describes_its_rows_when_a_name_overflows_the_col
     width rule that is internally consistent -- including a future truncating one.
 
     THE DISPLAY NAME IS WHAT COUNTS, not the registry key: `_board_width` measures the same string
-    `_overview_row` pads, or a renamed project reintroduces the bug through the other door.
+    `_overview_row` pads, or a renamed repository reintroduces the bug through the other door.
     """
     long_display = "reveal-data-consistency"  # 23 -- the longest name in the real registry today
-    assert len(long_display) > render._COL_PROJECT  # pylint: disable=protected-access
+    assert len(long_display) > render._COL_REPOSITORY  # pylint: disable=protected-access
     doc = _doc(
         total_projects=2,
         order=["a", "b"],
@@ -837,7 +837,7 @@ def test_a_summary_past_seventy_columns_wraps_and_reindents_inside_the_card():
         assert continuation.startswith("  ") and not continuation.startswith("   ")
 
 
-def test_two_pending_wakes_for_one_project_render_the_first_not_the_last():
+def test_two_pending_wakes_for_one_repository_render_the_first_not_the_last():
     """`_cortex_countdowns` is first-wins, matching borg.zsh:374's awk join: a state file appended to
     twice has an earlier wake, and the earlier one is the one that fires."""
     doc = _doc(
@@ -1111,7 +1111,7 @@ class TestOverviewSummaryCut:
 # NOT `borg switch`. The commit that added these cases claimed this function feeds the fzf picker.
 # It does not -- `cmd_switch` pipes `cmd_ls --porcelain` into fzf, and that is a separate zsh
 # implementation in borg.zsh which never calls into Python. The picker's own defect is fixed there
-# and pinned by cli_contract.bats's "the picker feed stays one 5-field record per project through
+# and pinned by cli_contract.bats's "the picker feed stays one 5-field record per repository through
 # tab and newline" -- a title narrowed from "tab, newline and CR" because its counting oracle cannot
 # kill a CR-only mutant. See `render.porcelain`'s docstring for the full retraction.
 #
@@ -1182,13 +1182,13 @@ def test_board_row_stays_one_line_for_every_surviving_control(ch):
 
 
 @pytest.mark.parametrize("ch", _SURVIVING_WS)
-def test_porcelain_emits_exactly_one_record_per_project_for_every_surviving_control(ch):
+def test_porcelain_emits_exactly_one_record_per_repository_for_every_surviving_control(ch):
     """THE HONEST ASSERTION IS ON THE RECORD COUNT, and on the field count within the record.
 
     An assertion on the text alone ("the summary reads `top bottom`") passes on a build that emits
     TWO rows, because the first row still ends where the assertion stops looking. What a
-    field-parsing consumer of `borg link --porcelain` depends on is one record per project and five
-    tab-separated fields per record -- an extra record is a project that does not exist, and a
+    field-parsing consumer of `borg link --porcelain` depends on is one record per repository and five
+    tab-separated fields per record -- an extra record is a repository that does not exist, and a
     shifted field means column 3 is no longer the status. Both are asserted here; neither is implied
     by the other.
     """
@@ -1508,7 +1508,7 @@ def test_the_router_covers_every_declared_gate_kind():
     MUTATION: add a third member to `manifest_core.GATE_KINDS` without adding it to `_GATE_ROUTING`.
 
     `GATE_KINDS` no longer gates validation — any non-empty kind loads now — so it is purely the
-    DECLARED vocabulary, the set of kinds this project says it understands. The invariant is that the
+    DECLARED vocabulary, the set of kinds this repository says it understands. The invariant is that the
     router is never BEHIND that declaration: a kind added to the declared set and forgotten in
     `_GATE_ROUTING` would fall to `unsure` and be reported as unroutable when it is in fact a kind we
     claim to know, which is a quieter wrong answer than the one `unsure` exists to prevent.
@@ -1524,7 +1524,7 @@ def test_the_router_covers_every_declared_gate_kind():
     assert render._route("review") == render._GROUP_UNSURE  # pylint: disable=protected-access
 
 
-# ── the board: WAITING ON YOU and the per-project routing counts ─────────────────────────────────
+# ── the board: WAITING ON YOU and the per-repository routing counts ─────────────────────────────────
 
 
 def _gate(ref: str, kind: str, text: str) -> dict:
@@ -1588,7 +1588,7 @@ def test_waiting_item_text_is_truncated_to_one_line():
     assert len(body) == 1 and "…" in body[0]
 
 
-def test_the_board_counts_a_projects_routed_next_rows_and_dashes_the_rest():
+def test_the_board_counts_a_repositories_routed_next_rows_and_dashes_the_rest():
     """The counts are `▸ NEXT`'s rows per owner, attributed by the manifest's path. MUTATION: count
     `yours` rows into the `mine` bucket, or attribute by basename instead of path prefix."""
     doc = _ready_doc(

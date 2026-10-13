@@ -10,7 +10,7 @@ _borg_should_reap (lib/reaper.sh), borg_registry_with_state's merge algebra and 
 decision logic (lib/registry.zsh), _borg_active_count, and the title/ship-date/slug/sort/plan
 primitives the deep dive and the four collectors share.
 
-PHASE 2 SCOPE: the human table's ordering (project_sort_key/order_projects) and the pure document
+PHASE 2 SCOPE: the human table's ordering (repository_sort_key/order_repositories) and the pure document
 assembler (assemble) now live here too. No renderer lives here yet -- the porcelain/overview/deep
 flip is still Phase 3 (see PROJECT_PLAN.md).
 
@@ -19,8 +19,8 @@ it. The grid itself -- the resolve ladder, the node table, the level assignment,
 receipt -- lives in the sibling module borg_core/link/grid.py, held to the identical Domain rules
 (pyproject's clean-arch module map names both files). It started here and pushed this module past
 pylint's 1000-line ceiling in one step, which was the honest signal that two questions had been
-stacked in one file: this one answers "what does the registry say about every project", grid.py
-answers "what does one project's manifest declare, and what is the live state of every ref it names".
+stacked in one file: this one answers "what does the registry say about every repository", grid.py
+answers "what does one repository's manifest declare, and what is the live state of every ref it names".
 `assemble` takes the finished block as an opaque argument, so nothing here imports grid.py and there
 is no cycle.
 """
@@ -52,8 +52,8 @@ TSV_EMPTY_SENTINEL = "-"
 # `summary` now comes from the latest checkpoint (PR #329); stays 2: the key was already nullable, nothing narrowed.
 DOCUMENT_VERSION = 2
 
-# The human table's three-key sort (project_sort_key) ranks status ascending: waiting < active <
-# idle. See project_sort_key's docstring for the full writeup of all four judgment calls baked in.
+# The human table's three-key sort (repository_sort_key) ranks status ascending: waiting < active <
+# idle. See repository_sort_key's docstring for the full writeup of all four judgment calls baked in.
 _STATUS_RANK = {"waiting": 0, "active": 1, "idle": 2}
 
 # Catches archived rows AND any truly-unknown status -- both fall into jq's `else 3` bucket at
@@ -61,7 +61,7 @@ _STATUS_RANK = {"waiting": 0, "active": 1, "idle": 2}
 _OTHER_STATUS_RANK = 3
 
 # The third sort key's substitute for a jq-falsy last_activity (missing, JSON null, or false). An
-# empty string is jq-truthy and is therefore NOT replaced -- see project_sort_key's docstring.
+# empty string is jq-truthy and is therefore NOT replaced -- see repository_sort_key's docstring.
 _NO_ACTIVITY_SENTINEL = "0"
 
 _HEADING_PREFIX = re.compile(r"^#* *")
@@ -165,14 +165,14 @@ def should_reap(
     now_epoch: int,
     threshold_hours: int | None,
 ) -> bool:
-    """Whether a project's status should be downgraded to idle, mirroring lib/reaper.sh:19-37.
+    """Whether a repository's status should be downgraded to idle, mirroring lib/reaper.sh:19-37.
 
     The CHECK ORDER is load-bearing and was probed against the live shell:
 
     1. Status not exactly "active" or "waiting" -> keep. Case-sensitive: "Active" is not reapable.
     2. A live window -> keep, regardless of age.
     3. No last_activity (None, "", or the literal "null") -> REAP. This sits BEFORE the threshold
-       check because a garbage threshold still reaps a project with no timestamp.
+       check because a garbage threshold still reaps a repository with no timestamp.
     4. An unparseable last_activity -> REAP. (relative_time echoes such input back instead; the two
        functions genuinely disagree, and that is the shell's behavior.)
     5. A non-integer threshold -> keep. This is where the shell's `[ "$age_h" -ge "abc" ]` prints
@@ -194,11 +194,11 @@ def should_reap(
 
 
 def overlay_state(entry: dict, state: dict) -> dict:
-    """Merge one project's state.json over its registry entry, mirroring lib/registry.zsh:174-180.
+    """Merge one repository's state.json over its registry entry, mirroring lib/registry.zsh:174-180.
 
-    The state wins on every field EXCEPT that a project whose PRE-MERGE registry status was exactly
+    The state wins on every field EXCEPT that a repository whose PRE-MERGE registry status was exactly
     "archived" keeps that status. Only `.status` is protected -- last_activity and every other field
-    are overwritten even on an archived project, matching the jq. Never mutates its arguments.
+    are overwritten even on an archived repository, matching the jq. Never mutates its arguments.
     """
     was_archived = entry.get("status") == "archived"
     merged = {**entry, **state}
@@ -208,16 +208,16 @@ def overlay_state(entry: dict, state: dict) -> dict:
 
 
 def with_state(registry: dict, states: dict[str, dict]) -> dict:
-    """Apply every project's state.json overlay, then default missing statuses to idle.
+    """Apply every repository's state.json overlay, then default missing statuses to idle.
 
     Mirrors borg_registry_with_state's merge half (lib/registry.zsh:165-184). The default uses jq's
     `//=`, which replaces null/false/missing only -- NOT an empty string, which is jq-truthy and
     survives unchanged. Reproduced via jq_default rather than a bare Python truthiness check; see
     jq_default's docstring. Never mutates the input registry.
     """
-    projects = registry.get("projects") or {}
+    repositories = registry.get("projects") or {}
     merged: dict[str, dict] = {}
-    for name, entry in projects.items():
+    for name, entry in repositories.items():
         state = states.get(name)
         merged[name] = overlay_state(entry, state) if state else dict(entry)
         merged[name]["status"] = jq_default(merged[name].get("status"), DEFAULT_STATUS)
@@ -225,9 +225,9 @@ def with_state(registry: dict, states: dict[str, dict]) -> dict:
 
 
 def resolve_window(name: str, entry: dict) -> str:
-    """The tmux window a project is expected to own, mirroring lib/registry.zsh:221.
+    """The tmux window a repository is expected to own, mirroring lib/registry.zsh:221.
 
-    Falls back to the project name when tmux_window is missing, None, empty, the literal "null", or
+    Falls back to the repository name when tmux_window is missing, None, empty, the literal "null", or
     the TSV empty sentinel "-".
     """
     window = entry.get("tmux_window")
@@ -237,8 +237,8 @@ def resolve_window(name: str, entry: dict) -> str:
 
 
 def window_is_live(name: str, entry: dict, live_windows: "list[str] | set[str]") -> bool:
-    """Whether the project owns a LIVE tmux window under EITHER form: the registry's `tmux_window`
-    (the short name) or the project name (a window opened before short names existed).
+    """Whether the repository owns a LIVE tmux window under EITHER form: the registry's `tmux_window`
+    (the short name) or the repository name (a window opened before short names existed).
 
     The one either-form rule for the Python side; lib/tmux.zsh's `borg_tmux_find_window` is its zsh
     twin and drone's `_drone_find_window` the third statement of it. Literal whole-string membership.
@@ -252,7 +252,7 @@ def reap_overlay(
     now_epoch: int,
     threshold_hours: int | None,
 ) -> dict:
-    """Downgrade every stale active/waiting project to idle, mirroring lib/registry.zsh:209-243.
+    """Downgrade every stale active/waiting repository to idle, mirroring lib/registry.zsh:209-243.
 
     Display-path only: the caller's state.json files are untouched, and the original status is kept
     under `_reaped_from` so callers can report what was auto-downgraded. Never mutates its arguments.
@@ -272,9 +272,9 @@ def reap_overlay(
     which pins the outcome (REAP) rather than the branch and stays green either way.
     """
     live = set(live_windows)
-    projects = registry.get("projects") or {}
+    repositories = registry.get("projects") or {}
     updated: dict[str, dict] = {}
-    for name, entry in projects.items():
+    for name, entry in repositories.items():
         status = entry.get("status", "")
         last_activity = entry.get("last_activity")
         is_live = window_is_live(name, entry, live)
@@ -286,24 +286,24 @@ def reap_overlay(
 
 
 def active_count(registry: dict) -> int:
-    """Projects needing attention, mirroring _borg_active_count (borg.zsh:114-116).
+    """Repositories needing attention, mirroring _borg_active_count (borg.zsh:114-116).
 
     Counts the registry AS PASSED, so the caller decides whether the reap overlay has been applied.
     """
-    projects = registry.get("projects") or {}
-    return sum(1 for entry in projects.values() if entry.get("status") in REAPABLE_STATUSES)
+    repositories = registry.get("projects") or {}
+    return sum(1 for entry in repositories.values() if entry.get("status") in REAPABLE_STATUSES)
 
 
-def project_paths(registry: dict) -> list[tuple[str, str]]:
-    """(name, path) for every project, mirroring the collectors' `[.key, (.value.path // "")] | @tsv`.
+def repository_paths(registry: dict) -> list[tuple[str, str]]:
+    """(name, path) for every repository, mirroring the collectors' `[.key, (.value.path // "")] | @tsv`.
 
     A null, false, or missing path becomes "" -- via jq_default, not a bare Python truthiness check,
     so a (nonsensical but not impossible) numeric path of 0 is NOT replaced, matching jq's `//`. Order
     is the registry's JSON insertion order, which json.loads preserves and which the aggregate
     directive/assimilated sections depend on. Callers apply their own skip rules.
     """
-    projects = registry.get("projects") or {}
-    return [(name, str(jq_default(entry.get("path"), ""))) for name, entry in projects.items()]
+    repositories = registry.get("projects") or {}
+    return [(name, str(jq_default(entry.get("path"), ""))) for name, entry in repositories.items()]
 
 
 def _path_components(path: str) -> list[str]:
@@ -314,15 +314,15 @@ def _path_components(path: str) -> list[str]:
 def scope_for(
     cwd: str,
     orchestrator_root: str,
-    project_paths_: list[tuple[str, str]],
+    repository_paths_: list[tuple[str, str]],
     local: bool = False,
-    requested_project: str = "",
+    requested_repository: str = "",
 ) -> dict:
     """Resolve which repositories one `borg link` invocation covers.
 
     Returns `{"kind": "repository"|"orchestrator", "repository": str|None, "local": bool}`.
 
-    THE EXPLICIT POSITIONAL DOMINATES CWD. `requested_project`, when non-empty and present in the
+    THE EXPLICIT POSITIONAL DOMINATES CWD. `requested_repository`, when non-empty and present in the
     registry, sets the scope outright; cwd is consulted ONLY for the no-argument shape. Deriving
     breadth from cwd alone is not a latency bug, it is a truthfulness bug: `borg link ingle` run from
     inside borg-collective would sweep borg-collective and render those nodes under ingle's header --
@@ -330,10 +330,10 @@ def scope_for(
     GONE -- it named "drone.zsh:964 iterates tmux window names inside cmd_status's loop, and
     borg.zsh:266's fzf preview renders `borg link {1}` for arbitrary {1} from the invoking cwd", and
     both were retired 2026-08-27. The rule is not weakened by losing them: `drone link` still passes
-    `${PWD##*/}` from whatever cwd the window is in, and a human typing `borg link <other-project>`
+    `${PWD##*/}` from whatever cwd the window is in, and a human typing `borg link <other-repository>`
     is the case that matters most, because a wrong document is indistinguishable from a right one.
-    A requested project that is NOT in the registry deliberately falls through to cwd resolution
-    rather than being honored -- `_focus` raises ProjectNotFound for that case, and scope must not
+    A requested repository that is NOT in the registry deliberately falls through to cwd resolution
+    rather than being honored -- `_focus` raises RepositoryNotFound for that case, and scope must not
     invent a repository the registry has never heard of.
 
     The orchestrator test is EXACT equality with `orchestrator_root`, mirroring `_borg_session_mode`
@@ -344,7 +344,7 @@ def scope_for(
     must not match a registry path of `/a/b`.
 
     Pure -- takes strings and a list of (name, path) pairs, touches no filesystem and no environment.
-    `project_paths_` MUST arrive with every path already realpath-normalized, which is why it is a
+    `repository_paths_` MUST arrive with every path already realpath-normalized, which is why it is a
     pair list rather than the registry dict: both sides of the comparison have to be resolved the same
     way, and resolving is filesystem work that cannot happen in the Domain layer. Normalizing only cwd
     and comparing it against raw registry paths breaks on any symlinked path -- and does so first in
@@ -353,8 +353,8 @@ def scope_for(
     """
     scope = {"kind": "orchestrator", "repository": None, "local": bool(local)}
 
-    if requested_project and any(name == requested_project for name, _ in project_paths_):
-        return {**scope, "kind": "repository", "repository": requested_project}
+    if requested_repository and any(name == requested_repository for name, _ in repository_paths_):
+        return {**scope, "kind": "repository", "repository": requested_repository}
 
     if cwd == orchestrator_root:
         return scope
@@ -362,7 +362,7 @@ def scope_for(
     cwd_parts = _path_components(cwd)
     best_name = None
     best_depth = -1
-    for name, entry_path in project_paths_:
+    for name, entry_path in repository_paths_:
         if not entry_path:
             continue
         parts = _path_components(entry_path)
@@ -429,10 +429,10 @@ def slug_from_filename(name: str) -> str:
 
 
 def sort_assimilated(entries: list[dict]) -> list[dict]:
-    """Newest-first by filename, mirroring `sort -r -k1,1` over `<filename>\\t<path>\\t<project>`.
+    """Newest-first by filename, mirroring `sort -r -k1,1` over `<filename>\\t<path>\\t<repository>`.
 
     The key includes the ".md" suffix because the shell sorts the basename, not the slug, and the
-    (path, project) tail reproduces sort's last-resort whole-line comparison on ties.
+    (path, repository) tail reproduces sort's last-resort whole-line comparison on ties.
 
     DEVIATION, recorded: Python sorts by codepoint; zsh's glob sort and coreutils `sort` use LOCALE
     collation, where punctuation is ignored at the primary level. Measured impact across all 374 real
@@ -446,8 +446,8 @@ def sort_assimilated(entries: list[dict]) -> list[dict]:
     )
 
 
-def repo_sources(name: str, projects: dict) -> list[tuple[str, str]]:
-    """The `(project_name, path)` pairs that are worktrees of ONE git clone, focus first.
+def repo_sources(name: str, repositories: dict) -> list[tuple[str, str]]:
+    """The `(repository_name, path)` pairs that are worktrees of ONE git clone, focus first.
 
     The group key is the `repo` field `borg add` writes -- the absolute `--git-common-dir`, which is
     byte-identical from a main checkout and from every linked worktree of it. Two entries share a
@@ -465,17 +465,17 @@ def repo_sources(name: str, projects: dict) -> list[tuple[str, str]]:
     must keep resolving to itself forever.
 
     FOCUS FIRST, and the rest by name, so the ordering is a function of the registry and not of dict
-    insertion order -- `order_checkpoints` breaks a filename tie on project name, and a tiebreak that
+    insertion order -- `order_checkpoints` breaks a filename tie on repository name, and a tiebreak that
     depended on JSON key order would make "the latest checkpoint" unstable across a registry rewrite.
     """
-    entry = (projects or {}).get(name) or {}
+    entry = (repositories or {}).get(name) or {}
     here = str(entry.get("path") or "")
     repo = str(entry.get("repo") or "")
     if not repo:
         return [(name, here)] if here else []
 
     siblings = []
-    for other, other_entry in (projects or {}).items():
+    for other, other_entry in (repositories or {}).items():
         if other == name:
             continue
         other_entry = other_entry or {}
@@ -490,7 +490,7 @@ def repo_sources(name: str, projects: dict) -> list[tuple[str, str]]:
 
 
 def order_checkpoints(found: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """Every `(filename, project_name)` across a repo group, newest first.
+    """Every `(filename, repository_name)` across a repo group, newest first.
 
     BY NAME, NOT MTIME, and that rule is inherited verbatim from the `sort_checkpoints` this
     replaces, which mirrored `find ... | sort -r | head -3` (borg.zsh:466): checkpoint filenames are
@@ -502,15 +502,15 @@ def order_checkpoints(found: list[tuple[str, str]]) -> list[tuple[str, str]]:
     written in the same minute by two sessions on the same repo. A pure name sort leaves those two
     rows adjacent and in an order set by whatever the caller happened to collect first, which is how
     "the latest checkpoint" came to depend on which directory you asked about. Breaking the tie on
-    project name makes the answer a function of the data alone. It does NOT claim the winner is the
+    repository name makes the answer a function of the data alone. It does NOT claim the winner is the
     better document -- neither is -- only that the same registry always yields the same winner, and
     that `label_checkpoints` says out loud which one it was.
 
-    Composed as two stable sorts rather than one key: project ascending, then filename descending.
-    A single `reverse=True` over a tuple key would reverse the project tiebreak too.
+    Composed as two stable sorts rather than one key: repository ascending, then filename descending.
+    A single `reverse=True` over a tuple key would reverse the repository tiebreak too.
     """
-    by_project = sorted(found, key=lambda pair: pair[1])
-    return sorted(by_project, key=lambda pair: pair[0], reverse=True)
+    by_repository = sorted(found, key=lambda pair: pair[1])
+    return sorted(by_repository, key=lambda pair: pair[0], reverse=True)
 
 
 def dedupe_checkpoints(
@@ -567,7 +567,7 @@ def dedupe_checkpoints(
 
 
 def label_checkpoints(ordered: list[tuple[str, str]], limit: int = 3) -> list[str]:
-    """The capped display labels for an ordered group -- `<filename>` or `<filename> @<project>`.
+    """The capped display labels for an ordered group -- `<filename>` or `<filename> @<repository>`.
 
     THE BYLINE APPEARS ONLY WHEN THE ROWS BEING PRINTED ARE ACTUALLY AMBIGUOUS -- decided on the
     rows that survive deduping, not on how many siblings exist or how many files were found. A
@@ -581,8 +581,8 @@ def label_checkpoints(ordered: list[tuple[str, str]], limit: int = 3) -> list[st
     its shape and `render.py` keeps printing the string it is handed; the byline rides inside the
     element rather than beside it.
     """
-    multi = len({project for _, project in ordered}) > 1
-    return [f"{fn} @{project}" if multi else fn for fn, project in ordered[:limit]]
+    multi = len({repository for _, repository in ordered}) > 1
+    return [f"{fn} @{repository}" if multi else fn for fn, repository in ordered[:limit]]
 
 
 def plan_objective(text: str) -> str:
@@ -717,7 +717,7 @@ def jq_interp(value: object) -> str:
 format_iso = timefmt.epoch_to_iso
 
 
-def project_sort_key(entry: dict) -> tuple[int, int, str]:
+def repository_sort_key(entry: dict) -> tuple[int, int, str]:
     """The human table's three-key sort, ported from the jq at borg.zsh:303-310 (byte-identical text
     also at :255-262 and :543-550): pinned first, then waiting < active < idle < other, then
     last_activity ascending as a raw string compare.
@@ -759,27 +759,27 @@ def public_entry(entry: dict, now_epoch: int) -> dict:
     return public
 
 
-def visible_projects(registry: dict, show_all: bool, now_epoch: int) -> dict[str, dict]:
-    """The projects a `borg link` invocation shows, keyed by name, with public_entry applied.
+def visible_repositories(registry: dict, show_all: bool, now_epoch: int) -> dict[str, dict]:
+    """The repositories a `borg link` invocation shows, keyed by name, with public_entry applied.
 
     Ports the archived filter FUSED into the jq pipeline at borg.zsh:302, which runs BEFORE the
-    sort. Insertion order is preserved -- it is the tie-break order_projects's stable sort relies on.
+    sort. Insertion order is preserved -- it is the tie-break order_repositories's stable sort relies on.
     """
-    projects = registry.get("projects") or {}
+    repositories = registry.get("projects") or {}
     return {
         name: public_entry(entry, now_epoch)
-        for name, entry in projects.items()
+        for name, entry in repositories.items()
         if show_all or entry.get("status") != "archived"
     }
 
 
-def order_projects(projects: dict[str, dict]) -> list[str]:
-    """The display order for `projects`, mirroring jq's stable sort_by.
+def order_repositories(repositories: dict[str, dict]) -> list[str]:
+    """The display order for `repositories`, mirroring jq's stable sort_by.
 
     Python's sort is stable, reproducing jq's stable sort_by falling back to registry insertion
     order on a full three-key tie.
     """
-    return sorted(projects, key=lambda name: project_sort_key(projects[name]))
+    return sorted(repositories, key=lambda name: repository_sort_key(repositories[name]))
 
 
 def capacity(active: int, limit: int) -> dict:
@@ -806,7 +806,7 @@ def _paragraph(lines: list[str], start: int) -> str:
 def checkpoint_summary(text: str) -> str | None:
     """The one-line summary a checkpoint states about itself, or None when it states none.
 
-    A project's summary is DERIVED FROM ITS LATEST CHECKPOINT, an artifact /borg-link-up already
+    A repository's summary is DERIVED FROM ITS LATEST CHECKPOINT, an artifact /borg-link-up already
     writes, rather than from a transcript heuristic (summarize.py) that surfaced raw greetings and
     mid-sentence cuts. Order: the `**tl;dr** -- ...` paragraph; else the first bullet (or first
     paragraph) under the `Accomplished` heading; else None. None is a real answer: the row then
@@ -840,7 +840,7 @@ def _with_flat_summary(entry):
     """`entry` with a STRING `summary` flattened; anything else comes back unchanged.
 
     "Anything else" is a missing key, and also a present-but-null one: the registry writes
-    `"summary": null` for a project with no debrief yet, and `str(None)` is the word "None", which
+    `"summary": null` for a repository with no debrief yet, and `str(None)` is the word "None", which
     the board row's and porcelain's `jq_default` then keep because it is no longer null. Every
     non-string passes through as stored, so those renderers' `jq_default` and `str()` see it
     exactly as they did before flattening moved here. Flattening is a guarantee about STRING
@@ -914,9 +914,9 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
     registry -- NOT `len(order)` or `len(projects)`, both of which are post-archived-filter. The
     document's `.order`/`.projects` alone cannot distinguish an empty registry from one that is
     entirely archived (both emit `order: []`, `projects: {}`), yet the overview must print two
-    different sentences for those two cases. Deriving the overview's "no projects at all" branch
+    different sentences for those two cases. Deriving the overview's "no repositories at all" branch
     from `len(order)` is the single highest-probability Phase 3 bug: it renders correctly on nearly
-    every fixture and silently inverts on a real registry with any archived project.
+    every fixture and silently inverts on a real registry with any archived repository.
 
     `scope` (S1) is PURELY ADDITIVE and DOCUMENT_VERSION deliberately stays 2. Nothing that existed
     before this key changed meaning: `order`, `projects` and `focus` still cover the whole registry.
@@ -950,7 +950,7 @@ def assemble(  # pylint: disable=too-many-arguments,too-many-positional-argument
         # THE CHOKEPOINT. `summary` is flattened HERE, once, so no renderer can receive it dirty --
         # see `flatten_summary` for the three bugs that each came from a renderer defending itself
         # individually. A row without a `summary` key is left exactly as it was: adding one would
-        # change what the wire carries for projects that never had the field. Likewise a non-string
+        # change what the wire carries for repositories that never had the field. Likewise a non-string
         # `summary` stays as stored: the wire carries null, not the word "None". So a v2 consumer
         # reads a string or the stored non-string, which is null for every row borg itself writes;
         # d9e27f6's "still reads a string" was wrong.
