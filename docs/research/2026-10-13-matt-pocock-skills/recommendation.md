@@ -20,6 +20,8 @@ AI-scoring: 80/100
 
 ## Recommendation
 
+**Decision (Noah, 2026-10-13):** adopt the round-3 blind reviewer's variant instead of Option F. Borrow nothing as "adoption". Fold the three tracker failure cases (finished work never marked done, two sessions claiming or overwriting the same item, a locked decision not reaching dependent items) into the existing manifest lost-update directive (docs/plans/directives/2026-10-12-manifest-writer-lost-update-guard.md) plus an audit of every code path that changes an item's state (assimilate, close, add-row, manual merge, hooks). Keep the AFK/HITL label and the demo check as log-triggered maybes (Option A-plus triggers), and re-check on 2027-01-11.
+
 **NOT upheld by blind review after 3 rounds.** The recommendation below is not upheld by blind review after 3 rounds. Round 1 returned "revise" on Option B. Round 2 returned "revise" on F. Round 3 reviewed the amended F and also returned "revise". The council's pick stays Option F as amended, with A-plus as the fallback, and the open round-3 objection is listed below for Noah to decide. The amended F is not design-reviewed and upheld.
 
 **Round-3 verdict: revise.** Strongest objection, verbatim:
