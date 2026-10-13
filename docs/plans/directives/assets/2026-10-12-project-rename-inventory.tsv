@@ -2678,7 +2678,7 @@ lib/borg-hooks.sh	274	1	project	repository	registered repo dir (state helper)
 lib/borg/resume-close.sh	4	1	project	contract	contract: usage placeholder quoting bin/borg-resume (mark-closed <project|sid> [dir]); bin/ is outside R3; kept in R3 (#357)
 lib/borg/resume-close.sh	4	2	project	contract	contract: usage placeholder quoting bin/borg-resume (mark-closed <project|sid> [dir]); bin/ is outside R3; kept in R3 (#357)
 lib/borg/resume-close.sh	16	1	project	contract	resume registry field .project
-lib/borg/resume-close.sh	17	1	project	contract	contract: usage placeholder quoting bin/borg-resume (mark-closed <project|sid> [dir]); bin/ is outside R3; kept in R3 (#357)
+lib/borg/resume-close.sh	17	1	project	repository	renamed in R3 (#357)
 lib/borg/resume-close.sh	17	2	project	contract	resume registry field tmux.project_dir
 lib/borg/resume-close.sh	32	1	project	contract	resume registry fields .project / tmux.project_dir
 lib/borg/resume-close.sh	32	2	project	contract	resume registry fields .project / tmux.project_dir
