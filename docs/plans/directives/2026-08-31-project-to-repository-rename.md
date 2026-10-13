@@ -2,6 +2,12 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface (assimilated 2026-09-23)*
 *Filed: 2026-08-31*
 
+## Vocabulary, clarified by Noah on 2026-10-13
+
+Vocabulary, clarified by Noah on 2026-10-13: a REPOSITORY is the git repo (e.g. borg-collective). A WORKTREE is a linked checkout of it registered as its own directory (e.g. borg-collective-front-door, tmux window borg-door; borg-collective-nanoprobes, window borg-probes); several worktrees, each carrying a PROJECT, can be active on one repository at once. A PROJECT is a body of related requirements, PRs and work that can span repositories (the ratified 2026-08-24 meaning, formerly "program"). A STACK is the declared, ordered PR stack of a project (the manifest file and its rows); "stack" replaces "chain" everywhere (decided 2026-10-13, matching GitHub's "PR stacks" and the tool-neutral .stacks/ root). In user-facing text a registered directory is a "repository", and "worktree" is used where the distinction matters. Planning surfaces (PROJECT_PLAN.md, /borg-plan, /borg-assimilate) keep "project".
+
+Queen (Noah, 2026-10-13; first recorded in https://github.com/noah-goodrich/borg-collective/pull/207 on 2026-09-16): the orchestrator session is the QUEEN in everything Noah sees (tmux window, claude --name, borg help, launch prompt, hook text, messages, living docs; the third name "Conductor" is retired). Internal and contract names stay: BORG_ORCHESTRATOR_ROOT, the session-mode value, scope.kind, every --json key, and agent role text.
+
 ## Why
 
 The One Front Door plan ratified a vocabulary on 2026-08-24 and then deferred half of it:
@@ -66,6 +72,10 @@ each step is independently green:
    buys little. Recommend keeping the filename and renaming only the variables that read it — record the decision
    either way.
 4. **Tests and goldens move with each step**, never in a trailing commit.
+5. Step R6 (Noah, 2026-10-13): after R5 and the chain-to-stack rename, one PR aligns skills/ and the user docs with the
+   final vocabulary (repository, worktree, project, stack, Queen), plus one claude-plugins mirror rebuild PR so
+   sessions see it. The inventory covered code files only, so R6 owns the markdown surfaces. The registry-key
+   migration (projects -> repositories, behind a dual reader) follows R6 in its own PRs.
 
 ## Acceptance criteria
 
