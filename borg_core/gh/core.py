@@ -56,25 +56,48 @@ def classify(view: dict) -> dict:
         verdict = PENDING
     else:
         verdict = GREEN
-    return {"head": view.get("headRefOid", ""), "state": view.get("state", ""), "verdict": verdict,
-            "checks": counts, "failing": failing, "rerun_run_ids": run_ids,
-            "merge_state": view.get("mergeStateStatus", "")}
+    return {
+        "head": view.get("headRefOid", ""),
+        "state": view.get("state", ""),
+        "verdict": verdict,
+        "checks": counts,
+        "failing": failing,
+        "rerun_run_ids": run_ids,
+        "merge_state": view.get("mergeStateStatus", ""),
+        "empty": not view.get("statusCheckRollup"),
+    }
 
 
-def wait_for_verdict(fetch: Callable[[], dict], sleep: Callable[[], None], expired: Callable[[], bool],
-                     on_no_runner: Callable[[dict], bool] | None = None, grace_polls: int = 3) -> dict:
+def wait_for_verdict(
+    fetch: Callable[[], dict],
+    sleep: Callable[[], None],
+    expired: Callable[[], bool],
+    on_no_runner: Callable[[dict], bool] | None = None,
+    grace_polls: int = 3,
+    stale_head: str = "",
+    empty_grace: int = 0,
+) -> dict:
     """Poll `fetch` until the verdict is terminal or `expired()`; return the last gate document.
 
     Terminal: green, failing, or no-runner. A no-runner verdict first goes to `on_no_runner(doc)`; if that
     returns True (a rerun was issued) the verdict is treated as pending for `grace_polls` consecutive polls,
     because the rollup can lag the rerun; past that it is terminal. Without a handler it is terminal at once.
+    `stale_head` (the head before an update-branch) keeps a green pending until the head differs, so a green on
+    the old head never counts. `empty_grace` keeps an empty rollup pending for that many polls (checks may not
+    have registered yet); after the grace an empty rollup is green (a repo with no checks).
     The returned doc carries `timed_out` True when `expired()` ended the wait while still pending.
     """
     seen_after_rerun = 0
     rerun_issued = False
+    empty_polls = 0
     while True:
         doc = classify(fetch())
         doc["timed_out"] = False
+        if doc["verdict"] == GREEN and (
+            (stale_head and doc["head"] == stale_head) or (doc["empty"] and empty_polls < empty_grace)
+        ):
+            doc["verdict"] = PENDING
+        empty_polls += doc["empty"]
         verdict = doc["verdict"]
         if verdict == NO_RUNNER:
             if rerun_issued:

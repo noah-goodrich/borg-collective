@@ -32,9 +32,21 @@ setup() {
 
 @test "borg pr runs the real gate against a fake gh on PATH" {
     mkdir -p "$BATS_TEST_TMPDIR/bin"
-    printf '#!/bin/sh\necho %s\n' "'{\"statusCheckRollup\":[],\"headRefOid\":\"abc\",\"mergeStateStatus\":\"CLEAN\",\"state\":\"OPEN\"}'" > "$BATS_TEST_TMPDIR/bin/gh"
+    local view='{"statusCheckRollup":[],"headRefOid":"abc","mergeStateStatus":"CLEAN","state":"OPEN"}'
+    {
+        printf '#!/bin/sh\n'
+        printf 'echo "$*" >> "%s/argv"\n' "$BATS_TEST_TMPDIR"
+        printf "echo '%s'\\n" "$view"
+    } > "$BATS_TEST_TMPDIR/bin/gh"
     chmod +x "$BATS_TEST_TMPDIR/bin/gh"
-    PATH="$BATS_TEST_TMPDIR/bin:$PATH" run "$BORG_CMD" pr gate 5 --json
+    # borg.zsh resets PATH, so a fake gh must come in through BORG_PATH_PREFIX.
+    BORG_PATH_PREFIX="$BATS_TEST_TMPDIR/bin" run "$BORG_CMD" pr gate 5 --json
     [ "$status" -eq 0 ]
     [[ "$output" == *'"verdict": "green"'* ]] || false
+    grep -q '^pr view 5 --json ' "$BATS_TEST_TMPDIR/argv"
+}
+
+@test "borg pr usage errors exit 64, not argparse's 2" {
+    run "$BORG_CMD" pr gate notanumber
+    [ "$status" -eq 64 ]
 }

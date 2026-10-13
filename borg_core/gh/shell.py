@@ -12,9 +12,14 @@ class GhError(RuntimeError):
     """`gh` could not be run or exited non-zero where the caller needed it to succeed."""
 
 
+GH_TIMEOUT = 120.0
+
+
 def run(argv: list[str]) -> tuple[int, str, str]:
     try:
-        proc = subprocess.run(["gh", *argv], capture_output=True, text=True, check=False)
+        proc = subprocess.run(["gh", *argv], capture_output=True, text=True, check=False, timeout=GH_TIMEOUT)
+    except subprocess.TimeoutExpired as exc:
+        raise GhError(f"gh {' '.join(argv[:2])} timed out after {GH_TIMEOUT:g}s") from exc
     except OSError as exc:
         raise GhError(f"cannot run gh: {exc}") from exc
     return proc.returncode, proc.stdout, proc.stderr
@@ -46,6 +51,7 @@ def rerun_failed(run_id: str, repo: str = "") -> tuple[int, str]:
 
 
 def merge(n: int, head: str, method: str = "squash", repo: str = "") -> tuple[int, str]:
-    rc, out, err = run(["pr", "merge", str(n), f"--{method}", "--delete-branch",
-                        "--match-head-commit", head, *_repo(repo)])
+    rc, out, err = run(
+        ["pr", "merge", str(n), f"--{method}", "--delete-branch", "--match-head-commit", head, *_repo(repo)]
+    )
     return rc, (err or out).strip()
