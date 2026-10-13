@@ -3232,6 +3232,10 @@ cmd_help() {
     nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     spend               Main-vs-subagent spend split + trend (this machine; --project/--by-model/--last)
+    pr <verb>           PR check/merge verbs over gh (exit code = verdict; JSON when piped)
+                          gate <n> [--repo R] [--wait]   0 green, 1 failing, 2 pending, 3 cancelled w/o runner
+                          merge-train <n...> [--dry-run] Update, wait, rerun once, merge in order; MERGES:
+                                                         human or orchestrator main loop only, NEVER agents
     reap                Persist idle to stale active/waiting sessions (no live window)
     reap-worktrees [--dry-run] [p]  Remove stale/merged (incl. squash) nanoprobe worktrees
     doctor              Verify the 4 launchd agents + headless claude -p reachability
@@ -3811,6 +3815,12 @@ case "${1:-help}" in
         # arm above and the migration ledger for the same rationale.
         shift
         _borg_py borg_core.registry.cli rm "$@"
+        ;;
+    pr)
+        # Dispatches to borg_core/gh/cli.py. `merge-train` merges: human or orchestrator main loop only,
+        # never workflow agents or nanoprobes (see docs/plans/directives/2026-10-13-shell-command-hygiene.md D4).
+        shift
+        _borg_py borg_core.gh.cli "$@"
         ;;
     color)    cmd_color "${@:2}" ;;
     window)   cmd_window "${@:2}" ;;
