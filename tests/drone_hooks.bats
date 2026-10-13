@@ -4,7 +4,7 @@
 # Covers both:
 #  - run_borg_hook unit behavior (strict vs lenient, present/absent/non-executable)
 #  - drone.zsh integration: hooks fire around `docker compose up/down` but NOT
-#    around the transient down in _cycle_project (restart/rebuild).
+#    around the transient down in _cycle_repository (restart/rebuild).
 
 load test_helper/setup
 
@@ -220,7 +220,7 @@ EOF
     _install_hook pre-up.sh 0
     _install_hook post-down.sh 0
     # restart requires a running container. Since our mock docker 'ps' returns
-    # a name, drone should walk the _cycle_project path.
+    # a name, drone should walk the _cycle_repository path.
     run "$DRONE" restart "$TEST_PROJECT"
     # Count hook invocations across the cycle.
     local pre_count post_count

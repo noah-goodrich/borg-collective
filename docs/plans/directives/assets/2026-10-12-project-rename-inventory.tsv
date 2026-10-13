@@ -2102,10 +2102,10 @@ drone.zsh	253	1	project	repository	registered repo / its dir or name
 drone.zsh	253	2	project	repository	registered repo / its dir or name
 drone.zsh	253	3	project	repository	registered repo / its dir or name
 drone.zsh	254	1	project	repository	registered repo / its dir or name
-drone.zsh	256	1	project	repository	registered repo / its dir or name
+drone.zsh	256	1	project	external	R5: docker compose label helper _compose_project_label keeps docker compose's word
 drone.zsh	257	1	project	external	docker compose project label
 drone.zsh	262	1	project	repository	registered repo / its dir or name
-drone.zsh	265	1	project	repository	registered repo / its dir or name
+drone.zsh	265	1	project	external	R5: docker compose label helper _compose_project_label keeps docker compose's word
 drone.zsh	266	1	project	external	docker compose project label
 drone.zsh	301	1	project	repository	registered repo / its dir or name
 drone.zsh	302	1	project	repository	registered repo / its dir or name
@@ -2435,7 +2435,7 @@ drone.zsh	1243	1	project	repository	registered repo / its dir or name
 drone.zsh	1247	1	project	repository	registered repo / its dir or name
 drone.zsh	1251	1	project	repository	registered repo / its dir or name
 drone.zsh	1252	1	project	repository	registered repo / its dir or name
-drone.zsh	1253	1	project	repository	registered repo / its dir or name
+drone.zsh	1253	1	project	contract	R5: heading text is the idempotency key matched in scaffolded CLAUDE.md files; kept
 drone.zsh	1264	1	project	repository	registered repo / its dir or name
 drone.zsh	1266	1	project	repository	registered repo / its dir or name
 drone.zsh	1269	1	project	repository	registered repo / its dir or name

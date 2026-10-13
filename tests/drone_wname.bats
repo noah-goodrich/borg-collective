@@ -170,6 +170,22 @@ _new_window_names() { grep -E '^tmux (new-window|new-session)' "$TRACE" | sed -E
     ! grep -q 'docker compose -p quill ' "$TRACE"
 }
 
+@test "restart --all skips the Queen's windows (queen, orchestrator) and host" {
+    mkdir -p "$PROJ/.devcontainer" "$OTHER/.devcontainer"
+    touch "$PROJ/.devcontainer/docker-compose.yml" "$OTHER/.devcontainer/docker-compose.yml"
+    _register amber-fox-labs "$PROJ" fox
+    printf '%s\n' host queen orchestrator fox > "$WINDOWS"
+    for w in host queen orchestrator; do echo "$OTHER" > "$BATS_TEST_TMPDIR/pdir.$w"; done
+    echo "$PROJ" > "$BATS_TEST_TMPDIR/pdir.fox"
+    run "$DRONE" restart --all
+    [ "$status" -eq 0 ]
+    grep -q 'docker compose -p amber-fox-labs ' "$TRACE"
+    ! grep -q 'docker compose -p queen ' "$TRACE"
+    ! grep -q 'docker compose -p orchestrator ' "$TRACE"
+    ! grep -q 'docker compose -p host ' "$TRACE"
+    [[ "$output" == *"Restarted 1 repository(ies)"* ]]
+}
+
 @test "an unregistered project falls back to its own name when the registry is unusable" {
     echo 'not json' > "$BORG_REGISTRY"
     run "$DRONE" up "$PROJ"

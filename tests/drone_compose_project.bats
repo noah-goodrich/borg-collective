@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # The compose project name has ONE source of truth: the registry/project name drone passes to
-# `docker compose -p`. Lookups (get_project_container / get_service_name) must filter on the same
+# `docker compose -p`. Lookups (get_repository_container / get_service_name) must filter on the same
 # value, normalized the way docker compose normalizes it, never on the folder basename. Names invented.
 
 load test_helper/setup
