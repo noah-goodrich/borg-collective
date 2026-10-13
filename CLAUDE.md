@@ -67,14 +67,14 @@ Two independent tools that compose:
 - Registry-based project tracking with atomic writes
 - User-authored session checkpoints at <project>/.borg/checkpoints/<ts>.md (via /borg-link-up)
 - Session context loaded at start from the latest checkpoint
-- `borg init` orchestrator: morning briefing from registry + checkpoints
+- `borg init` launches the Queen: morning briefing from registry + checkpoints
 
 ### Commands
 
 ```
-borg init                Launch orchestrator: morning briefing + Claude session
+borg init  Launch the Queen: morning briefing + Claude session
 borg / borg next         What needs attention? Switch to it.
-borg claude              Launch/resume orchestrator Claude session
+borg claude  Resume the Queen session (continue most recent)
 borg link [project]      ONE renderer, TWO pages, chosen by scope.kind
                            Queen root: the cross-repository overview
                            Inside a registered path: strictly that ONE directory's page
@@ -292,10 +292,10 @@ docs/
   is a hook that works. Do NOT read this as licence to port hooks wholesale — `bash-guard.sh` spawns two dozen
   subprocesses and qualifies, but porting it is worth doing when it next needs a substantive change, not as a
   migration.
-- **Orchestrator-mode vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
+- **Queen vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
   Stop, and Notification hook now classifies the session via `_borg_session_mode` (in
   `lib/borg-hooks.sh`). A session whose `$CWD` *exactly* equals `$BORG_ORCHESTRATOR_ROOT`
-  (default `$HOME/dev`) is the **orchestrator** session — it renders a cross-project overview
+  (default `$HOME/dev`) is the **Queen** session (`orchestrator`) — it renders a cross-project overview
   on start and writes **nothing** to `~/.config/borg/registry.json`. Every other CWD is a
   **project** session and uses the existing per-project flow (status flips, checkpoint
   injection, uncommitted-change tracking). Two-variable vocabulary: `BORG_ORCHESTRATOR_ROOT`
@@ -407,7 +407,7 @@ docs/
   repo stays clean. `borg reap-worktrees` auto-cleans stale borg worktrees (merged branch or older
   than `BORG_REAP_STALE_HOURS`). Worktrees live under `~/.local/state/borg/worktrees/` (NOT inside
   `.borg/`, which is reserved for user checkpoints).
-  The orchestrator session never edits project files — it briefs, spawns, monitors, and synthesizes.
+  The Queen session never edits project files — it briefs, spawns, monitors, and synthesizes.
   Lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (a `SubagentStop` hook) which appends one
   JSONL line per completion to `~/.config/borg/agents.jsonl` (`id`, `agent_type`, `transcript_path`,
   `summary` from `last_assistant_message`, hard-coded `status: "completed"`, `finished_at`, `cwd`).
@@ -646,7 +646,7 @@ docs/
 |------|---------|---------|
 | jq | `jq` | Registry JSON CRUD |
 | fzf | `fzf` | Fuzzy picker for `borg switch` |
-| claude | `claude` | LLM debriefs (Sonnet), orchestrator session |
+| claude | `claude` | LLM debriefs (Sonnet), the Queen session |
 | cortex | `cortex` | Cortex Code CLI (CoCo) — optional, detected at install |
 
 ## Architecture Rules
