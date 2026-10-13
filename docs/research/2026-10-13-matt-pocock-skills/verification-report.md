@@ -1,50 +1,56 @@
-# Verification report (round 1)
+# Verification report (round 3)
 
-**Synthesis agent ID:** wf-research-matt-pocock/evidence-tracks
-**Verifier agent ID:** wf-research-matt-pocock/verifier-round-1
+**Synthesis agent ID:** synthesis-tracks-wffcea4944
+**Verifier agent ID:** verifier-round3-closeout
 
-**Sample size:** 30 of 98 mp-* cards (30.6%; floor is 30%, rounded up = 30)
-**Sample-selection method:** random draw (sort -R shuffle, first 30) over all 98 mp-* cards in the sources directory. Each card's URL was fetched live (curl, plus the .md rendering for the Snowflake docs page and a WebFetch rendering for the JavaScript-rendered Snowflake blog); every verbatim quote was matched after normalizing smart quotes, whitespace, backticks and markdown-link rendering.
+**Earlier rounds:** round 1 checked 30 of 98 mp-* cards (0 failed). This round-3 audit is the reported one; it was drawn fresh from the cards round 1 left out.
+
+**Sample size:** 34 of 106 cards (32.1%; floor is 30%, rounded up = 32). The 106 is every card file in the sources directory (98 mp-* cards plus 8 deployment-primitive cards); the draw was taken from the mp-* cards only.
+**Sample-selection method:** random draw (sort -R shuffle, first 34) over the 68 mp-* cards that were not in the round-1 sample. Each card's URL was fetched live with curl (plus the raw.githubusercontent.com rendering for github.com blob pages and the .md rendering for docs pages); HTML was stripped and every verbatim quote was matched after normalizing smart quotes, whitespace, backticks, markdown-link rendering and the stray spaces that link or emphasis markup leaves in rendered text. Quotes that missed on the first pass were re-checked by hand against the raw text.
 
 ## Sampled filenames and outcomes
 
 | filename | outcome | notes |
 |---|---|---|
-| mp-cortex-agentskills-spec.md | verified |  |
-| mp-cortex-coco-skills-repo.md | verified |  |
-| mp-cortex-plugins-docs.md | verified | Q1 matched on the .md rendering named in the card |
-| mp-cortex-snowflake-blog-dbt-benchmark.md | verified | Card declared cached/partial; page was fetchable and both quotes matched exactly via rendered fetch |
-| mp-cortex-subagent-cortex-code-repo.md | verified | Both quotes matched in README raw text |
-| mp-cortex-vercel-skills-agent-table.md | verified | Table row matched exactly in README raw text |
-| mp-native-agentskills-open-standard.md | verified | Q2 matched (link markup rendered as plain text); Q3 matched in embedded client list |
-| mp-native-besthub-grill-vs-superpowers.md | verified |  |
-| mp-native-chatbotkit-skills-expensive-rag.md | verified |  |
-| mp-native-commands-bundled-skills.md | verified |  |
-| mp-native-cross-session-messaging.md | verified |  |
-| mp-native-official-marketplace-listing.md | verified |  |
-| mp-pm-addy-osmani-skills-comparison.md | verified |  |
-| mp-pm-aiengineer-workflow-talk-2026.md | verified |  |
-| mp-pm-aihero-to-tickets-docs.md | verified |  |
-| mp-pm-fowler-boeckeler-sdd-tools.md | verified |  |
-| mp-pm-issue-828-wayfinder-stale-premises.md | verified |  |
-| mp-pm-marmelab-sdd-waterfall.md | verified |  |
-| mp-pm-repo-to-tickets-skill.md | verified |  |
-| mp-reception-claude-marketplace-listing.md | verified | Description matched; Installs value 1,745 present in page data |
-| mp-reception-glean-switching-from-superpowers.md | verified |  |
-| mp-reception-hn-ai-coding-agent-skills-thread.md | verified |  |
-| mp-reception-hn-comment-prior-art-marketing.md | verified |  |
-| mp-reception-skill-induced-failures-arxiv.md | verified |  |
-| mp-reception-zenn-superpowers-vs-pocock.md | verified |  |
-| mp-what-hn-skills-thread.md | verified |  |
-| mp-what-pragmatic-engineer-interview.md | verified |  |
-| mp-what-sandcastle-readme.md | verified |  |
-| mp-what-skills-readme.md | verified |  |
-| mp-what-skills-scope-out-of-scope.md | verified | Q1 on SCOPE.md; Q2/Q3 matched in .out-of-scope/*.md files, same github.com repo, as the location reference states |
+| mp-cortex-changelog.md | verified |  |
+| mp-cortex-claude-skills-docs.md | verified |  |
+| mp-cortex-extensibility-docs.md | verified |  |
+| mp-cortex-mattpocock-readme.md | verified | Install-block quote matched in README raw text (angle-bracket placeholder was stripped by HTML removal on the first pass) |
+| mp-cortex-pocock-git-guardrails-skill.md | verified |  |
+| mp-native-agent-teams.md | verified |  |
+| mp-native-anthropic-engineering-blog-skills.md | verified |  |
+| mp-native-anthropic-skill-best-practices.md | verified |  |
+| mp-native-claude-skills-docs.md | verified |  |
+| mp-native-dynamic-workflows.md | verified |  |
+| mp-native-pocock-out-of-scope-harness.md | verified | Q1/Q2 on the card URL; Q3/Q4 matched in subagent-recursion.md and harness-name-collisions.md, same github.com repo, as the location reference states |
+| mp-native-sandcastle-readme.md | verified |  |
+| mp-native-scheduled-tasks-loop.md | verified |  |
+| mp-pm-besthub-grill-with-docs-vs-superpowers.md | verified |  |
+| mp-pm-contextstudios-pocock-workflow.md | verified |  |
+| mp-pm-dora-2025-ai-amplifier.md | verified |  |
+| mp-pm-issue-310-to-tickets-rubber-stamp.md | verified |  |
+| mp-pm-pragmatic-engineer-pocock-interview.md | verified |  |
+| mp-pm-repo-ask-matt-router.md | verified |  |
+| mp-pm-repo-changelog.md | verified |  |
+| mp-pm-repo-triage-skill.md | verified |  |
+| mp-pm-repo-wayfinder-skill.md | verified |  |
+| mp-reception-devto-yim-review.md | verified |  |
+| mp-reception-every-case-against-skills.md | verified | Both quotes present in free portion; first-pass miss was only link-markup spacing |
+| mp-reception-github-issue-1071-skill-bloat.md | verified |  |
+| mp-reception-hn-comment-agents-too-complicated.md | verified |  |
+| mp-reception-hn-comment-ceremony-fast-lane.md | verified |  |
+| mp-reception-kaizen-critical-guide.md | verified |  |
+| mp-reception-repo-out-of-scope-native-question-tool.md | verified |  |
+| mp-what-aie-agent-skills-talk.md | verified |  |
+| mp-what-aie-fundamentals-talk.md | verified |  |
+| mp-what-aihero-cohort-page.md | verified |  |
+| mp-what-aihero-ralph-plugin-post.md | verified | Q2 present; first-pass miss was emphasis-markup spacing around dumb zone |
+| mp-what-skills-changelog.md | verified |  |
 
 ## Aggregate
 
-- verified: 30
+- verified: 34
 - failed: 0
 - inaccessible: 0
-- Failure rate = failed / (verified + failed) = 0 / 30 = 0%
+- Failure rate = failed / (verified + failed) = 0 / 34 = 0%
 - Failure-rate band: <=5%

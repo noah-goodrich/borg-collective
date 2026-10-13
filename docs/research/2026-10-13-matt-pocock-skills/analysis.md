@@ -431,14 +431,15 @@ Format: `[source key; score band; evidence level]` after each claim. Keys are ca
 
 | Metric | Value |
 |--------|-------|
-| Total source cards | 98 |
-| Cards sampled | 30 (30.6%) |
-| Verified | 30 |
+| Total source cards | 106 (98 mp-* plus 8 deployment-primitive) |
+| Cards sampled | 34 of 106 (32.1%) |
+| Verified | 34 |
 | Failed | 0 |
 | Inaccessible | 0 |
-| **Failure rate** | 0.0% (0 of 30) |
+| **Failure rate** | 0.0% (0 of 34) |
 | Failure-rate band | `≤5%` |
 
+- Rounds 1 and 3: round 1 checked 30 of 98 cards (0 failed); round 3 is the reported audit, drawn fresh from the mp-* cards that round 1 left out. Round 3 ran because cards added after round 1 pushed the audit under the 30% floor and the agent-ID format needed correcting.
 - Each sampled card's URL was fetched live and every verbatim quote matched after normalizing quotes and whitespace. One sampled card (mp-what-hn-skills-thread) was later excluded at Phase 4 as redundant, not for accuracy.
 
 ### Inclusion/Exclusion Results

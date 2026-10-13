@@ -20,7 +20,26 @@ AI-scoring: 80/100
 
 ## Recommendation
 
-**Review status, stated plainly.** The blind review of the first pick (Option B) returned "revise". Options F and A-plus were added in response and the council was rerun, which moved the pick to F. A second blind review of F raised the objection below. That review did not return "uphold", and the revised F in this section has not been through another blind pass, so treat it as design-reviewed once and revised since, not as an approved design.
+**NOT upheld by blind review after 3 rounds.** The recommendation below is not upheld by blind review after 3 rounds. Round 1 returned "revise" on Option B. Round 2 returned "revise" on F. Round 3 reviewed the amended F and also returned "revise". The council's pick stays Option F as amended, with A-plus as the fallback, and the open round-3 objection is listed below for Noah to decide. The amended F is not design-reviewed and upheld.
+
+**Round-3 verdict: revise.** Strongest objection, verbatim:
+
+> "The amendment relocates the round-2 defect instead of removing it. Step 1 now says \"absent\" means a probe ran and could not produce the failure. But each probe is still written in borg's mechanism, and the mechanism chosen is the one least likely to fail. The done-signal probe is \"run assimilate on a finished item; does the manifest entry change state\". The recommendation's own Prior Work says assimilate was used 2 times and \"most merges bypass it\". So the failure class, finished work never marked done so the frontier goes stale, is most plausibly present on the bypass path. A happy-path assimilate probe would pass and be recorded as \"absent\" with a retained test as false assurance. The lost-update probe has the same problem. Issue 476 is \"double-resolution + map lost-update\", but the probe covers only the double claim, and a single sequential run cannot show a race is absent. Borg already has a directive filed yesterday (docs/plans/directives/2026-10-12-manifest-writer-lost-update-guard.md) stating that the lost-update race in write_manifest is real and unlocked, so the 476 class is already known present. Finally, the amendment assigns probe authorship to the borg-verifier agent. That agent's tools are Bash, Read, Grep, Glob, with no Edit or Write, and its guard hook is hook-enforced read-only. It cannot write a test file. The central safeguard against self-confirmation therefore cannot run as specified. Nothing defines probe adequacy, such as covering every write path that mutates item state or stress-running races N times, so the \"who decides absent\" question from round 2 is still open."
+
+**Open objections for Noah to decide:**
+
+- Infeasible as specified: the read-only verifier agent (tools Bash, Read, Grep, Glob; read-only guard hook) cannot create a regression test file. Probe authorship has to move to a nanoprobe or the main loop, which reintroduces the "person who expects to find nothing" problem, or the verifier's role has to be redesigned.
+- Mechanism-matching survives inside the probes: the 508 probe runs assimilate, but most merges bypass assimilate, so the likely failure path (manual merge, direct close, no close) goes untested. There is no adequacy rule such as "probe must exercise every writer of item state".
+- The 476 probe is narrower than the issue, and a one-shot probe cannot show a race is absent; it needs forced interleaving or N-run stress.
+- Redundant with existing work: the lost-update directive filed 2026-10-12 already establishes that class as present and specifies a forced-interleave test with mutation check. Step 1 should cite and fold into it, and the "absent / unknown" framing is stale for at least one of the three cases.
+- A failing probe followed by a fix is unbounded: the 828 probe almost certainly fails today because no propagation mechanism exists, so the fix is a feature, not a patch. This collides with the 0.5-session estimate, the "maintain, do not expand" infra guidance and the "every addition names a deletion" rule, and there is no xfail or defer-with-ticket ending.
+- Pocock-specificity is thin: the probes are generic hygiene on borg's own write paths and would be justified without his repo. What distinguishes F from A-plus is "run three tests Noah should run anyway", not anything borrowed.
+- Evidence for the failure classes is asserted, not shown: the three source cards are n=1 reports, scored borderline (about 5.75 to 6.0), and "corroboration" means adjacent issues, not replication.
+- Several Skip verdicts rest on assertion or an unreviewed document: "tdd" relies on the lifecycle-hybrid directive (Proposed, not design-reviewed); "diagnosing-bugs: no gap found" has no gap analysis in analysis.md; "retro: skip" sits next to borg's acknowledged Debriefs PM gap.
+- Document hygiene: the Options section still carries the superseded F text ("absent -> note, stop"; "Zero tests is a valid and expected outcome"), so an implementer could follow the rejected rule.
+- Missed option: fold F's step 1 into the existing manifest-writer directive plus an "every item-state writer" audit (assimilate, close, add-row, manual merge, hook paths), treat Pocock as a seed list only, and keep the two gated additions as A-plus's log triggers. Grilling remains undecided (deferred to D), leaving the library's most-cited skill outside this adopt/skip decision.
+
+**Round-2 review, for the record.** The round-2 review of F raised the objection below. The amended F that follows was written in response.
 
 The strongest objection to F, verbatim:
 
@@ -311,7 +330,7 @@ Remaining weak point: F's thresholds (3 misses, 2 changed decisions, 2 of 5 plan
 
 ### Dissent and open objections
 
-The User Advocate dissents from Option E for good: a permanent per-project lane choice means two mental models across 20 projects, and Cortex does not honor the lane well. The Technical Realist expected two of the three failures not to exist in borg, and the second blind review named that expectation as the weak point; the revised step 1 exists to remove it by making the probes decide. The Product Strategist and Pragmatist accept A-plus as a legitimate floor, and the User Advocate warns that both A-plus and the four-week tally depend on remembering to log, so the log stays at one line. Adapter stability for E has no primary evidence and stays stamped as such. The unresolved objections are the arbitrary thresholds and the lack of a re-review of the revised F.
+The User Advocate dissents from Option E for good: a permanent per-project lane choice means two mental models across 20 projects, and Cortex does not honor the lane well. The Technical Realist expected two of the three failures not to exist in borg, and the second blind review named that expectation as the weak point; the revised step 1 exists to remove it by making the probes decide. The Product Strategist and Pragmatist accept A-plus as a legitimate floor, and the User Advocate warns that both A-plus and the four-week tally depend on remembering to log, so the log stays at one line. Adapter stability for E has no primary evidence and stays stamped as such. The unresolved objections are the arbitrary thresholds and the open round-3 objection above (the amended F was re-reviewed and not upheld).
 
 ## Track Findings
 
