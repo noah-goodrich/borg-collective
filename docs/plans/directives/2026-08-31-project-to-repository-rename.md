@@ -72,10 +72,10 @@ each step is independently green:
    buys little. Recommend keeping the filename and renaming only the variables that read it — record the decision
    either way.
 4. **Tests and goldens move with each step**, never in a trailing commit.
-5. **Step R6 (Noah, 2026-10-13): skills and user docs.** After R5 and the chain-to-stack rename, one PR aligns `skills/`
-   and the user docs with the final vocabulary (repository, worktree, project, stack, Queen), plus one `claude-plugins`
-   mirror rebuild PR so sessions see it. The inventory covered code files only, so R6 owns the markdown surfaces. The
-   registry-key migration (`projects` -> `repositories`, behind a dual reader) follows R6 in its own PRs.
+5. Step R6 (Noah, 2026-10-13): after R5 and the chain-to-stack rename, one PR aligns skills/ and the user docs with the
+   final vocabulary (repository, worktree, project, stack, Queen), plus one claude-plugins mirror rebuild PR so
+   sessions see it. The inventory covered code files only, so R6 owns the markdown surfaces. The registry-key
+   migration (projects -> repositories, behind a dual reader) follows R6 in its own PRs.
 
 ## Acceptance criteria
 
