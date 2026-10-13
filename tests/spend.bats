@@ -58,7 +58,7 @@ EOF
     _write_fixture
     run "$BORG_CMD" spend --project alpha
     [ "$status" -eq 0 ]
-    [[ "$output" == *"filtered to project: alpha"* ]] || false
+    [[ "$output" == *"filtered to repository: alpha"* ]] || false
     [[ "$output" == *"total         \$100"* ]] || false
     [[ "$output" == *"(80%)"* ]] || false
     # beta must not appear in the filtered trend/breakdown.
@@ -72,7 +72,7 @@ EOF
     run "$BORG_CMD" spend
     [ "$status" -eq 0 ]
     [[ "$output" == *"Recent sessions"* ]] || false
-    [[ "$output" == *"By project"* ]] || false
+    [[ "$output" == *"By repository"* ]] || false
     [[ "$output" == *"alpha"* ]] || false
     [[ "$output" == *"beta"* ]] || false
 }

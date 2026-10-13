@@ -159,7 +159,7 @@ borg.zsh	1037	2	project	repository	registered repo / user-facing text
 borg.zsh	1042	1	projects	contract	registry JSON key projects
 borg.zsh	1046	1	projects	repository	registered repo / user-facing text
 borg.zsh	1163	1	project	repository	registered repo / user-facing text
-borg.zsh	1187	1	project	repository	tmux @project_dir option holds repo path
+borg.zsh	1187	1	project	contract	contract: tmux window option @project_dir, written by drone.zsh and read by borg-resume; kept in R4 (#369)
 borg.zsh	1192	1	project	repository	registered repo / user-facing text
 borg.zsh	1206	1	project	repository	registered repo / user-facing text
 borg.zsh	1208	1	projects	repository	registered repo / user-facing text
@@ -184,12 +184,12 @@ borg.zsh	1414	1	project	noise	noise: projection; was ambiguous
 borg.zsh	1439	1	PROJECTS	repository	narrative prompt text for a registered repo
 borg.zsh	1440	1	projects	contract	link --json document key projects
 borg.zsh	1441	1	PROJECT	repository	narrative prompt text for a registered repo
-borg.zsh	1455	1	PROJECT	repository	registered repo / user-facing text
+borg.zsh	1455	1	PROJECT	workstream	project manifest = a chain manifest (workstream sense); kept in R4 (#369)
 borg.zsh	1475	1	PROJECT	noise	noise: projection; was repository
 borg.zsh	1476	1	project	noise	noise: projection; was ambiguous
 borg.zsh	1485	1	project	noise	noise: projection; was ambiguous
 borg.zsh	1492	1	project	repository	registered repo / user-facing text
-borg.zsh	1495	1	project	repository	registered repo / user-facing text
+borg.zsh	1495	1	project	workstream	project manifest = a chain manifest (workstream sense); kept in R4 (#369)
 borg.zsh	1498	1	projects	repository	registered repo / user-facing text
 borg.zsh	1499	1	project	repository	registered repo / user-facing text
 borg.zsh	1501	1	projects	repository	registered repo / user-facing text
@@ -224,10 +224,10 @@ borg.zsh	2436	1	project	repository	registered repo / user-facing text
 borg.zsh	2437	1	project	contract	wakes JSON .project field
 borg.zsh	2570	1	project	repository	spend text about per-repo breakdown/flag
 borg.zsh	2579	1	project	repository	spend text about per-repo breakdown/flag
-borg.zsh	2582	1	project	repository	spend text about per-repo breakdown/flag
+borg.zsh	2582	1	project	contract	contract: borg spend --project flag name (flag names never change); kept in R4 (#369)
 borg.zsh	2582	2	project	repository	spend text about per-repo breakdown/flag
-borg.zsh	2595	1	project	repository	spend text about per-repo breakdown/flag
-borg.zsh	2595	2	project	repository	spend text about per-repo breakdown/flag
+borg.zsh	2595	1	project	contract	contract: borg spend/search --project flag name quoted in a comment; kept in R4 (#369)
+borg.zsh	2595	2	project	contract	contract: borg spend/search --project flag name quoted in a comment; kept in R4 (#369)
 borg.zsh	2597	1	project	repository	spend filter variable holding repo name
 borg.zsh	2597	2	project	contract	token-spend.jsonl .project field
 borg.zsh	2597	3	project	repository	spend filter variable holding repo name
@@ -274,9 +274,9 @@ borg.zsh	3180	1	project	repository	registered repo / user-facing text
 borg.zsh	3182	1	projects	repository	registered repo / user-facing text
 borg.zsh	3183	1	PROJECT	contract	PROJECT_PLAN.md filename
 borg.zsh	3183	2	project	repository	registered repo / user-facing text
-borg.zsh	3191	1	project	repository	registered repo / user-facing text
+borg.zsh	3191	1	project	contract	contract: borg spend --project flag name in the help line; kept in R4 (#369)
 borg.zsh	3211	1	project	repository	registered repo / user-facing text
-borg.zsh	3214	1	Project	ambiguous	/borg-plan help text: repo plan vs cross-repo workstream unclear
+borg.zsh	3214	1	Project	workstream	ambiguous resolved by Noah 2026-10-13: /borg-plan is a planning surface and keeps the word project; kept in R4 (#369)
 borg.zsh	3221	1	project	repository	registered repo / user-facing text
 borg.zsh	3234	1	project	repository	registered repo / user-facing text
 borg.zsh	3234	2	project	repository	registered repo / user-facing text
@@ -1913,10 +1913,10 @@ borg_core/registry/test_shell.py	176	1	project	external	Claude Code per-cwd sess
 borg_core/registry/test_shell.py	177	1	project	external	Claude Code per-cwd session dir
 borg_core/registry/test_shell.py	178	1	project	external	Claude Code per-cwd session dir
 borg_core/registry/test_shell.py	188	1	projects	external	Claude Code ~/.claude/projects dir
-borg_core/statemigrate/project_cli.py	1	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
+borg_core/statemigrate/project_cli.py	1	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
 borg_core/statemigrate/project_cli.py	2	1	project	contract	contract: migrate-project-state flag name; kept in R2 (#352)
-borg_core/statemigrate/project_cli.py	12	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
-borg_core/statemigrate/project_cli.py	13	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
+borg_core/statemigrate/project_cli.py	12	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
+borg_core/statemigrate/project_cli.py	13	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
 borg_core/statemigrate/project_cli.py	20	1	project	contract	contract: migrate-project-state flag name; kept in R2 (#352)
 borg_core/statemigrate/project_cli.py	27	1	projects	repository	registry entries reader
 borg_core/statemigrate/project_cli.py	31	1	project	contract	contract: migrate-project-state flag name; kept in R2 (#352)
@@ -1924,13 +1924,13 @@ borg_core/statemigrate/project_cli.py	44	1	project	contract	contract: migrate-pr
 borg_core/statemigrate/project_cli.py	51	1	project	contract	contract: migrate-project-state flag name; kept in R2 (#352)
 borg_core/statemigrate/project_cli.py	55	1	project	contract	contract: migrate-project-state flag name; kept in R2 (#352)
 borg_core/statemigrate/project_core.py	1	1	project	repository	registry entry / per-repo state root
-borg_core/statemigrate/project_core.py	3	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
+borg_core/statemigrate/project_core.py	3	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
 borg_core/statemigrate/project_core.py	18	1	Project	repository	registry entry / per-repo state root
 borg_core/statemigrate/project_core.py	48	1	projects	repository	registry entry / per-repo state root
 borg_core/statemigrate/project_core.py	48	2	Project	repository	registry entry / per-repo state root
 borg_core/statemigrate/project_core.py	51	1	projects	repository	registry entry / per-repo state root
 borg_core/statemigrate/project_shell.py	1	1	project	repository	per-repo state migration
-borg_core/statemigrate/project_shell.py	11	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
+borg_core/statemigrate/project_shell.py	11	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
 borg_core/statemigrate/project_shell.py	21	1	projects	repository	registry_projects: registered repos
 borg_core/statemigrate/project_shell.py	21	2	Project	repository	core.Project: a repo record
 borg_core/statemigrate/project_shell.py	23	1	Project	repository	core.Project: a repo record
@@ -1944,8 +1944,8 @@ borg_core/statemigrate/project_shell.py	76	1	Project	repository	core.Project: a 
 borg_core/statemigrate/project_shell.py	80	1	project	repository	loop var: repo record
 borg_core/statemigrate/project_shell.py	82	1	project	repository	loop var: repo record
 borg_core/statemigrate/test_project_core.py	1	1	project	repository	per-repo state migration entry/type
-borg_core/statemigrate/test_project_core.py	8	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
-borg_core/statemigrate/test_project_core.py	9	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
+borg_core/statemigrate/test_project_core.py	8	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
+borg_core/statemigrate/test_project_core.py	9	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
 borg_core/statemigrate/test_project_core.py	9	2	Project	repository	per-repo state migration entry/type
 borg_core/statemigrate/test_project_core.py	40	1	projects	repository	per-repo state migration entry/type
 borg_core/statemigrate/test_project_core.py	40	2	Project	repository	per-repo state migration entry/type
@@ -1954,9 +1954,9 @@ borg_core/statemigrate/test_project_core.py	40	4	Project	repository	per-repo sta
 borg_core/statemigrate/test_project_core.py	41	1	projects	repository	per-repo state migration entry/type
 borg_core/statemigrate/test_project_core.py	42	1	Project	repository	per-repo state migration entry/type
 borg_core/statemigrate/test_project_core.py	43	1	projects	repository	per-repo state migration entry/type
-borg_core/statemigrate/test_project_core.py	56	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
-borg_core/statemigrate/test_project_shell.py	1	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
-borg_core/statemigrate/test_project_shell.py	12	1	project	contract	contract: statemigrate module path project_*, invoked from borg.zsh; kept in R2 (#352)
+borg_core/statemigrate/test_project_core.py	56	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
+borg_core/statemigrate/test_project_shell.py	1	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
+borg_core/statemigrate/test_project_shell.py	12	1	project	repository	renamed in R4 (#369): statemigrate module project_* is now repository_*, borg.zsh call site updated
 borg_core/statemigrate/test_project_shell.py	30	1	projects	repository	registry entries param
 borg_core/statemigrate/test_project_shell.py	31	1	projects	contract	registry JSON key projects
 borg_core/statemigrate/test_project_shell.py	31	2	projects	repository	registry entries value

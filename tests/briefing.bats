@@ -328,7 +328,7 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"PROJECT: quiet-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: quiet-project"* ]] || false
     [[ "$output" == *"note: no summary on record"* ]] || false
     [[ "$output" != *"summary: None"* ]] || false
 }
@@ -496,18 +496,18 @@ EOF
     # The scope really is beta's, and its OWN facts are there: without these the absences below could pass for
     # the wrong reason (a prompt that dropped everything).
     [[ "$output" == *"SCOPE: repository — beta"* ]] || false
-    [[ "$output" == *"PROJECT: beta"* ]] || false
+    [[ "$output" == *"REPOSITORY: beta"* ]] || false
     [[ "$output" == *"summary: Beta own checkpoint line."* ]] || false
     [[ "$output" == *"--- latest checkpoint for beta ---"* ]] || false
     [[ "$output" == *"NEXT ACTION: nothing is ready"* ]] || false
     # NO OTHER REGISTRY ENTRY, AND NONE OF THE BOARD'S REGISTRY-WIDE LINES. MUTATION: send the repository
-    # scope through the board projection and "alpha" (and CAPACITY/QUEUED/PROJECTS) come straight back.
+    # scope through the board projection and "alpha" (and CAPACITY/QUEUED/REPOSITORIES) come straight back.
     [[ "$output" != *"alpha"* ]] || false
     [[ "$output" != *"CAPACITY:"* ]] || false
     [[ "$output" != *"QUEUED:"* ]] || false
     [[ "$output" != *"SHIPPED RECENTLY:"* ]] || false
-    [[ "$output" != *"PROJECTS (already in priority order"* ]] || false
-    [[ "$output" != *"Focus: <project_name>"* ]] || false
+    [[ "$output" != *"REPOSITORIES (already in priority order"* ]] || false
+    [[ "$output" != *"Focus: <repository_name>"* ]] || false
 
     # THE CONTROL. The same registry with --overview from the same directory: the Queen's breadth is unchanged,
     # so the absences above are the scope's doing and not a projection that dropped everything.
@@ -516,7 +516,7 @@ EOF
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"SCOPE: orchestrator"* ]] || false
-    [[ "$output" == *"PROJECT: alpha"* ]] || false
+    [[ "$output" == *"REPOSITORY: alpha"* ]] || false
     [[ "$output" == *"QUEUED: 1 open directives"* ]] || false
     [[ "$output" == *"SHIPPED RECENTLY:"* ]] || false
 }
@@ -651,8 +651,8 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"PROJECT: live-project"* ]] || false
-    [[ "$output" != *"PROJECT: retired-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: live-project"* ]] || false
+    [[ "$output" != *"REPOSITORY: retired-project"* ]] || false
 
     # THE FLAG: same registry, same command, one flag — the archived row is now on the board the
     # narrative is asked to describe.
@@ -661,8 +661,8 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"PROJECT: live-project"* ]] || false
-    [[ "$output" == *"PROJECT: retired-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: live-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: retired-project"* ]] || false
 }
 
 # ── Both no-page rungs are loud, on STDERR, and are not exit 0 ────────────────
