@@ -93,7 +93,7 @@ n_inject() { wc -l <"$ILOG" | tr -d ' '; }
 rec() { cat "$RD"/pending/*.json "$RD"/done/*.json 2>/dev/null | jq -r -s "$1"; }
 want() { printf '%s' "$1" >"$FT/want_sid"; }
 
-@test "clean relaunch: argv-form new-window, absolute claude, pane bound, then the normal injection runs" {
+@test "clean relaunch: argv-form new-window, absolute claude, pane bound, then handed to relaunching, never injected" {
     mk_dead "$SID"
     want "$SID"
     run_due
@@ -103,8 +103,8 @@ want() { printf '%s' "$1" >"$FT/want_sid"; }
     grep -qxF "ARG[${BATS_TEST_TMPDIR}/bin/claude]" "$FT/calls.log"
     grep -qxF "ARG[$CWD]" "$FT/calls.log"
     grep -q "^%9|$SID|" "$FT/panes"
-    [ "$(n_inject)" = 1 ]
-    [ "$(rec '.[0].state')" = injected ]
+    [ "$(n_inject)" = 0 ]
+    [ "$(rec '.[0].state')" = relaunching ]
     [ "$(rec '.[0].relaunch.cause')" = pane_closed ]
 }
 
@@ -112,8 +112,8 @@ want() { printf '%s' "$1" >"$FT/want_sid"; }
     mk_dead "$SID"
     want "$SID"
     run_due
-    [ "$(jq -r .injections_today "$RD/state/$SID.json")" = 2 ]
-    [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 2 ]
+    [ "$(jq -r .injections_today "$RD/state/$SID.json")" = 1 ]
+    [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 1 ]
     [ "$(wc -l <"$RD/relaunch.log" | tr -d ' ')" = 1 ]
 }
 
@@ -146,8 +146,8 @@ want() { printf '%s' "$1" >"$FT/want_sid"; }
     grep -q "send-keys -t %9 -l 2" "$FT/calls.log"
     ! grep -q "Enter" "$FT/calls.log"
     ! grep -q "send-keys -t %9 -l 1" "$FT/calls.log"
-    [ "$(n_inject)" = 1 ]
-    [ "$(rec '.[0].state')" = injected ]
+    [ "$(n_inject)" = 0 ]
+    [ "$(rec '.[0].state')" = relaunching ]
 }
 
 @test "login shell wraps claude: argv form via exec \"\$@\", no string building" {
@@ -315,7 +315,7 @@ break"
     [ ! -e "$FT/calls.log" ]
 }
 
-@test "reboot with the tmux server gone: new-session, then the normal flow" {
+@test "reboot with the tmux server gone: new-session, then relaunching, never injected" {
     touch "$FT/down"
     export BORG_RESUME_BOOT_EPOCH=$((NOW - 600))
     mk_dead "$SID"
@@ -323,7 +323,7 @@ break"
     run_due
     [ "$(n_calls new-session)" = 1 ]
     [ "$(rec '.[0].cause')" = reboot ]
-    [ "$(n_inject)" = 1 ]
+    [ "$(n_inject)" = 0 ]
 }
 
 @test "a pane left at a shell is never typed into: a new window is opened, the old pane is unbound" {
@@ -342,7 +342,7 @@ break"
         [ "$(n_calls new-window)" = 1 ]
         grep -q "^%3||" "$FT/panes"
         grep -q "^%10|$SID|" "$FT/panes"
-        [ "$(n_inject)" = 1 ]
+        [ "$(n_inject)" = 0 ]
     done
 }
 
@@ -360,4 +360,28 @@ break"
     kill "$p" 2>/dev/null || true
     [ ! -e "$FT/calls.log" ]
     [ "$(rec '.[0].state')" = cancelled ]
+}
+
+mk_counting_hook() {
+    printf 'borg_resume_relaunch_hook() { printf "%%s\\n" "$1" >>"%s/hook.calls"; return 0; }\n' "$BATS_TEST_TMPDIR" \
+        >"${BATS_TEST_TMPDIR}/hook.sh"
+    export BORG_RESUME_RELAUNCH_HOOK_FILE="${BATS_TEST_TMPDIR}/hook.sh"
+    : >"${BATS_TEST_TMPDIR}/hook.calls"
+}
+
+@test "the relaunch hook is called exactly once per due process_death record, from the dispatch path only" {
+    mk_counting_hook
+    mk_dead "$SID"
+    run_due
+    [ "$(wc -l <"${BATS_TEST_TMPDIR}/hook.calls" | tr -d " ")" = 1 ]
+    [ "$(rec '.[0].state')" = relaunching ]
+}
+
+@test "the relaunch hook is not called when a gate defers the record" {
+    mk_counting_hook
+    export BORG_NO_SESSION_HOOKS=1
+    mk_dead "$SID"
+    run_due
+    [ "$(wc -l <"${BATS_TEST_TMPDIR}/hook.calls" | tr -d " ")" = 0 ]
+    [ "$(rec '.[0].gate_reason')" = no_session_hooks ]
 }
