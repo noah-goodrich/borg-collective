@@ -1,0 +1,29 @@
+[1m▸ IN FOCUS[0m  [2mplatform-feat — worktree of platform[0m
+  [2mSource:[0m       cli
+  [2mPath:[0m         <TMP>/ws/platform-feat
+  [2mBranch:[0m       feat/scope-rotation
+  [2mWorktree of:[0m  platform
+  [2mStatus:[0m       waiting
+  [2mLast active:[0m  <TS>
+  [2mtmux window:[0m  platform-feat
+  [2mSession ID:[0m   sess-feat-0009
+
+  [1mSummary[0m
+  Scope rotation lives on the feature branch.
+
+  [1mRecent Checkpoints[0m
+    [0;36m2026-07-30-0900.md[0m
+
+  [1mLatest Checkpoint[0m
+  **tl;dr** — Scope rotation lives on the feature branch.
+  
+  ## 5. Next Session
+  
+  Finish the rotation.
+
+  [2mEvery repository and worktree:[0m [0;36mborg link --overview[0m  [2m(the Queen view)[0m
+
+[1m▸ WAITING ON YOU[0m  [2m1 item[0m
+  [1;33m▶[0m session  platform-feat  reply to session
+  [1mnext[0m  reply to session [2m(platform-feat)[0m  [0;36mborg next[0m
+

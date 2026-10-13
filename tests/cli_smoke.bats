@@ -86,7 +86,8 @@ setup() {
     printf '%s' '{"projects":{"smoke":{"path":null,"source":"cli","status":"idle","summary":"Smoke."}}}' \
         > "$BORG_REGISTRY"
 
-    run "$BORG_CMD" link --local
+    # `--overview`: the Queen's page from this (unregistered) cwd. A bare `borg link` here prints the hint page.
+    run "$BORG_CMD" link --local --overview
     [ "$status" -eq 0 ]
     [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
     [[ "$output" == *"smoke"* ]] || false
