@@ -29,7 +29,7 @@ Ask yourself:
 2. **Is this command dangerous enough to warrant isolation?** If it's safe to allow globally
    (like `make` or `pre-commit`), add it to global instead.
 3. **Can I use `run-in`, `git -C` or a plain command instead?** Many permission prompts are caused by
-   `cd &&` chains or loops, not missing rules. Check the Bash Permission Patterns section in
+   `cd &&` chains or loops, not missing rules. Check the "Plain commands by default" section in
    CLAUDE.md before adding new rules.
 
 ## If You Still Need a Local Exception

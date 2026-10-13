@@ -5,12 +5,12 @@
 
 ### Plain commands by default
 Allow rules are matched per subcommand, so a pipe, `;`, `&&` or `||` chain is checked one part at a time and needs no wrapper (https://code.claude.com/docs/en/permissions.md). Write these directly:
-- Single commands, pipes (`cmd1 | cmd2`), `;` and `&&` chains.
-- Leading env assignment: `env VAR=val cmd` or `VAR=val cmd | cmd2`.
+- Single commands, pipes (`cmd1 | cmd2`) and `;` chains. `&&` chains follow the same per-subcommand rule but were not exercised; prefer `;` or separate calls.
+- Leading env assignment: `VAR=val cmd | cmd2`.
 - `awk` filters and other one-line text tools.
 
 Avoid these shapes, which cannot be checked before they run (top-level prompt, flat denial in subagents):
-- Loops, `$(...)` and heredocs piped into an interpreter. Split them into separate plain calls, use a named `borg` command, or use the Read and Grep tools.
+- Loops, `$(...)` and heredocs piped into an interpreter. Use separate plain calls, a named `borg` command where one exists, or the Read and Grep tools. A lone loop is the one case that runs only as `bash -c`.
 
 | Instead of                    | Use                                          |
 |-------------------------------|----------------------------------------------|
@@ -20,8 +20,8 @@ Avoid these shapes, which cannot be checked before they run (top-level prompt, f
 | `jq ... file \| head -5`       | a `jq` slice such as `.[:5]`                 |
 
 - `run-in` is at `~/.claude/bin/run-in` (installed by `borg setup`).
-- Use `bash -c` only for genuine control flow (loops, conditionals) that cannot be a plain command or a tool call. Keep such a script free of brace text and `$` inside nested quotes. `bash -c` stays in the global allowlist.
-- If the removal check denies a command, restructure it as a plain command or use a tool. Never respell, split or script a command to get past the check.
+- Use `bash -c` only for genuine control flow (loops, conditionals) that cannot be a plain command or a tool call. `bash -c` stays in the global allowlist.
+- If the removal check denies a command, restructure it as a plain command or use a tool. Never reshape, respell or script a command only to get past the removal check.
 - Genuine deletions use literal paths, never variable targets, so the check can judge them. Do not obfuscate or respell the removal word for any reason.
 - Long data heredocs (code or docs) belong in the Write tool, followed by a short command on the file.
 - Prefer built-in tools (Grep, Glob, Read) over Bash when they can do the job.
@@ -30,7 +30,7 @@ Avoid these shapes, which cannot be checked before they run (top-level prompt, f
 - **No inline `#` comments in one-liner bash commands.** Quotes inside comments confuse the
   shell parser and trigger approval prompts.
 - **No temp scripts.** Don't `cat > /tmp/foo.sh && bash foo.sh`. Use plain commands, a named
-  `borg` command, or built-in tools (Glob, Grep, Read); a short `bash -c` loop only for genuine control flow.
+  `borg` command where one exists, or built-in tools (Glob, Grep, Read); a short `bash -c` loop only for genuine control flow.
 - **Always use absolute paths, never `~`.** Permission prefix matching is literal —
   `find ~/dev` doesn't match `Bash(find:*)` the same way `find /Users/noah/dev` does.
 - **Never use `$()` command substitution in Bash tool calls.** The shell parser flags it as

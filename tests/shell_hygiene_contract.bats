@@ -32,14 +32,30 @@ RULES="$ROOT/config/claude/CLAUDE.md"
     grep -q 'genuine control flow' "$RULES"
 }
 
-@test "no agent file instructs wrapping pipelines in bash -c" {
-    run grep -nE "bash -c.*for pipelines|bash -c.*pipelines and compound" "$ROOT"/agents/*.md
+@test "no agent or skill file instructs wrapping a pipeline or chain in bash -c" {
+    run grep -nE "bash -c '[^']*([|]|&&|;)" "$ROOT"/agents/*.md "$ROOT"/skills/*/SKILL.md
     [ "$status" -eq 1 ]
 }
 
-@test "no skill file instructs wrapping pipelines in bash -c" {
-    run grep -nE "bash -c.*for pipelines|bash -c.*pipelines and compound|use .bash -c '.*[|]" "$ROOT"/skills/break-glass/SKILL.md
+@test "no agent or skill file prescribes any bash -c wrapper" {
+    run grep -nE "^bash -c |^[$] bash -c " "$ROOT"/agents/*.md "$ROOT"/skills/*/SKILL.md
     [ "$status" -eq 1 ]
+}
+
+@test "rules file carries no script-shaping advice to dodge the check" {
+    run grep -niE 'free of brace|nested quotes' "$RULES"
+    [ "$status" -eq 1 ]
+}
+
+@test "stale pointers to the old CLAUDE.md section name are gone" {
+    run grep -rn 'Bash Permission Patterns' "$ROOT/skills" "$ROOT/agents"
+    [ "$status" -eq 1 ]
+}
+
+@test "agent and Subagent Rules bullets are pinned" {
+    grep -q 'allow rules match per subcommand' "$ROOT/agents/borg-nanoprobe.md"
+    grep -q 'never to get past a removal check' "$ROOT/agents/borg-nanoprobe.md"
+    grep -q 'Write pipes and' "$RULES"
 }
 
 @test "no guidance recommends a bracketed or respelled removal word" {

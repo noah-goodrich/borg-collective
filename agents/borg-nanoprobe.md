@@ -165,7 +165,7 @@ drone exec <project> -- <cmd>
 **Always pass the project name explicitly to `drone exec` — never rely on cwd.**
 The registry-by-name resolution in `drone.zsh` is cwd-independent; `drone exec <project> -- <cmd>`
 is the only correct invocation form from a nanoprobe context. If you need to run a host command
-inside `<repo_path>` (rare — prefer `drone exec`), use an absolute path or `cd` there explicitly.
+inside `<repo_path>` (rare — prefer `drone exec`), use `run-in <repo_path> <cmd>` or an absolute path.
 
 ## Verify before completion
 
