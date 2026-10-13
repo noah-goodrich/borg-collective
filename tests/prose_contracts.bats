@@ -382,3 +382,21 @@ _shim_section() {
     [ "$status" -eq 0 ]
     [[ "$output" == *'every table row and every fenced-block line'* ]]
 }
+
+# ── borg-resume skill: watcher first, CronCreate only as fallback (directive S15) ─────────────────
+@test "borg-resume skill: status --json precedes CronCreate and no stale framing" {
+    local f="${REPO_ROOT}/skills/borg-resume/SKILL.md"
+    grep -q 'borg-resume status --json' "$f"
+    local s c
+    s="$(grep -n 'borg-resume status --json' "$f" | head -1 | cut -d: -f1)"
+    c="$(grep -n 'CronCreate' "$f" | head -1 | cut -d: -f1)"
+    [ "$s" -lt "$c" ]
+    grep -qi 'workflow agents are never SendMessaged' "$f"
+    ! grep -q 'create_trigger' "$f"
+    ! grep -qi 'unpredictable' "$f"
+}
+
+@test "borg-resume skill: the ordering check discriminates" {
+    run bash -c "printf 'Use CronCreate now.\n' | grep -q 'borg-resume status --json'"
+    [ "$status" -ne 0 ]
+}

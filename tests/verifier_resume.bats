@@ -33,13 +33,43 @@ fm() { awk '/^---$/{n++; next} n==1' "$1"; }
     [ "$status" -ne 0 ]
 }
 
-@test "borg-resume: uses CronCreate, not create_trigger/send_later" {
-    grep -q 'CronCreate' "$RESUME"
-    ! grep -q 'create_trigger' "$RESUME"
-    ! grep -q 'send_later' "$RESUME"
+@test "borg-resume: status --json runs first, before any CronCreate" {
+    grep -q 'borg-resume status --json' "$RESUME"
+    local s c
+    s="$(grep -n 'borg-resume status --json' "$RESUME" | head -1 | cut -d: -f1)"
+    c="$(grep -n 'CronCreate' "$RESUME" | head -1 | cut -d: -f1)"
+    [ "$s" -lt "$c" ]
 }
 
-@test "borg-resume: states the three caveats" {
+@test "borg-resume: CronCreate is only the fallback, recurring:false, no-double-run prompt" {
+    grep -q 'CronCreate' "$RESUME"
+    grep -qi 'fallback' "$RESUME"
+    grep -q 'recurring: false' "$RESUME"
+    grep -qi 'already finished or was resumed, do nothing' "$RESUME"
+    grep -q 'BORG_RESUME_WATCH=0' "$RESUME"
+}
+
+@test "borg-resume: no create_trigger, send_later, or unpredictable-limit framing" {
+    ! grep -q 'create_trigger' "$RESUME"
+    ! grep -q 'send_later' "$RESUME"
+    ! grep -qi 'unpredictable' "$RESUME"
+}
+
+@test "borg-resume: names resumeFromRunId and SendMessage; workflow agents never SendMessaged" {
+    grep -q 'resumeFromRunId' "$RESUME"
+    grep -q 'SendMessage' "$RESUME"
+    grep -qi 'workflow agents are never SendMessaged' "$RESUME"
+}
+
+@test "borg-resume: documents only CLI verbs that exist; kill switch named" {
+    local v
+    for v in status cancel pause unpause run ack defer; do grep -q "borg-resume $v" "$RESUME"; done
+    ! grep -Eq 'run --now|run --print|borg-resume log' "$RESUME"
+    grep -q 'DISABLED' "$RESUME"
+    grep -q 'BORG_RESUME_DISABLE=1' "$RESUME"
+}
+
+@test "borg-resume: keeps the honest caveats" {
     grep -qi 'lost if the session exits' "$RESUME"
     grep -qi 'session model' "$RESUME"
     grep -q 'RemoteTrigger' "$RESUME"
