@@ -3,11 +3,12 @@
 #
 # Sourced by lib/borg/resume-gate.sh. Bash 3.2 safe, jq required, functions only; sourcing prints nothing.
 #
-#   borg_resume_relaunch_group <sid>   called by the S9 gate (_rg_run_group) for the session group in $_RG_GROUP,
-#                                      AFTER every gate check (supersede, age, caps, concurrency, headroom, dispatch
-#                                      guard) and BEFORE the prompt is rendered. Return 0 = the session is alive and
-#                                      verified, go on with the normal flow (render + S8 injection). Return 1 = this
-#                                      slice handled the group (deferred, notify_only, cancelled).
+#   borg_resume_relaunch_group <sid>   reached from the S9 gate via borg_resume_relaunch_hook (a process_death record
+#                                      is handed over in the dispatch step), AFTER every gate check (supersede, age,
+#                                      caps, concurrency, headroom, dispatch guard) and BEFORE the prompt is rendered.
+#                                      Return 0 = the session is alive and verified, go on with the normal flow
+#                                      (render + S8 injection). Return 1 = this slice handled the group (deferred,
+#                                      notify_only, cancelled).
 #
 # It acts only for records whose cause is a dead process: crash, pane_closed, reboot (and workflow_killed:<those>),
 # which S10 recorded. It never relaunches a deliberate stop (S10 end state closed/deliberate, trailing interrupt
@@ -17,7 +18,8 @@
 #   - the sid must match the UUID regex; the cwd must be an existing directory, free of control characters, that is a
 #     registered project dir, a known git worktree of it, or under BORG_RESUME_CWD_ALLOW (colon list, default
 #     $HOME/dev); anything else is notify_only
-#   - pane gone, tmux up:    tmux new-window -d -P -- <login-shell> -l -c "exec \"$@\"" borg-resume <claude> --resume <sid>
+#   - pane gone, tmux up:    tmux new-window -d -P -- <login-shell> -l -c "exec \"$@\"" borg-resume <claude>
+#                            --resume <sid>
 #                            (argv form; the login shell gives claude the user env, which a tmux server started from
 #                            launchd lacks. zsh -l reads .zprofile/.zshenv, NOT .zshrc: exports living only in .zshrc
 #                            are not seen. The server-global env of a launchd-started server stays minimal; both are
@@ -392,7 +394,8 @@ EOF
 # Gate hook (RECONCILE-6): called by _rg_dispatch_dead <rid> <cause> <file> for ONE process_death record, only from
 # _rg_run_group and only after every gate passed. Returns 0 when this path took ownership of the record (relaunched and
 # verified -> relaunching, or handled: notify_only, cancelled, deferred with _RR_DEFERRED=1), 1 when it does not apply
-# (the gate then defers the record with no_pane). The S9 counters are bumped once, inside borg_resume_relaunch_group.
+# (the gate then defers the record with no_pane). The relaunch bumps the S9 counters once (a second tick comes with
+# the injection).
 _RR_DEFERRED=0
 borg_resume_relaunch_hook() { # <rid> <cause> <file>
     local _rid="$1" _cause="$2" _f="$3" _saved="${_RG_GROUP:-}" _rc _st

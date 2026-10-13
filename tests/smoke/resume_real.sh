@@ -48,13 +48,15 @@ say() { printf '%s\n' "$*"; }
 pass() { say "  PASS  $*"; }
 fail() { say "  FAIL  $*"; SM_FAILS=$((SM_FAILS + 1)); }
 
+# session_id is a tolerated alias: the fixture names it, claude 2.1.296 emits only sessionId. It is neither required
+# nor counted as a surprise key.
 # shape_match <actual keys as a JSON array> <fixture json file>. Exit 0 on a match.
 shape_match() {
     jq -n -e --argjson a "$1" --slurpfile f "$2" '
         ($f[0] | keys) as $fk
-        | ($fk - ["<key>"]) as $named
+        | ($fk - ["<key>", "session_id"]) as $named
         | ((($named - $a) | length) == 0)
-          and (((($a - $named) | length) > 0) == (($fk | index("<key>")) != null))' >/dev/null 2>&1
+          and (((($a - $named - ["session_id"]) | length) > 0) == (($fk | index("<key>")) != null))' >/dev/null 2>&1
 }
 
 # The first isApiErrorMessage record of a jsonl file, as one JSON line.
@@ -212,7 +214,7 @@ EOF
 
 sm_main() {
     local _rc
-    if [ -n "${CI:-}" ]; then
+    if [ -n "${CI:-}" ] && [ "${CI:-}" != 0 ] && [ "${CI:-}" != false ]; then
         say "skipped: the real-claude smoke lane is local only (CI is set)"
         return 3
     fi

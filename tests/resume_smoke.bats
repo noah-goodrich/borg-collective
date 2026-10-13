@@ -94,14 +94,23 @@ start_stub() { # <mode>
 @test "smoke: the stub binds loopback only" {
     start_stub 429
     run lsof -nP -a -p "$STUB_PID" -iTCP -sTCP:LISTEN
-    if [ "$status" -eq 0 ]; then
-        [[ "$output" == *"127.0.0.1:"* ]]
-        [[ "$output" != *"*:"* ]]
-    fi
+    [ "$status" -eq 0 ] || skip "lsof cannot list the stub's listening socket here"
+    [[ "$output" == *"127.0.0.1:"* ]]
+    [[ "$output" != *"*:"* ]]
 }
 
 @test "smoke: under CI the run verb skips with exit 3 before touching anything" {
     CI=1 run "$SMOKE"
     [ "$status" -eq 3 ]
     [[ "$output" == *"local only"* ]]
+}
+
+@test "smoke: a real record without the fixture's session_id alias (but with new keys) still matches" {
+    jq -c 'select(.isApiErrorMessage == true)' "$FXR/main_rate_limit.jsonl" | head -n 1 >"$BATS_TEST_TMPDIR/rec.json"
+    run "$SMOKE" check-keys "$(jq -c '. + {perTurnEffort: 1} | keys - ["session_id"]' "$BATS_TEST_TMPDIR/rec.json")" \
+        "$BATS_TEST_TMPDIR/rec.json"
+    [ "$status" -eq 0 ]
+    run "$SMOKE" check-keys "$(jq -c 'keys - ["session_id", "apiErrorStatus"]' "$BATS_TEST_TMPDIR/rec.json")" \
+        "$BATS_TEST_TMPDIR/rec.json"
+    [ "$status" -ne 0 ]
 }

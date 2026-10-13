@@ -73,7 +73,7 @@ setup() {
     mkdir -p "$PD" "$RD"
     # The private server is started AFTER every export above: panes inherit this environment, which is how the stub
     # claude and the hook it runs find the sandbox. A keeper session holds the server open.
-    tmux -L "$SOCK" new-session -d -s keeper -x 160 -y 50 -c "$CWD" sleep 3600
+    tmux -L "$SOCK" -f /dev/null new-session -d -s keeper -x 160 -y 50 -c "$CWD" sleep 3600
 }
 
 teardown() {
@@ -118,19 +118,30 @@ draw() {
 }
 stty -echo -icanon min 1 2>/dev/null
 draw
-while IFS= read -rsn1 ch; do
-    printf '%q\n' "$ch" >>"$FAKE_KEYLOG"
-    case "$ch" in
-        $'\r' | "")
-            printf 'SUBMIT %s\n' "$buf" >>"$FAKE_KEYLOG"
-            jq -n -c --arg t "$buf" --arg s "$sid" \
-                '{type:"user", uuid:("sub-" + $s), message:{role:"user", content:$t}}' >>"$tp"
-            buf=""
-            ;;
-        $'\025') buf="" ;;
-        *) buf="${buf}${ch}" ;;
-    esac
-    [ -f "$FAKE_SCREENFILE" ] || draw
+shown=""
+[ -f "$FAKE_SCREENFILE" ] && shown=1
+while true; do
+    if IFS= read -rsn1 -t 1 ch; then
+        printf '%q\n' "$ch" >>"$FAKE_KEYLOG"
+        case "$ch" in
+            $'\r' | "")
+                printf 'SUBMIT %s\n' "$buf" >>"$FAKE_KEYLOG"
+                jq -n -c --arg t "$buf" --arg s "$sid" \
+                    '{type:"user", uuid:("sub-" + $s), message:{role:"user", content:$t}}' >>"$tp"
+                buf=""
+                ;;
+            $'\025') buf="" ;;
+            *) buf="${buf}${ch}" ;;
+        esac
+        [ -f "$FAKE_SCREENFILE" ] || draw
+    else
+        # bash 3.2 reports a read timeout as status 1, so every failure is treated as an idle tick (the pane's
+        # SIGHUP ends the loop when tmux goes away). A screen file that appears later (after the relaunch is verified) is drawn on the next idle tick.
+        if [ -z "$shown" ] && [ -f "$FAKE_SCREENFILE" ]; then
+            draw
+            shown=1
+        fi
+    fi
 done
 FAKE
     chmod +x "$SB/bin/claude"
@@ -223,6 +234,15 @@ pane_of() { tmux -L "$SOCK" list-panes -t "${1:-live}" -F '#{pane_id}' | head -1
 MAIN='[.[] | select(.scope == "main")][0]'
 WFREC='[.[] | select(.scope | startswith("workflow:"))][0]'
 submits() { grep -c '^SUBMIT ' "$FAKE_KEYLOG" || true; }
+# The stub logs SUBMIT asynchronously after the Enter: poll (bounded) rather than assert at once.
+wait_submits() { # <n>
+    local _i=0
+    while [ "$_i" -lt 50 ] && [ "$(submits)" != "$1" ]; do
+        sleep 0.1
+        _i=$((_i + 1))
+    done
+    [ "$(submits)" = "$1" ]
+}
 
 # ---- (a) stop_failure through the hook, the whole way to done ----------------------------------------------------
 
@@ -249,7 +269,7 @@ submits() { grep -c '^SUBMIT ' "$FAKE_KEYLOG" || true; }
     at $((ra + 1))
     watch
     [ "$(n_sk)" = 2 ]
-    [ "$(submits)" = 1 ]
+    wait_submits 1
     local line pane rid
     pane="$(pane_of live)"
     line="$(sed -n 's/^SUBMIT //p' "$FAKE_KEYLOG")"
@@ -338,7 +358,7 @@ submits() { grep -c '^SUBMIT ' "$FAKE_KEYLOG" || true; }
     [ "$(n_new_windows)" = 1 ]
     [ "$(wc -l <"$RD/relaunch.log" | tr -d ' ')" = 1 ]
     [ "$(n_sk)" = 2 ]
-    [ "$(submits)" = 1 ]
+    wait_submits 1
     local pane
     pane="$(tmux -L "$SOCK" list-panes -a -F '#{pane_id}|#{@borg_sid}' | grep "|$SID\$" | cut -d'|' -f1)"
     [ "$(printf '%s\n' "$pane" | wc -l | tr -d ' ')" = 1 ]
@@ -361,7 +381,6 @@ submits() { grep -c '^SUBMIT ' "$FAKE_KEYLOG" || true; }
 # ---- (c) a permission dialog on screen: nothing is typed --------------------------------------------------------
 
 @test "e2e (c): relaunched claude sits in a permission dialog -> nothing is ever typed" {
-    cp "$FXR/panes/permission.txt" "$FAKE_SCREENFILE"
     mk_killed tool
     watch
     at $((T0 + 400))
@@ -369,7 +388,20 @@ submits() { grep -c '^SUBMIT ' "$FAKE_KEYLOG" || true; }
     [ "$(n_new_windows)" = 1 ]
     [ "$(n_sk)" = 0 ]
     [ "$(submits)" = 0 ]
-    # The relaunch itself is verified (session_start arrived); the dialog is then met by the injection proof.
+    # The relaunch is verified (watch returned with the record relaunching) BEFORE the dialog is drawn: the stub
+    # only draws the screen file once it exists, so the dialog cannot race the verification.
+    [ "$(rq '[.[] | select(.class == "process_death")][0].state')" = relaunching ]
+    cp "$FXR/panes/permission.txt" "$FAKE_SCREENFILE"
+    local _i=0 _pane
+    _pane="$(tmux -L "$SOCK" list-panes -a -F '#{pane_id}|#{@borg_sid}' | grep "|$SID\$" | cut -d'|' -f1)"
+    while [ "$_i" -lt 50 ] && tmux -L "$SOCK" capture-pane -p -t "$_pane" | grep -qF '? for shortcuts'; do
+        sleep 0.2
+        _i=$((_i + 1))
+    done
+    if tmux -L "$SOCK" capture-pane -p -t "$_pane" | grep -qF '? for shortcuts'; then
+        echo "dialog never drawn" >&2
+        return 1
+    fi
     at $((T0 + 500))
     watch
     [ "$(rq "$MAIN | .state")" = deferred ]
@@ -473,7 +505,7 @@ submits() { grep -c '^SUBMIT ' "$FAKE_KEYLOG" || true; }
     at $((ra + 800))
     watch
     [ "$(n_sk)" = 2 ]
-    [ "$(submits)" = 1 ]
+    wait_submits 1
 }
 
 @test "e2e (e): the DISABLED sentinel also stops a relaunch" {
@@ -493,12 +525,29 @@ submits() { grep -c '^SUBMIT ' "$FAKE_KEYLOG" || true; }
     mk_transcript
     start_live live
     BORG_RESUME_DISABLE=1 hook_stop_failure
-    ! jq -e -s 'any(.ev == "stop_failure")' "$RD/events/$SID.jsonl" 2>/dev/null
+    # Nothing was recorded: no stop_failure event and no record (SessionStart events from the stub are fine).
+    if [ -f "$RD/events/$SID.jsonl" ] && grep -q stop_failure "$RD/events/$SID.jsonl"; then
+        return 1
+    fi
+    [ -z "$(ls "$RD/pending" "$RD/done" 2>/dev/null | grep '\.json$')" ]
+    # Positive control: the same hook call without the switch DOES record, so the checks above can fail.
+    hook_stop_failure
+    grep -q stop_failure "$RD/events/$SID.jsonl"
+    watch
+    [ "$(rq "$MAIN | .state")" != null ]
+    local ra
+    ra="$(rq "$MAIN | .resume_at")"
+    # With the switch, a due record is never injected, however late the pass.
+    at $((ra + 1))
     BORG_RESUME_DISABLE=1 run "$IBIN" watch --once
-    at $((T0 + 90000))
+    at $((ra + 90000))
     BORG_RESUME_DISABLE=1 run "$IBIN" watch --once
     [ "$(n_sk)" = 0 ]
     [ "$(submits)" = 0 ]
+    # Without it, the same record goes through.
+    at $((ra + 90100))
+    watch
+    [ "$(n_sk)" = 2 ]
 }
 
 # ---- the installed layout is what runs --------------------------------------------------------------------------

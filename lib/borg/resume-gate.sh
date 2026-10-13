@@ -39,9 +39,9 @@
 # BORG_RESUME_COMPACT_WAIT_SEC (120), BORG_RESUME_WEEKLY (notify = notify-only), BORG_RESUME_WEEKLY_MIN_SEC (86400),
 # BORG_RESUME_AUTO_COMPACT (S6 flag), BORG_USAGE_HALT_ENABLED / _PCT / _TTL_SEC / BORG_USAGE_SAMPLES (dispatch guard).
 #
-# Relaunch of a dead process and the resume-size dialog live in resume-relaunch.sh (S11). Deferred: launchd (S12), doctor (S13),
-# status/cancel/pause/run verbs (S14; notifications already name `borg resume cancel|run <rid>`). Liveness (S10)
-# records dead owners; this gate owns the post-confirmation stall watchdog.
+# Relaunch of a dead process and the resume-size dialog live in resume-relaunch.sh (S11); the launchd watcher (S12),
+# doctor rows (S13) and the status/cancel/pause/run verbs (S14) are in place. Liveness (S10) records dead owners; this
+# gate owns the post-confirmation stall watchdog.
 
 # shellcheck disable=SC2016
 _RG_DIR="${BASH_SOURCE[0]%/*}"
