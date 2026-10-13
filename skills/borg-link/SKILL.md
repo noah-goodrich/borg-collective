@@ -337,7 +337,7 @@ Bash: dir="$PWD"; while [[ "$dir" != "/" ]]; do
 2. For the **current project**, always use the resolved workspace from step 1 — never the
    registry's `path` field, which may be a host path. Marker found means a repository-scope page: the
    Repository scope rules apply (identity, session and status from `state.json`, the checkpoints in
-   `<workspace>/.borg/checkpoints` only, the next action, the Queen pointer line) and no other
+   `<workspace>/.borg/checkpoints` only, the Queen pointer line, the next action last) and no other
    project is shown.
 3. Marker found: do NOT read other projects at all; the page is about this workspace alone. The
    registry's `path` for another project resolves on the host and usually not inside a drone, and
@@ -371,5 +371,5 @@ the question in prose; it does not imitate `borg link`'s frame.
   work around.
 - One `borg link --json [<project>]` call serves every scope. Do not call twice.
 - Scope is the engine's `scope.kind`, never the `.borg-project` marker and never your own guess from
-  the cwd. The repository page names no other worktree, repository or project, and ends with the
-  Queen pointer line.
+  the cwd. The repository page names no other worktree, repository or project, and ends on the
+  next-action line, after the Queen pointer.

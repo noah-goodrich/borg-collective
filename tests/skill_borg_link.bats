@@ -174,6 +174,13 @@ _stub_borg() {
     [[ "$last" == "Next:"* ]] || false
 }
 
+@test "scope: Guardrails and Fallback also end the repository page on the next action, not the pointer" {
+    ! grep -n -A1 'ends with the$' "$SKILL" | grep -q 'Queen pointer line'
+    ! grep -q 'the next action, the Queen pointer line' "$SKILL"
+    grep -q 'the Queen pointer line, the next action last' "$SKILL"
+    grep -q 'ends on the$' "$SKILL"
+}
+
 @test "scope: a detached HEAD is reported as detached at the short sha, not as a branch called HEAD" {
     run _section '## Repository scope' '## Fallback'
     [[ "$output" == *'rev-parse --short HEAD'* ]] || false
