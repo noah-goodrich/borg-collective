@@ -631,7 +631,7 @@ def select_manifests(manifests: list[dict], scope: dict, slug: str) -> tuple[lis
 
     AN UNRESOLVABLE SLUG SELECTS NOTHING, and says so. The tempting degrade -- fall back to showing
     every discovered manifest -- is exactly the B3 failure class this front door exists to remove: it
-    would render another project's entire grid under this repository's header, a wrong answer rather
+    would render another chain's entire grid under this repository's header, a wrong answer rather
     than a missing one. A directory with no git origin, a plain subdirectory of a checkout, or a
     registry entry with no path all land here.
     """
@@ -895,13 +895,13 @@ def ready_refs(manifest: dict, nodes: dict[str, dict]) -> dict:
 
 def _manifest_repos(manifest: dict) -> list[str]:
     """Every `owner/repo` this manifest's ROWS name, deduplicated and sorted. AC2 renders it as the
-    "repos:" line under a project's heading.
+    "repos:" line under a chain's heading.
 
     OVER row_refs, NOT declared_refs, and it is the same rule select_for_repository scopes on
     (manifest_core.row_refs' docstring carries the argument in full). The rows ARE the work; an apex is
     a tracker and an `after`/`blocked_by_ref` entry is a pointer at work happening somewhere else.
-    Listing those would tell a reader this project spans a repository it merely references -- and
-    would do it under a heading that already claims the project, which is the wrong-answer-under-a-
+    Listing those would tell a reader this chain spans a repository it merely references -- and
+    would do it under a heading that already claims the chain, which is the wrong-answer-under-a-
     confident-header class the front door exists to remove.
 
     A ref parse_ref rejects contributes NOTHING rather than a blank entry: ref_slug returns "" for it,

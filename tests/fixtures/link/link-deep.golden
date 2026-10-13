@@ -59,7 +59,7 @@
 ──────────────────────────────────────────────────────────────────────────────────────────
  delta                [C]  [0;32mactive      [0m 3h ago           –    –      – Delta keeps the deep dive deterministic. [0;36m◀[0m
 
-[1m▸ CHAINS[0m  [2m0 projects · 0 refs · 0 unresolved · not swept[0m
+[1m▸ CHAINS[0m  [2m0 chains · 0 refs · 0 unresolved · not swept[0m
   [2m— this directory has no GitHub origin — nothing to scope a chain to.[0m
 
 [1m▸ QUEUED[0m  [2m2 directives[0m

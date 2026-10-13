@@ -311,7 +311,7 @@ def glyph_color(node: dict) -> str:
     UNRESOLVED PROVENANCE TAKES THE COLOUR DOWN TO DIM, whatever the state says. A hand-typed
     `"status": "merged"` rendered in the same GREEN as a swept one is the AC4 precondition's exact
     complaint, measured on the live `ingle-t1-cutover` manifest: twelve green checkmarks asserting a
-    project is essentially done, from a field no sweep and no fetch ever saw.
+    chain is essentially done, from a field no sweep and no fetch ever saw.
 
     THE COLOUR IS THE REINFORCEMENT, NOT THE SIGNAL. Option (iii) of the precondition — dim the glyph
     and change nothing else — was rejected because a colour change is invisible in a plain-text
@@ -617,7 +617,7 @@ def node_ids(manifest_grids: list[dict], columns_by_manifest: list[dict[str, int
     the jump for both.
 
     Ordered by `(manifest index, level, column)` -- the order an eye crosses the page, so n1 is the
-    top-left node of the first project.
+    top-left node of the first chain.
     """
     ids: dict[str, str] = {}
     ordered: list[tuple[int, int, int, str]] = []

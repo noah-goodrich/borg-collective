@@ -286,7 +286,7 @@ def test_selection_is_scoped_even_though_discovery_is_not(isolated, monkeypatch)
     """A repository declaring NO row in the manifest selects nothing, and says why.
 
     The other half of B6. Discovery is global, so the manifest is found from `echo` too; selection
-    must then reject it rather than render another project's whole grid under this repository's
+    must then reject it rather than render another chain's whole grid under this repository's
     header, which is the B3 wrong-answer class this front door exists to remove.
     """
     _four_repository_registry(isolated)
@@ -762,7 +762,7 @@ def test_a_repository_with_no_git_origin_selects_nothing_and_says_so(isolated, m
     """No origin means no `owner/repo`, and no `owner/repo` means nothing can be scoped to it.
 
     The tempting degrade -- show every discovered manifest -- is the B3 wrong-answer class: another
-    project's entire grid rendered under this repository's header.
+    chain's entire grid rendered under this repository's header.
     """
     dirs = _four_repository_registry(isolated)
     bare = isolated / "ws" / "foxtrot"
@@ -2299,9 +2299,9 @@ def test_a_manifest_block_carries_its_desc_and_repo_slugs():
     """G3. MUTATION: drop `desc` or `repos` from `grid_manifest`'s dict.
 
     `repos` is over row_refs, NOT declared_refs, and the apex here is what proves it: `o/tracker#9`
-    lives in `o/tracker`, a repository this project does not span. Listing it would tell a reader the
-    project reaches a repository it merely files its tracker in -- under a heading that already claims
-    the project. Sorted and deduplicated, so two rows in one repository contribute one entry.
+    lives in `o/tracker`, a repository this chain does not span. Listing it would tell a reader the
+    chain reaches a repository it merely files its tracker in -- under a heading that already claims
+    the chain. Sorted and deduplicated, so two rows in one repository contribute one entry.
     """
     manifest = {
         "program": "spanning",

@@ -662,7 +662,7 @@ def _grid_placeholder(grid_block: dict) -> str:
     REFUSED IS TESTED FIRST, BEFORE SCOPE, and that order is the whole point of the arm. A manifest
     that failed to load is not among `manifests` -- it was refused whole -- so every later arm
     reports on a repository that looks manifest-less and says so: `borg link` in a repository whose
-    only manifest has one bad row rendered "no project manifests in the registry yet. Run /borg-plan
+    only manifest has one bad row rendered "no chain manifests in the registry yet. Run /borg-plan
     in any repository." That sentence is not merely unhelpful, it is FALSE, and it points the reader
     at scaffolding a second manifest beside the broken one. The `▸ SIGNALS` warning naming the real
     reason is a dim line at the bottom of the page; this section is where the reader is looking.
@@ -674,7 +674,7 @@ def _grid_placeholder(grid_block: dict) -> str:
     counted for whatever scope resolved -- one repository's directory in repository scope, the whole
     registry in orchestrator scope -- so a wording like "manifests are HERE but could not be read"
     would be false on the orchestrator page, and moving the arm below scope to dodge that would let
-    the registry-wide sentence claim "no project manifests in the registry yet" while three of them
+    the registry-wide sentence claim "no chain manifests in the registry yet" while three of them
     sit on disk unreadable. Saying only that they could not be read is true in both, which is why the
     arm can stay where correctness wants it.
 
@@ -700,14 +700,14 @@ def _grid_placeholder(grid_block: dict) -> str:
             "see the reasons below, then fix and re-run."
         )
     if grid_block.get("scope_kind") != "repository":
-        return "no project manifests in the registry yet. Run /borg-plan in any repository."
+        return "no chain manifests in the registry yet. Run /borg-plan in any repository."
     if not grid_block.get("slug"):
         return "this directory has no GitHub origin — nothing to scope a chain to."
-    return f"no project manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."
+    return f"no chain manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."
 
 
 def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str, int]) -> list[str]:
-    """One project's CHAINS block: its heading, the picture, then one detail block per node.
+    """One chain's CHAINS block: its heading, the picture, then one detail block per node.
 
     THE DETAIL BLOCKS ARE IN NODE-ID ORDER, which is picture reading order (manifest, level, column)
     and NOT the wire's `(seq, ref)`. A reader moving between the picture and the details must never
@@ -735,9 +735,9 @@ def _manifest_lines(manifest_grid: dict, ids: dict[str, str], columns: dict[str,
 
 def _grid_section(doc: dict) -> tuple[str, list[str]]:
     """CHAINS: the declared cross-repository topology, one picture and one detail block set per
-    project, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
+    chain, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once.
 
-    The note is UNCONDITIONAL, even when no manifest was selected: `0 projects · 0 refs · 0
+    The note is UNCONDITIONAL, even when no manifest was selected: `0 chains · 0 refs · 0
     unresolved · swept back to <mark>` is the honest reading of a repository with nothing declared,
     and it is what separates that from a repository nobody swept.
 
@@ -761,7 +761,7 @@ def _grid_section(doc: dict) -> tuple[str, list[str]]:
     since = str(grid_block.get("since") or "")
     freshness = f"swept back to {since}" if grid_block.get("swept") and since else "not swept"
     note = (
-        f"{_plural(len(manifests), 'project', 'projects')}"
+        f"{_plural(len(manifests), 'chain', 'chains')}"
         f" · {grid_block.get('declared', 0)} refs"
         f" · {grid_block.get('unresolved', 0)} unresolved"
         f" · {freshness}"

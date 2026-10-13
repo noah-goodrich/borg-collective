@@ -3446,7 +3446,7 @@ _link_picture_budget() {
     # carries no `▸` line). Seven since AC4.
     run grep -c '▸ ' "${BATS_TEST_TMPDIR}/ledger.txt"
     [ "$output" = "8" ]
-    run grep -c 'no project manifest declares work in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
+    run grep -c 'no chain manifest declares work in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
     [ "$output" = "1" ]
     run grep -c 'none declaring a row in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
     [ "$output" = "1" ]
@@ -3471,7 +3471,7 @@ _link_picture_budget() {
         "$root/solo" > "$BORG_REGISTRY"
 
     _link_grid_run "$root" "${BATS_TEST_TMPDIR}/orch-empty.txt" link
-    run grep -c 'no project manifests in the registry yet' "${BATS_TEST_TMPDIR}/orch-empty.txt"
+    run grep -c 'no chain manifests in the registry yet' "${BATS_TEST_TMPDIR}/orch-empty.txt"
     [ "$output" = "1" ]
     run bash -c "grep -c 'no GitHub origin' '${BATS_TEST_TMPDIR}/orch-empty.txt' || true"
     [ "$output" = "0" ]

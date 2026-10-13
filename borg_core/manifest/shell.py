@@ -313,7 +313,7 @@ def _invalid_manifest(where: str, reasons: list[str]) -> str:
 
     There were four hand-written copies of this f-string and a fifth literal in the marker tuple, in
     one file, while `refused_manifest_paths`'s docstring claimed "exactly one producer". Reword any
-    copy and the CHAINS placeholder silently reverts to the false "no project manifests in the
+    copy and the CHAINS placeholder silently reverts to the false "no chain manifests in the
     registry yet", with nothing red -- the tests build their warnings through `discover`, so both
     sides move together.
     """
