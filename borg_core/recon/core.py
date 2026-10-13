@@ -162,7 +162,7 @@ def _changed_ts(item: dict) -> str:
 
 
 def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
-    """Drop cross-source duplicates of the same ref before the project merge.
+    """Drop cross-source duplicates of the same ref before the repository merge.
 
     Two sources reporting the same ref are the same artifact reported twice — both flowing through
     inflates every downstream count (measured 2026-08-21: one PR rendered twice inside a single
@@ -177,7 +177,7 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
     timestamp in `changed` compares as oldest. Ties keep the first track's item, and track order is
     adapter discovery order, so the outcome is deterministic. Each track records how many of its
     items lost as `deduped`. When the winner and a loser disagree on `state` — or on which
-    `project` owns the ref, which silently empties the loser's project bucket — that is a real
+    `project` owns the ref, which silently empties the loser's repository bucket — that is a real
     contradiction between sources, emitted for the human and never resolved silently, same policy
     as the checkpoint-vs-source detector.
 
@@ -208,7 +208,7 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
             if item.get("state") != winner.get("state"):
                 # The digest renders project/ref/note; the *_says keys carry the detail for the
                 # /borg-recon synthesis, named for what they are (this is source-vs-source, not the
-                # checkpoint-vs-source shape project_contradictions emits).
+                # checkpoint-vs-source shape repository_contradictions emits).
                 contradictions.append(
                     {
                         "project": winner.get("project"),
@@ -222,21 +222,21 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
                     }
                 )
             if item.get("project") != winner.get("project"):
-                # A project divergence is worse than a state one: the loser's copy vanishes from its
-                # project's bucket entirely, so `--projects <loser's>` filters and per-project digests
+                # A repository divergence is worse than a state one: the loser's copy vanishes from its
+                # repository's bucket entirely, so `--projects <loser's>` filters and per-repository digests
                 # silently lose the item. Surfaced, never resolved — the sources disagree about which
-                # project owns this ref, and only a human knows.
+                # repository owns this ref, and only a human knows.
                 contradictions.append(
                     {
                         "project": winner.get("project"),
                         "ref": ref,
                         "kept_says": (
-                            f"{winner.get('source')} files this under project {winner.get('project')!r} (newer)"
+                            f"{winner.get('source')} files this under repository {winner.get('project')!r} (newer)"
                         ),
-                        "dropped_says": f"{item.get('source')} files this under project {item.get('project')!r}",
+                        "dropped_says": f"{item.get('source')} files this under repository {item.get('project')!r}",
                         "note": (
-                            "two sources file this item under different projects — it now appears "
-                            "only under the kept project; confirm which is right"
+                            "two sources file this item under different repositories — it now appears "
+                            "only under the kept repository; confirm which is right"
                         ),
                     }
                 )
@@ -247,19 +247,19 @@ def dedup_cross_source(tracks: list[dict]) -> tuple[list[dict], list[dict]]:
     return deduped_tracks, contradictions
 
 
-def merge_by_project(tracks: list[dict]) -> dict[str, list[dict]]:
-    """Merge all track item arrays into a flat item list grouped by project.
+def merge_by_repository(tracks: list[dict]) -> dict[str, list[dict]]:
+    """Merge all track item arrays into a flat item list grouped by repository.
 
     Mirrors _recon_merge_by_project (jq group_by).
     """
-    by_project: dict[str, list[dict]] = {}
+    by_repository: dict[str, list[dict]] = {}
     for track in tracks:
         for item in track.get("items", []):
-            project = item.get("project")
-            if not isinstance(project, str):
+            repository = item.get("project")
+            if not isinstance(repository, str):
                 continue
-            by_project.setdefault(project, []).append(item)
-    return by_project
+            by_repository.setdefault(repository, []).append(item)
+    return by_repository
 
 
 def extract_checkpoint_blockers(checkpoint_text: str) -> str:
@@ -286,10 +286,10 @@ def extract_checkpoint_blockers(checkpoint_text: str) -> str:
     return "\n".join(lines)
 
 
-def project_contradictions(project: str, blockers_text: str, items: list[dict]) -> list[dict]:
-    """Detect stale-blocker contradictions for one project.
+def repository_contradictions(repository: str, blockers_text: str, items: list[dict]) -> list[dict]:
+    """Detect stale-blocker contradictions for one repository.
 
-    An Item shows a resolved-ish state while the project's checkpoint still lists its ref as a
+    An Item shows a resolved-ish state while the repository's checkpoint still lists its ref as a
     blocker. Mirrors _recon_project_contradictions.
     """
     if not blockers_text:
@@ -308,7 +308,7 @@ def project_contradictions(project: str, blockers_text: str, items: list[dict]) 
             continue
         results.append(
             {
-                "project": project,
+                "project": repository,
                 "ref": ref,
                 "checkpoint_says": "listed as a blocker in the latest checkpoint",
                 "source_says": f"{state} — {item.get('one_line', '')}",
@@ -394,19 +394,19 @@ def _render_item_line(item: dict) -> str:
     return f"    - {item.get('one_line')}  {suffix}"
 
 
-def _render_by_project_section(items_by_project: dict[str, list[dict]]) -> list[str]:
+def _render_by_repository_section(items_by_project: dict[str, list[dict]]) -> list[str]:
     if not items_by_project:
         return ["  (no activity since the mark — quiet sweep)"]
     ranked = sorted(
         (
-            (min((_urgency_rank(i.get("urgency", "fyi")) for i in items), default=3), project, items)
-            for project, items in items_by_project.items()
+            (min((_urgency_rank(i.get("urgency", "fyi")) for i in items), default=3), repository, items)
+            for repository, items in items_by_project.items()
         ),
         key=lambda t: t[0],
     )
     lines: list[str] = []
-    for rank, project, items in ranked:
-        lines.append(f"● {project}  [{_urgency_label(rank)}]")
+    for rank, repository, items in ranked:
+        lines.append(f"● {repository}  [{_urgency_label(rank)}]")
         for item in sorted(items, key=lambda i: _urgency_rank(i.get("urgency", "fyi"))):
             lines.append(_render_item_line(item))
         lines.append("")
@@ -414,7 +414,7 @@ def _render_by_project_section(items_by_project: dict[str, list[dict]]) -> list[
 
 
 def render_digest(doc: dict) -> str:
-    """Render the terse, most-urgent-first by-project digest from a reconciled doc.
+    """Render the terse, most-urgent-first by-repository digest from a reconciled doc.
 
     Mirrors _recon_print_digest's jq template.
     """
@@ -424,9 +424,9 @@ def render_digest(doc: dict) -> str:
     ]
     lines.extend(_render_sources_section(doc.get("sources", [])))
     lines.extend(_render_contradictions_section(doc.get("contradictions", [])))
-    lines.append("By project (most urgent first):")
+    lines.append("By repository (most urgent first):")
     lines.append("")
-    lines.extend(_render_by_project_section(doc.get("items_by_project", {})))
+    lines.extend(_render_by_repository_section(doc.get("items_by_project", {})))
     lines.append("Run /borg-recon for the full morning link-up: reconcile, Yours-vs-Mine action lists,")
     lines.append("and a recommended parallel kickoff batch.")
     return "\n".join(lines)

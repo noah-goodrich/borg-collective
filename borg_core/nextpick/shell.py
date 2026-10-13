@@ -36,8 +36,8 @@ def append_row(row: dict[str, Any]) -> bool:
         return False
 
 
-def recon_items(projects: dict[str, Any], local: bool) -> tuple[dict[str, list[dict[str, Any]]], str | None]:
-    """`(items grouped by project, degraded note)` from the recon sweep `borg recon --json` runs. Fail-open.
+def recon_items(repositories: dict[str, Any], local: bool) -> tuple[dict[str, list[dict[str, Any]]], str | None]:
+    """`(items grouped by repository, degraded note)` from the recon sweep `borg recon --json` runs. Fail-open.
 
     Uses `link.shell.sweep`, the in-process fan-out under its own 10s per-adapter deadline (inside the 15s network
     bound). Unlike `borg recon --json` it NEVER writes the last-run marker, so `--rows --json` stays read-only.
@@ -45,11 +45,11 @@ def recon_items(projects: dict[str, Any], local: bool) -> tuple[dict[str, list[d
     """
     if local:
         return {}, None
-    live = {name: entry for name, entry in projects.items() if entry.get("status") != "archived"}
+    live = {name: entry for name, entry in repositories.items() if entry.get("status") != "archived"}
     try:
         result = link_shell.sweep(live)
         tracks = result.get("tracks") or []
-        by_project = recon_core.merge_by_project(tracks)
+        by_repository = recon_core.merge_by_repository(tracks)
         failed = [str(t.get("source")) for t in tracks if t.get("ok") is False]
         if not result.get("swept"):
             note = "; ".join(result.get("warnings") or []) or "sweep did not run"
@@ -60,7 +60,7 @@ def recon_items(projects: dict[str, Any], local: bool) -> tuple[dict[str, list[d
     # JUSTIFICATION: a failed sweep must degrade the rows to the other sources, never fail the chooser.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return {}, f"sweep failed: {exc}"
-    return by_project, note
+    return by_repository, note
 
 
 _PLAN_TITLE = re.compile(r"^#\s*Project Plan:\s*(.+?)\s*$", re.MULTILINE)
@@ -77,11 +77,11 @@ def plan_name(text: str, fallback: str) -> str:
     return fallback
 
 
-def read_plans(projects: dict[str, Any], names: list[str]) -> dict[str, dict[str, str]]:
-    """`{project: {"name", "text"}}` for each project with a PROJECT_PLAN.md at its root or under docs/plans/."""
+def read_plans(repositories: dict[str, Any], names: list[str]) -> dict[str, dict[str, str]]:
+    """`{repository: {"name", "text"}}` for each repository with a PROJECT_PLAN.md at its root or under docs/plans/."""
     found: dict[str, dict[str, str]] = {}
     for name in names:
-        path = str((projects.get(name) or {}).get("path") or "")
+        path = str((repositories.get(name) or {}).get("path") or "")
         if not path or path == "null":
             continue
         for candidate in (Path(path) / "PROJECT_PLAN.md", Path(path) / "docs" / "plans" / "PROJECT_PLAN.md"):
@@ -97,16 +97,16 @@ def read_plans(projects: dict[str, Any], names: list[str]) -> dict[str, dict[str
 _WHOLE_CHECKPOINT_LINES = 1_000_000
 
 
-def checkpoint_next_steps(projects: dict[str, Any], names: list[str]) -> dict[str, str]:
-    """`{project: first next-session item of its latest checkpoint}` for the names that have one. Fail-open.
+def checkpoint_next_steps(repositories: dict[str, Any], names: list[str]) -> dict[str, str]:
+    """`{repository: first next-session item of its latest checkpoint}` for the names that have one. Fail-open.
 
     Resolves the checkpoint through `link.shell` (repo-group union read, name-sorted, content-deduped), so the
-    "latest checkpoint" is the very document `borg link` shows. Any error for a project omits that project.
+    "latest checkpoint" is the very document `borg link` shows. Any error for a repository omits that repository.
     """
     found: dict[str, str] = {}
     for name in names:
         try:
-            sources = link_core.repo_sources(name, projects)
+            sources = link_core.repo_sources(name, repositories)
             text = link_shell.read_latest_checkpoint_head(sources, _WHOLE_CHECKPOINT_LINES)
             step = core.checkpoint_next_step(text)
         # JUSTIFICATION: a checkpoint that cannot be read must leave the cell blank, never fail the chooser.

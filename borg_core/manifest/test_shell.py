@@ -83,7 +83,7 @@ def _write_manifest(root, repository, name, doc):
 
 
 def _registry(*paths):
-    """A registry dict shaped like ~/.config/borg/registry.json, keyed by project name."""
+    """A registry dict shaped like ~/.config/borg/registry.json, keyed by repository name."""
     return {"projects": {os.path.basename(p) or f"p{i}": {"path": p} for i, p in enumerate(paths)}}
 
 
@@ -386,7 +386,7 @@ def test_a_registry_entry_with_no_path_is_skipped_and_never_reads_the_cwd(tmp_pa
 
 
 def test_one_pathless_entry_among_good_ones_stays_silent(tmp_path):
-    # The negative pair: the tripwire is per-REGISTRY, not per-entry, so a single pathless project
+    # The negative pair: the tripwire is per-REGISTRY, not per-entry, so a single pathless repository
     # cannot make it noisy.
     good = _write_manifest(tmp_path, "good", "a.json", _manifest([_row("1", "o/a#1")]))
     manifests, warnings = shell.discover_registered({"projects": {"good": {"path": good}, "bad": {}}})

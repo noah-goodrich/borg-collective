@@ -9,9 +9,9 @@ already permits `pathlib`, `json` and `datetime`.
 THE PRECEDENCE RULE IS "THE LAYER THAT OWNS THE FACT WINS", and it is one rule rather than a
 per-type exception so that a reader can predict what a file does without knowing its type:
 
-    prose extensions      -> the REPO layer wins. It asserts project policy ("plans here cite a
-                             ticket"), the project owns that, and it should bind everyone who works
-                             on the project. This is the pre-existing behaviour, unchanged: both
+    prose extensions      -> the REPO layer wins. It asserts repository policy ("plans here cite a
+                             ticket"), the repository owns that, and it should bind everyone who works
+                             on the repository. This is the pre-existing behaviour, unchanged: both
                              layers are read in order and the later one extends or overrides.
     prefer-tool extensions -> the MACHINE layer wins. It asserts something about the environment
                              ("this machine creates PRs via X"). A repository cannot know what is

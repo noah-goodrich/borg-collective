@@ -9,7 +9,7 @@ two entry points the one-front-door `link` needs: `discover_registered`, which g
 repository rather than one, and `repository_slug`, which answers "which `owner/repo` is this
 directory?" the same way the recon github adapter does.
 
-WHY THIS DOES NOT IMPORT borg_core.link.core. `discover_registered` needs the registry's project
+WHY THIS DOES NOT IMPORT borg_core.link.core. `discover_registered` needs the registry's repository
 paths, and `borg_core.link.core.repository_paths` already extracts them (mirroring jq's
 `[.key, (.value.path // "")] | @tsv`). Importing it would point an arrow from `manifest` at `link`,
 and `link` is about to become the CONSUMER of this package -- the arrow belongs the other way round.
@@ -434,28 +434,28 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     validates JSON syntax and nothing else, so a hand-edited or half-migrated registry arrives here
     intact.
 
-    A REGISTRY THAT DECLARES PROJECTS AND YIELDS NO PATH WARNS. Zero manifests and zero warnings is
+    A REGISTRY THAT DECLARES REPOSITORIES AND YIELDS NO PATH WARNS. Zero manifests and zero warnings is
     the silent-blindness shape this repository has been burned by twice (the usage-watch and
     `borg recon` incidents in CLAUDE.md's "Learned"): if the registry schema moves under this
     extractor -- a renamed key, a different null sentinel, paths stored elsewhere -- the sweep goes
     quiet and `link` renders a confidently empty grid. One warning is the whole tripwire. It stays
-    per-REGISTRY rather than per-entry so a single pathless project cannot make it noisy.
+    per-REGISTRY rather than per-entry so a single pathless repository cannot make it noisy.
     """
     if not isinstance(registry, dict):
         return [], [f"registry: not an object ({type(registry).__name__}) -- no repositories swept"]
-    projects = registry.get("projects")
-    if not projects:
+    repositories = registry.get("projects")
+    if not repositories:
         return [], []
-    if not isinstance(projects, dict):
-        return [], [f"registry: projects is not an object ({type(projects).__name__}) -- no repositories swept"]
+    if not isinstance(repositories, dict):
+        return [], [f"registry: projects is not an object ({type(repositories).__name__}) -- no repositories swept"]
 
     paths = []
-    for entry in projects.values():
+    for entry in repositories.values():
         path = str(entry.get("path") or "") if isinstance(entry, dict) else ""
         if path and path != "null":
             paths.append(path)
     if not paths:
-        return [], [f"registry: {len(projects)} project(s) registered but none carry a usable path"]
+        return [], [f"registry: {len(repositories)} repository(ies) registered but none carry a usable path"]
     return paths, []
 
 

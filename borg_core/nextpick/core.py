@@ -1,7 +1,7 @@
 """PURE `borg next` ranking, chooser log rows and the follow-rate gate.
 
 NO I/O OF ANY KIND -- no filesystem, no subprocess, no network, no clock. Callers pass in the registry
-projects dict (and timestamps) that someone else read. `test_core.py` pins the purity by AST import walk.
+repositories dict (and timestamps) that someone else read. `test_core.py` pins the purity by AST import walk.
 
 `rank` reproduces borg.zsh's `cmd_next` jq pipeline exactly, including the quirks of jq's `sort_by`:
 it is STABLE, `to_entries` walks object keys in sorted (codepoint) order so equal (score, last_activity)
@@ -48,11 +48,11 @@ def _score(entry: dict[str, Any]) -> int:
     return score
 
 
-def rank(projects: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return non-archived projects best-first, as cmd_next's jq orders them."""
+def rank(repositories: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return non-archived repositories best-first, as cmd_next's jq orders them."""
     items = []
-    for name in sorted(projects):
-        entry = projects[name]
+    for name in sorted(repositories):
+        entry = repositories[name]
         if entry.get("status") == "archived":
             continue
         items.append(
@@ -122,10 +122,10 @@ def gate(rows: list[dict[str, Any]], min_rows: int = 20, threshold: float = 0.60
 _BLANK = {"item": "", "next_step": "", "owner": "", "ready": ""}
 
 
-def _project_ready(path: str, manifests: list[dict[str, Any]]) -> dict[str, str]:
+def _repository_ready(path: str, manifests: list[dict[str, Any]]) -> dict[str, str]:
     """The first ready row of the manifests that live under `path`, routed exactly as `▸ NEXT` routes it.
 
-    A manifest belongs to a project when its file sits inside the project directory. A manifest whose READY set
+    A manifest belongs to a repository when its file sits inside the repository directory. A manifest whose READY set
     is `unlooked` (nothing resolved, e.g. `--local`) contributes nothing, as `render._next_tally` skips it.
     Within a manifest `rows[].next` orders first, then ref, the same stable order `_next_tally` uses.
     """
@@ -197,18 +197,18 @@ def chooser_rows(
     fallbacks: dict[str, str] | None = None,
     now_epoch: int = 0,
 ) -> list[dict[str, Any]]:
-    """One row per ranked project, ranked order: `{n, project, item, next_step, owner, ready, status, age,
+    """One row per ranked repository, ranked order: `{n, project, item, next_step, owner, ready, status, age,
     waiting_reason}`.
 
     Cells come from the link document's grid manifests via `render.route_kind` (owner) and `picture.state_glyph`
-    (ready glyph). A project with no manifest, or a None / degraded document, gets blank cells, never an error.
-    `next_step` falls back to `fallbacks[project]` (the latest checkpoint's first next-session item) when no
+    (ready glyph). A repository with no manifest, or a None / degraded document, gets blank cells, never an error.
+    `next_step` falls back to `fallbacks[repository]` (the latest checkpoint's first next-session item) when no
     manifest supplied one. `age` is `link_core.relative_time`, the string `borg link` shows.
     """
     manifests = ((link_doc or {}).get("grid") or {}).get("manifests") or []
     rows = []
     for index, item in enumerate(ranked):
-        cells = _project_ready(str(item.get("path") or ""), manifests)
+        cells = _repository_ready(str(item.get("path") or ""), manifests)
         if not cells["next_step"]:
             cells["next_step"] = (fallbacks or {}).get(item["name"], "")
         rows.append(
@@ -270,7 +270,7 @@ def render_chooser(
     """Plain-text screen 2: header, rule, column header, one line per item row, optional `+N quiet` line, rule,
     optional suggestion, key hint. Every line is at most `width` visible columns, cut with an ellipsis."""
     rule = "─" * width
-    lines = ["WHERE COULD YOUR FOCUS GO?", rule, _line("#", "project · item", "next step", "owner", "ready")]
+    lines = ["WHERE COULD YOUR FOCUS GO?", rule, _line("#", "repository · item", "next step", "owner", "ready")]
     for row in rows:
         label = f"{row['project']} · {row['item']}" if row.get("item") else row["project"]
         lines.append(_line(str(row["n"]), label, row.get("next_step", ""), row.get("owner", ""), row.get("ready", "")))
@@ -285,7 +285,7 @@ def render_chooser(
 
 
 def suggestion_for(rows: list[dict[str, Any]], log_rows: list[dict[str, Any]]) -> str | None:
-    """The top row's label ("<n> <project>") only once the follow-rate `gate` has passed, else None."""
+    """The top row's label ("<n> <repository>") only once the follow-rate `gate` has passed, else None."""
     if not rows or not gate(log_rows):
         return None
     return f"{rows[0]['n']} {rows[0]['project']}"
@@ -366,21 +366,21 @@ def _plan_rows(plan: dict[str, Any] | None) -> list[dict[str, Any]]:
 def work_items(
     ranked: list[dict[str, Any]],
     recon_items_by_project: dict[str, list[dict[str, Any]]],
-    plans_by_project: dict[str, dict[str, Any]],
+    plans_by_repository: dict[str, dict[str, Any]],
     checkpoint_steps: dict[str, str],
     now_epoch: int = 0,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    """One row per actionable item, in ranked project order, plus the `quiet` project names.
+    """One row per actionable item, in ranked repository order, plus the `quiet` repository names.
 
     Row: `{project, item, next_step, owner, ready, ref, age}` (a waiting-session row also carries
-    `waiting_reason`). Within a project: waiting session; open PRs (YOU merges first, then AGENT rows by PR
+    `waiting_reason`). Within a repository: waiting session; open PRs (YOU merges first, then AGENT rows by PR
     number); the active plan's first unchecked criterion when no PR row exists; else the checkpoint next step.
-    `plans_by_project[p]` is `{"name": str, "text": <PROJECT_PLAN.md text>}`, parsed by planstate.parse_criteria.
+    `plans_by_repository[p]` is `{"name": str, "text": <PROJECT_PLAN.md text>}`, parsed by planstate.parse_criteria.
     """
     rows: list[dict[str, Any]] = []
     quiet: list[str] = []
     for entry in ranked:
-        project = entry["name"]
+        repository = entry["name"]
         age = str(link_core.relative_time(entry.get("last_activity") or None, now_epoch))
         mine: list[dict[str, Any]] = []
         if entry.get("status") == "waiting":
@@ -394,19 +394,19 @@ def work_items(
                     "waiting_reason": entry.get("waiting_reason") or "",
                 }
             )
-        prs = [it for it in recon_items_by_project.get(project) or [] if it.get("state") == "open"]
+        prs = [it for it in recon_items_by_project.get(repository) or [] if it.get("state") == "open"]
         pr_rows = sorted(
             (_pr_row(it) for it in prs), key=lambda r: (r["owner"] != "YOU", _pr_number({"ref": r["ref"]}))
         )
         mine.extend(pr_rows)
         if not pr_rows:
-            mine.extend(_plan_rows(plans_by_project.get(project)))
-        step = checkpoint_steps.get(project, "")
+            mine.extend(_plan_rows(plans_by_repository.get(repository)))
+        step = checkpoint_steps.get(repository, "")
         if not mine and step:
             mine.append({"item": "", "next_step": step, "owner": "—", "ready": "", "ref": None})
         if not mine:
-            quiet.append(project)
-        rows.extend({"project": project, **row, "age": age} for row in mine)
+            quiet.append(repository)
+        rows.extend({"project": repository, **row, "age": age} for row in mine)
     return _dedupe_repo_groups(rows, ranked, now_epoch), quiet
 
 
@@ -417,11 +417,11 @@ SHOWN_MAX = 5
 def _dedupe_repo_groups(
     rows: list[dict[str, Any]], ranked: list[dict[str, Any]], now_epoch: int
 ) -> list[dict[str, Any]]:
-    """Drop rows a repo-sharing sibling project already carries, and flag stale drafts.
+    """Drop rows a repo-sharing sibling repository already carries, and flag stale drafts.
 
-    Projects whose registry `repo` (the git common dir) is equal are views of ONE repo, so the same PR, plan or
-    checkpoint step shows up under each. The best-ranked project keeps it. Session rows are never merged (each
-    project has its own session), and a null / missing `repo` is a group of one. A draft PR whose last activity
+    Repositories whose registry `repo` (the git common dir) is equal are views of ONE repo, so the same PR, plan or
+    checkpoint step shows up under each. The best-ranked repository keeps it. Session rows are never merged (each
+    repository has its own session), and a null / missing `repo` is a group of one. A draft PR whose last activity
     is older than `STALE_DRAFT_DAYS` days gets `stale: True`; with `now_epoch` 0 (no clock) nothing is stale.
     """
     repo_of = {entry["name"]: str(entry.get("repo") or "") for entry in ranked}
@@ -473,7 +473,7 @@ def hidden_lines(hidden: dict[str, int]) -> list[str]:
 
 
 def numbered_rows(work: list[dict[str, Any]], ranked: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """`work_items` rows as the wire rows: `n` 1..len, the project's `status`, and a `waiting_reason` always set."""
+    """`work_items` rows as the wire rows: `n` 1..len, the repository's `status`, and a `waiting_reason` always set."""
     status = {entry["name"]: entry.get("status") or "" for entry in ranked}
     return [
         {

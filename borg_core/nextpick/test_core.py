@@ -55,8 +55,8 @@ def test_archived_is_excluded_even_when_pinned():
 
 
 def test_equal_score_and_activity_fall_back_to_name_order_regardless_of_insertion():
-    projects = {"zz": {"status": "idle", "last_activity": "x"}, "aa": {"status": "idle", "last_activity": "x"}}
-    assert [i["name"] for i in core.rank(projects)] == ["aa", "zz"]
+    repositories = {"zz": {"status": "idle", "last_activity": "x"}, "aa": {"status": "idle", "last_activity": "x"}}
+    assert [i["name"] for i in core.rank(repositories)] == ["aa", "zz"]
 
 
 def test_items_carry_the_fields_cmd_next_reads_with_jq_defaults():
@@ -269,7 +269,7 @@ def _three():
 GOLDEN_HEAD = [
     "WHERE COULD YOUR FOCUS GO?",
     "───────────────────────────────────────────────────────────",
-    " # project · item         next step          owner ready",
+    " # repository · item      next step          owner ready",
     " 1 borg · hygiene         /borg-assimilate   yours ●",
     " 2 borg · research        merge #252         mine  ●",
     " 3 ingle",
@@ -286,7 +286,7 @@ def test_render_chooser_golden_with_suggestion():
     assert got == GOLDEN_HEAD + ["▸ suggested: 1 borg", "⏎ top · 1-9 open · q quit"]
 
 
-def test_render_chooser_collapses_quiet_projects_into_one_trailing_line():
+def test_render_chooser_collapses_quiet_repositories_into_one_trailing_line():
     got = core.render_chooser(_three(), suggestion=None, quiet=["x", "y"])
     assert got[6] == "+2 quiet: x, y"
     assert got[7] == GOLDEN_HEAD[-1]
@@ -329,8 +329,8 @@ def test_chooser_rows_fall_back_to_checkpoint_but_prefer_the_manifest():
     assert rows[1]["next_step"] == "cp step"
 
 
-def _qrow(n, project, status, step="", reason=""):
-    return {"n": n, "project": project, "status": status, "next_step": step, "waiting_reason": reason}
+def _qrow(n, repository, status, step="", reason=""):
+    return {"n": n, "project": repository, "status": status, "next_step": step, "waiting_reason": reason}
 
 
 def test_split_quiet_partitions_idle_blank_rows_in_rank_order():
@@ -544,7 +544,7 @@ def test_stale_needs_a_clock_a_draft_and_a_timestamp():
     assert not _work([_rank("p")], {"p": [_pr(1, draft=True)]})[0]["stale"]
 
 
-def test_projects_sharing_a_repo_do_not_repeat_a_pr():
+def test_repositories_sharing_a_repo_do_not_repeat_a_pr():
     ranked = [{**_rank("reveal"), "repo": "/g"}, {**_rank("reveal-data-consistency"), "repo": "/g"}]
     rows = _work(ranked, {"reveal": [_pr(4)], "reveal-data-consistency": [_pr(4), _pr(5)]})
     assert [(r["project"], r["ref"]) for r in rows] == [("reveal", "o/r#4"), ("reveal-data-consistency", "o/r#5")]

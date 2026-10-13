@@ -27,8 +27,8 @@ def _box(tmp_path, monkeypatch):
     return tmp_path
 
 
-def _registry(box: Path, projects: dict) -> None:
-    (box / "config" / "borg" / "registry.json").write_text(json.dumps({"projects": projects}))
+def _registry(box: Path, repositories: dict) -> None:
+    (box / "config" / "borg" / "registry.json").write_text(json.dumps({"projects": repositories}))
 
 
 def _proj(box: Path, name: str, state: str | None = '{"status":"idle"}') -> Path:
@@ -58,7 +58,7 @@ def test_copy_removes_legacy_and_empty_dir_and_backs_up(box, capsys):
     d = _proj(box, "a")
     _registry(box, {"a": {"path": str(d), "repo": None}})
     cli.main([])
-    new = paths.project_state_file(d, None)
+    new = paths.repository_state_file(d, None)
     assert json.loads(new.read_text()) == {"status": "idle"}
     assert not (d / ".borg").exists()
     assert _backups(box)
@@ -80,7 +80,7 @@ def test_other_borg_contents_survive(box):
 def test_keep_new_when_both_exist(box):
     d = _proj(box, "a", '{"v":"old"}')
     _registry(box, {"a": {"path": str(d)}})
-    new = paths.project_state_file(d, None)
+    new = paths.repository_state_file(d, None)
     new.parent.mkdir(parents=True)
     new.write_text('{"v":"new"}')
     cli.main([])
@@ -114,8 +114,8 @@ def test_git_backed_with_repo_uses_registry_repo_key(box):
     repo = _git_init(d)
     _registry(box, {"a": {"path": str(d), "repo": repo}})
     cli.main([])
-    assert paths.project_state_file(d, repo).is_file()
-    assert not paths.project_state_file(d, None).exists()
+    assert paths.repository_state_file(d, repo).is_file()
+    assert not paths.repository_state_file(d, None).exists()
 
 
 def test_tracked_legacy_is_copied_but_kept(box):
@@ -124,7 +124,7 @@ def test_tracked_legacy_is_copied_but_kept(box):
     subprocess.run(["git", "-C", str(d), "add", "-f", ".borg/state.json"], check=True)
     _registry(box, {"a": {"path": str(d), "repo": repo}})
     cli.main([])
-    assert paths.project_state_file(d, repo).is_file()
+    assert paths.repository_state_file(d, repo).is_file()
     assert (d / ".borg" / "state.json").exists()
 
 
@@ -132,7 +132,7 @@ def test_path_option_names_an_unregistered_file(box):
     d = _proj(box, "stray")
     _registry(box, {})
     cli.main(["--path", str(d / ".borg" / "state.json")])
-    assert paths.project_state_file(d, None).is_file()
+    assert paths.repository_state_file(d, None).is_file()
     assert not (d / ".borg").exists()
 
 

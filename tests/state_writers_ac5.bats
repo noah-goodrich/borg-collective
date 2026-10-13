@@ -93,7 +93,7 @@ _zsh_read() { zsh -c 'source "$1/lib/registry.zsh" && borg_state_read "$2" "$3"'
     [ "$status" -eq 0 ]
     [ "$(_bash_read | jq -r .status)" = "waiting" ]
     [ "$(_zsh_read | jq -r .status)" = "waiting" ]
-    py="$(PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import project_state_read_path as f; print(f(sys.argv[1], sys.argv[2]))' "$PROJ" "$COMMON")"
+    py="$(PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import repository_state_read_path as f; print(f(sys.argv[1], sys.argv[2]))' "$PROJ" "$COMMON")"
     [ "$(jq -r .status "$py")" = "waiting" ]
 }
 
