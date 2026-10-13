@@ -132,6 +132,12 @@ _rd_watchlog() {
     fi
 }
 
+# First <string> after <key>NAME</key> in a plist (EnvironmentVariables values).
+_rd_plist_string() {
+    awk -v k="<key>$2</key>" 'index($0, k) { f = 1; next }
+        f && /<string>/ { gsub(/.*<string>|<\/string>.*/, ""); print; exit }' "$1"
+}
+
 # The probe runs the INSTALLED borg-resume under a launchd-like environment (env -i + the plist's PATH and
 # BORG_CLAUDE_BIN), with the cache bypassed (TTL 0) and a scratch state dir so doctor writes nothing real.
 _rd_probe() {
@@ -148,10 +154,8 @@ _rd_probe() {
     _path="/usr/bin:/bin:$HOME/.claude/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin"
     _cbin=""
     if [ -f "$_plist" ]; then
-        _path="$(awk '/<key>PATH<\/key>/{f=1;next} f&&/<string>/{gsub(/.*<string>|<\/string>.*/,"");print;exit}' \
-            "$_plist")"
-        _cbin="$(awk '/<key>BORG_CLAUDE_BIN<\/key>/{f=1;next} f&&/<string>/{gsub(/.*<string>|<\/string>.*/,"");print;exit}' \
-            "$_plist")"
+        _path="$(_rd_plist_string "$_plist" PATH)"
+        _cbin="$(_rd_plist_string "$_plist" BORG_CLAUDE_BIN)"
         [ -n "$_path" ] || _path="/usr/bin:/bin:$HOME/.claude/bin:$HOME/.local/bin:/opt/homebrew/bin"
     fi
     _scratch="$(mktemp -d "${TMPDIR:-/tmp}/borg-doctor-probe.XXXXXX")" || {
