@@ -194,6 +194,16 @@ _realmerge() {
     ! grep -q '^bootstrap' "$CALLS"
 }
 
+@test "watcher: the opt-out is persisted as a marker and cleared by a later opted-in install" {
+    _stub_plutil 0
+    export XDG_STATE_HOME="$BATS_TEST_TMPDIR/xdg"
+    BORG_RESUME_WATCH=0 STUB_LIST_RC=1 run _zwatcher
+    [ "$status" -eq 0 ]
+    [ -e "$XDG_STATE_HOME/borg/resume/WATCH_OPTOUT" ]
+    STUB_LIST_RC=1 run _zwatcher
+    [ ! -e "$XDG_STATE_HOME/borg/resume/WATCH_OPTOUT" ]
+}
+
 @test "contract: install.sh resolves resume-watch through the label resolver, uses the watcher installer only" {
     grep -q '_borg_launchd_label resume-watch)' "$ROOT/install.sh"
     grep -q 'borg_resume_install_watcher' "$ROOT/install.sh"

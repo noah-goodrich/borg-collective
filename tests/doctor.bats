@@ -501,7 +501,8 @@ _resume_install() {
     : > "$HOME/.claude/hooks/borg-resume-hook.sh"
     _write_plist "$RESUME_LABEL" "30"
     _write_settings "$HOME/.claude/settings.json"
-    echo "$(date +%s) pass" > "$RESUME_DIR/watch.log"
+    : > "$RESUME_DIR/watch.heartbeat"
+    export BORG_RESUME_DOCTOR_TEST=1
     printf '{"last_swept_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$XDG_STATE_HOME/borg/usage-guardian.json"
     export BORG_RESUME_DIR="$RESUME_DIR"
     export BORG_RESUME_USAGE_CMD="echo 'Current session: 12% used'"
@@ -510,7 +511,8 @@ _resume_install() {
 
 _write_settings() {
     cat > "$1" <<JSON
-{"permissions":{"allow":["Bash(~/.claude/bin/borg-resume:*)","Bash(borg-resume:*)","Read(~/.local/state/borg/resume/**)"]}}
+{"permissions":{"allow":["Bash(~/.claude/bin/borg-resume:*)","Bash(borg-resume:*)",
+"Read(~/.local/state/borg/resume/**)"]}}
 JSON
 }
 
@@ -584,10 +586,42 @@ EOF
 
 @test "resume: stale watch.log -> FAIL" {
     _resume_install
-    echo "$(( $(date +%s) - 900 )) pass" > "$RESUME_DIR/watch.log"
+    touch -t 202001010000 "$RESUME_DIR/watch.heartbeat"
     run "$BORG_CMD" doctor
     [ "$status" -eq 1 ]
     [[ "$output" == *"resume-log"*"FAIL"* ]] || false
+}
+
+@test "resume: a real idle watch --once (empty ledger, no watch.log) keeps resume-log OK" {
+    _resume_install
+    rm "$RESUME_DIR/watch.heartbeat"
+    run env HOME="$HOME" XDG_STATE_HOME="$XDG_STATE_HOME" BORG_RESUME_DIR="$RESUME_DIR" \
+        BORG_RESUME_LIBDIR="$HOME/.claude/lib/borg" "$HOME/.claude/bin/borg-resume" watch --once
+    [ "$status" -eq 0 ]
+    [ ! -s "$RESUME_DIR/watch.log" ]
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-log"*"OK"* ]] || false
+}
+
+@test "resume: freshly installed, no pass yet -> WARN, not FAIL" {
+    _resume_install
+    rm "$RESUME_DIR/watch.heartbeat"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-log"*"WARN"* ]] || false
+}
+
+@test "resume: persisted install-time opt-out holds in a fresh shell without the env var" {
+    _resume_install
+    rm "$HOME/Library/LaunchAgents/$RESUME_LABEL.plist" "$RESUME_DIR/watch.heartbeat"
+    echo '{"permissions":{"allow":[]}}' > "$HOME/.claude/settings.json"
+    _write_launchctl_resume gone
+    : > "$RESUME_DIR/WATCH_OPTOUT"
+    unset BORG_RESUME_WATCH
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"opted out"* ]] || false
 }
 
 @test "resume: failing probe -> FAIL" {
@@ -669,7 +703,7 @@ EOF
     _write_launchctl_resume gone
     BORG_RESUME_WATCH=0 run "$BORG_CMD" doctor
     [ "$status" -eq 0 ]
-    [[ "$output" == *"disabled by BORG_RESUME_WATCH=0"* ]] || false
+    [[ "$output" == *"opted out"* ]] || false
 }
 
 @test "resume: kill switch state is informational" {

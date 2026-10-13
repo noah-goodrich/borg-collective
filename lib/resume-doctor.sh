@@ -87,7 +87,7 @@ _rd_watcher() {
     _out="$(launchctl print "gui/$(id -u)/$_label" 2>&1)" || _rc=$?
     if [ "$_rc" -ne 0 ]; then
         if [ "$_optout" = 1 ]; then
-            _rd_row OFF resume-watch "disabled by BORG_RESUME_WATCH=0" "unset it and run: borg setup"
+            _rd_row OFF resume-watch "opted out (BORG_RESUME_WATCH=0 at install)" "unset it and run: borg setup"
         else
             _rd_row FAIL resume-watch "watcher job not loaded ($_label)" \
                 "nothing will resume sessions: run ./install.sh to install the watcher"
@@ -109,19 +109,18 @@ _rd_watcher() {
 }
 
 _rd_watchlog() {
-    local _optout="$1" _f _last _t _now _age _max="$BORG_RESUME_DOCTOR_LOG_MAX_AGE"
+    local _optout="$1" _f _t _now _age _max="$BORG_RESUME_DOCTOR_LOG_MAX_AGE"
     if [ "$_optout" = 1 ]; then
-        _rd_row OFF resume-log "disabled by BORG_RESUME_WATCH=0"
+        _rd_row OFF resume-log "opted out (BORG_RESUME_WATCH=0 at install)"
         return 0
     fi
-    _f="$(_rd_dir)/watch.log"
-    if [ ! -s "$_f" ]; then
-        _rd_row FAIL resume-log "no watch.log yet" "the watcher has never completed a pass"
+    # watch.log only gets a line on activity; liveness is the heartbeat the watcher touches every pass.
+    _f="$(_rd_dir)/watch.heartbeat"
+    if [ ! -e "$_f" ]; then
+        _rd_row WARN resume-log "no watcher pass recorded yet" "expected within a minute of install; re-run doctor"
         return 0
     fi
-    _last="$(tail -n 1 "$_f" 2>/dev/null)"
-    _t="${_last%% *}"
-    case "$_t" in "" | *[!0-9]*) _t="$(_rd_mtime "$_f")" ;; esac
+    _t="$(_rd_mtime "$_f")"
     _now="$(_rd_now)"
     case "$_t" in "" | *[!0-9]*) _rd_row WARN resume-log "cannot read the last pass time"; return 0 ;; esac
     _age=$((_now - _t))
@@ -143,7 +142,7 @@ _rd_plist_string() {
 _rd_probe() {
     local _optout="$1" _label="$2" _bin="$HOME/.claude/bin/borg-resume" _plist _path _cbin _scratch _out _rc=0
     if [ "$_optout" = 1 ]; then
-        _rd_row OFF resume-probe "disabled by BORG_RESUME_WATCH=0"
+        _rd_row OFF resume-probe "opted out (BORG_RESUME_WATCH=0 at install)"
         return 0
     fi
     if [ ! -x "$_bin" ] || [ ! -f "$HOME/.claude/lib/borg/resume-probe.sh" ]; then
@@ -164,7 +163,7 @@ _rd_probe() {
     }
     _out="$(env -i HOME="$HOME" USER="${USER:-$(id -un)}" PATH="$_path" XDG_STATE_HOME="${XDG_STATE_HOME:-}" \
         BORG_CLAUDE_BIN="$_cbin" BORG_RESUME_DIR="$_scratch" BORG_RESUME_PROBE_TTL=0 BORG_RESUME_PROBE_TIMEOUT=20 \
-        BORG_RESUME_USAGE_CMD="${BORG_RESUME_USAGE_CMD:-}" "$_bin" probe 2>&1)" || _rc=$?
+        BORG_RESUME_USAGE_CMD="$([ "${BORG_RESUME_DOCTOR_TEST:-}" = 1 ] && printf '%s' "${BORG_RESUME_USAGE_CMD:-}")" "$_bin" probe 2>&1)" || _rc=$?
     rm -r "$_scratch" 2>/dev/null
     if [ "$_rc" -eq 0 ]; then
         _rd_row OK resume-probe "usage probe works under the launchd environment (${_out}% used)"
@@ -205,7 +204,7 @@ _rd_allowlist() {
     local _optout="$1" _s="$HOME/.claude/settings.json" _allow _miss="" _e
     if [ ! -r "$_s" ]; then
         if [ "$_optout" = 1 ]; then
-            _rd_row OFF resume-allow "disabled by BORG_RESUME_WATCH=0"
+            _rd_row OFF resume-allow "opted out (BORG_RESUME_WATCH=0 at install)"
         else
             _rd_row FAIL resume-allow "global settings.json not readable ($_s)" "run: borg setup"
         fi
@@ -222,7 +221,7 @@ _rd_allowlist() {
     if [ -z "$_e" ]; then
         _rd_row OK resume-allow "the three borg-resume allowlist entries are present"
     elif [ "$_optout" = 1 ]; then
-        _rd_row OFF resume-allow "disabled by BORG_RESUME_WATCH=0"
+        _rd_row OFF resume-allow "opted out (BORG_RESUME_WATCH=0 at install)"
     else
         _rd_row FAIL resume-allow "missing from settings.json allow: $_e" \
             "without them resume prompts for permission and stalls: run: borg setup"
@@ -276,6 +275,7 @@ _rd_switch() {
 borg_resume_doctor_rows() {
     local _label="$1" _optout=0 _bin=0 _hook=0 _plist=0 _lib=0
     [ "${BORG_RESUME_WATCH:-1}" = "0" ] && _optout=1
+    [ -e "$(_rd_dir)/WATCH_OPTOUT" ] && _optout=1
     [ -x "$HOME/.claude/bin/borg-resume" ] && _bin=1
     _rd_hook_registered && _hook=1
     [ -e "$HOME/Library/LaunchAgents/$_label.plist" ] && _plist=1

@@ -801,6 +801,9 @@ borg_resume_watch_once() {
     if [ $((_rw_n_created + _rw_n_merged + _rw_n_closed + _rw_n_done)) -gt 0 ]; then
         _rw_log "pass: created=$_rw_n_created merged=$_rw_n_merged closed=$_rw_n_closed done=$_rw_n_done"
     fi
+    # Heartbeat: touched on EVERY completed pass (watch.log only gets activity lines), so `borg doctor` can tell
+    # an idle healthy watcher from a dead one.
+    : >"$(borg_resume_dir)/watch.heartbeat" 2>/dev/null
     printf 'borg-resume watch: created=%s merged=%s closed=%s done=%s\n' \
         "$_rw_n_created" "$_rw_n_merged" "$_rw_n_closed" "$_rw_n_done"
     trap - EXIT INT TERM
