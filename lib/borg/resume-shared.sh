@@ -66,8 +66,9 @@ _rs_trim_outbox() {
 # Host-side delivery. BORG_RESUME_NOTIFY_CMD (test seam) is run as `<cmd> <title> <subtitle> <message>` when it is an
 # executable path, else as a shell snippet with the three values as $1 $2 $3. Never fails the caller.
 _rs_deliver() { # <subtitle> <message>
-    local _c="${BORG_RESUME_NOTIFY_CMD:-}"
-    if [ -n "$_c" ]; then
+    local _c="${BORG_RESUME_NOTIFY_CMD:-}" _to _p
+    if [ -n "${BORG_RESUME_DIR:-}" ]; then
+        [ -n "$_c" ] || return 0
         if [ -x "$_c" ]; then
             "$_c" "Borg Resume" "$1" "$2" >/dev/null 2>&1 || true
         else
@@ -75,12 +76,23 @@ _rs_deliver() { # <subtitle> <message>
         fi
         return 0
     fi
-    [ -z "${BORG_RESUME_DIR:-}" ] || return 0
-    # A subshell: sourcing borg-hooks.sh must not leak into the watcher.
-    # shellcheck source=/dev/null
-    ( . "$_RS_DIR/../borg-hooks.sh" >/dev/null 2>&1 &&
-        _borg_osa_notify "Borg Resume" "$1" "$2" ) >/dev/null 2>&1 || true
+    # Production: detached and time-boxed so a hung osascript can never hold the watcher lock. The outbox line is
+    # already written, so a lost delivery is safe.
+    _to="$(_rs_int "${BORG_RESUME_NOTIFY_TIMEOUT:-}" 5)"
+    (
+        # shellcheck source=/dev/null
+        ( . "$_RS_DIR/../borg-hooks.sh" >/dev/null 2>&1 &&
+            _borg_osa_notify "Borg Resume" "$1" "$2" ) </dev/null >/dev/null 2>&1 &
+        _p=$!
+        ( sleep "$_to"; pkill -TERM -P "$_p" 2>/dev/null; kill -TERM "$_p" 2>/dev/null ) </dev/null >/dev/null 2>&1 &
+        exit 0
+    ) </dev/null >/dev/null 2>&1 || true
     return 0
+}
+
+# True when the helpers the gate and liveness depend on are defined; callers fail closed (log + skip) otherwise.
+borg_resume_shared_ok() {
+    command -v borg_resume_notify >/dev/null 2>&1 && command -v borg_resume_transcript_moving >/dev/null 2>&1
 }
 
 # borg_resume_notify <kind> <sid> <rid> <message> [key]

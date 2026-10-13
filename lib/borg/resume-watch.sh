@@ -621,7 +621,12 @@ _rw_confirmed_pass() {
         _sd="${_loc#*$'\t'}"
         _file="$_t"
         case "$_scope" in
-            agent:*) _file="$_sd/subagents/agent-${_scope#agent:}.jsonl" ;;
+            # The gate records the confirmation baseline from this same file (main when the agent file is missing).
+            agent:*)
+                if [ -n "$_sd" ] && [ -f "$_sd/subagents/agent-${_scope#agent:}.jsonl" ]; then
+                    _file="$_sd/subagents/agent-${_scope#agent:}.jsonl"
+                fi
+                ;;
         esac
         _lines=0
         [ -f "$_file" ] && _lines="$(wc -l <"$_file" | tr -d ' ')"

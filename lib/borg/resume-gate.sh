@@ -40,8 +40,8 @@
 # BORG_RESUME_AUTO_COMPACT (S6 flag), BORG_USAGE_HALT_ENABLED / _PCT / _TTL_SEC / BORG_USAGE_SAMPLES (dispatch guard).
 #
 # Deferred to later slices: relaunch of a dead process and the resume-size dialog (S11), launchd (S12), doctor (S13),
-# status/cancel/pause/run verbs (S14; notifications already name `borg resume cancel|run <rid>`), liveness and the
-# the stall watchdog for partial workflows without an errored agent (S10).
+# status/cancel/pause/run verbs (S14; notifications already name `borg resume cancel|run <rid>`). Liveness (S10)
+# records dead owners; this gate owns the post-confirmation stall watchdog.
 
 # shellcheck disable=SC2016
 _RG_DIR="${BASH_SOURCE[0]%/*}"
@@ -71,6 +71,14 @@ _rg_int() { # <env-name> <default>
 
 _rg_log() { _rw_log "gate: $*"; }
 _rg_isolated() { [ -n "${BORG_RESUME_DIR:-}" ]; }
+
+# Fail closed: without the shared library (notify, "moving") every notice would be lost and the stall check would
+# fall through on elapsed time alone. Log and skip the pass instead.
+_rg_shared_loaded() {
+    command -v borg_resume_shared_ok >/dev/null 2>&1 && borg_resume_shared_ok && return 0
+    _rw_log "gate: resume-shared.sh not loaded, pass skipped"
+    return 1
+}
 
 _rg_fmt_time() {
     date -r "$1" '+%a %b %d %H:%M' 2>/dev/null || date -d "@$1" '+%a %b %d %H:%M' 2>/dev/null || printf '%s' "$1"
@@ -302,18 +310,60 @@ _rg_weekly() { # <file> (fields loaded)
 # when that function exists; it returns 0 when it took ownership of the record (state transitions are then its job).
 # Until S11 defines it the record defers with no_pane and nothing is injected. BORG_RESUME_RELAUNCH_HOOK_FILE (an
 # isolated state dir only) is sourced first so a test can define the hook.
+#
+# CONTRACT: the hook is called ONLY from _rg_run_group, after every dynamic gate (.borg/no-resume, no_session_hooks,
+# per-pass and concurrency caps) has passed, and at most once per session per pass. The consecutive and daily caps
+# were applied in the static pass. After the hook returns 0 the gate re-reads the record: one still in
+# new/scheduled/deferred is forced to `relaunching` (a non-due state the hook's owner moves on), so a hook that
+# forgets to transition can never be called again for the same record. Returns 0 when the hook took ownership.
 _rg_dead_owner() { # <file>
-    local _f="$1" _cause
+    local _f="$1" _cause _rid _st
     _cause="$(jq -r '.cause // "unknown"' "$_f" 2>/dev/null)"
+    _rid="$(jq -r .rid "$_f")"
     if _rg_isolated && [ -n "${BORG_RESUME_RELAUNCH_HOOK_FILE:-}" ]; then
         # shellcheck source=/dev/null
         . "$BORG_RESUME_RELAUNCH_HOOK_FILE" 2>/dev/null
     fi
     if command -v borg_resume_relaunch_hook >/dev/null 2>&1 &&
-        borg_resume_relaunch_hook "$(jq -r .rid "$_f")" "$_cause" "$_f"; then
+        borg_resume_relaunch_hook "$_rid" "$_cause" "$_f"; then
+        if [ -f "$_f" ]; then
+            _st="$(jq -r .state "$_f" 2>/dev/null)"
+            case "$_st" in
+                new | scheduled | deferred)
+                    _rg_to "$_f" relaunching hook_no_transition
+                    _rg_log "relaunch hook left $_rid in $_st; forced to relaunching"
+                    ;;
+            esac
+        fi
         return 0
     fi
     _rg_defer "$_f" no_pane
+    return 1
+}
+
+# Hand the process_death records of the current group (all gates passed) to the relaunch path; the remaining
+# records stay the group. A second record of a session that already has one relaunching does not call the hook again.
+_rg_dispatch_dead() { # <sid>
+    local _f _keep="" _d _o _busy=0
+    _d="$(borg_resume_dir)"
+    for _o in "$_d"/pending/*.json; do
+        [ -f "$_o" ] || continue
+        jq -e --arg s "$1" '.sid == $s and .state == "relaunching"' "$_o" >/dev/null 2>&1 && _busy=1
+    done
+    while IFS= read -r _f; do
+        [ -n "$_f" ] || continue
+        if [ "$(jq -r .class "$_f")" != process_death ]; then
+            _keep="${_keep}${_f}"$'\n'
+        elif [ "$_busy" = 1 ]; then
+            _rg_to "$_f" relaunching relaunch_sibling
+        elif _rg_dead_owner "$_f"; then
+            _busy=1
+            _RG_NINJ=$((_RG_NINJ + 1))
+        fi
+    done <<EOF
+$_RG_GROUP
+EOF
+    _RG_GROUP="${_keep%$'\n'}"
 }
 
 # Static pass for one record. Appends "sid<US>file" to _RG_READY when it should be considered for injection.
@@ -371,12 +421,8 @@ _rg_static() { # <file>
         _rg_note "$_f" container "Container session needs a manual resume ($_f_rid): borg resume run $_f_rid"
         return 0
     fi
-    # RECONCILE-6: S10 records whose owner is gone (process_death: crash, pane_closed, reboot staging) have no live
-    # session to inject into. They never join the injection candidates; they go to the relaunch path (S11).
-    if [ "$_f_class" = process_death ]; then
-        _rg_dead_owner "$_f"
-        return 0
-    fi
+    # S10 records whose owner is gone (process_death) join the group like any other, but _rg_run_group hands them to
+    # the relaunch path (S11) only AFTER the dynamic gates, and never injects them.
     _RG_READY="${_RG_READY}${_f_sid}${_RG_SEP}${_f}"$'\n'
     return 0
 }
@@ -389,7 +435,8 @@ _rg_active_sids() {
     local _f
     for _f in "$(borg_resume_dir)"/pending/*.json; do
         [ -f "$_f" ] || continue
-        jq -r 'select(.state | IN("injecting", "injected", "confirmed")) | .sid' "$_f" 2>/dev/null
+        jq -r --argjson n "$(_rc_now)" 'select(.state | IN("injecting", "injected", "confirmed"))
+            // select(.state == "relaunching" and ((.state_log[-1][1] // 0) > $n - 3600)) | .sid' "$_f" 2>/dev/null
     done | sort -u
 }
 
@@ -594,6 +641,12 @@ _rg_run_group() { # <sid>
         return 0
     fi
 
+    # Dead owners (process_death) never get an injection; they go to the relaunch hook now that the gates passed.
+    _rg_dispatch_dead "$_sid"
+    [ -n "$_RG_GROUP" ] || return 0
+    _lead="$(_rg_lead)"
+    _lrid="$(jq -r .rid "$_lead")"
+
     # Prompt-too-long without the compact flag is notify-only (D3).
     if [ "$(jq -r .class "$_lead")" = prompt_too_long ] && ! resume_prompt_compact_enabled; then
         _rg_each _rg_to notify_only compact_disabled
@@ -722,6 +775,7 @@ _rg_sync_members() {
 
 borg_resume_gate_due_pass() {
     local _f _ord _mode _lines _ready _sid _seen _l _lead
+    _rg_shared_loaded || return 0
     _rg_sync_members
     borg_resume_paused && return 0
     _RG_READY=""
@@ -803,7 +857,8 @@ _rg_stall_transcript() { # <record> <sid> <main-transcript>
 }
 
 borg_resume_gate_confirm_pass() {
-    local _f _st _rid _sid _t _lines _size _inj _il _now _since _wait _tag _la _ll _ls _tt _sf _stall _perm _ev
+    local _f _st _rid _sid _t _lines _size _inj _il _now _since _wait _tag _la _ll _ls _tt _sf _stall _perm _ev _wt
+    _rg_shared_loaded || return 0
     _now="$(_rc_now)"
     _wait="$(_rg_int BORG_RESUME_CONFIRM_WAIT_SEC 90)"
     _stall="$(_rg_int BORG_RESUME_STALL_MIN 10)"
@@ -839,6 +894,8 @@ borg_resume_gate_confirm_pass() {
             esac
             if [ $((_now - _la)) -ge $((_stall * 60)) ]; then
                 _since="$(jq -r '.injected_at // .confirmed_at // .first_seen // 0' "$_f")"
+                # Only a prompt NEWER than the last growth proves a stuck prompt (an answered one is not).
+                case "$_la" in "" | *[!0-9]*) ;; *) [ "$_la" -le "$_since" ] || _since="$_la" ;; esac
                 _perm=0
                 if [ -f "$(borg_resume_events_file "$_sid")" ] && jq -e -R -n --argjson s "$_since" '
                     [inputs | fromjson? | select(type == "object" and .ev == "permission_prompt" and (.t // 0) >= $s)]
@@ -874,6 +931,12 @@ borg_resume_gate_confirm_pass() {
             _ev=tag
         fi
         if [ -n "$_ev" ]; then
+            # The baseline is taken from the file the watchdogs watch (the agent transcript for an agent scope), so
+            # growth is compared like with like.
+            _wt="$(_rg_stall_transcript "$_f" "$_sid" "$_t")"
+            _lines="$(_rg_lines "$_wt")"
+            _size=0
+            [ -f "$_wt" ] && _size="$(wc -c <"$_wt" | tr -d ' ')"
             _rg_to "$_f" confirmed "" ".confirmed_at = \$now | .confirmed_lines = $_lines | .last_lines = $_lines
                 | .confirmed_size = $_size | .last_size = $_size
                 | .last_growth_at = \$now | .confirmed_by = \"$_ev\""

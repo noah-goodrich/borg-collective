@@ -298,6 +298,10 @@ _rl_create() {
     return 0
 }
 
+_rl_human_time() { # <epoch>
+    date -r "$1" '+%a %b %d %H:%M' 2>/dev/null || date -d "@$1" '+%a %b %d %H:%M' 2>/dev/null || printf '%s' "$1"
+}
+
 # Send ONE notice for the records created for this session in this detection, with the exact manual command.
 _rl_flush_notice() {
     local _sid="$1" _proj _msg
@@ -305,8 +309,13 @@ _rl_flush_notice() {
     _proj="$(jq -r '.project // empty' "$(borg_resume_registry_file "$_sid")" 2>/dev/null)"
     if [ "$_rl_new_resume" = 1 ]; then
         _msg="borg-resume: session ${_proj:-$_sid} ended with open work ($_rl_new_cause, $_rl_new_n scope(s)); will"
-        _msg="$_msg relaunch with --resume at epoch ${_rl_new_ra:-?} unless cancelled. Cancel: borg-resume"
-        _msg="$_msg mark-closed ${_proj:-$_sid}"
+        if command -v borg_resume_relaunch_hook >/dev/null 2>&1; then
+            _msg="$_msg relaunch with --resume at $(_rl_human_time "${_rl_new_ra:-0}") unless cancelled."
+            _msg="$_msg Cancel: borg-resume mark-closed ${_proj:-$_sid}"
+        else
+            _msg="$_msg be relaunched once relaunch support lands (pending); until then resume it by hand:"
+            _msg="$_msg claude --resume $_sid. Cancel: borg-resume mark-closed ${_proj:-$_sid}"
+        fi
     else
         _msg="borg-resume: session ${_proj:-$_sid} ended with open work ($_rl_new_cause) and cannot be relaunched"
         _msg="$_msg automatically; resume it by hand: claude --resume $_sid"
@@ -499,6 +508,10 @@ borg_resume_liveness_pass() {
     local _d _f _sid _hours _cut
     command -v jq >/dev/null 2>&1 || return 0
     borg_resume_disabled_env && return 0
+    if ! { command -v borg_resume_shared_ok >/dev/null 2>&1 && borg_resume_shared_ok; }; then
+        _rw_log "liveness: resume-shared.sh not loaded, pass skipped"
+        return 0
+    fi
     if ! declare -F _bi_tmux >/dev/null 2>&1; then
         # shellcheck source=/dev/null
         . "${BORG_RESUME_LIBDIR:?}/inject.sh" 2>/dev/null || return 0
