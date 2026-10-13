@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # S3 (borg-resume): the host resume ledger is bind-mounted into drone containers, and
-# `drone up <project> --resume <sid>` relaunches claude with --resume. Project names are invented.
+# `drone up <repository> --resume <sid>` relaunches claude with --resume. Repository names are invented.
 # No container is started: docker and tmux are stubs that log to $TRACE.
 
 load test_helper/setup
@@ -96,7 +96,7 @@ _claude_keys() { grep -E '^tmux send-keys' "$TRACE" | grep 'claude --model' || t
     [[ "$(_claude_keys)" != *"--resume"* ]]
 }
 
-@test "up --resume accepts the flag before the project" {
+@test "up --resume accepts the flag before the repository" {
     run "$DRONE" up --resume "$SID" "$PROJ"
     [ "$status" -eq 0 ]
     [[ "$(_claude_keys)" == *"--resume $SID"* ]]
@@ -119,7 +119,7 @@ _claude_keys() { grep -E '^tmux send-keys' "$TRACE" | grep 'claude --model' || t
     [ -z "$(_claude_keys)" ]
 }
 
-@test "up on a devcontainer project creates the host ledger dir before compose up" {
+@test "up on a devcontainer repository creates the host ledger dir before compose up" {
     mkdir -p "$PROJ/.devcontainer"
     : > "$PROJ/.devcontainer/docker-compose.yml"
     [ ! -d "$BORG_RESUME_DIR" ]

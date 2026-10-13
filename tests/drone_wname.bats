@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # Tests for drone's registry-owned tmux window names: derive-on-up, explicit names respected, either
-# form accepted as an argument, long-named live windows still found, and `--all` handing PROJECT
-# names (never window names) to the container cycle. Project names below are invented.
+# form accepted as an argument, long-named live windows still found, and `--all` handing REPOSITORY
+# names (never window names) to the container cycle. Repository names below are invented.
 
 load test_helper/setup
 
@@ -41,7 +41,7 @@ MOCK
     chmod +x "$MOCK_BIN/tmux"
 
     # borg add stub: registers basename(dir) if absent, then CLOBBERS tmux_window like the real
-    # `borg add` does (null, because no window named after the project exists) -- drone must repair it.
+    # `borg add` does (null, because no window named after the repository exists) -- drone must repair it.
     cat > "$MOCK_BIN/borg" <<'MOCK'
 #!/usr/bin/env bash
 echo "borg $*" >> "$TRACE"
@@ -95,7 +95,7 @@ _new_window_names() { grep -E '^tmux (new-window|new-session)' "$TRACE" | sed -E
     [ "$(_new_window_names)" = "fox" ]
 }
 
-@test "up with a short name argument resolves to the project" {
+@test "up with a short name argument resolves to the repository" {
     _register amber-fox-labs "$PROJ" fox
     run "$DRONE" up fox
     [ "$status" -eq 0 ]
@@ -144,7 +144,7 @@ _new_window_names() { grep -E '^tmux (new-window|new-session)' "$TRACE" | sed -E
     grep -q 'select-layout -t wtest:fox' "$TRACE"
 }
 
-@test "claude targets the window name, not the project name" {
+@test "claude targets the window name, not the repository name" {
     _register amber-fox-labs "$PROJ" fox
     echo fox > "$WINDOWS"
     run "$DRONE" claude amber-fox-labs
@@ -154,7 +154,7 @@ _new_window_names() { grep -E '^tmux (new-window|new-session)' "$TRACE" | sed -E
     ! grep -q 'wtest:amber-fox-labs' "$TRACE"
 }
 
-@test "restart --all passes PROJECT names (not window names) to the cycle" {
+@test "restart --all passes REPOSITORY names (not window names) to the cycle" {
     mkdir -p "$PROJ/.devcontainer" "$OTHER/.devcontainer"
     touch "$PROJ/.devcontainer/docker-compose.yml" "$OTHER/.devcontainer/docker-compose.yml"
     _register amber-fox-labs "$PROJ" fox
@@ -186,14 +186,14 @@ _new_window_names() { grep -E '^tmux (new-window|new-session)' "$TRACE" | sed -E
     [[ "$output" == *"Restarted 1 repository(ies)"* ]]
 }
 
-@test "an unregistered project falls back to its own name when the registry is unusable" {
+@test "an unregistered repository falls back to its own name when the registry is unusable" {
     echo 'not json' > "$BORG_REGISTRY"
     run "$DRONE" up "$PROJ"
     [ "$status" -eq 0 ]
     [ "$(_new_window_names)" = "amber-fox-labs" ]
 }
 
-@test "cortex targets the window name, not the project name" {
+@test "cortex targets the window name, not the repository name" {
     _register amber-fox-labs "$PROJ" fox
     echo fox > "$WINDOWS"
     run "$DRONE" cortex fox
@@ -202,7 +202,7 @@ _new_window_names() { grep -E '^tmux (new-window|new-session)' "$TRACE" | sed -E
     ! grep -q 'wtest:amber-fox-labs' "$TRACE"
 }
 
-# ── drone must not register a twin of a project whose name is not its folder's basename ──────────────
+# ── drone must not register a twin of a repository whose name is not its folder's basename ──────────────
 # A monorepo subfolder is registered as `widgets`; `borg add` alone would name it `widget-kit`. These
 # use the REAL registry writer (borg_core.registry.cli) behind a call-logging `borg` shim, because the
 # stub above names by basename too and would hide exactly the bug.
@@ -220,7 +220,7 @@ MOCK
 
 _entries_for() { jq -r --arg d "$1" '[.projects | to_entries[] | select(.value.path == $d)] | length' "$BORG_REGISTRY"; }
 
-@test "up twice on a non-basename project leaves one entry, same name and tmux_window" {
+@test "up twice on a non-basename repository leaves one entry, same name and tmux_window" {
     _real_borg
     SUB="$BATS_TEST_TMPDIR/dev/monorepo/libs/widget-kit"
     mkdir -p "$SUB"
@@ -239,7 +239,7 @@ _entries_for() { jq -r --arg d "$1" '[.projects | to_entries[] | select(.value.p
     [[ "$output" != *"Registered: widget-kit"* ]]
 }
 
-@test "drone does not call borg add for an already-registered project" {
+@test "drone does not call borg add for an already-registered repository" {
     _register widgets "$BATS_TEST_TMPDIR/dev/widget-kit" wdg
     mkdir -p "$BATS_TEST_TMPDIR/dev/widget-kit"
     run "$DRONE" up widgets
@@ -247,7 +247,7 @@ _entries_for() { jq -r --arg d "$1" '[.projects | to_entries[] | select(.value.p
     ! grep -q '^borg add' "$TRACE"
 }
 
-@test "drone registers a brand-new project under the name it was given" {
+@test "drone registers a brand-new repository under the name it was given" {
     _real_borg
     run "$DRONE" up "$PROJ"
     [ "$status" -eq 0 ]

@@ -146,7 +146,7 @@ _row_field() {
 # stops borg's hooks firing on those sessions; nothing stopped the transcript write itself.
 #
 # Pruning that one directory is safe because hooks/borg-link-down.sh declares "'/' can never be a
-# real borg project" and bails on it — so nothing a human cares about can legitimately live there.
+# real borg repository" and bails on it — so nothing a human cares about can legitimately live there.
 
 _seed_probe_dir() {
     export BORG_USAGE_PROBE_TRANSCRIPT_DIR="${BATS_TEST_TMPDIR}/probe-transcripts"

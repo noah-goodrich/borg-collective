@@ -4,7 +4,7 @@ Usage:
   python3 build_chains.py <gather.json> <programs-dir> [<programs-dir> ...] [--out chains.json]
 
 Portable: no hardcoded paths. <programs-dir> is any directory containing *.json manifests (e.g. the
-committed docs/pr158-rider/manifests/, or a project's .borg/programs/). The committed chains.json in
+committed docs/pr158-rider/manifests/, or a repository's .borg/programs/). The committed chains.json in
 this directory was produced from live recon data on 2026-08-20; render_chains_md.py on it reproduces
 rendered/chains.md byte-for-byte, so the render step is runnable with no machine-local data.
 """

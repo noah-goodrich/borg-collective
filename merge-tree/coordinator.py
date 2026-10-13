@@ -313,9 +313,9 @@ def load_recon_items(path: str | None) -> list[dict[str, Any]]:
     if isinstance(doc, dict):
         if isinstance(doc.get("items"), list):
             return doc["items"]
-        by_project = doc.get("items_by_project")
-        if isinstance(by_project, dict):
-            return [it for items in by_project.values() for it in (items or [])]
+        by_repository = doc.get("items_by_project")
+        if isinstance(by_repository, dict):
+            return [it for items in by_repository.values() for it in (items or [])]
     return []
 
 
@@ -324,9 +324,9 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
 
     Returns `(written_paths, warnings)`. Each manifest is written back to ITS OWN file, in whichever
     root holds it (`.stacks/`, `.borg/chains/` or the legacy `.borg/programs/`), found from the `_path`
-    discover() stamped onto it. The earlier design keyed a shared map by chain name — so two projects
+    discover() stamped onto it. The earlier design keyed a shared map by chain name — so two repositories
     declaring the same name collapsed to one entry, and the loser's manifest was silently written into
-    the OTHER project's directory (the exact multi-repo pattern S4 proposes: the same manifest landed
+    the OTHER repository's directory (the exact multi-repo pattern S4 proposes: the same manifest landed
     in each owning repo). Keying per-manifest makes that overwrite structurally impossible; the
     duplicate-name condition itself is still surfaced as a named warning because two same-named
     manifests will fight over edges downstream, and only a human knows which is right. Idempotent:
@@ -340,31 +340,31 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
     seen: dict[str, str] = {}
     for manifest in manifests:
         chain = _id_of(manifest)
-        project_dir = _project_dir_of(manifest)
+        repository_dir = _repository_dir_of(manifest)
         source_path = str(manifest.get("_path") or "")
-        if not chain or not project_dir:
+        if not chain or not repository_dir:
             # NAMED ONLY WHEN THERE IS SOMETHING TO NAME, and the distinction is deliberate.
             #
             # A manifest with NO `_path` never came from `discover` (which always stamps it), so it
             # is a caller's hand-built dict rather than a file on disk -- nothing was lost and
             # `test_a_manifest_with_no_path_stamp_is_skipped_not_raised` pins that silence.
             #
-            # A manifest WITH a `_path` that `_project_dir_of` cannot resolve is the opposite: a real
+            # A manifest WITH a `_path` that `_repository_dir_of` cannot resolve is the opposite: a real
             # file under none of the three manifest directories, dropped at exit 0. That is the
             # confident-empty shape this tree keeps removing, so it is reported.
-            if source_path and not project_dir:
+            if source_path and not repository_dir:
                 warnings.append(f"skipped {source_path}: not under .borg/chains, .borg/programs or .stacks")
             continue
         if chain in seen and seen[chain] != source_path:
-            # Keyed by SOURCE FILE, not project dir (opus round 2, finding 1): two files in the SAME
-            # project declaring one id is just as real a contention as two projects — and the
+            # Keyed by SOURCE FILE, not repository dir (opus round 2, finding 1): two files in the SAME
+            # repository declaring one id is just as real a contention as two repositories — and the
             # in-place rewrite below is what stops the second one silently overwriting the first.
             warnings.append(
                 f"chain {chain!r} is declared twice ({seen[chain]} and {source_path}) — "
                 f"each file rewritten in place, but they will contend downstream"
             )
         seen.setdefault(chain, source_path)
-        path, warning = _rewrite_in_place(manifest, project_dir, source_path)
+        path, warning = _rewrite_in_place(manifest, repository_dir, source_path)
         if warning:
             warnings.append(warning)
         else:
@@ -372,7 +372,7 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
     return written, warnings
 
 
-def _rewrite_in_place(manifest: dict[str, Any], project_dir: str, source_path: str) -> tuple[str, str]:
+def _rewrite_in_place(manifest: dict[str, Any], repository_dir: str, source_path: str) -> tuple[str, str]:
     """`(written_path, "")` or `("", warning)` for one manifest read from `source_path`.
 
     NO WRITE MAY REDUCE A MANIFEST'S ROW COUNT ON DISK. Whatever `discover` returned is written back
@@ -395,7 +395,7 @@ def _rewrite_in_place(manifest: dict[str, Any], project_dir: str, source_path: s
         )
     try:
         written = shell.write_manifest(
-            project_dir, manifest, os.path.basename(source_path), directory=os.path.dirname(source_path)
+            repository_dir, manifest, os.path.basename(source_path), directory=os.path.dirname(source_path)
         )
     except shell.InvalidManifest as exc:
         return "", f"refused to rewrite {source_path}: {exc}"
@@ -412,19 +412,19 @@ def _rows_on_disk(path: str) -> int:
     return len(rows) if isinstance(rows, list) else 0
 
 
-def _project_dir_of(manifest: dict[str, Any]) -> str:
-    """One manifest's project root from the `_path` discover() stamped onto it, or ""."""
+def _repository_dir_of(manifest: dict[str, Any]) -> str:
+    """One manifest's repository root from the `_path` discover() stamped onto it, or ""."""
     path = str(manifest.get("_path") or "")
     if not path:
         return ""
-    # path = <project_dir>/{.borg/chains,.borg/programs,.stacks}/<name>.json
+    # path = <repository_dir>/{.borg/chains,.borg/programs,.stacks}/<name>.json
     #
     # ALL THREE NAMES, because this recovers a root by SPLITTING ON THE DIRECTORY NAME and the
     # directory has had more than one (AC7 renamed one, and `.stacks/` is the tool-neutral second
     # root). A single-name split against another name returns the WHOLE PATH unchanged -- `rsplit`
     # with no match yields the original -- so `sync_borg` would then treat the manifest file itself as
-    # a project root and write outside the tree. That fails silently: the caller only checks
-    # `if not project_dir`, and a non-empty wrong answer passes.
+    # a repository root and write outside the tree. That fails silently: the caller only checks
+    # `if not repository_dir`, and a non-empty wrong answer passes.
     for name in (
         os.path.join(".borg", shell.CHAINS_DIRNAME),
         os.path.join(".borg", shell.LEGACY_DIRNAME),
@@ -451,7 +451,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
     # PM6: plan exits non-zero only on malformed input — a refused MANIFEST is malformed input, a
-    # directory-level note (absent project path in the registry sweep) is not, and neither is a stray
+    # directory-level note (absent repository path in the registry sweep) is not, and neither is a stray
     # JSON file with no rows list, which is skipped with a named note. Either way the audit for every
     # valid manifest still runs and prints (PM2: one bad manifest must not blank the spine); the
     # file-level failure is reflected in the exit code AFTER the findings print. WHICH warnings are
@@ -493,9 +493,9 @@ def cmd_sync(args: argparse.Namespace) -> int:
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
     # Refuse only on FILE-level refusals (a malformed manifest must never half-sync). Directory-level
-    # notes — a registry row whose project is absent on this machine — leave nothing to half-write,
+    # notes — a registry row whose repository is absent on this machine — leave nothing to half-write,
     # and refusing on them would make one stale registry entry veto the whole sync (PM9: the
-    # personal machine must work with a different project set).
+    # personal machine must work with a different repository set).
     fatal = shell.refused_manifest_paths(warnings)
     if fatal:
         print(f"sync: {len(fatal)} malformed manifest(s) — refusing to sync", file=sys.stderr)
@@ -532,8 +532,8 @@ def main() -> int:
             dest="chains_dir",
             action="append",
             default=[],
-            metavar="PROJECT_DIR",
-            help="project root to sweep for .stacks/*.json and .borg/chains/*.json (repeatable)",
+            metavar="REPOSITORY_DIR",
+            help="repository root to sweep for .stacks/*.json and .borg/chains/*.json (repeatable)",
         )
         if name == "plan":
             sp.add_argument(

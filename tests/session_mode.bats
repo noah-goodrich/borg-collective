@@ -37,7 +37,7 @@ setup() {
     [ "$output" = "orchestrator" ]
 }
 
-@test "session_mode: trailing slash on project path still returns project" {
+@test "session_mode: trailing slash on repository path still returns project" {
     run bash -c "source '$LIB'; _borg_session_mode '$HOME/dev/reveal/'"
     [ "$status" -eq 0 ]
     [ "$output" = "project" ]

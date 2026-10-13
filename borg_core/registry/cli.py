@@ -6,7 +6,7 @@ would be ceremony. `backfill-repo` lives here rather than in `borg tidy` because
 `repo` field `cmd_add` writes, and one writer of a field is easier to keep honest than two.
 
 Deliberately NOT argparse (unlike borg_core.recon.cli): the original cmd_add/cmd_rm have zero flag
-surface -- each reads only `$1` (`local ppath="${1:-$PWD}"` / `local project="${1:-}"`) and never
+surface -- each reads only `$1` (`local ppath="${1:-$PWD}"` / `local repository="${1:-}"`) and never
 references `$2` onward, so extra positional args are silently ignored, and a value like "-h" or
 "--help" is treated as ordinary data (a literal path/repository name), not a flag. argparse's
 positional matching would reject extra args and auto-intercept -h/--help, which are both

@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # borg's window lookups accept a live window under EITHER form: the registry's `tmux_window` (the short
-# name) or the project name (a window opened before short names existed). Covers `borg switch`, the
-# reap overlay and `borg color`. Project names are invented.
+# name) or the repository name (a window opened before short names existed). Covers `borg switch`, the
+# reap overlay and `borg color`. Repository names are invented.
 
 load test_helper/setup
 
@@ -56,7 +56,7 @@ _seed() {  # json
     [ "$(jq -r '.projects["widget-factory"].tmux_window' "$BORG_REGISTRY")" = "null" ]
 }
 
-@test "reap: a project whose SHORT-named window is live is not downgraded" {
+@test "reap: a repository whose SHORT-named window is live is not downgraded" {
     export BORG_REAP_STALE_HOURS=12
     _seed '{"projects":{"widget-factory":{"path":"/tmp/wf","status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":"wf"}}}'
     export LIVE_WINDOWS="wf"
@@ -64,7 +64,7 @@ _seed() {  # json
     [ "$output" = "active" ]
 }
 
-@test "reap: a project whose LONG-named window is live is not downgraded, and a dead one still is" {
+@test "reap: a repository whose LONG-named window is live is not downgraded, and a dead one still is" {
     export BORG_REAP_STALE_HOURS=12
     _seed '{"projects":{"widget-factory":{"path":"/tmp/wf","status":"active","last_activity":"2020-01-01T00:00:00Z","tmux_window":"wf"}}}'
     local cmd="source '$BORG_HOME/lib/reaper.sh'; source '$BORG_HOME/lib/registry.zsh'; source '$BORG_HOME/lib/tmux.zsh'; cat '$BORG_REGISTRY' | borg_reap_overlay | jq -r '.projects[\"widget-factory\"].status'"

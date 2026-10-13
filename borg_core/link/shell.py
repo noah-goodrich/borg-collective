@@ -745,12 +745,12 @@ def sweep(repositories: dict, now: int | None = None) -> dict:
 
     since = grid.sweep_since(now_epoch() if now is None else now, sweep_window_days())
     with tempfile.TemporaryDirectory(prefix="borg-link.") as workdir:
-        projects_file = os.path.join(workdir, "projects.json")
+        repositories_file = os.path.join(workdir, "projects.json")
         try:
-            recon_shell.write_repositories_file(repositories, projects_file)
+            recon_shell.write_repositories_file(repositories, repositories_file)
         except (OSError, TypeError, ValueError) as exc:
             return grid.no_sweep([f"sweep: could not stage the repository list ({exc}) -- no adapter ran"])
-        tracks = recon_shell.fanout(since, projects_file, adapters, timeout=sweep_timeout())
+        tracks = recon_shell.fanout(since, repositories_file, adapters, timeout=sweep_timeout())
     return {"swept": True, "since": since, "tracks": tracks, "warnings": grid.track_warnings(tracks)}
 
 

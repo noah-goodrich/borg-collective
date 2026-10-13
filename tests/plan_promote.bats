@@ -102,7 +102,7 @@ setup() {
     setup_temp_dirs
 
     # Create an isolated fake git repo for tests to use as a repo root.
-    FAKE_REPO="${BATS_TEST_TMPDIR}/myproject"
+    FAKE_REPO="${BATS_TEST_TMPDIR}/myrepo"
     mkdir -p "$FAKE_REPO"
     git -C "$FAKE_REPO" init -q
     git -C "$FAKE_REPO" config user.email "test@test.com"

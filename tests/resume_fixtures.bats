@@ -419,9 +419,9 @@ print(m.enum_ok('notification_type', 'my_secret_plan'), m.enum_ok('notification_
 
 @test "harness hook: /private/var, /tmp, spaced and Windows paths are dropped" {
     command -v python3 >/dev/null || skip "python3 not installed"
-    _hook '{"kc3":"/private/var/folders/xx/secret-project","message":"/tmp/secretproj/file.txt","error_details":"/Users/bob/My Docs/tax return/x.pdf","kd4":"C:\\Users\\bob\\taxes\\x.pdf"}'
+    _hook '{"kc3":"/private/var/folders/xx/secret-repository","message":"/tmp/secretproj/file.txt","error_details":"/Users/bob/My Docs/tax return/x.pdf","kd4":"C:\\Users\\bob\\taxes\\x.pdf"}'
     run cat "$BORG_SPIKE_DIR/payloads.jsonl"
-    _absent "$output" 'secret-project' || false
+    _absent "$output" 'secret-repository' || false
     _absent "$output" 'secretproj' || false
     _absent "$output" 'tax return' || false
     _absent "$output" 'bob' || false

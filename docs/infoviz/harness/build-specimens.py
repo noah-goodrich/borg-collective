@@ -106,17 +106,17 @@ def shuffle_story(story, rng):
 def build_registry(rng):
     """A fixture registry with a real answer to 'what needs your attention?'
 
-    Live borg ls currently shows 20/20 projects idle, so check A has no correct answer to find. The
-    fixture plants one waiting and one active project among idles, at a random position.
+    Live borg ls currently shows 20/20 repositories idle, so check A has no correct answer to find. The
+    fixture plants one waiting and one active repository among idles, at a random position.
     """
     names = [
-        "project-alpha", "project-beta", "project-gamma", "project-delta",
-        "project-epsilon", "project-zeta", "project-eta", "project-theta",
-        "project-iota", "project-mu", "project-kappa", "project-lambda",
+        "repository-alpha", "repository-beta", "repository-gamma", "repository-delta",
+        "repository-epsilon", "repository-zeta", "repository-eta", "repository-theta",
+        "repository-iota", "repository-mu", "repository-kappa", "repository-lambda",
     ]
     rng.shuffle(names)
     waiting, active = names[0], names[1]
-    projects = {}
+    repositories = {}
     for i, n in enumerate(names):
         if n == waiting:
             status, last, summary = "waiting", "2026-08-10T18:40:00Z", "Blocked on review from a colleague"
@@ -126,15 +126,15 @@ def build_registry(rng):
             status = "idle"
             last = "2026-0%d-%02dT12:00:00Z" % (rng.randint(4, 7), rng.randint(1, 28))
             summary = None
-        projects[n] = {
+        repositories[n] = {
             "path": "/Users/<user>/dev/%s" % n,
             "status": status,
             "last_activity": last,
             "summary": summary,
         }
-    return {"projects": projects}, {
-        "waiting_project": waiting,
-        "active_project": active,
+    return {"projects": repositories}, {
+        "waiting_repository": waiting,
+        "active_repository": active,
         "n_idle": len(names) - 2,
     }
 

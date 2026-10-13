@@ -47,7 +47,7 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/tmux"
 
-    # Mock docker so a devcontainer project dir doesn't need a real container.
+    # Mock docker so a devcontainer repository dir doesn't need a real container.
     cat > "$MOCK_BIN/docker" <<'EOF'
 #!/usr/bin/env bash
 echo "docker $*" >> "$TRACE"
@@ -126,7 +126,7 @@ _split_call() {
 
 # ─── devcontainer-aware pane creation ──────────────────────────────────────────
 
-@test "pane in a devcontainer project execs into the container shell" {
+@test "pane in a devcontainer repository execs into the container shell" {
     export PDIR="${BATS_TEST_TMPDIR}/devproj"
     mkdir -p "$PDIR/.devcontainer"
     touch "$PDIR/.devcontainer/docker-compose.yml"
@@ -136,7 +136,7 @@ _split_call() {
     grep -q "tmux send-keys -t %1 docker compose" "$TRACE"
 }
 
-@test "pane in a plain (non-devcontainer) project cds into the project dir" {
+@test "pane in a plain (non-devcontainer) repository cds into the repository dir" {
     export PDIR="${BATS_TEST_TMPDIR}/plainproj"
     mkdir -p "$PDIR"
 

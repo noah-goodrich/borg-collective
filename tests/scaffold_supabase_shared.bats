@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # Tests for `drone scaffold --supabase-shared <dir>`: template rendering,
-# NO per-project supabase init/network, and the shared borg-hooks lifecycle
+# NO per-repository supabase init/network, and the shared borg-hooks lifecycle
 # scripts (pre-up.sh idempotent start-once, post-down.sh no-op).
 #
 # INERT feature: these tests exercise scaffolding + hook script logic only.
@@ -14,23 +14,23 @@ TEMPLATES="${BATS_TEST_DIRNAME}/../templates/supabase-shared"
 setup() {
     setup_temp_dirs
 
-    export TEST_PROJECT="${BATS_TEST_TMPDIR}/myapp"
-    mkdir -p "$TEST_PROJECT"
+    export TEST_REPOSITORY="${BATS_TEST_TMPDIR}/myapp"
+    mkdir -p "$TEST_REPOSITORY"
 
     setup_mock_bin
 }
 
 # ─── drone scaffold --supabase-shared ─────────────────────────────────────────
 
-@test "scaffold --supabase-shared: refuses when project dir does not exist" {
+@test "scaffold --supabase-shared: refuses when repository dir does not exist" {
     run "$DRONE" scaffold --supabase-shared "${BATS_TEST_TMPDIR}/does-not-exist"
     [ "$status" -ne 0 ]
     [[ "$output" == *"does not exist"* ]] || false
 }
 
 @test "scaffold --supabase-shared: refuses when .devcontainer already exists" {
-    mkdir "$TEST_PROJECT/.devcontainer"
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    mkdir "$TEST_REPOSITORY/.devcontainer"
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -ne 0 ]
     [[ "$output" == *".devcontainer/"* ]] || false
 }
@@ -38,90 +38,90 @@ setup() {
 @test "scaffold --supabase-shared: does NOT require supabase CLI at scaffold time" {
     # No supabase mock installed in $MOCK_BIN — must still succeed, since the
     # shared model never runs 'supabase init' during scaffold.
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
 }
 
-@test "scaffold --supabase-shared: does NOT create a supabase/ dir in the project" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+@test "scaffold --supabase-shared: does NOT create a supabase/ dir in the repository" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    [ ! -d "$TEST_PROJECT/supabase" ]
+    [ ! -d "$TEST_REPOSITORY/supabase" ]
 }
 
 @test "scaffold --supabase-shared: docker-compose.yml joins the fixed shared network" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    [ -f "$TEST_PROJECT/.devcontainer/docker-compose.yml" ]
-    ! grep -q '__PROJECT_NAME__' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
-    ! grep -q '__SCHEMA__' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
-    grep -q 'supabase_network_stillpoint' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
-    grep -q 'supabase_db_stillpoint' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
-    grep -q 'MYAPP_DB_URL' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+    [ -f "$TEST_REPOSITORY/.devcontainer/docker-compose.yml" ]
+    ! grep -q '__PROJECT_NAME__' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
+    ! grep -q '__SCHEMA__' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
+    grep -q 'supabase_network_stillpoint' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
+    grep -q 'supabase_db_stillpoint' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
+    grep -q 'MYAPP_DB_URL' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
 }
 
 @test "scaffold --supabase-shared: attaches via the supabase_shared network alias" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    grep -q '^\s*- supabase_shared$' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
-    grep -qE '^\s*supabase_shared:$' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+    grep -q '^\s*- supabase_shared$' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
+    grep -qE '^\s*supabase_shared:$' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
 }
 
-@test "scaffold --supabase-shared: DB URL and API URL are schema-scoped (default = project name)" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+@test "scaffold --supabase-shared: DB URL and API URL are schema-scoped (default = repository name)" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    grep -q 'search_path%3Dmyapp' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
-    grep -q 'MYAPP_SUPABASE_URL: http://supabase_kong_stillpoint:8000' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+    grep -q 'search_path%3Dmyapp' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
+    grep -q 'MYAPP_SUPABASE_URL: http://supabase_kong_stillpoint:8000' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
 }
 
-@test "scaffold --supabase-shared: --schema overrides the default project-name schema" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT" --schema custom_schema
+@test "scaffold --supabase-shared: --schema overrides the default repository-name schema" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY" --schema custom_schema
     [ "$status" -eq 0 ]
-    grep -q 'search_path%3Dcustom_schema' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
-    ! grep -q 'search_path%3Dmyapp' "$TEST_PROJECT/.devcontainer/docker-compose.yml"
+    grep -q 'search_path%3Dcustom_schema' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
+    ! grep -q 'search_path%3Dmyapp' "$TEST_REPOSITORY/.devcontainer/docker-compose.yml"
 }
 
-@test "scaffold --supabase-shared: hyphenated project name yields an underscored schema" {
-    export TEST_HYPHEN_PROJECT="${BATS_TEST_TMPDIR}/my-app"
-    mkdir -p "$TEST_HYPHEN_PROJECT"
-    run "$DRONE" scaffold --supabase-shared "$TEST_HYPHEN_PROJECT"
+@test "scaffold --supabase-shared: hyphenated repository name yields an underscored schema" {
+    export TEST_HYPHEN_REPOSITORY="${BATS_TEST_TMPDIR}/my-app"
+    mkdir -p "$TEST_HYPHEN_REPOSITORY"
+    run "$DRONE" scaffold --supabase-shared "$TEST_HYPHEN_REPOSITORY"
     [ "$status" -eq 0 ]
-    grep -q 'search_path%3Dmy_app' "$TEST_HYPHEN_PROJECT/.devcontainer/docker-compose.yml"
-    ! grep -q 'search_path%3Dmy-app' "$TEST_HYPHEN_PROJECT/.devcontainer/docker-compose.yml"
-    grep -q 'the `my_app` schema via `search_path`' "$TEST_HYPHEN_PROJECT/CLAUDE.md"
+    grep -q 'search_path%3Dmy_app' "$TEST_HYPHEN_REPOSITORY/.devcontainer/docker-compose.yml"
+    ! grep -q 'search_path%3Dmy-app' "$TEST_HYPHEN_REPOSITORY/.devcontainer/docker-compose.yml"
+    grep -q 'the `my_app` schema via `search_path`' "$TEST_HYPHEN_REPOSITORY/CLAUDE.md"
 }
 
 @test "scaffold --supabase-shared: appends the shared-stack block to a new CLAUDE.md" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    [ -f "$TEST_PROJECT/CLAUDE.md" ]
-    grep -q '## Local Supabase — ONE shared stack' "$TEST_PROJECT/CLAUDE.md"
-    grep -q 'the `myapp` schema via `search_path`' "$TEST_PROJECT/CLAUDE.md"
-    grep -q 'borg-supabase-guard.sh' "$TEST_PROJECT/CLAUDE.md"
-    ! grep -q '__SCHEMA__' "$TEST_PROJECT/CLAUDE.md"
+    [ -f "$TEST_REPOSITORY/CLAUDE.md" ]
+    grep -q '## Local Supabase — ONE shared stack' "$TEST_REPOSITORY/CLAUDE.md"
+    grep -q 'the `myapp` schema via `search_path`' "$TEST_REPOSITORY/CLAUDE.md"
+    grep -q 'borg-supabase-guard.sh' "$TEST_REPOSITORY/CLAUDE.md"
+    ! grep -q '__SCHEMA__' "$TEST_REPOSITORY/CLAUDE.md"
 }
 
 @test "scaffold --supabase-shared: appends (not overwrites) an existing CLAUDE.md" {
-    printf '# myapp\n\nExisting project notes.\n' > "$TEST_PROJECT/CLAUDE.md"
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    printf '# myapp\n\nExisting repository notes.\n' > "$TEST_REPOSITORY/CLAUDE.md"
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    grep -q 'Existing project notes.' "$TEST_PROJECT/CLAUDE.md"
-    grep -q '## Local Supabase — ONE shared stack' "$TEST_PROJECT/CLAUDE.md"
+    grep -q 'Existing repository notes.' "$TEST_REPOSITORY/CLAUDE.md"
+    grep -q '## Local Supabase — ONE shared stack' "$TEST_REPOSITORY/CLAUDE.md"
 }
 
-@test "scaffold --supabase-shared: writes devcontainer.json with project name" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+@test "scaffold --supabase-shared: writes devcontainer.json with repository name" {
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    [ -f "$TEST_PROJECT/.devcontainer/devcontainer.json" ]
-    grep -q '"name": "myapp"' "$TEST_PROJECT/.devcontainer/devcontainer.json"
+    [ -f "$TEST_REPOSITORY/.devcontainer/devcontainer.json" ]
+    grep -q '"name": "myapp"' "$TEST_REPOSITORY/.devcontainer/devcontainer.json"
 }
 
 @test "scaffold --supabase-shared: copies borg-hooks scripts as executable" {
-    run "$DRONE" scaffold --supabase-shared "$TEST_PROJECT"
+    run "$DRONE" scaffold --supabase-shared "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    [ -x "$TEST_PROJECT/.devcontainer/borg-hooks/pre-up.sh" ]
-    [ -x "$TEST_PROJECT/.devcontainer/borg-hooks/post-down.sh" ]
-    grep -q 'supabase_db_stillpoint' "$TEST_PROJECT/.devcontainer/borg-hooks/pre-up.sh"
-    grep -q 'no-op' "$TEST_PROJECT/.devcontainer/borg-hooks/post-down.sh"
+    [ -x "$TEST_REPOSITORY/.devcontainer/borg-hooks/pre-up.sh" ]
+    [ -x "$TEST_REPOSITORY/.devcontainer/borg-hooks/post-down.sh" ]
+    grep -q 'supabase_db_stillpoint' "$TEST_REPOSITORY/.devcontainer/borg-hooks/pre-up.sh"
+    grep -q 'no-op' "$TEST_REPOSITORY/.devcontainer/borg-hooks/post-down.sh"
 }
 
 # ─── pre-up.sh: idempotent start-once behavior ────────────────────────────────
@@ -173,7 +173,7 @@ EOF
     grep -q "supabase start (pwd=$STILLPOINT_DIR)" "$SUPABASE_TRACE"
 }
 
-@test "shared pre-up.sh: never runs a per-project 'supabase init'" {
+@test "shared pre-up.sh: never runs a per-repository 'supabase init'" {
     cat > "$MOCK_BIN/docker" <<'EOF'
 #!/usr/bin/env bash
 [[ "$1" == "inspect" ]] && echo "false"
@@ -216,7 +216,7 @@ EOF
     [ ! -s "$SUPABASE_CALLED" ]
 }
 
-# ─── regression: --supabase (per-project) path is untouched ──────────────────
+# ─── regression: --supabase (per-repository) path is untouched ──────────────────
 # NOTE: cannot reliably assert "supabase CLI missing" behavior here — drone.zsh
 # resets PATH to include /opt/homebrew/bin which hosts the real supabase CLI on
 # dev machines (same caveat documented in tests/scaffold_supabase.bats). The

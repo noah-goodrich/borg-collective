@@ -99,7 +99,7 @@ def repository_state_key(directory: str | os.PathLike[str], repo: object = FORK_
     slugs: paths carry spaces and slashes, and a slug of two different paths can collide.
 
     Siblings, byte-identical output required: `_borg_repository_state_key` in lib/borg-hooks.sh and
-    lib/state-root.zsh (pinned by tests/project_state.bats).
+    lib/state-root.zsh (pinned by tests/repository_state.bats).
 
     `repo` is the fast path for registry-driven readers: pass the registry entry's `repo` field (the
     git common dir `borg add` recorded; None/"" when the entry has none) and no git is forked, so

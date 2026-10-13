@@ -31,12 +31,12 @@ def _manifest(chain, rows):
     return {"_id": chain, "rows": rows}
 
 
-def _write_stacks(tmp_path, project, stem, rows, **declared):
-    """The tool-neutral second root: `<project>/.stacks/<stem>.json`, no `program` key unless declared."""
-    d = tmp_path / project / ".stacks"
+def _write_stacks(tmp_path, repository, stem, rows, **declared):
+    """The tool-neutral second root: `<repository>/.stacks/<stem>.json`, no `program` key unless declared."""
+    d = tmp_path / repository / ".stacks"
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{stem}.json").write_text(json.dumps({"rows": rows, **declared}))
-    return str(tmp_path / project)
+    return str(tmp_path / repository)
 
 
 def _tree_bytes(root):
@@ -44,18 +44,18 @@ def _tree_bytes(root):
     return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
 
 
-def _write_manifest_dir(tmp_path, project, stem, rows, directory="chains", **declared):
-    """A project whose `.borg/<directory>/<stem>.json` declares `rows` and, by default, NO `program` key.
+def _write_manifest_dir(tmp_path, repository, stem, rows, directory="chains", **declared):
+    """A repository whose `.borg/<directory>/<stem>.json` declares `rows` and, by default, NO `program` key.
 
     The key is left out on purpose. Every fixture here used to set `program` itself, so the code under
     test never had to DERIVE the manifest's identity from the filename -- which is the one thing the
     borg_core reader does, and the reason a repoint that read `m.get("program")` would have passed all
     of them while syncing nothing. A test that needs a declared id passes `program=...` explicitly.
     """
-    d = tmp_path / project / ".borg" / directory
+    d = tmp_path / repository / ".borg" / directory
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{stem}.json").write_text(json.dumps({"rows": rows, **declared}))
-    return str(tmp_path / project)
+    return str(tmp_path / repository)
 
 
 def _make_target(tmp_path, name, script):
@@ -263,9 +263,9 @@ class TestLoadReconItems:
 
 
 class TestSyncBorg:
-    def _discovered(self, project_dir, stem="prog-a"):
-        _write_manifest_dir(project_dir.parent, project_dir.name, stem, [_row("1", "o/r#1")])
-        manifests, _ = shell.discover([str(project_dir)])
+    def _discovered(self, repository_dir, stem="prog-a"):
+        _write_manifest_dir(repository_dir.parent, repository_dir.name, stem, [_row("1", "o/r#1")])
+        manifests, _ = shell.discover([str(repository_dir)])
         return manifests
 
     def test_writes_each_manifest_via_the_native_writer(self, tmp_path):
@@ -295,8 +295,8 @@ class TestSyncBorg:
         assert sorted(f.name for f in pdir.iterdir()) == ["three-repo-program.json"]
         assert warnings == []
 
-    def test_two_files_declaring_one_program_in_one_project_both_survive_with_a_warning(self, tmp_path):
-        # The same-project half of the blocker: b.json and z.json both declaring program "b" must
+    def test_two_files_declaring_one_program_in_one_repository_both_survive_with_a_warning(self, tmp_path):
+        # The same-repository half of the blocker: b.json and z.json both declaring program "b" must
         # not overwrite each other, and the contention is named.
         import json as _json
 
@@ -337,9 +337,9 @@ class TestSyncBorg:
         assert written == [str(legacy / "old.json")] and warnings == []
         assert not (tmp_path / "proj" / ".borg" / "chains").exists()
 
-    def test_same_program_in_two_projects_writes_each_to_its_own_home(self, tmp_path):
+    def test_same_program_in_two_repositories_writes_each_to_its_own_home(self, tmp_path):
         # Opus review MERGE-BLOCKER: the old program-keyed map wrote the loser's manifest into
-        # the OTHER project's .borg/programs/. Each manifest must land in its own project root,
+        # the OTHER repository's .borg/programs/. Each manifest must land in its own repository root,
         # and the duplicate-name condition is warned, not silently resolved.
         dir_a, dir_b = tmp_path / "reveal", tmp_path / "ingle"
         manifests = self._discovered(dir_a, "shared-prog") + self._discovered(dir_b, "shared-prog")
@@ -349,13 +349,13 @@ class TestSyncBorg:
         assert len(warnings) == 1 and "shared-prog" in warnings[0]
 
 
-class TestProjectDirOf:
-    def test_recovers_project_root_from_the_discover_stamped_path(self, tmp_path):
-        project_dir = _write_manifest_dir(tmp_path, "proj", "prog-a", [_row("1", "o/r#1")])
+class TestRepositoryDirOf:
+    def test_recovers_repository_root_from_the_discover_stamped_path(self, tmp_path):
+        repository_dir = _write_manifest_dir(tmp_path, "proj", "prog-a", [_row("1", "o/r#1")])
         path = str(tmp_path / "proj" / ".borg" / "chains" / "prog-a.json")
-        manifests, _ = shell.discover([project_dir])
+        manifests, _ = shell.discover([repository_dir])
         assert manifests[0]["_path"] == path
-        assert coordinator._project_dir_of(manifests[0]) == project_dir
+        assert coordinator._repository_dir_of(manifests[0]) == repository_dir
 
 
 class _Args:
@@ -397,7 +397,7 @@ class TestCmdPlan:
         out, err = capsys.readouterr()
         assert "no publish target found" in err
         assert "plan: 1 chain(s), 1 row(s)" in out
-        # PM7: plan is read-only — running it must not add or change any file under the project.
+        # PM7: plan is read-only — running it must not add or change any file under the repository.
         assert sorted((tmp_path / "proj").rglob("*")) == before
 
     def test_checks_reality_against_a_recon_doc(self, tmp_path, capsys, monkeypatch):
@@ -418,8 +418,8 @@ class TestCmdSync:
         (d / "bad.json").write_text("{not json")
         assert coordinator.cmd_sync(_Args([str(tmp_path / "proj")])) == 1
 
-    def _bad_row_project(self, tmp_path):
-        """A project whose one manifest has three rows, the middle one invalid; returns (project, file, bytes)."""
+    def _bad_row_repository(self, tmp_path):
+        """A repository whose one manifest has three rows, the middle one invalid; returns (repository, file, bytes)."""
         bad = _row("2", "o/r#2", gate={"kind": "decision", "blocked_by": "someone"})
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1"), bad, _row("3", "o/r#3")])
         path = tmp_path / "proj" / ".borg" / "chains" / "a.json"
@@ -433,7 +433,7 @@ class TestCmdSync:
         and the file shrinks from three rows to two, at exit 0 -- this goes red.
         """
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        d, path, before = self._bad_row_project(tmp_path)
+        d, path, before = self._bad_row_repository(tmp_path)
 
         assert coordinator.cmd_sync(_Args([d])) == 1, "a refused file refuses the sync"
         assert path.read_bytes() == before, "byte-identical: nothing was rewritten"
@@ -446,7 +446,7 @@ class TestCmdSync:
         A discovered dict with the invalid row already removed (what a salvaging reader would hand
         over) must not overwrite the three-row file. MUTATION: delete the row-count guard in `sync_borg`.
         """
-        _, path, before = self._bad_row_project(tmp_path)
+        _, path, before = self._bad_row_repository(tmp_path)
         salvaged = {"_id": "a", "_path": str(path), "rows": [_row("1", "o/r#1"), _row("3", "o/r#3")]}
 
         written, warnings = coordinator.sync_borg([salvaged])
@@ -576,18 +576,18 @@ class TestTheRetiredWordIsOutOfMergeTree:
         assert offenders == [], f"the retired word is back in merge-tree/: {offenders}"
 
 
-class TestProjectDirOfUnrecognised:
-    """The `""` arm of `_project_dir_of`, which had no coverage (review finding 3 on #222)."""
+class TestRepositoryDirOfUnrecognised:
+    """The `""` arm of `_repository_dir_of`, which had no coverage (review finding 3 on #222)."""
 
     def test_a_path_under_neither_directory_name_yields_empty(self):
         # Before the chains rename this split on one hardcoded name, and `rsplit` with NO MATCH
         # returns the WHOLE PATH -- so an unrecognised layout produced a non-empty wrong "root".
-        assert coordinator._project_dir_of({"_path": "/tmp/x/.borg/elsewhere/p.json"}) == ""
+        assert coordinator._repository_dir_of({"_path": "/tmp/x/.borg/elsewhere/p.json"}) == ""
 
     def test_both_recognised_names_still_resolve(self):
-        assert coordinator._project_dir_of({"_path": "/tmp/x/.borg/chains/p.json"}) == "/tmp/x"
-        assert coordinator._project_dir_of({"_path": "/tmp/x/.borg/programs/p.json"}) == "/tmp/x"
-        assert coordinator._project_dir_of({"_path": "/tmp/x/.stacks/p.json"}) == "/tmp/x"
+        assert coordinator._repository_dir_of({"_path": "/tmp/x/.borg/chains/p.json"}) == "/tmp/x"
+        assert coordinator._repository_dir_of({"_path": "/tmp/x/.borg/programs/p.json"}) == "/tmp/x"
+        assert coordinator._repository_dir_of({"_path": "/tmp/x/.stacks/p.json"}) == "/tmp/x"
 
     def test_sync_borg_NAMES_a_dropped_manifest_instead_of_losing_it(self, tmp_path):
         """A bare `continue` lost a manifest at exit 0 -- the confident-empty shape again.
@@ -610,9 +610,9 @@ class TestProjectDirOfUnrecognised:
 _BAD_GATE = {"kind": "decision", "blocked_by": "someone"}
 
 
-def _refusal_project(tmp_path, kind):
-    """A project holding one GOOD manifest and one the reader refuses for `kind`; returns the project."""
-    project = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
+def _refusal_repository(tmp_path, kind):
+    """A repository holding one GOOD manifest and one the reader refuses for `kind`; returns the repository."""
+    repository = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
     chains = tmp_path / "proj" / ".borg" / "chains"
     if kind == "unreadable json":
         (chains / "bad.json").write_text("{not json")
@@ -624,7 +624,7 @@ def _refusal_project(tmp_path, kind):
         (chains / "dup.json").write_text(json.dumps({"rows": [_row("1", "o/r#5")]}))
     else:
         raise AssertionError(kind)
-    return project
+    return repository
 
 
 class TestRefusalsThroughTheRealReader:
@@ -638,24 +638,24 @@ class TestRefusalsThroughTheRealReader:
         self, tmp_path, capsys, monkeypatch, kind
     ):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = _refusal_project(tmp_path, kind)
-        _, warnings = shell.discover([project])
+        repository = _refusal_repository(tmp_path, kind)
+        _, warnings = shell.discover([repository])
         assert shell.refused_manifest_paths(warnings), f"the fixture produced no refusal: {warnings}"
         before = _tree_bytes(tmp_path)
 
-        assert coordinator.cmd_sync(_Args([project])) == 1
-        assert coordinator.cmd_plan(_Args([project])) == 1
+        assert coordinator.cmd_sync(_Args([repository])) == 1
+        assert coordinator.cmd_plan(_Args([repository])) == 1
 
         assert _tree_bytes(tmp_path) == before, "a refused sweep must not rewrite even the good manifest"
         assert "wrote" not in capsys.readouterr().out
 
     def test_a_registered_path_that_is_absent_is_a_note_and_not_a_refusal(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
+        repository = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
         gone = str(tmp_path / "gone")
 
-        assert coordinator.cmd_sync(_Args([gone, project])) == 0
-        assert coordinator.cmd_plan(_Args([gone, project])) == 0
+        assert coordinator.cmd_sync(_Args([gone, repository])) == 0
+        assert coordinator.cmd_plan(_Args([gone, repository])) == 0
 
         out, err = capsys.readouterr()
         assert "wrote 1 manifest(s)" in out
@@ -668,29 +668,29 @@ class TestRefusalsThroughTheRealReader:
         # no rows list declares no rows, so skipping it cannot lose data; the row-count guard and the
         # whole-file refusal still protect every real manifest.
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
+        repository = _write_manifest_dir(tmp_path, "proj", "good", [_row("1", "o/r#1")])
         stray = tmp_path / "proj" / ".borg" / "chains" / "settings.json"
         stray.write_text('{"theme": "dark"}')
 
-        assert coordinator.cmd_plan(_Args([project])) == 0
+        assert coordinator.cmd_plan(_Args([repository])) == 0
         plan_out, plan_err = capsys.readouterr()
         assert "settings.json" in plan_err and "not a manifest (no rows list)" in plan_err
         assert "plan: 1 chain(s)" in plan_out and "CAVEAT" not in plan_out
 
-        assert coordinator.cmd_sync(_Args([project])) == 0
+        assert coordinator.cmd_sync(_Args([repository])) == 0
         assert "wrote 1 manifest(s)" in capsys.readouterr().out
         assert stray.read_text() == '{"theme": "dark"}'
 
     def test_a_shorthand_ref_manifest_is_refused_by_list_and_plan(self, tmp_path, capsys, monkeypatch):
         # The validator swap is the intended AC7 outcome: `borg link` already refuses this shape.
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = _write_manifest_dir(tmp_path, "proj", "short", [_row("1", "r#22")])
+        repository = _write_manifest_dir(tmp_path, "proj", "short", [_row("1", "r#22")])
 
-        assert coordinator.cmd_list(_Args([project])) == 0
+        assert coordinator.cmd_list(_Args([repository])) == 0
         out, err = capsys.readouterr()
         assert "MANIFEST SKIPPED" in err and "0 chain(s), 1 skipped" in out
 
-        assert coordinator.cmd_plan(_Args([project])) == 1
+        assert coordinator.cmd_plan(_Args([repository])) == 1
 
 
 class TestStacksRoot:
@@ -699,35 +699,35 @@ class TestStacksRoot:
 
     def test_list_and_plan_cover_the_stacks_root(self, tmp_path, capsys, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = _write_stacks(tmp_path, "proj", "tool-neutral", [_row("1", "o/r#1"), _row("2", "o/r#2")])
+        repository = _write_stacks(tmp_path, "proj", "tool-neutral", [_row("1", "o/r#1"), _row("2", "o/r#2")])
 
-        assert coordinator.cmd_list(_Args([project])) == 0
+        assert coordinator.cmd_list(_Args([repository])) == 0
         assert "tool-neutral: 2 row(s)" in capsys.readouterr().out
-        assert coordinator.cmd_plan(_Args([project])) == 0
+        assert coordinator.cmd_plan(_Args([repository])) == 0
         assert "plan: 1 chain(s), 2 row(s)" in capsys.readouterr().out
 
     def test_sync_rewrites_a_stacks_manifest_in_place_and_creates_no_second_file(self, tmp_path, capsys, monkeypatch):
         # A second copy under `.borg/chains/` would be declared in BOTH roots, which the next read
         # refuses by name and which makes the following sync exit 1.
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = _write_stacks(tmp_path, "proj", "tool-neutral", [_row("1", "o/r#1")])
+        repository = _write_stacks(tmp_path, "proj", "tool-neutral", [_row("1", "o/r#1")])
         target = tmp_path / "proj" / ".stacks" / "tool-neutral.json"
         compact = target.read_text()
 
-        assert coordinator.cmd_sync(_Args([project])) == 0
+        assert coordinator.cmd_sync(_Args([repository])) == 0
 
         assert target.read_text() != compact and target.read_text().startswith("{\n  ")
         assert not (tmp_path / "proj" / ".borg").exists(), "a second copy was created beside the first"
-        _, warnings = shell.discover([project])
+        _, warnings = shell.discover([repository])
         assert warnings == []
-        assert coordinator.cmd_sync(_Args([project])) == 0, "the rewritten tree must sync again"
+        assert coordinator.cmd_sync(_Args([repository])) == 0, "the rewritten tree must sync again"
 
 
 class TestWhatTheWriterPersists:
     def _synced(self, tmp_path, monkeypatch, directory="chains", **declared):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = _write_manifest_dir(tmp_path, "proj", "plain", [_row("1", "o/r#1")], directory, **declared)
-        assert coordinator.cmd_sync(_Args([project])) == 0
+        repository = _write_manifest_dir(tmp_path, "proj", "plain", [_row("1", "o/r#1")], directory, **declared)
+        assert coordinator.cmd_sync(_Args([repository])) == 0
         return tmp_path / "proj" / ".borg" / directory / "plain.json"
 
     def test_written_bytes_gain_no_derived_or_retired_key(self, tmp_path, monkeypatch):
@@ -802,21 +802,21 @@ class TestOneChainRegisteredTwice:
 class TestSyncKeepsWhatTheAuthorWrote:
     """PR #341 fix round 1: two regressions inherited from the shared writer, now reached by `borg chain sync`."""
 
-    def _project(self, tmp_path, **declared):
+    def _repository(self, tmp_path, **declared):
         return _write_manifest_dir(tmp_path, "proj", "plain", [_row("1", "o/r#1")], **declared)
 
     def test_sync_preserves_an_authored_underscore_key_and_persists_no_stamp(self, tmp_path, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = self._project(tmp_path, _comment="hand-written", _note=["a", "b"])
-        assert coordinator.cmd_sync(_Args([project])) == 0
+        repository = self._repository(tmp_path, _comment="hand-written", _note=["a", "b"])
+        assert coordinator.cmd_sync(_Args([repository])) == 0
         written = json.loads((tmp_path / "proj" / ".borg" / "chains" / "plain.json").read_text())
         assert written == {"rows": [_row("1", "o/r#1")], "_comment": "hand-written", "_note": ["a", "b"]}
         assert "_id" not in written and "_path" not in written
 
     def test_sync_keeps_a_0644_manifest_0644(self, tmp_path, monkeypatch):
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        project = self._project(tmp_path)
+        repository = self._repository(tmp_path)
         target = tmp_path / "proj" / ".borg" / "chains" / "plain.json"
         os.chmod(target, 0o644)
-        assert coordinator.cmd_sync(_Args([project])) == 0
+        assert coordinator.cmd_sync(_Args([repository])) == 0
         assert stat.S_IMODE(os.stat(target).st_mode) == 0o644

@@ -116,7 +116,7 @@ ev() { # <sid> <json>
     [[ "$output" == *"no records"* ]] || false
 }
 
-@test "status lists records grouped by state with rid, project, class, cause, due, last reason" {
+@test "status lists records grouped by state with rid, repository, class, cause, due, last reason" {
     mk_main "$SID"
     mk_reg "$SID" '.project = "alpha"'
     at 0
@@ -135,7 +135,7 @@ ev() { # <sid> <json>
 
 @test "status output fits a 60 column pane" {
     mk_main "$SID"
-    mk_reg "$SID" '.project = "alpha-with-a-rather-long-project-name"'
+    mk_reg "$SID" '.project = "alpha-with-a-rather-long-repository-name"'
     at 0
     watch
     run "$BIN" status

@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# The compose project name has ONE source of truth: the registry/project name drone passes to
+# The compose project name has ONE source of truth: the registry/repository name drone passes to
 # `docker compose -p`. Lookups (get_repository_container / get_service_name) must filter on the same
 # value, normalized the way docker compose normalizes it, never on the folder basename. Names invented.
 

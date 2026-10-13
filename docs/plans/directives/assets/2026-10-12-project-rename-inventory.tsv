@@ -1277,7 +1277,7 @@ borg_core/manifest/test_shell.py	454	1	projects	contract	registry JSON key proje
 borg_core/manifest/test_shell.py	484	1	projects	contract	registry JSON key projects in fixture
 borg_core/manifest/test_shell.py	668	1	project	external	pyproject.toml
 borg_core/manifest/test_shell.py	1365	1	project	noise	noise: projected; was external
-borg_core/manifest/test_shell.py	1796	1	projects	ambiguous	legacy merge-tree fn apply_program_projects; sense unclear
+borg_core/manifest/test_shell.py	1796	1	projects	external	R5: ambiguous resolved: retired merge-tree function apply_program_projects quoted in a docstring (same call as R2 #352 on its siblings)
 borg_core/manifest/test_shell.py	2186	1	project	external	pyproject.toml
 borg_core/manifest/test_shell.py	2190	1	project	external	pyproject.toml
 borg_core/manifest/test_shell.py	2199	1	project	external	pyproject.toml
@@ -2490,9 +2490,9 @@ drone.zsh	1516	1	PROJECT	repository	user-facing help about repo lookup
 drone.zsh	1527	1	project	repository	user-facing help about repo lookup
 evals/lifecycle-manifests/fixtures.sh	112	1	Project	contract	PROJECT_PLAN.md content/filename
 evals/lifecycle-manifests/fixtures.sh	113	1	PROJECT	contract	PROJECT_PLAN.md filename
-evals/lifecycle-manifests/fixtures.sh	141	1	PROJECT	ambiguous	generic English: sample software project in fixture repo
-evals/lifecycle-manifests/fixtures.sh	152	1	project	ambiguous	fixture helper name; generic sample project in a repo
-evals/lifecycle-manifests/fixtures.sh	163	1	project	ambiguous	commit message text; generic English
+evals/lifecycle-manifests/fixtures.sh	141	1	PROJECT	repository	R5: ambiguous resolved: the fixture is a repository holding a small codebase; comment reworded
+evals/lifecycle-manifests/fixtures.sh	152	1	project	repository	R5: ambiguous resolved: helper builds a repository; renamed _eval_repo_with_source with its 6 callers in run.sh
+evals/lifecycle-manifests/fixtures.sh	163	1	project	repository	R5: ambiguous resolved: commit message of the fixture repository; reworded
 evals/lifecycle-manifests/run.sh	9	1	project	repository	a real repo in eval scenario
 evals/lifecycle-manifests/run.sh	10	1	project	repository	a real repo in eval scenario
 evals/lifecycle-manifests/run.sh	12	1	project	repository	a real repo in eval scenario
@@ -2508,7 +2508,7 @@ evals/lifecycle-manifests/run.sh	323	1	project	repository	eval helper building a
 evals/s4-k3/run.sh	83	1	project	contract	.borg-project marker filename
 evals/s4-k3/run.sh	196	1	project	external	pyproject.toml
 evals/session-load/run.sh	35	1	projects	external	~/.claude/projects Claude dir
-evals/session-load/run.sh	36	1	project	repository	project-mode session = repo cwd session
+evals/session-load/run.sh	36	1	project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
 evals/session-load/run.sh	162	1	project	repository	fixture repo dir named project
 evals/session-load/run.sh	163	1	project	repository	fixture repo dir named project
 hooks/bash-guard.sh	276	1	project	contract	.borg-project marker filename
@@ -2722,8 +2722,8 @@ lib/colors.zsh	9	1	project	repository	repo name variable
 lib/colors.zsh	9	2	projects	contract	registry JSON key projects
 lib/colors.zsh	12	1	project	repository	repo name variable
 lib/desktop.zsh	5	1	Project	external	Claude Desktop's own Project feature
-lib/desktop.zsh	32	1	project	ambiguous	Desktop topic display name; registry entry without a repo
-lib/desktop.zsh	43	1	project	ambiguous	Desktop topic display name; registry entry without a repo
+lib/desktop.zsh	32	1	project	repository	R5: ambiguous resolved: the local holds a Claude Desktop topic's display name; renamed to display_name
+lib/desktop.zsh	43	1	project	repository	R5: ambiguous resolved: the local holds a Claude Desktop topic's display name; renamed to display_name
 lib/drone-hooks.zsh	4	1	Projects	repository	repos shipping borg-hooks
 lib/drone-hooks.zsh	10	1	project	repository	hook cwd is the repo root
 lib/drone-hooks.zsh	10	2	PROJECT	contract	BORG_PROJECT_NAME env var for borg-hooks
@@ -2938,7 +2938,7 @@ templates/supabase-shared/borg-hooks/pre-up.sh	11	1	project	repository	a repo us
 templates/supabase-shared/borg-hooks/pre-up.sh	12	1	project	repository	a repo using the shared Supabase stack
 templates/supabase/borg-hooks/post-down.sh	8	1	project	repository	project root dir of scaffolded repo
 templates/supabase/borg-hooks/post-down.sh	9	1	project	repository	project root dir of scaffolded repo
-templates/supabase/borg-hooks/pre-up.sh	3	1	project	repository	project root dir of scaffolded repo
+templates/supabase/borg-hooks/pre-up.sh	3	1	project	external	R5: external: Supabase word; was repository
 templates/supabase/borg-hooks/pre-up.sh	15	1	project	repository	project root dir of scaffolded repo
 templates/supabase/borg-hooks/pre-up.sh	16	1	project	repository	project root dir of scaffolded repo
 tests/bash_guard.bats	677	1	project	contract	.borg-project marker filename
@@ -2992,7 +2992,7 @@ tests/briefing.bats	308	1	project	repository	registered repo / registry entry (n
 tests/briefing.bats	309	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	323	1	PROJECT	repository	PROJECT: label in prompt text + fixture repo name
 tests/briefing.bats	323	2	project	repository	PROJECT: label in prompt text + fixture repo name
-tests/briefing.bats	330	1	project	repository	registered repo / registry entry (name, path or dir)
+tests/briefing.bats	330	1	project	noise	R5: noise: verb 'to project' (the --brief arm projects the document into the prompt); was repository
 tests/briefing.bats	330	2	projects	noise	noise: verb to project; was external
 tests/briefing.bats	343	1	project	repository	registered repo / registry entry (name, path or dir)
 tests/briefing.bats	349	1	projects	contract	registry/link --json/wire key or fixture pinning it
@@ -3149,7 +3149,7 @@ tests/cli_contract.bats	1280	1	projects	repository	registered repo / user-facing
 tests/cli_contract.bats	1337	1	projects	contract	JSON key (registry/link doc/spend/wakes)
 tests/cli_contract.bats	1395	1	projects	contract	JSON key (registry/link doc/spend/wakes)
 tests/cli_contract.bats	1515	1	project	contract	JSON key (registry/link doc/spend/wakes)
-tests/cli_contract.bats	1551	1	project	repository	registered repo / user-facing or test prose
+tests/cli_contract.bats	1551	1	project	contract	R5: contract: tmux option or registered field; was repository
 tests/cli_contract.bats	1552	1	project	repository	registered repo / user-facing or test prose
 tests/cli_contract.bats	1648	1	projects	repository	registered repo / user-facing or test prose
 tests/cli_contract.bats	1651	1	project	repository	registered repo / user-facing or test prose
@@ -3301,7 +3301,7 @@ tests/cli_contract.bats	3693	1	projects	contract	JSON key (registry/link doc/spe
 tests/cli_contract.bats	3695	1	projects	contract	JSON key (registry/link doc/spend/wakes)
 tests/cli_contract.bats	3725	1	project	repository	registered repo / user-facing or test prose
 tests/cli_contract.bats	3740	1	project	repository	registered repo / user-facing or test prose
-tests/cli_contract.bats	3760	1	projects	repository	registered repo / user-facing or test prose
+tests/cli_contract.bats	3760	1	projects	contract	R5: contract: test name quotes the projects key of the --json document; was repository
 tests/cli_contract.bats	3763	1	projects	contract	jq path .projects (registry/link JSON key)
 tests/cli_contract.bats	3763	2	projects	contract	jq path .projects (registry/link JSON key)
 tests/cli_contract.bats	3783	1	projects	repository	registered repo / user-facing or test prose
@@ -3428,9 +3428,9 @@ tests/eval_floor.bats	73	1	PROJECT	contract	PROJECT_PLAN.md filename
 tests/eval_floor.bats	312	1	project	external	pyproject.toml
 tests/eval_floor.bats	354	1	project	external	pyproject.toml
 tests/eval_floor.bats	431	1	project	repository	the repo's own .venv
-tests/extension_blocks.bats	17	1	project	repository	<project root> = repo root in extension path
-tests/extension_blocks.bats	33	1	project	repository	<project root> = repo root in extension path
-tests/extension_blocks.bats	44	1	project	repository	<project root> = repo root in extension path
+tests/extension_blocks.bats	17	1	project	contract	R5: contract: greps the skills' own text <project root>, which R6 rewrites with the skills; was repository
+tests/extension_blocks.bats	33	1	project	contract	R5: contract: greps the skills' own text <project root>, which R6 rewrites with the skills; was repository
+tests/extension_blocks.bats	44	1	project	contract	R5: contract: greps the skills' own text <project root>, which R6 rewrites with the skills; was repository
 tests/hook_rotate_subshell.bats	42	1	projects	external	Claude Code ~/.claude/projects dir
 tests/lifecycle.bats	25	1	Project	repository	test repo dir / session mode for a repo
 tests/lifecycle.bats	26	1	project	repository	test repo dir / session mode for a repo
@@ -3439,7 +3439,7 @@ tests/lifecycle.bats	42	2	project	repository	fixture repo name myproject
 tests/lifecycle.bats	65	1	project	repository	test repo dir / session mode for a repo
 tests/lifecycle.bats	79	1	project	repository	test repo dir / session mode for a repo
 tests/lifecycle.bats	80	1	project	repository	test repo dir / session mode for a repo
-tests/lifecycle.bats	94	1	project	repository	test repo dir / session mode for a repo
+tests/lifecycle.bats	94	1	project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
 tests/lifecycle.bats	206	1	project	repository	test repo dir / session mode for a repo
 tests/lifecycle.bats	260	1	project	contract	.borg-project marker filename
 tests/lifecycle.bats	262	1	project	repository	repo resolved from marker
@@ -3457,8 +3457,8 @@ tests/lifecycle.bats	303	1	projects	contract	registry JSON key projects
 tests/lifecycle.bats	312	1	project	contract	.borg-project marker filename
 tests/lifecycle.bats	352	1	project	repository	test repo dir / session mode for a repo
 tests/lifecycle.bats	401	1	project	repository	test repo dir / session mode for a repo
-tests/lifecycle.bats	413	1	project	repository	test repo dir / session mode for a repo
-tests/lifecycle.bats	453	1	project	repository	test repo dir / session mode for a repo
+tests/lifecycle.bats	413	1	project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
+tests/lifecycle.bats	453	1	project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
 tests/lifecycle.bats	522	1	project	repository	test repo dir / session mode for a repo
 tests/lifecycle.bats	531	1	project	repository	test repo dir / session mode for a repo
 tests/link_sweep.bats	40	1	project	repository	registered repos in sweep
@@ -3499,24 +3499,24 @@ tests/memory_read_log.bats	72	1	project	external	Claude memory file name project
 tests/memory_read_log.bats	74	1	project	external	Claude memory file name project_*.md
 tests/memory_read_log.bats	78	1	projects	external	Claude Code ~/.claude/projects/ memory dir
 tests/memory_read_log.bats	91	1	projects	external	Claude Code ~/.claude/projects/ memory dir
-tests/migrate_project_state.bats	2	1	project	repository	CLI flag/name for per-repo state migration
+tests/migrate_project_state.bats	2	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
 tests/migrate_project_state.bats	3	1	project	repository	test file name for per-repo state
 tests/migrate_project_state.bats	13	1	projects	contract	registry/link JSON key projects
-tests/migrate_project_state.bats	18	1	project	repository	CLI flag/name for per-repo state migration
-tests/migrate_project_state.bats	19	1	project	repository	CLI flag/name for per-repo state migration
+tests/migrate_project_state.bats	18	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
+tests/migrate_project_state.bats	19	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
 tests/migrate_project_state.bats	22	1	projects	contract	on-disk state root dir projects/
 tests/migrate_project_state.bats	24	1	projects	contract	on-disk state root dir projects/
-tests/migrate_project_state.bats	28	1	project	repository	CLI flag/name for per-repo state migration
-tests/migrate_project_state.bats	29	1	project	repository	CLI flag/name for per-repo state migration
-tests/migrate_project_state.bats	31	1	project	repository	CLI flag/name for per-repo state migration
-tests/migrate_project_state.bats	36	1	project	repository	CLI flag/name for per-repo state migration
-tests/migrate_project_state.bats	37	1	project	repository	CLI flag/name for per-repo state migration
+tests/migrate_project_state.bats	28	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
+tests/migrate_project_state.bats	29	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
+tests/migrate_project_state.bats	31	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
+tests/migrate_project_state.bats	36	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
+tests/migrate_project_state.bats	37	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
 tests/migrate_project_state.bats	41	1	projects	contract	on-disk state root dir projects/
-tests/migrate_project_state.bats	45	1	project	repository	CLI flag/name for per-repo state migration
-tests/migrate_project_state.bats	47	1	project	repository	CLI flag/name for per-repo state migration
+tests/migrate_project_state.bats	45	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
+tests/migrate_project_state.bats	47	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
 tests/migrate_project_state.bats	51	1	projects	contract	on-disk state root dir projects/
-tests/migrate_project_state.bats	54	1	project	repository	CLI flag/name for per-repo state migration
-tests/migrate_project_state.bats	58	1	project	repository	CLI flag/name for per-repo state migration
+tests/migrate_project_state.bats	54	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
+tests/migrate_project_state.bats	58	1	project	contract	R5: contract: command flag migrate-project-state quoted in a test (flag stays, as in R2 #352); was repository
 tests/next_chooser.bats	21	1	PROJECTS	contract	BORG_WORK_PROJECTS env var name
 tests/next_chooser.bats	53	1	projects	contract	registry/link --json/wire key or fixture pinning it
 tests/next_chooser.bats	72	1	project	repository	registered repo / registry entry (name, path or dir)
@@ -3540,17 +3540,17 @@ tests/notifyd.bats	39	1	projects	contract	registry JSON key projects
 tests/notifyd.bats	47	1	projects	contract	registry JSON key projects
 tests/notifyd.bats	49	1	projects	contract	registry JSON key projects
 tests/plan_promote.bats	2	1	PROJECT	contract	PROJECT_PLAN.md filename
-tests/plan_promote.bats	5	1	Project	repository	session mode for a repo dir (vs orchestrator)
+tests/plan_promote.bats	5	1	Project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
 tests/plan_promote.bats	5	2	PROJECT	contract	PROJECT_PLAN.md filename
-tests/plan_promote.bats	6	1	Project	repository	session mode for a repo dir (vs orchestrator)
+tests/plan_promote.bats	6	1	Project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
 tests/plan_promote.bats	6	2	PROJECT	contract	PROJECT_PLAN.md filename
-tests/plan_promote.bats	7	1	Project	repository	session mode for a repo dir (vs orchestrator)
+tests/plan_promote.bats	7	1	Project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
 tests/plan_promote.bats	105	1	project	repository	fake repo dir name
 tests/plan_promote.bats	117	1	projects	external	Claude Code ~/.claude/projects dir
 tests/plan_promote.bats	120	1	projects	external	Claude Code ~/.claude/projects dir
 tests/plan_promote.bats	127	1	PROJECT	contract	PROJECT_PLAN.md filename
 tests/plan_promote.bats	128	1	PROJECT	contract	PROJECT_PLAN.md filename
-tests/plan_promote.bats	142	1	project	repository	session mode for a repo dir (vs orchestrator)
+tests/plan_promote.bats	142	1	project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
 tests/plan_promote.bats	142	2	PROJECT	contract	PROJECT_PLAN.md filename
 tests/plan_promote.bats	220	1	PROJECT	contract	PROJECT_PLAN.md filename
 tests/plan_promote.bats	233	1	PROJECT	contract	PROJECT_PLAN.md filename
@@ -3692,7 +3692,7 @@ tests/resume_ledger.bats	191	1	project	contract	ledger mode value project
 tests/resume_ledger.bats	198	1	project	contract	ledger mode value project
 tests/resume_ledger.bats	229	1	project	contract	ledger tmux.project_dir key
 tests/resume_ledger.bats	284	1	project	contract	ledger mode value project
-tests/resume_mark_closed.bats	2	1	project	repository	mark-closed arg: repo name
+tests/resume_mark_closed.bats	2	1	project	contract	R5: contract: quotes the <project|sid> usage of bin/borg-resume, which no step owns; was repository
 tests/resume_mark_closed.bats	3	1	project	repository	invented repo names
 tests/resume_mark_closed.bats	28	1	project	contract	session file JSON key `project`
 tests/resume_mark_closed.bats	43	1	project	repository	mark-closed arg: repo name
@@ -3810,7 +3810,7 @@ tests/scaffold_supabase_shared.bats	124	1	PROJECT	repository	test var holding re
 tests/scaffold_supabase_shared.bats	176	1	project	repository	repo dir being scaffolded / per-repo supabase
 tests/scaffold_supabase_shared.bats	219	1	project	repository	repo dir being scaffolded / per-repo supabase
 tests/session_mode.bats	5	1	project	contract	session-mode value from _borg_session_mode
-tests/session_mode.bats	6	1	project	repository	sessions in a repo dir
+tests/session_mode.bats	6	1	project	contract	R5: contract: session-mode value project (persisted by bin/borg-resume); was repository
 tests/session_mode.bats	22	1	project	contract	session-mode value from _borg_session_mode
 tests/session_mode.bats	25	1	project	contract	session-mode value from _borg_session_mode
 tests/session_mode.bats	28	1	project	contract	session-mode value from _borg_session_mode
@@ -3831,7 +3831,7 @@ tests/spend.bats	29	1	project	contract	token-spend.jsonl project key
 tests/spend.bats	55	1	project	repository	spend filter by repo
 tests/spend.bats	57	1	project	repository	borg spend --project flag
 tests/spend.bats	57	2	project	repository	one registered repo
-tests/spend.bats	59	1	project	repository	borg spend --project flag
+tests/spend.bats	59	1	project	contract	R5: contract: borg spend --project flag; was repository
 tests/spend.bats	61	1	project	repository	user-facing spend output text
 tests/spend.bats	68	1	project	repository	spend section by repo
 tests/spend.bats	70	1	project	repository	spend section by repo
@@ -3909,4 +3909,4 @@ tests/window_either_form.bats	67	1	project	repository	registered repo in reap te
 tests/window_either_form.bats	69	1	projects	contract	registry JSON key `projects`
 tests/window_either_form.bats	70	1	projects	contract	registry JSON key `projects`
 tests/window_either_form.bats	80	1	projects	contract	registry JSON key `projects`
-tests/workflow_model_guard.bats	265	1	project	repository	repo dir whose .claude/workflows is searched
+tests/workflow_model_guard.bats	265	1	project	external	R5: external: Claude Code project-scope workflows; was repository

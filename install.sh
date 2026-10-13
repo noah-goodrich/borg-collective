@@ -399,7 +399,7 @@ launchctl kickstart -k "gui/$UID/$MEMORY_GATE_LABEL" 2>/dev/null || true
 # ── 3e. Extension agents: drop-in launchd templates ──────────────────────────
 #
 # borg's installer is the ONLY launchd installer on the machine. Anything else that wants a
-# LaunchAgent (dotfiles, a project) drops `<name>.plist.tmpl` (file or symlink) into
+# LaunchAgent (dotfiles, a repository) drops `<name>.plist.tmpl` (file or symlink) into
 # ${XDG_CONFIG_HOME:-~/.config}/borg/extensions/launchd/ and gets rendered through the SAME
 # placeholders the built-in plists use — {{LABEL}} {{HOME}} {{USER}} {{LOG_DIR}} {{PATH_VALUE}} —
 # then bootout-if-loaded + bootstrap, exactly like the agents above. Label = <prefix>.<name>, or
@@ -510,7 +510,7 @@ echo ""
 info "Installation complete."
 echo ""
 echo "  The Borg workflow:"
-echo "    1. drone start <project> <feature> create worktree + branch, launch Claude"
+echo "    1. drone start <repository> <feature> create worktree + branch, launch Claude"
 echo "    2. /borg-plan                      lock objectives + acceptance criteria"
 echo "    3. (implement)"
 echo "    4. /simplify                       review changed code before committing"
@@ -518,18 +518,18 @@ echo "    5. /borg-link-up + git commit     flush session state, document milest
 echo "    6. borg next / Ctrl+Space >        what needs attention? jump there."
 echo ""
 echo "  borg commands:"
-echo "    borg next [--switch]   Single recommendation + jump there"
-echo "    borg link [project]    Overview, or deep dive on one project"
-echo "    borg switch <project>  fzf picker → tmux window"
-echo "    borg scan              Auto-discover projects from session history"
-echo "    borg help              All borg commands"
+echo "    borg next [--switch]      Single recommendation + jump there"
+echo "    borg link [repository]    The Queen's overview at the workspace root; ONE directory's page anywhere else"
+echo "    borg switch <repository>  fzf picker → jump to repository tmux window"
+echo "    borg scan                 Discover repositories from session history"
+echo "    borg help                 All borg commands"
 echo ""
 echo "  drone commands:"
-echo "    drone up [project]     Start container + tmux window"
-echo "    drone down [project]   Stop container + remove window"
-echo "    drone claude [project] Launch Claude Code in project window"
-echo "    drone restart [all]    Restart containers"
-echo "    drone help             All drone commands"
+echo "    drone up [repository]      Start container + tmux window"
+echo "    drone down [repository]    Stop container + remove window"
+echo "    drone claude [repository]  Launch Claude Code in repository window"
+echo "    drone restart [all]        Restart containers"
+echo "    drone help                 All drone commands"
 echo ""
 echo "  Skills installed:"
 for skill_dir in "$BORG_HOME/skills/"*/(N); do
@@ -538,7 +538,7 @@ done
 echo ""
 if command -v cortex &>/dev/null; then
     echo "  CoCo integration: active"
-    echo "    borg link shows [X] badge for Cortex Code projects"
+    echo "    borg link shows [X] badge for Cortex Code repositories"
     echo "    borg scan discovers CoCo sessions from session-log.md"
     echo "    Stop hook fires on CoCo sessions → registry update + checkpoint nudge"
     echo ""
@@ -548,7 +548,7 @@ echo "    /plugin marketplace add alirezarezvani/claude-skills"
 echo "    Adds: Boris Cherny's 57-tip framework, Scope Guard, 205+ engineering skills"
 echo ""
 echo "  Environment variables:"
-echo "    BORG_ORCHESTRATOR_ROOT=\$HOME/dev   workspace root (where orchestrator runs)"
+echo "    BORG_ORCHESTRATOR_ROOT=\$HOME/dev   workspace root (where the Queen runs)"
 echo "    BORG_ROOT=$BORG_HOME    install path of the borg source tree"
 echo ""
 echo "  Optional: ~/.config/borg/config.zsh for work/life boundaries"

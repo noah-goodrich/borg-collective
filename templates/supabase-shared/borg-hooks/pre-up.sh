@@ -7,9 +7,9 @@
 # calling `docker compose up -d`. Do NOT try to run this from inside the
 # drone; it needs direct access to the host Docker daemon.
 #
-# Unlike the per-project --supabase model, this hook NEVER runs a
-# per-project `supabase start`/`supabase init`. The shared stack lives in
-# the stillpoint repo and is shared across every project on this machine —
+# Unlike the per-repository --supabase model, this hook NEVER runs a
+# per-repository `supabase start`/`supabase init`. The shared stack lives in
+# the stillpoint repo and is shared across every repository on this machine —
 # it is started ONCE (idempotent no-op if already running) and never
 # stopped by an individual drone's lifecycle. See post-down.sh.
 

@@ -30,7 +30,7 @@ _repo_with_remote() {
     git -C "$WORK/$name" remote add origin "$remote"
 }
 
-_projects_json() {
+_repositories_json() {
     local out="$WORK/projects.json" first=1
     printf '{' > "$out"
     local pair
@@ -74,7 +74,7 @@ JSON
 @test "adapter: emits the Item contract with correctly-typed fields" {
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
     _mock_gh "$(_one_pr_body)"
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     [ "$status" -eq 0 ]
     # bats CLOBBERS $output on every `run`, so the adapter's document must be parked in a file
     # before any assertion runs -- otherwise the second jq parses the FIRST jq's result string and
@@ -98,7 +98,7 @@ JSON
 @test "adapter: urgency escalates to now on an urgent-looking title" {
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
     _mock_gh "$(_one_pr_body | sed 's/a normal change/hotfix the broken thing/')"
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     run bash -c "printf '%s' '$output' | jq -r '.items[0].urgency'"
     [ "$output" = "now" ]
 }
@@ -106,7 +106,7 @@ JSON
 @test "adapter: a merged PR updated before the mark is filtered out" {
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
     _mock_gh "$(_one_pr_body | sed -e 's/2026-08-20T10:00:00Z/2026-08-01T10:00:00Z/' -e 's/"OPEN"/"MERGED"/')"
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     run bash -c "printf '%s' '$output' | jq -r '.items | length'"
     [ "$output" = "0" ]
 }
@@ -114,7 +114,7 @@ JSON
 @test "adapter: owner is 'you' only when the author matches the batched viewer login" {
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
     _mock_gh "$(_one_pr_body | sed 's/"login":"me"}}]/"login":"someone-else"}}]/')"
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     run bash -c "printf '%s' '$output' | jq -r '.items[0].owner'"
     [ "$output" = "unknown" ]
 }
@@ -140,7 +140,7 @@ EOF
     export GH_CALLS="${BATS_TEST_TMPDIR}/gh-calls.txt"
     : > "$GH_CALLS"
 
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha beta gamma)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha beta gamma)"
     [ "$status" -eq 0 ]
 
     run bash -c "wc -c < '$GH_CALLS' | tr -d ' '"
@@ -151,7 +151,7 @@ EOF
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
     _repo_with_remote beta "git@github.com:owner/beta.git"
     _mock_gh "$(_one_pr_body)"
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha beta)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha beta)"
 
     run cat "$QUERY_DUMP"
     [[ "$output" == *"viewer { login }"* ]] || false
@@ -164,7 +164,7 @@ EOF
 @test "adapter: a credentialed remote never reaches the GraphQL query" {
     _repo_with_remote alpha "https://x-access-token:gho_EXAMPLETOKEN123456789@github.com/owner/alpha.git"
     _mock_gh "$(_one_pr_body)"
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     [ "$status" -eq 0 ]
 
     run cat "$QUERY_DUMP"
@@ -181,7 +181,7 @@ EOF
     # quoted. A rejected repo must not appear in the query and must not break the sweep.
     _repo_with_remote alpha 'https://github.com/ow"ner/al{pha.git'
     _mock_gh "$(_one_pr_body)"
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     [ "$status" -eq 0 ]
     # Nothing in scope resolved to a queryable repository, so the track reports itself SKIPPED rather
     # than as an empty answer. `skipped` is the flag that lets `borg link` tell "I looked and there
@@ -201,7 +201,7 @@ EOF
     _repo_with_remote beta "git@github.com:owner/beta.git"
     _mock_gh '{"data":{"viewer":{"login":"me"},"r0":{"pullRequests":{"nodes":[{"number":7,"title":"t","state":"OPEN","isDraft":false,"updatedAt":"2026-08-20T10:00:00Z","url":"u","headRefName":"h","baseRefName":"main","author":{"login":"me"}}]}},"r1":null},"errors":[{"type":"NOT_FOUND"}]}' 1
 
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha beta)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha beta)"
     [ "$status" -eq 0 ]
     run bash -c "printf '%s' '$output' | jq -r '.items | length'"
     [ "$output" = "1" ]
@@ -210,7 +210,7 @@ EOF
 @test "adapter: an offline or unauthenticated gh degrades to an explained empty track" {
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
     _mock_gh "" 1
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     [ "$status" -eq 0 ]
     [[ "$output" == *"github track skipped"* ]] || false
     # AND IT SAYS SO IN A FIELD, not only in prose. Every emit_skip path exits 0 with a valid,
@@ -224,7 +224,7 @@ EOF
 @test "adapter: unparseable gh output degrades instead of emitting a raw dump" {
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
     _mock_gh "this is not json" 0
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     [ "$status" -eq 0 ]
     run bash -c "printf '%s' '$output' | jq -e '.source == \"github\" and (.items | length) == 0'"
     [ "$status" -eq 0 ]
@@ -232,8 +232,8 @@ EOF
 
 @test "adapter: missing gh, missing --since and missing --projects each skip cleanly" {
     _repo_with_remote alpha "git@github.com:owner/alpha.git"
-    local projects
-    projects="$(_projects_json alpha)"
+    local repositories
+    repositories="$(_repositories_json alpha)"
 
     # `PATH="/usr/bin:/bin"` is NOT a valid way to hide a binary -- it assumes gh lives outside
     # those two directories, which is true on macOS (Homebrew installs to /opt/homebrew/bin) and
@@ -258,12 +258,12 @@ EOF
         ln -s "$(command -v "$tool")" "$isolated/$tool"
     done
 
-    run env PATH="$isolated" "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$projects"
+    run env PATH="$isolated" "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$repositories"
     [ "$status" -eq 0 ]
     [[ "$output" == *"gh not installed"* ]] || false
 
     _mock_gh "$(_one_pr_body)"
-    run "$ADAPTER" --projects "$projects"
+    run "$ADAPTER" --projects "$repositories"
     [ "$status" -eq 0 ]
     [[ "$output" == *"no --since"* ]] || false
 
@@ -326,7 +326,7 @@ _pr_json() {
 }
 
 _sweep_doc() {
-    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_projects_json alpha)"
+    run "$ADAPTER" --since 2026-08-11T00:00:00Z --projects "$(_repositories_json alpha)"
     [ "$status" -eq 0 ]
     printf '%s' "$output" > "${BATS_TEST_TMPDIR}/doc.json"
 }

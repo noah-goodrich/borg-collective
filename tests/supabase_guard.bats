@@ -36,7 +36,7 @@ _assert_allowed() {
 
 # ─── BLOCK: supabase start/stop/db reset outside the shared dir ─────────────
 
-@test "blocks: supabase start with cwd=non-stillpoint project" {
+@test "blocks: supabase start with cwd=non-stillpoint repository" {
     _run_guard "supabase start" "/Users/noah/dev/ingle"
     _assert_blocked
 }
