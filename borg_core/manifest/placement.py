@@ -19,6 +19,8 @@ class StacksIgnored(ValueError):
     """
 
 
+# Six independent facts gathered by `shell.scaffold_root`; bundling them would only rename the arguments.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def choose_scaffold_root(
     override: str,
     stacks_exists: bool,

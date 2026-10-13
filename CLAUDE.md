@@ -495,10 +495,12 @@ docs/
   neither is present** — so an empty log in a plugin-only install means "not instrumented", not
   "no bypasses".
 - **Manifests are read from two roots**: `<repo>/.borg/chains/` (borg's own) and the tool-neutral
-  `<repo>/.stacks/`. `scaffold` creates in `.stacks/` if it exists, else borg's own directory (`.borg/chains/`, or
-  legacy `.borg/programs/`) if it exists, else `.stacks/` when git ignores `.borg/`, else `.borg/chains/`
-  (`placement.choose_scaffold_root`, facts from `shell.scaffold_root`; `--root stacks|borg` overrides), and prints
-  `root: <folder> (<reason>)` after its `scaffolded:` line (an `exists:` line has none).
+  `<repo>/.stacks/`. `scaffold` creates in `.stacks/` always -- whether `.stacks/` exists, `.borg/chains/` (or legacy
+  `.borg/programs/`) exists, git ignores `.borg/`, or none of these (`placement.choose_scaffold_root`, facts from
+  `shell.scaffold_root`) -- unless `--root borg` asks for borg's own directory. It never creates inside a `.stacks/` that git
+  ignores: it refuses by name, naming the ignore and `--root borg`, never silently falling back. It prints
+  `root: <folder> (<reason>)` after its `scaffolded:` line (an `exists:` line has none). `borg stack` is the sweep verb
+  (`borg chain` forwards to it until the chain -> stack rename's contract step).
   So a repository shared with people who do not run borg need
   not carry a `.borg/`; a stem declared in both is refused by name, never picked, an in-place edit
   writes back to the file it found, two roots that are one directory (a symlink) are read once, and an
