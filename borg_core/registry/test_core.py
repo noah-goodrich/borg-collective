@@ -121,7 +121,7 @@ def test_build_add_entry_empty_string_tmux_window_normalizes_to_none():
 
 
 def _reg(**windows):
-    """Registry projects dict: name -> entry; a value of None means no tmux_window."""
+    """Registry repositories dict: name -> entry; a value of None means no tmux_window."""
     return {name: ({"tmux_window": w} if w else {}) for name, w in windows.items()}
 
 
@@ -132,21 +132,21 @@ def _reg(**windows):
         ("a.b", "'.' or ':'"),
         ("a:b", "'.' or ':'"),
         ("borg", "session name"),
-        ("widget", "name of project 'widget'"),
-        ("wf", "tmux window of project 'other'"),
+        ("widget", "name of repository 'widget'"),
+        ("wf", "tmux window of repository 'other'"),
     ],
 )
 def test_validate_rejects_with_reason(candidate, needle):
-    projects = _reg(me=None, widget=None, other="wf")
-    reason = core.validate_window_name(candidate, "me", "borg", projects)
+    repositories = _reg(me=None, widget=None, other="wf")
+    reason = core.validate_window_name(candidate, "me", "borg", repositories)
     assert reason is not None and needle in reason
 
 
 def test_validate_accepts_free_name_and_own_name_and_own_window():
-    projects = _reg(me="old", widget=None)
-    assert core.validate_window_name("fresh", "me", "borg", projects) is None
-    assert core.validate_window_name("me", "me", "borg", projects) is None
-    assert core.validate_window_name("old", "me", "borg", projects) is None
+    repositories = _reg(me="old", widget=None)
+    assert core.validate_window_name("fresh", "me", "borg", repositories) is None
+    assert core.validate_window_name("me", "me", "borg", repositories) is None
+    assert core.validate_window_name("old", "me", "borg", repositories) is None
 
 
 def test_validate_tolerates_null_entries():
@@ -178,26 +178,26 @@ def test_derive_session_collision_grows_prefix():
     assert core.derive_window_name("borgxy-thing", "borgxy", {}) == "borgxy-t"
 
 
-def test_derive_prefix_growth_on_other_projects_name():
-    projects = _reg(widget=None, mine=None)
-    assert core.derive_window_name("widget-factory", "borg", projects) == "widget-f"
+def test_derive_prefix_growth_on_other_repositories_name():
+    repositories = _reg(widget=None, mine=None)
+    assert core.derive_window_name("widget-factory", "borg", repositories) == "widget-f"
 
 
-def test_derive_prefix_growth_on_other_projects_window():
-    projects = _reg(other="widget")
-    assert core.derive_window_name("widget-factory", "borg", projects) == "widget-f"
+def test_derive_prefix_growth_on_other_repositories_window():
+    repositories = _reg(other="widget")
+    assert core.derive_window_name("widget-factory", "borg", repositories) == "widget-f"
 
 
 def test_derive_initials_collision_grows_prefix():
-    projects = _reg(other="abg")
-    assert core.derive_window_name("alpha-beta-gamma", "borg", projects) == "alpha-b"
+    repositories = _reg(other="abg")
+    assert core.derive_window_name("alpha-beta-gamma", "borg", repositories) == "alpha-b"
 
 
 def test_derive_falls_back_to_full_name_when_every_prefix_taken():
     name = "alpha-beta-gamma"
     taken = {f"p{n}": name[:n].rstrip("-") for n in range(7, len(name))}
-    projects = _reg(abg="abg", **taken)
-    assert core.derive_window_name(name, "borg", projects) == name
+    repositories = _reg(abg="abg", **taken)
+    assert core.derive_window_name(name, "borg", repositories) == name
 
 
 def test_derive_trims_trailing_separator_on_grown_prefix():
@@ -207,9 +207,9 @@ def test_derive_trims_trailing_separator_on_grown_prefix():
 
 
 def test_derive_is_deterministic():
-    projects = _reg(x=None)
-    assert core.derive_window_name("alpha-beta-gamma", "borg", projects) == core.derive_window_name(
-        "alpha-beta-gamma", "borg", projects
+    repositories = _reg(x=None)
+    assert core.derive_window_name("alpha-beta-gamma", "borg", repositories) == core.derive_window_name(
+        "alpha-beta-gamma", "borg", repositories
     )
 
 

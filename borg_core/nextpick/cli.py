@@ -1,7 +1,7 @@
 """argparse entrypoint for `borg next`. Registry JSON on stdin; exit 0 always.
 
 Log mode (default) appends one row and NEVER writes stdout. `--rows` prints the chooser screen instead: the
-rendered lines, then one final `names` line (tab-separated ranked project names in row order) for the zsh side.
+rendered lines, then one final `names` line (tab-separated ranked repository names in row order) for the zsh side.
 """
 
 from __future__ import annotations
@@ -34,9 +34,9 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_row(args: argparse.Namespace, projects: dict[str, Any], now: datetime) -> dict[str, Any]:
+def build_row(args: argparse.Namespace, repositories: dict[str, Any], now: datetime) -> dict[str, Any]:
     """Assemble the log row for one invocation."""
-    ranked = core.rank(projects)
+    ranked = core.rank(repositories)
     chooser = bool(args.chooser or args.pick is not None)
     rec = ranked[0]["name"] if ranked else None
     opened = None
@@ -71,7 +71,7 @@ NAMES_PREFIX = "names\t"
 
 
 def item_rows(
-    projects: dict[str, Any],
+    repositories: dict[str, Any],
     local: bool,
     show_all: bool = False,
     swept: tuple[dict[str, list[dict[str, Any]]], str | None] | None = None,
@@ -83,37 +83,37 @@ def item_rows(
     Each source is gathered fail-open (a failed sweep only sets `degraded`). Under `local` the sweep is skipped, so
     only session, plan and checkpoint rows appear.
 
-    `swept` is a sweep the caller ALREADY RAN, as `(items by project, degraded note)`: `borg link` hands in the one
+    `swept` is a sweep the caller ALREADY RAN, as `(items by repository, degraded note)`: `borg link` hands in the one
     its grid performed, so a page that shows these rows never pays a second `gh` round trip for them.
     """
-    ranked = core.rank(projects)
+    ranked = core.rank(repositories)
     names = [item["name"] for item in ranked]
-    by_project, degraded = swept if swept is not None else shell.recon_items(projects, local)
+    by_repository, degraded = swept if swept is not None else shell.recon_items(repositories, local)
     work, quiet = core.work_items(
         ranked,
-        by_project,
-        shell.read_plans(projects, names),
-        shell.checkpoint_next_steps(projects, names),
+        by_repository,
+        shell.read_plans(repositories, names),
+        shell.checkpoint_next_steps(repositories, names),
         int(datetime.now(UTC).timestamp()),
     )
     shown, hidden = core.cap_rows(work, show_all)
     return core.numbered_rows(shown, ranked), quiet, degraded, hidden
 
 
-def rows_output(projects: dict[str, Any], local: bool, show_all: bool = False) -> list[str]:
-    """The chooser screen plus the trailing names line (one project per ROW, so a key selects a row)."""
-    rows, quiet, _degraded, hidden = item_rows(projects, local, show_all)
+def rows_output(repositories: dict[str, Any], local: bool, show_all: bool = False) -> list[str]:
+    """The chooser screen plus the trailing names line (one repository per ROW, so a key selects a row)."""
+    rows, quiet, _degraded, hidden = item_rows(repositories, local, show_all)
     suggestion = core.suggestion_for(rows, shell.read_log_rows())
     lines = core.render_chooser(rows, suggestion=suggestion, quiet=quiet, hidden=hidden)
     return [*lines, NAMES_PREFIX + "\t".join(row["project"] for row in rows)]
 
 
-def rows_json(projects: dict[str, Any], local: bool, show_all: bool = False) -> dict[str, Any]:
-    """The `--rows --json` payload: item rows, the first row's project, the earned suggestion's row number or None.
+def rows_json(repositories: dict[str, Any], local: bool, show_all: bool = False) -> dict[str, Any]:
+    """The `--rows --json` payload: item rows, the first row's repository, the earned suggestion's row number or None.
 
     `hidden` is `{agent, stale, overflow}`: how many rows the cap left out (all zero under `--all`).
     """
-    rows, quiet, degraded, hidden = item_rows(projects, local, show_all)
+    rows, quiet, degraded, hidden = item_rows(repositories, local, show_all)
     earned = core.suggestion_for(rows, shell.read_log_rows()) is not None
     return {
         "rows": rows,
@@ -125,10 +125,10 @@ def rows_json(projects: dict[str, Any], local: bool, show_all: bool = False) -> 
     }
 
 
-def _rows_json_failopen(projects: dict[str, Any], local: bool, show_all: bool = False) -> dict[str, Any]:
+def _rows_json_failopen(repositories: dict[str, Any], local: bool, show_all: bool = False) -> dict[str, Any]:
     """`rows_json`, degrading to an empty payload that says why; never raises."""
     try:
-        return rows_json(projects, local, show_all)
+        return rows_json(repositories, local, show_all)
     # JUSTIFICATION: the payload must be valid JSON whatever fails underneath; degrade, do not crash.
     except Exception as exc:  # pylint: disable=broad-exception-caught
         return {
@@ -147,17 +147,17 @@ def main(argv: list[str] | None = None) -> int:
         args, _unknown = _parser().parse_known_args(argv)
         if args.rows and args.json:
             try:
-                projects = json.load(sys.stdin).get("projects") or {}
+                repositories = json.load(sys.stdin).get("projects") or {}
             except (ValueError, AttributeError):
-                projects = {}
-            print(json.dumps(_rows_json_failopen(projects, bool(args.local), bool(args.all))))
+                repositories = {}
+            print(json.dumps(_rows_json_failopen(repositories, bool(args.local), bool(args.all))))
             return 0
         doc = json.load(sys.stdin)
-        projects = doc.get("projects") or {}
+        repositories = doc.get("projects") or {}
         if args.rows:
-            print("\n".join(rows_output(projects, bool(args.local), bool(args.all))))
+            print("\n".join(rows_output(repositories, bool(args.local), bool(args.all))))
             return 0
-        shell.append_row(build_row(args, projects, datetime.now(UTC)))
+        shell.append_row(build_row(args, repositories, datetime.now(UTC)))
     # JUSTIFICATION: a logging side channel must never fail the command it observes; every error is swallowed.
     except (Exception, SystemExit):  # pylint: disable=broad-exception-caught
         pass

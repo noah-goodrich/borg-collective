@@ -1,4 +1,4 @@
-"""The impure rungs of the project-state migration: observe, back up, apply, verify, remove."""
+"""The impure rungs of the repository-state migration: observe, back up, apply, verify, remove."""
 
 from __future__ import annotations
 
@@ -18,22 +18,22 @@ def _tracked(src: Path) -> bool:
     return captured is not None and captured[0] == 0
 
 
-def registry_projects(registry: dict) -> list[tuple[core.Project, str]]:
+def registry_repositories(registry: dict) -> list[tuple[core.Repository, str]]:
     """(precondition view, path) per registry entry. git is forked only for an entry with a null repo."""
-    out: list[tuple[core.Project, str]] = []
+    out: list[tuple[core.Repository, str]] = []
     for name, entry in sorted((registry.get("projects") or {}).items()):
         entry = entry or {}
         path = str(entry.get("path") or "")
         repo = entry.get("repo") or None
         backed = bool(repo) or bool(path and registry_shell.git_common_dir(path))
-        out.append((core.Project(name, repo, backed), path))
+        out.append((core.Repository(name, repo, backed), path))
     return out
 
 
 def observe(directory: Path, repo: str | None) -> core.Entry:
-    """Observe one project directory; the key uses the registry `repo` (None -> `local-` key)."""
+    """Observe one repository directory; the key uses the registry `repo` (None -> `local-` key)."""
     src = directory / ".borg" / "state.json"
-    dest = paths.project_state_file(directory, repo)
+    dest = paths.repository_state_file(directory, repo)
     present = src.is_file()
     return core.Entry(str(src), str(dest), present, dest.is_file(), present and _tracked(src))
 
@@ -73,11 +73,11 @@ def migrate(entries: list[core.Entry], new_root: Path, dry_run: bool) -> tuple[l
     return actions, failures
 
 
-def explicit_entry(file: str, registry: list[tuple[core.Project, str]]) -> core.Entry:
+def explicit_entry(file: str, registry: list[tuple[core.Repository, str]]) -> core.Entry:
     """An operator-named `.borg/state.json`: reuse a registry entry's repo for the same directory,
     else ask git."""
     directory = Path(os.path.realpath(file)).parent.parent
-    for project, path in registry:
+    for repository, path in registry:
         if path and os.path.realpath(path) == str(directory):
-            return observe(directory, project.repo)
+            return observe(directory, repository.repo)
     return observe(directory, registry_shell.git_common_dir(str(directory)))

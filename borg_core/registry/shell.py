@@ -70,8 +70,8 @@ def registry_has(name: str) -> bool:
 def registry_merge(name: str, entry: dict) -> None:
     """Upsert `entry` into the registry under `name` (shallow-merge with any existing entry)."""
     registry = read_registry()
-    projects = registry.setdefault("projects", {})
-    projects[name] = core.merge_entry(projects.get(name), entry)
+    repositories = registry.setdefault("projects", {})
+    repositories[name] = core.merge_entry(repositories.get(name), entry)
     write_registry(registry)
 
 
@@ -199,7 +199,7 @@ def git_common_dir(path: str) -> str | None:
     SHARED git directory, so a main checkout and all 31 of its linked worktrees return one identical
     string, while an independent clone of the same GitHub repo returns its own. That is the relation
     `borg add` never recorded: it wrote `name = basename(path)` and nothing else, so a worktree
-    became a project coequal with its parent, with its own checkpoint store and its own plan slot.
+    became a repository coequal with its parent, with its own checkpoint store and its own plan slot.
 
     `--path-format=absolute` IS LOAD-BEARING, not tidiness. Without it git answers a bare `.git`
     from a main checkout and an absolute path from a linked worktree -- the two forms that must
