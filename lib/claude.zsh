@@ -12,7 +12,7 @@ borg_claude_encode_path() {
     echo "${path//\//-}"
 }
 
-# Return the ~/.claude/projects directory for a given project path
+# Return the ~/.claude/projects directory for a given repository path
 borg_claude_project_dir() {
     local path="$1"
     local encoded
@@ -20,7 +20,7 @@ borg_claude_project_dir() {
     echo "$CLAUDE_PROJECTS_DIR/$encoded"
 }
 
-# Find the most recently modified JSONL file for a project path
+# Find the most recently modified JSONL file for a repository path
 # Returns just the session UUID (no extension)
 borg_claude_latest_session_id() {
     local path="$1"
@@ -42,7 +42,7 @@ borg_claude_session_jsonl() {
     echo "$dir/${session_id}.jsonl"
 }
 
-# Return the latest JSONL transcript path for a project
+# Return the latest JSONL transcript path for a repository
 borg_claude_latest_jsonl() {
     local path="$1"
     local session_id
@@ -51,8 +51,8 @@ borg_claude_latest_jsonl() {
     borg_claude_session_jsonl "$path" "$session_id"
 }
 
-# Parse ~/.claude/session-log.md and return unique project paths
-# Format: "- 2026-03-17 08:25 | /path/to/project | session:uuid"
+# Parse ~/.claude/session-log.md and return unique repository paths
+# Format: "- 2026-03-17 08:25 | /path/to/repository | session:uuid"
 borg_claude_scan_session_log() {
     [[ -f "$CLAUDE_SESSION_LOG" ]] || return 0
     /usr/bin/awk -F'|' '/^\-/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 ~ /^\//) print $2 }' \

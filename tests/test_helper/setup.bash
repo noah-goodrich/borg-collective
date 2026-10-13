@@ -119,5 +119,5 @@ run_zsh_fn() {
 # AC5 step c: where a project directory's state.json is WRITTEN now (the per-project state-root path). Forks git
 # for the repo key, like a hook with no registry repo; pass the registry repo as $2 to take the fast path.
 state_path_of() {
-    bash -c 'source "$1/lib/borg-hooks.sh" && _borg_project_state_file "$2" ${3+"$3"}' _ "$BORG_HOME" "$@"
+    bash -c 'source "$1/lib/borg-hooks.sh" && _borg_repository_state_file "$2" ${3+"$3"}' _ "$BORG_HOME" "$@"
 }

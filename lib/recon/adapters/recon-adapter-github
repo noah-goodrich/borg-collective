@@ -26,8 +26,8 @@
 #   exit 0 =  success (even for an empty sweep). Non-zero or malformed output = the engine records
 #             the track as failed and continues. NEVER emit raw dumps — only the structured object.
 #
-# This adapter sweeps every registered project's GitHub repo for PRs updated since `since`. It
-# degrades gracefully to an empty, explained track when gh is missing, unauthenticated, or a project
+# This adapter sweeps every registered repository's GitHub repo for PRs updated since `since`. It
+# degrades gracefully to an empty, explained track when gh is missing, unauthenticated, or a repository
 # has no github remote — a source being unavailable must never break the fan-out.
 #
 # ONE BATCHED GraphQL CALL, NOT N REST CALLS. This adapter previously issued `gh pr list` once per
@@ -87,10 +87,10 @@ SINCE_DATE="${SINCE%%T*}"
 REPOS_FILE="$(mktemp)"
 trap 'rm -f "$REPOS_FILE"' EXIT
 
-# Iterate projects. Each line: "<project>\t<path>". Resolution stays LOCAL (git remotes on disk) —
+# Iterate registered repositories. Each line: "<repository>\t<path>". Resolution stays LOCAL (git remotes on disk) —
 # it costs nothing and it is what lets the network call be a single batch.
-while IFS=$'\t' read -r PROJECT PPATH; do
-    [ -n "$PROJECT" ] && [ -n "$PPATH" ] || continue
+while IFS=$'\t' read -r REGISTERED_NAME PPATH; do
+    [ -n "$REGISTERED_NAME" ] && [ -n "$PPATH" ] || continue
     # -e, NOT -d: a linked git worktree's .git is a FILE containing "gitdir: ...", and
     # `git remote get-url origin` answers correctly inside one. The old -d test skipped every
     # worktree, so `drone feature` checkouts (registered by `borg add` — reveal-data-consistency is
@@ -125,7 +125,7 @@ while IFS=$'\t' read -r PROJECT PPATH; do
         *)                  continue ;;   # no slash at all
     esac
 
-    printf '%s\t%s\n' "$PROJECT" "$REPO" >> "$REPOS_FILE"
+    printf '%s\t%s\n' "$REGISTERED_NAME" "$REPO" >> "$REPOS_FILE"
 done < <(jq -r 'to_entries[] | [.key, (.value.path // "")] | @tsv' "$PROJECTS_FILE" 2>/dev/null)
 
 # `grep -c` PRINTS "0" and EXITS 1 on no matches, so `|| echo 0` would append a second line and make
@@ -134,17 +134,17 @@ done < <(jq -r 'to_entries[] | [.key, (.value.path // "")] | @tsv' "$PROJECTS_FI
 SWEPT="$(grep -c . "$REPOS_FILE" 2>/dev/null || true)"
 SWEPT="${SWEPT:-0}"
 
-# Two projects may legitimately resolve to the SAME repository (a worktree registered alongside its
-# parent). The old implementation queried once per PROJECT and emitted items per project; aliasing by
-# project line index rather than by repo preserves that exactly, at no extra cost — duplicate nodes in
+# Two registered repositories may legitimately resolve to the SAME GitHub repository (a worktree registered
+# alongside its parent). The old implementation queried once per registered name and emitted items per name;
+# aliasing by registered-line index rather than by repo preserves that exactly, at no extra cost — duplicate nodes in
 # one GraphQL document are still one round trip and still one rate-limit point.
 ALIAS_MAP="$(jq -R -s -c '
     split("\n") | map(select(length > 0)) | to_entries
-    | map({alias: ("r" + (.key|tostring)), project: (.value|split("\t")[0]), repo: (.value|split("\t")[1])})
+    | map({alias: ("r" + (.key|tostring)), name: (.value|split("\t")[0]), repo: (.value|split("\t")[1])})
 ' "$REPOS_FILE")"
 
 # SWEPT=0 IS A SKIP, NOT AN EMPTY ANSWER. Nothing in scope resolved to a github repository — no
-# origin, a non-github remote, or an empty project list — so this track looked at exactly zero
+# origin, a non-github remote, or an empty repository list — so this track looked at exactly zero
 # sources. Reporting that as a plain empty sweep is the same conflation emit_skip exists to prevent.
 if [ "$SWEPT" -eq 0 ]; then
     jq -n --arg s "$SOURCE" --arg m "no github repository in scope — nothing to sweep" \
@@ -152,12 +152,12 @@ if [ "$SWEPT" -eq 0 ]; then
     exit 0
 fi
 
-# Build the batched document: viewer once, then one aliased repository node per project.
+# Build the batched document: viewer once, then one aliased repository node per registered repository.
 PR_FIELDS='number title state isDraft updatedAt url headRefName baseRefName author { login }'
 PR_FIELDS_OPEN="$PR_FIELDS mergeable reviewDecision commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }"
 QUERY='query { viewer { login }'
 IDX=0
-while IFS=$'\t' read -r PROJECT REPO; do
+while IFS=$'\t' read -r REGISTERED_NAME REPO; do
     [ -n "$REPO" ] || continue
     OWNER="${REPO%%/*}"
     NAME="${REPO#*/}"
@@ -186,7 +186,7 @@ QUERY="$QUERY }"
 # Verified against the live registry: borg-collective had 53 PRs in window; the old adapter kept two
 # updated 2026-08-13 while dropping two updated 2026-08-14. `orderBy: {field: UPDATED_AT, direction:
 # DESC}` makes the cap mean "the 30 most recently updated", which is the only defensible reading for
-# a "what changed since the mark" sweep. Per-project item counts are unchanged (verified identical
+# a "what changed since the mark" sweep. Per-repository item counts are unchanged (verified identical
 # across all 13 repositories); only which items survive the cap on an over-30 repository differs.
 
 # DO NOT TREAT NON-ZERO EXIT AS TOTAL FAILURE. `gh api graphql` exits 1 whenever the response carries
@@ -212,7 +212,7 @@ ITEMS="$(printf '%s' "$RESPONSE" | jq -c \
       | (((.openPrs.nodes // []) + (.pullRequests.nodes // [])) | unique_by(.number))[]
       | select(.state == "OPEN" or ((.updatedAt | split("T")[0]) >= $since))
       | {
-          project: $m.project,
+          project: $m.name,
           source:  $source,
           ref:     ($m.repo + "#" + (.number|tostring)),
           title:   .title,

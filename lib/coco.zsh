@@ -15,7 +15,7 @@ borg_coco_encode_path() {
     echo "${path//\//-}"
 }
 
-# Return the ~/.snowflake/cortex/projects directory for a given project path
+# Return the ~/.snowflake/cortex/projects directory for a given repository path
 borg_coco_project_dir() {
     local path="$1"
     local encoded
@@ -23,7 +23,7 @@ borg_coco_project_dir() {
     echo "$COCO_PROJECTS_DIR/$encoded"
 }
 
-# Find the most recently modified JSONL file for a project path
+# Find the most recently modified JSONL file for a repository path
 # Returns just the session UUID (no extension)
 borg_coco_latest_session_id() {
     local path="$1"
@@ -45,7 +45,7 @@ borg_coco_session_jsonl() {
     echo "$dir/${session_id}.jsonl"
 }
 
-# Return the latest JSONL transcript path for a project
+# Return the latest JSONL transcript path for a repository
 borg_coco_latest_jsonl() {
     local path="$1"
     local session_id
@@ -54,8 +54,8 @@ borg_coco_latest_jsonl() {
     borg_coco_session_jsonl "$path" "$session_id"
 }
 
-# Parse ~/.snowflake/cortex/session-log.md and return unique project paths
-# Format: "- 2026-03-17 08:25 | /path/to/project | session:uuid"
+# Parse ~/.snowflake/cortex/session-log.md and return unique repository paths
+# Format: "- 2026-03-17 08:25 | /path/to/repository | session:uuid"
 borg_coco_scan_session_log() {
     [[ -f "$COCO_SESSION_LOG" ]] || return 0
     /usr/bin/awk -F'|' '/^\-/ { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $2); if ($2 ~ /^\//) print $2 }' \

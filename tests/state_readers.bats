@@ -28,7 +28,7 @@ setup() {
         > "$BORG_REGISTRY"
 }
 
-_new_path() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_project_state_file "$2"' _ "$ROOT" "$PROJ"; }
+_new_path() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_repository_state_file "$2"' _ "$ROOT" "$PROJ"; }
 _legacy() { mkdir -p "$PROJ/.borg" && printf '%s\n' "$1" > "$PROJ/.borg/state.json"; }
 _new() { mkdir -p "$(dirname "$(_new_path)")" && printf '%s\n' "$1" > "$(_new_path)"; }
 
@@ -74,8 +74,8 @@ _bash_read() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_state_read "$2" $
 
 @test "repo fast path names the same file as the forking resolver in bash, zsh and python" {
     forked="$(_new_path)"
-    fast_b="$(bash -c 'source "$1/lib/borg-hooks.sh" && _borg_project_state_file "$2" "$3"' _ "$ROOT" "$PROJ" "$COMMON")"
-    fast_z="$(zsh -c 'source "$1/lib/state-root.zsh" && _borg_project_state_file "$2" "$3"' _ "$ROOT" "$PROJ" "$COMMON")"
+    fast_b="$(bash -c 'source "$1/lib/borg-hooks.sh" && _borg_repository_state_file "$2" "$3"' _ "$ROOT" "$PROJ" "$COMMON")"
+    fast_z="$(zsh -c 'source "$1/lib/state-root.zsh" && _borg_repository_state_file "$2" "$3"' _ "$ROOT" "$PROJ" "$COMMON")"
     fast_p="$(PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import repository_state_file as f; print(f(sys.argv[1], sys.argv[2]))' "$PROJ" "$COMMON")"
     [ "$forked" = "$fast_b" ]
     [ "$forked" = "$fast_z" ]
@@ -85,10 +85,10 @@ _bash_read() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_state_read "$2" $
 @test "a null repo is the path-only key in all three languages, and equals the non-git resolver" {
     plain="$BATS_TEST_TMPDIR/plain"
     mkdir -p "$plain"
-    forked="$(bash -c 'source "$1/lib/borg-hooks.sh" && _borg_project_state_file "$2"' _ "$ROOT" "$plain")"
+    forked="$(bash -c 'source "$1/lib/borg-hooks.sh" && _borg_repository_state_file "$2"' _ "$ROOT" "$plain")"
     [[ "$forked" == */projects/local-*/state.json ]]
-    fast_b="$(bash -c 'source "$1/lib/borg-hooks.sh" && _borg_project_state_file "$2" ""' _ "$ROOT" "$plain")"
-    fast_z="$(zsh -c 'source "$1/lib/state-root.zsh" && _borg_project_state_file "$2" ""' _ "$ROOT" "$plain")"
+    fast_b="$(bash -c 'source "$1/lib/borg-hooks.sh" && _borg_repository_state_file "$2" ""' _ "$ROOT" "$plain")"
+    fast_z="$(zsh -c 'source "$1/lib/state-root.zsh" && _borg_repository_state_file "$2" ""' _ "$ROOT" "$plain")"
     fast_p="$(PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import repository_state_file as f; print(f(sys.argv[1], None))' "$plain")"
     [ "$forked" = "$fast_b" ]
     [ "$forked" = "$fast_z" ]
