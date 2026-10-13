@@ -39,7 +39,7 @@
 # BORG_RESUME_COMPACT_WAIT_SEC (120), BORG_RESUME_WEEKLY (notify = notify-only), BORG_RESUME_WEEKLY_MIN_SEC (86400),
 # BORG_RESUME_AUTO_COMPACT (S6 flag), BORG_USAGE_HALT_ENABLED / _PCT / _TTL_SEC / BORG_USAGE_SAMPLES (dispatch guard).
 #
-# Deferred to later slices: relaunch of a dead process and the resume-size dialog (S11), launchd (S12), doctor (S13),
+# Relaunch of a dead process and the resume-size dialog live in resume-relaunch.sh (S11). Deferred: launchd (S12), doctor (S13),
 # status/cancel/pause/run verbs (S14; notifications already name `borg resume cancel|run <rid>`). Liveness (S10)
 # records dead owners; this gate owns the post-confirmation stall watchdog.
 
@@ -53,6 +53,9 @@ command -v borg_resume_probe >/dev/null 2>&1 || . "$_RG_DIR/resume-probe.sh" 2>/
 command -v borg_resume_prompt >/dev/null 2>&1 || . "$_RG_DIR/resume-prompt.sh" 2>/dev/null
 # shellcheck source=/dev/null
 command -v borg_resume_notify >/dev/null 2>&1 || . "$_RG_DIR/resume-shared.sh" 2>/dev/null
+# S11 relaunch hook for dead sessions (lib/borg/resume-relaunch.sh), called only from _rg_dispatch_dead
+# shellcheck source=/dev/null
+command -v borg_resume_relaunch_hook >/dev/null 2>&1 || . "$_RG_DIR/resume-relaunch.sh" 2>/dev/null
 
 _RG_SEP=$'\037'
 _RG_GROUP=""
@@ -330,6 +333,8 @@ _rg_dead_owner() { # <file>
             _st="$(jq -r .state "$_f" 2>/dev/null)"
             case "$_st" in
                 new | scheduled | deferred)
+                    # A hook that deferred the record itself (cap, shell unproven) keeps that deferral.
+                    [ "${_RR_DEFERRED:-0}" = 1 ] && [ "$_st" = deferred ] && return 0
                     _rg_to "$_f" relaunching hook_no_transition
                     _rg_log "relaunch hook left $_rid in $_st; forced to relaunching"
                     ;;
@@ -418,7 +423,8 @@ _rg_static() { # <file>
     _cont="$(jq -r '.in_container // false' "$(borg_resume_registry_file "$_f_sid")" 2>/dev/null)"
     if [ "$_cont" = true ]; then
         _rg_to "$_f" notify_only container_session
-        _rg_note "$_f" container "Container session needs a manual resume ($_f_rid): borg resume run $_f_rid"
+        _cont="drone up <project> --resume $_f_sid, or borg resume run $_f_rid"
+        _rg_note "$_f" container "Container session needs a manual resume ($_f_rid): $_cont"
         return 0
     fi
     # S10 records whose owner is gone (process_death) join the group like any other, but _rg_run_group hands them to
