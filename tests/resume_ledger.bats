@@ -128,10 +128,10 @@ payload() {
     [ -z "$output" ]
 }
 
-@test "record: exits 0 when the lib directory is missing" {
+@test "record: exits 3 with one stderr line when the lib directory is missing (S12, no longer silent)" {
     run bash -c "printf '%s' '{\"session_id\":\"$SID\"}' | BORG_RESUME_LIBDIR=/nonexistent '$BR' record stop_failure"
-    [ "$status" -eq 0 ]
-    [ -z "$output" ]
+    [ "$status" -eq 3 ]
+    [[ "$output" == *"resume-paths.sh"* ]]
 }
 
 @test "record: BORG_RESUME_NOW_EPOCH pins the timestamp" {

@@ -457,6 +457,31 @@ _launchd_install_extensions
 info "Running borg setup..."
 "$BORG_HOME/borg.zsh" setup
 
+# ── 4b. borg-resume watcher job + global allowlist (S12) ─────────────────────
+#
+# Runs AFTER `borg setup` so ~/.claude/bin/borg-resume and ~/.claude/lib/borg are already in place. The
+# watcher is a LaunchAgent (every 30s, RunAtLoad off); the allowlist merge is D10 (three entries, global
+# settings only, idempotent, backed up first). Undo steps are listed in the PR that introduced this section.
+source "$BORG_HOME/lib/resume-install.sh"
+
+info "Installing borg-resume watcher (launchd, every 30s)..."
+RESUME_LABEL="$(_borg_launchd_label resume-watch)"
+RESUME_BIN="$HOME/.claude/bin/borg-resume"
+RESUME_CLAUDE_BIN=""
+if [[ -f "$BORG_HOME/lib/borg/claude-bin.sh" ]]; then
+    source "$BORG_HOME/lib/borg/claude-bin.sh" 2>/dev/null
+    borg_resolve_claude_bin 2>/dev/null && RESUME_CLAUDE_BIN="$BORG_CLAUDE_BIN"
+fi
+[[ -n "$RESUME_CLAUDE_BIN" ]] || warn "  claude not found on PATH: the watcher will run without BORG_CLAUDE_BIN"
+RESUME_PATH_VALUE="$HOME/.claude/bin:$HOME/.local/bin"
+[[ -n "$RESUME_CLAUDE_BIN" ]] && RESUME_PATH_VALUE="$RESUME_PATH_VALUE:${RESUME_CLAUDE_BIN:h}"
+RESUME_PATH_VALUE="$RESUME_PATH_VALUE:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+borg_resume_install_agent "$BORG_HOME/launchd/borg.resume-watch.plist" "$RESUME_LABEL" "$LA_DIR" "$LOG_DIR" \
+    "$RESUME_BIN" "$RESUME_CLAUDE_BIN" "$RESUME_PATH_VALUE"
+
+info "Merging borg-resume allowlist into $HOME/.claude/settings.json (Decision 10)..."
+borg_resume_merge_allowlist "$HOME/.claude/settings.json"
+
 # ── 5. Plugin detection ──────────────────────────────────────────────────────
 
 # Plugin check (REQUIRED): borg hooks are now owned by the borg-collective plugin.

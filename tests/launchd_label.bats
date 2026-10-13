@@ -147,7 +147,7 @@ _label() { zsh -c "source '$LIB' && _borg_launchd_label \"\$@\"" -- "$@"; }
     for a in $AGENTS; do
         [ -f "$LAUNCHD_DIR/borg.$a.plist" ] || { echo "missing launchd/borg.$a.plist"; false; }
     done
-    [ "$(ls "$LAUNCHD_DIR" | wc -l | tr -d ' ')" -eq 6 ]
+    [ "$(ls "$LAUNCHD_DIR" | wc -l | tr -d ' ')" -eq 7 ]
     ! ls "$LAUNCHD_DIR" | grep -q 'stillpoint'
 }
 

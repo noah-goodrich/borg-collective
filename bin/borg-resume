@@ -5,8 +5,8 @@
 #   record <event>   called by a hook with the hook payload on stdin. Appends ONE fact to
 #                    events/<sid>.jsonl; for session_start it also writes the registry
 #                    sessions/<sid>.json (replaced atomically on each session_start) and binds the tmux pane (@borg_sid).
-#                    ALWAYS exits 0, prints
-#                    nothing, and never blocks: it is called from a hook, so every failure is swallowed.
+#                    Exits 0 silently on every failure once its lib loads; exits 3 with one stderr line when it can not
+#                    load resume-paths.sh (S12). Never blocks: it is called from a hook.
 #   pause            create the DISABLED sentinel (nothing will inject; recording continues)
 #   unpause          remove it
 #   probe            print the session usage percent (own claude -p /usage sample, cached 120s)
@@ -244,9 +244,12 @@ _br_main() {
     local _cmd="${1:-}"
     [ $# -gt 0 ] && shift
     if [ "$_cmd" = "record" ]; then
+        # S12: a missing lib is a real install fault, not a swallowed event: exit 3 with one stderr line so the
+        # hook can log it. Every failure AFTER the lib loads stays fail-open.
         # shellcheck source=/dev/null
         if ! . "$BORG_RESUME_LIBDIR/resume-paths.sh" 2>/dev/null; then
-            return 0
+            printf "borg-resume: cannot load %s/resume-paths.sh (lib not installed?)\n" "$BORG_RESUME_LIBDIR" >&2
+            return 3
         fi
         { _br_record "$@"; } 2>/dev/null
         return 0

@@ -2247,6 +2247,13 @@ CONF
             info "  $uname"
         done
 
+        # S12 (borg-resume): bin/borg-resume finds its lib at ../lib/borg, so install lib/borg beside bin.
+        if [[ -d "$BORG_HOME/lib/borg" && -f "$BORG_HOME/lib/resume-install.sh" ]]; then
+            info "Installing borg-resume lib..."
+            source "$BORG_HOME/lib/resume-install.sh"
+            borg_resume_install_lib "$BORG_HOME/lib/borg" "$CLAUDE_DIR/lib/borg"
+        fi
+
         # Ensure ~/.claude/bin is in PATH for this session and future shells
         if [[ ":$PATH:" != *":$CLAUDE_BIN_DIR:"* ]]; then
             export PATH="$CLAUDE_BIN_DIR:$PATH"
