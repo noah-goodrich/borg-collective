@@ -447,6 +447,7 @@ mk_confirmed() { # confirmed 15 minutes ago, 10 transcript lines at the time
 @test "stall watchdog: transcript still moving or younger than 10 minutes is not stalled" {
     mk_confirmed
     ev "$SID" "{\"t\":$((NOW - 800)),\"ev\":\"permission_prompt\",\"scope\":\"main\"}"
+    t_tool "$PD/$SID.jsonl"
     set_mtime "$PD/$SID.jsonl" $((NOW - 30))
     watch
     [ "$(rec_q '.[0].state')" = confirmed ]
