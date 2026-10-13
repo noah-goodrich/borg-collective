@@ -189,12 +189,16 @@ borg_resume_install_watcher() {
     local _home="$1" _label="$2" _la="$3" _logs="$4" _claude="" _pv _dir
     if [ "${BORG_RESUME_WATCH:-1}" = "0" ]; then
         _ri_say "  BORG_RESUME_WATCH=0: borg-resume watcher not installed"
+        # Persist the opt-out so `borg doctor` in a fresh shell knows it was deliberate.
+        mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/borg/resume" 2>/dev/null &&
+            : >"${XDG_STATE_HOME:-$HOME/.local/state}/borg/resume/WATCH_OPTOUT" 2>/dev/null
         if _ri_is_loaded "$_label"; then
             _ri_say "  booting out the already-loaded watcher: $_label"
             _ri_bootout_wait "$_label" || true
         fi
         return 0
     fi
+    rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/borg/resume/WATCH_OPTOUT" 2>/dev/null
     if [ -f "$_home/lib/borg/claude-bin.sh" ]; then
         # shellcheck source=/dev/null
         . "$_home/lib/borg/claude-bin.sh" 2>/dev/null
