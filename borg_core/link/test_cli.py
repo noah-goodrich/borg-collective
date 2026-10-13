@@ -37,6 +37,16 @@ def isolated_env(tmp_path, monkeypatch):
     return tmp_path
 
 
+def _stand_at_queen(root, monkeypatch):
+    """Make cwd the Queen root: the only place (besides `--overview`) the cross-repository page renders.
+
+    Since 2026-10-13 a cwd that is neither the Queen root nor inside a registered path prints the hint page, so
+    a test that wants the overview must stand where the overview lives.
+    """
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(root))
+    monkeypatch.chdir(root)
+
+
 def _write_registry(root, repositories):
     registry_file = root / "borg-dir" / "registry.json"
     registry_file.write_text(json.dumps({"projects": repositories}), encoding="utf-8")
@@ -170,8 +180,9 @@ def test_json_publishes_the_measured_picture_width_on_the_grid_block(isolated_en
     assert empty["manifests"] == [] and empty["picture_width"] == 0
 
 
-def test_run_human_mode_renders_the_seven_section_document(isolated_env, capsys):
+def test_run_human_mode_renders_the_seven_section_document(isolated_env, capsys, monkeypatch):
     _write_registry(isolated_env, {"solo": {"status": "idle", "last_activity": "2026-08-01T00:00:00Z"}})
+    _stand_at_queen(isolated_env, monkeypatch)
 
     exit_code = cli._run("", False, "human")  # pylint: disable=protected-access
 
@@ -180,6 +191,56 @@ def test_run_human_mode_renders_the_seven_section_document(isolated_env, capsys)
     assert captured.err == ""
     assert "THE BORG COLLECTIVE" in captured.out
     assert "solo" in captured.out
+
+
+def test_an_unregistered_cwd_prints_the_hint_page_exits_zero_and_reads_nothing_else(isolated_env, capsys, monkeypatch):
+    """Decision (3), end to end: neither the Queen root nor inside a registered path => a short page, exit 0.
+
+    The hint page reads NOTHING: no sweep, no manifest glob, no aggregate. MUTATION: remove `hint_only` in
+    `_document` and the three counters below go red while the page itself stays identical -- the cost of a page
+    that throws its whole document away. `--json` is NOT short-circuited: it carries the full document from any
+    cwd and says `scope.unregistered` (additive; `kind` is still "orchestrator").
+    """
+    registered = _repository_dir(isolated_env, "registered-secret")
+    _write_registry(isolated_env, {"registered-secret": {"path": registered, "status": "idle"}})
+    stranger = isolated_env / "stranger"
+    stranger.mkdir()
+    queen = isolated_env / "queen"
+    queen.mkdir()
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(queen))
+    monkeypatch.chdir(stranger)
+
+    calls = {"sweep": 0, "discover": 0, "aggregate": 0}
+
+    def counting(name, real):
+        def wrapper(*args, **kwargs):
+            calls[name] += 1
+            return real(*args, **kwargs)
+
+        return wrapper
+
+    monkeypatch.setattr(shell, "sweep", counting("sweep", shell.sweep))
+    monkeypatch.setattr(shell, "discover_manifests", counting("discover", shell.discover_manifests))
+    monkeypatch.setattr(shell, "collect_all_directives", counting("aggregate", shell.collect_all_directives))
+
+    assert cli._run("", False, "human") == 0  # pylint: disable=protected-access
+    captured = capsys.readouterr()
+    page = captured.out
+    assert captured.err == ""
+    assert "This directory is not a registered repository." in page
+    assert "borg add" in page and "borg link --overview" in page
+    assert "registered-secret" not in page and "THE BORG COLLECTIVE" not in page and "REPOSITORIES" not in page
+    assert calls == {"sweep": 0, "discover": 0, "aggregate": 0}
+
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["scope"]["kind"] == "orchestrator" and doc["scope"]["unregistered"] is True
+    assert doc["order"] == ["registered-secret"], "--json carries the whole document from any cwd"
+
+    # `--overview` asks for the Queen view by name, from the same stranger directory, and gets it.
+    assert cli._run("", False, "human", local=True, overview=True) == 0  # pylint: disable=protected-access
+    overview = capsys.readouterr().out
+    assert "registered-secret" in overview and "not a registered repository" not in overview
 
 
 def test_run_reads_the_wall_clock_exactly_once_per_document(isolated_env, monkeypatch, capsys):
@@ -420,6 +481,7 @@ def test_render_document_prints_the_same_page_the_human_arm_would(isolated_env, 
     """
     path = _delta_workspace(isolated_env)
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle", "summary": "Delta."}})
+    _stand_at_queen(isolated_env, monkeypatch)
     monkeypatch.setattr(shell, "now_epoch", lambda: 1_800_000_000)
 
     with pytest.raises(SystemExit) as exc_info:
@@ -450,6 +512,7 @@ def test_render_document_builds_nothing_of_its_own(isolated_env, capsys, monkeyp
     something that fails on contact can tell them apart.
     """
     _write_registry(isolated_env, {"solo": {"status": "idle", "last_activity": "2026-08-01T00:00:00Z"}})
+    _stand_at_queen(isolated_env, monkeypatch)
     with pytest.raises(SystemExit):
         cli.main(["--json"])
     document_json = capsys.readouterr().out
@@ -522,6 +585,7 @@ def test_repository_scope_calls_no_aggregate_collector_on_the_human_path(isolate
     # the prize, not the invariant -- the assertion is unchanged.)
     path = _delta_workspace(isolated_env)
     _write_registry(isolated_env, {"delta": {"path": path, "status": "idle"}})
+    _stand_at_queen(isolated_env, monkeypatch)
 
     calls = {"directives": 0, "assimilated": 0}
     real_directives = shell.collect_all_directives
@@ -1001,7 +1065,7 @@ def test_a_stem_declared_in_both_roots_counts_as_refused_not_as_no_manifest(isol
         target.mkdir(parents=True)
         shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", target)
     _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
-    monkeypatch.chdir(isolated_env)
+    _stand_at_queen(isolated_env, monkeypatch)
 
     assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
     grid_block = json.loads(capsys.readouterr().out)["grid"]
@@ -1028,7 +1092,7 @@ def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(
     refused_file = target / "broken.json"
     refused_file.write_text(json.dumps({"program": "broken", "rows": [good_row, bad_row]}))
     _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
-    monkeypatch.chdir(isolated_env)
+    _stand_at_queen(isolated_env, monkeypatch)
 
     assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
     grid_block = json.loads(capsys.readouterr().out)["grid"]
@@ -1079,3 +1143,147 @@ def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
     assert len(body) == 5 + 2 + 1
     assert "+2 more decisions" in body[-3] and "+2 agent tasks" in body[-2]
     assert "next" in body[-1]
+# ── the worktree page (2026-10-13): a directory reads ONLY that directory ───────────────────────────
+
+
+def _two_worktrees(root):
+    """`borg` (a main checkout) and `door` (a linked worktree of it), registered under one `repo` key.
+
+    The git layout is written by hand, exactly as git writes it: the main checkout's `.git` is a directory, the
+    worktree's `.git` is a FILE naming `<main>/.git/worktrees/door`, whose `commondir` is `../..` and whose
+    `HEAD` is a symbolic ref. `read_git_identity` reads those files, so the fixture needs no `git` on PATH.
+    Each directory holds its OWN checkpoint, the main checkout's NEWER by filename -- the shape that made the
+    union read leak a sibling's checkpoint onto the worktree's page.
+    """
+    main = Path(_repository_dir(root, "borg"))
+    door = Path(_repository_dir(root, "door"))
+    (main / ".git").mkdir()
+    (main / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    gitdir = main / ".git" / "worktrees" / "door"
+    gitdir.mkdir(parents=True)
+    (gitdir / "commondir").write_text("../..\n", encoding="utf-8")
+    (gitdir / "HEAD").write_text("ref: refs/heads/feat-door\n", encoding="utf-8")
+    (door / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+    for directory, name, summary in (
+        (main, "2026-10-13-1200.md", "Main summary."),
+        (door, "2026-10-12-0900.md", "Door summary."),
+    ):
+        store = directory / ".borg" / "checkpoints"
+        store.mkdir(parents=True)
+        (store / name).write_text(f"**tl;dr** — {summary}\n\n## Next Session\n\nOwn work.\n", encoding="utf-8")
+    common = str(Path(os.path.realpath(main / ".git")))
+    _write_registry(
+        root,
+        {
+            "borg": {"path": str(main), "repo": common, "status": "idle"},
+            "door": {"path": str(door), "repo": common, "status": "active"},
+        },
+    )
+    return main, door
+
+
+def test_a_worktrees_checkpoints_and_summary_are_its_own_never_a_siblings(isolated_env, monkeypatch):
+    """Noah's report from borg-probes, as a test. RED AGAINST THE UNION READ: with `core.repo_sources` in
+    `_focus`, `door`'s checkpoint list leads with the main checkout's newer `2026-10-13-1200.md @borg`, its head
+    is the main checkout's body, and its summary is `Main summary.`"""
+    main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+
+    monkeypatch.chdir(door)
+    doc = cli._document("", False, "json")  # pylint: disable=protected-access
+    assert doc["focus"]["name"] == "door"
+    assert doc["focus"]["checkpoints"] == ["2026-10-12-0900.md"]
+    assert "Door summary." in doc["focus"]["checkpoint_head"] and "Main summary." not in doc["focus"]["checkpoint_head"]
+    assert doc["focus"]["entry"]["summary"] == "Door summary."
+    # ...and the board rows the document carries are each their own directory's, not the group's.
+    assert doc["projects"]["door"]["summary"] == "Door summary."
+    assert doc["projects"]["borg"]["summary"] == "Main summary."
+
+    monkeypatch.chdir(main)
+    doc = cli._document("", False, "json")  # pylint: disable=protected-access
+    assert doc["focus"]["checkpoints"] == ["2026-10-13-1200.md"]
+    assert doc["focus"]["entry"]["summary"] == "Main summary."
+
+
+def test_focus_states_what_git_says_the_directory_is(isolated_env, monkeypatch):
+    main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+
+    monkeypatch.chdir(door)
+    assert cli._document("", False, "json")["focus"]["identity"] == {  # pylint: disable=protected-access
+        "kind": "worktree",
+        "branch": "feat-door",
+        "worktree_of": "borg",
+    }
+    monkeypatch.chdir(main)
+    assert cli._document("", False, "json")["focus"]["identity"] == {  # pylint: disable=protected-access
+        "kind": "checkout",
+        "branch": "main",
+        "worktree_of": "",
+    }
+
+
+def test_the_human_page_in_a_worktree_is_strictly_that_worktree(isolated_env, monkeypatch, capsys):
+    _main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(door)
+
+    assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
+    out = capsys.readouterr().out
+    assert "IN FOCUS" in out and "door — worktree of borg" in out
+    assert "Door summary." in out and "2026-10-12-0900.md" in out
+    assert "Main summary." not in out and "2026-10-13-1200.md" not in out
+    assert "REPOSITORIES" not in out and "THE BORG COLLECTIVE" not in out
+    assert "borg link --overview" in out
+
+
+def test_overview_forces_the_queen_view_from_a_worktree(isolated_env, monkeypatch, capsys):
+    """MUTATION: drop `overview=overview` from the `scope_for` call and the worktree keeps its own page."""
+    _main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(door)
+
+    doc = cli._document("", False, "json", True, True)  # pylint: disable=protected-access
+    assert doc["scope"] == {"kind": "orchestrator", "repository": None, "local": True}
+    assert doc["focus"] is None
+    # ...a positional is not honoured against the flag: the request for the whole collective wins.
+    ignored = cli._document("door", False, "json", True, True)  # pylint: disable=protected-access
+    assert ignored["scope"]["kind"] == "orchestrator" and ignored["focus"] is None
+
+    assert cli._run("", False, "human", local=True, overview=True) == 0  # pylint: disable=protected-access
+    out = capsys.readouterr().out
+    assert "REPOSITORIES" in out and "THE BORG COLLECTIVE" in out
+    assert "worktree of" not in out
+
+
+def test_overview_parses_and_defaults_off():
+    assert cli._build_parser().parse_args([]).overview is False  # pylint: disable=protected-access
+    assert cli._build_parser().parse_args(["--overview"]).overview is True  # pylint: disable=protected-access
+
+
+def test_json_keeps_every_key_the_directory_page_stopped_rendering(isolated_env, monkeypatch):
+    """Decision 5: the human page narrows, the wire does not. Registry-wide keys are present and unchanged in
+    repository scope, and the only key ADDED is `focus.identity` (additive, so DOCUMENT_VERSION stays 2)."""
+    _main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+
+    monkeypatch.chdir(door)
+    inside = cli._document("", False, "json")  # pylint: disable=protected-access
+    monkeypatch.chdir(isolated_env)
+    queen = cli._document("", False, "json")  # pylint: disable=protected-access
+
+    assert set(inside) == set(queen)
+    assert inside["version"] == queen["version"] == 2
+    for registry_wide in ("order", "projects", "directives", "assimilated", "capacity", "grid"):
+        assert registry_wide in inside
+    assert inside["order"] == queen["order"]
+    assert set(inside["focus"]) == {
+        "name",
+        "entry",
+        "identity",
+        "plan",
+        "checkpoints",
+        "checkpoint_head",
+        "directives",
+        "assimilated",
+    }
