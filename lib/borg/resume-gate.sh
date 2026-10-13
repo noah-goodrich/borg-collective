@@ -310,7 +310,7 @@ _rg_weekly() { # <file> (fields loaded)
 
 # Static pass for one record. Appends "sid<US>file" to _RG_READY when it should be considered for injection.
 _rg_static() { # <file>
-    local _f="$1" _now _age _base _reason _cons _day _cont
+    local _f="$1" _now _age _base _reason _cons _day _cont _runat
     _rg_fields "$_f" || return 0
     case "$_f_state" in new | scheduled | deferred) ;; *) return 0 ;; esac
     borg_resume_valid_sid "$_f_sid" || return 0
@@ -329,6 +329,11 @@ _rg_static() { # <file>
 
     _age="$(_rg_int BORG_RESUME_MAX_AGE_HOURS 48)"
     _base="$_f_ra"
+    # run_at (set by `borg resume run`) rebases the age clock and the 7-day ceiling.
+    _runat="$(jq -r '.run_at // 0' "$_f" 2>/dev/null)"
+    case "$_runat" in "" | *[!0-9]*) _runat=0 ;; esac
+    [ "$_runat" -gt "$_base" ] && _base="$_runat"
+    [ "$_runat" -gt "$_f_fs" ] && _f_fs="$_runat"
     if [ "$_f_class" = usage_limit ] && [ "$_f_reset" != "-" ]; then
         if [ $((_now - _f_fs)) -gt 604800 ]; then
             _rg_to "$_f" expired age_ceiling
@@ -353,7 +358,7 @@ _rg_static() { # <file>
     fi
     if [ "$_day" -ge "$(_rg_int BORG_RESUME_MAX_PER_DAY 12)" ]; then
         _rg_to "$_f" capped daily_cap
-        _rg_note "$_f" capped "Daily resume cap reached ($_f_rid). Retry by hand: borg resume run $_f_rid"
+        _rg_note "$_f" capped "Daily resume cap reached ($_f_rid); it resets at midnight. Then: borg resume run $_f_rid"
         return 0
     fi
 

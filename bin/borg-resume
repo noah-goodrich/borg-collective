@@ -18,7 +18,7 @@
 #   defer <rid> [<until>] [--reason <w>]  append a defer event; the watcher reschedules the record; slice S7b
 #   status [--json] [--all]   records by state, due time, kill-switch state; slice S14
 #   cancel <rid> | --session <sid> | --all   append a cancel event; the watcher moves the record to cancelled; S14
-#   run <rid> [--force]   make a record due now, run one watcher pass (full gate and idle proof), print the decision; S14
+#   run <rid> [--force]   make a record due now, run one watcher pass (full gate and idle proof); S14
 #
 # Later slices add log and the rest. Hooks only APPEND; the watcher owns every
 # state transition. Bash 3.2 safe, jq is the only non-coreutils dependency.

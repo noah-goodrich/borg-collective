@@ -24,7 +24,8 @@
 # with its evidence uuid, which is what blocks the scan from re-creating it. run moves a new/scheduled/deferred
 # record to scheduled with resume_at = min(resume_at, now) and drops gate_next; a terminal expired, capped,
 # notify_only, stalled, failed or cancelled record in done/ is revived into pending/ the same way; done and
-# superseded records are never revived. run --force also zeroes the session's consecutive and injections_today.
+# superseded records are never revived. run stamps run_at (rebases the gate
+# age clock and 7-day ceiling). run --force resets only consecutive, and only for a consecutive_cap record.
 #
 # Exit codes: 0 ok (or BORG_RESUME_DISABLE=1, a no-op with a message), 1 no such record / nothing to do / cannot
 # write, 2 usage.
@@ -317,7 +318,7 @@ borg_resume_run() {
 
 # Revive or reschedule one record for a run event. $1 sid, $2 rid, $3 force flag.
 _rcli_apply_run() {
-    local _sid="$1" _rid="$2" _force="$3" _pf _df _now _st
+    local _sid="$1" _rid="$2" _force="$3" _pf _df _now _st _prev="" _revived=0
     _now="$(_rc_now)"
     _pf="$(borg_resume_dir)/pending/$_rid.json"
     _df="$(borg_resume_dir)/done/$_rid.json"
@@ -328,20 +329,27 @@ _rcli_apply_run() {
         [ "$(jq -r .sid "$_df" 2>/dev/null)" = "$_sid" ] || return 0
         _st="$(jq -r .state "$_df" 2>/dev/null)"
         case "$_st" in expired | capped | notify_only | stalled | failed | cancelled) ;; *) return 0 ;; esac
+        _prev="$(jq -r '.done_reason // ""' "$_df" 2>/dev/null)"
         cp -f "$_df" "$_pf" 2>/dev/null || return 1
+        _revived=1
     else
         return 0
     fi
-    _rw_update "$_pf" --argjson now "$_now" --arg f "$_force" '
-        .state = "scheduled" | .resume_at = ([(.resume_at // $now), $now] | min)
+    # run_at rebases the gate age clock (and the 7-day ceiling), so an age-expired record is not re-expired at once;
+    # a record revived from done/ is due now rather than at its old resume_at.
+    _rw_update "$_pf" --argjson now "$_now" --argjson rv "$_revived" '
+        .state = "scheduled"
+        | .resume_at = (if $rv == 1 then $now else ([(.resume_at // $now), $now] | min) end)
         | del(.gate_next, .gate_reason, .lead, .done_reason)
-        | (if $f == "force" then .forced_at = $now else . end)
+        | .run_at = $now
         | .run_count = ((.run_count // 0) + 1)
         | .state_log = ((.state_log + [["scheduled", $now, "run"]])[-40:])' || return 1
     rm -f "$_df" 2>/dev/null
-    if [ "$_force" = force ]; then
+    # --force only lifts the 3-consecutive cap, and only for a record that was stopped by it. The daily cap is hard:
+    # injections_today is never touched here.
+    if [ "$_force" = force ] && [ "$_prev" = consecutive_cap ]; then
         _rw_state_ensure "$_sid"
-        _rw_update "$(_rw_state_file "$_sid")" '.consecutive = 0 | .injections_today = 0' || return 1
+        _rw_update "$(_rw_state_file "$_sid")" '.consecutive = 0' || return 1
     fi
     _rw_log "run applied $_rid force=${_force:-no}"
     return 0

@@ -377,6 +377,75 @@ ev() { # <sid> <json>
     [ "$(rf "$rid" .state)" = injected ]
 }
 
+@test "run --force never bypasses the daily cap and never touches injections_today" {
+    mk_main "$SID"
+    at 0
+    watch
+    local rid
+    rid="$(basename "$RD"/pending/*.json .json)"
+    mk_state "$SID" '.injections_today = 12 | .consecutive = 1 | .day = "2026-10-12"'
+    run "$BIN" run "$rid" --force
+    [ "$(n_inject)" = 0 ]
+    [ "$(rf "$rid" .state)" = capped ]
+    [ "$(rf "$rid" .done_reason)" = daily_cap ]
+    [ "$(jq -r .injections_today "$RD/state/$SID.json")" = 12 ]
+    [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 1 ]
+}
+
+@test "run --force resets consecutive only for a record capped by consecutive_cap" {
+    mk_main "$SID"
+    at 0
+    watch
+    local rid
+    rid="$(basename "$RD"/pending/*.json .json)"
+    mk_state "$SID" '.consecutive = 2 | .injections_today = 5'
+    run "$BIN" run "$rid" --force
+    [ "$(jq -r .consecutive "$RD/state/$SID.json")" = 3 ]
+    [ "$(jq -r .injections_today "$RD/state/$SID.json")" = 6 ]
+}
+
+@test "run revives a record that expired by age, and by the 7-day ceiling" {
+    mk_main "$SID"
+    at 0
+    watch
+    local rid
+    rid="$(basename "$RD"/pending/*.json .json)"
+    jq -c --argjson o $((T0 - 3 * 86400)) '.state = "expired" | .done_reason = "age" | .first_seen = $o
+        | .resume_at = $o' "$RD/pending/$rid.json" >"$RD/done/$rid.json"
+    rm "$RD/pending/$rid.json"
+    run "$BIN" run "$rid"
+    [ "$status" -eq 0 ]
+    [ "$(n_inject)" = 1 ]
+    [ "$(rf "$rid" .state)" = injected ]
+}
+
+@test "run revives a usage_limit record past the 7-day ceiling" {
+    mk_main "$SID"
+    at 0
+    watch
+    local rid
+    rid="$(basename "$RD"/pending/*.json .json)"
+    jq -c --argjson o $((T0 - 9 * 86400)) '.state = "expired" | .done_reason = "age_ceiling" | .first_seen = $o
+        | .resume_at = $o | .class = "usage_limit" | .reset_text = "resets 3pm"' \
+        "$RD/pending/$rid.json" >"$RD/done/$rid.json"
+    rm "$RD/pending/$rid.json"
+    run "$BIN" run "$rid"
+    [ "$status" -eq 0 ]
+    [ "$(rf "$rid" .state)" != expired ]
+}
+
+@test "the watcher says so loudly in watch.log when resume-cli.sh is missing from the lib dir" {
+    local lib="${BATS_TEST_TMPDIR}/lib"
+    mkdir -p "$lib"
+    cp "${BATS_TEST_DIRNAME}"/../lib/borg/*.sh "$lib/"
+    rm "$lib/resume-cli.sh"
+    mk_main "$SID"
+    ev "$SID" '{"t":1,"ev":"cancel","sid":"x","scope":"main","rid":"r_aaaaaa","reason":"user"}'
+    BORG_RESUME_LIBDIR="$lib" run "$BIN" watch --once
+    [ "$status" -eq 0 ]
+    grep -q 'resume-cli.sh missing' "$RD/watch.log"
+}
+
 @test "run rejects unknown flags with usage" {
     run "$BIN" run r_aaaaaa --bogus
     [ "$status" -eq 2 ]

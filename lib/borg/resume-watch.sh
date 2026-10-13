@@ -761,6 +761,8 @@ borg_resume_watch_once() {
     # shellcheck source=/dev/null
     if [ -n "${BORG_RESUME_LIBDIR:-}" ] && [ -f "$BORG_RESUME_LIBDIR/resume-cli.sh" ]; then
         . "$BORG_RESUME_LIBDIR/resume-cli.sh"
+    else
+        _rw_log "ERROR resume-cli.sh missing from ${BORG_RESUME_LIBDIR:-unset}: cancel and run events are NOT applied"
     fi
     for _f in "$_d"/events/*.jsonl; do
         [ -f "$_f" ] || continue
