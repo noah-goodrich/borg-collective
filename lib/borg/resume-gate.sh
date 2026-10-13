@@ -39,9 +39,20 @@
 # BORG_RESUME_COMPACT_WAIT_SEC (120), BORG_RESUME_WEEKLY (notify = notify-only), BORG_RESUME_WEEKLY_MIN_SEC (86400),
 # BORG_RESUME_AUTO_COMPACT (S6 flag), BORG_USAGE_HALT_ENABLED / _PCT / _TTL_SEC / BORG_USAGE_SAMPLES (dispatch guard).
 #
+<<<<<<< HEAD
 # Relaunch of a dead process and the resume-size dialog live in resume-relaunch.sh (S11). Deferred: launchd (S12), doctor (S13),
 # status/cancel/pause/run verbs (S14; notifications already name `borg resume cancel|run <rid>`). Liveness (S10)
 # records dead owners; this gate owns the post-confirmation stall watchdog.
+||||||| parent of 8337308 (fix(resume): S11 review fixes - no typing, size dialog opt-in)
+# Relaunch of a dead process and the resume-size dialog live in resume-relaunch.sh (S11). Deferred: launchd (S12), doctor (S13),
+# status/cancel/pause/run verbs (S14; notifications already name `borg resume cancel|run <rid>`), liveness and the
+# stall watchdog for partial workflows without an errored agent (S10).
+=======
+# Relaunch of a dead process and the resume-size dialog live in resume-relaunch.sh (S11).
+# Deferred to later slices: launchd (S12), doctor (S13),
+# status/cancel/pause/run verbs (S14; notifications already name `borg resume cancel|run <rid>`), liveness and the
+# stall watchdog for partial workflows without an errored agent (S10).
+>>>>>>> 8337308 (fix(resume): S11 review fixes - no typing, size dialog opt-in)
 
 # shellcheck disable=SC2016
 _RG_DIR="${BASH_SOURCE[0]%/*}"
@@ -423,7 +434,8 @@ _rg_static() { # <file>
     _cont="$(jq -r '.in_container // false' "$(borg_resume_registry_file "$_f_sid")" 2>/dev/null)"
     if [ "$_cont" = true ]; then
         _rg_to "$_f" notify_only container_session
-        _rg_note "$_f" container "Container session needs a manual resume ($_f_rid): drone up <project> --resume $_f_sid, or borg resume run $_f_rid"
+        _cont="drone up <project> --resume $_f_sid, or borg resume run $_f_rid"
+        _rg_note "$_f" container "Container session needs a manual resume ($_f_rid): $_cont"
         return 0
     fi
     # S10 records whose owner is gone (process_death) join the group like any other, but _rg_run_group hands them to

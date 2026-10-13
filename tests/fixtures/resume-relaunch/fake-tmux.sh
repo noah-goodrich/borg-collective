@@ -97,7 +97,11 @@ case "$cmd" in
         ;;
     set-option)
         log "set-option $*"
-        setp "$3" 2 "$5" 2>/dev/null
+        if [ "$2" = "-u" ]; then
+            setp "$4" 2 ""
+        else
+            setp "$3" 2 "$5" 2>/dev/null
+        fi
         ;;
     send-keys)
         log "send-keys $*"
@@ -109,30 +113,18 @@ case "$cmd" in
             shift
         fi
         key="$1"
-        if [ "$lit" = 1 ]; then
-            case "$key" in
-                cd\ *)
-                    printf '%s\n' "$ $key" >>"$FT/cap.$t"
-                    echo "$key" >"$FT/typed.$t"
-                    ;;
-                *) echo "$key" >"$FT/picked.$t" ;;
-            esac
-        elif [ "$key" = Enter ]; then
-            if [ -e "$FT/typed.$t" ]; then
-                rm -f "$FT/typed.$t"
-                started "$t"
-            elif [ "$(cat "$FT/state.$t" 2>/dev/null)" = size ]; then
-                sid="$(cat "$FT/want_sid")"
-                cp "$FIX/idle.txt" "$FT/cap.$t"
-                if [ "$(cat "$FT/picked.$t" 2>/dev/null)" = 2 ]; then
-                    setp "$t" 2 "$sid"
-                    event "$sid"
-                else
-                    setp "$t" 2 "$FORK"
-                    event "$FORK"
-                fi
-                rm -f "$FT/state.$t"
+        # SYNTHETIC select dialog that commits on the digit alone (real behaviour unknown, U17); Enter is inert.
+        if [ "$lit" = 1 ] && [ "$(cat "$FT/state.$t" 2>/dev/null)" = size ]; then
+            sid="$(cat "$FT/want_sid")"
+            cp "$FIX/idle.txt" "$FT/cap.$t"
+            if [ "$key" = 2 ]; then
+                setp "$t" 2 "$sid"
+                event "$sid"
+            else
+                setp "$t" 2 "$FORK"
+                event "$FORK"
             fi
+            rm -f "$FT/state.$t"
         fi
         ;;
 esac

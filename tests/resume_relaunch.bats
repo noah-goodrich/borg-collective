@@ -125,16 +125,51 @@ want() { printf '%s' "$1" >"$FT/want_sid"; }
     [ ! -e "$FT/calls.log" ]
 }
 
-@test "resume-size dialog: the FULL-session option is chosen and the session is verified" {
+@test "resume-size dialog (default, U17 uncaptured): notify_only, nothing typed, manual command given" {
+    echo size >"$FT/scenario"
+    mk_dead "$SID"
+    want "$SID"
+    run_due
+    ! grep -q "send-keys" "$FT/calls.log"
+    [ "$(rec '.[0].state')" = notify_only ]
+    [ "$(rec '.[0].done_reason')" = relaunch_resume_size_dialog ]
+    [ "$(n_inject)" = 0 ]
+    grep -q "claude --resume $SID" "$NLOG"
+}
+
+@test "resume-size dialog, opted in (SYNTHETIC fixture): the digit alone, never followed by Enter" {
+    export BORG_RESUME_ANSWER_SIZE_DIALOG=1
     echo size >"$FT/scenario"
     mk_dead "$SID"
     want "$SID"
     run_due
     grep -q "send-keys -t %9 -l 2" "$FT/calls.log"
-    grep -q "send-keys -t %9 Enter" "$FT/calls.log"
+    ! grep -q "Enter" "$FT/calls.log"
     ! grep -q "send-keys -t %9 -l 1" "$FT/calls.log"
     [ "$(n_inject)" = 1 ]
     [ "$(rec '.[0].state')" = injected ]
+}
+
+@test "login shell wraps claude: argv form via exec \"\$@\", no string building" {
+    mk_dead "$SID"
+    want "$SID"
+    export BORG_RESUME_LOGIN_SHELL=/bin/bash
+    run_due
+    grep -qxF "ARG[/bin/bash]" "$FT/calls.log"
+    grep -qxF "ARG[-l]" "$FT/calls.log"
+    grep -qxF 'ARG[exec "$@"]' "$FT/calls.log"
+    grep -qxF "ARG[${BATS_TEST_TMPDIR}/bin/claude]" "$FT/calls.log"
+    grep -qxF "ARG[$SID]" "$FT/calls.log"
+}
+
+@test "a cwd containing # is rejected (tmux format expansion)" {
+    CWD="${BATS_TEST_TMPDIR}/work/a#(touch pwned)"
+    mkdir -p "$CWD"
+    mk_dead "$SID"
+    want "$SID"
+    run_due
+    [ ! -e "$FT/calls.log" ]
+    [ "$(rec '.[0].done_reason')" = bad_cwd ]
 }
 
 @test "trust prompt: notify_only, nothing typed, nothing injected, exact command in the notice" {
@@ -182,7 +217,8 @@ want() { printf '%s' "$1" >"$FT/want_sid"; }
     [ "$(n_inject)" = 0 ]
 }
 
-@test "resume-size dialog where the summary option forks the id: failure, never injected" {
+@test "resume-size dialog, opted in, where the summary option forks the id: failure, never injected" {
+    export BORG_RESUME_ANSWER_SIZE_DIALOG=1
     echo size >"$FT/scenario"
     mk_dead "$SID"
     want "ffffffff-0000-4000-8000-0000000000ee"
@@ -290,28 +326,24 @@ break"
     [ "$(n_inject)" = 1 ]
 }
 
-@test "a pane left at a shell prompt gets one printf-%q line, typed then Enter separately" {
-    printf '%%3|%s|99|zsh\n' "$SID" >"$FT/panes"
-    printf 'user@host ~ %% ' >"$FT/cap.%3"
-    mk_dead "$SID"
-    want "$SID"
-    run_due
-    [ "$(n_calls new-window)" = 0 ]
-    grep -q "send-keys -t %3 -l cd " "$FT/calls.log"
-    grep -q "send-keys -t %3 Enter" "$FT/calls.log"
-    grep -q -- "--resume $SID" "$FT/calls.log"
-    [ "$(n_inject)" = 1 ]
-}
-
-@test "a shell pane that is not provably at an empty prompt is left alone (deferred)" {
-    printf '%%3|%s|99|zsh\n' "$SID" >"$FT/panes"
-    printf 'building something\n' >"$FT/cap.%3"
-    mk_dead "$SID"
-    want "$SID"
-    run_due
-    ! grep -q "send-keys" "$FT/calls.log"
-    [ "$(rec '.[0].gate_reason')" = relaunch_shell_unproven ]
-    [ "$(n_inject)" = 0 ]
+@test "a pane left at a shell is never typed into: a new window is opened, the old pane is unbound" {
+    local p
+    for p in 'user@host ~ % ' 'dquote> ' '> ' 'building something'; do
+        rm -rf "$RD" "$FT"
+        mkdir -p "$FT" "$RD/sessions" "$RD/events" "$RD/pending" "$RD/done"
+        echo clean >"$FT/scenario"
+        printf '%%3|%s|99|zsh\n' "$SID" >"$FT/panes"
+        printf '%s' "$p" >"$FT/cap.%3"
+        : >"$ILOG"
+        mk_dead "$SID"
+        want "$SID"
+        run_due
+        ! grep -q "send-keys" "$FT/calls.log"
+        [ "$(n_calls new-window)" = 1 ]
+        grep -q "^%3||" "$FT/panes"
+        grep -q "^%10|$SID|" "$FT/panes"
+        [ "$(n_inject)" = 1 ]
+    done
 }
 
 @test "a session that is alive (owned claude pane) is not relaunched" {

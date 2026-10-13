@@ -17,14 +17,21 @@
 #   - the sid must match the UUID regex; the cwd must be an existing directory, free of control characters, that is a
 #     registered project dir, a known git worktree of it, or under BORG_RESUME_CWD_ALLOW (colon list, default
 #     $HOME/dev); anything else is notify_only
-#   - pane gone, tmux up:    tmux new-window -d -P -- <claude> --resume <sid>   (argv form, no shell)
+#   - pane gone, tmux up:    tmux new-window -d -P -- <login-shell> -l -c "exec \"$@\"" borg-resume <claude> --resume <sid>
+#                            (argv form; the login shell gives claude the user env, which a tmux server started from
+#                            launchd lacks. zsh -l reads .zprofile/.zshenv, NOT .zshrc: exports living only in .zshrc
+#                            are not seen. The server-global env of a launchd-started server stays minimal; both are
+#                            S16 smoke-test items.)
 #   - tmux server gone:      tmux new-session -d ... (same argv form)
-#   - pane alive at a shell: one line built with printf %q, typed with send-keys -l and a separate Enter, only when
-#     capture-pane shows an empty shell prompt and no human is at the keys
-#   The claude binary is the absolute path from lib/borg/claude-bin.sh.
+#   - pane alive at a shell: NOTHING is typed into it (an empty prompt cannot be proven from a capture). A new window
+#                            is opened and the old shell pane is unbound from the sid.
+#   The claude binary is the absolute path from lib/borg/claude-bin.sh. cwd, window and session names containing #
+#   are rejected or neutralised (tmux expands formats in -c/-n/-s).
 # After launch the new pane gets @borg_sid=<sid> and the screen is polled BEFORE anything else happens:
-#   - resume-size dialog, positively recognized: answered with the FULL-session option (D11); the summary option may
-#     fork the session id
+#   - resume-size dialog (U17 UNCAPTURED, fixture is synthetic): notify_only with the exact manual command by default.
+#     BORG_RESUME_ANSWER_SIZE_DIALOG=1 opts in to answering it with the FULL-session option (D11): the digit alone
+#     when the option is not highlighted, or Enter alone when it already is. Never a digit followed by Enter; a dialog
+#     still showing afterwards is notify_only. Do not enable until a real capture replaces the fixture.
 #   - trust-folder prompt, permission prompt, any other dialog, or a screen that never settles: notify_only, the pane
 #     is left for the human, nothing is typed
 #   - verified = a session_start event with source resume arrived for the SAME sid after the launch AND the pane is
@@ -35,6 +42,7 @@
 #
 # Caps: BORG_RESUME_MAX_RELAUNCH_PER_HOUR (3, orchestrator first through the gate's ordering); every relaunch also
 # counts against the S9 session counters (consecutive, injections_today); concurrency was checked by the gate.
+# A verified relaunch bumps those counters twice (here, then in the gate injection): deliberately conservative.
 #
 # Env: BORG_RESUME_RELAUNCH_TRIES (45) x BORG_RESUME_RELAUNCH_POLL_SEC (2) is the verification window (90s);
 # BORG_RESUME_CWD_ALLOW; tests use BORG_RESUME_TMUX_CMD and BORG_CLAUDE_BIN.
@@ -45,7 +53,6 @@ _RR_DIR="${BASH_SOURCE[0]%/*}"
 command -v borg_resolve_claude_bin >/dev/null 2>&1 || . "$_RR_DIR/claude-bin.sh" 2>/dev/null
 
 _RR_UUID_RE='^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$'
-_RR_PROMPT_RE='[%$#>❯»][[:space:]]*$'
 _RR_FULL_RE='^[[:space:]]*(❯)?[[:space:]]*([0-9]+)\.[[:space:]]+Resume[[:space:]]full[[:space:]]session'
 _rr_pane=""
 _rr_fork=""
@@ -67,7 +74,7 @@ _rr_cwd_ok() { # <cwd> <registry-file>
     local _cwd="$1" _reg="$2" _a _allow _pd
     [ -n "$_cwd" ] && [ -d "$_cwd" ] || return 1
     case "$_cwd" in /*) ;; *) return 1 ;; esac
-    case "$_cwd" in *[[:cntrl:]]* | */../* | */.. ) return 1 ;; esac
+    case "$_cwd" in *\#* | *[[:cntrl:]]* | */../* | */.. ) return 1 ;; esac
     _allow="${BORG_RESUME_CWD_ALLOW:-${HOME:-/nonexistent}/dev}"
     local _ifs="$IFS"
     IFS=:
@@ -180,8 +187,11 @@ _rr_answer_size() { # <pane> <capture>
 $_cap
 EOF
     [ "$_n" -eq 1 ] && [ -n "$_num" ] || return 1
-    [ "$_cur" -eq 1 ] || _bi_sendkeys -t "$1" -l "$_num" >/dev/null 2>&1 || true
-    _bi_sendkeys -t "$1" Enter >/dev/null 2>&1 || true
+    if [ "$_cur" -eq 1 ]; then
+        _bi_sendkeys -t "$1" Enter >/dev/null 2>&1 || true
+    else
+        _bi_sendkeys -t "$1" -l "$_num" >/dev/null 2>&1 || true
+    fi
     return 0
 }
 
@@ -205,6 +215,7 @@ _rr_watch() { # <sid> <pane> <since>
             case "$_cap" in
                 *"trust this folder"* | *"Accessing workspace"*) _rr_res=trust_prompt; return 0 ;;
                 *"Resuming the full session"*)
+                    [ "${BORG_RESUME_ANSWER_SIZE_DIALOG:-0}" = 1 ] || { _rr_res=resume_size_dialog; return 0; }
                     [ "$_answered" -eq 0 ] || { _rr_res=resume_dialog_stuck; return 0; }
                     _rr_answer_size "$_pane" "$_cap" || { _rr_res=unrecognized_dialog; return 0; }
                     _answered=1
@@ -224,33 +235,33 @@ _rr_watch() { # <sid> <pane> <since>
     _rr_res=no_verification
 }
 
-# Start claude. Sets _rr_pane (new or shell pane). Returns 0 started, 1 failed, 2 defer (shell pane not provable).
-_rr_launch() { # <sid> <cwd> <claude-bin> <name> <session> <mode: window|shell>
-    local _sid="$1" _cwd="$2" _bin="$3" _name="$4" _sess="$5" _mode="$6" _out _line _cap _want
-    if [ "$_mode" = shell ]; then
-        borg_inject_human_active && return 2
-        _bi_pane_ok "$_rr_pane" >/dev/null || return 2
-        _cap="$(_bi_tmux capture-pane -p -t "$_rr_pane" 2>/dev/null)" || return 2
-        _line="$(printf '%s\n' "$_cap" | sed '/^[[:space:]]*$/d' | tail -n 1)"
-        [[ "$_line" =~ $_RR_PROMPT_RE ]] || return 2
-        printf -v _line 'cd %q && %q --resume %q' "$_cwd" "$_bin" "$_sid"
-        _bi_sendkeys -t "$_rr_pane" -l "$_line" >/dev/null 2>&1 || return 1
-        _cap="$(_bi_tmux capture-pane -p -t "$_rr_pane" 2>/dev/null)"
-        _want="${_line//[[:space:]]/}"
-        if [[ "${_cap//[[:space:]]/}" != *"$_want"* ]]; then
-            _bi_sendkeys -t "$_rr_pane" C-u >/dev/null 2>&1
-            return 2
-        fi
-        _bi_sendkeys -t "$_rr_pane" Enter >/dev/null 2>&1 || return 1
-        return 0
+# The shell that wraps claude so it runs with the user's login environment (a tmux server started from launchd has a
+# minimal one). Only zsh and bash, whose `-l -c 'exec "$@"'` form is known to work; anything else falls back.
+_rr_login_shell() {
+    local _s
+    for _s in "${BORG_RESUME_LOGIN_SHELL:-}" "${SHELL:-}" /bin/zsh /bin/bash; do
+        case "$_s" in /*) ;; *) continue ;; esac
+        case "${_s##*/}" in zsh | bash) [ -x "$_s" ] && { printf '%s' "$_s"; return 0; } ;; esac
+    done
+    return 1
+}
+
+# Start claude in a NEW window or session, never by typing into an existing pane (a shell prompt cannot be proven
+# empty from a screen capture). Sets _rr_pane. Returns 0 started, 1 failed.
+_rr_launch() { # <sid> <cwd> <claude-bin> <name> <session>
+    local _sid="$1" _cwd="$2" _bin="$3" _name="$4" _sess="$5" _out _sh
+    local -a _argv
+    _argv=("$_bin" --resume "$_sid")
+    if _sh="$(_rr_login_shell)"; then
+        _argv=("$_sh" -l -c 'exec "$@"' borg-resume "$_bin" --resume "$_sid")
     fi
     if _bi_tmux list-panes -a -F '#{pane_id}' >/dev/null 2>&1 &&
         _bi_tmux has-session -t "=$_sess" >/dev/null 2>&1; then
         _out="$(_bi_tmux new-window -d -P -F '#{pane_id}' -t "=$_sess:" -c "$_cwd" -n "$_name" -- \
-            "$_bin" --resume "$_sid" 2>/dev/null)" || return 1
+            "${_argv[@]}" 2>/dev/null)" || return 1
     else
         _out="$(_bi_tmux new-session -d -P -F '#{pane_id}' -s "$_sess" -c "$_cwd" -n "$_name" -- \
-            "$_bin" --resume "$_sid" 2>/dev/null)" || return 1
+            "${_argv[@]}" 2>/dev/null)" || return 1
     fi
     _out="${_out%%$'\n'*}"
     case "$_out" in %[0-9]*) ;; *) return 1 ;; esac
@@ -259,7 +270,7 @@ _rr_launch() { # <sid> <cwd> <claude-bin> <name> <session> <mode: window|shell>
 }
 
 borg_resume_relaunch_group() {
-    local _sid="$1" _f _cause="" _c _reg _cwd _proj _name _sess _mode _lrc _recent _since _res _fb _cap
+    local _sid="$1" _f _cause="" _c _reg _cwd _proj _name _sess _old _recent _since _res _fb _cap
     local _lead _lrid _t _loc
     # Does any record of the group call for a relaunch?
     while IFS= read -r _f; do
@@ -343,18 +354,17 @@ EOF
     _sess="$(jq -r '.tmux.session // empty' "$_reg" 2>/dev/null)"
     [ -n "$_name" ] || _name="${_sid:0:8}"
     [ -n "$_sess" ] || _sess=borg
-    _mode=window
-    [ "$_rr_kind" = shell ] && _mode=shell
+    _name="${_name//\#/_}"
+    _sess="${_sess//\#/_}"
+    _old=""
+    [ "$_rr_kind" = shell ] && _old="$_rr_pane"
     _since="$(_bi_now)"
-    _rr_launch "$_sid" "$_cwd" "$BORG_CLAUDE_BIN" "$_name" "$_sess" "$_mode"
-    _lrc=$?
-    if [ "$_lrc" -eq 2 ]; then
-        _rg_each _rg_defer relaunch_shell_unproven $(($(_rc_now) + 60))
-        return 1
-    elif [ "$_lrc" -ne 0 ]; then
+    if ! _rr_launch "$_sid" "$_cwd" "$BORG_CLAUDE_BIN" "$_name" "$_sess"; then
         _rr_notify_only launch_failed "Relaunch of $_lrid failed to start. By hand: $_rr_cmdline"
         return 1
     fi
+    # The dead session's old shell pane (if any) stops claiming the sid; the new window owns it.
+    [ -z "$_old" ] || _bi_tmux set-option -p -u -t "$_old" @borg_sid >/dev/null 2>&1
     # Counted from here on, whatever happens next: a relaunch is an expensive resume.
     _rr_ledger "$_sid"
     _rw_state_ensure "$_sid"
