@@ -869,4 +869,23 @@ def test_read_git_identity_agrees_with_real_git_on_a_real_linked_worktree(isolat
     assert common == os.path.realpath(os.path.join(main, ".git"))
 
     subprocess.run(["git", "-C", linked, "checkout", "-q", "--detach"], check=True)
-    assert shell.read_git_identity(linked, pairs)["branch"] == ""
+    detached = shell.read_git_identity(linked, pairs)
+    assert detached["branch"] == ""
+    # A detached HEAD is "detached at <short sha>", and the sha is git's own answer for that HEAD, read here from
+    # the git dir's HEAD file (no fork). MUTATION: read the wrong file or length and this differs from git.
+    sha = subprocess.run(
+        ["git", "-C", linked, "rev-parse", "--short=7", "HEAD"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    assert detached["detached"] == sha and len(sha) == 7
+    assert "detached" not in shell.read_git_identity(main, pairs)
+
+
+def test_read_git_identity_states_nothing_for_a_head_that_is_neither_a_branch_nor_a_sha(isolated_env):
+    path = _repository(isolated_env, "odd")
+    git_dir = os.path.join(path, ".git")
+    os.makedirs(git_dir)
+    for head in ("garbage\n", "ref: refs/tags/v1\n", "abc123\n", ""):
+        with open(os.path.join(git_dir, "HEAD"), "w", encoding="utf-8") as handle:
+            handle.write(head)
+        identity = shell.read_git_identity(path, [("odd", os.path.realpath(path))])
+        assert identity["branch"] == "" and "detached" not in identity

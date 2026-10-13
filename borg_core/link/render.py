@@ -525,10 +525,12 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     # the sentinel string "null".
     if path != "null":
         out.append(_label("Path:", str(path)))
-    # Absent, not blanked, when git did not state them: a non-git directory has no branch, a detached HEAD
-    # has none either, and only a linked worktree has a repository it is a worktree of.
-    if identity.get("branch"):
-        out.append(_label("Branch:", str(identity["branch"])))
+    # Absent, not blanked, when git did not state them: a non-git directory has no branch, and only a linked
+    # worktree has a repository it is a worktree of. A detached HEAD has no branch NAME but is not unstated:
+    # the row says where it is detached.
+    branch = worktree.branch_text(identity)
+    if branch:
+        out.append(_label("Branch:", branch))
     if identity.get("kind") == "worktree" and identity.get("worktree_of"):
         out.append(_label("Worktree of:", str(identity["worktree_of"])))
     # Exactly ONE line on the whole page contains "Status:", and this section is above every other
@@ -1350,11 +1352,37 @@ REPOSITORY_SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], 
 )
 
 
+def _unregistered_section(_doc: dict) -> tuple[str, list[str]]:
+    """The whole page of a directory that is neither the Queen root nor inside any registered path.
+
+    SHORT ON PURPOSE (2026-10-13): the overview belongs to the Queen, so a stranger directory is told what it
+    is not and given the two ways out -- register it, or ask for the Queen view by name. UNTITLED, so it
+    carries no `▸` header and no cube; the exit code is the caller's (0).
+    """
+    return "", [
+        f"  {BOLD}This directory is not a registered repository.{NC}\n",
+        "\n",
+        _label("Register it:", f"{CYAN}borg add{NC}"),
+        _label("Queen view:", f"{CYAN}borg link --overview{NC}  {DIM}(every repository and worktree){NC}"),
+        "\n",
+    ]
+
+
+UNREGISTERED_SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (("", _unregistered_section),)
+
+
+def _is_unregistered(doc: dict) -> bool:
+    """Whether scope says cwd is neither the Queen root nor inside a registered path (`scope.unregistered`)."""
+    return bool((doc.get("scope") or {}).get("unregistered"))
+
+
 def _sections_for(doc: dict) -> tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...]:
-    """The section list for this document's scope: one directory's page, or the Queen's overview.
+    """The section list for this document's scope: one directory's page, the hint, or the Queen's overview.
 
     A document with no `scope` (one built before S1) is the Queen's, as it always rendered.
     """
+    if _is_unregistered(doc):
+        return UNREGISTERED_SECTIONS
     return REPOSITORY_SECTIONS if _is_repository_scope(doc) else SECTIONS
 
 

@@ -385,15 +385,23 @@ def _document(  # pylint: disable=too-many-locals
     # INSIDE whatever repository the session is in. Scope-gating the aggregates would report
     # "Queued: 0 directives" for the whole collective at `.version == 2` -- which SKILL.md maps to
     # "CLI path. Never fall back." A wrong answer, not a missing one. Neither hot loop is `--json`.
-    need_aggregate = mode == "json" or (mode != "porcelain" and scope["kind"] == "orchestrator")
+    #
+    # THE HINT PAGE READS NOTHING (2026-10-13). A cwd that is neither the Queen root nor inside a registered
+    # path renders a short page that names no repository, so in the human mode the aggregates, the cortex
+    # file, the sweep and the waiting rows would all be fetched to be thrown away. `--json` and `--porcelain`
+    # are not skipped: they are machine surfaces and carry the whole document from any cwd, as always.
+    hint_only = mode == "human" and bool(scope.get("unregistered"))
+    need_aggregate = mode == "json" or (mode != "porcelain" and scope["kind"] == "orchestrator" and not hint_only)
 
     directives, assimilated = _aggregates(need_aggregate)
     # NOT gated with the aggregates any more: the cortex pause row hangs off a BOARD row, and the
     # board renders in both contexts. It is a single ~40-line file read (shell.cortex_pending), not a
     # per-repository glob, so it is priced with the render rather than with the aggregates.
-    cortex_pending = [] if mode == "porcelain" else shell.cortex_pending(now=moment)
+    cortex_pending = [] if mode == "porcelain" or hint_only else shell.cortex_pending(now=moment)
 
-    block, waiting = _grid_and_waiting(overlaid, repositories, scope, local, moment, mode)
+    block, waiting = (
+        (None, None) if hint_only else _grid_and_waiting(overlaid, repositories, scope, local, moment, mode)
+    )
     return core.assemble(
         generated_at=core.format_iso(moment),
         show_all=show_all,

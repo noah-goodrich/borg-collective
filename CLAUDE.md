@@ -77,8 +77,10 @@ borg / borg next         What needs attention? Switch to it.
 borg claude              Launch/resume orchestrator Claude session
 borg link [project]      ONE renderer, TWO pages, chosen by scope.kind
                            Queen root: the cross-repository overview
-                           Anywhere else: strictly that ONE directory's page
+                           Inside a registered path: strictly that ONE directory's page
                              (AC2's "same spine" was reversed 2026-10-13)
+                           Anywhere else: a short "not a registered repository"
+                             hint (`borg add`, `borg link --overview`), exit 0
                              — and `--brief`, which prints prose instead
                            --overview Force the Queen view from any directory
                            --brief   Same document, same sweep, PROSE not the seven
@@ -526,7 +528,7 @@ docs/
   repository shares. Now `render._sections_for` picks one of two lists. The Queen
   (`scope.kind == "orchestrator"`: cwd equal to `BORG_ORCHESTRATOR_ROOT`, or `--overview` from anywhere) prints
   `SECTIONS`, and its board collapses worktrees under their repository (group by the registry `repo` key, via
-  `worktree.repository_groups`) instead of counting each as a repository. Anywhere else prints
+  `worktree.repository_groups`) instead of counting each as a repository. Inside a registered path prints
   `REPOSITORY_SECTIONS`, STRICTLY that directory: a scope label (`<name> — worktree of <repo>` or `— main
   checkout`), identity (path, branch, worktree-of), live session and status, its OWN checkpoints, its own
   waiting row (the session row only, no repository PR rows), the next-action line, and one line pointing at
@@ -539,7 +541,18 @@ docs/
   `focus.checkpoint_head` and the summaries, which are now the directory's own, and the one key added is
   `focus.identity` (additive). `DOCUMENT_VERSION` stays 2: no pre-existing JSON key narrowed and
   `skills/borg-link/SKILL.md`'s version gate is untouched. Git identity is read from the git dir's own files
-  (`commondir`, `HEAD`), not by forking git, because `--local`'s fork count is a pinned contract.
+  (`commondir`, `HEAD`), not by forking git, because `--local`'s fork count is a pinned contract. A detached
+  HEAD (the HEAD file is a bare commit id) prints `Branch: detached at <short sha>`; the sha rides in the additive
+  `focus.identity.detached` key, and `branch` stays a branch name or empty.
+  **A cwd that is neither the Queen root nor inside any registered path prints a short hint page, never the
+  overview** (`render.UNREGISTERED_SECTIONS`, 2026-10-13): it says the directory is not a registered repository
+  and offers `borg add` and `borg link --overview`, and exits 0. The wire keeps `scope.kind` `orchestrator` and
+  adds `scope.unregistered: true` (present only when true); `--json` and `--porcelain` still carry the whole
+  document from any cwd, and the human mode reads nothing (`cli._document`'s `hint_only` skips the sweep, the
+  manifest glob and the aggregates). `borg init` is the Queen launcher and always briefs with `--overview`.
+  `borg link --brief` follows the page's breadth: at the Queen root the prompt is the board, in repository scope
+  it is built only from that directory's identity, own checkpoint, own session row and next action (no other
+  registry entry), and in an unregistered cwd it skips `claude -p` and prints the hint page.
 - **`picture.py` is pure; `render.py` is the page**: the topological picture (columns, connectors,
   crossings, glyph seam, OSC-8 links, the `PICTURE_BUDGET` width) lives in `borg_core/link/picture.py`
   and does **no I/O of any kind** — it imports only `re`, `link.grid` and `manifest.core`, takes refs

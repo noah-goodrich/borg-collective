@@ -51,6 +51,15 @@ def test_identity_names_a_main_checkout_a_worktree_and_a_plain_directory():
     assert plain == {"kind": "directory", "branch": "", "worktree_of": ""}
 
 
+def test_identity_carries_a_detached_sha_only_when_there_is_one():
+    """`detached` is ADDITIVE: absent from every identity read before it existed, so none of them changes shape.
+    MUTATION: always emit the key and the exact-dict assertions above (and in test_shell) go red."""
+    detached = worktree.identity("/dev/borg-door", "", COMMON, PAIRS, "8afb0b4")
+    assert detached == {"kind": "worktree", "branch": "", "worktree_of": "borg", "detached": "8afb0b4"}
+    assert "detached" not in worktree.identity("/dev/borg-door", "feat", COMMON, PAIRS)
+    assert "detached" not in worktree.identity("/dev/borg-door", "", COMMON, PAIRS, "")
+
+
 def test_identity_falls_back_to_the_main_checkouts_basename_when_it_is_not_registered():
     """MUTATION: return "" for the unregistered case and a worktree whose parent was never `borg add`ed reads as
     a worktree of nothing."""

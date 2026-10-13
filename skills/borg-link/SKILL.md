@@ -30,7 +30,9 @@ Vocabulary: a *repository* is the git repo; a *worktree* is a linked checkout re
 ONE call serves every scope. Run it once, with the project name appended only when the user gave one:
 
 ```bash
-bash -c 'set -o pipefail; borg link --json [<project>] | jq "if .scope.kind == \"orchestrator\"
+bash -c 'set -o pipefail; borg link --json [<project>] | jq "if .scope.unregistered == true
+  then {version, generated_at, scope}
+  elif .scope.kind == \"orchestrator\"
   then (.directives |= (group_by(.project) | map({project: .[0].project, n: length,
     titles: [limit(5; .[].title)]})))
   else (.scope.repository as \$r | {version, generated_at, scope,
@@ -42,6 +44,7 @@ bash -c 'set -o pipefail; borg link --json [<project>] | jq "if .scope.kind == \
 
 Then branch, and only on this:
 
+- `.scope.unregistered == true` → the **hint page**: the directory is neither the Queen root nor inside any registered path (the engine's own page for it says so and offers two commands). Say in two short lines that this directory is not a registered repository, that `borg add` registers it, and that `borg link --overview` (or `/borg-link` in the Queen session) gives the Queen view. Do not render the board, and do not present the overview in its place. Nothing else follows.
 - `.scope.kind == "orchestrator"` → the **Queen view**. Follow `## Queen view` below.
 - `.scope.kind == "repository"` → the **repository page**. Follow `## Repository scope` below. Stop reading the Queen view sections; they do not apply.
 
@@ -214,10 +217,10 @@ This page is about exactly ONE directory: `.entry.path`, the directory the engin
 1. **Identity.** `.entry.path` plus branch and worktree relationship, from git on that path (one call):
 
 ```bash
-bash -c 'git -C "<entry.path>" rev-parse --abbrev-ref HEAD; git -C "<entry.path>" rev-parse --path-format=absolute --git-dir --git-common-dir'
+bash -c 'git -C "<entry.path>" rev-parse --abbrev-ref HEAD; git -C "<entry.path>" rev-parse --path-format=absolute --git-dir --git-common-dir; git -C "<entry.path>" rev-parse --short HEAD'
 ```
 
-The first line is the branch. The two paths on the next lines are equal for a main checkout; when they differ this directory is a linked worktree, and the worktree-of path is the common dir without its trailing `/.git` (`.entry.repo` is the same common dir as the registry recorded it). If git fails (the path is missing or not a repository), print the path and say identity is unavailable. Do not look the parent up in the registry.
+The first line is the branch; when it is `HEAD` the checkout is detached, so write `detached at <short sha>` using the fourth line (the short sha) instead of a branch name. The two paths on the next two lines are equal for a main checkout; when they differ this directory is a linked worktree, and the worktree-of path is the common dir without its trailing `/.git` (`.entry.repo` is the same common dir as the registry recorded it). If git fails (the path is missing or not a repository), print the path and say identity is unavailable. Do not look the parent up in the registry.
 
 2. **Session and status**, all from `.entry`: `status`, `relative_activity`, `waiting_reason` when present, `has_uncommitted_changes`, `has_live_window` when present (null or absent means unknown, not false), and `tmux_window`. One or two plain lines.
 
@@ -237,16 +240,16 @@ Read the newest file with the Read tool at `<entry.path>/.borg/checkpoints/<newe
 
 ```
 ## <entry.path>  ·  <status>  ·  <relative_activity>
-Branch <branch>  ·  worktree of <worktree-of path>   ← "main checkout" when the two git paths are equal
+Branch <branch>  ·  worktree of <worktree-of path>   ← "main checkout" when the two git paths are equal; "detached at <short sha>" when detached
 <one or two lines: the live session, uncommitted changes, waiting_reason>
 Checkpoint (<newest filename>): <the 2-3 things that matter>
 Recent: <up to 3 filenames>                            ← omit when there are none
+For the overview of every repository, run /borg-link in the Queen session.
 Waiting: <next_step> — <item> (<age>)                  ← or `nothing waits on you here`
 Next: <one line>
-For the overview of every repository, run /borg-link in the Queen session.
 ```
 
-That last line is ALWAYS the final line, verbatim, and nothing follows it. One scope, one pointer: do not add a second one, a menu, or a count of other worktrees. The Version gate, `--refresh`/`--brief` redirects and the Fallback apply here exactly as above.
+The ORDER is the engine's own page order, not a choice: identity, session and checkpoints first, then the Queen pointer, then the waiting row, and the page ENDS on the `Next:` line (link-unification L3: the answer is the last thing the eye lands on). The pointer line is verbatim and appears exactly once, BEFORE the waiting row; nothing follows the `Next:` line. One scope, one pointer: do not add a second one, a menu, or a count of other worktrees. The Version gate, `--refresh`/`--brief` redirects and the Fallback apply here exactly as above.
 
 ## Fallback — direct file reads (the drone-container path)
 

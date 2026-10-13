@@ -323,7 +323,9 @@ def scope_for(
 ) -> dict:
     """Resolve which repositories one `borg link` invocation covers.
 
-    Returns `{"kind": "repository"|"orchestrator", "repository": str|None, "local": bool}`.
+    Returns `{"kind": "repository"|"orchestrator", "repository": str|None, "local": bool}`, plus
+    `"unregistered": True` when cwd is neither the Queen root nor inside any registered path (the human page
+    is then a short hint, never the overview; `--overview` still forces the Queen view).
 
     `overview` (`borg link --overview`) FORCES the Queen view from anywhere: the scope is orchestrator whatever
     the cwd or a positional says, because the page is the cross-repository overview only at the Queen and a
@@ -383,7 +385,11 @@ def scope_for(
             best_name, best_depth = name, len(parts)
 
     if best_name is None:
-        return scope
+        # NEITHER THE QUEEN ROOT NOR INSIDE ANY REGISTERED PATH (2026-10-13). `kind` stays "orchestrator" on the
+        # wire, as it always was for this case, so no consumer branching on it is surprised; the ADDITIVE key
+        # `unregistered` is what tells the renderer this is not the Queen, and it is present ONLY when true, so
+        # no scope that existed before carries a new key.
+        return {**scope, "unregistered": True}
     return {**scope, "kind": "repository", "repository": best_name}
 
 

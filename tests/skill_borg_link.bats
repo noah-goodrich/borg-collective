@@ -146,13 +146,58 @@ _stub_borg() {
     [[ "$output" == *'you must not reconstruct them'* ]] || false
 }
 
-@test "scope: the repository page ends with the Queen pointer line, once, verbatim" {
+# DECISION 5 (2026-10-13): the skill renders the repository page in the SAME ORDER as the engine -- identity,
+# session and checkpoints, then the Queen pointer, then the waiting row, and the page ENDS on the next-action
+# line (link-unification L3). It used to end on the pointer, which made the skill's page differ from `borg link`'s.
+@test "scope: the repository page puts the Queen pointer before WAITING and ends on the next action" {
     local line='For the overview of every repository, run /borg-link in the Queen session.'
     [ "$(grep -cxF "$line" "$SKILL")" -eq 1 ]
     run _section '## Repository scope' '## Fallback'
-    [[ "$output" == *'That last line is ALWAYS the final line, verbatim, and nothing follows it.'* ]] || false
-    run awk -v want="$line" 'prev == want && $0 == "```" { ok=1 } { prev=$0 } END { exit !ok }' "$SKILL"
+    [[ "$output" == *'the page ENDS on the `Next:` line'* ]] || false
+    [[ "$output" != *'That last line is ALWAYS the final line'* ]] || false
+
+    # The skeleton is the fenced block that holds the pointer. Order inside it is the contract.
+    local block
+    block="$(awk -v want="$line" '
+        /^```/ { if (inblock) { if (hit) { printf "%s", buf; exit } buf=""; inblock=0 } else { inblock=1; buf="" } next }
+        inblock { buf = buf $0 "\n"; if ($0 == want) hit=1 }
+    ' "$SKILL")"
+    [ -n "$block" ]
+    local pointer_at waiting_at next_at last
+    pointer_at="$(grep -nxF "$line" <<<"$block" | head -1 | cut -d: -f1)"
+    waiting_at="$(grep -n '^Waiting:' <<<"$block" | head -1 | cut -d: -f1)"
+    next_at="$(grep -n '^Next:' <<<"$block" | head -1 | cut -d: -f1)"
+    [ -n "$pointer_at" ] && [ -n "$waiting_at" ] && [ -n "$next_at" ]
+    [ "$pointer_at" -lt "$waiting_at" ]
+    [ "$waiting_at" -lt "$next_at" ]
+    last="$(grep -v '^[[:space:]]*$' <<<"$block" | tail -1)"
+    [[ "$last" == "Next:"* ]] || false
+}
+
+@test "scope: a detached HEAD is reported as detached at the short sha, not as a branch called HEAD" {
+    run _section '## Repository scope' '## Fallback'
+    [[ "$output" == *'rev-parse --short HEAD'* ]] || false
+    [[ "$output" == *'detached at <short sha>'* ]] || false
+}
+
+@test "scope: an unregistered directory gets the hint page, never the Queen view" {
+    run cat "$SKILL"
+    [[ "$output" == *'`.scope.unregistered == true` → the **hint page**'* ]] || false
+    [[ "$output" == *'`borg add`'* ]] || false
+    [[ "$output" == *'do not present the overview in its place'* ]] || false
+    cat > "${BATS_TEST_TMPDIR}/unreg.json" <<'JSON'
+{"version": 2, "generated_at": "t", "order": ["secret-a", "secret-b"], "projects": {"secret-a": {}, "secret-b": {}},
+ "directives": [{"project": "secret-a", "title": "x"}], "grid": {"warnings": []}, "focus": null,
+ "scope": {"kind": "orchestrator", "repository": null, "local": false, "unregistered": true}}
+JSON
+    _stub_borg "${BATS_TEST_TMPDIR}/unreg.json"
+    local cmd
+    cmd="$(_step1_command)"
+    cmd="${cmd/ \[<project>\]/}"
+    PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
     [ "$status" -eq 0 ]
+    run jq -c 'keys' <<<"$output"
+    [ "$output" = '["generated_at","scope","version"]' ]
 }
 
 @test "scope: Step 1 pipe, repository arm, passes a whitelist and drops every registry-wide key" {

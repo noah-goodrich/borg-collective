@@ -442,7 +442,7 @@ MOCK
     # forbids and the one no stdout assertion anywhere in the suite can detect (`link beta` and
     # `link --local beta` are byte-identical on stdout; only a subprocess count sees the wire).
     : > "$GH_TRACE"
-    run zsh "$BORG" link --totally-bogus
+    run zsh "$BORG" link --overview --totally-bogus
     [ "$status" -eq 0 ]
     run cat "$GH_TRACE"
     [ -n "$output" ]

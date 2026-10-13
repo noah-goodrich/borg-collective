@@ -1742,6 +1742,58 @@ def test_the_identity_lines_are_omitted_when_git_did_not_state_them():
     assert plain(render.document(_door_doc(focus=focus))).startswith("▸ IN FOCUS  door\n")
 
 
+def test_a_detached_head_worktree_states_where_it_is_detached():
+    """A detached HEAD has no branch NAME but is not unstated: the row says `detached at <short sha>`.
+
+    MUTATION: drop the `elif` in `_focus_section` and the row vanishes, which is the defect decision (7) closes.
+    A real branch still wins over a stray `detached` key, and `Worktree of:` is unaffected.
+    """
+    focus = _worktree_focus()
+    focus["identity"] = {"kind": "worktree", "branch": "", "worktree_of": "borg", "detached": "8afb0b4"}
+    out = plain(render.document(_door_doc(focus=focus)))
+    assert "Branch:       detached at 8afb0b4" in out
+    assert "Worktree of:  borg" in out
+    focus["identity"] = {"kind": "worktree", "branch": "feat-x", "worktree_of": "borg", "detached": "8afb0b4"}
+    assert "detached at" not in plain(render.document(_door_doc(focus=focus)))
+
+
+def _unregistered_doc() -> dict:
+    """The document of a cwd that is neither the Queen root nor inside a registered path: the FULL registry-wide
+    document is on the wire (`--json` is scope-independent), and only `scope.unregistered` says not to show it."""
+    doc = _doc(
+        total_projects=2,
+        order=["alpha-secret", "beta-secret"],
+        projects={
+            "alpha-secret": {"source": "cli", "status": "idle", "path": "/dev/alpha-secret", "summary": "Alpha."},
+            "beta-secret": {"source": "cli", "status": "waiting", "path": "/dev/beta-secret", "summary": "Beta."},
+        },
+        directives=[{"project": "alpha-secret", "title": "Queued elsewhere", "slug": "q"}],
+    )
+    doc["scope"] = {"kind": "orchestrator", "repository": None, "local": False, "unregistered": True}
+    return doc
+
+
+def test_an_unregistered_directory_prints_the_hint_page_and_never_the_overview():
+    """Decision (3): a stranger directory is told what it is not and given two commands. MUTATION: drop the
+    `_is_unregistered` arm in `_sections_for` and the whole overview (every registry name) renders again."""
+    out = plain(render.document(_unregistered_doc()))
+    assert "This directory is not a registered repository." in out
+    assert "borg add" in out
+    assert "borg link --overview" in out
+    for absent in ("alpha-secret", "beta-secret", "THE BORG COLLECTIVE", "REPOSITORIES", "QUEUED", "WAITING ON YOU"):
+        assert absent not in out, absent
+    assert _headers(render.document(_unregistered_doc())) == []
+
+
+def test_the_queen_root_with_no_unregistered_key_still_renders_the_overview():
+    """The hint is keyed on the additive key alone: the same document without it is the Queen's page."""
+    doc = _unregistered_doc()
+    del doc["scope"]["unregistered"]
+    out = plain(render.document(doc))
+    assert "alpha-secret" in out and "REPOSITORIES" in out
+    assert "not a registered repository" not in out
+
+
 def test_a_directory_page_points_at_the_queen_view_and_still_ends_on_the_next_action():
     """L3: the answer is the last line. The pointer is ABOVE it. MUTATION: move the pointer entry after
     WAITING ON YOU in REPOSITORY_SECTIONS and the last-line assertion goes red."""

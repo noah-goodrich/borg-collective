@@ -544,6 +544,14 @@ def _git_dir_of(directory: str) -> Path | None:
     return target if target.is_absolute() else Path(directory) / target
 
 
+_SHORT_SHA = 7
+
+
+def _is_hex_sha(text: str) -> bool:
+    """Whether `text` is a full commit id (40 or 64 hex digits), which is what a detached HEAD file holds."""
+    return len(text) in (40, 64) and all(char in "0123456789abcdef" for char in text)
+
+
 def read_git_identity(repository_path: str | None, resolved_paths: list[tuple[str, str]]) -> dict:
     """What git says this ONE directory is: `{kind, branch, worktree_of}` (see `worktree.identity`).
 
@@ -554,7 +562,8 @@ def read_git_identity(repository_path: str | None, resolved_paths: list[tuple[st
     common dir -- the value `borg add` stores as the registry's `repo` -- and `HEAD` is `ref: refs/heads/<name>`
     on a branch. Both are plain text git itself writes, and both degrade quietly: an unreadable layout answers
     `kind: directory` with no branch, and the page omits the lines it cannot state. A detached HEAD has no
-    branch, and an empty branch is "not stated", never a made-up name.
+    branch, and an empty branch is "not stated", never a made-up name; its HEAD file is the bare commit id, which
+    becomes the additive `detached` key (the short sha) so the page can say "detached at <sha>".
     """
     directory = _usable_path(repository_path)
     if directory is None:
@@ -567,7 +576,10 @@ def read_git_identity(repository_path: str | None, resolved_paths: list[tuple[st
     common_dir = os.path.realpath(git_dir / shared if shared else git_dir)
     head = _read_text(git_dir / "HEAD").strip()
     branch = head[len("ref: refs/heads/") :] if head.startswith("ref: refs/heads/") else ""
-    return worktree.identity(physical, branch, common_dir, resolved_paths)
+    # A detached HEAD file is the bare commit id; anything else that is not a branch ref (an unfamiliar layout)
+    # states nothing, as before. Only a full hex id counts as "detached at <short sha>".
+    detached = head[:_SHORT_SHA] if not branch and _is_hex_sha(head) else ""
+    return worktree.identity(physical, branch, common_dir, resolved_paths, detached)
 
 
 def read_plan(repository_path: str | None) -> dict | None:

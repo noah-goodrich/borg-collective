@@ -39,6 +39,14 @@ setup() {
     # shared setup_temp_dirs helper), so this follows established precedent rather than introducing
     # a new one.
     export XDG_DATA_HOME="${BATS_TEST_TMPDIR}/data"
+
+    # STAND AT THE QUEEN ROOT (2026-10-13). Every `link overview ...` case below is about the Queen's page, and a
+    # bare `borg link` is the Queen's page only at the Queen root: a cwd that is neither the root nor inside a
+    # registered path prints the hint page (pinned by "an unregistered directory ..."), and the bats cwd is the
+    # repository under test. Cases that need a registered directory `cd` into it themselves.
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/queen"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+    cd "$BORG_ORCHESTRATOR_ROOT"
 }
 
 # Run the CLI under an explicit zsh. Stdout+stderr merged; callers assert on $output/$status.
@@ -1356,6 +1364,66 @@ EOF
     run grep -c "claude -p" "$TRACE"
     [ "$output" -ge 1 ]
     # And init still completes its actual job.
+    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+}
+
+
+# `borg init` IS THE QUEEN LAUNCHER (decision 4, 2026-10-13): its briefing passes --overview whatever the cwd.
+# Without it, `borg init` run from inside a registered repository would brief THAT DIRECTORY ONLY and then
+# launch the orchestrator over the whole registry. Asserted on the wire (the python3 argv of the document
+# build) AND on the prompt the model is handed (the Queen's breadth, with the other registry entry in it).
+#
+# MUTATION: change `_borg_print_briefing 0 0 1` in cmd_init back to a bare call and both assertions go red.
+@test "contract: init from inside a registered repository still briefs the Queen's overview" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export TRACE="${BATS_TEST_TMPDIR}/trace.log"
+    export PY_TRACE="${BATS_TEST_TMPDIR}/py-trace.log"
+    export PROMPT_FILE="${BATS_TEST_TMPDIR}/prompt.txt"
+    : > "$TRACE"
+    : > "$PY_TRACE"
+    export TMUX_MOCK_HAS_SESSION=1
+    _mock_tmux
+
+    export TMUX="/tmp/tmux-mock/default,1234,0"
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/orchestrator-root"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+
+    local here="${BATS_TEST_TMPDIR}/ws/here" there="${BATS_TEST_TMPDIR}/ws/there"
+    mkdir -p "$here" "$there"
+    printf '{"projects":{"here":{"path":"%s","source":"cli","status":"idle","summary":"Here.","last_activity":"2026-08-01T10:00:00Z"},"there":{"path":"%s","source":"cli","status":"idle","summary":"There.","last_activity":"2026-08-01T10:00:00Z"}}}' \
+        "$here" "$there" > "$BORG_REGISTRY"
+
+    local real_python
+    real_python=$(command -v python3)
+    [ -n "$real_python" ]
+    cat > "$MOCK_BIN/python3" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "$PY_TRACE"
+exec "$real_python" "\$@"
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    cat > "$MOCK_BIN/claude" <<EOF
+#!/usr/bin/env bash
+echo "claude \$*" >> "$TRACE"
+[ "\$1" = "-p" ] && { printf '%s' "\$2" > "$PROMPT_FILE"; echo "INIT-NARRATIVE"; }
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    run bash -c "cd '$here' && zsh '$BORG' init"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run grep -c -- "borg_core.link.cli --json --overview" "$PY_TRACE"
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+    run cat "$PROMPT_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SCOPE: orchestrator"* ]] || false
+    [[ "$output" == *"PROJECT: here"* ]] || false
+    [[ "$output" == *"PROJECT: there"* ]] || false
     run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
@@ -2768,6 +2836,32 @@ EOF
     run_zsh_borg link
     [ "$status" -eq 0 ]
     [[ "$output" == *"No repositories registered. Run: borg scan"* ]] || false
+}
+
+# DECISION 3 (2026-10-13): a cwd that is neither the Queen root nor inside any registered path prints a SHORT page,
+# never the overview. It says the directory is not a registered repository, offers `borg add` and
+# `borg link --overview`, and exits 0. `--overview` from the same directory is still the Queen's page. This replaces
+# the old premise ("an unregistered cwd falls back to the overview"), which the whole `link overview` family above
+# used to lean on by running from wherever bats happened to be.
+@test "contract: link from an unregistered directory prints the hint page, never the overview, and exits 0" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"registered-secret":{"path":null,"source":"cli","status":"idle"}}}' > "$BORG_REGISTRY"
+    local stranger="${BATS_TEST_TMPDIR}/stranger"
+    mkdir -p "$stranger"
+
+    run bash -c "cd '$stranger' && zsh '$BORG' link --local"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"This directory is not a registered repository."* ]] || false
+    [[ "$output" == *"borg add"* ]] || false
+    [[ "$output" == *"borg link --overview"* ]] || false
+    [[ "$output" != *"registered-secret"* ]] || false
+    [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" != *"REPOSITORIES"* ]] || false
+
+    run bash -c "cd '$stranger' && zsh '$BORG' link --local --overview"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"registered-secret"* ]] || false
+    [[ "$output" != *"not a registered repository"* ]] || false
 }
 
 @test "contract: link overview prints the discovery tip when only one project is registered" {

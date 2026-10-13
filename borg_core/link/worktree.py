@@ -40,14 +40,24 @@ def main_checkout_path(common_dir: str) -> str:
     return common_dir[: -len(_GIT_SUFFIX)] if common_dir.endswith(_GIT_SUFFIX) else ""
 
 
-def identity(path: str, branch: str, common_dir: str, resolved_paths: list[tuple[str, str]]) -> dict:
+def identity(
+    path: str, branch: str, common_dir: str, resolved_paths: list[tuple[str, str]], detached: str = ""
+) -> dict:
     """What a directory IS to git: `{kind, branch, worktree_of}`, `kind` one of worktree|checkout|directory.
 
     `path` and every path in `resolved_paths` arrive realpath-normalized (a filesystem act that cannot
     happen here), because `common_dir` is git's own physical answer and the comparison is between those.
     `directory` means git knows nothing about it (no common dir), and says nothing about a relationship.
     `worktree_of` names the registry project that IS the main checkout, else the main checkout's basename.
+    `detached` is the SHORT SHA of a detached HEAD and an ADDITIVE key: present only when non-empty, so every
+    identity read before it existed is byte-identical, and `branch` stays a branch name or "".
     """
+    base = _identity(path, branch, common_dir, resolved_paths)
+    return {**base, "detached": detached} if detached else base
+
+
+def _identity(path: str, branch: str, common_dir: str, resolved_paths: list[tuple[str, str]]) -> dict:
+    """`identity` without the detached key: the relationship of a directory to its repository."""
     if not common_dir:
         return {"kind": "directory", "branch": branch, "worktree_of": ""}
     main = main_checkout_path(common_dir)
@@ -58,6 +68,13 @@ def identity(path: str, branch: str, common_dir: str, resolved_paths: list[tuple
             return {"kind": "worktree", "branch": branch, "worktree_of": name}
     leaf = (main or common_dir).rstrip("/").rsplit("/", 1)[-1]
     return {"kind": "worktree", "branch": branch, "worktree_of": leaf.removesuffix(".git")}
+
+
+def branch_text(ident: dict) -> str:
+    """The `Branch:` row's value: the branch name, else `detached at <short sha>`, else "" (git did not state one)."""
+    if ident.get("branch"):
+        return str(ident["branch"])
+    return f"detached at {ident['detached']}" if ident.get("detached") else ""
 
 
 def scope_label(name: str, ident: dict) -> str:

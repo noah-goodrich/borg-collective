@@ -1317,8 +1317,14 @@ cmd_tidy() {
 #
 # ARGS: $1 = --all (0/1), $2 = --local (0/1), $3 = --overview (0/1), forwarded exactly as every other arm
 # forwards them.
-# `borg init` passes neither, so the morning briefing is orchestrator-breadth and SWEPT — a real cost
-# change from the registry-only read it used to do, and the intended one.
+# `borg init` passes --overview (and neither of the others), so the morning briefing is orchestrator-breadth and
+# SWEPT whatever the cwd — a real cost change from the registry-only read it used to do, and the intended one.
+#
+# THE NARRATIVE'S BREADTH FOLLOWS THE PAGE'S (2026-10-13). At the Queen root (or with --overview) the prompt is the
+# registry-wide board, as ever. In repository scope the prompt is built ONLY from this directory's page: its
+# identity, its own checkpoint, its own session row and the next action — no other registry entry, no capacity
+# count, no sweep of other repositories. A cwd that is neither the Queen root nor inside a registered path has
+# nothing to narrate, so it skips `claude -p` (silently: the hint page IS the answer) and renders the page.
 #
 # THE `claude -p` CALL STAYS IN zsh, AND THAT IS A CONSTRAINT RATHER THAN INERTIA. borg_core/proc.py
 # is borg_core's only sanctioned fork; it hard-wires `stderr=subprocess.DEVNULL` and returns None
@@ -1385,8 +1391,20 @@ _borg_print_briefing() {
     # changed behaviour for an all-archived registry: the short circuit stopped firing and the
     # narrative paid for `claude -p` to describe a board with zero rows on it. `--all` puts archived
     # rows back in `.order`, so it opts back into a narrative, which is what asking for them means.
-    rows=$(printf '%s' "$doc" | jq -r '(.order // []) | length' 2>/dev/null) || rows=0
-    if [[ -z "$rows" || "$rows" == "0" || "$rows" == "null" ]]; then
+    #
+    # ONE jq reads both facts the ladder below needs: the row count and the scope the ENGINE resolved
+    # (`unregistered` first, since it rides on kind "orchestrator"). The short circuit is the Queen's alone — a
+    # directory's page has its own focus block whatever the rest of the registry holds.
+    local brief_scope=""
+    local scope_probe
+    scope_probe=$(printf '%s' "$doc" | jq -r '
+        [((.order // []) | length),
+         (if (.scope.unregistered // false) then "unregistered" else (.scope.kind // "orchestrator") end)]
+        | @tsv' 2>/dev/null) || scope_probe=""
+    rows="${scope_probe%%$'\t'*}"
+    brief_scope="${scope_probe#*$'\t'}"
+    [[ -z "$scope_probe" ]] && { rows=0; brief_scope="orchestrator"; }
+    if [[ "$brief_scope" == "orchestrator" ]] && [[ -z "$rows" || "$rows" == "0" || "$rows" == "null" ]]; then
         info "No projects in registry. Run: borg scan"
         return 0
     fi
@@ -1426,7 +1444,43 @@ _borg_print_briefing() {
     # explicit truncation of the file: `2>` on the command substitution opens it O_TRUNC, exactly as
     # the `claude` call's own stderr capture does further down.
     local jq_stderr_file="$(_borg_state_root)/briefing-projection-stderr.log"
-    payload=$(printf '%s' "$doc" | jq -r '
+    local projection
+    if [[ "$brief_scope" == "repository" ]]; then
+        projection='
+        . as $d
+        | ($d.focus // {}) as $f
+        | ($f.entry // {}) as $e
+        | ($f.identity // {}) as $i
+        | (($d.waiting.rows // []) | map(select(.item == "session" and ((.ref // "") == ""))) | first // null) as $row
+        | [
+            "SCOPE: repository — \($f.name // $d.scope.repository // "unknown")",
+            "THIS DOCUMENT DESCRIBES ONE DIRECTORY AND NOTHING ELSE. There is no other project here: do not name or guess at one.",
+            "",
+            "PROJECT: \($f.name // $d.scope.repository // "unknown")",
+            "path: \($e.path // "unknown")",
+            "branch: " + (if (($i.branch // "") | length) > 0 then $i.branch
+                          elif (($i.detached // "") | length) > 0 then "detached at \($i.detached)"
+                          else "unknown" end)
+          ]
+          + (if $i.kind == "worktree" and (($i.worktree_of // "") | length) > 0
+             then ["worktree_of: \($i.worktree_of)"] else [] end)
+          + ["status: \($e.status // "unknown")",
+             "last_active: \($e.relative_activity // "never")",
+             "summary: \($e.summary // "")"]
+          + (if (($e.waiting_reason // "") | length) > 0
+             then ["waiting_reason: \($e.waiting_reason)"] else [] end)
+          + (if (($e.summary // "") | length) == 0
+             then ["note: no summary on record — describe this one by state only, invent nothing"] else [] end)
+          + [""]
+          + (if (($f.checkpoint_head // "") | length) > 0
+             then ["--- latest checkpoint for \($f.name) ---", $f.checkpoint_head, "--- end checkpoint ---", ""]
+             else [] end)
+          + ["NEXT ACTION: " + (if $row != null then "waiting on you — \($row.next_step // "a session needs input")"
+                                else "nothing is ready" end)]
+          | join("\n")
+    '
+    else
+        projection='
         . as $d
         | (if ($d.scope.kind // "") == "repository" then ($d.focus // {}) else $d end) as $breadth
         | [
@@ -1482,7 +1536,9 @@ _borg_print_briefing() {
                    "--- end checkpoint ---", ""]
              else [] end)
           | join("\n")
-    ' 2>"$jq_stderr_file") || payload=""
+    '
+    fi
+    payload=$(printf '%s' "$doc" | jq -r "$projection" 2>"$jq_stderr_file") || payload=""
     local jq_stderr=""
     [[ -s "$jq_stderr_file" ]] && jq_stderr=$(<"$jq_stderr_file")
 
@@ -1500,10 +1556,19 @@ _borg_print_briefing() {
         [[ -n "$jq_stderr" ]] && fallback_reason+=": ${jq_stderr}"
     fi
 
-    IFS= read -r -d '' briefing_prompt <<EOF || true
-Generate a morning briefing for a developer. Output plain text for a terminal — no markdown, no headers, no bullet symbols.
+    # Which instructions the model gets follows the document's breadth: a directory's page is ONE project, so
+    # there is no list to keep in order and no Focus line to choose between projects.
+    local prompt_shape
+    if [[ "$brief_scope" == "repository" ]]; then
+        prompt_shape="This briefing is about ONE directory. Write exactly these lines (omit Blocked line if not waiting):
+  <name>  [<status>, <relative_time>]
+    Last: <one sentence — what was accomplished. Use the latest checkpoint if there is one, else summary>
+    Next: <one sentence — the NEXT ACTION below>
+    Blocked: <waiting_reason>  ← only if status is waiting
 
-For each project write exactly these lines (omit Blocked line if not waiting):
+Name no other project. Keep each line under 80 chars."
+    else
+        prompt_shape="For each project write exactly these lines (omit Blocked line if not waiting):
   <name>  [<status>, <relative_time>]
     Last: <one sentence — what was accomplished. Use the latest checkpoint if there is one, else summary>
     Next: <one sentence — most important next action. Prefer a READY ref from a project manifest>
@@ -1512,7 +1577,13 @@ For each project write exactly these lines (omit Blocked line if not waiting):
 After all projects, add one blank line then:
   Focus: <project_name> — <one sentence why it needs attention first>
 
-The projects below are already in priority order — keep it. Keep each line under 80 chars.
+The projects below are already in priority order — keep it. Keep each line under 80 chars."
+    fi
+
+    IFS= read -r -d '' briefing_prompt <<EOF || true
+Generate a morning briefing for a developer. Output plain text for a terminal — no markdown, no headers, no bullet symbols.
+
+$prompt_shape
 
 PROVENANCE. Every state below carries its source. A node marked "declared" was typed into a manifest
 by a human; one marked "swept" or "fetched" was observed on GitHub during this run. Never present a
@@ -1528,8 +1599,11 @@ EOF
     # THE WHOLE NARRATIVE HALF IS SKIPPED WHEN THERE IS NOTHING TO NARRATE FROM. A projection failure
     # is already a decided fallback; forking `claude -p` anyway would bill for a briefing built on an
     # empty DOCUMENT block and then throw the answer away — or worse, print it.
+    #
+    # AN UNREGISTERED CWD IS SKIPPED TOO, AND SILENTLY: its document has no directory to narrate, the hint page
+    # the fallback renders is the whole answer, and a reason line would call a decided outcome a failure.
     briefing=""
-    if [[ -z "$fallback_reason" ]]; then
+    if [[ -z "$fallback_reason" && "$brief_scope" != "unregistered" ]]; then
         info "Building morning briefing..."
 
         # Capture stderr to a file under the state root instead of /dev/null (was silent — see
@@ -1704,7 +1778,11 @@ cmd_init() {
     # below, so a failed page must not stop the session from launching. This is not a silent swallow:
     # the function has already named the cause on stderr before returning, which is the whole of the
     # 2026-08-10 directive's "make the failure loud". Dropping only the status is the deliberate part.
-    _borg_print_briefing || true
+    #
+    # `borg init` IS THE QUEEN LAUNCHER, so its briefing passes --overview (the third argument) WHATEVER the
+    # cwd: the Queen view from anywhere. Without it, running `borg init` from inside a repository would brief
+    # that one directory and then launch the orchestrator over the whole registry.
+    _borg_print_briefing 0 0 1 || true
 
     local context
     context=$(_borg_orchestrator_context)
