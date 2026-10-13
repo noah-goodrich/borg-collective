@@ -3,7 +3,7 @@
 *Directive: [2026-08-31-project-to-repository-rename](../2026-08-31-project-to-repository-rename.md), first acceptance criterion.*
 *Pinned to commit `a2744df` (main, 2026-10-12). Companion data: `2026-10-12-project-rename-inventory.tsv`.*
 
-This is the classification the directive calls "the actual work". Every occurrence of `project` or `projects` (case-insensitive) in tracked `*.py`, `*.zsh`, `*.sh` and `*.bats` files at `a2744df` has one row in the TSV, with a sense. The first pass used five senses; a second pass (2026-10-12) added a sixth, `noise`, and moved 48 rows into it. The rename itself has not started. Line numbers are pinned to `a2744df` and drift as main moves; anchor on file plus the quoted code, not the number.
+This is the classification the directive calls "the actual work". Every occurrence of `project` or `projects` (case-insensitive) in tracked `*.py`, `*.zsh`, `*.sh` and `*.bats` files at `a2744df` has one row in the TSV, with a sense. The first pass used five senses; a second pass (2026-10-12) added a sixth, `noise`, and moved 48 rows into it. The rename started with R1 (PR #350); see "Relabels after R1". Line numbers are pinned to `a2744df` and drift as main moves; anchor on file plus the quoted code, not the number.
 
 ## Method
 
@@ -31,34 +31,34 @@ git ls-files "*.py" "*.zsh" "*.sh" "*.bats" \
 
 | sense      | rows | share |
 |------------|------|-------|
-| repository | 2605 | 66.6% |
-| contract   | 1023 | 26.2% |
+| repository | 2566 | 65.6% |
+| contract   | 1035 | 26.5% |
 | external   | 183  | 4.7%  |
-| workstream | 45   | 1.2%  |
+| workstream | 72   | 1.8%  |
 | noise      | 48   | 1.2%  |
 | ambiguous  | 7    | 0.2%  |
 | total      | 3911 | 100%  |
 
-Before the noise pass the table read repository 2614, contract 1023, external 213, workstream 45, ambiguous 16. The 48 noise rows came from repository (9), external (30) and ambiguous (9); contract and workstream lost none.
+Before the noise pass the table read repository 2614, contract 1023, external 213, workstream 45, ambiguous 16. The 48 noise rows came from repository (9), external (30) and ambiguous (9); contract and workstream lost none. The R1 relabel (PR #350, 2026-10-12) then moved 27 rows from repository to workstream and 12 from repository to contract; see "Relabels after R1" below. The pin is still `a2744df`: R1 renamed code but this table does not follow the renames, so a row R1 renamed keeps its `repository` label.
 
 By shard (files, rows, then rows per sense):
 
 | shard | files | rows | repo | work | ext | con | amb | noise |
 |-------|-------|------|------|------|-----|-----|-----|-------|
 | 0     | 1     | 469  | 432  | 0    | 14  | 23  | 0   | 0     |
-| 1     | 1     | 286  | 162  | 0    | 0   | 122 | 0   | 2     |
+| 1     | 1     | 286  | 160  | 2    | 0   | 122 | 0   | 2     |
 | 2     | 1     | 306  | 238  | 0    | 0   | 57  | 1   | 10    |
 | 3     | 3     | 270  | 150  | 0    | 0   | 120 | 0   | 0     |
-| 4     | 4     | 318  | 262  | 0    | 5   | 50  | 0   | 1     |
-| 5     | 5     | 292  | 172  | 0    | 1   | 100 | 0   | 19    |
+| 4     | 4     | 318  | 241  | 9    | 5   | 62  | 0   | 1     |
+| 5     | 5     | 292  | 163  | 9    | 1   | 100 | 0   | 19    |
 | 6     | 5     | 290  | 201  | 0    | 1   | 87  | 0   | 1     |
 | 7     | 6     | 319  | 259  | 0    | 1   | 59  | 0   | 0     |
-| 8     | 9     | 300  | 195  | 3    | 19  | 76  | 0   | 7     |
+| 8     | 9     | 300  | 193  | 5    | 19  | 76  | 0   | 7     |
 | 9     | 11    | 316  | 177  | 15   | 4   | 118 | 1   | 1     |
-| 10    | 18    | 290  | 140  | 0    | 36  | 110 | 0   | 4     |
+| 10    | 18    | 290  | 135  | 5    | 36  | 110 | 0   | 4     |
 | 11    | 31    | 307  | 156  | 18   | 66  | 64  | 0   | 3     |
 | 12    | 53    | 148  | 61   | 9    | 36  | 37  | 5   | 0     |
-| all   | 148   | 3911 | 2605 | 45   | 183 | 1023| 7   | 48    |
+| all   | 148   | 3911 | 2566 | 72   | 183 | 1035| 7   | 48    |
 
 Heaviest files: `drone.zsh` 469, `borg.zsh` 306, `tests/cli_contract.bats` 286, `borg_core/link/test_core.py` 134, `borg_core/link/test_shell.py` 118, `borg_core/link/core.py` 112, `borg_core/link/render.py` 110.
 
@@ -72,22 +72,45 @@ Heaviest files: `drone.zsh` 469, `borg.zsh` 306, `tests/cli_contract.bats` 286, 
 | distinct files in the TSV | 148        |
 | tracked code files        | 295        |
 
-The rows reconcile exactly. Beyond the equal totals, the TSV was joined to `git grep -noiE "project(s)?" a2744df` on file, line, nth and the matched text: 0 matches have no row, 0 rows have no match, 0 duplicate keys, and every `match` column equals the text grep returned. Every row has 6 tab-separated fields and one of the six senses. The join was run on the first draft of the TSV; the noise pass changed only the `sense` and `note` columns of 48 rows, and the data-row count, the keys and the `match` column are unchanged.
+The rows reconcile exactly. Beyond the equal totals, the TSV was joined to `git grep -noiE "project(s)?" a2744df` on file, line, nth and the matched text: 0 matches have no row, 0 rows have no match, 0 duplicate keys, and every `match` column equals the text grep returned. Every row has 6 tab-separated fields and one of the six senses. The join was run on the first draft of the TSV; the noise pass changed only the `sense` and `note` columns of 48 rows and the R1 relabel only those columns of 52 more, and the data-row count, the keys and the `match` column are unchanged.
 
 - **The directive's old numbers do not match this tree, and that is drift, not an inventory error.** The directive measured 3142 occurrences across 97 of 139 tracked code files on 2026-08-31. At `a2744df` the same command gives 3911 across 148 of 295. The tree grew in the two months between, and the difference is not attributed here. The directive's Measured scope section now carries the re-measured figures and keeps the old ones as history.
 - **Main has moved since the pin.** At `d96ea15` (two commits later) the same grep gives 3914 matches in 149 files: three more matches and one more file. They are not in the inventory. Re-measure before the first rename PR and extend the TSV for the delta.
 
 
-## Workstream-sense sites (all 45 rows)
+## Workstream-sense sites (all 72 rows)
 
-The criterion asks for these to be listed so a later reader can see they were considered, not missed. 45 rows on 39 lines in 9 files, every one of them prose or an identifier that uses "project" in the plan's vocabulary: work spanning one or more repositories. A rename script must skip them. Each bullet is `file:line (matches on that line)` and the code, trimmed.
+The criterion asks for these to be listed so a later reader can see they were considered, not missed. 72 rows on 65 lines in 14 files. 45 rows were classed workstream in the first pass: prose or an identifier that uses "project" in the plan's vocabulary, work spanning one or more repositories. R1 (#350) added 27 rows where "project" means a chain manifest and the code now says "chain"; their note starts "chain manifest: reworded to chain in #350", and so do 6 of the original rows that R1 reworded the same way. A rename script must skip them. Each bullet is `file:line (matches on that line)` and the code, trimmed.
 
+- `borg_core/link/grid.py:634` (project) `would render another project's entire grid under this repository's header, a wrong answer rather`
+- `borg_core/link/grid.py:898` (project) `"repos:" line under a project's heading.`
+- `borg_core/link/grid.py:903` (project) `Listing those would tell a reader this project spans a repository it merely references -- and`
+- `borg_core/link/grid.py:904` (project) `would do it under a heading that already claims the project, which is the wrong-answer-under-a-`
 - `borg_core/link/picture.py:314` (project) `project is essentially done, from a field no sweep and no fetch ever saw.`
 - `borg_core/link/picture.py:620` (project) `top-left node of the first project.`
+- `borg_core/link/render.py:665` (project) `only manifest has one bad row rendered "no project manifests in the registry yet. Run /borg-plan`
+- `borg_core/link/render.py:677` (project) `the registry-wide sentence claim "no project manifests in the registry yet" while three of them`
+- `borg_core/link/render.py:703` (project) `return "no project manifests in the registry yet. Run /borg-plan in any repository."`
+- `borg_core/link/render.py:706` (project) `return f"no project manifest declares work in {grid_block['slug']}. Run /borg-plan to scaffold one."`
+- `borg_core/link/render.py:710` (project) `"""One project's CHAINS block: its heading, the picture, then one detail block per node.`
+- `borg_core/link/render.py:738` (project) `` project, with GLOBAL node ids so `*` in vim toggles between a cell and its detail exactly once. ``
+- `borg_core/link/render.py:740` (projects) `` The note is UNCONDITIONAL, even when no manifest was selected: `0 projects · 0 refs · 0 ``
+- `borg_core/link/render.py:764` (project, projects) `f"{_plural(len(manifests), 'project', 'projects')}"`
+- `borg_core/link/test_grid.py:289` (project) `must then reject it rather than render another project's whole grid under this repository's`
+- `borg_core/link/test_grid.py:765` (project) `project's entire grid rendered under this repository's header.`
 - `borg_core/link/test_grid.py:2302` (project) `` lives in `o/tracker`, a repository this project does not span. Listing it would tell a reader the ``
 - `borg_core/link/test_grid.py:2303` (project) `project reaches a repository it merely files its tracker in -- under a heading that already claims`
 - `borg_core/link/test_grid.py:2304` (project) `the project. Sorted and deduplicated, so two rows in one repository contribute one entry.`
 - `borg_core/link/test_picture.py:844` (project) `# 2 unknown, and a glance strip of twelve green checkmarks asserting a project is essentially done`
+- `borg_core/link/test_render.py:170` (project) `({"scope_kind": "orchestrator", "slug": ""}, "no project manifests in the registry yet"),`
+- `borg_core/link/test_render.py:172` (project) `({"scope_kind": "repository", "slug": "acme/ledger"}, "no project manifest declares work in acme/led...`
+- `borg_core/link/test_render.py:201` (project) `A repository whose only manifest was refused used to render "no project manifests in the registry`
+- `borg_core/link/test_render.py:210` (project) `assert "no project manifests in the registry yet" not in page`
+- `borg_core/link/test_render.py:211` (project) `assert "no project manifest declares work in acme/ledger" not in page`
+- `borg_core/link/test_render.py:219` (project) `assert "no project manifest declares work in acme/ledger" in render.document(doc)`
+- `borg_core/link/test_render.py:229` (project) `so an orchestrator page with unreadable manifests on disk must not print "no project manifests in`
+- `borg_core/link/test_render.py:237` (project) `assert "no project manifests in the registry yet" not in page`
+- `borg_core/link/test_render.py:249` (project) `assert "no project manifests in the registry yet" in out`
 - `borg_core/manifest/across.py:52` (projects) `` `contested_refs` is the contested-ref half of the deleted merge-tree/gather.py's `apply_program_p... ``
 - `borg_core/manifest/across.py:82` (project) `under exactly one repository, so a second project that depends on one of its rows declares that`
 - `borg_core/manifest/across.py:181` (projects) `pointers at work happening somewhere else. Two projects sharing one tracker issue is not a`
@@ -99,6 +122,7 @@ The criterion asks for these to be listed so a later reader can see they were co
 - `borg_core/manifest/core.py:742` (project) `happening somewhere else. Scoping on the wider set puts another project's ENTIRE grid under this`
 - `borg_core/manifest/core.py:743` (project) `repository's header the moment this repository merely hosts its tracker issue or one cross-project`
 - `borg_core/manifest/core.py:795` (project) `for what hosting another project's tracker would otherwise do to this repository's grid.`
+- `borg_core/manifest/shell.py:316` (project) `copy and the CHAINS placeholder silently reverts to the false "no project manifests in the`
 - `borg_core/manifest/test_across.py:82` (projects) `"""Two projects naming the same dependency is normal input, so the duplicate is dropped rather`
 - `borg_core/manifest/test_across.py:364` (projects) `"""Two projects tracked by one issue is coordination, not a conflict. merge-tree's copy includes`
 - `borg_core/manifest/test_across.py:365` (project) `the apex because it regroups items onto a project with the same map; that job stays over there.`
@@ -121,9 +145,11 @@ The criterion asks for these to be listed so a later reader can see they were co
 - `docs/infoviz/harness/build-specimens.py:100` (project) `"needs_you_project_rank": target.get("priority"),`
 - `docs/infoviz/harness/build-specimens.py:214` (projects) `print("  story-lens.html   (shuffled projects, needs-you planted)")`
 - `merge-tree/test_s4_manifests.py:55` (project) `# Lifecycle naming rule: the id IS user-facing (it becomes the project id in every view), so it`
+- `tests/cli_contract.bats:3449` (project) `run grep -c 'no project manifest declares work in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"`
+- `tests/cli_contract.bats:3474` (project) `run grep -c 'no project manifests in the registry yet' "${BATS_TEST_TMPDIR}/orch-empty.txt"`
 
 - Notes on the list: `docs/infoviz/harness/build-specimens.py` (15 rows) is a specimen generator whose `story.json` "projects" each hold "workstreams", so its story-lens rows are workstream while the same file's registry-fixture rows are repository or contract. `borg_core/manifest/core.py:62` is the vocabulary statement itself. Every other site is a docstring, comment or test name in the manifest and link code that describes a chain or grid as a project spanning repositories.
-- Not in this list but close: the user-facing strings "no project manifests in the registry yet" and "no project manifest declares work in ..." (12 rows: `borg_core/link/render.py` 665, 677, 703, 706; `borg_core/link/test_render.py` 170, 172, 201, 210, 211, 219; `tests/cli_contract.bats` 3449, 3474) are classed repository, and a manifest is a chain that spans repositories, so these may belong here. Flagged by the shard 1 classifier; not an auditor disagreement; left as classified. See "Known limits".
+- Chain manifests: the user-facing strings "no project manifests in the registry yet", "no project manifest declares work in ..." and the CHAINS count "N projects" were classed repository in the first pass (the shard 1 classifier flagged them). Noah's R1 decision (2026-10-12) is that "chain" is the word for a manifest, so they now read "chain" and sit here with the comments, docstrings and tests that mean the same thing (`grid.py`, `render.py`, `picture.py`, `manifest/shell.py`, their tests and goldens).
 
 ## Ambiguous sites (all 7 rows, for a human)
 
@@ -165,14 +191,14 @@ Counts by file: `tests/briefing.bats` 19, `borg.zsh` 10, `borg_core/link/grid.py
 
 Not noise, kept as classified: `pyproject` (25 rows, external), `projectPath` in `scripts/resume-skeleton.py` (161, 231; external, Claude's own session key), `myproject`, `aproject`, `nosuchproject` (19 rows), `ProjectNotFound` (15 rows), `testprojectdirof...` (2 rows) and the other identifiers that contain the noun as a component.
 
-## Contract-sense breakdown (1023 rows)
+## Contract-sense breakdown (1035 rows)
 
 A contract name is one that other code, hooks, the plugin or on-disk data read, so renaming it needs a migration or a deprecation path. The table groups the rows by the identifier the match sits inside, derived from the code on each line rather than from the note column.
 
 | contract name                         | rows |
 |---------------------------------------|------|
-| `projects` (key, flag, jq path)       | 573  |
-| `project` (field or value, see below) | 166  |
+| `projects` (key, flag, jq path)       | 584  |
+| `project` (field or value, see below) | 167  |
 | `PROJECT_PLAN.md` and `PROJECT_PLAN`  | 107  |
 | `total_projects` (link --json)        | 55   |
 | `.borg-project` marker                | 35   |
@@ -182,15 +208,15 @@ A contract name is one that other code, hooks, the plugin or on-disk data read, 
 | env vars (see below)                  | 14   |
 | other identifiers embedding a name    | 12   |
 | `__PROJECT_NAME__` placeholders       | 6    |
-| total                                 | 1023 |
+| total                                 | 1035 |
 
-- **The registry key is most of the first row.** 573 rows read `projects`, and the token-level grouping cannot separate the registry key from the `borg link --json` document key and the recon `--projects` flag, which share the spelling. By the shard notes the registry key, its jq paths and its fixtures dominate; the flag is the smaller group.
+- **The registry key is most of the first row.** 584 rows read `projects`, and the token-level grouping cannot separate the registry key from the `borg link --json` document key and the recon `--projects` flag, which share the spelling. By the shard notes the registry key, its jq paths and its fixtures dominate; the flag is the smaller group.
 - **Env vars:** `BORG_WORK_PROJECTS` 10 rows, `BORG_PROJECT_NAME` 4 rows.
 - **The `project` rows (166) are wire fields and values:** the recon Item key, the `borg next --json` row key and its chooser fixtures, the `project` field of `token-spend.jsonl` and `cortex-wakes.json` records, the `project` key of resume session and ledger files, the session-mode value `project` returned by `_borg_session_mode`, and `# Project Plan:` heading text inside PROJECT_PLAN.md fixtures.
 - **`.borg-project`** (35 rows): the marker filename, written by `drone.zsh`, read by `lib/borg-hooks.sh`, hard-coded in `hooks/bash-guard.sh` and present in the `borg-link` skill's MARKER-WALK block. The directive's third change item says to keep the filename and decide either way in CLAUDE.md.
 - **State-root `projects/`**: about 17 rows name the on-disk `projects/<key>/state.json` directory (`lib/borg-hooks.sh`, `borg_core/statemigrate`), counted inside the `projects` row above because the token is the same. It is on-disk data, not a key in a shared file.
 - **Template placeholders** (6 rows) can be renamed only together with the files under `templates/` and `drone.zsh`.
-- **Debatable contract calls the shards flagged** and that a human should confirm before treating them as frozen: tmux window options `@project_dir`/`@project_name` (internal to tmux but possibly read elsewhere), the `recon --projects` flag and the adapter `projects.json` file (renameable behind a deprecation alias), the `assemble(projects=...)` kwargs, the `"Project Plan: Delta/Nox"` fixture bodies, and the `project` key in cortex-wakes fixtures (not checked against Cortex's own spelling).
+- **Debatable contract calls the shards flagged** and that a human should confirm before treating them as frozen: tmux window options `@project_dir`/`@project_name` (internal to tmux but possibly read elsewhere), the `recon --projects` flag and the adapter `projects.json` file (renameable behind a deprecation alias), the `"Project Plan: Delta/Nox"` fixture bodies, and the `project` key in cortex-wakes fixtures (not checked against Cortex's own spelling).
 
 ## External-sense breakdown (183 rows)
 
@@ -212,22 +238,30 @@ Three auditors, 20 rows each, 60 rows in total, drawn with `random.Random(seed)`
 | 47   | 20      | 20     | 0         |
 | all  | 60      | 60     | 0         |
 
-- **The sample by inventory sense:** 45 repository, 9 contract, 5 external, 1 workstream, 0 ambiguous. The workstream and ambiguous senses are barely tested by it (1 of 61 rows); the 45 workstream rows were instead each read for this document (listed above) and the sense holds on each.
+- **The sample by inventory sense:** 45 repository, 9 contract, 5 external, 1 workstream, 0 ambiguous. The workstream and ambiguous senses are barely tested by it (1 of 61 rows); the original 45 workstream rows were instead each read for this document (listed above) and the sense holds on each.
 - **Corrections: none at the time.** No auditor disagreement was found, so no row was changed by the audits. The three samples are committed as `2026-10-12-project-rename-audit-seed-11.tsv`, `2026-10-12-project-rename-audit-seed-29.tsv` and `2026-10-12-project-rename-audit-seed-47.tsv` in this directory: the 20 sampled inventory rows per seed, no header, the same six columns, with the sense and note as they stood when the audit ran (before the noise pass). The auditors' own picks are not in them. A joined check against the current TSV finds exactly two differences, both in seed 11 (below).
 - **Taxonomy remarks the auditors made, agreed on the row and since acted on:** `grid.py:925` ("projection") and `grid.py:167` ("projected") are substring false positives that were filed under `external`, which stretched the definition of that sense. The auditor recommended a `noise` sense for them; this document adds it, and these two rows, both in the seed 11 sample, are among the 48 reclassified rows. The sample files still show them as `external` because they record the audit as it was. Three rows were close calls resolved toward the inventory: `build-specimens.py:80` (workstream, a variable use), `test_core.py:793` (`projects={}` kwarg mirroring the link --json key, contract) and `nextpick/core.py:481` (`"project": row["project"]` wire key, contract). `briefing.bats:269` has "project" inside an invented repo name and is repository.
+
+## Relabels after R1
+
+R1 (PR #350) renamed the repository sense of `project` in `borg_core/link` and then fixed its own wording, and the TSV was relabelled so later rename PRs do not re-litigate those calls. Only the `sense` and `note` columns of 52 rows changed; keys, line numbers and the row count are untouched.
+
+- **Chain manifest, now `workstream` (33 rows).** Where text said "project" for a chain manifest (a file under `.borg/chains` or `.stacks`), R1 now says "chain". 27 rows moved from repository; 6 were already workstream. The note reads "chain manifest: reworded to chain in #350". They are listed in the workstream section above.
+- **Contract, judged by R1 (12 rows, were repository).** The `assemble(projects=...)` kwarg mirrors the `--json` `projects` key, so its sites in `borg_core/link/cli.py` (384), `borg_core/link/core.py` (890, 907 twice, 910, 911, 914, 916, 957) and the two comments in `borg_core/link/render.py` (135, 610) are contract. The `e.get("project")` checkpoint record key in `borg_core/link/core.py:444` mirrors a `--json` field.
+- **Callee renamed in R2 (7 rows, stay `repository`).** R1 left these because the name belongs to a function R2 renames: `recon_core.merge_by_project` (`borg_core/link/cli.py:234`, `borg_core/link/test_cli.py:1069`), `paths.project_state_read_path` and `paths.project_state_file` (`borg_core/link/shell.py:245`, `borg_core/link/test_shell.py` 190 and 233) and `recon_shell.write_projects_file` (`borg_core/link/test_grid.py` 701 and 713). Their note reads "callee renamed in R2".
+- **Not touched.** Rows R1 renamed keep their `repository` label, and so do the few R1 left in prose (`tests/link_sweep.bats` comments, the `ghost-project` fixture name) and `borg_core/manifest/shell.py`, which is outside R1.
 
 ## Known limits
 
 - **The classification is rule-based.** Each shard classifier applied rules to the text around each match and overrode by site. Nobody read all 3911 rows; the repository rows (2605, the edit scope) are the default and are the least checked. 45 of the 60 audited rows were repository and all 45 agreed, which bounds nothing tighter than a spot-check.
 - **Substring noise is now settled; verb noise is found by pattern, not by reading.** A mechanical check of the code on each line finds 63 rows where the match still sits inside a longer word: 27 external (`pyproject` 25, `projectPath` 2) and 36 repository (`ProjectNotFound` 15, `myproject` 15, `nosuchproject` 3, `testprojectdirof...` 2, `aproject` 1). They are identifiers that contain the noun as a component and stay. The other 38 such rows were English words and are noise. The verb case has no such mechanical test: the 10 verb rows were found by scanning every row for verb-shaped context (see "Noise pass"), so a verb use in a context that scan does not recognise could still sit in the repository rows. Reclassifying one later is a one-row edit.
 - **`--migrate-project-state` is classed inconsistently.** 18 rows on lines that mention the flag or its Python spelling are repository and 1 is contract. It is a CLI flag, so it may need a deprecation alias like the other contract names. Decide once before the rename.
-- **The "no project manifest(s)" strings** (12 rows, listed above) are repository but may be workstream.
 - **`PROJECT_PLAN.md` is contract by decision of the classifiers**, not the directive. The directive does not mention renaming it; treat the 107 rows as frozen unless that changes.
 - **Line numbers drift.** They are exact at `a2744df` only. Use `file` plus the quoted code to relocate a row on a newer tree.
 
 ## What this means for the rename PRs
 
-- **`repository` is the edit scope for the next rename PR: 2605 rows,** about two thirds of the occurrences. The other 1306 rows (contract 1023, external 183, workstream 45, noise 48, ambiguous 7) must not be touched by a mechanical pass. The noise rows are the ones a naive word-boundary-free replacement would damage first.
+- **`repository` is the edit scope for the next rename PR: 2566 rows,** about two thirds of the occurrences. The other 1345 rows (contract 1035, external 183, workstream 72, noise 48, ambiguous 7) must not be touched by a mechanical pass. The noise rows are the ones a naive word-boundary-free replacement would damage first.
 - **Contract names migrate separately,** each behind a reader that accepts both spellings, per the directive: the registry key `projects` last, after every reader tolerates `repositories`. The `--json` document keys (`projects`, `total_projects`, row key `project`) are a wire change for the `borg-link` skill and need a `DOCUMENT_VERSION` decision.
 - **`.borg-project` and `PROJECT_PLAN.md` are decisions, not edits,** per the directive's third change item.
 - **Resolve the 7 ambiguous rows and the flagged judgment calls first;** they are a few dozen rows and each one changes what a rename script may touch.
