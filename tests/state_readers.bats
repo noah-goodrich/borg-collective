@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# AC5 step b (expand, readers only): every reader of a project's state.json reads the per-project
+# AC5 step b (expand, readers only): every reader of a repository's state.json reads the per-repository
 # state-root path first, else the legacy <dir>/.borg/state.json. Writers moved in step c
 # (tests/state_writers_ac5.bats), so every case here seeds the files directly.
 #
@@ -128,7 +128,7 @@ _zsh_overlay() {
     [ "$(_zsh_overlay)" = "waiting" ]
 }
 
-@test "zsh overlay: a project with an empty path does not shift the repo column or kill the loop" {
+@test "zsh overlay: a repository with an empty path does not shift the repo column or kill the loop" {
     printf '{"projects":{"nopath":{"path":""},"proj":{"path":"%s","repo":"%s"}}}\n' "$PROJ" "$COMMON" > "$BORG_REGISTRY"
     _new '{"status":"active"}'
     [ "$(_zsh_overlay)" = "active" ]
@@ -183,7 +183,7 @@ _orch_overview() {
     [[ "$(_orch_overview)" == *"proj [active]"* ]]
 }
 
-@test "link-down orchestrator overview: a project with an empty path keeps every column" {
+@test "link-down orchestrator overview: a repository with an empty path keeps every column" {
     printf '{"projects":{"nopath":{"path":""},"proj":{"path":"%s","repo":"%s"}}}\n' "$PROJ" "$COMMON" > "$BORG_REGISTRY"
     _new '{"status":"active","last_activity":"2026-02-01T00:00:00Z"}'
     out="$(_orch_overview)"

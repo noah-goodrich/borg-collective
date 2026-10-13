@@ -29,7 +29,7 @@ setup() {
     echo "$output" | jq -e . >/dev/null
 }
 
-@test "borg_registry_list returns project names" {
+@test "borg_registry_list returns repository names" {
     run_zsh_fn registry borg_registry_init
     echo '{"projects":{"alpha":{},"beta":{}}}' > "$BORG_REGISTRY"
     run run_zsh_fn registry borg_registry_list
@@ -38,14 +38,14 @@ setup() {
     [[ "$output" == *"beta"* ]] || false
 }
 
-@test "borg_registry_list returns empty for no projects" {
+@test "borg_registry_list returns empty for no repositories" {
     run_zsh_fn registry borg_registry_init
     run run_zsh_fn registry borg_registry_list
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
-@test "borg_registry_get returns project entry" {
+@test "borg_registry_get returns repository entry" {
     run_zsh_fn registry borg_registry_init
     echo '{"projects":{"myproj":{"status":"active","path":"/dev/myproj"}}}' > "$BORG_REGISTRY"
     run run_zsh_fn registry borg_registry_get myproj
@@ -54,21 +54,21 @@ setup() {
     echo "$output" | jq -e '.path == "/dev/myproj"'
 }
 
-@test "borg_registry_get returns empty for missing project" {
+@test "borg_registry_get returns empty for missing repository" {
     run_zsh_fn registry borg_registry_init
     run run_zsh_fn registry borg_registry_get nonexistent
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
-@test "borg_registry_has returns 0 for existing project" {
+@test "borg_registry_has returns 0 for existing repository" {
     run_zsh_fn registry borg_registry_init
     echo '{"projects":{"myproj":{}}}' > "$BORG_REGISTRY"
     run run_zsh_fn registry borg_registry_has myproj
     [ "$status" -eq 0 ]
 }
 
-@test "borg_registry_has returns non-zero for missing project" {
+@test "borg_registry_has returns non-zero for missing repository" {
     run_zsh_fn registry borg_registry_init
     run run_zsh_fn registry borg_registry_has nonexistent
     [ "$status" -ne 0 ]
@@ -94,7 +94,7 @@ setup() {
     [ "$output" = "working" ]
 }
 
-@test "borg_registry_remove deletes a project" {
+@test "borg_registry_remove deletes a repository" {
     run_zsh_fn registry borg_registry_init
     echo '{"projects":{"keep":{},"remove":{}}}' > "$BORG_REGISTRY"
     run_zsh_fn registry borg_registry_remove remove
@@ -138,7 +138,7 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "borg_scan_path_should_skip: skips subpath of registered project" {
+@test "borg_scan_path_should_skip: skips subpath of registered repository" {
     run_zsh_fn registry borg_registry_init
     mkdir -p "${BATS_TEST_TMPDIR}/proj/nested"
     echo "{\"projects\":{\"proj\":{\"path\":\"${BATS_TEST_TMPDIR}/proj\"}}}" > "$BORG_REGISTRY"
@@ -146,14 +146,14 @@ setup() {
     [ "$status" -eq 0 ]
 }
 
-@test "borg_scan_path_should_skip: registers genuine new project" {
+@test "borg_scan_path_should_skip: registers genuine new repository" {
     run_zsh_fn registry borg_registry_init
     mkdir -p "${BATS_TEST_TMPDIR}/newproj"
     run run_zsh_fn registry borg_scan_path_should_skip "${BATS_TEST_TMPDIR}/newproj"
     [ "$status" -eq 1 ]
 }
 
-@test "borg_scan_path_should_skip: does NOT skip sibling of a registered project" {
+@test "borg_scan_path_should_skip: does NOT skip sibling of a registered repository" {
     run_zsh_fn registry borg_registry_init
     mkdir -p "${BATS_TEST_TMPDIR}/proj-a" "${BATS_TEST_TMPDIR}/proj-b"
     echo "{\"projects\":{\"proj-a\":{\"path\":\"${BATS_TEST_TMPDIR}/proj-a\"}}}" > "$BORG_REGISTRY"

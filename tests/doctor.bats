@@ -261,7 +261,7 @@ EOF
 # ─── container clock skew ──────────────────────────────────────────────────────
 #
 # `docker ps --filter label=dev.role=app` enumerates running drone containers (same filter
-# `get_project_container` in drone.zsh uses); `docker exec <c> date +%s` reads each one's clock.
+# `get_repository_container` in drone.zsh uses); `docker exec <c> date +%s` reads each one's clock.
 
 # Args: <ps-output> <container-name> <container-epoch-or-empty-for-exec-failure>
 _write_docker_mock() {

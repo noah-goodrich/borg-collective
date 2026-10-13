@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# AC5 step a: the per-project state-file resolver, one per language, byte-identical paths.
+# AC5 step a: the per-repository state-file resolver, one per language, byte-identical paths.
 #
 #   <state root>/projects/<repo12>-<path12>/state.json   (local-<path12> outside a git repo)
 #

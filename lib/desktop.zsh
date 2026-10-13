@@ -29,7 +29,7 @@ borg_desktop_scan() {
         last_activity=$(printf '%s' "$data" | jq -r '.last_activity // ""')
 
         # Use topic as the display name if available, else filename
-        local project="${topic:-$name}"
+        local display_name="${topic:-$name}"
         # Slugify for registry key
         local key="${name}"
 
@@ -40,7 +40,7 @@ borg_desktop_scan() {
             --arg status "$proj_status" \
             --arg summary "$([ -n "$next_steps" ] && echo "$summary Next: $next_steps" || echo "$summary")" \
             --arg last_activity "$last_activity" \
-            --arg display_name "$project" \
+            --arg display_name "$display_name" \
             '{
                 path: null,
                 source: $source,

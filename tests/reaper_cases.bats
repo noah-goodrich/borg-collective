@@ -88,14 +88,14 @@ _threshold_token() {
 
 # The half the plan's Risks section actually names, and the half an earlier draft of this table
 # missed entirely: borg_reap_overlay's own window resolution. should_reap never sees a tmux_window --
-# the overlay resolves it first, defaulting to the project name and mapping the "-" TSV sentinel back
+# the overlay resolves it first, defaulting to the repository name and mapping the "-" TSV sentinel back
 # to absent, then decides liveness by a whole-string LITERAL match.
 @test "shared table: borg_reap_overlay resolves windows the way core.resolve_window does" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
 
     # window_field <TAB> live_window_list <TAB> expected_status
-    # A project named "proj" that is active and fresh; only the window resolution decides its fate.
+    # A repository named "proj" that is active and fresh; only the window resolution decides its fate.
     local rows=(
         $'null\tproj\tactive'
         $'null\tother\tidle'

@@ -71,17 +71,17 @@ _rcli_status_json() { # <show-all 0|1>
     for _g in "$_d"/sessions/*.json; do
         [ -f "$_g" ] && _regs+=("$_g")
     done
-    local _projects='{}' _recs='[]'
+    local _repositories='{}' _recs='[]'
     if [ "${#_regs[@]}" -gt 0 ]; then
-        _projects="$(jq -c -s 'map(select(.session_id != null) | {(.session_id): (.project // .tmux.window)})
+        _repositories="$(jq -c -s 'map(select(.session_id != null) | {(.session_id): (.project // .tmux.window)})
             | add // {}' "${_regs[@]}" 2>/dev/null)"
     fi
-    [ -n "$_projects" ] || _projects='{}'
+    [ -n "$_repositories" ] || _repositories='{}'
     if [ "${#_files[@]}" -gt 0 ]; then
         _recs="$(jq -c -s '.' "${_files[@]}" 2>/dev/null)"
     fi
     [ -n "$_recs" ] || _recs='[]'
-    jq -n -c --argjson recs "$_recs" --argjson proj "$_projects" --argjson now "$_now" --argjson hours "$_hours" \
+    jq -n -c --argjson recs "$_recs" --argjson proj "$_repositories" --argjson now "$_now" --argjson hours "$_hours" \
         --argjson all "$1" --argjson paused "$_paused" --argjson off "$_off" '
         def active: IN("new", "scheduled", "deferred", "injecting", "injected", "confirmed");
         def order: {injecting: 0, injected: 1, confirmed: 2, scheduled: 3, new: 4, deferred: 5, stalled: 6,

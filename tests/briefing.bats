@@ -17,10 +17,10 @@
 # renders THAT SAME DOCUMENT when the narrative is unavailable (docs/plans/directives/
 # 2026-08-27-fold-brief-into-the-document.md). Most cases are untouched; three are consciously
 # rewritten and one keeps its assertion with new provenance:
-#   - "inactive projects appear under inactive header" — REWRITTEN. The "Inactive (>30 days):" block
+#   - "inactive repositories appear under inactive header" — REWRITTEN. The "Inactive (>30 days):" block
 #     and the 30-day active/inactive split were `_borg_print_briefing`'s own; they have no
 #     counterpart in `render.SECTIONS` and are deliberately retired. The case now asserts the same
-#     underlying claim — a long-dormant project is still ON the page, with its relative time — which
+#     underlying claim — a long-dormant repository is still ON the page, with its relative time — which
 #     is the property the header existed to serve.
 #   - "no debug variable lines in output" — REWRITTEN, THEN REWRITTEN AGAIN as "the xtrace guard
 #     keeps trace lines out of the briefing". The first rewrite re-pointed the names and left the
@@ -59,22 +59,22 @@ setup() {
     mkdir -p "$MOCK_BIN"
     export BORG_PATH_PREFIX="$MOCK_BIN"
 
-    # Seed registry: one waiting project (recent) + one inactive
+    # Seed registry: one waiting repository (recent) + one inactive
     local recent
     recent=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     cat > "$BORG_REGISTRY" <<EOF
 {
   "projects": {
-    "my-active-project": {
-      "path": "/tmp/my-active-project",
+    "my-active-repository": {
+      "path": "/tmp/my-active-repository",
       "status": "waiting",
       "source": "cli",
       "last_activity": "$recent",
       "summary": "Working on the login feature.",
       "waiting_reason": "Blocked on design review"
     },
-    "old-project": {
-      "path": "/tmp/old-project",
+    "old-repository": {
+      "path": "/tmp/old-repository",
       "status": "idle",
       "source": "cli",
       "last_activity": "2020-01-01T00:00:00Z",
@@ -94,13 +94,13 @@ EOF
 
 # ── Fallback (claude unavailable) ─────────────────────────────────────────────
 
-@test "briefing: fallback shows active project when claude fails" {
+@test "briefing: fallback shows active repository when claude fails" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"my-active-project"* ]] || false
+    [[ "$output" == *"my-active-repository"* ]] || false
 }
 
-@test "briefing: fallback shows project status" {
+@test "briefing: fallback shows repository status" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
     [[ "$output" == *"waiting"* ]] || false
@@ -108,14 +108,14 @@ EOF
 
 # REWRITTEN 2026-08-27. Was: asserts an "Inactive (>30 days):" header. That header, and the 30-day
 # split that fed it, belonged to the deleted registry walk and have no counterpart in the document's
-# seven-section spine — the board shows every non-archived project with its relative time and lets
-# the reader see dormancy rather than bucketing it. The claim worth keeping is that a project last
+# seven-section spine — the board shows every non-archived repository with its relative time and lets
+# the reader see dormancy rather than bucketing it. The claim worth keeping is that a repository last
 # touched in 2020 is still ON the page and still says how long ago that was, which is what a reader
 # used the header for.
-@test "briefing: a long-dormant project still renders, with how long ago it was touched" {
+@test "briefing: a long-dormant repository still renders, with how long ago it was touched" {
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"old-project"* ]] || false
+    [[ "$output" == *"old-repository"* ]] || false
     # `relative_activity` off the wire, not a zsh recomputation. core.relative_time's last bucket is
     # "<N>d ago" with no year branch, and 2020-01-01 is four digits of days back from any date this
     # suite can run on — so a four-or-more-digit day count is the assertion that the dormant row
@@ -142,7 +142,7 @@ EOF
 @test "briefing: the xtrace guard keeps trace lines out of the briefing" {
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
-echo "Focus: my-active-project — waiting on design review"
+echo "Focus: my-active-repository — waiting on design review"
 EOF
     chmod +x "$MOCK_BIN/claude"
 
@@ -151,7 +151,7 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     # The narrative really was reached, so the whole function body ran under the guard rather than
     # returning early somewhere above it.
-    [[ "$output" == *"Focus: my-active-project"* ]] || false
+    [[ "$output" == *"Focus: my-active-repository"* ]] || false
     printf '%s\n' "$output" > "$trace"
 
     # ANCHORED AT COLUMN 0, via grep rather than a `[[ ]]` glob: with PS4 empty a trace line IS the
@@ -174,8 +174,8 @@ EOF
     [ "$status" -eq 0 ]
     # Error message must NOT appear in output
     [[ "$output" != *"Not logged in"* ]] || false
-    # Fallback project listing must appear instead
-    [[ "$output" == *"my-active-project"* ]] || false
+    # Fallback repository listing must appear instead
+    [[ "$output" == *"my-active-repository"* ]] || false
 }
 
 @test "briefing: API error from claude triggers fallback" {
@@ -186,7 +186,7 @@ exit 1
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"my-active-project"* ]] || false
+    [[ "$output" == *"my-active-repository"* ]] || false
 }
 
 # ── Fallback provenance (2026-08-10 directive: silent fallback is the core defect) ────────────
@@ -230,7 +230,7 @@ EOF
 @test "briefing: successful LLM output prints no fallback-reason line" {
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
-echo "Focus: my-active-project — waiting on design review"
+echo "Focus: my-active-repository — waiting on design review"
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
@@ -242,16 +242,16 @@ EOF
 @test "briefing: LLM output is shown when claude succeeds" {
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
-echo "my-active-project  [waiting, just now]"
+echo "my-active-repository  [waiting, just now]"
 echo "  Last: Working on the login feature."
 echo "  Next: Finish the design review."
 echo "  Blocked: Blocked on design review"
 echo ""
-echo "Focus: my-active-project — waiting on design review"
+echo "Focus: my-active-repository — waiting on design review"
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"my-active-project"* ]] || false
+    [[ "$output" == *"my-active-repository"* ]] || false
     [[ "$output" == *"Focus:"* ]] || false
 }
 
@@ -273,8 +273,8 @@ EOF
     cat > "$BORG_REGISTRY" <<EOF
 {
   "projects": {
-    "field-collapse-project": {
-      "path": "/tmp/field-collapse-project",
+    "field-collapse-repository": {
+      "path": "/tmp/field-collapse-repository",
       "status": "waiting",
       "source": "cli",
       "last_activity": "$recent",
@@ -286,7 +286,7 @@ EOF
 EOF
     run "$BORG_CMD" link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"field-collapse-project"* ]] || false
+    [[ "$output" == *"field-collapse-repository"* ]] || false
     # The board row prints name / status / relative time and NOTHING from waiting_reason —
     # render._overview_row never reads that field. A substring match on the reason text is the
     # assertion regardless of which renderer produced the page.
@@ -313,8 +313,8 @@ EOF
     cat > "$BORG_REGISTRY" <<'EOF'
 {
   "projects": {
-    "quiet-project": {
-      "path": "/tmp/quiet-project",
+    "quiet-repository": {
+      "path": "/tmp/quiet-repository",
       "status": "idle",
       "source": "cli",
       "last_activity": "2026-08-01T00:00:00Z",
@@ -328,7 +328,7 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"REPOSITORY: quiet-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: quiet-repository"* ]] || false
     [[ "$output" == *"note: no summary on record"* ]] || false
     [[ "$output" != *"summary: None"* ]] || false
 }
@@ -348,14 +348,14 @@ echo "NARRATIVE"
 EOF
     chmod +x "$MOCK_BIN/claude"
 
-    local ws="${BATS_TEST_TMPDIR}/ws/cp-project"
+    local ws="${BATS_TEST_TMPDIR}/ws/cp-repository"
     mkdir -p "$ws/.borg/checkpoints"
     printf '**tl;dr** — Shipped the checkpoint-derived summary.\n\n## 2. Accomplished\n\n- Other.\n' \
         > "$ws/.borg/checkpoints/2026-08-01-0900.md"
     cat > "$BORG_REGISTRY" <<EOF
 {
   "projects": {
-    "cp-project": {
+    "cp-repository": {
       "path": "$ws",
       "status": "idle",
       "source": "cli",
@@ -383,7 +383,7 @@ EOF
 #
 # `.order`, NOT `.total_projects` — this comment named the latter for one round and was describing
 # code that had already been changed. `core.assemble` fills `total_projects` from the UNFILTERED
-# project map on purpose, so it counts archived rows the page never shows; `.order` is the
+# repository map on purpose, so it counts archived rows the page never shows; `.order` is the
 # post-archived-filter list, and it is exactly the list the projection below feeds to the prompt. The
 # paired all-archived case is where the difference bites, and it carries the argument in full.
 
@@ -395,7 +395,7 @@ EOF
 }
 
 # AN ALL-ARCHIVED REGISTRY IS THE OTHER HALF OF THE SAME SHORT CIRCUIT, and it is the half that
-# `total_projects` got wrong. `core.assemble` sets `total_projects` from the UNFILTERED project map
+# `total_projects` got wrong. `core.assemble` sets `total_projects` from the UNFILTERED repository map
 # deliberately, so an all-archived registry reports `total_projects: 1` with `order: []` — the short
 # circuit did not fire, and `claude -p` was billed to narrate a board with no rows on it. The deleted
 # registry walk excluded archived entries from BOTH its lists, so this printed the scan hint before
@@ -416,8 +416,8 @@ EOF
     cat > "$BORG_REGISTRY" <<'EOF'
 {
   "projects": {
-    "retired-project": {
-      "path": "/tmp/retired-project",
+    "retired-repository": {
+      "path": "/tmp/retired-repository",
       "status": "archived",
       "source": "cli",
       "last_activity": "2020-01-01T00:00:00Z",
@@ -540,7 +540,7 @@ EOF
     [[ "$output" == *"borg add"* ]] || false
     [[ "$output" == *"borg link --overview"* ]] || false
     [[ "$output" != *"narrative unavailable"* ]] || false
-    [[ "$output" != *"my-active-project"* ]] || false
+    [[ "$output" != *"my-active-repository"* ]] || false
     [ ! -s "$CLAUDE_TRACE" ]
 }
 
@@ -594,7 +594,7 @@ EOF
     [[ "$output" == *"MOCKED-PROJECTION-FAILURE"* ]] || false
     # The real page renders under it, from the document that was built before the projection ran.
     [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
-    [[ "$output" == *"my-active-project"* ]] || false
+    [[ "$output" == *"my-active-repository"* ]] || false
     # And nothing was billed for a briefing with no input.
     [[ "$output" != *"NARRATIVE-FROM-AN-EMPTY-BOARD"* ]] || false
     [ ! -s "$CLAUDE_TRACE" ]
@@ -610,13 +610,13 @@ EOF
 # capability-nothing-asserts shape as `borg recon` shipping dead (CLAUDE.md, "Learned").
 #
 # ASSERTED ON THE PROJECTED PROMPT, WITH ITS OWN CONTROL. The mock captures `claude -p`'s argument
-# verbatim, so the case reads the bytes the document actually produced. An archived project is the
+# verbatim, so the case reads the bytes the document actually produced. An archived repository is the
 # only observable `--all` has: it is the sole thing the flag adds to `.order`. The no-flag leg is
-# what makes the assertion honest — without it, "retired-project appears" would also pass for a
+# what makes the assertion honest — without it, "retired-repository appears" would also pass for a
 # build that ignored archiving altogether.
 #
 # MUTATION THAT TURNS THIS RED, VERIFIED: delete the `--all` line from `_borg_print_briefing`.
-@test "briefing: --all puts archived projects in the prompt, and its absence keeps them out" {
+@test "briefing: --all puts archived repositories in the prompt, and its absence keeps them out" {
     export PROMPT_FILE="${BATS_TEST_TMPDIR}/prompt.txt"
     cat > "$MOCK_BIN/claude" <<'EOF'
 #!/usr/bin/env bash
@@ -628,15 +628,15 @@ EOF
     cat > "$BORG_REGISTRY" <<'EOF'
 {
   "projects": {
-    "live-project": {
-      "path": "/tmp/live-project",
+    "live-repository": {
+      "path": "/tmp/live-repository",
       "status": "idle",
       "source": "cli",
       "last_activity": "2026-08-01T00:00:00Z",
       "summary": "Still going."
     },
-    "retired-project": {
-      "path": "/tmp/retired-project",
+    "retired-repository": {
+      "path": "/tmp/retired-repository",
       "status": "archived",
       "source": "cli",
       "last_activity": "2026-07-01T00:00:00Z",
@@ -651,8 +651,8 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"REPOSITORY: live-project"* ]] || false
-    [[ "$output" != *"REPOSITORY: retired-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: live-repository"* ]] || false
+    [[ "$output" != *"REPOSITORY: retired-repository"* ]] || false
 
     # THE FLAG: same registry, same command, one flag — the archived row is now on the board the
     # narrative is asked to describe.
@@ -661,8 +661,8 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"REPOSITORY: live-project"* ]] || false
-    [[ "$output" == *"REPOSITORY: retired-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: live-repository"* ]] || false
+    [[ "$output" == *"REPOSITORY: retired-repository"* ]] || false
 }
 
 # ── Both no-page rungs are loud, on STDERR, and are not exit 0 ────────────────

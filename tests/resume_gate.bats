@@ -171,7 +171,7 @@ ev() { # <sid> <json>
     [ "$(n_inject)" = 0 ]
 }
 
-@test ".borg/no-resume in the project defers with reason no_resume" {
+@test ".borg/no-resume in the repository defers with reason no_resume" {
     mk_main "$SID"
     mkdir -p "$CWD/.borg"
     touch "$CWD/.borg/no-resume"

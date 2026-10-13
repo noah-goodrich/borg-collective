@@ -48,7 +48,7 @@ def identity(
     `path` and every path in `resolved_paths` arrive realpath-normalized (a filesystem act that cannot
     happen here), because `common_dir` is git's own physical answer and the comparison is between those.
     `directory` means git knows nothing about it (no common dir), and says nothing about a relationship.
-    `worktree_of` names the registry project that IS the main checkout, else the main checkout's basename.
+    `worktree_of` names the registry entry that IS the main checkout, else the main checkout's basename.
     `detached` is the SHORT SHA of a detached HEAD and an ADDITIVE key: present only when non-empty, so every
     identity read before it existed is byte-identical, and `branch` stays a branch name or "".
     """

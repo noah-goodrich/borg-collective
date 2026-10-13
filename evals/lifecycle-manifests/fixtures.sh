@@ -138,7 +138,7 @@ _eval_allowlist_bin() {
     printf '%s\n' "$bindir"
 }
 
-# A repository holding a SMALL REAL PROJECT: source, a test, and a README naming a genuine gap.
+# A repository holding a SMALL REAL CODEBASE: source, a test, and a README naming a genuine gap.
 #
 # WHY THIS IS NOT DECORATION. Measured 2026-09-17: given a bare fixture (one commit, a README
 # containing the word "fixture"), `/borg-plan` read everything and declined -- "the 'probe-slug' name
@@ -149,7 +149,7 @@ _eval_allowlist_bin() {
 # The gap is named in the README on purpose, so the objective the prompt supplies is one a reader of
 # the repository would actually reach.
 # Args: <dir>
-_eval_repo_with_project() {
+_eval_repo_with_source() {
     local dir="$1"
     _eval_repo "$dir" >/dev/null
     mkdir -p "$dir/src" "$dir/tests"
@@ -160,7 +160,7 @@ _eval_repo_with_project() {
         > "$dir/README.md"
     _eval_git_env
     git -C "$dir" add -A >/dev/null 2>&1
-    git -C "$dir" commit --quiet -m "real project" >/dev/null 2>&1
+    git -C "$dir" commit --quiet -m "real source" >/dev/null 2>&1
     printf '%s\n' "$dir"
 }
 

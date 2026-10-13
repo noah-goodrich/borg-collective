@@ -174,7 +174,7 @@ keylog() { cat "$FAKE_KEYLOG"; }
     [ "$status" -eq 2 ]
 }
 
-@test "bind_container: exactly one claude pane in the project window binds" {
+@test "bind_container: exactly one claude pane in the repository window binds" {
     launch_fake t
     tmux -L "$SOCK" set-option -w -t t @project_dir /work/proj
     run bash -c ". '$LIB'; borg_inject_bind_container '$SID' /work/proj"

@@ -444,7 +444,7 @@ _rg_static() { # <file>
     _cont="$(jq -r '.in_container // false' "$(borg_resume_registry_file "$_f_sid")" 2>/dev/null)"
     if [ "$_cont" = true ]; then
         _rg_to "$_f" notify_only container_session
-        _cont="drone up <project> --resume $_f_sid, or borg resume run $_f_rid"
+        _cont="drone up <repository> --resume $_f_sid, or borg resume run $_f_rid"
         _rg_note "$_f" container "Container session needs a manual resume ($_f_rid): $_cont"
         return 0
     fi

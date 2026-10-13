@@ -181,7 +181,9 @@ def discover_adapters() -> list[tuple[str, str]]:
     return core.dedup_adapters(candidates)
 
 
-def run_adapter(source: str, adapter_path: str, since: str, projects_file: str, timeout: float | None = None) -> dict:
+def run_adapter(
+    source: str, adapter_path: str, since: str, repositories_file: str, timeout: float | None = None
+) -> dict:
     """Run one adapter as a subprocess under a timeout and normalize its output.
 
     Mirrors _recon_run_adapter: on any failure (non-zero exit, timeout, malformed output) returns
@@ -206,7 +208,7 @@ def run_adapter(source: str, adapter_path: str, since: str, projects_file: str, 
     BORG_RECON_TRACK_TIMEOUT.
     """
     captured = proc.run_capture(
-        [adapter_path, "--since", since, "--projects", projects_file],
+        [adapter_path, "--since", since, "--projects", repositories_file],
         timeout=track_timeout() if timeout is None else timeout,
     )
     if captured is None:
@@ -215,7 +217,9 @@ def run_adapter(source: str, adapter_path: str, since: str, projects_file: str, 
     return core.process_adapter_output(source, stdout, returncode)
 
 
-def fanout(since: str, projects_file: str, adapters: list[tuple[str, str]], timeout: float | None = None) -> list[dict]:
+def fanout(
+    since: str, repositories_file: str, adapters: list[tuple[str, str]], timeout: float | None = None
+) -> list[dict]:
     """Fan out over adapters concurrently, bounded by max_tracks(). Mirrors _recon_fanout.
 
     Worst-case wall clock is `ceil(len(adapters) / max_tracks()) * timeout`: one batch at the default
@@ -248,7 +252,9 @@ def fanout(since: str, projects_file: str, adapters: list[tuple[str, str]], time
     with concurrent.futures.ThreadPoolExecutor(  # pylint: disable=clean-arch-demeter
         max_workers=max_tracks()
     ) as pool:
-        futures = [pool.submit(run_adapter, source, path, since, projects_file, timeout) for source, path in adapters]
+        futures = [
+            pool.submit(run_adapter, source, path, since, repositories_file, timeout) for source, path in adapters
+        ]
         return [f.result() for f in futures]
 
 

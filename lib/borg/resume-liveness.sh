@@ -214,7 +214,7 @@ EOF
 }
 
 # Verdict for a session: alive | unknown | dead <cause> | defer <why>.
-# Usage: _rl_verdict <pid> <start> <in_container> <project> <sid> <has_tmux_fact>
+# Usage: _rl_verdict <pid> <start> <in_container> <repository> <sid> <has_tmux_fact>
 _rl_verdict() {
     local _pid="$1" _start="$2" _cont="$3" _proj="$4" _sid="$5" _hastmux="$6" _live _boot _sepoch _pk
     # Container identity (U9) is not established, so a container session is never declared dead from here: S3

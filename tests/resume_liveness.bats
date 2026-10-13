@@ -43,7 +43,7 @@ set_mtime() { # <file> <epoch>
     touch -t "$(date -r "$2" +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$2" +%Y%m%d%H%M.%S)" "$1"
 }
 
-# <sid> <pid> <start> [project] [mode] [in_container]
+# <sid> <pid> <start> [repository] [mode] [in_container]
 mk_regx() {
     jq -n -c --arg sid "$1" --argjson pid "$2" --arg st "$3" --arg p "${4:-proj}" --arg m "${5:-project}" \
         --argjson c "${6:-false}" --arg cwd "$CWD" \
@@ -226,7 +226,7 @@ n_recs() { all_recs | jq -s 'length'; }
     [ "$(n_recs)" = 0 ]
 }
 
-@test "mark-closed project is not resumed" {
+@test "mark-closed repository is not resumed" {
     mk_tr "$SID" open
     mk_dead "$SID" closedproj
     "$BIN" mark-closed closedproj

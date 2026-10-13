@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
-project_root="$(cd "$(dirname "$0")/../.." && pwd)"
-cd "$project_root"
+repository_root="$(cd "$(dirname "$0")/../.." && pwd)"
+cd "$repository_root"
 
 if ! command -v supabase >/dev/null 2>&1; then
     echo "⚠ supabase CLI not found — nothing to stop" >&2

@@ -294,16 +294,16 @@ def test_the_board_is_the_queens_page_alone():
     """REPOSITORIES is the cross-repository overview and the overview is the Queen's (2026-10-13). A directory's
     page names no other repository, however many the document carries -- the document is registry-wide, the
     page is not. skills/borg-switch gets its cross-repository list from `--overview` instead."""
-    projects = {
+    repositories = {
         "p": {"source": "cli", "status": "active", "relative_activity": "2h ago", "summary": "Mine."},
         "other": {"source": "cli", "status": "idle", "relative_activity": "1d ago", "summary": "Theirs."},
     }
-    repository = render.document(_repository_doc(total_projects=2, order=["p", "other"], projects=projects))
+    repository = render.document(_repository_doc(total_projects=2, order=["p", "other"], projects=repositories))
     assert "other" not in repository
     assert "Theirs." not in repository
     assert "REPOSITORY" not in repository
 
-    queen = render.document(_doc(total_projects=2, order=["p", "other"], projects=projects))
+    queen = render.document(_doc(total_projects=2, order=["p", "other"], projects=repositories))
     assert "other" in queen and "Theirs." in queen
 
 
@@ -1846,7 +1846,7 @@ _COMMON = "/dev/borg/.git"
 
 
 def _grouped_board_doc() -> dict:
-    projects = {
+    repositories = {
         "door": {
             "source": "cli",
             "status": "waiting",
@@ -1871,7 +1871,7 @@ def _grouped_board_doc() -> dict:
             "path": "/dev/solo",
         },
     }
-    return _doc(total_projects=3, order=["door", "borg", "solo"], projects=projects)
+    return _doc(total_projects=3, order=["door", "borg", "solo"], projects=repositories)
 
 
 def test_the_board_collapses_worktrees_under_their_repository():

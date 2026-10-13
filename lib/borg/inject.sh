@@ -223,10 +223,10 @@ borg_inject_find_pane() {
 }
 
 # Container-session binding rule (host side): set @borg_sid on the drone window's pane ONLY when the window whose
-# @project_dir equals <project_dir> holds exactly one claude pane. Two or more: stay unbound (rc 1), never pick
+# @project_dir equals <repository_dir> holds exactly one claude pane. Two or more: stay unbound (rc 1), never pick
 # the rightmost. The caller (S9/S10) must additionally prove the drone container is healthy and the transcript's
 # recent writes fit before calling this. Binding does NOT make the session injectable: see borg_inject_line.
-# Usage: borg_inject_bind_container <sid> <project_dir>
+# Usage: borg_inject_bind_container <sid> <repository_dir>
 borg_inject_bind_container() {
     local _sid="$1" _dir="$2" _re="${BORG_RESUME_PANE_CMD_RE:-$_BI_CMD_RE}" _id _pdir _cmd _bound _hit="" _hb="" _n=0
     borg_resume_valid_sid "$_sid" || return 1

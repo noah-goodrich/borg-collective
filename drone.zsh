@@ -1,20 +1,20 @@
 #!/usr/bin/env zsh
-# drone — The Borg Collective: project lifecycle manager
+# drone — The Borg Collective: repository lifecycle manager
 #
 # Manages Docker Compose devcontainers, tmux windows, and Claude sessions.
 # Forked from dev.sh and integrated with borg orchestration.
 #
 # Usage:
-#   drone feature <project> <branch>  Create worktree + branch, launch Claude (Boris workflow)
-#   drone up [project] [--resume <sid>]  Start container + create tmux window (relaunch claude --resume)
-#   drone down [project]         Stop container + remove tmux window
-#   drone claude [project]       Launch Claude Code in project window
-#   drone sh [project]           Shell into project container
-#   drone exec [project] -- ...  Run non-interactive command inside container
-#   drone restart [project]      Restart containers + re-exec panes
-#   drone rebuild [project]      Rebuild images (no cache) + restart
-#   drone fix [project|--all]    Restore standard 2-pane layout
-#   drone toggle [project]       Add/remove side pane (2-pane ↔ 3-pane)
+#   drone feature <repository> <branch>  Create worktree + branch, launch Claude (Boris workflow)
+#   drone up [repository] [--resume <sid>]  Start container + create tmux window (relaunch claude --resume)
+#   drone down [repository]      Stop container + remove tmux window
+#   drone claude [repository]    Launch Claude Code in repository window
+#   drone sh [repository]        Shell into repository container
+#   drone exec [repository] -- ...  Run non-interactive command inside container
+#   drone restart [repository]   Restart containers + re-exec panes
+#   drone rebuild [repository]   Rebuild images (no cache) + restart
+#   drone fix [repository|--all]    Restore standard 2-pane layout
+#   drone toggle [repository]    Add/remove side pane (2-pane ↔ 3-pane)
 #   drone pane <direction>       Split the calling pane top|bottom|left|right (two panes max; reuse unzooms)
 #   drone help                   Command reference
 
@@ -46,7 +46,7 @@ source "$DRONE_SCRIPT_DIR/lib/borg/resume-paths.sh"
 _run_pre_up()    { run_borg_hook "$1" "$2" pre-up.sh strict || die "pre-up.sh failed for $2"; }
 _run_post_down() { run_borg_hook "$1" "$2" post-down.sh lenient; }
 
-# Shared scaffolder preflight: absolutize project_dir, confirm it exists,
+# Shared scaffolder preflight: absolutize repository_dir, confirm it exists,
 # refuse if .devcontainer/ is already populated. Sets _sp_dir to the absolute path.
 _scaffold_preflight() {
     _sp_dir="$1"
@@ -64,8 +64,8 @@ _ws_symlink_snippet() {
     printf '; sudo rm -rf /workspace 2>/dev/null; sudo ln -sfn %s /workspace' "$workspace"
 }
 
-# Build a docker compose exec command for a project's app service.
-# Usage: build_exec_cmd <project_name> <compose_file> <service> <shell> <project_dir>
+# Build a docker compose exec command for a repository's app service.
+# Usage: build_exec_cmd <repository_name> <compose_file> <service> <shell> <repository_dir>
 build_exec_cmd() {
     _read_devcontainer_exec_config "$5"
     if [[ -n "$_dc_user" ]]; then
@@ -83,12 +83,12 @@ warn() { echo -e "${YELLOW}▸${NC} $*"; }
 die()  { echo -e "${RED}▸ ERROR:${NC} $*" >&2; exit 1; }
 dbg()  { [[ -n "${BORG_DEBUG:-}" ]] && echo -e "${CYAN}  [dbg]${NC} $*" >&2 || true; }
 
-# Source project secrets if present (Docker Compose needs API keys)
+# Source repository secrets if present (Docker Compose needs API keys)
 [[ -f "$HOME/.config/dotfiles/zsh/secrets.zsh" ]] && source "$HOME/.config/dotfiles/zsh/secrets.zsh" || true
 
-# ── Project resolution ────────────────────────────────────────────────────────
+# ── Repository resolution ─────────────────────────────────────────────────────
 
-# Resolve a project name/path argument to name + absolute dir.
+# Resolve a repository name/path argument to name + absolute dir.
 # Sets: _proj_name, _proj_dir
 _drone_resolve() {
     local arg="${1:-}"
@@ -111,14 +111,14 @@ _drone_resolve() {
             _proj_name="$arg"
             return 0
         fi
-        # Not a project name: it may be a project's SHORT tmux window name (registry `tmux_window`).
-        local reg_project
-        reg_project=$(_drone_project_for_window "$arg")
+        # Not a repository name: it may be a repository's SHORT tmux window name (registry `tmux_window`).
+        local reg_repository
+        reg_repository=$(_drone_repository_for_window "$arg")
         reg_path=""
-        [[ -n "$reg_project" ]] && reg_path=$(jq -r --arg p "$reg_project" '.projects[$p].path // empty' "$registry" 2>/dev/null) || true
+        [[ -n "$reg_repository" ]] && reg_path=$(jq -r --arg p "$reg_repository" '.projects[$p].path // empty' "$registry" 2>/dev/null) || true
         if [[ -n "$reg_path" && -d "$reg_path" ]]; then
             _proj_dir="$reg_path"
-            _proj_name="$reg_project"
+            _proj_name="$reg_repository"
             return 0
         fi
     fi
@@ -137,7 +137,7 @@ _drone_resolve() {
         return 0
     fi
 
-    die "Cannot find project '$arg'. cd to the project dir, or register it with: borg add <path>"
+    die "Cannot find repository '$arg'. cd to the repository dir, or register it with: borg add <path>"
 }
 
 # ── Window names (registry-owned) ─────────────────────────────────────────────
@@ -155,79 +155,79 @@ _drone_registry_py() {
     python3 -m borg_core.registry.cli "$@"
 }
 
-# The project's tmux window name, derived-and-stored on first use (`window-name --derive`: an
-# explicit choice is respected). Fail-open: any failure (no python, project not in the registry)
-# prints the project name, which is the pre-registry behaviour.
+# The repository's tmux window name, derived-and-stored on first use (`window-name --derive`: an
+# explicit choice is respected). Fail-open: any failure (no python, repository not in the registry)
+# prints the repository name, which is the pre-registry behaviour.
 _drone_window_name() {
-    local project="$1" out
-    out=$(_drone_registry_py window-name "$project" --derive 2>/dev/null) || out=""
-    print -r -- "${out:-$project}"
+    local repository="$1" out
+    out=$(_drone_registry_py window-name "$repository" --derive 2>/dev/null) || out=""
+    print -r -- "${out:-$repository}"
 }
 
-# Reverse lookup: the project whose registry `tmux_window` equals $1 (empty when none).
-_drone_project_for_window() {
+# Reverse lookup: the repository whose registry `tmux_window` equals $1 (empty when none).
+_drone_repository_for_window() {
     local registry="${BORG_REGISTRY:-$BORG_DIR/registry.json}"
     [[ -f "$registry" ]] || return 0
     jq -r --arg w "$1" '[.projects // {} | to_entries[] | select(.value.tmux_window == $w) | .key][0] // empty' \
         "$registry" 2>/dev/null || true
 }
 
-# Whether the registry knows project $1.
+# Whether the registry knows repository $1.
 _drone_registered() {
     local registry="${BORG_REGISTRY:-$BORG_DIR/registry.json}"
     [[ -f "$registry" ]] || return 1
     jq -e --arg p "$1" '.projects[$p] != null' "$registry" >/dev/null 2>&1
 }
 
-# Registry key for $1, which may be a project name or a short window name; $1 itself if unknown.
-_drone_project_of() {
-    local reg_project
+# Registry key for $1, which may be a repository name or a short window name; $1 itself if unknown.
+_drone_repository_of() {
+    local reg_repository
     if _drone_registered "$1"; then print -r -- "$1"; return 0; fi
-    reg_project=$(_drone_project_for_window "$1")
-    print -r -- "${reg_project:-$1}"
+    reg_repository=$(_drone_repository_for_window "$1")
+    print -r -- "${reg_repository:-$1}"
 }
 
-# The LIVE tmux window for a project: the short name OR the long (project) name, so windows opened
+# The LIVE tmux window for a repository: the short name OR the long (repository) name, so windows opened
 # before the short names existed keep working. Prints it; returns 1 when neither is live.
 _drone_find_window() {
-    local project="$1" wname="$2"
+    local repository="$1" wname="$2"
     if has_window "$wname"; then print -r -- "$wname"
-    elif has_window "$project"; then print -r -- "$project"
+    elif has_window "$repository"; then print -r -- "$repository"
     else return 1
     fi
 }
 
-# Window for a command-line argument in either form (project, short name, or a literal live window).
+# Window for a command-line argument in either form (repository, short name, or a literal live window).
 _drone_arg_window() {
-    local arg="$1" project wname live
+    local arg="$1" repository wname live
     if has_window "$arg"; then print -r -- "$arg"; return 0; fi
-    project=$(_drone_project_of "$arg")
-    wname=$(_drone_window_name "$project")
-    live=$(_drone_find_window "$project" "$wname") || live="$wname"
+    repository=$(_drone_repository_of "$arg")
+    wname=$(_drone_window_name "$repository")
+    live=$(_drone_find_window "$repository" "$wname") || live="$wname"
     print -r -- "$live"
 }
 
-# Register $project if it is not already, then put its window name back. `borg add` rewrites
-# tmux_window (to the project name, or null) because it knows nothing of short names, and names a
-# project by its folder basename unless told otherwise -- so an existing entry is never re-added
+# Register $repository if it is not already, then put its window name back. `borg add` rewrites
+# tmux_window (to the repository name, or null) because it knows nothing of short names, and names a
+# repository by its folder basename unless told otherwise -- so an existing entry is never re-added
 # (a monorepo subfolder registered as `widgets` would grow a `widget-kit` twin), and a new one is
 # added under the name drone was given. Fail-open.
 _drone_register() {
-    local project_dir="$1" project="$2" wname="$3"
-    _drone_registered "$project" || borg add "$project_dir" --name "$project" 2>/dev/null || true
-    [[ "$wname" == "$project" ]] || _drone_registry_py window-name "$project" --set "$wname" >/dev/null 2>&1 || true
+    local repository_dir="$1" repository="$2" wname="$3"
+    _drone_registered "$repository" || borg add "$repository_dir" --name "$repository" 2>/dev/null || true
+    [[ "$wname" == "$repository" ]] || _drone_registry_py window-name "$repository" --set "$wname" >/dev/null 2>&1 || true
 }
 
 # ── Color helpers ─────────────────────────────────────────────────────────────
 
-# Return the tmux color for a project (registry → hash fallback).
-_drone_project_color() {
-    local project="$1" color
-    color=$(jq -r --arg p "$project" '.projects[$p].color // empty' "$BORG_DIR/registry.json" 2>/dev/null)
+# Return the tmux color for a repository (registry → hash fallback).
+_drone_repository_color() {
+    local repository="$1" color
+    color=$(jq -r --arg p "$repository" '.projects[$p].color // empty' "$BORG_DIR/registry.json" 2>/dev/null)
     if [[ -z "$color" ]]; then
         local -a palette=(cyan green yellow magenta blue red white)
         local hash=0 c
-        for c in ${(s::)project}; do hash=$(( (hash * 31 + #c) % ${#palette} )); done
+        for c in ${(s::)repository}; do hash=$(( (hash * 31 + #c) % ${#palette} )); done
         color="${palette[$((hash + 1))]}"
     fi
     echo "$color"
@@ -249,9 +249,9 @@ _compose_project_label() {
     print -r -- "${n//[^a-z0-9_-]/}"
 }
 
-# Both lookups take the PROJECT name (the one passed to `docker compose -p`), never the folder basename.
-# Usage: get_project_container <project_name> <project_dir>
-get_project_container() {
+# Both lookups take the REPOSITORY name (the one passed to `docker compose -p`), never the folder basename.
+# Usage: get_repository_container <repository_name> <repository_dir>
+get_repository_container() {
     local name
     name=$(_compose_project_label "$1")
     docker ps --filter "label=com.docker.compose.project=$name" \
@@ -259,7 +259,7 @@ get_project_container() {
               --format '{{.Names}}' 2>/dev/null | head -1
 }
 
-# Usage: get_service_name <project_name>
+# Usage: get_service_name <repository_name>
 get_service_name() {
     local name
     name=$(_compose_project_label "$1")
@@ -298,8 +298,9 @@ get_left_pane() {
         | sort -n | head -1 | awk '{print $2}'
 }
 
-# Count project windows (all except 'host')
-project_window_count() {
+# Count every window except 'host'. The Queen's window (named queen or orchestrator) counts on purpose: while it
+# is open, cmd_down's "No repositories left" branch never runs `tmux kill-session`, which would close the Queen.
+repository_window_count() {
     tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -vcx 'host' | tr -d ' '
 }
 
@@ -317,8 +318,8 @@ ensure_postgres() {
 }
 
 _read_devcontainer_field() {
-    local project_dir="$1" field="$2"
-    local dc_json="$project_dir/.devcontainer/devcontainer.json"
+    local repository_dir="$1" field="$2"
+    local dc_json="$repository_dir/.devcontainer/devcontainer.json"
     [[ -f "$dc_json" ]] || return 0
     sed 's|^\s*//.*||' "$dc_json" | jq -r ".$field // empty"
 }
@@ -326,8 +327,8 @@ _read_devcontainer_field() {
 # Read workspaceFolder and remoteUser from devcontainer.json in one jq pass.
 # Sets _dc_workspace (default /workspace) and _dc_user (default empty = root).
 _read_devcontainer_exec_config() {
-    local project_dir="$1"
-    local dc_json="$project_dir/.devcontainer/devcontainer.json"
+    local repository_dir="$1"
+    local dc_json="$repository_dir/.devcontainer/devcontainer.json"
     _dc_workspace="/workspace"
     _dc_user=""
     [[ -f "$dc_json" ]] || return 0
@@ -338,11 +339,11 @@ _read_devcontainer_exec_config() {
 }
 
 _devcontainer_hash() {
-    local project_dir="$1"
-    [[ -d "$project_dir/.devcontainer" ]] || { echo ""; return 0; }
+    local repository_dir="$1"
+    [[ -d "$repository_dir/.devcontainer" ]] || { echo ""; return 0; }
     local base_id
     base_id=$(docker inspect devcontainer-base:local --format '{{.Id}}' 2>/dev/null || true)
-    { find "$project_dir/.devcontainer" -type f | sort | xargs shasum 2>/dev/null
+    { find "$repository_dir/.devcontainer" -type f | sort | xargs shasum 2>/dev/null
       printf '%s\n' "$base_id"
     } | shasum | awk '{print $1}'
 }
@@ -354,51 +355,51 @@ _save_devcontainer_hash() {
 }
 
 run_initialize_command() {
-    local project_dir="$1"
+    local repository_dir="$1"
     local init_cmd
-    init_cmd=$(_read_devcontainer_field "$project_dir" "initializeCommand") || return 0
+    init_cmd=$(_read_devcontainer_field "$repository_dir" "initializeCommand") || return 0
     [[ -n "$init_cmd" ]] || return 0
     dbg "run_initialize_command: $init_cmd"
-    local expanded="${init_cmd//\$\{localWorkspaceFolder\}/$project_dir}"
+    local expanded="${init_cmd//\$\{localWorkspaceFolder\}/$repository_dir}"
     eval "$expanded"
 }
 
 run_post_create_command() {
-    local project_name="$1" project_dir="$2"
+    local repository_name="$1" repository_dir="$2"
     local post_cmd
-    post_cmd=$(_read_devcontainer_field "$project_dir" "postCreateCommand") || return 0
+    post_cmd=$(_read_devcontainer_field "$repository_dir" "postCreateCommand") || return 0
     [[ -n "$post_cmd" ]] || return 0
-    local compose="$project_dir/$COMPOSE_FILE"
+    local compose="$repository_dir/$COMPOSE_FILE"
     local service
-    service=$(get_service_name "$project_name")
-    _read_devcontainer_exec_config "$project_dir"
+    service=$(get_service_name "$repository_name")
+    _read_devcontainer_exec_config "$repository_dir"
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
     local sentinel="/tmp/.drone-created"
     local exists
-    exists=$(docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" "$service" sh -c "test -f $sentinel && echo yes || echo no" 2>/dev/null) || exists="no"
+    exists=$(docker compose -p "$repository_name" -f "$compose" exec -T "${user_args[@]}" "$service" sh -c "test -f $sentinel && echo yes || echo no" 2>/dev/null) || exists="no"
     if [[ "$exists" == "no" ]]; then
         dbg "run_post_create_command: $post_cmd"
-        docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" sh -c "$post_cmd"
-        docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" "$service" sh -c "touch $sentinel"
+        docker compose -p "$repository_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" sh -c "$post_cmd"
+        docker compose -p "$repository_name" -f "$compose" exec -T "${user_args[@]}" "$service" sh -c "touch $sentinel"
     else
         dbg "run_post_create_command: sentinel exists, skipping"
     fi
 }
 
 run_post_start_command() {
-    local project_name="$1" project_dir="$2"
+    local repository_name="$1" repository_dir="$2"
     local post_cmd
-    post_cmd=$(_read_devcontainer_field "$project_dir" "postStartCommand") || return 0
+    post_cmd=$(_read_devcontainer_field "$repository_dir" "postStartCommand") || return 0
     [[ -n "$post_cmd" ]] || return 0
     dbg "run_post_start_command: $post_cmd"
-    local compose="$project_dir/$COMPOSE_FILE"
+    local compose="$repository_dir/$COMPOSE_FILE"
     local service
-    service=$(get_service_name "$project_name")
-    _read_devcontainer_exec_config "$project_dir"
+    service=$(get_service_name "$repository_name")
+    _read_devcontainer_exec_config "$repository_dir"
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
-    docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" sh -c "$post_cmd"
+    docker compose -p "$repository_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" sh -c "$post_cmd"
 }
 
 # ── Window management ─────────────────────────────────────────────────────────
@@ -449,7 +450,7 @@ wait_for_container() {
     local i=0 max=30
     while (( i < max )); do
         local c
-        c=$(get_project_container "$name" "$dir")
+        c=$(get_repository_container "$name" "$dir")
         if [[ -n "$c" ]]; then
             dbg "wait_for_container: found '$c' after ${i}s"
             echo "$c"
@@ -462,7 +463,7 @@ wait_for_container() {
     die "Timed out waiting for container to start after ${max}s."
 }
 
-# The claude launch line for a project pane. An optional session id appends --resume <sid>; callers
+# The claude launch line for a repository pane. An optional session id appends --resume <sid>; callers
 # validate it first (borg_resume_valid_sid), so it never needs quoting here.
 _drone_claude_cmd() {
     local cmd="claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}"
@@ -473,17 +474,17 @@ _drone_claude_cmd() {
 # ── drone up ─────────────────────────────────────────────────────────────────
 
 cmd_up() {
-    # Usage: drone up [project] [--resume <sid>]   (the flag may come before or after the project)
-    local _arg_project="" resume_sid="" _seen_resume=0
+    # Usage: drone up [repository] [--resume <sid>]   (the flag may come before or after the repository)
+    local _arg_repository="" resume_sid="" _seen_resume=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --resume)
-                [[ $# -ge 2 ]] || die "Usage: drone up [project] --resume <session-id>"
+                [[ $# -ge 2 ]] || die "Usage: drone up [repository] --resume <session-id>"
                 resume_sid="$2"; _seen_resume=1; shift 2 ;;
             --resume=*)
                 resume_sid="${1#--resume=}"; _seen_resume=1; shift ;;
             -*) die "drone up: unknown option '$1'" ;;
-            *)  _arg_project="$1"; shift ;;
+            *)  _arg_repository="$1"; shift ;;
         esac
     done
     if (( _seen_resume )); then
@@ -492,19 +493,19 @@ cmd_up() {
     local claude_cmd
     claude_cmd=$(_drone_claude_cmd "$resume_sid")
 
-    _drone_resolve "$_arg_project"
-    local project_name="$_proj_name"
-    local project_dir="$_proj_dir"
-    local compose="$project_dir/$COMPOSE_FILE"
+    _drone_resolve "$_arg_repository"
+    local repository_name="$_proj_name"
+    local repository_dir="$_proj_dir"
+    local compose="$repository_dir/$COMPOSE_FILE"
 
-    dbg "cmd_up: project=$project_name dir=$project_dir"
+    dbg "cmd_up: repository=$repository_name dir=$repository_dir"
 
-    # The window name is registry-owned. A brand-new project must be registered first or there is
+    # The window name is registry-owned. A brand-new repository must be registered first or there is
     # nothing to derive from; an existing entry is never re-added here (borg add rewrites tmux_window).
-    _drone_registered "$project_name" || borg add "$project_dir" --name "$project_name" 2>/dev/null || true
+    _drone_registered "$repository_name" || borg add "$repository_dir" --name "$repository_name" 2>/dev/null || true
     local wname live
-    wname=$(_drone_window_name "$project_name")
-    live=$(_drone_find_window "$project_name" "$wname") || live=""
+    wname=$(_drone_window_name "$repository_name")
+    live=$(_drone_find_window "$repository_name" "$wname") || live=""
     dbg "cmd_up: window name '$wname' live='$live'"
 
     local has_devcontainer=0
@@ -515,19 +516,19 @@ cmd_up() {
         dbg "cmd_up: no .devcontainer, creating local window"
 
         if [[ -n "$live" ]]; then
-            info "Project '$project_name' already open."
+            info "Repository '$repository_name' already open."
             [[ -n "$resume_sid" ]] && warn "window already open; --resume ignored (close it first)"
             attach_or_switch "$live"
             return
         fi
 
-        # Host-first: left pane runs claude, right pane is a shell at project_dir.
-        create_2pane_window "$wname" "$claude_cmd" "$project_dir" ""
-        tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
-        _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
-        _drone_register "$project_dir" "$project_name" "$wname"
-        echo "$project_name" > "$project_dir/.borg-project"
-        info "Project '$project_name' ready (local)."
+        # Host-first: left pane runs claude, right pane is a shell at repository_dir.
+        create_2pane_window "$wname" "$claude_cmd" "$repository_dir" ""
+        tmux set-option -t "$SESSION:$wname" @project_dir "$repository_dir"
+        _drone_apply_window_color "$wname" "$(_drone_repository_color "$repository_name")"
+        _drone_register "$repository_dir" "$repository_name" "$wname"
+        echo "$repository_name" > "$repository_dir/.borg-project"
+        info "Repository '$repository_name' ready (local)."
         attach_or_switch "$wname"
         return
     fi
@@ -543,9 +544,9 @@ cmd_up() {
     # Detect if devcontainer definition changed since last build
     local _dc_hash _dc_hash_dir _dc_hash_file _build_flag=""
     _dc_hash_dir="$(_borg_state_root)/devcontainer-hashes"
-    _dc_hash_file="$_dc_hash_dir/${project_name}.hash"
-    _dc_hash=$(_devcontainer_hash "$project_dir")
-    if [[ -n "$_dc_hash" && "$(cat "$(_borg_operational_file "devcontainer-hashes/${project_name}.hash")" 2>/dev/null)" != "$_dc_hash" ]]; then
+    _dc_hash_file="$_dc_hash_dir/${repository_name}.hash"
+    _dc_hash=$(_devcontainer_hash "$repository_dir")
+    if [[ -n "$_dc_hash" && "$(cat "$(_borg_operational_file "devcontainer-hashes/${repository_name}.hash")" 2>/dev/null)" != "$_dc_hash" ]]; then
         info "Devcontainer definition changed — rebuilding image."
         _build_flag="--build"
     fi
@@ -562,65 +563,65 @@ cmd_up() {
             # Fall through to create new window
         else
             local container
-            container=$(get_project_container "$project_name" "$project_dir")
+            container=$(get_repository_container "$repository_name" "$repository_dir")
             if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
                 if [[ -n "$_build_flag" ]]; then
-                    info "Rebuilding container for $project_name..."
+                    info "Rebuilding container for $repository_name..."
                 else
                     info "Container stopped. Restarting..."
                 fi
-                run_initialize_command "$project_dir"
-                _run_pre_up "$project_dir" "$project_name"
-                docker compose -p "$project_name" -f "$compose" up -d $_build_flag
-                container=$(wait_for_container "$project_name" "$project_dir")
+                run_initialize_command "$repository_dir"
+                _run_pre_up "$repository_dir" "$repository_name"
+                docker compose -p "$repository_name" -f "$compose" up -d $_build_flag
+                container=$(wait_for_container "$repository_name" "$repository_dir")
                 _save_devcontainer_hash
-                run_post_create_command "$project_name" "$project_dir"
-                run_post_start_command "$project_name" "$project_dir"
+                run_post_create_command "$repository_name" "$repository_dir"
+                run_post_start_command "$repository_name" "$repository_dir"
                 # Host-side panes are immune to container restart — no re-exec needed.
             fi
-            info "Project '$project_name' already running."
+            info "Repository '$repository_name' already running."
             [[ -n "$resume_sid" ]] && warn "window already open; --resume ignored (close it first)"
-            _drone_apply_window_color "$live" "$(_drone_project_color "$project_name")"
+            _drone_apply_window_color "$live" "$(_drone_repository_color "$repository_name")"
             attach_or_switch "$live"
             return
         fi
     fi
 
-    # Create new project window
+    # Create new repository window
     local container
-    container=$(get_project_container "$project_name" "$project_dir")
+    container=$(get_repository_container "$repository_name" "$repository_dir")
     if [[ -z "$container" ]] || [[ -n "$_build_flag" ]]; then
-        info "Starting containers for $project_name..."
-        run_initialize_command "$project_dir"
-        _run_pre_up "$project_dir" "$project_name"
-        docker compose -p "$project_name" -f "$compose" up -d $_build_flag
-        container=$(wait_for_container "$project_name" "$project_dir")
+        info "Starting containers for $repository_name..."
+        run_initialize_command "$repository_dir"
+        _run_pre_up "$repository_dir" "$repository_name"
+        docker compose -p "$repository_name" -f "$compose" up -d $_build_flag
+        container=$(wait_for_container "$repository_name" "$repository_dir")
         mkdir -p "$_dc_hash_dir" && [[ -n "$_dc_hash" ]] && echo "$_dc_hash" > "$_dc_hash_file" || true
     fi
 
     local service
-    service=$(get_service_name "$project_name")
+    service=$(get_service_name "$repository_name")
     info "Container: $container  Service: $service"
-    run_post_create_command "$project_name" "$project_dir"
-    run_post_start_command "$project_name" "$project_dir"
+    run_post_create_command "$repository_name" "$repository_dir"
+    run_post_start_command "$repository_name" "$repository_dir"
 
-    # Host-first: both panes are host shells at $project_dir.
+    # Host-first: both panes are host shells at $repository_dir.
     # Left (Claude) pane auto-launches `claude`; right pane stays as a shell prompt.
-    create_2pane_window "$wname" "$claude_cmd" "$project_dir" ""
-    tmux set-option -t "$SESSION:$wname" @project_dir "$project_dir"
-    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
-    _drone_register "$project_dir" "$project_name" "$wname"
-    echo "$project_name" > "$project_dir/.borg-project"
+    create_2pane_window "$wname" "$claude_cmd" "$repository_dir" ""
+    tmux set-option -t "$SESSION:$wname" @project_dir "$repository_dir"
+    _drone_apply_window_color "$wname" "$(_drone_repository_color "$repository_name")"
+    _drone_register "$repository_dir" "$repository_name" "$wname"
+    echo "$repository_name" > "$repository_dir/.borg-project"
 
     dbg "cmd_up: windows: $(tmux list-windows -t "$SESSION" -F '  #I: #W (#{window_panes} panes)' 2>/dev/null)"
 
-    info "Project '$project_name' ready."
+    info "Repository '$repository_name' ready."
     attach_or_switch "$wname"
 }
 
 # ── drone down ────────────────────────────────────────────────────────────────
 
-# Deliberate close: tell borg-resume this project was torn down on purpose. Best-effort and silent; it can never
+# Deliberate close: tell borg-resume this repository was torn down on purpose. Best-effort and silent; it can never
 # fail the teardown. borg-resume itself honors BORG_RESUME_DISABLE. BORG_RESUME_BIN overrides the binary (tests).
 _drone_mark_closed() {
     local bin="${BORG_RESUME_BIN:-$DRONE_SCRIPT_DIR/bin/borg-resume}"
@@ -631,37 +632,37 @@ _drone_mark_closed() {
 
 cmd_down() {
     _drone_resolve "${1:-}"
-    local project_name="$_proj_name"
-    local project_dir="$_proj_dir"
-    local compose="$project_dir/$COMPOSE_FILE"
+    local repository_name="$_proj_name"
+    local repository_dir="$_proj_dir"
+    local compose="$repository_dir/$COMPOSE_FILE"
 
-    _drone_mark_closed "$project_name" "$project_dir"
-    dbg "cmd_down: project=$project_name dir=$project_dir"
+    _drone_mark_closed "$repository_name" "$repository_dir"
+    dbg "cmd_down: repository=$repository_name dir=$repository_dir"
 
     local live
     if tmux has-session -t "$SESSION" 2>/dev/null \
-        && live=$(_drone_find_window "$project_name" "$(_drone_window_name "$project_name")"); then
+        && live=$(_drone_find_window "$repository_name" "$(_drone_window_name "$repository_name")"); then
         info "Removing window '$live'."
         tmux kill-window -t "$SESSION:$live"
     fi
 
-    rm -f "$project_dir/.borg-project"
+    rm -f "$repository_dir/.borg-project"
 
     if [[ -f "$compose" ]]; then
-        info "Stopping containers for $project_name..."
-        docker compose -p "$project_name" -f "$compose" down
-        _run_post_down "$project_dir" "$project_name"
+        info "Stopping containers for $repository_name..."
+        docker compose -p "$repository_name" -f "$compose" down
+        _run_post_down "$repository_dir" "$repository_name"
     fi
 
     # Second mark: a dying claude may have written its own session_end after the first one (sticky-close rule).
-    _drone_mark_closed "$project_name" "$project_dir"
+    _drone_mark_closed "$repository_name" "$repository_dir"
 
     if tmux has-session -t "$SESSION" 2>/dev/null; then
         local remaining
-        remaining=$(project_window_count)
-        dbg "cmd_down: $remaining project windows remaining"
+        remaining=$(repository_window_count)
+        dbg "cmd_down: $remaining repository windows remaining"
         if (( remaining == 0 )); then
-            info "No projects left. Stopping postgres and killing session."
+            info "No repositories left. Stopping postgres and killing session."
             docker compose -f "$POSTGRES_COMPOSE" down 2>/dev/null || true
             tmux kill-session -t "$SESSION" 2>/dev/null || true
         fi
@@ -675,47 +676,47 @@ cmd_down() {
 # Shared container cycle: down → [build] → up → post-start → re-exec panes.
 # mode=restart  skips the build step
 # mode=rebuild  adds docker compose build --no-cache
-_cycle_project() {
-    local project_name="$1" project_dir="$2" mode="${3:-restart}"
-    local compose="$project_dir/$COMPOSE_FILE"
+_cycle_repository() {
+    local repository_name="$1" repository_dir="$2" mode="${3:-restart}"
+    local compose="$repository_dir/$COMPOSE_FILE"
 
-    [[ -f "$compose" ]] || { warn "$project_name: no $COMPOSE_FILE, skipping"; return 0; }
+    [[ -f "$compose" ]] || { warn "$repository_name: no $COMPOSE_FILE, skipping"; return 0; }
 
     # Transient down during restart/rebuild intentionally does NOT fire
     # post-down.sh — external stacks (e.g. Supabase) should persist across cycles.
     if [[ "$mode" == "rebuild" ]]; then
-        info "Rebuilding $project_name (no cache)..."
-        docker compose -p "$project_name" -f "$compose" down
-        docker compose -p "$project_name" -f "$compose" build --no-cache
+        info "Rebuilding $repository_name (no cache)..."
+        docker compose -p "$repository_name" -f "$compose" down
+        docker compose -p "$repository_name" -f "$compose" build --no-cache
     else
-        info "Restarting $project_name..."
-        docker compose -p "$project_name" -f "$compose" down
+        info "Restarting $repository_name..."
+        docker compose -p "$repository_name" -f "$compose" down
     fi
-    _run_pre_up "$project_dir" "$project_name"
-    docker compose -p "$project_name" -f "$compose" up -d
+    _run_pre_up "$repository_dir" "$repository_name"
+    docker compose -p "$repository_name" -f "$compose" up -d
 
     local container
-    container=$(wait_for_container "$project_name" "$project_dir")
+    container=$(wait_for_container "$repository_name" "$repository_dir")
 
     if [[ "$mode" == "rebuild" ]]; then
         local _dc_hash _dc_hash_dir _dc_hash_file
         _dc_hash_dir="$(_borg_state_root)/devcontainer-hashes"
-        _dc_hash_file="$_dc_hash_dir/${project_name}.hash"
-        _dc_hash=$(_devcontainer_hash "$project_dir")
+        _dc_hash_file="$_dc_hash_dir/${repository_name}.hash"
+        _dc_hash=$(_devcontainer_hash "$repository_dir")
         _save_devcontainer_hash
     fi
-    run_post_create_command "$project_name" "$project_dir"
-    run_post_start_command "$project_name" "$project_dir"
+    run_post_create_command "$repository_name" "$repository_dir"
+    run_post_start_command "$repository_name" "$repository_dir"
 
     # Host-side panes are immune to container restart — no pane refresh needed.
-    info "$project_name: ${mode}ed."
+    info "$repository_name: ${mode}ed."
 }
 
-_restart_project() { _cycle_project "$1" "$2" "restart"; }
-_rebuild_project()  { _cycle_project "$1" "$2" "rebuild"; }
+_restart_repository() { _cycle_repository "$1" "$2" "restart"; }
+_rebuild_repository() { _cycle_repository "$1" "$2" "rebuild"; }
 
-# Shared --all iterator: walks every non-host project window and calls op_func.
-_foreach_project_window() {
+# Shared --all iterator: walks every repository window (not host, queen or orchestrator) and calls op_func.
+_foreach_repository_window() {
     local op_func="$1" past_tense="$2"
     tmux has-session -t "$SESSION" 2>/dev/null || die "No $SESSION tmux session running."
 
@@ -724,18 +725,19 @@ _foreach_project_window() {
 
     local count=0
     for wname in $windows; do
-        [[ "$wname" == "host" ]] && continue
+        # The Queen's window is "queen" since the rename; sessions started before it keep "orchestrator".
+        [[ "$wname" == "queen" || "$wname" == "orchestrator" || "$wname" == "host" ]] && continue
         local pdir
         pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
         if [[ -z "$pdir" ]]; then
             warn "$wname: no @project_dir set, skipping"
             continue
         fi
-        # The op takes a PROJECT name (docker compose -p, hooks), never a window name.
-        "$op_func" "$(_drone_project_of "$wname")" "$pdir"
+        # The op takes a REPOSITORY name (docker compose -p, hooks), never a window name.
+        "$op_func" "$(_drone_repository_of "$wname")" "$pdir"
         count=$(( count + 1 ))
     done
-    info "${past_tense} $count project(s)."
+    info "${past_tense} $count repository(ies)."
 }
 
 # Shared dispatch: handles --all, tmux current-window fallback, and named arg.
@@ -745,7 +747,7 @@ _cmd_cycle() {
     if [[ "$arg" == "--all" ]]; then
         local past_tense
         [[ "$mode" == "rebuild" ]] && past_tense="Rebuilt" || past_tense="Restarted"
-        _foreach_project_window "_${mode}_project" "$past_tense"
+        _foreach_repository_window "_${mode}_repository" "$past_tense"
         return
     fi
 
@@ -754,13 +756,13 @@ _cmd_cycle() {
         current_window=$(tmux display-message -p '#W')
         pdir=$(tmux show-option -t "$SESSION:$current_window" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" && -d "$pdir" ]]; then
-            _cycle_project "$(_drone_project_of "$current_window")" "$pdir" "$mode"
+            _cycle_repository "$(_drone_repository_of "$current_window")" "$pdir" "$mode"
             return
         fi
     fi
 
     _drone_resolve "$arg"
-    _cycle_project "$_proj_name" "$_proj_dir" "$mode"
+    _cycle_repository "$_proj_name" "$_proj_dir" "$mode"
 }
 
 cmd_restart() { _cmd_cycle "restart" "${1:-}"; }
@@ -770,19 +772,19 @@ cmd_rebuild()  { _cmd_cycle "rebuild" "${1:-}"; }
 
 cmd_claude() {
     _drone_resolve "${1:-}"
-    local project_name="$_proj_name"
-    local project_dir="$_proj_dir"
+    local repository_name="$_proj_name"
+    local repository_dir="$_proj_dir"
 
-    dbg "cmd_claude: project=$project_name dir=$project_dir"
+    dbg "cmd_claude: repository=$repository_name dir=$repository_dir"
 
     # If no window exists, drone up creates it AND auto-launches claude in the right pane.
     local wname
-    wname=$(_drone_window_name "$project_name")
-    if ! wname=$(_drone_find_window "$project_name" "$wname"); then
-        info "$project_name: no window found, running drone up first..."
+    wname=$(_drone_window_name "$repository_name")
+    if ! wname=$(_drone_find_window "$repository_name" "$wname"); then
+        info "$repository_name: no window found, running drone up first..."
         cmd_up "${1:-}"
-        wname=$(_drone_window_name "$project_name")
-        wname=$(_drone_find_window "$project_name" "$wname") || true
+        wname=$(_drone_window_name "$repository_name")
+        wname=$(_drone_find_window "$repository_name" "$wname") || true
     fi
 
     # Reattach: only send `claude` if the pane is at a shell prompt — avoids
@@ -792,7 +794,7 @@ cmd_claude() {
     current_cmd=$(tmux display-message -p -t "$claude_pane" '#{pane_current_command}' 2>/dev/null)
     case "$current_cmd" in
         zsh|bash|sh|fish|dash|"")
-            info "Launching Claude in $project_name..."
+            info "Launching Claude in $repository_name..."
             tmux send-keys -t "$claude_pane" "claude --model ${BORG_CLAUDE_MODEL:-opus} --effort ${BORG_CLAUDE_EFFORT:-xhigh}" Enter
             ;;
         *)
@@ -800,9 +802,9 @@ cmd_claude() {
             ;;
     esac
 
-    # Switch to the project window, focus + zoom Claude pane
+    # Switch to the repository window, focus + zoom Claude pane
     attach_or_switch "$wname"
-    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
+    _drone_apply_window_color "$wname" "$(_drone_repository_color "$repository_name")"
     tmux select-pane -t "$claude_pane"
     tmux resize-pane -Z -t "$claude_pane"
 }
@@ -811,28 +813,28 @@ cmd_claude() {
 
 cmd_cortex() {
     _drone_resolve "${1:-}"
-    local project_name="$_proj_name"
-    local project_dir="$_proj_dir"
+    local repository_name="$_proj_name"
+    local repository_dir="$_proj_dir"
 
-    dbg "cmd_cortex: project=$project_name dir=$project_dir"
+    dbg "cmd_cortex: repository=$repository_name dir=$repository_dir"
 
     local wname
-    wname=$(_drone_window_name "$project_name")
-    if ! wname=$(_drone_find_window "$project_name" "$wname"); then
-        info "$project_name: no window found, running drone up first..."
+    wname=$(_drone_window_name "$repository_name")
+    if ! wname=$(_drone_find_window "$repository_name" "$wname"); then
+        info "$repository_name: no window found, running drone up first..."
         cmd_up "${1:-}"
-        wname=$(_drone_window_name "$project_name")
-        wname=$(_drone_find_window "$project_name" "$wname") || true
+        wname=$(_drone_window_name "$repository_name")
+        wname=$(_drone_find_window "$repository_name" "$wname") || true
     fi
 
     local claude_pane
     claude_pane=$(get_left_pane "$wname")
-    info "Launching Cortex in $project_name (left pane)..."
+    info "Launching Cortex in $repository_name (left pane)..."
     tmux send-keys -t "$claude_pane" "cortex" Enter
     tmux set-option -t "$SESSION:$wname" @cortex_launched 1
 
     attach_or_switch "$wname"
-    _drone_apply_window_color "$wname" "$(_drone_project_color "$project_name")"
+    _drone_apply_window_color "$wname" "$(_drone_repository_color "$repository_name")"
     tmux select-pane -t "$claude_pane"
     tmux resize-pane -Z -t "$claude_pane"
 }
@@ -841,12 +843,12 @@ cmd_cortex() {
 
 cmd_feature() {
     local feature="${2:-}"
-    [[ -z "$feature" ]] && die "Usage: drone feature <project> <branch>"
+    [[ -z "$feature" ]] && die "Usage: drone feature <repository> <branch>"
     _drone_resolve "${1:-}"
-    local project_name="$_proj_name"
-    local project_dir="$_proj_dir"
-    local window_name="${project_name}-${feature}"
-    local work_dir="${project_dir%/*}/${project_name}-${feature}"
+    local repository_name="$_proj_name"
+    local repository_dir="$_proj_dir"
+    local window_name="${repository_name}-${feature}"
+    local work_dir="${repository_dir%/*}/${repository_name}-${feature}"
 
     if has_window "$window_name"; then
         info "Already open: $window_name"
@@ -855,10 +857,10 @@ cmd_feature() {
     fi
 
     if [[ ! -d "$work_dir" ]]; then
-        if git -C "$project_dir" show-ref --verify --quiet "refs/heads/$feature" 2>/dev/null; then
-            git -C "$project_dir" worktree add "$work_dir" "$feature"
+        if git -C "$repository_dir" show-ref --verify --quiet "refs/heads/$feature" 2>/dev/null; then
+            git -C "$repository_dir" worktree add "$work_dir" "$feature"
         else
-            git -C "$project_dir" worktree add -b "$feature" "$work_dir"
+            git -C "$repository_dir" worktree add -b "$feature" "$work_dir"
         fi
         info "Worktree created: $work_dir (branch: $feature)"
     else
@@ -871,7 +873,7 @@ cmd_feature() {
     else
         create_2pane_window "$window_name" "cd $work_dir" "$work_dir"
         tmux set-option -t "$SESSION:$window_name" @project_dir "$work_dir"
-        tmux set-option -t "$SESSION:$window_name" @project_name "$project_name"
+        tmux set-option -t "$SESSION:$window_name" @project_name "$repository_name"
         borg add "$work_dir" 2>/dev/null || true
         local claude_pane
         claude_pane=$(get_left_pane "$window_name")
@@ -887,69 +889,69 @@ cmd_feature() {
 
 cmd_sh() {
     _drone_resolve "${1:-}"
-    local project_name="$_proj_name"
-    local project_dir="$_proj_dir"
-    local compose="$project_dir/$COMPOSE_FILE"
+    local repository_name="$_proj_name"
+    local repository_dir="$_proj_dir"
+    local compose="$repository_dir/$COMPOSE_FILE"
 
-    [[ -f "$compose" ]] || die "No $COMPOSE_FILE found in $project_dir"
+    [[ -f "$compose" ]] || die "No $COMPOSE_FILE found in $repository_dir"
 
     local service
-    service=$(get_service_name "$project_name")
-    [[ -n "$service" ]] || die "No running app container found for $project_name. Run: drone up $project_name"
+    service=$(get_service_name "$repository_name")
+    [[ -n "$service" ]] || die "No running app container found for $repository_name. Run: drone up $repository_name"
 
-    _read_devcontainer_exec_config "$project_dir"
+    _read_devcontainer_exec_config "$repository_dir"
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
-    exec docker compose -p "$project_name" -f "$compose" exec "${user_args[@]}" -w "$_dc_workspace" "$service" "${shell:-/bin/zsh}"
+    exec docker compose -p "$repository_name" -f "$compose" exec "${user_args[@]}" -w "$_dc_workspace" "$service" "${shell:-/bin/zsh}"
 }
 
 # ── drone exec ────────────────────────────────────────────────────────────────
 
-# Run a non-interactive command inside the project's devcontainer.
-# Usage: drone exec [project] -- <cmd> [args...]
+# Run a non-interactive command inside the repository's devcontainer.
+# Usage: drone exec [repository] -- <cmd> [args...]
 #
 # Container-down behavior is fail-loud-and-self-heal: if the container is not
 # running, prints a clear message, brings the container up (no tmux work), and
 # retries the command exactly once. Exit code passes through.
 cmd_exec() {
-    local project_arg=""
+    local repository_arg=""
     if [[ "${1:-}" == "--" ]]; then
         :
     elif [[ -n "${1:-}" ]]; then
-        project_arg="$1"
+        repository_arg="$1"
         shift
     fi
-    [[ "${1:-}" == "--" ]] || die "Usage: drone exec [project] -- <cmd> [args...]"
+    [[ "${1:-}" == "--" ]] || die "Usage: drone exec [repository] -- <cmd> [args...]"
     shift
-    [[ $# -gt 0 ]] || die "Usage: drone exec [project] -- <cmd> [args...]"
+    [[ $# -gt 0 ]] || die "Usage: drone exec [repository] -- <cmd> [args...]"
 
-    _drone_resolve "$project_arg"
-    local project_name="$_proj_name"
-    local project_dir="$_proj_dir"
-    local compose="$project_dir/$COMPOSE_FILE"
+    _drone_resolve "$repository_arg"
+    local repository_name="$_proj_name"
+    local repository_dir="$_proj_dir"
+    local compose="$repository_dir/$COMPOSE_FILE"
 
-    [[ -f "$compose" ]] || die "No $COMPOSE_FILE found in $project_dir"
+    [[ -f "$compose" ]] || die "No $COMPOSE_FILE found in $repository_dir"
 
-    _read_devcontainer_exec_config "$project_dir"
+    _read_devcontainer_exec_config "$repository_dir"
     local -a user_args=()
     [[ -n "$_dc_user" ]] && user_args=(-u "$_dc_user")
 
     local container service
-    container=$(get_project_container "$project_name" "$project_dir")
+    container=$(get_repository_container "$repository_name" "$repository_dir")
     if [[ -z "$container" ]]; then
-        warn "$project_name: container down — running drone up"
+        warn "$repository_name: container down — running drone up"
         ensure_postgres
-        run_initialize_command "$project_dir"
-        _run_pre_up "$project_dir" "$project_name"
-        docker compose -p "$project_name" -f "$compose" up -d
-        container=$(wait_for_container "$project_name" "$project_dir")
-        run_post_create_command "$project_name" "$project_dir"
-        run_post_start_command "$project_name" "$project_dir"
+        run_initialize_command "$repository_dir"
+        _run_pre_up "$repository_dir" "$repository_name"
+        docker compose -p "$repository_name" -f "$compose" up -d
+        container=$(wait_for_container "$repository_name" "$repository_dir")
+        run_post_create_command "$repository_name" "$repository_dir"
+        run_post_start_command "$repository_name" "$repository_dir"
     fi
-    service=$(get_service_name "$project_name")
-    [[ -n "$service" ]] || die "$project_name: no app service found"
+    service=$(get_service_name "$repository_name")
+    [[ -n "$service" ]] || die "$repository_name: no app service found"
 
-    docker compose -p "$project_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" "$@"
+    docker compose -p "$repository_name" -f "$compose" exec -T "${user_args[@]}" -w "$_dc_workspace" "$service" "$@"
 }
 
 # ── drone fix ─────────────────────────────────────────────────────────────────
@@ -1000,7 +1002,7 @@ cmd_toggle() {
     elif [[ -n "$TMUX" ]]; then
         wname=$(tmux display-message -p '#W')
     else
-        die "Specify a project name or run from inside tmux."
+        die "Specify a repository name or run from inside tmux."
     fi
 
     has_window "$wname" || die "No window '$wname' found."
@@ -1025,13 +1027,13 @@ cmd_toggle() {
         if [[ -n "$main_pane" ]]; then
             local side
             side=$(tmux split-window -h -p 30 -t "$main_pane" -PF '#{pane_id}')
-            # If this is a devcontainer project, exec into the container
+            # If this is a devcontainer repository, exec into the container
             local pdir
             pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
             if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
                 local container shell service exec_cmd pname
-                pname=$(_drone_project_of "$wname")
-                container=$(get_project_container "$pname" "$pdir") || true
+                pname=$(_drone_repository_of "$wname")
+                container=$(get_repository_container "$pname" "$pdir") || true
                 if [[ -n "$container" ]]; then
                     shell=$(get_shell "$container")
                     service=$(get_service_name "$pname")
@@ -1095,14 +1097,14 @@ cmd_pane() {
     local new_pane
     new_pane=$(tmux split-window ${=flags} -t "$target" -PF '#{pane_id}')
 
-    # If this is a devcontainer project, exec into the container (same logic as cmd_toggle);
-    # otherwise just cd into the project dir.
+    # If this is a devcontainer repository, exec into the container (same logic as cmd_toggle);
+    # otherwise just cd into the repository dir.
     local pdir
     pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
     if [[ -n "$pdir" && -f "$pdir/$COMPOSE_FILE" ]]; then
         local container shell service exec_cmd pname
-        pname=$(_drone_project_of "$wname")
-        container=$(get_project_container "$pname" "$pdir") || true
+        pname=$(_drone_repository_of "$wname")
+        container=$(get_repository_container "$pname" "$pdir") || true
         if [[ -n "$container" ]]; then
             shell=$(get_shell "$container")
             service=$(get_service_name "$pname")
@@ -1120,36 +1122,36 @@ cmd_pane() {
 
 # Generate a Supabase-ready devcontainer from templates/supabase/, substituting
 # __PROJECT_NAME__ / __PROJECT_NAME_UPPER__ / __WORKSPACE__. Runs `supabase init`
-# in the project dir when supabase/ doesn't already exist. Refuses if
+# in the repository dir when supabase/ doesn't already exist. Refuses if
 # .devcontainer/ or supabase/ already exists (no --force in v1).
 _cmd_scaffold_supabase() {
-    local project_dir="$1" workspace="$2"
-    _scaffold_preflight "$project_dir"
-    project_dir="$_sp_dir"
-    local dc_dir="$project_dir/.devcontainer"
+    local repository_dir="$1" workspace="$2"
+    _scaffold_preflight "$repository_dir"
+    repository_dir="$_sp_dir"
+    local dc_dir="$repository_dir/.devcontainer"
 
-    [[ -d "$project_dir/supabase" ]] \
-        && die "supabase/ already exists in $project_dir — refusing to overwrite"
+    [[ -d "$repository_dir/supabase" ]] \
+        && die "supabase/ already exists in $repository_dir — refusing to overwrite"
     command -v supabase >/dev/null 2>&1 \
         || die "supabase CLI not found on PATH. Install: brew install supabase/tap/supabase"
 
-    local project_name="${project_dir##*/}"
-    local project_name_upper
-    project_name_upper="${project_name:u}"
-    project_name_upper="${project_name_upper//-/_}"
+    local repository_name="${repository_dir##*/}"
+    local repository_name_upper
+    repository_name_upper="${repository_name:u}"
+    repository_name_upper="${repository_name_upper//-/_}"
 
     local tmpl_dir="$DRONE_SCRIPT_DIR/templates/supabase"
     [[ -d "$tmpl_dir" ]] || die "Template directory missing: $tmpl_dir"
 
-    info "Scaffolding Supabase devcontainer for '$project_name'..."
+    info "Scaffolding Supabase devcontainer for '$repository_name'..."
     mkdir -p "$dc_dir/borg-hooks"
 
     local ws_symlink
     ws_symlink=$(_ws_symlink_snippet "$workspace")
 
     _subst_template() {
-        sed -e "s|__PROJECT_NAME__|$project_name|g" \
-            -e "s|__PROJECT_NAME_UPPER__|$project_name_upper|g" \
+        sed -e "s|__PROJECT_NAME__|$repository_name|g" \
+            -e "s|__PROJECT_NAME_UPPER__|$repository_name_upper|g" \
             -e "s|__WORKSPACE__|$workspace|g" \
             -e "s|__WS_SYMLINK__|$ws_symlink|g" \
             "$1" > "$2"
@@ -1162,28 +1164,28 @@ _cmd_scaffold_supabase() {
     cp "$tmpl_dir/borg-hooks/post-down.sh" "$dc_dir/borg-hooks/post-down.sh"
     chmod +x "$dc_dir/borg-hooks/pre-up.sh" "$dc_dir/borg-hooks/post-down.sh"
 
-    info "Running 'supabase init' in $project_dir..."
-    (cd "$project_dir" && supabase init) || die "supabase init failed"
+    info "Running 'supabase init' in $repository_dir..."
+    (cd "$repository_dir" && supabase init) || die "supabase init failed"
 
-    # Confirm project_id in supabase/config.toml matches project_name. Supabase's
+    # Confirm project_id in supabase/config.toml matches repository_name. Supabase's
     # default is the directory name, which already matches, but sed-confirm to
     # be safe against future CLI changes.
     local config="$supabase_dir/config.toml"
     if [[ -f "$config" ]]; then
         local current_id
         current_id=$(grep -E '^project_id = ' "$config" | head -1 | sed -E 's/project_id = "([^"]+)"/\1/')
-        if [[ -n "$current_id" && "$current_id" != "$project_name" ]]; then
-            info "Aligning supabase project_id ($current_id → $project_name)..."
-            sed -i.bak -E "s/^project_id = \"[^\"]+\"/project_id = \"$project_name\"/" "$config"
+        if [[ -n "$current_id" && "$current_id" != "$repository_name" ]]; then
+            info "Aligning supabase project_id ($current_id → $repository_name)..."
+            sed -i.bak -E "s/^project_id = \"[^\"]+\"/project_id = \"$repository_name\"/" "$config"
             rm -f "$config.bak"
         fi
     fi
 
-    info "Scaffolded Supabase project in $project_dir"
+    info "Scaffolded Supabase repository in $repository_dir"
     echo
     info "Next steps:"
-    info "  1. drone up $project_name"
-    info "  2. Create remote project: supabase login && supabase projects create $project_name"
+    info "  1. drone up $repository_name"
+    info "  2. Create remote project: supabase login && supabase projects create $repository_name"
     info "  3. Link: supabase link --project-ref <ref>"
 }
 
@@ -1191,35 +1193,35 @@ _cmd_scaffold_supabase() {
 
 # Generate a devcontainer that JOINS the always-on shared stillpoint Supabase
 # stack (network `supabase_network_stillpoint`) instead of creating a
-# per-project network + running its own `supabase init`/`start`. Does NOT
+# per-repository network + running its own `supabase init`/`start`. Does NOT
 # alter --supabase semantics — this is a wholly separate opt-in path.
 _cmd_scaffold_supabase_shared() {
-    local project_dir="$1" workspace="$2" schema="$3"
-    _scaffold_preflight "$project_dir"
-    project_dir="$_sp_dir"
-    local dc_dir="$project_dir/.devcontainer"
+    local repository_dir="$1" workspace="$2" schema="$3"
+    _scaffold_preflight "$repository_dir"
+    repository_dir="$_sp_dir"
+    local dc_dir="$repository_dir/.devcontainer"
 
-    local project_name="${project_dir##*/}"
-    local project_name_upper
-    project_name_upper="${project_name:u}"
-    project_name_upper="${project_name_upper//-/_}"
+    local repository_name="${repository_dir##*/}"
+    local repository_name_upper
+    repository_name_upper="${repository_name:u}"
+    repository_name_upper="${repository_name_upper//-/_}"
 
-    # Schema defaults to the project name (schema-per-app convention); pass
-    # --schema explicitly if the project's schema already differs.
-    [[ -z "$schema" ]] && schema="${project_name//-/_}"
+    # Schema defaults to the repository name (schema-per-app convention); pass
+    # --schema explicitly if the repository's schema already differs.
+    [[ -z "$schema" ]] && schema="${repository_name//-/_}"
 
     local tmpl_dir="$DRONE_SCRIPT_DIR/templates/supabase-shared"
     [[ -d "$tmpl_dir" ]] || die "Template directory missing: $tmpl_dir"
 
-    info "Scaffolding shared-Supabase devcontainer for '$project_name' (schema: $schema)..."
+    info "Scaffolding shared-Supabase devcontainer for '$repository_name' (schema: $schema)..."
     mkdir -p "$dc_dir/borg-hooks"
 
     local ws_symlink
     ws_symlink=$(_ws_symlink_snippet "$workspace")
 
     _subst_template() {
-        sed -e "s|__PROJECT_NAME__|$project_name|g" \
-            -e "s|__PROJECT_NAME_UPPER__|$project_name_upper|g" \
+        sed -e "s|__PROJECT_NAME__|$repository_name|g" \
+            -e "s|__PROJECT_NAME_UPPER__|$repository_name_upper|g" \
             -e "s|__WORKSPACE__|$workspace|g" \
             -e "s|__WS_SYMLINK__|$ws_symlink|g" \
             -e "s|__SCHEMA__|$schema|g" \
@@ -1233,23 +1235,23 @@ _cmd_scaffold_supabase_shared() {
     cp "$tmpl_dir/borg-hooks/post-down.sh" "$dc_dir/borg-hooks/post-down.sh"
     chmod +x "$dc_dir/borg-hooks/pre-up.sh" "$dc_dir/borg-hooks/post-down.sh"
 
-    _scaffold_append_claude_md "$project_dir" "$schema"
+    _scaffold_append_claude_md "$repository_dir" "$schema"
 
-    info "Scaffolded shared-Supabase project in $project_dir"
+    info "Scaffolded shared-Supabase repository in $repository_dir"
     echo
     info "Joins the ALWAYS-ON shared stillpoint stack (network: supabase_network_stillpoint)."
     info "The shared stack is started/stopped independently — see stillpoint repo."
     info "Next steps:"
-    info "  1. drone up $project_name"
+    info "  1. drone up $repository_name"
 }
 
 # Append the "Local Supabase — ONE shared stack" doc block to the scaffolded
-# project's CLAUDE.md, substituting the real schema. Creates CLAUDE.md if it
+# repository's CLAUDE.md, substituting the real schema. Creates CLAUDE.md if it
 # doesn't exist yet; otherwise appends with a blank-line separator. Idempotent:
 # a no-op if the block (matched by its heading) is already present.
 _scaffold_append_claude_md() {
-    local project_dir="$1" schema="$2"
-    local claude_md="$project_dir/CLAUDE.md"
+    local repository_dir="$1" schema="$2"
+    local claude_md="$repository_dir/CLAUDE.md"
     local heading="## Local Supabase — ONE shared stack (never boot a per-project stack)"
 
     if [[ -f "$claude_md" ]] && grep -qF "$heading" "$claude_md"; then
@@ -1261,21 +1263,21 @@ _scaffold_append_claude_md() {
     block=$(cat <<EOF
 $heading
 
-Local dev for every Stillpoint project shares a SINGLE always-on Supabase stack owned by the
+Local dev for every Stillpoint repository shares a SINGLE always-on Supabase stack owned by the
 \`stillpoint\` repo — one Postgres (\`supabase_db_stillpoint\` / gateway \`supabase_kong_stillpoint\`)
-with a schema per app. This project's rows live under the \`$schema\` schema via \`search_path\`, never
+with a schema per app. This repository's rows live under the \`$schema\` schema via \`search_path\`, never
 \`public\`. The devcontainer attaches to the external network \`supabase_network_stillpoint\`;
 \`.devcontainer/borg-hooks/pre-up.sh\` brings the shared stack up once (idempotent) on \`drone up\`.
-This project has NO local stack of its own.
+This repository has NO local stack of its own.
 
 The API URL (\`supabase_kong_stillpoint:8000\`) only serves auth, storage, and realtime on the
 \`public\` schema — the shared stack's PostgREST exposes just \`public\` and \`graphql_public\`. This
-project's own \`$schema\` schema is reachable through the DB URL only. Expanding exposed schemas is a
+repository's own \`$schema\` schema is reachable through the DB URL only. Expanding exposed schemas is a
 deliberate change in the \`stillpoint\` repo's \`supabase/config.toml\` plus a shared-stack restart —
 never something to do from this repo.
 
 **Never run these from this repo** — they boot or kill a COMPETING local stack that collides on
-ports 54321/54322 and takes the shared stack down for every project:
+ports 54321/54322 and takes the shared stack down for every repository:
 
 - \`supabase start\` · \`supabase stop\` · \`supabase db reset\` — boot/kill the local stack
 - \`docker stop|kill|rm\` of any \`supabase_*_stillpoint\` container
@@ -1298,7 +1300,7 @@ EOF
 # ── drone scaffold ────────────────────────────────────────────────────────────
 
 cmd_scaffold() {
-    local project_dir="" lang="none" workspace="" preset="" schema=""
+    local repository_dir="" lang="none" workspace="" preset="" schema=""
     local workspace_explicit=0
 
     # Parse args
@@ -1309,33 +1311,33 @@ cmd_scaffold() {
             --supabase) preset="supabase"; shift ;;
             --supabase-shared) preset="supabase-shared"; shift ;;
             --schema)   schema="${2:-}"; shift 2 ;;
-            *)          project_dir="$1"; shift ;;
+            *)          repository_dir="$1"; shift ;;
         esac
     done
 
-    [[ -z "$project_dir" ]] && die "Usage: drone scaffold <project-dir> [--supabase|--supabase-shared [--schema <name>]] [--lang python|node|none] [--workspace /workspaces/<project>]"
+    [[ -z "$repository_dir" ]] && die "Usage: drone scaffold <repository-dir> [--supabase|--supabase-shared [--schema <name>]] [--lang python|node|none] [--workspace /workspaces/<repository>]"
 
     # Default workspace from raw basename; the supabase branches run their own preflight.
     if (( ! workspace_explicit )); then
-        local _raw_basename="${project_dir%/}"
+        local _raw_basename="${repository_dir%/}"
         _raw_basename="${_raw_basename##*/}"
         workspace="/workspaces/$_raw_basename"
     fi
 
     if [[ "$preset" == "supabase" ]]; then
-        _cmd_scaffold_supabase "$project_dir" "$workspace"
+        _cmd_scaffold_supabase "$repository_dir" "$workspace"
         return
     fi
 
     if [[ "$preset" == "supabase-shared" ]]; then
-        _cmd_scaffold_supabase_shared "$project_dir" "$workspace" "$schema"
+        _cmd_scaffold_supabase_shared "$repository_dir" "$workspace" "$schema"
         return
     fi
 
-    _scaffold_preflight "$project_dir"
-    project_dir="$_sp_dir"
-    local dc_dir="$project_dir/.devcontainer"
-    local project_name="${project_dir##*/}"
+    _scaffold_preflight "$repository_dir"
+    repository_dir="$_sp_dir"
+    local dc_dir="$repository_dir/.devcontainer"
+    local repository_name="${repository_dir##*/}"
     mkdir -p "$dc_dir"
 
     # ── Dockerfile ────────────────────────────────────────────────────────
@@ -1351,7 +1353,7 @@ cmd_scaffold() {
             dockerfile_extra='# Node.js already included in base image'
             ;;
         none|*)
-            dockerfile_extra='# Add project-specific deps here if needed'
+            dockerfile_extra='# Add repository-specific deps here if needed'
             ;;
     esac
 
@@ -1376,20 +1378,20 @@ WORKDIR $workspace
 DOCKERFILE
 
     # ── docker-compose.yml ────────────────────────────────────────────────
-    # Profile split: ${project_name}-app (base, always starts, no borg mounts)
-    # and ${project_name}-borg (extends base, adds borg mounts, profiles: [borg]).
+    # Profile split: ${repository_name}-app (base, always starts, no borg mounts)
+    # and ${repository_name}-borg (extends base, adds borg mounts, profiles: [borg]).
     # drone sets COMPOSE_PROFILES=borg automatically; Cursor/team users start
-    # ${project_name}-app by default and get a fully working container without
+    # ${repository_name}-app by default and get a fully working container without
     # requiring host borg/claude config to be present.
     cat > "$dc_dir/docker-compose.yml" <<COMPOSE
 services:
   # ── Base service — team-portable, no borg mounts ──────────────────────────
-  ${project_name}-app:
+  ${repository_name}-app:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
     volumes:
-      # project files
+      # repository files
       - ..:${workspace}:cached
       # shell
       - ~/.config/dotfiles/zsh:/home/dev/.config/dotfiles/zsh:cached
@@ -1415,9 +1417,9 @@ services:
   # Only starts when COMPOSE_PROFILES=borg (set automatically by drone up).
   # Host-first Claude: ~/.claude is no longer mounted; Claude runs on the host
   # and dispatches into this container via \`drone exec\`.
-  ${project_name}-borg:
+  ${repository_name}-borg:
     extends:
-      service: ${project_name}-app
+      service: ${repository_name}-app
     labels:
       - dev.role=app
     volumes:
@@ -1449,9 +1451,9 @@ COMPOSE
 
     cat > "$dc_dir/devcontainer.json" <<DEVCONTAINER
 {
-  "name": "${project_name}",
+  "name": "${repository_name}",
   "dockerComposeFile": "docker-compose.yml",
-  "service": "${project_name}-borg",
+  "service": "${repository_name}-borg",
   "workspaceFolder": "${workspace}",
   "features": {},
   "postCreateCommand": "${post_create}",
@@ -1462,7 +1464,7 @@ COMPOSE
 }
 DEVCONTAINER
 
-    info "Scaffolded .devcontainer/ in $project_dir"
+    info "Scaffolded .devcontainer/ in $repository_dir"
     info "  Language: $lang"
     info "  Workspace: $workspace"
     echo
@@ -1470,7 +1472,7 @@ DEVCONTAINER
     info "  1. Verify base image exists: docker images devcontainer-base:local"
     info "  2. If missing, build it:"
     info "     docker build -f ~/.config/dotfiles/devcontainer/Dockerfile.base -t devcontainer-base:local ~/.config/dotfiles/devcontainer"
-    info "  3. drone up $project_name"
+    info "  3. drone up $repository_name"
 }
 
 # ── drone help ────────────────────────────────────────────────────────────────
@@ -1480,7 +1482,7 @@ cmd_help() {
 
     _______________
    /|             /|
-  / |            / |      drone — designation: project lifecycle
+  / |            / |      drone — designation: repository lifecycle
     |___________|  |
     |  |        |  |      "You will be assimilated."
     |  |________|__|
@@ -1488,32 +1490,32 @@ cmd_help() {
     |/          |/
 
   COMMANDS
-    feature <project> <branch>  Create worktree + branch, start window, launch Claude
-    up [project]         Start container + create tmux window (uses $PWD if no arg)
-    up [project] --resume <sid>
+    feature <repository> <branch>  Create worktree + branch, start window, launch Claude
+    up [repository]      Start container + create tmux window (uses $PWD if no arg)
+    up [repository] --resume <sid>
                          Same, relaunching claude --resume <sid>. Compose files bind-mount the host
                          resume ledger; an existing drone gets the mount only after drone down + up
-    down [project]       Stop container + remove tmux window
-    claude [project]     Launch Claude Code in project window (runs drone up if needed)
-    cortex [project]     Launch Cortex Code in project window (runs drone up if needed)
-    sh [project]         Shell into project container (interactive)
-    exec [project] -- <cmd>
+    down [repository]    Stop container + remove tmux window
+    claude [repository]  Launch Claude Code in repository window (runs drone up if needed)
+    cortex [repository]  Launch Cortex Code in repository window (runs drone up if needed)
+    sh [repository]      Shell into repository container (interactive)
+    exec [repository] -- <cmd>
                          Run a non-interactive command inside the devcontainer
                          (fail-loud-and-self-heal if container is down)
-    restart [project]    Restart containers + re-exec all panes
-    restart --all        Restart all project containers
-    rebuild [project]    Rebuild images (--no-cache) + restart + re-exec panes
-    rebuild --all        Rebuild all project containers
-    fix [project]        Restore standard 2-pane layout for project window
+    restart [repository] Restart containers + re-exec all panes
+    restart --all        Restart all repository containers
+    rebuild [repository] Rebuild images (--no-cache) + restart + re-exec panes
+    rebuild --all        Rebuild all repository containers
+    fix [repository]     Restore standard 2-pane layout for repository window
     fix --all            Restore layout for all windows
-    toggle [project]     Add/remove side pane (2-pane ↔ 3-pane)
+    toggle [repository]  Add/remove side pane (2-pane ↔ 3-pane)
     pane <direction>     Split the calling pane top|bottom|left|right (devcontainer-aware); a window holds
                          two panes, so with a side pane open it reuses that pane (unzooming the window if
                          it is zoomed, so the side pane is visible) and prints its id
     scaffold <dir>       Generate .devcontainer/ (--lang python|node|none, --supabase, --supabase-shared)
     help                 Show this message
 
-  PROJECT RESOLUTION
+  REPOSITORY RESOLUTION
     drone up             Uses current directory (backwards-compatible with dev.sh)
     drone up troth       Looks up 'troth' in borg registry, then $BORG_ORCHESTRATOR_ROOT/troth
 
@@ -1524,7 +1526,7 @@ cmd_help() {
 
   ENVIRONMENT
     BORG_TMUX_SESSION    tmux session name (default: borg)
-    BORG_ORCHESTRATOR_ROOT  workspace root for project lookup (default: ~/dev)
+    BORG_ORCHESTRATOR_ROOT  workspace root for repository lookup (default: ~/dev)
     BORG_DEBUG           set to any value for debug output
 
 EOF

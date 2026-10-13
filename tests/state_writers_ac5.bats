@@ -1,10 +1,10 @@
 #!/usr/bin/env bats
-# AC5 step c (expand, writers): every WRITER of a project's state.json writes the per-project state-root
+# AC5 step c (expand, writers): every WRITER of a repository's state.json writes the per-repository state-root
 # path, never <dir>/.borg/state.json. Read-modify-write sites read new-first-else-legacy, so a legacy-only
 # file's fields carry over into the new file; the legacy file is left alone (step d migrates it).
 #
 # Pinned here: each writer lands at the new path; legacy fields carry over; after a write the reader returns
-# the WRITTEN value (no stale shadow from a legacy file); the writer keys a registered project by the registry
+# the WRITTEN value (no stale shadow from a legacy file); the writer keys a registered repository by the registry
 # `repo` exactly as the readers do; and a source-level census that no code path writes .borg/state.json.
 #
 # HOME and every XDG dir are sandboxed by setup_temp_dirs, so no case can touch the real machine.
@@ -77,7 +77,7 @@ _zsh_read() { zsh -c 'source "$1/lib/registry.zsh" && borg_state_read "$2" "$3"'
     [ "$status" -eq 0 ]
 }
 
-@test "a registered project with NO repo is keyed path-only, the way the readers key it" {
+@test "a registered repository with NO repo is keyed path-only, the way the readers key it" {
     printf '{"projects":{"proj":{"path":"%s","status":"idle","source":"cli"}}}\n' "$PROJ" > "$BORG_REGISTRY"
     run bash "$NOTIFY" <<< "$(_hook_in)"
     [ "$status" -eq 0 ]
@@ -116,7 +116,7 @@ _reap_fixture() {
     chmod +x "$BATS_TEST_TMPDIR/bin/tmux"
 }
 
-@test "borg reap: a LEGACY-ONLY stale project is downgraded into the new path, legacy untouched" {
+@test "borg reap: a LEGACY-ONLY stale repository is downgraded into the new path, legacy untouched" {
     _reap_fixture
     _legacy '{"marker":"from-legacy","status":"active","last_activity":"2020-01-01T00:00:00Z"}'
     run zsh "$ROOT/borg.zsh" reap
@@ -127,7 +127,7 @@ _reap_fixture() {
     [ "$(jq -r .status "$LEGACY")" = "active" ]
 }
 
-@test "borg reap: a NEW-ONLY stale project is downgraded (the guard accepts either location)" {
+@test "borg reap: a NEW-ONLY stale repository is downgraded (the guard accepts either location)" {
     _reap_fixture
     mkdir -p "$(dirname "$NEWF")"
     printf '{"status":"active","last_activity":"2020-01-01T00:00:00Z"}\n' > "$NEWF"
@@ -137,7 +137,7 @@ _reap_fixture() {
     [ ! -e "$PROJ/.borg" ]
 }
 
-@test "borg reap: a project with no state file in either location is not created by the reaper" {
+@test "borg reap: a repository with no state file in either location is not created by the reaper" {
     _reap_fixture
     run zsh "$ROOT/borg.zsh" reap
     [ "$status" -eq 0 ]

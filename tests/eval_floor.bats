@@ -428,7 +428,7 @@ _eval_out_rel() {
 # harness's always-runnable case is a pytest selection and it guards on the import rather than on the
 # interpreter -- a python3 without pytest SKIPs -- so without this the mode floors would be asserted
 # over a missing dev dependency, and worse, the GLOBAL floor would fire first and print its reason
-# instead of the mode reason the case is checking. Preference order is deliberate: the project's own
+# instead of the mode reason the case is checking. Preference order is deliberate: the repository's own
 # `.venv` first, since CLAUDE.md records that this toolchain is NOT on the ambient PATH, then any
 # python3 that happens to carry pytest.
 #

@@ -31,19 +31,19 @@ setup() {
 }
 
 @test "borg_claude_latest_session_id returns empty for missing dir" {
-    run run_zsh_fn claude borg_claude_latest_session_id /nonexistent/project
+    run run_zsh_fn claude borg_claude_latest_session_id /nonexistent/repository
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
 
 @test "borg_claude_latest_session_id finds newest JSONL" {
-    local proj_dir="$HOME/.claude/projects/-test-project"
+    local proj_dir="$HOME/.claude/projects/-test-repository"
     mkdir -p "$proj_dir"
     touch "$proj_dir/aaa-old.jsonl"
     sleep 1
     touch "$proj_dir/bbb-new.jsonl"
 
-    run run_zsh_fn claude borg_claude_latest_session_id /test/project
+    run run_zsh_fn claude borg_claude_latest_session_id /test/repository
     [ "$status" -eq 0 ]
     [ "$output" = "bbb-new" ]
 }
