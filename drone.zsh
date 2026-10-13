@@ -298,7 +298,8 @@ get_left_pane() {
         | sort -n | head -1 | awk '{print $2}'
 }
 
-# Count repository windows (all except 'host')
+# Count every window except 'host'. The Queen's window (named queen or orchestrator) counts on purpose: while it
+# is open, cmd_down's "No repositories left" branch never runs `tmux kill-session`, which would close the Queen.
 repository_window_count() {
     tmux list-windows -t "$SESSION" -F '#W' 2>/dev/null | grep -vcx 'host' | tr -d ' '
 }

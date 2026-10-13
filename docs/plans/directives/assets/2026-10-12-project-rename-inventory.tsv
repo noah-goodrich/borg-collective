@@ -1277,7 +1277,7 @@ borg_core/manifest/test_shell.py	454	1	projects	contract	registry JSON key proje
 borg_core/manifest/test_shell.py	484	1	projects	contract	registry JSON key projects in fixture
 borg_core/manifest/test_shell.py	668	1	project	external	pyproject.toml
 borg_core/manifest/test_shell.py	1365	1	project	noise	noise: projected; was external
-borg_core/manifest/test_shell.py	1796	1	projects	external	R5: ambiguous resolved: retired merge-tree function apply_program_projects quoted in a docstring (same call as R2 #352 on its siblings)
+borg_core/manifest/test_shell.py	1796	1	projects	external	ambiguous resolved by Noah 2026-10-13 (R5 #370): retired merge-tree function apply_program_projects quoted in a docstring (same call as R2 #352 on its siblings)
 borg_core/manifest/test_shell.py	2186	1	project	external	pyproject.toml
 borg_core/manifest/test_shell.py	2190	1	project	external	pyproject.toml
 borg_core/manifest/test_shell.py	2199	1	project	external	pyproject.toml
@@ -2490,9 +2490,9 @@ drone.zsh	1516	1	PROJECT	repository	user-facing help about repo lookup
 drone.zsh	1527	1	project	repository	user-facing help about repo lookup
 evals/lifecycle-manifests/fixtures.sh	112	1	Project	contract	PROJECT_PLAN.md content/filename
 evals/lifecycle-manifests/fixtures.sh	113	1	PROJECT	contract	PROJECT_PLAN.md filename
-evals/lifecycle-manifests/fixtures.sh	141	1	PROJECT	repository	R5: ambiguous resolved: the fixture is a repository holding a small codebase; comment reworded
-evals/lifecycle-manifests/fixtures.sh	152	1	project	repository	R5: ambiguous resolved: helper builds a repository; renamed _eval_repo_with_source with its 6 callers in run.sh
-evals/lifecycle-manifests/fixtures.sh	163	1	project	repository	R5: ambiguous resolved: commit message of the fixture repository; reworded
+evals/lifecycle-manifests/fixtures.sh	141	1	PROJECT	repository	ambiguous resolved by Noah 2026-10-13 (R5 #370): the fixture is a repository holding a small codebase; comment reworded
+evals/lifecycle-manifests/fixtures.sh	152	1	project	repository	ambiguous resolved by Noah 2026-10-13 (R5 #370): helper builds a repository; renamed _eval_repo_with_source with its 6 callers in run.sh
+evals/lifecycle-manifests/fixtures.sh	163	1	project	repository	ambiguous resolved by Noah 2026-10-13 (R5 #370): commit message of the fixture repository; reworded
 evals/lifecycle-manifests/run.sh	9	1	project	repository	a real repo in eval scenario
 evals/lifecycle-manifests/run.sh	10	1	project	repository	a real repo in eval scenario
 evals/lifecycle-manifests/run.sh	12	1	project	repository	a real repo in eval scenario
@@ -2722,8 +2722,8 @@ lib/colors.zsh	9	1	project	repository	repo name variable
 lib/colors.zsh	9	2	projects	contract	registry JSON key projects
 lib/colors.zsh	12	1	project	repository	repo name variable
 lib/desktop.zsh	5	1	Project	external	Claude Desktop's own Project feature
-lib/desktop.zsh	32	1	project	repository	R5: ambiguous resolved: the local holds a Claude Desktop topic's display name; renamed to display_name
-lib/desktop.zsh	43	1	project	repository	R5: ambiguous resolved: the local holds a Claude Desktop topic's display name; renamed to display_name
+lib/desktop.zsh	32	1	project	repository	ambiguous resolved by Noah 2026-10-13 (R5 #370): the local holds a Claude Desktop topic's display name; renamed to display_name
+lib/desktop.zsh	43	1	project	repository	ambiguous resolved by Noah 2026-10-13 (R5 #370): the local holds a Claude Desktop topic's display name; renamed to display_name
 lib/drone-hooks.zsh	4	1	Projects	repository	repos shipping borg-hooks
 lib/drone-hooks.zsh	10	1	project	repository	hook cwd is the repo root
 lib/drone-hooks.zsh	10	2	PROJECT	contract	BORG_PROJECT_NAME env var for borg-hooks
