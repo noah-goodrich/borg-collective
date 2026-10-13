@@ -164,7 +164,9 @@ _stub_borg() {
  "focus": {"name": "p", "entry": {"path": "/w/p", "status": "waiting", "summary": "blended",
     "repo": "/w/.git"}, "plan": {"objective": "o"}, "checkpoints": ["a.md"],
     "checkpoint_head": "union", "directives": [1], "assimilated": [2]},
- "waiting": {"rows": [{"project": "p", "item": "mine"}, {"project": "q", "item": "theirs"}],
+ "waiting": {"rows": [{"project": "p", "item": "session", "ref": null},
+    {"project": "p", "item": "a repo PR", "ref": "o/r#9", "next_step": "merge #9"},
+    {"project": "q", "item": "session", "ref": null}],
     "hidden_lines": ["+3 more"], "degraded": null}}
 JSON
     _stub_borg "${BATS_TEST_TMPDIR}/repo.json"
@@ -181,9 +183,18 @@ JSON
     [ "${lines[0]}" = "false" ]
     [ "${lines[1]}" = "/w/p" ]
     PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
-    run jq -c '[.waiting.rows[].project], (.waiting | keys)' <<<"$output"
-    [ "${lines[0]}" = '["p"]' ]
+    run jq -c '[.waiting.rows[] | [.project, .item, .ref]], (.waiting | keys)' <<<"$output"
+    [ "${lines[0]}" = '[["p","session",null]]' ]
     [ "${lines[1]}" = '["degraded","rows"]' ]
+}
+
+@test "scope: the repository page keeps only the session row, never repository PR rows" {
+    run _section '## Repository scope' '## Fallback'
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"including the repository's open-PR rows"* ]] || false
+    [[ "$output" == *'keep only that row and drop every row with a `ref`'* ]] || false
+    [[ "$output" == *'no PR rows'* ]] || false
+    [[ "$output" == *"The session row's \`next_step\`"* ]] || false
 }
 
 @test "scope: Step 1 pipe, Queen arm, keeps the whole document and collapses directives" {

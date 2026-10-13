@@ -35,7 +35,8 @@ bash -c 'set -o pipefail; borg link --json [<project>] | jq "if .scope.kind == \
     titles: [limit(5; .[].title)]})))
   else (.scope.repository as \$r | {version, generated_at, scope,
     entry: (.focus.entry | del(.summary)),
-    waiting: {rows: [.waiting.rows[] | select(.project == \$r)], degraded: .waiting.degraded}})
+    waiting: {rows: [.waiting.rows[] | select(.project == \$r and .item == \"session\")],
+      degraded: .waiting.degraded}})
   end"'
 ```
 
@@ -228,9 +229,9 @@ bash -c 'ls -1 "<entry.path>/.borg/checkpoints" 2>/dev/null | grep "[.]md$" | so
 
 Read the newest file with the Read tool at `<entry.path>/.borg/checkpoints/<newest>`. The summary is its tl;dr, else its first Accomplished bullet; give the 2-3 things that matter. The "recent" line is the up-to-3 names from the listing. An empty listing or a missing directory is the normal case for a fresh worktree: say "no checkpoint here yet" and suggest `/borg-link-up` in this directory. Never fall back to a checkpoint from another directory.
 
-4. **This directory's waiting row(s)**, from `.waiting.rows` (the pipe kept only rows whose `project` is `scope.repository`). One line per row: the `next_step`, the `item` and `age`. `.waiting.degraded` is a note when the sweep failed; say it once. Add nothing else to the block: no manifest decisions, no `hidden_lines`, no other project's rows. With no rows print `nothing waits on you here`.
+4. **This directory's waiting row**, from `.waiting.rows`. The engine labels EVERY waiting row with this directory's project name, including the repository's open-PR rows (`merge #N`, `fix #N CI`), which belong to the whole repository and show up identically on every worktree page. The pipe therefore kept only the directory's own session row (`item` is `session`, `ref` null). If you ran without the pipe, keep only that row and drop every row with a `ref`. Print it as the `next_step`, the `item` and `age`. `.waiting.degraded` is a note when the sweep failed; say it once. Add nothing else to the block: no PR rows, no manifest decisions, no `hidden_lines`, no other project's rows. With no session row print `nothing waits on you here`.
 
-5. **Next action, one line.** The first waiting row's `next_step`; else, when `status` is `waiting`, the `waiting_reason`; else the newest checkpoint's own next-steps line; else "nothing pending here". If the checkpoint claims in-flight work but `relative_activity` shows this directory has gone idle, name that disagreement in the same line and recommend the fix, the way `/borg-recon` does. Use judgment on `relative_activity` — there is no fixed day threshold in the data.
+5. **Next action, one line.** The session row's `next_step`; else, when `status` is `waiting`, the `waiting_reason`; else the newest checkpoint's own next-steps line; else "nothing pending here". If the checkpoint claims in-flight work but `relative_activity` shows this directory has gone idle, name that disagreement in the same line and recommend the fix, the way `/borg-recon` does. Use judgment on `relative_activity` — there is no fixed day threshold in the data.
 
 **Skeleton:**
 
