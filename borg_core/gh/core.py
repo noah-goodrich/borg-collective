@@ -46,8 +46,10 @@ def classify(view: dict) -> dict:
             failing.append(_name(check))
         if bucket == "no_runner":
             found = _RUN_ID.search(check.get("detailsUrl") or "")
-            if found and found.group(1) not in run_ids:
-                run_ids.append(found.group(1))
+            # JUSTIFICATION: stdlib stream/regex/method access is a two-step chain by design
+            run_id = found.group(1) if found else ""  # pylint: disable=clean-arch-demeter
+            if run_id and run_id not in run_ids:
+                run_ids.append(run_id)
     if counts["fail"]:
         verdict = FAILING
     elif counts["cancelled_no_runner"]:
@@ -68,7 +70,8 @@ def classify(view: dict) -> dict:
     }
 
 
-def wait_for_verdict(
+# JUSTIFICATION: independent keyword-passed knobs of the poll loop; a config object would just rename them
+def wait_for_verdict(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     fetch: Callable[[], dict],
     sleep: Callable[[], None],
     expired: Callable[[], bool],
