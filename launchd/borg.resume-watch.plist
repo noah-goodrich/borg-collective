@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>{{LABEL}}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{{RESUME_BIN}}</string>
+        <string>watch</string>
+        <string>--once</string>
+    </array>
+    <!-- One watcher pass every 30s. RunAtLoad is false on purpose: the first pass comes one interval after
+         bootstrap, so installing never injects anything the moment it runs. -->
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StartInterval</key>
+    <integer>30</integer>
+    <!-- launchd hands jobs a minimal environment. USER is required by claude -p (same as usage-watch), PATH must
+         carry jq, tmux and the claude directory, and BORG_CLAUDE_BIN is the ABSOLUTE claude path the probe uses. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>USER</key>
+        <string>{{USER}}</string>
+        <key>HOME</key>
+        <string>{{HOME}}</string>
+        <key>PATH</key>
+        <string>{{PATH_VALUE}}</string>
+        <key>XDG_STATE_HOME</key>
+        <string>{{XDG_STATE_HOME}}</string>
+        <key>BORG_CLAUDE_BIN</key>
+        <string>{{CLAUDE_BIN}}</string>
+    </dict>
+    <!-- stdout is discarded: a pass prints a summary line every 30s and nothing rotates the log. Real problems
+         go to stderr. -->
+    <key>StandardOutPath</key>
+    <string>/dev/null</string>
+    <key>StandardErrorPath</key>
+    <string>{{LOG_DIR}}/resume-watch.stderr.log</string>
+</dict>
+</plist>

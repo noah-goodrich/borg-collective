@@ -457,6 +457,19 @@ _launchd_install_extensions
 info "Running borg setup..."
 "$BORG_HOME/borg.zsh" setup
 
+# ── 4b. borg-resume watcher job + global allowlist (S12) ─────────────────────
+#
+# Runs AFTER `borg setup` so ~/.claude/bin/borg-resume and ~/.claude/lib/borg are already in place. The
+# watcher is a LaunchAgent (every 30s, RunAtLoad off). The three D10 allowlist entries are NOT merged here:
+# `borg setup` owns settings.json and carries them from config/claude/settings.base.json. BORG_RESUME_WATCH=0
+# is the opt-out for both (watcher booted out and not installed, allowlist entries not merged).
+source "$BORG_HOME/lib/resume-install.sh"
+
+info "Installing borg-resume watcher (launchd, every 30s)..."
+RESUME_LABEL="$(_borg_launchd_label resume-watch)"
+_launchd_retire_legacy resume-watch "$RESUME_LABEL"
+borg_resume_install_watcher "$BORG_HOME" "$RESUME_LABEL" "$LA_DIR" "$LOG_DIR"
+
 # ── 5. Plugin detection ──────────────────────────────────────────────────────
 
 # Plugin check (REQUIRED): borg hooks are now owned by the borg-collective plugin.

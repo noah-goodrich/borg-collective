@@ -49,16 +49,19 @@ case "$_ev" in
 esac
 
 # claude is this script's parent; borg-resume runs as our child, so hand the pid over explicitly.
-{ printf '%s' "$_payload" | BORG_RESUME_CLAUDE_PID="$PPID" "$_bin" record "$_le" >/dev/null 2>&1; } 2>/dev/null
+# stderr is captured (first line only is kept) so a failure such as an uninstalled lib lands in hook.log
+# with its reason.
+_err="$({ printf '%s' "$_payload" | BORG_RESUME_CLAUDE_PID="$PPID" "$_bin" record "$_le" >/dev/null; } 2>&1)"
 _rc=$?
 if [ "$_rc" -ne 0 ]; then
     _dir="${BORG_RESUME_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/borg/resume}"
     _log="$_dir/hook.log"
+    _err="$(printf '%s' "$_err" | head -n 1 | cut -c1-200)"
     {
         mkdir -p "$_dir"
         # Keep the log bounded without a rotation dependency: drop it when it passes ~64KB.
         [ "$(wc -c <"$_log" 2>/dev/null || echo 0)" -gt 65536 ] && rm -f "$_log"
-        printf '%s %s rc=%s\n' "$(date +%s)" "$_le" "$_rc" >>"$_log"
+        printf '%s %s rc=%s %s\n' "$(date +%s)" "$_le" "$_rc" "$_err" >>"$_log"
     } 2>/dev/null
 fi
 exit 0

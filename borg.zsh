@@ -1788,16 +1788,10 @@ _borg_launch_in_tmux() {
 # Substitutes __DOTFILES_DIR__ in base before merging. Additive only — never removes entries.
 # Usage: _borg_merge_settings_permissions <base> <target> <dotfiles_dir>
 _borg_merge_settings_permissions() {
-    local base="$1" target="$2" dotfiles_dir="${3:-}"
-    [[ -f "$base" && -f "$target" ]] || return 0
-    local base_json tmp
-    base_json=$(sed "s|__DOTFILES_DIR__|${dotfiles_dir}|g" "$base")
-    tmp="$target.tmp.$$"
-    jq --argjson base "$base_json" \
-        '(.permissions.allow // []) as $live |
-         ($base.permissions.allow // []) as $new |
-         .permissions.allow = ($live + $new | unique)' \
-        "$target" > "$tmp" && mv "$tmp" "$target" || { rm -f "$tmp"; return 1; }
+    # The merge lives in lib/resume-install.sh (S12): it also resolves a symlinked target, writes through it,
+    # keeps the live order, and backs the file up when (and only when) it changes.
+    source "$BORG_HOME/lib/resume-install.sh"
+    borg_merge_settings_allow "$@" || { warn "settings merge into ${2:-?} failed; left as it was"; return 0; }
 }
 
 # Register a hook in a settings.json file. Skips if already registered.
@@ -2258,6 +2252,14 @@ CONF
             chmod +x "$CLAUDE_BIN_DIR/$uname"
             info "  $uname"
         done
+
+        # S12 (borg-resume): bin/borg-resume finds its lib at ../lib/borg, so install lib/borg beside bin.
+        if [[ -d "$BORG_HOME/lib/borg" && -f "$BORG_HOME/lib/resume-install.sh" ]]; then
+            info "Installing borg-resume lib..."
+            source "$BORG_HOME/lib/resume-install.sh"
+            borg_resume_install_lib "$BORG_HOME/lib/borg" "$CLAUDE_DIR/lib/borg" \
+                || warn "borg-resume lib install incomplete: borg-resume may be dark until 'borg setup' is re-run"
+        fi
 
         # Ensure ~/.claude/bin is in PATH for this session and future shells
         if [[ ":$PATH:" != *":$CLAUDE_BIN_DIR:"* ]]; then

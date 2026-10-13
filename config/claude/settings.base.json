@@ -95,6 +95,9 @@
       "Bash(shellcheck:*)",
       "Bash(shasum:*)",
       "Bash(run-in:*)",
+      "Bash(__HOME__/.claude/bin/borg-resume:*)",
+      "Bash(borg-resume:*)",
+      "Read(~/.local/state/borg/resume/**)",
       "mcp__claude_ai_Supabase__*"
     ]
   },
