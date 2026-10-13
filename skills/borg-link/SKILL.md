@@ -30,16 +30,16 @@ Vocabulary: a *repository* is the git repo; a *worktree* is a linked checkout re
 ONE call serves every scope. Run it once, with the project name appended only when the user gave one:
 
 ```bash
-bash -c 'set -o pipefail; borg link --json [<project>] | jq "if .scope.unregistered == true
+borg link --json [<project>] | jq 'if .scope.unregistered == true
   then {version, generated_at, scope}
-  elif .scope.kind == \"orchestrator\"
+  elif .scope.kind == "orchestrator"
   then (.directives |= (group_by(.project) | map({project: .[0].project, n: length,
     titles: [limit(5; .[].title)]})))
-  else (.scope.repository as \$r | {version, generated_at, scope,
+  else (.scope.repository as $r | {version, generated_at, scope,
     entry: (.focus.entry | del(.summary)),
-    waiting: {rows: [.waiting.rows[] | select(.project == \$r and .item == \"session\")],
+    waiting: {rows: [.waiting.rows[] | select(.project == $r and .item == "session")],
       degraded: .waiting.degraded}})
-  end"'
+  end'
 ```
 
 Then branch, and only on this:
@@ -217,18 +217,16 @@ This page is about exactly ONE directory: `.entry.path`, the directory the engin
 1. **Identity.** `.entry.path` plus branch and worktree relationship, from git on that path (one call):
 
 ```bash
-bash -c 'git -C "<entry.path>" rev-parse --abbrev-ref HEAD; git -C "<entry.path>" rev-parse --path-format=absolute --git-dir --git-common-dir; git -C "<entry.path>" rev-parse --short HEAD'
+git -C "<entry.path>" rev-parse --abbrev-ref HEAD
+git -C "<entry.path>" rev-parse --path-format=absolute --git-dir --git-common-dir
+git -C "<entry.path>" rev-parse --short HEAD
 ```
 
 The first line is the branch; when it is `HEAD` the checkout is detached, so write `detached at <short sha>` using the fourth line (the short sha) instead of a branch name. The two paths on the next two lines are equal for a main checkout; when they differ this directory is a linked worktree, and the worktree-of path is the common dir without its trailing `/.git` (`.entry.repo` is the same common dir as the registry recorded it). If git fails (the path is missing or not a repository), print the path and say identity is unavailable. Do not look the parent up in the registry.
 
 2. **Session and status**, all from `.entry`: `status`, `relative_activity`, `waiting_reason` when present, `has_uncommitted_changes`, `has_live_window` when present (null or absent means unknown, not false), and `tmux_window`. One or two plain lines.
 
-3. **This directory's own checkpoints, read by you from `<entry.path>/.borg/checkpoints` and from nowhere else.** An older engine's `focus.checkpoints`, `focus.checkpoint_head` and `entry.summary` are read across every checkout of the repository, so they describe other worktrees too; the pipe drops them either way and you must not reconstruct them. List the directory, newest filename first (a NAME sort, the same as the engine's):
-
-```bash
-bash -c 'ls -1 "<entry.path>/.borg/checkpoints" 2>/dev/null | grep "[.]md$" | sort -r | head -3'
-```
+3. **This directory's own checkpoints, read by you from `<entry.path>/.borg/checkpoints` and from nowhere else.** An older engine's `focus.checkpoints`, `focus.checkpoint_head` and `entry.summary` are read across every checkout of the repository, so they describe other worktrees too; the pipe drops them either way and you must not reconstruct them. List the directory with the Glob tool on `<entry.path>/.borg/checkpoints/*.md` (or Read the directory), then sort the names newest first yourself (a NAME sort, the same as the engine's) and keep the first 3. A missing directory is an empty listing.
 
 Read the newest file with the Read tool at `<entry.path>/.borg/checkpoints/<newest>`. The summary is its tl;dr, else its first Accomplished bullet; give the 2-3 things that matter. The "recent" line is the up-to-3 names from the listing. An empty listing or a missing directory is the normal case for a fresh worktree: say "no checkpoint here yet" and suggest `/borg-link-up` in this directory. Never fall back to a checkpoint from another directory.
 
@@ -262,18 +260,15 @@ one. `RepositoryNotFound` is only raised when a repository name is passed (in `_
 a probe that drops the argument makes that row unreachable. If Step 1's failing call was the overview
 (no repository), that row simply won't fire for it — that is correct, not a bug.
 
-Capture every branch input in one call (no `$()`, per repo rule). Substitute `<project>` with the
-same argument (or nothing, for an overview) that Step 1 used:
+Run the engine once more as a plain command. Substitute `<project>` with the same argument (or nothing, for an overview) that Step 1 used:
 
 ```bash
-bash -c 'borg link --json <project> >/tmp/borg-link.out 2>/tmp/borg-link.err
-echo "rc=$?"
-wc -c </tmp/borg-link.out
-grep -c "not in registry" /tmp/borg-link.err
-head -3 /tmp/borg-link.err'
+borg link --json <project>
 ```
 
-On `rc=0`, read `.version` from `/tmp/borg-link.out` with `jq .version /tmp/borg-link.out`.
+The tool result shows the exit status, stdout and stderr; no redirect or capture is needed. Call the exit status `rc` below, and check stderr for `not in registry` or `jq:`.
+
+On `rc=0`, read `.version` from the JSON it printed.
 
 | what you saw                    | what to do                                                              |
 | -------------------------------- | ------------------------------------------------------------------------ |
