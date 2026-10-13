@@ -365,6 +365,9 @@ EOF
     # guard let two worktrees of one clone write the same filename with different bodies (measured:
     # three such pairs, two inside the same minute).
     #
+    # 28 SINCE 2026-10-12: `resume` (borg-resume v2, slice S14: status, cancel, run, pause) is the next deliberate
+    # addition and a thin delegate to bin/borg-resume. The floor reading above still holds.
+    #
     # THE CRITERION IS STILL MET, and that is why the constant moves rather than the assertion.
     # AC1 asked for "net one command shorter than at plan start" — 27 at plan start, so anything
     # at or below 26 satisfies it, and the comment above already records that this is a FLOOR on
@@ -374,7 +377,7 @@ EOF
     # answer is on the line above. Keep it exact.
     run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{n++} END{print n+0}'"
     [ "$status" -eq 0 ]
-    [ "$output" = "27" ]
+    [ "$output" = "28" ]
 }
 
 # The count alone reaches 26 if someone deletes `doctor` instead of `recon` — and four dispatch
@@ -4486,4 +4489,40 @@ EOF
     cd "$decoy"
     run zsh "$BORG" rm no-such-project
     [[ "$output" != *"DECOY-SHADOWED"* ]] || false
+}
+
+# ── borg resume (borg-resume v2, slice S14) ──────────────────────────────────────────────────────
+# The zsh arm is a thin delegate to bin/borg-resume; these run it under a real zsh against an isolated ledger.
+
+@test "contract: borg resume status and pause/unpause delegate to borg-resume" {
+    command -v jq >/dev/null || skip "jq not installed"
+    export BORG_RESUME_DIR="${BATS_TEST_TMPDIR}/resume"
+    run_zsh_borg resume status
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"no records"* ]] || false
+    run_zsh_borg resume pause
+    [ "$status" -eq 0 ]
+    [ -e "$BORG_RESUME_DIR/DISABLED" ]
+    run_zsh_borg resume status --json
+    [ "$(echo "$output" | jq -r .paused)" = "true" ]
+    run_zsh_borg resume unpause
+    [ ! -e "$BORG_RESUME_DIR/DISABLED" ]
+}
+
+@test "contract: borg resume cancel and run report an unknown rid, and an unknown verb prints usage" {
+    command -v jq >/dev/null || skip "jq not installed"
+    export BORG_RESUME_DIR="${BATS_TEST_TMPDIR}/resume"
+    run_zsh_borg resume cancel r_nope00
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"no such record"* ]] || false
+    run_zsh_borg resume run r_nope00
+    [ "$status" -eq 1 ]
+    run_zsh_borg resume bogus
+    [ "$status" -ne 0 ]
+    [[ "$output" == *usage* ]] || false
+}
+
+@test "contract: borg help lists resume" {
+    run_zsh_borg help
+    [[ "$output" == *"resume <verb>"* ]] || false
 }

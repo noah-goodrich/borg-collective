@@ -1169,6 +1169,18 @@ _borg_mark_closed() {
     return 0
 }
 
+# borg resume <verb>: thin delegate to bin/borg-resume (the ledger CLI). BORG_RESUME_BIN overrides the binary (tests).
+cmd_resume() {
+    local bin="${BORG_RESUME_BIN:-$BORG_HOME/bin/borg-resume}" verb="${1:-status}"
+    [[ $# -gt 0 ]] && shift
+    case "$verb" in
+        status|cancel|run|pause|unpause|defer) ;;
+        *) die "usage: borg resume <status [--json] [--all] | cancel <rid>|--session <sid>|--all | run <rid> [--force] | pause | unpause | defer <rid> [<until>]>" ;;
+    esac
+    [[ -x "$bin" ]] || die "borg-resume not found at $bin"
+    "$bin" "$verb" "$@"
+}
+
 cmd_down() {
     info "Severing link to the Collective..."
 
@@ -3188,6 +3200,11 @@ cmd_help() {
     version             Print the installed borg version (alias: --version, -V)
     store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
+    resume <verb>       Interruption ledger: status [--json] | cancel <rid> | run <rid> [--force] | pause | unpause
+                          status    Records by state: rid, project, class, cause, due, last reason; pause state
+                          cancel    <rid> | --session <sid> | --all: stop a record (the watcher applies it)
+                          run       Make <rid> due now; still goes through the gate and the idle proof
+                          pause     Create the DISABLED sentinel: nothing injects, recording continues
     nanoprobes          List recent nanoprobe (subagent) runs (alias: np)
     nanoprobe-log <id>  Show transcript for a nanoprobe run (id prefix matches)
     spend               Main-vs-subagent spend split + trend (this machine; --project/--by-model/--last)
@@ -3799,6 +3816,7 @@ case "${1:-help}" in
     start)    cmd_start "${@:2}" ;;
     focus)    cmd_focus "${@:2}" ;;
     cortex-resume) cmd_cortex_resume "${@:2}" ;;
+    resume)         cmd_resume "${@:2}" ;;
     nanoprobes|np)  cmd_nanoprobes "${@:2}" ;;
     nanoprobe-log)  cmd_nanoprobe_log "${@:2}" ;;
     spend)          cmd_spend "${@:2}" ;;

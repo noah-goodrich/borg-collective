@@ -621,7 +621,12 @@ _rw_confirmed_pass() {
         _sd="${_loc#*$'\t'}"
         _file="$_t"
         case "$_scope" in
-            agent:*) _file="$_sd/subagents/agent-${_scope#agent:}.jsonl" ;;
+            # The gate records the confirmation baseline from this same file (main when the agent file is missing).
+            agent:*)
+                if [ -n "$_sd" ] && [ -f "$_sd/subagents/agent-${_scope#agent:}.jsonl" ]; then
+                    _file="$_sd/subagents/agent-${_scope#agent:}.jsonl"
+                fi
+                ;;
         esac
         _lines=0
         [ -f "$_file" ] && _lines="$(wc -l <"$_file" | tr -d ' ')"
@@ -757,6 +762,13 @@ borg_resume_watch_once() {
     case "$_hours" in "" | *[!0-9]*) _hours=72 ;; esac
     _cut=$((_now - _hours * 3600))
 
+    # S14 (lib/borg/resume-cli.sh): the cancel and run events are folded right after the defers.
+    # shellcheck source=/dev/null
+    if [ -n "${BORG_RESUME_LIBDIR:-}" ] && [ -f "$BORG_RESUME_LIBDIR/resume-cli.sh" ]; then
+        . "$BORG_RESUME_LIBDIR/resume-cli.sh"
+    else
+        _rw_log "ERROR resume-cli.sh missing from ${BORG_RESUME_LIBDIR:-unset}: cancel and run events are NOT applied"
+    fi
     for _f in "$_d"/events/*.jsonl; do
         [ -f "$_f" ] || continue
         _sid="${_f##*/}"
@@ -764,6 +776,7 @@ borg_resume_watch_once() {
         borg_resume_valid_sid "$_sid" || continue
         _rw_fold_hooks "$_sid"
         _rw_fold_defers "$_sid"
+        command -v borg_resume_cli_fold >/dev/null 2>&1 && borg_resume_cli_fold "$_sid"
     done
     for _f in "$_d"/sessions/*.json; do
         [ -f "$_f" ] || continue
@@ -773,8 +786,8 @@ borg_resume_watch_once() {
         [ "$(_ri_mtime "$_f")" -ge "$_cut" ] || continue
         _rw_scan_session "$_sid"
     done
-    # S10 liveness detector (lib/borg/resume-liveness.sh): dead process or pane with open work, sticky close, stall
-    # watchdog. Runs before the confirmed pass so a stall wins over the 30-minute timeout.
+    # S10 liveness detector (lib/borg/resume-liveness.sh): dead process or pane with open work, sticky close.
+    # (The stall watchdog is the S9 gate, below.)
     if [ -n "${BORG_RESUME_LIBDIR:-}" ] && [ -f "$BORG_RESUME_LIBDIR/resume-liveness.sh" ]; then
         # shellcheck source=/dev/null
         . "$BORG_RESUME_LIBDIR/resume-liveness.sh" && borg_resume_liveness_pass

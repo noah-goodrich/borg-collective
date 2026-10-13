@@ -159,7 +159,7 @@ def test_main_adapters_reaches_the_engine_not_the_gate(isolated_env, capsys):
 
 
 def test_main_modifier_alone_does_not_open_the_gate(isolated_env):
-    """--since/--sources/--projects are modifiers, not modes -- see the zsh sibling test in
+    """--since/--sources/--repositories are modifiers, not modes -- see the zsh sibling test in
     cli_contract.bats ("a recon modifier alone is not a machine flag") for why this needs its own
     case rather than trusting --json/--adapters coverage alone."""
     with pytest.raises(SystemExit) as exc:
@@ -168,9 +168,9 @@ def test_main_modifier_alone_does_not_open_the_gate(isolated_env):
     assert "was retired" in str(exc.value.code)
 
 
-def _item(project, ref, state="open", owner="agent", urgency="fyi", action_needed=False):
+def _item(repository, ref, state="open", owner="agent", urgency="fyi", action_needed=False):
     return {
-        "project": project,
+        "project": repository,
         "source": "demo",
         "ref": ref,
         "title": ref,
@@ -187,14 +187,14 @@ def test_run_json_output_detects_contradiction_end_to_end(isolated_env, capsys):
     """AC1: drive _collect_contradictions through cli._run's real fan-out path, not a direct call.
 
     A checkpoint on disk lists PR-42 as a blocker; the adapter reports it resolved. Before this
-    test, every existing test left by_project empty for every project, so the `if not items:
-    continue` branch always fired and read_checkpoint_blockers()/project_contradictions() never
-    ran (arc 48->50). This test forces a non-empty items list for a project that also has a real
+    test, every existing test left by_repository empty for every repository, so the `if not items:
+    continue` branch always fired and read_checkpoint_blockers()/repository_contradictions() never
+    ran (arc 48->50). This test forces a non-empty items list for a repository that also has a real
     checkpoint on disk, so the full chain executes.
     """
     tmp, adapters_dir = isolated_env
-    project_dir = tmp / "alpha"
-    checkpoints_dir = project_dir / ".borg" / "checkpoints"
+    repository_dir = tmp / "alpha"
+    checkpoints_dir = repository_dir / ".borg" / "checkpoints"
     checkpoints_dir.mkdir(parents=True)
     (checkpoints_dir / "2025-01-01-0000.md").write_text(
         "# Checkpoint\n\n## 4. Blockers\n- PR-42 still blocking release\n\n## 5. Next\n- n/a\n"
@@ -217,13 +217,13 @@ def test_run_json_output_detects_contradiction_end_to_end(isolated_env, capsys):
     assert "resolved" in contradiction["source_says"]
 
 
-def test_run_projects_filter_excludes_other_projects_end_to_end(tmp_path, monkeypatch, capsys):
-    """AC2: drive _filter_by_project through cli._run with an adapter that over-returns items.
+def test_run_repositories_filter_excludes_other_repositories_end_to_end(tmp_path, monkeypatch, capsys):
+    """AC2: drive _filter_by_repository through cli._run with an adapter that over-returns items.
 
     Before this test, every existing test passed keep_names=None/empty, so only the early-return
-    path (`if not keep_names: return by_project`) ever ran; the actual filter (lines 61-62) was
+    path (`if not keep_names: return by_repository`) ever ran; the actual filter (lines 61-62) was
     unverified. Here the registry only has 'alpha', but the adapter deliberately also emits an item
-    for 'beta' (simulating an adapter that over-returns for other projects) to prove --projects is
+    for 'beta' (simulating an adapter that over-returns for other repositories) to prove --repositories is
     authoritative even over adapter output, not just registry scoping.
     """
     monkeypatch.setenv("BORG_DIR", str(tmp_path / "borg-dir"))

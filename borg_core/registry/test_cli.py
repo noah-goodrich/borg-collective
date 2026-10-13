@@ -28,29 +28,29 @@ def isolated_env(tmp_path, monkeypatch):
 # ── cmd_add ────────────────────────────────────────────────────────────────────
 
 
-def test_cmd_add_registers_new_project_keyed_by_basename(isolated_env, capsys):
-    proj_dir = isolated_env / "sample-project"
+def test_cmd_add_registers_new_repository_keyed_by_basename(isolated_env, capsys):
+    proj_dir = isolated_env / "sample-repository"
     proj_dir.mkdir()
 
     exit_code = cli.cmd_add(str(proj_dir))
 
     out = capsys.readouterr().out
-    assert "Registered: sample-project" in out
+    assert "Registered: sample-repository" in out
     registry = shell.read_registry()
-    assert registry["projects"]["sample-project"]["path"] == str(proj_dir)
-    assert registry["projects"]["sample-project"]["source"] == "cli"
+    assert registry["projects"]["sample-repository"]["path"] == str(proj_dir)
+    assert registry["projects"]["sample-repository"]["source"] == "cli"
     assert exit_code == 0  # registration succeeded; a missing Claude session is not an error
 
 
 def test_cmd_add_with_no_path_registers_current_directory(isolated_env, capsys, monkeypatch):
-    proj_dir = isolated_env / "cwd-project"
+    proj_dir = isolated_env / "cwd-repository"
     proj_dir.mkdir()
     monkeypatch.chdir(proj_dir)
 
     exit_code = cli.cmd_add(None)
 
     out = capsys.readouterr().out
-    assert "Registered: cwd-project" in out
+    assert "Registered: cwd-repository" in out
     assert exit_code == 0
 
 
@@ -73,16 +73,16 @@ def test_cmd_add_with_discoverable_session_exits_0_and_prints_latest_session(iso
 
 
 def test_cmd_add_upserts_preserving_unrelated_existing_fields(isolated_env, capsys):
-    proj_dir = isolated_env / "existing-project"
+    proj_dir = isolated_env / "existing-repository"
     proj_dir.mkdir()
-    shell.write_registry({"projects": {"existing-project": {"path": "/old", "pinned": True}}})
+    shell.write_registry({"projects": {"existing-repository": {"path": "/old", "pinned": True}}})
 
     cli.cmd_add(str(proj_dir))
     capsys.readouterr()
 
     registry = shell.read_registry()
-    assert registry["projects"]["existing-project"]["pinned"] is True
-    assert registry["projects"]["existing-project"]["path"] == str(proj_dir)
+    assert registry["projects"]["existing-repository"]["pinned"] is True
+    assert registry["projects"]["existing-repository"]["path"] == str(proj_dir)
 
 
 def test_cmd_add_keeps_an_existing_short_tmux_window(isolated_env, capsys):
@@ -125,7 +125,7 @@ def test_cmd_add_fresh_and_null_entries_still_take_the_computed_window(isolated_
 # ── cmd_rm ─────────────────────────────────────────────────────────────────────
 
 
-def test_cmd_rm_removes_existing_project(isolated_env, capsys):
+def test_cmd_rm_removes_existing_repository(isolated_env, capsys):
     shell.write_registry({"projects": {"keep-me": {"path": "/tmp/keep"}, "drop-me": {"path": "/tmp/drop"}}})
 
     exit_code = cli.cmd_rm("drop-me")
@@ -138,7 +138,7 @@ def test_cmd_rm_removes_existing_project(isolated_env, capsys):
     assert "keep-me" in registry["projects"]
 
 
-def test_cmd_rm_with_no_project_argument_dies_with_usage(isolated_env):
+def test_cmd_rm_with_no_repository_argument_dies_with_usage(isolated_env):
     shell.write_registry({"projects": {"keep-me": {"path": "/tmp/keep"}}})
 
     with pytest.raises(SystemExit) as exc_info:
@@ -156,11 +156,11 @@ def test_cmd_rm_usage_message_matches_contract(isolated_env, capsys):
     assert "usage: borg rm" in err
 
 
-def test_cmd_rm_of_unregistered_project_dies_cleanly(isolated_env, capsys):
+def test_cmd_rm_of_unregistered_repository_dies_cleanly(isolated_env, capsys):
     shell.write_registry({"projects": {"keep-me": {"path": "/tmp/keep"}}})
 
     with pytest.raises(SystemExit) as exc_info:
-        cli.cmd_rm("ghost-project")
+        cli.cmd_rm("ghost-repository")
 
     assert exc_info.value.code == 1
     err = capsys.readouterr().err
@@ -226,7 +226,7 @@ def test_main_ignores_extra_positional_arguments_like_zsh_did(isolated_env, caps
 
 
 def test_main_treats_dash_prefixed_value_as_literal_data_not_a_flag(isolated_env, capsys, monkeypatch):
-    # zsh's cmd_rm has no flag parsing -- "--help" is just a project name to look up, and the
+    # zsh's cmd_rm has no flag parsing -- "--help" is just a repository name to look up, and the
     # lookup fails normally. argparse would instead intercept --help and print usage text with
     # exit 0; this pins the fix.
     monkeypatch.chdir(isolated_env)
@@ -236,7 +236,7 @@ def test_main_treats_dash_prefixed_value_as_literal_data_not_a_flag(isolated_env
 
     assert exc_info.value.code == 1
     err = capsys.readouterr().err
-    assert "project '--help' not in registry" in err
+    assert "repository '--help' not in registry" in err
 
 
 def test_main_wraps_malformed_registry_in_a_clean_die_not_a_traceback(isolated_env, capsys):
@@ -316,9 +316,9 @@ def test_backfill_repo_groups_a_worktree_with_its_parent(git_env, capsys):
 
     assert cli.cmd_backfill_repo() == 0
 
-    projects = shell.read_registry()["projects"]
-    assert projects["sp"]["repo"] == projects["sp-feat"]["repo"]
-    assert projects["sp"]["repo"] is not None
+    repositories = shell.read_registry()["projects"]
+    assert repositories["sp"]["repo"] == repositories["sp-feat"]["repo"]
+    assert repositories["sp"]["repo"] is not None
     assert "filled 2" in capsys.readouterr().out
 
 
@@ -405,16 +405,16 @@ def test_cmd_add_records_a_null_repo_outside_a_repository(git_env):
 # ── window-name ────────────────────────────────────────────────────────────────
 
 
-def _seed(projects: dict) -> None:
-    shell.write_registry({"projects": projects})
+def _seed(repositories: dict) -> None:
+    shell.write_registry({"projects": repositories})
 
 
-def _window(project: str) -> str | None:
-    window: str | None = shell.read_registry()["projects"][project].get("tmux_window")
+def _window(repository: str) -> str | None:
+    window: str | None = shell.read_registry()["projects"][repository].get("tmux_window")
     return window
 
 
-def test_window_name_prints_stored_value_else_project_name(isolated_env, capsys):
+def test_window_name_prints_stored_value_else_repository_name(isolated_env, capsys):
     _seed({"alpha-beta-gamma": {"tmux_window": "abg"}, "widget": {}})
     assert cli.cmd_window_name(["alpha-beta-gamma"]) == 0
     assert cli.cmd_window_name(["widget"]) == 0
@@ -429,7 +429,7 @@ def test_window_name_set_writes_and_prints(isolated_env, capsys):
     assert entry["tmux_window"] == "wf" and entry["path"] == "/p"
 
 
-@pytest.mark.parametrize("bad, needle", [("a.b", "'.' or ':'"), ("", "empty"), ("taken", "name of project")])
+@pytest.mark.parametrize("bad, needle", [("a.b", "'.' or ':'"), ("", "empty"), ("taken", "name of repository")])
 def test_window_name_set_rejects_with_reason_and_writes_nothing(isolated_env, capsys, bad, needle):
     _seed({"me": {}, "taken": {}})
     with pytest.raises(SystemExit) as exc:
@@ -463,7 +463,7 @@ def test_window_name_derive_leaves_explicit_choice_alone(isolated_env, capsys):
     assert _window("alpha-beta-gamma") == "custom"
 
 
-def test_window_name_unknown_project_and_bad_args(isolated_env, capsys):
+def test_window_name_unknown_repository_and_bad_args(isolated_env, capsys):
     _seed({"me": {}})
     for argv in (["ghost"], [], ["me", "--bogus"], ["me", "--set"]):
         with pytest.raises(SystemExit) as exc:
@@ -492,9 +492,9 @@ def test_cmd_add_name_overrides_the_basename(isolated_env, capsys):
 
     cli.cmd_add(str(proj_dir), "widgets")
 
-    projects = shell.read_registry()["projects"]
-    assert list(projects) == ["widgets"]
-    assert projects["widgets"]["path"] == str(proj_dir)
+    repositories = shell.read_registry()["projects"]
+    assert list(repositories) == ["widgets"]
+    assert repositories["widgets"]["path"] == str(proj_dir)
     assert "Registered: widgets" in capsys.readouterr().out
 
 
@@ -561,11 +561,11 @@ def test_cmd_add_with_either_name_of_an_existing_twin_keeps_the_update_path(isol
 
     cli.cmd_add(str(proj_dir), "widget-kit")
 
-    projects = shell.read_registry()["projects"]
-    assert sorted(projects) == ["widget-kit", "widgets"]
-    assert projects["widget-kit"]["note"] == "twin"
-    assert projects["widget-kit"]["source"] == "cli"
-    assert projects["widgets"]["tmux_window"] == "wdg"
+    repositories = shell.read_registry()["projects"]
+    assert sorted(repositories) == ["widget-kit", "widgets"]
+    assert repositories["widget-kit"]["note"] == "twin"
+    assert repositories["widget-kit"]["source"] == "cli"
+    assert repositories["widgets"]["tmux_window"] == "wdg"
 
     before = shell.read_registry()
     with pytest.raises(SystemExit) as raised:

@@ -85,8 +85,8 @@ FORK_GIT = object()
 registry entry's null `repo` and means outside git (path-only key)."""
 
 
-def project_state_key(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> str:
-    """The filesystem-safe key naming one project DIRECTORY's machine-local state.
+def repository_state_key(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> str:
+    """The filesystem-safe key naming one repository DIRECTORY's machine-local state.
 
     `<repo12>-<path12>`, or `local-<path12>` outside any git repository, where `path12` is the first
     12 hex of sha256 over the PHYSICAL directory path (symlinks resolved, no trailing slash) and
@@ -103,7 +103,7 @@ def project_state_key(directory: str | os.PathLike[str], repo: object = FORK_GIT
 
     `repo` is the fast path for registry-driven readers: pass the registry entry's `repo` field (the
     git common dir `borg add` recorded; None/"" when the entry has none) and no git is forked, so
-    `borg link` over N projects costs zero forks instead of N. Left as FORK_GIT it asks git. A null
+    `borg link` over N repositories costs zero forks instead of N. Left as FORK_GIT it asks git. A null
     `repo` yields the path-only `local-` key, exactly as the resolver does outside git.
     """
     physical = os.path.realpath(os.fspath(directory))
@@ -123,19 +123,19 @@ def project_state_key(directory: str | os.PathLike[str], repo: object = FORK_GIT
     return f"{_digest12(repo_text) if repo_text else 'local'}-{_digest12(physical)}"
 
 
-def project_state_file(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> Path:
-    """`<state root>/projects/<key>/state.json` for a project directory. One `git rev-parse` unless
-    `repo` is supplied (see `project_state_key`); creates nothing. Siblings: `_borg_project_state_file`
+def repository_state_file(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> Path:
+    """`<state root>/projects/<key>/state.json` for a repository directory. One `git rev-parse` unless
+    `repo` is supplied (see `repository_state_key`); creates nothing. Siblings: `_borg_project_state_file`
     in lib/borg-hooks.sh and lib/state-root.zsh."""
-    return state_root() / "projects" / project_state_key(directory, repo) / "state.json"
+    return state_root() / "projects" / repository_state_key(directory, repo) / "state.json"
 
 
-def project_state_read_path(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> Path:
-    """The state.json to READ for a project: the per-project state-root copy if it exists, else the
+def repository_state_read_path(directory: str | os.PathLike[str], repo: object = FORK_GIT) -> Path:
+    """The state.json to READ for a repository: the per-repository state-root copy if it exists, else the
     legacy `<dir>/.borg/state.json` (also the answer when neither exists). AC5 expand phase: readers
     accept both before any writer moves. Reader-only. Siblings: `_borg_state_read_path` in
     lib/borg-hooks.sh and `borg_state_read_path` in lib/registry.zsh."""
-    new = project_state_file(directory, repo)
+    new = repository_state_file(directory, repo)
     return new if new.is_file() else Path(directory) / ".borg" / "state.json"
 
 

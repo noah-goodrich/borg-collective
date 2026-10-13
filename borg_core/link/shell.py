@@ -242,7 +242,7 @@ def read_state(repository_path: str | None, repo: object = paths.FORK_GIT) -> di
         return None
     # New per-repository path first, else legacy <dir>/.borg/state.json (AC5 expand). `repo` is the registry
     # entry's field: supplied, no git is forked; left at the default, paths asks git.
-    state_file = paths.project_state_read_path(directory, repo)
+    state_file = paths.repository_state_read_path(directory, repo)
     text = _read_text(state_file)
     if not text:
         return None
@@ -693,7 +693,7 @@ def sweep(repositories: dict, now: int | None = None) -> dict:
     with tempfile.TemporaryDirectory(prefix="borg-link.") as workdir:
         projects_file = os.path.join(workdir, "projects.json")
         try:
-            recon_shell.write_projects_file(repositories, projects_file)
+            recon_shell.write_repositories_file(repositories, projects_file)
         except (OSError, TypeError, ValueError) as exc:
             return grid.no_sweep([f"sweep: could not stage the repository list ({exc}) -- no adapter ran"])
         tracks = recon_shell.fanout(since, projects_file, adapters, timeout=sweep_timeout())

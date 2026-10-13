@@ -235,7 +235,7 @@ def _waiting(repositories: dict, scope: dict, local: bool, tracks: list[dict]) -
             if scope.get("kind") == "repository" and repo in repositories
             else repositories
         )
-        by_repository = recon_core.merge_by_project(tracks)
+        by_repository = recon_core.merge_by_repository(tracks)
         rows, _quiet, degraded, hidden = nextpick_cli.item_rows(scoped, local, False, swept=(by_repository, None))
     # JUSTIFICATION: a side block must never take the page down; degrade and say why.
     except Exception as exc:  # pylint: disable=broad-exception-caught

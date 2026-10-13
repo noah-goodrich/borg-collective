@@ -76,7 +76,7 @@ _bash_read() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_state_read "$2" $
     forked="$(_new_path)"
     fast_b="$(bash -c 'source "$1/lib/borg-hooks.sh" && _borg_project_state_file "$2" "$3"' _ "$ROOT" "$PROJ" "$COMMON")"
     fast_z="$(zsh -c 'source "$1/lib/state-root.zsh" && _borg_project_state_file "$2" "$3"' _ "$ROOT" "$PROJ" "$COMMON")"
-    fast_p="$(PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import project_state_file as f; print(f(sys.argv[1], sys.argv[2]))' "$PROJ" "$COMMON")"
+    fast_p="$(PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import repository_state_file as f; print(f(sys.argv[1], sys.argv[2]))' "$PROJ" "$COMMON")"
     [ "$forked" = "$fast_b" ]
     [ "$forked" = "$fast_z" ]
     [ "$forked" = "$fast_p" ]
@@ -89,7 +89,7 @@ _bash_read() { bash -c 'source "$1/lib/borg-hooks.sh" && _borg_state_read "$2" $
     [[ "$forked" == */projects/local-*/state.json ]]
     fast_b="$(bash -c 'source "$1/lib/borg-hooks.sh" && _borg_project_state_file "$2" ""' _ "$ROOT" "$plain")"
     fast_z="$(zsh -c 'source "$1/lib/state-root.zsh" && _borg_project_state_file "$2" ""' _ "$ROOT" "$plain")"
-    fast_p="$(PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import project_state_file as f; print(f(sys.argv[1], None))' "$plain")"
+    fast_p="$(PYTHONPATH="$ROOT" python3 -c 'import sys; from borg_core.paths import repository_state_file as f; print(f(sys.argv[1], None))' "$plain")"
     [ "$forked" = "$fast_b" ]
     [ "$forked" = "$fast_z" ]
     [ "$forked" = "$fast_p" ]

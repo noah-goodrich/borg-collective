@@ -8,7 +8,7 @@ would be ceremony. `backfill-repo` lives here rather than in `borg tidy` because
 Deliberately NOT argparse (unlike borg_core.recon.cli): the original cmd_add/cmd_rm have zero flag
 surface -- each reads only `$1` (`local ppath="${1:-$PWD}"` / `local project="${1:-}"`) and never
 references `$2` onward, so extra positional args are silently ignored, and a value like "-h" or
-"--help" is treated as ordinary data (a literal path/project name), not a flag. argparse's
+"--help" is treated as ordinary data (a literal path/repository name), not a flag. argparse's
 positional matching would reject extra args and auto-intercept -h/--help, which are both
 confirmed, real divergences from that behavior (found in adversarial review of this migration) --
 so for a genuinely zero-flag command, direct `argv` indexing is the more faithful port, not a step
@@ -17,7 +17,7 @@ backward from argparse.
 `add` has since gained ONE flag, `--name <name>` (see `_split_name_flag`); every other token is still data.
 
 `add` exits 0 whenever registration succeeds, with or without a discoverable Claude session. The old zsh
-cmd_add exited 1 for a brand-new project (an accident of `set -e` tripping on its last line), which silently
+cmd_add exited 1 for a brand-new repository (an accident of `set -e` tripping on its last line), which silently
 broke `borg add <path> && ...`; that contract was flipped on purpose (issue #306). Real failures (a --name
 that collides with a path held under another name) still exit non-zero.
 """
@@ -52,7 +52,7 @@ def _same_path(stored: str, ppath: str) -> bool:
     return shell.resolve_path(stored).rstrip("/") == ppath.rstrip("/")
 
 
-def _path_holders(projects: dict[str, dict], ppath: str) -> list[str]:
+def _path_holders(repositories: dict[str, dict], ppath: str) -> list[str]:
     """Every registered name that already holds `ppath`, in registry order.
 
     Usually zero or one. It is a list because the bug this check closes left twins behind: one
@@ -61,13 +61,13 @@ def _path_holders(projects: dict[str, dict], ppath: str) -> list[str]:
     """
     return [
         str(key)
-        for key, entry in projects.items()
+        for key, entry in repositories.items()
         if isinstance((entry or {}).get("path"), str) and _same_path(entry["path"], ppath)
     ]
 
 
 def cmd_add(path_arg: str | None, name_arg: str | None = None) -> int:
-    """`borg add [path] [--name <name>]` -- register a project. Returns 0 once the project is
+    """`borg add [path] [--name <name>]` -- register a repository. Returns 0 once the repository is
     registered, whether or not a Claude session exists yet; failures exit non-zero via `_die`.
 
     The name defaults to the folder basename; `--name` overrides it (a monorepo subfolder is
@@ -77,9 +77,9 @@ def cmd_add(path_arg: str | None, name_arg: str | None = None) -> int:
     """
     ppath = shell.resolve_path(path_arg or ".")
     name = name_arg or _basename(ppath)
-    projects = shell.read_registry().get("projects") or {}
+    repositories = shell.read_registry().get("projects") or {}
 
-    holders = _path_holders(projects, ppath)
+    holders = _path_holders(repositories, ppath)
     if holders and name not in holders:
         held = ", ".join(f"'{holder}'" for holder in holders)
         if name_arg:
@@ -89,8 +89,8 @@ def cmd_add(path_arg: str | None, name_arg: str | None = None) -> int:
 
     tmux_window = name if shell.tmux_window_exists(name) else None
     # An existing tmux_window is the registry's ONE window-name value (possibly a short or explicit
-    # name); a re-add must not overwrite it with the project name or None. Fresh adds are unchanged.
-    existing = projects.get(name) or {}
+    # name); a re-add must not overwrite it with the repository name or None. Fresh adds are unchanged.
+    existing = repositories.get(name) or {}
     keep_window = bool(existing.get("tmux_window"))
 
     session_id = shell.claude_latest_session_id(ppath)
@@ -120,14 +120,14 @@ def cmd_add(path_arg: str | None, name_arg: str | None = None) -> int:
     return 0
 
 
-def cmd_rm(project: str | None) -> int:
-    """`borg rm <project>` -- unregister a project."""
-    if not project:
-        _die("usage: borg rm <project>")
-    if not shell.registry_has(project):
-        _die(f"project '{project}' not in registry")
-    shell.registry_remove(project)
-    print(f"Removed: {project}")
+def cmd_rm(repository: str | None) -> int:
+    """`borg rm <repository>` -- unregister a repository."""
+    if not repository:
+        _die("usage: borg rm <repository>")
+    if not shell.registry_has(repository):
+        _die(f"repository '{repository}' not in registry")
+    shell.registry_remove(repository)
+    print(f"Removed: {repository}")
     return 0
 
 
@@ -155,11 +155,11 @@ def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
         _die(f"borg: unknown option '{dry_run_arg}' (expected --dry-run)")
 
     data = shell.read_registry()
-    projects = data.get("projects") or {}
+    repositories = data.get("projects") or {}
 
     filled, already, skipped = 0, 0, 0
-    for name in sorted(projects):
-        entry = projects.get(name) or {}
+    for name in sorted(repositories):
+        entry = repositories.get(name) or {}
         if entry.get("repo"):
             already += 1
             continue
@@ -170,12 +170,12 @@ def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
             skipped += 1
             continue
         entry["repo"] = repo
-        projects[name] = entry
+        repositories[name] = entry
         print(f"  fill   {name}: {repo}")
         filled += 1
 
     if filled and not dry_run:
-        data["projects"] = projects
+        data["projects"] = repositories
         shell.write_registry(data)
 
     prefix = "would fill" if dry_run else "filled"
@@ -184,48 +184,48 @@ def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
 
 
 def cmd_window_name(args: list[str]) -> int:
-    """`window-name <project> [--set SHORT | --derive]` -- read or write a project's short tmux window name.
+    """`window-name <repository> [--set SHORT | --derive]` -- read or write a repository's short tmux window name.
 
-    No flag prints the effective name: the stored `tmux_window`, or the project name when none is
+    No flag prints the effective name: the stored `tmux_window`, or the repository name when none is
     stored. `--set SHORT` validates against the tmux session name (`$BORG_TMUX_SESSION`, default
-    `borg`) and every OTHER registered project's name and window, then writes atomically; an invalid
+    `borg`) and every OTHER registered repository's name and window, then writes atomically; an invalid
     name exits non-zero with the reason on stderr and writes nothing. `--derive` writes the derived
     name only when `core.needs_derivation` says the field was never customized, so an explicit
     choice survives; either way it prints the resulting name.
     """
-    usage = "usage: borg window <project> [short]  (registry: window-name <project> [--set SHORT | --derive])"
+    usage = "usage: borg window <repository> [short]  (registry: window-name <repository> [--set SHORT | --derive])"
     if not args or args[0].startswith("--"):
         _die(usage)
-    project, flags = args[0], args[1:]
+    repository, flags = args[0], args[1:]
     if flags and flags[0] not in ("--set", "--derive"):
         _die(f"borg: unknown option '{flags[0]}' (expected --set SHORT or --derive)")
     if flags[:1] == ["--set"] and len(flags) < 2:
         _die("borg: --set needs a value")
 
-    projects = shell.read_registry().get("projects") or {}
-    if project not in projects:
-        _die(f"project '{project}' not in registry")
-    entry = projects[project] or {}
+    repositories = shell.read_registry().get("projects") or {}
+    if repository not in repositories:
+        _die(f"repository '{repository}' not in registry")
+    entry = repositories[repository] or {}
     session = shell.tmux_session_name()
 
     if not flags:
-        print(entry.get("tmux_window") or project)
+        print(entry.get("tmux_window") or repository)
         return 0
 
     if flags[0] == "--set":
         short = flags[1]
-        reason = core.validate_window_name(short, project, session, projects)
+        reason = core.validate_window_name(short, repository, session, repositories)
         if reason:
             _die(f"borg: {reason}")
-        shell.registry_merge(project, {"tmux_window": short})
+        shell.registry_merge(repository, {"tmux_window": short})
         print(short)
         return 0
 
-    if not core.needs_derivation(entry, project):
+    if not core.needs_derivation(entry, repository):
         print(entry["tmux_window"])
         return 0
-    derived = core.derive_window_name(project, session, projects)
-    shell.registry_merge(project, {"tmux_window": derived})
+    derived = core.derive_window_name(repository, session, repositories)
+    shell.registry_merge(repository, {"tmux_window": derived})
     print(derived)
     return 0
 

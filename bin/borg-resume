@@ -17,8 +17,11 @@
 #   mark-closed <project|sid>  append a deliberate-close event (like SessionEnd prompt_input_exit); slice S3b
 #   ack <rid>        append an ack event for a record (the model runs it when done); slice S7b
 #   defer <rid> [<until>] [--reason <w>]  append a defer event; the watcher reschedules the record; slice S7b
+#   status [--json] [--all]   records by state, due time, kill-switch state; slice S14
+#   cancel <rid> | --session <sid> | --all   append a cancel event; the watcher moves the record to cancelled; S14
+#   run <rid> [--force]   make a record due now, run one watcher pass (full gate and idle proof); S14
 #
-# Later slices add status, run, cancel and the rest. Hooks only APPEND; the watcher owns every
+# Later slices add log and the rest. Hooks only APPEND; the watcher owns every
 # state transition. Bash 3.2 safe, jq is the only non-coreutils dependency.
 
 # No set -e on purpose: the record path must be fail-open.
@@ -238,7 +241,8 @@ _br_record() {
 _br_usage() {
     printf 'usage: borg-resume <record <event> | pause | unpause | probe | inventory <sid> [--json]' >&2
     printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout] | mark-closed <project|sid> [dir]' >&2
-    printf ' | ack <rid> | defer <rid> [<until>] [--reason <word>]>\n' >&2
+    printf ' | ack <rid> | defer <rid> [<until>] [--reason <word>]' >&2
+    printf ' | status [--json] [--all] | cancel <rid>|--session <sid>|--all | run <rid> [--force]>\n' >&2
 }
 
 _br_main() {
@@ -297,6 +301,7 @@ _br_main() {
             # shellcheck source=/dev/null
             . "$BORG_RESUME_LIBDIR/resume-classify.sh" && . "$BORG_RESUME_LIBDIR/resume-inventory.sh" &&
                 . "$BORG_RESUME_LIBDIR/resume-watch.sh" && . "$BORG_RESUME_LIBDIR/resume-prompt.sh" &&
+                . "$BORG_RESUME_LIBDIR/resume-shared.sh" &&
                 . "$BORG_RESUME_LIBDIR/resume-gate.sh" || return 1
             borg_resume_watch_once
             ;;
@@ -323,6 +328,14 @@ _br_main() {
             local _vrc=$?
             [ "$_vrc" -eq 2 ] && _br_usage
             return "$_vrc"
+            ;;
+        status | cancel | run)
+            # shellcheck source=/dev/null
+            . "$BORG_RESUME_LIBDIR/resume-cli.sh" 2>/dev/null || return 1
+            "borg_resume_$_cmd" "$@"
+            local _crc=$?
+            [ "$_crc" -eq 2 ] && _br_usage
+            return "$_crc"
             ;;
         *)
             _br_usage

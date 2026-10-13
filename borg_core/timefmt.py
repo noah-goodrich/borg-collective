@@ -9,7 +9,7 @@ point. The same `datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")` / `d
 `borg_core/recon/cli.py:71`.
 
 Kept genuinely neutral rather than folded into either package: `link` and `recon` are independently
-owned per CLAUDE.md's per-project directive discipline, and importing one package's internals into
+owned per CLAUDE.md's per-repository directive discipline, and importing one package's internals into
 the other would violate that even though the string constant is trivial. UNCONDITIONALLY PURE except
 `now_iso`, which reads the wall clock on purpose -- callers that must keep one shared instant across a
 whole document (see `borg_core/link/cli.py`'s `_document`) should call `shell.now_epoch()` once and

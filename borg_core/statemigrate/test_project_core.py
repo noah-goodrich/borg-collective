@@ -1,4 +1,4 @@
-"""Pure planner for the project-state migration: copy / keep-new / skip / refusal / idempotent."""
+"""Pure planner for the repository-state migration: copy / keep-new / skip / refusal / idempotent."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import ast
 from pathlib import Path
 
 from borg_core.statemigrate import project_core as core
-from borg_core.statemigrate.project_core import Entry, Project
+from borg_core.statemigrate.project_core import Entry, Repository
 
 
 def _op(legacy: bool, new: bool, tracked: bool = False) -> str:
@@ -37,10 +37,10 @@ def test_duplicate_destination_planned_once():
 
 
 def test_precondition_refuses_git_backed_without_repo():
-    projects = [Project("a", None, True), Project("b", "/r/.git", True), Project("c", None, False)]
-    assert core.precondition(projects) == ["a"]
-    assert core.precondition([Project("x", "", True)]) == ["x"]
-    assert core.precondition(projects[1:]) == []
+    repositories = [Repository("a", None, True), Repository("b", "/r/.git", True), Repository("c", None, False)]
+    assert core.precondition(repositories) == ["a"]
+    assert core.precondition([Repository("x", "", True)]) == ["x"]
+    assert core.precondition(repositories[1:]) == []
 
 
 def test_verify_accepts_plan_rejects_drift_and_bad_json():
