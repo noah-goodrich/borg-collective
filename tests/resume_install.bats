@@ -392,5 +392,5 @@ _realmerge() {
     printf '%s' '{}' >"$SETTINGS"
     chmod 600 "$SETTINGS"
     _merge "$SETTINGS"
-    [ "$(stat -f %Lp "$SETTINGS" 2>/dev/null || stat -c %a "$SETTINGS")" = "600" ]
+    [ "$(stat -c %a "$SETTINGS" 2>/dev/null || stat -f %Lp "$SETTINGS")" = "600" ]
 }
