@@ -293,6 +293,7 @@ _br_main() {
             # shellcheck source=/dev/null
             . "$BORG_RESUME_LIBDIR/resume-classify.sh" && . "$BORG_RESUME_LIBDIR/resume-inventory.sh" &&
                 . "$BORG_RESUME_LIBDIR/resume-watch.sh" && . "$BORG_RESUME_LIBDIR/resume-prompt.sh" &&
+                . "$BORG_RESUME_LIBDIR/resume-shared.sh" &&
                 . "$BORG_RESUME_LIBDIR/resume-gate.sh" || return 1
             borg_resume_watch_once
             ;;

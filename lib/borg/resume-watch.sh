@@ -621,7 +621,12 @@ _rw_confirmed_pass() {
         _sd="${_loc#*$'\t'}"
         _file="$_t"
         case "$_scope" in
-            agent:*) _file="$_sd/subagents/agent-${_scope#agent:}.jsonl" ;;
+            # The gate records the confirmation baseline from this same file (main when the agent file is missing).
+            agent:*)
+                if [ -n "$_sd" ] && [ -f "$_sd/subagents/agent-${_scope#agent:}.jsonl" ]; then
+                    _file="$_sd/subagents/agent-${_scope#agent:}.jsonl"
+                fi
+                ;;
         esac
         _lines=0
         [ -f "$_file" ] && _lines="$(wc -l <"$_file" | tr -d ' ')"
@@ -773,8 +778,8 @@ borg_resume_watch_once() {
         [ "$(_ri_mtime "$_f")" -ge "$_cut" ] || continue
         _rw_scan_session "$_sid"
     done
-    # S10 liveness detector (lib/borg/resume-liveness.sh): dead process or pane with open work, sticky close, stall
-    # watchdog. Runs before the confirmed pass so a stall wins over the 30-minute timeout.
+    # S10 liveness detector (lib/borg/resume-liveness.sh): dead process or pane with open work, sticky close.
+    # (The stall watchdog is the S9 gate, below.)
     if [ -n "${BORG_RESUME_LIBDIR:-}" ] && [ -f "$BORG_RESUME_LIBDIR/resume-liveness.sh" ]; then
         # shellcheck source=/dev/null
         . "$BORG_RESUME_LIBDIR/resume-liveness.sh" && borg_resume_liveness_pass
