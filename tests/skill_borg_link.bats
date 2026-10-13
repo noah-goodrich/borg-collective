@@ -139,7 +139,7 @@ _stub_borg() {
     [ "$status" -eq 0 ]
     [[ "$output" == *'<entry.path>/.borg/checkpoints'* ]] || false
     [[ "$output" == *'from nowhere else'* ]] || false
-    [[ "$output" == *'newest first (a NAME sort'* ]] || false
+    [[ "$output" == *'newest first yourself (a NAME sort'* ]] || false
     [[ "$output" == *'Never fall back to a checkpoint from another directory.'* ]] || false
     [[ "$output" == *'`focus.checkpoint_head`'* ]] || false
     [[ "$output" == *'`entry.summary`'* ]] || false
