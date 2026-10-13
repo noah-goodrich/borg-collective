@@ -24,7 +24,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
-    registry = shell.registry_projects(registry_shell.read_registry())
+    registry = shell.registry_repositories(registry_shell.read_registry())
     offenders = core.precondition([p for p, _ in registry])
     if offenders:
         print(

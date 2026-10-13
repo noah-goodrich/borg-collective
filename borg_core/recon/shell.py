@@ -112,11 +112,11 @@ def file_mtime(path: Path) -> int | None:
         return None
 
 
-def newest_checkpoint_epoch(project_dirs: list[str]) -> int | None:
-    """Newest checkpoint mtime (epoch) across a list of project dirs, or None if none exist."""
+def newest_checkpoint_epoch(repository_dirs: list[str]) -> int | None:
+    """Newest checkpoint mtime (epoch) across a list of repository dirs, or None if none exist."""
     newest: int | None = None
-    for project_dir in project_dirs:
-        cdir = Path(project_dir) / ".borg" / "checkpoints"
+    for repository_dir in repository_dirs:
+        cdir = Path(repository_dir) / ".borg" / "checkpoints"
         if not cdir.is_dir():
             continue
         for cp in cdir.glob("*.md"):
@@ -150,10 +150,10 @@ def write_last_run_marker(iso_ts: str) -> None:
         pass
 
 
-def resolve_since(explicit_since: str, project_dirs: list[str]) -> str:
+def resolve_since(explicit_since: str, repository_dirs: list[str]) -> str:
     """I/O-resolving wrapper around core.resolve_since: gathers the checkpoint epoch and marker,
     then delegates precedence resolution to core.py."""
-    checkpoint_epoch = None if explicit_since else newest_checkpoint_epoch(project_dirs)
+    checkpoint_epoch = None if explicit_since else newest_checkpoint_epoch(repository_dirs)
     marker_value = None if explicit_since or checkpoint_epoch is not None else read_last_run_marker()
     fallback_epoch = int(time.time()) - FALLBACK_WINDOW_SECONDS
     return core.resolve_since(explicit_since, checkpoint_epoch, marker_value, fallback_epoch)
@@ -252,13 +252,13 @@ def fanout(since: str, projects_file: str, adapters: list[tuple[str, str]], time
         return [f.result() for f in futures]
 
 
-def read_checkpoint_blockers(project_dir: str) -> str:
+def read_checkpoint_blockers(repository_dir: str) -> str:
     """Read the newest checkpoint's raw text and extract its Blockers section.
 
     Mirrors _recon_checkpoint_blockers (I/O: find + read newest checkpoint; logic: delegated to
     core.extract_checkpoint_blockers).
     """
-    cdir = Path(project_dir) / ".borg" / "checkpoints"
+    cdir = Path(repository_dir) / ".borg" / "checkpoints"
     if not cdir.is_dir():
         return ""
     checkpoints = sorted(p for p in cdir.glob("*.md") if p.is_file())
@@ -272,7 +272,7 @@ def read_checkpoint_blockers(project_dir: str) -> str:
     return core.extract_checkpoint_blockers(text)
 
 
-def load_registry_projects(registry_file: str, projects_filter: list[str] | None) -> dict:
+def load_registry_repositories(registry_file: str, repositories_filter: list[str] | None) -> dict:
     """Read the registry's `.projects` object, optionally filtered to a subset of names.
 
     The parameter is `registry_file`, not `registry_path`: this module now re-exports a
@@ -280,14 +280,14 @@ def load_registry_projects(registry_file: str, projects_filter: list[str] | None
     """
     with open(registry_file, encoding="utf-8") as f:
         registry = json.load(f)
-    projects: dict = registry.get("projects", {})
-    if projects_filter:
-        keep = set(projects_filter)
-        projects = {k: v for k, v in projects.items() if k in keep}
-    return projects
+    repositories: dict = registry.get("projects", {})
+    if repositories_filter:
+        keep = set(repositories_filter)
+        repositories = {k: v for k, v in repositories.items() if k in keep}
+    return repositories
 
 
-def write_projects_file(projects: dict, path: str) -> None:
+def write_repositories_file(repositories: dict, path: str) -> None:
     """Write the registry's projects object to a scratch file for adapters to read."""
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(projects, f)
+        json.dump(repositories, f)

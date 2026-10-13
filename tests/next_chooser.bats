@@ -353,7 +353,7 @@ GHEOF
     _write_registry ""
     _chooser $'\n'
     [ "$status" -eq 0 ]
-    [[ "$output" == *"project · item"*"next step"*"owner"*"ready"* ]]
+    [[ "$output" == *"repository · item"*"next step"*"owner"*"ready"* ]]
     [[ "$output" == *"wait-old · session"*"reply to session"*"YOU"*"✔"* ]]
     [[ "$output" == *"+3 quiet: act, idle, never"* ]]
     [ "$(_selected)" = "w-old" ]

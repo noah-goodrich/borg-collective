@@ -106,7 +106,7 @@ def test_newest_checkpoint_epoch_picks_newest(tmp_path):
 
 
 def test_newest_checkpoint_epoch_no_checkpoints(tmp_path):
-    assert shell.newest_checkpoint_epoch([str(tmp_path / "no-such-project")]) is None
+    assert shell.newest_checkpoint_epoch([str(tmp_path / "no-such-repository")]) is None
 
 
 # ── last-run marker ──────────────────────────────────────────────────────────
@@ -154,12 +154,12 @@ def test_resolve_since_explicit_short_circuits(isolated_env):
 
 def test_resolve_since_falls_back_to_marker(isolated_env):
     shell.write_last_run_marker("2023-05-05T05:05:05Z")
-    result = shell.resolve_since("", [str(isolated_env / "no-such-project")])
+    result = shell.resolve_since("", [str(isolated_env / "no-such-repository")])
     assert result == "2023-05-05T05:05:05Z"
 
 
 def test_resolve_since_falls_back_to_24h(isolated_env):
-    result = shell.resolve_since("", [str(isolated_env / "no-such-project")])
+    result = shell.resolve_since("", [str(isolated_env / "no-such-repository")])
     assert result.endswith("Z")
     assert result.startswith("20")
 
@@ -289,7 +289,7 @@ def test_read_checkpoint_blockers_extracts_section(tmp_path):
 
 
 def test_read_checkpoint_blockers_no_checkpoints_dir(tmp_path):
-    assert shell.read_checkpoint_blockers(str(tmp_path / "no-project")) == ""
+    assert shell.read_checkpoint_blockers(str(tmp_path / "no-repository")) == ""
 
 
 def test_read_checkpoint_blockers_picks_newest_by_name(tmp_path):
@@ -303,26 +303,26 @@ def test_read_checkpoint_blockers_picks_newest_by_name(tmp_path):
     assert "old" not in result
 
 
-# ── registry projects ────────────────────────────────────────────────────────
+# ── registry repositories ─────────────────────────────────────────────────────
 
 
-def test_load_registry_projects_no_filter(tmp_path):
+def test_load_registry_repositories_no_filter(tmp_path):
     registry = tmp_path / "registry.json"
     registry.write_text(json.dumps({"projects": {"a": {"path": "/a"}, "b": {"path": "/b"}}}))
-    result = shell.load_registry_projects(str(registry), None)
+    result = shell.load_registry_repositories(str(registry), None)
     assert set(result) == {"a", "b"}
 
 
-def test_load_registry_projects_with_filter(tmp_path):
+def test_load_registry_repositories_with_filter(tmp_path):
     registry = tmp_path / "registry.json"
     registry.write_text(json.dumps({"projects": {"a": {"path": "/a"}, "b": {"path": "/b"}}}))
-    result = shell.load_registry_projects(str(registry), ["a"])
+    result = shell.load_registry_repositories(str(registry), ["a"])
     assert set(result) == {"a"}
 
 
-def test_write_projects_file_roundtrip(tmp_path):
+def test_write_repositories_file_roundtrip(tmp_path):
     out = tmp_path / "projects.json"
-    shell.write_projects_file({"a": {"path": "/a"}}, str(out))
+    shell.write_repositories_file({"a": {"path": "/a"}}, str(out))
     assert json.loads(out.read_text()) == {"a": {"path": "/a"}}
 
 
@@ -330,5 +330,5 @@ def test_time_import_used_for_fallback(isolated_env):
     # Sanity check that resolve_since's fallback window is derived from real wall-clock time,
     # not a fixed constant, without pinning an exact value.
     before = int(time.time())
-    result = shell.resolve_since("", [str(isolated_env / "no-such-project")])
+    result = shell.resolve_since("", [str(isolated_env / "no-such-repository")])
     assert result.startswith(str(time.gmtime(before).tm_year))

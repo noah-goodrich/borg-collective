@@ -178,20 +178,20 @@ def test_build_postprocess_failed_track_shape():
     assert track["summary"] == "post-processing failed"
 
 
-# ── merge by project ─────────────────────────────────────────────────────────
+# ── merge by repository ──────────────────────────────────────────────────────
 
 
-def test_merge_by_project_groups_items_under_project_key():
+def test_merge_by_repository_groups_items_under_repository_key():
     t1 = {"items": [_item(project="alpha")]}
     t2 = {"items": [_item(project="beta"), _item(project="alpha", ref="r#9")]}
-    result = core.merge_by_project([t1, t2])
+    result = core.merge_by_repository([t1, t2])
     assert len(result["alpha"]) == 2
     assert len(result["beta"]) == 1
 
 
-def test_merge_by_project_skips_items_without_project():
+def test_merge_by_repository_skips_items_without_repository():
     t1 = {"items": [{"source": "s"}]}
-    assert core.merge_by_project([t1]) == {}
+    assert core.merge_by_repository([t1]) == {}
 
 
 # ── checkpoint blockers extraction ──────────────────────────────────────────
@@ -211,27 +211,27 @@ def test_extract_checkpoint_blockers_no_heading():
 # ── contradiction detection ─────────────────────────────────────────────────
 
 
-def test_project_contradictions_flags_resolved_item_still_blocking():
+def test_repository_contradictions_flags_resolved_item_still_blocking():
     items = [_item(project="alpha", ref="repo#7", state="merged")]
-    result = core.project_contradictions("alpha", "- repo#7 waiting on review", items)
+    result = core.repository_contradictions("alpha", "- repo#7 waiting on review", items)
     assert len(result) == 1
     assert result[0]["ref"] == "repo#7"
 
 
-def test_project_contradictions_empty_when_item_not_resolved():
+def test_repository_contradictions_empty_when_item_not_resolved():
     items = [_item(ref="repo#7", state="open")]
-    result = core.project_contradictions("alpha", "- repo#7 waiting on review", items)
+    result = core.repository_contradictions("alpha", "- repo#7 waiting on review", items)
     assert result == []
 
 
-def test_project_contradictions_empty_when_no_blockers():
+def test_repository_contradictions_empty_when_no_blockers():
     items = [_item(state="merged")]
-    assert core.project_contradictions("alpha", "", items) == []
+    assert core.repository_contradictions("alpha", "", items) == []
 
 
-def test_project_contradictions_ignores_non_string_state_or_ref():
+def test_repository_contradictions_ignores_non_string_state_or_ref():
     items = [{"state": None, "ref": "repo#7"}]
-    assert core.project_contradictions("alpha", "- repo#7", items) == []
+    assert core.repository_contradictions("alpha", "- repo#7", items) == []
 
 
 # ── assemble + digest ───────────────────────────────────────────────────────
@@ -254,8 +254,8 @@ def test_build_sources_summary():
     assert result == [{"source": "s", "summary": "ok", "ok": True, "count": 1, "dropped": 2, "deduped": 0}]
 
 
-def _dup_item(ref, source, changed="2026-01-01T00:00:00Z", state="open", project="p"):
-    return dict(VALID_ITEM, ref=ref, source=source, changed=changed, state=state, project=project)
+def _dup_item(ref, source, changed="2026-01-01T00:00:00Z", state="open", repository="p"):
+    return dict(VALID_ITEM, ref=ref, source=source, changed=changed, state=state, project=repository)
 
 
 def _dup_track(source, items):
@@ -366,15 +366,15 @@ def test_dedup_timestamp_without_offset_is_taken_as_utc():
     assert [it["source"] for it in deduped[1]["items"]] == ["b"]
 
 
-def test_dedup_project_divergence_is_a_contradiction():
-    # Opus review finding 5: the loser's copy leaves its project bucket entirely — the
+def test_dedup_repository_divergence_is_a_contradiction():
+    # Opus review finding 5: the loser's copy leaves its repository bucket entirely — the
     # --projects filter then drops the item silently unless this surfaces.
     tracks = [
-        _dup_track("github", [_dup_item("r#1", "github", changed="2026-01-01T00:00:00Z", project="ingle")]),
-        _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-01-02T00:00:00Z", project="acme-de")]),
+        _dup_track("github", [_dup_item("r#1", "github", changed="2026-01-01T00:00:00Z", repository="ingle")]),
+        _dup_track("tracker", [_dup_item("r#1", "tracker", changed="2026-01-02T00:00:00Z", repository="acme-de")]),
     ]
     _, contradictions = core.dedup_cross_source(tracks)
-    projected = [c for c in contradictions if "different projects" in c["note"]]
+    projected = [c for c in contradictions if "different repositories" in c["note"]]
     assert len(projected) == 1
     assert "acme-de" in projected[0]["kept_says"]
     assert "ingle" in projected[0]["dropped_says"]

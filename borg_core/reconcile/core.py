@@ -15,7 +15,7 @@ half needs none of it: the derived-vs-declared join is already built and already
 invocation. What was missing is only the comparison and a place to say it.
 
 A CONTRADICTION IS REPORTED, NEVER REPAIRED. Every function here returns findings; none proposes an
-edit. That is the same altitude `recon/core.py::project_contradictions` chose for the checkpoint
+edit. That is the same altitude `recon/core.py::repository_contradictions` chose for the checkpoint
 case, and it is why this module cannot cause the dataloss the writer's directive describes.
 """
 
