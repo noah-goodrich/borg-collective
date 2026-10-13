@@ -125,7 +125,7 @@ Tests (prose contract, bats):
 
 ### C2 Convention rewrite (dotfiles repo, PUBLIC)
 
-Repo `/Users/noah/.config/dotfiles`, file `claude/code/CLAUDE.md` lines about 22-27 (the table and the "global allowlist" bullet), plus a Grep of `claude/code/` for other copies. Separate PR in that repo. Public repo hygiene: generic wording, no project codenames, no infrastructure detail in the PR body or commit message. Same substance as C1; a link to nothing private. No bats there; verification is the C1 prose contract mirrored as a Grep in the PR description, and a fresh session check that `~/.claude/CLAUDE.md` still imports `borg-managed.md`.
+The dotfiles repo, file `claude/code/CLAUDE.md` lines about 22-27 (the table and the "global allowlist" bullet), plus a Grep of `claude/code/` for other copies. Separate PR in that repo. Public repo hygiene: generic wording, no project codenames, no infrastructure detail in the PR body or commit message. Same substance as C1; a link to nothing private. No bats there; verification is the C1 prose contract mirrored as a Grep in the PR description, and a fresh session check that `~/.claude/CLAUDE.md` still imports `borg-managed.md`.
 
 ### V1 Verbs: `borg pr gate` and `borg pr merge-train`
 
