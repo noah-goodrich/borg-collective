@@ -3,9 +3,9 @@
 ## Borg Commands (Orchestration)
 
 ```
-borg init                    First-time setup + launch orchestrator
+borg init                    First-time setup + launch the Queen
 borg                         What needs attention? Switch to it.
-borg claude                  Launch/resume orchestrator Claude session
+borg claude                  Launch/resume the Queen session
 
 borg link [project]          Front door: the Queen's overview at the workspace root, ONE directory's page elsewhere
 borg link --overview         Force the Queen's overview from any directory
@@ -94,7 +94,7 @@ Over capacity                 "4 sessions need attention (limit: 3)"
 ## Typical Daily Workflow
 
 ```
-borg init                         Morning: orchestrator presents briefing
+borg init                         Morning: the Queen presents briefing
 Ctrl+Space >                      Switch to recommended project
 drone feature my-project my-feature  Create worktree + branch, launch Claude
 /borg-plan                        Lock objectives + acceptance criteria
@@ -121,7 +121,7 @@ Ctrl+Space >                      Next project
 
 ```
 BORG_TMUX_SESSION=borg               tmux session name
-BORG_ORCHESTRATOR_ROOT=~/dev         Workspace root; orchestrator-mode session runs here
+BORG_ORCHESTRATOR_ROOT=~/dev         Workspace root; the Queen runs here
 BORG_MAX_ACTIVE=3                    Capacity warning threshold
 BORG_WORK_HOURS=09:00-18:00          Work hours (empty to disable)
 BORG_WORK_DAYS=Mon,Tue,Wed,Thu,Fri   Work days

@@ -188,7 +188,7 @@ def main():
     sys.stderr.write("borg agent model guard: Agent call denied.\n")
     for q in problems:
         sys.stderr.write("  - %s\n" % q)
-    sys.stderr.write("Policy: orchestrator/drone sessions run Opus xhigh; subagents must be below that "
+    sys.stderr.write("Policy: Queen/drone sessions run Opus xhigh; subagents must be below that "
                      "(Sonnet/Haiku, effort low/medium/high); claude-code-guide also needs effort low/medium/high. "
                      "Only research-tools:* is exempt, and only "
                      "after a research-tools skill/command ran. Guide: docs/agent-routing.md. "

@@ -52,7 +52,7 @@ This gives you Boris Cherny's 57-tip framework, Scope Guard, and 205+ engineerin
 borg init
 ```
 
-This launches the orchestrator — a Claude session that knows about all your projects. It opens with a
+This launches the Queen — a Claude session that knows about all your projects. It opens with a
 morning briefing: what's waiting for input, what's in progress, and one recommendation for where to
 start. Resume any time with `borg claude`.
 

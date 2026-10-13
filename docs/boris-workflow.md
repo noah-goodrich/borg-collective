@@ -159,7 +159,7 @@ and persistent context that survives across sessions.
 
 You open Ghostty. You type `borg init`.
 
-Borg starts an orchestrator — a Claude session that knows about all your projects. It reads the
+Borg starts the Queen — a Claude session that knows about all your projects. It reads the
 checkpoints you wrote at the end of your last sessions (stored per-project at
 `<project>/.borg/checkpoints/`) and presents a morning briefing:
 
@@ -312,7 +312,7 @@ forgot to run the skill — prints a one-line nudge telling you no recent checkp
 warns if you have uncommitted changes.
 
 The checkpoint file lives in your project (portable via git if you want it). Tomorrow's
-orchestrator will read it. The next Claude session in this project will have it as context. You
+Queen will read it. The next Claude session in this project will have it as context. You
 don't have to remember anything.
 
 ### End of day
@@ -355,8 +355,8 @@ the plumbing — borg handles it.
 
 | Command | What it does | What problem it solves |
 |---------|-------------|----------------------|
-| `borg init` | Launches orchestrator with morning briefing | "What should I work on?" |
-| `borg claude` | Opens/resumes orchestrator session | Re-enter orchestrator after stepping away |
+| `borg init` | Launches the Queen with morning briefing | "What should I work on?" |
+| `borg claude` | Opens/resumes the Queen session | Re-enter the Queen after stepping away |
 | `borg next` / `Ctrl+Space >` | Switches to most pressing project | Decision paralysis elimination |
 | `borg link` | Dashboard of all projects | "What's the state of everything?" |
 | `/borg-plan` | Skill — Claude proposes, you validate | Establishes locked acceptance criteria |

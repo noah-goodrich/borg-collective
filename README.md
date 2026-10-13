@@ -26,7 +26,7 @@ hooks, installs skills, and configures the tmux keybinding. Safe to re-run.
 
 ```bash
 borg scan   # auto-discover projects from Claude session history
-borg init   # morning briefing + launch orchestrator session
+borg init   # launch the Queen: morning briefing + Claude session
 ```
 
 ## Requirements
@@ -42,9 +42,9 @@ borg init   # morning briefing + launch orchestrator session
 
 | Command | Description |
 |---------|-------------|
-| `borg init` | Morning briefing + launch orchestrator Claude session |
+| `borg init` | Launch the Queen: morning briefing + Claude session |
 | `borg` / `borg next` | What needs attention? Switch to it. |
-| `borg claude` | Resume orchestrator Claude session |
+| `borg claude` | Resume the Queen session (continue most recent) |
 | `borg link [project]` | **Front door.** At the Queen's root (the workspace root) it is the cross-repository overview; anywhere else, or with a project, it is a page about that one directory (identity, session, its own checkpoints, what waits on it). `--overview` forces the overview from any directory |
 | `borg switch [query]` | fzf picker → jump to project tmux window |
 | `borg recon --json` | Machine surface only: the reconciled sweep document. Human digest retired — use `borg link` |
@@ -88,7 +88,7 @@ Two assimilation units, two lifetimes. Don't blur them.
 | **Drone** | Persistent devcontainer (Docker Compose) | Long-lived; one per project | Whole project — toolchain, dependencies, runtime | `drone up <project>` |
 | **Nanoprobe** | Ephemeral Claude Code subagent (`borg-nanoprobe`) | Single task; exits on completion | One discrete unit of work in a git worktree | Orchestrator via the Agent tool |
 
-The orchestrator session never edits project files inline. It spawns nanoprobes (background, worktree-isolated)
+The Queen session never edits project files inline. It spawns nanoprobes (background, worktree-isolated)
 that perform the work, commit, and exit. The `SubagentStop` hook (`borg-nanoprobe-log.sh`) appends a JSONL
 record to `~/.config/borg/agents.jsonl` so you can list recent runs with `borg nanoprobes` and pull
 transcripts with `borg nanoprobe-log <id>`.
@@ -219,7 +219,7 @@ resolve inside the container. See `drone scaffold` to generate this automaticall
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `BORG_TMUX_SESSION` | `borg` | tmux session name |
-| `BORG_ORCHESTRATOR_ROOT` | `~/dev` | Workspace root where projects live; orchestrator-mode session runs here |
+| `BORG_ORCHESTRATOR_ROOT` | `~/dev` | The Queen's workspace root |
 | `BORG_MAX_ACTIVE` | `3` | Capacity warning threshold |
 | `BORG_WORK_HOURS` | (unset) | e.g. `09:00-18:00` |
 | `BORG_WORK_DAYS` | (unset) | e.g. `Mon,Tue,Wed,Thu,Fri` |
