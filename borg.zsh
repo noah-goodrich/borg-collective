@@ -18,7 +18,7 @@ hash -r 2>/dev/null || true
 
 set -e
 
-BORG_VERSION="v0.9.3"
+BORG_VERSION="v0.9.4"
 BORG_HOME="${BORG_HOME:-${0:A:h}}"  # directory containing this script (for lib/, hooks/, skills/)
 BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"  # workspace root where projects live; orchestrator session runs here
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
@@ -3059,6 +3059,30 @@ cmd_doctor() {
                 [[ -n "$_part" ]] && echo -e "   ${_color}${_part}${NC}"
             done
         done
+        echo
+    fi
+
+    # borg-resume (S13): watcher, watch.log, probe, guardian, allowlist, installed lib. lib/resume-doctor.sh
+    # emits STATUS<TAB>NAME<TAB>DETAIL<TAB>HINT rows and is read-only. FAIL rows fail doctor; WARN/INFO/OFF do not.
+    if [[ -f "$BORG_HOME/lib/resume-doctor.sh" ]]; then
+        source "$BORG_HOME/lib/resume-doctor.sh"
+        printf "${BOLD} %s${NC}\n" "RESUME"
+        printf '%0.s─' {1..70}; echo
+        local _rrow _rst _rname _rdetail _rhint _rcolor
+        while IFS= read -r _rrow; do
+            [[ -n "$_rrow" ]] || continue
+            _rst="${_rrow%%	*}"; _rrow="${_rrow#*	}"
+            _rname="${_rrow%%	*}"; _rrow="${_rrow#*	}"
+            _rdetail="${_rrow%%	*}"; _rhint="${_rrow#*	}"
+            case "$_rst" in
+                FAIL) _rcolor="$RED"; overall_exit=1 ;;
+                WARN) _rcolor="$YELLOW" ;;
+                OK)   _rcolor="$GREEN" ;;
+                *)    _rcolor="$DIM" ;;
+            esac
+            printf " %-16s ${_rcolor}%-5s${NC} %s\n" "$_rname" "$_rst" "$_rdetail"
+            [[ -n "$_rhint" ]] && echo -e "   ${DIM}→ $_rhint${NC}"
+        done < <(borg_resume_doctor_rows "$(_borg_launchd_label resume-watch)")
         echo
     fi
 

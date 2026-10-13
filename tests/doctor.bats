@@ -484,3 +484,245 @@ _write_ext_template() {
     [ "$status" -eq 0 ]
     [[ "$output" != *"dev-postgres"* ]] || false
 }
+
+# ─── borg-resume rows (S13) ───────────────────────────────────────────────────
+#
+# A fully installed borg-resume in the sandbox HOME: bin, every lib/borg file, the hook entry, the
+# watcher plist, the three D10 allowlist entries, a fresh watch.log and guardian state. Each case then
+# breaks exactly one thing. launchctl is a stub; the probe uses the BORG_RESUME_USAGE_CMD seam, so the
+# real claude is never called.
+
+_resume_install() {
+    RESUME_LABEL=$(_label resume-watch)
+    RESUME_DIR="$XDG_STATE_HOME/borg/resume"
+    mkdir -p "$HOME/.claude/bin" "$HOME/.claude/lib/borg" "$HOME/.claude/hooks" "$RESUME_DIR"
+    cp "${BATS_TEST_DIRNAME}/../bin/borg-resume" "$HOME/.claude/bin/borg-resume"
+    cp "${BATS_TEST_DIRNAME}"/../lib/borg/*.sh "$HOME/.claude/lib/borg/"
+    : > "$HOME/.claude/hooks/borg-resume-hook.sh"
+    _write_plist "$RESUME_LABEL" "30"
+    _write_settings "$HOME/.claude/settings.json"
+    : > "$RESUME_DIR/watch.heartbeat"
+    export BORG_RESUME_DOCTOR_TEST=1
+    printf '{"last_swept_at":"%s"}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$XDG_STATE_HOME/borg/usage-guardian.json"
+    export BORG_RESUME_DIR="$RESUME_DIR"
+    export BORG_RESUME_USAGE_CMD="echo 'Current session: 12% used'"
+    _write_launchctl_resume running
+}
+
+_write_settings() {
+    cat > "$1" <<JSON
+{"permissions":{"allow":["Bash(~/.claude/bin/borg-resume:*)","Bash(borg-resume:*)",
+"Read(~/.local/state/borg/resume/**)"]}}
+JSON
+}
+
+# Args: running | idle | idle-failed | gone. `launchctl list` keeps answering for the base agents, and any
+# mutating verb is logged to $BATS_TEST_TMPDIR/mutations so a test can prove doctor never issued one.
+_write_launchctl_resume() {
+    local mode="$1"
+    cat > "$MOCK_BIN/launchctl" <<EOF
+#!/usr/bin/env bash
+case "\$1" in
+    kickstart|bootstrap|bootout|load|unload|enable|disable) echo "\$1" >> "$BATS_TEST_TMPDIR/mutations" ;;
+esac
+if [[ "\$1" == "list" ]]; then
+    printf -- '- 0 %s\n- 0 %s\n- 0 %s\n- 0 %s\n' '$NOTIFYD_LABEL' '$CORTEX_LABEL' '$USAGE_LABEL' '$REAP_LABEL'
+    exit 0
+fi
+if [[ "\$1" == "print" ]]; then
+    case '$mode' in
+        running) printf '\tstate = running\n\tpid = 4242\n\tlast exit code = (never exited)\n'; exit 0 ;;
+        idle) printf '\tstate = not running\n\tlast exit code = 0\n'; exit 0 ;;
+        idle-failed) printf '\tstate = not running\n\tlast exit code = 1\n'; exit 0 ;;
+        gone) echo 'Could not find service' >&2; exit 113 ;;
+    esac
+fi
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/launchctl"
+}
+
+@test "resume: fully installed -> every resume row OK, doctor exits 0" {
+    _resume_install
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-watch"*"OK"* ]] || false
+    [[ "$output" == *"resume-log"*"OK"* ]] || false
+    [[ "$output" == *"resume-probe"*"OK"* ]] || false
+    [[ "$output" == *"resume-allow"*"OK"* ]] || false
+    [[ "$output" == *"resume-lib"*"OK"* ]] || false
+}
+
+@test "resume: nothing installed -> one informational row, no failure" {
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"borg-resume"*"not installed"* ]] || false
+}
+
+@test "resume: watcher loaded but idle between passes is OK" {
+    _resume_install
+    _write_launchctl_resume idle
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-watch"*"OK"* ]] || false
+}
+
+@test "resume: watcher not running with a failing last exit -> FAIL" {
+    _resume_install
+    _write_launchctl_resume idle-failed
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"resume-watch"*"FAIL"* ]] || false
+}
+
+@test "resume: launchctl print exits non-zero (not found) -> FAIL" {
+    _resume_install
+    _write_launchctl_resume gone
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"resume-watch"*"FAIL"* ]] || false
+    [[ "$output" == *"not loaded"* ]] || false
+}
+
+@test "resume: stale watch.log -> FAIL" {
+    _resume_install
+    touch -t 202001010000 "$RESUME_DIR/watch.heartbeat"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"resume-log"*"FAIL"* ]] || false
+}
+
+@test "resume: a real idle watch --once (empty ledger, no watch.log) keeps resume-log OK" {
+    _resume_install
+    rm "$RESUME_DIR/watch.heartbeat"
+    run env HOME="$HOME" XDG_STATE_HOME="$XDG_STATE_HOME" BORG_RESUME_DIR="$RESUME_DIR" \
+        BORG_RESUME_LIBDIR="$HOME/.claude/lib/borg" "$HOME/.claude/bin/borg-resume" watch --once
+    [ "$status" -eq 0 ]
+    [ ! -s "$RESUME_DIR/watch.log" ]
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-log"*"OK"* ]] || false
+}
+
+@test "resume: freshly installed, no pass yet -> WARN, not FAIL" {
+    _resume_install
+    rm "$RESUME_DIR/watch.heartbeat"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-log"*"WARN"* ]] || false
+}
+
+@test "resume: persisted install-time opt-out holds in a fresh shell without the env var" {
+    _resume_install
+    rm "$HOME/Library/LaunchAgents/$RESUME_LABEL.plist" "$RESUME_DIR/watch.heartbeat"
+    echo '{"permissions":{"allow":[]}}' > "$HOME/.claude/settings.json"
+    _write_launchctl_resume gone
+    : > "$RESUME_DIR/WATCH_OPTOUT"
+    unset BORG_RESUME_WATCH
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"opted out"* ]] || false
+}
+
+@test "resume: failing probe -> FAIL" {
+    _resume_install
+    export BORG_RESUME_USAGE_CMD="exit 3"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"resume-probe"*"FAIL"* ]] || false
+}
+
+@test "resume: a cached good probe does not hide a failing probe" {
+    _resume_install
+    printf '{"at":%s,"session_pct":5}\n' "$(date +%s)" > "$RESUME_DIR/usage-probe.json"
+    export BORG_RESUME_USAGE_CMD="exit 3"
+    run "$BORG_CMD" doctor
+    [[ "$output" == *"resume-probe"*"FAIL"* ]] || false
+}
+
+@test "resume: stale usage-guardian.json -> WARN, not FAIL" {
+    _resume_install
+    printf '{"last_swept_at":"2020-01-01T00:00:00Z"}\n' > "$XDG_STATE_HOME/borg/usage-guardian.json"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-guardian"*"WARN"* ]] || false
+}
+
+@test "resume: missing allowlist entries -> FAIL naming them" {
+    _resume_install
+    echo '{"permissions":{"allow":["Bash(borg-resume:*)"]}}' > "$HOME/.claude/settings.json"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"resume-allow"*"FAIL"* ]] || false
+    [[ "$output" == *"Read(~/.local/state/borg/resume/**)"* ]] || false
+}
+
+@test "resume: allowlist is read through a symlinked settings.json" {
+    _resume_install
+    mkdir -p "$HOME/dotfiles"
+    mv "$HOME/.claude/settings.json" "$HOME/dotfiles/settings.json"
+    ln -s "$HOME/dotfiles/settings.json" "$HOME/.claude/settings.json"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-allow"*"OK"* ]] || false
+}
+
+@test "resume: absolute-HOME allowlist spelling (as the installer renders it) is accepted" {
+    _resume_install
+    sed -i.bak "s|Bash(~/.claude|Bash($HOME/.claude|" "$HOME/.claude/settings.json"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-allow"*"OK"* ]] || false
+}
+
+@test "resume: HEADLINE hook installed but lib missing -> FAIL with the fix command" {
+    _resume_install
+    mv "$HOME/.claude/lib/borg" "$BATS_TEST_TMPDIR/gone-lib"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"hook is installed but its lib is missing"* ]] || false
+    [[ "$output" == *"borg setup"* ]] || false
+}
+
+@test "resume: partial lib -> FAIL naming the missing files" {
+    _resume_install
+    rm "$HOME/.claude/lib/borg/resume-shared.sh" "$HOME/.claude/lib/borg/resume-relaunch.sh" \
+        "$HOME/.claude/lib/borg/resume-cli.sh"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"resume-lib"*"FAIL"* ]] || false
+    [[ "$output" == *"resume-shared.sh"* ]] || false
+    [[ "$output" == *"resume-relaunch.sh"* ]] || false
+    [[ "$output" == *"resume-cli.sh"* ]] || false
+}
+
+@test "resume: BORG_RESUME_WATCH=0 reports a missing watcher and allowlist as disabled, not FAIL" {
+    _resume_install
+    rm "$HOME/Library/LaunchAgents/$RESUME_LABEL.plist"
+    echo '{"permissions":{"allow":[]}}' > "$HOME/.claude/settings.json"
+    _write_launchctl_resume gone
+    BORG_RESUME_WATCH=0 run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"opted out"* ]] || false
+}
+
+@test "resume: kill switch state is informational" {
+    _resume_install
+    : > "$RESUME_DIR/DISABLED"
+    run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-switch"*"paused"* ]] || false
+    rm "$RESUME_DIR/DISABLED"
+    BORG_RESUME_DISABLE=1 run "$BORG_CMD" doctor
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"resume-switch"*"BORG_RESUME_DISABLE=1"* ]] || false
+}
+
+@test "resume: doctor stays read-only (no launchctl mutation, no file changes)" {
+    _resume_install
+    find "$HOME" "$XDG_STATE_HOME" -type f | sort | xargs ls -l > "$BATS_TEST_TMPDIR/before.txt"
+    run "$BORG_CMD" doctor
+    find "$HOME" "$XDG_STATE_HOME" -type f | sort | xargs ls -l > "$BATS_TEST_TMPDIR/after.txt"
+    diff "$BATS_TEST_TMPDIR/before.txt" "$BATS_TEST_TMPDIR/after.txt"
+    [ ! -e "$BATS_TEST_TMPDIR/mutations" ]
+}
