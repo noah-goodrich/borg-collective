@@ -389,7 +389,7 @@ EOF
     run bash "$BORG_START" <<< "$(printf '{"session_id":"orch-abc","cwd":"%s"}' "$orch_cwd")"
     [ "$status" -eq 0 ]
     echo "$output" | jq -e '.hookSpecificOutput.additionalContext' >/dev/null
-    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -qi "orchestrator"
+    echo "$output" | jq -r '.hookSpecificOutput.additionalContext' | grep -q "You are the QUEEN"
 }
 
 @test "start hook in orchestrator mode does NOT write to registry" {
@@ -512,7 +512,8 @@ EOF
     [ "$status" -eq 0 ]
     local ctx
     ctx=$(printf '%s' "$output" | jq -r '.hookSpecificOutput.additionalContext // ""')
-    [[ "$ctx" == *"you are the QUEEN"* ]] || { echo "orchestrator not self-identified"; false; }
+    [[ "$ctx" == *"You are the QUEEN"* ]] || { echo "orchestrator not self-identified"; false; }
+    [[ "$ctx" != *"Orchestrator session"* ]] || { echo "old prefix still present"; false; }
     # Discriminates against the project branch: the Queen does not get the drone vocabulary block.
     [[ "$ctx" != *"Call her the Queen in prose"* ]] || {
         echo "orchestrator got the drone-facing block"; false; }
