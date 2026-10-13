@@ -757,6 +757,11 @@ borg_resume_watch_once() {
     case "$_hours" in "" | *[!0-9]*) _hours=72 ;; esac
     _cut=$((_now - _hours * 3600))
 
+    # S14 (lib/borg/resume-cli.sh): the cancel and run events are folded right after the defers.
+    # shellcheck source=/dev/null
+    if [ -n "${BORG_RESUME_LIBDIR:-}" ] && [ -f "$BORG_RESUME_LIBDIR/resume-cli.sh" ]; then
+        . "$BORG_RESUME_LIBDIR/resume-cli.sh"
+    fi
     for _f in "$_d"/events/*.jsonl; do
         [ -f "$_f" ] || continue
         _sid="${_f##*/}"
@@ -764,6 +769,7 @@ borg_resume_watch_once() {
         borg_resume_valid_sid "$_sid" || continue
         _rw_fold_hooks "$_sid"
         _rw_fold_defers "$_sid"
+        command -v borg_resume_cli_fold >/dev/null 2>&1 && borg_resume_cli_fold "$_sid"
     done
     for _f in "$_d"/sessions/*.json; do
         [ -f "$_f" ] || continue
