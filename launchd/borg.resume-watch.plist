@@ -26,11 +26,15 @@
         <string>{{HOME}}</string>
         <key>PATH</key>
         <string>{{PATH_VALUE}}</string>
+        <key>XDG_STATE_HOME</key>
+        <string>{{XDG_STATE_HOME}}</string>
         <key>BORG_CLAUDE_BIN</key>
         <string>{{CLAUDE_BIN}}</string>
     </dict>
+    <!-- stdout is discarded: a pass prints a summary line every 30s and nothing rotates the log. Real problems
+         go to stderr. -->
     <key>StandardOutPath</key>
-    <string>{{LOG_DIR}}/resume-watch.stdout.log</string>
+    <string>/dev/null</string>
     <key>StandardErrorPath</key>
     <string>{{LOG_DIR}}/resume-watch.stderr.log</string>
 </dict>

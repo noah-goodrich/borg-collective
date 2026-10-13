@@ -14,7 +14,7 @@ load test_helper/setup
 LIB="${BATS_TEST_DIRNAME}/../lib/launchd-label.zsh"
 INSTALL_SH="${BATS_TEST_DIRNAME}/../install.sh"
 LAUNCHD_DIR="${BATS_TEST_DIRNAME}/../launchd"
-AGENTS="notifyd cortex-wake usage-watch reap pr-watch memory-gate"
+AGENTS="notifyd cortex-wake usage-watch reap pr-watch memory-gate resume-watch"
 
 setup() {
     setup_temp_dirs
@@ -178,6 +178,9 @@ _label() { zsh -c "source '$LIB' && _borg_launchd_label \"\$@\"" -- "$@"; }
             -e "s|{{USAGE_WATCH_BIN}}|/x/bin/borg-usage-watch|g" \
             -e "s|{{MEMORY_GATE_BIN}}|/x/bin/borg-memory-gate|g" \
             -e "s|{{BORG_BIN}}|/x/bin/borg|g" \
+            -e "s|{{RESUME_BIN}}|/x/bin/borg-resume|g" \
+            -e "s|{{CLAUDE_BIN}}|/x/bin/claude|g" \
+            -e "s|{{XDG_STATE_HOME}}|/x/state|g" \
             -e "s|{{BORG_ROOT}}|/x/borg-collective|g" \
             -e "s|{{LOG_DIR}}|/x/share/borg|g" \
             -e "s|{{USER}}|tester|g" \
@@ -442,5 +445,5 @@ MOCK
 @test "contract: install.sh calls _launchd_install_extensions and never migrates extension labels" {
     grep -q '^_launchd_install_extensions$' "$INSTALL_SH"
     # The legacy migration is keyed on borg's own agents only.
-    [ "$(grep -c '_launchd_retire_legacy ' "$INSTALL_SH")" -eq 6 ]
+    [ "$(grep -c '_launchd_retire_legacy ' "$INSTALL_SH")" -eq 7 ]
 }

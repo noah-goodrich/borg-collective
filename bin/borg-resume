@@ -4,7 +4,8 @@
 # Verbs:
 #   record <event>   called by a hook with the hook payload on stdin. Appends ONE fact to
 #                    events/<sid>.jsonl; for session_start it also writes the registry
-#                    sessions/<sid>.json (replaced atomically on each session_start) and binds the tmux pane (@borg_sid).
+#                    sessions/<sid>.json (replaced atomically on each session_start) and binds the tmux pane
+#                    (@borg_sid).
 #                    Exits 0 silently on every failure once its lib loads; exits 3 with one stderr line when it can not
 #                    load resume-paths.sh (S12). Never blocks: it is called from a hook.
 #   pause            create the DISABLED sentinel (nothing will inject; recording continues)

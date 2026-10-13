@@ -332,7 +332,7 @@ Variants chosen by `class`:
 - `prompt_too_long`: the first injected line is `/compact`, and the file is only injected after the compact boundary appears.
 - `process_death`: header says the process was restarted with `--resume`; Step 0 adds "check `git status` in the cwd for half-written files".
 
-Permissions for unattended runs: the prompt runs `borg-resume`, `Workflow`, `SendMessage`, and `Agent`. `install.sh` merges these allowlist entries into the global settings idempotently with jq (never project-level): `Bash(~/.claude/bin/borg-resume:*)`, `Bash(borg-resume:*)`, `Read(~/.local/state/borg/resume/**)`. `borg doctor` fails loudly if they are missing. Because this touches the global `settings.json`, it needs Noah's explicit OK (Decision 10). `Workflow`, `SendMessage`, and `Agent` are not added to the allowlist; if they would prompt, the post-confirmation watchdog reports `stalled`.
+Permissions for unattended runs (D10 approved 2026-10-12): the prompt runs `borg-resume`, `Workflow`, `SendMessage`, and `Agent`. `borg setup` carries these allowlist entries in config/claude/settings.base.json and merges them into the global settings additively, symlink-safe, with a timestamped backup (never project-level; the Bash entry is rendered with the absolute home path): `Bash(~/.claude/bin/borg-resume:*)`, `Bash(borg-resume:*)`, `Read(~/.local/state/borg/resume/**)`. `borg doctor` fails loudly if they are missing. Noah approved this on 2026-10-12 (Decision 10). `Workflow`, `SendMessage`, and `Agent` are not added to the allowlist; if they would prompt, the post-confirmation watchdog reports `stalled`.
 
 ## Safety rules
 
@@ -519,7 +519,7 @@ Disposition (approved 2026-10-12, Noah, lean defaults):
 - D6 approved: bind mount.
 - D7, D8, D12 approved at their lean answers (no, never, no).
 - D9 approved: weekly limit auto-resumes with two notifications; `BORG_RESUME_WEEKLY=notify` overrides.
-- D10 PENDING: not approved. Nothing may edit the global settings.json until Noah gives an explicit OK.
+- D10 APPROVED (Noah, 2026-10-12): the install may add Bash(~/.claude/bin/borg-resume:*), Bash(borg-resume:*) and Read(~/.local/state/borg/resume/**) to the global settings.json. `BORG_RESUME_WATCH=0` at install time opts out of the watcher job and of these entries.
 - D11 approved: full session at the `--resume` size dialog; blocked on spike U17, so unrecognized dialogs stay notify-only.
 
 Kill switch: the `DISABLED` sentinel pauses injection only; `BORG_RESUME_DISABLE=1` stops everything.

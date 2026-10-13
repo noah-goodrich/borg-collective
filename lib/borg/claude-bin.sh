@@ -10,7 +10,7 @@
 # Returns 1 and leaves BORG_CLAUDE_BIN unset when nothing is found. Bash 3.2 safe; never exits.
 
 borg_resolve_claude_bin() {
-    local _cand _dir _dirs _ifs_old
+    local _cand _dir _dirs _rest
     if [ -n "${BORG_CLAUDE_BIN:-}" ] && [ "${BORG_CLAUDE_BIN#/}" != "$BORG_CLAUDE_BIN" ] \
         && [ -x "$BORG_CLAUDE_BIN" ] && [ ! -d "$BORG_CLAUDE_BIN" ]; then
         export BORG_CLAUDE_BIN
@@ -23,17 +23,17 @@ borg_resolve_claude_bin() {
         return 0
     fi
     _dirs="${BORG_CLAUDE_SEARCH_DIRS:-${HOME:-}/.local/bin:/opt/homebrew/bin:/usr/local/bin}"
-    _ifs_old="$IFS"
-    IFS=:
-    for _dir in $_dirs; do
+    # Split on ":" with parameter expansion, not IFS word-splitting: zsh does not split unquoted expansions.
+    _rest="$_dirs:"
+    while [ -n "$_rest" ]; do
+        _dir="${_rest%%:*}"
+        _rest="${_rest#*:}"
         if [ -n "$_dir" ] && [ -x "$_dir/claude" ] && [ ! -d "$_dir/claude" ]; then
-            IFS="$_ifs_old"
             BORG_CLAUDE_BIN="$_dir/claude"
             export BORG_CLAUDE_BIN
             return 0
         fi
     done
-    IFS="$_ifs_old"
     unset BORG_CLAUDE_BIN
     return 1
 }

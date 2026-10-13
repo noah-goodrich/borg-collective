@@ -49,7 +49,8 @@ case "$_ev" in
 esac
 
 # claude is this script's parent; borg-resume runs as our child, so hand the pid over explicitly.
-# stderr is captured (first line only is kept) so a failure such as an uninstalled lib lands in hook.log with its reason.
+# stderr is captured (first line only is kept) so a failure such as an uninstalled lib lands in hook.log
+# with its reason.
 _err="$({ printf '%s' "$_payload" | BORG_RESUME_CLAUDE_PID="$PPID" "$_bin" record "$_le" >/dev/null; } 2>&1)"
 _rc=$?
 if [ "$_rc" -ne 0 ]; then
