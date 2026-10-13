@@ -815,7 +815,7 @@ def deny(origin, problems):
     sys.stderr.write("borg workflow model guard: Workflow denied (%s).\n" % origin)
     for q in problems:
         sys.stderr.write("  - %s\n" % q)
-    sys.stderr.write("Policy: orchestrator/drone sessions run Opus xhigh; every agent() must be below that: "
+    sys.stderr.write("Policy: Queen/drone sessions run Opus xhigh; every agent() must be below that: "
                      "an allowlisted agentType (borg-collective:borg-scout/-grunt/-nanoprobe/-researcher/"
                      "-reviewer/-verifier, claude-code-guide), or with no agentType model 'sonnet'/'haiku' "
                      "AND effort low/medium/high; claude-code-guide also needs effort low/medium/high. "

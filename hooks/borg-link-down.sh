@@ -144,7 +144,7 @@ if [[ "$MODE" == "orchestrator" ]]; then
         _repositories_tsv=$(printf '%s' "$_repositories_tsv" | sort -t$'\t' -k3 -r 2>/dev/null || printf '%s' "$_repositories_tsv")
 
         _proj_count=$(printf '%s' "$_repositories_tsv" | grep -c . 2>/dev/null || echo 0)
-        OVERVIEW+="Orchestrator session — you are the QUEEN (${_proj_count} repositories)"$'\n\n'
+        OVERVIEW+="You are the QUEEN (${_proj_count} repositories)"$'\n\n'
         if [[ -n "$_repositories_tsv" ]]; then
             while IFS=$'\t' read -r _name _status _last _path; do
                 [[ -z "$_name" ]] && continue
@@ -157,7 +157,7 @@ if [[ "$MODE" == "orchestrator" ]]; then
             OVERVIEW+="  (no repositories registered — run 'borg add <path>' or 'borg scan')"$'\n'
         fi
     else
-        OVERVIEW="Orchestrator session — registry not initialized. Run 'borg setup'."
+        OVERVIEW="You are the QUEEN — registry not initialized. Run 'borg setup'."
     fi
     OVERVIEW+=$'\n\n'"$ROUTING_CARD"
 

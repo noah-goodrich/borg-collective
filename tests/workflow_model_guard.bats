@@ -292,6 +292,13 @@ CMD_RT='{"type":"user","message":{"role":"user","content":"<command-name>/resear
     [ "$status" -eq 2 ]
 }
 
+@test "the deny message names the Queen/drone session tier" {
+    _run_json '{"tool_name":"Workflow","tool_input":{}}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"Policy: Queen/drone sessions run Opus xhigh"* ]] || false
+    [[ "$output" != *"orchestrator/drone"* ]] || false
+}
+
 @test "a Workflow call with no script, scriptPath or name is denied" {
     _run_json '{"tool_name":"Workflow","tool_input":{}}'
     [ "$status" -eq 2 ]

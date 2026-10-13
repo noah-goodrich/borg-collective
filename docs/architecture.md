@@ -9,7 +9,7 @@ How every component of Borg fits together.
 Borg is an AI development orchestration framework with two layers:
 
 1. **`borg` (orchestration)** — Runs on the host. Manages a JSON registry of projects, scores
-   priorities, enforces work/life boundaries, launches an orchestrator Claude session for morning
+   priorities, enforces work/life boundaries, launches the Queen session for morning
    briefings, and provides the `borg next` / `Ctrl+Space >` hotkey for instant context switching.
 
 2. **`drone` (project lifecycle)** — Runs on the host. Manages Docker Compose containers, tmux
@@ -251,7 +251,7 @@ borg.zsh
   │           _borg_orchestrator_context)
   ├── Commands
   │   ├── cmd_init        Build briefing context → claude --append-system-prompt
-  │   ├── cmd_claude      claude --continue from BORG_ORCHESTRATOR_ROOT (resume orchestrator)
+  │   ├── cmd_claude      claude --continue in the Queen's root
   │   ├── cmd_next        Priority scoring → recommendation → switch
   │   ├── cmd_ls          Dashboard with sorting, markers, capacity warning
   │   ├── cmd_switch      fzf picker or direct switch
@@ -323,7 +323,7 @@ Hooks are registered in `~/.claude/settings.json`:
 session JSONL for an `ExitPlanMode` tool call since the most recent real user message. If found,
 and no `PROJECT_PLAN.md` already exists in the repo, it writes the plan to
 `docs/plans/PROJECT_PLAN.md` (creating the directory if needed) and emits a one-line note to
-stderr. Always exits 0 — it never blocks the edit. Project-mode only; orchestrator sessions are
+stderr. Always exits 0 — it never blocks the edit. Project-mode only; Queen sessions are
 excluded via `_borg_session_mode`.
 
 ---
@@ -427,7 +427,7 @@ the move.
 
 ## Agent Roster and Nanoprobe Delegation
 
-The orchestrator session never edits project files directly — it briefs, spawns, monitors, and
+The Queen session never edits project files directly — it briefs, spawns, monitors, and
 synthesizes. Actual work is delegated to ephemeral subagents via the Agent tool, routed by model
 tier per `docs/agent-routing.md`:
 
@@ -492,5 +492,5 @@ directory names.
 | jq | Yes | Registry JSON CRUD |
 | fzf | Yes | Fuzzy picker for `borg switch` |
 | tmux | Yes | Session multiplexing |
-| claude | Optional | Orchestrator session, `borg link --brief` narrative over the link document |
+| claude | Optional | Queen session, `borg link --brief` narrative over the link document |
 | Docker | Optional | Devcontainer support |
