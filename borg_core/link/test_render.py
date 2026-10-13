@@ -127,9 +127,10 @@ def test_the_human_arm_names_render_document_exactly_once():
 # ── R3/R4: the spine, and the empty-section rule that makes it assertable ──────────────────────────
 
 
-def test_every_section_renders_its_header_in_both_contexts():
-    """The invariant compares each context against the SECTIONS CONSTANT, never against the other
-    context: a header diff between two renderings goes green if both drift together."""
+def test_every_section_renders_its_header_on_each_page():
+    """The invariant compares each page against ITS OWN section list, never against the other page: a header
+    diff between two renderings goes green if both drift together. Since 2026-10-13 there are two lists --
+    the Queen's `SECTIONS` and a directory's `REPOSITORY_SECTIONS` -- and `scope.kind` picks between them."""
     expected = [title for title, _ in render.SECTIONS if title]
     # A9. NINE SECTIONS SINCE THE BOARD (WAITING ON YOU, last: link-unification L3). EIGHT SINCE AC4. This list going red is the reviewable event AC2's directive chose
     # over reserving an always-empty slot for yours-vs-mine ahead of time -- "a section that renders
@@ -138,7 +139,11 @@ def test_every_section_renders_its_header_in_both_contexts():
     # above SIGNALS so the honest "nobody looked" line is the last word on a `--local` render.
     assert expected == ["IN FOCUS", "REPOSITORIES", "CHAINS", "QUEUED", "SHIPPED", "NEXT", "SIGNALS", "WAITING ON YOU"]
     assert _headers(render.document(_doc())) == expected
-    assert _headers(render.document(_repository_doc())) == expected
+    # THE DIRECTORY'S PAGE: strictly one directory -- its card, then what waits on it. MUTATION: add "REPOSITORIES"
+    # (or any repository-level section) to REPOSITORY_SECTIONS and this goes red, which is the point.
+    directory = [title for title, _ in render.REPOSITORY_SECTIONS if title]
+    assert directory == ["IN FOCUS", "WAITING ON YOU"]
+    assert _headers(render.document(_repository_doc())) == directory
 
 
 def test_an_empty_section_renders_exactly_one_placeholder_line():
@@ -285,46 +290,46 @@ def test_lone_archived_prints_both_tip_and_all_filtered_sentence():
 # ── R7/R8: what scope narrows, and what it must not ───────────────────────────────────────────────
 
 
-def test_the_board_is_registry_wide_in_repository_scope():
-    """REPOSITORIES is the one section breadth does NOT touch. skills/borg-switch runs
-    `borg link --local --all` from a repository session's cwd and reads the whole table out of it;
-    borg.zsh's 5s watch redraw does the same. Narrowing it makes both a one-row list."""
+def test_the_board_is_the_queens_page_alone():
+    """REPOSITORIES is the cross-repository overview and the overview is the Queen's (2026-10-13). A directory's
+    page names no other repository, however many the document carries -- the document is registry-wide, the
+    page is not. skills/borg-switch gets its cross-repository list from `--overview` instead."""
     projects = {
         "p": {"source": "cli", "status": "active", "relative_activity": "2h ago", "summary": "Mine."},
         "other": {"source": "cli", "status": "idle", "relative_activity": "1d ago", "summary": "Theirs."},
     }
-    doc = _repository_doc(total_projects=2, order=["p", "other"], projects=projects)
-    out = render.document(doc)
-    assert "other" in out
-    assert "Theirs." in out
-    # ...and the scoped row is MARKED rather than made the only row.
-    marked = [line for line in out.split("\n") if "◀" in line]
-    assert len(marked) == 1
-    assert marked[0].lstrip().startswith("p ")
+    repository = render.document(_repository_doc(total_projects=2, order=["p", "other"], projects=projects))
+    assert "other" not in repository
+    assert "Theirs." not in repository
+    assert "REPOSITORY" not in repository
+
+    queen = render.document(_doc(total_projects=2, order=["p", "other"], projects=projects))
+    assert "other" in queen and "Theirs." in queen
 
 
-def test_queued_reads_focus_directives_in_repository_scope_and_the_aggregate_otherwise():
-    """The `[repository]` tag follows the breadth: information in the orchestrator context, noise in
-    the repository's own."""
+def test_queued_is_the_queens_aggregate_and_a_directory_page_has_none():
+    """QUEUED is repository-level (it lists filed directives), so only the Queen's page prints it. The directory's
+    own directives still ride in `--json` as `focus.directives`; the page stops rendering them."""
     aggregate = [{"project": "other", "title": "Someone else's directive"}]
     scoped = [{"title": "My directive"}]
 
     repository = render.document(_repository_doc(directives=aggregate, focus=_focus(directives=scoped)))
-    assert "My directive" in repository
+    assert "My directive" not in repository
     assert "Someone else's directive" not in repository
-    assert "[other]" not in repository
+    assert "QUEUED" not in repository
 
     orchestrator = render.document(_doc(directives=aggregate))
     assert "[other] Someone else's directive" in orchestrator
 
 
-def test_shipped_follows_the_same_breadth_rule_as_queued():
+def test_shipped_follows_the_same_rule_as_queued():
     aggregate = [{"project": "other", "title": "Their ship", "ship_date": "2026-01-01"}]
     scoped = [{"title": "My ship", "ship_date": "2026-02-02"}]
 
     repository = render.document(_repository_doc(assimilated=aggregate, focus=_focus(assimilated=scoped)))
-    assert "My ship (2026-02-02)" in repository
+    assert "My ship" not in repository
     assert "Their ship" not in repository
+    assert "SHIPPED" not in repository
 
     orchestrator = render.document(_doc(assimilated=aggregate))
     assert "[other] Their ship (2026-01-01)" in orchestrator
@@ -340,8 +345,9 @@ def test_focus_path_line_omitted_entirely_when_path_is_the_string_null():
 
 def test_status_line_appears_exactly_once_on_the_whole_page_and_ends_in_the_status_word():
     """drone.zsh:964's `grep -m1 'Status:'` reads this line. The fixture below puts the literal
-    `Status:` inside a PR title in CHAINS as well, which is the poisoning shape a real sweep
-    produces -- IN FOCUS being section 2 is what keeps `-m1` landing on the right one."""
+    `Status:` inside a PR title in CHAINS of the Queen's page, which is the poisoning shape a real sweep
+    produces. A directory's page does not render CHAINS at all, so there the card's line is the only one
+    and it is FIRST by construction; the Queen's page has no card, hence no `Status:` line of its own."""
     doc = _repository_doc(focus=_focus(entry={"path": "null", "status": "active"}))
     doc["grid"]["manifests"] = [
         {
@@ -369,49 +375,24 @@ def test_status_line_appears_exactly_once_on_the_whole_page_and_ends_in_the_stat
     out = render.document(doc)
     body_text = plain(out)
     status_lines = [line for line in body_text.split("\n") if "Status:" in line]
-    assert len(status_lines) == 2  # the card's own line, plus the poisoned PR title below it
+    assert len(status_lines) == 1  # the card's own line; the poisoned PR title is not on this page
     assert status_lines[0].startswith("  Status:")
     assert status_lines[0].endswith("active")
 
+    # On the Queen's page the poisoned title IS rendered, and it is the only `Status:` there: the Queen has no card.
+    queen = plain(render.document({**doc, "focus": None, "scope": {"kind": "orchestrator"}})).split("\n")
+    assert [line for line in queen if "Status:" in line] == [line for line in queen if "normalise the rollout" in line]
+    assert len([line for line in queen if "Status:" in line]) == 1
 
-def test_objective_omitted_with_no_placeholder_when_empty():
-    doc = _repository_doc(focus=_focus(plan={"objective": "", "met": 0, "total": 2}))
+
+def test_the_plan_is_not_on_a_directorys_page():
+    """The Active Plan block left the page with the repository-level sections (2026-10-13). `focus.plan` still
+    rides in `--json`, so a consumer that wants it has it; the human page is strictly the directory's card."""
+    doc = _repository_doc(focus=_focus(plan={"objective": "Ship the thing.", "met": 1, "total": 2}))
     out = render.document(doc)
-    assert "Objective:" not in out
-    assert "0/2 criteria met" in out
-
-
-def test_the_objective_folds_like_a_summary_instead_of_running_off_the_page():
-    """MUTATION: restore `out.append(f"  {CYAN}Objective:{NC} {objective}\\n")` in `_focus_section`.
-
-    IN FOCUS printed the objective RAW while `_summary_block`, three lines above it in the same
-    section, folded at 70. Measured against this repo's own PROJECT_PLAN.md the emitted line was 129
-    VISIBLE COLUMNS -- the widest row the document produces, and wider than the picture's own
-    68-column budget. Nothing caught it because every fixture objective is one short line.
-
-    ASSERTED AS A WIDTH BOUND, not as a set of expected break points: any honest fold satisfies it
-    and the raw print cannot. The whole objective must still be PRESENT, so folding may not become
-    truncating by another name.
-    """
-    objective = (
-        "Land the derived-fact surface behind one front door, so that every consumer reads the same "
-        "document, and no renderer re-derives a number the wire already published."
-    )
-    doc = _repository_doc(focus=_focus(plan={"objective": objective, "met": 1, "total": 2}))
-    body = plain(render.document(doc)).split("\n")
-
-    # The Active Plan block is `Objective:` then `Progress:`, so the objective owns every line
-    # between them -- one, before this fix; as many as the fold needs, after it.
-    start = next(i for i, line in enumerate(body) if line.startswith("  Objective:"))
-    end = next(i for i, line in enumerate(body) if line.startswith("  Progress:"))
-    block = body[start:end]
-
-    assert len(block) > 1, "an objective well past 70 columns must wrap at all"
-    for line in block:
-        assert len(line) <= 72, f"{len(line)} columns: {line}"
-        assert not line[2:3].isspace(), f"a continuation must never begin with a space: {line!r}"
-    # Reassembling the block must give the objective back -- folding, never truncating.
-    assert " ".join(part.strip() for part in block) == f"Objective: {objective}"
+    assert "Active Plan" not in out
+    assert "Ship the thing." not in out
+    assert "criteria met" not in out
 
 
 def test_focus_renders_checkpoints_and_the_latest_head():
@@ -726,7 +707,7 @@ def test_chains_renders_a_manifest_heading_its_description_and_its_repositories(
     """MUTATION: drop the `desc` or `repos` line from `_manifest_lines`. Both are AC2 additions to
     the wire (grid.py's `desc`/`repos`) and neither has any other consumer, so nothing else notices
     if the renderer stops reading them."""
-    doc = _repository_doc()
+    doc = _doc()
     doc["grid"]["manifests"] = [_fork_block()]
     body_text = plain(render.document(doc))
 
@@ -747,7 +728,7 @@ def test_a_manifest_with_no_description_or_repositories_renders_neither_line():
     block = _fork_block()
     block["desc"] = ""
     block["repos"] = []
-    doc = _repository_doc()
+    doc = _doc()
     doc["grid"]["manifests"] = [block]
     body_text = plain(render.document(doc))
 
@@ -775,7 +756,7 @@ def test_signals_names_a_declared_cycle_rather_than_drawing_it():
     block = link_grid.grid_manifest(cyclic, {}, {})
     assert render.picture.back_edges(block), "the fixture must actually be cyclic"
 
-    doc = _repository_doc()
+    doc = _doc()
     doc["grid"]["manifests"] = [block]
     assert "loop: 1 declared edge forms a cycle and is not drawn" in render.document(doc)
 
@@ -803,7 +784,7 @@ def test_signals_names_a_declared_cycle_rather_than_drawing_it():
     assert "edge forms" not in out
 
     # An acyclic manifest says nothing at all.
-    clean = _repository_doc()
+    clean = _doc()
     clean["grid"]["manifests"] = [_fork_block()]
     assert "cycle" not in render.document(clean)
 
@@ -878,11 +859,12 @@ def test_assimilated_omits_parens_when_ship_date_empty():
     assert "()" not in out
     assert "[borg-collective] recon migration ledger (C6) (2026-08-12)" in out
 
-    scoped = render.document(
-        _repository_doc(focus=_focus(assimilated=[{"slug": "s", "title": "Deep shipped (C6)", "ship_date": ""}]))
+    # ...and the bullet loop is the Queen's alone: a bare-date item with no `project` tag still prints cleanly.
+    untagged = render.document(
+        _doc(assimilated=[{"project": "", "slug": "s", "title": "Deep shipped (C6)", "ship_date": ""}])
     )
-    assert "Deep shipped (C6)\x1b[0m\n" in scoped
-    assert "()" not in scoped
+    assert "Deep shipped (C6)\x1b[0m\n" in untagged
+    assert "()" not in untagged
 
 
 def test_render_imports_no_impure_module():
@@ -1642,8 +1624,288 @@ def test_the_next_action_never_puts_a_malformed_ref_on_a_command_line():
     assert render._next_action_command("o/r#7") == "gh pr view 7 -R o/r"  # pylint: disable=protected-access
 
 
-def test_the_next_action_line_is_the_same_in_both_scopes():
-    """One spine, no branch on scope: the final line is identical in orchestrator and repository scope."""
+def test_the_next_action_line_ends_both_pages_but_a_directory_sees_only_its_own_items():
+    """The final line is a `next` line with a runnable command on BOTH pages (L3). What differs is its input:
+    the Queen's sees the manifest decision, a directory's does not, because a manifest row is a fact about the
+    repository and not about this checkout. MUTATION: restore the manifest read in `_waiting` for repository
+    scope and the directory's page recommends a pull request that is not its own."""
     doc = _ready_doc(["o/r#2"], gates=[_gate("o/r#2", "decision", "Dana signs off")])
     repo = {**doc, "scope": {"kind": "repository"}}
-    assert _page_tail(doc)[-1] == _page_tail(repo)[-1]
+    assert _page_tail(doc)[-1].startswith("  next  o/r#2") and _page_tail(doc)[-1].endswith("gh pr view 2 -R o/r")
+    last = _page_tail(repo)[-1]
+    assert last.startswith("  next  ") and last.endswith("borg next")
+    assert "o/r#2" not in last
+# ── the page of repository scope: strictly one directory (2026-10-13) ───────────────────────────────
+
+
+def _worktree_focus(**overrides) -> dict:
+    return _focus(
+        name="door",
+        entry={
+            "path": "/dev/borg-door",
+            "source": "cli",
+            "status": "active",
+            "last_activity": "2026-10-13T09:00:00Z",
+            "tmux_window": "door",
+            "claude_session_id": "sess-door-1",
+            "summary": "Own summary.",
+        },
+        identity={"kind": "worktree", "branch": "feat-x", "worktree_of": "borg"},
+        checkpoints=["2026-10-13-0900.md"],
+        checkpoint_head="# Own checkpoint",
+        **overrides,
+    )
+
+
+def _door_doc(**overrides) -> dict:
+    """A directory's document that ALSO carries every repository-level thing the Queen's page would print.
+
+    The registry-wide keys are populated on purpose: the page must be strictly the directory by CHOICE, not
+    because the document happened to be thin.
+    """
+    others = {
+        "door": {"source": "cli", "status": "active", "relative_activity": "1h ago", "summary": "Own summary."},
+        "sibling": {"source": "cli", "status": "waiting", "relative_activity": "2h ago", "summary": "Sibling work."},
+        "other-repo": {"source": "cli", "status": "idle", "relative_activity": "3d ago", "summary": "Elsewhere."},
+    }
+    base = {
+        "focus": _worktree_focus(plan={"objective": "A plan.", "met": 1, "total": 2}),
+        "total_projects": 3,
+        "order": ["door", "sibling", "other-repo"],
+        "projects": others,
+        "directives": [{"project": "other-repo", "title": "Queued elsewhere"}],
+        "assimilated": [{"project": "other-repo", "title": "Shipped elsewhere", "ship_date": "2026-01-01"}],
+    }
+    base.update(overrides)
+    doc = _repository_doc(**base)
+    doc["scope"]["repository"] = "door"
+    doc["grid"]["warnings"] = ["sweep: a repository-level warning"]
+    doc["grid"]["manifests"] = [_fork_block()]
+    return doc
+
+
+def test_a_worktree_page_is_strictly_that_directory():
+    """The decision in one case. MUTATION: make `_sections_for` return SECTIONS for repository scope, or add any
+    repository-level builder to REPOSITORY_SECTIONS -- every absence below goes red."""
+    out = plain(render.document(_door_doc()))
+    assert out.startswith("▸ IN FOCUS  door — worktree of borg\n")
+    for kept in (
+        "Path:         /dev/borg-door",
+        "Branch:       feat-x",
+        "Worktree of:  borg",
+        "Status:       active",
+        "sess-door-1",
+        "Own summary.",
+        "2026-10-13-0900.md",
+        "# Own checkpoint",
+    ):
+        assert kept in out, kept
+    for absent in (
+        "THE BORG COLLECTIVE",
+        "Tip:",
+        "REPOSITORIES",
+        "CHAINS",
+        "QUEUED",
+        "SHIPPED",
+        "NEXT",
+        "SIGNALS",
+        "Active Plan",
+        "sibling",
+        "other-repo",
+        "Sibling work.",
+        "Elsewhere.",
+        "Queued elsewhere",
+        "Shipped elsewhere",
+        "auth-hardening",
+        "a repository-level warning",
+    ):
+        assert absent not in out, absent
+
+
+def test_a_main_checkout_page_is_labelled_a_main_checkout_and_has_no_worktree_of_line():
+    focus = _worktree_focus()
+    focus["identity"] = {"kind": "checkout", "branch": "main", "worktree_of": ""}
+    out = plain(render.document(_door_doc(focus=focus)))
+    assert out.startswith("▸ IN FOCUS  door — main checkout\n")
+    assert "Branch:       main" in out
+    assert "Worktree of:" not in out
+
+
+def test_the_identity_lines_are_omitted_when_git_did_not_state_them():
+    """A non-git directory has no branch and no relationship; a blank `Branch:` would state a falsehood."""
+    focus = _worktree_focus()
+    focus["identity"] = {"kind": "directory", "branch": "", "worktree_of": ""}
+    out = plain(render.document(_door_doc(focus=focus)))
+    assert out.startswith("▸ IN FOCUS  door\n")
+    assert "Branch:" not in out and "Worktree of:" not in out
+    del focus["identity"]
+    assert plain(render.document(_door_doc(focus=focus))).startswith("▸ IN FOCUS  door\n")
+
+
+def test_a_detached_head_worktree_states_where_it_is_detached():
+    """A detached HEAD has no branch NAME but is not unstated: the row says `detached at <short sha>`.
+
+    MUTATION: drop the `elif` in `_focus_section` and the row vanishes, which is the defect decision (7) closes.
+    A real branch still wins over a stray `detached` key, and `Worktree of:` is unaffected.
+    """
+    focus = _worktree_focus()
+    focus["identity"] = {"kind": "worktree", "branch": "", "worktree_of": "borg", "detached": "8afb0b4"}
+    out = plain(render.document(_door_doc(focus=focus)))
+    assert "Branch:       detached at 8afb0b4" in out
+    assert "Worktree of:  borg" in out
+    focus["identity"] = {"kind": "worktree", "branch": "feat-x", "worktree_of": "borg", "detached": "8afb0b4"}
+    assert "detached at" not in plain(render.document(_door_doc(focus=focus)))
+
+
+def _unregistered_doc() -> dict:
+    """The document of a cwd that is neither the Queen root nor inside a registered path: the FULL registry-wide
+    document is on the wire (`--json` is scope-independent), and only `scope.unregistered` says not to show it."""
+    doc = _doc(
+        total_projects=2,
+        order=["alpha-secret", "beta-secret"],
+        projects={
+            "alpha-secret": {"source": "cli", "status": "idle", "path": "/dev/alpha-secret", "summary": "Alpha."},
+            "beta-secret": {"source": "cli", "status": "waiting", "path": "/dev/beta-secret", "summary": "Beta."},
+        },
+        directives=[{"project": "alpha-secret", "title": "Queued elsewhere", "slug": "q"}],
+    )
+    doc["scope"] = {"kind": "orchestrator", "repository": None, "local": False, "unregistered": True}
+    return doc
+
+
+def test_an_unregistered_directory_prints_the_hint_page_and_never_the_overview():
+    """Decision (3): a stranger directory is told what it is not and given two commands. MUTATION: drop the
+    `_is_unregistered` arm in `_sections_for` and the whole overview (every registry name) renders again."""
+    out = plain(render.document(_unregistered_doc()))
+    assert "This directory is not a registered repository." in out
+    assert "borg add" in out
+    assert "borg link --overview" in out
+    for absent in ("alpha-secret", "beta-secret", "THE BORG COLLECTIVE", "REPOSITORIES", "QUEUED", "WAITING ON YOU"):
+        assert absent not in out, absent
+    assert _headers(render.document(_unregistered_doc())) == []
+
+
+def test_the_queen_root_with_no_unregistered_key_still_renders_the_overview():
+    """The hint is keyed on the additive key alone: the same document without it is the Queen's page."""
+    doc = _unregistered_doc()
+    del doc["scope"]["unregistered"]
+    out = plain(render.document(doc))
+    assert "alpha-secret" in out and "REPOSITORIES" in out
+    assert "not a registered repository" not in out
+
+
+def test_a_directory_page_points_at_the_queen_view_and_still_ends_on_the_next_action():
+    """L3: the answer is the last line. The pointer is ABOVE it. MUTATION: move the pointer entry after
+    WAITING ON YOU in REPOSITORY_SECTIONS and the last-line assertion goes red."""
+    lines = plain(render.document(_door_doc())).split("\n")
+    pointer = next(i for i, line in enumerate(lines) if "borg link --overview" in line)
+    waiting = next(i for i, line in enumerate(lines) if line.startswith("▸ WAITING ON YOU"))
+    assert "Queen view" in lines[pointer]
+    assert pointer < waiting
+    body = [line for line in lines if line.strip()]
+    assert body[-1].startswith("  next  ") and body[-1].endswith("borg next")
+
+
+def test_a_directorys_waiting_section_holds_its_own_session_row_only():
+    """MUTATION: drop the repository-scope filter in `render._waiting` and the PR row, the manifest decision and
+    the `+N` hidden counts -- all repository-level -- come back onto a page about one checkout."""
+    session = {"project": "door", "item": "session", "next_step": "reply to session", "owner": "YOU", "ref": None}
+    pull_request = {"project": "door", "item": "Fix the thing", "next_step": "merge", "owner": "YOU", "ref": "o/r#9"}
+    doc = _door_doc(
+        waiting={
+            "rows": [session, pull_request],
+            "hidden": {"agent": 2, "stale": 0, "overflow": 0},
+            "hidden_lines": ["+2 agent tasks"],
+            "degraded": None,
+        }
+    )
+    out = plain(render.document(doc))
+    assert "▶ session" in out and "reply to session" in out
+    assert "o/r#9" not in out and "Fix the thing" not in out
+    assert "agent tasks" not in out
+
+    queen = plain(render.document({**doc, "focus": None, "scope": {"kind": "orchestrator"}}))
+    assert "Fix the thing" in queen and "+2 agent tasks" in queen
+
+
+def test_a_directory_with_nothing_waiting_says_so_and_still_gives_a_runnable_next_action():
+    out = plain(render.document(_door_doc()))
+    assert "— nothing waits on you" in out
+    assert [line for line in out.split("\n") if line.strip()][-1] == "  next  nothing is ready  borg next"
+
+
+def test_a_degraded_waiting_block_is_still_reported_on_a_directory_page():
+    out = plain(render.document(_door_doc(waiting={"rows": [], "hidden_lines": [], "degraded": "boom"})))
+    assert "rows degraded: boom" in out
+
+
+# ── the Queen's board collapses worktrees under their repository (2026-10-13) ───────────────────────
+
+
+_COMMON = "/dev/borg/.git"
+
+
+def _grouped_board_doc() -> dict:
+    projects = {
+        "door": {
+            "source": "cli",
+            "status": "waiting",
+            "relative_activity": "1h ago",
+            "summary": "Door.",
+            "path": "/dev/borg-door",
+            "repo": _COMMON,
+        },
+        "borg": {
+            "source": "cli",
+            "status": "idle",
+            "relative_activity": "2h ago",
+            "summary": "Borg.",
+            "path": "/dev/borg",
+            "repo": _COMMON,
+        },
+        "solo": {
+            "source": "cli",
+            "status": "idle",
+            "relative_activity": "3d ago",
+            "summary": "Solo.",
+            "path": "/dev/solo",
+        },
+    }
+    return _doc(total_projects=3, order=["door", "borg", "solo"], projects=projects)
+
+
+def test_the_board_collapses_worktrees_under_their_repository():
+    """MUTATION: iterate `order` directly in `_board_section` (the old loop) and `door` prints as its own
+    repository, the note counts three, and the worktree is not indented under `borg`."""
+    out = plain(render.document(_grouped_board_doc()))
+    assert "▸ REPOSITORIES  the collective · 2 repositories · 1 worktree · 1 need attention" in out
+    rows = [line for line in out.split("\n") if line.lstrip(" *").startswith(("borg", "└ door", "solo"))]
+    assert [line.lstrip(" *").split()[0] for line in rows] == ["borg", "└", "solo"]
+    assert rows[1].lstrip(" *").startswith("└ door")
+    # ...and the worktree's own status is still visible: a waiting session matters to the Queen.
+    assert "waiting <<<" in rows[1]
+
+
+def test_the_board_header_still_describes_its_rows_with_a_worktree_prefix():
+    """The prefix is part of the displayed name, so it is measured: a name at the column floor plus `└ ` must
+    widen the header, not push the SRC column out from under it."""
+    doc = _grouped_board_doc()
+    doc["projects"]["door"]["display_name"] = "d" * 20
+    lines = plain(render.document(doc)).split("\n")
+    header = next(line for line in lines if " SRC " in line and "STATUS" in line)
+    row = next(line for line in lines if "└ " in line)
+    assert header.index("SRC") == row.index("[C]")
+
+
+def test_a_board_with_no_shared_repo_is_unchanged_by_grouping():
+    doc = _doc(
+        total_projects=2,
+        order=["a", "b"],
+        projects={
+            "a": {"source": "cli", "status": "idle", "relative_activity": "1h ago", "summary": "A."},
+            "b": {"source": "cli", "status": "idle", "relative_activity": "2h ago", "summary": "B."},
+        },
+    )
+    out = plain(render.document(doc))
+    assert "▸ REPOSITORIES  the collective · 2 repositories · 0 need attention" in out
+    assert "worktree" not in out and "└" not in out

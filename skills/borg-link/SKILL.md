@@ -30,24 +30,27 @@ Vocabulary: a *repository* is the git repo; a *worktree* is a linked checkout re
 ONE call serves every scope. Run it once, with the project name appended only when the user gave one:
 
 ```bash
-bash -c 'set -o pipefail; borg link --json [<project>] | jq "if .scope.kind == \"orchestrator\"
+borg link --json [<project>] | jq 'if .scope.unregistered == true
+  then {version, generated_at, scope}
+  elif .scope.kind == "orchestrator"
   then (.directives |= (group_by(.project) | map({project: .[0].project, n: length,
     titles: [limit(5; .[].title)]})))
-  else (.scope.repository as \$r | {version, generated_at, scope,
+  else (.scope.repository as $r | {version, generated_at, scope,
     entry: (.focus.entry | del(.summary)),
-    waiting: {rows: [.waiting.rows[] | select(.project == \$r and .item == \"session\")],
+    waiting: {rows: [.waiting.rows[] | select(.project == $r and .item == "session")],
       degraded: .waiting.degraded}})
-  end"'
+  end'
 ```
 
 Then branch, and only on this:
 
+- `.scope.unregistered == true` → the **hint page**: the directory is neither the Queen root nor inside any registered path (the engine's own page for it says so and offers two commands). Say in two short lines that this directory is not a registered repository, that `borg add` registers it, and that `borg link --overview` (or `/borg-link` in the Queen session) gives the Queen view. Do not render the board, and do not present the overview in its place. Nothing else follows.
 - `.scope.kind == "orchestrator"` → the **Queen view**. Follow `## Queen view` below.
 - `.scope.kind == "repository"` → the **repository page**. Follow `## Repository scope` below. Stop reading the Queen view sections; they do not apply.
 
 **The `.borg-project` marker is NOT the mode decision.** It never was a reliable one: linked worktrees never get a marker, so a marker walk sent them into the overview. The engine resolves scope from the cwd (or from an explicit project name, which wins), and you believe it. The marker is read only in the `## Fallback`, where the engine cannot run. Do not write an ad hoc find/ls to detect the project.
 
-The repository-scope arm of the jq is a whitelist on purpose. `--json` stays registry-wide on every call (`order`, `projects`, `directives`, `assimilated`, `grid`), and `focus` carries a plan, directives and a checkpoint list that were read across the whole repo group, plus an `entry.summary` that came from the same union. The repository page may use none of that, so the pipe never lets it reach you.
+The repository-scope arm of the jq is a whitelist on purpose. `--json` stays registry-wide on every call (`order`, `projects`, `directives`, `assimilated`, `grid`), and `focus` carries a plan and directives, which are repository-level. Its checkpoint list, head and `entry.summary` were read across the whole repo group until 2026-10-13 and are now the directory's own, but an older engine still sends the union. The repository page reads its own directory itself and may use none of that, so the pipe never lets it reach you.
 
 **Version gate — read `.version` first.**
 - `== 2` → proceed silently.
@@ -214,18 +217,16 @@ This page is about exactly ONE directory: `.entry.path`, the directory the engin
 1. **Identity.** `.entry.path` plus branch and worktree relationship, from git on that path (one call):
 
 ```bash
-bash -c 'git -C "<entry.path>" rev-parse --abbrev-ref HEAD; git -C "<entry.path>" rev-parse --path-format=absolute --git-dir --git-common-dir'
+git -C "<entry.path>" rev-parse --abbrev-ref HEAD
+git -C "<entry.path>" rev-parse --path-format=absolute --git-dir --git-common-dir
+git -C "<entry.path>" rev-parse --short HEAD
 ```
 
-The first line is the branch. The two paths on the next lines are equal for a main checkout; when they differ this directory is a linked worktree, and the worktree-of path is the common dir without its trailing `/.git` (`.entry.repo` is the same common dir as the registry recorded it). If git fails (the path is missing or not a repository), print the path and say identity is unavailable. Do not look the parent up in the registry.
+The first line is the branch; when it is `HEAD` the checkout is detached, so write `detached at <short sha>` using the fourth line (the short sha) instead of a branch name. The two paths on the next two lines are equal for a main checkout; when they differ this directory is a linked worktree, and the worktree-of path is the common dir without its trailing `/.git` (`.entry.repo` is the same common dir as the registry recorded it). If git fails (the path is missing or not a repository), print the path and say identity is unavailable. Do not look the parent up in the registry.
 
 2. **Session and status**, all from `.entry`: `status`, `relative_activity`, `waiting_reason` when present, `has_uncommitted_changes`, `has_live_window` when present (null or absent means unknown, not false), and `tmux_window`. One or two plain lines.
 
-3. **This directory's own checkpoints, read by you from `<entry.path>/.borg/checkpoints` and from nowhere else.** The engine's `focus.checkpoints`, `focus.checkpoint_head` and `entry.summary` are read across every checkout of the repository, so they describe other worktrees too; the pipe dropped them and you must not reconstruct them. List the directory, newest filename first (a NAME sort, the same as the engine's):
-
-```bash
-bash -c 'ls -1 "<entry.path>/.borg/checkpoints" 2>/dev/null | grep "[.]md$" | sort -r | head -3'
-```
+3. **This directory's own checkpoints, read by you from `<entry.path>/.borg/checkpoints` and from nowhere else.** An older engine's `focus.checkpoints`, `focus.checkpoint_head` and `entry.summary` are read across every checkout of the repository, so they describe other worktrees too; the pipe drops them either way and you must not reconstruct them. List the directory with the Glob tool on `<entry.path>/.borg/checkpoints/*.md` (or Read the directory), then sort the names newest first yourself (a NAME sort, the same as the engine's) and keep the first 3. A missing directory is an empty listing.
 
 Read the newest file with the Read tool at `<entry.path>/.borg/checkpoints/<newest>`. The summary is its tl;dr, else its first Accomplished bullet; give the 2-3 things that matter. The "recent" line is the up-to-3 names from the listing. An empty listing or a missing directory is the normal case for a fresh worktree: say "no checkpoint here yet" and suggest `/borg-link-up` in this directory. Never fall back to a checkpoint from another directory.
 
@@ -237,16 +238,16 @@ Read the newest file with the Read tool at `<entry.path>/.borg/checkpoints/<newe
 
 ```
 ## <entry.path>  ·  <status>  ·  <relative_activity>
-Branch <branch>  ·  worktree of <worktree-of path>   ← "main checkout" when the two git paths are equal
+Branch <branch>  ·  worktree of <worktree-of path>   ← "main checkout" when the two git paths are equal; "detached at <short sha>" when detached
 <one or two lines: the live session, uncommitted changes, waiting_reason>
 Checkpoint (<newest filename>): <the 2-3 things that matter>
 Recent: <up to 3 filenames>                            ← omit when there are none
+For the overview of every repository, run /borg-link in the Queen session.
 Waiting: <next_step> — <item> (<age>)                  ← or `nothing waits on you here`
 Next: <one line>
-For the overview of every repository, run /borg-link in the Queen session.
 ```
 
-That last line is ALWAYS the final line, verbatim, and nothing follows it. One scope, one pointer: do not add a second one, a menu, or a count of other worktrees. The Version gate, `--refresh`/`--brief` redirects and the Fallback apply here exactly as above.
+The ORDER is the engine's own page order, not a choice: identity, session and checkpoints first, then the Queen pointer, then the waiting row, and the page ENDS on the `Next:` line (link-unification L3: the answer is the last thing the eye lands on). The pointer line is verbatim and appears exactly once, BEFORE the waiting row; nothing follows the `Next:` line. One scope, one pointer: do not add a second one, a menu, or a count of other worktrees. The Version gate, `--refresh`/`--brief` redirects and the Fallback apply here exactly as above.
 
 ## Fallback — direct file reads (the drone-container path)
 
@@ -259,18 +260,15 @@ one. `RepositoryNotFound` is only raised when a repository name is passed (in `_
 a probe that drops the argument makes that row unreachable. If Step 1's failing call was the overview
 (no repository), that row simply won't fire for it — that is correct, not a bug.
 
-Capture every branch input in one call (no `$()`, per repo rule). Substitute `<project>` with the
-same argument (or nothing, for an overview) that Step 1 used:
+Run the engine once more as a plain command. Substitute `<project>` with the same argument (or nothing, for an overview) that Step 1 used:
 
 ```bash
-bash -c 'borg link --json <project> >/tmp/borg-link.out 2>/tmp/borg-link.err
-echo "rc=$?"
-wc -c </tmp/borg-link.out
-grep -c "not in registry" /tmp/borg-link.err
-head -3 /tmp/borg-link.err'
+borg link --json <project>
 ```
 
-On `rc=0`, read `.version` from `/tmp/borg-link.out` with `jq .version /tmp/borg-link.out`.
+The tool result shows the exit status, stdout and stderr; no redirect or capture is needed. Call the exit status `rc` below, and check stderr for `not in registry` or `jq:`.
+
+On `rc=0`, read `.version` from the JSON it printed.
 
 | what you saw                    | what to do                                                              |
 | -------------------------------- | ------------------------------------------------------------------------ |
@@ -334,7 +332,7 @@ Bash: dir="$PWD"; while [[ "$dir" != "/" ]]; do
 2. For the **current project**, always use the resolved workspace from step 1 — never the
    registry's `path` field, which may be a host path. Marker found means a repository-scope page: the
    Repository scope rules apply (identity, session and status from `state.json`, the checkpoints in
-   `<workspace>/.borg/checkpoints` only, the next action, the Queen pointer line) and no other
+   `<workspace>/.borg/checkpoints` only, the Queen pointer line, the next action last) and no other
    project is shown.
 3. Marker found: do NOT read other projects at all; the page is about this workspace alone. The
    registry's `path` for another project resolves on the host and usually not inside a drone, and
@@ -368,5 +366,5 @@ the question in prose; it does not imitate `borg link`'s frame.
   work around.
 - One `borg link --json [<project>]` call serves every scope. Do not call twice.
 - Scope is the engine's `scope.kind`, never the `.borg-project` marker and never your own guess from
-  the cwd. The repository page names no other worktree, repository or project, and ends with the
-  Queen pointer line.
+  the cwd. The repository page names no other worktree, repository or project, and ends on the
+  next-action line, after the Queen pointer.

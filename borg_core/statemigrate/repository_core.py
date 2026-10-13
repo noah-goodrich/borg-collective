@@ -1,6 +1,6 @@
 """PURE planner for the per-directory `.borg/state.json` -> per-repository state-root migration. No I/O.
 
-The shell layer (`project_shell.py`) observes each legacy file and its destination and hands this module
+The shell layer (`repository_shell.py`) observes each legacy file and its destination and hands this module
 the observation; this module answers whether the precondition holds, what to do per file, and whether
 the result is acceptable. Sibling of `core.py` (the config-dir migration); same contract.
 """

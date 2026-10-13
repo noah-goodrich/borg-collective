@@ -81,12 +81,13 @@ setup() {
 #
 # `--local` because a bare `borg link` sweeps every source over the network post-S3; a smoke test
 # must not need `gh`. The seeded registry is what makes the render non-trivial — against the empty
-# default the overview short-circuits to "No projects registered" and never builds a document.
+# default the overview short-circuits to "No repositories registered" and never builds a document.
 @test "borg link is still dispatched" {
     printf '%s' '{"projects":{"smoke":{"path":null,"source":"cli","status":"idle","summary":"Smoke."}}}' \
         > "$BORG_REGISTRY"
 
-    run "$BORG_CMD" link --local
+    # `--overview`: the Queen's page from this (unregistered) cwd. A bare `borg link` here prints the hint page.
+    run "$BORG_CMD" link --local --overview
     [ "$status" -eq 0 ]
     [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
     [[ "$output" == *"smoke"* ]] || false

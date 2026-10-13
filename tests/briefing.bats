@@ -46,6 +46,14 @@ BORG_CMD="${BATS_TEST_DIRNAME}/../borg.zsh"
 setup() {
     setup_temp_dirs
 
+    # STAND AT THE QUEEN ROOT (2026-10-13). The cross-repository briefing is the Queen's page, and a cwd that is
+    # neither the Queen root nor inside a registered path now prints the hint page instead of the overview, so
+    # every case below that is about the board runs from the root. The cases about a directory's own briefing
+    # `cd` into a registered repository themselves.
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/queen"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+    cd "$BORG_ORCHESTRATOR_ROOT"
+
     # Mock bin dir — borg.zsh resets PATH, so use BORG_PATH_PREFIX to inject mocks
     export MOCK_BIN="${BATS_TEST_TMPDIR}/bin"
     mkdir -p "$MOCK_BIN"
@@ -320,7 +328,7 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"PROJECT: quiet-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: quiet-project"* ]] || false
     [[ "$output" == *"note: no summary on record"* ]] || false
     [[ "$output" != *"summary: None"* ]] || false
 }
@@ -428,24 +436,28 @@ EOF
 
 # ── The prompt's breadth is the page's breadth ────────────────────────────────
 #
-# THE DEFECT THIS PINS, MEASURED BEFORE IT WAS FIXED: in repository scope the projection read the
-# TOP-LEVEL `.directives` / `.assimilated`, which `cli.py`'s `need_aggregate = mode == "json" or ...`
-# always fills with the registry-WIDE aggregate — while `render._scoped_rows` narrows QUEUED and
-# SHIPPED to `doc.focus[key]` for the same scope. On the author's real registry that was
-# "QUEUED: 141 open directives" plus three collective-wide plan titles in the prompt, against
-# "nothing queued" / "nothing shipped yet" on the fallback page rendered from THE SAME BYTES. One
-# invocation, two answers — which is the failure class the whole fold exists to remove.
+# THE DEFECT THIS FAMILY PINS, MEASURED BEFORE IT WAS FIXED: in repository scope the projection read the
+# TOP-LEVEL `.directives` / `.assimilated`, which `cli.py`'s `need_aggregate = mode == "json" or ...` always
+# fills with the registry-WIDE aggregate, so the prompt said "QUEUED: 141 open directives" while the fallback page
+# rendered from THE SAME BYTES said "nothing queued". One invocation, two answers.
 #
-# ASSERTED ON THE PROMPT, not on prose: the mock captures `claude -p`'s argument verbatim, so the
-# case reads the exact bytes the model would have been handed.
+# SINCE 2026-10-13 THE REPOSITORY SCOPE IS STRICTER THAN THAT FIX: the page is strictly one directory, so the
+# prompt is built only from this directory's identity, its own checkpoint, its own session row and the next
+# action. It carries no QUEUED/SHIPPED at all (the page prints neither), no capacity count, no sweep lines and no
+# other registry entry. The Queen's projection (and its `$breadth` binding) is unchanged and is the control.
 #
-# MUTATION THAT TURNS THIS RED: change `$breadth.directives` / `$breadth.assimilated` back to
-# `$d.directives` / `$d.assimilated` in _borg_print_briefing's jq.
-@test "briefing: in repository scope the prompt's QUEUED/SHIPPED match the page's, not the registry's" {
+# ASSERTED ON THE PROMPT, not on prose: the mock captures `claude -p`'s argument verbatim, so the case reads the
+# exact bytes the model would have been handed.
+#
+# MUTATION THAT TURNS THIS RED: route `brief_scope == repository` through the board projection in
+# _borg_print_briefing, and every absence below comes back.
+@test "briefing: in repository scope the prompt carries only this directory's facts" {
     local ws="${BATS_TEST_TMPDIR}/ws"
-    mkdir -p "$ws/alpha/docs/plans/directives" "$ws/alpha/docs/plans/assimilated" "$ws/beta"
+    mkdir -p "$ws/alpha/docs/plans/directives" "$ws/alpha/docs/plans/assimilated" "$ws/beta/.borg/checkpoints"
     echo "# Alpha's very own directive" > "$ws/alpha/docs/plans/directives/2026-08-01-alpha-only.md"
     echo "# Alpha's very own shipped plan" > "$ws/alpha/docs/plans/assimilated/2026-07-01-alpha-shipped.md"
+    printf '**tl;dr** — Beta own checkpoint line.\n\n## 2. Accomplished\n\n- Other.\n' \
+        > "$ws/beta/.borg/checkpoints/2026-08-02-0900.md"
 
     cat > "$BORG_REGISTRY" <<EOF
 {
@@ -481,24 +493,55 @@ EOF
 
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    # The scope really is beta's — without this the QUEUED assertion below could pass for the wrong
-    # reason (an orchestrator-scope document that happens to have found no directives at all).
+    # The scope really is beta's, and its OWN facts are there: without these the absences below could pass for
+    # the wrong reason (a prompt that dropped everything).
     [[ "$output" == *"SCOPE: repository — beta"* ]] || false
-    [[ "$output" == *"QUEUED: 0 open directives"* ]] || false
+    [[ "$output" == *"REPOSITORY: beta"* ]] || false
+    [[ "$output" == *"summary: Beta own checkpoint line."* ]] || false
+    [[ "$output" == *"--- latest checkpoint for beta ---"* ]] || false
+    [[ "$output" == *"NEXT ACTION: nothing is ready"* ]] || false
+    # NO OTHER REGISTRY ENTRY, AND NONE OF THE BOARD'S REGISTRY-WIDE LINES. MUTATION: send the repository
+    # scope through the board projection and "alpha" (and CAPACITY/QUEUED/REPOSITORIES) come straight back.
+    [[ "$output" != *"alpha"* ]] || false
+    [[ "$output" != *"CAPACITY:"* ]] || false
+    [[ "$output" != *"QUEUED:"* ]] || false
     [[ "$output" != *"SHIPPED RECENTLY:"* ]] || false
-    [[ "$output" != *"alpha-only"* ]] || false
-    [[ "$output" != *"alpha-shipped"* ]] || false
+    [[ "$output" != *"REPOSITORIES (already in priority order"* ]] || false
+    [[ "$output" != *"Focus: <repository_name>"* ]] || false
 
-    # THE CONTROL. The same registry, one directory up: orchestrator scope must still carry the
-    # aggregate, or the assertions above would be satisfied by a projection that dropped the two
-    # lists entirely.
-    run bash -c "cd '$ws' && '$BORG_CMD' link --brief --local"
+    # THE CONTROL. The same registry with --overview from the same directory: the Queen's breadth is unchanged,
+    # so the absences above are the scope's doing and not a projection that dropped everything.
+    run bash -c "cd '$ws/beta' && '$BORG_CMD' link --brief --local --overview"
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"SCOPE: orchestrator"* ]] || false
+    [[ "$output" == *"REPOSITORY: alpha"* ]] || false
     [[ "$output" == *"QUEUED: 1 open directives"* ]] || false
     [[ "$output" == *"SHIPPED RECENTLY:"* ]] || false
+}
+
+# A cwd that is neither the Queen root nor inside a registered path has nothing to narrate (decision 3, carried
+# into --brief by decision 6): no `claude -p` call, no reason line (the hint page IS the answer), exit 0.
+@test "briefing: an unregistered cwd skips the narrative and prints the hint page" {
+    export CLAUDE_TRACE="${BATS_TEST_TMPDIR}/claude-trace.log"
+    : > "$CLAUDE_TRACE"
+    cat > "$MOCK_BIN/claude" <<'EOF'
+#!/usr/bin/env bash
+echo "called" >> "$CLAUDE_TRACE"
+echo "NARRATIVE-THAT-SHOULD-NOT-HAPPEN"
+EOF
+    chmod +x "$MOCK_BIN/claude"
+    mkdir -p "${BATS_TEST_TMPDIR}/stranger"
+
+    run bash -c "cd '${BATS_TEST_TMPDIR}/stranger' && '$BORG_CMD' link --brief --local"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    [[ "$output" == *"This directory is not a registered repository."* ]] || false
+    [[ "$output" == *"borg add"* ]] || false
+    [[ "$output" == *"borg link --overview"* ]] || false
+    [[ "$output" != *"narrative unavailable"* ]] || false
+    [[ "$output" != *"my-active-project"* ]] || false
+    [ ! -s "$CLAUDE_TRACE" ]
 }
 
 # ── A broken projection is a fallback, never an empty prompt ──────────────────
@@ -608,8 +651,8 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"PROJECT: live-project"* ]] || false
-    [[ "$output" != *"PROJECT: retired-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: live-project"* ]] || false
+    [[ "$output" != *"REPOSITORY: retired-project"* ]] || false
 
     # THE FLAG: same registry, same command, one flag — the archived row is now on the board the
     # narrative is asked to describe.
@@ -618,8 +661,8 @@ EOF
     [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"PROJECT: live-project"* ]] || false
-    [[ "$output" == *"PROJECT: retired-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: live-project"* ]] || false
+    [[ "$output" == *"REPOSITORY: retired-project"* ]] || false
 }
 
 # ── Both no-page rungs are loud, on STDERR, and are not exit 0 ────────────────

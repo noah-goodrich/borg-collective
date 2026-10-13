@@ -39,6 +39,14 @@ setup() {
     # shared setup_temp_dirs helper), so this follows established precedent rather than introducing
     # a new one.
     export XDG_DATA_HOME="${BATS_TEST_TMPDIR}/data"
+
+    # STAND AT THE QUEEN ROOT (2026-10-13). Every `link overview ...` case below is about the Queen's page, and a
+    # bare `borg link` is the Queen's page only at the Queen root: a cwd that is neither the root nor inside a
+    # registered path prints the hint page (pinned by "an unregistered directory ..."), and the bats cwd is the
+    # repository under test. Cases that need a registered directory `cd` into it themselves.
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/queen"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+    cd "$BORG_ORCHESTRATOR_ROOT"
 }
 
 # Run the CLI under an explicit zsh. Stdout+stderr merged; callers assert on $output/$status.
@@ -87,7 +95,7 @@ run_zsh_borg() {
 # touches no dispatch arm at all. Measured: replacing the entire overview arm with
 # `die "overview deleted by mutation"` left this case AND its cli_smoke twin green. `--local`
 # because a bare `borg link` sweeps the network post-S3; the seeded registry because the empty
-# default short-circuits to "No projects registered" before any document is built. The `--help`
+# default short-circuits to "No repositories registered" before any document is built. The `--help`
 # WORDING is asserted separately, by the AC1 case further down this file.
 @test "contract: link is still dispatched and is not itself reported as removed" {
     _link_mock_tmux ""
@@ -582,7 +590,7 @@ EOF
     run_zsh_borg scan
     [ "$status" -eq 0 ]
     [[ "$output" == *"Scanning Claude session history"* ]] || false
-    [[ "$output" == *"No new projects found"* ]] || false
+    [[ "$output" == *"No new repositories found"* ]] || false
 }
 
 @test "contract: scan --no-llm still dispatches and exits 0" {
@@ -836,7 +844,7 @@ EOF
     printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
     run_zsh_borg color ghost blue
     [ "$status" -ne 0 ]
-    [[ "$output" == *"Unknown project: ghost"* ]] || false
+    [[ "$output" == *"Unknown repository: ghost"* ]] || false
 }
 
 # cmd_image (borg.zsh:1013) build/push/pull all shell out to real `docker`, and push/pull can also
@@ -1100,14 +1108,14 @@ EOF
     export BORG_WORKTREE_STATE_DIR="${BATS_TEST_TMPDIR}/borg-worktrees"
     run_zsh_borg reap-worktrees
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No registered projects found."* ]] || false
+    [[ "$output" == *"No registered repositories found."* ]] || false
 }
 
 @test "contract: reap-worktrees errors cleanly on an unknown project name" {
     export BORG_WORKTREE_STATE_DIR="${BATS_TEST_TMPDIR}/borg-worktrees"
     run_zsh_borg reap-worktrees no-such-project
     [ "$status" -ne 0 ]
-    [[ "$output" == *"unknown project 'no-such-project'"* ]] || false
+    [[ "$output" == *"unknown repository 'no-such-project'"* ]] || false
 }
 
 @test "contract: reap-worktrees removes an age-expired worktree for a registered project" {
@@ -1283,7 +1291,7 @@ EOF
 }
 
 # Registry is deliberately left empty: _borg_print_briefing's early-return path
-# ("No projects in registry. Run: borg scan") is the only way to safely exercise cmd_init without
+# ("No repositories in registry. Run: borg scan") is the only way to safely exercise cmd_init without
 # also needing to mock a `claude -p ...` LLM-briefing call -- a non-empty registry would route
 # through that call too. TMUX is set (the direct-exec launch branch) so a real `claude` process is
 # never spawned even in principle; only the mocked one on BORG_PATH_PREFIX is reachable.
@@ -1312,9 +1320,55 @@ EOF
 
     run_zsh_borg init
     [ "$status" -eq 0 ]
-    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
+}
+
+# THE QUEEN, BY NAME (rename PR R4). With no tmux session running, `borg init` creates the session's first
+# window as "queen" (not "orchestrator") and turns automatic-rename off on it; the claude handoff is named
+# "borg-queen"; and the launch prompt calls the session the Queen's and says "repository files". The mock
+# claude copies its --append-system-prompt-file argument aside because cmd_init deletes the file after
+# claude exits. The registry stays empty so no `claude -p` briefing call is reached.
+@test "contract: init creates the Queen's window and names the session and prompt for the Queen" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export TRACE="${BATS_TEST_TMPDIR}/trace.log"
+    : > "$TRACE"
+    export TMUX_MOCK_HAS_SESSION=0
+    _mock_tmux
+
+    export TMUX="/tmp/tmux-mock/default,1234,0"
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/orchestrator-root"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+
+    cat > "$MOCK_BIN/claude" <<EOF
+#!/usr/bin/env bash
+echo "claude \$*" >> "$TRACE"
+prev=""
+for a in "\$@"; do
+    [ "\$prev" = "--append-system-prompt-file" ] && cp "\$a" "${BATS_TEST_TMPDIR}/prompt.txt"
+    prev="\$a"
+done
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    run_zsh_borg init
+    [ "$status" -eq 0 ]
+    run grep -c "tmux new-session -d -s borg -n queen" "$TRACE"
+    [ "$output" -ge 1 ]
+    run grep -c "tmux set-option -t borg:queen automatic-rename off" "$TRACE"
+    [ "$output" -ge 1 ]
+    run grep -cE "(-n |borg:|--name borg-)orchestrator" "$TRACE"
+    [ "$output" -eq 0 ]
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
+    [ "$output" -ge 1 ]
+    run cat "${BATS_TEST_TMPDIR}/prompt.txt"
+    [[ "$output" == *"You are the Queen for this developer's work session."* ]] || false
+    [[ "$output" == *"files from this Queen session"* ]] || false
+    [[ "$output" == *"Never edit repository"* ]] || false
+    [[ "$output" != *"You are the orchestrator"* ]] || false
 }
 
 
@@ -1326,7 +1380,7 @@ EOF
 # assertion in the empty-registry case would stay green.
 #
 # ONE MOCK, TWO CALLS, DISTINGUISHED BY $1. `cmd_init` invokes `claude` twice: `-p` for the briefing
-# narrative and `--name borg-orchestrator ...` for the handoff. The marker rides only on the `-p`
+# narrative and `--name borg-queen ...` for the handoff. The marker rides only on the `-p`
 # arm so "the narrative reached stdout" cannot be satisfied by the handoff.
 @test "contract: init builds the briefing from the document and still hands off to claude" {
     setup_mock_bin
@@ -1359,7 +1413,67 @@ EOF
     run grep -c "claude -p" "$TRACE"
     [ "$output" -ge 1 ]
     # And init still completes its actual job.
-    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+}
+
+
+# `borg init` IS THE QUEEN LAUNCHER (decision 4, 2026-10-13): its briefing passes --overview whatever the cwd.
+# Without it, `borg init` run from inside a registered repository would brief THAT DIRECTORY ONLY and then
+# launch the orchestrator over the whole registry. Asserted on the wire (the python3 argv of the document
+# build) AND on the prompt the model is handed (the Queen's breadth, with the other registry entry in it).
+#
+# MUTATION: change `_borg_print_briefing 0 0 1` in cmd_init back to a bare call and both assertions go red.
+@test "contract: init from inside a registered repository still briefs the Queen's overview" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export TRACE="${BATS_TEST_TMPDIR}/trace.log"
+    export PY_TRACE="${BATS_TEST_TMPDIR}/py-trace.log"
+    export PROMPT_FILE="${BATS_TEST_TMPDIR}/prompt.txt"
+    : > "$TRACE"
+    : > "$PY_TRACE"
+    export TMUX_MOCK_HAS_SESSION=1
+    _mock_tmux
+
+    export TMUX="/tmp/tmux-mock/default,1234,0"
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/orchestrator-root"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+
+    local here="${BATS_TEST_TMPDIR}/ws/here" there="${BATS_TEST_TMPDIR}/ws/there"
+    mkdir -p "$here" "$there"
+    printf '{"projects":{"here":{"path":"%s","source":"cli","status":"idle","summary":"Here.","last_activity":"2026-08-01T10:00:00Z"},"there":{"path":"%s","source":"cli","status":"idle","summary":"There.","last_activity":"2026-08-01T10:00:00Z"}}}' \
+        "$here" "$there" > "$BORG_REGISTRY"
+
+    local real_python
+    real_python=$(command -v python3)
+    [ -n "$real_python" ]
+    cat > "$MOCK_BIN/python3" <<EOF
+#!/usr/bin/env bash
+echo "\$*" >> "$PY_TRACE"
+exec "$real_python" "\$@"
+EOF
+    chmod +x "$MOCK_BIN/python3"
+
+    cat > "$MOCK_BIN/claude" <<EOF
+#!/usr/bin/env bash
+echo "claude \$*" >> "$TRACE"
+[ "\$1" = "-p" ] && { printf '%s' "\$2" > "$PROMPT_FILE"; echo "INIT-NARRATIVE"; }
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    run bash -c "cd '$here' && zsh '$BORG' init"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
+    run grep -c -- "borg_core.link.cli --json --overview" "$PY_TRACE"
+    [ "$status" -eq 0 ]
+    [ "$output" -ge 1 ]
+    run cat "$PROMPT_FILE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"SCOPE: orchestrator"* ]] || false
+    [[ "$output" == *"REPOSITORY: here"* ]] || false
+    [[ "$output" == *"REPOSITORY: there"* ]] || false
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
@@ -1374,7 +1488,7 @@ EOF
 # reaches the orchestrator session, which is the product; the briefing is only its preamble.
 #
 # MUTATION, VERIFIED BOTH WAYS: delete `|| true` from `cmd_init`'s `_borg_print_briefing` call and
-# this case goes red (init exits 9 and never runs `claude --name borg-orchestrator`); restore it and
+# this case goes red (init exits 9 and never runs `claude --name borg-queen`); restore it and
 # it goes green. Nothing else in the suite moves either way.
 #
 # THE MOCK IS A PASS-THROUGH ON python3 THAT FAILS ONLY `--json`, the same shape briefing.bats uses
@@ -1432,7 +1546,7 @@ EOF
     run grep -c "claude -p" "$TRACE"
     [ "$output" -eq 0 ]
     # And init still completes its actual job.
-    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
@@ -1453,7 +1567,7 @@ EOF
 
     run_zsh_borg claude
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Resuming orchestrator"* ]] || false
+    [[ "$output" == *"Resuming the Queen"* ]] || false
     run grep -c "tmux send-keys" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
@@ -1482,7 +1596,7 @@ EOF
 
     run_zsh_borg claude
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Resuming orchestrator"* ]] || false
+    [[ "$output" == *"Resuming the Queen"* ]] || false
     run grep -c "claude --model opus --effort xhigh --continue" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
@@ -1572,7 +1686,7 @@ _mock_teardown_infra() {
 echo "\$@" >> "$MOCK_BIN/tmux.calls"
 case "\$1" in
     has-session) exit 0 ;;
-    list-windows) echo "testproj" ;;
+    list-windows) printf '%s\n' \${TMUX_TEARDOWN_WINDOWS:-testproj} ;;
     show-option) exit 1 ;;
 esac
 exit 0
@@ -1614,6 +1728,35 @@ EOF
     [[ "$calls" == *"has-session -t borg"* ]] || false
     [[ "$calls" == *"kill-window -t borg:testproj"* ]] || false
     [[ "$calls" == *"kill-session -t borg"* ]] || false
+}
+
+# THE QUEEN'S WINDOW IS SKIPPED UNDER BOTH ITS NAMES. `borg init` now creates the window as "queen", but a
+# session started before the rename keeps its "orchestrator" window until Noah renames it, so cmd_down must
+# treat either name as the Queen's (no @project_dir lookup, no kill-window; kill-session reaps it). The
+# repository window in the same list is still torn down, so the skip is not "nothing was listed".
+# MUTATION THAT TURNS THIS RED: drop `"$wname" == "orchestrator"` (or the "queen" arm) from cmd_down's skip list.
+@test "contract: down skips the Queen's window under both the old and the new name" {
+    _mock_teardown_infra
+    export TMUX_TEARDOWN_WINDOWS="queen orchestrator testproj"
+
+    run_zsh_borg down
+
+    [ "$status" -eq 0 ]
+    local calls
+    calls=$(cat "$MOCK_BIN/tmux.calls")
+    [[ "$calls" == *"kill-window -t borg:testproj"* ]] || false
+    [[ "$calls" != *"kill-window -t borg:queen"* ]] || false
+    [[ "$calls" != *"kill-window -t borg:orchestrator"* ]] || false
+    [[ "$calls" != *"show-option -t borg:queen"* ]] || false
+    [[ "$calls" != *"show-option -t borg:orchestrator"* ]] || false
+}
+
+@test "contract: help names the Queen on the init and claude lines" {
+    run_zsh_borg help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"    init                Launch the Queen: morning briefing + Claude session"* ]] || false
+    [[ "$output" == *"    claude              Resume the Queen session (continue most recent)"* ]] || false
+    [[ "$output" != *"Launch orchestrator"* ]] || false
 }
 
 @test "contract: sever with an argument refuses, points at git mv, and tears nothing down" {
@@ -1664,7 +1807,7 @@ EOF
     run_zsh_borg regenerate
 
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No stale projects"* ]] || false
+    [[ "$output" == *"No stale repositories"* ]] || false
 }
 
 @test "contract: regenerate finds a stale project and fails cleanly (non-interactive) without archiving it" {
@@ -1674,7 +1817,7 @@ EOF
     run_zsh_borg regenerate < /dev/null
 
     [ "$status" -ne 0 ]
-    [[ "$output" == *"Stale projects"* ]] || false
+    [[ "$output" == *"Stale repositories"* ]] || false
     [[ "$output" == *"stale-proj"* ]] || false
 
     local registry_after
@@ -2197,7 +2340,7 @@ _link_build_grid_ws() {
 
     for p in platform warehouse ledger; do
         mkdir -p "$root/$p"
-        git -C "$root/$p" init -q >/dev/null 2>&1
+        git -C "$root/$p" init -q -b trunk >/dev/null 2>&1
         git -C "$root/$p" remote add origin "https://github.com/acme/${p}.git" >/dev/null 2>&1
     done
     mkdir -p "$root/infra" "$root/atlas" "$root/relay" "$root/archive-tools"
@@ -2285,7 +2428,7 @@ EOF
 # broke on ubuntu-latest once already: `PATH=/usr/bin:/bin` assumes `gh` lives outside those
 # directories, which is true on Homebrew and false on a GitHub runner.)
 _link_setup_grid() {
-    _link_mock_tmux $'platform\nwarehouse\ninfra\natlas'
+    _link_mock_tmux "${1:-$'platform\nwarehouse\ninfra\natlas'}"
     cat > "$MOCK_BIN/gh" <<'EOF'
 #!/usr/bin/env bash
 echo "gh $*" >> "$TRACE"
@@ -2293,6 +2436,35 @@ exit 1
 EOF
     chmod +x "$MOCK_BIN/gh"
     _link_build_grid_ws
+}
+
+# A LINKED WORKTREE OF `platform`, registered on its own (2026-10-13), with a checkpoint of its own that is
+# OLDER by filename than its parent's. That ordering is the point: a union read across the repo group would
+# put `platform`'s newer checkpoint (and summary) on the worktree's page, which is the defect Noah reported
+# from borg-probes. The registry `repo` is written as `<platform path>/.git` -- the string the registry's own
+# `path` implies -- so the head of the Queen board's group is chosen the same on every machine; `borg add`
+# stores git's physical answer, which equals this wherever the path is already physical.
+#
+# `waiting` WITH A LIVE WINDOW (the caller passes it to _link_setup_grid), so the worktree's page carries a
+# session row and the Queen board shows a `waiting <<<` worktree under an `active` repository.
+_link_add_worktree() {
+    local root="${BATS_TEST_TMPDIR}/ws" wt="${BATS_TEST_TMPDIR}/ws/platform-feat" t_wt
+    git -C "$root/platform" commit -q --allow-empty -m init >/dev/null 2>&1
+    git -C "$root/platform" worktree add -q -b feat/scope-rotation "$wt" >/dev/null 2>&1
+    mkdir -p "$wt/.borg/checkpoints"
+    printf '**tl;dr** — Scope rotation lives on the feature branch.\n\n## 5. Next Session\n\nFinish the rotation.\n' \
+        > "$wt/.borg/checkpoints/2026-07-30-0900.md"
+    t_wt=$(_link_iso_ago 600)  # "10m ago"
+    jq --arg p "$wt" --arg r "$root/platform/.git" --arg t "$t_wt" \
+        '.projects["platform-feat"] = {"path": $p, "source": "cli", "status": "waiting", "last_activity": $t,
+            "tmux_window": "platform-feat", "claude_session_id": "sess-feat-0009", "repo": $r}
+         | .projects.platform.repo = $r' "$BORG_REGISTRY" > "$BORG_REGISTRY.tmp" \
+        && mv "$BORG_REGISTRY.tmp" "$BORG_REGISTRY"
+}
+
+_link_setup_grid_with_worktree() {
+    _link_setup_grid $'platform\nwarehouse\ninfra\natlas\nplatform-feat'
+    _link_add_worktree
 }
 
 # Point both network seams at their recordings. Exported UNCONDITIONALLY, including on the
@@ -2375,6 +2547,7 @@ _assert_link_grid_golden() {
     # tripwire so the number is visibly a property of the fixtures, not of the assertion.
     local expect_unresolved=0
     [ "$name" = "link-grid-orchestrator" ] && expect_unresolved=1
+    [ "$name" = "link-grid-queen-worktrees" ] && expect_unresolved=1
     _link_grid_tripwire "$probe" "$name" "$expect_unresolved"
 
     local raw="${BATS_TEST_TMPDIR}/${name}.raw" actual="${BATS_TEST_TMPDIR}/${name}.actual"
@@ -2434,8 +2607,8 @@ _assert_link_grid_golden() {
 #
 # The two producers ALREADY diverge, which is why asserting the field shape against `link
 # --porcelain` alone would have been asserting it in the wrong place: on an empty registry the
-# porcelain surface prints nothing while `cmd_ls` prints the human "No projects registered" line
-# straight into the fzf stream — its `project_count == 0` guard returns before the porcelain branch
+# porcelain surface prints nothing while `cmd_ls` prints the human "No repositories registered" line
+# straight into the fzf stream — its `repository_count == 0` guard returns before the porcelain branch
 # is ever consulted.
 @test "contract: the fzf picker's two producers each keep their half of the contract" {
     _link_setup_porcelain
@@ -2567,7 +2740,7 @@ EOF
     [ -z "$output" ]
 
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_ls --porcelain\""
-    [[ "$output" == *"No projects registered"* ]] || false
+    [[ "$output" == *"No repositories registered"* ]] || false
 }
 
 # cmd_link's flag loop (borg.zsh:220-229) resolves porcelain BEFORE the project branch, so
@@ -2651,7 +2824,7 @@ EOF
 # refuses the bad file, and the guard at lib/registry.zsh was `result=$(... | jq ...) ||
 # result="$result"` — a no-op, because command substitution assigns BEFORE the `||` runs, so `result`
 # was already empty when the fallback reassigned empty to empty. Every consumer of
-# borg_registry_with_state saw an empty registry: `borg link` printed "No projects registered. Run:
+# borg_registry_with_state saw an empty registry: `borg link` printed "No repositories registered. Run:
 # borg scan", and next/switch/init/reap/watch saw nothing either. A partial write from a hook or a
 # killed session was enough. The healthy project must still receive its state overlay — asserted via
 # `last_activity`, which exists ONLY in state.json here, so a merge that silently stopped merging
@@ -2667,7 +2840,7 @@ EOF
 
     run_zsh_borg link
     [ "$status" -eq 0 ]
-    [[ "$output" != *"No projects registered"* ]] || false
+    [[ "$output" != *"No repositories registered"* ]] || false
     [[ "$output" == *"goodproj"* ]] || false
     [[ "$output" == *"badproj"* ]] || false
 
@@ -2741,6 +2914,32 @@ EOF
     run_zsh_borg link
     [ "$status" -eq 0 ]
     [[ "$output" == *"No repositories registered. Run: borg scan"* ]] || false
+}
+
+# DECISION 3 (2026-10-13): a cwd that is neither the Queen root nor inside any registered path prints a SHORT page,
+# never the overview. It says the directory is not a registered repository, offers `borg add` and
+# `borg link --overview`, and exits 0. `--overview` from the same directory is still the Queen's page. This replaces
+# the old premise ("an unregistered cwd falls back to the overview"), which the whole `link overview` family above
+# used to lean on by running from wherever bats happened to be.
+@test "contract: link from an unregistered directory prints the hint page, never the overview, and exits 0" {
+    _link_mock_tmux ""
+    printf '%s' '{"projects":{"registered-secret":{"path":null,"source":"cli","status":"idle"}}}' > "$BORG_REGISTRY"
+    local stranger="${BATS_TEST_TMPDIR}/stranger"
+    mkdir -p "$stranger"
+
+    run bash -c "cd '$stranger' && zsh '$BORG' link --local"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"This directory is not a registered repository."* ]] || false
+    [[ "$output" == *"borg add"* ]] || false
+    [[ "$output" == *"borg link --overview"* ]] || false
+    [[ "$output" != *"registered-secret"* ]] || false
+    [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" != *"REPOSITORIES"* ]] || false
+
+    run bash -c "cd '$stranger' && zsh '$BORG' link --local --overview"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"registered-secret"* ]] || false
+    [[ "$output" != *"not a registered repository"* ]] || false
 }
 
 @test "contract: link overview prints the discovery tip when only one project is registered" {
@@ -2921,7 +3120,7 @@ EOF
 # ints, so the port renders this on one line, matching A4's amended text for the case below. (The
 # pointer here used to be a `cli_contract.bats:<N>` self-reference; it was stale, and every numeric
 # pointer at this file in the tree has since been re-anchored by @test name.)
-@test "contract: link <project> deep dive renders Progress on one line when no criteria are met" {
+@test "contract: link <project> reports plan Progress as integers when no criteria are met" {
     _link_mock_tmux ""
     local d="${BATS_TEST_TMPDIR}/ws/nox"
     mkdir -p "$d"
@@ -2940,12 +3139,17 @@ EOF
     printf '{"projects":{"nox":{"path":"%s","source":"cli","status":"idle","summary":"Fresh plan."}}}' "$d" \
         > "$BORG_REGISTRY"
 
+    # THE PLAN LEFT THE HUMAN PAGE on 2026-10-13 (a directory's page is strictly the directory; the plan is a
+    # repository-level section), so what is pinned here is the half that survives: `focus.plan` carries
+    # integers, never the two-line "0\n0" string. The page says nothing about it.
+    run bash -c "zsh '$BORG' link --json nox 2>/dev/null | jq -c '.focus.plan | [.met, .total]'"
+    [ "$status" -eq 0 ]
+    [ "$output" = "[0,2]" ]
+
     run_zsh_borg link nox
     [ "$status" -eq 0 ]
-
-    local plain
-    plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
-    [[ "$plain" == *"Progress: 0/2 criteria met"* ]] || false
+    [[ "$output" != *"Active Plan"* ]] || false
+    [[ "$output" != *"criteria met"* ]] || false
 }
 
 @test "contract: link <project> dies non-zero on a project that is not registered" {
@@ -2972,13 +3176,11 @@ EOF
     _link_setup_deep
     _link_build_deep_assim_ws
 
-    run_zsh_borg link delta
+    # READ OFF `--json` (2026-10-13): SHIPPED is a repository-level section and no longer on a directory's page.
+    # `focus.assimilated` is the same list the page used to print, in the same order.
+    run bash -c "zsh '$BORG' link --json delta 2>/dev/null | jq -r '[.focus.assimilated[].title] | join(\",\")'"
     [ "$status" -eq 0 ]
-    [[ "$output" != *"Delta shipped A"* ]] || false
-    [[ "$output" == *"Delta shipped B"* ]] || false
-    [[ "$output" == *"Delta shipped C"* ]] || false
-    [[ "$output" == *"Delta shipped D"* ]] || false
-    [[ "$output" == *"Delta shipped D"*"Delta shipped C"* ]] || false
+    [ "$output" = "Delta shipped D,Delta shipped C,Delta shipped B" ]
 }
 
 # THE EMPTY-DATE FIX. Reproduced against the owner's real registry post-merge, NOT by any fixture in
@@ -3029,11 +3231,15 @@ EOF
     _link_build_noshipdate_ws
     _link_registry_noshipdate
 
+    # `focus.assimilated` carries an EMPTY ship_date for the undated plan (the page that used to print it
+    # rendered a bare "()" from exactly this shape), and a directory's page prints no SHIPPED list at all.
+    run bash -c "zsh '$BORG' link --json kilo 2>/dev/null | jq -c '[.focus.assimilated[] | [.title, .ship_date]]'"
+    [ "$status" -eq 0 ]
+    [ "$output" = '[["Kilo unshipped (K1)",""],["Kilo shipped","2026-05-01"]]' ]
+
     run_zsh_borg link kilo
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Kilo unshipped (K1)"$'\033''[0m'* ]] || false
-    [[ "$output" != *"Kilo unshipped (K1) ("* ]] || false
-    [[ "$output" == *"Kilo shipped (2026-05-01)"* ]] || false
+    [[ "$output" != *"Kilo unshipped"* ]] || false
     [[ "$output" != *"()"* ]] || false
 }
 
@@ -3070,33 +3276,75 @@ EOF
     _assert_link_grid_golden link-grid-repository "${BATS_TEST_TMPDIR}/ws/platform" link
 }
 
+# 2026-10-13. THE PAGE OF A LINKED WORKTREE, byte for byte, from the positional and from its own cwd (the
+# same two-shape rule as the main checkout above). Its identity names the branch and the repository it is a
+# worktree of; its checkpoint is its OWN even though its parent's is newer; nothing registry-wide is on it.
+@test "contract: link renders a worktree's page byte-identically to its golden, from the positional and the cwd" {
+    _link_setup_grid_with_worktree
+    _assert_link_grid_golden link-grid-worktree "${BATS_TEST_TMPDIR}/ws" link platform-feat
+    _assert_link_grid_golden link-grid-worktree "${BATS_TEST_TMPDIR}/ws/platform-feat" link
+}
+
+# THE UNION READ, AS A BATS CASE (the pytest one is test_cli's). `platform` holds `2026-08-01-0900.md`, the
+# worktree `2026-07-30-0900.md`: with the repo-group union in `_focus` the worktree's page would lead with its
+# parent's newer checkpoint and summary. MUTATION: put `core.repo_sources` back in `cli._focus`.
+@test "contract: each of two worktrees of one repository shows only its own checkpoint" {
+    _link_setup_grid_with_worktree
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform-feat" "${BATS_TEST_TMPDIR}/feat.txt" link
+    run grep -c '2026-07-30-0900.md' "${BATS_TEST_TMPDIR}/feat.txt"
+    [ "$output" -ge 1 ]
+    run bash -c "grep -c '2026-08-01-0900.md\|Scoped keypair auth rollout' '${BATS_TEST_TMPDIR}/feat.txt' || true"
+    [ "$output" = "0" ]
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform" "${BATS_TEST_TMPDIR}/main.txt" link
+    run grep -c '2026-08-01-0900.md' "${BATS_TEST_TMPDIR}/main.txt"
+    [ "$output" -ge 1 ]
+    run bash -c "grep -c '2026-07-30-0900.md\|Scope rotation lives on the feature branch' '${BATS_TEST_TMPDIR}/main.txt' || true"
+    [ "$output" = "0" ]
+}
+
+# THE QUEEN WITH A WORKTREE REGISTERED: one repository row with the worktree beneath it, and the note counting
+# repositories. The un-grouped orchestrator golden below is DELIBERATELY left without a worktree, so it is the
+# proof that a registry with no shared `repo` renders exactly as it always did. `--overview` from the worktree
+# must be the same bytes as the Queen's own render: one file, two invocation shapes.
+@test "contract: the Queen collapses a worktree under its repository, and --overview from the worktree is the same page" {
+    _link_setup_grid_with_worktree
+    _assert_link_grid_golden link-grid-queen-worktrees "${BATS_TEST_TMPDIR}/ws" link
+    _assert_link_grid_golden link-grid-queen-worktrees "${BATS_TEST_TMPDIR}/ws/platform-feat" link --overview
+}
+
 @test "contract: link renders the orchestrator context byte-identically to its golden" {
     _link_setup_grid
     _assert_link_grid_golden link-grid-orchestrator "${BATS_TEST_TMPDIR}/ws" link
 }
 
 # B4. THE INVARIANT IS AGAINST THE CONSTANT, NEVER AGAINST THE OTHER GOLDEN. Comparing the two
-# renderings' header lists to each other goes green if both drift together; comparing each to
-# `render.SECTIONS` cannot. This is the executable form of "the two contexts differ in breadth only".
-@test "contract: both link contexts render the same section headers in the same order" {
+# renderings' header lists to each other goes green if both drift together; comparing each to its own
+# list in `render` cannot. Since 2026-10-13 there are TWO lists, because the two contexts no longer differ in
+# breadth only: the Queen prints `SECTIONS`, a directory prints `REPOSITORY_SECTIONS`, and `scope.kind`
+# chooses. This reverses AC2's "never which sections exist" for repository scope, on purpose.
+_link_spine_matches() {
+    local cwd="$1" constant="$2" expected
+    expected=$(PYTHONPATH="$BORG_HOME" python3 -c \
+        "from borg_core.link import render; print('\n'.join(t for t, _ in render.$constant if t))")
+    [ -n "$expected" ]
+    _link_grid_run "$cwd" "${BATS_TEST_TMPDIR}/spine.raw" link
+    run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${BATS_TEST_TMPDIR}/spine.raw' \
+        | grep '^▸ ' | sed 's/  .*//' | sed 's/^▸ //'"
+    [ "$output" = "$expected" ] || {
+        printf 'cwd %s rendered:\n%s\nexpected (%s):\n%s\n' "$cwd" "$output" "$constant" "$expected" >&2
+        false
+    }
+}
+
+@test "contract: each link context renders its own section list, in order" {
     _link_setup_grid
     _link_grid_seams
 
-    local expected
-    expected=$(PYTHONPATH="$BORG_HOME" python3 -c \
-        'from borg_core.link import render; print("\n".join(t for t, _ in render.SECTIONS if t))')
-    [ -n "$expected" ]
-
-    local ctx
-    for ctx in "${BATS_TEST_TMPDIR}/ws/platform:link" "${BATS_TEST_TMPDIR}/ws:link"; do
-        _link_grid_run "${ctx%%:*}" "${BATS_TEST_TMPDIR}/spine.raw" "${ctx##*:}"
-        run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${BATS_TEST_TMPDIR}/spine.raw' \
-            | grep '^▸ ' | sed 's/  .*//' | sed 's/^▸ //'"
-        [ "$output" = "$expected" ] || {
-            printf 'context %s rendered:\n%s\nexpected:\n%s\n' "$ctx" "$output" "$expected" >&2
-            false
-        }
-    done
+    _link_spine_matches "${BATS_TEST_TMPDIR}/ws/platform" REPOSITORY_SECTIONS
+    _link_spine_matches "${BATS_TEST_TMPDIR}/ws" SECTIONS
 }
 
 # B5/B6. THE `Status:` INVARIANT, AND IT IS STRUCTURAL RATHER THAN LEXICAL. `sweep-acme.json`
@@ -3109,18 +3357,20 @@ EOF
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/repo.txt" link platform
-    # The poisoned title really is on the page -- otherwise this case proves nothing.
-    run grep -c 'Status: normalise the rollout report' "${BATS_TEST_TMPDIR}/repo.txt"
-    [ "$output" = "1" ]
-    # Three hits: the card's own line, the PR title in CHAINS, and the same title again as a WAITING ON YOU
-    # row (last section, so it can never precede the card). Two before the board's chooser rows.
+    # A DIRECTORY'S PAGE CARRIES NO WIRE TEXT AT ALL since 2026-10-13: CHAINS and the repository PR rows are
+    # repository-level, so the poisoned title is simply not on it, and the card's line is the ONLY `Status:`.
+    run bash -c "grep -c 'Status: normalise the rollout report' '${BATS_TEST_TMPDIR}/repo.txt' || true"
+    [ "$output" = "0" ]
     run grep -c 'Status:' "${BATS_TEST_TMPDIR}/repo.txt"
-    [ "$output" = "3" ]
-    # ...and the FIRST hit is the card's, not the PR's.
+    [ "$output" = "1" ]
     run bash -c "grep -m1 'Status:' '${BATS_TEST_TMPDIR}/repo.txt' | sed \$'s/\033\\\\[[0-9;]*m//g'"
     [[ "$output" == "  Status:"*"active" ]] || false
 
+    # ...and the Queen's page has no card, while the poisoned title really is on it (otherwise the zero below
+    # would prove nothing about the Queen).
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/orch.txt" link
+    run grep -c 'Status: normalise the rollout report' "${BATS_TEST_TMPDIR}/orch.txt"
+    [ "$output" -ge 1 ]
     run bash -c "grep -c '^  .Status:' '${BATS_TEST_TMPDIR}/orch.txt' || true"
     [ "$output" = "0" ]
 }
@@ -3168,22 +3418,39 @@ EOF
     [ "$output" = "5" ]
 }
 
-# B10. REPOSITORIES is the one section breadth does not touch. skills/borg-switch/SKILL.md runs
-# exactly this from a project session's cwd and reads the whole table out of it; borg.zsh's 5s watch
-# redraw does the same. Applying the scope filter to the board turns both into a one-row list.
-@test "contract: borg link --local --all from inside a repository still lists every project" {
+# B10. THE BOARD IS THE QUEEN'S (2026-10-13), AND `--overview` IS HOW A DIRECTORY ASKS FOR IT. This used to
+# assert the opposite: that `borg link --local --all` from a repository session listed every project, because
+# skills/borg-switch/SKILL.md ran exactly that and read the table out of it. That skill now passes
+# `--overview`, which forces the Queen view from any cwd; without it the same cwd gets only its own page.
+@test "contract: borg link --local --all --overview from inside a repository lists every project" {
     _link_setup_grid
     _link_grid_seams
 
-    _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform" "${BATS_TEST_TMPDIR}/board.txt" link --local --all
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform" "${BATS_TEST_TMPDIR}/board.txt" link --local --all --overview
     local p
     for p in platform warehouse infra ledger atlas relay archive-tools; do
         run grep -c -- "$p" "${BATS_TEST_TMPDIR}/board.txt"
         [ "$output" != "0" ] || { echo "board lost $p" >&2; false; }
     done
-    # ...and exactly one row carries the scoped marker.
-    run bash -c "grep -c '◀' '${BATS_TEST_TMPDIR}/board.txt'"
+    run grep -c 'REPOSITORIES' "${BATS_TEST_TMPDIR}/board.txt"
     [ "$output" = "1" ]
+    # The Queen has no scoped repository, so no row is marked.
+    run bash -c "grep -c '◀' '${BATS_TEST_TMPDIR}/board.txt' || true"
+    [ "$output" = "0" ]
+}
+
+@test "contract: borg link --local --all from inside a repository lists only that directory" {
+    _link_setup_grid
+    _link_grid_seams
+
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws/platform" "${BATS_TEST_TMPDIR}/page.txt" link --local --all
+    local p
+    for p in warehouse infra ledger atlas relay archive-tools; do
+        run bash -c "grep -c -- '$p' '${BATS_TEST_TMPDIR}/page.txt' || true"
+        [ "$output" = "0" ] || { echo "a directory's page named $p" >&2; false; }
+    done
+    run bash -c "grep -c 'REPOSITORIES' '${BATS_TEST_TMPDIR}/page.txt' || true"
+    [ "$output" = "0" ]
 }
 
 # B11. The tripwire as a NAMED case, so a reader can see what the goldens are allowed to be cut from.
@@ -3232,28 +3499,34 @@ EOF
 
 # B13. The fixture-replay warnings name their fixture by ABSOLUTE path and those fixtures live under
 # `tests/`, NOT under $BATS_TEST_TMPDIR — so the single-expression scrub the four older goldens use
-# does not cover them. Without the `<TESTS>` expression both grid goldens are green only on the
-# machine that authored them.
+# does not cover them. Without the `<TESTS>` expression the grid goldens are green only on the
+# machine that authored them. The warnings live in SIGNALS, which only the Queen's page prints (2026-10-13),
+# so the two Queen goldens carry exactly two placeholders each and the three directory goldens carry none.
 @test "contract: the grid goldens carry no absolute checkout path" {
-    local g
-    for g in link-grid-repository link-grid-orchestrator; do
+    local g expected
+    for g in link-grid-repository link-grid-worktree link-grid-orchestrator link-grid-queen-worktrees; do
         [ -f "${LINK_GOLDEN_DIR}/${g}.golden" ]
         run bash -c "grep -c '${BATS_TEST_DIRNAME}' '${LINK_GOLDEN_DIR}/${g}.golden' || true"
         [ "$output" = "0" ] || { echo "$g leaks \$BATS_TEST_DIRNAME" >&2; false; }
         run bash -c "grep -c '/Users/\\|/home/\\|/private/tmp' '${LINK_GOLDEN_DIR}/${g}.golden' || true"
         [ "$output" = "0" ] || { echo "$g leaks an absolute path" >&2; false; }
-        # ...and the scrubbed placeholders really are there, so this is not green on an empty file.
-        run bash -c "grep -c '<TESTS>/fixtures/link/' '${LINK_GOLDEN_DIR}/${g}.golden'"
-        [ "$output" = "2" ]
+        # ...and the scrubbed placeholders really are there on the pages that print the warnings, so this
+        # is not green on an empty file.
+        expected=2
+        case "$g" in link-grid-repository|link-grid-worktree) expected=0 ;; esac
+        run bash -c "grep -c '<TESTS>/fixtures/link/' '${LINK_GOLDEN_DIR}/${g}.golden' || true"
+        [ "$output" = "$expected" ] || { echo "$g carries $output <TESTS> placeholders, wanted $expected" >&2; false; }
     done
 }
 
 # B14. Node ids are a JUMP TARGET: each appears exactly twice on the page — once in a picture cell,
 # once as a detail heading — so `*` in vim toggles between them with no plugin. Numbering per manifest
 # instead of globally puts four `n1`s on the orchestrator page and breaks the jump for both projects.
-@test "contract: every node id appears exactly twice in each grid golden" {
+# Only the Queen's page draws a picture now (CHAINS is repository-level), so the directory goldens are
+# asserted to carry NONE: a node id on a directory's page means a repository-level section came back.
+@test "contract: every node id appears exactly twice in each Queen golden, and never on a directory's page" {
     local g
-    for g in link-grid-repository link-grid-orchestrator; do
+    for g in link-grid-orchestrator link-grid-queen-worktrees; do
         run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/${g}.golden' \
             | grep -oE '\\bn[0-9]+\\b' | sort | uniq -c | awk '{print \$1}' | sort -u"
         [ "$output" = "2" ] || { echo "$g node id counts: $output" >&2; false; }
@@ -3270,9 +3543,11 @@ EOF
     # instead of shortening a number nobody reads.
     [ "$output" = "1 2 3 4 5 6 7 8 9 10 11 12 13 " ]
 
-    run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/link-grid-repository.golden' \
-        | grep -oE '\\bn[0-9]+\\b' | sort -u | sed 's/^n//' | sort -n | tr '\n' ' '"
-    [ "$output" = "1 2 3 4 5 6 7 " ]
+    for g in link-grid-repository link-grid-worktree; do
+        run bash -c "sed \$'s/\033\\\\[[0-9;]*m//g' '${LINK_GOLDEN_DIR}/${g}.golden' \
+            | grep -cE '\\bn[0-9]+\\b' || true"
+        [ "$output" = "0" ] || { echo "$g carries a node id" >&2; false; }
+    done
 }
 
 # The widest `▸ CHAINS` picture row on a rendered page, in VISIBLE columns, printed to stdout.
@@ -3411,13 +3686,17 @@ _link_picture_budget() {
     _link_setup_grid
     _link_grid_seams
 
-    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local platform
+    # THE QUEEN'S PAGE, not `link --local platform`: CHAINS is a repository-level section and a directory's
+    # page no longer prints it (2026-10-13). The Queen selects both manifests, so the count is every ref across
+    # them that declared no state of its own (12 of the 13; `acme/warehouse#75` declares `merged`), not
+    # `platform`'s seven.
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local
     run grep -c 'platform#400' "${BATS_TEST_TMPDIR}/local.txt"
     [ "$output" != "0" ]
     run bash -c "grep -ci 'unknown' '${BATS_TEST_TMPDIR}/local.txt' || true"
     [ "$output" = "0" ]
     run grep -c 'nobody has an answer for this ref' "${BATS_TEST_TMPDIR}/local.txt"
-    [ "$output" = "7" ]
+    [ "$output" = "12" ]
     run grep -c 'declared refs unresolved' "${BATS_TEST_TMPDIR}/local.txt"
     [ "$output" = "1" ]
 }
@@ -3430,7 +3709,7 @@ _link_picture_budget() {
     _link_setup_grid
     _link_grid_seams
 
-    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local platform
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/local.txt" link --local
     run grep -c 'carry a word that is not a PR state' "${BATS_TEST_TMPDIR}/local.txt"
     [ "$output" = "1" ]
     run grep -c '"review" x1' "${BATS_TEST_TMPDIR}/local.txt"
@@ -3443,24 +3722,27 @@ _link_picture_budget() {
 # The MODAL repository: a git origin, no manifest. Six of its seven sections are strictly richer than
 # what `borg link <project>` showed before AC2 (which had no board and no chains at all), and the one
 # empty section carries a DIAGNOSIS rather than a blank frame.
-@test "contract: a repository with no manifest renders the same spine and names why CHAINS is empty" {
+@test "contract: a repository with no manifest renders the directory page, and --json still names why its grid is empty" {
     _link_setup_grid
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.txt" link ledger
-    # EIGHT `▸` HEADERS SINCE THE BOARD'S WAITING ON YOU (the ninth section is the header block, which
-    # carries no `▸` line). Seven since AC4.
+    # TWO `▸` HEADERS SINCE 2026-10-13 (IN FOCUS, WAITING ON YOU): a directory's page is strictly the
+    # directory, so CHAINS and its three diagnoses left it. They were EIGHT before. The diagnosis inputs are
+    # still on the wire, which is where this pins them: `grid.slug` and `grid.manifests` are what
+    # `render._grid_placeholder` reads on the Queen's page, and what a `--json` consumer reads anywhere.
     run grep -c '▸ ' "${BATS_TEST_TMPDIR}/ledger.txt"
-    [ "$output" = "8" ]
-    run grep -c 'no chain manifest declares work in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
-    [ "$output" = "1" ]
-    run grep -c 'none declaring a row in acme/ledger' "${BATS_TEST_TMPDIR}/ledger.txt"
-    [ "$output" = "1" ]
+    [ "$output" = "2" ]
+    run bash -c "grep -c 'no chain manifest declares work' '${BATS_TEST_TMPDIR}/ledger.txt' || true"
+    [ "$output" = "0" ]
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.json" link ledger --json
+    run jq -c '[.grid.slug, (.grid.manifests | length), .grid.scope_kind]' "${BATS_TEST_TMPDIR}/ledger.json"
+    [ "$output" = '["acme/ledger",0,"repository"]' ]
 
-    # ...and a directory with no git origin at all gets the OTHER diagnosis.
-    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/infra.txt" link infra
-    run grep -c 'no GitHub origin' "${BATS_TEST_TMPDIR}/infra.txt"
-    [ "$output" = "1" ]
+    # ...and a directory with no git origin at all has no slug to scope a chain to.
+    _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/infra.json" link infra --json
+    run jq -c '[.grid.slug, (.grid.manifests | length)]' "${BATS_TEST_TMPDIR}/infra.json"
+    [ "$output" = '["",0]' ]
 }
 
 # THE THIRD DIAGNOSIS, AND IT WAS DEAD CODE UNTIL THE GENERATED GOLDEN WAS READ. `repository_dir`
@@ -3541,7 +3823,7 @@ EOF
 
     run_zsh_borg link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No projects in registry. Run: borg scan"* ]] || false
+    [[ "$output" == *"No repositories in registry. Run: borg scan"* ]] || false
     [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
 }
 

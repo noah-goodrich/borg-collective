@@ -1,4 +1,4 @@
-"""project_cli against a fully sandboxed HOME / XDG dirs. Nothing here may touch the real machine."""
+"""repository_cli against a fully sandboxed HOME / XDG dirs. Nothing here may touch the real machine."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from borg_core import paths
-from borg_core.statemigrate import project_cli as cli
+from borg_core.statemigrate import repository_cli as cli
 
 
 @pytest.fixture(name="box")

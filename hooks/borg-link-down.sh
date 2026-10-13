@@ -345,6 +345,10 @@ clock is corrected. Consider 'drone restart' or restarting the devcontainer to r
 fi
 
 # Active directives for this repository — inject filename + objective line only (no full bodies)
+#
+# THESE ARE THE REPOSITORY'S DIRECTIVES, NOT THIS DIRECTORY'S OWN WORK, and the label says so (2026-10-13).
+# A directive file lives in the repo, so every worktree of it reads the same set from its own checkout; the
+# checkpoint injected below is the opposite kind of fact and is strictly this directory's.
 DIRECTIVES_DIR="$CWD/docs/plans/directives"
 if [[ -d "$DIRECTIVES_DIR" ]]; then
     _directive_lines=""
@@ -368,7 +372,8 @@ if [[ -d "$DIRECTIVES_DIR" ]]; then
         fi
     done < <(find "$DIRECTIVES_DIR" -maxdepth 1 -name "*.md" -print0 2>/dev/null | sort -z)
     if [[ -n "$_directive_lines" ]]; then
-        CONTEXT_PARTS+=("Active directives for $REPOSITORY (check these before starting new work):
+        CONTEXT_PARTS+=("Active directives for the repository (read from $REPOSITORY's checkout; they belong to the
+repository, not to this directory alone — check these before starting new work):
 
 ${_directive_lines%$'\n'}")
     fi
@@ -403,7 +408,9 @@ verbatim to SendMessage. Never hardcode an address — not here, not in a checkp
 
 CONTEXT_PARTS+=("$ROUTING_CARD")
 
-# Latest checkpoint for this repository — written by /borg-link-up
+# Latest checkpoint for THIS DIRECTORY — written by /borg-link-up. It is read from $CWD/.borg/checkpoints and
+# nowhere else: a sibling worktree's checkpoint describes that checkout's session, not this one's, and the
+# injection must never be a union across the repo group (tests/lifecycle.bats pins it with two worktrees).
 CHECKPOINT_FILE=""
 if [[ -d "$CWD/.borg/checkpoints" ]]; then
     CHECKPOINT_FILE=$(find "$CWD/.borg/checkpoints" -maxdepth 1 -name "*.md" 2>/dev/null | sort -r | head -1 || true)

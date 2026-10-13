@@ -3,11 +3,12 @@
 #
 # Sourced by lib/borg/resume-gate.sh. Bash 3.2 safe, jq required, functions only; sourcing prints nothing.
 #
-#   borg_resume_relaunch_group <sid>   called by the S9 gate (_rg_run_group) for the session group in $_RG_GROUP,
-#                                      AFTER every gate check (supersede, age, caps, concurrency, headroom, dispatch
-#                                      guard) and BEFORE the prompt is rendered. Return 0 = the session is alive and
-#                                      verified, go on with the normal flow (render + S8 injection). Return 1 = this
-#                                      slice handled the group (deferred, notify_only, cancelled).
+#   borg_resume_relaunch_group <sid>   reached from the S9 gate via borg_resume_relaunch_hook (a process_death record
+#                                      is handed over in the dispatch step), AFTER every gate check (supersede, age,
+#                                      caps, concurrency, headroom, dispatch guard) and BEFORE the prompt is rendered.
+#                                      Return 0 = the session is alive and verified, go on with the normal flow
+#                                      (render + S8 injection). Return 1 = this slice handled the group (deferred,
+#                                      notify_only, cancelled).
 #
 # It acts only for records whose cause is a dead process: crash, pane_closed, reboot (and workflow_killed:<those>),
 # which S10 recorded. It never relaunches a deliberate stop (S10 end state closed/deliberate, trailing interrupt
@@ -17,7 +18,8 @@
 #   - the sid must match the UUID regex; the cwd must be an existing directory, free of control characters, that is a
 #     registered project dir, a known git worktree of it, or under BORG_RESUME_CWD_ALLOW (colon list, default
 #     $HOME/dev); anything else is notify_only
-#   - pane gone, tmux up:    tmux new-window -d -P -- <login-shell> -l -c "exec \"$@\"" borg-resume <claude> --resume <sid>
+#   - pane gone, tmux up:    tmux new-window -d -P -- <login-shell> -l -c "exec \"$@\"" borg-resume <claude>
+#                            --resume <sid>
 #                            (argv form; the login shell gives claude the user env, which a tmux server started from
 #                            launchd lacks. zsh -l reads .zprofile/.zshenv, NOT .zshrc: exports living only in .zshrc
 #                            are not seen. The server-global env of a launchd-started server stays minimal; both are
@@ -392,7 +394,8 @@ EOF
 # Gate hook (RECONCILE-6): called by _rg_dispatch_dead <rid> <cause> <file> for ONE process_death record, only from
 # _rg_run_group and only after every gate passed. Returns 0 when this path took ownership of the record (relaunched and
 # verified -> relaunching, or handled: notify_only, cancelled, deferred with _RR_DEFERRED=1), 1 when it does not apply
-# (the gate then defers the record with no_pane). The S9 counters are bumped once, inside borg_resume_relaunch_group.
+# (the gate then defers the record with no_pane). The relaunch bumps the S9 counters once (a second tick comes with
+# the injection).
 _RR_DEFERRED=0
 borg_resume_relaunch_hook() { # <rid> <cause> <file>
     local _rid="$1" _cause="$2" _f="$3" _saved="${_RG_GROUP:-}" _rc _st
@@ -409,5 +412,46 @@ borg_resume_relaunch_hook() { # <rid> <cause> <file>
     elif [ "$_st" = deferred ]; then
         _RR_DEFERRED=1
     fi
+    return 0
+}
+
+# ---------------------------------------------------------------------------------------------
+# S16: hand a relaunched session on to the normal gate flow.
+#
+# The relaunch hook leaves a record in `relaunching` after a VERIFIED same-session relaunch, and nothing else ever moved
+# it: the revived claude sat at an empty composer with no prompt and the record was stuck. This pass, called at the top
+# of the gate's due pass, flips every `relaunching` record of a session whose pane is now proven alive and owned back to
+# `scheduled` (due now, `relaunched: true`). The gate then treats it like any other record: the dead-owner dispatch
+# skips it, the S6 prompt is rendered and borg_inject_line (full pane proof) types it. The relaunch already bumped the
+# S9 counters; the injection bumps them once more, one tick per action. A session that is not alive and owned yet stays
+# `relaunching` (the S9 concurrency window ignores it after an hour).
+borg_resume_relaunched_pass() {
+    local _f _sid _now _seen=" " _ports
+    _now="$(_rc_now)"
+    for _f in "$(borg_resume_dir)"/pending/*.json; do
+        [ -f "$_f" ] || continue
+        [ "$(jq -r .state "$_f" 2>/dev/null)" = relaunching ] || continue
+        [ "$(jq -r '.relaunched // false' "$_f" 2>/dev/null)" = false ] || continue
+        _sid="$(jq -r .sid "$_f" 2>/dev/null)"
+        case "$_seen" in
+            *" $_sid=no "*) continue ;;
+            *" $_sid=yes "*) ;;
+            *)
+                _rr_find "$_sid"
+                _ports=""
+                [ "$_rr_kind" = claude ] && [ "$_rr_n" -eq 1 ] &&
+                    _ports="$(_bi_list_panes | awk -F'|' -v p="$_rr_pane" '$1 == p {print $3}')"
+                if [ -n "$_ports" ] && borg_inject_owner_check "$_sid" "$_ports" >/dev/null 2>&1; then
+                    _seen="${_seen}${_sid}=yes "
+                else
+                    _seen="${_seen}${_sid}=no "
+                    continue
+                fi
+                ;;
+        esac
+        _rw_update "$_f" --argjson now "$_now" '.relaunched = true | .resume_at = $now | .state = "scheduled"
+            | .state_log += [["scheduled", $now, "relaunched"]]'
+        _rr_log "session alive and owned again, handed to the gate: ${_f##*/}"
+    done
     return 0
 }

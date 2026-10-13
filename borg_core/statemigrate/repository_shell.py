@@ -8,7 +8,7 @@ from pathlib import Path
 
 from borg_core import paths, proc
 from borg_core.registry import shell as registry_shell
-from borg_core.statemigrate import project_core as core
+from borg_core.statemigrate import repository_core as core
 from borg_core.statemigrate import shell as base
 
 

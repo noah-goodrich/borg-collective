@@ -7,7 +7,8 @@ borg init                    First-time setup + launch orchestrator
 borg                         What needs attention? Switch to it.
 borg claude                  Launch/resume orchestrator Claude session
 
-borg link [project]          Primary overview: dashboard (no arg) or deep dive (with project)
+borg link [project]          Front door: the Queen's overview at the workspace root, ONE directory's page elsewhere
+borg link --overview         Force the Queen's overview from any directory
 borg next                    Single recommendation: what to work on now
 borg next --switch           Recommend AND switch to that project
 borg switch                  fzf picker → jump to tmux window

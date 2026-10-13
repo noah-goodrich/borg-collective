@@ -15,8 +15,8 @@
 #   - every word whose basename is `git` or `gh`, anywhere in a command, must start a read-only invocation from
 #     the tables below, so `drone exec p -- git push`, `find -exec git push` and `env git push` are all seen;
 #     a dashed `git-push` / `gh-ext` binary is denied outright;
-#   - `bash|sh|zsh|... -c '<script>'` is parsed recursively, so the `bash -c` form every agent is told to use
-#     for pipelines still works; heredoc bodies are skipped as data, except that an unquoted body is checked
+#   - `bash|sh|zsh|... -c '<script>'` is parsed recursively, so a `bash -c` control-flow script (loops, conditionals)
+#     still works; heredoc bodies are skipped as data, except that an unquoted body is checked
 #     for command substitution;
 #   - anything the parser cannot see through is denied: command substitution, `$VAR` / `$'...'` / zsh `=cmd`
 #     expansion, brace expansion, a glob in a command position, eval/alias/trap/parallel/watch/tmux and other
