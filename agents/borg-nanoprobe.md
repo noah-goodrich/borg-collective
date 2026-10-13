@@ -231,7 +231,7 @@ tokens, missing detail loses context.
 
 When you run shell commands, follow the same rules the orchestrator follows:
 
-- Use `bash -c '...'` for pipelines and compound commands (`|`, `&&`, `;`).
+- Write pipes and `;`/`&&` chains as plain commands (allow rules match per subcommand); use `bash -c` only for genuine control flow (loops, conditionals), never to get past a removal check. Genuine deletions use literal paths.
 - Use `run-in /path command` instead of `cd /path && command` when available.
 - Use absolute paths, never `~` (e.g. `/Users/noah/dev/foo` not `~/dev/foo`).
 - No `$()` command substitution — use parameter expansion or pipes.

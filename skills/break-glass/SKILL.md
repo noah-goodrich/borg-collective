@@ -28,8 +28,8 @@ Ask yourself:
    instead (that's just regular borg-collective work — no skill needed).
 2. **Is this command dangerous enough to warrant isolation?** If it's safe to allow globally
    (like `make` or `pre-commit`), add it to global instead.
-3. **Can I use `run-in` or `bash -c` instead?** Many permission prompts are caused by
-   compound commands, not missing rules. Check the Bash Permission Patterns section in
+3. **Can I use `run-in`, `git -C` or a plain command instead?** Many permission prompts are caused by
+   `cd &&` chains or loops, not missing rules. Check the Bash Permission Patterns section in
    CLAUDE.md before adding new rules.
 
 ## If You Still Need a Local Exception
@@ -62,4 +62,4 @@ Ask yourself:
 - `Bash(pre-commit:*)` — useful everywhere, add to global
 - `Bash(docker exec:*)` — useful everywhere, add to global
 - `Bash(cd /path && git status)` — use `run-in` or `git -C` instead
-- `Bash(ls -la | grep foo)` — use `bash -c 'ls -la | grep foo'` instead
+- `Bash(ls -la | grep foo)` — pipes are matched per subcommand, so write it plain
