@@ -5,8 +5,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from borg_core.statemigrate import project_core as core
-from borg_core.statemigrate.project_core import Entry, Repository
+from borg_core.statemigrate import repository_core as core
+from borg_core.statemigrate.repository_core import Entry, Repository
 
 
 def _op(legacy: bool, new: bool, tracked: bool = False) -> str:
@@ -53,7 +53,7 @@ def test_verify_accepts_plan_rejects_drift_and_bad_json():
 
 
 def test_core_imports_stay_pure():
-    tree = ast.parse((Path(__file__).parent / "project_core.py").read_text())
+    tree = ast.parse((Path(__file__).parent / "repository_core.py").read_text())
     roots = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):

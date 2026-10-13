@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # `borg tidy --migrate-project-state [--dry-run]` end to end. setup_temp_dirs redirects HOME and all
-# three XDG dirs, so nothing here can reach the real machine. Planner cases: test_project_core.py.
+# three XDG dirs, so nothing here can reach the real machine. Planner cases: test_repository_core.py.
 
 load test_helper/setup
 

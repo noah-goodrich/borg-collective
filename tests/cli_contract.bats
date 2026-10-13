@@ -95,7 +95,7 @@ run_zsh_borg() {
 # touches no dispatch arm at all. Measured: replacing the entire overview arm with
 # `die "overview deleted by mutation"` left this case AND its cli_smoke twin green. `--local`
 # because a bare `borg link` sweeps the network post-S3; the seeded registry because the empty
-# default short-circuits to "No projects registered" before any document is built. The `--help`
+# default short-circuits to "No repositories registered" before any document is built. The `--help`
 # WORDING is asserted separately, by the AC1 case further down this file.
 @test "contract: link is still dispatched and is not itself reported as removed" {
     _link_mock_tmux ""
@@ -587,7 +587,7 @@ EOF
     run_zsh_borg scan
     [ "$status" -eq 0 ]
     [[ "$output" == *"Scanning Claude session history"* ]] || false
-    [[ "$output" == *"No new projects found"* ]] || false
+    [[ "$output" == *"No new repositories found"* ]] || false
 }
 
 @test "contract: scan --no-llm still dispatches and exits 0" {
@@ -841,7 +841,7 @@ EOF
     printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
     run_zsh_borg color ghost blue
     [ "$status" -ne 0 ]
-    [[ "$output" == *"Unknown project: ghost"* ]] || false
+    [[ "$output" == *"Unknown repository: ghost"* ]] || false
 }
 
 # cmd_image (borg.zsh:1013) build/push/pull all shell out to real `docker`, and push/pull can also
@@ -1105,14 +1105,14 @@ EOF
     export BORG_WORKTREE_STATE_DIR="${BATS_TEST_TMPDIR}/borg-worktrees"
     run_zsh_borg reap-worktrees
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No registered projects found."* ]] || false
+    [[ "$output" == *"No registered repositories found."* ]] || false
 }
 
 @test "contract: reap-worktrees errors cleanly on an unknown project name" {
     export BORG_WORKTREE_STATE_DIR="${BATS_TEST_TMPDIR}/borg-worktrees"
     run_zsh_borg reap-worktrees no-such-project
     [ "$status" -ne 0 ]
-    [[ "$output" == *"unknown project 'no-such-project'"* ]] || false
+    [[ "$output" == *"unknown repository 'no-such-project'"* ]] || false
 }
 
 @test "contract: reap-worktrees removes an age-expired worktree for a registered project" {
@@ -1288,7 +1288,7 @@ EOF
 }
 
 # Registry is deliberately left empty: _borg_print_briefing's early-return path
-# ("No projects in registry. Run: borg scan") is the only way to safely exercise cmd_init without
+# ("No repositories in registry. Run: borg scan") is the only way to safely exercise cmd_init without
 # also needing to mock a `claude -p ...` LLM-briefing call -- a non-empty registry would route
 # through that call too. TMUX is set (the direct-exec launch branch) so a real `claude` process is
 # never spawned even in principle; only the mocked one on BORG_PATH_PREFIX is reachable.
@@ -1317,9 +1317,55 @@ EOF
 
     run_zsh_borg init
     [ "$status" -eq 0 ]
-    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
+}
+
+# THE QUEEN, BY NAME (rename PR R4). With no tmux session running, `borg init` creates the session's first
+# window as "queen" (not "orchestrator") and turns automatic-rename off on it; the claude handoff is named
+# "borg-queen"; and the launch prompt calls the session the Queen's and says "repository files". The mock
+# claude copies its --append-system-prompt-file argument aside because cmd_init deletes the file after
+# claude exits. The registry stays empty so no `claude -p` briefing call is reached.
+@test "contract: init creates the Queen's window and names the session and prompt for the Queen" {
+    setup_mock_bin
+    export BORG_PATH_PREFIX="$MOCK_BIN"
+    export TRACE="${BATS_TEST_TMPDIR}/trace.log"
+    : > "$TRACE"
+    export TMUX_MOCK_HAS_SESSION=0
+    _mock_tmux
+
+    export TMUX="/tmp/tmux-mock/default,1234,0"
+    export BORG_ORCHESTRATOR_ROOT="${BATS_TEST_TMPDIR}/orchestrator-root"
+    mkdir -p "$BORG_ORCHESTRATOR_ROOT"
+
+    cat > "$MOCK_BIN/claude" <<EOF
+#!/usr/bin/env bash
+echo "claude \$*" >> "$TRACE"
+prev=""
+for a in "\$@"; do
+    [ "\$prev" = "--append-system-prompt-file" ] && cp "\$a" "${BATS_TEST_TMPDIR}/prompt.txt"
+    prev="\$a"
+done
+exit 0
+EOF
+    chmod +x "$MOCK_BIN/claude"
+
+    run_zsh_borg init
+    [ "$status" -eq 0 ]
+    run grep -c "tmux new-session -d -s borg -n queen" "$TRACE"
+    [ "$output" -ge 1 ]
+    run grep -c "tmux set-option -t borg:queen automatic-rename off" "$TRACE"
+    [ "$output" -ge 1 ]
+    run grep -cE "(-n |borg:|--name borg-)orchestrator" "$TRACE"
+    [ "$output" -eq 0 ]
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
+    [ "$output" -ge 1 ]
+    run cat "${BATS_TEST_TMPDIR}/prompt.txt"
+    [[ "$output" == *"You are the Queen for this developer's work session."* ]] || false
+    [[ "$output" == *"files from this Queen session"* ]] || false
+    [[ "$output" == *"Never edit repository"* ]] || false
+    [[ "$output" != *"You are the orchestrator"* ]] || false
 }
 
 
@@ -1331,7 +1377,7 @@ EOF
 # assertion in the empty-registry case would stay green.
 #
 # ONE MOCK, TWO CALLS, DISTINGUISHED BY $1. `cmd_init` invokes `claude` twice: `-p` for the briefing
-# narrative and `--name borg-orchestrator ...` for the handoff. The marker rides only on the `-p`
+# narrative and `--name borg-queen ...` for the handoff. The marker rides only on the `-p`
 # arm so "the narrative reached stdout" cannot be satisfied by the handoff.
 @test "contract: init builds the briefing from the document and still hands off to claude" {
     setup_mock_bin
@@ -1364,7 +1410,7 @@ EOF
     run grep -c "claude -p" "$TRACE"
     [ "$output" -ge 1 ]
     # And init still completes its actual job.
-    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
@@ -1422,9 +1468,9 @@ EOF
     run cat "$PROMPT_FILE"
     [ "$status" -eq 0 ]
     [[ "$output" == *"SCOPE: orchestrator"* ]] || false
-    [[ "$output" == *"PROJECT: here"* ]] || false
-    [[ "$output" == *"PROJECT: there"* ]] || false
-    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    [[ "$output" == *"REPOSITORY: here"* ]] || false
+    [[ "$output" == *"REPOSITORY: there"* ]] || false
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
@@ -1439,7 +1485,7 @@ EOF
 # reaches the orchestrator session, which is the product; the briefing is only its preamble.
 #
 # MUTATION, VERIFIED BOTH WAYS: delete `|| true` from `cmd_init`'s `_borg_print_briefing` call and
-# this case goes red (init exits 9 and never runs `claude --name borg-orchestrator`); restore it and
+# this case goes red (init exits 9 and never runs `claude --name borg-queen`); restore it and
 # it goes green. Nothing else in the suite moves either way.
 #
 # THE MOCK IS A PASS-THROUGH ON python3 THAT FAILS ONLY `--json`, the same shape briefing.bats uses
@@ -1497,7 +1543,7 @@ EOF
     run grep -c "claude -p" "$TRACE"
     [ "$output" -eq 0 ]
     # And init still completes its actual job.
-    run grep -c "claude --model opus --effort xhigh --name borg-orchestrator --append-system-prompt-file" "$TRACE"
+    run grep -c "claude --model opus --effort xhigh --name borg-queen --append-system-prompt-file" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
 }
@@ -1518,7 +1564,7 @@ EOF
 
     run_zsh_borg claude
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Resuming orchestrator"* ]] || false
+    [[ "$output" == *"Resuming the Queen"* ]] || false
     run grep -c "tmux send-keys" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
@@ -1547,7 +1593,7 @@ EOF
 
     run_zsh_borg claude
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Resuming orchestrator"* ]] || false
+    [[ "$output" == *"Resuming the Queen"* ]] || false
     run grep -c "claude --model opus --effort xhigh --continue" "$TRACE"
     [ "$status" -eq 0 ]
     [ "$output" -ge 1 ]
@@ -1637,7 +1683,7 @@ _mock_teardown_infra() {
 echo "\$@" >> "$MOCK_BIN/tmux.calls"
 case "\$1" in
     has-session) exit 0 ;;
-    list-windows) echo "testproj" ;;
+    list-windows) printf '%s\n' \${TMUX_TEARDOWN_WINDOWS:-testproj} ;;
     show-option) exit 1 ;;
 esac
 exit 0
@@ -1679,6 +1725,35 @@ EOF
     [[ "$calls" == *"has-session -t borg"* ]] || false
     [[ "$calls" == *"kill-window -t borg:testproj"* ]] || false
     [[ "$calls" == *"kill-session -t borg"* ]] || false
+}
+
+# THE QUEEN'S WINDOW IS SKIPPED UNDER BOTH ITS NAMES. `borg init` now creates the window as "queen", but a
+# session started before the rename keeps its "orchestrator" window until Noah renames it, so cmd_down must
+# treat either name as the Queen's (no @project_dir lookup, no kill-window; kill-session reaps it). The
+# repository window in the same list is still torn down, so the skip is not "nothing was listed".
+# MUTATION THAT TURNS THIS RED: drop `"$wname" == "orchestrator"` (or the "queen" arm) from cmd_down's skip list.
+@test "contract: down skips the Queen's window under both the old and the new name" {
+    _mock_teardown_infra
+    export TMUX_TEARDOWN_WINDOWS="queen orchestrator testproj"
+
+    run_zsh_borg down
+
+    [ "$status" -eq 0 ]
+    local calls
+    calls=$(cat "$MOCK_BIN/tmux.calls")
+    [[ "$calls" == *"kill-window -t borg:testproj"* ]] || false
+    [[ "$calls" != *"kill-window -t borg:queen"* ]] || false
+    [[ "$calls" != *"kill-window -t borg:orchestrator"* ]] || false
+    [[ "$calls" != *"show-option -t borg:queen"* ]] || false
+    [[ "$calls" != *"show-option -t borg:orchestrator"* ]] || false
+}
+
+@test "contract: help names the Queen on the init and claude lines" {
+    run_zsh_borg help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"    init                Launch the Queen: morning briefing + Claude session"* ]] || false
+    [[ "$output" == *"    claude              Resume the Queen session (continue most recent)"* ]] || false
+    [[ "$output" != *"Launch orchestrator"* ]] || false
 }
 
 @test "contract: sever with an argument refuses, points at git mv, and tears nothing down" {
@@ -1729,7 +1804,7 @@ EOF
     run_zsh_borg regenerate
 
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No stale projects"* ]] || false
+    [[ "$output" == *"No stale repositories"* ]] || false
 }
 
 @test "contract: regenerate finds a stale project and fails cleanly (non-interactive) without archiving it" {
@@ -1739,7 +1814,7 @@ EOF
     run_zsh_borg regenerate < /dev/null
 
     [ "$status" -ne 0 ]
-    [[ "$output" == *"Stale projects"* ]] || false
+    [[ "$output" == *"Stale repositories"* ]] || false
     [[ "$output" == *"stale-proj"* ]] || false
 
     local registry_after
@@ -2529,8 +2604,8 @@ _assert_link_grid_golden() {
 #
 # The two producers ALREADY diverge, which is why asserting the field shape against `link
 # --porcelain` alone would have been asserting it in the wrong place: on an empty registry the
-# porcelain surface prints nothing while `cmd_ls` prints the human "No projects registered" line
-# straight into the fzf stream — its `project_count == 0` guard returns before the porcelain branch
+# porcelain surface prints nothing while `cmd_ls` prints the human "No repositories registered" line
+# straight into the fzf stream — its `repository_count == 0` guard returns before the porcelain branch
 # is ever consulted.
 @test "contract: the fzf picker's two producers each keep their half of the contract" {
     _link_setup_porcelain
@@ -2662,7 +2737,7 @@ EOF
     [ -z "$output" ]
 
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_ls --porcelain\""
-    [[ "$output" == *"No projects registered"* ]] || false
+    [[ "$output" == *"No repositories registered"* ]] || false
 }
 
 # cmd_link's flag loop (borg.zsh:220-229) resolves porcelain BEFORE the project branch, so
@@ -2746,7 +2821,7 @@ EOF
 # refuses the bad file, and the guard at lib/registry.zsh was `result=$(... | jq ...) ||
 # result="$result"` — a no-op, because command substitution assigns BEFORE the `||` runs, so `result`
 # was already empty when the fallback reassigned empty to empty. Every consumer of
-# borg_registry_with_state saw an empty registry: `borg link` printed "No projects registered. Run:
+# borg_registry_with_state saw an empty registry: `borg link` printed "No repositories registered. Run:
 # borg scan", and next/switch/init/reap/watch saw nothing either. A partial write from a hook or a
 # killed session was enough. The healthy project must still receive its state overlay — asserted via
 # `last_activity`, which exists ONLY in state.json here, so a merge that silently stopped merging
@@ -2762,7 +2837,7 @@ EOF
 
     run_zsh_borg link
     [ "$status" -eq 0 ]
-    [[ "$output" != *"No projects registered"* ]] || false
+    [[ "$output" != *"No repositories registered"* ]] || false
     [[ "$output" == *"goodproj"* ]] || false
     [[ "$output" == *"badproj"* ]] || false
 
@@ -3745,7 +3820,7 @@ EOF
 
     run_zsh_borg link --brief
     [ "$status" -eq 0 ]
-    [[ "$output" == *"No projects in registry. Run: borg scan"* ]] || false
+    [[ "$output" == *"No repositories in registry. Run: borg scan"* ]] || false
     [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
 }
 

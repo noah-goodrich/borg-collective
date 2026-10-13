@@ -1,4 +1,4 @@
-"""`python3 -m borg_core.statemigrate.project_cli [--dry-run] [--path FILE]...` -- the body of
+"""`python3 -m borg_core.statemigrate.repository_cli [--dry-run] [--path FILE]...` -- the body of
 `borg tidy --migrate-project-state`."""
 
 from __future__ import annotations
@@ -9,8 +9,8 @@ from pathlib import Path
 
 from borg_core import paths
 from borg_core.registry import shell as registry_shell
-from borg_core.statemigrate import project_core as core
-from borg_core.statemigrate import project_shell as shell
+from borg_core.statemigrate import repository_core as core
+from borg_core.statemigrate import repository_shell as shell
 
 _VERB = {core.COPY: "copy     ", core.KEEP_NEW: "keep-new "}
 

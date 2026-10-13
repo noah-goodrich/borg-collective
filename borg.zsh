@@ -2,12 +2,12 @@
 # borg — The Borg Collective: multi-session Claude Code manager
 #
 # Usage:
-#   borg link                 # overview of all tracked projects
-#   borg link [project]       # deep dive on one project
+#   borg link                 # overview of all tracked repositories
+#   borg link [repository]    # deep dive on one repository
 #   borg switch [query]       # fzf picker → tmux window switch
-#   borg scan                 # auto-discover projects from session history
-#   borg add [path] [--name n] # manually register a project
-#   borg rm <name>            # unregister a project
+#   borg scan                 # auto-discover repositories from session history
+#   borg add [path] [--name n] # manually register a repository
+#   borg rm <name>            # unregister a repository
 
 # Set a known-good PATH from scratch. Non-interactive zsh scripts invoked via shebang
 # do not source /etc/zprofile or ~/.zshrc, so PATH can be empty or incomplete.
@@ -20,7 +20,7 @@ set -e
 
 BORG_VERSION="v0.9.5"
 BORG_HOME="${BORG_HOME:-${0:A:h}}"  # directory containing this script (for lib/, hooks/, skills/)
-BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"  # workspace root where projects live; orchestrator session runs here
+BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}"  # workspace root where repositories live; orchestrator session runs here
 BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 
 # Colors (same as dev.sh)
@@ -102,18 +102,18 @@ _borg_is_work_day() {
     [[ ",$BORG_WORK_DAYS," == *",$today,"* ]]
 }
 
-# Check if a project is a work project
-_borg_is_work_project() {
+# Check if a repository is a work repository
+_borg_is_work_repository() {
     [[ -z "$BORG_WORK_PROJECTS" ]] && return 1
     [[ ",$BORG_WORK_PROJECTS," == *",$1,"* ]]
 }
 
 # Prompt for work/life boundary confirmation. Returns 0 if allowed.
 _borg_boundary_check() {
-    local project="$1"
-    if _borg_is_work_project "$project" && { ! _borg_is_work_hours || ! _borg_is_work_day; }; then
+    local repository="$1"
+    if _borg_is_work_repository "$repository" && { ! _borg_is_work_hours || ! _borg_is_work_day; }; then
         local now_t=$(date +"%l:%M %p" | sed 's/^ //')
-        echo -ne "${YELLOW}▸${NC} It's $now_t. ${BOLD}$project${NC} is a work project. Switch? [y/N] "
+        echo -ne "${YELLOW}▸${NC} It's $now_t. ${BOLD}$repository${NC} is a work repository. Switch? [y/N] "
         read -rk1 reply
         echo
         [[ "$reply" == [yY] ]] && return 0 || return 1
@@ -121,13 +121,13 @@ _borg_boundary_check() {
     return 0
 }
 
-# Count projects with status=waiting or status=active (reads per-project state.json)
+# Count repositories with status=waiting or status=active (reads per-repository state.json)
 _borg_active_count() {
     borg_registry_with_state | jq '[.projects[] | select(.status == "waiting" or .status == "active")] | length'
 }
 
-# Read directives from a project's own docs/plans/directives/ directory.
-# Argument: absolute path to the project root.
+# Read directives from a repository's own docs/plans/directives/ directory.
+# Argument: absolute path to the repository root.
 # Output: first line = count, subsequent lines = slug\ttitle
 #
 # NOTE: parameter is `ppath`, not `path`. zsh ties `path` to $PATH, so
@@ -171,8 +171,8 @@ cmd_ls() {
     # -- and because borg.zsh runs under `set -e`, the whole of cmd_ls dies at the FIRST such
     # substitution. Measured, not assumed: with a `"summary": "top\nbottom"` in the registry,
     # `cmd_ls --porcelain` exits 5 having printed nothing; forced past errexit it prints the human
-    # "No projects registered. Run: borg scan" line straight into fzf's stream, because the failed
-    # jq left `project_count` empty and zsh arithmetic reads empty as 0.
+    # "No repositories registered. Run: borg scan" line straight into fzf's stream, because the failed
+    # jq left `repository_count` empty and zsh arithmetic reads empty as 0.
     #
     # THIS FAILS BEFORE THE RECORD IS EVER BUILT, so it is the first half of the picker defect and
     # the flatten below is the second; fixing only the flatten fixes nothing observable.
@@ -189,16 +189,16 @@ cmd_ls() {
     #   awk '/echo .*\| *jq/{ if ($0 !~ /^ *#/) print FILENAME":"NR }' borg.zsh bin/* lib/*.zsh
     local registry
     registry=$(borg_registry_with_state)
-    local project_count
-    project_count=$(printf '%s' "$registry" | jq '.projects | length')
+    local repository_count
+    repository_count=$(printf '%s' "$registry" | jq '.projects | length')
 
-    if (( project_count == 0 )); then
-        info "No projects registered. Run: borg scan"
+    if (( repository_count == 0 )); then
+        info "No repositories registered. Run: borg scan"
         return 0
     fi
 
-    if (( project_count <= 1 && ! porcelain )); then
-        echo -e "  ${DIM}Tip: run 'borg scan' to discover projects from session history${NC}"
+    if (( repository_count <= 1 && ! porcelain )); then
+        echo -e "  ${DIM}Tip: run 'borg scan' to discover repositories from session history${NC}"
     fi
 
     # Sort by: pinned DESC, status priority (waiting>active>idle>archived), last_activity
@@ -218,7 +218,7 @@ cmd_ls() {
     ')
 
     if [[ -z "$sorted_names" ]]; then
-        info "No projects to show. Run: borg link --all"
+        info "No repositories to show. Run: borg link --all"
         return 0
     fi
 
@@ -235,7 +235,7 @@ cmd_ls() {
             # 0x09/0x0A/0x0D arrive here intact. This is a TSV record read back by `cmd_switch` with
             # `fzf --delimiter '\t' --with-nth 1,3,5` and then `cut -f1`: a 0x0A ends the record
             # early and makes the summary's tail a SECOND selectable row whose field 1 is prose,
-            # which `cut -f1` hands to `_borg_do_switch` as a project name; a 0x09 shifts every
+            # which `cut -f1` hands to `_borg_do_switch` as a repository name; a 0x09 shifts every
             # field right, so --with-nth shows the wrong status and date.
             #
             # WHY EXACTLY THESE THREE, read off lib/registry.zsh's scrub rather than guessed:
@@ -267,19 +267,19 @@ cmd_ls() {
 }
 
 cmd_status() {
-    local project="${1:-}"
+    local repository="${1:-}"
 
-    if [[ -z "$project" ]]; then
-        # Default to project matching current directory name
-        project=$(basename "$PWD")
+    if [[ -z "$repository" ]]; then
+        # Default to repository matching current directory name
+        repository=$(basename "$PWD")
     fi
 
-    if ! borg_registry_has "$project"; then
-        die "project '$project' not in registry. Run: borg add [path]"
+    if ! borg_registry_has "$repository"; then
+        die "repository '$repository' not in registry. Run: borg add [path]"
     fi
 
     local entry
-    entry=$(borg_registry_get_with_state "$project")
+    entry=$(borg_registry_get_with_state "$repository")
 
     local source ppath proj_status last summary session_id tmux_window
     source=$(printf '%s' "$entry"     | jq -r '.source // "cli"')
@@ -290,7 +290,7 @@ cmd_status() {
     session_id=$(printf '%s' "$entry" | jq -r '.claude_session_id // "(unknown)"')
     tmux_window=$(printf '%s' "$entry"| jq -r '.tmux_window // "(none)"')
 
-    echo -e "\n${BOLD}${project}${NC}"
+    echo -e "\n${BOLD}${repository}${NC}"
     printf '%0.s─' {1..40}; echo
     echo -e "  ${DIM}Source:${NC}       $source"
     [[ "$ppath" != "null" ]] && echo -e "  ${DIM}Path:${NC}         $ppath"
@@ -307,7 +307,7 @@ cmd_status() {
 cmd_switch() {
     local query="${*:-}"
 
-    # If query matches exactly one project, skip fzf and switch directly
+    # If query matches exactly one repository, skip fzf and switch directly
     if [[ -n "$query" ]]; then
         if borg_registry_has "$query"; then
             _borg_do_switch "$query"
@@ -320,33 +320,33 @@ cmd_switch() {
     selection=$(cmd_ls --porcelain | \
         fzf --query "$query" \
             --prompt "borg> " \
-            --header "Switch to project (Enter=switch, Esc=cancel)" \
+            --header "Switch to repository (Enter=switch, Esc=cancel)" \
             --delimiter '\t' \
             --with-nth 1,3,5 \
             2>/dev/null) || return 0
 
-    local project
-    project=$(echo "$selection" | cut -f1)
-    [[ -z "$project" ]] && return 0
+    local repository
+    repository=$(echo "$selection" | cut -f1)
+    [[ -z "$repository" ]] && return 0
 
-    _borg_do_switch "$project"
+    _borg_do_switch "$repository"
 }
 
-# Internal: switch to a project by name (tmux or show status)
-# Usage: _borg_do_switch <project> [--silent]
+# Internal: switch to a repository by name (tmux or show status)
+# Usage: _borg_do_switch <repository> [--silent]
 #   --silent: suppress text output, use tmux display-message instead (for keybinding context)
 _borg_do_switch() {
-    local project="$1"
+    local repository="$1"
     local silent=0
     [[ "${2:-}" == "--silent" ]] && silent=1
 
     # Work/life boundary check (skip in silent/keybinding mode — Ctrl+Space > is itself a conscious action)
     if (( ! silent )); then
-        _borg_boundary_check "$project" || return 0
+        _borg_boundary_check "$repository" || return 0
     fi
 
     local entry
-    entry=$(borg_registry_get_with_state "$project")
+    entry=$(borg_registry_get_with_state "$repository")
     # `printf '%s' "$entry" | jq`, NEVER `echo "$entry" | jq` — the SAME defect cmd_ls carried, in
     # the function cmd_switch hands its `cut -f1` selection to. zsh's `echo` expands backslash
     # escapes, and jq stores a summary's real newline as the two characters `\` `n`; `echo` turns
@@ -382,25 +382,25 @@ _borg_do_switch() {
     summary=$(printf '%s' "$entry" | jq -r '.summary // ""')
     last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
 
-    # If no registered window, try project name as window name
+    # If no registered window, try repository name as window name
     if [[ -z "$tmux_window" || "$tmux_window" == "null" ]]; then
-        if borg_tmux_window_exists "$project"; then
-            tmux_window="$project"
+        if borg_tmux_window_exists "$repository"; then
+            tmux_window="$repository"
             # Update registry so future calls are faster
-            borg_registry_set "$project" "tmux_window" "\"$project\"" 2>/dev/null || true
+            borg_registry_set "$repository" "tmux_window" "\"$repository\"" 2>/dev/null || true
         fi
     fi
 
     # Guard: tmux_window must not equal the session name (stale registry entry)
     if [[ "$tmux_window" == "$BORG_TMUX_SESSION" ]]; then
-        warn "tmux_window for '$project' is '$tmux_window' (same as session name) — clearing stale entry"
-        borg_registry_set "$project" "tmux_window" "null" 2>/dev/null || true
+        warn "tmux_window for '$repository' is '$tmux_window' (same as session name) — clearing stale entry"
+        borg_registry_set "$repository" "tmux_window" "null" 2>/dev/null || true
         tmux_window=""
     fi
 
-    # Either form: a live window under the project name counts even when the registry holds a short name
+    # Either form: a live window under the repository name counts even when the registry holds a short name
     if [[ -n "$tmux_window" && "$tmux_window" != "null" ]]; then
-        tmux_window=$(borg_tmux_find_window "$project" "$tmux_window") || true
+        tmux_window=$(borg_tmux_find_window "$repository" "$tmux_window") || true
         [[ -n "$tmux_window" ]] || tmux_window="$(printf '%s' "$entry" | jq -r '.tmux_window // ""')"
     fi
 
@@ -408,42 +408,42 @@ _borg_do_switch() {
         if (( silent )); then
             # In tmux keybinding context: switch first, then show brief as display-message
             borg_tmux_switch "$tmux_window" || true
-            local msg="$project"
-            [[ -n "$summary" && "$summary" != "null" ]] && msg="$project | ${summary:0:60}"
+            local msg="$repository"
+            [[ -n "$summary" && "$summary" != "null" ]] && msg="$repository | ${summary:0:60}"
             tmux display-message "$msg" 2>/dev/null || true
         else
             # Auto-brief before switching (interactive context)
             if [[ -n "$summary" && "$summary" != "null" ]]; then
-                echo -e "\n${DIM}─── $project ───${NC}"
+                echo -e "\n${DIM}─── $repository ───${NC}"
                 local rel_time
                 rel_time=$(_borg_relative_time "$last")
                 echo -e "  ${DIM}Last active:${NC} $rel_time"
                 echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
                 echo
             fi
-            info "Switching to $project ($tmux_window)"
+            info "Switching to $repository ($tmux_window)"
             borg_tmux_switch "$tmux_window"
         fi
     elif [[ "$source" == "desktop" ]]; then
         if (( silent )); then
-            tmux display-message "$project (Desktop session — open Claude Desktop)" 2>/dev/null || true
+            tmux display-message "$repository (Desktop session — open Claude Desktop)" 2>/dev/null || true
         else
-            info "$project is a Desktop session — open Claude Desktop to continue"
-            cmd_status "$project"
+            info "$repository is a Desktop session — open Claude Desktop to continue"
+            cmd_status "$repository"
         fi
     else
         if (( silent )); then
-            tmux display-message "borg: no tmux window for $project" 2>/dev/null || true
+            tmux display-message "borg: no tmux window for $repository" 2>/dev/null || true
         else
-            warn "No tmux window registered for $project"
-            cmd_status "$project"
+            warn "No tmux window registered for $repository"
+            cmd_status "$repository"
         fi
     fi
 }
 
-# Register all projects from a session log into the registry.
+# Register all repositories from a session log into the registry.
 # Args: source label, session-id fn name, scan-log fn name, display label (optional)
-# Appends to new_projects array in calling scope (zsh dynamic scoping).
+# Appends to new_repositories array in calling scope (zsh dynamic scoping).
 _borg_scan_source() {
     local source="$1" get_session_id="$2" scan_log="$3" label="${4:-}"
     local ppath name tmux_window session_id tw_json sid_json json
@@ -499,7 +499,7 @@ _borg_scan_source() {
 
         borg_registry_merge "$name" "$json"
         info "Registered: $name ($ppath)${label:+ $label}"
-        new_projects+=("$name")
+        new_repositories+=("$name")
     done < <("$scan_log")
 }
 
@@ -513,8 +513,8 @@ cmd_scan() {
         esac
     done
 
-    # ── Phase 1: Discover new projects ────────────────────────────────────────
-    local new_projects=()
+    # ── Phase 1: Discover new repositories ────────────────────────────────────────
+    local new_repositories=()
 
     info "Scanning Claude session history..."
     _borg_scan_source "cli" borg_claude_latest_session_id borg_claude_scan_session_log
@@ -526,18 +526,18 @@ cmd_scan() {
 
     borg_desktop_scan 2>/dev/null || true
 
-    if (( ${#new_projects[@]} == 0 )); then
-        info "No new projects found (already up to date)"
+    if (( ${#new_repositories[@]} == 0 )); then
+        info "No new repositories found (already up to date)"
     fi
 
-    # ── Phase 2: Refresh summaries for all registered projects ────────────────
+    # ── Phase 2: Refresh summaries for all registered repositories ────────────────
     # LLM summaries default on (richer context, no external service to supplement it),
     # unless the user opts out with --no-llm.
     if (( ! llm_explicit && ! use_llm )); then
         use_llm=1
     fi
 
-    info "Refreshing project summaries..."
+    info "Refreshing repository summaries..."
     local llm_flag=""
     (( use_llm )) && llm_flag="--llm"
 
@@ -546,8 +546,8 @@ cmd_scan() {
     registry_json=$(borg_registry_read)
     local updated=0
 
-    local projects name ppath session_id jsonl cur_activity file_mtime summary new_json
-    projects=$(printf '%s' "$registry_json" | jq -r '.projects | keys[]')
+    local repositories name ppath session_id jsonl cur_activity file_mtime summary new_json
+    repositories=$(printf '%s' "$registry_json" | jq -r '.projects | keys[]')
 
     while IFS= read -r name; do
         [[ -z "$name" ]] && continue
@@ -604,7 +604,7 @@ cmd_scan() {
                 warn "$name: jq failed updating summary, skipping"
             fi
         fi
-    done < <(echo "$projects")
+    done < <(echo "$repositories")
 
     if (( updated )); then
         echo "$registry_json" | _borg_registry_write
@@ -612,29 +612,29 @@ cmd_scan() {
 }
 
 cmd_color() {
-    local project="${1:-}" color="${2:-}"
-    [[ -z "$project" || -z "$color" ]] && die "Usage: borg color <project> <color>"
-    borg_registry_has "$project" || die "Unknown project: $project"
-    borg_registry_set "$project" "color" "\"$color\""
-    info "Color for $project → $color"
+    local repository="${1:-}" color="${2:-}"
+    [[ -z "$repository" || -z "$color" ]] && die "Usage: borg color <repository> <color>"
+    borg_registry_has "$repository" || die "Unknown repository: $repository"
+    borg_registry_set "$repository" "color" "\"$color\""
+    info "Color for $repository → $color"
     local live_window
-    if live_window=$(borg_tmux_find_window "$project" "$(borg_registry_get "$project" | jq -r '.tmux_window // ""')" 2>/dev/null); then
+    if live_window=$(borg_tmux_find_window "$repository" "$(borg_registry_get "$repository" | jq -r '.tmux_window // ""')" 2>/dev/null); then
         _borg_apply_window_color "$live_window" "$color"
         info "Applied to live tmux window."
     fi
 }
 
 cmd_window() {
-    local project="${1:-}" short="${2:-}"
-    [[ -z "$project" ]] && die "Usage: borg window <project> [short]"
-    borg_registry_has "$project" || die "Unknown project: $project"
+    local repository="${1:-}" short="${2:-}"
+    [[ -z "$repository" ]] && die "Usage: borg window <repository> [short]"
+    borg_registry_has "$repository" || die "Unknown repository: $repository"
     if [[ -z "$short" ]]; then
-        _borg_py borg_core.registry.cli window-name "$project"
+        _borg_py borg_core.registry.cli window-name "$repository"
         return
     fi
     local applied
-    applied=$(_borg_py borg_core.registry.cli window-name "$project" --set "$short") || exit 1
-    info "Window name for $project → $applied"
+    applied=$(_borg_py borg_core.registry.cli window-name "$repository" --set "$short") || exit 1
+    info "Window name for $repository → $applied"
 }
 
 cmd_image() {
@@ -781,7 +781,7 @@ _borg_next_chooser() {
 # Non-interactive surfaces for skills (no TTY): `--rows --json` (logs nothing), `--open <p> --chosen [--shown]`
 # and `--declined [--shown]` (each logs ONE real, unscripted chooser row).
 _borg_next_surface() {
-    local local_flag="$1" mode="" project="" shown=0 chosen=0 all_flag=0 arg
+    local local_flag="$1" mode="" repository="" shown=0 chosen=0 all_flag=0 arg
     shift
     while (( $# )); do
         arg="$1"; shift
@@ -789,7 +789,7 @@ _borg_next_surface() {
             --rows) mode=rows ;;
             --json) ;;
             --all) all_flag=1 ;;
-            --open) mode=open; project="${1:-}"; (( $# )) && shift ;;
+            --open) mode=open; repository="${1:-}"; (( $# )) && shift ;;
             --chosen) chosen=1 ;;
             --declined) mode=declined ;;
             --shown) shown=1 ;;
@@ -810,11 +810,11 @@ _borg_next_surface() {
             ;;
         open)
             (( chosen )) || die "next --open needs --chosen"
-            [[ -n "$project" ]] || die "next --open needs a project"
-            printf '%s' "$registry" | jq -e --arg p "$project" '.projects[$p] != null' >/dev/null 2>&1 ||
-                die "next --open: unknown project '$project'"
-            _borg_next_log "$registry" 0 "" "${base[@]}" --opened "$project" --unmeasured
-            _borg_do_switch "$project" --silent
+            [[ -n "$repository" ]] || die "next --open needs a repository"
+            printf '%s' "$registry" | jq -e --arg p "$repository" '.projects[$p] != null' >/dev/null 2>&1 ||
+                die "next --open: unknown repository '$repository'"
+            _borg_next_log "$registry" 0 "" "${base[@]}" --opened "$repository" --unmeasured
+            _borg_do_switch "$repository" --silent
             ;;
         declined)
             _borg_next_log "$registry" 0 "" "${base[@]}"
@@ -856,7 +856,7 @@ cmd_next() {
         (( chooser_rc != 3 )) && return $chooser_rc
     fi
 
-    # Score and sort projects: pinned +200, waiting +100, active +50, idle +10, no activity -50
+    # Score and sort repositories: pinned +200, waiting +100, active +50, idle +10, no activity -50
     # Tiebreaker: waiting → oldest first (neglected longest); active/idle → newest first
     local top
     top=$(printf '%s' "$registry" | jq -r --argjson idx "$(( ${pick:-1} - 1 ))" '
@@ -936,7 +936,7 @@ cmd_next() {
         echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
     fi
 
-    # Directives for recommended project (from its own docs/plans/directives/)
+    # Directives for recommended repository (from its own docs/plans/directives/)
     if [[ "$ppath" != "null" ]]; then
         local directive_output directive_count
         directive_output=$(_borg_read_directives "$ppath")
@@ -970,19 +970,19 @@ cmd_next() {
 }
 
 cmd_pin() {
-    local project="${1:-}"
-    [[ -z "$project" ]] && project="${PWD##*/}"
-    borg_registry_has "$project" || die "project '$project' not in registry"
-    borg_registry_set "$project" "pinned" "true"
-    info "Pinned: $project"
+    local repository="${1:-}"
+    [[ -z "$repository" ]] && repository="${PWD##*/}"
+    borg_registry_has "$repository" || die "repository '$repository' not in registry"
+    borg_registry_set "$repository" "pinned" "true"
+    info "Pinned: $repository"
 }
 
 cmd_unpin() {
-    local project="${1:-}"
-    [[ -z "$project" ]] && project="${PWD##*/}"
-    borg_registry_has "$project" || die "project '$project' not in registry"
-    borg_registry_set "$project" "pinned" "false"
-    info "Unpinned: $project"
+    local repository="${1:-}"
+    [[ -z "$repository" ]] && repository="${PWD##*/}"
+    borg_registry_has "$repository" || die "repository '$repository' not in registry"
+    borg_registry_set "$repository" "pinned" "false"
+    info "Unpinned: $repository"
 }
 
 # Durably reap stale active/waiting sessions to idle. A session is stale when it
@@ -1018,23 +1018,23 @@ cmd_reap() {
 #
 # Usage:
 #   borg reap-worktrees            # reap across all registered repos
-#   borg reap-worktrees <project>  # reap for one registered project
-#   borg reap-worktrees --dry-run [project]  # print "Would reap ..." lines, remove nothing
+#   borg reap-worktrees <repository>  # reap for one registered repository
+#   borg reap-worktrees --dry-run [repository]  # print "Would reap ..." lines, remove nothing
 cmd_reap_worktrees() {
-    local target_project="" dry_run=0 arg
+    local target_repository="" dry_run=0 arg
     local repo_paths=()
     for arg in "$@"; do
         case "$arg" in
             --dry-run) dry_run=1 ;;
-            -*) die "reap-worktrees: unknown flag '$arg' (usage: borg reap-worktrees [--dry-run] [project])" ;;
-            *) target_project="$arg" ;;
+            -*) die "reap-worktrees: unknown flag '$arg' (usage: borg reap-worktrees [--dry-run] [repository])" ;;
+            *) target_repository="$arg" ;;
         esac
     done
 
-    if [[ -n "$target_project" ]]; then
+    if [[ -n "$target_repository" ]]; then
         local ppath
-        ppath=$(borg_registry_get "$target_project" | jq -r '.path // empty' 2>/dev/null)
-        [[ -n "$ppath" ]] || die "unknown project '$target_project'"
+        ppath=$(borg_registry_get "$target_repository" | jq -r '.path // empty' 2>/dev/null)
+        [[ -n "$ppath" ]] || die "unknown repository '$target_repository'"
         repo_paths=("$ppath")
     else
         while IFS= read -r ppath; do
@@ -1043,7 +1043,7 @@ cmd_reap_worktrees() {
     fi
 
     if (( ${#repo_paths[@]} == 0 )); then
-        info "No registered projects found."
+        info "No registered repositories found."
         return 0
     fi
 
@@ -1160,7 +1160,7 @@ _borg_stop_shared_supabase() {
         || warn "supabase stop failed — stop it manually: cd $stillpoint_dir && supabase stop"
 }
 
-# Deliberate close: best-effort borg-resume marker so the watcher never resumes a project torn down on purpose.
+# Deliberate close: best-effort borg-resume marker so the watcher never resumes a repository torn down on purpose.
 # Never fails the caller; borg-resume honors BORG_RESUME_DISABLE. BORG_RESUME_BIN overrides the binary (tests).
 _borg_mark_closed() {
     local bin="${BORG_RESUME_BIN:-$BORG_HOME/bin/borg-resume}"
@@ -1194,14 +1194,15 @@ cmd_down() {
     local checkpoint_threshold_hours=8
 
     for wname in $windows; do
-        [[ "$wname" == "orchestrator" || "$wname" == "host" ]] && continue
+        # The Queen's window is "queen" since the rename; sessions started before it keep "orchestrator".
+        [[ "$wname" == "queen" || "$wname" == "orchestrator" || "$wname" == "host" ]] && continue
         local pdir
         pdir=$(tmux show-option -t "$BORG_TMUX_SESSION:$wname" -v @project_dir 2>/dev/null) || true
         if [[ -n "$pdir" ]]; then
             _borg_has_recent_checkpoint "$pdir" "$checkpoint_threshold_hours" \
                 || _borg_offer_checkpoint "$wname" "$pdir" "" "$checkpoint_threshold_hours"
             info "Stopping $wname..."
-            # drone down marks the project itself (before and after teardown); mark here only on the fallback.
+            # drone down marks the repository itself (before and after teardown); mark here only on the fallback.
             if ! drone down "$wname" 2>/dev/null; then
                 _borg_mark_closed "${pdir:t}" "$pdir"
                 tmux kill-window -t "$BORG_TMUX_SESSION:$wname" 2>/dev/null || true
@@ -1215,9 +1216,9 @@ cmd_down() {
     local postgres_compose="$HOME/.config/dotfiles/devcontainer/docker-compose.postgres.yml"
     [[ -f "$postgres_compose" ]] && docker compose -f "$postgres_compose" down 2>/dev/null || true
 
-    # Stop the ALWAYS-ON shared stillpoint Supabase stack. Per-project
+    # Stop the ALWAYS-ON shared stillpoint Supabase stack. Per-repository
     # borg-hooks/post-down.sh intentionally never touches it (it is shared
-    # across projects), so sever — the deliberate "tear down everything" —
+    # across repositories), so sever — the deliberate "tear down everything" —
     # is the one place that stops it explicitly. Fail-open: never block sever.
     _borg_stop_shared_supabase
 
@@ -1272,11 +1273,11 @@ cmd_tidy() {
     done < <(printf '%s' "$registry" | jq -r '.projects | keys[]')
 
     if (( ${#candidates[@]} == 0 )); then
-        info "No stale projects. Everything is fresh."
+        info "No stale repositories. Everything is fresh."
         return 0
     fi
 
-    echo -e "\n${BOLD}Stale projects${NC} (idle >48h):\n"
+    echo -e "\n${BOLD}Stale repositories${NC} (idle >48h):\n"
     local c
     for c in "${candidates[@]}"; do
         echo "  - $c"
@@ -1306,7 +1307,7 @@ cmd_tidy() {
 #
 # WHAT THIS REPLACED, AND WHY IT IS NOT COMING BACK (2026-08-27 directive "Fold `--brief` onto the
 # document"): 177 lines that re-derived a board from `borg_registry_with_state` — its own 30-day
-# active/inactive split, its own waiting-first sort, one `jq` per project for `status` /
+# active/inactive split, its own waiting-first sort, one `jq` per repository for `status` /
 # `last_activity` / `summary` / `waiting_reason` / `path`, its own `_borg_relative_time` call, its own
 # `find .borg/checkpoints | sort -r | head -1`, and a hand-rolled fallback table. Every one of those
 # fields is already on the document, computed once, with the staleness overlay applied. The second
@@ -1383,7 +1384,7 @@ _borg_print_briefing() {
     # to say, and paying `claude -p` to say it is pure waste.
     #
     # `.order`, NOT `.total_projects`, AND THE DIFFERENCE IS A REAL REGISTRY STATE. `core.assemble`
-    # sets `total_projects` from the UNFILTERED project map ON PURPOSE (see its docstring: the page
+    # sets `total_projects` from the UNFILTERED repository map ON PURPOSE (see its docstring: the page
     # must distinguish an empty registry from an all-archived one, which both emit `order: []`).
     # `.order` is the post-archived-filter list, and it is EXACTLY the list this function projects
     # into the prompt below — so it is the only count that answers "is there anything to narrate".
@@ -1405,11 +1406,11 @@ _borg_print_briefing() {
     brief_scope="${scope_probe#*$'\t'}"
     [[ -z "$scope_probe" ]] && { rows=0; brief_scope="orchestrator"; }
     if [[ "$brief_scope" == "orchestrator" ]] && [[ -z "$rows" || "$rows" == "0" || "$rows" == "null" ]]; then
-        info "No projects in registry. Run: borg scan"
+        info "No repositories in registry. Run: borg scan"
         return 0
     fi
 
-    # ONE jq over the whole document, never one per project — and no `read` loop, so the \x1f
+    # ONE jq over the whole document, never one per repository — and no `read` loop, so the \x1f
     # delimiter this function used to need is gone with it: JSON cannot field-shift an empty summary
     # into the next column. The projection is deliberately NARROWER than the document (~40KB raw,
     # 141 directive rows on the author's machine): it carries the board rows in `.order` (already
@@ -1421,8 +1422,8 @@ _borg_print_briefing() {
     # the wrong-answer-under-a-confident-header failure this plan exists to remove.
     #
     # THE ONE INPUT THIS NARROWS, consciously: the old payload carried 1500 bytes of the newest
-    # checkpoint for EVERY active project; the document carries `checkpoint_head` for the FOCUSED
-    # repository only. Widening the wire to a per-project head is a v2→v3 bump with four coupled
+    # checkpoint for EVERY active repository; the document carries `checkpoint_head` for the FOCUSED
+    # repository only. Widening the wire to a per-repository head is a v2→v3 bump with four coupled
     # SKILL.md edits, and re-reading checkpoints here would reinstate the second derivation this
     # function just lost. The grid's per-node provenance is the replacement input, which is exactly
     # the trade the 2026-08-27 directive argues for.
@@ -1454,9 +1455,9 @@ _borg_print_briefing() {
         | (($d.waiting.rows // []) | map(select(.item == "session" and ((.ref // "") == ""))) | first // null) as $row
         | [
             "SCOPE: repository — \($f.name // $d.scope.repository // "unknown")",
-            "THIS DOCUMENT DESCRIBES ONE DIRECTORY AND NOTHING ELSE. There is no other project here: do not name or guess at one.",
+            "THIS DOCUMENT DESCRIBES ONE DIRECTORY AND NOTHING ELSE. There is no other repository here: do not name or guess at one.",
             "",
-            "PROJECT: \($f.name // $d.scope.repository // "unknown")",
+            "REPOSITORY: \($f.name // $d.scope.repository // "unknown")",
             "path: \($e.path // "unknown")",
             "branch: " + (if (($i.branch // "") | length) > 0 then $i.branch
                           elif (($i.detached // "") | length) > 0 then "detached at \($i.detached)"
@@ -1504,9 +1505,9 @@ _borg_print_briefing() {
           + (if (($breadth.assimilated // []) | length) > 0
              then ["SHIPPED RECENTLY:"] + ($breadth.assimilated | map("  \(.title // .slug)"))
              else [] end)
-          + ["", "PROJECTS (already in priority order — most urgent first; do not re-sort):"]
+          + ["", "REPOSITORIES (already in priority order — most urgent first; do not re-sort):"]
           + ($d.order | map(. as $n | $d.projects[$n] as $p |
-              (["PROJECT: \($n)",
+              (["REPOSITORY: \($n)",
                 "status: \($p.status // "unknown")",
                 "last_active: \($p.relative_activity // "never")",
                 "summary: \($p.summary // "")"]
@@ -1556,8 +1557,8 @@ _borg_print_briefing() {
         [[ -n "$jq_stderr" ]] && fallback_reason+=": ${jq_stderr}"
     fi
 
-    # Which instructions the model gets follows the document's breadth: a directory's page is ONE project, so
-    # there is no list to keep in order and no Focus line to choose between projects.
+    # Which instructions the model gets follows the document's breadth: a directory's page is ONE repository, so
+    # there is no list to keep in order and no Focus line to choose between repositories.
     local prompt_shape
     if [[ "$brief_scope" == "repository" ]]; then
         prompt_shape="This briefing is about ONE directory. Write exactly these lines (omit Blocked line if not waiting):
@@ -1566,18 +1567,18 @@ _borg_print_briefing() {
     Next: <one sentence — the NEXT ACTION below>
     Blocked: <waiting_reason>  ← only if status is waiting
 
-Name no other project. Keep each line under 80 chars."
+Name no other repository. Keep each line under 80 chars."
     else
-        prompt_shape="For each project write exactly these lines (omit Blocked line if not waiting):
+        prompt_shape="For each repository write exactly these lines (omit Blocked line if not waiting):
   <name>  [<status>, <relative_time>]
     Last: <one sentence — what was accomplished. Use the latest checkpoint if there is one, else summary>
     Next: <one sentence — most important next action. Prefer a READY ref from a project manifest>
     Blocked: <waiting_reason>  ← only if status is waiting
 
-After all projects, add one blank line then:
-  Focus: <project_name> — <one sentence why it needs attention first>
+After all repositories, add one blank line then:
+  Focus: <repository_name> — <one sentence why it needs attention first>
 
-The projects below are already in priority order — keep it. Keep each line under 80 chars."
+The repositories below are already in priority order — keep it. Keep each line under 80 chars."
     fi
 
     IFS= read -r -d '' briefing_prompt <<EOF || true
@@ -1710,7 +1711,7 @@ _borg_orchestrator_context() {
 
     echo "Current time: $now"
     echo ""
-    echo "Project registry:"
+    echo "Repository registry:"
     printf '%s' "$registry" | jq -r '
         .projects | to_entries |
         sort_by(
@@ -1726,7 +1727,7 @@ _borg_orchestrator_context() {
     '
     echo ""
 
-    # Latest checkpoint for top 3 priority projects
+    # Latest checkpoint for top 3 priority repositories
     local top3
     top3=$(printf '%s' "$registry" | jq -r '
         .projects | to_entries |
@@ -1762,8 +1763,8 @@ cmd_init() {
     # Ensure tmux session exists — borg init should just work
     if ! borg_tmux_alive; then
         info "Starting tmux session: $BORG_TMUX_SESSION"
-        tmux new-session -d -s "$BORG_TMUX_SESSION" -n orchestrator
-        tmux set-option -t "$BORG_TMUX_SESSION:orchestrator" automatic-rename off
+        tmux new-session -d -s "$BORG_TMUX_SESSION" -n queen
+        tmux set-option -t "${BORG_TMUX_SESSION}:queen" automatic-rename off
     fi
 
     # Merge Desktop sessions before building briefing
@@ -1788,23 +1789,23 @@ cmd_init() {
     context=$(_borg_orchestrator_context)
 
     local prompt
-    prompt="We are the Borg. You are the orchestrator for this developer's work session.
+    prompt="We are the Borg. You are the Queen for this developer's work session.
 
 == CURRENT STATE ==
 $context
 == END STATE ==
 
 The developer has already seen the morning hail in their terminal.
-Be ready to answer questions about any project, help them switch focus, or dive into work.
-If they say 'go' or 'start' or 'engage', switch to the top-priority project.
+Be ready to answer questions about any repository, help them switch focus, or dive into work.
+If they say 'go' or 'start' or 'engage', switch to the top-priority repository.
 
 == ORCHESTRATION MODEL ==
-When the developer asks for project work, spawn the \`borg-collective:borg-nanoprobe\` agent via the Agent tool
+When the developer asks for repository work, spawn the \`borg-collective:borg-nanoprobe\` agent via the Agent tool
 (subagent_type \`borg-collective:borg-nanoprobe\`); do not pass model, effort or background -- the agent
-frontmatter sets them. Pass the project name, repo path, working branch, and task in the
+frontmatter sets them. Pass the repository name, repo path, working branch, and task in the
 invocation prompt. Do NOT use \`isolation: worktree\` — nanoprobes manage their own git worktrees
-inside the target repo at \`~/.local/state/borg/worktrees/<repo>/<slug>\`. Never edit project
-files from this orchestrator session — your role is to spawn / monitor / synthesize. The standard
+inside the target repo at \`~/.local/state/borg/worktrees/<repo>/<slug>\`. Never edit repository
+files from this Queen session — your role is to spawn / monitor / synthesize. The standard
 flow is: brief the nanoprobe → spawn → wait for SubagentStop → report results. Use
 \`borg nanoprobes\` to see recent runs and \`borg nanoprobe-log <id>\` to read a transcript.
 
@@ -1816,12 +1817,12 @@ use it to confirm the main-loop share is shrinking over time (numbers are for th
     printf '%s' "$prompt" > "$prompt_file"
 
     info "Hailing frequencies open — resume any time with: borg claude"
-    _borg_launch_in_tmux "$prompt_file" claude --model "${BORG_CLAUDE_MODEL:-opus}" --effort "${BORG_CLAUDE_EFFORT:-xhigh}" --name "borg-orchestrator" --append-system-prompt-file "$prompt_file"
+    _borg_launch_in_tmux "$prompt_file" claude --model "${BORG_CLAUDE_MODEL:-opus}" --effort "${BORG_CLAUDE_EFFORT:-xhigh}" --name "borg-queen" --append-system-prompt-file "$prompt_file"
 }
 
 cmd_claude() {
-    # Resume the most recent orchestrator session
-    info "Resuming orchestrator..."
+    # Resume the most recent Queen session
+    info "Resuming the Queen..."
     _borg_launch_in_tmux claude --model "${BORG_CLAUDE_MODEL:-opus}" --effort "${BORG_CLAUDE_EFFORT:-xhigh}" --continue
 }
 
@@ -2057,7 +2058,7 @@ cmd_setup() {
 # Work/life boundaries (empty to disable)
 # BORG_WORK_HOURS="09:00-18:00"
 
-# Projects that count as "work" (comma-separated, for boundary checks)
+# Repositories that count as "work" (comma-separated, for boundary checks)
 # BORG_WORK_PROJECTS=""
 
 # Max concurrent active sessions before capacity warning
@@ -2297,7 +2298,7 @@ CONF
     fi
 
     # ── 4c. Ensure .borg/state.json is gitignored + initialise state files ────
-    info "Ensuring .borg/state.json is gitignored in registered projects..."
+    info "Ensuring .borg/state.json is gitignored in registered repositories..."
     while IFS=$'\t' read -r _proj_path _proj_repo; do
         [[ -n "$_proj_path" && -d "$_proj_path" ]] || continue
         local _gi="$_proj_path/.gitignore"
@@ -2308,7 +2309,7 @@ CONF
             info "  Added .borg/state.json to ${_proj_path##*/}/.gitignore"
         fi
         # Initialise an empty state.json if one doesn't exist yet.
-        # Either location existing counts as initialised; the write goes to the per-project state-root path.
+        # Either location existing counts as initialised; the write goes to the per-repository state-root path.
         local _sf=""
         _sf=$(borg_state_read_path "$_proj_path" "$_proj_repo")
         if [[ ! -f "$_sf" ]]; then
@@ -2356,7 +2357,7 @@ CONF
             info "Adding tmux keybinding: Ctrl+Space > (borg next --switch)"
             local borg_bin
             borg_bin=$(command -v borg 2>/dev/null || echo "$HOME/.local/bin/borg")
-            printf '\n# Borg: jump to most pressing project (borg next --switch)\n' >> "$TMUX_CONF"
+            printf '\n# Borg: jump to most pressing repository (borg next --switch)\n' >> "$TMUX_CONF"
             printf "bind > run-shell \"%s next --switch 2>/dev/null || tmux display-message 'All clear — take a break'\"\n" \
                 "$borg_bin" >> "$TMUX_CONF"
             tmux source-file "$TMUX_CONF" 2>/dev/null && info "tmux config reloaded" || true
@@ -2499,14 +2500,14 @@ cmd_cortex_resume() {
     fi
     [[ -n "$entry" && "$entry" != "null" ]] || die "no pending wake matching '$target'"
 
-    local pane_id project session window pane_index
+    local pane_id repository session window pane_index
     # \x1f, not @tsv/tab: tab is IFS *whitespace*, so a run of consecutive tabs (an empty middle
     # field) collapses to ONE delimiter and shifts every field after it left. \x1f is a
     # non-whitespace IFS char, so adjacent delimiters always produce an empty field instead of
     # merging. This is the last site of the pattern — _borg_print_briefing carried the original
     # rationale until the 2026-08-27 fold deleted its `read` loop, so the reasoning lives here now
     # rather than as a cross-reference to a function that no longer demonstrates it.
-    IFS=$'\x1f' read -r pane_id project session window pane_index < <(
+    IFS=$'\x1f' read -r pane_id repository session window pane_index < <(
         printf '%s' "$entry" | jq -r '[.pane_id,.project,.session,.window,.pane_index] | join("\u001f")'
     )
 
@@ -2515,19 +2516,19 @@ cmd_cortex_resume() {
         local fresh
         fresh=$(tmux list-panes -t "$session:$window" -F '#{pane_id} #{pane_index}' 2>/dev/null \
             | awk -v idx="$pane_index" '$2 == idx { print $1; exit }')
-        [[ -n "$fresh" ]] || die "pane $pane_id ($project) is gone and could not be re-resolved"
+        [[ -n "$fresh" ]] || die "pane $pane_id ($repository) is gone and could not be re-resolved"
         pane_id="$fresh"
     fi
 
     tmux send-keys -t "$pane_id" "wake up!" Enter \
-        || die "tmux send-keys failed for $pane_id ($project)"
+        || die "tmux send-keys failed for $pane_id ($repository)"
 
-    info "sent 'wake up!' to $project (pane $pane_id)"
+    info "sent 'wake up!' to $repository (pane $pane_id)"
 
     # Drop entry atomically.
     mkdir -p "${wakes_write:h}"
     local tmp="$wakes_write.tmp.$$"
-    jq --arg p "$pane_id" --arg pr "$project" \
+    jq --arg p "$pane_id" --arg pr "$repository" \
         '.wakes |= map(select(.pane_id != $p and .project != $pr))' \
         "$wakes_read" > "$tmp" && mv "$tmp" "$wakes_write"
 }
@@ -2661,7 +2662,7 @@ cmd_nanoprobe_log() {
 # Report main-vs-subagent spend from ~/.claude/token-spend.jsonl (the SessionEnd collector). The
 # directive's actual ask is the main-loop % SHARE — so the goal "shrink the main-loop share" is
 # observable over time — not just raw totals. Default output shows: all-time split with main %, a
-# recent-sessions trend (newest first), and a by-project breakdown sorted by cost.
+# recent-sessions trend (newest first), and a by-repository breakdown sorted by cost.
 #
 # CAVEAT (correctness trap): token-spend.jsonl has NO host/machine field. These numbers therefore
 # reflect THIS MACHINE ONLY. The header and footer state this; do not aggregate across machines from
@@ -2670,10 +2671,10 @@ cmd_spend() {
     # NOTE: token-spend.jsonl lives under ~/.claude (NOT XDG_CONFIG_HOME — that is agents.jsonl).
     local log="$HOME/.claude/token-spend.jsonl"
 
-    local project="" by_model=0 last=15
+    local repository="" by_model=0 last=15
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --project|-p) project="$2"; shift 2 ;;
+            --project|-p) repository="$2"; shift 2 ;;
             --by-model)   by_model=1; shift ;;
             --last)       last="$2"; shift 2 ;;
             *) shift ;;
@@ -2688,14 +2689,14 @@ cmd_spend() {
 
     # Optional --project filter (mirrors borg search --project).
     local filter='.'
-    [[ -n "$project" ]] && filter="select(.project == \"$project\")"
+    [[ -n "$repository" ]] && filter="select(.project == \"$repository\")"
 
     echo -e "${BOLD}Spend — main vs subagent split${NC} ${DIM}(this machine only; token-spend.jsonl has no host field)${NC}"
-    [[ -n "$project" ]] && echo -e "${DIM}filtered to project: $project${NC}"
+    [[ -n "$repository" ]] && echo -e "${DIM}filtered to repository: $repository${NC}"
     echo
 
     # ── All-time totals + main-loop share ──
-    jq -s -r --arg flt "$project" '
+    jq -s -r --arg flt "$repository" '
         [ .[] | select($flt == "" or .project == $flt) ] as $rows
         | ($rows | map(.main.est_cost_usd // 0) | add // 0)      as $main
         | ($rows | map(.subagents.est_cost_usd // 0) | add // 0) as $sub
@@ -2711,10 +2712,10 @@ cmd_spend() {
     ' "$log"
     echo
 
-    # ── Recent-sessions trend (newest first) — date, project, total, main % ──
+    # ── Recent-sessions trend (newest first) — date, repository, total, main % ──
     echo -e "${BOLD}Recent sessions${NC} ${DIM}(newest first, main % should trend down)${NC}"
     _borg_reverse_lines "$log" \
-        | jq -r --arg flt "$project" '
+        | jq -r --arg flt "$repository" '
             select($flt == "" or .project == $flt)
             | (.main.est_cost_usd // 0)      as $main
             | (.subagents.est_cost_usd // 0) as $sub
@@ -2731,20 +2732,20 @@ cmd_spend() {
         done
     echo
 
-    # ── By-project breakdown, sorted by cost desc ──
-    echo -e "${BOLD}By project${NC} ${DIM}(cost desc)${NC}"
-    jq -s -r --arg flt "$project" '
+    # ── By-repository breakdown, sorted by cost desc ──
+    echo -e "${BOLD}By repository${NC} ${DIM}(cost desc)${NC}"
+    jq -s -r --arg flt "$repository" '
         [ .[] | select($flt == "" or .project == $flt) ]
         | group_by(.project)
         | map({
-            project: .[0].project,
+            repository: .[0].project,
             total:   (map(.est_cost_usd // 0) | add // 0),
             main:    (map(.main.est_cost_usd // 0) | add // 0),
             n:       length
           })
         | sort_by(-.total)
         | .[]
-        | [ .project,
+        | [ .repository,
             (.total | .*100 | round / 100),
             (if .total > 0 then (.main / .total * 100 | round) else 0 end),
             .n ] | join("\u001f")
@@ -2761,7 +2762,7 @@ cmd_spend() {
     if (( by_model )); then
         echo
         echo -e "${BOLD}By model${NC} ${DIM}(layer · model · computed cost, USD/M pricing)${NC}"
-        jq -s -r --arg flt "$project" '
+        jq -s -r --arg flt "$repository" '
             # Pricing per million tokens, by tier: [input, output, cache_creation, cache_read]
             # Pricing per million tokens, by tier: [input, output, cache_creation, cache_read].
             { "opus":   [15,   75,   18.75, 1.50],
@@ -3189,16 +3190,17 @@ _borg_version_ge() {
 }
 
 # ── chain manifests (PM6) ──────────────────────────────────────────────────────
-# borg chain list|plan|sync — the sync coordinator over <project>/.borg/chains/*.json.
+# borg chain list|plan|sync — the sync coordinator over <repository>/.borg/chains/*.json.
 # The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
-# testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered project
+# testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered repository
 # path becomes a --chains-dir, so `borg chain list` sweeps the whole collective. Explicit
 # --chains-dir args (or the legacy --programs-dir) are passed through untouched and suppress the
 # registry sweep.
 #
-# Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: cmd_chain resolves
-# roots by reading `.projects[].path` from the registry, where "project" means REPOSITORY — so that
-# name would mean one thing and do another until the deferred project→repository rename lands. The
+# Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: a project is work that can
+# span repositories, but cmd_chain resolves roots by reading `.projects[].path` from the registry, where
+# the entry is a REPOSITORY (the registry key keeps its name) — that verb would mean one thing and do
+# another. The
 # --chains-dir and --recon TOKENS are coordinator.py's argparse flags and are deliberately
 # untouched here; they move with the merge-tree retirement, not with the verb.
 cmd_chain() {
@@ -3238,7 +3240,7 @@ cmd_chain() {
         while IFS= read -r _proj_path; do
             [[ -n "$_proj_path" ]] && _chain_args+=(--chains-dir "$_proj_path")
         done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY")
-        (( ${#_chain_args[@]} )) || die "registry has no project paths — run 'borg add <path>' first"
+        (( ${#_chain_args[@]} )) || die "registry has no repository paths — run 'borg add <path>' first"
     fi
 
     PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
@@ -3275,38 +3277,38 @@ cmd_help() {
     |/          |/
 
   COMMANDS
-    init                Launch orchestrator: morning briefing + Claude session
-    claude              Resume orchestrator session (continue most recent)
-    link [project]      The Queen's overview at the workspace root; ONE directory's page anywhere else
+    init                Launch the Queen: morning briefing + Claude session
+    claude              Resume the Queen session (continue most recent)
+    link [repository]   The Queen's overview at the workspace root; ONE directory's page anywhere else
                           --overview Force the Queen's cross-repository overview from any directory
                           --local   Skip the source sweep — registry + manifests only, no network
                           --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
-                          --all     Include archived projects
+                          --all     Include archived repositories
     next [--all|--switch|--pick n|--rows --json|--open p --chosen|--declined]  What needs your attention?
-    switch [query]      fzf picker → jump to project tmux window
-    chain <action>      Manifest coordinator over <project>/.borg/chains/*.json
-                          list           Every declared chain across registered projects
+    switch [query]      fzf picker → jump to repository tmux window
+    chain <action>      Manifest coordinator over <repository>/.borg/chains/*.json
+                          list           Every declared chain across registered repositories
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
                           --chains-dir <path>    Explicit roots (suppresses the registry sweep)
                           --recon <file> (plan only) recon JSON for the reality check
-    scan                Discover projects from session history
-    add [path] [--name <n>]  Register a project (defaults to $PWD, named by folder; --name overrides)
-    rm <project>        Unregister a project
-    pin [project]       Mark as priority (sorts first, preferred by next)
-    unpin [project]     Remove priority flag
-    window <p> [short]  Show (or set) a project's short tmux window name
+    scan                Discover repositories from session history
+    add [path] [--name <n>]  Register a repository (defaults to $PWD, named by folder; --name overrides)
+    rm <repository>     Unregister a repository
+    pin [repository]    Mark as priority (sorts first, preferred by next)
+    unpin [repository]  Remove priority flag
+    window <p> [short]  Show (or set) a repository's short tmux window name
     down                Tear down everything: containers, windows, session
-    regenerate          Archive stale projects (idle >48h)
-    start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per project)
+    regenerate          Archive stale repositories (idle >48h)
+    start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per repository)
     setup               Register Claude Code hooks, skills, and config
     checkpoint-name     Print the collision-proof filename stem for a new checkpoint
     version             Print the installed borg version (alias: --version, -V)
     store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
     resume <verb>       Interruption ledger: status [--json] | cancel <rid> | run <rid> [--force] | pause | unpause
-                          status    Records by state: rid, project, class, cause, due, last reason; pause state
+                          status    Records by state: rid, repository, class, cause, due, last reason; pause state
                           cancel    <rid> | --session <sid> | --all: stop a record (the watcher applies it)
                           run       Make <rid> due now; still goes through the gate and the idle proof
                           pause     Create the DISABLED sentinel: nothing injects, recording continues
@@ -3332,7 +3334,7 @@ cmd_help() {
                  Tear down with 'borg down'; retire a directive with 'git mv' into docs/plans/severed/.
 
   HOTKEY
-    Ctrl+Space >        Jump to most pressing project (runs: borg next --switch)
+    Ctrl+Space >        Jump to most pressing repository (runs: borg next --switch)
 
   SKILLS (use in Claude Code sessions)
     /borg-plan              Project planning + Collective review
@@ -3342,7 +3344,7 @@ cmd_help() {
     /borg-link-up           Flush session state to checkpoint (run before stopping)
     /borg-link              Same as 'borg link' — overview or deep dive
     /borg-next              Same as 'borg next' — what needs attention
-    /borg-switch            Same as 'borg switch' — jump to project
+    /borg-switch            Same as 'borg switch' — jump to repository
     /borg-recon             Cross-source synthesis over 'borg recon --json' ('borg link' is the front door)
     /adhd-guardrails        Compassionate constraints (always active)
 
@@ -3353,20 +3355,20 @@ cmd_help() {
     archived            Hidden from default ls (shown with --all)
 
   CONFIG
-    ~/.config/borg/config.zsh       Work/life boundaries, limits
-    ~/.config/borg/registry.json    Session registry
-    <project>/.borg/checkpoints/    Per-project session checkpoints (via /borg-link-up)
+    ~/.config/borg/config.zsh          Work/life boundaries, limits
+    ~/.config/borg/registry.json       Session registry
+    <repository>/.borg/checkpoints/    Per-repository session checkpoints (via /borg-link-up)
 
   ENVIRONMENT
     BORG_TMUX_SESSION       tmux session name (default: borg)
     BORG_MAX_ACTIVE         Capacity warning threshold (default: 3)
     BORG_REAP_STALE_HOURS   Reap active/waiting after N idle hours (default: 12)
     BORG_WORK_HOURS         e.g. "09:00-18:00" (empty to disable)
-    BORG_WORK_PROJECTS      Comma-separated work project names
+    BORG_WORK_PROJECTS      Comma-separated work repository names
     BORG_DEBUG              Set to any value for debug output
     BORG_SECRETS_FILE       Override path to secrets.zsh (default: ~/.config/dotfiles/zsh/secrets.zsh)
 
-  "We are the Borg. Your projects will be assimilated."
+  "We are the Borg. Your repositories will be assimilated."
 
 EOF
 }
@@ -3672,15 +3674,15 @@ _borg_recon_retired() {
 # Flags recognised: --json, --porcelain, --brief|--llm (aliases), --refresh, --all, --local, and
 # -h|--help. ANY other `-*` is silently swallowed (no die, exit 0) -- pinned by the case named
 # "link tolerates an unknown flag and still renders the overview at exit 0" in cli_contract.bats;
-# do NOT adopt recon's die-on-unknown-flag behavior here. A bare word sets the project, LAST-WINS
-# (`link a b` deep-dives `b`). Precedence, strictly: help > json > porcelain > project(deep) >
+# do NOT adopt recon's die-on-unknown-flag behavior here. A bare word sets the repository, LAST-WINS
+# (`link a b` deep-dives `b`). Precedence, strictly: help > json > porcelain > repository(deep) >
 # brief > overview -- this merges today's two layers, where the top arm intercepted `--json` first
-# and cmd_link's own order was porcelain > project > brief > overview.
+# and cmd_link's own order was porcelain > repository > brief > overview.
 _borg_link_dispatch() {
     typeset _link_json=0 _link_porcelain=0 _link_brief=0 _link_refresh=0 _link_all=0 _link_local=0
     typeset _link_overview=0
     typeset _link_help=0
-    typeset _link_project="" _link_arg
+    typeset _link_repository="" _link_arg
     typeset -a _link_py_args
     for _link_arg in "$@"; do
         case "$_link_arg" in
@@ -3693,14 +3695,14 @@ _borg_link_dispatch() {
             --overview)    _link_overview=1 ;;
             -h|--help)     _link_help=1 ;;                # MUST precede `-*)`: zsh case is first-match
             -*)            ;;                            # lenient, matching cmd_link's `-*) shift`
-            *)             _link_project="$_link_arg" ;;  # last-wins, matching cmd_link
+            *)             _link_repository="$_link_arg" ;;  # last-wins, matching cmd_link
         esac
     done
     # --overview FORCES THE QUEEN VIEW (2026-10-13) and so beats a positional: run anywhere but the Queen
     # root, `borg link` is a page about that one directory, and this is how a caller standing in a worktree
-    # asks for the cross-repository overview anyway (skills/borg-switch). Clearing the project here keeps the
-    # positional arm below from sending `--deep -- <project>`, which would answer the narrower question.
-    (( _link_overview )) && _link_project=""
+    # asks for the cross-repository overview anyway (skills/borg-switch). Clearing the repository here keeps the
+    # positional arm below from sending `--deep -- <repository>`, which would answer the narrower question.
+    (( _link_overview )) && _link_repository=""
     # --local MUST be matched explicitly here and forwarded on every arm. The lenient `-*)` arm two
     # lines up silently swallows unknown flags and exits 0 (pinned by the unknown-flag case in
     # cli_contract.bats), so a half-wired --local would fail OPEN -- the caller believes it opted
@@ -3733,7 +3735,7 @@ _borg_link_dispatch() {
     # cli_contract twin) was re-pointed at `borg link --local` when this arm landed, because an
     # early `return` here means `--help` no longer reaches any dispatch arm to prove alive.
     if (( _link_help )); then
-        echo "usage: borg link [project] [--local] [--all] [--overview] [--refresh] [--brief|--llm] [--json] [--porcelain]"
+        echo "usage: borg link [repository] [--local] [--all] [--overview] [--refresh] [--brief|--llm] [--json] [--porcelain]"
         echo "       --local skips the source sweep (registry + manifests only, no network)"
         echo "       --overview shows the Queen's cross-repository view from any directory"
         return 0
@@ -3761,17 +3763,17 @@ _borg_link_dispatch() {
         # suppression (VERIFIED: redirections apply left-to-right, so fd1 is duped from the
         # ORIGINAL fd2 before fd2 is reopened on /dev/null).
         #
-        # The desktop pre-pass runs ONLY for the overview shape (no project positional). The deep
-        # dive never scans and never writes the registry; running it for `--json <project>` would
+        # The desktop pre-pass runs ONLY for the overview shape (no repository positional). The deep
+        # dive never scans and never writes the registry; running it for `--json <repository>` would
         # add a registry WRITE to a path that has always been read-only. Deliberate, not an oversight.
-        if [[ -z "$_link_project" ]]; then
+        if [[ -z "$_link_repository" ]]; then
             borg_desktop_scan 1>&2 2>/dev/null || true
         fi
         _link_py_args=(--json)
         (( _link_all )) && _link_py_args+=(--all)
         (( _link_local )) && _link_py_args+=(--local)
         (( _link_overview )) && _link_py_args+=(--overview)
-        [[ -n "$_link_project" ]] && _link_py_args+=(-- "$_link_project")
+        [[ -n "$_link_repository" ]] && _link_py_args+=(-- "$_link_repository")
         _borg_py borg_core.link.cli "${_link_py_args[@]}"
         return 0
     fi
@@ -3783,7 +3785,7 @@ _borg_link_dispatch() {
         # never triggers it" asserts the human path really does splice the warning onto stdout.
         # (Anchored by test name: that file's line numbers drift on every insertion.)
         borg_desktop_scan 2>/dev/null || true
-        # CRITICAL: do NOT forward the positional in porcelain mode. `link --porcelain nosuchproject`
+        # CRITICAL: do NOT forward the positional in porcelain mode. `link --porcelain nosuchrepository`
         # exits 0 with the listing today; forwarding it would build a focus block and die instead.
         _link_py_args=(--porcelain)
         (( _link_all )) && _link_py_args+=(--all)
@@ -3792,7 +3794,7 @@ _borg_link_dispatch() {
         return 0
     fi
 
-    if [[ -n "$_link_project" ]]; then
+    if [[ -n "$_link_repository" ]]; then
         # The deep dive stays read-only and never scans -- no desktop pre-pass here, matching today.
         #
         # CORRECTED 2026-08-28: this comment used to call this "the fzf preview's arm", citing a
@@ -3801,12 +3803,12 @@ _borg_link_dispatch() {
         # nothing else -- `grep -- '--preview' borg.zsh` matches only prose. The per-keypress hot
         # loop that justification described does not exist. What is still true, and is the whole
         # reason this arm matters, is that it is the ONLY live caller that passes `--deep`, and it
-        # serves EVERY `borg link <project>` a human types plus `drone link`, whose dispatch arm
+        # serves EVERY `borg link <repository>` a human types plus `drone link`, whose dispatch arm
         # (`link)       exec borg link ...` in drone.zsh) forwards a bare positional straight here.
         # Treat it as user-facing, not as a hot loop.
         _link_py_args=(--deep)
         (( _link_local )) && _link_py_args+=(--local)
-        _link_py_args+=(-- "$_link_project")
+        _link_py_args+=(-- "$_link_repository")
         _borg_py borg_core.link.cli "${_link_py_args[@]}"
         return 0
     fi
@@ -3921,7 +3923,7 @@ case "${1:-help}" in
         if [[ "${2:-}" == "--migrate-state" ]]; then
             _borg_py borg_core.statemigrate.cli "${@:3}"
         elif [[ "${2:-}" == "--migrate-project-state" ]]; then
-            _borg_py borg_core.statemigrate.project_cli "${@:3}"
+            _borg_py borg_core.statemigrate.repository_cli "${@:3}"
         else
             cmd_tidy "${@:2}"
         fi
