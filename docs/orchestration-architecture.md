@@ -7,15 +7,15 @@ research (`docs/research/2026-05-23-agent-teams/analysis.md`, 16 source cards) a
 
 ## The one-paragraph model
 
-Borg is an **orchestrator-worker** system, NOT an inter-agent mesh. A single Conductor (the human-driven Claude
+Borg is an **orchestrator-worker** system, NOT an inter-agent mesh. A single Queen (the human-driven Claude
 session at `BORG_ORCHESTRATOR_ROOT`) briefs, spawns, monitors, and synthesizes; specialist subagents do the work
-and report back to the Conductor. Workers never talk to each other. This is the settled architecture — the
+and report back to the Queen. Workers never talk to each other. This is the settled architecture — the
 research, the AntStack 5-layer model, and the Cognition contrarian position all converge on it, and Anthropic's
 experimental Agent Teams are deliberately NOT adopted at indie scale (token cost + experimental status).
 
-## The Conductor (orchestrator)
+## The Queen
 
-There is no Conductor *agent file* — the Conductor is the main session whose CWD is exactly
+There is no Queen *agent file* — the Queen is the main session whose CWD is exactly
 `BORG_ORCHESTRATOR_ROOT` (default `~/dev`); `borg-hooks.sh` classifies the session by that CWD.
 
 - **Owns:** morning briefing synthesis (registry.json + per-project `.borg/checkpoints/`); priority scoring
@@ -24,14 +24,14 @@ There is no Conductor *agent file* — the Conductor is the main session whose C
 - **Never does:** write `registry.json` (hook-excluded when CWD = root); **edit project files** — it briefs,
   spawns, monitors, synthesizes. Code changes go through workers in their own worktrees.
 - **Is the dominant cost center** (~96% of session spend, driven by cache reads of the growing context every
-  turn). The primary cost lever is keeping the Conductor context lean: delegate verbose reads to scouts, get
+  turn). The primary cost lever is keeping the Queen context lean: delegate verbose reads to scouts, get
   distilled summaries back. (Framework-doc edits like this file are the narrow exception — they are the
-  Conductor's own artifacts, not project code.)
+  Queen's own artifacts, not project code.)
 
 ## The handoff state-machine
 
 ```
-Conductor receives a task
+Queen receives a task
   │
   ├─ fully specified, no judgment?
   │     ├─ read-only search        → borg-scout      (Haiku/low,   ≤500 chars back)
@@ -46,17 +46,17 @@ Conductor receives a task
         └─ claude / general-purpose (inherited session model — LAST RESORT, not a default)
 ```
 
-Worker → Conductor is the only edge. There is no worker → worker edge. A worker that needs another worker's
-output returns to the Conductor, which spawns the next.
+Worker → Queen is the only edge. There is no worker → worker edge. A worker that needs another worker's
+output returns to the Queen, which spawns the next.
 
 ## Frozen decisions (do not re-litigate without a new research pass)
 
-1. **Orchestrator-worker only; no inter-agent messaging.** Workers report to the Conductor; they never message
+1. **Orchestrator-worker only; no inter-agent messaging.** Workers report to the Queen; they never message
    each other. Agent Teams stay off.
 2. **Cost-ordered routing with explicit model tiers.** scout/grunt → Haiku; nanoprobe/researcher → Sonnet/med;
    reviewer → Sonnet/high. `general-purpose` and untyped spawns are denied: use an allowlisted agentType, or
    an explicit `model` + `effort`. Gate conditions are fully specified in `docs/agent-routing.md`.
-3. **Session-model rule (post-2026-07-07).** Orchestrator and drone sessions launch on Opus at `xhigh`; every
+3. **Session-model rule (post-2026-07-07).** Queen and drone sessions launch on Opus at `xhigh`; every
    subagent must sit below that tier (Sonnet or Haiku, effort at most `high`), except research-tools agent types.
    Inside a `Workflow` script, `agent()` calls use an allowlisted `agentType` or an explicit `model:` plus effort —
    an untyped call is denied, not inherited. See `docs/agent-routing.md` for detail.
@@ -66,8 +66,8 @@ output returns to the Conductor, which spawns the next.
 5. **Bounded termination.** Every loop/fan-out declares an explicit ceiling (e.g. `MAX_RETRIES=3`) before
    starting and hard-stops with a failure summary at the ceiling. Open-ended loops are a protocol violation.
 6. **Lean-context return contracts.** grunt ≤300 chars; scout ≤500; nanoprobe/researcher ≤500; reviewer ≤800
-   words. Never return raw file contents, full command output, diffs, or facts the Conductor already has.
-7. **Orchestrator identity by CWD.** CWD == `BORG_ORCHESTRATOR_ROOT` ⇒ Conductor: never writes registry.json,
+   words. Never return raw file contents, full command output, diffs, or facts the Queen already has.
+7. **Queen identity by CWD.** CWD == `BORG_ORCHESTRATOR_ROOT` ⇒ Queen: never writes registry.json,
    never edits project files. Any other CWD is a project session.
 8. **Container commands via `drone exec <project> -- <cmd>`.** Registry-by-name resolution is CWD-independent;
    relying on CWD for container routing is a protocol violation.
@@ -77,7 +77,7 @@ output returns to the Conductor, which spawns the next.
 
 ## Open questions (NOT frozen — carry to a future decision)
 
-- **No Conductor agent file / no unattended handoff protocol.** The Conductor is human-driven; overnight,
+- **No Queen agent file / no unattended handoff protocol.** The Queen is human-driven; overnight,
   past-session-limit multi-project orchestration has no defined handoff. See `[[unattended-agent-execution]]`.
 - **Two divergent nanoprobe definitions.** The plugin copy (`claude-plugins/borg-collective/agents/`) has the
   scope gate + 5-read-before-write bound + `CLAUDE_CODE_MAX_OUTPUT_TOKENS:8000`; the main-repo copy lacks them,

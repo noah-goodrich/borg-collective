@@ -33,6 +33,13 @@ _agent() {
     [[ "$output" == *"borg-collective:borg-nanoprobe"* ]] || false
 }
 
+@test "the deny message names the Queen/drone session tier" {
+    _agent '{"prompt":"x"}'
+    [ "$status" -eq 2 ]
+    [[ "$output" == *"Policy: Queen/drone sessions run Opus xhigh"* ]] || false
+    [[ "$output" != *"orchestrator/drone"* ]] || false
+}
+
 @test "empty subagent_type is denied" {
     _agent '{"prompt":"x","subagent_type":""}'
     [ "$status" -eq 2 ]

@@ -96,7 +96,7 @@ borg version && claude plugin list | grep borg-collective && borg doctor
 
 - **Python 3.11+ is now required.** `borg next` and `borg link` import `datetime.UTC` and fail with an
   `ImportError` on the Xcode CLT python 3.9. Phase 0 installs `python@3.13`.
-- **Model tiers and routing.** Orchestrator and drone launches pin `--model`/`--effort`, and the plugin's
+- **Model tiers and routing.** Queen and drone launches pin `--model`/`--effort`, and the plugin's
   Agent/Workflow model guards deny untyped spawns. See Phase 3 for the account requirements and kill switches.
 - **Dotfiles `install.sh` registers no LaunchAgents.** Optional agents are `.plist.tmpl` templates symlinked
   into `~/.config/borg/extensions/launchd/`; borg's `install.sh` renders them. Labels follow
@@ -328,11 +328,11 @@ This phase is no longer part of setup.
 
 ```zsh
 borg link                                # project dashboard
-borg add ~/dev                           # register orchestrator root if not auto-discovered
+borg add ~/dev                           # register the Queen's root
 claude plugin list | grep borg-collective
 borg next                                # recommendation engine
 borg doctor                              # agents, claude -p, clock, gh floor
-borg init                                # optional: morning briefing + orchestrator session
+borg init                                # optional: launch the Queen
 ```
 
 ---

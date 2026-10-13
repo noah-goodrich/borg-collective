@@ -4,9 +4,9 @@
 
 ## Policy
 
-**Orchestrator and drone sessions run Opus at xhigh. Every subagent they spawn must be BELOW that tier: Sonnet or Haiku, effort at most `high`.** The single exception is research-tools.
+**Queen and drone sessions run Opus at xhigh. Every subagent they spawn must be BELOW that tier: Sonnet or Haiku, effort at most `high`.** The single exception is research-tools.
 
-- **Session tier.** The orchestrator and drone session tier (Opus at xhigh or max effort) comes from the user's own launch or settings; the `borg` and `drone` launchers start a plain `claude` and do not pin it. `/effort max` is a per-session choice.
+- **Session tier.** The Queen and drone session tier (Opus at xhigh or max effort) comes from the user's own launch or settings; the `borg` and `drone` launchers start a plain `claude` and do not pin it. `/effort max` is a per-session choice.
 - **Why a guard, not a convention.** An unpinned subagent inherits the session model AND effort, so it would run Opus xhigh. `CLAUDE_CODE_SUBAGENT_MODEL` does not reach `Agent`-tool forks or Workflow `agent()` calls. Effort matters as much as model: cache reads cost the same on Opus and Sonnet, so a high-effort Sonnet agent can still be expensive.
 - **Deny-by-default allowlist** of `subagent_type` (Agent tool) / `agentType` (Workflow `agent()`):
   - `borg-collective:borg-scout`, `borg-collective:borg-grunt`, `borg-collective:borg-nanoprobe`, `borg-collective:borg-researcher`, `borg-collective:borg-reviewer`, `borg-collective:borg-verifier`
@@ -100,4 +100,4 @@ Stage guidance:
 - **Parallelize grunts and scouts freely.** They are cheap and stateless.
 - **One nanoprobe per concern.** Split unrelated files or systems across nanoprobes.
 - **Reviewer always arrives cold.**
-- **Opus stays in the main loop.** Hard open-ended reasoning belongs to the orchestrator or drone session itself, not a delegated agent.
+- **Opus stays in the main loop.** Hard open-ended reasoning belongs to the Queen or drone session itself, not a delegated agent.
