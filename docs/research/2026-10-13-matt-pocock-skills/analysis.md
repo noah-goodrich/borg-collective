@@ -50,6 +50,8 @@ Each bullet names the §4 section that backs it. The commands in the Cortex bull
 
 ## 2. Summary
 
+NO PRIMARY EVIDENCE — all findings are literature-derived predictions
+
 **What was researched.** Noah asked for "all of the things" about Matt Pocock and his skills library: what the thing is, what practitioners say, how it compares to borg, what his project-management (PM) approach looks like, how it stacks against Claude Code's native features, and whether it matters for the Cortex Code CLI (Snowflake's Claude-Code-like tool, which he uses at work). The run read 98 source cards from five parallel tracks, scored them, and cut 8. Distinct sources: 85, of which 79 survive.
 
 **What it is.** `mattpocock/skills` is a curated, MIT-licensed personal kit of about 27 skills that Matt says he uses every day. It is not a framework: the README names GSD, BMAD, and Spec-Kit as tools that "own the process" and take away control, and says the opposite is intended. On 2026-10-13 it had 289,479 stars and 24,301 forks, was created 2026-02-03 (not April; April was the viral moment), and had reached v1.3.1. One author wrote 499 of 545 commits. The skills split into user-invoked ones you type (grill, spec, tickets, triage) and model-invoked ones the agent calls (tdd, diagnosing bugs). The core flow is: grill yourself, write a short spec in the issue tracker, cut it into tracer-bullet tickets with blocking links, implement each in fresh context, review, run a retro. His paid business (AI Hero cohorts and courses) sits beside a free repo and newsletter. Sandcastle is a separate, much smaller TypeScript library (8,418 stars) that runs agents in containers on their own branches.
