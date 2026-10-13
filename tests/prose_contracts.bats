@@ -382,3 +382,29 @@ _shim_section() {
     [ "$status" -eq 0 ]
     [[ "$output" == *'every table row and every fenced-block line'* ]]
 }
+
+# ── borg-resume skill: watcher first, CronCreate only as fallback (directive S15) ─────────────────
+# Negations are written as `run grep` + status check: a bare `! cmd` that is not the last command of
+# a bats test is exempt from errexit and never fails.
+@test "borg-resume skill: status --json precedes the first CronCreate and no stale framing" {
+    local f="${REPO_ROOT}/skills/borg-resume/SKILL.md"
+    grep -q 'borg-resume status --all --json' "$f"
+    local s c
+    s="$(grep -n 'borg-resume status --all --json' "$f" | head -1 | cut -d: -f1)"
+    c="$(grep -n 'CronCreate' "$f" | head -1 | cut -d: -f1)"
+    [ "$s" -lt "$c" ]
+    grep -qi 'workflow agents are never SendMessaged' "$f"
+    run grep -q 'create_trigger' "$f"
+    [ "$status" -ne 0 ]
+    run grep -qi 'unpredictable' "$f"
+    [ "$status" -ne 0 ]
+}
+
+@test "borg-resume skill: the first scheduling instruction sits after the Step 2 heading" {
+    local f="${REPO_ROOT}/skills/borg-resume/SKILL.md"
+    local h c
+    h="$(grep -n '^## Step 2' "$f" | head -1 | cut -d: -f1)"
+    c="$(grep -n 'Schedule it.* with .CronCreate' "$f" | head -1 | cut -d: -f1)"
+    [ -n "$h" ] && [ -n "$c" ]
+    [ "$h" -lt "$c" ]
+}
