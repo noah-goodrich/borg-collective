@@ -164,6 +164,8 @@ t_line() { printf '{"type":"user","uuid":"u-%s","message":{"role":"user","conten
 # ---- (3) the gate honours S10's cause ---------------------------------------------------------------
 
 @test "gate: process_death with cause crash is never injected and defers (no_pane)" {
+    printf 'borg_resume_relaunch_hook() { return 1; }\n' >"${BATS_TEST_TMPDIR}/nohook.sh"
+    export BORG_RESUME_RELAUNCH_HOOK_FILE="${BATS_TEST_TMPDIR}/nohook.sh"
     printf '{"type":"user","uuid":"u1"}\n' >"$PD/$SID.jsonl"
     mk_rec r_c process_death scheduled "$((T0 - 10))" '.cause = "crash"'
     watch
@@ -173,6 +175,8 @@ t_line() { printf '{"type":"user","uuid":"u-%s","message":{"role":"user","conten
 }
 
 @test "gate: pane_closed and reboot causes are never injected either" {
+    printf 'borg_resume_relaunch_hook() { return 1; }\n' >"${BATS_TEST_TMPDIR}/nohook.sh"
+    export BORG_RESUME_RELAUNCH_HOOK_FILE="${BATS_TEST_TMPDIR}/nohook.sh"
     printf '{"type":"user","uuid":"u1"}\n' >"$PD/$SID.jsonl"
     mk_rec r_p process_death scheduled "$((T0 - 10))" '.cause = "pane_closed"'
     mk_rec r_b process_death scheduled "$((T0 - 10))" '.cause = "reboot" | .scope = "workflow:wf1"'
