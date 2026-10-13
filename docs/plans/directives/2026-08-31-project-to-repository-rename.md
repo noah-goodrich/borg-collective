@@ -2,6 +2,17 @@
 *Parent plan: 2026-08-24-one-front-door-link-derived-fact-surface (assimilated 2026-09-23)*
 *Filed: 2026-08-31*
 
+## Vocabulary, clarified by Noah on 2026-10-13
+
+Four words, four meanings, and no word does double duty. This refines the 2026-08-24 vocabulary below and replaces none of it.
+
+- **Repository** — the git repo (for example `borg-collective`).
+- **Worktree** — a linked checkout of a repository, registered as its own directory (for example `borg-collective-front-door`, tmux window `borg-door`; `borg-collective-nanoprobes`, window `borg-probes`). Several worktrees, each carrying a project, can be active on one repository at once.
+- **Project** — a body of related requirements, PRs and work that can span repositories. This is the ratified 2026-08-24 meaning, formerly "program".
+- **Stack** — the declared, ordered PR stack of a project: the manifest file and its rows. "Stack" replaces "chain" everywhere (decided 2026-10-13, matching GitHub's "PR stacks" and the tool-neutral `.stacks/` root); the rename is filed as `2026-10-13-chain-to-stack-rename.md`, and lands after R3 to R5 of this directive and before R6 (skills and docs), so skills are edited once.
+
+In user-facing text a registered directory is a "repository", and "worktree" is used where the distinction matters. The planning surfaces (`PROJECT_PLAN.md`, `/borg-plan`, `/borg-assimilate`) keep "project".
+
 ## Why
 
 The One Front Door plan ratified a vocabulary on 2026-08-24 and then deferred half of it:

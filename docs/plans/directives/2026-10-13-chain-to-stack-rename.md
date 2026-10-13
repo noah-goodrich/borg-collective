@@ -1,0 +1,93 @@
+# Directive: Rename `chain` to `stack` everywhere
+
+*Filed: 2026-10-13 · Status: Proposed · Owner: Noah*
+
+**tl;dr** — "chain" was picked on 2026-08-31 only to dodge the project/repository word collision, and the tool-neutral `.stacks/` root that arrived on 2026-10-08 left the codebase with two names for one thing: `borg chain`, `▸ CHAINS` and `.borg/chains/` on one side, `.stacks/` on the other. Noah decided on 2026-10-13 that "stack" is the one name everywhere, matching GitHub's "PR stacks". The change is expand -> migrate -> contract, one PR per step: (a) scaffold defaults to `.stacks/`, both roots keep being read, `borg stack` is added with `borg chain` still working; (b) every existing manifest moves from `.borg/chains/` to `.stacks/` through a dry-runnable migration command, and the identifiers, section header, strings, goldens and contract tests are renamed; (c) the `.borg/chains` read is dropped and `borg chain` becomes a pointer. It lands after R3-R5 of the project-to-repository rename and before R6 (skills and docs), so skills are edited once. The registry key and every `--json` key are out of scope.
+
+## Why
+
+The name was chosen to avoid a collision, not because it was right, and the collision is gone.
+
+- **`program` became `chain` to dodge a word, and that is the whole recorded reason.** AC7 decision (2) of `docs/plans/assimilated/2026-08-24-one-front-door-link-derived-fact-surface.md` (ratified 2026-08-31) says `borg program` becomes `borg chain`, not `borg project`, because the vocabulary maps program to project while `cmd_program` read `.projects[].path` where `project` meant repository: "`chain` sidesteps both senses and matches what `borg link` already prints in `▸ CHAINS`." The verb was renamed in https://github.com/noah-goodrich/borg-collective/pull/185 (merge commit `9d4953d`, 2026-08-31). It was also chosen as a rename, not a deletion, so the COMMANDS count stayed put.
+- **The directory followed the verb.** `.borg/programs` became `.borg/chains` in https://github.com/noah-goodrich/borg-collective/pull/222 (merge commit `ce565b7`, 2026-09-22), as the expand phase of a rename that is still unfinished: `borg_core/manifest/shell.py` `manifest_dir` still reads the legacy `programs` name, and `.gitignore` keeps `!.borg/programs/` beside `!.borg/chains/` "until the contract commit".
+- **A second name arrived later and was never reconciled.** The tool-neutral `.stacks/` root landed in https://github.com/noah-goodrich/borg-collective/pull/276 (2026-10-08) so a repository shared with people who do not run borg need not carry a `.borg/`. The new root introduced the word "stack", and nothing renamed the verb, the section or the strings to match. Scaffold still prefers `.borg/chains` when it exists, and when neither root exists and git does not ignore `.borg/` (`choose_scaffold_root` in `borg_core/manifest/placement.py`, the final `return borg_path, "default"`).
+- **The two names now disagree in every layer.** `borg chain` (`cmd_chain`, `borg.zsh`) sweeps a registered repository's `.borg/chains/*.json` through `merge-tree/coordinator.py`; `borg link` prints `▸ CHAINS` and "N chains · M refs" from `borg_core/link/render.py`; `shell.py` names the constants `CHAINS_DIRNAME` and `STACKS_DIRNAME` side by side. A reader has to learn that "the chains section" renders what lives in `.stacks/`.
+- **The collision that justified "chain" is being removed by the other rename.** `docs/plans/directives/2026-08-31-project-to-repository-rename.md` moves the repository sense of `project` to `repository`, so `project` can mean the cross-repository workstream the 2026-08-24 vocabulary always intended. Once that holds, a project has a stack (its declared, ordered PRs) and nothing about "stack" is ambiguous. The vocabulary is recorded in that directive's "Vocabulary, clarified" section.
+- **Decision, Noah, 2026-10-13:** "stack" becomes the one name everywhere, matching GitHub's "PR stacks" and the tool-neutral `.stacks/` root.
+
+## The change
+
+Expand -> migrate -> contract, per the Architecture Rules in `CLAUDE.md`: add the new form and accept both, migrate every existing instance, only then remove the old form. One PR per step, each independently green.
+
+### (a) EXPAND
+
+- **Scaffold defaults to `.stacks/`.** `choose_scaffold_root` keeps rule 1 (`--root` override) and rule 2 (`.stacks/` exists); rules 3 to 5 (borg's directory exists, git ignores `.borg/`, otherwise default) all resolve to `.stacks/`, so nothing new is created under the retiring name. `--root borg` stays as an explicit override until (c). `shell.scaffold_root` still gathers the same facts; `test_placement.py` moves with the rules.
+- **Both roots keep being read**, exactly as `manifest_roots` does today, including the refusal by name when one stem is declared in both and the write-back to whichever file was found. A repository mid-migration is a legal state.
+- **`borg stack` is added** (`cmd_stack`, same `list|plan|sync` actions and flags as `cmd_chain`, plus `--stacks-dir`), and `borg chain` keeps working as a dispatch arm that forwards to it, as `--programs-dir` is still accepted today beside `--chains-dir`. `borg help` lists `stack` in COMMANDS in the place `chain` holds now, and `chain` stays out of COMMANDS, so the entry count is unchanged (see Acceptance criteria).
+
+### (b) MIGRATE
+
+- **A migration command moves every existing manifest** from a registered repository's `.borg/chains/` (and the legacy `.borg/programs/`, which `manifest_dir` still reads) to `.stacks/`. Proposed spelling: `borg stack migrate [--dry-run] [<repository>]`, logic in `borg_core/manifest` (testable core, zsh arm as wrapper). It uses `git mv` for a tracked manifest and a plain move for an ignored one, never commits, and prints per repository what it moved and what to commit.
+- **It never touches a repository with uncommitted manifest changes.** A modified, staged or untracked file under the source directory (`git status --porcelain`), or a repository that is not a git repository, is skipped by name with the reason, and the exit status says some were skipped. It also refuses, by name, a repository where a stem exists in both roots, since moving would clobber one.
+- **`--dry-run` prints the same plan and writes nothing.** A second run is a no-op.
+- **Identifiers, strings, goldens and contract tests are renamed.** `▸ CHAINS` becomes `▸ STACKS` (the `SECTIONS` entry in `borg_core/link/render.py` and every golden or test that pins the header); `"N chains · M refs"` becomes `"N stacks · M refs"`; `"no chain manifests in the registry yet"` and `"no chain manifest declares work in <slug>"` say stack; `CHAINS_DIRNAME`, `cmd_chain`, `_chain_args`, comments and docstrings follow; `merge-tree/coordinator.py` says stack in its output (the `0 chain(s)` line `tests/cli_contract.bats` pins in "argless 'borg chain' reaches the list default") and adds `--stacks-dir` alongside the two older spellings. Tests and goldens move in the step whose output they pin, never in a trailing commit. If this step is too large to review, it may split by area the way R1 to R5 did; that is a sizing choice and not a change of scope.
+- **This repository is its own first migration**: `.borg/chains/` holds three tracked manifests today (`2026-09-28-state-hygiene-reader-census.json`, `2026-10-06-borg-next-chooser.json`, `viz-program.json`), and `.stacks/` does not exist.
+
+### (c) CONTRACT
+
+- **Drop the `.borg/chains` read** (and the legacy `.borg/programs` read) from `manifest_dir` and `manifest_roots`, drop `--root borg`, and remove the `!.borg/chains/` and `!.borg/programs/` carve-outs from `.gitignore`, which were kept "until the contract commit". A repository that still holds `.borg/chains/*.json` gets a named warning pointing at `borg stack migrate`, never silence, because an unread manifest must not render as an empty stack (the same rule `shell.py` applies to an unreadable root).
+- **`borg chain` becomes a pointer**: the dispatch arm dies with `'borg chain' was renamed to 'borg stack'. Run: borg stack <args>`, in the way the `program)` arm does now, and `borg help` gains a REMOVED entry in the style of the 2026-08-31 "program renamed to chain" one. That existing entry says "Run: borg chain" and must be reworded in the same PR so the tombstone does not point at a pointer. `--chains-dir` and `--programs-dir` stop being accepted, with the same named refusal.
+
+### Sequencing
+
+After R3 to R5 of the project-to-repository rename (R3 `lib/` and `hooks/`, R4 `borg.zsh`, R5 `drone.zsh` and the rest, as listed in `CLAUDE.md` under "Vocabulary: `repository` is the code word for a git repo"), and before R6 (skills and docs), so `skills/borg-plan/SKILL.md` and the docs are edited once, saying both "repository" and "stack". The reason for the order is that (a) to (c) rewrite the same `borg.zsh` and `borg_core/link` lines the R-steps rewrite; running them concurrently would conflict line for line. The cost is accepted: between (a) and R6, `skills/borg-plan/SKILL.md` (the scaffold-root paragraph near its `.stacks/` mention) describes the pre-(a) placement order.
+
+## Acceptance criteria
+
+- [ ] **(a) Scaffold creates in `.stacks/` unless told otherwise.**
+  - Verify: `borg_core/manifest/test_placement.py` has one case per derived outcome (`.stacks/` exists, `.borg/chains` exists, git ignores `.borg/`, neither) each returning the `.stacks` path, and `--root borg` still returns borg's own; a `scaffold` run in a fresh git repository and in one already holding `.borg/chains/` both print `root: .stacks`.
+- [ ] **(a) Both roots are still read, and a stem in both is still refused by name.**
+  - Verify: the existing both-roots and stem-in-both cases in `borg_core/manifest/test_shell.py` pass unmodified.
+- [ ] **(a) `borg stack` works and `borg chain` still does, with identical output; the COMMANDS count does not move.**
+  - Verify: new `tests/cli_contract.bats` cases mirror "argless 'borg chain' reaches the list default", "'borg chain list' sweeps a registry manifest end to end" and "an unknown chain action prints usage including --recon" for `borg stack`, and the old ones still pass. The count is pinned by `contract: borg help is net one command shorter than at plan start (AC1)` (`tests/cli_contract.bats`, the exact `27` assertion), and the names in COMMANDS by `contract: recon is gone from COMMANDS and named in REMOVED (AC1)`; both stay green with `stack` listed and `chain` unlisted. Do not edit the `27`: the verb is renamed, and deleting or adding a COMMANDS entry is exactly what that test is there to catch.
+- [ ] **(b) The migration command is safe.**
+  - Verify: tests for (1) `--dry-run` leaves the repository tree byte-identical and prints the plan; (2) a repository with a modified, staged or untracked file under `.borg/chains/` is skipped by name and untouched; (3) a stem in both roots is refused by name; (4) a tracked manifest moves with `git mv` and an ignored one with a plain move; (5) a second run moves nothing; (6) nothing is committed.
+- [ ] **(b) No manifest stays behind in a registered repository.**
+  - Verify: after the run, `find <repository>/.borg/chains -name '*.json'` is empty for every repository the command did not skip, and `borg link --json` reports the same manifest count and the same ref count as before the run.
+- [ ] **(b) The names are renamed, with their pins, in the same PR.**
+  - Verify: `grep -rniE '\bchains?\b'` over `borg.zsh`, `lib/`, `hooks/`, `borg_core/`, `merge-tree/`, `evals/` and `tests/` returns only the `chain)` forwarding arm and the REMOVED text, `--chains-dir` and `--programs-dir`, the `.borg/chains` and `.borg/programs` read paths and their tests, and the "kept" items in Non-goals. `make test` at the coverage floor, `make lint` exit 0, `bats tests/` green.
+- [ ] **(b) The section reads `▸ STACKS`, and no pre-existing JSON key changed.**
+  - Verify: the renderer spine test and the goldens pin `▸ STACKS`; the set of key paths in `borg link --json` output, diffed before and after with `jq`, is empty.
+- [ ] **(c) The old root is no longer read, and an unmigrated repository says so.**
+  - Verify: a test puts a valid manifest under `.borg/chains/` only and asserts it renders nowhere, and that `borg link` names the repository and `borg stack migrate` in a warning, not an empty `▸ STACKS`; `.gitignore` no longer carries either carve-out.
+- [ ] **(c) `borg chain` is a pointer, and the tombstone is accurate.**
+  - Verify: `borg chain list` exits non-zero naming `borg stack`; `borg help` has a REMOVED entry for it and no `chain` entry in COMMANDS; the 2026-08-31 REMOVED entry no longer says "Run: borg chain"; the `27` assertion and the recon/COMMANDS-names case are untouched and green; the die-arm test follows the pattern of `contract: 'borg program' is renamed, not removed, and forwards its args (AC7)`.
+- [ ] **The order held.**
+  - Verify: `git log --oneline origin/main` shows R3, R4 and R5 of the project-to-repository rename merged before (a), and R6 not before (c).
+
+## Non-goals
+
+- **The registry key `projects`**, which migrates last in the project-to-repository rename, in its own PRs.
+- **Every `borg link --json` key** (and `BORG_PROJECT_NAME`, and the `.borg-project` marker), which `CLAUDE.md` keeps permanently as contract names for the same reason: they are on-disk and cross-repository wire names, and the distributed plugin reads them.
+- **Manifest file contents.** The manifest schema (apex, rows, `after`, `gate`) is not renamed, and no row is rewritten; the migration moves files and does not edit them.
+- **The planning surfaces' word "project"**: `PROJECT_PLAN.md`, `/borg-plan`, `/borg-assimilate`.
+- **Skills and docs**, which are R6's, so they are edited once. This directive changes `CLAUDE.md` only where a step makes a sentence false.
+- **A new manifest format or a change to how the stack is derived.** That belongs to the PR-stack directives (`2026-10-04-personal-pr-stack-stamper.md`).
+- **Renaming a repository's `.stacks/` directory, or adding a third root.**
+
+## Alternatives considered
+
+- **A: Keep `chain` and rename `.stacks/` to `.chains/`.** Rejected: `.stacks/` is tool-neutral and meant to be read by people who do not run borg, and "stack" is the word GitHub uses for the same thing.
+- **B: Rename the words and leave the files where they are.** Rejected: that is the present state, one name in the UI and another on disk, and it leaves `.borg/chains` as a permanent second root.
+- **C: Do it in one PR.** Rejected: it would be a flag day over a directory every registered repository holds, with the rename and the data move landing together. Expand -> migrate -> contract exists so no artifact is read by rules it was not written to satisfy.
+- **D: Leave scaffold's rule 3 alone, so a repository that already has `.borg/chains/` keeps creating there until (c).** Closer to today, and it avoids a repository holding manifests in both roots for a while. Rejected for (a) because it keeps feeding the root being retired, so (b) would have more to move; the two-root state is already legal and already handled. Easy to reverse if Noah prefers it.
+- **E: Delete `borg chain` outright in (c) instead of a pointer.** Rejected: the COMMANDS test asks that a retired verb leave a tombstone so a user typing it gets a pointer instead of `unknown command`, which is what `program` and `recon` did.
+- **F: Use the word "train".** The PR-train directives use it for the same ordered set, but "stack" is what the `.stacks/` root already says and what GitHub calls it.
+
+## Notes
+
+- **The COMMANDS count is pinned by two tests, and neither should be edited for this change.** `contract: borg help is net one command shorter than at plan start (AC1)` asserts the count is exactly `27` (an awk over the COMMANDS section of `borg help`), and its long comment explains why a rename leaves it unchanged where a deletion turns it red. `contract: recon is gone from COMMANDS and named in REMOVED (AC1)` reads the names in the same section and the REMOVED block. A `borg stack` entry that is added next to `chain` instead of replacing it would make 28 and fail the first; that is the intended tripwire.
+- **A git worktree carries its own copy of the manifests.** `.borg/chains/` is git-tracked here, so `drone feature` produces a duplicate copy per worktree (see the worktree note in `borg_core/manifest/shell.py`). The migration runs per registered directory and does not chase worktrees; a worktree's manifests move when its branch merges the migration commit. Between those, the worktree holds the old root and the main checkout the new one, which is the mid-migration state the read side already accepts.
+- **Hand-made manifests in ignored `.borg/` directories** (the case `scaffold` already handles by choosing `.stacks/`) are the one place the move turns an untracked file into a trackable one. The command should say so in its output rather than decide for the user.
+- **The plugin mirror** (`claude-plugins`) needs a rebuild after R6, since skills and the `borg-plan` scaffold text ship through it.
+- Related: `docs/plans/directives/2026-08-31-project-to-repository-rename.md` (vocabulary and the R-step sequence), `docs/plans/directives/2026-10-12-manifest-writer-lost-update-guard.md` (touches the same writer, its invocations say `borg chain add-row`).
