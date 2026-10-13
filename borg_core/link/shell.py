@@ -72,7 +72,7 @@ import time
 from pathlib import Path
 
 from borg_core import paths, proc
-from borg_core.link import core, grid
+from borg_core.link import core, grid, worktree
 from borg_core.manifest import shell as manifest_shell
 from borg_core.recon import shell as recon_shell
 from borg_core.registry import shell as registry_shell
@@ -526,6 +526,48 @@ def read_checkpoint_summary(sources: list[tuple[str, str]]) -> str | None:
         return None
     filename, repository_name = window[0]
     return core.checkpoint_summary(_read_text(stores[repository_name] / filename))
+
+
+def _git_dir_of(directory: str) -> Path | None:
+    """The directory's own git dir: its `.git` when that is a directory, else what a `.git` FILE points at.
+
+    A linked worktree's `.git` is a file reading `gitdir: <path>` (absolute, or relative to the worktree), the
+    same fact `repository_slug` documents. None for anything else, including a `.git` that cannot be read.
+    """
+    dot_git = Path(directory) / ".git"
+    if dot_git.is_dir():
+        return dot_git
+    first = _read_text(dot_git).split("\n", 1)[0] if dot_git.is_file() else ""
+    if not first.startswith("gitdir:"):
+        return None
+    target = Path(first[len("gitdir:") :].strip())
+    return target if target.is_absolute() else Path(directory) / target
+
+
+def read_git_identity(repository_path: str | None, resolved_paths: list[tuple[str, str]]) -> dict:
+    """What git says this ONE directory is: `{kind, branch, worktree_of}` (see `worktree.identity`).
+
+    READ FROM THE FILES, NOT BY FORKING GIT, and that is a measured contract and not a taste: `--local` on a
+    repository page forks exactly `git remote get-url origin` and `tmux list-windows` (CLAUDE.md, `_grid`'s
+    docstring, test_grid's exact-argv case), and a page that states a branch must not be what breaks that.
+    The git dir's `commondir` file (present in a linked worktree's git dir, relative to it) names the shared
+    common dir -- the value `borg add` stores as the registry's `repo` -- and `HEAD` is `ref: refs/heads/<name>`
+    on a branch. Both are plain text git itself writes, and both degrade quietly: an unreadable layout answers
+    `kind: directory` with no branch, and the page omits the lines it cannot state. A detached HEAD has no
+    branch, and an empty branch is "not stated", never a made-up name.
+    """
+    directory = _usable_path(repository_path)
+    if directory is None:
+        return worktree.identity("", "", "", resolved_paths)
+    physical = os.path.realpath(directory)
+    git_dir = _git_dir_of(physical)
+    if git_dir is None:
+        return worktree.identity(physical, "", "", resolved_paths)
+    shared = _read_text(git_dir / "commondir").strip()
+    common_dir = os.path.realpath(git_dir / shared if shared else git_dir)
+    head = _read_text(git_dir / "HEAD").strip()
+    branch = head[len("ref: refs/heads/") :] if head.startswith("ref: refs/heads/") else ""
+    return worktree.identity(physical, branch, common_dir, resolved_paths)
 
 
 def read_plan(repository_path: str | None) -> dict | None:

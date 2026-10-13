@@ -311,16 +311,23 @@ def _path_components(path: str) -> list[str]:
     return [part for part in path.split("/") if part]
 
 
+# JUSTIFICATION: six independent inputs of one pure resolution; a container would only relocate the names.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def scope_for(
     cwd: str,
     orchestrator_root: str,
     repository_paths_: list[tuple[str, str]],
     local: bool = False,
     requested_repository: str = "",
+    overview: bool = False,
 ) -> dict:
     """Resolve which repositories one `borg link` invocation covers.
 
     Returns `{"kind": "repository"|"orchestrator", "repository": str|None, "local": bool}`.
+
+    `overview` (`borg link --overview`) FORCES the Queen view from anywhere: the scope is orchestrator whatever
+    the cwd or a positional says, because the page is the cross-repository overview only at the Queen and a
+    caller standing in a worktree must still be able to ask for it (skills/borg-switch does).
 
     THE EXPLICIT POSITIONAL DOMINATES CWD. `requested_repository`, when non-empty and present in the
     registry, sets the scope outright; cwd is consulted ONLY for the no-argument shape. Deriving
@@ -353,6 +360,8 @@ def scope_for(
     """
     scope = {"kind": "orchestrator", "repository": None, "local": bool(local)}
 
+    if overview:
+        return scope
     if requested_repository and any(name == requested_repository for name, _ in repository_paths_):
         return {**scope, "kind": "repository", "repository": requested_repository}
 
@@ -607,7 +616,8 @@ def plan_objective(text: str) -> str:
     plan written without a blank line before `## Acceptance Criteria` would otherwise swallow the
     heading into the objective, which is a worse wrong answer than the one being fixed. Joined with
     single spaces, because the newlines are the author's WRAP, not the author's structure -- the
-    renderer folds it to the page's own width (`render._objective_lines`).
+    renderer folded it to the page's own width until 2026-10-13, when the plan left the human page; the
+    objective now rides in `--json` as `focus.plan`.
     """
     lines = text.split("\n")
     for index, line in enumerate(lines):

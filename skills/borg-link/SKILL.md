@@ -47,7 +47,7 @@ Then branch, and only on this:
 
 **The `.borg-project` marker is NOT the mode decision.** It never was a reliable one: linked worktrees never get a marker, so a marker walk sent them into the overview. The engine resolves scope from the cwd (or from an explicit project name, which wins), and you believe it. The marker is read only in the `## Fallback`, where the engine cannot run. Do not write an ad hoc find/ls to detect the project.
 
-The repository-scope arm of the jq is a whitelist on purpose. `--json` stays registry-wide on every call (`order`, `projects`, `directives`, `assimilated`, `grid`), and `focus` carries a plan, directives and a checkpoint list that were read across the whole repo group, plus an `entry.summary` that came from the same union. The repository page may use none of that, so the pipe never lets it reach you.
+The repository-scope arm of the jq is a whitelist on purpose. `--json` stays registry-wide on every call (`order`, `projects`, `directives`, `assimilated`, `grid`), and `focus` carries a plan and directives, which are repository-level. Its checkpoint list, head and `entry.summary` were read across the whole repo group until 2026-10-13 and are now the directory's own, but an older engine still sends the union. The repository page reads its own directory itself and may use none of that, so the pipe never lets it reach you.
 
 **Version gate — read `.version` first.**
 - `== 2` → proceed silently.
@@ -221,7 +221,7 @@ The first line is the branch. The two paths on the next lines are equal for a ma
 
 2. **Session and status**, all from `.entry`: `status`, `relative_activity`, `waiting_reason` when present, `has_uncommitted_changes`, `has_live_window` when present (null or absent means unknown, not false), and `tmux_window`. One or two plain lines.
 
-3. **This directory's own checkpoints, read by you from `<entry.path>/.borg/checkpoints` and from nowhere else.** The engine's `focus.checkpoints`, `focus.checkpoint_head` and `entry.summary` are read across every checkout of the repository, so they describe other worktrees too; the pipe dropped them and you must not reconstruct them. List the directory, newest filename first (a NAME sort, the same as the engine's):
+3. **This directory's own checkpoints, read by you from `<entry.path>/.borg/checkpoints` and from nowhere else.** An older engine's `focus.checkpoints`, `focus.checkpoint_head` and `entry.summary` are read across every checkout of the repository, so they describe other worktrees too; the pipe drops them either way and you must not reconstruct them. List the directory, newest filename first (a NAME sort, the same as the engine's):
 
 ```bash
 bash -c 'ls -1 "<entry.path>/.borg/checkpoints" 2>/dev/null | grep "[.]md$" | sort -r | head -3'

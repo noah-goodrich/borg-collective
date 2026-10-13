@@ -1123,3 +1123,14 @@ def test_checkpoint_summary_accepts_a_bold_paragraph_under_accomplished():
 @pytest.mark.parametrize("text", ["", "# only a heading\n\nprose\n", "## Accomplished\n\n## Next\n- x\n", "**tl;dr** —\n"])
 def test_checkpoint_summary_is_none_when_the_checkpoint_states_nothing(text):
     assert core.checkpoint_summary(text) is None
+
+
+def test_scope_for_overview_forces_the_queen_view_from_a_repository_cwd():
+    """`borg link --overview` from a worktree. MUTATION: drop the early return and the cwd (or the positional)
+    resolves a repository again."""
+    inside = "/Users/noah/dev/ingle/src"
+    assert core.scope_for(inside, ROOT, PATHS)["kind"] == "repository"
+    forced = core.scope_for(inside, ROOT, PATHS, overview=True)
+    assert forced == {"kind": "orchestrator", "repository": None, "local": False}
+    assert core.scope_for(inside, ROOT, PATHS, requested_repository="ingle", overview=True)["kind"] == "orchestrator"
+    assert core.scope_for(inside, ROOT, PATHS, local=True, overview=True)["local"] is True

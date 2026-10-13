@@ -833,3 +833,40 @@ def test_read_checkpoint_summary_reads_below_the_twenty_line_head(isolated_env):
     body = "# cp\n" + "filler\n" * 30 + "## Accomplished\n\n- Found it far down.\n"
     path = _repository(isolated_env, "p", checkpoints=[("2026-09-18-1200.md", body)])
     assert shell.read_checkpoint_summary([("p", path)]) == "Found it far down."
+
+
+# ── read_git_identity: what git says one directory is, read from its files ─────────────────────────
+
+
+def test_read_git_identity_of_a_plain_directory_states_nothing(isolated_env):
+    path = _repository(isolated_env, "plain")
+    assert shell.read_git_identity(path, [("plain", path)]) == {"kind": "directory", "branch": "", "worktree_of": ""}
+    assert shell.read_git_identity(None, []) == {"kind": "directory", "branch": "", "worktree_of": ""}
+    assert shell.read_git_identity("null", []) == {"kind": "directory", "branch": "", "worktree_of": ""}
+
+
+def test_read_git_identity_agrees_with_real_git_on_a_real_linked_worktree(isolated_env):
+    """The reader parses git's own files rather than forking git (the `--local` fork count is a pinned contract),
+    so it is checked against git itself: a real `git worktree add`, a real branch, and git's answer to
+    `rev-parse --git-common-dir` for the shared dir. MUTATION: read `HEAD` or `commondir` from the wrong place and
+    the branch or the relationship is wrong against the real layout, not just against a hand-written one."""
+    import subprocess  # pylint: disable=import-outside-toplevel
+
+    main = _repository(isolated_env, "main")
+    git = ["git", "-C", main]
+    subprocess.run([*git, "init", "-q", "-b", "trunk"], check=True)
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "init"], check=True)
+    linked = os.path.join(str(isolated_env), "linked")
+    subprocess.run([*git, "worktree", "add", "-q", "-b", "feat/x", linked], check=True)
+    pairs = [("main", os.path.realpath(main)), ("linked", os.path.realpath(linked))]
+
+    assert shell.read_git_identity(main, pairs) == {"kind": "checkout", "branch": "trunk", "worktree_of": ""}
+    assert shell.read_git_identity(linked, pairs) == {"kind": "worktree", "branch": "feat/x", "worktree_of": "main"}
+
+    common = subprocess.run(
+        [*git, "rev-parse", "--path-format=absolute", "--git-common-dir"], check=True, capture_output=True, text=True
+    ).stdout.strip()
+    assert common == os.path.realpath(os.path.join(main, ".git"))
+
+    subprocess.run(["git", "-C", linked, "checkout", "-q", "--detach"], check=True)
+    assert shell.read_git_identity(linked, pairs)["branch"] == ""

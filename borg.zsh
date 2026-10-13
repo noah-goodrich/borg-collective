@@ -1315,7 +1315,8 @@ cmd_tidy() {
 # manifest, a gate or a ready set. If you find yourself reaching for `borg_registry_with_state` in
 # here, the fold has been undone.
 #
-# ARGS: $1 = --all (0/1), $2 = --local (0/1), forwarded exactly as every other arm forwards them.
+# ARGS: $1 = --all (0/1), $2 = --local (0/1), $3 = --overview (0/1), forwarded exactly as every other arm
+# forwards them.
 # `borg init` passes neither, so the morning briefing is orchestrator-breadth and SWEPT — a real cost
 # change from the registry-only read it used to do, and the intended one.
 #
@@ -1338,6 +1339,7 @@ _borg_print_briefing() {
     _brief_py_args=(--json)
     (( ${1:-0} )) && _brief_py_args+=(--all)
     (( ${2:-0} )) && _brief_py_args+=(--local)
+    (( ${3:-0} )) && _brief_py_args+=(--overview)
 
     # A FAILED BUILD IS AS LOUD AS A FAILED RENDER, AND FOR THE SAME REASON. This branch used to
     # `warn` (which writes to STDOUT — see its definition beside `info`/`die` at the top of this
@@ -3173,7 +3175,8 @@ cmd_help() {
   COMMANDS
     init                Launch orchestrator: morning briefing + Claude session
     claude              Resume orchestrator session (continue most recent)
-    link [project]      Overview (no arg) or deep dive (with project)
+    link [project]      The Queen's overview at the workspace root; ONE directory's page anywhere else
+                          --overview Force the Queen's cross-repository overview from any directory
                           --local   Skip the source sweep — registry + manifests only, no network
                           --brief   Same document, same sweep, as prose — falls back to the page
                           --refresh Regenerate summaries
@@ -3573,6 +3576,7 @@ _borg_recon_retired() {
 # and cmd_link's own order was porcelain > project > brief > overview.
 _borg_link_dispatch() {
     typeset _link_json=0 _link_porcelain=0 _link_brief=0 _link_refresh=0 _link_all=0 _link_local=0
+    typeset _link_overview=0
     typeset _link_help=0
     typeset _link_project="" _link_arg
     typeset -a _link_py_args
@@ -3584,11 +3588,17 @@ _borg_link_dispatch() {
             --refresh)     _link_refresh=1 ;;
             --all)         _link_all=1 ;;
             --local)       _link_local=1 ;;
+            --overview)    _link_overview=1 ;;
             -h|--help)     _link_help=1 ;;                # MUST precede `-*)`: zsh case is first-match
             -*)            ;;                            # lenient, matching cmd_link's `-*) shift`
             *)             _link_project="$_link_arg" ;;  # last-wins, matching cmd_link
         esac
     done
+    # --overview FORCES THE QUEEN VIEW (2026-10-13) and so beats a positional: run anywhere but the Queen
+    # root, `borg link` is a page about that one directory, and this is how a caller standing in a worktree
+    # asks for the cross-repository overview anyway (skills/borg-switch). Clearing the project here keeps the
+    # positional arm below from sending `--deep -- <project>`, which would answer the narrower question.
+    (( _link_overview )) && _link_project=""
     # --local MUST be matched explicitly here and forwarded on every arm. The lenient `-*)` arm two
     # lines up silently swallows unknown flags and exits 0 (pinned by the unknown-flag case in
     # cli_contract.bats), so a half-wired --local would fail OPEN -- the caller believes it opted
@@ -3621,8 +3631,9 @@ _borg_link_dispatch() {
     # cli_contract twin) was re-pointed at `borg link --local` when this arm landed, because an
     # early `return` here means `--help` no longer reaches any dispatch arm to prove alive.
     if (( _link_help )); then
-        echo "usage: borg link [project] [--local] [--all] [--refresh] [--brief|--llm] [--json] [--porcelain]"
+        echo "usage: borg link [project] [--local] [--all] [--overview] [--refresh] [--brief|--llm] [--json] [--porcelain]"
         echo "       --local skips the source sweep (registry + manifests only, no network)"
+        echo "       --overview shows the Queen's cross-repository view from any directory"
         return 0
     fi
 
@@ -3657,6 +3668,7 @@ _borg_link_dispatch() {
         _link_py_args=(--json)
         (( _link_all )) && _link_py_args+=(--all)
         (( _link_local )) && _link_py_args+=(--local)
+        (( _link_overview )) && _link_py_args+=(--overview)
         [[ -n "$_link_project" ]] && _link_py_args+=(-- "$_link_project")
         _borg_py borg_core.link.cli "${_link_py_args[@]}"
         return 0
@@ -3725,7 +3737,7 @@ _borg_link_dispatch() {
         # report as success. Captured explicitly rather than left to `set -e` so the propagation is
         # visible at the call site.
         local _brief_rc=0
-        _borg_print_briefing "$_link_all" "$_link_local" || _brief_rc=$?
+        _borg_print_briefing "$_link_all" "$_link_local" "$_link_overview" || _brief_rc=$?
         return $_brief_rc
     fi
 
@@ -3733,6 +3745,7 @@ _borg_link_dispatch() {
     _link_py_args=()
     (( _link_all )) && _link_py_args+=(--all)
     (( _link_local )) && _link_py_args+=(--local)
+    (( _link_overview )) && _link_py_args+=(--overview)
     _borg_py borg_core.link.cli "${_link_py_args[@]}"
 }
 

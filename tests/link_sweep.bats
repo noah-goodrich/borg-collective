@@ -381,7 +381,7 @@ MOCK
     #
     #   skills/borg-switch      buys the widest sweep in the system (`--all`) to produce a list of
     #                            names that comes straight off the registry.
-    run grep -c -- 'borg link --local --all' "${BATS_TEST_DIRNAME}/../skills/borg-switch/SKILL.md"
+    run grep -c -- 'borg link --local --all --overview' "${BATS_TEST_DIRNAME}/../skills/borg-switch/SKILL.md"
     [ "$output" -eq 1 ]
 
     # AC2/S4 REMOVED THE SECOND CALL SITE ALTOGETHER, so its two guards went with it rather than
@@ -783,7 +783,30 @@ MOCK
 # `_assert_brief_fallback_document` is the shared assertion. It checks the cube AND a section header
 # AND the registered repository's name, because any one alone is weak — the cube alone would pass on
 # a page whose body failed to render, and a bare name match would pass on the deleted registry table.
+#
+# THE FALLBACK IS THE PAGE THE SCOPE NAMES (2026-10-13). These cases run from inside the repository, so the page
+# is that DIRECTORY's: its `▸ IN FOCUS` card and `▸ WAITING ON YOU`, and none of the Queen's cube or board.
+# The Queen's fallback is pinned separately below, through `--overview`.
 _assert_brief_fallback_document() {
+    [[ "$output" == *"narrative unavailable"* ]] || false
+    [[ "$output" == *"IN FOCUS"* ]] || false
+    [[ "$output" == *"WAITING ON YOU"* ]] || false
+    [[ "$output" == *"sierra"* ]] || false
+    [[ "$output" != *"THE BORG COLLECTIVE"* ]] || false
+    [[ "$output" != *"REPOSITORIES"* ]] || false
+}
+
+@test "sweep: --brief --overview falls back to the Queen's page from inside a repository" {
+    _sweepable_repo
+    local dir="${BATS_TEST_TMPDIR}/ws/sierra"
+    cat > "$MOCK_BIN/timeout" <<'MOCK'
+#!/usr/bin/env bash
+exit 124
+MOCK
+    chmod +x "$MOCK_BIN/timeout"
+
+    run bash -c "cd '$dir' && zsh '$BORG' link --local --brief --overview"
+    [ "$status" -eq 0 ] || { printf '%s\n' "$output" >&2; false; }
     [[ "$output" == *"narrative unavailable"* ]] || false
     [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
     [[ "$output" == *"REPOSITORIES"* ]] || false

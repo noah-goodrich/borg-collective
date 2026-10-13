@@ -20,7 +20,7 @@ import os
 import sys
 from typing import NoReturn
 
-from borg_core.link import core, grid, picture, render, shell
+from borg_core.link import core, grid, picture, render, shell, worktree
 from borg_core.nextpick import cli as nextpick_cli
 from borg_core.nextpick import core as nextpick_core
 from borg_core.recon import core as recon_core
@@ -68,13 +68,18 @@ def _focus(repository: str, registry: dict, now_epoch: int) -> dict | None:
     entry = repositories.get(repository)
     if entry is None:
         raise RepositoryNotFound(repository)
-    # THE GROUP IS RESOLVED ONCE, HERE, and the two checkpoint reads share it. Resolving it inside
-    # each reader would let the list and the head disagree if the registry changed between the two
-    # calls, and would walk `repositories` twice for one answer.
-    sources = core.repo_sources(repository, repositories)
+    # THE DIRECTORY'S OWN SOURCE, RESOLVED ONCE, HERE, and the two checkpoint reads share it. It used to be the
+    # repo-group union (`core.repo_sources`), which made a worktree's page print a sibling's latest checkpoint
+    # and summary (Noah's report from borg-probes, 2026-10-13). A page about one directory reads that
+    # directory; resolving it inside each reader would also let the list and the head disagree if the registry
+    # changed between the two calls.
+    sources = worktree.own_source(repository, repositories)
     return {
         "name": repository,
         "entry": core.public_entry(entry, now_epoch),
+        # ADDITIVE: what git says this directory is (worktree | checkout | directory), its branch, and the
+        # repository it is a worktree of. Read for the one directory this page is about, never the registry.
+        "identity": shell.read_git_identity(entry.get("path"), shell.resolved_repository_paths(registry)),
         "plan": shell.read_plan(entry.get("path")),
         "checkpoints": shell.read_checkpoints(sources),
         "checkpoint_head": shell.read_latest_checkpoint_head(sources),
@@ -91,6 +96,9 @@ def _with_checkpoint_summaries(registry: dict) -> dict:
     in the copy this invocation renders, and never written back. A repository with no checkpoint, or a
     checkpoint stating nothing, gets null and renders no summary. Expand step only: summarize.py and
     the registry writer are untouched, so other readers of the stored field are unaffected.
+
+    EACH ENTRY'S OWN checkpoint, not its repo group's: the Queen board prints one row per directory, and a
+    worktree row carrying its sibling's summary described a session that was not there.
     """
     repositories = registry.get("projects") or {}
     derived = {}
@@ -98,7 +106,7 @@ def _with_checkpoint_summaries(registry: dict) -> dict:
         if not isinstance(entry, dict):
             derived[name] = entry
             continue
-        summary = shell.read_checkpoint_summary(core.repo_sources(name, repositories))
+        summary = shell.read_checkpoint_summary(worktree.own_source(name, repositories))
         derived[name] = {**entry, "summary": summary}
     return {**registry, "projects": derived}
 
@@ -275,15 +283,17 @@ def _aggregates(wanted: bool) -> tuple[list[dict], list[dict]]:
 
 
 # JUSTIFICATION: the assembly step of one document; every local is a distinct input to core.assemble.
-def _document(repository: str, show_all: bool, mode: str, local: bool = False) -> dict:  # pylint: disable=too-many-locals
+def _document(  # pylint: disable=too-many-locals
+    repository: str, show_all: bool, mode: str, local: bool = False, overview: bool = False
+) -> dict:
     """Assemble the `borg link` document for one invocation, consumed by `--json`, `--porcelain` and
     the one human renderer.
 
     BREADTH IS APPLIED HERE AND NARROWED IN THE RENDERER, WHICH IS WHY `DOCUMENT_VERSION` STAYS 2.
     core.assemble's docstring prices a version bump at the moment a PRE-EXISTING key narrows; under
     AC2 none does. The `--json` wire is byte-compatible with v2 from any cwd (see `need_aggregate`
-    below), and what "scope" changes is which ROWS render.document prints, not what the document
-    carries.
+    below), and what "scope" changes is which SECTIONS render.document prints (since 2026-10-13 it picks
+    the Queen's section list or one directory's by scope.kind), not what the document carries.
 
     Skipping unread work is still done here, but ITS ORIGINAL JUSTIFICATION HAS LAPSED AND NOTHING
     REPLACES IT. This paragraph used to read "`_document` is READ-ONLY but re-executed per call site:
@@ -328,6 +338,9 @@ def _document(repository: str, show_all: bool, mode: str, local: bool = False) -
     collapse it into one read; (v) `total_projects` is `len(overlaid.get("projects"))`, from the UNFILTERED
     overlaid map -- NOT from `repositories` (the --all-filtered map) or `order`.
     """
+    # `--overview` IS THE QUEEN VIEW FROM ANYWHERE, so it also drops a positional: a request for the whole
+    # collective and for one repository cannot both be answered, and the flag is the more specific ask.
+    repository = "" if overview else repository
     moment = shell.now_epoch()
     overlaid = _with_checkpoint_summaries(shell.registry_with_state(now=moment))
     repositories = core.visible_repositories(overlaid, show_all, moment)
@@ -343,6 +356,7 @@ def _document(repository: str, show_all: bool, mode: str, local: bool = False) -
         shell.resolved_repository_paths(overlaid),
         local=local,
         requested_repository=repository,
+        overview=overview,
     )
 
     # `bool(repository) or ...` AND NOT A PURELY SCOPE-DERIVED TEST. scope_for honours a positional only
@@ -419,7 +433,7 @@ def _emit(text: str) -> int:
     return 0
 
 
-def _run(repository: str, show_all: bool, mode: str, local: bool = False) -> int:
+def _run(repository: str, show_all: bool, mode: str, local: bool = False, overview: bool = False) -> int:
     """Dispatch one `borg link` invocation; returns the process exit code.
 
     Mode precedence, strictly: json > porcelain > human. Renders to a SINGLE string and prints it
@@ -434,7 +448,7 @@ def _run(repository: str, show_all: bool, mode: str, local: bool = False) -> int
     test_render.py asserts that on the source text: a second call site is how "one front door" decays
     back into two modes of one command answering the same question with different data.
     """
-    doc = _document(repository, show_all, mode, local)
+    doc = _document(repository, show_all, mode, local, overview)
     if mode == "json":
         return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
@@ -536,6 +550,12 @@ def _build_parser() -> argparse.ArgumentParser:
     # not there. Anyone reading this as dead plumbing and deleting a `--local` from a call site is
     # removing a network sweep's only brake.
     parser.add_argument("--local", dest="local", action="store_true")
+    # FORCES THE QUEEN VIEW FROM ANYWHERE (2026-10-13). Run outside the Queen root, `borg link` is a page about
+    # that one directory; the cross-repository overview is the Queen's page, and this is how a caller standing
+    # in a worktree asks for it anyway. Its one automated caller is skills/borg-switch (`borg link --local
+    # --all --overview`), which wants every repository's name from whatever cwd the session is in. It sets
+    # scope.kind to orchestrator and ignores a positional; no JSON key is added or narrowed.
+    parser.add_argument("--overview", dest="overview", action="store_true")
     # NOT A MODE. Reads a document off stdin and renders it; builds nothing, sweeps nothing, reads no
     # clock. Its one caller is `_borg_print_briefing`'s fallback (borg.zsh), and `_render_document_from_stdin`
     # carries the reasoning. It is gated in `main()` ABOVE `_run` rather than inside `_mode` so the
@@ -600,7 +620,7 @@ def main(argv: list[str] | None = None) -> None:
         if args.render_document:
             exit_code = _render_document_from_stdin(sys.stdin)
         else:
-            exit_code = _run(args.repository, args.show_all, mode, args.local)
+            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview)
     except RepositoryNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.

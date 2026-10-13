@@ -1079,3 +1079,147 @@ def test_waiting_rows_and_hidden_counts_match_the_chooser_exactly():
     assert len(body) == 5 + 2 + 1
     assert "+2 more decisions" in body[-3] and "+2 agent tasks" in body[-2]
     assert "next" in body[-1]
+# ── the worktree page (2026-10-13): a directory reads ONLY that directory ───────────────────────────
+
+
+def _two_worktrees(root):
+    """`borg` (a main checkout) and `door` (a linked worktree of it), registered under one `repo` key.
+
+    The git layout is written by hand, exactly as git writes it: the main checkout's `.git` is a directory, the
+    worktree's `.git` is a FILE naming `<main>/.git/worktrees/door`, whose `commondir` is `../..` and whose
+    `HEAD` is a symbolic ref. `read_git_identity` reads those files, so the fixture needs no `git` on PATH.
+    Each directory holds its OWN checkpoint, the main checkout's NEWER by filename -- the shape that made the
+    union read leak a sibling's checkpoint onto the worktree's page.
+    """
+    main = Path(_repository_dir(root, "borg"))
+    door = Path(_repository_dir(root, "door"))
+    (main / ".git").mkdir()
+    (main / ".git" / "HEAD").write_text("ref: refs/heads/main\n", encoding="utf-8")
+    gitdir = main / ".git" / "worktrees" / "door"
+    gitdir.mkdir(parents=True)
+    (gitdir / "commondir").write_text("../..\n", encoding="utf-8")
+    (gitdir / "HEAD").write_text("ref: refs/heads/feat-door\n", encoding="utf-8")
+    (door / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+    for directory, name, summary in (
+        (main, "2026-10-13-1200.md", "Main summary."),
+        (door, "2026-10-12-0900.md", "Door summary."),
+    ):
+        store = directory / ".borg" / "checkpoints"
+        store.mkdir(parents=True)
+        (store / name).write_text(f"**tl;dr** — {summary}\n\n## Next Session\n\nOwn work.\n", encoding="utf-8")
+    common = str(Path(os.path.realpath(main / ".git")))
+    _write_registry(
+        root,
+        {
+            "borg": {"path": str(main), "repo": common, "status": "idle"},
+            "door": {"path": str(door), "repo": common, "status": "active"},
+        },
+    )
+    return main, door
+
+
+def test_a_worktrees_checkpoints_and_summary_are_its_own_never_a_siblings(isolated_env, monkeypatch):
+    """Noah's report from borg-probes, as a test. RED AGAINST THE UNION READ: with `core.repo_sources` in
+    `_focus`, `door`'s checkpoint list leads with the main checkout's newer `2026-10-13-1200.md @borg`, its head
+    is the main checkout's body, and its summary is `Main summary.`"""
+    main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+
+    monkeypatch.chdir(door)
+    doc = cli._document("", False, "json")  # pylint: disable=protected-access
+    assert doc["focus"]["name"] == "door"
+    assert doc["focus"]["checkpoints"] == ["2026-10-12-0900.md"]
+    assert "Door summary." in doc["focus"]["checkpoint_head"] and "Main summary." not in doc["focus"]["checkpoint_head"]
+    assert doc["focus"]["entry"]["summary"] == "Door summary."
+    # ...and the board rows the document carries are each their own directory's, not the group's.
+    assert doc["projects"]["door"]["summary"] == "Door summary."
+    assert doc["projects"]["borg"]["summary"] == "Main summary."
+
+    monkeypatch.chdir(main)
+    doc = cli._document("", False, "json")  # pylint: disable=protected-access
+    assert doc["focus"]["checkpoints"] == ["2026-10-13-1200.md"]
+    assert doc["focus"]["entry"]["summary"] == "Main summary."
+
+
+def test_focus_states_what_git_says_the_directory_is(isolated_env, monkeypatch):
+    main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+
+    monkeypatch.chdir(door)
+    assert cli._document("", False, "json")["focus"]["identity"] == {  # pylint: disable=protected-access
+        "kind": "worktree",
+        "branch": "feat-door",
+        "worktree_of": "borg",
+    }
+    monkeypatch.chdir(main)
+    assert cli._document("", False, "json")["focus"]["identity"] == {  # pylint: disable=protected-access
+        "kind": "checkout",
+        "branch": "main",
+        "worktree_of": "",
+    }
+
+
+def test_the_human_page_in_a_worktree_is_strictly_that_worktree(isolated_env, monkeypatch, capsys):
+    _main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(door)
+
+    assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
+    out = capsys.readouterr().out
+    assert "IN FOCUS" in out and "door — worktree of borg" in out
+    assert "Door summary." in out and "2026-10-12-0900.md" in out
+    assert "Main summary." not in out and "2026-10-13-1200.md" not in out
+    assert "REPOSITORIES" not in out and "THE BORG COLLECTIVE" not in out
+    assert "borg link --overview" in out
+
+
+def test_overview_forces_the_queen_view_from_a_worktree(isolated_env, monkeypatch, capsys):
+    """MUTATION: drop `overview=overview` from the `scope_for` call and the worktree keeps its own page."""
+    _main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+    monkeypatch.chdir(door)
+
+    doc = cli._document("", False, "json", True, True)  # pylint: disable=protected-access
+    assert doc["scope"] == {"kind": "orchestrator", "repository": None, "local": True}
+    assert doc["focus"] is None
+    # ...a positional is not honoured against the flag: the request for the whole collective wins.
+    ignored = cli._document("door", False, "json", True, True)  # pylint: disable=protected-access
+    assert ignored["scope"]["kind"] == "orchestrator" and ignored["focus"] is None
+
+    assert cli._run("", False, "human", local=True, overview=True) == 0  # pylint: disable=protected-access
+    out = capsys.readouterr().out
+    assert "REPOSITORIES" in out and "THE BORG COLLECTIVE" in out
+    assert "worktree of" not in out
+
+
+def test_overview_parses_and_defaults_off():
+    assert cli._build_parser().parse_args([]).overview is False  # pylint: disable=protected-access
+    assert cli._build_parser().parse_args(["--overview"]).overview is True  # pylint: disable=protected-access
+
+
+def test_json_keeps_every_key_the_directory_page_stopped_rendering(isolated_env, monkeypatch):
+    """Decision 5: the human page narrows, the wire does not. Registry-wide keys are present and unchanged in
+    repository scope, and the only key ADDED is `focus.identity` (additive, so DOCUMENT_VERSION stays 2)."""
+    _main, door = _two_worktrees(isolated_env)
+    monkeypatch.setenv("BORG_ORCHESTRATOR_ROOT", str(isolated_env))
+
+    monkeypatch.chdir(door)
+    inside = cli._document("", False, "json")  # pylint: disable=protected-access
+    monkeypatch.chdir(isolated_env)
+    queen = cli._document("", False, "json")  # pylint: disable=protected-access
+
+    assert set(inside) == set(queen)
+    assert inside["version"] == queen["version"] == 2
+    for registry_wide in ("order", "projects", "directives", "assimilated", "capacity", "grid"):
+        assert registry_wide in inside
+    assert inside["order"] == queen["order"]
+    assert set(inside["focus"]) == {
+        "name",
+        "entry",
+        "identity",
+        "plan",
+        "checkpoints",
+        "checkpoint_head",
+        "directives",
+        "assimilated",
+    }

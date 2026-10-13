@@ -75,9 +75,12 @@ Two independent tools that compose:
 borg init                Launch orchestrator: morning briefing + Claude session
 borg / borg next         What needs attention? Switch to it.
 borg claude              Launch/resume orchestrator Claude session
-borg link [project]      ONE document, seven sections, always the same spine (AC2)
-                           Scope widens or narrows it; it is never a different page
-                             — except `--brief`, the one invocation that prints prose
+borg link [project]      ONE renderer, TWO pages, chosen by scope.kind
+                           Queen root: the cross-repository overview
+                           Anywhere else: strictly that ONE directory's page
+                             (AC2's "same spine" was reversed 2026-10-13)
+                             — and `--brief`, which prints prose instead
+                           --overview Force the Queen view from any directory
                            --brief   Same document, same sweep, PROSE not the seven
                                      sections (AC1). Falls back to the real page.
                            --refresh Regenerate summaries
@@ -94,7 +97,7 @@ borg link [project]      ONE document, seven sections, always the same spine (AC
                                      is unaffected by the flag; it is gated by the reap overlay, not
                                      by the network. No hot loop is left behind it; the one
                                      automated caller is skills/borg-switch's
-                                     `borg link --local --all`
+                                     `borg link --local --all --overview`
                            --json / --porcelain  the two machine surfaces
                            --deep    Parsed and IGNORED since AC2; kept for borg.zsh's positional
                                      `link` arm, the one live caller (`_link_py_args=(--deep)`)
@@ -503,20 +506,40 @@ docs/
   `borg chain sync` rewrites a `.stacks/` manifest in place.
 - **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
   `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
-  `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS` — with **no branch on
-  scope, mode or emptiness**. (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
+  `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS`, `▸ WAITING ON YOU` — with
+  **no branch on mode or emptiness**, and since 2026-10-13 scope picks WHICH tuple (see the reversal
+  below). (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
   reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
   chose over reserving an always-empty slot in advance.) `render.overview` and `render.deep` are
   deleted, and `--deep` is parsed and ignored (kept in the parser because borg.zsh's positional `link`
   arm — grep `_link_py_args=(--deep)`, the one live caller, serving every `borg link <project>` and
   `drone link` — still passes it, and argparse exiting 2 there is a blank pane with nothing on stderr.
   Line pins are deliberately absent: four sites all said `borg.zsh:3111`, which matched neither main
-  nor the branch that "corrected" it.) **Scope changes which ROWS
-  a section prints, never which sections exist** — the contexts differ in breadth only, so a reader
-  who learns the page once has learned every invocation of it. Section headers are byte-identical
-  in both contexts; `focus` now follows scope, so a bare `borg link` inside a repository renders
-  `▸ IN FOCUS` for it. `DOCUMENT_VERSION` stays 2: breadth is applied in the renderer, so no
-  pre-existing JSON key narrowed and `skills/borg-link/SKILL.md`'s version gate is untouched.
+  nor the branch that "corrected" it.) **AC2's rule — "scope changes which ROWS
+  a section prints, never which sections exist; the contexts differ in breadth only" — WAS REVERSED
+  2026-10-13 for repository scope, on purpose (Noah: the overview belongs to the Queen).** Standing in a
+  worktree of `borg-collective`, `borg link` printed the whole `REPOSITORIES` board, the repository's pull
+  requests and its CHAINS, and led with a sibling worktree's checkpoint: a page about "here" that was about
+  everywhere. Three root causes, each now closed: the checkpoint and summary reads were a repo-group UNION
+  (`core.repo_sources`; `focus` now reads `worktree.own_source`, the directory alone), the board was
+  scope-invariant, and the repository-level sections were keyed on the GitHub slug, which every worktree of a
+  repository shares. Now `render._sections_for` picks one of two lists. The Queen
+  (`scope.kind == "orchestrator"`: cwd equal to `BORG_ORCHESTRATOR_ROOT`, or `--overview` from anywhere) prints
+  `SECTIONS`, and its board collapses worktrees under their repository (group by the registry `repo` key, via
+  `worktree.repository_groups`) instead of counting each as a repository. Anywhere else prints
+  `REPOSITORY_SECTIONS`, STRICTLY that directory: a scope label (`<name> — worktree of <repo>` or `— main
+  checkout`), identity (path, branch, worktree-of), live session and status, its OWN checkpoints, its own
+  waiting row (the session row only, no repository PR rows), the next-action line, and one line pointing at
+  `borg link --overview`. No board, no other worktree or repository, no CHAINS, NEXT, QUEUED, SHIPPED, plan or
+  SIGNALS. The vocabulary is fixed: a *repository* is the git repo, a *worktree* is a linked checkout
+  registered on its own and carrying a project, and the orchestrator session is called the Queen in
+  user-facing text while every internal name (`scope.kind` `orchestrator`, `BORG_ORCHESTRATOR_ROOT`, the
+  `--json` keys) is unchanged. `--json` keeps EVERY key: the registry-wide ones are untouched and the human page
+  simply stops rendering them in repository scope; the only values that changed are `focus.checkpoints`,
+  `focus.checkpoint_head` and the summaries, which are now the directory's own, and the one key added is
+  `focus.identity` (additive). `DOCUMENT_VERSION` stays 2: no pre-existing JSON key narrowed and
+  `skills/borg-link/SKILL.md`'s version gate is untouched. Git identity is read from the git dir's own files
+  (`commondir`, `HEAD`), not by forking git, because `--local`'s fork count is a pinned contract.
 - **`picture.py` is pure; `render.py` is the page**: the topological picture (columns, connectors,
   crossings, glyph seam, OSC-8 links, the `PICTURE_BUDGET` width) lives in `borg_core/link/picture.py`
   and does **no I/O of any kind** — it imports only `re`, `link.grid` and `manifest.core`, takes refs

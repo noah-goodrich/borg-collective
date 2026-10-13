@@ -1,9 +1,15 @@
 """The one human renderer for `borg link`, plus the machine TSV `--porcelain` still serializes.
 
 TWO PUBLIC CALLABLES, AND THAT IS THE WHOLE OF AC2's "one front door". `document(doc)` is the single
-human entry point: a fixed SEVEN-SECTION SPINE whose `▸` headers are byte-identical in every context,
-where `scope` narrows the ROW SET of the four scope-dependent sections and never the board, never the
-section list and never the order. `porcelain(doc)` is deliberately outside "everywhere" and its
+human entry point, and since 2026-10-13 `scope` chooses WHICH SECTION LIST it prints, from one place
+(`_sections_for`): the Queen's page (`SECTIONS`, scope.kind "orchestrator") is the cross-repository
+overview, a fixed spine whose `▸` headers are byte-identical on every Queen render; the page of
+repository scope (`REPOSITORY_SECTIONS`) is STRICTLY ONE DIRECTORY -- its label, identity, session,
+own checkpoints, its own waiting row and the next action -- with no board, no other worktree or
+repository, and no repository-level section. THIS REVERSES AC2's "scope changes which rows a section
+prints, never which sections exist" for repository scope, deliberately (Noah: the overview belongs to
+the Queen). It is still ONE renderer: no second `document`, and the choice is a lookup, not a branch
+inside any section. `porcelain(doc)` is deliberately outside "everywhere" and its
 LAYOUT is unchanged (one control-character flatten aside, see its docstring) -- it is not a renderer,
 it is `borg link --porcelain`'s machine TSV, read BY FIELD, and box drawing in that stream would
 break any consumer that splits it. IT DOES NOT FEED `borg switch`: this paragraph used to say it was
@@ -26,10 +32,10 @@ future field can escape. Two supporting invariants hold it up: the grid's vocabu
 and never `Status:`, and the board's column header stays `STATUS` (uppercase, colonless).
 
 EVERY SECTION ALWAYS RENDERS ITS HEADER. A section with no rows renders that header plus EXACTLY ONE
-dim placeholder line naming what would fill it and the one command that would -- which is the same
-rule that makes "the two contexts differ in breadth only" mechanically assertable, because the header
-list can then be compared against `SECTIONS` itself rather than against the other context's golden
-(a header diff between two goldens goes green if both drift together).
+dim placeholder line naming what would fill it and the one command that would -- which is the rule that
+makes each page's section list mechanically assertable, because the header list can then be compared
+against `SECTIONS` / `REPOSITORY_SECTIONS` themselves rather than against a golden (a header diff
+between two goldens goes green if both drift together).
 
 UNCONDITIONALLY PURE, matching core.py's and picture.py's contract: no clock, no os.environ, no
 subprocess, no filesystem, no isatty. Every function here takes the already-assembled `--json`
@@ -81,7 +87,7 @@ from __future__ import annotations
 import re
 from typing import Callable
 
-from borg_core.link import core, grid, picture
+from borg_core.link import core, grid, picture, worktree
 from borg_core.link.picture import BOLD, CYAN, DIM, GREEN, NC, YELLOW
 
 # Overview column widths, hoisted so the header line and every row format string share ONE source
@@ -106,6 +112,8 @@ _COL_STATUS = 12
 _COL_LAST_ACTIVE = 12
 # The three routing columns (yours / mine / unsure), each as wide as its header.
 _COL_ROUTE = (5, 4, 6)
+# What a worktree's board row is prefixed with, so it reads as beneath the repository row above it.
+_WORKTREE_MARK = "└ "
 _ROUTE_GROUPS = ("yours", "mine", "unsure")
 
 # The deep dive's label column (borg.zsh:440-445): a 2-space indent PLUS a 14-wide label field, so
@@ -196,38 +204,6 @@ def _summary_block(summary: str) -> str:
         else:
             out.append(f"  {line}\n")
     return "".join(out)
-
-
-# Named so `_objective_lines` slices the folded first line at exactly the prefix it built.
-_OBJECTIVE_LABEL = "Objective:"
-
-
-def _objective_lines(objective: str) -> list[str]:
-    """The Active Plan objective, FOLDED the way `_summary_block` folds a summary.
-
-    IT USED TO PRINT RAW, which was half of a two-part defect: `core.plan_objective` read one
-    physical line of a wrapped paragraph, and this printed whatever it got with no fold at all,
-    unlike every other prose field on the page. Measured on this repo's own PROJECT_PLAN.md the
-    emitted line was 129 VISIBLE COLUMNS -- the widest row the document produces, wider than the
-    picture's own 68-column budget, in the section a reader looks at first.
-
-    THE PREFIXED STRING IS WHAT GETS FOLDED, at 70, through `_fold_s` -- byte for byte the
-    arrangement `_summary_block` uses, so the section's two prose blocks cannot wrap differently.
-    Continuations re-indent to two spaces, keeping the deep dive's `^  [^ ]` rule intact. The slice
-    is safe by construction: `_fold_s` breaks after the last space at or before 70, `"  Objective: "`
-    puts one at index 12, 12 < 70 -- so `rfind` never returns below 12 and the slice cannot bite into
-    the label. THAT ARGUMENT WAS ONLY HALF OF ONE: a first token of 57+ chars pushes the next space
-    past 70, leaving 12 the sole candidate, so the label line degenerates to `"  Objective: "` with
-    the objective on the continuation (measured: shares the line at 56, not at 57). Left as is --
-    not corruption, exactly what `fold -s -w 70` does with those bytes, and a 57-char unbroken token
-    is a URL, whose fix belongs in `core.plan_objective` rather than a carve-out in a folder pinned
-    to `fold`'s behaviour. Only the LABEL is coloured, so ANSI bytes never enter the width arithmetic.
-    """
-    prefix = f"  {_OBJECTIVE_LABEL} "
-    folded = _fold_s(prefix + objective, width=70)
-    out = [f"  {CYAN}{_OBJECTIVE_LABEL}{NC}{folded[0][len(prefix) - 1 :]}\n"]
-    out.extend(f"  {line}\n" for line in folded[1:])
-    return out
 
 
 def _checkpoint_head_block(head: str) -> str:
@@ -518,12 +494,16 @@ def _header_section(doc: dict) -> tuple[str, list[str]]:
 
 # JUSTIFICATION: transcribes borg.zsh:415-508 statement by statement for one golden-diffable section.
 def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-many-locals
-    """IN FOCUS: the scoped repository's own card, transcribed from the retired `deep()`.
+    """IN FOCUS: the page of repository scope -- ONE directory's card, transcribed from the retired `deep()`.
 
-    Its Directives and Recently-assimilated blocks are NOT here any more -- they are the QUEUED and
-    SHIPPED sections, which render the same rows under a header shared with the orchestrator context.
-    That is what "the two contexts differ in breadth only" means in practice: one row set moved out
-    from under a per-mode heading and into a section that exists in both.
+    The header note is the one-line SCOPE LABEL (`worktree.scope_label`): the directory and what it is to its
+    repository. The card states the directory's identity (path, branch, worktree-of), its live session and
+    status, and its OWN checkpoints (summary, recent, latest); `cli._focus` read every one of those from that
+    directory alone. There is no Active Plan block: since 2026-10-13 the repository-scope page is strictly the
+    directory, and the plan is a repository-level section (still in `--json` as `focus.plan`).
+
+    Its Directives and Recently-assimilated blocks are NOT here either -- they are the QUEUED and
+    SHIPPED sections, which only the Queen's page renders.
     """
     focus = doc.get("focus") or {}
     if not focus:
@@ -531,6 +511,7 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
 
     name = focus.get("name", "")
     entry = focus.get("entry") or {}
+    identity = focus.get("identity") or {}
     source = core.jq_default(entry.get("source"), "cli")
     path = core.jq_default(entry.get("path"), "null")
     status = core.jq_default(entry.get("status"), _JQ_ABSENT_STATUS)
@@ -544,6 +525,12 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
     # the sentinel string "null".
     if path != "null":
         out.append(_label("Path:", str(path)))
+    # Absent, not blanked, when git did not state them: a non-git directory has no branch, a detached HEAD
+    # has none either, and only a linked worktree has a repository it is a worktree of.
+    if identity.get("branch"):
+        out.append(_label("Branch:", str(identity["branch"])))
+    if identity.get("kind") == "worktree" and identity.get("worktree_of"):
+        out.append(_label("Worktree of:", str(identity["worktree_of"])))
     # Exactly ONE line on the whole page contains "Status:", and this section is above every other
     # source of text, so drone.zsh:964-965's `grep -m1` finds it before any PR title. See the module
     # docstring for why that ordering is the invariant rather than a scrubbing rule.
@@ -556,15 +543,6 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
         out.append("\n")
         out.append(_summary_block(summary))
 
-    plan = focus.get("plan")
-    if plan is not None:
-        out.append("\n")
-        out.append(f"  {BOLD}Active Plan{NC}\n")
-        objective = plan.get("objective") or ""
-        if objective:
-            out.extend(_objective_lines(objective))
-        out.append(f"  {CYAN}Progress:{NC} {plan.get('met', 0)}/{plan.get('total', 0)} criteria met\n")
-
     checkpoints = focus.get("checkpoints") or []
     if checkpoints:
         out.append("\n")
@@ -575,7 +553,7 @@ def _focus_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-m
         out.append(f"  {BOLD}Latest Checkpoint{NC}\n")
         out.append(_checkpoint_head_block(focus.get("checkpoint_head") or ""))
 
-    return name, out
+    return worktree.scope_label(name, identity), out
 
 
 def _scoped_name(doc: dict) -> str:
@@ -583,24 +561,42 @@ def _scoped_name(doc: dict) -> str:
     return str((doc.get("scope") or {}).get("repository") or "")
 
 
-def _board_section(doc: dict) -> tuple[str, list[str]]:
-    """REPOSITORIES: every registered repository, in BOTH contexts. Transcribed from `overview()`.
+def _is_repository_scope(doc: dict) -> bool:
+    """Whether the document is the page of ONE directory (scope.kind "repository") and not the Queen's."""
+    return (doc.get("scope") or {}).get("kind") == "repository"
 
-    DELIBERATELY SCOPE-INVARIANT, and this is the one section AC2's "breadth" rule does not touch.
 
-    TWO OF THE THREE CONSUMERS THIS USED TO CITE NO LONGER EXIST, and the justification is restated
-    rather than re-invented around whatever is left. It named `borg.zsh:2225`'s 5s `borg watch`
-    redraw and "the fzf preview's own orientation": `watch` is not in the case dispatch and exits 1
-    with "unknown command", and `cmd_switch`'s fzf call has no `--preview` at all (B15 pins
-    `grep -c -- '--preview-window' borg.zsh` at 0) -- both retired 2026-08-27. ONE named consumer
-    survives, skills/borg-switch/SKILL.md's `borg link --local --all`, run from a repository session's
-    cwd precisely to get a cross-repository list; narrowing this section to the scoped repository would
-    hand it a one-row table.
+def _board_entries(groups: list[tuple[str, list[str]]], repositories: dict) -> list[tuple[str, dict]]:
+    """The board's `(name, entry)` rows in print order: each repository, then its worktrees beneath it.
 
-    The remaining reason is the one that was always underneath the consumer list: the page has
-    exactly one place that answers "what else is going on", and a reader who ran `borg link` inside
-    a repository has not asked to stop being able to see that. `--all` remains the only control over
-    which rows appear; the scoped row is MARKED with a trailing `◀` rather than made the only row.
+    A worktree's row prints under "└ <name>", and that prefix is part of the DISPLAYED name, so it is applied
+    to the entry before the width is measured: measuring the bare name while padding the prefixed one is the
+    header/row mismatch `_board_display` exists to prevent.
+    """
+    entries: list[tuple[str, dict]] = []
+    for head, children in groups:
+        entries.append((head, repositories[head]))
+        for child in children:
+            shown = {**repositories[child], "display_name": _WORKTREE_MARK + _board_display(child, repositories[child])}
+            entries.append((child, shown))
+    return entries
+
+
+# JUSTIFICATION: transcribes `overview()` statement by statement for one golden-diffable section.
+def _board_section(doc: dict) -> tuple[str, list[str]]:  # pylint: disable=too-many-locals
+    """REPOSITORIES: every registered repository, on the QUEEN'S page only. Transcribed from `overview()`.
+
+    IT WAS SCOPE-INVARIANT UNTIL 2026-10-13 and no longer is: the board is the cross-repository overview, and
+    the overview belongs to the Queen (`REPOSITORY_SECTIONS` has no board). Its one automated consumer,
+    skills/borg-switch/SKILL.md's `borg link --local --all`, now passes `--overview`, which forces this page
+    from any cwd. `--all` remains the only control over which rows appear. The scoped-row `◀` mark is
+    therefore unreachable from the CLI (the Queen has no scoped repository) and survives only for a
+    hand-built document; it is not a contract.
+
+    ONE ROW PER REPOSITORY, WORKTREES BENEATH IT. Entries sharing a registry `repo` (the git common dir) are
+    one repository (`worktree.repository_groups`): the head row is the repository, its worktrees follow
+    indented with `└`, and the note counts repositories, naming worktrees separately, instead of counting each
+    checkout as a repository of its own. A registry with no shared `repo` renders exactly as it always did.
     """
     total_projects = doc.get("total_projects", 0)
     order = doc.get("order") or []
@@ -620,11 +616,19 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     # while this note answers "how many of these rows are blocked on me". The two are different
     # numbers on the same registry and the goldens carry both.
     waiting = sum(1 for name in order if str(core.jq_default(repositories[name].get("status"), "")) == "waiting")
-    note = f"the collective · {_plural(len(order), 'repository', 'repositories')} · {waiting} need attention"
+    groups = worktree.repository_groups(order, repositories)
+    worktrees = sum(len(children) for _, children in groups)
+    counted = _plural(len(groups), "repository", "repositories")
+    if worktrees:
+        counted += f" · {_plural(worktrees, 'worktree', 'worktrees')}"
+    note = f"the collective · {counted} · {waiting} need attention"
+
+    entries = _board_entries(groups, repositories)
+    displayed = dict(entries)
 
     # MEASURED ONCE AND HANDED TO BOTH the header and every row, which is the only arrangement in
     # which the header cannot stop describing its rows.
-    width = _board_width(order, repositories)
+    width = _board_width([name for name, _ in entries], displayed)
     lines = [
         f"{BOLD} {'REPOSITORY':<{width}} {'SRC':<{_COL_SRC}} {'STATUS':<{_COL_STATUS}} "
         f"{'LAST ACTIVE':<{_COL_LAST_ACTIVE}} "
@@ -635,9 +639,9 @@ def _board_section(doc: dict) -> tuple[str, list[str]]:
     countdowns = _cortex_countdowns(doc)
     routed = _routing_counts(doc)
     scoped = _scoped_name(doc)
-    for name in order:
+    for name, entry in entries:
         mark = f" {CYAN}◀{NC}" if name == scoped else ""
-        lines.append(_overview_row(name, repositories[name], countdowns, mark, width, routed.get(name)))
+        lines.append(_overview_row(name, entry, countdowns, mark, width, routed.get(name)))
     return note, lines
 
 
@@ -1052,7 +1056,13 @@ def _waiting(doc: dict) -> tuple[list[dict], bool]:
     NO AGE: nothing in the document says when a row began waiting; a made-up age would be mock data.
     """
     repositories = doc.get("projects") or {}
-    items = [_chooser_item(row) for row in (doc.get("waiting") or {}).get("rows") or []]
+    rows = (doc.get("waiting") or {}).get("rows") or []
+    if _is_repository_scope(doc):
+        # THE SESSION ROW ONLY. The page of repository scope is strictly one directory, and a pull request or a
+        # manifest decision is a fact about the repository, which the Queen's page carries. `waiting.rows` in
+        # `--json` is untouched; the page stops rendering what is not this directory's.
+        return [_chooser_item(row) for row in rows if row.get("item") == "session" and not row.get("ref")], False
+    items = [_chooser_item(row) for row in rows]
     seen = {item["ref"] for item in items}
     unlooked = False
     for manifest in (doc.get("grid") or {}).get("manifests") or []:
@@ -1100,7 +1110,13 @@ def _next_action_command(ref: str) -> str:
 
 
 def _first_mine(doc: dict) -> tuple[str, str] | None:
-    """`(ref, repository)` of the first agent-routable ready row across the manifests, or None."""
+    """`(ref, repository)` of the first agent-routable ready row across the manifests, or None.
+
+    Always None on the page of repository scope: a ready manifest row is a repository-level fact, and that
+    page's next action comes from its own session or says nothing is ready.
+    """
+    if _is_repository_scope(doc):
+        return None
     repositories = doc.get("projects") or {}
     for manifest in (doc.get("grid") or {}).get("manifests") or []:
         for ref, _, group in _ready_rows(manifest):
@@ -1116,8 +1132,8 @@ def _next_action_line(doc: dict, items: list[dict], unlooked: bool) -> str:
     this rule: the first WAITING ON YOU item (a decision only the reader can make) if any; else the
     first agent (`mine`) ready row; else a sentence saying nothing is ready (or that nobody looked,
     when no manifest was resolved) followed by `borg next`, so the line always carries a runnable
-    command. It reads `doc` and nothing else, and has no branch on scope, so
-    orchestrator and repository pages print the same SHAPE of line.
+    command. It reads `doc` and nothing else, and both pages print the same SHAPE of line; what differs by
+    scope is only which items it can see (`_waiting`, `_first_mine`).
     """
     if items:
         top = items[0]
@@ -1146,7 +1162,10 @@ def _waiting_section(doc: dict) -> tuple[str, list[str]]:
     """
     items, unlooked = _waiting(doc)
     waiting = doc.get("waiting") or {}
-    tail = [f"  {DIM}{line}{NC}\n" for line in waiting.get("hidden_lines") or []]
+    # The hidden counts (`+N agent tasks`, ...) describe repository-level rows, none of which a directory's
+    # page shows, so they are not printed there either.
+    hidden = [] if _is_repository_scope(doc) else waiting.get("hidden_lines") or []
+    tail = [f"  {DIM}{line}{NC}\n" for line in hidden]
     if waiting.get("degraded"):
         tail.append(_placeholder(f"rows degraded: {waiting['degraded']}"))
     action = _next_action_line(doc, items, unlooked)
@@ -1310,13 +1329,43 @@ SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
 )
 
 
-def document(doc: dict) -> str:
-    """THE ONE HUMAN ENTRY POINT. Iterates SECTIONS and joins; no branch on scope, mode or emptiness.
+def _queen_pointer_section(_doc: dict) -> tuple[str, list[str]]:
+    """The one line on a directory's page that points at everything else: the Queen's view, and its command.
 
-    Every branch that used to pick a renderer now lives inside one section builder, which is what
-    makes the header list assertable against `SECTIONS` itself: extract the `▸ `-prefixed titles from
-    any rendering, in any context, and they equal `tuple(t for t, _ in SECTIONS if t)`. A builder that
-    returns nothing still renders its header plus one placeholder, so an empty section cannot silently
-    disappear and take the invariant with it.
+    UNTITLED, so it supplies its own trailing blank (the `_section` rule for an empty title). It sits ABOVE
+    WAITING ON YOU on purpose: the page ends on the recommended next action (link-unification L3), and a
+    pointer after it would be the last thing the eye lands on instead.
     """
-    return "".join(line for title, build in SECTIONS for line in _section(title, *build(doc)))
+    pointer = f"  {DIM}Every repository and worktree:{NC} {CYAN}borg link --overview{NC}  {DIM}(the Queen view){NC}\n"
+    return "", [pointer, "\n"]
+
+
+# THE PAGE OF REPOSITORY SCOPE: strictly one directory (2026-10-13). IN FOCUS carries the scope label, the
+# identity, the live session and the directory's own checkpoints; WAITING ON YOU carries its own session row
+# and the next action. No board, no CHAINS, no NEXT stack rows, no QUEUED, no SHIPPED, no SIGNALS, no cube.
+REPOSITORY_SECTIONS: tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...] = (
+    ("IN FOCUS", _focus_section),  # FIRST -- the `Status:` invariant
+    ("", _queen_pointer_section),
+    ("WAITING ON YOU", _waiting_section),  # LAST -- L3
+)
+
+
+def _sections_for(doc: dict) -> tuple[tuple[str, Callable[[dict], tuple[str, list[str]]]], ...]:
+    """The section list for this document's scope: one directory's page, or the Queen's overview.
+
+    A document with no `scope` (one built before S1) is the Queen's, as it always rendered.
+    """
+    return REPOSITORY_SECTIONS if _is_repository_scope(doc) else SECTIONS
+
+
+def document(doc: dict) -> str:
+    """THE ONE HUMAN ENTRY POINT. Prints the section list its scope names and joins; no branch inside a section.
+
+    The choice of list is made once, in `_sections_for`. Every branch that used to pick a renderer lives
+    inside one section builder, which is what makes the header list assertable against the list itself:
+    extract the `▸ `-prefixed titles from a rendering and they equal `tuple(t for t, _ in SECTIONS if t)`
+    (the Queen's) or `REPOSITORY_SECTIONS`' (a directory's). A builder that returns nothing still renders
+    its header plus one placeholder, so an empty section cannot silently disappear and take the invariant
+    with it.
+    """
+    return "".join(line for title, build in _sections_for(doc) for line in _section(title, *build(doc)))
