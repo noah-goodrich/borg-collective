@@ -299,6 +299,72 @@ def test_a_stem_in_both_roots_is_refused_by_name_and_untouched(tmp_path, registr
     assert _snapshot(repo) == before
 
 
+def _destination_staged_then_deleted(repo):
+    _write(repo, ".stacks/a.json", '{"only": "in the index"}\n')
+    _git(repo, "add", ".stacks/a.json")
+    os.unlink(os.path.join(repo, ".stacks/a.json"))
+
+
+def _destination_tracked_then_deleted(repo):
+    _write(repo, ".stacks/a.json", '{"committed": true}\n')
+    _commit(repo, "track the destination")
+    os.unlink(os.path.join(repo, ".stacks/a.json"))
+
+
+def _destination_deletion_staged(repo):
+    _write(repo, ".stacks/a.json", '{"committed": true}\n')
+    _commit(repo, "track the destination")
+    _git(repo, "rm", "-q", ".stacks/a.json")
+
+
+@pytest.mark.parametrize(
+    "setup",
+    [_destination_staged_then_deleted, _destination_tracked_then_deleted, _destination_deletion_staged],
+    ids=["staged-only-then-deleted", "tracked-then-deleted", "deletion-staged"],
+)
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "real"])
+def test_a_destination_git_holds_but_the_tree_lacks_is_refused_by_name_and_untouched(
+    tmp_path, registry, capsys, setup, dry_run
+):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    setup(repo)
+    registry(repo=repo)
+    before = _snapshot(repo)
+
+    code, out, _ = _run(capsys, *(["--dry-run"] if dry_run else []))
+
+    assert code == 1
+    assert f"refused: {repo}: " in out
+    assert ".borg/chains/a.json and .stacks/a.json" in out
+    assert _snapshot(repo) == before
+
+
+def test_a_destination_that_enters_the_index_after_the_plan_is_never_replaced(tmp_path):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    _write(repo, ".stacks/a.json", "staged, then deleted\n")
+    _git(repo, "add", ".stacks/a.json")
+    os.unlink(os.path.join(repo, ".stacks/a.json"))
+    before = _snapshot(repo)
+
+    assert migrate_shell.execute(plan) == ".stacks/a.json is already in the git index; nothing was moved"
+    assert _snapshot(repo) == before
+
+
+def test_an_index_that_cannot_be_read_stops_the_move_instead_of_assuming_it_is_free(tmp_path, monkeypatch):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    _git_fails_for(monkeypatch, "ls-files")
+    assert migrate_shell.execute(plan) == "could not tell whether git holds .stacks/a.json; nothing was moved"
+    assert os.path.exists(os.path.join(repo, ".borg/chains/a.json"))
+
+
 # ── (8) .stacks/ would be ignored ───────────────────────────────────────────────────────────────
 
 

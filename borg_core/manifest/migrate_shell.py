@@ -1,6 +1,6 @@
 """The impure half of `borg stack migrate`: gather the facts `migrate.plan_repository` decides on, then execute.
 
-`gather` observes one repository (the filesystem and four read-only git probes) and hands the answer to the
+`gather` observes one repository (the filesystem and six read-only git probes) and hands the answer to the
 pure planner as data. `execute` carries out a `migrate` plan with `git mv`, or a move and a `git add`, and
 never commits. Every subprocess goes through `borg_core.proc`, the one place borg_core forks.
 
@@ -71,7 +71,15 @@ def gather(path: str) -> migrate.Facts:
     status = _git(
         path, "status", "--porcelain=v1", "-z", "--ignored", "--untracked-files=normal", "--", *migrate.SOURCE_DIRS
     )
-    if ls_files is None or ls_files[0] != 0 or status is None or status[0] != 0:
+    stacks_index = _git(path, "ls-files", "-z", "--", migrate.STACKS_DIR)
+    stacks_status = _git(path, "status", "--porcelain=v1", "-z", "--untracked-files=normal", "--", migrate.STACKS_DIR)
+    if (
+        ls_files is None
+        or status is None
+        or stacks_index is None
+        or stacks_status is None
+        or any(probe[0] != 0 for probe in (ls_files, status, stacks_index, stacks_status))
+    ):
         return migrate.Facts(path, error="git ls-files or git status failed")
     ignored = False
     # Not probed when `.stacks` is a symlink or a file: git refuses a path beyond a symlink, and the planner
@@ -81,7 +89,17 @@ def gather(path: str) -> migrate.Facts:
         if probe is None or probe[0] not in (0, 1):
             return migrate.Facts(path, error="git check-ignore failed")
         ignored = probe[0] == 0
-    return migrate.Facts(path, True, True, kinds, listings, ls_files[1], status[1], ignored)
+    return migrate.Facts(
+        path, True, True, kinds, listings, ls_files[1], status[1], ignored, "", stacks_index[1], stacks_status[1]
+    )
+
+
+def _index_holds(path: str, dest: str) -> str:
+    """Why `dest` is not free in the git index, or "". `lexists` cannot see an entry the tree lacks."""
+    held = _git(path, "ls-files", "-z", "--", dest)
+    if held is None or held[0] != 0:
+        return f"could not tell whether git holds {dest}"
+    return f"{dest} is already in the git index" if held[1].strip("\0") else ""
 
 
 def _move_one(path: str, move: migrate.Move) -> str:
@@ -89,6 +107,9 @@ def _move_one(path: str, move: migrate.Move) -> str:
     source, dest = os.path.join(path, move.source), os.path.join(path, move.dest)
     if os.path.lexists(dest):
         return f"{move.dest} already exists"
+    held = _index_holds(path, move.dest)
+    if held:
+        return held
     if move.tracked:
         captured = _git(path, "mv", "--", move.source, move.dest)
         return "" if captured is not None and captured[0] == 0 else f"git mv {move.source} failed"

@@ -134,6 +134,27 @@ def test_the_legacy_root_clashing_with_chains_is_refused_too():
     assert ".borg/chains/a.json and .borg/programs/a.json" in plan.reason
 
 
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"stacks_index": _nul(".stacks/a.json")},
+        {"stacks_status": _nul("D  .stacks/a.json")},
+        {"stacks_status": _nul("AD .stacks/a.json"), "stacks_index": _nul(".stacks/a.json")},
+    ],
+    ids=["in-the-index", "deletion-staged", "staged-then-deleted"],
+)
+def test_a_destination_git_holds_is_a_clash_though_the_tree_lacks_it(overrides):
+    plan = migrate.plan_repository(_facts(chains=("a.json",), **overrides))
+    assert plan.outcome == migrate.OUTCOME_REFUSE
+    assert plan.reason.count(".stacks/a.json") == 1
+    assert ".borg/chains/a.json and .stacks/a.json" in plan.reason
+
+
+def test_a_destination_both_listed_and_indexed_is_named_once():
+    plan = migrate.plan_repository(_facts(chains=("a.json",), stacks=("a.json",), stacks_index=_nul(".stacks/a.json")))
+    assert plan.reason.count(".stacks/a.json") == 1
+
+
 def test_names_that_differ_only_in_case_clash_because_the_filesystem_may_agree():
     plan = migrate.plan_repository(_facts(chains=("A.json",), stacks=("a.json",)))
     assert plan.outcome == migrate.OUTCOME_REFUSE

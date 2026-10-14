@@ -53,14 +53,17 @@ _UNTRACKED = "??"
 
 
 @dataclass(frozen=True)
-# JUSTIFICATION: nine plain facts gathered by `migrate_shell.gather`; bundling them would only rename the fields.
+# JUSTIFICATION: eleven plain facts gathered by `migrate_shell.gather`; bundling them would only rename the fields.
 class Facts:  # pylint: disable=too-many-instance-attributes
     """What the shell observed about one repository directory. Raw where git is the source.
 
     `kinds` and `listings` are keyed by repository-relative directory (`SOURCE_DIRS` and `STACKS_DIR`):
     `kinds` is `KIND_*`, `listings` the `.json` file names in a plain directory. `ls_files` and `status`
     are git's own NUL-separated output, restricted to `SOURCE_DIRS`. `error` is set when a git probe
-    failed: a repository nobody could read is skipped, never treated as clean.
+    failed: a repository nobody could read is skipped, never treated as clean. `stacks_index` is
+    `git ls-files -z` and `stacks_status` is `git status --porcelain=v1 -z`, both restricted to `.stacks`:
+    they name destinations git still holds (in the index, or staged for deletion) that the working tree
+    does not show, which a directory listing cannot see.
     """
 
     path: str
@@ -72,6 +75,8 @@ class Facts:  # pylint: disable=too-many-instance-attributes
     status: str = ""
     stacks_ignored: bool = False
     error: str = ""
+    stacks_index: str = ""
+    stacks_status: str = ""
 
 
 @dataclass(frozen=True)
@@ -139,11 +144,29 @@ def _manifests(facts: Facts) -> list[tuple[str, str]]:
     return [(d, n) for d in SOURCE_DIRS for n in sorted(facts.listings.get(d, ()))]
 
 
+def _held_in_stacks(facts: Facts) -> list[str]:
+    """Manifest names git holds under `.stacks/` that a directory listing may not show.
+
+    An index entry (tracked, or staged and then deleted from the tree) and a path staged for deletion both
+    mean the destination is not free: `git mv` over it would replace what git, not the disk, remembers.
+    """
+    prefix = f"{STACKS_DIR}/"
+    paths = parse_nul(facts.stacks_index) + [p for code, p in parse_status(facts.stacks_status) if "D" in code]
+    names = [p[len(prefix) :] for p in paths if p.startswith(prefix)]
+    return sorted({n for n in names if "/" not in n and n.endswith(".json")})
+
+
 def _clashes(facts: Facts) -> list[str]:
-    """One phrase per file name present in more than one of the three directories (case-insensitively)."""
+    """One phrase per file name present in more than one of the three directories (case-insensitively).
+
+    The `.stacks` side is the union of its listing and what git holds there, each name once.
+    """
     homes: dict[str, list[str]] = {}
     for directory in (*SOURCE_DIRS, STACKS_DIR):
-        for name in facts.listings.get(directory, ()):
+        names = set(facts.listings.get(directory, ()))
+        if directory == STACKS_DIR:
+            names |= set(_held_in_stacks(facts))
+        for name in sorted(names):
             homes.setdefault(name.casefold(), []).append(f"{directory}/{name}")
     return [" and ".join(paths) for paths in homes.values() if len(paths) > 1]
 
