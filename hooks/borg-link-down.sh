@@ -57,6 +57,7 @@ ROUTING_CARD="AGENT ROUTING — this session runs Opus (xhigh); every subagent i
   Workflow agent(): EVERY call sets an allowlisted agentType, or model sonnet/haiku AND effort
     low/medium/high, as string literals in an inline options object. Variables, spreads, unparseable
     scripts and unresolvable saved workflows are denied; there is no inherit escape hatch.
+  Read-only Workflow lenses (forensics, log reads, no-write reviews): borg-researcher or borg-scout, never borg-nanoprobe.
   Only exception: research-tools:* agents (any model/effort), after a research-tools skill/command ran.
   Kill switches: BORG_AGENT_MODEL_GUARD=0, BORG_WORKFLOW_MODEL_GUARD=0.
 Full guide: docs/agent-routing.md in the borg-collective repo."

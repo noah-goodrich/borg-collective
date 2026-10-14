@@ -44,7 +44,7 @@ Two independent tools that compose:
   the surface of record.
 - Hooks (18, incl. borg-nanoprobe-guard): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
-  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook,
+  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook, borg-nanoprobe-log, borg-prefer-tool-log,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
 - Skills (17): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
   pane, and 10 more (full list under Files below)
@@ -508,12 +508,12 @@ docs/
   not carry a `.borg/`; a stem declared in both is refused by name, never picked, an in-place edit
   writes back to the file it found, two roots that are one directory (a symlink) are read once, and an
   unreadable root or parent is a named warning, never silence (`scaffold`, the one creator, refuses by
-  name rather than create beside a root it cannot read). `borg_core` and `borg chain` both read both roots
+  name rather than create beside a root it cannot read). `borg_core` and `borg stack` both read both roots
   (`merge-tree/coordinator.py` reads through `borg_core.manifest`; `merge-tree/programs.py` is gone), and
-  `borg chain sync` rewrites a `.stacks/` manifest in place.
+  `borg stack sync` rewrites a `.stacks/` manifest in place.
 - **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
   `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
-  `▸ REPOSITORIES`, `▸ CHAINS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS`, `▸ WAITING ON YOU` — with
+  `▸ REPOSITORIES`, `▸ STACKS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS`, `▸ WAITING ON YOU` — with
   **no branch on mode or emptiness**, and since 2026-10-13 scope picks WHICH tuple (see the reversal
   below). (`▸ NEXT` is AC4's, inserted between SHIPPED and SIGNALS so the page
   reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
@@ -526,7 +526,7 @@ docs/
   a section prints, never which sections exist; the contexts differ in breadth only" — WAS REVERSED
   2026-10-13 for repository scope, on purpose (Noah: the overview belongs to the Queen).** Standing in a
   worktree of `borg-collective`, `borg link` printed the whole `REPOSITORIES` board, the repository's pull
-  requests and its CHAINS, and led with a sibling worktree's checkpoint: a page about "here" that was about
+  requests and its STACKS, and led with a sibling worktree's checkpoint: a page about "here" that was about
   everywhere. Three root causes, each now closed: the checkpoint and summary reads were a repo-group UNION
   (`core.repo_sources`; `focus` now reads `worktree.own_source`, the directory alone), the board was
   scope-invariant, and the repository-level sections were keyed on the GitHub slug, which every worktree of a
@@ -537,7 +537,7 @@ docs/
   `REPOSITORY_SECTIONS`, STRICTLY that directory: a scope label (`<name> — worktree of <repo>` or `— main
   checkout`), identity (path, branch, worktree-of), live session and status, its OWN checkpoints, its own
   waiting row (the session row only, no repository PR rows), the next-action line, and one line pointing at
-  `borg link --overview`. No board, no other worktree or repository, no CHAINS, NEXT, QUEUED, SHIPPED, plan or
+  `borg link --overview`. No board, no other worktree or repository, no STACKS, NEXT, QUEUED, SHIPPED, plan or
   SIGNALS. The vocabulary is fixed: a *repository* is the git repo, a *worktree* is a linked checkout
   registered on its own and carrying a project, and the orchestrator session is called the Queen in
   user-facing text while every internal name (`scope.kind` `orchestrator`, `BORG_ORCHESTRATOR_ROOT`, the
