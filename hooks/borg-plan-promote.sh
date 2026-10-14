@@ -47,7 +47,16 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || true)
 
 # ── Gate 1: repository-mode only ─────────────────────────────────────────────
 
-source "${HOME}/.claude/lib/borg-hooks.sh" 2>/dev/null || exit 0
+# >>> borg-hooks.sh: script-relative first, installed copy second (build-plugin.sh inlines the lib over this block)
+_borg_lib_dir="${BASH_SOURCE[0]%/*}"
+[[ "$_borg_lib_dir" == "${BASH_SOURCE[0]}" ]] && _borg_lib_dir=.
+_borg_lib="$_borg_lib_dir/../lib/borg-hooks.sh"
+# The lib sources its reaper.sh sibling unguarded, and on bash 3.2 that failure kills the hook: usable = both files.
+[[ -f "$_borg_lib" && -f "${_borg_lib%/*}/reaper.sh" ]] || _borg_lib="${HOME}/.claude/lib/borg-hooks.sh"
+# shellcheck source=../lib/borg-hooks.sh
+[[ -f "$_borg_lib" && -f "${_borg_lib%/*}/reaper.sh" ]] && source "$_borg_lib" 2>/dev/null || true
+# <<< borg-hooks.sh
+declare -F _borg_session_mode >/dev/null || exit 0
 
 MODE=$(_borg_session_mode "$CWD")
 [[ "$MODE" == "orchestrator" ]] && exit 0
