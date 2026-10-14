@@ -705,6 +705,12 @@ def _grid_placeholder(grid_block: dict) -> str:
             f"{_plural(refused, 'manifest', 'manifests')} could not be read — "
             "see the reasons below, then fix and re-run."
         )
+    unmigrated = grid_block.get("unmigrated") or 0
+    if unmigrated:
+        return (
+            f"manifests in {_plural(unmigrated, 'repository', 'repositories')} are still under .borg/chains and "
+            "are no longer read — see the reasons below, then run borg stack migrate."
+        )
     if grid_block.get("scope_kind") != "repository":
         return "no stack manifests in the registry yet. Run /borg-plan in any repository."
     if not grid_block.get("slug"):

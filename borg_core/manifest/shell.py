@@ -46,7 +46,7 @@ import tempfile
 from typing import Any
 
 from borg_core import paths as borg_paths, proc
-from borg_core.manifest import core, placement
+from borg_core.manifest import core, migrate, placement
 
 # `git remote get-url` on a healthy checkout is instant, but a repository whose object store sits on
 # a stale network mount can block indefinitely, and this runs once per registered repository on a
@@ -56,65 +56,112 @@ from borg_core.manifest import core, placement
 GIT_TIMEOUT_SECONDS = 5
 
 
-# The directory under `.borg/` that holds borg's own stacks. The VALUE stays "chains" because it is an on-disk
-# path that step (c) of the chain -> stack rename retires; only the identifier says stack.
-OWN_STACKS_DIRNAME = "chains"
-LEGACY_DIRNAME = "programs"
-
-# The tool-neutral root: `<repository>/.stacks/`, for a repository shared with people who do not run
-# borg and so should not have to carry a `.borg/` directory. It is the root `scaffold` creates into
-# (every placement rule resolves to it unless `--root borg` is given) and the target of `borg stack
-# migrate`; it is READ alongside borg's own root (see `manifest_roots`), and an in-place edit writes back
-# to whichever file it found.
+# The tool-neutral root: `<repository>/.stacks/`, the ONE manifest root since step (c) of the chain -> stack
+# rename. It is where `scaffold` creates, where `borg stack migrate` moves manifests to, and the only directory
+# manifests are READ from. An in-place edit writes back to the file it found there.
 STACKS_DIRNAME = ".stacks"
+
+# The two retired roots, listed relative to a repository and NEVER read as manifests: `.borg/chains` (the
+# pre-rename name) and `.borg/programs` (the one before). They are only LISTED, to warn that a repository
+# still holds manifests there (`unmigrated_warnings`). The one definition is `migrate.SOURCE_DIRS`, the
+# directories `borg stack migrate` moves out of, so the warning and the cure cannot name different places.
+UNMIGRATED_DIRS = migrate.SOURCE_DIRS
+
+# The text every unmigrated warning carries, and the one the grid counts them by (`unmigrated_repositories`).
+_UNMIGRATED = " unmigrated manifest(s) under "
 
 
 def manifest_dir(repository_dir: str) -> str:
-    """borg's own (retiring) manifest root: `<repository>/.borg/chains`, or the legacy name.
+    """The manifest root: `<repository>/.stacks`. The ONLY directory manifests are read from or created in.
 
-    scaffold creates here only on `--root borg`; by default it creates in `.stacks/`. This is one of the two
-    roots manifests are READ from -- the other is `<repository>/.stacks/`, see `manifest_roots`. Nothing outside
-    those two directories is ever opened -- not `<repository>/.borg/anything.json`, not a manifest-shaped
-    file in the repository root. What CHANGED with the hardened spec's B6 is not this rule but the sweep:
-    every registered repository's copy of these directories is globbed, not just the one in scope.
+    Nothing outside it is ever opened -- not `<repository>/.borg/anything.json`, not a manifest-shaped file in
+    the repository root. The retired `.borg/chains` and `.borg/programs` are listed for a warning and never
+    parsed (`unmigrated_warnings`); a manifest that lives only there renders nowhere.
 
-    THE RENAME IS THE EXPAND PHASE, AND BOTH NAMES RESOLVE ON PURPOSE. AC7's verify greps the
-    COMMANDS section of `borg help` for the retired word and gets two hits that are NOT the retired
-    verb -- `.borg/chains/*.json` in the manifest verb's help line, and `--programs-dir`. Renaming the verb
-    (decision 2) could not reach either, because they are a filesystem path and a flag. The `chains` directory
-    is the name step (c) of the chain -> stack rename retires; until then it is read beside `.stacks/`.
-
-    PRECEDENCE IS "WHICHEVER EXISTS", LEGACY LAST, and never both: a repository mid-migration must
-    not have its manifests split across two directories, which would make `discover` emit each
-    program twice and `resolve` report `ambiguous` for a repository holding one. A repository with
-    NEITHER gets the new name, so nothing created from today lands under the retired word.
-
-    Per the Architecture Rules this is expand -> migrate -> contract: this commit expands (both read),
-    migrates this repository's own manifest, and leaves the contraction -- deleting the legacy arm --
-    to a follow-up, because no artifact may be read by rules it was not written to satisfy.
+    This is the CONTRACT step of the chain -> stack rename (expand -> migrate -> contract): `.stacks/` was
+    added beside the old root, every manifest moved with `borg stack migrate`, and only then was the old read
+    deleted, so no artifact was ever read by rules it was not written to satisfy.
     """
-    borg = os.path.join(repository_dir, ".borg")
-    new_dir = os.path.join(borg, OWN_STACKS_DIRNAME)
-    if os.path.isdir(new_dir):
-        return new_dir
-    legacy = os.path.join(borg, LEGACY_DIRNAME)
-    if os.path.isdir(legacy):
-        return legacy
-    return new_dir
+    return os.path.join(repository_dir, STACKS_DIRNAME)
+
+
+def unmigrated_warnings(repository_dir: str, seen: set[str] | None = None) -> list[str]:
+    """One named warning per retired root under `repository_dir` that still holds `*.json`, else `[]`.
+
+    A MANIFEST THAT IS NO LONGER READ MUST NEVER LOOK LIKE A MANIFEST THAT IS NOT THERE: an empty STACKS
+    section would be a confident falsehood about a repository that declares work. So this names the
+    repository and the cure (`borg stack migrate`), through the same warning channel an unreadable root uses.
+
+    DETECTION IS A DIRECTORY LISTING AND NOTHING ELSE: no fork, no parse, no open of any manifest, so the
+    `--local` fork-count contract is untouched. `seen` carries the realpaths an earlier repository already
+    listed, so a symlinked or trailing-slash registry entry warns once, as `survey_manifests` does for roots.
+    A retired directory that does not exist, or is not a directory, is silent: most repositories have neither.
+    """
+    seen = seen if seen is not None else set()
+    warnings: list[str] = []
+    for relative in UNMIGRATED_DIRS:
+        directory = os.path.join(repository_dir, relative)
+        real = os.path.realpath(directory)
+        if real in seen:
+            continue
+        seen.add(real)
+        try:
+            count = sum(1 for name in os.listdir(directory) if name.endswith(".json"))
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        except OSError as exc:
+            warnings.append(f"{repository_dir}: cannot check {relative} for unmigrated manifests ({exc})")
+            continue
+        if count:
+            warnings.append(
+                f"{repository_dir}:{_UNMIGRATED}{relative}, no longer read -- run `borg stack migrate` to move them to "
+                f"{STACKS_DIRNAME}/"
+            )
+    return warnings
+
+
+def unmigrated_repositories(warnings: list[str], under: str = "") -> list[str]:
+    """The repository directories `warnings` report as holding unmigrated manifests, optionally one repository's.
+
+    Parses what `unmigrated_warnings` writes, for the reason `refused_manifest_paths` parses what `_invalid_manifest`
+    writes: warnings are registry-WIDE, and the grid needs a count without widening `discover`'s return. A
+    repository with BOTH retired roots populated is listed twice, one per warning; callers count repositories
+    with `len(set(...))`.
+    """
+    prefix = os.path.join(under, "") if under else ""
+    found = []
+    for warning in warnings:
+        head, sep, _ = warning.partition(f":{_UNMIGRATED}")
+        if sep and (not prefix or os.path.join(head, "").startswith(prefix)):
+            found.append(head)
+    return found
+
+
+def locate_unmigrated(repository_dir: str, name: str) -> str:
+    """The path of the manifest `name` (a stem or a filename) still under a retired root, or "". Located, NEVER read.
+
+    Only a CREATOR needs this: `scaffold` would otherwise write a fresh, empty `.stacks/<name>.json` beside the
+    real manifest the author still has under `.borg/chains`, a duplicate `borg stack migrate` then refuses.
+    """
+    stem = os.path.basename(name)
+    filename = stem if stem.endswith(".json") else f"{stem}.json"
+    for relative in UNMIGRATED_DIRS:
+        path = os.path.join(repository_dir, relative, filename)
+        if os.path.exists(path):
+            return path
+    return ""
 
 
 def manifest_roots(repository_dir: str) -> tuple[list[str], list[str]]:
-    """`(roots, warnings)`: the manifest roots to read under a repository, in a FIXED order.
+    """`(roots, warnings)`: the manifest roots to read under a repository -- `.stacks/` when it exists.
 
-    `.stacks/` first (when it exists), then borg's own `manifest_dir`. borg's root is ALWAYS returned,
-    even when nothing is there: listing it is what tells a genuinely absent root (silent, the normal
-    case -- most repositories have neither) from an unreadable one, and an untraversable parent
-    (`.borg`, or the repository itself, with no permissions) must reach `discover`'s named
-    "unreadable" warning rather than vanish from the sweep. `.stacks` is probed with one `os.stat`:
-    absent is silent, any other failure is a named "unreadable" warning, and a `.stacks` that exists
-    but is not a directory gets ONE warning and is skipped; it is never opened.
+    `.stacks` is probed with one `os.stat`: absent is silent (the normal case -- most repositories have no
+    stack), any other failure is a named "unreadable" warning, and a `.stacks` that exists but is not a
+    directory gets ONE warning and is skipped; it is never opened. An untraversable parent (the repository
+    itself with no permissions) fails that `stat` with something other than "absent", so it reaches
+    `discover`'s named "unreadable" warning rather than vanishing from the sweep.
     """
-    stacks = os.path.join(repository_dir, STACKS_DIRNAME)
+    stacks = manifest_dir(repository_dir)
     roots: list[str] = []
     warnings: list[str] = []
     try:
@@ -126,39 +173,22 @@ def manifest_roots(repository_dir: str) -> tuple[list[str], list[str]]:
         pass
     except OSError as exc:
         warnings.append(f"{stacks}: unreadable ({exc})")
-    roots.append(manifest_dir(repository_dir))
     return roots, warnings
 
 
 def list_manifests(repository_dir: str, swept: set[str] | None = None) -> tuple[list[tuple[str, str]], list[str]]:
-    """`([(filename, path), ...], warnings)` across every root of one repository. See `survey_manifests`."""
-    found, _, warnings = survey_manifests(repository_dir, swept)
-    return found, warnings
+    """`([(filename, path), ...], warnings)` for one repository: the `.json` files in its `.stacks/`.
 
-
-def survey_manifests(
-    repository_dir: str, swept: set[str] | None = None
-) -> tuple[list[tuple[str, str]], list[str], list[str]]:
-    """`([(filename, path), ...], refused_filenames, warnings)` across every root of one repository.
-
-    `refused_filenames` are the names dropped as duplicates. A lookup by stem needs them: a refused
-    stem is still a CANDIDATE, so a caller that chooses among the survivors alone would pick another
-    manifest exactly when the one it wanted was refused.
-
-    THE ONE PLACE THE TWO ROOTS ARE RECONCILED, shared by `discover` and every lookup by stem. The
-    same filename in both roots is REFUSED BY NAME: neither copy is returned and each file gets one
-    warning, naming both paths. Picking one silently would bind a reader to a manifest its author may not be looking
-    at. Roots are collapsed on `os.path.realpath` in EVERY call: `swept` carries the realpaths an earlier
-    repository already listed (a symlinked or trailing-slash registry entry), and a caller with no such
-    set gets a local one. So `.stacks` symlinked to `.borg/chains` (or the reverse) is read ONCE by
-    discover and by every lookup alike, and is never reported as declared in both.
-
+    `swept` carries the realpaths an earlier repository already listed (a symlinked or trailing-slash registry
+    entry), and a caller with no such set gets a local one, so one directory is read ONCE by `discover` and by
+    every lookup alike. The warnings are everything a reader must not lose: a repository directory that does not
+    exist (a typo'd or stale registry path must not be indistinguishable from "no manifests"), a `.stacks` that
+    cannot be listed, and the retired roots that still hold manifests (`unmigrated_warnings`).
     """
     if not os.path.isdir(repository_dir):
-        # A typo'd or stale registry path must not be indistinguishable from "no manifests".
-        return [], [], [f"{repository_dir}: repository directory does not exist"]
+        return [], [f"{repository_dir}: repository directory does not exist"]
     roots, warnings = manifest_roots(repository_dir)
-    listed: list[tuple[str, list[str]]] = []
+    found: list[tuple[str, str]] = []
     seen = swept if swept is not None else set()
     for directory in roots:
         real = os.path.realpath(directory)
@@ -167,10 +197,8 @@ def survey_manifests(
         seen.add(real)
         names, warning = _list_root(directory)
         warnings.extend([warning] if warning else [])
-        if names is not None:
-            listed.append((directory, names))
-    found, refused, refusals = _reconcile(listed)
-    return found, refused, warnings + refusals
+        found.extend((name, os.path.join(directory, name)) for name in names or [])
+    return found, warnings + unmigrated_warnings(repository_dir, seen)
 
 
 def _list_root(directory: str) -> tuple[list[str] | None, str]:
@@ -189,69 +217,35 @@ def _list_root(directory: str) -> tuple[list[str] | None, str]:
         return None, f"{directory}: unreadable ({exc})"
 
 
-def _reconcile(listed: list[tuple[str, list[str]]]) -> tuple[list[tuple[str, str]], list[str], list[str]]:
-    """Flatten per-root listings, refusing any filename that appears in more than one root.
+def locate_manifest(repository_dir: str, name: str) -> str:
+    """The path of the existing manifest `name` (a stem or a filename) under `.stacks/`, or "" when it is absent.
 
-    One warning PER refused file, led by its path and built by `_invalid_manifest`, so
-    `refused_manifest_paths` counts both copies under their repository and STACKS says a manifest
-    could not be read rather than that none exists.
-    """
-    owners: dict[str, list[str]] = {}
-    for directory, names in listed:
-        for name in names:
-            owners.setdefault(name, []).append(os.path.join(directory, name))
-    found: list[tuple[str, str]] = []
-    refused: list[str] = []
-    warnings: list[str] = []
-    for directory, names in listed:
-        for name in names:
-            paths = owners[name]
-            if len(paths) == 1:
-                found.append((name, paths[0]))
-                continue
-            here = os.path.join(directory, name)
-            other = next(p for p in paths if p != here)
-            if name not in refused:
-                refused.append(name)
-            reasons = [f"declared in both {here} and {other}", "neither loaded; separate files, reconcile them"]
-            warnings.append(_invalid_manifest(here, reasons))
-    return found, refused, warnings
-
-
-def locate_manifest(repository_dir: str, name: str) -> tuple[str, str]:
-    """`(path, problem)` for the existing manifest `name` (a stem or a filename), by the two-root rule.
-
-    `path` is "" with `problem` "" when no root holds it -- the caller decides whether that is an
-    error (`add-row`) or the expected state (`scaffold`). `problem` is set, and `path` "", when the
-    stem is declared in both roots: the refusal `survey_manifests` words, never a silent pick.
+    "" is not an error here: the caller decides whether it is one (`add-row`) or the expected state (`scaffold`).
+    A manifest that exists only under a retired root is absent on purpose -- it is not read, and
+    `unmigrated_warnings` is what tells the author why.
     """
     stem = os.path.basename(name)
     filename = stem if stem.endswith(".json") else f"{stem}.json"
-    found, refused, warnings = survey_manifests(repository_dir)
-    for listed_name, path in found:
+    for listed_name, path in list_manifests(repository_dir)[0]:
         if listed_name == filename:
-            return path, ""
-    if filename in refused:
-        marker = f"{os.sep}{filename}{_INVALID_MANIFEST}declared in both"
-        return "", next(w for w in warnings if marker in w)
+            return path
     # The filesystem, not a string compare, decides name equality: on a case-insensitive volume
     # `Alpha.json` IS `alpha.json`, and a creator told "absent" would replace the existing file.
     for root in manifest_roots(repository_dir)[0]:
         if os.path.exists(os.path.join(root, filename)):
-            return os.path.join(root, filename), ""
-    return "", ""
+            return os.path.join(root, filename)
+    return ""
 
 
 def unreadable_roots(repository_dir: str) -> list[str]:
-    """The `<root>: unreadable (...)` warnings of one repository's manifest roots; `[]` when every root lists.
+    """The `<root>: unreadable (...)` warnings of one repository's manifest root; `[]` when `.stacks/` lists.
 
     Only a CREATOR needs this. `locate_manifest` answers "absent" for a stem it cannot see, which is
     right for an edit (the file it located is the file it edits) and wrong for `scaffold`: a root it
-    cannot list may hold the same stem, and creating it in the other root would make the both-roots
-    duplicate that discovery then refuses. An absent root is not listed here, and neither is a `.stacks`
-    that is not a directory -- only a root that exists and cannot be read.
+    cannot list may hold the same stem, and creating it anyway would clobber it. An absent root is not listed
+    here, and neither is a `.stacks` that is not a directory -- only a root that exists and cannot be read.
     """
-    return [w for w in survey_manifests(repository_dir)[2] if _UNREADABLE_ROOT in w]
+    return [w for w in list_manifests(repository_dir)[1] if _UNREADABLE_ROOT in w]
 
 
 def _load_manifest(path: str, name: str) -> tuple[dict | None, str]:
@@ -356,7 +350,7 @@ def _manifest_identity(manifest: dict) -> str:
     """A manifest's content identity: its declared body with every derived `_` key removed.
 
     Two registry entries can point at two DIFFERENT directories holding the SAME manifest -- a git
-    worktree is the live case, since `.borg/chains/` is git-tracked, so `drone feature` produces a
+    worktree is the live case, since `.stacks/` is git-tracked, so `drone feature` produces a
     second checkout of every manifest and `borg add` registers it beside its parent. Their `_path`
     values differ, so no path-level dedup can see it, and the grid would render every node, every
     gate and every declared ref twice under one header.
@@ -373,14 +367,14 @@ def _manifest_identity(manifest: dict) -> str:
 
 
 def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
-    """Load every manifest under the given repositories' two roots: `.stacks/` and `.borg/chains/`.
+    """Load every manifest under the given repositories' `.stacks/`, the one manifest root.
 
     Returns `(manifests, warnings)`. Takes explicit directories so the pure selection and ranking in
     core.py can be exercised against any set of paths; `discover_registered` is the entry point that
     derives them from the registry.
 
-    The per-repository listing, its two-root reconciliation (a stem declared in BOTH roots is refused
-    by name, neither copy loaded) and its silent-common-case rules live in `survey_manifests`.
+    The per-repository listing, its silent-common-case rules and the warning for a repository that still
+    holds manifests under a retired root live in `list_manifests`.
 
     DEDUPLICATED TWICE, because a duplicate arrives by two different routes and neither catches the
     other. Root directories are collapsed on `os.path.realpath`, which absorbs a symlinked registry entry
@@ -390,9 +384,9 @@ def discover(repository_dirs: list[str]) -> tuple[list[dict], list[str]]:
     worktree: a real second checkout at a real second path holding a real second copy of the same
     file.
 
-    Manifests come back `.stacks/` first, then borg's root, each in `sorted()` filename order, so load order is
-    deterministic across filesystems, and only `.json` files are read -- a README.md living beside
-    the manifests produces zero warnings.
+    Manifests come back in `sorted()` filename order per repository, so load order is deterministic
+    across filesystems, and only `.json` files are read -- a README.md living beside the manifests
+    produces zero warnings.
     """
     manifests: list[dict] = []
     warnings: list[str] = []
@@ -426,7 +420,7 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     Blank and the literal string "null" are dropped, and that is not defensive padding: `jq` renders
     a JSON null as the four characters `null`, every zsh reader guards
     `[[ -z "$ppath" || "$ppath" == "null" ]]`, and -- worse -- passing "" to manifest_dir would yield
-    the RELATIVE path `.borg/chains`, making discovery read whatever directory the process happens to
+    the RELATIVE path `.stacks`, making discovery read whatever directory the process happens to
     be sitting in (`discover` now warns and reads nothing for it, but a blank must never get that far).
     One entry with no path is skipped silently, matching every other collector in borg_core.
 
@@ -473,7 +467,7 @@ def registered_paths(registry: Any) -> tuple[list[str], list[str]]:
 
 
 def discover_registered(registry: Any) -> tuple[list[dict], list[str]]:
-    """Every manifest under EVERY registered repository's two roots. B6's enforcing half.
+    """Every manifest under EVERY registered repository's `.stacks/`. B6's enforcing half.
 
     DISCOVERY IS GLOBAL; SELECTION IS SCOPED -- stated once in core.py's module docstring ("WHERE
     MANIFESTS COME FROM") and enforced here. The sweep is a local glob over ~14 directories,
@@ -590,8 +584,8 @@ def _path_is_ignored(repository_dir: str, probe: str) -> bool:
 
     `git check-ignore -q` exits 0 for an ignored path, 1 for a not-ignored one and 128 on error, so
     ONLY exit 0 counts: a non-git directory, a missing git, a timeout and a git error all answer False.
-    The probe names a FILE under the directory, not the directory, because a `.gitignore` of `.borg/`
-    and one of `.borg/chains/*` both match the file but only the first matches the bare directory name.
+    The probe names a FILE under the directory, not the directory, because a `.gitignore` of `.stacks/`
+    and one of `.stacks/*` both match the file but only the first matches the bare directory name.
     """
     captured = proc.run_capture(
         ["git", "-C", repository_dir, "check-ignore", "-q", "--", probe],
@@ -605,24 +599,11 @@ def scaffold_root(repository_dir: str, override: str = "") -> tuple[str, str]:
     hands them to the pure `placement.choose_scaffold_root`, which raises `placement.StacksIgnored`
     when the answer is `.stacks/` and git would ignore it.
 
-    The `.stacks/` probe runs unless `--root borg` was asked for, since every other answer is
-    `.stacks/`. The `.borg/` probe only feeds the reason text, so it runs only when neither root exists.
+    Two facts, one of them a git fork: whether `.stacks/` exists, and whether git would ignore a file in it.
     """
-    stacks = os.path.join(repository_dir, STACKS_DIRNAME)
-    borg = manifest_dir(repository_dir)
-    stacks_exists = os.path.isdir(stacks)
-    borg_exists = os.path.isdir(borg)
-    wants_stacks = override != placement.ROOT_BORG
-    borg_ignored = (
-        wants_stacks
-        and not stacks_exists
-        and not borg_exists
-        and _path_is_ignored(repository_dir, ".borg/chains/.scaffold-probe.json")
-    )
-    stacks_ignored = wants_stacks and _path_is_ignored(repository_dir, f"{STACKS_DIRNAME}/.scaffold-probe.json")
-    return placement.choose_scaffold_root(
-        override, stacks_exists, borg_exists, borg_ignored, (stacks, borg), stacks_ignored
-    )
+    stacks = manifest_dir(repository_dir)
+    stacks_ignored = _path_is_ignored(repository_dir, f"{STACKS_DIRNAME}/.scaffold-probe.json")
+    return placement.choose_scaffold_root(override, os.path.isdir(stacks), stacks, stacks_ignored)
 
 
 def write_manifest(repository_dir: str, manifest: dict, name: str, directory: str = "") -> str:
@@ -630,7 +611,7 @@ def write_manifest(repository_dir: str, manifest: dict, name: str, directory: st
 
     `directory` is for an in-place edit: `add-row` and `close` pass the directory the manifest was
     FOUND in, so a `.stacks/` manifest is written back to `.stacks/`. Creation passes the directory
-    `scaffold_root` picked (`.stacks/` or borg's own root); passing nothing lands under `manifest_dir`.
+    `scaffold_root` picked; passing nothing lands under `manifest_dir`.
     The function writes wherever it is told.
 
     THE ONE PLACE THIS MODULE'S "nothing here is ever fatal" RULE DOES NOT APPLY, and the asymmetry

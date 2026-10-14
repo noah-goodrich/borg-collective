@@ -105,15 +105,15 @@ fi
 mkdir -p "$WORK/none/$_EVAL_MANIFEST_DIR"
 printf '{"program":"stale","rows":[]}\n' > "$WORK/none/$_EVAL_MANIFEST_DIR/stale.json"
 nd="$(_eval_repo_without_manifest "$WORK/none")"
-if [ ! -e "$nd/.borg" ]; then
-    ok "manifest-less fixture has NO .borg at all"
+if [ ! -e "$nd/.borg" ] && [ ! -e "$nd/$_EVAL_MANIFEST_DIR" ]; then
+    ok "manifest-less fixture has NO .borg and no manifest root at all"
 else
-    bad "manifest-less fixture carries .borg — N2's premise is inverted"
+    bad "manifest-less fixture carries a manifest root or .borg — N2's premise is inverted"
 fi
-if [ -d "$d/.borg" ]; then
+if [ -d "$d/$_EVAL_MANIFEST_DIR" ]; then
     ok "and the with-manifest fixture does carry one (the pair discriminates)"
 else
-    bad "with-manifest fixture has no .borg"
+    bad "with-manifest fixture has no manifest root"
 fi
 
 # ── 3. fixtures carry a real commit ──────────────────────────────────────────────────────────────

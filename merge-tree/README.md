@@ -7,5 +7,5 @@ What remains here:
 - `coordinator.py` — the stack writer behind `borg stack list`, `plan` and `sync` (`borg.zsh` dispatches into it; `borg_core/reconcile/` cites it as the live reconcile writer).
 - Manifests are read and written through `borg_core/manifest` (`shell.discover`, `shell.write_manifest`); the second copy that used to live here, `programs.py`, was retired into it (`docs/plans/directives/2026-08-31-retire-merge-tree-programs-into-borg-core.md`).
 - `test_coordinator.py`, `test_s4_manifests.py` — its tests, gated by `make test-viz` and the CI `viz` job.
-- `SCHEMA.md` — the live part is the stack-manifest contract (`<project>/.borg/chains/*.json`); the `data.json` and `story.json` sections are historical.
+- `SCHEMA.md` — the live part is the stack-manifest contract (`<repository>/.stacks/*.json`; `.borg/chains` and `.borg/programs` are no longer read, and a repository still holding one gets a named warning pointing at `borg stack migrate`); the `data.json` and `story.json` sections are historical.
 - `PROTOCOL.md` — the action-dispatch contract, historical alongside the board it served.

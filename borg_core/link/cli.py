@@ -215,6 +215,11 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: lis
     # what this page says about itself. Empty in orchestrator scope, where the ladder's first arm
     # answers before this is read.
     block["refused"] = len(shell.refused_manifest_paths(warnings, directory))
+    # THE SAME STAMP, FOR THE SAME REASON, for a repository whose manifests sit under a retired root: they are
+    # not read, so they are not among `manifests` either, and an empty STACKS section would be the confident
+    # falsehood "no stack declares work here". Counted per repository (a repository holding both retired roots
+    # warns twice), additive inside the `grid` block, so no pre-existing key moves.
+    block["unmigrated"] = len(set(shell.unmigrated_repositories(warnings, directory)))
     return block
 
 
