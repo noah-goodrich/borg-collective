@@ -8,9 +8,11 @@ The registry is a throwaway file reached through `BORG_REGISTRY`, never the real
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shlex
+import stat
 import subprocess
 
 import pytest
@@ -66,6 +68,9 @@ def _snapshot(repo):
             names = ["index", "HEAD"]
         for name in names:
             full = os.path.join(root, name)
+            if os.path.islink(full):
+                files[os.path.relpath(full, repo)] = b"-> " + os.readlink(full).encode()
+                continue
             with open(full, "rb") as handle:
                 files[os.path.relpath(full, repo)] = handle.read()
         files.update({os.path.relpath(os.path.join(root, d), repo) + "/": b"" for d in directories if d != ".git"})
@@ -262,7 +267,8 @@ def test_a_repository_with_uncommitted_manifest_changes_is_skipped_by_name_and_u
 
     assert code == 1
     assert f"skipped: {repo}: uncommitted changes" in out
-    assert "were skipped or refused and left untouched" in err
+    assert "1 skipped or refused and left untouched" in out
+    assert "skipped or refused" not in err
     assert _snapshot(repo) == before
 
 
@@ -351,7 +357,7 @@ def test_a_destination_that_enters_the_index_after_the_plan_is_never_replaced(tm
     os.unlink(os.path.join(repo, ".stacks/a.json"))
     before = _snapshot(repo)
 
-    assert migrate_shell.execute(plan) == ".stacks/a.json is already in the git index; nothing was moved"
+    assert migrate_shell.execute(plan).failure == ".stacks/a.json is already in the git index; nothing was moved"
     assert _snapshot(repo) == before
 
 
@@ -361,7 +367,8 @@ def test_an_index_that_cannot_be_read_stops_the_move_instead_of_assuming_it_is_f
     _commit(repo)
     plan = migrate.plan_repository(migrate_shell.gather(repo))
     _git_fails_for(monkeypatch, "ls-files")
-    assert migrate_shell.execute(plan) == "could not tell whether git holds .stacks/a.json; nothing was moved"
+    failure = migrate_shell.execute(plan).failure
+    assert failure == "could not tell whether git holds .stacks/a.json; nothing was moved"
     assert os.path.exists(os.path.join(repo, ".borg/chains/a.json"))
 
 
@@ -399,7 +406,8 @@ def test_a_directory_that_is_not_a_git_repository_is_skipped_by_name(tmp_path, r
     code, out, err = _run(capsys)
     assert code == 1
     assert f"skipped: {plain}: not a git repository" in out
-    assert "skipped or refused" in err
+    assert "1 skipped or refused" in out
+    assert err == ""
     assert os.path.exists(os.path.join(plain, ".borg/chains/a.json"))
 
 
@@ -444,7 +452,8 @@ def test_one_skipped_repository_does_not_stop_the_others_and_the_exit_says_so(tm
         ".stacks/g.json",
     ]
     assert "migrated 1 manifest(s) in 1 repository(ies); 1 skipped or refused" in out
-    assert "1 repository(ies) were skipped or refused" in err
+    assert (out + err).count("skipped or refused") == 1
+    assert err == ""
 
 
 def test_a_worktree_is_migrated_on_its_own_and_the_parents_move_does_not_chase_it(tmp_path, registry, capsys):
@@ -497,11 +506,123 @@ def test_a_stacks_that_is_not_a_plain_directory_is_refused_untouched(tmp_path, r
     assert _snapshot(repo) == before
 
 
-def test_a_json_directory_is_not_a_manifest(tmp_path, registry, capsys):
+def test_a_json_directory_is_not_a_manifest_and_is_refused_not_silently_ignored(tmp_path, registry, capsys):
+    """It was skipped as nothing; since H1 any `*.json` entry that is not a regular file refuses by name."""
     repo = _repo(tmp_path, gitignore=CARVED)
     os.makedirs(os.path.join(repo, ".borg/chains/folder.json"))
     registry(repo=repo)
-    assert _run(capsys)[0] == 0
+    before = _snapshot(repo)
+    code, out, _ = _run(capsys)
+    assert code == 1
+    assert f"refused: {repo}: .borg/chains/folder.json is a directory, not a regular file; move it by hand" in out
+    assert _snapshot(repo) == before
+
+
+# ── H1: a symlinked manifest ────────────────────────────────────────────────────────────────────
+
+
+def _symlinked_manifest(repo, tmp_path):
+    """A relative symlink: `a.json -> ../../real.json`. Moved with its text unchanged it would dangle in `.stacks/`."""
+    _write(repo, "real.json")
+    os.symlink("../../real.json", os.path.join(repo, ".borg/chains/a.json"))
+
+
+def _dangling_manifest(repo, tmp_path):
+    os.makedirs(os.path.join(repo, ".borg/chains"), exist_ok=True)
+    os.symlink("nowhere.json", os.path.join(repo, ".borg/chains/a.json"))
+
+
+def _symlinked_legacy_manifest(repo, tmp_path):
+    os.makedirs(os.path.join(repo, ".borg/programs"), exist_ok=True)
+    os.symlink(str(tmp_path / "elsewhere.json"), os.path.join(repo, ".borg/programs/a.json"))
+    (tmp_path / "elsewhere.json").write_text("{}\n", encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "build,kind,where",
+    [
+        (_symlinked_manifest, "symlink", ".borg/chains/a.json"),
+        (_dangling_manifest, "dangling symlink", ".borg/chains/a.json"),
+        (_symlinked_legacy_manifest, "symlink", ".borg/programs/a.json"),
+    ],
+    ids=["live-relative", "dangling", "legacy-root"],
+)
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "real"])
+def test_a_symlinked_manifest_refuses_the_repository_by_name_and_leaves_it_untouched(
+    tmp_path, registry, capsys, build, kind, where, dry_run
+):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/ok.json")
+    _commit(repo)
+    build(repo, tmp_path)
+    registry(repo=repo)
+    before = _snapshot(repo)
+    link_text = os.readlink(os.path.join(repo, where))
+
+    code, out, _ = _run(capsys, *(["--dry-run"] if dry_run else []))
+
+    assert code == 1
+    assert f"refused: {repo}: {where} is a {kind}, not a regular file; move it by hand" in out
+    assert "nothing to migrate" not in out
+    assert "git mv" not in out
+    assert _snapshot(repo) == before
+    assert os.readlink(os.path.join(repo, where)) == link_text
+    assert not os.path.exists(os.path.join(repo, ".stacks"))
+
+
+def test_a_dangling_link_alone_is_not_reported_as_nothing_to_migrate(tmp_path, registry, capsys):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _dangling_manifest(repo, tmp_path)
+    registry(repo=repo)
+    code, out, _ = _run(capsys)
+    assert code == 1
+    assert "nothing to migrate" not in out
+    assert f"refused: {repo}: .borg/chains/a.json is a dangling symlink" in out
+
+
+# ── H2: a destination that exists but is not a regular file ─────────────────────────────────────
+
+
+def _dest_directory(repo, tmp_path):
+    os.makedirs(os.path.join(repo, ".stacks/a.json"))
+
+
+def _dest_symlink(repo, tmp_path):
+    os.makedirs(os.path.join(repo, ".stacks"))
+    (tmp_path / "target.json").write_text("{}\n", encoding="utf-8")
+    os.symlink(str(tmp_path / "target.json"), os.path.join(repo, ".stacks/a.json"))
+
+
+def _dest_dangling(repo, tmp_path):
+    os.makedirs(os.path.join(repo, ".stacks"))
+    os.symlink(str(tmp_path / "missing.json"), os.path.join(repo, ".stacks/a.json"))
+
+
+@pytest.mark.parametrize(
+    "build,kind",
+    [(_dest_directory, "directory"), (_dest_symlink, "symlink"), (_dest_dangling, "dangling symlink")],
+)
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "real"])
+def test_a_destination_that_is_not_a_regular_file_is_refused_by_the_dry_run_and_the_real_run_alike(
+    tmp_path, registry, capsys, build, kind, dry_run
+):
+    """H2: the dry run used to say `would migrate` and the real run then failed part-way."""
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _write(repo, ".borg/chains/b.json")
+    _commit(repo)
+    build(repo, tmp_path)
+    registry(repo=repo)
+    before = _snapshot(repo)
+
+    code, out, _ = _run(capsys, *(["--dry-run"] if dry_run else []))
+
+    assert code == 1
+    assert f"refused: {repo}: " in out
+    assert f".borg/chains/a.json and .stacks/a.json (a {kind})" in out
+    assert "would git mv" not in out
+    assert _snapshot(repo) == before
+    assert os.path.exists(os.path.join(repo, ".borg/chains/b.json"))
 
 
 # ── which repository: a name, a directory, or all ───────────────────────────────────────────────
@@ -632,9 +753,9 @@ def test_a_destination_that_appears_after_the_plan_is_never_overwritten(tmp_path
     plan = migrate.plan_repository(migrate_shell.gather(repo))
     _write(repo, ".stacks/b.json", "someone else's\n")
 
-    failure = migrate_shell.execute(plan)
+    execution = migrate_shell.execute(plan)
 
-    assert failure == ".stacks/b.json already exists; already moved: .borg/chains/a.json"
+    assert execution == migrate.Execution(".stacks/b.json already exists; already moved: .borg/chains/a.json", 1)
     assert open(os.path.join(repo, ".stacks/b.json"), encoding="utf-8").read() == "someone else's\n"
     assert os.path.exists(os.path.join(repo, ".borg/chains/b.json"))
 
@@ -644,7 +765,7 @@ def test_a_failed_git_mv_is_reported_with_nothing_moved(tmp_path):
     plan = migrate.RepositoryPlan(
         repo, migrate.OUTCOME_MIGRATE, "", (migrate.Move(".borg/chains/ghost.json", ".stacks/ghost.json", True),)
     )
-    assert migrate_shell.execute(plan) == "git mv .borg/chains/ghost.json failed; nothing was moved"
+    assert migrate_shell.execute(plan).failure == "git mv .borg/chains/ghost.json failed; nothing was moved"
 
 
 def test_a_failed_move_or_add_is_reported(tmp_path, monkeypatch):
@@ -652,22 +773,39 @@ def test_a_failed_move_or_add_is_reported(tmp_path, monkeypatch):
     missing = migrate.RepositoryPlan(
         repo, migrate.OUTCOME_MIGRATE, "", (migrate.Move(".borg/chains/ghost.json", ".stacks/ghost.json", False),)
     )
-    assert migrate_shell.execute(missing).startswith("could not move .borg/chains/ghost.json")
+    assert migrate_shell.execute(missing).failure.startswith("could not move .borg/chains/ghost.json")
 
     _write(repo, ".borg/chains/a.json")
-    real = proc.run_capture
-    monkeypatch.setattr(proc, "run_capture", lambda argv, timeout=None: None if "add" in argv else real(argv, timeout))
+    _git_add_fails(monkeypatch)
     plan = migrate.RepositoryPlan(
         repo, migrate.OUTCOME_MIGRATE, "", (migrate.Move(".borg/chains/a.json", ".stacks/a.json", False),)
     )
-    failure = migrate_shell.execute(plan)
-    assert failure.startswith("git add .stacks/a.json failed; moved but NOT staged")
-    assert "nothing was moved" not in failure
+    assert migrate_shell.execute(plan) == migrate.Execution(
+        "git add .stacks/a.json failed and .borg/chains/a.json was put back; nothing was moved", 0
+    )
 
 
-def test_a_failed_git_add_of_an_ignored_manifest_says_it_is_moved_and_unstaged(tmp_path):
+def _git_add_fails(monkeypatch):
+    real = proc.run_capture
+    monkeypatch.setattr(proc, "run_capture", lambda argv, timeout=None: None if "add" in argv else real(argv, timeout))
+
+
+def _rename_back_fails(monkeypatch):
+    """`os.rename` works, except for the put-back of a file `git add` refused (destination -> source)."""
+    real = os.rename
+
+    def fake(source, dest, *args, **kwargs):
+        if source.endswith(".stacks/0hidden.json") and dest.endswith(".borg/chains/0hidden.json"):
+            raise PermissionError(13, "Permission denied")
+        return real(source, dest, *args, **kwargs)
+
+    monkeypatch.setattr(os, "rename", fake)
+
+
+def test_a_failed_git_add_puts_the_one_ignored_manifest_back_and_reports_it_not_moved(tmp_path):
+    """H5: the file used to stay untracked in `.stacks/`; the one rollback there is, is the rename back."""
     repo = _repo(tmp_path, gitignore=CARVED + ".borg/chains/0hidden.json\n")
-    _write(repo, ".borg/chains/0hidden.json")
+    hidden = _write(repo, ".borg/chains/0hidden.json")
     _write(repo, ".borg/chains/a.json")
     _commit(repo)
     plan = migrate.plan_repository(migrate_shell.gather(repo))
@@ -675,39 +813,65 @@ def test_a_failed_git_add_of_an_ignored_manifest_says_it_is_moved_and_unstaged(t
     lock = os.path.join(repo, ".git", "index.lock")
     _write(repo, ".git/index.lock", "held\n")
     try:
-        failure = migrate_shell.execute(plan)
+        execution = migrate_shell.execute(plan)
     finally:
         os.remove(lock)
 
+    assert os.path.exists(hidden)
+    assert not os.path.exists(os.path.join(repo, ".stacks/0hidden.json"))
+    assert execution == migrate.Execution(
+        "git add .stacks/0hidden.json failed and .borg/chains/0hidden.json was put back; nothing was moved", 0
+    )
+    assert not os.path.exists(os.path.join(repo, ".stacks"))
+
+
+def test_when_the_put_back_fails_too_the_report_stays_accurate_about_an_unstaged_file(tmp_path, monkeypatch):
+    repo = _repo(tmp_path, gitignore=CARVED + ".borg/chains/0hidden.json\n")
+    _write(repo, ".borg/chains/0hidden.json")
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    _git_add_fails(monkeypatch)
+    _rename_back_fails(monkeypatch)
+
+    execution = migrate_shell.execute(plan)
+
     assert os.path.exists(os.path.join(repo, ".stacks/0hidden.json"))
-    assert not os.path.exists(os.path.join(repo, ".borg/chains/0hidden.json"))
-    assert "nothing was moved" not in failure
-    assert failure == (
+    assert execution == migrate.Execution(
         "git add .stacks/0hidden.json failed; moved but NOT staged, run git add .stacks/0hidden.json: "
-        ".borg/chains/0hidden.json -> .stacks/0hidden.json"
+        ".borg/chains/0hidden.json -> .stacks/0hidden.json",
+        1,
     )
 
 
-def test_a_failed_git_add_after_an_earlier_move_names_both(tmp_path, monkeypatch):
+def test_a_failed_git_add_after_an_earlier_move_keeps_the_earlier_move_and_puts_back_only_the_failed_one(
+    tmp_path, monkeypatch
+):
     repo = _repo(tmp_path, gitignore=CARVED + ".borg/chains/z-hidden.json\n")
     _write(repo, ".borg/chains/a.json")
     _write(repo, ".borg/chains/z-hidden.json")
     _commit(repo)
     plan = migrate.plan_repository(migrate_shell.gather(repo))
     assert [m.source for m in plan.moves] == [".borg/chains/a.json", ".borg/chains/z-hidden.json"]
-    real = proc.run_capture
-    monkeypatch.setattr(proc, "run_capture", lambda argv, timeout=None: None if "add" in argv else real(argv, timeout))
-    failure = migrate_shell.execute(plan)
+    _git_add_fails(monkeypatch)
 
-    assert failure.startswith("git add .stacks/z-hidden.json failed; already moved: .borg/chains/a.json; ")
-    assert "moved but NOT staged, run git add .stacks/z-hidden.json" in failure
+    execution = migrate_shell.execute(plan)
+
+    assert execution == migrate.Execution(
+        "git add .stacks/z-hidden.json failed and .borg/chains/z-hidden.json was put back; "
+        "already moved: .borg/chains/a.json",
+        1,
+    )
+    assert os.path.exists(os.path.join(repo, ".stacks/a.json"))
+    assert os.path.exists(os.path.join(repo, ".borg/chains/z-hidden.json"))
+    assert not os.path.exists(os.path.join(repo, ".stacks/z-hidden.json"))
 
 
 def test_a_stacks_directory_that_cannot_be_created_is_reported(tmp_path):
     repo = _repo(tmp_path)
     _write(repo, ".stacks", "a file\n")
     plan = migrate.RepositoryPlan(repo, migrate.OUTCOME_MIGRATE, "", ())
-    assert migrate_shell.execute(plan).startswith("could not create .stacks/")
+    assert migrate_shell.execute(plan).failure.startswith("could not create .stacks/")
 
 
 def test_a_part_way_failure_is_printed_and_exits_non_zero(tmp_path, registry, capsys, monkeypatch):
@@ -715,9 +879,455 @@ def test_a_part_way_failure_is_printed_and_exits_non_zero(tmp_path, registry, ca
     _write(repo, ".borg/chains/a.json")
     _commit(repo)
     registry(repo=repo)
-    monkeypatch.setattr(migrate_shell, "execute", lambda plan: "boom; nothing was moved")
+    monkeypatch.setattr(migrate_shell, "execute", lambda plan: migrate.Execution("boom; nothing was moved"))
     code, out, err = _run(capsys)
     assert code == 1
     assert f"failed: {repo}: boom; nothing was moved" in out
     assert "failed part-way" in err
     assert "migrated 0 manifest(s)" in out
+
+
+def test_the_summary_after_a_part_way_failure_counts_the_moves_that_landed(tmp_path, registry, capsys, monkeypatch):
+    """N1, end to end: a real failure after one move said `migrated 0 manifest(s)` although a.json had moved."""
+    repo = _repo(tmp_path, gitignore=CARVED + ".borg/chains/z-hidden.json\n")
+    _write(repo, ".borg/chains/a.json")
+    _write(repo, ".borg/chains/z-hidden.json")
+    _commit(repo)
+    registry(repo=repo)
+    real = migrate_shell._move_one  # pylint: disable=protected-access
+    calls = []
+
+    def second_move_fails(path, move):
+        calls.append(move.source)
+        return ("simulated failure", False) if len(calls) == 2 else real(path, move)
+
+    monkeypatch.setattr(migrate_shell, "_move_one", second_move_fails)
+    code, out, err = _run(capsys)
+
+    assert code == 1
+    assert os.path.exists(os.path.join(repo, ".stacks/a.json"))
+    assert "migrated 1 manifest(s) in 1 repository(ies)" in out
+    assert "migrated 0 manifest(s)" not in out
+    assert "failed part-way" in err
+
+
+def test_a_stacks_directory_this_run_created_is_removed_when_nothing_landed_in_it(tmp_path, monkeypatch):
+    """N3: a failed first move must leave the tree as it was."""
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    monkeypatch.setattr(migrate_shell, "_move_one", lambda path, move: ("simulated failure", False))
+    before = _snapshot(repo)
+
+    assert migrate_shell.execute(plan) == migrate.Execution("simulated failure; nothing was moved", 0)
+    assert _snapshot(repo) == before
+    assert not os.path.exists(os.path.join(repo, ".stacks"))
+
+
+def test_a_stacks_directory_that_already_existed_is_never_removed(tmp_path, monkeypatch):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    os.makedirs(os.path.join(repo, ".stacks"))
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    monkeypatch.setattr(migrate_shell, "_move_one", lambda path, move: ("simulated failure", False))
+    migrate_shell.execute(plan)
+    assert os.path.isdir(os.path.join(repo, ".stacks"))
+
+
+def test_a_stacks_directory_holding_an_earlier_move_is_kept_after_a_later_failure(tmp_path, monkeypatch):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _write(repo, ".borg/chains/b.json")
+    _commit(repo)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    real = migrate_shell._move_one  # pylint: disable=protected-access
+    monkeypatch.setattr(
+        migrate_shell,
+        "_move_one",
+        lambda path, move: ("simulated failure", False) if move.source.endswith("b.json") else real(path, move),
+    )
+    assert migrate_shell.execute(plan).moved == 1
+    assert os.path.exists(os.path.join(repo, ".stacks/a.json"))
+
+
+def test_an_emptied_source_directory_is_not_removed_after_a_successful_run(tmp_path, registry, capsys):
+    """N3's other half: removing `.borg/chains/` is step (c)'s, not this command's."""
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    registry(repo=repo)
+    assert _run(capsys)[0] == 0
+    assert os.path.isdir(os.path.join(repo, ".borg/chains"))
+    assert os.listdir(os.path.join(repo, ".borg/chains")) == []
+
+
+# ── H3: an atomic plain move, and a preflight that predicts a directory that is not writable ────
+
+needs_non_root = pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory permissions")
+
+
+@pytest.fixture(name="readonly")
+def _readonly():
+    """`lock(path)` makes a directory read-only; every mode is restored at teardown so pytest can clean up."""
+    changed = []
+
+    def lock(path):
+        changed.append((path, stat.S_IMODE(os.stat(path).st_mode)))
+        os.chmod(path, 0o555)
+
+    yield lock
+    for path, mode in reversed(changed):
+        os.chmod(path, mode)
+
+
+def _ignored_manifest_repo(tmp_path):
+    repo = _repo(tmp_path, gitignore=CARVED + ".borg/chains/hidden.json\n")
+    _write(repo, ".borg/chains/hidden.json")
+    return repo
+
+
+@needs_non_root
+def test_a_plain_move_out_of_a_read_only_directory_fails_without_leaving_a_copy_behind(tmp_path, readonly):
+    """H3: `shutil.move` copied, failed to unlink, and said `nothing was moved` with the file in both roots."""
+    repo = _ignored_manifest_repo(tmp_path)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    assert [m.tracked for m in plan.moves] == [False]
+    readonly(os.path.join(repo, ".borg/chains"))
+
+    execution = migrate_shell.execute(plan)
+
+    assert execution.moved == 0
+    assert execution.failure.startswith("could not move .borg/chains/hidden.json: ")
+    assert "nothing was moved" in execution.failure
+    assert os.path.exists(os.path.join(repo, ".borg/chains/hidden.json"))
+    assert not os.path.lexists(os.path.join(repo, ".stacks/hidden.json"))
+    assert not os.path.exists(os.path.join(repo, ".stacks"))
+
+
+def test_a_plain_move_across_filesystems_fails_without_copying(tmp_path, monkeypatch):
+    repo = _ignored_manifest_repo(tmp_path)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+
+    def exdev(source, dest, *args, **kwargs):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+
+    monkeypatch.setattr(os, "rename", exdev)
+    execution = migrate_shell.execute(plan)
+
+    assert execution.failure.startswith("could not move .borg/chains/hidden.json: ")
+    assert os.path.exists(os.path.join(repo, ".borg/chains/hidden.json"))
+    assert not os.path.lexists(os.path.join(repo, ".stacks/hidden.json"))
+
+
+def _lock_source(repo, readonly):
+    readonly(os.path.join(repo, ".borg/chains"))
+
+
+def _lock_stacks(repo, readonly):
+    """An existing, empty `.stacks/` (git does not see an empty directory), read-only."""
+    os.makedirs(os.path.join(repo, ".stacks"))
+    readonly(os.path.join(repo, ".stacks"))
+
+
+def _lock_repository(repo, readonly):
+    readonly(repo)
+
+
+@needs_non_root
+@pytest.mark.parametrize(
+    "lock,words",
+    [
+        (_lock_source, "not writable, so manifests cannot be moved: .borg/chains"),
+        (_lock_stacks, "not writable, so manifests cannot be moved: .stacks"),
+        (_lock_repository, "the repository directory (.stacks/ would be created there)"),
+    ],
+    ids=["source-directory", "stacks-directory", "parent-of-a-stacks-to-create"],
+)
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "real"])
+def test_a_directory_that_is_not_writable_skips_the_repository_by_name_and_predicts_it_in_a_dry_run(
+    tmp_path, registry, capsys, readonly, lock, words, dry_run
+):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    registry(repo=repo)
+    lock(repo, readonly)
+    before = _snapshot(repo)
+
+    code, out, _ = _run(capsys, *(["--dry-run"] if dry_run else []))
+
+    assert code == 1
+    assert f"skipped: {repo}: " in out
+    assert words in out
+    assert "would git mv" not in out
+    assert _snapshot(repo) == before
+
+
+@needs_non_root
+def test_a_read_only_tree_with_nothing_to_move_still_says_nothing_to_migrate(tmp_path, registry, capsys, readonly):
+    repo = _repo(tmp_path)
+    readonly(repo)
+    registry(repo=repo)
+    code, out, _ = _run(capsys)
+    assert code == 0
+    assert f"nothing to migrate: {repo}" in out
+
+
+# ── H4: an operation in progress, or a locked index ─────────────────────────────────────────────
+
+
+def _git_try(repo, *args):
+    """A git command that is EXPECTED to stop (a conflict): the exit status is not the point."""
+    subprocess.run(["git", "-C", repo, *args], check=False, capture_output=True, text=True)
+
+
+def _diverge(repo):
+    """Two branches that rewrite `conflict.txt` from one base, so a merge of either way conflicts.
+
+    The manifest is committed on its own first, so what `conflict.txt` does never touches `.borg/chains/`.
+    Leaves `repo` on its original branch, with `other` beside it and `a.json` committed and clean.
+    """
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo, "manifest")
+    _write(repo, "conflict.txt", "base\n")
+    _commit(repo, "base")
+    original = _git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip()
+    _git(repo, "checkout", "-q", "-b", "other")
+    _write(repo, "conflict.txt", "other\n")
+    _commit(repo, "other")
+    _git(repo, "checkout", "-q", original)
+    _write(repo, "conflict.txt", "main\n")
+    _commit(repo, "main")
+    return original
+
+
+def _begin_merge(repo):
+    _git_try(repo, "merge", "-q", "--no-edit", "other")
+
+
+def _begin_cherry_pick(repo):
+    _git_try(repo, "cherry-pick", "other")
+
+
+def _begin_revert(repo):
+    _git_try(repo, "revert", "--no-edit", "HEAD~1")
+
+
+def _begin_rebase(repo):
+    _git_try(repo, "rebase", "other")
+
+
+def _begin_rebase_apply(repo):
+    _git_try(repo, "rebase", "--apply", "other")
+
+
+OPERATION_CASES = [
+    (_begin_merge, "a merge is in progress (MERGE_HEAD exists)", "merge"),
+    (_begin_cherry_pick, "a cherry-pick is in progress (CHERRY_PICK_HEAD exists)", "cherry-pick"),
+    (_begin_revert, "a revert is in progress (REVERT_HEAD exists)", "revert"),
+    (_begin_rebase, "a rebase is in progress (rebase-merge exists)", "rebase"),
+    (_begin_rebase_apply, "a rebase is in progress (rebase-apply exists)", "rebase"),
+]
+OPERATION_IDS = ["merge", "cherry-pick", "revert", "rebase-merge", "rebase-apply"]
+
+
+@pytest.mark.parametrize("begin,words,abort", OPERATION_CASES, ids=OPERATION_IDS)
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "real"])
+def test_a_repository_in_the_middle_of_an_operation_is_skipped_by_name_and_untouched(
+    tmp_path, registry, capsys, begin, words, abort, dry_run
+):
+    """H4: the printed pathspec commit is refused by git mid-merge, so the move must wait for the operation."""
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _diverge(repo)
+    begin(repo)
+    registry(repo=repo)
+    before = _snapshot(repo)
+
+    code, out, _ = _run(capsys, *(["--dry-run"] if dry_run else []))
+
+    assert code == 1
+    assert f"skipped: {repo}: {words}" in out
+    assert "git mv" not in out
+    assert _snapshot(repo) == before
+    assert not os.path.exists(os.path.join(repo, ".stacks"))
+
+
+@pytest.mark.parametrize("begin,words,abort", OPERATION_CASES, ids=OPERATION_IDS)
+def test_once_the_operation_is_aborted_the_repository_migrates(tmp_path, registry, capsys, begin, words, abort):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _diverge(repo)
+    begin(repo)
+    registry(repo=repo)
+    assert _run(capsys)[0] == 1
+    _git(repo, abort, "--abort")
+
+    code, out, _ = _run(capsys)
+
+    assert code == 0
+    assert "git mv: .borg/chains/a.json -> .stacks/a.json" in out
+
+
+def test_a_linked_worktree_in_the_middle_of_a_merge_is_skipped_through_its_own_git_dir(tmp_path, registry, capsys):
+    """In a linked worktree `.git` is a FILE, so MERGE_HEAD only resolves through `git rev-parse --git-path`."""
+    repo = _repo(tmp_path, gitignore=CARVED)
+    original = _diverge(repo)
+    worktree = str(tmp_path / "wt")
+    _git(repo, "worktree", "add", "-q", "-b", "feature", worktree, original)
+    _begin_merge(worktree)
+    assert os.path.isfile(os.path.join(worktree, ".git"))
+    registry(repo=repo, wt=worktree)
+    before = _snapshot(worktree)
+
+    code, out, _ = _run(capsys, "--dry-run")
+
+    assert code == 1
+    assert f"skipped: {worktree}: a merge is in progress (MERGE_HEAD exists)" in out
+    assert "would git mv: .borg/chains/a.json -> .stacks/a.json" in out
+    assert _snapshot(worktree) == before
+
+
+def _hold_the_index(repo):
+    return _write(repo, ".git/index.lock", "held by another git process\n")
+
+
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "real"])
+def test_a_locked_index_skips_the_repository_by_name_and_a_dry_run_predicts_it(tmp_path, registry, capsys, dry_run):
+    """H4: the real run used to fail part-way on `git mv`/`git add`; the dry run said it would migrate."""
+    repo = _ignored_manifest_repo(tmp_path)
+    _write(repo, ".borg/chains/tracked.json")
+    _commit(repo)
+    registry(repo=repo)
+    lock = _hold_the_index(repo)
+    before = _snapshot(repo)
+    try:
+        code, out, _ = _run(capsys, *(["--dry-run"] if dry_run else []))
+        assert code == 1
+        assert f"skipped: {repo}: the git index is locked (index.lock exists)" in out
+        assert "git mv" not in out
+        assert _snapshot(repo) == before
+    finally:
+        os.remove(lock)
+    assert _run(capsys)[0] == 0
+
+
+def test_a_locked_index_in_a_linked_worktree_is_found_through_git_path(tmp_path, registry, capsys):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    worktree = str(tmp_path / "wt")
+    _git(repo, "worktree", "add", "-q", "-b", "feature", worktree)
+    lock = os.path.join(worktree, _git(worktree, "rev-parse", "--git-path", "index.lock").strip())
+    with open(lock, "w", encoding="utf-8") as handle:
+        handle.write("held\n")
+    try:
+        registry(wt=worktree)
+        code, out, _ = _run(capsys, "--dry-run")
+    finally:
+        os.remove(lock)
+    assert code == 1
+    assert f"skipped: {worktree}: the git index is locked" in out
+
+
+def test_an_unreadable_git_state_skips_the_repository_instead_of_reading_it_as_idle(tmp_path, monkeypatch):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    real = proc.run_capture
+    monkeypatch.setattr(
+        proc, "run_capture", lambda argv, timeout=None: None if "--git-path" in argv else real(argv, timeout)
+    )
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    assert plan.outcome == migrate.OUTCOME_SKIP
+    assert "could not read git state" in plan.reason
+
+
+def test_a_git_state_answer_of_the_wrong_length_is_not_trusted(tmp_path, monkeypatch):
+    repo = _repo(tmp_path, gitignore=CARVED)
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    real = proc.run_capture
+    monkeypatch.setattr(
+        proc,
+        "run_capture",
+        lambda argv, timeout=None: (0, ".git/MERGE_HEAD\n") if "--git-path" in argv else real(argv, timeout),
+    )
+    assert migrate.plan_repository(migrate_shell.gather(repo)).outcome == migrate.OUTCOME_SKIP
+
+
+# ── H6: the ignore refusal names the destinations and the rules, not a whole directory ──────────
+
+
+def _force_track(repo, *names):
+    for name in names:
+        _write(repo, f".borg/chains/{name}")
+        _git(repo, "add", "-f", f".borg/chains/{name}")
+    _git(repo, "commit", "-q", "-m", "manifests")
+
+
+@pytest.mark.parametrize("dry_run", [True, False], ids=["dry-run", "real"])
+def test_a_narrow_ignore_rule_refuses_naming_only_the_ignored_destination_and_its_rule(
+    tmp_path, registry, capsys, dry_run
+):
+    repo = _repo(tmp_path, gitignore=CARVED + "*.local.json\n")
+    _force_track(repo, "a.json", "b.local.json")
+    registry(repo=repo)
+    before = _snapshot(repo)
+
+    code, out, _ = _run(capsys, *(["--dry-run"] if dry_run else []))
+
+    assert code == 1
+    assert f"refused: {repo}: git ignores .stacks/b.local.json (.gitignore:4:*.local.json); " in out
+    assert ".stacks/a.json" not in out
+    assert "git ignores .stacks/," not in out
+    assert "always version-controlled" in out
+    assert _snapshot(repo) == before
+    assert not os.path.exists(os.path.join(repo, ".stacks"))
+
+
+def test_each_ignored_destination_is_named_with_the_rule_that_ignores_it(tmp_path, registry, capsys):
+    repo = _repo(tmp_path, gitignore=CARVED + "a.json\n")
+    with open(os.path.join(repo, ".git/info/exclude"), "a", encoding="utf-8") as handle:
+        handle.write("b.json\n")
+    _force_track(repo, "a.json", "b.json", "c.json")
+    registry(repo=repo)
+
+    code, out, _ = _run(capsys, "--dry-run")
+
+    assert code == 1
+    assert ".stacks/a.json (.gitignore:4:a.json)" in out
+    assert ".stacks/b.json (.git/info/exclude:" in out
+    assert ".stacks/c.json" not in out
+
+
+def test_a_destination_a_later_rule_un_ignores_is_not_named_and_does_not_refuse(tmp_path, registry, capsys):
+    """`check-ignore -v` also prints a path that matched `!rule`; that path is NOT ignored."""
+    repo = _repo(tmp_path, gitignore=CARVED + ".stacks/*.json\n!.stacks/a.json\n")
+    _force_track(repo, "a.json")
+    registry(repo=repo)
+    code, out, _ = _run(capsys)
+    assert code == 0
+    assert "git mv: .borg/chains/a.json -> .stacks/a.json" in out
+    assert _git(repo, "diff", "--cached", "--name-status", "-M").splitlines() == [
+        "R100\t.borg/chains/a.json\t.stacks/a.json"
+    ]
+
+
+def test_a_negated_rule_beside_an_ignored_destination_names_only_the_ignored_one(tmp_path, registry, capsys):
+    repo = _repo(tmp_path, gitignore=CARVED + ".stacks/*.json\n!.stacks/a.json\n")
+    _force_track(repo, "a.json", "b.json")
+    registry(repo=repo)
+    code, out, _ = _run(capsys, "--dry-run")
+    assert code == 1
+    assert ".stacks/b.json (.gitignore:4:.stacks/*.json)" in out
+    assert "git ignores .stacks/a.json" not in out
+
+
+def test_remove_if_empty_leaves_a_directory_that_has_something_in_it(tmp_path):
+    """`os.rmdir` refuses a non-empty directory, and the helper must swallow that, never escalate to a recursive delete."""
+    folder = tmp_path / "held"
+    folder.mkdir()
+    (folder / "keep.txt").write_text("x\n", encoding="utf-8")
+    migrate_shell._remove_if_empty(str(folder))  # pylint: disable=protected-access
+    assert (folder / "keep.txt").exists()
