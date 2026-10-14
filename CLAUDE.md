@@ -437,7 +437,9 @@ docs/
   a brief consumed once at spawn, a scope gate and a return contract, so there is no "before the
   artifact" moment to hook and two more load points would be seams nothing sits at. **The scope gate
   is NOT extensible**: an extension may add instructions, never widen what the agent may touch,
-  raise its deliverable ceiling, or relax bounded termination.
+  raise its deliverable ceiling, or relax bounded termination. **One sanctioned exception**: the
+  MACHINE-layer `- Prefer-tool:` may name the Skill target for step 3 (opening the PR) only, gated by
+  `hooks/borg-nanoprobe-guard.sh`, which also denies nanoprobe writes under `borg/extensions/`.
 - **THE SHIM LAYER: two tiers, one direction.** borg composes with an employer plugin layer through
   exactly two sockets, and which socket a shim belongs in is decided by whether it MUST happen or
   merely shapes judgment.
