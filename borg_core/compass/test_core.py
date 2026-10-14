@@ -239,6 +239,10 @@ def test_due_soon_with_the_waypoint_complete_is_on_track():
     assert _state(due="2026-03-12", done=3, total=3) == "on-track"
 
 
+def test_due_soon_with_a_criteria_less_waypoint_is_at_risk_because_zero_of_zero_is_not_complete():
+    assert _state(due="2026-03-12", done=0, total=0) == "at-risk"
+
+
 def test_due_soon_with_no_next_waypoint_is_at_risk_because_nothing_shows_progress():
     assert _state(due="2026-03-12", waypoint=False) == "at-risk"
 
@@ -304,6 +308,12 @@ def test_a_parking_line_with_missing_or_bad_fields_is_kept_with_nulls_and_is_not
     assert bare == {"text": "bare", "parked": None, "look": None, "seen": 0, "last": None, "due": False}
     assert (garbled["look"], garbled["seen"], garbled["due"]) == (None, 0, False)
     assert core.parse_parking(None, TODAY_DATE) == []
+
+
+@pytest.mark.parametrize("seen", ["²", "¹²", "٣²", "-3", "1" * 5000])
+def test_a_seen_value_int_would_reject_or_that_is_not_a_plain_count_is_zero_and_never_raises(seen):
+    (item,) = core.parse_parking(f"- [ ] odd | seen: {seen}\n", TODAY_DATE)
+    assert item["seen"] == 0
 
 
 # -- repositories ------------------------------------------------------------------------------------------------

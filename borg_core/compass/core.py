@@ -255,6 +255,20 @@ def parse_due_dates(readme_text: str | None, ids: list[str]) -> tuple[dict[str, 
     return dues, []
 
 
+def _count(value: str) -> int:
+    """A non-negative integer from ASCII digits, else 0.
+
+    `str.isdigit` is true for characters such as superscripts that `int` rejects, and `int` itself refuses a digit
+    run past the interpreter's conversion limit, so the guard is ASCII-only and the conversion is still caught.
+    """
+    if not (value.isascii() and value.isdigit()):
+        return 0
+    try:
+        return int(value)
+    except ValueError:
+        return 0
+
+
 def parse_parking(text: str | None, today: datetime.date) -> list[dict]:
     """The unchecked `- [ ] <text> | parked: D | look: D | seen: N | last: D` lines of the parking lot.
 
@@ -278,7 +292,7 @@ def parse_parking(text: str | None, today: datetime.date) -> list[dict]:
                 "text": segments[0],
                 "parked": fields.get("parked") if as_date(fields.get("parked")) else None,
                 "look": fields.get("look") if look else None,
-                "seen": int(fields["seen"]) if fields.get("seen", "").isdigit() else 0,
+                "seen": _count(fields.get("seen", "")),
                 "last": fields.get("last") if as_date(fields.get("last")) else None,
                 "due": look is not None and look <= today,
             }
@@ -297,7 +311,7 @@ def destination_state(destination: dict, today: datetime.date) -> str:
     if due < today:
         return "late"
     waypoint = destination["next_waypoint"]
-    complete = waypoint is not None and waypoint["total"] > 0 and waypoint["done"] == waypoint["total"]
+    complete = waypoint is not None and 0 < waypoint["total"] == waypoint["done"]
     if (due - today).days <= AT_RISK_DAYS and not complete:
         return "at-risk"
     return "on-track"
