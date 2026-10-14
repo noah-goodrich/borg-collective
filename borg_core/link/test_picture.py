@@ -999,3 +999,24 @@ def test_node_ids_are_global_across_manifests_and_appear_once_each():
     assert len(set(ids.values())) == len(ids) == 13
     assert ids["acme/platform#400"] == "n1"
     assert ids["a/r#1"] == "n8", "the second manifest continues the numbering"
+
+
+def test_plain_removes_sgr_and_osc8_and_nothing_else():
+    """`picture.plain` is the NO_COLOR strip; the file's own `plain` helper is the independent oracle.
+
+    The input is a REAL row (a glyph cell, a hyperlinked ref, a detail heading), not a hand-typed string, and
+    the control is that it carries both escape families before stripping. MUTATION: drop the `_OSC8_RE` pass
+    in `plain` and the hyperlink bytes survive; drop the `_SGR_RE` pass and the colours do.
+    """
+    node = {"ref": "owner/repo#7", "state": "merged"}
+    row = (
+        f"{picture.glyph_color(node)}{picture.state_glyph(node)}{picture.NC} "
+        f"{picture.link_ref(node['ref'], 'repo#7')}"
+    )
+    assert "\033[" in row and "\033]8;;" in row
+
+    stripped = picture.plain(row)
+    assert "\033" not in stripped
+    assert stripped == plain(row) == f"{picture.GLYPH_MERGED} repo#7"
+    assert picture.plain("no escapes here ✔ ├┬┐") == "no escapes here ✔ ├┬┐"
+    assert len(stripped) == picture.visible_len(row)
