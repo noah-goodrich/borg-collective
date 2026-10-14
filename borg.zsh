@@ -3657,6 +3657,7 @@ _borg_py() {
     BORG_ORCHESTRATOR_ROOT="${BORG_ORCHESTRATOR_ROOT:-$HOME/dev}" \
     BORG_CORTEX_WAKES="$BORG_CORTEX_WAKES" \
     BORG_NO_REAP="$BORG_NO_REAP" \
+    BORG_MAP_DIR="${BORG_MAP_DIR:-}" \
     PYTHONSAFEPATH=1 \
     PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
     python3 -m "$@"
@@ -3668,6 +3669,8 @@ _borg_py() {
 # is safe because nothing else in borg_core reads BORG_NO_REAP, and cli_contract.bats's "the python3
 # dispatch wrapper hands borg's config surface to the child" asserts only the PRESENCE of a fixed
 # list of names. (Anchored by test name: line numbers in that file drift on every insertion.)
+# BORG_MAP_DIR is passed the same bare way: borg_core/paths.py's map_dir() reads a blank value as unset and
+# defaults to $HOME/dev/map, so the compass reader needs no default applied here.
 
 # The `--help` shape: full notice on STDOUT at exit 0, because a human who asked for help got it.
 #

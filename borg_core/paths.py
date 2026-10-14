@@ -139,6 +139,17 @@ def repository_state_read_path(directory: str | os.PathLike[str], repo: object =
     return new if new.is_file() else Path(directory) / ".borg" / "state.json"
 
 
+def map_dir() -> Path:
+    """Resolve the owner's map directory: `$BORG_MAP_DIR`, else `$HOME/dev/map`.
+
+    An OVERRIDE, never a requirement, and a blank value is treated as unset, same as the shells' `:-`: borg.zsh's
+    `_borg_py` hands the variable down bare, so an unset one arrives as an exported empty string. The directory
+    may not exist; `borg_core/compass/shell.py` reports that as `found: false`.
+    """
+    override = os.environ.get("BORG_MAP_DIR")
+    return Path(override) if override else Path.home() / "dev" / "map"
+
+
 def registry_path() -> Path:
     """Path to registry.json, mirroring zsh's `BORG_REGISTRY="$BORG_DIR/registry.json"`."""
     override = os.environ.get("BORG_REGISTRY")

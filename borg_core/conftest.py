@@ -41,6 +41,17 @@ def _git_identity(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _sandbox_map_dir(monkeypatch, tmp_path_factory):
+    """Point BORG_MAP_DIR at a directory that does not exist for every test.
+
+    The compass reader defaults to `$HOME/dev/map` and pytest never redirects HOME, so without this a test that
+    builds the `borg link --json` document would read the developer's REAL map. Tests that exercise the reader
+    set the variable themselves.
+    """
+    monkeypatch.setenv("BORG_MAP_DIR", str(tmp_path_factory.mktemp("map-parent") / "absent"))
+
+
+@pytest.fixture(autouse=True)
 def _sandbox_state_home(monkeypatch, tmp_path_factory):
     """Point XDG_STATE_HOME at an empty sandbox dir for every test.
 
