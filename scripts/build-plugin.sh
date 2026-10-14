@@ -5,7 +5,7 @@
 # Plugin target:   $HOME/dev/claude-plugins/borg-collective/  (or PLUGIN_DIR_OVERRIDE)
 #
 # What this builds:
-#   skills/       — all SKILL.md files (same as sync-plugin.sh, now subsumed)
+#   skills/       — whole skill directories: SKILL.md plus references/ (mirrored, stale files removed)
 #   hooks/        — curated self-contained hooks (NO source of ~/.claude/lib)
 #   agents/       — borg-nanoprobe.md subagent definition
 #   hooks.json    — regenerated hook wiring for all shipped hooks
@@ -124,10 +124,8 @@ else
     for skill_dir in "$SKILLS_SRC"/*/; do
         skill_name="${skill_dir%/}"
         skill_name="${skill_name##*/}"
-        src_skill="${skill_dir}SKILL.md"
-        dst_skill="$SKILLS_DST/$skill_name/SKILL.md"
 
-        [[ -f "$src_skill" ]] || continue
+        [[ -f "${skill_dir}SKILL.md" ]] || continue
 
         if [[ ! -d "$SKILLS_DST/$skill_name" ]]; then
             if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -138,14 +136,36 @@ else
             fi
         fi
 
-        if ! diff -q "$src_skill" "$dst_skill" >/dev/null 2>&1; then
-            if [[ "$DRY_RUN" -eq 1 ]]; then
-                _dry "would sync skill: $skill_name"
-            else
-                cp "$src_skill" "$dst_skill"
-                _info "  synced skill: $skill_name"
+        # Mirror the whole skill directory: every regular file (references/ and the like), recursively.
+        while IFS= read -r rel; do
+            rel="${rel#./}"
+            src_file="${skill_dir}${rel}"
+            dst_file="$SKILLS_DST/$skill_name/$rel"
+            if ! diff -q "$src_file" "$dst_file" >/dev/null 2>&1; then
+                if [[ "$DRY_RUN" -eq 1 ]]; then
+                    _dry "would sync skill file: $skill_name/$rel"
+                else
+                    mkdir -p "$(dirname "$dst_file")"
+                    cp "$src_file" "$dst_file"
+                    _info "  synced skill file: $skill_name/$rel"
+                fi
+                skills_changed=$((skills_changed + 1))
             fi
-            skills_changed=$((skills_changed + 1))
+        done < <(cd "$skill_dir" && find . -type f | LC_ALL=C sort)
+
+        # Remove mirror files whose source is gone, so a deleted reference does not linger.
+        if [[ -d "$SKILLS_DST/$skill_name" ]]; then
+            while IFS= read -r rel; do
+                rel="${rel#./}"
+                [[ -f "${skill_dir}${rel}" ]] && continue
+                if [[ "$DRY_RUN" -eq 1 ]]; then
+                    _dry "would remove skill file: $skill_name/$rel"
+                else
+                    rm -f "$SKILLS_DST/$skill_name/$rel"
+                    _info "  removed skill file: $skill_name/$rel"
+                fi
+                skills_changed=$((skills_changed + 1))
+            done < <(cd "$SKILLS_DST/$skill_name" && find . -type f | LC_ALL=C sort)
         fi
     done
     if [[ "$skills_changed" -eq 0 ]]; then
