@@ -741,7 +741,7 @@ class TestWhatTheWriterPersists:
     def test_a_manifest_holding_en_dashes_round_trips_byte_identical(self, tmp_path, monkeypatch):
         # Today's sync dirties viz-program.json with `\\u2013` escapes; ensure_ascii=False is the fix.
         monkeypatch.setenv(coordinator.ENV_VAR, str(tmp_path / "no-target"))
-        original = (pathlib.Path(REPO_ROOT) / ".borg" / "chains" / "viz-program.json").read_bytes()
+        original = (pathlib.Path(REPO_ROOT) / ".stacks" / "viz-program.json").read_bytes()
         assert "\u2013".encode() in original
         chains = tmp_path / "proj" / ".borg" / "chains"
         chains.mkdir(parents=True)

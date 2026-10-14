@@ -3190,7 +3190,7 @@ _borg_version_ge() {
 }
 
 # ── chain manifests (PM6) ──────────────────────────────────────────────────────
-# borg stack list|plan|sync — the sync coordinator over <repository>/.stacks/*.json and
+# borg stack list|plan|sync|migrate — the sync coordinator (migrate: see cmd_stack) over <repository>/.stacks/*.json and
 # <repository>/.borg/chains/*.json. `borg stack` is the verb since the chain -> stack rename's
 # EXPAND step (docs/plans/directives/2026-10-13-chain-to-stack-rename.md); `borg chain` is a dispatch
 # arm that forwards here until the CONTRACT step, so `borg chain list` and `borg stack list` print the
@@ -3211,9 +3211,16 @@ _borg_version_ge() {
 # the MIGRATE step.
 cmd_stack() {
     local action="${1:-list}"
+    # `migrate` is an action of `borg stack`, not a COMMANDS entry of its own (the pinned count must hold).
+    # It is a wrapper only: the planning, the git facts and the moves are borg_core/manifest/migrate*.py,
+    # and it takes its own flags, which is why it leaves before the --stacks-dir/--recon parsing below.
+    if [[ "$action" == "migrate" ]]; then
+        _borg_py borg_core.manifest.migrate_cli "${@:2}"
+        return
+    fi
     case "$action" in
         list|plan|sync) ;;
-        *) die "usage: borg stack list|plan|sync [--stacks-dir <path>]... ; plan also takes --recon <file>" ;;
+        *) die "usage: borg stack list|plan|sync [--stacks-dir <path>]... ; plan also takes --recon <file> ; or: borg stack migrate [--dry-run] [<repository>]" ;;
     esac
     # Guarded: zsh hard-errors a bare `shift` at $#==0 (unlike bash), and set -e makes that fatal —
     # which would kill the argless `borg stack` the :-list default exists for.
@@ -3297,6 +3304,7 @@ cmd_help() {
                           list           Every declared stack across registered repositories
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
+                          migrate [--dry-run] [<repository>]  Move .borg/chains/*.json into .stacks/ (stages, never commits)
                           --stacks-dir <path>    Explicit roots (suppresses the registry sweep)
                           'borg chain' is still accepted as a spelling of 'borg stack'
                           --recon <file> (plan only) recon JSON for the reality check

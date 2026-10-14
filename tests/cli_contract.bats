@@ -4528,6 +4528,98 @@ _repo_norm() {
     [[ "$output" != *chain* ]] || false
 }
 
+# ── borg stack migrate: the chain -> stack rename, MIGRATE step (b1) ─────────────────────────────
+# `migrate` is an ACTION of `borg stack`, not a COMMANDS entry, so the pinned count above stays put. The
+# decisions live in borg_core/manifest/migrate*.py and are tested there over real git repositories; these
+# cases pin the zsh arm: that it reaches the module, hands it the registry and its flags, and returns its
+# exit status. Every repository here is a throwaway under BATS_TEST_TMPDIR, reached through the sandboxed
+# registry; nothing touches a real one.
+
+# A real repository: one tracked manifest, one git-ignored one, a carve-out like this repository's own.
+_migrate_repo() {
+    local repo="$BATS_TEST_TMPDIR/$1"
+    mkdir -p "$repo/.borg/chains"
+    git -C "$repo" init -q
+    printf '.borg/*\n!.borg/chains/\n.borg/chains/hidden.json\n' > "$repo/.gitignore"
+    echo '{"program": "tracked", "rows": [{"order": "1", "ref": "o/r#1"}]}' > "$repo/.borg/chains/tracked.json"
+    git -C "$repo" add -A
+    git -C "$repo" commit -q -m init
+    echo '{"program": "hidden", "rows": []}' > "$repo/.borg/chains/hidden.json"
+    echo '{"projects": {"'"$1"'": {"path": "'"$repo"'"}}}' > "$BORG_REGISTRY"
+}
+
+@test "contract: borg stack migrate --dry-run prints the plan and writes nothing" {
+    _migrate_repo alpha
+    before="$(git -C "$BATS_TEST_TMPDIR/alpha" status --porcelain --ignored)"
+    run zsh -c "'$BORG' stack migrate --dry-run"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"would git mv: .borg/chains/tracked.json -> .stacks/tracked.json"* ]] || false
+    [[ "$output" == *"would track: .stacks/hidden.json (was ignored)"* ]] || false
+    [ ! -e "$BATS_TEST_TMPDIR/alpha/.stacks" ]
+    [ "$(git -C "$BATS_TEST_TMPDIR/alpha" status --porcelain --ignored)" = "$before" ]
+}
+
+@test "contract: borg stack migrate moves, stages, names what became tracked, and never commits" {
+    _migrate_repo alpha
+    head="$(git -C "$BATS_TEST_TMPDIR/alpha" rev-parse HEAD)"
+    run zsh -c "'$BORG' stack migrate"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"now tracked: .stacks/hidden.json (was ignored)"* ]] || false
+    [ -f "$BATS_TEST_TMPDIR/alpha/.stacks/tracked.json" ]
+    [ -f "$BATS_TEST_TMPDIR/alpha/.stacks/hidden.json" ]
+    [ ! -e "$BATS_TEST_TMPDIR/alpha/.borg/chains/tracked.json" ]
+    run git -C "$BATS_TEST_TMPDIR/alpha" diff --cached --name-only
+    [[ "$output" == *".stacks/hidden.json"* ]] || false
+    [ "$(git -C "$BATS_TEST_TMPDIR/alpha" rev-parse HEAD)" = "$head" ]
+    run zsh -c "'$BORG' stack migrate"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"nothing to migrate"* ]] || false
+}
+
+@test "contract: borg stack migrate skips a repository with uncommitted manifest changes and exits non-zero" {
+    _migrate_repo alpha
+    echo '{"edited": true}' > "$BATS_TEST_TMPDIR/alpha/.borg/chains/tracked.json"
+    run zsh -c "'$BORG' stack migrate"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"skipped: $BATS_TEST_TMPDIR/alpha: uncommitted changes"* ]] || false
+    [[ "$output" == *"skipped or refused"* ]] || false
+    [ -f "$BATS_TEST_TMPDIR/alpha/.borg/chains/tracked.json" ]
+    [ ! -e "$BATS_TEST_TMPDIR/alpha/.stacks" ]
+}
+
+@test "contract: borg stack migrate refuses a repository whose ignore rules would ignore .stacks/" {
+    _migrate_repo alpha
+    echo '.stacks/' >> "$BATS_TEST_TMPDIR/alpha/.gitignore"
+    git -C "$BATS_TEST_TMPDIR/alpha" add .gitignore
+    git -C "$BATS_TEST_TMPDIR/alpha" commit -q -m ignore-stacks
+    run zsh -c "'$BORG' stack migrate"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"refused: $BATS_TEST_TMPDIR/alpha: git ignores .stacks/"* ]] || false
+    [ ! -e "$BATS_TEST_TMPDIR/alpha/.stacks" ]
+}
+
+@test "contract: borg stack migrate takes a registry name and migrates that repository alone" {
+    _migrate_repo alpha
+    _migrate_repo beta
+    echo '{"projects": {"alpha": {"path": "'"$BATS_TEST_TMPDIR"'/alpha"}, "beta": {"path": "'"$BATS_TEST_TMPDIR"'/beta"}}}' > "$BORG_REGISTRY"
+    run zsh -c "'$BORG' stack migrate beta"
+    [ "$status" -eq 0 ]
+    [ -f "$BATS_TEST_TMPDIR/beta/.stacks/tracked.json" ]
+    [ -f "$BATS_TEST_TMPDIR/alpha/.borg/chains/tracked.json" ]
+    run zsh -c "'$BORG' stack migrate no-such-repository"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"no repository named 'no-such-repository'"* ]] || false
+}
+
+@test "contract: migrate is an action of borg stack, not a COMMANDS entry, and the usage names it" {
+    run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{print \$1}'"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *migrate* ]] || false
+    run zsh -c "'$BORG' stack bogus"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"borg stack migrate [--dry-run] [<repository>]"* ]] || false
+}
+
 # The rename is only safe if the old name still answers. A user with `borg program` in muscle memory
 # or in a script must get a pointer, not `unknown command` — and the pointer must carry the args, or
 # it sends them back to a bare verb they then have to re-type.

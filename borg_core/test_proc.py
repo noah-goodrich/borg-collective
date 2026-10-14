@@ -337,8 +337,9 @@ def test_a_zero_timeout_is_an_expired_deadline_and_not_an_absent_one(tmp_path):
         ("borg_core.recon.shell", "run_adapter"),
         ("borg_core.manifest.shell", "_git_origin_url"),
         ("borg_core.link.shell", "sweep"),
+        ("borg_core.manifest.migrate_shell", "gather"),
     ],
-    ids=["registry-tmux", "recon-adapter", "manifest-git", "link-sweep"],
+    ids=["registry-tmux", "recon-adapter", "manifest-git", "link-sweep", "manifest-migrate"],
 )
 def test_no_module_forks_a_subprocess_of_its_own(module_name, function_name):
     """The regression this module exists to prevent: a fourth copy of the same shape.

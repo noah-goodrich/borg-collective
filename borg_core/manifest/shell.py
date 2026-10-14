@@ -459,6 +459,15 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     return paths, []
 
 
+def registered_paths(registry: Any) -> tuple[list[str], list[str]]:
+    """The public seam over `_registered_paths`, for `migrate_shell`: the same extraction and the same warnings.
+
+    One extractor, so `borg stack migrate` and the sweep can never disagree about which registered
+    repositories exist; a second copy would be the registry-shape drift `_registered_paths` warns about.
+    """
+    return _registered_paths(registry)
+
+
 def discover_registered(registry: Any) -> tuple[list[dict], list[str]]:
     """Every manifest under EVERY registered repository's two roots. B6's enforcing half.
 
