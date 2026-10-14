@@ -232,13 +232,19 @@ cmd_ls() {
     fi
 
     if (( porcelain )); then
-        local name entry source proj_status last summary
+        local name entry source proj_status last summary waiting_reason
+        # Column 5 is each repository's checkpoint tl;dr, derived for ALL of them in one Python call, then
+        # waiting_reason, then the relative activity. Never the stored summary (see _borg_checkpoint_summaries).
+        registry=$(printf '%s' "$registry" | _borg_checkpoint_summaries)
         while IFS= read -r name; do
             entry=$(printf '%s' "$registry" | jq -c --arg p "$name" '.projects[$p]')
             source=$(printf '%s' "$entry" | jq -r '.source // "cli"')
             proj_status=$(printf '%s' "$entry" | jq -r '.status // "unknown"')
             last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
             summary=$(printf '%s' "$entry" | jq -r '.summary // ""')
+            waiting_reason=$(printf '%s' "$entry" | jq -r '.waiting_reason // ""')
+            [[ -n "$summary" ]] || summary="$waiting_reason"
+            [[ -n "$summary" || -z "$last" ]] || summary=$(_borg_relative_time "$last")
             # FLATTEN THE THREE CONTROL CHARACTERS THAT REACH A RECORD, BEFORE THE 80-CHAR CUT.
             # `jq -r` prints the DECODED string, so once the parse above succeeds a summary's real
             # 0x09/0x0A/0x0D arrive here intact. This is a TSV record read back by `cmd_switch` with
@@ -275,8 +281,11 @@ cmd_ls() {
     # caller, not assumed.
 }
 
+# Usage: cmd_status [repository [summary]]. An explicit `summary` (even empty) is the caller's already-derived
+# one (`_borg_do_switch` has resolved it), which saves a second Python call; omitted, it is derived here.
 cmd_status() {
     local repository="${1:-}"
+    local -i summary_given=$(( $# >= 2 ))
 
     if [[ -z "$repository" ]]; then
         # Default to repository matching current directory name
@@ -295,7 +304,8 @@ cmd_status() {
     ppath=$(printf '%s' "$entry"      | jq -r '.path // "null"')
     proj_status=$(printf '%s' "$entry"     | jq -r '.status // "unknown"')
     last=$(printf '%s' "$entry"       | jq -r '.last_activity // "(never)"')
-    summary=$(printf '%s' "$entry"    | jq -r '.summary // "(no summary)"')
+    if (( summary_given )); then summary="$2"; else summary=$(_borg_checkpoint_summary "$repository"); fi
+    [[ -n "$summary" ]] || summary="(no summary)"
     session_id=$(printf '%s' "$entry" | jq -r '.claude_session_id // "(unknown)"')
     tmux_window=$(printf '%s' "$entry"| jq -r '.tmux_window // "(none)"')
 
@@ -342,12 +352,18 @@ cmd_switch() {
 }
 
 # Internal: switch to a repository by name (tmux or show status)
-# Usage: _borg_do_switch <repository> [--silent]
+# Usage: _borg_do_switch <repository> [--silent] [--summary <text>]
 #   --silent: suppress text output, use tmux display-message instead (for keybinding context)
+#   --summary: the caller's already-derived checkpoint summary (even empty), so this does not derive it again
 _borg_do_switch() {
     local repository="$1"
-    local silent=0
+    local silent=0 summary_given=0 given_summary=""
     [[ "${2:-}" == "--silent" ]] && silent=1
+    if [[ "${2:-}" == "--summary" ]]; then
+        summary_given=1; given_summary="${3:-}"
+    elif [[ "${3:-}" == "--summary" ]]; then
+        summary_given=1; given_summary="${4:-}"
+    fi
 
     # Work/life boundary check (skip in silent/keybinding mode — Ctrl+Space > is itself a conscious action)
     if (( ! silent )); then
@@ -385,10 +401,13 @@ _borg_do_switch() {
     # function reaches `warn` + `cmd_status`, which no longer dies: measured exit 0 where it was
     # exit 5 with `jq: parse error: Invalid string: control characters from U+0000 through U+001F
     # must be escaped`.
-    local tmux_window source summary last
+    local tmux_window source summary last waiting_reason
     tmux_window=$(printf '%s' "$entry" | jq -r '.tmux_window // ""')
     source=$(printf '%s' "$entry" | jq -r '.source // "cli"')
-    summary=$(printf '%s' "$entry" | jq -r '.summary // ""')
+    # The brief is the newest checkpoint's tl;dr (ONE Python call), never the registry's stored `summary`, which
+    # goes stale the moment a newer checkpoint lands. No checkpoint: waiting_reason, then the relative activity.
+    if (( summary_given )); then summary="$given_summary"; else summary=$(_borg_checkpoint_summary "$repository"); fi
+    waiting_reason=$(printf '%s' "$entry" | jq -r '.waiting_reason // ""')
     last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
 
     # If no registered window, try repository name as window name
@@ -417,17 +436,19 @@ _borg_do_switch() {
         if (( silent )); then
             # In tmux keybinding context: switch first, then show brief as display-message
             borg_tmux_switch "$tmux_window" || true
-            local msg="$repository"
-            [[ -n "$summary" && "$summary" != "null" ]] && msg="$repository | ${summary:0:60}"
+            local msg="$repository" blurb="${summary:-$waiting_reason}"
+            [[ -n "$blurb" || -z "$last" ]] || blurb=$(_borg_relative_time "$last")
+            [[ -n "$blurb" ]] && msg="$repository | ${blurb:0:60}"
             tmux display-message "$msg" 2>/dev/null || true
         else
             # Auto-brief before switching (interactive context)
-            if [[ -n "$summary" && "$summary" != "null" ]]; then
+            if [[ -n "$summary" || -n "$waiting_reason" ]]; then
                 echo -e "\n${DIM}─── $repository ───${NC}"
                 local rel_time
                 rel_time=$(_borg_relative_time "$last")
                 echo -e "  ${DIM}Last active:${NC} $rel_time"
-                echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
+                [[ -z "$waiting_reason" ]] || echo -e "  ${YELLOW}Needs:${NC} $waiting_reason"
+                [[ -z "$summary" ]] || echo -e "  $(_borg_clip_summary "$summary")"
                 echo
             fi
             info "Switching to $repository ($tmux_window)"
@@ -438,14 +459,14 @@ _borg_do_switch() {
             tmux display-message "$repository (Desktop session — open Claude Desktop)" 2>/dev/null || true
         else
             info "$repository is a Desktop session — open Claude Desktop to continue"
-            cmd_status "$repository"
+            cmd_status "$repository" "$summary"
         fi
     else
         if (( silent )); then
             tmux display-message "borg: no tmux window for $repository" 2>/dev/null || true
         else
             warn "No tmux window registered for $repository"
-            cmd_status "$repository"
+            cmd_status "$repository" "$summary"
         fi
     fi
 }
@@ -717,6 +738,50 @@ _borg_next_registry() {
     printf '%s\n' "$out"
 }
 
+# The registry's stored `summary` is summarize.py's transcript heuristic, written once at session end, and it is
+# stale the moment a newer checkpoint lands. No reader prints it: `borg link`, `borg next` (via the overlay above),
+# the switch picker, the switch brief and the Queen context all take the newest checkpoint's tl;dr (else its first
+# Accomplished bullet) from `borg_core.link.shell.with_checkpoint_summaries`, the one implementation, and degrade
+# to waiting_reason or the relative activity when there is none. A repository with no checkpoint gets NO summary,
+# never the stored one.
+#
+# `_borg_checkpoint_summaries`: registry JSON on stdin, the same registry on stdout with every `summary` derived.
+# ONE Python call however many repositories there are. If that call fails the summaries are nulled rather than
+# passed through, because a stale sentence is the one thing these readers must not print.
+_borg_checkpoint_summaries() {
+    local registry out
+    registry=$(cat)
+    if out=$(printf '%s' "$registry" | _borg_py borg_core.link.overlay --summaries 2>/dev/null) && [[ -n "$out" ]]; then
+        printf '%s\n' "$out"
+    else
+        printf '%s' "$registry" | jq -c '.projects |= map_values(if type == "object" then .summary = null else . end)'
+    fi
+}
+
+# `_borg_checkpoint_summary <repository>`: that one repository's derived summary, "" when it has none or the
+# call fails. One Python call; for the readers that hold a single entry (the switch brief, `cmd_status`).
+_borg_checkpoint_summary() {
+    _borg_py borg_core.link.overlay --summary "$1" 2>/dev/null || true
+}
+
+# `_borg_clip_summary <text>`: the text as ONE line of at most 80 visible characters (the picker's budget), with the
+# three storable control characters flattened first (the picker's own flatten) and a trailing `…` standing in as the
+# 80th character when it is cut. A tl;dr is a whole paragraph; the picker, the Queen context and the tmux message
+# already cut it, and `borg next` and the interactive switch brief must not print it unbounded (so neither folds it:
+# clipped to 80 it is one line). Short text is unchanged.
+_borg_clip_summary() {
+    local text="${1//[$'\t\n\r']/ }"
+    if (( ${#text} > 80 )); then text="${text:0:79}…"; fi
+    printf '%s' "$text"
+}
+
+# `_borg_registry_summary <registry-json> <repository>`: the summary already derived into an overlaid registry (the
+# `_borg_next_registry` output), "" when null. Lets a caller holding that registry hand it to `_borg_do_switch
+# --summary` instead of paying a second `overlay --summary` Python call.
+_borg_registry_summary() {
+    printf '%s' "$1" | jq -r --arg p "$2" '.projects[$p].summary // ""' 2>/dev/null || true
+}
+
 # One fail-open log row per `borg next` run (borg_core.nextpick.cli never writes stdout, exits 0).
 # Called BEFORE the --pick range check so the row exists even for a bad pick; a die after it is fine.
 # `_borg_py` (not bare python3) so the child inherits the config surface; XDG_STATE_HOME is read from
@@ -784,7 +849,7 @@ _borg_next_chooser() {
         return 0
     fi
     _borg_next_log "$registry" 0 "" "${base[@]}" --opened "${names[idx]}" --opened-after "$(( SECONDS - start ))"
-    _borg_do_switch "${names[idx]}" --silent
+    _borg_do_switch "${names[idx]}" --silent --summary "$(_borg_registry_summary "$registry" "${names[idx]}")"
 }
 
 # Non-interactive surfaces for skills (no TTY): `--rows --json` (logs nothing), `--open <p> --chosen [--shown]`
@@ -823,7 +888,7 @@ _borg_next_surface() {
             printf '%s' "$registry" | jq -e --arg p "$repository" '.projects[$p] != null' >/dev/null 2>&1 ||
                 die "next --open: unknown repository '$repository'"
             _borg_next_log "$registry" 0 "" "${base[@]}" --opened "$repository" --unmeasured
-            _borg_do_switch "$repository" --silent
+            _borg_do_switch "$repository" --silent --summary "$(_borg_registry_summary "$registry" "$repository")"
             ;;
         declined)
             _borg_next_log "$registry" 0 "" "${base[@]}"
@@ -919,7 +984,8 @@ cmd_next() {
 
     # --switch / --pick mode: skip all output, switch immediately
     if (( do_switch )) || [[ -n "$pick" ]]; then
-        _borg_do_switch "$name" --silent
+        # The overlay already derived this row's summary from its checkpoint; hand it over, do not derive twice.
+        _borg_do_switch "$name" --silent --summary "$summary"
         return $?
     fi
 
@@ -942,7 +1008,7 @@ cmd_next() {
         echo -e "  ${YELLOW}Needs:${NC} $waiting_reason"
     fi
     if [[ -n "$summary" && "$summary" != "null" ]]; then
-        echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
+        echo -e "  $(_borg_clip_summary "$summary")"
     fi
 
     # Directives for recommended repository (from its own docs/plans/directives/)
@@ -1713,8 +1779,10 @@ EOF
 }
 
 _borg_orchestrator_context() {
+    # Each repository's summary is its newest checkpoint's tl;dr, all of them in one Python call; the stored
+    # registry summary is stale and never reaches the Queen's prompt (see _borg_checkpoint_summaries).
     local registry
-    registry=$(borg_registry_with_state)
+    registry=$(borg_registry_with_state | _borg_checkpoint_summaries)
     local now
     now=$(date '+%Y-%m-%d %H:%M %Z')
 
@@ -1732,7 +1800,7 @@ _borg_orchestrator_context() {
         .[] |
         "  \(.key) [\(.value.status // "unknown")] \(
             if .value.last_activity then .value.last_activity else "never" end
-        ) — \(.value.summary // "(no summary)" | .[0:80])"
+        ) — \(.value.summary // .value.waiting_reason // "(no summary)" | .[0:80])"
     '
     echo ""
 
