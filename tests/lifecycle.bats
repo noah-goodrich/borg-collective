@@ -467,6 +467,117 @@ EOF
 }
 
 
+# ── waiting only for real asks ───────────────────────────────────────────────────────────────────
+# Claude Code sends idle_prompt about 60s after EVERY turn ends. Treating it as "waiting" put every
+# idle session in the WAITING ON YOU list. Only permission_prompt and elicitation_dialog are asks.
+
+BORG_NOTIFY="${BATS_TEST_DIRNAME}/../hooks/borg-notify.sh"
+
+_notify_input() {
+    local ntype="$1" msg="$2"
+    if [[ -n "$ntype" ]]; then
+        printf '{"session_id":"sess-abc","cwd":"%s","message":"%s","notification_type":"%s"}' \
+            "$TEST_CWD" "$msg" "$ntype"
+    else
+        printf '{"session_id":"sess-abc","cwd":"%s","message":"%s"}' "$TEST_CWD" "$msg"
+    fi
+}
+
+_seed_state() {
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    mkdir -p "${sf%/*}"
+    printf '%s' "$1" > "$sf"
+}
+
+@test "notify: idle_prompt leaves status unchanged and adds no waiting_reason" {
+    _seed_state '{"status":"idle"}'
+
+    bash "$BORG_NOTIFY" <<< "$(_notify_input idle_prompt 'Claude is waiting for your input')" 2>/dev/null
+
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    [ "$(jq -r '.status' "$sf")" = "idle" ]
+    [ "$(jq -r 'has("waiting_reason")' "$sf")" = "false" ]
+}
+
+@test "notify: idle_prompt does not disturb an existing waiting_reason" {
+    _seed_state '{"status":"waiting","waiting_reason":"Claude needs your permission"}'
+
+    bash "$BORG_NOTIFY" <<< "$(_notify_input idle_prompt 'Claude is waiting for your input')" 2>/dev/null
+
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    [ "$(jq -r '.status' "$sf")" = "waiting" ]
+    [ "$(jq -r '.waiting_reason' "$sf")" = "Claude needs your permission" ]
+}
+
+@test "notify: permission_prompt sets status waiting with the message as waiting_reason" {
+    _seed_state '{"status":"active"}'
+
+    bash "$BORG_NOTIFY" <<< "$(_notify_input permission_prompt 'Claude needs your permission')" 2>/dev/null
+
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    [ "$(jq -r '.status' "$sf")" = "waiting" ]
+    [ "$(jq -r '.waiting_reason' "$sf")" = "Claude needs your permission" ]
+}
+
+@test "notify: elicitation_dialog sets status waiting with the message as waiting_reason" {
+    _seed_state '{"status":"active"}'
+
+    bash "$BORG_NOTIFY" <<< "$(_notify_input elicitation_dialog 'Claude has a question')" 2>/dev/null
+
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    [ "$(jq -r '.status' "$sf")" = "waiting" ]
+    [ "$(jq -r '.waiting_reason' "$sf")" = "Claude has a question" ]
+}
+
+@test "notify: a payload with no notification_type still sets waiting (older Claude Code)" {
+    _seed_state '{"status":"active"}'
+
+    bash "$BORG_NOTIFY" <<< "$(_notify_input '' 'Claude needs your attention')" 2>/dev/null
+
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    [ "$(jq -r '.status' "$sf")" = "waiting" ]
+    [ "$(jq -r '.waiting_reason' "$sf")" = "Claude needs your attention" ]
+}
+
+@test "notify: auth_success leaves status unchanged" {
+    _seed_state '{"status":"active"}'
+
+    bash "$BORG_NOTIFY" <<< "$(_notify_input auth_success 'Authenticated')" 2>/dev/null
+
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    [ "$(jq -r '.status' "$sf")" = "active" ]
+    [ "$(jq -r 'has("waiting_reason")' "$sf")" = "false" ]
+}
+
+@test "start hook removes a stale waiting_reason" {
+    _seed_state '{"status":"waiting","waiting_reason":"Claude needs your permission"}'
+
+    bash "$BORG_START" <<< "$(_start_input)" >/dev/null
+
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    [ "$(jq -r '.status' "$sf")" = "active" ]
+    [ "$(jq -r 'has("waiting_reason")' "$sf")" = "false" ]
+}
+
+@test "stop hook removes a stale waiting_reason" {
+    _seed_state '{"status":"waiting","waiting_reason":"Claude needs your permission"}'
+
+    bash "$BORG_STOP" <<< "$(_stop_input)" 2>/dev/null
+
+    local sf
+    sf=$(state_path_of "$TEST_CWD" "")
+    [ "$(jq -r '.status' "$sf")" = "idle" ]
+    [ "$(jq -r 'has("waiting_reason")' "$sf")" = "false" ]
+}
+
 # ── Queen vocabulary ─────────────────────────────────────────────────────────────────────────────
 # The identity is injected on EVERY SessionStart so it survives compaction, and it deliberately
 # carries the lookup rather than a literal address. Measured 2026-09-16: the addressable name's hex
