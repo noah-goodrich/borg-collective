@@ -45,12 +45,15 @@ After R3 to R5 of the project-to-repository rename (R3 `lib/` and `hooks/`, R4 `
 
 ## Acceptance criteria
 
-- [ ] **(a) Scaffold creates in `.stacks/` unless told otherwise.**
+- [x] **(a) Scaffold creates in `.stacks/` unless told otherwise.**
   - Verify: `borg_core/manifest/test_placement.py` has one case per derived outcome (`.stacks/` exists, `.borg/chains` exists, git ignores `.borg/`, neither) each returning the `.stacks` path, and `--root borg` still returns borg's own; a `scaffold` run in a fresh git repository and in one already holding `.borg/chains/` both print `root: .stacks`.
-- [ ] **(a) Both roots are still read, and a stem in both is still refused by name.**
+  - Evidence (step (a) PR): test_placement.py (one case per derived outcome, all returning the .stacks path, plus the --root borg case and the ignored-stacks refusals), test_shell.py scaffold_root cases, and test_cli.py cases for a fresh git repository and one holding .borg/chains/, both asserting the root: line names .stacks.
+- [x] **(a) Both roots are still read, and a stem in both is still refused by name.**
   - Verify: the existing both-roots and stem-in-both cases in `borg_core/manifest/test_shell.py` pass unmodified.
-- [ ] **(a) `borg stack` works and `borg chain` still does, with identical output; the COMMANDS count does not move.**
+  - Evidence (step (a) PR): git diff of borg_core/manifest/test_shell.py touches only the scaffold_root section and the placement import; every both-roots and stem-in-both case in it is unmodified and green.
+- [x] **(a) `borg stack` works and `borg chain` still does, with identical output; the COMMANDS count does not move.**
   - Verify: new `tests/cli_contract.bats` cases mirror "argless 'borg chain' reaches the list default", "'borg chain list' sweeps a registry manifest end to end" and "an unknown chain action prints usage including --recon" for `borg stack`, and the old ones still pass. The count is pinned by `contract: borg help is net one command shorter than at plan start (AC1)` (`tests/cli_contract.bats`, the exact `27` assertion), and the names in COMMANDS by `contract: recon is gone from COMMANDS and named in REMOVED (AC1)`; both stay green with `stack` listed and `chain` unlisted. Do not edit the `27`: the verb is renamed, and deleting or adding a COMMANDS entry is exactly what that test is there to catch.
+  - Evidence (step (a) PR): the six new borg stack cases in tests/cli_contract.bats (three mirrors, plus chain-vs-stack identical document, --stacks-dir, and COMMANDS naming stack and not chain) pass beside the old chain ones; the two pinned COMMANDS tests pass with their assertions untouched.
 - [ ] **(b) The migration command is safe.**
   - Verify: tests for (1) `--dry-run` leaves the repository tree byte-identical and prints the plan; (2) a repository with a modified, staged or untracked (not ignored) file under `.borg/chains/` is skipped by name and untouched, with the exit status saying some were skipped; (3) a stem in both roots is refused by name; (4) a tracked manifest moves with `git mv`, and a manifest in a git-ignored `.borg/chains/` moves with a plain move and is staged; (5) a second run moves nothing; (6) nothing is committed; (7) a repository whose `.borg/chains/` is git-ignored ends with its manifests in `.stacks/`, staged (`git diff --cached --name-only` lists them), and each named in the output as `now tracked: .stacks/<file> (was ignored)`; (8) a repository whose ignore rules would ignore `.stacks/` is refused by name and its tree and index are untouched; (9) a repository with uncommitted manifest changes is skipped by name and its tree and index are untouched.
 - [ ] **(b) No manifest stays behind in a registered repository.**

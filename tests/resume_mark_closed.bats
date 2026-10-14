@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # S3b (borg-resume): `borg-resume mark-closed <project|sid>` and its callers (drone down, borg down).
-# docker and tmux are stubs that log to $TRACE; project names are invented.
+# docker and tmux are stubs that log to $TRACE; repository names are invented.
 
 load test_helper/setup
 
@@ -40,7 +40,7 @@ evs() { printf '%s/events/%s.jsonl' "$BORG_RESUME_DIR" "$1"; }
     [ ! -e "$(evs "$SID3")" ]
 }
 
-@test "mark-closed <project> marks every registered session of that project only" {
+@test "mark-closed <project> marks every registered session of that repository only" {
     run "$BIN" mark-closed amber-fox-labs
     [ "$status" -eq 0 ]
     [ -s "$(evs "$SID1")" ]
@@ -97,7 +97,7 @@ MOCK
     echo "{\"projects\":{\"amber-fox-labs\":{\"path\":\"$PROJ\"}}}" > "$BORG_REGISTRY"
 }
 
-@test "drone down marks the project closed" {
+@test "drone down marks the repository closed" {
     _stub_infra
     run "$DRONE" down amber-fox-labs
     [ "$status" -eq 0 ]
@@ -122,14 +122,14 @@ MOCK
 }
 
 
-# ---- review fixes: project-name charset, dir matching, ordering, borg down behavior -----------
+# ---- review fixes: repository-name charset, dir matching, ordering, borg down behavior -----------
 
 regfull() {
     printf '{"session_id":"%s","project":"%s","cwd":"%s","tmux":{"project_dir":"%s"}}\n' \
         "$1" "$2" "$3" "$4" > "$BORG_RESUME_DIR/sessions/$1.json"
 }
 
-@test "mark-closed matches a project name containing dots" {
+@test "mark-closed matches a repository name containing dots" {
     local sid="0b1e2c3d-4f5a-6b7c-8d9e-0a1b2c3d4e61"
     reg "$sid" "my.app v2"
     run "$BIN" mark-closed "my.app v2"
@@ -138,7 +138,7 @@ regfull() {
     [ ! -e "$(evs "$SID3")" ]
 }
 
-@test "mark-closed matches a subdir cwd through the project dir" {
+@test "mark-closed matches a subdir cwd through the repository dir" {
     local sid="0b1e2c3d-4f5a-6b7c-8d9e-0a1b2c3d4e62"
     regfull "$sid" src "/dev/pr/src" ""
     run "$BIN" mark-closed pr /dev/pr

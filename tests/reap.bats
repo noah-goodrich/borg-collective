@@ -86,9 +86,9 @@ setup() {
 
 # ─── borg_reap_overlay stream filter ─────────────────────────────────────────
 # No tmux helper is loaded in the test, so _borg_live_windows is empty and every
-# project is treated as having no live window.
+# repository is treated as having no live window.
 
-@test "borg_reap_overlay downgrades a stale project to idle and records _reaped_from" {
+@test "borg_reap_overlay downgrades a stale repository to idle and records _reaped_from" {
     local json
     json='{"projects":{"stale":{"status":"active","last_activity":"2020-01-01T00:00:00Z","path":"/tmp/stale"}}}'
     result=$(printf '%s' "$json" | run_zsh_fn registry borg_reap_overlay)
@@ -98,7 +98,7 @@ setup() {
     [ "$from" = "active" ]
 }
 
-@test "borg_reap_overlay preserves a fresh active project" {
+@test "borg_reap_overlay preserves a fresh active repository" {
     local now json
     now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     json="{\"projects\":{\"fresh\":{\"status\":\"active\",\"last_activity\":\"${now}\",\"path\":\"/tmp/fresh\"}}}"
@@ -109,7 +109,7 @@ setup() {
     [ "$from" = "none" ]
 }
 
-@test "borg_reap_overlay leaves an already-idle project untouched" {
+@test "borg_reap_overlay leaves an already-idle repository untouched" {
     local json
     json='{"projects":{"done":{"status":"idle","path":"/tmp/done"}}}'
     result=$(printf '%s' "$json" | run_zsh_fn registry borg_reap_overlay)

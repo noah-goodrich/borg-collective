@@ -65,7 +65,7 @@ hook_file() {
     export BORG_RESUME_RELAUNCH_HOOK_FILE="${BATS_TEST_TMPDIR}/hook.sh"
 }
 
-@test "relaunch hook: a .borg/no-resume project is never relaunched" {
+@test "relaunch hook: a .borg/no-resume repository is never relaunched" {
     t_line "$PD/$SID.jsonl"
     mkdir -p "$CWD/.borg"
     : >"$CWD/.borg/no-resume"

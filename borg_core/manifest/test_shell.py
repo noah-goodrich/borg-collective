@@ -39,7 +39,7 @@ import types
 
 import pytest
 
-from borg_core.manifest import across, core, errors, refs, shell
+from borg_core.manifest import across, core, errors, placement, refs, shell
 
 
 def _manifest(rows, apex=None):
@@ -2025,7 +2025,7 @@ def test_borg_chains_symlinked_to_stacks_is_read_once(tmp_path):
     assert problem == "" and os.path.samefile(path, stacks)
 
 
-# ── scaffold_root: the git probe and the facts behind placement.choose_scaffold_root ──────────────────
+# ── scaffold_root: the git probes and the facts behind placement.choose_scaffold_root ─────────────────
 def _ignore(repository, pattern):
     with open(os.path.join(repository, ".gitignore"), "w", encoding="utf-8") as handle:
         handle.write(pattern + "\n")
@@ -2039,56 +2039,78 @@ def test_scaffold_root_derives_stacks_when_git_ignores_borg(tmp_path):
     assert "ignores" in reason
 
 
-def test_scaffold_root_keeps_borg_when_borg_is_tracked(tmp_path):
+def test_scaffold_root_defaults_to_stacks_when_borg_is_tracked(tmp_path):
     repository = _git_repository(tmp_path, "r")
-    assert shell.scaffold_root(repository)[0] == shell.manifest_dir(repository)
+    directory, reason = shell.scaffold_root(repository)
+    assert directory == os.path.join(repository, ".stacks") and reason == "default"
 
 
-def test_scaffold_root_keeps_borg_outside_any_git_repository(tmp_path):
+def test_scaffold_root_defaults_to_stacks_outside_any_git_repository(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
-    assert shell.scaffold_root(str(plain))[0] == shell.manifest_dir(str(plain))
+    assert shell.scaffold_root(str(plain))[0] == os.path.join(str(plain), ".stacks")
 
 
-def test_scaffold_root_keeps_borg_when_git_is_missing(tmp_path, monkeypatch):
+def test_scaffold_root_defaults_to_stacks_when_git_is_missing(tmp_path, monkeypatch):
     repository = _git_repository(tmp_path, "r")
-    _ignore(repository, ".borg/")
+    _ignore(repository, ".stacks/")
     monkeypatch.setattr(shell.proc, "run_capture", lambda *a, **k: None)
-    assert shell.scaffold_root(repository)[0] == shell.manifest_dir(repository)
+    assert shell.scaffold_root(repository)[0] == os.path.join(repository, ".stacks")
 
 
-def test_scaffold_root_existing_root_beats_the_ignore_probe(tmp_path):
+def test_scaffold_root_an_existing_borg_root_no_longer_wins(tmp_path):
     repository = _git_repository(tmp_path, "r")
     _ignore(repository, ".borg/")
     os.makedirs(os.path.join(repository, ".borg", "chains"))
-    assert shell.scaffold_root(repository)[0] == shell.manifest_dir(repository)
+    directory, reason = shell.scaffold_root(repository)
+    assert directory == os.path.join(repository, ".stacks") and "still read" in reason
 
 
-def test_scaffold_root_override_wins_and_skips_the_probe(tmp_path, monkeypatch):
+def test_scaffold_root_borg_override_wins_and_skips_every_probe(tmp_path, monkeypatch):
     repository = _git_repository(tmp_path, "r")
-    _ignore(repository, ".borg/")
+    _ignore(repository, ".stacks/")
     monkeypatch.setattr(shell.proc, "run_capture", lambda *a, **k: pytest.fail("probe ran"))
     assert shell.scaffold_root(repository, "borg")[0] == shell.manifest_dir(repository)
 
 
-def test_scaffold_root_legacy_programs_dir_counts_as_borg_existing(tmp_path):
+def test_scaffold_root_legacy_programs_dir_still_resolves_to_stacks(tmp_path):
     repository = _git_repository(tmp_path, "r")
-    _ignore(repository, ".borg/")
     os.makedirs(os.path.join(repository, ".borg", "programs"))
-    assert shell.scaffold_root(repository)[0] == os.path.join(repository, ".borg", "programs")
+    assert shell.scaffold_root(repository)[0] == os.path.join(repository, ".stacks")
+
+
+def test_scaffold_root_refuses_a_stacks_dir_git_ignores(tmp_path):
+    """The probe names a FILE, so `.stacks/*` (which ignores every file but not the bare directory name)
+    still refuses, and so does an ignore that was in place before `.stacks/` existed. MUTATION: probe the
+    directory instead and the contents case goes red."""
+    for name, pattern in (("whole", ".stacks/"), ("contents", ".stacks/*")):
+        repository = _git_repository(tmp_path, name)
+        _ignore(repository, pattern)
+        with pytest.raises(placement.StacksIgnored) as caught:
+            shell.scaffold_root(repository)
+        assert "--root borg" in str(caught.value)
+    existing = _git_repository(tmp_path, "existing")
+    _ignore(existing, ".stacks/")
+    os.makedirs(os.path.join(existing, ".stacks"))
+    with pytest.raises(placement.StacksIgnored):
+        shell.scaffold_root(existing)
+    with pytest.raises(placement.StacksIgnored):
+        shell.scaffold_root(existing, "stacks")
 
 
 def test_scaffold_root_probe_names_a_file_so_a_contents_only_ignore_still_counts(tmp_path):
-    """`.borg/*` plus `!.borg/chains/` leaves `.borg/chains/` un-ignored, so borg keeps its root; `.borg/chains/*`
-    ignores every file in it while the bare directory name is not ignored, and only a probe that names a FILE sees
-    that. MUTATION: probe the directory instead and the second case goes red."""
+    """`.borg/*` plus `!.borg/chains/` leaves `.borg/chains/` un-ignored; `.borg/chains/*` ignores every file in
+    it while the bare directory name is not ignored, and only a probe that names a FILE sees that. Either way
+    the answer is `.stacks/`, and the reason is what tells the two apart. MUTATION: probe the directory
+    instead and the second case's reason goes red."""
     carved = _git_repository(tmp_path, "carved")
     with open(os.path.join(carved, ".gitignore"), "w", encoding="utf-8") as handle:
         handle.write(".borg/*\n!.borg/chains/\n")
-    assert shell.scaffold_root(carved)[0] == shell.manifest_dir(carved)
+    assert shell.scaffold_root(carved) == (os.path.join(carved, ".stacks"), "default")
     contents = _git_repository(tmp_path, "contents")
     _ignore(contents, ".borg/chains/*")
-    assert shell.scaffold_root(contents)[0] == os.path.join(contents, ".stacks")
+    directory, reason = shell.scaffold_root(contents)
+    assert directory == os.path.join(contents, ".stacks") and "ignores" in reason
 
 
 # ── the writer round-trips through the reader, over the real corpus (AC3) ───────────────────────────

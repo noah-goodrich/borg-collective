@@ -10,7 +10,7 @@ BORG_CMD="${BATS_TEST_DIRNAME}/../borg.zsh"
 
 setup() {
     setup_temp_dirs
-    PDIR="$BATS_TEST_TMPDIR/project"
+    PDIR="$BATS_TEST_TMPDIR/repository"
     CP_DIR="$PDIR/.borg/checkpoints"
     mkdir -p "$CP_DIR"
 }

@@ -41,7 +41,7 @@ def _repository(tmp_path):
 # ── scaffold ─────────────────────────────────────────────────────────────────────────────────────
 def test_scaffold_writes_an_empty_manifest_with_the_apex_and_desc(repository):
     assert _run("scaffold", "--repository", repository, "--name", "demo",
-                "--apex", "o/r#1", "--title", "Apex", "--desc", "A demo.") == 0
+                "--apex", "o/r#1", "--title", "Apex", "--desc", "A demo.", "--root", "borg") == 0
     doc = _read(repository)
     # `program` IS EXPECTED, and its absence was the defect these two cases used to pin. Every
     # manifest under `.borg/chains/` must carry a top-level `program` equal to its filename stem --
@@ -59,7 +59,7 @@ def test_scaffold_writes_an_empty_manifest_with_the_apex_and_desc(repository):
 def test_scaffold_with_no_apex_is_still_valid(repository):
     # core._validate_apex: "No apex at all is valid, not a problem" -- work small enough to need no
     # tracker legitimately has none, and pointing at one that does not exist is worse.
-    assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
+    assert _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg") == 0
     assert _read(repository) == {"program": "demo", "rows": []}
 
 
@@ -69,7 +69,7 @@ def test_scaffold_never_clobbers_an_existing_manifest(repository):
     MUTATION: drop the `os.path.exists` guard in `_cmd_scaffold` and this row vanishes, because the
     fresh scaffold writes `rows: []` over it.
     """
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#7", "--why", "keep me")
     assert _run("scaffold", "--repository", repository, "--name", "demo", "--desc", "different") == 0
     doc = _read(repository)
@@ -79,7 +79,7 @@ def test_scaffold_never_clobbers_an_existing_manifest(repository):
 
 # ── add-row ──────────────────────────────────────────────────────────────────────────────────────
 def test_add_row_appends_and_derives_the_order_within_a_lane(repository):
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "build")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "build")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#3", "--lane", "docs", "--new-lane")
@@ -92,7 +92,7 @@ def test_add_row_skips_prerequisite_orders_when_numbering(repository):
 
     Numbering after a prerequisite would claim a position the author deliberately left unnumbered.
     """
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1",
          "--lane", "build", "--order", "–")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "build")
@@ -106,7 +106,7 @@ def test_add_row_updates_rather_than_duplicating_an_existing_ref(repository):
     A plain append would produce a duplicate ref, which `core.validate` rejects outright -- so the
     second invocation would refuse the whole file for the ordinary case of a PR already declared.
     """
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1",
          "--lane", "build", "--why", "hand-written reason")
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1",
@@ -126,7 +126,7 @@ def test_a_duplicate_ref_would_have_been_refused_by_the_validator(repository):
 
 # ── close ────────────────────────────────────────────────────────────────────────────────────────
 def test_close_sets_the_status_by_ref(repository):
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1")
     assert _run("close", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 0
     assert _read(repository)["rows"][0]["status"] == "merged"
@@ -134,7 +134,7 @@ def test_close_sets_the_status_by_ref(repository):
 
 def test_close_refuses_an_undeclared_ref_and_names_what_is_declared(repository, capsys):
     """Not an implicit add: a wrong ref at close time is something the author needs told."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1")
     assert _run("close", "--repository", repository, "--name", "demo", "--ref", "o/r#99") == 1
     err = capsys.readouterr().err
@@ -156,7 +156,7 @@ def test_add_row_refuses_an_invalid_manifest_and_the_bad_row_survives(repository
     assertion. Three refusal-path cases go red with it -- see the module docstring for why that is
     four and not one.
     """
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "build")
     doc = _read(repository)
     doc["rows"].append({"ref": "o/r#2", "lane": "build", "why": "no order, so invalid"})
@@ -173,7 +173,7 @@ def test_add_row_refuses_an_invalid_manifest_and_the_bad_row_survives(repository
 
 def test_the_reader_refuses_the_whole_file_rather_than_dropping_that_row(repository):
     """The read-side twin: discover no longer salvages, so no caller can write back a shortened manifest."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "build")
     doc = _read(repository)
     doc["rows"].append({"ref": "o/r#2", "lane": "build", "why": "no order, so invalid"})
@@ -209,14 +209,14 @@ def test_add_row_refuses_a_json_document_that_is_not_an_object(repository, capsy
 
 def test_a_ref_the_validator_rejects_is_refused_on_the_way_in(repository, capsys):
     """AC ids and bare paths are not refs, so a skill cannot smuggle one in through this verb."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "AC1") == 1
     assert "must be a GitHub ref" in capsys.readouterr().err
 
 
 def test_the_written_stem_is_basenamed_so_a_name_cannot_escape_the_directory(repository):
     """`write_manifest` basenames the stem; this asserts the CLI agrees, so both land on one path."""
-    assert _run("scaffold", "--repository", repository, "--name", "../escape") == 0
+    assert _run("scaffold", "--repository", repository, "--name", "../escape", "--root", "borg") == 0
     assert os.path.exists(_path(repository, "escape"))
     assert not os.path.exists(os.path.join(repository, ".borg", "escape.json"))
 
@@ -239,7 +239,7 @@ def test_a_lane_move_rederives_the_order_instead_of_carrying_a_stale_one(reposit
     dependencies changed, so it is kept and stated separately rather than folded into the first.
     """
     from borg_core.manifest import core
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "contract")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "contract")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#9", "--lane", "cutover")
@@ -257,7 +257,7 @@ def test_a_lane_move_rederives_the_order_instead_of_carrying_a_stale_one(reposit
 
 def test_an_explicit_order_still_wins_over_the_derived_one_on_a_move(repository):
     """The fix fills the gap the caller left; it does not override the caller."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "a")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "b")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2",
@@ -270,7 +270,7 @@ def test_a_padded_lane_buckets_the_way_core_lanes_buckets_it(repository):
 
     Two rows then derived order "1" into what every consumer reads as ONE lane.
     """
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "a")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2", "--lane", "  a  ")
     rows = _read(repository)["rows"]
@@ -284,14 +284,14 @@ def test_status_is_written_on_a_NEW_row(repository):
     A row written with no status reads as an unknown state, so it is excluded from every ready-set
     answer and renders unresolved rather than merged.
     """
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--status", "merged")
     assert _read(repository)["rows"][0]["status"] == "merged"
 
 
 def test_add_row_and_close_require_a_ref_at_exit_2(repository, capsys):
     """The guard that distinguishes "you forgot a flag" (rc 2) from "your manifest is bad" (rc 1)."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     assert _run("add-row", "--repository", repository, "--name", "demo") == 2
     assert "--ref is required" in capsys.readouterr().err
     assert _run("close", "--repository", repository, "--name", "demo") == 2
@@ -322,7 +322,7 @@ def test_a_lane_move_preserves_a_declared_prerequisite_instead_of_numbering_it(r
     is a claim about ordering, and this file's ordering is marker, then lane position, then edges.
     """
     from borg_core.manifest import core
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1",
          "--lane", "contract", "--order", "–")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2",
@@ -359,7 +359,7 @@ def test_a_lane_move_does_not_outrank_an_untouched_row_whose_order_holds_no_digi
     and this goes red on the lane-order assertion.
     """
     from borg_core.manifest import core
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     for n in (1, 2, 3):
         _run("add-row", "--repository", repository, "--name", "demo", "--ref", f"o/r#{n}", "--lane", "filler")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#7",
@@ -516,7 +516,7 @@ def test_add_row_refuses_a_lane_that_is_not_already_declared(repository, capsys)
 
     MUTATION: delete the `_unknown_lane` call in `_cmd_add_row` and this goes green again.
     """
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "alpha")
     capsys.readouterr()
 
@@ -530,7 +530,7 @@ def test_add_row_refuses_a_lane_that_is_not_already_declared(repository, capsys)
 
 def test_add_row_permits_a_new_lane_when_it_is_declared_deliberately(repository):
     """The discriminating direction: a typo never passes --new-lane, so the flag is the whole gate."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "alpha")
 
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2",
@@ -541,14 +541,14 @@ def test_add_row_permits_a_new_lane_when_it_is_declared_deliberately(repository)
 
 def test_add_row_the_first_lane_in_an_empty_manifest_is_free(repository):
     """There is nothing to typo against yet, so the guard must not demand --new-lane on row one."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     assert _run("add-row", "--repository", repository, "--name", "demo",
                 "--ref", "o/r#1", "--lane", "alpha") == 0
 
 
 def test_add_row_without_a_lane_is_never_a_typo(repository):
     """An omitted --lane resolves to DEFAULT_LANE -- the single-stack case, which names nothing."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1", "--lane", "alpha")
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#2") == 0
 
@@ -565,7 +565,7 @@ def test_add_row_refuses_a_tracked_kind_this_machine_cannot_resolve(repository, 
     MUTATION: delete the `_unauthorable_ref` call in `_cmd_add_row` and this goes green.
     """
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(tmp_path / "no-adapters"))
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     capsys.readouterr()
 
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "PROJ-2107") == 1
@@ -586,7 +586,7 @@ def test_add_row_admits_the_same_jira_ref_once_an_adapter_exists(repository, mon
     stub.chmod(0o755)
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(adapters))
 
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "PROJ-2107") == 0
     assert [row["ref"] for row in _read(repository)["rows"]] == ["PROJ-2107"]
 
@@ -594,7 +594,7 @@ def test_add_row_admits_the_same_jira_ref_once_an_adapter_exists(repository, mon
 def test_add_row_never_authors_a_reference_kind(repository, capsys):
     """Refused for the OPPOSITE reason: `ready_set` skips a link parent, so it is inert rather than
     wedging. It is still not this writer's to create -- a reference is context a human attaches."""
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     capsys.readouterr()
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "https://x.co/a") == 1
     assert "Reference kinds are context a human attaches" in capsys.readouterr().err
@@ -603,7 +603,7 @@ def test_add_row_never_authors_a_reference_kind(repository, capsys):
 def test_add_row_still_authors_github_refs(repository, monkeypatch, tmp_path):
     """github is resolvable without any adapter -- `grid` carries a built-in targeted fetch."""
     monkeypatch.setenv("BORG_RECON_ADAPTER_PATH", str(tmp_path / "none"))
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     assert _run("add-row", "--repository", repository, "--name", "demo", "--ref", "o/r#1") == 0
 
 
@@ -718,8 +718,8 @@ def test_add_row_refuses_a_stem_declared_in_both_roots(repository, capsys):
     assert "declared in both" in capsys.readouterr().err
 
 
-def test_scaffold_still_creates_under_borg_chains_and_leaves_stacks_alone(repository):
-    assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
+def test_scaffold_root_borg_still_creates_under_borg_chains_and_leaves_stacks_alone(repository):
+    assert _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg") == 0
     assert os.path.isfile(_path(repository))
     assert not os.path.exists(os.path.join(repository, shell.STACKS_DIRNAME))
 
@@ -824,10 +824,12 @@ def test_scaffold_root_borg_beats_an_existing_stacks(repository):
     assert os.path.isfile(_path(repository))
 
 
-def test_scaffold_default_is_borg_when_nothing_exists(repository, capsys):
+def test_scaffold_default_is_stacks_when_nothing_exists(repository, capsys):
     assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
-    assert os.path.isfile(_path(repository))
-    assert "default" in capsys.readouterr().out
+    assert os.path.isfile(_stacks_path(repository))
+    assert not os.path.exists(_path(repository))
+    out = capsys.readouterr().out.splitlines()
+    assert out[1].startswith(f"root: {os.path.join(repository, shell.STACKS_DIRNAME)} (") and "default" in out[1]
 
 
 def test_scaffold_default_follows_an_existing_stacks_dir(repository):
@@ -836,11 +838,21 @@ def test_scaffold_default_follows_an_existing_stacks_dir(repository):
     assert os.path.isfile(_stacks_path(repository))
 
 
-def test_scaffold_default_follows_an_existing_borg_dir_even_when_git_ignores_it(repository):
+def test_scaffold_default_is_stacks_even_when_an_ignored_borg_dir_exists(repository):
     _git_init(repository, ".borg/")
     os.makedirs(os.path.join(repository, ".borg", "chains"))
     assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
-    assert os.path.isfile(_path(repository))
+    assert os.path.isfile(_stacks_path(repository))
+    assert not os.path.exists(_path(repository))
+
+
+def test_scaffold_default_is_stacks_in_a_repository_already_holding_borg_chains(repository, capsys):
+    _git_init(repository)
+    os.makedirs(os.path.join(repository, ".borg", "chains"))
+    assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
+    assert os.path.isfile(_stacks_path(repository))
+    assert not os.path.exists(_path(repository))
+    assert capsys.readouterr().out.splitlines()[1].startswith(f"root: {os.path.join(repository, '.stacks')} (")
 
 
 def test_scaffold_default_is_stacks_when_git_ignores_borg_and_neither_exists(repository, capsys):
@@ -850,9 +862,28 @@ def test_scaffold_default_is_stacks_when_git_ignores_borg_and_neither_exists(rep
     assert "ignores .borg/" in capsys.readouterr().out
 
 
-def test_scaffold_default_is_borg_in_a_repository_that_tracks_borg(repository):
+def test_scaffold_default_is_stacks_in_a_fresh_git_repository(repository, capsys):
     _git_init(repository)
     assert _run("scaffold", "--repository", repository, "--name", "demo") == 0
+    assert os.path.isfile(_stacks_path(repository))
+    assert capsys.readouterr().out.splitlines()[1].startswith(f"root: {os.path.join(repository, '.stacks')} (")
+
+
+@pytest.mark.parametrize("root_args", [(), ("--root", "stacks")])
+def test_scaffold_refuses_by_name_when_git_ignores_stacks(repository, capsys, root_args):
+    """Never a silent fallback to `.borg/chains/`, and nothing is created: the refusal names the ignore and
+    the `--root borg` way out. MUTATION: fall back to borg's root on the refusal and the existence check goes red."""
+    _git_init(repository, ".stacks/")
+    assert _run("scaffold", "--repository", repository, "--name", "demo", *root_args) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("demo: refusing to scaffold") and "ignores" in err and "--root borg" in err
+    assert not os.path.exists(_stacks_path(repository)) and not os.path.exists(_path(repository))
+    assert not os.path.exists(os.path.join(repository, shell.STACKS_DIRNAME))
+
+
+def test_scaffold_root_borg_is_the_way_past_an_ignored_stacks(repository):
+    _git_init(repository, ".stacks/")
+    assert _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg") == 0
     assert os.path.isfile(_path(repository))
 
 
@@ -916,7 +947,7 @@ def test_scaffold_names_a_stacks_path_that_is_a_file(repository, capsys, root):
 
 # ── authored `_`-prefixed keys survive an in-place edit (PR #341 fix round 1) ────────────────────
 def _author_a_comment(repository):
-    _run("scaffold", "--repository", repository, "--name", "demo")
+    _run("scaffold", "--repository", repository, "--name", "demo", "--root", "borg")
     doc = _read(repository)
     doc.update({"_comment": "hand-written, not derived", "_note": ["kept", "too"]})
     with open(_path(repository), "w", encoding="utf-8") as handle:

@@ -16,7 +16,7 @@
 #
 # Launch (host sessions only; never builds a shell string from transcript or payload text):
 #   - the sid must match the UUID regex; the cwd must be an existing directory, free of control characters, that is a
-#     registered project dir, a known git worktree of it, or under BORG_RESUME_CWD_ALLOW (colon list, default
+#     registered repository dir, a known git worktree of it, or under BORG_RESUME_CWD_ALLOW (colon list, default
 #     $HOME/dev); anything else is notify_only
 #   - pane gone, tmux up:    tmux new-window -d -P -- <login-shell> -l -c "exec \"$@\"" borg-resume <claude>
 #                            --resume <sid>
@@ -324,7 +324,7 @@ EOF
     fi
     if [ "$(jq -r '.in_container // false' "$_reg" 2>/dev/null)" = true ]; then
         _proj="$(jq -r '.project // empty' "$_reg" 2>/dev/null)"
-        _rr_notify_only container_session "Container session $_lrid: drone up ${_proj:-<project>} --resume $_sid"
+        _rr_notify_only container_session "Container session $_lrid: drone up ${_proj:-<repository>} --resume $_sid"
         return 1
     fi
     if ! _rr_cwd_ok "$_cwd" "$_reg"; then

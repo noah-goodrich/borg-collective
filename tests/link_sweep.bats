@@ -37,7 +37,7 @@ setup() {
 #   - a real `git init` + `origin` on github.com, because recon-adapter-github derives the repo slug
 #     from `git remote get-url origin` and emits SWEPT=0 (exiting before `gh`) without one;
 #   - the real shipped adapter on BORG_RECON_ADAPTER_PATH, overriding setup_temp_dirs' empty dir;
-#   - a real registry entry carrying that path, because the sweep's project list is derived from the
+#   - a real registry entry carrying that path, because the sweep's repository list is derived from the
 #     registry and nothing else;
 #   - the real `jq`, which is why only `gh` is mocked.
 #
@@ -386,7 +386,7 @@ MOCK
 
     # AC2/S4 REMOVED THE SECOND CALL SITE ALTOGETHER, so its two guards went with it rather than
     # being weakened or inverted. bin/link-parity-harness used to loop 3 fixed modes + one deep dive
-    # per registered project through BOTH trees (34 invocations at 14 projects), which is why
+    # per registered repository through BOTH trees (34 invocations at 14 repositories), which is why
     # `--local` was pinned at its `run_link` chokepoint and why its sandbox neutralized
     # BORG_RECON_ADAPTER_PATH with a real empty directory. The `render` leg that did all of that is
     # retired; the surviving `primitives` leg invokes no `borg` subcommand at all — no borg.zsh, no
@@ -665,7 +665,7 @@ for p in sys.argv[1:]:
     unset BORG_LINK_FETCH_FIXTURE
 
     # A POSITIONAL, NOT THE BARE OVERVIEW, and that is a safety rule rather than a measurement one:
-    # `--json` with no project runs borg_desktop_scan, which MERGES into the registry — here, the
+    # `--json` with no repository runs borg_desktop_scan, which MERGES into the registry — here, the
     # user's real one. The deep arm never scans and never writes. It is also the right shape to
     # measure: the positional dominates cwd (B3), so this is repository scope by construction.
     # Through a FILE, not through `printf '%s' '$output' | jq`. That idiom is used elsewhere in the

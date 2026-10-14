@@ -64,7 +64,7 @@ set_mtime() {
     touch -t "$(date -r "$2" +%Y%m%d%H%M.%S 2>/dev/null || date -d "@$2" +%Y%m%d%H%M.%S)" "$1"
 }
 
-# <sid> [mode] [project] : a dead session with an agent in flight
+# <sid> [mode] [repository] : a dead session with an agent in flight
 mk_dead() {
     local sid="$1" f="$PD/$1.jsonl"
     jq -n -c --arg sid "$sid" --argjson pid "$DEADPID" --arg st "$(lstart_of $((NOW - 3600)))" \
@@ -261,7 +261,7 @@ break"
     CWD="${BATS_TEST_TMPDIR}/elsewhere"
     mkdir -p "$CWD"
     mk_dead "$SID"
-    jq -c '.tmux.project_dir = "/nonexistent-project"' "$RD/sessions/$SID.json" >"$RD/sessions/t.json"
+    jq -c '.tmux.project_dir = "/nonexistent-repository"' "$RD/sessions/$SID.json" >"$RD/sessions/t.json"
     mv "$RD/sessions/t.json" "$RD/sessions/$SID.json"
     want "$SID"
     run_due

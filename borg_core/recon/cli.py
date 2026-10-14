@@ -75,9 +75,11 @@ def _filter_by_repository(by_repository: dict[str, list[dict]], keep_names: list
     return {k: v for k, v in by_repository.items() if k in keep}
 
 
-def _run_sweep(resolved_since: str, projects_file: str, adapters: list[tuple[str, str]], repositories: dict) -> dict:
+def _run_sweep(
+    resolved_since: str, repositories_file: str, adapters: list[tuple[str, str]], repositories: dict
+) -> dict:
     """Run the fan-out + reconcile pipeline and assemble the reconciled doc."""
-    tracks = shell.fanout(resolved_since, projects_file, adapters)
+    tracks = shell.fanout(resolved_since, repositories_file, adapters)
     tracks, source_contradictions = core.dedup_cross_source(tracks)
     by_repository = core.merge_by_repository(tracks)
     sources_json = core.build_sources_summary(tracks)
@@ -93,9 +95,9 @@ def _sweep(since: str, sources_filter: str, repositories: dict, repositories_nam
     adapters = _select_adapters(sources_filter)
 
     with tempfile.TemporaryDirectory(prefix="borg-recon.") as workdir:
-        projects_file = os.path.join(workdir, "projects.json")
-        shell.write_repositories_file(repositories, projects_file)
-        doc = _run_sweep(resolved_since, projects_file, adapters, repositories)
+        repositories_file = os.path.join(workdir, "projects.json")
+        shell.write_repositories_file(repositories, repositories_file)
+        doc = _run_sweep(resolved_since, repositories_file, adapters, repositories)
         doc["items_by_project"] = _filter_by_repository(doc["items_by_project"], repositories_names)
         shell.write_last_run_marker(resolved_since)
 

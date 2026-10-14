@@ -4,7 +4,7 @@
 # Covers both:
 #  - run_borg_hook unit behavior (strict vs lenient, present/absent/non-executable)
 #  - drone.zsh integration: hooks fire around `docker compose up/down` but NOT
-#    around the transient down in _cycle_project (restart/rebuild).
+#    around the transient down in _cycle_repository (restart/rebuild).
 
 load test_helper/setup
 
@@ -14,8 +14,8 @@ LIB="${BATS_TEST_DIRNAME}/../lib/drone-hooks.zsh"
 setup() {
     setup_temp_dirs
 
-    export TEST_PROJECT="${BATS_TEST_TMPDIR}/sample"
-    mkdir -p "$TEST_PROJECT/.devcontainer/borg-hooks"
+    export TEST_REPOSITORY="${BATS_TEST_TMPDIR}/sample"
+    mkdir -p "$TEST_REPOSITORY/.devcontainer/borg-hooks"
 
     # Trace file for invocation order assertions.
     export TRACE="${BATS_TEST_TMPDIR}/trace.log"
@@ -77,11 +77,11 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/borg"
 
-    # Minimal devcontainer files so drone sees a valid project.
-    cat > "$TEST_PROJECT/.devcontainer/devcontainer.json" <<'EOF'
+    # Minimal devcontainer files so drone sees a valid repository.
+    cat > "$TEST_REPOSITORY/.devcontainer/devcontainer.json" <<'EOF'
 { "name": "sample", "dockerComposeFile": "docker-compose.yml", "service": "devcontainer", "workspaceFolder": "/workspace", "remoteUser": "dev" }
 EOF
-    cat > "$TEST_PROJECT/.devcontainer/docker-compose.yml" <<'EOF'
+    cat > "$TEST_REPOSITORY/.devcontainer/docker-compose.yml" <<'EOF'
 services:
   devcontainer:
     image: alpine
@@ -93,76 +93,76 @@ EOF
 # Build a borg-hook that writes a tagged line to $TRACE and exits with given code.
 _install_hook() {
     local name="$1" rc="${2:-0}"
-    cat > "$TEST_PROJECT/.devcontainer/borg-hooks/$name" <<EOF
+    cat > "$TEST_REPOSITORY/.devcontainer/borg-hooks/$name" <<EOF
 #!/usr/bin/env bash
 echo "hook:$name" >> "$TRACE"
 exit $rc
 EOF
-    chmod +x "$TEST_PROJECT/.devcontainer/borg-hooks/$name"
+    chmod +x "$TEST_REPOSITORY/.devcontainer/borg-hooks/$name"
 }
 
 # ─── run_borg_hook unit tests ─────────────────────────────────────────────────
 
 @test "run_borg_hook: absent hook returns 0 silently" {
-    run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample pre-up.sh strict"
+    run zsh -c "source '$LIB'; run_borg_hook '$TEST_REPOSITORY' sample pre-up.sh strict"
     [ "$status" -eq 0 ]
 }
 
 @test "run_borg_hook: present hook runs and returns 0 on success" {
     _install_hook pre-up.sh 0
-    run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample pre-up.sh strict"
+    run zsh -c "source '$LIB'; run_borg_hook '$TEST_REPOSITORY' sample pre-up.sh strict"
     [ "$status" -eq 0 ]
     grep -q 'hook:pre-up.sh' "$TRACE"
 }
 
 @test "run_borg_hook: strict mode propagates non-zero exit" {
     _install_hook pre-up.sh 7
-    run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample pre-up.sh strict"
+    run zsh -c "source '$LIB'; run_borg_hook '$TEST_REPOSITORY' sample pre-up.sh strict"
     [ "$status" -eq 7 ]
     [[ "$output" == *"aborting"* ]] || false
 }
 
 @test "run_borg_hook: lenient mode swallows non-zero exit" {
     _install_hook post-down.sh 5
-    run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample post-down.sh lenient"
+    run zsh -c "source '$LIB'; run_borg_hook '$TEST_REPOSITORY' sample post-down.sh lenient"
     [ "$status" -eq 0 ]
     [[ "$output" == *"WARN"* ]] || false
     [[ "$output" == *"continuing"* ]] || false
 }
 
 @test "run_borg_hook: non-executable hook is skipped with warning" {
-    cat > "$TEST_PROJECT/.devcontainer/borg-hooks/pre-up.sh" <<'EOF'
+    cat > "$TEST_REPOSITORY/.devcontainer/borg-hooks/pre-up.sh" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
     # deliberately no chmod +x
-    run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample pre-up.sh strict"
+    run zsh -c "source '$LIB'; run_borg_hook '$TEST_REPOSITORY' sample pre-up.sh strict"
     [ "$status" -eq 0 ]
     [[ "$output" == *"not executable"* ]] || false
 }
 
 @test "run_borg_hook: passes BORG_PROJECT_NAME to hook" {
-    cat > "$TEST_PROJECT/.devcontainer/borg-hooks/pre-up.sh" <<'EOF'
+    cat > "$TEST_REPOSITORY/.devcontainer/borg-hooks/pre-up.sh" <<'EOF'
 #!/usr/bin/env bash
 echo "name=$BORG_PROJECT_NAME" >> "$TRACE"
 exit 0
 EOF
-    chmod +x "$TEST_PROJECT/.devcontainer/borg-hooks/pre-up.sh"
-    run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' myproj pre-up.sh strict"
+    chmod +x "$TEST_REPOSITORY/.devcontainer/borg-hooks/pre-up.sh"
+    run zsh -c "source '$LIB'; run_borg_hook '$TEST_REPOSITORY' myproj pre-up.sh strict"
     [ "$status" -eq 0 ]
     grep -q 'name=myproj' "$TRACE"
 }
 
-@test "run_borg_hook: cds to project dir before running hook" {
-    cat > "$TEST_PROJECT/.devcontainer/borg-hooks/pre-up.sh" <<'EOF'
+@test "run_borg_hook: cds to repository dir before running hook" {
+    cat > "$TEST_REPOSITORY/.devcontainer/borg-hooks/pre-up.sh" <<'EOF'
 #!/usr/bin/env bash
 echo "pwd=$PWD" >> "$TRACE"
 exit 0
 EOF
-    chmod +x "$TEST_PROJECT/.devcontainer/borg-hooks/pre-up.sh"
-    run zsh -c "source '$LIB'; run_borg_hook '$TEST_PROJECT' sample pre-up.sh strict"
+    chmod +x "$TEST_REPOSITORY/.devcontainer/borg-hooks/pre-up.sh"
+    run zsh -c "source '$LIB'; run_borg_hook '$TEST_REPOSITORY' sample pre-up.sh strict"
     [ "$status" -eq 0 ]
-    grep -q "pwd=$TEST_PROJECT" "$TRACE"
+    grep -q "pwd=$TEST_REPOSITORY" "$TRACE"
 }
 
 # ─── drone.zsh integration ────────────────────────────────────────────────────
@@ -170,30 +170,30 @@ EOF
 # points. They stub docker+tmux via PATH, run drone commands, and check the
 # TRACE log for invocation order.
 
-@test "drone up: pre-up.sh fires BEFORE project's docker compose up" {
+@test "drone up: pre-up.sh fires BEFORE repository's docker compose up" {
     _install_hook pre-up.sh 0
-    run "$DRONE" up "$TEST_PROJECT"
+    run "$DRONE" up "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
-    # ensure_postgres runs its own compose up before the project; filter to
-    # the project's compose call only (contains "-p sampleproj").
+    # ensure_postgres runs its own compose up before the repository; filter to
+    # the repository's compose call only (contains "-p sampleproj").
     local hook_line up_line
     hook_line=$(grep -n 'hook:pre-up.sh' "$TRACE" | head -1 | cut -d: -f1)
     up_line=$(grep -n 'docker-compose -p sample .*up' "$TRACE" | head -1 | cut -d: -f1)
     [ -n "$hook_line" ] && [ -n "$up_line" ] && [ "$hook_line" -lt "$up_line" ]
 }
 
-@test "drone up: pre-up.sh non-zero exit aborts (project compose never runs)" {
+@test "drone up: pre-up.sh non-zero exit aborts (repository compose never runs)" {
     _install_hook pre-up.sh 1
-    run "$DRONE" up "$TEST_PROJECT"
+    run "$DRONE" up "$TEST_REPOSITORY"
     [ "$status" -ne 0 ]
-    # ensure_postgres may still run, but the project's compose must not.
+    # ensure_postgres may still run, but the repository's compose must not.
     ! grep -q 'docker-compose -p sample .*up' "$TRACE"
 }
 
 @test "drone up: no borg-hooks dir — succeeds silently with no hook output" {
     # Remove the hooks dir entirely
-    rm -rf "$TEST_PROJECT/.devcontainer/borg-hooks"
-    run "$DRONE" up "$TEST_PROJECT"
+    rm -rf "$TEST_REPOSITORY/.devcontainer/borg-hooks"
+    run "$DRONE" up "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
     ! grep -q 'Running borg-hook' <<< "$output"
     ! grep -q 'hook:' "$TRACE"
@@ -201,7 +201,7 @@ EOF
 
 @test "drone down: post-down.sh fires AFTER docker compose down" {
     _install_hook post-down.sh 0
-    run "$DRONE" down "$TEST_PROJECT"
+    run "$DRONE" down "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
     local down_line hook_line
     down_line=$(grep -n 'docker-compose.*down' "$TRACE" | head -1 | cut -d: -f1)
@@ -211,7 +211,7 @@ EOF
 
 @test "drone down: post-down.sh non-zero exit does NOT fail drone down" {
     _install_hook post-down.sh 13
-    run "$DRONE" down "$TEST_PROJECT"
+    run "$DRONE" down "$TEST_REPOSITORY"
     [ "$status" -eq 0 ]
     [[ "$output" == *"post-down.sh"* ]] || false
 }
@@ -220,8 +220,8 @@ EOF
     _install_hook pre-up.sh 0
     _install_hook post-down.sh 0
     # restart requires a running container. Since our mock docker 'ps' returns
-    # a name, drone should walk the _cycle_project path.
-    run "$DRONE" restart "$TEST_PROJECT"
+    # a name, drone should walk the _cycle_repository path.
+    run "$DRONE" restart "$TEST_REPOSITORY"
     # Count hook invocations across the cycle.
     local pre_count post_count
     pre_count=$(grep -c 'hook:pre-up.sh' "$TRACE" || true)

@@ -159,8 +159,8 @@ if [ "$SKIP_MODEL" -eq 0 ]; then
     elif ! command -v "$PYTHON" >/dev/null 2>&1; then
         skip "LIVE: interpreter '$PYTHON' not found -- set BORG_EVAL_PYTHON"
     else
-        mkdir -p "$OUT/xdg-config" "$OUT/xdg-state" "$OUT/project"
-        ( cd "$OUT/project" && unset BORG_ORCHESTRATOR_ROOT BORG_DIR BORG_REGISTRY \
+        mkdir -p "$OUT/xdg-config" "$OUT/xdg-state" "$OUT/repository"
+        ( cd "$OUT/repository" && unset BORG_ORCHESTRATOR_ROOT BORG_DIR BORG_REGISTRY \
             && XDG_CONFIG_HOME="$OUT/xdg-config" XDG_STATE_HOME="$OUT/xdg-state" \
                "$CLAUDE_BIN" -p 'Reply with the single word OK.' --model "$EVAL_MODEL" --effort "$EVAL_EFFORT" \
                --output-format stream-json --verbose --include-hook-events --no-session-persistence \

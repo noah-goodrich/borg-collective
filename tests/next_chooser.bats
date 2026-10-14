@@ -69,7 +69,7 @@ JSON
     [ "$(_selected)" = "w-old" ]
 }
 
-@test "next --switch: a pinned project outranks a waiting tie" {
+@test "next --switch: a pinned repository outranks a waiting tie" {
     _write_registry ', "pinned-idle": {"path":null,"status":"idle","pinned":true,"tmux_window":"w-pin","last_activity":"2026-08-01T10:00:00Z"}'
     run zsh "$BORG" next --switch
     [ "$status" -eq 0 ]
@@ -140,7 +140,7 @@ _last_row() {
     [ "$output" = "$expected" ]
 }
 
-@test "next --switch: logs the focused project as active when the tmux window matches tmux_window" {
+@test "next --switch: logs the focused repository as active when the tmux window matches tmux_window" {
     _write_registry ""
     export TMUX_MOCK_CURRENT="w-act"
     run zsh "$BORG" next --switch
@@ -270,7 +270,7 @@ _log_count() {
     _last_row | jq -e ".shown == true and .opened == \"act\""
 }
 
-@test "next --open with an unknown project dies with no switch and no log" {
+@test "next --open with an unknown repository dies with no switch and no log" {
     _write_registry ""
     run zsh "$BORG" next --open nonesuch --chosen
     [ "$status" -ne 0 ]
@@ -377,7 +377,7 @@ GHEOF
 # ONE STATE OVERLAY. `borg link` and `borg next` used to read the registry through two implementations (the
 # Python overlay vs the zsh borg_registry_with_state), so "what waits on me" could differ between them. Both now
 # consume borg_core.link.overlay. The fixture is the shape the two readers were supposed to agree on: the REGISTRY
-# says idle and a fresh state.json says waiting, one project per liveness path (live window, window under the
+# says idle and a fresh state.json says waiting, one repository per liveness path (live window, window under the
 # short name, dead window with a recent timestamp is kept by age).
 @test "link's waiting rows and next --rows --json rows are the same rows, session rows included" {
     local now

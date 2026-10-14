@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# Tests for per-project state.json helpers in lib/borg-hooks.sh (bash) and
+# Tests for per-repository state.json helpers in lib/borg-hooks.sh (bash) and
 # lib/registry.zsh (zsh). Covers _borg_state_{file,read,write} and
 # borg_registry_with_state / borg_registry_get_with_state.
 
@@ -8,13 +8,13 @@ load test_helper/setup
 setup() {
     setup_temp_dirs
 
-    export TEST_PROJ="${BATS_TEST_TMPDIR}/myproject"
+    export TEST_PROJ="${BATS_TEST_TMPDIR}/myrepo"
     mkdir -p "$TEST_PROJ"
 
     # Seed registry with a real path so state helpers can resolve it
     mkdir -p "$BORG_DIR"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"myproject":{"path":"${TEST_PROJ}","source":"cli","summary":null}}}
+{"projects":{"myrepo":{"path":"${TEST_PROJ}","source":"cli","summary":null}}}
 EOF
 }
 
@@ -67,7 +67,7 @@ EOF
     [ ! -f "$(state_path_of "$TEST_PROJ" "")" ]
 }
 
-@test "_borg_state_write creates the per-project state dir if absent" {
+@test "_borg_state_write creates the per-repository state dir if absent" {
     [ ! -d "$(dirname "$(state_path_of "$TEST_PROJ" "")")" ]
     bash -c "
         source '${BORG_HOME}/lib/borg-hooks.sh'
@@ -101,7 +101,7 @@ EOF
 @test "borg_registry_with_state returns registry data when no state.json" {
     result=$(run_zsh_fn registry borg_registry_with_state)
     name=$(printf '%s' "$result" | jq -r '.projects | keys[0]')
-    [ "$name" = "myproject" ]
+    [ "$name" = "myrepo" ]
 }
 
 @test "borg_registry_with_state overlays state.json fields" {
@@ -114,8 +114,8 @@ EOF
         > "${TEST_PROJ}/.borg/state.json"
 
     result=$(run_zsh_fn registry borg_registry_with_state)
-    status=$(printf '%s' "$result" | jq -r '.projects.myproject.status')
-    sid=$(printf '%s' "$result" | jq -r '.projects.myproject.claude_session_id')
+    status=$(printf '%s' "$result" | jq -r '.projects.myrepo.status')
+    sid=$(printf '%s' "$result" | jq -r '.projects.myrepo.claude_session_id')
     [ "$status" = "active" ]
     [ "$sid" = "sess-xyz" ]
 }
@@ -125,13 +125,13 @@ EOF
     echo '{"status":"active"}' > "${TEST_PROJ}/.borg/state.json"
 
     result=$(run_zsh_fn registry borg_registry_with_state)
-    src=$(printf '%s' "$result" | jq -r '.projects.myproject.source')
-    path=$(printf '%s' "$result" | jq -r '.projects.myproject.path')
+    src=$(printf '%s' "$result" | jq -r '.projects.myrepo.source')
+    path=$(printf '%s' "$result" | jq -r '.projects.myrepo.path')
     [ "$src" = "cli" ]
     [ "$path" = "${TEST_PROJ}" ]
 }
 
-@test "borg_registry_get_with_state returns merged project entry" {
+@test "borg_registry_get_with_state returns merged repository entry" {
     mkdir -p "${TEST_PROJ}/.borg"
     # Fresh last_activity keeps the reaper overlay from downgrading waiting -> idle.
     local now
@@ -139,14 +139,14 @@ EOF
     echo "{\"status\":\"waiting\",\"last_activity\":\"${now}\",\"waiting_reason\":\"Needs review\"}" \
         > "${TEST_PROJ}/.borg/state.json"
 
-    result=$(run_zsh_fn registry borg_registry_get_with_state myproject)
+    result=$(run_zsh_fn registry borg_registry_get_with_state myrepo)
     status=$(printf '%s' "$result" | jq -r '.status')
     reason=$(printf '%s' "$result" | jq -r '.waiting_reason')
     [ "$status" = "waiting" ]
     [ "$reason" = "Needs review" ]
 }
 
-@test "borg_registry_get_with_state returns empty for unknown project" {
+@test "borg_registry_get_with_state returns empty for unknown repository" {
     result=$(run_zsh_fn registry borg_registry_get_with_state nonexistent)
     [ -z "$result" ]
 }

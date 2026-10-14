@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# borg-notifyd check(): a project with an EMPTY tmux_window must still fire its container-origin
+# borg-notifyd check(): a repository with an EMPTY tmux_window must still fire its container-origin
 # "waiting" notification. The registry line used to be tab-joined; a tab is IFS whitespace, so the empty
 # window collapsed and notify_origin slid into `window`, leaving origin empty and the notification silent.
 

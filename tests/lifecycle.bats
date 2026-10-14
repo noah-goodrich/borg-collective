@@ -22,8 +22,8 @@ _stop_input() {
 setup() {
     setup_temp_dirs
 
-    # Project directory (real dir for git checks)
-    export TEST_CWD="${BATS_TEST_TMPDIR}/myproject"
+    # Repository directory (real dir for git checks)
+    export TEST_CWD="${BATS_TEST_TMPDIR}/myrepo"
     mkdir -p "$TEST_CWD"
 
     # Mock bin dir
@@ -39,7 +39,7 @@ setup() {
     # Seed registry with the real test CWD path so hooks can resolve state.json
     mkdir -p "$BORG_DIR"
     cat > "$BORG_REGISTRY" <<EOF
-{"projects":{"myproject":{"path":"${TEST_CWD}","status":"idle","source":"cli"}}}
+{"projects":{"myrepo":{"path":"${TEST_CWD}","status":"idle","source":"cli"}}}
 EOF
 
     # Mock claude: generate a fake debrief
@@ -62,7 +62,7 @@ EOF
 
 # ─── start hook registry update ───────────────────────────────────────────────
 
-@test "start hook sets project status to active" {
+@test "start hook sets repository status to active" {
     bash "$BORG_START" <<< "$(_start_input)" >/dev/null
 
     status=$(jq -r '.status' "$(state_path_of "$TEST_CWD" "")")
@@ -76,8 +76,8 @@ EOF
     [ "$sid" = "sess-abc" ]
 }
 
-@test "start hook exits 0 for unknown project (not in registry)" {
-    unknown_cwd="${BATS_TEST_TMPDIR}/unknown-project"
+@test "start hook exits 0 for unknown repository (not in registry)" {
+    unknown_cwd="${BATS_TEST_TMPDIR}/unknown-repository"
     mkdir -p "$unknown_cwd"
     run bash "$BORG_START" <<< "$(_start_input "$unknown_cwd")"
     [ "$status" -eq 0 ]
@@ -266,7 +266,7 @@ EOF
 
 # ─── stop hook registry update ────────────────────────────────────────────────
 
-@test "stop hook sets project status to idle" {
+@test "stop hook sets repository status to idle" {
     # Pre-seed state.json as active
     mkdir -p "${TEST_CWD}/.borg"
     echo '{"status":"active"}' > "${TEST_CWD}/.borg/state.json"
@@ -322,7 +322,7 @@ EOF
 
 # ─── .borg-project marker resolution ─────────────────────────────────────────
 
-@test "start hook resolves project from .borg-project marker in CWD" {
+@test "start hook resolves repository from .borg-project marker in CWD" {
     # Simulate a container path whose basename != registry key
     local container_dir="${BATS_TEST_TMPDIR}/snowfort-audit"
     mkdir -p "$container_dir"
@@ -339,7 +339,7 @@ EOF
     [ "$status" = "active" ]
 }
 
-@test "start hook resolves project from .borg-project marker in ancestor dir" {
+@test "start hook resolves repository from .borg-project marker in ancestor dir" {
     # Simulate Claude CWD being a subdirectory (e.g. src/api) inside the mount
     local container_dir="${BATS_TEST_TMPDIR}/snowfort-audit"
     local sub_dir="$container_dir/src/api"
@@ -356,7 +356,7 @@ EOF
     [ "$status" = "active" ]
 }
 
-@test "stop hook resolves project from .borg-project marker in ancestor dir" {
+@test "stop hook resolves repository from .borg-project marker in ancestor dir" {
     local container_dir="${BATS_TEST_TMPDIR}/snowfort-audit"
     local sub_dir="$container_dir/src/api"
     mkdir -p "$sub_dir"
@@ -412,7 +412,7 @@ EOF
     bash "$BORG_STOP" \
         <<< "$(printf '{"session_id":"orch-abc","cwd":"%s"}' "$orch_cwd")" 2>/dev/null
 
-    # No state.json should have been created for myproject — orch hook exits early
+    # No state.json should have been created for myrepo — orch hook exits early
     [ ! -f "${TEST_CWD}/.borg/state.json" ]
     [ ! -f "$(state_path_of "$TEST_CWD" "")" ]
 }
@@ -461,7 +461,7 @@ EOF
     bash "$borg_notify" \
         <<< "$(printf '{"session_id":"orch-abc","cwd":"%s","message":"waiting"}' "$orch_cwd")" 2>/dev/null || true
 
-    # No state.json should have been created for myproject — orch hook exits early
+    # No state.json should have been created for myrepo — orch hook exits early
     [ ! -f "${TEST_CWD}/.borg/state.json" ]
     [ ! -f "$(state_path_of "$TEST_CWD" "")" ]
 }
@@ -583,7 +583,7 @@ _fresh_checkpoint() {
     [ "$STOP_RC" -eq 0 ]
     printf "%s" "$STOP_OUT" | jq -e . >/dev/null
     [ "$(printf "%s" "$STOP_OUT" | jq -r "keys | join(\",\")")" = "systemMessage" ]
-    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "myproject has uncommitted changes"
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "myrepo has uncommitted changes"
     [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
 }
 
@@ -592,7 +592,7 @@ _fresh_checkpoint() {
 
     _run_stop_split
     [ "$STOP_RC" -eq 0 ]
-    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "No checkpoint in the last hour for myproject"
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "No checkpoint in the last hour for myrepo"
     [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
 }
 

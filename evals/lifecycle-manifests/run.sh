@@ -6,10 +6,10 @@
 # well by a skill that does the thing unconditionally.
 #
 #   VERBS               offline, pytest  -> the four `manifest.cli` verbs the skills shell to hold
-#   P1 /borg-plan        real project, no .borg  -> manifest scaffolded, validates, rows: []
-#   N1 /borg-plan        real project + manifest -> the file is BYTE-IDENTICAL afterwards
+#   P1 /borg-plan        real repository, no .borg -> manifest scaffolded, validates, rows: []
+#   N1 /borg-plan        real repository + manifest -> the file is BYTE-IDENTICAL afterwards
 #   P2 /borg-link-up     manifest + gh stub      -> one row for that ref
-#   N2 /borg-link-up     real project, NO manifest -> none created; creation stays /borg-plan's
+#   N2 /borg-link-up     real repository, NO manifest -> none created; creation stays /borg-plan's
 #   P3 /borg-assimilate  manifest declares ref   -> that row's status is merged
 #   N3 /borg-assimilate  manifest lacks the ref  -> file byte-identical, and NO row was added
 #
@@ -232,7 +232,7 @@ if [ -n "$model_off" ]; then
     skip "P1 /borg-plan scaffolds a manifest ($model_off)"
     skip "N1 /borg-plan does not clobber an existing manifest (P1 did not run)"
 else
-    p1="$(_eval_repo_with_project "$OUT/p1")"
+    p1="$(_eval_repo_with_source "$OUT/p1")"
     MODEL_RAN=$((MODEL_RAN+1))
     _run_skill "$p1" "/borg-plan" "add CI and a coverage gate to this library"
     p1_planned=0; [ -f "$p1/PROJECT_PLAN.md" ] && p1_planned=1
@@ -244,7 +244,7 @@ else
 
     # N1's PRECONDITION: /borg-plan must have reached its output step at all. Without this the
     # byte-identical assertion below passes whenever the skill does nothing.
-    n1="$(_eval_repo_with_project "$OUT/n1")"
+    n1="$(_eval_repo_with_source "$OUT/n1")"
     mkdir -p "$n1/$_EVAL_MANIFEST_DIR"
     printf '{"program":"declared","rows":[{"ref":"o/r#1","lane":"alpha","order":"1","why":"first"},{"ref":"o/r#2","lane":"alpha","order":"2","why":"second"}]}\n' \
         > "$n1/$_EVAL_MANIFEST_DIR/declared.json"
@@ -266,7 +266,7 @@ if [ -n "$model_off" ]; then
     skip "P2 /borg-link-up adds one row for the branch's PR ($model_off)"
     skip "N2 /borg-link-up does not scaffold where none exists (P2 did not run)"
 else
-    p2="$(_eval_repo_with_project "$OUT/p2")"
+    p2="$(_eval_repo_with_source "$OUT/p2")"
     mkdir -p "$p2/$_EVAL_MANIFEST_DIR"
     printf '{"program":"prog","rows":[]}\n' > "$p2/$_EVAL_MANIFEST_DIR/prog.json"
     _eval_plan "$p2" 2026-01-01-p2-slug
@@ -281,7 +281,7 @@ else
 
     # N2's PRECONDITION: P2 proved link-up can write a row at all. If it cannot, "no manifest was
     # created" is true for a reason unrelated to the creation split.
-    n2="$(_eval_repo_with_project "$OUT/n2")"
+    n2="$(_eval_repo_with_source "$OUT/n2")"
     _eval_plan "$n2" 2026-01-01-n2-slug
     MODEL_RAN=$((MODEL_RAN+1))
     _run_skill "$n2" "/borg-link-up" "record where this session got to"
@@ -305,7 +305,7 @@ if [ -n "$model_off" ]; then
     skip "P3 /borg-assimilate closes the merged row ($model_off)"
     skip "N3 /borg-assimilate does not add a row it was meant to verify (P3 did not run)"
 else
-    p3="$(_eval_repo_with_project "$OUT/p3")"
+    p3="$(_eval_repo_with_source "$OUT/p3")"
     mkdir -p "$p3/$_EVAL_MANIFEST_DIR"
     printf '{"program":"prog","rows":[{"ref":"o/r#7","lane":"alpha","order":"1","why":"the merged one"}]}\n' \
         > "$p3/$_EVAL_MANIFEST_DIR/prog.json"
@@ -320,7 +320,7 @@ else
         bad "P3 /borg-assimilate did not close the declared row"
     fi
 
-    n3="$(_eval_repo_with_project "$OUT/n3")"
+    n3="$(_eval_repo_with_source "$OUT/n3")"
     mkdir -p "$n3/$_EVAL_MANIFEST_DIR"
     printf '{"program":"prog","rows":[{"ref":"o/r#99","lane":"alpha","order":"1","why":"a different ref"}]}\n' \
         > "$n3/$_EVAL_MANIFEST_DIR/prog.json"

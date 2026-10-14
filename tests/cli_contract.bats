@@ -124,13 +124,13 @@ run_zsh_borg() {
     [[ "$plain" != *"None"* ]] || false
 }
 
-# ── A project's summary comes from its latest CHECKPOINT, or it has none ──────────────────────────────
+# ── A repository's summary comes from its latest CHECKPOINT, or it has none ──────────────────────────────
 #
 # Each case registers a `summary` the way summarize.py would have stored it. The registry value is the
-# decoy: `borg link` must never display it. The checkpoint FILES are real, written under the project's
+# decoy: `borg link` must never display it. The checkpoint FILES are real, written under the repository's
 # path, so these cases fail if production reads anything but the file.
 
-@test "contract: a project whose stored summary is a greeting and which has no checkpoint renders no summary" {
+@test "contract: a repository whose stored summary is a greeting and which has no checkpoint renders no summary" {
     _link_mock_tmux ""
     local ws="${BATS_TEST_TMPDIR}/ws/greeter"
     mkdir -p "$ws"
@@ -153,7 +153,7 @@ EOF
     [[ "$plain" != *"Summary"* ]] || false
 }
 
-@test "contract: a project with a checkpoint renders its tl;dr, flattened, without bold markers" {
+@test "contract: a repository with a checkpoint renders its tl;dr, flattened, without bold markers" {
     _link_mock_tmux ""
     local ws="${BATS_TEST_TMPDIR}/ws/shipper"
     mkdir -p "$ws/.borg/checkpoints"
@@ -236,7 +236,7 @@ EOF
     # ("Recon sweep — since ...", 14 repos, exit 0) on a machine with real adapters.
     local -a probes=(
         "--since 2026-01-01T00:00:00Z"
-        "--projects nosuchproject"
+        "--projects nosuchrepository"
         "--sources github"
     )
     local probe
@@ -480,7 +480,7 @@ EOF
 # `borg_tmux_window_exists`, which is a real (if read-only) `tmux has-session`/`list-windows` query
 # against WHATEVER tmux session happens to be live on the machine running the suite; `borg color`'s
 # live-window variant would have gone further and issued real `tmux set-option` calls against a real
-# window if one happened to match the test's project name. Every mock in this section is now paired
+# window if one happened to match the test's repository name. Every mock in this section is now paired
 # with an explicit `export BORG_PATH_PREFIX="$MOCK_BIN"`, matching the established precedent in
 # tests/doctor.bats and tests/briefing.bats. Each group's documented "honest gaps" are preserved
 # verbatim as comments near the relevant tests rather than silently dropped.
@@ -517,13 +517,13 @@ EOF
 
 # ── registry CRUD: next, scan, add, rm, pin, unpin, color, image ─────────────
 
-# cmd_next (borg.zsh:1074). Reads borg_registry_with_state, scores/sorts projects via jq, prints the
+# cmd_next (borg.zsh:1074). Reads borg_registry_with_state, scores/sorts repositories via jq, prints the
 # top pick or "All clear". No unit-level test of this scoring exists anywhere else in tests/, so
-# these are real behavioral checks, not just dispatch smoke. Every fixture project uses path:null so
+# these are real behavioral checks, not just dispatch smoke. Every fixture repository uses path:null so
 # _borg_read_directives is a no-op, keeping the test inside the sandbox. NOTE: borg_registry_with_state
 # unconditionally calls _borg_live_windows (inside borg_reap_overlay) once per invocation, regardless
-# of whether any project is active/waiting or the registry is empty — so even these read-mostly tests
-# reach real tmux unless mocked; a bare "no live session" stub is enough since neither fixture project
+# of whether any repository is active/waiting or the registry is empty — so even these read-mostly tests
+# reach real tmux unless mocked; a bare "no live session" stub is enough since neither fixture repository
 # is ever active/waiting.
 
 @test "contract: next on an empty registry says all clear and exits 0" {
@@ -540,7 +540,7 @@ EOF
     [[ "$output" == *"All clear"* ]] || false
 }
 
-@test "contract: next surfaces the pinned project over an unpinned one" {
+@test "contract: next surfaces the pinned repository over an unpinned one" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -574,10 +574,10 @@ EOF
 }
 
 # cmd_scan (borg.zsh:838) fans out over claude/coco/desktop session-history sources and then, for
-# every ALREADY-REGISTERED project, shells out to python3 summarize.py. Path-skip/discovery logic
+# every ALREADY-REGISTERED repository, shells out to python3 summarize.py. Path-skip/discovery logic
 # already has real unit coverage in tests/registry.bats (borg_scan_path_should_skip: 6 cases). The
 # minimal safe CLI contract here is proving dispatch reaches cmd_scan and completes cleanly under a
-# fully sandboxed/empty HOME — with zero registered projects and the claude/coco session logs absent
+# fully sandboxed/empty HOME — with zero registered repositories and the claude/coco session logs absent
 # under the sandboxed HOME, both the discovery loop and the summarize.py refresh loop have zero
 # iterations, so no external process or real ~/.claude data is ever touched, and no tmux mock is
 # needed either (cmd_scan reads the raw registry, not the state-overlaid/tmux-touching one).
@@ -601,18 +601,18 @@ EOF
 # cmd_add (borg.zsh:946) calls borg_tmux_window_exists unconditionally, which shells out to real
 # tmux. Mocked per this suite's established convention (see tests/drone_pane.bats) so the test never
 # depends on, or touches, any real tmux session/window on the host. has-session always fails here (no
-# live window), which is the common case for a freshly-registered project.
+# live window), which is the common case for a freshly-registered repository.
 #
 # HONEST GAP (from the drafting group, preserved): cmd_add has no invalid-argument failure branch at
 # all by design — `local ppath="${1:-$PWD}"` accepts any string, including a nonexistent path, and
 # always "succeeds" (realpath falls back to echoing the raw string on failure). So unlike rm/pin/
 # unpin/color, there is no clean-failure-on-bad-arg contract to test for `add`.
 #
-# FORMER BUG, fixed on purpose (issue #306): cmd_add used to exit 1 for a freshly-added project with no
+# FORMER BUG, fixed on purpose (issue #306): cmd_add used to exit 1 for a freshly-added repository with no
 # Claude session (the common case), so `borg add <path> && ...` silently skipped the second command. It
 # now exits 0 whenever registration succeeds; a genuine failure (the --name collision below) still exits 1.
 
-@test "contract: add registers a new project keyed by the directory basename and exits 0 with no Claude session" {
+@test "contract: add registers a new repository keyed by the directory basename and exits 0 with no Claude session" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -622,21 +622,21 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/tmux"
 
-    local proj_dir="${BATS_TEST_TMPDIR}/sample-project"
+    local proj_dir="${BATS_TEST_TMPDIR}/sample-repository"
     mkdir -p "$proj_dir"
 
     run_zsh_borg add "$proj_dir"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Registered: sample-project"* ]] || false
+    [[ "$output" == *"Registered: sample-repository"* ]] || false
 
     run jq -e '.' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
 
-    run jq -r '.projects["sample-project"].path' "$BORG_REGISTRY"
+    run jq -r '.projects["sample-repository"].path' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"/sample-project" ]] || false
+    [[ "$output" == *"/sample-repository" ]] || false
 
-    run jq -r '.projects["sample-project"].source' "$BORG_REGISTRY"
+    run jq -r '.projects["sample-repository"].source' "$BORG_REGISTRY"
     [ "$output" = "cli" ]
 }
 
@@ -679,21 +679,21 @@ exit 0
 EOF
     chmod +x "$MOCK_BIN/tmux"
 
-    local proj_dir="${BATS_TEST_TMPDIR}/cwd-project"
+    local proj_dir="${BATS_TEST_TMPDIR}/cwd-repository"
     mkdir -p "$proj_dir"
 
     run zsh -c "cd '$proj_dir' && '$BORG' add"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Registered: cwd-project"* ]] || false
+    [[ "$output" == *"Registered: cwd-repository"* ]] || false
 
-    run jq -r '.projects["cwd-project"].path' "$BORG_REGISTRY"
+    run jq -r '.projects["cwd-repository"].path' "$BORG_REGISTRY"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"/cwd-project" ]] || false
+    [[ "$output" == *"/cwd-repository" ]] || false
 }
 
 # cmd_rm (borg.zsh:993) never shells out (pure registry read/write), so no mocking is needed.
 
-@test "contract: rm removes an existing project from the registry" {
+@test "contract: rm removes an existing repository from the registry" {
     printf '%s' '{"projects":{"keep-me":{"path":"/tmp/keep"},"drop-me":{"path":"/tmp/drop"}}}' > "$BORG_REGISTRY"
     run_zsh_borg rm drop-me
     [ "$status" -eq 0 ]
@@ -705,7 +705,7 @@ EOF
     [ "$status" -eq 0 ]
 }
 
-@test "contract: rm with no project argument fails cleanly without touching the registry" {
+@test "contract: rm with no repository argument fails cleanly without touching the registry" {
     printf '%s' '{"projects":{"keep-me":{"path":"/tmp/keep"}}}' > "$BORG_REGISTRY"
     run_zsh_borg rm
     [ "$status" -ne 0 ]
@@ -715,9 +715,9 @@ EOF
     [ "$status" -eq 0 ]
 }
 
-@test "contract: rm of an unregistered project dies cleanly and leaves the registry valid" {
+@test "contract: rm of an unregistered repository dies cleanly and leaves the registry valid" {
     printf '%s' '{"projects":{"keep-me":{"path":"/tmp/keep"}}}' > "$BORG_REGISTRY"
-    run_zsh_borg rm ghost-project
+    run_zsh_borg rm ghost-repository
     [ "$status" -ne 0 ]
     [[ "$output" == *"not in registry"* ]] || false
 
@@ -729,7 +729,7 @@ EOF
 
 # cmd_pin/cmd_unpin (borg.zsh:1189, 1197) are pure registry read/write; no mocking needed.
 
-@test "contract: pin sets pinned=true on an existing project" {
+@test "contract: pin sets pinned=true on an existing repository" {
     printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha","pinned":false}}}' > "$BORG_REGISTRY"
     run_zsh_borg pin alpha
     [ "$status" -eq 0 ]
@@ -739,7 +739,7 @@ EOF
     [ "$output" = "true" ]
 }
 
-@test "contract: pin of an unregistered project dies cleanly without corrupting the registry" {
+@test "contract: pin of an unregistered repository dies cleanly without corrupting the registry" {
     printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
     run_zsh_borg pin ghost
     [ "$status" -ne 0 ]
@@ -759,7 +759,7 @@ EOF
     [[ "$output" == *"not in registry"* ]] || false
 }
 
-@test "contract: unpin sets pinned=false on an existing project" {
+@test "contract: unpin sets pinned=false on an existing repository" {
     printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha","pinned":true}}}' > "$BORG_REGISTRY"
     run_zsh_borg unpin alpha
     [ "$status" -eq 0 ]
@@ -769,7 +769,7 @@ EOF
     [ "$output" = "false" ]
 }
 
-@test "contract: unpin of an unregistered project dies cleanly without corrupting the registry" {
+@test "contract: unpin of an unregistered repository dies cleanly without corrupting the registry" {
     printf '%s' '{"projects":{"alpha":{"path":"/tmp/alpha"}}}' > "$BORG_REGISTRY"
     run_zsh_borg unpin ghost
     [ "$status" -ne 0 ]
@@ -786,7 +786,7 @@ EOF
 # the mock instead of a real tmux binary — without it, the live-window variant below would issue real
 # `tmux set-option` calls against a real window if one happened to match "alpha".
 
-@test "contract: color sets a project's color field in the registry" {
+@test "contract: color sets a repository's color field in the registry" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -840,7 +840,7 @@ EOF
     [[ "$output" == *"Usage: borg color"* ]] || false
 }
 
-@test "contract: color of an unregistered project dies cleanly" {
+@test "contract: color of an unregistered repository dies cleanly" {
     printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
     run_zsh_borg color ghost blue
     [ "$status" -ne 0 ]
@@ -1069,7 +1069,7 @@ EOF
     [[ "$output" == *"Nothing to reap"* ]] || false
 }
 
-@test "contract: reap persists a stale active project to idle via state.json" {
+@test "contract: reap persists a stale active repository to idle via state.json" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     cat > "$MOCK_BIN/tmux" <<'EOF'
@@ -1104,21 +1104,21 @@ EOF
 # lib/reaper.sh) is an absolute path under the developer's actual ~/.local/state, and
 # cmd_reap_worktrees must never be allowed to fall back to it.
 
-@test "contract: reap-worktrees reports cleanly with no registered projects" {
+@test "contract: reap-worktrees reports cleanly with no registered repositories" {
     export BORG_WORKTREE_STATE_DIR="${BATS_TEST_TMPDIR}/borg-worktrees"
     run_zsh_borg reap-worktrees
     [ "$status" -eq 0 ]
     [[ "$output" == *"No registered repositories found."* ]] || false
 }
 
-@test "contract: reap-worktrees errors cleanly on an unknown project name" {
+@test "contract: reap-worktrees errors cleanly on an unknown repository name" {
     export BORG_WORKTREE_STATE_DIR="${BATS_TEST_TMPDIR}/borg-worktrees"
-    run_zsh_borg reap-worktrees no-such-project
+    run_zsh_borg reap-worktrees no-such-repository
     [ "$status" -ne 0 ]
-    [[ "$output" == *"unknown repository 'no-such-project'"* ]] || false
+    [[ "$output" == *"unknown repository 'no-such-repository'"* ]] || false
 }
 
-@test "contract: reap-worktrees removes an age-expired worktree for a registered project" {
+@test "contract: reap-worktrees removes an age-expired worktree for a registered repository" {
     export BORG_WORKTREE_STATE_DIR="${BATS_TEST_TMPDIR}/borg-worktrees"
     local repo="${BATS_TEST_TMPDIR}/repo-wt"
     mkdir -p "$repo" "$BORG_WORKTREE_STATE_DIR"
@@ -1195,18 +1195,18 @@ EOF
 # plain `export PATH=...` from a test is silently discarded (see tests/briefing.bats, tests/doctor.bats
 # for the established precedent). No test in this section ever leaves tmux/claude/cortex unmocked,
 # even on the "clean failure" paths, because the registry-vs-live-tmux reap overlay shells out to
-# `tmux has-session` on every registry read regardless of which project is being asked about — an
+# `tmux has-session` on every registry read regardless of which repository is being asked about — an
 # unmocked tmux here would probe (or worse, actually drive) the real developer tmux session.
 
-@test "contract: switch with a query matching exactly one registered project switches via tmux directly" {
+@test "contract: switch with a query matching exactly one registered repository switches via tmux directly" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     export TRACE="${BATS_TEST_TMPDIR}/trace.log"
     : > "$TRACE"
     export TMUX_MOCK_HAS_SESSION=1
     # Guard against the interactive work/life boundary prompt (a `read -rk1`) ever firing here
-    # regardless of what the host shell happens to export -- this project name should never be
-    # a work project, but unsetting is cheap insurance against a hung test.
+    # regardless of what the host shell happens to export -- this repository name should never be
+    # a work repository, but unsetting is cheap insurance against a hung test.
     unset BORG_WORK_PROJECTS
     _mock_tmux
 
@@ -1231,7 +1231,7 @@ EOF
     [ "$output" -ge 1 ]
 }
 
-@test "contract: switch falls through to fzf and returns cleanly when no project matches" {
+@test "contract: switch falls through to fzf and returns cleanly when no repository matches" {
     setup_mock_bin
     export BORG_PATH_PREFIX="$MOCK_BIN"
     export TRACE="${BATS_TEST_TMPDIR}/trace.log"
@@ -1249,7 +1249,7 @@ exit 1
 EOF
     chmod +x "$MOCK_BIN/fzf"
 
-    run_zsh_borg switch no-such-project-anywhere
+    run_zsh_borg switch no-such-repository-anywhere
     [ "$status" -eq 0 ]
     [[ "$output" != *"Switching to"* ]] || false
 }
@@ -1669,7 +1669,7 @@ EOF
 # elsewhere on $PATH would win.
 #
 # The mock tmux reports one alive session with one window that has no @project_dir option set, which
-# routes cmd_down through its simpler "no project dir" branch (a direct tmux kill-window, skipping
+# routes cmd_down through its simpler "no repository dir" branch (a direct tmux kill-window, skipping
 # the interactive /borg-link-up checkpoint offer entirely — that path is exercised by unit-level
 # coverage elsewhere, not needed again here). This proves the real teardown sequence (has-session ->
 # list-windows -> per-window kill-window -> kill-session, plus the shared-Supabase docker inspect)
@@ -1794,14 +1794,14 @@ EOF
     [[ "$output" == *"never retired a directive"* ]] || false
 }
 
-# cmd_tidy archives projects idle >48h, but only after a `read -rk1` "Archive all? [y/N]"
+# cmd_tidy archives repositories idle >48h, but only after a `read -rk1` "Archive all? [y/N]"
 # confirmation. zsh's `-k1` (single-keypress) read requires a real controlling terminal — under
 # bats' non-interactive stdin it fails immediately, and because borg.zsh runs under `set -e`, the
-# whole invocation dies right there. That makes the "stale project found" path safe to run for real
+# whole invocation dies right there. That makes the "stale repository found" path safe to run for real
 # against a sandboxed registry fixture: detection happens (proving the stale-scan logic and dispatch
 # both work), but there is no reachable path in this suite to a real archive write.
 
-@test "contract: regenerate reports no stale projects on a fresh, empty registry" {
+@test "contract: regenerate reports no stale repositories on a fresh, empty registry" {
     echo '{"projects":{}}' > "$BORG_REGISTRY"
 
     run_zsh_borg regenerate
@@ -1810,7 +1810,7 @@ EOF
     [[ "$output" == *"No stale repositories"* ]] || false
 }
 
-@test "contract: regenerate finds a stale project and fails cleanly (non-interactive) without archiving it" {
+@test "contract: regenerate finds a stale repository and fails cleanly (non-interactive) without archiving it" {
     printf '{"projects":{"stale-proj":{"path":"/tmp/stale-proj","status":"idle","last_activity":"2020-01-01T00:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
@@ -1933,7 +1933,7 @@ EOF
 # directly instead, because a golden cannot express it.
 #
 # THE ONE NORMALIZATION. `$BATS_TEST_TMPDIR` is a fresh random path per run, and the deep dive
-# prints the project's path. It is rewritten to `<TMP>` before the diff; nothing else is touched.
+# prints the repository's path. It is rewritten to `<TMP>` before the diff; nothing else is touched.
 #
 # DETERMINISM RULES followed by every fixture here:
 #   - tmux is ALWAYS mocked. borg_reap_overlay shells out to the real tmux on every registry read,
@@ -1964,7 +1964,7 @@ _link_iso_ago() {
         || date -u -d "@$epoch" +"%Y-%m-%dT%H:%M:%SZ"
 }
 
-# Mock tmux so each project named in $1 (one per LINE) reads as a live window, exempting it from the
+# Mock tmux so each repository named in $1 (one per LINE) reads as a live window, exempting it from the
 # reap overlay. TRACE must be exported before _mock_tmux's script runs: its `>> "$TRACE"` would
 # otherwise fail to open and leak a shell error onto stderr, which the golden diff would catch as a
 # spurious mismatch (same redirect-open-order trap documented in CLAUDE.md).
@@ -2000,7 +2000,7 @@ _link_mock_tmux() {
 # exports both seams.
 #
 # THE SCRUB HAS THREE EXPRESSIONS, not one. `$BATS_TEST_TMPDIR` is a fresh random path per run and the
-# IN FOCUS card prints the project's path; `$BATS_TEST_DIRNAME` is this checkout's `tests/` directory
+# IN FOCUS card prints the repository's path; `$BATS_TEST_DIRNAME` is this checkout's `tests/` directory
 # and reaches the page through the fixture-replay warnings, which name their fixture by ABSOLUTE
 # path. With only the first expression the grid goldens would be green on the authoring machine and
 # red everywhere else — the class of bug that is invisible precisely where it is being tested.
@@ -2033,12 +2033,12 @@ _assert_link_golden() {
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
 
-# `borg link` takes a project's summary from its latest CHECKPOINT FILE and never from the registry's
+# `borg link` takes a repository's summary from its latest CHECKPOINT FILE and never from the registry's
 # `summary` (the transcript heuristic's output). A fixture that put the string in the registry would
 # supply the value production must derive, which proves nothing -- so this rewrites the fixture the
-# registry above just wrote: every project's `summary` becomes a real `**tl;dr** -- ...` checkpoint at
+# registry above just wrote: every repository's `summary` becomes a real `**tl;dr** -- ...` checkpoint at
 # <path>/.borg/checkpoints/, and the registry key is DELETED so a reader that still consulted it would
-# render nothing. A project with a null path is given a directory under cpws/ to hold its checkpoint.
+# render nothing. A repository with a null path is given a directory under cpws/ to hold its checkpoint.
 _link_seed_checkpoints() {
     local name dir
     jq -r '.projects | to_entries[] | select(.value.summary | type == "string") | .key' "$BORG_REGISTRY" \
@@ -2061,9 +2061,9 @@ _link_seed_checkpoints() {
 # deliberately past 80 chars: _borg_link_porcelain cuts at 80 with NO ellipsis (the overview cuts at
 # 50 WITH one), and the two limits have been silently different since the command was written.
 #
-# THREE PROJECTS SHARE THE IDLE+UNPINNED BUCKET ON PURPOSE. The sort has three keys (borg.zsh:255-262)
+# THREE REPOSITORIES SHARE THE IDLE+UNPINNED BUCKET ON PURPOSE. The sort has three keys (borg.zsh:255-262)
 # and the third -- `last_activity` ASCENDING -- is only observable when two rows tie on the first two.
-# With one project per bucket, reversing that key or dropping it entirely renders byte-identically,
+# With one repository per bucket, reversing that key or dropping it entirely renders byte-identically,
 # and "oldest first" is exactly the ordering a porter is most likely to assume is a bug and "fix".
 # It is also the key that orders a REAL registry, where nearly every row is idle and unpinned.
 # `golf` carries NO status field at all: borg_registry_with_state defaults it to "idle"
@@ -2118,7 +2118,7 @@ _link_build_overview_ws() {
 # `hotel`'s display_name is 26 CHARACTERS ON PURPOSE, past `render._COL_REPOSITORY`'s floor of 20. Every
 # name in every fixture used to be short, so no golden had ever rendered the overflow case -- and the
 # board's header, padded from the same constant the rows treated as a MINIMUM, silently stopped
-# describing its own columns for any name over 20. Two REAL registered projects trigger it today
+# describing its own columns for any name over 20. Two REAL registered repositories trigger it today
 # (`pytest-coverage-impact` 22, `reveal-data-consistency` 23). This is the fixture that makes the
 # widened REPOSITORY column a golden fact rather than a unit-test one.
 #
@@ -2287,7 +2287,7 @@ _link_setup_porcelain() {
     _link_registry_porcelain
 }
 
-# Four projects -- three active plus one waiting -- each with a live window so none are reaped.
+# Four repositories -- three active plus one waiting -- each with a live window so none are reaped.
 # _borg_active_count counts waiting AND active (borg.zsh:115), so the total is 4: one over the
 # default BORG_MAX_ACTIVE=3, and exactly ON the limit when the tests override it to 4.
 _link_registry_busy() {
@@ -2327,7 +2327,7 @@ EOF
 # eight nodes read `state: from the sweep` and three read `from a targeted fetch`, and a precedence
 # inversion moves eight lines of both goldens.
 
-# Two sandbox repositories with REAL git origins, the two fixture manifests, and a seven-project
+# Two sandbox repositories with REAL git origins, the two fixture manifests, and a seven-repository
 # registry. Mirrors the shape a live machine has: a manifest declaring rows across three
 # repositories lives under exactly ONE of them, and a repository with a git origin and no manifest
 # (ledger) is the modal case — 13 of ~14 registered repositories.
@@ -2379,7 +2379,7 @@ _link_build_grid_ws() {
 #
 # NO CORTEX PAUSE ROW HERE, deliberately. Its countdown is wall-clock derived and cannot be pinned in
 # a golden without pinning a timing race; it keeps its own structural case ("link overview renders a
-# cortex pause row under the paused project"). active+waiting is 4 against the default
+# cortex pause row under the paused repository"). active+waiting is 4 against the default
 # BORG_MAX_ACTIVE=3, so the capacity warning DOES land in SIGNALS in both goldens — capacity is a
 # property of the registry, not of the scope, and rendering it in only one context would be the
 # breadth rule leaking into a section it does not govern.
@@ -2420,7 +2420,7 @@ EOF
 }
 
 # The whole grid arrangement in one call, tmux mock included so it cannot be forgotten. The four
-# active/waiting projects need live windows or the reap overlay silently downgrades them to idle and
+# active/waiting repositories need live windows or the reap overlay silently downgrades them to idle and
 # the board's status column — and the capacity count — stop describing the fixture.
 #
 # `gh` IS MOCKED WITH A TRACE, not hidden from PATH. Hiding a binary asserts that a code path could
@@ -2576,9 +2576,9 @@ _assert_link_grid_golden() {
     _assert_link_golden link-porcelain link --porcelain
 }
 
-# Archived projects are filtered out unless --all is passed; --all must also keep them LAST in the
+# Archived repositories are filtered out unless --all is passed; --all must also keep them LAST in the
 # sort (status priority archived=3), not merely present somewhere in the listing.
-@test "contract: link --porcelain --all admits archived projects and sorts them last" {
+@test "contract: link --porcelain --all admits archived repositories and sorts them last" {
     _link_setup_porcelain
 
     run_zsh_borg link --porcelain
@@ -2601,7 +2601,7 @@ _assert_link_grid_golden() {
 # assertions by it. That preview flag was retired on 2026-08-27; `cmd_switch` now passes no preview
 # flag at all, so no fzf keystroke reaches `borg link` any more. What those assertions still pin is
 # narrower and is not an fzf fact: `link --porcelain` emits the SAME 5-field row shape `cmd_ls` does,
-# and a column-1 name is still an argument `borg link <project>` renders. NO REPLACEMENT CONSUMER IS
+# and a column-1 name is still an argument `borg link <repository>` renders. NO REPLACEMENT CONSUMER IS
 # NAMED HERE, because there is not one to name — inventing a live justification for a check whose
 # reason retired is how the previous sentence stayed wrong for a month.
 #
@@ -2665,7 +2665,7 @@ _assert_link_grid_golden() {
 #      cmd_ls then dies mid-function: measured, exit 5 with an EMPTY picker list.
 #   2. Past that, `jq -r` hands back the DECODED string, so a 0x0A ends the TSV record early (a
 #      second, selectable row whose field 1 is prose, which `cut -f1` passes to `_borg_do_switch`
-#      as a project name) and a 0x09 shifts every field right under `--with-nth 1,3,5`.
+#      as a repository name) and a 0x09 shifts every field right under `--with-nth 1,3,5`.
 #
 # ASSERTED ON COUNTS, NOT TEXT, deliberately. A text assertion (`[[ $output == *"top bottom"* ]]`)
 # passes on a build that emits TWO rows, because the first row still ends where the assertion stops
@@ -2703,7 +2703,7 @@ EOF
     _link_seed_checkpoints
 }
 
-@test "contract: the picker feed stays one 5-field record per project through tab and newline" {
+@test "contract: the picker feed stays one 5-field record per repository through tab and newline" {
     _link_mock_tmux ""
     _link_registry_control_chars
 
@@ -2715,7 +2715,7 @@ EOF
     [ "$status" -eq 0 ] || { printf 'cmd_ls exited %s\n' "$status" >&2; cat "$err" >&2; false; }
     [ ! -s "$err" ] || { printf -- '--- unexpected stderr ---\n' >&2; cat "$err" >&2; false; }
 
-    # ONE RECORD PER PROJECT. Three projects in, three lines out — no phantom row, and no truncated
+    # ONE RECORD PER REPOSITORY. Three repositories in, three lines out — no phantom row, and no truncated
     # list from a mid-function errexit death.
     run bash -c "wc -l < '$out' | tr -d ' '"
     [ "$status" -eq 0 ]
@@ -2743,16 +2743,16 @@ EOF
     [[ "$output" == *"No repositories registered"* ]] || false
 }
 
-# cmd_link's flag loop (borg.zsh:220-229) resolves porcelain BEFORE the project branch, so
-# `--porcelain` wins over a project name; and the `*)` arm is last-wins, so `link a b` focuses b.
+# cmd_link's flag loop (borg.zsh:220-229) resolves porcelain BEFORE the repository branch, so
+# `--porcelain` wins over a repository name; and the `*)` arm is last-wins, so `link a b` focuses b.
 #
 # THE SECOND HALF'S ASSERTION MOVED IN AC2, and the reason is the point of AC2 rather than a
-# concession to it. Pre-AC2 the deep dive rendered ONE project, so "alpha did not win" could be
+# concession to it. Pre-AC2 the deep dive rendered ONE repository, so "alpha did not win" could be
 # asserted as "alpha's summary is nowhere on the page". Post-AC2 every page carries the whole board,
 # so alpha's summary is on it BY DESIGN and that assertion would now be asserting the board is
 # broken. What "last name wins" actually means is which repository is IN FOCUS, so that is what this
 # reads -- off the card, not off the page.
-@test "contract: link flag precedence — porcelain beats a project name, last project name wins" {
+@test "contract: link flag precedence — porcelain beats a repository name, last repository name wins" {
     _link_setup_porcelain
 
     run_zsh_borg link --porcelain echo
@@ -2794,9 +2794,9 @@ EOF
 
 # The reap overlay (lib/registry.zsh:186) is the read-path downgrade: active/waiting with no live
 # window and a stale last_activity renders as idle, without touching state.json. Every other fixture
-# here mocks its projects as LIVE, which exempts them (lib/reaper.sh:24-26) — so with only those,
+# here mocks its repositories as LIVE, which exempts them (lib/reaper.sh:24-26) — so with only those,
 # deleting the overlay call entirely changed no assertion. This is the case that observes it.
-@test "contract: link overview downgrades a stale active project with no live window to idle" {
+@test "contract: link overview downgrades a stale active repository with no live window to idle" {
     _link_mock_tmux "held"
     cat > "$BORG_REGISTRY" <<'EOF'
 {
@@ -2820,16 +2820,16 @@ EOF
     [[ "$plain" =~ held[[:space:]]+\[C\][[:space:]]+active ]] || false
 }
 
-# ONE project with an unparseable .borg/state.json used to blank the ENTIRE registry. jq's --argjson
+# ONE repository with an unparseable .borg/state.json used to blank the ENTIRE registry. jq's --argjson
 # refuses the bad file, and the guard at lib/registry.zsh was `result=$(... | jq ...) ||
 # result="$result"` — a no-op, because command substitution assigns BEFORE the `||` runs, so `result`
 # was already empty when the fallback reassigned empty to empty. Every consumer of
 # borg_registry_with_state saw an empty registry: `borg link` printed "No repositories registered. Run:
 # borg scan", and next/switch/init/reap/watch saw nothing either. A partial write from a hook or a
-# killed session was enough. The healthy project must still receive its state overlay — asserted via
+# killed session was enough. The healthy repository must still receive its state overlay — asserted via
 # `last_activity`, which exists ONLY in state.json here, so a merge that silently stopped merging
 # would render "never".
-@test "contract: link survives one project with a malformed state.json" {
+@test "contract: link survives one repository with a malformed state.json" {
     _link_mock_tmux ""
     local good="${BATS_TEST_TMPDIR}/ws/goodproj" bad="${BATS_TEST_TMPDIR}/ws/badproj"
     mkdir -p "$good/.borg" "$bad/.borg"
@@ -2846,7 +2846,7 @@ EOF
 
     local plain
     plain=$(printf '%s\n' "$output" | sed $'s/\033\\[[0-9;]*m//g')
-    # The overlay still ran for the healthy project: last_activity comes only from its state.json.
+    # The overlay still ran for the healthy repository: last_activity comes only from its state.json.
     [[ "$plain" != *"goodproj"*"never"* ]] || false
     # And nothing from the merge loop leaked onto stdout. A bare `local merged` inside that loop
     # re-declares an already-declared parameter, which zsh PRINTS — sending `merged=$'{...'` into the
@@ -2855,8 +2855,8 @@ EOF
 }
 
 # The reap overlay used to match live windows with `grep -qx "$tw"` — no -F, so the window NAME was
-# compiled as a basic regex. A project whose tmux_window is `troth.site` matched a live window named
-# `troth-site` and was reported ALIVE while its session was dead. Domain-named projects are exactly
+# compiled as a basic regex. A repository whose tmux_window is `troth.site` matched a live window named
+# `troth-site` and was reported ALIVE while its session was dead. Domain-named repositories are exactly
 # the shape that hits it, and no test in the repo had ever exercised the match with a metacharacter.
 #
 # This also has to hold for the Python port: `name in live_windows` is a literal match, so leaving zsh
@@ -2942,7 +2942,7 @@ EOF
     [[ "$output" != *"not a registered repository"* ]] || false
 }
 
-@test "contract: link overview prints the discovery tip when only one project is registered" {
+@test "contract: link overview prints the discovery tip when only one repository is registered" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"solo":{"path":null,"source":"cli","status":"idle"}}}' > "$BORG_REGISTRY"
 
@@ -2951,10 +2951,10 @@ EOF
     [[ "$output" == *"run 'borg scan' to discover repositories from session history"* ]] || false
 }
 
-# Distinct from the empty-registry branch above: projects EXIST but all are filtered out, so the
-# hint points at --all rather than at scan. Two archived projects, not one, so the <=1 tip does not
+# Distinct from the empty-registry branch above: repositories EXIST but all are filtered out, so the
+# hint points at --all rather than at scan. Two archived repositories, not one, so the <=1 tip does not
 # also fire and blur which branch produced the output.
-@test "contract: link overview points at --all when every project is archived" {
+@test "contract: link overview points at --all when every repository is archived" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"a1":{"path":null,"status":"archived"},"a2":{"path":null,"status":"archived"}}}' \
         > "$BORG_REGISTRY"
@@ -3002,14 +3002,14 @@ EOF
     [[ "$output" == *"4 sessions need attention"* ]] || false
 }
 
-# The cortex pause row is the only per-project line rendered BELOW its own table row, and the only
+# The cortex pause row is the only per-repository line rendered BELOW its own table row, and the only
 # one sourced from outside the registry ($BORG_DIR/cortex-wakes.json). Its countdown is wall-clock
 # derived, so it is asserted structurally rather than pinned in a golden.
-@test "contract: link overview renders a cortex pause row under the paused project" {
+@test "contract: link overview renders a cortex pause row under the paused repository" {
     _link_mock_tmux ""
-    # TWO projects, only one paused: the pause row is bound to its project by an awk join on the
-    # project field (borg.zsh:374). With a single-project registry a port that printed the row under
-    # EVERY project, or ignored the project field entirely, passed.
+    # TWO repositories, only one paused: the pause row is bound to its repository by an awk join on the
+    # repository field (borg.zsh:374). With a single-repository registry a port that printed the row under
+    # EVERY repository, or ignored the repository field entirely, passed.
     printf '%s' '{"projects":{"awake":{"path":null,"source":"cli","status":"idle","summary":"Awake.","last_activity":"2026-08-01T10:00:00Z"},"paused":{"path":null,"source":"coco","status":"idle","summary":"Paused.","last_activity":"2026-08-02T10:00:00Z"}}}' \
         > "$BORG_REGISTRY"
 
@@ -3036,19 +3036,19 @@ EOF
 
 # ── mode 3/4: deep dive ──────────────────────────────────────────────────────
 
-@test "contract: link <project> deep dive renders byte-identically to its golden" {
+@test "contract: link <repository> deep dive renders byte-identically to its golden" {
     _link_setup_deep
     _assert_link_golden link-deep link delta
 }
 
-# Every optional section is guarded by `[[ "$ppath" != "null" ]]`. A path-null project (the shape
+# Every optional section is guarded by `[[ "$ppath" != "null" ]]`. A path-null repository (the shape
 # every Desktop-sourced entry has) must render the header block and NOTHING else — no plan, no
 # checkpoints, no directives, no assimilated, and no error from reading a path that isn't there.
 #
 # It is also the only fixture that reaches the header's DEFAULT values (borg.zsh:433-436), so the
 # assertions name the values, not just the labels: a port that dropped `// "(unknown)"` and printed
 # an empty column still satisfies `*"Session ID:"*`.
-@test "contract: link <project> deep dive omits every optional section for a path-null project" {
+@test "contract: link <repository> deep dive omits every optional section for a path-null repository" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"nopath":{"path":null,"source":"desktop","status":"idle"}}}' \
         > "$BORG_REGISTRY"
@@ -3086,7 +3086,7 @@ EOF
 # character, and would do so differently depending on the CI/dev-host userland. Asserted
 # structurally instead, so it holds regardless of which fold implementation runs it: more than one
 # line, and every line after the first indented.
-@test "contract: link <project> deep dive wraps and indents a summary longer than 70 columns" {
+@test "contract: link <repository> deep dive wraps and indents a summary longer than 70 columns" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"wordy":{"path":null,"source":"cli","status":"idle","summary":"This summary is deliberately far longer than seventy columns so that the fold pipeline has to break it across at least three separate rendered lines."}}}' \
         > "$BORG_REGISTRY"
@@ -3120,7 +3120,7 @@ EOF
 # ints, so the port renders this on one line, matching A4's amended text for the case below. (The
 # pointer here used to be a `cli_contract.bats:<N>` self-reference; it was stale, and every numeric
 # pointer at this file in the tree has since been re-anchored by @test name.)
-@test "contract: link <project> reports plan Progress as integers when no criteria are met" {
+@test "contract: link <repository> reports plan Progress as integers when no criteria are met" {
     _link_mock_tmux ""
     local d="${BATS_TEST_TMPDIR}/ws/nox"
     mkdir -p "$d"
@@ -3152,13 +3152,13 @@ EOF
     [[ "$output" != *"criteria met"* ]] || false
 }
 
-@test "contract: link <project> dies non-zero on a project that is not registered" {
+@test "contract: link <repository> dies non-zero on a repository that is not registered" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"known":{"path":null,"status":"idle"}}}' > "$BORG_REGISTRY"
 
-    run_zsh_borg link ghost-project
+    run_zsh_borg link ghost-repository
     [ "$status" -ne 0 ]
-    [[ "$output" == *"repository 'ghost-project' not in registry"* ]] || false
+    [[ "$output" == *"repository 'ghost-repository' not in registry"* ]] || false
     [[ "$output" == *"Run: borg add"* ]] || false
 }
 
@@ -3172,7 +3172,7 @@ EOF
 # The 4-file ordering fixture lives HERE and not in the golden's workspace on purpose. If the golden
 # also encoded the buggy order, fixing the bug would have forced regenerating a parity golden
 # mid-port -- exactly what A4 says is not a parity proof. This test was designed to flip and did.
-@test "contract: link <project> assimilated is newest-first by filename (the (NOm) fix)" {
+@test "contract: link <repository> assimilated is newest-first by filename (the (NOm) fix)" {
     _link_setup_deep
     _link_build_deep_assim_ws
 
@@ -3184,8 +3184,8 @@ EOF
 }
 
 # THE EMPTY-DATE FIX. Reproduced against the owner's real registry post-merge, NOT by any fixture in
-# this file: zsh's `IFS=$'\t' read -r slug title ship aproject` COLLAPSES consecutive tabs (tab is a
-# whitespace IFS char), so a plan with no "Shipped:" line shifted `project` left into `ship`'s slot
+# this file: zsh's `IFS=$'\t' read -r slug title ship repository` COLLAPSES consecutive tabs (tab is a
+# whitespace IFS char), so a plan with no "Shipped:" line shifted `repository` left into `ship`'s slot
 # and rendered a bare, empty "()" after the title. See PROJECT_PLAN.md's A4 fourth deviation.
 #
 # A DEDICATED workspace/registry, not _link_build_overview_ws / _link_registry_overview: every
@@ -3226,7 +3226,7 @@ EOF
     [[ "$output" != *"()"* ]] || false
 }
 
-@test "contract: link <project> deep dive assimilated omits parens when a plan has no Shipped: date" {
+@test "contract: link <repository> deep dive assimilated omits parens when a plan has no Shipped: date" {
     _link_mock_tmux ""
     _link_build_noshipdate_ws
     _link_registry_noshipdate
@@ -3377,7 +3377,7 @@ _link_spine_matches() {
 
 # B7. `scope_for` honours a positional only when it is IN THE REGISTRY, so `borg link ghost` from the
 # workspace root resolves to ORCHESTRATOR scope — the exact shape where a purely scope-derived
-# `need_focus` skips `_focus`, skips the raise, and exits 0 with a full board. `bool(project) or ...`
+# `need_focus` skips `_focus`, skips the raise, and exits 0 with a full board. `bool(repository) or ...`
 # preserves it.
 #
 # B8 (the raise happening BEFORE any aggregate collector runs) is not observable from bats — nothing
@@ -3389,9 +3389,9 @@ _link_spine_matches() {
     _link_setup_grid
     _link_grid_seams
 
-    run bash -c "cd '${BATS_TEST_TMPDIR}/ws' && zsh '$BORG' link ghost-project 2>&1"
+    run bash -c "cd '${BATS_TEST_TMPDIR}/ws' && zsh '$BORG' link ghost-repository 2>&1"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"repository 'ghost-project' not in registry"* ]] || false
+    [[ "$output" == *"repository 'ghost-repository' not in registry"* ]] || false
     [[ "$output" != *"▸ REPOSITORIES"* ]] || false
 }
 
@@ -3400,7 +3400,7 @@ _link_spine_matches() {
 # repository the session is in. Scope-gating the aggregates would report zero directives for the whole
 # collective at `.version == 2`, which SKILL.md maps to "CLI path. Never fall back." A WRONG answer,
 # not a missing one, and it is why DOCUMENT_VERSION could stay 2.
-@test "contract: link --json carries every project's directives from inside a repository" {
+@test "contract: link --json carries every repository's directives from inside a repository" {
     _link_setup_grid
     _link_grid_seams
 
@@ -3419,10 +3419,10 @@ _link_spine_matches() {
 }
 
 # B10. THE BOARD IS THE QUEEN'S (2026-10-13), AND `--overview` IS HOW A DIRECTORY ASKS FOR IT. This used to
-# assert the opposite: that `borg link --local --all` from a repository session listed every project, because
+# assert the opposite: that `borg link --local --all` from a repository session listed every repository, because
 # skills/borg-switch/SKILL.md ran exactly that and read the table out of it. That skill now passes
 # `--overview`, which forces the Queen view from any cwd; without it the same cwd gets only its own page.
-@test "contract: borg link --local --all --overview from inside a repository lists every project" {
+@test "contract: borg link --local --all --overview from inside a repository lists every repository" {
     _link_setup_grid
     _link_grid_seams
 
@@ -3521,7 +3521,7 @@ _link_spine_matches() {
 
 # B14. Node ids are a JUMP TARGET: each appears exactly twice on the page — once in a picture cell,
 # once as a detail heading — so `*` in vim toggles between them with no plugin. Numbering per manifest
-# instead of globally puts four `n1`s on the orchestrator page and breaks the jump for both projects.
+# instead of globally puts four `n1`s on the orchestrator page and breaks the jump for both repositories.
 # Only the Queen's page draws a picture now (CHAINS is repository-level), so the directory goldens are
 # asserted to carry NONE: a node id on a directory's page means a repository-level section came back.
 @test "contract: every node id appears exactly twice in each Queen golden, and never on a directory's page" {
@@ -3651,7 +3651,7 @@ _link_picture_budget() {
 }
 
 # B16. `--deep` is parsed and IGNORED. It stays in the parser because ONE live copy of the dispatcher
-# passes it — borg.zsh's positional arm, which every `borg link <project>` routes through; delete the
+# passes it — borg.zsh's positional arm, which every `borg link <repository>` routes through; delete the
 # argument and argparse exits 2 wherever a caller swallows failure silently. The fzf preview and
 # `drone status` were the two such callers named here until both were retired on 2026-08-27; the arm
 # they shared is still live and still passes the flag.
@@ -3720,7 +3720,7 @@ _link_picture_budget() {
 }
 
 # The MODAL repository: a git origin, no manifest. Six of its seven sections are strictly richer than
-# what `borg link <project>` showed before AC2 (which had no board and no chains at all), and the one
+# what `borg link <repository>` showed before AC2 (which had no board and no chains at all), and the one
 # empty section carries a DIAGNOSIS rather than a blank frame.
 @test "contract: a repository with no manifest renders the directory page, and --json still names why its grid is empty" {
     _link_setup_grid
@@ -3809,7 +3809,7 @@ EOF
 # IT SURVIVED THE 2026-08-27 FOLD, WITH A NEW SOURCE. The sentence used to come from a registry read
 # that found neither an active nor an inactive name; it now comes from the DOCUMENT's own
 # `(.order // []) | length`, and NOT from `total_projects` — a deliberate correction, not a spelling.
-# `core.assemble` fills `total_projects` from the UNFILTERED project map on purpose (the page must be
+# `core.assemble` fills `total_projects` from the UNFILTERED repository map on purpose (the page must be
 # able to tell an empty registry from an all-archived one, and both emit `order: []`), so keying the
 # short circuit on it stops it firing for an all-archived registry and pays `claude -p` to narrate a
 # board with zero rows. `.order` is the post-archived-filter list, and it is exactly the list
@@ -3883,7 +3883,7 @@ EOF
 # `borg` from PATH, so this mocks `borg` (via BORG_DRONE_EXTRA_PATH, which drone.zsh honors after its
 # own PATH reset) and asserts the forwarded argv — including the no-arg cwd-basename default, which
 # is the ONLY caller that reaches _borg_link_deep's `${PWD##*/}` fallback.
-@test "contract: drone link forwards the project name to borg link, defaulting to the cwd basename" {
+@test "contract: drone link forwards the repository name to borg link, defaulting to the cwd basename" {
     setup_mock_bin
     export TRACE="${BATS_TEST_TMPDIR}/borg-trace.log"
     : > "$TRACE"
@@ -3958,7 +3958,7 @@ EOF
 # and zero diagnostics.
 #
 # WHY config.zsh AND NOT "SEED THE DERIVED DEFAULT". B8's literal instruction — seed a uniquely
-# named project at the derived default and run with both variables unset — is worthless here, and
+# named repository at the derived default and run with both variables unset — is worthless here, and
 # that was measured rather than reasoned: borg.zsh:24 and lib/registry.zsh:14-15 derive
 # BORG_DIR/BORG_REGISTRY with the SAME formula borg_core/paths.py uses, from the SAME environment
 # the python3 child inherits, so deleting BOTH forwarding lines from _borg_py leaves the child
@@ -3972,7 +3972,7 @@ EOF
 # child inherits the sentinel even with _borg_py gutted.
 #
 # ASSERT ON THE SENTINEL, NEVER ON STATUS. A mis-resolved registry is auto-created empty and exits
-# 0; only a uniquely-named project that cannot appear in an auto-created file discriminates.
+# 0; only a uniquely-named repository that cannot appear in an auto-created file discriminates.
 @test "contract: link --json resolves the registry through a value no derivation can reach (B8)" {
     _link_mock_tmux ""
     local alt="${BATS_TEST_TMPDIR}/elsewhere/registry.json"
@@ -4010,7 +4010,7 @@ EOF
     # _borg_py fails at `var=BORG_DIR count=0`; deleting `BORG_REGISTRY="$BORG_REGISTRY"` fails at
     # `var=BORG_REGISTRY count=0`. The `env BORG_MAX_ACTIVE=7` sub-assertion at the bottom keeps
     # its own inheritance and is deliberately left alone.
-    run zsh -c "unset BORG_DIR BORG_REGISTRY; '$BORG' rm some-project"
+    run zsh -c "unset BORG_DIR BORG_REGISTRY; '$BORG' rm some-repository"
     [ "$status" -eq 0 ]
     [ -f "$ENVDUMP" ]
 
@@ -4025,7 +4025,7 @@ EOF
     run grep '^BORG_MAX_ACTIVE=' "$ENVDUMP"
     [ "$output" = "BORG_MAX_ACTIVE=3" ]
 
-    run env BORG_MAX_ACTIVE=7 zsh "$BORG" rm some-project
+    run env BORG_MAX_ACTIVE=7 zsh "$BORG" rm some-repository
     [ "$status" -eq 0 ]
     run grep '^BORG_MAX_ACTIVE=' "$ENVDUMP"
     [ "$output" = "BORG_MAX_ACTIVE=7" ]
@@ -4068,7 +4068,7 @@ EOF
     [ "$output" = "echo,bravo,charlie,golf,foxtrot,alpha" ]
 }
 
-@test "contract: link --json --all restores archived projects to both order and projects" {
+@test "contract: link --json --all restores archived repositories to both order and projects" {
     _link_setup_porcelain
 
     run bash -c "zsh '$BORG' link --json --all | jq -r '.order | length'"
@@ -4123,7 +4123,7 @@ EOF
     chmod u+w "$BORG_DIR"
 }
 
-@test "contract: link --json <project> adds a focus block and leaves the deep dive alone" {
+@test "contract: link --json <repository> adds a focus block and leaves the deep dive alone" {
     _link_setup_deep
 
     run bash -c "zsh '$BORG' link --json delta | jq -r '.focus.name'"
@@ -4166,7 +4166,7 @@ EOF
     done
 }
 
-@test "contract: link --json dies on an unknown project with empty stdout" {
+@test "contract: link --json dies on an unknown repository with empty stdout" {
     printf '%s' '{"projects":{}}' > "$BORG_REGISTRY"
 
     run bash -c "zsh '$BORG' link --json ghost > '${BATS_TEST_TMPDIR}/o' 2> '${BATS_TEST_TMPDIR}/e'"
@@ -4229,7 +4229,7 @@ EOF
 # Test 1 (part 2/2 -- part 1/2 is the parametrized pytest boundary assert in
 # borg_core/link/test_core.py). The pytest half pins core.capacity() directly; this half proves the
 # same boundary is reachable end to end through the real CLI on the --json path, which is what a
-# user/skill actually observes. `_link_registry_busy` gives 4 active-or-waiting projects with live
+# user/skill actually observes. `_link_registry_busy` gives 4 active-or-waiting repositories with live
 # tmux windows (so none are reaped out from under the count), matching borg.zsh:408's semantics
 # `(( active_count > BORG_MAX_ACTIVE ))`.
 @test "contract: link --json reports capacity.over_limit on the strict > boundary" {
@@ -4280,7 +4280,7 @@ EOF
 # BORG_REAP_STALE_HOURS=12 per lib/reaper.sh:_borg_should_reap. Unlike bats:2452 (which only greps
 # the variable NAME out of a mocked python3's env dump), this asserts the VALUE end to end through a
 # real borg_core execution, mirroring the A2 test's shape (bats:2298-2304).
-@test "contract: link --json reaps a stale active project to idle, and BORG_NO_REAP restores it" {
+@test "contract: link --json reaps a stale active repository to idle, and BORG_NO_REAP restores it" {
     _link_mock_tmux ""
     printf '%s' '{"projects":{"stale1":{"path":null,"source":"cli","status":"active","last_activity":"2020-01-01T00:00:00Z"}}}' \
         > "$BORG_REGISTRY"
@@ -4462,6 +4462,72 @@ _repo_norm() {
     [[ "$output" == *"list|plan|sync"* ]] || false
 }
 
+# ── borg stack: the chain -> stack rename, EXPAND step ───────────────────────────────────────────
+# `borg stack` is the verb; `borg chain` is a dispatch arm that forwards to it (cmd_stack) until the
+# CONTRACT step. These mirror the three `borg chain` cases above, so the two spellings stay pinned to
+# the same behaviour. docs/plans/directives/2026-10-13-chain-to-stack-rename.md, section (a).
+
+@test "contract: argless 'borg stack' reaches the list default instead of a shift crash" {
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    mkdir -p "$BATS_TEST_TMPDIR/proj"
+    run zsh -c "'$BORG' stack"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"0 chain(s)"* ]] || false
+}
+
+@test "contract: 'borg stack list' sweeps a registry manifest end to end" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.stacks"
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.stacks/auth.json"
+    run zsh -c "'$BORG' stack list"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+}
+
+@test "contract: an unknown stack action prints usage including --recon" {
+    run zsh -c "'$BORG' stack bogus"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"list|plan|sync"* ]] || false
+    [[ "$output" == *"--recon"* ]] || false
+}
+
+@test "contract: 'borg stack' and 'borg chain' print the same document over the same registry" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/chains"
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.borg/chains/auth.json"
+    run zsh -c "'$BORG' stack list"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+    stack_output="$output"
+    run zsh -c "'$BORG' chain list"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$stack_output" ]
+}
+
+@test "contract: --stacks-dir is a spelling of the manifests-dir flag, and its refusal names it" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.stacks"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.stacks/auth.json"
+    run zsh -c "'$BORG' stack list --stacks-dir '$BATS_TEST_TMPDIR/proj'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+    run zsh -c "'$BORG' chain list --stacks-dir '$BATS_TEST_TMPDIR/proj'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+    run zsh -c "'$BORG' stack plan --stacks-dir"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--stacks-dir needs a path"* ]] || false
+}
+
+@test "contract: borg help lists stack in COMMANDS where chain was, and no longer lists chain there" {
+    run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{print \$1}'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *stack* ]] || false
+    [[ "$output" != *chain* ]] || false
+}
+
 # The rename is only safe if the old name still answers. A user with `borg program` in muscle memory
 # or in a script must get a pointer, not `unknown command` — and the pointer must carry the args, or
 # it sends them back to a bare verb they then have to re-type.
@@ -4521,7 +4587,7 @@ JSON
     [ "$output" = "repository:beta" ]
 }
 
-@test "contract: an explicit project dominates cwd when resolving scope" {
+@test "contract: an explicit repository dominates cwd when resolving scope" {
     # B3, found independently by all three reviewers. Standing in alpha and asking for beta must
     # scope to BETA -- otherwise beta's header renders alpha's facts, a wrong answer not a missing
     # one. Every scripted caller passes a name from a fixed cwd (drone.zsh:964, borg.zsh:266).
@@ -4557,9 +4623,9 @@ JSON
     # The two arms this pins, and who still reaches them. ALL THREE CALL SITES THIS COMMENT USED TO
     # NAME — the fzf preview, `drone status` and `cmd_watch` — were retired on 2026-08-27, and they
     # are not being replaced with invented ones; these are the consumers that actually survive:
-    #   bare positional -> DEEP. Every `borg link <project>` routes through borg.zsh's positional
+    #   bare positional -> DEEP. Every `borg link <repository>` routes through borg.zsh's positional
     #     arm — the same arm B16 keeps `--deep` in the parser for.
-    #   `--local`, no project -> OVERVIEW. `skills/borg-switch/SKILL.md` runs `borg link --local
+    #   `--local`, no repository -> OVERVIEW. `skills/borg-switch/SKILL.md` runs `borg link --local
     #     --all` before a switch prompt, and says in as many words that `--local` is mandatory there.
     # The wire matters regardless of who is on it: a `--local` the dispatcher drops fails OPEN — the
     # caller believes it opted out of the network and silently pays for the sweep anyway.
@@ -4637,7 +4703,7 @@ EOF
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_status alpha\" 2>&1"
     [ "$status" -eq 0 ] || { printf 'cmd_status exited %s\n%s\n' "$status" "$output" >&2; false; }
     [[ "$output" != *"parse error"* ]] || { printf 'jq still parsing echo output:\n%s\n' "$output" >&2; false; }
-    [[ "$output" == *"first line"* ]] || { printf 'no project detail rendered:\n%s\n' "$output" >&2; false; }
+    [[ "$output" == *"first line"* ]] || { printf 'no repository detail rendered:\n%s\n' "$output" >&2; false; }
 }
 
 @test "contract: _borg_do_switch survives a newline summary on the NO-tmux_window fallback arm" {
@@ -4772,7 +4838,7 @@ EOF
     echo 'print("DECOY-SHADOWED")' > "$decoy/borg_core/registry/cli.py"
 
     cd "$decoy"
-    run zsh "$BORG" rm no-such-project
+    run zsh "$BORG" rm no-such-repository
     [[ "$output" != *"DECOY-SHADOWED"* ]] || false
 }
 

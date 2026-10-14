@@ -5,7 +5,7 @@
 # "shrink the main-loop share" goal is observable. It must:
 #   1. Empty-guard cleanly when the log is absent (exit 0, informational message).
 #   2. Compute the correct all-time total and main-loop % from a known fixture.
-#   3. Honor --project to filter to a single project.
+#   3. Honor --project to filter to a single repository.
 #   4. State the per-machine caveat (no host field) in the output.
 
 load test_helper/setup
@@ -52,9 +52,9 @@ EOF
     [[ "$output" == *"(15%)"* ]] || false
 }
 
-# ─── per-project filter ───────────────────────────────────────────────────────
+# ─── per-repository filter ───────────────────────────────────────────────────────
 
-@test "spend --project filters to a single project" {
+@test "spend --project filters to a single repository" {
     _write_fixture
     run "$BORG_CMD" spend --project alpha
     [ "$status" -eq 0 ]
@@ -65,9 +65,9 @@ EOF
     [[ "$output" != *"beta"* ]] || false
 }
 
-# ─── trend + by-project sections present ──────────────────────────────────────
+# ─── trend + by-repository sections present ──────────────────────────────────────
 
-@test "spend shows recent-sessions trend and by-project sections" {
+@test "spend shows recent-sessions trend and by-repository sections" {
     _write_fixture
     run "$BORG_CMD" spend
     [ "$status" -eq 0 ]
