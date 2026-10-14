@@ -2,14 +2,13 @@
 
 Three verbs, one per moment in a row's life:
 
-    scaffold   `/borg-plan` -- create `<name>.json` with an apex and no rows, in `.stacks/` (or
-               `.borg/chains/` with `--root borg`). Idempotent and NEVER clobbering.
+    scaffold   `/borg-plan` -- create `<name>.json` with an apex and no rows, in `.stacks/`.
+               Idempotent and NEVER clobbering. `--root borg` is refused by name (the retired root).
     add-row    `/borg-link-up` -- append a row for a ref, or update the one already carrying it.
     close      `/borg-assimilate` -- set a row's status, by ref.
 
-add-row and close edit in place: the manifest is looked up in `<repository>/.stacks/` and
-`<repository>/.borg/chains/`, and written back to the file that was found. A stem declared in both
-roots is refused by name.
+add-row and close edit in place: the manifest is looked up in `<repository>/.stacks/`, the one manifest
+root, and written back to the file that was found.
 
 WHY A CLI AT ALL, RATHER THAN THE SKILLS WRITING JSON. A skill is markdown: asking one to emit a
 valid manifest means asking a model to satisfy `core.validate` freehand on every invocation, and the
@@ -65,31 +64,31 @@ def _manifest_path(repository_dir: str, name: str) -> str:
     return os.path.join(shell.manifest_dir(repository_dir), stem if stem.endswith(".json") else f"{stem}.json")
 
 
-def _roots_phrase(repository_dir: str) -> str:
-    """Both roots a lookup searched, so a not-found message never implies only borg's was read."""
-    stacks = os.path.join(repository_dir, shell.STACKS_DIRNAME)
-    return f"{stacks} or {shell.manifest_dir(repository_dir)}"
+def _not_found_hint(repository_dir: str) -> str:
+    """What a not-found message adds when the repository still holds manifests under a retired root.
+
+    A manifest that is only under `.borg/chains` is not read, so "no manifest" alone would send its author to
+    scaffold a second one beside it. Empty when there is nothing unmigrated, so the common message is unchanged.
+    """
+    unmigrated = shell.unmigrated_warnings(repository_dir)
+    return f"; {' '.join(unmigrated)}" if unmigrated else ""
 
 
 def _read_for_write(repository_dir: str, name: str) -> tuple[dict[str, Any], str]:
     """`(manifest, directory)`: `name` validated whole, and the root it was FOUND in.
 
     Raises `shell.InvalidManifest` rather than salvaging. The directory is returned so the write goes
-    back to the file that was read -- a `.stacks/` manifest stays in `.stacks/`. A stem declared in
-    both roots is refused by name here too, never resolved to one of them.
+    back to the file that was read -- a `.stacks/` manifest stays in `.stacks/`.
 
     See the module docstring for why this does not go through `shell.discover`. `_path`/`_id` are
     never stamped here, so what comes back is already the declared body.
     """
-    path, problem = shell.locate_manifest(repository_dir, name)
-    if problem:
-        raise shell.InvalidManifest(f"{name}: {problem}", [])
-    path = path or _manifest_path(repository_dir, name)
+    path = shell.locate_manifest(repository_dir, name) or _manifest_path(repository_dir, name)
     try:
         with open(path, encoding="utf-8") as handle:
             doc = json.load(handle)
     except FileNotFoundError as exc:
-        raise shell.InvalidManifest(f"{name}: no manifest at {path} ({_roots_phrase(repository_dir)})", []) from exc
+        raise shell.InvalidManifest(f"{name}: no manifest at {path}{_not_found_hint(repository_dir)}", []) from exc
     except json.JSONDecodeError as exc:
         raise shell.InvalidManifest(f"{name}: not valid JSON ({exc})", []) from exc
     except UnicodeDecodeError as exc:
@@ -241,23 +240,27 @@ def _cmd_scaffold(args: argparse.Namespace) -> int:
     re-plan, so an existing file is reported and left exactly as it is -- at exit 0, since "already
     scaffolded" is the desired end state and not a failure.
 
-    A NEW manifest goes where `shell.scaffold_root` says -- `.stacks/` unless `--root borg` asks for
-    borg's own, and never into a `.stacks/` that git ignores (that refuses, naming `--root borg`). The
-    second stdout line names the folder and the reason; the first token of the first line
-    (`scaffolded:` / `exists:`) is unchanged.
+    A NEW manifest always goes in `.stacks/`, the one manifest root (`shell.scaffold_root` supplies the reason),
+    and never into a `.stacks/` that git ignores (that refuses). The second stdout line names the folder and the
+    reason; the first token of the first line (`scaffolded:` / `exists:`) is unchanged.
     """
-    existing, problem = shell.locate_manifest(args.repository, args.name)
-    if problem:
-        print(problem, file=sys.stderr)
-        return 1
-    # An existing manifest in EITHER root counts: scaffolding beside a `.stacks/` one would create the
-    # same stem in both roots, which discovery then refuses by name.
+    existing = shell.locate_manifest(args.repository, args.name)
     if existing:
         print(f"exists: {existing}")
         return 0
-    # A root that cannot be listed may hold this very stem, so creating it in the other root could make
-    # the duplicate discovery refuses. Scaffold is the only verb that creates, so it is the only one to
-    # refuse here; an edit changes the file it located and needs no view of the other root.
+    # A manifest of this name still under a retired root is not read, so it is not "existing" -- but creating
+    # an empty one beside it would shadow it, and `borg stack migrate` refuses a stem held in both places.
+    stranded = shell.locate_unmigrated(args.repository, args.name)
+    if stranded:
+        print(
+            f"{args.name}: refusing to scaffold, {stranded} is no longer read and a new manifest would shadow it; "
+            "run `borg stack migrate` first",
+            file=sys.stderr,
+        )
+        return 1
+    # A root that cannot be listed may hold this very stem, so creating it anyway could clobber it.
+    # Scaffold is the only verb that creates, so it is the only one to refuse here; an edit changes the
+    # file it located.
     blind = shell.unreadable_roots(args.repository)
     if blind:
         print(f"{args.name}: refusing to scaffold, cannot rule out a duplicate -- {'; '.join(blind)}", file=sys.stderr)
@@ -443,42 +446,28 @@ def _cmd_resolve(args: argparse.Namespace) -> int:
       4. More than one and no match, or no declared slug -> exit 1, naming which. NEVER A GUESS.
          Picking one of several would silently bind a session's row to another program's chain.
 
-    A stem declared in both roots is REFUSED (neither copy loads) but is still a CANDIDATE, and it
-    stops the verb only where it could be the chosen one: the deciding slug names it, or no slug
-    decides and a refused stem is among the candidates. A slug that names an intact manifest prints
-    that stem even when some other stem is refused -- an unrelated duplicate must not block a program
-    whose own manifest is fine.
+    A manifest that exists only under a retired root (`.borg/chains`) is not a candidate: it is not read. The
+    warnings printed first say so, naming the repository and `borg stack migrate`, so `no manifest` is never
+    the whole answer for a repository that declares one.
     """
-    listing, refused, warnings = shell.survey_manifests(args.repository)
+    listing, warnings = shell.list_manifests(args.repository)
     for warning in warnings:
         print(warning, file=sys.stderr)
     names = [name for name, _ in listing]
     paths = dict(listing)
 
-    if not names and not refused:
-        print(f"no manifest under {_roots_phrase(args.repository)}", file=sys.stderr)
+    if not names:
+        print(f"no manifest under {shell.manifest_dir(args.repository)}", file=sys.stderr)
         return 1
 
-    # A refused stem is still a CANDIDATE: dropping it from the count would let rule 2 or 3 pick a
-    # sibling program's manifest at exactly the moment the wanted one was refused.
-    stems = [os.path.splitext(n)[0] for n in names + refused]
-    refused_stems = [os.path.splitext(n)[0] for n in refused]
-    refusal = (f"refused (declared in both roots): {', '.join(refused_stems)}; "
-               f"candidates are {', '.join(stems)}")
-
-    if len(stems) == 1 and not refused:
+    stems = [os.path.splitext(n)[0] for n in names]
+    if len(stems) == 1:
         print(stems[0])
         return 0
 
-    # A lone refused stem has no sibling for a slug to choose between, so it falls to the refusal below.
-    slug = _declared_plan_slug(args.repository) if len(stems) > 1 else ""
+    slug = _declared_plan_slug(args.repository)
     if not slug:
-        # No slug decides, so any refused stem could be the wanted one: never pick around it.
-        print(refusal if refused else f"no plan slug declared; candidates are {', '.join(stems)}", file=sys.stderr)
-        return 1
-
-    if slug in refused_stems:
-        print(refusal, file=sys.stderr)
+        print(f"no plan slug declared; candidates are {', '.join(stems)}", file=sys.stderr)
         return 1
 
     for name in names:
@@ -516,7 +505,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # three write verbs still require it, enforced below where the verb is known -- moving the check
     # from argparse to the dispatch is what lets one flat parser serve four verbs with different
     # needs, the same trade the `--apex`-on-close comment describes.
-    parser.add_argument("--name", default="", help="manifest file stem under .stacks/ or .borg/chains/")
+    parser.add_argument("--name", default="", help="manifest file stem under .stacks/")
     parser.add_argument("--ref", default="", help="the row's ref (add-row, close)")
     parser.add_argument("--lane", default="", help=f"lane name (add-row; default {core.DEFAULT_LANE})")
     parser.add_argument("--new-lane", action="store_true",
@@ -524,8 +513,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--order", default=_ORDER_UNSET, help="declared order; derived from the lane when omitted")
     parser.add_argument("--why", default="", help="one line on why this row exists (add-row)")
     parser.add_argument("--status", default="", help=f"{core.STATE_OPEN}|{core.STATE_MERGED}|{core.STATE_CLOSED}")
-    parser.add_argument("--root", default="", choices=("", *placement.ROOT_CHOICES),
-                        help="where scaffold creates a new manifest; derived when omitted (scaffold)")
+    parser.add_argument("--root", default="", choices=("", *placement.ROOT_CHOICES, placement.ROOT_BORG),
+                        help="stacks is the only root; borg is parsed only so it can be refused by name")
     parser.add_argument("--apex", default="", help="apex ref (scaffold)")
     parser.add_argument("--title", default="", help="apex title (scaffold)")
     parser.add_argument("--desc", default="", help="one-line program description (scaffold)")
@@ -543,6 +532,11 @@ def main(argv: list[str] | None = None) -> int:
     requirement where the verb that has it lives.
     """
     args = _build_parser().parse_args(argv)
+    # The retired root is refused for every verb, by name, before anything is read or written: a caller whose
+    # muscle memory still says `--root borg` must be told why it stopped working, not silently redirected.
+    if args.root == placement.ROOT_BORG:
+        print(placement.BORG_ROOT_REFUSAL, file=sys.stderr)
+        return 1
     # Same pattern and same reason as the `--ref` check below: the requirement belongs to the verb,
     # not the shared flat parser. `resolve` exists to DISCOVER the stem, so requiring one would make
     # the verb unusable by its only caller.

@@ -136,10 +136,10 @@ def _stub_git(bin_dir, body):
 
 
 def test_manifest_dir_is_the_one_location():
-    # The `programs` literal is what is on disk and stays; the FUNCTION is not named after it.
+    # The directory is `.stacks`; the FUNCTION is not named after any retired word.
     # "Program" is retired, and a new public symbol in a new package is exactly where the retired
     # word must not reappear (PROJECT_PLAN.md Vocabulary; AC7 greps for it).
-    assert shell.manifest_dir("/repos/ingle") == "/repos/ingle/.borg/chains"
+    assert shell.manifest_dir("/repos/ingle") == "/repos/ingle/.stacks"
 
 
 def test_no_public_name_in_the_package_carries_the_retired_word():
@@ -177,7 +177,7 @@ def test_discover_reads_a_declared_id_but_synthesizes_no_program_key(tmp_path):
     assert "program" not in without_key, "and never invented"
 
 
-def test_a_repository_with_no_programs_dir_is_silent(tmp_path):
+def test_a_repository_with_no_stacks_dir_is_silent(tmp_path):
     # The common case on every repository that has never authored a manifest. Warning here would put
     # noise on every invocation.
     (tmp_path / "empty").mkdir()
@@ -192,11 +192,11 @@ def test_a_nonexistent_repository_dir_warns_by_name(tmp_path):
     assert len(warnings) == 1 and "does not exist" in warnings[0] and "gone" in warnings[0]
 
 
-def test_an_unreadable_programs_dir_warns_by_name(tmp_path):
+def test_an_unreadable_stacks_dir_warns_by_name(tmp_path):
     if os.geteuid() == 0:
         pytest.skip("root ignores mode bits -- chmod 000 cannot deny listdir (devcontainer case)")
 
-    directory = tmp_path / "repo" / ".borg" / "chains"
+    directory = tmp_path / "repo" / ".stacks"
     directory.mkdir(parents=True)
     os.chmod(directory, 0o000)
     try:
@@ -241,7 +241,7 @@ def test_one_bad_manifest_does_not_suppress_a_good_one(tmp_path):
 
 def test_non_json_files_are_ignored_with_no_warning(tmp_path):
     p = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1")]))
-    (tmp_path / "repo" / ".borg" / "chains" / "README.md").write_text("notes", encoding="utf-8")
+    (tmp_path / "repo" / ".stacks" / "README.md").write_text("notes", encoding="utf-8")
     manifests, warnings = shell.discover([p])
     assert len(manifests) == 1 and warnings == []
 
@@ -252,8 +252,8 @@ def test_manifests_carry_their_source_path(tmp_path):
     assert shell.discover([p])[0][0]["_path"].endswith("a.json")
 
 
-def test_discovery_reads_only_from_borg_programs(tmp_path):
-    # Nothing outside a repository's own .borg/chains is ever opened.
+def test_discovery_reads_only_from_stacks(tmp_path):
+    # Nothing outside a repository's own .stacks is ever opened.
     p = tmp_path / "repo"
     (p / ".borg").mkdir(parents=True)
     (p / ".borg" / "elsewhere.json").write_text(json.dumps(_manifest([_row("1", "o/r#1")])), encoding="utf-8")
@@ -454,7 +454,7 @@ def test_a_worktree_registered_beside_its_parent_loads_each_manifest_once(tmp_pa
     registry = {"projects": {"repo": {"path": repository}, "repo-pm6": {"path": worktree}}}
     manifests, warnings = shell.discover_registered(registry)
     assert warnings == []
-    assert os.path.exists(os.path.join(worktree, ".borg", "chains", "a.json")), "the copy is really there"
+    assert os.path.exists(os.path.join(worktree, ".stacks", "a.json")), "the copy is really there"
     assert len(manifests) == 1
     selected = core.select_for_repository(manifests, shell.repository_slug(worktree))
     assert len(selected) == 1
@@ -968,7 +968,7 @@ def test_a_written_manifest_round_trips_through_the_reader(tmp_path):
     doc = _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", lane="viz")])
     path = shell.write_manifest(repository, doc, "chain")
 
-    assert path == os.path.join(repository, ".borg", "chains", "chain.json")
+    assert path == os.path.join(repository, ".stacks", "chain.json")
     manifests, warnings = shell.discover([repository])
     assert warnings == []
     assert len(manifests) == 1
@@ -1017,7 +1017,7 @@ def test_an_invalid_manifest_is_refused_whole_and_writes_nothing(tmp_path):
         shell.write_manifest(repository, doc, "chain")
 
     assert "rows[1]" in str(caught.value)
-    assert not os.path.exists(os.path.join(repository, ".borg", "chains", "chain.json"))
+    assert not os.path.exists(os.path.join(repository, ".stacks", "chain.json"))
 
 
 def test_a_refused_write_leaves_no_temp_file(tmp_path):
@@ -1027,7 +1027,7 @@ def test_a_refused_write_leaves_no_temp_file(tmp_path):
     with pytest.raises(shell.InvalidManifest):
         shell.write_manifest(repository, _manifest([_row("1", "bad#1")]), "nope")
 
-    directory = os.path.join(repository, ".borg", "chains")
+    directory = os.path.join(repository, ".stacks")
     assert sorted(os.listdir(directory)) == ["ok.json"]
 
 
@@ -1040,7 +1040,7 @@ def test_a_shorthand_ref_naming_this_repository_is_suggested_not_repaired(tmp_pa
         shell.write_manifest(repository, _manifest([_row("1", "repo#12")]), "chain")
 
     assert "did you mean noah-goodrich/repo#12?" in str(caught.value)
-    assert not os.path.exists(os.path.join(repository, ".borg", "chains", "chain.json"))
+    assert not os.path.exists(os.path.join(repository, ".stacks", "chain.json"))
 
 
 def test_a_shorthand_ref_naming_another_repository_gets_no_guess(tmp_path):
@@ -1071,7 +1071,7 @@ def test_the_name_is_basenamed_so_a_slash_cannot_escape_the_directory(tmp_path):
     # could write outside the directory.
     repository = _git_repository(tmp_path, "repo", remote="https://github.com/o/r.git")
     path = shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "../../escape")
-    assert path == os.path.join(repository, ".borg", "chains", "escape.json")
+    assert path == os.path.join(repository, ".stacks", "escape.json")
 
 
 def test_a_name_that_already_ends_in_json_is_not_doubled(tmp_path):
@@ -1093,9 +1093,9 @@ def test_a_non_ascii_order_survives_the_round_trip_unescaped(tmp_path):
 
 def test_write_creates_the_manifest_directory_when_absent(tmp_path):
     repository = _git_repository(tmp_path, "fresh", remote="https://github.com/o/r.git")
-    assert not os.path.isdir(os.path.join(repository, ".borg", "chains"))
+    assert not os.path.isdir(os.path.join(repository, ".stacks"))
     shell.write_manifest(repository, _manifest([_row("1", "o/r#1")]), "chain")
-    assert os.path.isdir(os.path.join(repository, ".borg", "chains"))
+    assert os.path.isdir(os.path.join(repository, ".stacks"))
 
 
 def test_declared_body_is_the_one_definition_of_derived(tmp_path):
@@ -1111,7 +1111,7 @@ def test_declared_body_is_the_one_definition_of_derived(tmp_path):
 def test_refused_paths_names_both_whole_file_refusals(tmp_path):
     # The two shapes that mean "a file here looks like a manifest and could not be used".
     repository = _write_manifest(tmp_path, "repo", "broken.json", {"rows": [{"order": "1"}]})
-    (tmp_path / "repo" / ".borg" / "chains" / "garbage.json").write_text("{not json", encoding="utf-8")
+    (tmp_path / "repo" / ".stacks" / "garbage.json").write_text("{not json", encoding="utf-8")
     _, warnings = shell.discover([repository])
 
     refused = shell.refused_manifest_paths(warnings)
@@ -1121,7 +1121,7 @@ def test_refused_paths_names_both_whole_file_refusals(tmp_path):
 def test_a_stray_non_manifest_is_not_a_refusal(tmp_path):
     # `not a manifest (no rows list)` describes a stray settings.json sitting in the directory, not a
     # manifest that failed. Counting it would make CHAINS claim a broken manifest that does not exist.
-    directory = tmp_path / "repo" / ".borg" / "chains"
+    directory = tmp_path / "repo" / ".stacks"
     directory.mkdir(parents=True)
     (directory / "settings.json").write_text('{"theme": "dark"}', encoding="utf-8")
     _, warnings = shell.discover([str(tmp_path / "repo")])
@@ -1819,37 +1819,21 @@ def test_e2a_the_collision_is_still_reported_once_the_retired_program_key_is_gon
     assert "auth-scopes" in contested[0] and "platform-audit" in contested[0]
 
 
-# ── the chains rename, expand phase (AC7) ────────────────────────────────────────────────────────
-def test_manifest_dir_prefers_the_new_name(tmp_path):
-    """A repository with neither directory gets `chains`, so nothing created from today lands under
-    the retired word."""
-    assert shell.manifest_dir(str(tmp_path)).endswith("/.borg/chains")
+# ── the contract step of the chain -> stack rename: ONE root, and a named warning for the retired ones ─────────
+@pytest.mark.parametrize("retired", [(), ("programs",), ("chains",), ("programs", "chains")])
+def test_manifest_dir_is_stacks_whatever_retired_directories_exist(tmp_path, retired):
+    """The one root, regardless of what else sits under `.borg/`. This replaces three expand-phase pins
+    (prefers the new name, still reads a legacy repository, never splits across both): there is no precedence
+    left to pin, because there is nothing to choose between.
 
-
-def test_manifest_dir_still_reads_a_legacy_repository(tmp_path):
-    """THE EXPAND PHASE, PINNED. Renaming the directory without this arm would make every
-    un-migrated repository's manifests invisible -- `discover` would find nothing, `resolve` would
-    report `no manifest declared`, and `borg link` would render a chainless board. All three fail
-    SILENTLY, which is why the rename is expand -> migrate -> contract and not a `git mv`.
-
-    MUTATION: delete the legacy branch in `manifest_dir` and this goes red.
+    MUTATION: restore the `.borg/chains` branch in `manifest_dir` and every non-empty case goes red.
     """
-    (tmp_path / ".borg" / "programs").mkdir(parents=True)
-    assert shell.manifest_dir(str(tmp_path)).endswith("/.borg/programs")
+    for name in retired:
+        (tmp_path / ".borg" / name).mkdir(parents=True)
+    assert shell.manifest_dir(str(tmp_path)) == str(tmp_path / ".stacks")
 
 
-def test_manifest_dir_never_splits_a_repository_across_both(tmp_path):
-    """A repository holding BOTH resolves to exactly one, and it is the new name.
-
-    Returning both would make `discover` emit each program twice and `resolve` report `ambiguous`
-    for a repository that declares one -- a mid-migration state that reads as a defect in the data.
-    """
-    (tmp_path / ".borg" / "programs").mkdir(parents=True)
-    (tmp_path / ".borg" / "chains").mkdir(parents=True)
-    assert shell.manifest_dir(str(tmp_path)).endswith("/.borg/chains")
-
-
-# ── the second root: `<repository>/.stacks/` ─────────────────────────────────────────────────────
+# ── the one root: `<repository>/.stacks/` ────────────────────────────────────────────────────────
 def _stacks_manifest(repository, name, ref="acme/ledger#1"):
     """Write one valid manifest straight into `<repository>/.stacks/`, creating it."""
     directory = os.path.join(str(repository), shell.STACKS_DIRNAME)
@@ -1860,10 +1844,11 @@ def _stacks_manifest(repository, name, ref="acme/ledger#1"):
     return path
 
 
-def _borg_manifest(repository, name, ref="acme/ledger#2"):
-    directory = shell.manifest_dir(str(repository))
-    os.makedirs(directory, exist_ok=True)
-    path = os.path.join(directory, f"{name}.json")
+def _retired_manifest(repository, name, ref="acme/ledger#2", directory="chains"):
+    """A VALID manifest under a retired root (`.borg/chains` or `.borg/programs`): never read, so never silent."""
+    target = os.path.join(str(repository), ".borg", directory)
+    os.makedirs(target, exist_ok=True)
+    path = os.path.join(target, f"{name}.json")
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(_manifest([_row("1", ref)]), handle)
     return path
@@ -1878,62 +1863,148 @@ def test_stacks_dir_alone_is_discovered(tmp_path):
     assert [m["_path"] for m in manifests] == [path]
 
 
-def test_both_roots_with_distinct_stems_load_both_stacks_first(tmp_path):
+@pytest.mark.parametrize("directory", ["chains", "programs"])
+def test_a_manifest_only_under_a_retired_root_renders_nowhere_and_warns_naming_the_repository(tmp_path, directory):
+    """THE CONTRACT, PINNED. A valid manifest under `.borg/<directory>` is not loaded, and the answer is not silence:
+    one warning that leads with the repository and names `borg stack migrate`, and is NOT a refusal (the grid's
+    other channel), so it cannot be mistaken for a manifest that failed to parse.
+
+    MUTATION: restore the `.borg/chains` or `.borg/programs` read in `manifest_roots` and `manifests` is non-empty.
+    """
     repository = tmp_path / "alpha"
-    stacks = _stacks_manifest(repository, "alpha")
-    borg = _borg_manifest(repository, "bravo")
+    _retired_manifest(repository, "alpha", directory=directory)
     manifests, warnings = shell.discover([str(repository)])
-    assert warnings == []
-    assert [m["_path"] for m in manifests] == [stacks, borg]
+    assert manifests == [], "the retired root is not read"
+    assert len(warnings) == 1
+    assert warnings[0].startswith(f"{repository}: ") and f".borg/{directory}" in warnings[0]
+    assert "borg stack migrate" in warnings[0] and "no longer read" in warnings[0]
+    assert shell.refused_manifest_paths(warnings) == [], "a different channel from a refused file"
+    assert shell.unmigrated_repositories(warnings) == [str(repository)]
 
 
-def test_the_same_stem_in_both_roots_loads_neither_and_names_both(tmp_path):
-    """MUTATION: delete the duplicate refusal in `_reconcile` and this goes red."""
+def test_retired_and_stacks_manifests_together_load_only_the_stacks_one_and_still_warn(tmp_path):
+    """Replaces "both roots with distinct stems load both": a mid-migration repository is legal, and half of it
+    must not vanish silently."""
     repository = tmp_path / "alpha"
     stacks = _stacks_manifest(repository, "alpha")
-    borg = _borg_manifest(repository, "alpha")
-    other = _borg_manifest(repository, "bravo", ref="acme/ledger#3")
+    _retired_manifest(repository, "bravo")
     manifests, warnings = shell.discover([str(repository)])
-    assert [m["_path"] for m in manifests] == [other], "the unrelated stem still loads"
-    assert len(warnings) == 2, "one path-led warning per refused file"
-    assert all(stacks in w and borg in w and "neither loaded" in w for w in warnings)
-    assert sorted(shell.refused_manifest_paths(warnings, str(repository))) == sorted([stacks, borg])
+    assert [m["_path"] for m in manifests] == [stacks]
+    assert len(warnings) == 1 and "borg stack migrate" in warnings[0]
+
+
+def test_the_same_stem_in_both_roots_is_no_longer_refused_only_the_stacks_copy_is_read(tmp_path):
+    """Replaces "the same stem in both roots loads neither and names both": with one root there is no duplicate to
+    refuse. The retired copy is warned about, once, and the unrelated retired stem is counted under the same line.
+
+    MUTATION: restore the `_reconcile` duplicate refusal and `manifests` goes empty and two refusals appear.
+    """
+    repository = tmp_path / "alpha"
+    stacks = _stacks_manifest(repository, "alpha")
+    _retired_manifest(repository, "alpha")
+    _retired_manifest(repository, "bravo", ref="acme/ledger#3")
+    manifests, warnings = shell.discover([str(repository)])
+    assert [m["_path"] for m in manifests] == [stacks]
+    assert len(warnings) == 1 and "neither loaded" not in warnings[0]
+    assert shell.refused_manifest_paths(warnings, str(repository)) == []
+
+
+def test_each_retired_directory_that_holds_manifests_warns_once_and_counts_as_one_repository(tmp_path):
+    repository = tmp_path / "alpha"
+    _retired_manifest(repository, "a", directory="chains")
+    _retired_manifest(repository, "b", directory="programs")
+    warnings = shell.discover([str(repository)])[1]
+    assert len(warnings) == 2
+    assert len(set(shell.unmigrated_repositories(warnings))) == 1
+
+
+def test_a_retired_directory_with_no_manifest_in_it_is_silent(tmp_path):
+    """An empty directory (a leftover `mkdir`), a README and a stray non-JSON file are not unmigrated manifests."""
+    repository = tmp_path / "alpha"
+    (repository / ".borg" / "chains").mkdir(parents=True)
+    (repository / ".borg" / "chains" / "README.md").write_text("notes", encoding="utf-8")
+    (repository / ".borg" / "programs").write_text("a file, not a directory", encoding="utf-8")
+    assert shell.discover([str(repository)]) == ([], [])
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
+def test_an_unreadable_retired_directory_warns_by_name(tmp_path, restore_modes):
+    """Zero warnings from a directory that could not be checked would read as "nothing is stranded"."""
+    repository = tmp_path / "alpha"
+    chains = repository / ".borg" / "chains"
+    chains.mkdir(parents=True)
+    _lock(chains, restore_modes)
+    manifests, warnings = shell.discover([str(repository)])
+    assert manifests == []
+    assert len(warnings) == 1 and ".borg/chains" in warnings[0] and "cannot check" in warnings[0]
+    assert str(repository) in warnings[0]
+
+
+def test_unmigrated_detection_forks_nothing_and_parses_no_manifest(tmp_path, monkeypatch):
+    """A directory listing and nothing else, which is what keeps `borg link --local`'s pinned fork count intact.
+
+    MUTATION: have `unmigrated_warnings` call git, or open a manifest to count its rows, and this goes red.
+    """
+    repository = tmp_path / "alpha"
+    _retired_manifest(repository, "alpha")
+
+    def refuse(*_args, **_kwargs):
+        pytest.fail("the unmigrated check forked or parsed a manifest")
+
+    monkeypatch.setattr(subprocess, "Popen", refuse)
+    monkeypatch.setattr(subprocess, "run", refuse)
+    monkeypatch.setattr(shell.json, "load", refuse)
+    manifests, warnings = shell.discover([str(repository)])
+    assert manifests == [] and len(warnings) == 1
+
+
+def test_unmigrated_repositories_narrows_to_one_repository_and_not_to_a_prefix_sibling(tmp_path):
+    mine = tmp_path / "repo"
+    sibling = tmp_path / "repo-two"
+    _retired_manifest(mine, "a")
+    _retired_manifest(sibling, "b")
+    warnings = shell.discover([str(mine), str(sibling)])[1]
+    assert sorted(shell.unmigrated_repositories(warnings)) == sorted([str(mine), str(sibling)])
+    assert shell.unmigrated_repositories(warnings, str(mine)) == [str(mine)]
+    assert shell.unmigrated_repositories(warnings, str(tmp_path / "repo-three")) == []
 
 
 def test_an_absent_stacks_dir_is_silent(tmp_path):
     repository = tmp_path / "alpha"
-    _borg_manifest(repository, "alpha")
+    repository.mkdir()
     assert shell.manifest_roots(str(repository))[1] == []
     assert shell.discover([str(repository)])[1] == []
 
 
 def test_a_stacks_path_that_is_a_file_warns_once_and_is_skipped(tmp_path):
     repository = tmp_path / "alpha"
-    borg = _borg_manifest(repository, "alpha")
+    repository.mkdir()
     (repository / ".stacks").write_text("not a directory", encoding="utf-8")
     manifests, warnings = shell.discover([str(repository)])
-    assert [m["_path"] for m in manifests] == [borg]
+    assert manifests == []
     assert len(warnings) == 1 and ".stacks" in warnings[0] and "not a directory" in warnings[0]
 
 
-def test_locate_manifest_finds_a_stacks_manifest_and_refuses_a_duplicate(tmp_path):
+def test_locate_manifest_finds_a_stacks_manifest_and_never_a_retired_one(tmp_path):
     repository = tmp_path / "alpha"
     stacks = _stacks_manifest(repository, "alpha")
-    assert shell.locate_manifest(str(repository), "alpha") == (stacks, "")
-    assert shell.locate_manifest(str(repository), "missing") == ("", "")
-    _borg_manifest(repository, "alpha")
-    path, problem = shell.locate_manifest(str(repository), "alpha")
-    assert path == "" and "declared in both" in problem
+    assert shell.locate_manifest(str(repository), "alpha") == stacks
+    assert shell.locate_manifest(str(repository), "missing") == ""
+    retired = _retired_manifest(repository, "bravo")
+    assert shell.locate_manifest(str(repository), "bravo") == "", "a retired-root manifest is absent on purpose"
+    assert shell.locate_unmigrated(str(repository), "bravo") == retired
+    assert shell.locate_unmigrated(str(repository), "bravo.json") == retired
+    assert shell.locate_unmigrated(str(repository), "alpha") == ""
 
 
 def test_locate_manifest_lets_the_filesystem_decide_name_equality(tmp_path):
     """MUTATION: delete the `os.path.exists` fallback in `locate_manifest` and this goes red."""
     repository = tmp_path / "alpha"
-    borg = _borg_manifest(repository, "alpha")
-    if not os.path.exists(os.path.join(os.path.dirname(borg), "ALPHA.json")):
+    stacks = _stacks_manifest(repository, "alpha")
+    if not os.path.exists(os.path.join(os.path.dirname(stacks), "ALPHA.json")):
         pytest.skip("case-sensitive filesystem")
-    path, problem = shell.locate_manifest(str(repository), "Alpha")
-    assert problem == "" and os.path.samefile(path, borg)
+    path = shell.locate_manifest(str(repository), "Alpha")
+    assert os.path.samefile(path, stacks)
 
 
 def test_the_repo_group_union_sees_a_stacks_manifest_in_a_sibling_worktree(tmp_path):
@@ -1948,12 +2019,6 @@ def test_the_repo_group_union_sees_a_stacks_manifest_in_a_sibling_worktree(tmp_p
 
 
 # ── unreadable is never silent; aliased roots are one root ───────────────────────────────────────
-def _borg_repository(tmp_path):
-    repository = tmp_path / "alpha"
-    _borg_manifest(repository, "alpha")
-    return repository
-
-
 def _stacks_repository(tmp_path):
     repository = tmp_path / "alpha"
     _stacks_manifest(repository, "alpha")
@@ -1974,20 +2039,25 @@ def _lock(path, restore_modes):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
-def test_an_unreadable_borg_parent_warns_by_name(tmp_path, restore_modes):
-    """MUTATION: return borg's root only when it exists in `manifest_roots` and this goes red."""
-    repository = _borg_repository(tmp_path)
+def test_an_unreadable_borg_parent_warns_by_name_and_does_not_hide_the_stacks_manifest(tmp_path, restore_modes):
+    """`.borg` is no longer where manifests live, but it is still where a stranded one would be: an untraversable
+    parent must say it could not be checked, and `.stacks/` (a sibling, not a child) still loads.
+
+    MUTATION: swallow every OSError in `unmigrated_warnings` and the warning vanishes.
+    """
+    repository = _stacks_repository(tmp_path)
+    (repository / ".borg").mkdir()
     _lock(repository / ".borg", restore_modes)
     manifests, warnings = shell.discover([str(repository)])
-    assert manifests == []
-    assert len(warnings) == 1 and ".borg" in warnings[0] and "unreadable" in warnings[0]
+    assert len(manifests) == 1
+    assert len(warnings) == len(shell.UNMIGRATED_DIRS), "one per retired directory that could not be checked"
+    assert all(".borg" in w and "cannot check" in w for w in warnings)
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores permission bits")
-@pytest.mark.parametrize("build", [_borg_repository, _stacks_repository])
-def test_an_unreadable_repository_directory_warns_by_name(tmp_path, restore_modes, build):
-    """MUTATION: drop the `.stacks` `os.stat` error branch in `manifest_roots` and the stacks case goes red."""
-    repository = build(tmp_path)
+def test_an_unreadable_repository_directory_warns_by_name(tmp_path, restore_modes):
+    """MUTATION: drop the `.stacks` `os.stat` error branch in `manifest_roots` and this goes red."""
+    repository = _stacks_repository(tmp_path)
     _lock(repository, restore_modes)
     manifests, warnings = shell.discover([str(repository)])
     assert manifests == []
@@ -2002,41 +2072,47 @@ def test_an_unreadable_repository_with_stacks_names_the_stacks_root(tmp_path, re
     assert len(warnings) == 1 and ".stacks" in warnings[0] and "unreadable" in warnings[0]
 
 
-def test_a_stacks_root_symlinked_to_borg_chains_is_read_once(tmp_path):
-    """MUTATION: drop the realpath de-duplication in `survey_manifests` and this goes red."""
+def test_a_stacks_root_symlinked_to_a_retired_directory_is_read_not_reported_as_unmigrated(tmp_path):
+    """A directory `.stacks` already reads is not "stranded". MUTATION: drop the realpath de-duplication in
+    `unmigrated_warnings` and the symlink target is read AND reported, a false alarm for a working repository."""
     repository = tmp_path / "alpha"
-    borg = _borg_manifest(repository, "alpha")
-    os.symlink(os.path.dirname(borg), repository / ".stacks")
+    retired = _retired_manifest(repository, "alpha")
+    os.symlink(os.path.dirname(retired), repository / ".stacks")
     manifests, warnings = shell.discover([str(repository)])
     assert warnings == [] and len(manifests) == 1
-    assert shell.locate_manifest(str(repository), "alpha")[1] == ""
-    assert shell.locate_manifest(str(repository), "alpha")[0] != ""
+    assert shell.locate_manifest(str(repository), "alpha") != ""
     assert shell.list_manifests(str(repository))[1] == []
 
 
-def test_borg_chains_symlinked_to_stacks_is_read_once(tmp_path):
+def test_a_retired_directory_symlinked_to_stacks_is_read_once_and_not_reported(tmp_path):
     repository = tmp_path / "alpha"
     stacks = _stacks_manifest(repository, "alpha")
     (repository / ".borg").mkdir()
     os.symlink(os.path.dirname(stacks), repository / ".borg" / "chains")
     manifests, warnings = shell.discover([str(repository)])
     assert warnings == [] and len(manifests) == 1
-    path, problem = shell.locate_manifest(str(repository), "alpha")
-    assert problem == "" and os.path.samefile(path, stacks)
+    assert os.path.samefile(shell.locate_manifest(str(repository), "alpha"), stacks)
 
 
-# ── scaffold_root: the git probes and the facts behind placement.choose_scaffold_root ─────────────────
+def test_a_repository_listed_twice_warns_once_about_its_retired_manifests(tmp_path):
+    """`discover` shares one `swept` set across repositories, so a symlinked or trailing-slash registry entry is
+    swept once and warns once. MUTATION: build a fresh `seen` per call in `list_manifests` and this goes red."""
+    repository = tmp_path / "alpha"
+    _retired_manifest(repository, "alpha")
+    warnings = shell.discover([str(repository), str(repository) + os.sep])[1]
+    assert len(warnings) == 1
+
+
+# ── scaffold_root: the git probe and the facts behind placement.choose_scaffold_root ──────────────────
 def _ignore(repository, pattern):
     with open(os.path.join(repository, ".gitignore"), "w", encoding="utf-8") as handle:
         handle.write(pattern + "\n")
 
 
-def test_scaffold_root_derives_stacks_when_git_ignores_borg(tmp_path):
+def test_scaffold_root_defaults_to_stacks_when_git_ignores_borg(tmp_path):
     repository = _git_repository(tmp_path, "r")
     _ignore(repository, ".borg/")
-    directory, reason = shell.scaffold_root(repository)
-    assert directory == os.path.join(repository, ".stacks")
-    assert "ignores" in reason
+    assert shell.scaffold_root(repository) == (os.path.join(repository, ".stacks"), "default")
 
 
 def test_scaffold_root_defaults_to_stacks_when_borg_is_tracked(tmp_path):
@@ -2058,25 +2134,32 @@ def test_scaffold_root_defaults_to_stacks_when_git_is_missing(tmp_path, monkeypa
     assert shell.scaffold_root(repository)[0] == os.path.join(repository, ".stacks")
 
 
-def test_scaffold_root_an_existing_borg_root_no_longer_wins(tmp_path):
+@pytest.mark.parametrize("retired", ["chains", "programs"])
+def test_scaffold_root_ignores_a_retired_directory(tmp_path, retired):
+    """Replaces "an existing borg root no longer wins" and "legacy programs still resolves to stacks": a retired
+    directory is not a fact scaffold gathers at all, so it cannot change the answer or the reason."""
     repository = _git_repository(tmp_path, "r")
-    _ignore(repository, ".borg/")
-    os.makedirs(os.path.join(repository, ".borg", "chains"))
-    directory, reason = shell.scaffold_root(repository)
-    assert directory == os.path.join(repository, ".stacks") and "still read" in reason
+    os.makedirs(os.path.join(repository, ".borg", retired))
+    assert shell.scaffold_root(repository) == (os.path.join(repository, ".stacks"), "default")
 
 
-def test_scaffold_root_borg_override_wins_and_skips_every_probe(tmp_path, monkeypatch):
+def test_scaffold_root_runs_exactly_one_git_probe_and_names_a_file_in_stacks(tmp_path, monkeypatch):
+    """Replaces "the borg override skips every probe": there is no override left, and the one remaining fork is the
+    `.stacks/` check -- not a second one for the retired directory.
+
+    MUTATION: restore the `.borg/chains/.scaffold-probe.json` probe and the count goes to two.
+    """
     repository = _git_repository(tmp_path, "r")
-    _ignore(repository, ".stacks/")
-    monkeypatch.setattr(shell.proc, "run_capture", lambda *a, **k: pytest.fail("probe ran"))
-    assert shell.scaffold_root(repository, "borg")[0] == shell.manifest_dir(repository)
+    calls = []
 
+    def record(argv, **_kwargs):
+        calls.append(argv)
+        return (1, "")
 
-def test_scaffold_root_legacy_programs_dir_still_resolves_to_stacks(tmp_path):
-    repository = _git_repository(tmp_path, "r")
-    os.makedirs(os.path.join(repository, ".borg", "programs"))
-    assert shell.scaffold_root(repository)[0] == os.path.join(repository, ".stacks")
+    monkeypatch.setattr(shell.proc, "run_capture", record)
+    shell.scaffold_root(repository)
+    assert len(calls) == 1
+    assert calls[0][-1] == ".stacks/.scaffold-probe.json"
 
 
 def test_scaffold_root_refuses_a_stacks_dir_git_ignores(tmp_path):
@@ -2088,7 +2171,7 @@ def test_scaffold_root_refuses_a_stacks_dir_git_ignores(tmp_path):
         _ignore(repository, pattern)
         with pytest.raises(placement.StacksIgnored) as caught:
             shell.scaffold_root(repository)
-        assert "--root borg" in str(caught.value)
+        assert "ignores" in str(caught.value) and "--root borg" not in str(caught.value)
     existing = _git_repository(tmp_path, "existing")
     _ignore(existing, ".stacks/")
     os.makedirs(os.path.join(existing, ".stacks"))
@@ -2096,21 +2179,6 @@ def test_scaffold_root_refuses_a_stacks_dir_git_ignores(tmp_path):
         shell.scaffold_root(existing)
     with pytest.raises(placement.StacksIgnored):
         shell.scaffold_root(existing, "stacks")
-
-
-def test_scaffold_root_probe_names_a_file_so_a_contents_only_ignore_still_counts(tmp_path):
-    """`.borg/*` plus `!.borg/chains/` leaves `.borg/chains/` un-ignored; `.borg/chains/*` ignores every file in
-    it while the bare directory name is not ignored, and only a probe that names a FILE sees that. Either way
-    the answer is `.stacks/`, and the reason is what tells the two apart. MUTATION: probe the directory
-    instead and the second case's reason goes red."""
-    carved = _git_repository(tmp_path, "carved")
-    with open(os.path.join(carved, ".gitignore"), "w", encoding="utf-8") as handle:
-        handle.write(".borg/*\n!.borg/chains/\n")
-    assert shell.scaffold_root(carved) == (os.path.join(carved, ".stacks"), "default")
-    contents = _git_repository(tmp_path, "contents")
-    _ignore(contents, ".borg/chains/*")
-    directory, reason = shell.scaffold_root(contents)
-    assert directory == os.path.join(contents, ".stacks") and "ignores" in reason
 
 
 # ── the writer round-trips through the reader, over the real corpus (AC3) ───────────────────────────
@@ -2135,7 +2203,6 @@ def _corpus_paths():
     for relative in (
         os.path.join("evals", "s4-k3", "fixtures", "programs"),
         ".stacks",
-        os.path.join(".borg", "chains"),
         os.path.join("tests", "fixtures", "link", "manifests"),
     ):
         directory = os.path.join(_REPO_ROOT, relative)

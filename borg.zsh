@@ -3190,21 +3190,20 @@ _borg_version_ge() {
 }
 
 # ── stack manifests (PM6) ──────────────────────────────────────────────────────
-# borg stack list|plan|sync|migrate — the sync coordinator (migrate: see cmd_stack) over <repository>/.stacks/*.json and
-# <repository>/.borg/chains/*.json. `borg stack` is the verb (docs/plans/directives/2026-10-13-chain-to-stack-rename.md);
-# the old spelling is a dispatch arm that forwards here until step (c), so both print the same document.
+# borg stack list|plan|sync|migrate — the sync coordinator (migrate: see cmd_stack) over <repository>/.stacks/*.json.
+# `borg stack` is the verb (docs/plans/directives/2026-10-13-chain-to-stack-rename.md); `borg chain` and `borg program`
+# are dispatch arms that die pointing here (step (c), the contract), and `.borg/chains/` is no longer read.
 # The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
 # testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered repository
 # path becomes a --stacks-dir, so `borg stack list` sweeps the whole collective. Explicit
-# --stacks-dir args (or the older --chains-dir and --programs-dir) are passed through untouched and
-# suppress the registry sweep.
+# --stacks-dir args are passed through untouched and suppress the registry sweep.
 #
 # Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: a project is work that can
 # span repositories, but cmd_stack resolves roots by reading `.projects[].path` from the registry, where
 # the entry is a REPOSITORY (the registry key keeps its name) — that verb would mean one thing and do
 # another. The
-# --stacks-dir and --recon TOKENS are coordinator.py's argparse flags; coordinator.py still accepts the
-# older --chains-dir and --programs-dir spellings, as does this function.
+# --stacks-dir and --recon TOKENS are coordinator.py's argparse flags; the older --chains-dir and
+# --programs-dir spellings are refused by name there, and by this function, pointing at --stacks-dir.
 cmd_stack() {
     local action="${1:-list}"
     # `migrate` is an action of `borg stack`, not a COMMANDS entry of its own (the pinned count must hold).
@@ -3226,11 +3225,11 @@ cmd_stack() {
     local _explicit_dirs=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --stacks-dir|--chains-dir|--programs-dir)
-                # THE REFUSAL NAMES THE SPELLING THE USER TYPED, not the canonical one. `$1` rather
-                # than a literal: a user who typed the legacy `--programs-dir` and is told
-                # "--stacks-dir needs a path" has to work out that the two are the same flag, which
-                # is a worse error than the shift crash this guard replaced.
+            --chains-dir|--programs-dir)
+                # RETIRED SPELLINGS, refused by name (step (c) of the chain -> stack rename). `$1` rather than a
+                # literal, so the message names the flag the user typed and points at its replacement.
+                die "borg stack: $1 was renamed to --stacks-dir. Run: borg stack ${action} --stacks-dir <repository>" ;;
+            --stacks-dir)
                 [[ -n "${2:-}" ]] || die "borg stack: $1 needs a path"
                 _stack_args+=(--stacks-dir "$2"); _explicit_dirs=1; shift 2 ;;
             --recon)
@@ -3296,13 +3295,12 @@ cmd_help() {
                           --all     Include archived repositories
     next [--all|--switch|--pick n|--rows --json|--open p --chosen|--declined]  What needs your attention?
     switch [query]      fzf picker → jump to repository tmux window
-    stack <action>      Manifest coordinator over <repository>/.stacks/*.json (and .borg/chains/*.json)
+    stack <action>      Manifest coordinator over <repository>/.stacks/*.json
                           list           Every declared stack across registered repositories
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
                           migrate [--dry-run] [<repository>]  Move .borg/chains/*.json into .stacks/ (stages, never commits)
                           --stacks-dir <path>    Explicit roots (suppresses the registry sweep)
-                          'borg chain' is still accepted as a spelling of 'borg stack'
                           --recon <file> (plan only) recon JSON for the reality check
     scan                Discover repositories from session history
     add [path] [--name <n>]  Register a repository (defaults to $PWD, named by folder; --name overrides)
@@ -3343,10 +3341,14 @@ cmd_help() {
                  'borg recon --json' and 'borg recon --adapters' are the machine surface
                  /borg-recon consumes, and both still work. (merge-tree/gather.py, a
                  second consumer, retired 2026-10-12 with the browser board.)
-    2026-08-31 — program renamed to chain. Same command, same actions, same flags; the word
-                 "program" is retired in favour of "chain". Run: borg chain
+    2026-08-31 — program renamed to chain, and chain to stack on 2026-10-14. Same command, same
+                 actions, same flags; the word "program" is retired in favour of "stack".
+                 Run: borg stack
     2026-10-04 — sever was an alias of 'down' (tears down everything) and never retired a directive.
                  Tear down with 'borg down'; retire a directive with 'git mv' into docs/plans/severed/.
+    2026-10-14 — chain renamed to stack. Same command, same actions, same flags; the word "chain"
+                 is retired in favour of "stack", and <repository>/.borg/chains/ is no longer read:
+                 'borg stack migrate' moves manifests into .stacks/. Run: borg stack
 
   HOTKEY
     Ctrl+Space >        Jump to most pressing repository (runs: borg next --switch)
@@ -3961,7 +3963,7 @@ case "${1:-help}" in
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
     doctor)         cmd_doctor "${@:2}" ;;
-    stack|chain)    cmd_stack "${@:2}" ;;
+    stack)          cmd_stack "${@:2}" ;;
     vinculum|vinc)  cmd_vinculum "${@:2}" ;;
     checkpoint-name)
         # Prints the filename stem a new checkpoint should use. Exists so that
@@ -3986,7 +3988,9 @@ case "${1:-help}" in
         die "'borg ${1}' was removed — it was an alias for 'link'. Run: borg link" ;;
     briefing) die "'borg briefing' was removed. Run: borg link --brief" ;;
     refresh)  die "'borg refresh' was removed. Run: borg link --refresh" ;;
-    # Renamed 2026-08-31 (AC7): same command under a non-retired name.
-    program)  die "'borg program' was renamed to 'borg chain'. Run: borg chain ${*:2}" ;;
+    # Renamed 2026-08-31 (AC7) to chain, then chain to stack (step (c) of the chain -> stack rename): the same
+    # command under a non-retired name, so each retired spelling dies pointing at `borg stack` with the args.
+    program)  die "'borg program' was renamed to 'borg stack'. Run: borg stack ${*:2}" ;;
+    chain)    die "'borg chain' was renamed to 'borg stack'. Run: borg stack ${*:2}" ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac

@@ -25,12 +25,12 @@
 #      case that produced nothing this time.
 
 # ── where a manifest lives, in ONE place ─────────────────────────────────────────────────────────
-# `.borg/chains`, the name #222's expand phase made primary. These fixtures were authored under
-# `.borg/programs` and stayed there until that PR was in `main`, because a fixture under a name
-# `discover()` does not yet know is "rejected", which reads downstream exactly like "absent".
-# Flipping this one value was the whole migration for this harness. The legacy name is still
-# readable (expand, not contract), so run.sh's N2 checks that NONE of `.stacks`, `.borg/chains` and `.borg/programs` was created.
-_EVAL_MANIFEST_DIR=".borg/chains"
+# `.stacks`, the ONE manifest root since the contract step of the chain -> stack rename. These fixtures were
+# authored under `.borg/programs`, then `.borg/chains`, and stayed there until each name was readable,
+# because a fixture under a name `discover()` does not know is "rejected", which reads downstream exactly
+# like "absent". Flipping this one value was the whole migration for this harness. The retired names are
+# no longer read, but run.sh's N2 still checks that NONE of `.stacks`, `.borg/chains` and `.borg/programs` was created.
+_EVAL_MANIFEST_DIR=".stacks"
 
 # ── the interpreter ladder, in ONE place ─────────────────────────────────────────────────────────
 # run.sh and floor-tests.sh both need an interpreter with an importable pytest, which is a dev-group
@@ -91,13 +91,13 @@ _eval_repo_with_manifest() {
     printf '%s\n' "$dir"
 }
 
-# A repository that provably has NO .borg at all. Asserted rather than assumed, because "no
+# A repository that provably has NO manifest root (.stacks) and no .borg at all. Asserted, not assumed: "no
 # manifest" is the premise of every negative case and a stray directory silently inverts it.
 # Args: <dir>
 _eval_repo_without_manifest() {
     local dir="$1"
     _eval_repo "$dir" >/dev/null
-    rm -rf "$dir/.borg"
+    rm -rf "$dir/.borg" "$dir/$_EVAL_MANIFEST_DIR"
     printf '%s\n' "$dir"
 }
 

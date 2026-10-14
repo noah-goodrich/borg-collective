@@ -174,7 +174,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
     extensions/             Local-extension resolution: layer precedence, prefer-tool, liveness
-    manifest/               Reader for <project>/.borg/chains/ and .stacks/ manifests
+    manifest/               Reader for <project>/.stacks/ manifests, one root
     link/                   `borg link` document build + renderer
         core.py             Registry/plan/checkpoint reads, scope resolution, relative time
         grid.py             Manifests → the topology wire: levels, nodes, parents/children/seq
@@ -497,20 +497,7 @@ docs/
   divergence AC7 ends), resolves the package script-relative or via `$BORG_ROOT`, and **no-ops when
   neither is present** — so an empty log in a plugin-only install means "not instrumented", not
   "no bypasses".
-- **Manifests are read from two roots**: `<repo>/.borg/chains/` (borg's own) and the tool-neutral
-  `<repo>/.stacks/`. `scaffold` creates in `.stacks/` always -- whether `.stacks/` exists, `.borg/chains/` (or legacy
-  `.borg/programs/`) exists, git ignores `.borg/`, or none of these (`placement.choose_scaffold_root`, facts from
-  `shell.scaffold_root`) -- unless `--root borg` asks for borg's own directory. It never creates inside a `.stacks/` that git
-  ignores: it refuses by name, naming the ignore and `--root borg`, never silently falling back. It prints
-  `root: <folder> (<reason>)` after its `scaffolded:` line (an `exists:` line has none). `borg stack` is the sweep verb
-  (`borg chain` forwards to it until the chain -> stack rename's contract step).
-  So a repository shared with people who do not run borg need
-  not carry a `.borg/`; a stem declared in both is refused by name, never picked, an in-place edit
-  writes back to the file it found, two roots that are one directory (a symlink) are read once, and an
-  unreadable root or parent is a named warning, never silence (`scaffold`, the one creator, refuses by
-  name rather than create beside a root it cannot read). `borg_core` and `borg stack` both read both roots
-  (`merge-tree/coordinator.py` reads through `borg_core.manifest`; `merge-tree/programs.py` is gone), and
-  `borg stack sync` rewrites a `.stacks/` manifest in place.
+- **Manifests are read from ONE root: `<repo>/.stacks/`** (the contract step of the chain -> stack rename, 2026-10-14). `<repo>/.borg/chains/` and the older `<repo>/.borg/programs/` are no longer read, and `--root borg` is refused by name. A repository that still holds `*.json` there gets a named warning (the repository and `borg stack migrate`) through the same channel an unreadable root uses, in `borg link` (`--json` and the page) and in `borg stack`'s sweep, never silence and never an empty `▸ STACKS` presented as the truth; the legacy manifest itself is never parsed. Detection is a directory listing with no fork, so the `--local` fork count is untouched. `scaffold` always creates in `.stacks/` and refuses by name when git ignores it (`placement.choose_scaffold_root`, facts from `shell.scaffold_root`); it prints `root: <folder> (<reason>)` after its `scaffolded:` line. `borg stack` is the sweep verb; `borg chain` and `borg program` die pointing at it, and `--chains-dir` and `--programs-dir` are refused by name. An in-place edit writes back to the file it found, two roots that are one directory (a symlink) are read once, and an unreadable root or parent is a named warning, never silence. `merge-tree/coordinator.py` reads through `borg_core.manifest`, and `borg stack sync` rewrites a `.stacks/` manifest in place.
 - **`borg link` is ONE renderer, not three (AC2)**: there is a single human renderer,
   `render.document()`, which iterates a module-level `SECTIONS` tuple — header, `▸ IN FOCUS`,
   `▸ REPOSITORIES`, `▸ STACKS`, `▸ QUEUED`, `▸ SHIPPED`, `▸ NEXT`, `▸ SIGNALS`, `▸ WAITING ON YOU` — with

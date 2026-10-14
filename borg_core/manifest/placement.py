@@ -1,14 +1,25 @@
 """Where `scaffold` creates a NEW manifest: the pure decision, split from `core.py`.
 
 `core.py` is at pylint's module-length ceiling, and `refs.py` / `across.py` are the precedent for a
-pure sibling. No I/O here: `shell.scaffold_root` gathers the facts (directory checks, the git probes).
+pure sibling. No I/O here: `shell.scaffold_root` gathers the facts (the `.stacks/` directory check, the git probe).
+
+Since step (c) of the chain -> stack rename there is ONE manifest root, `.stacks/`, so the decision is no longer
+a choice between roots: it is whether `.stacks/` may be created at all.
 """
 
 from __future__ import annotations
 
 ROOT_STACKS = "stacks"
+ROOT_CHOICES = (ROOT_STACKS,)
+
+# `--root borg` named borg's own directory (`.borg/chains`), which is no longer a manifest root. The flag value is
+# still PARSED so the refusal can name it, rather than argparse's anonymous "invalid choice" exit 2.
 ROOT_BORG = "borg"
-ROOT_CHOICES = (ROOT_STACKS, ROOT_BORG)
+BORG_ROOT_REFUSAL = (
+    "--root borg is no longer accepted: borg's own directory (.borg/chains) is not a manifest root any more, "
+    "and manifests live in .stacks/. Drop the flag to scaffold into .stacks/; "
+    "`borg stack migrate` moves manifests that are still under .borg/chains"
+)
 
 
 class StacksIgnored(ValueError):
@@ -19,51 +30,30 @@ class StacksIgnored(ValueError):
     """
 
 
-# Six independent facts gathered by `shell.scaffold_root`; bundling them would only rename the arguments.
-# pylint: disable-next=too-many-arguments,too-many-positional-arguments
 def choose_scaffold_root(
-    override: str,
-    stacks_exists: bool,
-    borg_dir_exists: bool,
-    borg_ignored: bool,
-    candidates: tuple[str, str],
-    stacks_ignored: bool = False,
+    override: str, stacks_exists: bool, stacks_path: str, stacks_ignored: bool = False
 ) -> tuple[str, str]:
     """`(directory, reason)` for where `scaffold` creates a NEW manifest. Pure: plain facts in, a pair out.
 
-    First match wins, and every rule but the `ROOT_BORG` override resolves to `.stacks/`, because
-    nothing new may be created under the retiring `.borg/chains` name:
+    The directory is always `stacks_path` (`.stacks/`); what varies is the reason, and whether the answer is a
+    refusal. First match wins:
 
-    1. `override` `ROOT_BORG` names borg's own directory outright, even beside an existing `.stacks/`.
-       `override` `ROOT_STACKS` names `.stacks/` outright.
-    2. `.stacks/` already exists.
-    3. borg's own directory already exists -- it is still READ, but a new manifest goes to `.stacks/`.
-    4. Neither exists and git ignores `.borg/`.
-    5. Otherwise: the default, `.stacks/`.
+    1. `stacks_ignored`: git would ignore a file there, and `.stacks/` is always version-controlled, so this raises
+       `StacksIgnored` instead of creating into an ignored path. There is no other root to fall back to.
+    2. `override` `ROOT_STACKS` names `.stacks/` outright.
+    3. `.stacks/` already exists.
+    4. Otherwise: the default.
 
-    `.stacks/` is always version-controlled, so when the answer is `.stacks/` and `stacks_ignored`
-    says git would ignore a file there, this raises `StacksIgnored` instead of creating into an
-    ignored path. `ROOT_BORG` is the one way past it, since the caller then asked for the other root.
-
-    `candidates` is `(stacks_path, borg_path)`, the two directories a manifest could be created in.
-    The facts are gathered by `shell.scaffold_root`; nothing here touches a disk or runs git.
-    An `override` that is neither choice falls through to the derived rules -- the CLI rejects it at
-    the argparse seam, so reaching here with one is a caller bug that should not become a crash.
+    The facts are gathered by `shell.scaffold_root`; nothing here touches a disk or runs git. `--root borg` never
+    reaches here: the CLI seam refuses it by name first (`BORG_ROOT_REFUSAL`).
     """
-    stacks_path, borg_path = candidates
-    if override == ROOT_BORG:
-        return borg_path, "--root borg"
     if stacks_ignored:
         raise StacksIgnored(
             f"git ignores {stacks_path}, and .stacks/ is always version-controlled, so scaffold will not "
-            f"create a manifest there. Remove the ignore rule, or pass --root borg to create in {borg_path}"
+            "create a manifest there. Remove the ignore rule"
         )
     if override == ROOT_STACKS:
         return stacks_path, "--root stacks"
     if stacks_exists:
         return stacks_path, ".stacks/ already exists"
-    if borg_dir_exists:
-        return stacks_path, f"{borg_path} exists and is still read, but new manifests go in .stacks/"
-    if borg_ignored:
-        return stacks_path, "git ignores .borg/, so a manifest there could not be shared"
     return stacks_path, "default"

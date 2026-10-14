@@ -372,18 +372,18 @@ else
     # hand-authored, so the count is EXACT and falsifiable by its own inputs: add or remove a row
     # in either fixture and this case goes red, naming both numbers.
     #
-    # `discover` globs `.borg/programs/*.json` and never shells git, so the staged tree needs no
+    # `discover` globs `.stacks/*.json` and never shells git, so the staged tree needs no
     # `git init` -- two directories and two files is the whole fixture.
     fixture_root="$OUT/fixtures"
     programs_dir_args=()
     for fixture_repo in platform warehouse; do
-        mkdir -p "$fixture_root/$fixture_repo/.borg/programs"
+        mkdir -p "$fixture_root/$fixture_repo/.stacks"
         programs_dir_args+=("$fixture_root/$fixture_repo")
     done
     cp "$SCRIPT_DIR/fixtures/programs/atlas-cutover.json" \
-       "$fixture_root/platform/.borg/programs/"
+       "$fixture_root/platform/.stacks/"
     cp "$SCRIPT_DIR/fixtures/programs/warehouse-window.json" \
-       "$fixture_root/warehouse/.borg/programs/"
+       "$fixture_root/warehouse/.stacks/"
 
     # THE OPT-IN REAL-DATA UPGRADE. When a real second repository IS on this machine it is swept
     # IN ADDITION to the fixtures, so nothing that used to be covered stops being covered -- but
