@@ -22,6 +22,7 @@ import sys
 from collections.abc import Mapping
 from typing import NoReturn
 
+from borg_core.compass import shell as compass_shell
 from borg_core.link import core, grid, overlay, picture, render, shell, worktree
 from borg_core.nextpick import cli as nextpick_cli
 from borg_core.nextpick import core as nextpick_core
@@ -397,7 +398,7 @@ def _document(  # pylint: disable=too-many-locals
     block, waiting = (
         (None, None) if hint_only else _grid_and_waiting(overlaid, repositories, scope, local, moment, mode)
     )
-    return core.assemble(
+    document = core.assemble(
         generated_at=core.format_iso(moment),
         show_all=show_all,
         total_projects=len(overlaid.get("projects") or {}),
@@ -412,6 +413,14 @@ def _document(  # pylint: disable=too-many-locals
         grid=block,
         waiting=waiting,
     )
+    # THE COMPASS RIDES THE `--json` WIRE ONLY, in every scope, ADDITIVELY (DOCUMENT_VERSION stays 2): the
+    # human page ignores it until the render step, and `--porcelain` is byte-identical to before. It is stamped
+    # here rather than inside `core.assemble` because that module sits at pylint's 1000-line ceiling and the map
+    # is an impure read. Repository names come from the document already in hand, `moment` is the document's
+    # one epoch, and the reader forks nothing, so `--local`'s subprocess contract is unchanged.
+    if mode == "json":
+        document["compass"] = compass_shell.read_compass(moment, list(document["projects"]))
+    return document
 
 
 def _emit(text: str) -> int:
