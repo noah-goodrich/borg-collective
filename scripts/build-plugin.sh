@@ -151,7 +151,7 @@ else
                 fi
                 skills_changed=$((skills_changed + 1))
             fi
-        done < <(cd "$skill_dir" && find . -type f | LC_ALL=C sort)
+        done < <(cd "$skill_dir" && find . -type f -not -path '*/.*' | LC_ALL=C sort)
 
         # Remove mirror files whose source is gone, so a deleted reference does not linger.
         if [[ -d "$SKILLS_DST/$skill_name" ]]; then
@@ -165,7 +165,7 @@ else
                     _info "  removed skill file: $skill_name/$rel"
                 fi
                 skills_changed=$((skills_changed + 1))
-            done < <(cd "$SKILLS_DST/$skill_name" && find . -type f | LC_ALL=C sort)
+            done < <(cd "$SKILLS_DST/$skill_name" && find . -type f -not -path '*/.*' | LC_ALL=C sort)
         fi
     done
     if [[ "$skills_changed" -eq 0 ]]; then

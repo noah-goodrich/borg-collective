@@ -89,3 +89,12 @@ _sandbox_repo() {
     run bash "$SB/scripts/build-plugin.sh"
     [[ "$output" == *"all skills in sync"* ]]
 }
+
+@test "a dot-prefixed file in a source skill dir is not mirrored" {
+    _sandbox_repo
+    echo junk > "$SB/skills/fixture/.DS_Store"
+    run bash "$SB/scripts/build-plugin.sh"
+    [ "$status" -eq 0 ]
+    [ -f "$PLUGIN_DIR_OVERRIDE/skills/fixture/SKILL.md" ]
+    [ ! -e "$PLUGIN_DIR_OVERRIDE/skills/fixture/.DS_Store" ]
+}

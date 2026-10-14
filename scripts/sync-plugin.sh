@@ -12,9 +12,10 @@
 # hooks are a curated stateless subset (bash-guard, notify, nudges) and the plugin
 # carries no lib/ (self-contained, no machine-local sources). Sync skills + agents only.
 #
-# The agents loop is additive and existing-targets-only; the skills loop covers whole skill directories
-# of skills already in the distro (it may create files inside them, e.g. references/; it never deletes). There is no --delete — this is a
-# one-way source→distro refresh, not a true mirror.
+# The agents loop is additive and existing-targets-only; the skills loop covers whole skill
+# directories of skills already in the distro (it may create files inside them, e.g.
+# references/; it never deletes; dot-prefixed files are skipped). There is no --delete —
+# this is a one-way source→distro refresh, not a true mirror.
 
 set -euo pipefail
 
@@ -67,7 +68,7 @@ for skill_dir in "$SRC"/*/; do
             fi
             changed=$((changed + 1))
         fi
-    done < <(cd "$skill_dir" && find . -type f | LC_ALL=C sort)
+    done < <(cd "$skill_dir" && find . -type f -not -path '*/.*' | LC_ALL=C sort)
 done
 
 # Agents: same additive, existing-targets-only contract as skills above. Only overwrite agent
