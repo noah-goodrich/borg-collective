@@ -30,11 +30,13 @@ Vocabulary: a *repository* is the git repo; a *worktree* is a linked checkout re
 ONE call serves every scope. Run it once, with the project name appended only when the user gave one:
 
 ```bash
-borg link --json [<project>] | jq 'if .scope.unregistered == true
+borg link --json [<project>] | jq -c 'if .scope.unregistered == true
   then {version, generated_at, scope}
   elif .scope.kind == "orchestrator"
   then (.directives |= (group_by(.project) | map({project: .[0].project, n: length,
-    titles: [limit(5; .[].title)]})))
+    titles: [limit(5; .[].title)]}))
+    | del(.projects[] | .claude_session_id, .path, .repo, .clock_divergence, .tmux_session,
+      .source, .notify_origin, .last_activity))
   else (.scope.repository as $r | {version, generated_at, scope,
     entry: (.focus.entry | del(.summary)),
     waiting: {rows: [.waiting.rows[] | select(.project == $r and .item == "session")],
@@ -156,7 +158,7 @@ mean paying for a network round trip and then rendering the same overview as bef
 
 **Why the jq.** The Queen arm (`.directives |= (...)`) does not enumerate a field — it transforms one
 key in place, so anything the document gains later passes through untouched. It collapses the one
-uncapped array (directives, ~121 items live) from 27,298 bytes raw to ~13,935. The repository arm is
+uncapped array (directives, ~121 items live) from 27,298 bytes raw to ~13,935. `-c` drops the pretty-print whitespace, which costs context and tells a model reader nothing, and the named `del()` removes eight per-project fields the Queen view never reads (`claude_session_id`, `path`, `repo`, `clock_divergence`, `tmux_session`, `source`, `notify_origin`, `last_activity`); it names what to drop rather than what to keep, so a field the document gains later still passes through. The repository arm is
 the opposite: an explicit whitelist, and a field the document gains later is invisible until it is
 added there. That is the point of it — it keeps registry-wide data off a page that must be about one
 directory. If `jq` is missing, drop the pipe and read the raw document, and still render only what the
