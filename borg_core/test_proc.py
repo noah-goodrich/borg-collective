@@ -372,3 +372,15 @@ def test_no_module_forks_a_subprocess_of_its_own(module_name, function_name):
 def test_the_helper_lives_above_every_package_that_uses_it():
     # A neutral top-level home, so no package imports another package to get it.
     assert os.path.basename(os.path.dirname(os.path.abspath(proc.__file__))) == "borg_core"
+
+
+def test_cwd_runs_the_child_in_that_directory(tmp_path):
+    work = tmp_path / "work"
+    work.mkdir()
+    argv = [_script(tmp_path, "where", b"pwd -P")]
+    assert proc.run_capture(argv, cwd=str(work)) == (0, os.path.realpath(work) + "\n")
+
+
+def test_a_missing_cwd_degrades_to_none_like_a_missing_binary(tmp_path):
+    argv = [_script(tmp_path, "any", b"true")]
+    assert proc.run_capture(argv, cwd=str(tmp_path / "nope")) is None

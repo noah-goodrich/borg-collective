@@ -25,6 +25,11 @@ def session_id() -> str:
     return os.environ.get("CLAUDE_CODE_SESSION_ID", "")
 
 
-def checkpoint_stem() -> str:
-    """The stem for a checkpoint written right now, by this session."""
-    return core.checkpoint_stem(datetime.now(), core.short_suffix(session_id()))
+def checkpoint_stem(session: str = "", moment: datetime | None = None) -> str:
+    """The stem for a checkpoint written by this session, now unless `moment` says otherwise.
+
+    `session` is for a caller that was HANDED the session id (`borg checkpoint-prepare --session`, whose id comes
+    from a skill substitution) and falls back to the environment exactly as the no-argument form always did.
+    `moment` exists so that caller's tests can pin the clock; production passes nothing.
+    """
+    return core.checkpoint_stem(moment or datetime.now(), core.short_suffix(session or session_id()))

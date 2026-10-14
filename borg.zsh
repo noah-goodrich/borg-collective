@@ -3390,6 +3390,7 @@ cmd_help() {
     start <slug>        Promote a directive to PROJECT_PLAN.md (one in-flight per repository)
     setup               Register Claude Code hooks, skills, and config
     checkpoint-name     Print the collision-proof filename stem for a new checkpoint
+    checkpoint-prepare  Print every input /borg-link-up needs in one call (read-only, always exit 0)
     version             Print the installed borg version (alias: --version, -V)
     store-secret <name> Store a secret in macOS Keychain and wire to secrets.zsh
     cortex-resume [proj] Force-wake a paused Cortex pane (no arg = first pending)
@@ -4057,6 +4058,12 @@ case "${1:-help}" in
         # bare `python3 -m borg_core...` line in a skill would carry a PYTHONPATH the skill has to
         # get right, which is the class of instruction that silently stops working.
         _borg_py borg_core.checkpoint.cli ;;
+    checkpoint-prepare)
+        # Prints every mechanical input /borg-link-up needs, as one document: root, the checkpoint path (collision
+        # loop applied), plan, git status, manifest stem, PR, prefer-tool, and the three extension hooks. Exits 0
+        # ALWAYS and writes nothing, because the skill loads it through dynamic context injection, where a
+        # non-zero exit aborts the skill. Contract: docs/plans/directives/2026-10-14-link-up-prepare.md.
+        _borg_py borg_core.checkpoint.prepare_cli "${@:2}" ;;
     version|--version|-V) cmd_version ;;
     help|--help|-h) cmd_help ;;
     # Removed 2026-08-10: ls/status/hail/brief/briefing/refresh were aliases for `link`. Six names
