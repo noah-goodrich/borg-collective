@@ -166,7 +166,8 @@ if [[ -d "$CHECKPOINT_DIR" ]]; then
     _recent_cp=$(find "$CHECKPOINT_DIR" -maxdepth 1 -name "*.md" -mmin -60 2>/dev/null | head -1 || true)
     if [[ -z "$_recent_cp" ]]; then
         _warn "▸ No checkpoint in the last hour for ${REPOSITORY}
-  Run /borg-link-up next session to save state for future resumption."
+  Run /borg-link-up next session to save state for future resumption.
+  Better still, checkpoint before the session goes idle, while its cache is still warm: a checkpoint after a long idle gap pays to reload the whole context."
     fi
 fi
 

@@ -16,7 +16,7 @@ load test_helper/setup
 
 BORG="${BATS_TEST_DIRNAME}/../borg.zsh"
 NOW="2026-10-14T10:10:10"
-EXPECTED_HEADERS="PROJECT_ROOT,CHECKPOINT_PATH,PLAN,GIT_STATUS,MANIFEST_RESOLVE,PR_REF,PREFER_TOOL"
+EXPECTED_HEADERS="PROJECT_ROOT,CHECKPOINT_PATH,PLAN,BORG_SOURCE_DIR,GIT_STATUS,MANIFEST_RESOLVE,PR_REF,PREFER_TOOL"
 EXPECTED_HEADERS+=",EXTENSION_01_CONTEXT_MACHINE,EXTENSION_01_CONTEXT_REPOSITORY,EXTENSION_01_CONTEXT_PRECEDENCE"
 EXPECTED_HEADERS+=",EXTENSION_02_OUTPUT_MACHINE,EXTENSION_02_OUTPUT_REPOSITORY,EXTENSION_02_OUTPUT_PRECEDENCE"
 EXPECTED_HEADERS+=",EXTENSION_03_FOLLOWUP_MACHINE,EXTENSION_03_FOLLOWUP_REPOSITORY,EXTENSION_03_FOLLOWUP_PRECEDENCE"
@@ -68,6 +68,8 @@ _ext_dir_repo() { echo "$REPO/.borg/skill-extensions/borg-link-up"; }
     [ "$(printf '%s\n' "$output" | head -1)" = "borg checkpoint-prepare v1" ]
     [ "$(_headers)" = "$EXPECTED_HEADERS" ]
     [ "$(_field PLAN)" = "none" ]
+    [ "$(_field BORG_SOURCE_DIR)" = "$(cd "$BORG_HOME" && pwd -P)" ]
+    [ -d "$(_field BORG_SOURCE_DIR)/borg_core" ]
     [[ "$(_field MANIFEST_RESOLVE)" == 'refused: "'* ]] || false
     [[ "$(_field PR_REF)" == 'none: "gh not installed"' ]] || false
     [ "$(_field PREFER_TOOL)" = "none" ]

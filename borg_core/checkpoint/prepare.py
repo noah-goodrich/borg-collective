@@ -17,7 +17,9 @@ language model that treats text as potential instruction. Two rules follow.
      the whole at `MAX_OUTPUT_BYTES`; every cut leaves a `[TRUNCATED: ...]` marker, because a silently shortened
      extension is a silently ignored instruction.
 
-The fixed headers are documented in docs/plans/directives/2026-10-14-link-up-prepare.md.
+The fixed headers are documented in docs/plans/directives/2026-10-14-link-up-prepare.md. The format name stays v1:
+BORG_SOURCE_DIR (the directory to put on PYTHONPATH for the manifest and planstate engines) was added after PLAN
+before any consumer existed.
 """
 
 from __future__ import annotations
@@ -78,13 +80,14 @@ class PreferRow:
 
 
 @dataclass(frozen=True)
-# JUSTIFICATION: thirteen plain facts gathered by `prepare_shell.gather`; bundling them would only rename them.
+# JUSTIFICATION: fourteen plain facts gathered by `prepare_shell.gather`; bundling them would only rename them.
 class Facts:  # pylint: disable=too-many-instance-attributes
     """Everything the impure layer read. Every field defaults to the "nothing known" value."""
 
     root: str = "unknown"
     checkpoint_path: str = "unknown"
     plan: str = ""
+    source_dir: str = "unknown"
     git_status: str | None = None
     git_reason: str = "not read"
     manifest_stem: str = ""
@@ -195,6 +198,7 @@ def _assemble(facts: Facts, body_limit: int) -> list[str]:
         f"CHECKPOINT_PATH: {_one_line(facts.checkpoint_path)}",
     ]
     lines.append(f"PLAN: {_one_line(facts.plan) if facts.plan else 'none'}")
+    lines.append(f"BORG_SOURCE_DIR: {_one_line(facts.source_dir)}")
     lines.extend(_git_block(facts.git_status, facts.git_reason))
     if facts.manifest_stem:
         lines.append(f"MANIFEST_RESOLVE: {_one_line(facts.manifest_stem)}")

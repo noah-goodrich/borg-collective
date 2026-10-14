@@ -281,6 +281,14 @@ def test_gather_on_an_empty_repository_has_no_problems(tmp_path, monkeypatch):
     assert facts.git_status is not None
 
 
+def test_source_dir_is_the_directory_holding_borg_core(tmp_path, monkeypatch):
+    monkeypatch.setenv(prepare_shell.NOW_OVERRIDE_ENV, "2026-10-14T10:10:10")
+    found = Path(prepare_shell.source_dir())
+    assert found.is_absolute()
+    assert (found / "borg_core" / "checkpoint" / "prepare_shell.py").is_file()
+    assert prepare_shell.gather(str(_git_repo(tmp_path))).source_dir == str(found)
+
+
 def test_gather_advances_the_checkpoint_name_past_an_existing_file(tmp_path, monkeypatch):
     monkeypatch.setenv(prepare_shell.NOW_OVERRIDE_ENV, "2026-10-14T10:10:10")
     repo = _git_repo(tmp_path)
