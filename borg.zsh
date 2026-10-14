@@ -26,7 +26,16 @@ BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 # Colors (same as dev.sh)
 GREEN='\033[0;32m'  YELLOW='\033[1;33m'  RED='\033[0;31m'  CYAN='\033[0;36m'
 BOLD='\033[1m'  DIM='\033[2m'  NC='\033[0m'
-info()  { echo -e "${GREEN}▸${NC} $*"; }
+ERASE_LINE='\033[K'
+# NO_COLOR (https://no-color.org): set to a NON-EMPTY value, no ANSI leaves the CLI. The palette is the one
+# place colour is defined, so blanking it here covers every `${GREEN}...${NC}` in this file and in lib/*.zsh.
+# ERASE_LINE is not colour but is the same ESC byte, so it becomes spaces (the caller's `\r` finishes the job).
+# `borg link` reads the same variable itself in borg_core/link/cli.py; both sides use "non-empty", never "set".
+if [[ -n "${NO_COLOR:-}" ]]; then
+    GREEN='' YELLOW='' RED='' CYAN='' BOLD='' DIM='' NC=''
+    ERASE_LINE='                    '
+fi
+info() { echo -e "${GREEN}▸${NC} $*"; }
 warn()  { echo -e "${YELLOW}▸${NC} $*"; }
 die()   { echo -e "${RED}▸ ERROR:${NC} $*" >&2; exit 1; }
 dbg()   { [[ -n "${BORG_DEBUG:-}" ]] && echo -e "${CYAN}  [dbg]${NC} $*" >&2 || true; }
@@ -787,7 +796,7 @@ _borg_next_chooser() {
     # The link build can wait on the network; say so on stderr (never stdout), and not at all with --local.
     (( ! local_flag )) && printf '\r%s' "${DIM}checking GitHub…${NC}" >&2
     out=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null) || out=""
-    (( ! local_flag )) && printf '\r\033[K' >&2
+    (( ! local_flag )) && printf '\r%b\r' "$ERASE_LINE" >&2
     names_line="${out##*$'\n'}"
     if [[ "$names_line" != names$'\t'?* ]]; then
         # Genuinely empty registry: nothing to choose, nothing worth a chooser row.
@@ -3431,6 +3440,7 @@ cmd_help() {
     BORG_WORK_HOURS         e.g. "09:00-18:00" (empty to disable)
     BORG_WORK_PROJECTS      Comma-separated work repository names
     BORG_DEBUG              Set to any value for debug output
+    NO_COLOR                Set to any non-empty value: no colour, no hyperlinks (no-color.org)
     BORG_SECRETS_FILE       Override path to secrets.zsh (default: ~/.config/dotfiles/zsh/secrets.zsh)
 
   "We are the Borg. Your repositories will be assimilated."

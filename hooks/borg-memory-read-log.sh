@@ -44,7 +44,14 @@ OLD_LOG="${XDG_CONFIG_HOME:-$HOME/.config}/borg/memory-hits.log"
 
 # Retention: cap at 1 MiB, one previous generation; memory-hits-report reads .1 then the live file.
 # bash 3.2: a failed `source` is fatal under set -e even inside `{ }`/`|| true`; a subshell contains it.
-( source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "${STATE_DIR}/memory-hits.log" ) >/dev/null 2>&1 || true
+# The lib is resolved script-relative first, the installed copy second (same order as the lifecycle hooks).
+(
+    _borg_lib_dir="${BASH_SOURCE[0]%/*}"
+    [[ "$_borg_lib_dir" == "${BASH_SOURCE[0]}" ]] && _borg_lib_dir=.
+    _borg_lib="$_borg_lib_dir/../lib/borg-hooks.sh"
+    [[ -f "$_borg_lib" ]] || _borg_lib="${HOME}/.claude/lib/borg-hooks.sh"
+    source "$_borg_lib" && _borg_rotate_log "${STATE_DIR}/memory-hits.log"
+) >/dev/null 2>&1 || true
 
 { printf '%s\t%s\t%s\t%s\t%s\n' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$SESSION_ID" "$PROJECT_DIR" "$FILE_NAME" "$BYTES" \
