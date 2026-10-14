@@ -44,7 +44,7 @@ Two independent tools that compose:
   the surface of record.
 - Hooks (17): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
-  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook,
+  bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook, borg-nanoprobe-log, borg-prefer-tool-log,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
 - Skills (17): adhd-guardrails, borg-link-up, borg-plan, borg-review, borg-assimilate, borg-verify,
   pane, and 10 more (full list under Files below)

@@ -83,20 +83,17 @@ def main(argv: list[str] | None = None) -> int:
     if code:
         return code
     results = migrate_shell.run(directories, args.dry_run)
-    for plan, failure in results:
-        if failure:
-            print(f"failed: {plan.path}: {failure}")
+    for plan, execution in results:
+        if execution.failure:
+            print(f"failed: {plan.path}: {execution.failure}")
         else:
             print("\n".join(migrate.render(plan, args.dry_run)))
-    plans = [plan for plan, failure in results if not failure]
-    print(migrate.summary(plans, args.dry_run))
-    failed = sum(1 for _, failure in results if failure)
+    plans = [plan for plan, execution in results if not execution.failure]
+    partial = {plan.path: execution.moved for plan, execution in results if execution.failure}
+    # The skipped-or-refused count is the summary's, printed once; the exit status below carries it to a script.
+    print(migrate.summary(plans, args.dry_run, partial))
+    failed = len(partial)
     left = len(migrate.incomplete(plans))
-    if left:
-        print(
-            f"stack migrate: {left} repository(ies) were skipped or refused and left untouched (see above)",
-            file=sys.stderr,
-        )
     if failed:
         print(f"stack migrate: {failed} repository(ies) failed part-way (see above)", file=sys.stderr)
     return 1 if left or failed else 0
