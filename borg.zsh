@@ -26,7 +26,16 @@ BORG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/borg"
 # Colors (same as dev.sh)
 GREEN='\033[0;32m'  YELLOW='\033[1;33m'  RED='\033[0;31m'  CYAN='\033[0;36m'
 BOLD='\033[1m'  DIM='\033[2m'  NC='\033[0m'
-info()  { echo -e "${GREEN}▸${NC} $*"; }
+ERASE_LINE='\033[K'
+# NO_COLOR (https://no-color.org): set to a NON-EMPTY value, no ANSI leaves the CLI. The palette is the one
+# place colour is defined, so blanking it here covers every `${GREEN}...${NC}` in this file and in lib/*.zsh.
+# ERASE_LINE is not colour but is the same ESC byte, so it becomes spaces (the caller's `\r` finishes the job).
+# `borg link` reads the same variable itself in borg_core/link/cli.py; both sides use "non-empty", never "set".
+if [[ -n "${NO_COLOR:-}" ]]; then
+    GREEN='' YELLOW='' RED='' CYAN='' BOLD='' DIM='' NC=''
+    ERASE_LINE='                    '
+fi
+info() { echo -e "${GREEN}▸${NC} $*"; }
 warn()  { echo -e "${YELLOW}▸${NC} $*"; }
 die()   { echo -e "${RED}▸ ERROR:${NC} $*" >&2; exit 1; }
 dbg()   { [[ -n "${BORG_DEBUG:-}" ]] && echo -e "${CYAN}  [dbg]${NC} $*" >&2 || true; }
@@ -223,13 +232,19 @@ cmd_ls() {
     fi
 
     if (( porcelain )); then
-        local name entry source proj_status last summary
+        local name entry source proj_status last summary waiting_reason
+        # Column 5 is each repository's checkpoint tl;dr, derived for ALL of them in one Python call, then
+        # waiting_reason, then the relative activity. Never the stored summary (see _borg_checkpoint_summaries).
+        registry=$(printf '%s' "$registry" | _borg_checkpoint_summaries)
         while IFS= read -r name; do
             entry=$(printf '%s' "$registry" | jq -c --arg p "$name" '.projects[$p]')
             source=$(printf '%s' "$entry" | jq -r '.source // "cli"')
             proj_status=$(printf '%s' "$entry" | jq -r '.status // "unknown"')
             last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
             summary=$(printf '%s' "$entry" | jq -r '.summary // ""')
+            waiting_reason=$(printf '%s' "$entry" | jq -r '.waiting_reason // ""')
+            [[ -n "$summary" ]] || summary="$waiting_reason"
+            [[ -n "$summary" || -z "$last" ]] || summary=$(_borg_relative_time "$last")
             # FLATTEN THE THREE CONTROL CHARACTERS THAT REACH A RECORD, BEFORE THE 80-CHAR CUT.
             # `jq -r` prints the DECODED string, so once the parse above succeeds a summary's real
             # 0x09/0x0A/0x0D arrive here intact. This is a TSV record read back by `cmd_switch` with
@@ -266,8 +281,11 @@ cmd_ls() {
     # caller, not assumed.
 }
 
+# Usage: cmd_status [repository [summary]]. An explicit `summary` (even empty) is the caller's already-derived
+# one (`_borg_do_switch` has resolved it), which saves a second Python call; omitted, it is derived here.
 cmd_status() {
     local repository="${1:-}"
+    local -i summary_given=$(( $# >= 2 ))
 
     if [[ -z "$repository" ]]; then
         # Default to repository matching current directory name
@@ -286,7 +304,8 @@ cmd_status() {
     ppath=$(printf '%s' "$entry"      | jq -r '.path // "null"')
     proj_status=$(printf '%s' "$entry"     | jq -r '.status // "unknown"')
     last=$(printf '%s' "$entry"       | jq -r '.last_activity // "(never)"')
-    summary=$(printf '%s' "$entry"    | jq -r '.summary // "(no summary)"')
+    if (( summary_given )); then summary="$2"; else summary=$(_borg_checkpoint_summary "$repository"); fi
+    [[ -n "$summary" ]] || summary="(no summary)"
     session_id=$(printf '%s' "$entry" | jq -r '.claude_session_id // "(unknown)"')
     tmux_window=$(printf '%s' "$entry"| jq -r '.tmux_window // "(none)"')
 
@@ -333,12 +352,18 @@ cmd_switch() {
 }
 
 # Internal: switch to a repository by name (tmux or show status)
-# Usage: _borg_do_switch <repository> [--silent]
+# Usage: _borg_do_switch <repository> [--silent] [--summary <text>]
 #   --silent: suppress text output, use tmux display-message instead (for keybinding context)
+#   --summary: the caller's already-derived checkpoint summary (even empty), so this does not derive it again
 _borg_do_switch() {
     local repository="$1"
-    local silent=0
+    local silent=0 summary_given=0 given_summary=""
     [[ "${2:-}" == "--silent" ]] && silent=1
+    if [[ "${2:-}" == "--summary" ]]; then
+        summary_given=1; given_summary="${3:-}"
+    elif [[ "${3:-}" == "--summary" ]]; then
+        summary_given=1; given_summary="${4:-}"
+    fi
 
     # Work/life boundary check (skip in silent/keybinding mode — Ctrl+Space > is itself a conscious action)
     if (( ! silent )); then
@@ -376,10 +401,13 @@ _borg_do_switch() {
     # function reaches `warn` + `cmd_status`, which no longer dies: measured exit 0 where it was
     # exit 5 with `jq: parse error: Invalid string: control characters from U+0000 through U+001F
     # must be escaped`.
-    local tmux_window source summary last
+    local tmux_window source summary last waiting_reason
     tmux_window=$(printf '%s' "$entry" | jq -r '.tmux_window // ""')
     source=$(printf '%s' "$entry" | jq -r '.source // "cli"')
-    summary=$(printf '%s' "$entry" | jq -r '.summary // ""')
+    # The brief is the newest checkpoint's tl;dr (ONE Python call), never the registry's stored `summary`, which
+    # goes stale the moment a newer checkpoint lands. No checkpoint: waiting_reason, then the relative activity.
+    if (( summary_given )); then summary="$given_summary"; else summary=$(_borg_checkpoint_summary "$repository"); fi
+    waiting_reason=$(printf '%s' "$entry" | jq -r '.waiting_reason // ""')
     last=$(printf '%s' "$entry" | jq -r '.last_activity // ""')
 
     # If no registered window, try repository name as window name
@@ -408,17 +436,19 @@ _borg_do_switch() {
         if (( silent )); then
             # In tmux keybinding context: switch first, then show brief as display-message
             borg_tmux_switch "$tmux_window" || true
-            local msg="$repository"
-            [[ -n "$summary" && "$summary" != "null" ]] && msg="$repository | ${summary:0:60}"
+            local msg="$repository" blurb="${summary:-$waiting_reason}"
+            [[ -n "$blurb" || -z "$last" ]] || blurb=$(_borg_relative_time "$last")
+            [[ -n "$blurb" ]] && msg="$repository | ${blurb:0:60}"
             tmux display-message "$msg" 2>/dev/null || true
         else
             # Auto-brief before switching (interactive context)
-            if [[ -n "$summary" && "$summary" != "null" ]]; then
+            if [[ -n "$summary" || -n "$waiting_reason" ]]; then
                 echo -e "\n${DIM}─── $repository ───${NC}"
                 local rel_time
                 rel_time=$(_borg_relative_time "$last")
                 echo -e "  ${DIM}Last active:${NC} $rel_time"
-                echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
+                [[ -z "$waiting_reason" ]] || echo -e "  ${YELLOW}Needs:${NC} $waiting_reason"
+                [[ -z "$summary" ]] || echo -e "  $(_borg_clip_summary "$summary")"
                 echo
             fi
             info "Switching to $repository ($tmux_window)"
@@ -429,14 +459,14 @@ _borg_do_switch() {
             tmux display-message "$repository (Desktop session — open Claude Desktop)" 2>/dev/null || true
         else
             info "$repository is a Desktop session — open Claude Desktop to continue"
-            cmd_status "$repository"
+            cmd_status "$repository" "$summary"
         fi
     else
         if (( silent )); then
             tmux display-message "borg: no tmux window for $repository" 2>/dev/null || true
         else
             warn "No tmux window registered for $repository"
-            cmd_status "$repository"
+            cmd_status "$repository" "$summary"
         fi
     fi
 }
@@ -708,6 +738,50 @@ _borg_next_registry() {
     printf '%s\n' "$out"
 }
 
+# The registry's stored `summary` is summarize.py's transcript heuristic, written once at session end, and it is
+# stale the moment a newer checkpoint lands. No reader prints it: `borg link`, `borg next` (via the overlay above),
+# the switch picker, the switch brief and the Queen context all take the newest checkpoint's tl;dr (else its first
+# Accomplished bullet) from `borg_core.link.shell.with_checkpoint_summaries`, the one implementation, and degrade
+# to waiting_reason or the relative activity when there is none. A repository with no checkpoint gets NO summary,
+# never the stored one.
+#
+# `_borg_checkpoint_summaries`: registry JSON on stdin, the same registry on stdout with every `summary` derived.
+# ONE Python call however many repositories there are. If that call fails the summaries are nulled rather than
+# passed through, because a stale sentence is the one thing these readers must not print.
+_borg_checkpoint_summaries() {
+    local registry out
+    registry=$(cat)
+    if out=$(printf '%s' "$registry" | _borg_py borg_core.link.overlay --summaries 2>/dev/null) && [[ -n "$out" ]]; then
+        printf '%s\n' "$out"
+    else
+        printf '%s' "$registry" | jq -c '.projects |= map_values(if type == "object" then .summary = null else . end)'
+    fi
+}
+
+# `_borg_checkpoint_summary <repository>`: that one repository's derived summary, "" when it has none or the
+# call fails. One Python call; for the readers that hold a single entry (the switch brief, `cmd_status`).
+_borg_checkpoint_summary() {
+    _borg_py borg_core.link.overlay --summary "$1" 2>/dev/null || true
+}
+
+# `_borg_clip_summary <text>`: the text as ONE line of at most 80 visible characters (the picker's budget), with the
+# three storable control characters flattened first (the picker's own flatten) and a trailing `…` standing in as the
+# 80th character when it is cut. A tl;dr is a whole paragraph; the picker, the Queen context and the tmux message
+# already cut it, and `borg next` and the interactive switch brief must not print it unbounded (so neither folds it:
+# clipped to 80 it is one line). Short text is unchanged.
+_borg_clip_summary() {
+    local text="${1//[$'\t\n\r']/ }"
+    if (( ${#text} > 80 )); then text="${text:0:79}…"; fi
+    printf '%s' "$text"
+}
+
+# `_borg_registry_summary <registry-json> <repository>`: the summary already derived into an overlaid registry (the
+# `_borg_next_registry` output), "" when null. Lets a caller holding that registry hand it to `_borg_do_switch
+# --summary` instead of paying a second `overlay --summary` Python call.
+_borg_registry_summary() {
+    printf '%s' "$1" | jq -r --arg p "$2" '.projects[$p].summary // ""' 2>/dev/null || true
+}
+
 # One fail-open log row per `borg next` run (borg_core.nextpick.cli never writes stdout, exits 0).
 # Called BEFORE the --pick range check so the row exists even for a bad pick; a die after it is fine.
 # `_borg_py` (not bare python3) so the child inherits the config surface; XDG_STATE_HOME is read from
@@ -740,7 +814,7 @@ _borg_next_chooser() {
     # The link build can wait on the network; say so on stderr (never stdout), and not at all with --local.
     (( ! local_flag )) && printf '\r%s' "${DIM}checking GitHub…${NC}" >&2
     out=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli "${rows_args[@]}" 2>/dev/null) || out=""
-    (( ! local_flag )) && printf '\r\033[K' >&2
+    (( ! local_flag )) && printf '\r%b\r' "$ERASE_LINE" >&2
     names_line="${out##*$'\n'}"
     if [[ "$names_line" != names$'\t'?* ]]; then
         # Genuinely empty registry: nothing to choose, nothing worth a chooser row.
@@ -775,7 +849,7 @@ _borg_next_chooser() {
         return 0
     fi
     _borg_next_log "$registry" 0 "" "${base[@]}" --opened "${names[idx]}" --opened-after "$(( SECONDS - start ))"
-    _borg_do_switch "${names[idx]}" --silent
+    _borg_do_switch "${names[idx]}" --silent --summary "$(_borg_registry_summary "$registry" "${names[idx]}")"
 }
 
 # Non-interactive surfaces for skills (no TTY): `--rows --json` (logs nothing), `--open <p> --chosen [--shown]`
@@ -814,7 +888,7 @@ _borg_next_surface() {
             printf '%s' "$registry" | jq -e --arg p "$repository" '.projects[$p] != null' >/dev/null 2>&1 ||
                 die "next --open: unknown repository '$repository'"
             _borg_next_log "$registry" 0 "" "${base[@]}" --opened "$repository" --unmeasured
-            _borg_do_switch "$repository" --silent
+            _borg_do_switch "$repository" --silent --summary "$(_borg_registry_summary "$registry" "$repository")"
             ;;
         declined)
             _borg_next_log "$registry" 0 "" "${base[@]}"
@@ -910,7 +984,8 @@ cmd_next() {
 
     # --switch / --pick mode: skip all output, switch immediately
     if (( do_switch )) || [[ -n "$pick" ]]; then
-        _borg_do_switch "$name" --silent
+        # The overlay already derived this row's summary from its checkpoint; hand it over, do not derive twice.
+        _borg_do_switch "$name" --silent --summary "$summary"
         return $?
     fi
 
@@ -933,7 +1008,7 @@ cmd_next() {
         echo -e "  ${YELLOW}Needs:${NC} $waiting_reason"
     fi
     if [[ -n "$summary" && "$summary" != "null" ]]; then
-        echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
+        echo -e "  $(_borg_clip_summary "$summary")"
     fi
 
     # Directives for recommended repository (from its own docs/plans/directives/)
@@ -1704,8 +1779,10 @@ EOF
 }
 
 _borg_orchestrator_context() {
+    # Each repository's summary is its newest checkpoint's tl;dr, all of them in one Python call; the stored
+    # registry summary is stale and never reaches the Queen's prompt (see _borg_checkpoint_summaries).
     local registry
-    registry=$(borg_registry_with_state)
+    registry=$(borg_registry_with_state | _borg_checkpoint_summaries)
     local now
     now=$(date '+%Y-%m-%d %H:%M %Z')
 
@@ -1723,7 +1800,7 @@ _borg_orchestrator_context() {
         .[] |
         "  \(.key) [\(.value.status // "unknown")] \(
             if .value.last_activity then .value.last_activity else "never" end
-        ) — \(.value.summary // "(no summary)" | .[0:80])"
+        ) — \(.value.summary // .value.waiting_reason // "(no summary)" | .[0:80])"
     '
     echo ""
 
@@ -3189,26 +3266,21 @@ _borg_version_ge() {
     return 0
 }
 
-# ── chain manifests (PM6) ──────────────────────────────────────────────────────
-# borg stack list|plan|sync|migrate — the sync coordinator (migrate: see cmd_stack) over <repository>/.stacks/*.json and
-# <repository>/.borg/chains/*.json. `borg stack` is the verb since the chain -> stack rename's
-# EXPAND step (docs/plans/directives/2026-10-13-chain-to-stack-rename.md); `borg chain` is a dispatch
-# arm that forwards here until the CONTRACT step, so `borg chain list` and `borg stack list` print the
-# same document. Everything below still says chain: the identifiers and strings move in the MIGRATE step.
+# ── stack manifests (PM6) ──────────────────────────────────────────────────────
+# borg stack list|plan|sync|migrate — the sync coordinator (migrate: see cmd_stack) over <repository>/.stacks/*.json.
+# `borg stack` is the verb (docs/plans/directives/2026-10-13-chain-to-stack-rename.md); `borg chain` and `borg program`
+# are dispatch arms that die pointing here (step (c), the contract), and `.borg/chains/` is no longer read.
 # The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
 # testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered repository
-# path becomes a --chains-dir, so `borg chain list` sweeps the whole collective. Explicit
-# --chains-dir args (or the legacy --programs-dir) are passed through untouched and suppress the
-# registry sweep.
+# path becomes a --stacks-dir, so `borg stack list` sweeps the whole collective. Explicit
+# --stacks-dir args are passed through untouched and suppress the registry sweep.
 #
 # Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: a project is work that can
 # span repositories, but cmd_stack resolves roots by reading `.projects[].path` from the registry, where
 # the entry is a REPOSITORY (the registry key keeps its name) — that verb would mean one thing and do
 # another. The
-# --chains-dir and --recon TOKENS are coordinator.py's argparse flags and are deliberately
-# untouched here; they move with the merge-tree retirement, not with the verb. `--stacks-dir` is a
-# third spelling accepted HERE and passed down as --chains-dir, because coordinator.py learns it in
-# the MIGRATE step.
+# --stacks-dir and --recon TOKENS are coordinator.py's argparse flags; the older --chains-dir and
+# --programs-dir spellings are refused by name there, and by this function, pointing at --stacks-dir.
 cmd_stack() {
     local action="${1:-list}"
     # `migrate` is an action of `borg stack`, not a COMMANDS entry of its own (the pinned count must hold).
@@ -3226,23 +3298,23 @@ cmd_stack() {
     # which would kill the argless `borg stack` the :-list default exists for.
     (( $# )) && shift
 
-    typeset -a _chain_args
+    typeset -a _stack_args
     local _explicit_dirs=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --stacks-dir|--chains-dir|--programs-dir)
-                # THE REFUSAL NAMES THE SPELLING THE USER TYPED, not the canonical one. `$1` rather
-                # than a literal: a user who typed the legacy `--programs-dir` and is told
-                # "--chains-dir needs a path" has to work out that the two are the same flag, which
-                # is a worse error than the shift crash this guard replaced.
+            --chains-dir|--programs-dir)
+                # RETIRED SPELLINGS, refused by name (step (c) of the chain -> stack rename). `$1` rather than a
+                # literal, so the message names the flag the user typed and points at its replacement.
+                die "borg stack: $1 was renamed to --stacks-dir. Run: borg stack ${action} --stacks-dir <repository>" ;;
+            --stacks-dir)
                 [[ -n "${2:-}" ]] || die "borg stack: $1 needs a path"
-                _chain_args+=(--chains-dir "$2"); _explicit_dirs=1; shift 2 ;;
+                _stack_args+=(--stacks-dir "$2"); _explicit_dirs=1; shift 2 ;;
             --recon)
                 # argparse registers --recon on the plan subparser only; failing here beats
                 # advertising a flag downstream then rejects.
                 [[ "$action" == "plan" ]] || die "borg stack: --recon is only valid with 'plan'"
                 [[ -n "${2:-}" ]] || die "borg stack: --recon needs a file (or -)"
-                _chain_args+=(--recon "$2"); shift 2 ;;
+                _stack_args+=(--recon "$2"); shift 2 ;;
             *)              die "unknown flag '$1' for borg stack" ;;
         esac
     done
@@ -3251,13 +3323,13 @@ cmd_stack() {
         [[ -f "$BORG_REGISTRY" ]] || die "no registry at $BORG_REGISTRY — run 'borg add <path>' first"
         local _proj_path
         while IFS= read -r _proj_path; do
-            [[ -n "$_proj_path" ]] && _chain_args+=(--chains-dir "$_proj_path")
-        done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY")
-        (( ${#_chain_args[@]} )) || die "registry has no repository paths — run 'borg add <path>' first"
+            [[ -n "$_proj_path" ]] && _stack_args+=(--stacks-dir "$_proj_path")
+        done < <(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | .projects[].path // empty" "$BORG_REGISTRY")
+        (( ${#_stack_args[@]} )) || die "registry has no repository paths — run 'borg add <path>' first"
     fi
 
     PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 "$BORG_HOME/merge-tree/coordinator.py" "$action" "${_chain_args[@]}"
+        python3 "$BORG_HOME/merge-tree/coordinator.py" "$action" "${_stack_args[@]}"
 }
 
 cmd_version() {
@@ -3300,13 +3372,12 @@ cmd_help() {
                           --all     Include archived repositories
     next [--all|--switch|--pick n|--rows --json|--open p --chosen|--declined]  What needs your attention?
     switch [query]      fzf picker → jump to repository tmux window
-    stack <action>      Manifest coordinator over <repository>/.stacks/*.json (and .borg/chains/*.json)
+    stack <action>      Manifest coordinator over <repository>/.stacks/*.json
                           list           Every declared stack across registered repositories
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
                           migrate [--dry-run] [<repository>]  Move .borg/chains/*.json into .stacks/ (stages, never commits)
                           --stacks-dir <path>    Explicit roots (suppresses the registry sweep)
-                          'borg chain' is still accepted as a spelling of 'borg stack'
                           --recon <file> (plan only) recon JSON for the reality check
     scan                Discover repositories from session history
     add [path] [--name <n>]  Register a repository (defaults to $PWD, named by folder; --name overrides)
@@ -3347,10 +3418,14 @@ cmd_help() {
                  'borg recon --json' and 'borg recon --adapters' are the machine surface
                  /borg-recon consumes, and both still work. (merge-tree/gather.py, a
                  second consumer, retired 2026-10-12 with the browser board.)
-    2026-08-31 — program renamed to chain. Same command, same actions, same flags; the word
-                 "program" is retired in favour of "chain". Run: borg chain
+    2026-08-31 — program renamed to chain, and chain to stack on 2026-10-14. Same command, same
+                 actions, same flags; the word "program" is retired in favour of "stack".
+                 Run: borg stack
     2026-10-04 — sever was an alias of 'down' (tears down everything) and never retired a directive.
                  Tear down with 'borg down'; retire a directive with 'git mv' into docs/plans/severed/.
+    2026-10-14 — chain renamed to stack. Same command, same actions, same flags; the word "chain"
+                 is retired in favour of "stack", and <repository>/.borg/chains/ is no longer read:
+                 'borg stack migrate' moves manifests into .stacks/. Run: borg stack
 
   HOTKEY
     Ctrl+Space >        Jump to most pressing repository (runs: borg next --switch)
@@ -3385,6 +3460,7 @@ cmd_help() {
     BORG_WORK_HOURS         e.g. "09:00-18:00" (empty to disable)
     BORG_WORK_PROJECTS      Comma-separated work repository names
     BORG_DEBUG              Set to any value for debug output
+    NO_COLOR                Set to any non-empty value: no colour, no hyperlinks (no-color.org)
     BORG_SECRETS_FILE       Override path to secrets.zsh (default: ~/.config/dotfiles/zsh/secrets.zsh)
 
   "We are the Borg. Your repositories will be assimilated."
@@ -3965,7 +4041,7 @@ case "${1:-help}" in
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
     doctor)         cmd_doctor "${@:2}" ;;
-    stack|chain)    cmd_stack "${@:2}" ;;
+    stack)          cmd_stack "${@:2}" ;;
     vinculum|vinc)  cmd_vinculum "${@:2}" ;;
     checkpoint-name)
         # Prints the filename stem a new checkpoint should use. Exists so that
@@ -3990,7 +4066,9 @@ case "${1:-help}" in
         die "'borg ${1}' was removed — it was an alias for 'link'. Run: borg link" ;;
     briefing) die "'borg briefing' was removed. Run: borg link --brief" ;;
     refresh)  die "'borg refresh' was removed. Run: borg link --refresh" ;;
-    # Renamed 2026-08-31 (AC7): same command under a non-retired name.
-    program)  die "'borg program' was renamed to 'borg chain'. Run: borg chain ${*:2}" ;;
+    # Renamed 2026-08-31 (AC7) to chain, then chain to stack (step (c) of the chain -> stack rename): the same
+    # command under a non-retired name, so each retired spelling dies pointing at `borg stack` with the args.
+    program)  die "'borg program' was renamed to 'borg stack'. Run: borg stack ${*:2}" ;;
+    chain)    die "'borg chain' was renamed to 'borg stack'. Run: borg stack ${*:2}" ;;
     *)        die "unknown command '${1}'. Run: borg help" ;;
 esac

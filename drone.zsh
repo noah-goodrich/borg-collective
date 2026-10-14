@@ -40,6 +40,8 @@ DRONE_SCRIPT_DIR="${0:A:h}"
 # Host-side lifecycle hooks (.devcontainer/borg-hooks/{pre-up,post-down}.sh).
 source "$DRONE_SCRIPT_DIR/lib/drone-hooks.zsh"
 source "$DRONE_SCRIPT_DIR/lib/state-root.zsh"
+# Shared registry-key helper (BORG_REGISTRY_NORM_JQ): readers accept `projects` or `repositories`.
+source "$DRONE_SCRIPT_DIR/lib/reaper.sh"
 # borg-resume ledger layout (borg_resume_dir, borg_resume_valid_sid): the same definitions the hooks use.
 source "$DRONE_SCRIPT_DIR/lib/borg/resume-paths.sh"
 
@@ -105,7 +107,7 @@ _drone_resolve() {
     local registry="$BORG_DIR/registry.json"
     if [[ -f "$registry" ]]; then
         local reg_path
-        reg_path=$(jq -r --arg p "$arg" '.projects[$p].path // empty' "$registry" 2>/dev/null) || true
+        reg_path=$(jq -r --arg p "$arg" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p].path // empty' "$registry" 2>/dev/null) || true
         if [[ -n "$reg_path" && -d "$reg_path" ]]; then
             _proj_dir="$reg_path"
             _proj_name="$arg"
@@ -115,7 +117,7 @@ _drone_resolve() {
         local reg_repository
         reg_repository=$(_drone_repository_for_window "$arg")
         reg_path=""
-        [[ -n "$reg_repository" ]] && reg_path=$(jq -r --arg p "$reg_repository" '.projects[$p].path // empty' "$registry" 2>/dev/null) || true
+        [[ -n "$reg_repository" ]] && reg_path=$(jq -r --arg p "$reg_repository" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p].path // empty' "$registry" 2>/dev/null) || true
         if [[ -n "$reg_path" && -d "$reg_path" ]]; then
             _proj_dir="$reg_path"
             _proj_name="$reg_repository"
@@ -168,7 +170,7 @@ _drone_window_name() {
 _drone_repository_for_window() {
     local registry="${BORG_REGISTRY:-$BORG_DIR/registry.json}"
     [[ -f "$registry" ]] || return 0
-    jq -r --arg w "$1" '[.projects // {} | to_entries[] | select(.value.tmux_window == $w) | .key][0] // empty' \
+    jq -r --arg w "$1" "${BORG_REGISTRY_NORM_JQ:-.} | "'[.projects // {} | to_entries[] | select(.value.tmux_window == $w) | .key][0] // empty' \
         "$registry" 2>/dev/null || true
 }
 
@@ -176,7 +178,7 @@ _drone_repository_for_window() {
 _drone_registered() {
     local registry="${BORG_REGISTRY:-$BORG_DIR/registry.json}"
     [[ -f "$registry" ]] || return 1
-    jq -e --arg p "$1" '.projects[$p] != null' "$registry" >/dev/null 2>&1
+    jq -e --arg p "$1" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p] != null' "$registry" >/dev/null 2>&1
 }
 
 # Registry key for $1, which may be a repository name or a short window name; $1 itself if unknown.
@@ -223,7 +225,7 @@ _drone_register() {
 # Return the tmux color for a repository (registry → hash fallback).
 _drone_repository_color() {
     local repository="$1" color
-    color=$(jq -r --arg p "$repository" '.projects[$p].color // empty' "$BORG_DIR/registry.json" 2>/dev/null)
+    color=$(jq -r --arg p "$repository" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p].color // empty' "$BORG_DIR/registry.json" 2>/dev/null)
     if [[ -z "$color" ]]; then
         local -a palette=(cyan green yellow magenta blue red white)
         local hash=0 c
@@ -715,7 +717,11 @@ _cycle_repository() {
 _restart_repository() { _cycle_repository "$1" "$2" "restart"; }
 _rebuild_repository() { _cycle_repository "$1" "$2" "rebuild"; }
 
+# The Queen's window is "queen" since the rename; sessions started before it keep "orchestrator".
+_is_non_repository_window() { [[ "$1" == "queen" || "$1" == "orchestrator" || "$1" == "host" ]]; }
+
 # Shared --all iterator: walks every repository window (not host, queen or orchestrator) and calls op_func.
+# Pinned, with `fix --all`, by tests/drone_all_skips_queen.bats.
 _foreach_repository_window() {
     local op_func="$1" past_tense="$2"
     tmux has-session -t "$SESSION" 2>/dev/null || die "No $SESSION tmux session running."
@@ -725,8 +731,7 @@ _foreach_repository_window() {
 
     local count=0
     for wname in $windows; do
-        # The Queen's window is "queen" since the rename; sessions started before it keep "orchestrator".
-        [[ "$wname" == "queen" || "$wname" == "orchestrator" || "$wname" == "host" ]] && continue
+        _is_non_repository_window "$wname" && continue
         local pdir
         pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
         if [[ -z "$pdir" ]]; then
@@ -961,7 +966,11 @@ cmd_fix() {
 
     local targets=()
     if [[ "${1:-}" == "--all" ]]; then
-        targets=(${(f)"$(tmux list-windows -t "$SESSION" -F '#W')"})
+        local -a all_windows=(${(f)"$(tmux list-windows -t "$SESSION" -F '#W')"})
+        local w
+        for w in $all_windows; do
+            _is_non_repository_window "$w" || targets+=("$w")
+        done
     elif [[ -n "${1:-}" ]]; then
         targets=("$(_drone_arg_window "$1")")
     else
@@ -1507,7 +1516,7 @@ cmd_help() {
     rebuild [repository] Rebuild images (--no-cache) + restart + re-exec panes
     rebuild --all        Rebuild all repository containers
     fix [repository]     Restore standard 2-pane layout for repository window
-    fix --all            Restore layout for all windows
+    fix --all            Restore layout for all repository windows
     toggle [repository]  Add/remove side pane (2-pane ↔ 3-pane)
     pane <direction>     Split the calling pane top|bottom|left|right (devcontainer-aware); a window holds
                          two panes, so with a side pane open it reuses that pane (unzooming the window if

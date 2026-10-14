@@ -29,7 +29,7 @@ borg_status=$(echo "$raw" | grep -m1 'Status:' | sed 's/.*Status:[[:space:]]*//'
 That is a human-facing, ANSI-coloured, seven-section page being screen-scraped for one field. The AC2 spec's Q6
 established that the extraction survives the redesign, and it does — `_focus_section` reuses the same
 `_label("Status:", status)` call character for character, and IN FOCUS renders as section 2 of 7, above `▸ REPOSITORIES`
-and above `▸ CHAINS`.
+and above `▸ STACKS`.
 
 **But the reason it survives is positional.** Post-AC2 the page carries two classes of text the renderer does not
 control: board summaries (free text out of checkpoint debriefs) and PR titles off the wire. A PR titled

@@ -30,11 +30,13 @@ Vocabulary: a *repository* is the git repo; a *worktree* is a linked checkout re
 ONE call serves every scope. Run it once, with the repository name appended only when the user gave one:
 
 ```bash
-borg link --json [<repository>] | jq 'if .scope.unregistered == true
+borg link --json [<repository>] | jq -c 'if .scope.unregistered == true
   then {version, generated_at, scope}
   elif .scope.kind == "orchestrator"
   then (.directives |= (group_by(.project) | map({project: .[0].project, n: length,
-    titles: [limit(5; .[].title)]})))
+    titles: [limit(5; .[].title)]}))
+    | del(.projects[] | .claude_session_id, .path, .repo, .clock_divergence, .tmux_session,
+      .source, .notify_origin, .last_activity))
   else (.scope.repository as $r | {version, generated_at, scope,
     entry: (.focus.entry | del(.summary)),
     waiting: {rows: [.waiting.rows[] | select(.project == $r and .item == "session")],
@@ -93,7 +95,7 @@ mean paying for a network round trip and then rendering the same overview as bef
   `.resolved` (refs that came back with a usable answer). As with `.grid.sources[].status`,
   `failed` and `degraded` mean the states below them are DECLARED rather than OBSERVED — treat
   them the same way.
-- `.grid.picture_width` is the widest `▸ CHAINS` picture row this document would draw, in VISIBLE
+- `.grid.picture_width` is the widest `▸ STACKS` picture row this document would draw, in VISIBLE
   columns (SGR and OSC-8 bytes excluded). Compare it to `PICTURE_BUDGET` (68). Over budget means the
   topology will wrap in a narrow pane and should be reported as a manifest problem — a ref is long
   or a level is too wide — not as a rendering bug. The human page says the same thing in
@@ -156,7 +158,7 @@ mean paying for a network round trip and then rendering the same overview as bef
 
 **Why the jq.** The Queen arm (`.directives |= (...)`) does not enumerate a field — it transforms one
 key in place, so anything the document gains later passes through untouched. It collapses the one
-uncapped array (directives, ~121 items live) from 27,298 bytes raw to ~13,935. The repository arm is
+uncapped array (directives, ~121 items live) from 27,298 bytes raw to ~13,935. `-c` drops the pretty-print whitespace, which costs context and tells a model reader nothing, and the named `del()` removes eight per-repository fields the Queen view never reads (`claude_session_id`, `path`, `repo`, `clock_divergence`, `tmux_session`, `source`, `notify_origin`, `last_activity`); it names what to drop rather than what to keep, so a field the document gains later still passes through. The repository arm is
 the opposite: an explicit whitelist, and a field the document gains later is invisible until it is
 added there. That is the point of it — it keeps registry-wide data off a page that must be about one
 directory. If `jq` is missing, drop the pipe and read the raw document, and still render only what the
@@ -210,7 +212,7 @@ sentences and getting them backwards is the known trap.
 
 This page is about exactly ONE directory: `.entry.path`, the directory the engine resolved. It is the directory of a repository or of a linked worktree registered on its own (borg-probes is a worktree of borg-collective; each carries its own project). Say what is true of THIS directory and stop.
 
-**Never render, even though `--json` carries it:** the registry-wide board (`order`, `projects`, capacity, other repositories), any other worktree or repository, and every repo-level section: plan, QUEUED/SHIPPED (`directives`, `assimilated`), chains and the `grid`, repository PRs. The Step 1 pipe already withheld them; if you ran without the pipe, ignore them anyway. A page that blends the repository's other checkouts into this directory's page is the exact defect this scope exists to prevent.
+**Never render, even though `--json` carries it:** the registry-wide board (`order`, `projects`, capacity, other repositories), any other worktree or repository, and every repo-level section: plan, QUEUED/SHIPPED (`directives`, `assimilated`), stacks and the `grid`, repository PRs. The Step 1 pipe already withheld them; if you ran without the pipe, ignore them anyway. A page that blends the repository's other checkouts into this directory's page is the exact defect this scope exists to prevent.
 
 **Read in this order, then write the page.**
 

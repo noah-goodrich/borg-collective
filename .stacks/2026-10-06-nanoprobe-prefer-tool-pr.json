@@ -1,0 +1,12 @@
+{
+  "desc": "borg-nanoprobe honors a live machine-layer prefer-tool for PR creation, fenced by its scope gate, with no team plugin named in borg",
+  "program": "2026-10-06-nanoprobe-prefer-tool-pr",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#278",
+      "why": "nanoprobe opens its PR through a live machine-layer prefer-tool, fenced by its scope gate"
+    }
+  ]
+}

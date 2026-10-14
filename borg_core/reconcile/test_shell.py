@@ -43,7 +43,7 @@ def _repo_with_rows(tmp_path, rows, stem="prog"):
     ambiguous, but because zero were found. Caught only because a second, discriminating assertion
     in the same case failed.
     """
-    programs = tmp_path / ".borg" / "programs"
+    programs = tmp_path / ".stacks"
     programs.mkdir(parents=True, exist_ok=True)
     (programs / f"{stem}.json").write_text(json.dumps({"program": stem, "rows": rows}),
                                            encoding="utf-8")

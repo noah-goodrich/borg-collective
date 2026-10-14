@@ -53,7 +53,7 @@ Two things generalize beyond the artifact:
   ~20 vertices, so this was ~9x past it, and "the lines were hard to follow" is precisely the hairball Kosara
   names. **Track 6's question — "which representation family fits this graph's size, density, and task?" — is
   therefore answered empirically at BOTH scales this estate has:** node-link fails at 174 nodes, and is
-  uncontested at the 3 rows `borg link`'s `▸ CHAINS` actually renders. Reading Track 6 to de-risk a live DAG
+  uncontested at the 3 rows `borg link`'s `▸ STACKS` actually renders. Reading Track 6 to de-risk a live DAG
   project is no longer the trigger it was; it becomes live again if one manifest passes ~20 rows.
 
 A one-file review brief of Phases 1-2 (tl;dr, must-see rules, independent-review list) is generated at

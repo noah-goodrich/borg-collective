@@ -117,13 +117,13 @@ _LINK_FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "l
 
 
 def _manifest_workspace(root, name="warehouse"):
-    """A registered repository carrying a SHIPPED fixture manifest under `.borg/chains/`.
+    """A registered repository carrying a SHIPPED fixture manifest under `.stacks/`.
 
     The bytes are `tests/fixtures/link/manifests/warehouse-rollout.json`'s, not an inline copy: the
     goldens pin the same file's rendered form, so a test that built its own rows could stay green
     while the fixture the goldens measure moved underneath it.
     """
-    programs = Path(_repository_dir(root, name)) / ".borg" / "chains"
+    programs = Path(_repository_dir(root, name)) / ".stacks"
     programs.mkdir(parents=True, exist_ok=True)
     shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", programs)
     return str(Path(_repository_dir(root, name)))
@@ -993,7 +993,7 @@ def test_document_scope_survives_an_archived_repository(isolated_env, monkeypatc
 
 
 def test_json_publishes_a_refused_count_on_the_grid_block(isolated_env, capsys, monkeypatch):
-    """The fourth CHAINS diagnosis is only as good as the key it reads.
+    """The fourth STACKS diagnosis is only as good as the key it reads.
 
     MUTATION, APPLIED AND CONFIRMED RED: replace the `shell.refused_manifest_paths(...)` stamp in
     `cli._grid` with the literal `0`. Without this case the whole arm survives that mutation --
@@ -1010,7 +1010,7 @@ def test_json_publishes_a_refused_count_on_the_grid_block(isolated_env, capsys, 
     "absent".
     """
     directory = _repository_dir(isolated_env, "warehouse")
-    programs = Path(directory) / ".borg" / "chains"
+    programs = Path(directory) / ".stacks"
     programs.mkdir(parents=True, exist_ok=True)
     # One row, missing `order` -- structurally a manifest, refused whole by `validate`.
     (programs / "broken.json").write_text(json.dumps({"rows": [{"ref": "acme/ledger#1"}]}), encoding="utf-8")
@@ -1053,27 +1053,78 @@ def test_json_reports_a_stacks_manifest_with_its_stacks_path(isolated_env, capsy
     assert not (Path(directory) / ".borg").exists()
 
 
-def test_a_stem_declared_in_both_roots_counts_as_refused_not_as_no_manifest(isolated_env, capsys, monkeypatch):
-    """MUTATION: reword the duplicate warning so it carries no refusal marker and this goes red.
+@pytest.mark.parametrize("directory_name", ["chains", "programs"])
+def test_a_manifest_only_under_a_retired_root_renders_nowhere_and_borg_link_names_the_migration(
+    isolated_env, capsys, monkeypatch, directory_name
+):
+    """THE CONTRACT, THROUGH `borg link`. A VALID manifest under `.borg/<directory>` is not read: it is on no node,
+    it is not a "refused" file, and the page does not say "no stack manifests in the registry yet" about a
+    repository that declares one. It says which repository, and what to run.
 
-    Without the count CHAINS prints the "run /borg-plan to scaffold one" sentence beside a
-    manifest that exists twice, which is the false advice the `refused` key was added to end.
+    The same shipped fixture that `test_a_registry_of_readable_manifests_publishes_refused_zero` loads from
+    `.stacks/` is placed under the retired root here, so the only variable is where it sits.
+
+    MUTATION: restore the `.borg/chains` read in `shell.manifest_roots` and `manifests` is non-empty; drop the
+    `unmigrated` stamp in `cli._grid` and the STACKS sentence reverts to the false "in the registry yet" one.
     """
     directory = _repository_dir(isolated_env, "warehouse")
-    for root in (".stacks", ".borg/chains"):
-        target = Path(directory) / root
-        target.mkdir(parents=True)
-        shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", target)
+    target = Path(directory) / ".borg" / directory_name
+    target.mkdir(parents=True)
+    shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", target)
     _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
     _stand_at_queen(isolated_env, monkeypatch)
 
     assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
     grid_block = json.loads(capsys.readouterr().out)["grid"]
-    assert grid_block["manifests"] == [] and grid_block["refused"] == 2
+    assert grid_block["manifests"] == [] and grid_block["declared"] == 0, "the retired root is not read"
+    assert grid_block["refused"] == 0 and grid_block["unmigrated"] == 1
+    named = [w for w in grid_block["warnings"] if "borg stack migrate" in w]
+    assert len(named) == 1 and directory in named[0] and f".borg/{directory_name}" in named[0]
+
     assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
     page = capsys.readouterr().out
-    assert "2 manifests could not be read" in page
-    assert "to scaffold one" not in page and "in the registry yet" not in page
+    assert "manifests in 1 repository are still under .borg/chains and are no longer read" in page
+    assert "in the registry yet" not in page and "to scaffold one" not in page
+    signals = page[page.index("SIGNALS") :]
+    assert directory in signals and "borg stack migrate" in signals, "SIGNALS names the repository and the cure"
+
+
+def test_a_registry_with_no_retired_manifest_publishes_unmigrated_zero(isolated_env, capsys, monkeypatch):
+    """The negative half: a stamp that hardcoded `1` would pass the case above."""
+    directory = _manifest_workspace(isolated_env)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    grid_block = json.loads(capsys.readouterr().out)["grid"]
+    assert grid_block["manifests"] and grid_block["unmigrated"] == 0
+    assert not any("borg stack migrate" in w for w in grid_block["warnings"])
+
+
+def test_the_unmigrated_count_follows_the_scope_it_is_asked_about(isolated_env, capsys, monkeypatch):
+    """Warnings are registry-wide; the count is narrowed to the resolved directory, as `refused` is, so a stranded
+    manifest in some OTHER repository does not change what this repository's page says about itself.
+
+    MUTATION: drop the `directory` argument in the `unmigrated_repositories` stamp and the repository leg reads 2.
+    """
+    stranded = _repository_dir(isolated_env, "warehouse")
+    other = _repository_dir(isolated_env, "depot")
+    for directory in (stranded, other):
+        target = Path(directory) / ".borg" / "chains"
+        target.mkdir(parents=True)
+        shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", target)
+    _write_registry(
+        isolated_env,
+        {"warehouse": {"path": stranded, "status": "idle"}, "depot": {"path": other, "status": "idle"}},
+    )
+
+    _stand_at_queen(isolated_env, monkeypatch)
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    assert json.loads(capsys.readouterr().out)["grid"]["unmigrated"] == 2
+
+    monkeypatch.chdir(stranded)
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    assert json.loads(capsys.readouterr().out)["grid"]["unmigrated"] == 1
 
 
 def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(isolated_env, capsys, monkeypatch):
@@ -1081,11 +1132,11 @@ def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(
 
     MUTATION: restore row salvage in `shell._load_manifest` and the file loads (refused == 0, rows on the
     grid) with a "rows dropped" warning, so every assertion here goes red. The refusal must name the path
-    and the validator's first error in SIGNALS, and CHAINS must say the manifest could not be read rather
+    and the validator's first error in SIGNALS, and STACKS must say the manifest could not be read rather
     than print an emptiness sentence.
     """
     directory = _repository_dir(isolated_env, "warehouse")
-    target = Path(directory) / ".borg" / "chains"
+    target = Path(directory) / ".stacks"
     target.mkdir(parents=True)
     bad_row = {"order": "2", "ref": "o/r#2", "status": "stacked", "gate": {"kind": "decision", "blocked_by": "x"}}
     good_row = {"order": "1", "ref": "o/r#1", "status": "stacked"}
@@ -1103,7 +1154,7 @@ def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(
     signals = page[page.index("SIGNALS") :]
     assert str(refused_file) in signals, "SIGNALS names the refused file path"
     assert "gate.resolved_by is required" in signals, "and the validator first error"
-    assert "1 manifest could not be read" in page, "CHAINS shows the fourth diagnosis"
+    assert "1 manifest could not be read" in page, "STACKS shows the fourth diagnosis"
     assert "to scaffold one" not in page and "in the registry yet" not in page
     assert "rows dropped" not in page
 
@@ -1287,3 +1338,94 @@ def test_json_keeps_every_key_the_directory_page_stopped_rendering(isolated_env,
         "directives",
         "assimilated",
     }
+
+
+# ── NO_COLOR (https://no-color.org) ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [
+        ({}, True),
+        ({"NO_COLOR": ""}, True),
+        ({"NO_COLOR": "1"}, False),
+        ({"NO_COLOR": "0"}, False),
+        ({"NO_COLOR": "anything"}, False),
+        ({"TERM": "xterm"}, True),
+    ],
+)
+def test_color_is_off_only_for_a_non_empty_no_color(environ, expected):
+    assert cli._color_enabled(environ) is expected  # pylint: disable=protected-access
+
+
+def _page_with_a_picture(isolated_env, monkeypatch):
+    """A registered repository holding the shipped manifest, so the page carries SGR AND OSC-8 bytes."""
+    directory = _manifest_workspace(isolated_env)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+    monkeypatch.setattr(shell, "now_epoch", lambda: 1_800_000_000)
+
+
+def _main_stdout(argv, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(argv)
+    assert exc_info.value.code == 0
+    return capsys.readouterr().out
+
+
+def test_no_color_strips_every_escape_from_the_human_page_and_empty_keeps_colour(isolated_env, capsys, monkeypatch):
+    """The page is built coloured and stripped once at the boundary; the strip must find every site.
+
+    THE CONTROL IS THE FIRST HALF. With NO_COLOR unset the same invocation must contain both an SGR and an
+    OSC-8 sequence, or "no ESC byte" below would hold of a page that never had one. MUTATION: make `_page`
+    return its text unchanged and the NO_COLOR=1 half goes red. The stripped page is also asserted to be the
+    coloured page minus its escapes, so a column that shifted (padding computed on the wrong length) fails.
+    """
+    _page_with_a_picture(isolated_env, monkeypatch)
+    argv = ["--local", "--overview"]
+
+    coloured = _main_stdout(argv, capsys)
+    assert "\033[" in coloured and "\033]8;;" in coloured, "the control page carries no colour to remove"
+
+    monkeypatch.setenv("NO_COLOR", "")
+    assert _main_stdout(argv, capsys) == coloured, "an EMPTY NO_COLOR is unset, per no-color.org"
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    plain = _main_stdout(argv, capsys)
+    assert "\033" not in plain
+    assert plain == picture.plain(coloured)
+    assert "warehouse" in plain and "REPOSITORIES" in plain, "stripping must not eat the page"
+
+
+def test_no_color_leaves_json_and_porcelain_byte_identical(isolated_env, capsys, monkeypatch):
+    _page_with_a_picture(isolated_env, monkeypatch)
+    for flag in ("--json", "--porcelain"):
+        argv = [flag, "--local", "--overview"]
+        unset = _main_stdout(argv, capsys)
+        monkeypatch.setenv("NO_COLOR", "1")
+        assert _main_stdout(argv, capsys) == unset, f"NO_COLOR changed {flag}"
+        monkeypatch.delenv("NO_COLOR")
+        assert unset, f"{flag} printed nothing; the comparison above is vacuous"
+
+
+def test_no_color_applies_to_the_render_document_fallback_too(isolated_env, capsys, monkeypatch):
+    """`--render-document` (the `--brief` fallback) is the second human arm; it must honour the flag."""
+    _page_with_a_picture(isolated_env, monkeypatch)
+    document = _main_stdout(["--json", "--local", "--overview"], capsys)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document))
+    assert "\033[" in _main_stdout(["--render-document"], capsys)
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document))
+    assert "\033" not in _main_stdout(["--render-document"], capsys)
+
+
+def test_no_color_strips_the_error_line_but_json_errors_never_had_colour(isolated_env, capsys, monkeypatch):
+    _write_registry(isolated_env, {})
+    monkeypatch.setenv("NO_COLOR", "1")
+
+    with pytest.raises(SystemExit):
+        cli.main(["--deep", "--", "nope"])
+    err = capsys.readouterr().err
+    assert err == "▸ ERROR: repository 'nope' not in registry. Run: borg add [path]\n"
+    assert "\033" not in err

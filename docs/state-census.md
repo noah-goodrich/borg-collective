@@ -64,8 +64,8 @@ wallpapering this census exists to prevent.
 | --- | --- | --- | --- |
 | `.borg/checkpoints` | store | `borg_core/link/shell.py` | union-read across a repo group; also `hooks/borg-link-down.sh` |
 | `.borg/state` | store | `lib/registry.zsh` | `state.json`; also read by three hooks and `borg_core/link/shell.py` |
-| `.borg/chains` | dynamic | `borg_core/manifest/shell.py` | path joined from `CHAINS_DIRNAME`, never a literal |
-| `.borg/programs` | dynamic | `borg_core/manifest/shell.py` | pre-rename spelling, joined from `LEGACY_DIRNAME` |
+| `.borg/chains` | dynamic | `borg_core/manifest/shell.py` | retired root: listed for the unmigrated warning, never read; joined from `UNMIGRATED_DIRS` |
+| `.borg/programs` | dynamic | `borg_core/manifest/shell.py` | pre-rename spelling, same `UNMIGRATED_DIRS` join |
 | `.borg/skill-extensions` | dynamic | `borg_core/extensions/shell.py` | `layer_paths` joins `.borg / kind`, so no literal exists |
 | `.borg/agent-extensions` | dynamic | `borg_core/extensions/shell.py` | same `layer_paths` join, agent side |
 | `.borg/skills` | store | `hooks/borg-link-up.sh` | repository-local skills; also `hooks/borg-link-down.sh` |
