@@ -42,7 +42,7 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (17): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (18, incl. borg-nanoprobe-guard): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
   bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook, borg-nanoprobe-log, borg-prefer-tool-log,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
@@ -195,6 +195,7 @@ hooks/
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
     borg-verifier-guard.sh  PreToolUse (Bash) → verifier: git/gh reads
+    borg-nanoprobe-guard.sh PreToolUse (Skill/Write/Edit/Bash) → nanoprobe: skill grant + no borg/extensions access
     borg-resume-hook.sh     Events → borg-resume ledger (append-only)
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit
@@ -437,7 +438,9 @@ docs/
   a brief consumed once at spawn, a scope gate and a return contract, so there is no "before the
   artifact" moment to hook and two more load points would be seams nothing sits at. **The scope gate
   is NOT extensible**: an extension may add instructions, never widen what the agent may touch,
-  raise its deliverable ceiling, or relax bounded termination.
+  raise its deliverable ceiling, or relax bounded termination. **One sanctioned exception**: the
+  MACHINE-layer `- Prefer-tool:` may name the Skill target for step 3 (opening the PR) only, gated by
+  `hooks/borg-nanoprobe-guard.sh`, which also denies nanoprobe writes under `borg/extensions/`.
 - **THE SHIM LAYER: two tiers, one direction.** borg composes with an employer plugin layer through
   exactly two sockets, and which socket a shim belongs in is decided by whether it MUST happen or
   merely shapes judgment.
