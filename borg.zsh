@@ -3189,26 +3189,22 @@ _borg_version_ge() {
     return 0
 }
 
-# ── chain manifests (PM6) ──────────────────────────────────────────────────────
+# ── stack manifests (PM6) ──────────────────────────────────────────────────────
 # borg stack list|plan|sync|migrate — the sync coordinator (migrate: see cmd_stack) over <repository>/.stacks/*.json and
-# <repository>/.borg/chains/*.json. `borg stack` is the verb since the chain -> stack rename's
-# EXPAND step (docs/plans/directives/2026-10-13-chain-to-stack-rename.md); `borg chain` is a dispatch
-# arm that forwards here until the CONTRACT step, so `borg chain list` and `borg stack list` print the
-# same document. Everything below still says chain: the identifiers and strings move in the MIGRATE step.
+# <repository>/.borg/chains/*.json. `borg stack` is the verb (docs/plans/directives/2026-10-13-chain-to-stack-rename.md);
+# the old spelling is a dispatch arm that forwards here until step (c), so both print the same document.
 # The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
 # testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered repository
-# path becomes a --chains-dir, so `borg chain list` sweeps the whole collective. Explicit
-# --chains-dir args (or the legacy --programs-dir) are passed through untouched and suppress the
-# registry sweep.
+# path becomes a --stacks-dir, so `borg stack list` sweeps the whole collective. Explicit
+# --stacks-dir args (or the older --chains-dir and --programs-dir) are passed through untouched and
+# suppress the registry sweep.
 #
 # Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: a project is work that can
 # span repositories, but cmd_stack resolves roots by reading `.projects[].path` from the registry, where
 # the entry is a REPOSITORY (the registry key keeps its name) — that verb would mean one thing and do
 # another. The
-# --chains-dir and --recon TOKENS are coordinator.py's argparse flags and are deliberately
-# untouched here; they move with the merge-tree retirement, not with the verb. `--stacks-dir` is a
-# third spelling accepted HERE and passed down as --chains-dir, because coordinator.py learns it in
-# the MIGRATE step.
+# --stacks-dir and --recon TOKENS are coordinator.py's argparse flags; coordinator.py still accepts the
+# older --chains-dir and --programs-dir spellings, as does this function.
 cmd_stack() {
     local action="${1:-list}"
     # `migrate` is an action of `borg stack`, not a COMMANDS entry of its own (the pinned count must hold).
@@ -3226,23 +3222,23 @@ cmd_stack() {
     # which would kill the argless `borg stack` the :-list default exists for.
     (( $# )) && shift
 
-    typeset -a _chain_args
+    typeset -a _stack_args
     local _explicit_dirs=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --stacks-dir|--chains-dir|--programs-dir)
                 # THE REFUSAL NAMES THE SPELLING THE USER TYPED, not the canonical one. `$1` rather
                 # than a literal: a user who typed the legacy `--programs-dir` and is told
-                # "--chains-dir needs a path" has to work out that the two are the same flag, which
+                # "--stacks-dir needs a path" has to work out that the two are the same flag, which
                 # is a worse error than the shift crash this guard replaced.
                 [[ -n "${2:-}" ]] || die "borg stack: $1 needs a path"
-                _chain_args+=(--chains-dir "$2"); _explicit_dirs=1; shift 2 ;;
+                _stack_args+=(--stacks-dir "$2"); _explicit_dirs=1; shift 2 ;;
             --recon)
                 # argparse registers --recon on the plan subparser only; failing here beats
                 # advertising a flag downstream then rejects.
                 [[ "$action" == "plan" ]] || die "borg stack: --recon is only valid with 'plan'"
                 [[ -n "${2:-}" ]] || die "borg stack: --recon needs a file (or -)"
-                _chain_args+=(--recon "$2"); shift 2 ;;
+                _stack_args+=(--recon "$2"); shift 2 ;;
             *)              die "unknown flag '$1' for borg stack" ;;
         esac
     done
@@ -3251,13 +3247,13 @@ cmd_stack() {
         [[ -f "$BORG_REGISTRY" ]] || die "no registry at $BORG_REGISTRY — run 'borg add <path>' first"
         local _proj_path
         while IFS= read -r _proj_path; do
-            [[ -n "$_proj_path" ]] && _chain_args+=(--chains-dir "$_proj_path")
-        done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY")
-        (( ${#_chain_args[@]} )) || die "registry has no repository paths — run 'borg add <path>' first"
+            [[ -n "$_proj_path" ]] && _stack_args+=(--stacks-dir "$_proj_path")
+        done < <(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | .projects[].path // empty" "$BORG_REGISTRY")
+        (( ${#_stack_args[@]} )) || die "registry has no repository paths — run 'borg add <path>' first"
     fi
 
     PYTHONPATH="$BORG_HOME${PYTHONPATH:+:$PYTHONPATH}" \
-        python3 "$BORG_HOME/merge-tree/coordinator.py" "$action" "${_chain_args[@]}"
+        python3 "$BORG_HOME/merge-tree/coordinator.py" "$action" "${_stack_args[@]}"
 }
 
 cmd_version() {

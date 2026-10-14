@@ -43,7 +43,8 @@ def read_registry() -> dict:
         # registry here: a subsequent write would silently overwrite the corrupted-but-possibly-
         # recoverable file with a fresh empty one, which is worse than a loud failure.
         raise ValueError(f"registry.json is not valid JSON ({path}): {exc}") from exc
-    return data
+    normalized: dict = paths.normalize_registry(data)
+    return normalized
 
 
 def write_registry(data: dict) -> None:
@@ -60,6 +61,40 @@ def write_registry(data: dict) -> None:
     tmp = path.parent / f"{path.name}.tmp.{os.getpid()}"
     tmp.write_text(text, encoding="utf-8")
     os.replace(tmp, path)
+
+
+def migrate_key(dry_run: bool) -> str:
+    """Rename the registry file's top-level `projects` key to `repositories`; return a report line.
+
+    Reads the file RAW (`read_registry` normalizes, which would hide the very thing being decided).
+    Idempotent: only a file with `projects` and no `repositories` is touched; a second run reports
+    "already" and writes nothing. A real run first copies the file to a timestamped sibling
+    (`<name>.bak.<UTC stamp>`), then writes atomically via `write_registry`'s tmp+rename. Never
+    creates the file.
+    """
+    path = registry_path()
+    if not path.is_file():
+        return f"no registry at {path} -- nothing to migrate"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"registry.json is not valid JSON ({path}): {exc}") from exc
+    verdict, renamed = core.plan_key_migration(doc)
+    if verdict == "both":
+        return f"{path} has both 'projects' and 'repositories' -- nothing changed (resolve by hand)"
+    if verdict == "already":
+        return f"{path} already uses 'repositories' -- nothing to do"
+    if verdict == "neither":
+        return f"{path} has neither 'projects' nor 'repositories' -- nothing to do"
+    if verdict == "invalid" or renamed is None:
+        raise ValueError(f"registry.json is not a JSON object ({path})")
+    if dry_run:
+        return f"would rename 'projects' to 'repositories' in {path} (dry run, nothing written)"
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    backup = path.parent / f"{path.name}.bak.{stamp}"
+    backup.write_bytes(path.read_bytes())
+    write_registry(renamed)
+    return f"renamed 'projects' to 'repositories' in {path} (backup: {backup})"
 
 
 def registry_has(name: str) -> bool:

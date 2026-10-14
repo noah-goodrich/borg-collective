@@ -183,6 +183,20 @@ def cmd_backfill_repo(dry_run_arg: str | None = None) -> int:
     return 0
 
 
+def cmd_migrate_key(dry_run_arg: str | None = None) -> int:
+    """`migrate-key [--dry-run]` -- rename the registry file's `projects` key to `repositories`.
+
+    The EXPAND phase of the rename ships readers that accept either key while every writer still
+    writes `projects`; this verb is the opt-in step that flips a file. Idempotent and conservative:
+    see `shell.migrate_key`. `--dry-run` reports what would happen and writes nothing.
+    """
+    dry_run = dry_run_arg == "--dry-run"
+    if dry_run_arg is not None and not dry_run:
+        _die(f"borg: unknown option '{dry_run_arg}' (expected --dry-run)")
+    print(shell.migrate_key(dry_run))
+    return 0
+
+
 def cmd_window_name(args: list[str]) -> int:
     """`window-name <repository> [--set SHORT | --derive]` -- read or write a repository's short tmux window name.
 
@@ -273,15 +287,19 @@ def main(argv: list[str] | None = None) -> None:
         rest, name_arg = _split_name_flag(rest)
     value = rest[0] if rest else None
 
-    if command not in ("add", "rm", "backfill-repo", "window-name"):
+    if command not in ("add", "rm", "backfill-repo", "window-name", "migrate-key"):
         _die(
             f"borg: unknown registry command '{command}' "
-            "(expected add, rm, backfill-repo or window-name)"
+            "(expected add, rm, backfill-repo or window-name; also migrate-key)"
         )
     if command == "window-name":
         raise SystemExit(cmd_window_name(rest))
 
-    handlers: dict[str, Callable[[str | None], int]] = {"rm": cmd_rm, "backfill-repo": cmd_backfill_repo}
+    handlers: dict[str, Callable[[str | None], int]] = {
+        "rm": cmd_rm,
+        "backfill-repo": cmd_backfill_repo,
+        "migrate-key": cmd_migrate_key,
+    }
     try:
         exit_code = cmd_add(value, name_arg) if command == "add" else handlers[command](value)
     except ValueError as exc:
