@@ -16,6 +16,10 @@
 #   2 — path:line citation found (e.g. "lib/borg-hooks.sh:42")
 #   3 — path:line citations + git diff present in worktree
 #
+# ZERO-WRITE (writer types only): zero_commit is true when the transcript shows no Edit/Write/NotebookEdit/
+# MultiEdit, no git commit/push, and no Bash file write (> or >> to anything but /dev/null|stdout|stderr or an
+# fd dup such as 2>&1, tee, sed -i, heredoc to a file). Counted in one jq pass; no per-call subprocess.
+#
 # Claude Code internal agents (prompt suggestions, away summaries, compaction; agent_type "") are skipped:
 # the plugin matcher is ".+" and the guard after AGENT_TYPE is parsed covers registrations without one.
 #
@@ -161,22 +165,34 @@ fi
 
 # ─── Zero-write detection ─────────────────────────────────────────────────────
 # Both warnings (EVIDENCE, ZERO-WRITE) apply to writer types only (borg-nanoprobe, borg-grunt).
-# ZERO-WRITE comes from the agent transcript (successful edits or git commit/push), never the payload
+# ZERO-WRITE comes from the agent transcript (successful edits, git commit/push, Bash file writes), never the payload
 # cwd, which is the parent session's. zero_commit is null when not applicable.
 # A 0-write run (the 15-read/0-write/32k-abort failure) is flagged loudly so the orchestrator
 # re-spawns instead of believing the work landed. The payload cwd is the PARENT session's cwd (a
 # nanoprobe works in its own worktree via git -C and removes it), so the repo cannot answer this;
-# the transcript can. Count file-edit tool calls plus Bash git commit/push, joining each tool_use to
-# its tool_result by tool_use_id and dropping only is_error results (a call with no result yet counts).
+# the transcript can. Count file-edit tool calls plus Bash git commit/push and Bash file writes (a > or >>
+# redirect to anything but /dev/null|stdout|stderr or an fd dup like 2>&1, tee, sed -i, a heredoc to a file),
+# joining each tool_use to its tool_result by tool_use_id and dropping only is_error results (a call with
+# no result yet counts). All patterns run inside the one jq pass over the transcript.
 # zero_commit: true = flagged, false = writes found, null = not applicable (non-writer or no transcript).
 ZERO_COMMIT=null
 if [[ "$IS_WRITER" == "true" && -n "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]]; then
     # git, then any mix of -C <path> (bare or quoted), -c k=v and --long[=value], then commit|push; the
     # lead-in may be start, whitespace, ; & | ( or a quote so `bash -c '...git commit...'` matches.
     _git_re="(^|[[:space:];&|(\"'])git((\\s+-C\\s+(\"[^\"]*\"|'[^']*'|\\S+))|(\\s+-c\\s+\\S+)|(\\s+--[A-Za-z][A-Za-z-]*(=\\S+)?))*\\s+(commit|push)(\\s|\$|[\"'])"
+    # Bash-shaped writes, folded into the SAME single jq pass (no extra subprocess). A Bash command counts
+    # when, after dropping fd duplicates (2>&1, >&2) and redirects to /dev/null|stdout|stderr, it still has
+    # a `>` or `>>` (not part of ->, =>, <>, >|), or it runs tee, or sed -i / --in-place. A heredoc written
+    # to a file (cat > f << EOF) is covered by the redirect. A `>` inside a quoted string is a known false positive.
+    _w_dup='[0-9&]*>&[0-9-]+'
+    _w_sink='[0-9&]*>>?\s*/dev/(null|stdout|stderr)(\s|$|[;&|)"'"'"'])'
+    _w_redir='(^|[^-=<>|])>'
+    _w_tee='(^|[\s;&|("'"'"'])tee(\s|$)'
+    _w_sed='(^|[\s;&|("'"'"'])sed\s+([^|;&]*\s)?(-[A-Za-z]*i|--in-place)'
     # Line by line: one malformed line (fromjson?) or non-array content must not void the whole parse.
     # A tool_use with no tool_result yet counts (the transcript lags); only an is_error result drops it.
-    _writes=$(jq -R -r -n --arg re "$_git_re" '
+    _writes=$(jq -R -r -n --arg re "$_git_re" --arg dup "$_w_dup" --arg sink "$_w_sink" --arg redir "$_w_redir" \
+        --arg tee "$_w_tee" --arg sed "$_w_sed" '
         [inputs | fromjson? | (.message.content? // []) | if type == "array" then .[] else empty end
             | select(type == "object")] as $blocks
         | ([$blocks[] | select(.type == "tool_result" and (.is_error // false) == true) | .tool_use_id]) as $bad
@@ -184,7 +200,12 @@ if [[ "$IS_WRITER" == "true" && -n "$TRANSCRIPT_PATH" && -r "$TRANSCRIPT_PATH" ]
             | select(.type == "tool_use" and (.id as $i | $bad | index($i) == null))
             | select(
                 (.name | IN("Edit", "Write", "NotebookEdit", "MultiEdit"))
-                or (.name == "Bash" and ((.input.command // "") | test($re)))
+                or (.name == "Bash" and ((.input.command // "") | (
+                    test($re)
+                    or (gsub($dup; "") | gsub($sink; " ") | test($redir))
+                    or test($tee)
+                    or test($sed)
+                  )))
               )
           ] | length
     ' "$TRANSCRIPT_PATH" 2>/dev/null || true)
