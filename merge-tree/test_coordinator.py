@@ -359,8 +359,8 @@ class TestRepositoryDirOf:
 
 
 class _Args:
-    def __init__(self, chains_dir, recon=None):
-        self.chains_dir = chains_dir
+    def __init__(self, stacks_dir, recon=None):
+        self.stacks_dir = stacks_dir
         self.recon = recon
 
 
@@ -369,7 +369,7 @@ class TestCmdList:
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         assert coordinator.cmd_list(_Args([d])) == 0
         out = capsys.readouterr().out
-        assert "a: 1 row(s)" in out and "1 chain(s), 0 skipped" in out
+        assert "a: 1 row(s)" in out and "1 stack(s), 0 skipped" in out
 
     def test_names_a_skipped_manifest_but_still_succeeds(self, tmp_path, capsys):
         d = tmp_path / "proj" / ".borg" / "chains"
@@ -396,7 +396,7 @@ class TestCmdPlan:
         assert rc == 0
         out, err = capsys.readouterr()
         assert "no publish target found" in err
-        assert "plan: 1 chain(s), 1 row(s)" in out
+        assert "plan: 1 stack(s), 1 row(s)" in out
         # PM7: plan is read-only — running it must not add or change any file under the repository.
         assert sorted((tmp_path / "proj").rglob("*")) == before
 
@@ -491,14 +491,14 @@ class TestMain:
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--chains-dir", d])
         assert coordinator.main() == 0
-        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
+        assert "1 stack(s), 0 skipped" in capsys.readouterr().out
 
     def test_the_legacy_flag_spelling_is_still_accepted(self, tmp_path, capsys, monkeypatch):
         # tests/cli_contract.bats pins `--programs-dir` as a spelling `borg chain` forwards untouched.
         d = _write_manifest_dir(tmp_path, "proj", "a", [_row("1", "o/r#1")])
         monkeypatch.setattr("sys.argv", ["coordinator.py", "list", "--programs-dir", d])
         assert coordinator.main() == 0
-        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
+        assert "1 stack(s), 0 skipped" in capsys.readouterr().out
 
     def test_requires_a_subcommand(self, monkeypatch):
         monkeypatch.setattr("sys.argv", ["coordinator.py"])
@@ -675,7 +675,7 @@ class TestRefusalsThroughTheRealReader:
         assert coordinator.cmd_plan(_Args([repository])) == 0
         plan_out, plan_err = capsys.readouterr()
         assert "settings.json" in plan_err and "not a manifest (no rows list)" in plan_err
-        assert "plan: 1 chain(s)" in plan_out and "CAVEAT" not in plan_out
+        assert "plan: 1 stack(s)" in plan_out and "CAVEAT" not in plan_out
 
         assert coordinator.cmd_sync(_Args([repository])) == 0
         assert "wrote 1 manifest(s)" in capsys.readouterr().out
@@ -688,7 +688,7 @@ class TestRefusalsThroughTheRealReader:
 
         assert coordinator.cmd_list(_Args([repository])) == 0
         out, err = capsys.readouterr()
-        assert "MANIFEST SKIPPED" in err and "0 chain(s), 1 skipped" in out
+        assert "MANIFEST SKIPPED" in err and "0 stack(s), 1 skipped" in out
 
         assert coordinator.cmd_plan(_Args([repository])) == 1
 
@@ -704,7 +704,7 @@ class TestStacksRoot:
         assert coordinator.cmd_list(_Args([repository])) == 0
         assert "tool-neutral: 2 row(s)" in capsys.readouterr().out
         assert coordinator.cmd_plan(_Args([repository])) == 0
-        assert "plan: 1 chain(s), 2 row(s)" in capsys.readouterr().out
+        assert "plan: 1 stack(s), 2 row(s)" in capsys.readouterr().out
 
     def test_sync_rewrites_a_stacks_manifest_in_place_and_creates_no_second_file(self, tmp_path, capsys, monkeypatch):
         # A second copy under `.borg/chains/` would be declared in BOTH roots, which the next read
@@ -792,7 +792,7 @@ class TestOneChainRegisteredTwice:
         second_before = second_file.read_bytes()
 
         assert coordinator.cmd_list(_Args([first, second])) == 0
-        assert "1 chain(s), 0 skipped" in capsys.readouterr().out
+        assert "1 stack(s), 0 skipped" in capsys.readouterr().out
 
         assert coordinator.cmd_sync(_Args([first, second])) == 0
         assert "wrote 1 manifest(s)" in capsys.readouterr().out
