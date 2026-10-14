@@ -2,9 +2,9 @@
 name: borg-link-up
 description: >
   "Link up" to the collective — flush session state to a checkpoint.
-  Use when ending a session, before a break, or when switching projects.
+  Use when ending a session, before a break, or when switching repositories.
   Produces a structured checkpoint that eliminates context-rebuild time on
-  the next /borg-link-down. Saves to <project>/.borg/checkpoints/<timestamp>.md,
+  the next /borg-link-down. Saves to <repository>/.borg/checkpoints/<timestamp>.md,
   which is what the SessionStart hook (borg-link-down.sh) reads to restore context.
 ---
 
@@ -33,11 +33,11 @@ Before composing the checkpoint, check for local extension files. Read each file
 files extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-link-up/01-context.md` (per machine)
-2. `<project root>/.borg/skill-extensions/borg-link-up/01-context.md` (per project)
+2. `<repository root>/.borg/skill-extensions/borg-link-up/01-context.md` (per repository)
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
@@ -84,7 +84,7 @@ ls PROJECT_PLAN.md docs/plans/PROJECT_PLAN.md 2>/dev/null | head -1
 
 **If absent, skip.** No plan means nothing to reconcile: do not run the engine, do not emit a
 `## Criteria Reconciled` section, do not mention it in the checkpoint, and do not say "no plan
-found" anywhere. The step is a SILENT no-op. Most registered projects have no `PROJECT_PLAN.md`,
+found" anywhere. The step is a SILENT no-op. Most registered repositories have no `PROJECT_PLAN.md`,
 so a "nothing to do" line here would be permanent noise in every checkpoint they ever write.
 
 ### 2. Run the engine — exactly once
@@ -179,7 +179,7 @@ the checkpoint and nothing else.
 ### 1. Resolve the manifest — never scaffold here
 
 ```
-PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli resolve --repository <project root>
+PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli resolve --repository <repository root>
 ```
 
 Prints one manifest stem at exit 0. **ANY non-zero exit is a no-op**, not an error to work around —
@@ -225,7 +225,7 @@ authorable with no code change.
 
 ```
 PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli add-row \
-    --repository <project root> --name <the stem step 1 printed> \
+    --repository <repository root> --name <the stem step 1 printed> \
     --ref <owner/repo#N> --lane <lane> --why "<one line: what this PR does>"
 ```
 
@@ -257,11 +257,11 @@ Before writing the checkpoint file, check for local extension files. Read each f
 files extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-link-up/02-output.md` (per machine)
-2. `<project root>/.borg/skill-extensions/borg-link-up/02-output.md` (per project)
+2. `<repository root>/.borg/skill-extensions/borg-link-up/02-output.md` (per repository)
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
@@ -269,7 +269,7 @@ Fold any extension instructions into the checkpoint before saving it.
 
 ## Save to disk
 
-After displaying the checkpoint, save it to `<project-root>/.borg/checkpoints/<timestamp>.md`.
+After displaying the checkpoint, save it to `<repository-root>/.borg/checkpoints/<timestamp>.md`.
 
 To determine `<timestamp>`: do NOT compose it, and do not call `date` yourself. Run
 `borg checkpoint-name` via the Bash tool and use its literal stdout, unmodified, as `<timestamp>`.
@@ -284,11 +284,11 @@ the same clone each found the name free and both wrote it. That happened: three 
 filenames exist twice on this machine with different bodies, two of the pairs written inside the
 same minute. The collision is now closed by the name itself.
 
-To determine `<project-root>`: use the directory that contains `PROJECT_PLAN.md`, or the git root
+To determine `<repository-root>`: use the directory that contains `PROJECT_PLAN.md`, or the git root
 (run `git rev-parse --show-toplevel`), or the current working directory if neither applies.
 
 Create the directory if it does not exist. Before writing, check whether
-`<project-root>/.borg/checkpoints/<timestamp>.md` already exists (e.g. via the Bash tool,
+`<repository-root>/.borg/checkpoints/<timestamp>.md` already exists (e.g. via the Bash tool,
 `test -e <path>`). If it does, do not overwrite it — append `-2` to the timestamp and check again
 (then `-3`, and so on) until you find a filename that does not yet exist, and save there instead.
 
@@ -308,11 +308,11 @@ After the checkpoint file lands, check for local extension files. Read each file
 files extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-link-up/03-followup.md` (per machine)
-2. `<project root>/.borg/skill-extensions/borg-link-up/03-followup.md` (per project)
+2. `<repository root>/.borg/skill-extensions/borg-link-up/03-followup.md` (per repository)
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 

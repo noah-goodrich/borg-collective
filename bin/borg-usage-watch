@@ -119,7 +119,7 @@ CLAUDE_BIN="${BORG_USAGE_CLAUDE_BIN:-claude}"
 # those sessions, but nothing stopped the transcript itself from being written.
 #
 # "/" is a declared quarantine, not an accident — hooks/borg-link-down.sh states "'/' can never be a
-# real borg project" and bails on it. That invariant is what makes pruning this one directory safe:
+# real borg repository" and bails on it. That invariant is what makes pruning this one directory safe:
 # nothing a human cares about can legitimately live there.
 PROBE_TRANSCRIPT_DIR="${BORG_USAGE_PROBE_TRANSCRIPT_DIR:-$HOME/.claude/projects/-}"
 PROBE_RETAIN_MIN="${BORG_USAGE_PROBE_RETAIN_MIN:-60}"
@@ -477,7 +477,7 @@ fi
 # in any count or average over that ledger. BORG_NO_SPEND_RECORD tells that hook to skip. Scoped to
 # this invocation, not exported, so nothing else in the process inherits it. Same story for the
 # SessionStart hook (borg-link-down.sh): this poller runs with cwd="/" (no WorkingDirectory in the
-# launchd plist), which would otherwise pollute per-project state with "/" as a bogus project —
+# launchd plist), which would otherwise pollute per-repository state with "/" as a bogus repository —
 # BORG_NO_SESSION_HOOKS tells it to skip too.
 claude_exit=0
 output=$(BORG_NO_SPEND_RECORD=1 BORG_NO_SESSION_HOOKS=1 "$CLAUDE_BIN" -p "/usage" 2>&1) || claude_exit=$?

@@ -38,11 +38,11 @@ and treat its contents as additional instructions for this phase. Read in order;
 extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-plan/01-context.md`
-2. `<project root>/.borg/skill-extensions/borg-plan/01-context.md`
+2. `<repository root>/.borg/skill-extensions/borg-plan/01-context.md`
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
@@ -116,7 +116,7 @@ Name 2-3 specific risks you see in the code. Don't ask "what could go wrong?" �
 ## Follow-Up Directives During an Active Plan
 
 When the developer requests a new directive *while a `PROJECT_PLAN.md` already exists* in the
-project root (i.e. we are mid-plan, not starting from scratch), write the directive file to
+repository root (i.e. we are mid-plan, not starting from scratch), write the directive file to
 `docs/plans/directives/<date>-<slug>.md` with a `*Parent plan: <plan-slug>*` italic metadata line
 immediately below the H1 heading.
 
@@ -151,15 +151,15 @@ and treat its contents as additional instructions for shaping the plan being wri
 order; later files extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-plan/02-output.md`
-2. `<project root>/.borg/skill-extensions/borg-plan/02-output.md`
+2. `<repository root>/.borg/skill-extensions/borg-plan/02-output.md`
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently.
 
-After the conversation, write `PROJECT_PLAN.md` in the project root.
+After the conversation, write `PROJECT_PLAN.md` in the repository root.
 
 **`- Plan-slug:` is the plan's own name for its archived copy, and it is chosen HERE — once, by a
 person, at plan time.** It is `<established-date>-<short-slug>`, where the short slug is a 3-6 word
@@ -218,7 +218,7 @@ not a question, and not something the developer opts into:
 ```
 command -v borg | xargs readlink -f | xargs dirname
 PYTHONPATH=<that dir> python3 -m borg_core.manifest.cli scaffold \
-    --repository <project root> --name <the Plan-slug> --desc "<the confirmed Objective, one line>"
+    --repository <repository root> --name <the Plan-slug> --desc "<the confirmed Objective, one line>"
 ```
 
 - **`--name` is the `- Plan-slug:` you just declared**, byte for byte. Same string, same session.
@@ -243,11 +243,11 @@ exists and treat its contents as additional instructions for follow-up actions (
 plan to an external ticket). Read in order; later files extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-plan/03-followup.md`
-2. `<project root>/.borg/skill-extensions/borg-plan/03-followup.md`
+2. `<repository root>/.borg/skill-extensions/borg-plan/03-followup.md`
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently.
 

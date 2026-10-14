@@ -62,6 +62,16 @@ run_zsh_borg() {
     [[ "$output" == *"THE BORG COLLECTIVE"* ]] || false
 }
 
+# The /borg-link skill is `borg link`, and outside the Queen's root `borg link` is ONE directory's page: the
+# overview exists only at the Queen's root or with --overview. The help line used to say "overview or deep
+# dive", which described the two pages `borg link` printed before scope picked between them.
+@test "contract: borg help describes /borg-link as this directory's page, not 'overview or deep dive'" {
+    run_zsh_borg help
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"/borg-link"*"this directory's page"* ]] || false
+    [[ "$output" != *"overview or deep dive"* ]] || false
+}
+
 @test "contract: unknown command exits non-zero with a pointer to help" {
     run_zsh_borg definitely-not-a-command
     [ "$status" -ne 0 ]

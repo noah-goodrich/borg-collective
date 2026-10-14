@@ -18,15 +18,15 @@ experimental Agent Teams are deliberately NOT adopted at indie scale (token cost
 There is no Queen *agent file* — the Queen is the main session whose CWD is exactly
 `BORG_ORCHESTRATOR_ROOT` (default `~/dev`); `borg-hooks.sh` classifies the session by that CWD.
 
-- **Owns:** morning briefing synthesis (registry.json + per-project `.borg/checkpoints/`); priority scoring
+- **Owns:** morning briefing synthesis (registry.json + per-repository `.borg/checkpoints/`); priority scoring
   (`borg next`, one recommendation); work/life boundary speed-bumps; spawning + monitoring specialists;
   synthesizing lean return summaries.
-- **Never does:** write `registry.json` (hook-excluded when CWD = root); **edit project files** — it briefs,
+- **Never does:** write `registry.json` (hook-excluded when CWD = root); **edit repository files** — it briefs,
   spawns, monitors, synthesizes. Code changes go through workers in their own worktrees.
 - **Is the dominant cost center** (~96% of session spend, driven by cache reads of the growing context every
   turn). The primary cost lever is keeping the Queen context lean: delegate verbose reads to scouts, get
   distilled summaries back. (Framework-doc edits like this file are the narrow exception — they are the
-  Queen's own artifacts, not project code.)
+  Queen's own artifacts, not repository code.)
 
 ## The handoff state-machine
 
@@ -68,8 +68,8 @@ output returns to the Queen, which spawns the next.
 6. **Lean-context return contracts.** grunt ≤300 chars; scout ≤500; nanoprobe/researcher ≤500; reviewer ≤800
    words. Never return raw file contents, full command output, diffs, or facts the Queen already has.
 7. **Queen identity by CWD.** CWD == `BORG_ORCHESTRATOR_ROOT` ⇒ Queen: never writes registry.json,
-   never edits project files. Any other CWD is a project session.
-8. **Container commands via `drone exec <project> -- <cmd>`.** Registry-by-name resolution is CWD-independent;
+   never edits repository files. Any other CWD is a repository session.
+8. **Container commands via `drone exec <repository> -- <cmd>`.** Registry-by-name resolution is CWD-independent;
    relying on CWD for container routing is a protocol violation.
 9. **SubagentStop → `~/.config/borg/agents.jsonl`.** One JSONL line per completion (id, agent_type,
    transcript_path, summary, status, finished_at, cwd). The worker's final message IS the logged summary, so it
@@ -78,7 +78,7 @@ output returns to the Queen, which spawns the next.
 ## Open questions (NOT frozen — carry to a future decision)
 
 - **No Queen agent file / no unattended handoff protocol.** The Queen is human-driven; overnight,
-  past-session-limit multi-project orchestration has no defined handoff. See `[[unattended-agent-execution]]`.
+  past-session-limit multi-repository orchestration has no defined handoff. See `[[unattended-agent-execution]]`.
 - **Two divergent nanoprobe definitions.** The plugin copy (`claude-plugins/borg-collective/agents/`) has the
   scope gate + 5-read-before-write bound + `CLAUDE_CODE_MAX_OUTPUT_TOKENS:8000`; the main-repo copy lacks them,
   yet `borg setup` installs the main-repo copy to `~/.claude/agents/`. Reconcile: make the source-of-truth copy

@@ -1,6 +1,6 @@
 # Local extensions
 
-A local extension is a markdown file that layers machine-specific or project-specific instructions
+A local extension is a markdown file that layers machine-specific or repository-specific instructions
 onto a skill or an agent, without that content living in this repository. Missing files are skipped
 silently; markdown only, no executable scripts.
 
@@ -13,7 +13,7 @@ tools, tickets or plugins belongs in a machine-local extension, never in a check
 Every extension is looked for in both, in this order:
 
 1. `~/.config/borg/extensions/<kind>/<subject>/<hook>.md` — per machine
-2. `<project root>/.borg/<kind>/<subject>/<hook>.md` — per project
+2. `<repository root>/.borg/<kind>/<subject>/<hook>.md` — per repository
 
 `<kind>` is `skill-extensions` or `agent-extensions`. Keep extension files terse: they load on every
 invocation of their subject.
@@ -83,7 +83,7 @@ type. The question to answer for any future type is: **who owns the fact being a
 
 | the extension asserts | owner | winner |
 |---|---|---|
-| project policy ("plans here cite a ticket") | the project | **repo** — binds everyone who works on it |
+| repository policy ("plans here cite a ticket") | the repository | **repo** — binds everyone who works on it |
 | environment ("this machine makes PRs via X") | the machine | **machine** — a public repo cannot know this machine |
 
 So prose keeps the existing behaviour (repo layered after machine, repo wins) and `prefer-tool`

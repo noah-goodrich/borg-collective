@@ -335,7 +335,7 @@ EOF
 
 # ── The prompt carries the CHECKPOINT's summary, not the registry's ───────────────────────────
 #
-# `borg link` derives a project's summary from its latest checkpoint FILE. `--brief` projects the same
+# `borg link` derives a repository's summary from its latest checkpoint FILE. `--brief` projects the same
 # document, so its prompt must carry that text. The registry row here holds a greeting (what
 # summarize.py stored from a transcript) to prove the stored field is not what reaches the prompt.
 

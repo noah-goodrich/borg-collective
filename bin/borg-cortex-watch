@@ -183,18 +183,18 @@ _resolve_pane() {
 }
 
 _fire_wake() {
-    local pane_id="$1" project="$2" reset_at="$3"
+    local pane_id="$1" repository="$2" reset_at="$3"
     tmux send-keys -t "$pane_id" "wake up!" Enter 2>/dev/null || {
-        log "ERROR: tmux send-keys failed for $pane_id ($project)"
+        log "ERROR: tmux send-keys failed for $pane_id ($repository)"
         return 1
     }
     local hhmm; hhmm=$(date +"%H:%M")
     if command -v _borg_osa_notify &>/dev/null; then
-        _borg_osa_notify "Cortex auto-wake" "$project" "cortex resumed at $hhmm"
+        _borg_osa_notify "Cortex auto-wake" "$repository" "cortex resumed at $hhmm"
     else
-        osascript -e "display notification \"$project cortex resumed at $hhmm\" with title \"Cortex auto-wake\" sound name \"Glass\"" 2>/dev/null || true
+        osascript -e "display notification \"$repository cortex resumed at $hhmm\" with title \"Cortex auto-wake\" sound name \"Glass\"" 2>/dev/null || true
     fi
-    log "fired wake: pane=$pane_id project=$project reset_at=$reset_at"
+    log "fired wake: pane=$pane_id repository=$repository reset_at=$reset_at"
 }
 
 # Sweep due/orphaned entries: fire those whose reset_at <= now+grace, drop those whose pane
@@ -208,12 +208,12 @@ _sweep() {
     local now_epoch
     now_epoch=$(date +%s)
 
-    local i pane_id session window pane_index project reset_at reset_epoch fresh_pane
+    local i pane_id session window pane_index repository reset_at reset_epoch fresh_pane
     local -a keep_indices=()
     local fired=0 orphaned=0
 
     for (( i = 0; i < count; i++ )); do
-        IFS=$'\t' read -r pane_id session window pane_index project reset_at < <(
+        IFS=$'\t' read -r pane_id session window pane_index repository reset_at < <(
             printf '%s' "$entries" | jq -r ".wakes[$i] | [.pane_id,.session,.window,.pane_index,.project,.reset_at] | @tsv"
         )
 
@@ -231,7 +231,7 @@ _sweep() {
 
         reset_epoch=$(_iso_to_epoch "$reset_at")
         if (( reset_epoch <= now_epoch + WAKE_GRACE_SEC )); then
-            _fire_wake "$pane_id" "$project" "$reset_at" && fired=$(( fired + 1 ))
+            _fire_wake "$pane_id" "$repository" "$reset_at" && fired=$(( fired + 1 ))
             continue
         fi
 

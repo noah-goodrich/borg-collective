@@ -68,8 +68,8 @@ wallpapering this census exists to prevent.
 | `.borg/programs` | dynamic | `borg_core/manifest/shell.py` | pre-rename spelling, joined from `LEGACY_DIRNAME` |
 | `.borg/skill-extensions` | dynamic | `borg_core/extensions/shell.py` | `layer_paths` joins `.borg / kind`, so no literal exists |
 | `.borg/agent-extensions` | dynamic | `borg_core/extensions/shell.py` | same `layer_paths` join, agent side |
-| `.borg/skills` | store | `hooks/borg-link-up.sh` | project-local skills; also `hooks/borg-link-down.sh` |
-| `.borg/no-resume` | store | `lib/borg/resume-gate.sh` | per-project opt-out marker: a file here keeps borg-resume from injecting into that project's sessions |
+| `.borg/skills` | store | `hooks/borg-link-up.sh` | repository-local skills; also `hooks/borg-link-down.sh` |
+| `.borg/no-resume` | store | `lib/borg/resume-gate.sh` | per-repository opt-out marker: a file here keeps borg-resume from injecting into that repository's sessions |
 | `.borg/knowledge` | retired | - | cairn's export, 1106 tracked files KEPT; the promise to grep it was deleted from CLAUDE.md 2026-09-28. See `docs/plans/directives/assets/2026-09-28-state-audit-adversarial.md` |
 | `.borg/elsewhere` | prose | - | not a store: a path in `merge-tree/test_coordinator.py`'s fixture for a manifest OUTSIDE the manifest dir |
 | `.borg/anything` | prose | - | not a store: a docstring example in `borg_core/manifest/shell.py` naming a path that is never opened |
@@ -124,7 +124,7 @@ over both locations; the table describes only the defaults.
 | `pr-watch-delta.md` | MOVED | `borg-pr-watch` output, regenerated every run |
 | `pr-watch.log` | MOVED | a log; logs are never configuration |
 | `recon/last-run` | MOVED | the recon since-mark marker, machine-written |
-| `devcontainer-hashes/<project>.hash` | MOVED | `drone` change-detection cache, safe to delete |
+| `devcontainer-hashes/<repository>.hash` | MOVED | `drone` change-detection cache, safe to delete |
 | `briefing-*-stderr.log` (4 files) | MOVED | captured stderr of the `--brief` stages; diagnostics only |
 | `plan-promote-debug.log` | MOVED | debug log of `borg-plan-promote.sh` |
 | `memory-hits.log` | MOVED | append-only read log of `borg-memory-read-log.sh` |

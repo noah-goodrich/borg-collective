@@ -2,8 +2,8 @@
 # borg — The Borg Collective: multi-session Claude Code manager
 #
 # Usage:
-#   borg link                 # overview of all tracked repositories
-#   borg link [repository]    # deep dive on one repository
+#   borg link                 # the Queen's overview at the workspace root; ONE directory's page elsewhere
+#   borg link [repository]    # the page for one registered repository
 #   borg switch [query]       # fzf picker → tmux window switch
 #   borg scan                 # auto-discover repositories from session history
 #   borg add [path] [--name n] # manually register a repository
@@ -3361,7 +3361,7 @@ cmd_help() {
     /borg-assimilate        Shipping checklist + Collective review + execution
     /borg-collective-review Adversarial multi-persona review
     /borg-link-up           Flush session state to checkpoint (run before stopping)
-    /borg-link              Same as 'borg link' — overview or deep dive
+    /borg-link              Same as 'borg link' — this directory's page (overview: Queen's root or --overview)
     /borg-next              Same as 'borg next' — what needs attention
     /borg-switch            Same as 'borg switch' — jump to repository
     /borg-recon             Cross-source synthesis over 'borg recon --json' ('borg link' is the front door)

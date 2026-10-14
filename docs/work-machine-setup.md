@@ -7,7 +7,7 @@
 
 > **cairn decommissioned (2026-08-08):** cairn (the Postgres+pgvector knowledge-graph service formerly
 > set up here) has been fully decommissioned — DB dropped, service/hooks/CLI removed, repo archived.
-> Its corpus now lives in per-project `.borg/knowledge/*.md` markdown, grep-reachable with no service
+> Its corpus now lives in per-repository `.borg/knowledge/*.md` markdown, grep-reachable with no service
 > required. Any cairn references below are historical.
 
 **Target:** Apple Silicon macOS. Read every phase before running. Steps are in dependency order.
@@ -105,7 +105,7 @@ borg version && claude plugin list | grep borg-collective && borg doctor
   version-floor table (`gh` >= 2.97.0), and it can exit 1.
 - **`borg sever` is retired.** Use `borg down`, which tears down every tmux window, the shared Postgres and the
   shared Supabase stack.
-- **cairn is gone (2026-08-08).** Nothing to run; its corpus lives in per-project `.borg/knowledge/*.md`. A
+- **cairn is gone (2026-08-08).** Nothing to run; its corpus lives in per-repository `.borg/knowledge/*.md`. A
   session started before the pull may log a harmless "No such file or directory" from the deleted
   `borg-cairn-heartbeat.sh` Stop hook — restart Claude Code to clear it.
 - **Plugin version equals `borg --version`.** `bash-guard` has been hardened against pre-approval bypasses, so a
@@ -201,7 +201,7 @@ security add-generic-password -s "NEXUS_HOST"     -a "$USER" -w "<nexus.yourco.c
 security add-generic-password -s "NEXUS_USERNAME" -a "$USER" -w "<token-name>" -U
 security add-generic-password -s "NEXUS_TOKEN"    -a "$USER" -w "<token>" -U
 
-# Optional / project-specific
+# Optional / repository-specific
 security add-generic-password -s "SNOWFLAKE_PAT"         -a "$USER" -w "<pat>" -U
 security add-generic-password -s "SUPABASE_ACCESS_TOKEN" -a "$USER" -w "<token>" -U
 ```
@@ -316,7 +316,7 @@ claude plugin list | grep noah-personal
 ## Phase 4 — cairn (decommissioned)
 
 cairn was decommissioned on 2026-08-08: DB dropped, service/hooks/CLI removed, repo archived. Its
-corpus now lives in per-project `.borg/knowledge/*.md` markdown (grep-reachable, no service required).
+corpus now lives in per-repository `.borg/knowledge/*.md` markdown (grep-reachable, no service required).
 This phase is no longer part of setup.
 
 > **Podman reminder:** the machine VM does **not** auto-start at login (unlike OrbStack) — run
@@ -327,7 +327,7 @@ This phase is no longer part of setup.
 ## Phase 5 — Verify everything
 
 ```zsh
-borg link                                # project dashboard
+borg link                                # the front door page
 borg add ~/dev                           # register the Queen's root
 claude plugin list | grep borg-collective
 borg next                                # recommendation engine
