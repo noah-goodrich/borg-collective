@@ -858,7 +858,13 @@ cmd_next() {
 
     # Score and sort repositories: pinned +200, waiting +100, active +50, idle +10, no activity -50
     # Tiebreaker: waiting → oldest first (neglected longest); active/idle → newest first
+    # The compass (the owner's map, when there is one) decides FIRST: today's leg, then nearest due date, then
+    # undated, then frozen/done/unmapped. borg_core.nextpick.cli --top is the same ranking the chooser uses
+    # (core.rank), so the chooser and the --switch/--pick/"Next up" paths cannot disagree. It exits non-zero
+    # when it cannot answer, and only then does the jq pipeline below run: it is the pre-compass ordering
+    # (no map) kept as the fallback, not a second opinion.
     local top
+    top=$(printf '%s' "$registry" | _borg_py borg_core.nextpick.cli --top "$(( ${pick:-1} - 1 ))" 2>/dev/null) ||
     top=$(printf '%s' "$registry" | jq -r --argjson idx "$(( ${pick:-1} - 1 ))" '
         .projects | to_entries |
         map(select(.value.status != "archived")) |

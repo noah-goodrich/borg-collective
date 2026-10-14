@@ -35,8 +35,12 @@ borg link --json [<project>] | jq 'if .scope.unregistered == true
   elif .scope.kind == "orchestrator"
   then (.directives |= (group_by(.project) | map({project: .[0].project, n: length,
     titles: [limit(5; .[].title)]})))
-  else (.scope.repository as $r | {version, generated_at, scope,
+  else (.scope.repository as $r | (.compass // {}) as $c
+    | ($c.repositories[$r] // {}) as $m | {version, generated_at, scope,
     entry: (.focus.entry | del(.summary)),
+    compass: {found: $c.found, map_dir: $c.map_dir, leg: $c.leg,
+      repository: $m, destinations: [$c.destinations[]?
+        | select(.id == $m.destination)]},
     waiting: {rows: [.waiting.rows[] | select(.project == $r and .item == "session")],
       degraded: .waiting.degraded}})
   end'
@@ -50,7 +54,14 @@ Then branch, and only on this:
 
 **The `.borg-project` marker is NOT the mode decision.** It never was a reliable one: linked worktrees never get a marker, so a marker walk sent them into the overview. The engine resolves scope from the cwd (or from an explicit project name, which wins), and you believe it. The marker is read only in the `## Fallback`, where the engine cannot run. Do not write an ad hoc find/ls to detect the project.
 
-The repository-scope arm of the jq is a whitelist on purpose. `--json` stays registry-wide on every call (`order`, `projects`, `directives`, `assimilated`, `grid`), and `focus` carries a plan and directives, which are repository-level. Its checkpoint list, head and `entry.summary` were read across the whole repo group until 2026-10-13 and are now the directory's own, but an older engine still sends the union. The repository page reads its own directory itself and may use none of that, so the pipe never lets it reach you.
+The repository-scope arm of the jq is a whitelist on purpose. `--json` stays registry-wide on every call (`order`, `projects`, `directives`, `assimilated`, `grid`), and `focus` carries a plan and directives, which are repository-level. Its checkpoint list, head and `entry.summary` were read across the whole repo group until 2026-10-13 and are now the directory's own, but an older engine still sends the union. The repository page reads its own directory itself and may use none of that, so the pipe never lets it reach you. The one thing added to the whitelist is `compass`, cut down to this repository's own slice: the leg, this repository's `{destination, on_leg}` and the one destination it maps to. The Queen arm leaves the whole block in place.
+
+**Reading `.compass`** (the owner's plain-file map; additive, so the version gate below is unchanged and an engine that predates it simply has no `.compass` (on the repository page `found` is null), which you say nothing about):
+- `.compass.found` false → one line, "no map at `<map_dir>`", and move on. Never invent a leg, a destination or a date.
+- `.compass.leg.text` is today's leg; a null `leg` means none was chosen. Each destination's `state` is `on-track`, `at-risk`, `late` or `undated` for an active one, else its status (`done`, `killed`, `frozen`, `proposed`). In the Queen view give the tally of the active ones and lead with `late`.
+- **Off route**: `.compass.repositories[<name>]` is `{destination, on_leg}`. A repository whose destination is not on the leg is off route, said as "off route: `<repository>` is not on today's leg", and only when a leg exists. A repository with no destination is simply unmapped, never off route.
+- **Parking due**: `.compass.parking[]` items with `due == true` wait on the user, so list them last in WAITING ON YOU as "parking: `<text>` (look again `<look>`, seen `<seen>`)". The Queen view only; the repository page has no parking rows.
+- A non-empty `.compass.warnings` is a map file the reader skipped; say so once.
 
 **Version gate — read `.version` first.**
 - `== 2` → proceed silently.

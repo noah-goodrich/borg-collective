@@ -335,6 +335,27 @@ def map_repositories(destinations: list[dict], names: list[str], leg: dict | Non
     return mapped
 
 
+def leg_priority(compass: dict | None, name: str) -> tuple[int, str]:
+    """`(bucket, due)`: where a repository sorts among candidates for `borg next`. Lower is earlier.
+
+    Bucket 0 is a repository on today's leg; 1 is a repository whose active destination has a due date, ordered by
+    that date (so the nearest, and a late one before any other, comes first); 2 is an active destination with no
+    date; 3 is everything else: a frozen, done, killed or proposed destination, and a repository no destination
+    claims. With no map (None, or `found` false) every repository gets `(0, "")`, a constant, so a stable sort on
+    a key that starts with this is exactly the sort it was before.
+    """
+    if not compass or not compass.get("found"):
+        return 0, ""
+    entry = (compass.get("repositories") or {}).get(name) or {}
+    if entry.get("on_leg"):
+        return 0, ""
+    owner = next((d for d in compass.get("destinations") or [] if d.get("id") == entry.get("destination")), None)
+    if owner is None or owner.get("status") != "active":
+        return 3, ""
+    due = owner.get("due")
+    return (1, due) if as_date(due) else (2, "")
+
+
 def collect_destinations(destination_files: list[tuple[str, str]], warnings: list[str]) -> list[dict]:
     """Every parseable destination in file order; a skipped file (malformed, or a repeated id) adds to `warnings`."""
     destinations: list[dict] = []

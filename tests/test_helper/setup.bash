@@ -17,6 +17,10 @@ setup_temp_dirs() {
     # value EXPORTED by the invoking shell beats that default and points every case at a directory
     # outside the sandbox, so drop it here; a case that needs a custom root sets it inline.
     unset BORG_ORCHESTRATOR_ROOT
+    # The owner's map directory, same reasoning: the compass reader defaults to "$HOME/dev/map", which the HOME
+    # line above sandboxes, and an exported override would point every `borg link` and `borg next` here at a
+    # REAL map. A case that needs a map sets it inline, to a directory it built.
+    unset BORG_MAP_DIR
 
     # GIVE THE SANDBOX A GIT IDENTITY. HOME is redirected on the line above, so `~/.gitconfig` is
     # gone by construction -- and recon_adapter_github.bats's case "adapter: a linked worktree is

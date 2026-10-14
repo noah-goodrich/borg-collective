@@ -383,3 +383,35 @@ def test_core_never_reads_the_clock():
     source = Path(core.__file__).read_text(encoding="utf-8")
     for needle in ("now(", "today()", "utcnow", "time.time", "os.environ", "open("):
         assert needle not in source
+
+
+# -- leg_priority: the sort prefix `borg next` ranks by ------------------------------------------------------------
+
+
+def _prioritised(log, destinations, readme, names):
+    block = core.build_compass("/m", TODAY, log, destinations, readme, None, names)
+    return {name: core.leg_priority(block, name) for name in names}
+
+
+def test_leg_priority_buckets_and_due_dates():
+    readme = "| Destination | Due |\n|---|---|\n| alpha | 2026-04-01 |\n| beta | TBD |\n"
+    destinations = [
+        ("destinations/alpha.md", _destination("alpha", extra="repositories:\n  - dated\n")),
+        ("destinations/beta.md", _destination("beta", extra="repositories:\n  - open\n")),
+        ("destinations/gamma.md", _destination("gamma", status="frozen", extra="repositories:\n  - cold\n")),
+        ("destinations/legged.md", _destination("legged", extra="repositories:\n  - hot\n")),
+    ]
+    log = "## Today's leg\n\n- work on legged\n"
+    got = _prioritised(log, destinations, readme, ["dated", "open", "cold", "hot", "nobody"])
+    assert got == {
+        "dated": (1, "2026-04-01"),
+        "open": (2, ""),
+        "cold": (3, ""),
+        "hot": (0, ""),
+        "nobody": (3, ""),
+    }
+
+
+@pytest.mark.parametrize("block", [None, {}, {"found": False, "map_dir": "/m"}])
+def test_leg_priority_is_a_constant_without_a_map(block):
+    assert core.leg_priority(block, "anything") == (0, "")
