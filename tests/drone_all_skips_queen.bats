@@ -19,7 +19,7 @@ setup() {
     export TMUX="/tmp/tmux-1000/default,1234,0"
     unset TMUX_PANE
 
-    # Every window has a project dir and two panes, so a window the command touches shows up in TRACE.
+    # Every window has a repository dir and two panes, so a window the command touches shows up in TRACE.
     cat > "$MOCK_BIN/tmux" <<'MOCK'
 #!/usr/bin/env bash
 echo "tmux $*" >> "$TRACE"
