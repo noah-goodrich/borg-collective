@@ -138,7 +138,7 @@ _new_state=$(printf '%s' "$_cur_state" | jq \
     --argjson dirty "$DIRTY_FLAG" \
     --argjson diverged "$CLOCK_DIVERGED" \
     --argjson delta "$CLOCK_DELTA" \
-    '.status = "idle" | .last_activity = $now |
+    '.status = "idle" | .last_activity = $now | del(.waiting_reason) |
      .has_uncommitted_changes = $dirty |
      .clock_divergence = {detected: $diverged, delta_seconds: $delta} |
      (if $sid != "" then .claude_session_id = $sid else . end)')

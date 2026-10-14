@@ -64,8 +64,8 @@ _sweepable_repo() {
 
     # A manifest declaring two refs in this repository: one the sweep will answer for (#1) and one it
     # will not (#2). That contrast is what makes the resolve ladder observable end to end.
-    mkdir -p "$dir/.borg/programs"
-    cat > "$dir/.borg/programs/sierra-stack.json" <<'EOF'
+    mkdir -p "$dir/.stacks"
+    cat > "$dir/.stacks/sierra-stack.json" <<'EOF'
 {"program":"sierra-stack","rows":[
   {"order":"1","ref":"testorg/sierra#1","status":"stacked","why":"the trunk"},
   {"order":"2","ref":"testorg/sierra#2","status":"open","why":"the next one"}
@@ -225,8 +225,8 @@ _ac3_two_repository_manifest() {
     git init -q "$tango"
     git -C "$tango" remote add origin "https://github.com/testorg/tango.git"
 
-    mkdir -p "$tango/.borg/programs"
-    cat > "$tango/.borg/programs/cross-window.json" <<'EOF'
+    mkdir -p "$tango/.stacks"
+    cat > "$tango/.stacks/cross-window.json" <<'EOF'
 {"program":"cross-window","rows":[
   {"order":"1","ref":"testorg/sierra#1","status":"merged","why":"the sweep answers this one"},
   {"order":"2","ref":"testorg/sierra#2","why":"no status key at all — only a fetch can answer"},

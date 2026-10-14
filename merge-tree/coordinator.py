@@ -13,8 +13,9 @@ reader `borg link`, `add-row`, `close` and `resolve` also use, and written back 
 `shell.write_manifest`, the only writer. This module used to carry a second copy of both and the two
 disagreed about what a valid manifest is; there is one now. A manifest's identity is the `_id`
 borg_core stamps on it (a declared top-level key read verbatim when the author wrote one, else the
-filename stem), and `.stacks/` is swept alongside `.borg/chains/` and the legacy
-`.borg/programs/`.
+filename stem), and `.stacks/` is the one root swept. A repository that still holds manifests under the
+retired `.borg/chains/` or `.borg/programs/` gets a named warning pointing at `borg stack migrate`; those
+files are never read.
 
 THE DISCOVERED TARGET. Exactly like a recon adapter (`BORG_RECON_ADAPTER_PATH`), the external
 writer is discovered, never hardcoded: an executable named `borg-sync-target-<name>` on
@@ -323,7 +324,7 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
     """Rewrite each manifest through borg's OWN native writer (`shell.write_manifest`).
 
     Returns `(written_paths, warnings)`. Each manifest is written back to ITS OWN file, in whichever
-    root holds it (`.stacks/`, `.borg/chains/` or the legacy `.borg/programs/`), found from the `_path`
+    root holds it (`.stacks/`), found from the `_path`
     discover() stamped onto it. The earlier design keyed a shared map by chain name — so two repositories
     declaring the same name collapsed to one entry, and the loser's manifest was silently written into
     the OTHER repository's directory (the exact multi-repo pattern S4 proposes: the same manifest landed
@@ -353,7 +354,7 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
             # file under none of the three manifest directories, dropped at exit 0. That is the
             # confident-empty shape this tree keeps removing, so it is reported.
             if source_path and not repository_dir:
-                warnings.append(f"skipped {source_path}: not under .borg/chains, .borg/programs or .stacks")
+                warnings.append(f"skipped {source_path}: not under .stacks")
             continue
         if chain in seen and seen[chain] != source_path:
             # Keyed by SOURCE FILE, not repository dir (opus round 2, finding 1): two files in the SAME
@@ -382,8 +383,7 @@ def _rewrite_in_place(manifest: dict[str, Any], repository_dir: str, source_path
 
     The file is rewritten where it LIVES (`directory=` its own dirname, name = its own basename),
     never at a name derived from the chain id: a manifest whose filename differs from its id must not
-    spawn a second copy, and a `.stacks/` manifest written under `.borg/chains/` would be declared in
-    both roots, which the next read refuses by name. A manifest the writer refuses becomes a SYNC
+    spawn a second copy. A manifest the writer refuses becomes a SYNC
     WARNING rather than a traceback; nothing is written for it.
     """
     on_disk = _rows_on_disk(source_path)
@@ -417,22 +417,16 @@ def _repository_dir_of(manifest: dict[str, Any]) -> str:
     path = str(manifest.get("_path") or "")
     if not path:
         return ""
-    # path = <repository_dir>/{.borg/chains,.borg/programs,.stacks}/<name>.json
+    # path = <repository_dir>/.stacks/<name>.json
     #
-    # ALL THREE NAMES, because this recovers a root by SPLITTING ON THE DIRECTORY NAME and the
-    # directory has had more than one (AC7 renamed one, and `.stacks/` is the tool-neutral second
-    # root). A single-name split against another name returns the WHOLE PATH unchanged -- `rsplit`
-    # with no match yields the original -- so `sync_borg` would then treat the manifest file itself as
-    # a repository root and write outside the tree. That fails silently: the caller only checks
-    # `if not repository_dir`, and a non-empty wrong answer passes.
-    for name in (
-        os.path.join(".borg", shell.OWN_STACKS_DIRNAME),
-        os.path.join(".borg", shell.LEGACY_DIRNAME),
-        shell.STACKS_DIRNAME,
-    ):
-        marker = os.sep + name + os.sep
-        if marker in path:
-            return path.rsplit(marker, 1)[0]
+    # This recovers a root by SPLITTING ON THE DIRECTORY NAME. A split against a name the path does not
+    # contain returns the WHOLE PATH unchanged -- `rsplit` with no match yields the original -- so
+    # `sync_borg` would then treat the manifest file itself as a repository root and write outside the
+    # tree. That fails silently: the caller only checks `if not repository_dir`, and a non-empty wrong
+    # answer passes. The guard is the `in` test, which returns "" for a path under no manifest root.
+    marker = os.sep + shell.STACKS_DIRNAME + os.sep
+    if marker in path:
+        return path.rsplit(marker, 1)[0]
     return ""
 
 
@@ -520,6 +514,18 @@ def cmd_sync(args: argparse.Namespace) -> int:
     return 0
 
 
+class _RetiredDirFlag(argparse.Action):
+    """`--chains-dir` and `--programs-dir`: refused BY NAME, pointing at `--stacks-dir`.
+
+    They were accepted beside `--stacks-dir` until the contract step of the chain -> stack rename. Parsing them
+    only to refuse them is deliberate: argparse's own answer to an unknown flag is an anonymous "unrecognized
+    arguments", which tells a caller with a stale script nothing about what replaced the flag.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser.error(f"{option_string} was renamed to --stacks-dir; use --stacks-dir <repository>")
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -528,14 +534,13 @@ def main() -> int:
         sp = sub.add_parser(name)
         sp.add_argument(
             "--stacks-dir",
-            "--chains-dir",  # older spellings; accepted until the contract phase drops them
-            "--programs-dir",
             dest="stacks_dir",
             action="append",
             default=[],
             metavar="REPOSITORY_DIR",
-            help="repository root to sweep for .stacks/*.json and .borg/chains/*.json (repeatable)",
+            help="repository root to sweep for .stacks/*.json (repeatable)",
         )
+        sp.add_argument("--chains-dir", "--programs-dir", action=_RetiredDirFlag, nargs="*", help=argparse.SUPPRESS)
         if name == "plan":
             sp.add_argument(
                 "--recon",

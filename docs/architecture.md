@@ -83,12 +83,12 @@ writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/a
         paths.py                Config-path resolution + defaults
         registry/               Registry read/write core, shell adapter, CLI entry
         recon/                  Recon fan-out engine (ported from the deleted lib/recon.sh)
-        manifest/               Reader for <project>/.borg/programs/*.json program manifests
+        manifest/               Reader for <project>/.stacks/*.json stack manifests
         link/                   `borg link` document build + renderer
     hooks/
         borg-link-down.sh       SessionStart → status=active + checkpoint injection
         borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
-        borg-notify.sh          Notification → status=waiting + reason
+        borg-notify.sh          permission/elicitation Notification → status=waiting + reason
         borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
         borg-dispatch-guard.sh  PreToolUse → >=92% usage dispatch veto (Usage Guardian)
         borg-agent-model-guard.sh  PreToolUse (Agent|Task) → subagent_type allowlist + model/effort caps

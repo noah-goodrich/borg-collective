@@ -117,13 +117,13 @@ _LINK_FIXTURES = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "l
 
 
 def _manifest_workspace(root, name="warehouse"):
-    """A registered repository carrying a SHIPPED fixture manifest under `.borg/chains/`.
+    """A registered repository carrying a SHIPPED fixture manifest under `.stacks/`.
 
     The bytes are `tests/fixtures/link/manifests/warehouse-rollout.json`'s, not an inline copy: the
     goldens pin the same file's rendered form, so a test that built its own rows could stay green
     while the fixture the goldens measure moved underneath it.
     """
-    programs = Path(_repository_dir(root, name)) / ".borg" / "chains"
+    programs = Path(_repository_dir(root, name)) / ".stacks"
     programs.mkdir(parents=True, exist_ok=True)
     shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", programs)
     return str(Path(_repository_dir(root, name)))
@@ -1010,7 +1010,7 @@ def test_json_publishes_a_refused_count_on_the_grid_block(isolated_env, capsys, 
     "absent".
     """
     directory = _repository_dir(isolated_env, "warehouse")
-    programs = Path(directory) / ".borg" / "chains"
+    programs = Path(directory) / ".stacks"
     programs.mkdir(parents=True, exist_ok=True)
     # One row, missing `order` -- structurally a manifest, refused whole by `validate`.
     (programs / "broken.json").write_text(json.dumps({"rows": [{"ref": "acme/ledger#1"}]}), encoding="utf-8")
@@ -1053,27 +1053,78 @@ def test_json_reports_a_stacks_manifest_with_its_stacks_path(isolated_env, capsy
     assert not (Path(directory) / ".borg").exists()
 
 
-def test_a_stem_declared_in_both_roots_counts_as_refused_not_as_no_manifest(isolated_env, capsys, monkeypatch):
-    """MUTATION: reword the duplicate warning so it carries no refusal marker and this goes red.
+@pytest.mark.parametrize("directory_name", ["chains", "programs"])
+def test_a_manifest_only_under_a_retired_root_renders_nowhere_and_borg_link_names_the_migration(
+    isolated_env, capsys, monkeypatch, directory_name
+):
+    """THE CONTRACT, THROUGH `borg link`. A VALID manifest under `.borg/<directory>` is not read: it is on no node,
+    it is not a "refused" file, and the page does not say "no stack manifests in the registry yet" about a
+    repository that declares one. It says which repository, and what to run.
 
-    Without the count STACKS prints the "run /borg-plan to scaffold one" sentence beside a
-    manifest that exists twice, which is the false advice the `refused` key was added to end.
+    The same shipped fixture that `test_a_registry_of_readable_manifests_publishes_refused_zero` loads from
+    `.stacks/` is placed under the retired root here, so the only variable is where it sits.
+
+    MUTATION: restore the `.borg/chains` read in `shell.manifest_roots` and `manifests` is non-empty; drop the
+    `unmigrated` stamp in `cli._grid` and the STACKS sentence reverts to the false "in the registry yet" one.
     """
     directory = _repository_dir(isolated_env, "warehouse")
-    for root in (".stacks", ".borg/chains"):
-        target = Path(directory) / root
-        target.mkdir(parents=True)
-        shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", target)
+    target = Path(directory) / ".borg" / directory_name
+    target.mkdir(parents=True)
+    shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", target)
     _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
     _stand_at_queen(isolated_env, monkeypatch)
 
     assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
     grid_block = json.loads(capsys.readouterr().out)["grid"]
-    assert grid_block["manifests"] == [] and grid_block["refused"] == 2
+    assert grid_block["manifests"] == [] and grid_block["declared"] == 0, "the retired root is not read"
+    assert grid_block["refused"] == 0 and grid_block["unmigrated"] == 1
+    named = [w for w in grid_block["warnings"] if "borg stack migrate" in w]
+    assert len(named) == 1 and directory in named[0] and f".borg/{directory_name}" in named[0]
+
     assert cli._run("", False, "human", local=True) == 0  # pylint: disable=protected-access
     page = capsys.readouterr().out
-    assert "2 manifests could not be read" in page
-    assert "to scaffold one" not in page and "in the registry yet" not in page
+    assert "manifests in 1 repository are still under .borg/chains and are no longer read" in page
+    assert "in the registry yet" not in page and "to scaffold one" not in page
+    signals = page[page.index("SIGNALS") :]
+    assert directory in signals and "borg stack migrate" in signals, "SIGNALS names the repository and the cure"
+
+
+def test_a_registry_with_no_retired_manifest_publishes_unmigrated_zero(isolated_env, capsys, monkeypatch):
+    """The negative half: a stamp that hardcoded `1` would pass the case above."""
+    directory = _manifest_workspace(isolated_env)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    grid_block = json.loads(capsys.readouterr().out)["grid"]
+    assert grid_block["manifests"] and grid_block["unmigrated"] == 0
+    assert not any("borg stack migrate" in w for w in grid_block["warnings"])
+
+
+def test_the_unmigrated_count_follows_the_scope_it_is_asked_about(isolated_env, capsys, monkeypatch):
+    """Warnings are registry-wide; the count is narrowed to the resolved directory, as `refused` is, so a stranded
+    manifest in some OTHER repository does not change what this repository's page says about itself.
+
+    MUTATION: drop the `directory` argument in the `unmigrated_repositories` stamp and the repository leg reads 2.
+    """
+    stranded = _repository_dir(isolated_env, "warehouse")
+    other = _repository_dir(isolated_env, "depot")
+    for directory in (stranded, other):
+        target = Path(directory) / ".borg" / "chains"
+        target.mkdir(parents=True)
+        shutil.copy(_LINK_FIXTURES / "manifests" / "warehouse-rollout.json", target)
+    _write_registry(
+        isolated_env,
+        {"warehouse": {"path": stranded, "status": "idle"}, "depot": {"path": other, "status": "idle"}},
+    )
+
+    _stand_at_queen(isolated_env, monkeypatch)
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    assert json.loads(capsys.readouterr().out)["grid"]["unmigrated"] == 2
+
+    monkeypatch.chdir(stranded)
+    assert cli._run("", False, "json", local=True) == 0  # pylint: disable=protected-access
+    assert json.loads(capsys.readouterr().out)["grid"]["unmigrated"] == 1
 
 
 def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(isolated_env, capsys, monkeypatch):
@@ -1085,7 +1136,7 @@ def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(
     than print an emptiness sentence.
     """
     directory = _repository_dir(isolated_env, "warehouse")
-    target = Path(directory) / ".borg" / "chains"
+    target = Path(directory) / ".stacks"
     target.mkdir(parents=True)
     bad_row = {"order": "2", "ref": "o/r#2", "status": "stacked", "gate": {"kind": "decision", "blocked_by": "x"}}
     good_row = {"order": "1", "ref": "o/r#1", "status": "stacked"}

@@ -1379,10 +1379,10 @@ def test_an_unrecognized_kind_reaches_unsure_through_the_real_loader(tmp_path):
     green if someone reverted the fixture, leaving the golden as the only guard on a row whose whole
     job is to be the guard.
     """
-    # `discover` takes REPOSITORY roots and globs `<root>/.borg/chains/`, so the shipped fixture is
+    # `discover` takes REPOSITORY roots and globs `<root>/.stacks/`, so the shipped fixture is
     # copied into that layout rather than read in place -- the bytes under test are still the
     # fixture's.
-    programs = tmp_path / "warehouse" / ".borg" / "chains"
+    programs = tmp_path / "warehouse" / ".stacks"
     programs.mkdir(parents=True)
     shutil.copy(os.path.join(_LINK_FIXTURES, "manifests", "warehouse-rollout.json"), str(programs))
 

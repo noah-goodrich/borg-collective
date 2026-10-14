@@ -23,7 +23,7 @@ from collections.abc import Mapping
 from typing import NoReturn
 
 from borg_core.compass import shell as compass_shell
-from borg_core.link import core, grid, picture, render, shell, worktree
+from borg_core.link import core, grid, overlay, picture, render, shell, worktree
 from borg_core.nextpick import cli as nextpick_cli
 from borg_core.nextpick import core as nextpick_core
 from borg_core.recon import core as recon_core
@@ -102,29 +102,6 @@ def _focus(repository: str, registry: dict, now_epoch: int) -> dict | None:
         "directives": shell.read_directives(entry.get("path")),
         "assimilated": shell.read_assimilated(entry.get("path")),
     }
-
-
-def _with_checkpoint_summaries(registry: dict) -> dict:
-    """The registry with every repository's `summary` REPLACED by its latest checkpoint's, or null.
-
-    `borg link` no longer reads the registry's `summary` (summarize.py's transcript heuristic, which
-    surfaced raw greetings and mid-sentence cuts) for display: the stored value is overwritten HERE,
-    in the copy this invocation renders, and never written back. A repository with no checkpoint, or a
-    checkpoint stating nothing, gets null and renders no summary. Expand step only: summarize.py and
-    the registry writer are untouched, so other readers of the stored field are unaffected.
-
-    EACH ENTRY'S OWN checkpoint, not its repo group's: the Queen board prints one row per directory, and a
-    worktree row carrying its sibling's summary described a session that was not there.
-    """
-    repositories = registry.get("projects") or {}
-    derived = {}
-    for name, entry in repositories.items():
-        if not isinstance(entry, dict):
-            derived[name] = entry
-            continue
-        summary = shell.read_checkpoint_summary(worktree.own_source(name, repositories))
-        derived[name] = {**entry, "summary": summary}
-    return {**registry, "projects": derived}
 
 
 def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: list | None = None) -> dict:
@@ -239,6 +216,11 @@ def _grid(registry: dict, scope: dict, local: bool, moment: int, tracks_out: lis
     # what this page says about itself. Empty in orchestrator scope, where the ladder's first arm
     # answers before this is read.
     block["refused"] = len(shell.refused_manifest_paths(warnings, directory))
+    # THE SAME STAMP, FOR THE SAME REASON, for a repository whose manifests sit under a retired root: they are
+    # not read, so they are not among `manifests` either, and an empty STACKS section would be the confident
+    # falsehood "no stack declares work here". Counted per repository (a repository holding both retired roots
+    # warns twice), additive inside the `grid` block, so no pre-existing key moves.
+    block["unmigrated"] = len(set(shell.unmigrated_repositories(warnings, directory)))
     return block
 
 
@@ -356,7 +338,7 @@ def _document(  # pylint: disable=too-many-locals
     # collective and for one repository cannot both be answered, and the flag is the more specific ask.
     repository = "" if overview else repository
     moment = shell.now_epoch()
-    overlaid = _with_checkpoint_summaries(shell.registry_with_state(now=moment))
+    overlaid = overlay.with_checkpoint_summaries(shell.registry_with_state(now=moment))
     repositories = core.visible_repositories(overlaid, show_all, moment)
     order = core.order_repositories(repositories)
 

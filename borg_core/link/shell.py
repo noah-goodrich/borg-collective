@@ -605,6 +605,7 @@ def read_plan(repository_path: str | None) -> dict | None:
 discover_manifests = manifest_shell.discover_registered
 repository_slug = manifest_shell.repository_slug
 refused_manifest_paths = manifest_shell.refused_manifest_paths
+unmigrated_repositories = manifest_shell.unmigrated_repositories
 
 # Seconds one adapter gets before it is SIGKILLed, when `link` is the caller. recon's own default is
 # 30 -- correct for a morning link-up a human deliberately waits on, absurd for the front door AC1
