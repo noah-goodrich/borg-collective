@@ -1,0 +1,5 @@
+{
+  "desc": "Cut the link-up turn from eight API requests to three with one host command that prints every mechanical input",
+  "program": "2026-10-14-link-up-prepare",
+  "rows": []
+}
