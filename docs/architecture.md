@@ -88,7 +88,7 @@ writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/a
     hooks/
         borg-link-down.sh       SessionStart → status=active + checkpoint injection
         borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
-        borg-notify.sh          Notification → status=waiting + reason
+        borg-notify.sh          permission/elicitation Notification → status=waiting + reason
         borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
         borg-dispatch-guard.sh  PreToolUse → >=92% usage dispatch veto (Usage Guardian)
         borg-agent-model-guard.sh  PreToolUse (Agent|Task) → subagent_type allowlist + model/effort caps

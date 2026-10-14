@@ -206,7 +206,7 @@ _cur_state=$(_borg_state_read "$PROJ_DIR" ${_REPO+"$_REPO"})
 _new_state=$(printf '%s' "$_cur_state" | jq \
     --arg sid "$SESSION_ID" \
     --arg now "$NOW" \
-    '.status = "active" | .last_activity = $now |
+    '.status = "active" | .last_activity = $now | del(.waiting_reason) |
      (if $sid != "" then .claude_session_id = $sid else . end)')
 _borg_state_write "$PROJ_DIR" "$_new_state" ${_REPO+"$_REPO"} || true
 
