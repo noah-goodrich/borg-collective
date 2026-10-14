@@ -164,7 +164,7 @@ def cmd_primitives(repo_root: Path, registry_path: Path) -> int:
         text = path.read_text(errors="replace")
         py_title = _py_core(repo_root, "heading_title", text)
         sh_title = _shell_heading_title(path)
-        cases.append(("heading_title", str(path), py_title, sh_title, text.startswith("---")))
+        cases.append(("heading_title", str(path), py_title, sh_title, text.split("\n", 1)[0].rstrip() == "---"))
 
         py_met, py_total = _py_core(repo_root, "plan_progress", text)
         sh_met, sh_total = _shell_plan_progress(path)
@@ -185,7 +185,7 @@ def cmd_primitives(repo_root: Path, registry_path: Path) -> int:
         text = path.read_text(errors="replace")
         py_title = _py_core(repo_root, "heading_title", text)
         sh_title = _shell_heading_title(path)
-        cases.append(("heading_title", str(path), py_title, sh_title, text.startswith("---")))
+        cases.append(("heading_title", str(path), py_title, sh_title, text.split("\n", 1)[0].rstrip() == "---"))
 
         py_ship = _py_core(repo_root, "ship_date", text)
         sh_ship = _shell_ship_date(path)

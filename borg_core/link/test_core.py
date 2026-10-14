@@ -365,7 +365,12 @@ def test_heading_title(text, expected):
         ("---", ""),
         ("---\n---", ""),
         ("> quote\nbody", "> quote"),
-        ("----\nbody", "----\nbody".split("\n")[0]),
+        ("----\nbody", "----"),
+        ("---\nx: 1\n---\n---\nbody", "body"),
+        ("---\n---\n---", ""),
+        ("---\n...\n---", ""),
+        ("---\ntitle:\n---\nbody", "body"),
+        ("---\ntitle: ''\n---\nbody", "body"),
     ],
 )
 def test_heading_title_skips_frontmatter(text, expected):

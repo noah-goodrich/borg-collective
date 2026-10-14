@@ -427,8 +427,9 @@ def _frontmatter_title(rest: list[str]) -> str:
     end = next((i for i, ln in enumerate(rest) if ln.rstrip() in ("---", "...")), None)
     front, body = ([], rest) if end is None else (rest[:end], rest[end + 1:])
     heads = [ln for ln in body if ln.startswith("#")]
-    titles = [ln[len("title:"):].strip().strip("\"'").strip() for ln in front if ln.startswith("title:")]
-    prose = [ln.strip() for ln in body if ln.strip()]
+    titles = [ln[6:].strip().strip("\"'").strip() for ln in front if ln.startswith("title:")]
+    prose = [ln.strip() for ln in body if ln.strip() not in ("", "---", "...")]
+    titles = [t for t in titles if t]
     return _HEADING_PREFIX.sub("", heads[0]) if heads else (titles + prose + [""])[0]
 
 
