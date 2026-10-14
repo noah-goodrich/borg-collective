@@ -102,25 +102,30 @@ def _index_holds(path: str, dest: str) -> str:
     return f"{dest} is already in the git index" if held[1].strip("\0") else ""
 
 
-def _move_one(path: str, move: migrate.Move) -> str:
-    """Carry out one move; "" on success, else why not. A destination that exists is never overwritten."""
+def _move_one(path: str, move: migrate.Move) -> tuple[str, bool]:
+    """Carry out one move; `(problem, landed)`. `problem` is "" on success, else why not.
+
+    `landed` is True when the file is at its destination even though the move failed: an ignored manifest whose
+    `git add` failed after the plain move sits in `.stacks/` untracked, and the caller must say so. A destination
+    that exists is never overwritten.
+    """
     source, dest = os.path.join(path, move.source), os.path.join(path, move.dest)
     if os.path.lexists(dest):
-        return f"{move.dest} already exists"
+        return f"{move.dest} already exists", False
     held = _index_holds(path, move.dest)
     if held:
-        return held
+        return held, False
     if move.tracked:
         captured = _git(path, "mv", "--", move.source, move.dest)
-        return "" if captured is not None and captured[0] == 0 else f"git mv {move.source} failed"
+        return ("", False) if captured is not None and captured[0] == 0 else (f"git mv {move.source} failed", False)
     try:
         shutil.move(source, dest)
     except OSError as exc:
-        return f"could not move {move.source}: {exc}"
+        return f"could not move {move.source}: {exc}", False
     captured = _git(path, "add", "--", move.dest)
     if captured is None or captured[0] != 0:
-        return f"moved {move.source} but git add {move.dest} failed"
-    return ""
+        return f"git add {move.dest} failed", True
+    return "", False
 
 
 def execute(plan: migrate.RepositoryPlan) -> str:
@@ -136,10 +141,16 @@ def execute(plan: migrate.RepositoryPlan) -> str:
     except OSError as exc:
         return f"could not create {migrate.STACKS_DIR}/: {exc}"
     for move in plan.moves:
-        problem = _move_one(plan.path, move)
+        problem, landed = _move_one(plan.path, move)
         if problem:
-            moved = f"; already moved: {', '.join(done)}" if done else "; nothing was moved"
-            return f"{problem}{moved}"
+            parts = [problem]
+            if done:
+                parts.append(f"already moved: {', '.join(done)}")
+            if landed:
+                parts.append(f"moved but NOT staged, run git add {move.dest}: {move.source} -> {move.dest}")
+            elif not done:
+                parts.append("nothing was moved")
+            return "; ".join(parts)
         done.append(move.source)
     return ""
 

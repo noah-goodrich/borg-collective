@@ -660,9 +660,47 @@ def test_a_failed_move_or_add_is_reported(tmp_path, monkeypatch):
     plan = migrate.RepositoryPlan(
         repo, migrate.OUTCOME_MIGRATE, "", (migrate.Move(".borg/chains/a.json", ".stacks/a.json", False),)
     )
-    assert (
-        migrate_shell.execute(plan) == "moved .borg/chains/a.json but git add .stacks/a.json failed; nothing was moved"
+    failure = migrate_shell.execute(plan)
+    assert failure.startswith("git add .stacks/a.json failed; moved but NOT staged")
+    assert "nothing was moved" not in failure
+
+
+def test_a_failed_git_add_of_an_ignored_manifest_says_it_is_moved_and_unstaged(tmp_path):
+    repo = _repo(tmp_path, gitignore=CARVED + ".borg/chains/0hidden.json\n")
+    _write(repo, ".borg/chains/0hidden.json")
+    _write(repo, ".borg/chains/a.json")
+    _commit(repo)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    assert [m.source for m in plan.moves] == [".borg/chains/0hidden.json", ".borg/chains/a.json"]
+    lock = os.path.join(repo, ".git", "index.lock")
+    _write(repo, ".git/index.lock", "held\n")
+    try:
+        failure = migrate_shell.execute(plan)
+    finally:
+        os.remove(lock)
+
+    assert os.path.exists(os.path.join(repo, ".stacks/0hidden.json"))
+    assert not os.path.exists(os.path.join(repo, ".borg/chains/0hidden.json"))
+    assert "nothing was moved" not in failure
+    assert failure == (
+        "git add .stacks/0hidden.json failed; moved but NOT staged, run git add .stacks/0hidden.json: "
+        ".borg/chains/0hidden.json -> .stacks/0hidden.json"
     )
+
+
+def test_a_failed_git_add_after_an_earlier_move_names_both(tmp_path, monkeypatch):
+    repo = _repo(tmp_path, gitignore=CARVED + ".borg/chains/z-hidden.json\n")
+    _write(repo, ".borg/chains/a.json")
+    _write(repo, ".borg/chains/z-hidden.json")
+    _commit(repo)
+    plan = migrate.plan_repository(migrate_shell.gather(repo))
+    assert [m.source for m in plan.moves] == [".borg/chains/a.json", ".borg/chains/z-hidden.json"]
+    real = proc.run_capture
+    monkeypatch.setattr(proc, "run_capture", lambda argv, timeout=None: None if "add" in argv else real(argv, timeout))
+    failure = migrate_shell.execute(plan)
+
+    assert failure.startswith("git add .stacks/z-hidden.json failed; already moved: .borg/chains/a.json; ")
+    assert "moved but NOT staged, run git add .stacks/z-hidden.json" in failure
 
 
 def test_a_stacks_directory_that_cannot_be_created_is_reported(tmp_path):
