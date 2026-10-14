@@ -29,7 +29,7 @@ def _read_registry() -> tuple[Any, str]:
     path = paths.registry_path()
     try:
         with open(path, encoding="utf-8") as handle:
-            return json.load(handle), ""
+            return paths.normalize_registry(json.load(handle)), ""
     except FileNotFoundError:
         return None, f"no registry at {path} -- run 'borg add <path>' first"
     except (OSError, ValueError) as exc:

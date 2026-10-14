@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
+from typing import Any
 from pathlib import Path
 
 
@@ -156,3 +157,20 @@ def registry_path() -> Path:
     if override:
         return Path(override)
     return borg_dir() / "registry.json"
+
+
+def normalize_registry(doc: Any) -> Any:
+    """The registry document with its entry map under `projects`, whichever key the file uses.
+
+    THE ONE PLACE the Python side decides which top-level key holds the entries. The registry file is
+    mid-rename from `projects` to `repositories` (expand phase): readers accept either, writers still
+    write `projects`. `repositories` wins when both are present; otherwise `projects` is used as is.
+    Every other key is carried over untouched, and a non-dict document is returned unchanged so the
+    callers' own type checks still see what was on disk. Pure; a new dict is returned, `doc` is not
+    mutated. The `borg link --json` wire keys are a different contract and never pass through here.
+    """
+    if not isinstance(doc, dict) or "repositories" not in doc:
+        return doc
+    normalized = {key: value for key, value in doc.items() if key != "repositories"}
+    normalized["projects"] = doc["repositories"]
+    return normalized
