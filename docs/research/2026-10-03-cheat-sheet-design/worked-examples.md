@@ -46,7 +46,7 @@ $ borg link --local
  pytest-coverage-impact  [C]  idle         never    (no summary)
  ... 17 more rows, 15 of them "(no summary)" ...
  borg-collective         [C]  idle         3d ago†  (no summary) ◀
-▸ CHAINS  1 project · 4 refs · 4 unresolved · not swept  (30 lines)
+▸ STACKS  1 project · 4 refs · 4 unresolved · not swept  (30 lines)
 ▸ QUEUED  30 directives  (30 lines)
 ▸ NEXT  nobody looked
   - no state on this page was resolved; run without --local.

@@ -993,7 +993,7 @@ def test_document_scope_survives_an_archived_repository(isolated_env, monkeypatc
 
 
 def test_json_publishes_a_refused_count_on_the_grid_block(isolated_env, capsys, monkeypatch):
-    """The fourth CHAINS diagnosis is only as good as the key it reads.
+    """The fourth STACKS diagnosis is only as good as the key it reads.
 
     MUTATION, APPLIED AND CONFIRMED RED: replace the `shell.refused_manifest_paths(...)` stamp in
     `cli._grid` with the literal `0`. Without this case the whole arm survives that mutation --
@@ -1056,7 +1056,7 @@ def test_json_reports_a_stacks_manifest_with_its_stacks_path(isolated_env, capsy
 def test_a_stem_declared_in_both_roots_counts_as_refused_not_as_no_manifest(isolated_env, capsys, monkeypatch):
     """MUTATION: reword the duplicate warning so it carries no refusal marker and this goes red.
 
-    Without the count CHAINS prints the "run /borg-plan to scaffold one" sentence beside a
+    Without the count STACKS prints the "run /borg-plan to scaffold one" sentence beside a
     manifest that exists twice, which is the false advice the `refused` key was added to end.
     """
     directory = _repository_dir(isolated_env, "warehouse")
@@ -1081,7 +1081,7 @@ def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(
 
     MUTATION: restore row salvage in `shell._load_manifest` and the file loads (refused == 0, rows on the
     grid) with a "rows dropped" warning, so every assertion here goes red. The refusal must name the path
-    and the validator's first error in SIGNALS, and CHAINS must say the manifest could not be read rather
+    and the validator's first error in SIGNALS, and STACKS must say the manifest could not be read rather
     than print an emptiness sentence.
     """
     directory = _repository_dir(isolated_env, "warehouse")
@@ -1103,7 +1103,7 @@ def test_a_manifest_with_one_bad_row_is_refused_end_to_end_and_named_in_signals(
     signals = page[page.index("SIGNALS") :]
     assert str(refused_file) in signals, "SIGNALS names the refused file path"
     assert "gate.resolved_by is required" in signals, "and the validator first error"
-    assert "1 manifest could not be read" in page, "CHAINS shows the fourth diagnosis"
+    assert "1 manifest could not be read" in page, "STACKS shows the fourth diagnosis"
     assert "to scaffold one" not in page and "in the registry yet" not in page
     assert "rows dropped" not in page
 
