@@ -333,16 +333,16 @@ _eval_sandbox_repo() {
 }
 
 # ONE declared ref in a sandbox `$REPO`, so E2 has something to resolve. Authored here rather than
-# copied from this repository's own `.borg/programs/`: the count is then a fact of this file, which
+# copied from this repository's own `.stacks/`: the count is then a fact of this file, which
 # is what lets case 7 assert `checked=1` exactly instead of a digit that drifts whenever a real
 # manifest gains a row. The shape is the minimum `programs.validate` accepts -- a `rows` list whose
 # every entry carries a unique `ref` and an `order` -- and the ref names a repository that cannot
 # exist, so a real `gh` reaching this fixture would report it UNRESOLVED and turn case 7 red rather
 # than green on a live read.
 _declare_one_ref() {
-    mkdir -p "$1/.borg/programs"
+    mkdir -p "$1/.stacks"
     printf '%s\n' '{"rows": [{"order": "1", "ref": "borg-tests/nonexistent#1"}]}' \
-        > "$1/.borg/programs/one-ref.json"
+        > "$1/.stacks/one-ref.json"
 }
 
 # A sandbox `$REPO` whose only content is a pytest file with an AUTHORED number of `e2a` tests, some

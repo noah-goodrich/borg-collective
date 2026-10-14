@@ -12,9 +12,10 @@
 # hooks are a curated stateless subset (bash-guard, notify, nudges) and the plugin
 # carries no lib/ (self-contained, no machine-local sources). Sync skills + agents only.
 #
-# Both loops are additive and existing-targets-only (they only overwrite files that already
-# exist in the distro; they never create or delete). There is no --delete — this is a
-# one-way source→distro refresh, not a true mirror.
+# The agents loop is additive and existing-targets-only; the skills loop covers whole skill
+# directories of skills already in the distro (it may create files inside them, e.g.
+# references/; it never deletes; dot-prefixed files are skipped). There is no --delete —
+# this is a one-way source→distro refresh, not a true mirror.
 
 set -euo pipefail
 
@@ -48,21 +49,26 @@ changed=0
 for skill_dir in "$SRC"/*/; do
     skill_name="${skill_dir%/}"
     skill_name="${skill_name##*/}"
-    src_skill="${skill_dir}SKILL.md"
-    dst_skill="$DST/$skill_name/SKILL.md"
 
-    [[ -f "$src_skill" ]] || continue
+    [[ -f "${skill_dir}SKILL.md" ]] || continue
     [[ -d "$DST/$skill_name" ]] || continue  # only sync skills that already exist in the plugin
 
-    if ! diff -q "$src_skill" "$dst_skill" >/dev/null 2>&1; then
-        if [[ "$DRY_RUN" -eq 1 ]]; then
-            echo "would sync: $skill_name"
-        else
-            cp "$src_skill" "$dst_skill"
-            echo "synced: $skill_name"
+    # Whole skill directory (SKILL.md plus references/), additive: never deletes.
+    while IFS= read -r rel; do
+        rel="${rel#./}"
+        src_file="${skill_dir}${rel}"
+        dst_file="$DST/$skill_name/$rel"
+        if ! diff -q "$src_file" "$dst_file" >/dev/null 2>&1; then
+            if [[ "$DRY_RUN" -eq 1 ]]; then
+                echo "would sync: $skill_name/$rel"
+            else
+                mkdir -p "$(dirname "$dst_file")"
+                cp "$src_file" "$dst_file"
+                echo "synced: $skill_name/$rel"
+            fi
+            changed=$((changed + 1))
         fi
-        changed=$((changed + 1))
-    fi
+    done < <(cd "$skill_dir" && find . -type f -not -path '*/.*' | LC_ALL=C sort)
 done
 
 # Agents: same additive, existing-targets-only contract as skills above. Only overwrite agent

@@ -150,7 +150,7 @@ def _write_registry(root: Path, repositories: dict) -> None:
 
 
 def _write_manifest(repository_dir: str, name: str, manifest: dict) -> Path:
-    directory = Path(repository_dir) / ".borg" / "chains"
+    directory = Path(repository_dir) / ".stacks"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{name}.json"
     path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -784,7 +784,7 @@ def test_a_malformed_manifest_warns_and_the_rest_of_the_grid_survives(isolated, 
     """One bad file must never blank the grid, and an unnamed skip is indistinguishable from a file
     that was never there. manifest/shell.py's header states the policy; this pins that link keeps it."""
     dirs = _four_repository_registry(isolated)
-    broken = Path(dirs["delta"]) / ".borg" / "chains"
+    broken = Path(dirs["delta"]) / ".stacks"
     broken.mkdir(parents=True, exist_ok=True)
     (broken / "broken.json").write_text("{ not json", encoding="utf-8")
     monkeypatch.chdir(dirs["delta"])
