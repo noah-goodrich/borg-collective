@@ -93,7 +93,7 @@ mean paying for a network round trip and then rendering the same overview as bef
   `.resolved` (refs that came back with a usable answer). As with `.grid.sources[].status`,
   `failed` and `degraded` mean the states below them are DECLARED rather than OBSERVED — treat
   them the same way.
-- `.grid.picture_width` is the widest `▸ CHAINS` picture row this document would draw, in VISIBLE
+- `.grid.picture_width` is the widest `▸ STACKS` picture row this document would draw, in VISIBLE
   columns (SGR and OSC-8 bytes excluded). Compare it to `PICTURE_BUDGET` (68). Over budget means the
   topology will wrap in a narrow pane and should be reported as a manifest problem — a ref is long
   or a level is too wide — not as a rendering bug. The human page says the same thing in
