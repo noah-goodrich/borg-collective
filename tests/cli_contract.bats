@@ -4462,6 +4462,72 @@ _repo_norm() {
     [[ "$output" == *"list|plan|sync"* ]] || false
 }
 
+# ── borg stack: the chain -> stack rename, EXPAND step ───────────────────────────────────────────
+# `borg stack` is the verb; `borg chain` is a dispatch arm that forwards to it (cmd_stack) until the
+# CONTRACT step. These mirror the three `borg chain` cases above, so the two spellings stay pinned to
+# the same behaviour. docs/plans/directives/2026-10-13-chain-to-stack-rename.md, section (a).
+
+@test "contract: argless 'borg stack' reaches the list default instead of a shift crash" {
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    mkdir -p "$BATS_TEST_TMPDIR/proj"
+    run zsh -c "'$BORG' stack"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"0 chain(s)"* ]] || false
+}
+
+@test "contract: 'borg stack list' sweeps a registry manifest end to end" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.stacks"
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.stacks/auth.json"
+    run zsh -c "'$BORG' stack list"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+}
+
+@test "contract: an unknown stack action prints usage including --recon" {
+    run zsh -c "'$BORG' stack bogus"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"list|plan|sync"* ]] || false
+    [[ "$output" == *"--recon"* ]] || false
+}
+
+@test "contract: 'borg stack' and 'borg chain' print the same document over the same registry" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.borg/chains"
+    echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.borg/chains/auth.json"
+    run zsh -c "'$BORG' stack list"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+    stack_output="$output"
+    run zsh -c "'$BORG' chain list"
+    [ "$status" -eq 0 ]
+    [ "$output" = "$stack_output" ]
+}
+
+@test "contract: --stacks-dir is a spelling of the manifests-dir flag, and its refusal names it" {
+    mkdir -p "$BATS_TEST_TMPDIR/proj/.stacks"
+    echo '{"program": "auth", "rows": [{"order": "1", "ref": "o/r#1"}]}' \
+        > "$BATS_TEST_TMPDIR/proj/.stacks/auth.json"
+    run zsh -c "'$BORG' stack list --stacks-dir '$BATS_TEST_TMPDIR/proj'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+    run zsh -c "'$BORG' chain list --stacks-dir '$BATS_TEST_TMPDIR/proj'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"auth: 1 row(s)"* ]] || false
+    run zsh -c "'$BORG' stack plan --stacks-dir"
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"--stacks-dir needs a path"* ]] || false
+}
+
+@test "contract: borg help lists stack in COMMANDS where chain was, and no longer lists chain there" {
+    run bash -c "zsh '$BORG' help | awk '/^  COMMANDS\$/{f=1;next} f && /^  [A-Z]/{f=0} f && /^    [a-z]/{print \$1}'"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *stack* ]] || false
+    [[ "$output" != *chain* ]] || false
+}
+
 # The rename is only safe if the old name still answers. A user with `borg program` in muscle memory
 # or in a script must get a pointer, not `unknown command` — and the pointer must carry the args, or
 # it sends them back to a bare verb they then have to re-type.

@@ -3190,7 +3190,11 @@ _borg_version_ge() {
 }
 
 # ── chain manifests (PM6) ──────────────────────────────────────────────────────
-# borg chain list|plan|sync — the sync coordinator over <repository>/.borg/chains/*.json.
+# borg stack list|plan|sync — the sync coordinator over <repository>/.stacks/*.json and
+# <repository>/.borg/chains/*.json. `borg stack` is the verb since the chain -> stack rename's
+# EXPAND step (docs/plans/directives/2026-10-13-chain-to-stack-rename.md); `borg chain` is a dispatch
+# arm that forwards here until the CONTRACT step, so `borg chain list` and `borg stack list` print the
+# same document. Everything below still says chain: the identifiers and strings move in the MIGRATE step.
 # The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
 # testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered repository
 # path becomes a --chains-dir, so `borg chain list` sweeps the whole collective. Explicit
@@ -3198,39 +3202,41 @@ _borg_version_ge() {
 # registry sweep.
 #
 # Renamed from `borg program` 2026-08-31 (AC7 decision 2). NOT `borg project`: a project is work that can
-# span repositories, but cmd_chain resolves roots by reading `.projects[].path` from the registry, where
+# span repositories, but cmd_stack resolves roots by reading `.projects[].path` from the registry, where
 # the entry is a REPOSITORY (the registry key keeps its name) — that verb would mean one thing and do
 # another. The
 # --chains-dir and --recon TOKENS are coordinator.py's argparse flags and are deliberately
-# untouched here; they move with the merge-tree retirement, not with the verb.
-cmd_chain() {
+# untouched here; they move with the merge-tree retirement, not with the verb. `--stacks-dir` is a
+# third spelling accepted HERE and passed down as --chains-dir, because coordinator.py learns it in
+# the MIGRATE step.
+cmd_stack() {
     local action="${1:-list}"
     case "$action" in
         list|plan|sync) ;;
-        *) die "usage: borg chain list|plan|sync [--chains-dir <path>]... ; plan also takes --recon <file>" ;;
+        *) die "usage: borg stack list|plan|sync [--stacks-dir <path>]... ; plan also takes --recon <file>" ;;
     esac
     # Guarded: zsh hard-errors a bare `shift` at $#==0 (unlike bash), and set -e makes that fatal —
-    # which would kill the argless `borg chain` the :-list default exists for.
+    # which would kill the argless `borg stack` the :-list default exists for.
     (( $# )) && shift
 
     typeset -a _chain_args
     local _explicit_dirs=0
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --chains-dir|--programs-dir)
+            --stacks-dir|--chains-dir|--programs-dir)
                 # THE REFUSAL NAMES THE SPELLING THE USER TYPED, not the canonical one. `$1` rather
                 # than a literal: a user who typed the legacy `--programs-dir` and is told
                 # "--chains-dir needs a path" has to work out that the two are the same flag, which
                 # is a worse error than the shift crash this guard replaced.
-                [[ -n "${2:-}" ]] || die "borg chain: $1 needs a path"
+                [[ -n "${2:-}" ]] || die "borg stack: $1 needs a path"
                 _chain_args+=(--chains-dir "$2"); _explicit_dirs=1; shift 2 ;;
             --recon)
                 # argparse registers --recon on the plan subparser only; failing here beats
                 # advertising a flag downstream then rejects.
-                [[ "$action" == "plan" ]] || die "borg chain: --recon is only valid with 'plan'"
-                [[ -n "${2:-}" ]] || die "borg chain: --recon needs a file (or -)"
+                [[ "$action" == "plan" ]] || die "borg stack: --recon is only valid with 'plan'"
+                [[ -n "${2:-}" ]] || die "borg stack: --recon needs a file (or -)"
                 _chain_args+=(--recon "$2"); shift 2 ;;
-            *)              die "unknown flag '$1' for borg chain" ;;
+            *)              die "unknown flag '$1' for borg stack" ;;
         esac
     done
 
@@ -3287,11 +3293,12 @@ cmd_help() {
                           --all     Include archived repositories
     next [--all|--switch|--pick n|--rows --json|--open p --chosen|--declined]  What needs your attention?
     switch [query]      fzf picker → jump to repository tmux window
-    chain <action>      Manifest coordinator over <repository>/.borg/chains/*.json
-                          list           Every declared chain across registered repositories
+    stack <action>      Manifest coordinator over <repository>/.stacks/*.json (and .borg/chains/*.json)
+                          list           Every declared stack across registered repositories
                           plan           Read-only three-way drift audit (borg / target / recon)
                           sync           Rewrite via borg's writer + dispatch to a sync target
-                          --chains-dir <path>    Explicit roots (suppresses the registry sweep)
+                          --stacks-dir <path>    Explicit roots (suppresses the registry sweep)
+                          'borg chain' is still accepted as a spelling of 'borg stack'
                           --recon <file> (plan only) recon JSON for the reality check
     scan                Discover repositories from session history
     add [path] [--name <n>]  Register a repository (defaults to $PWD, named by folder; --name overrides)
@@ -3950,7 +3957,7 @@ case "${1:-help}" in
     reap)           cmd_reap "${@:2}" ;;
     reap-worktrees) cmd_reap_worktrees "${@:2}" ;;
     doctor)         cmd_doctor "${@:2}" ;;
-    chain)          cmd_chain "${@:2}" ;;
+    stack|chain)    cmd_stack "${@:2}" ;;
     vinculum|vinc)  cmd_vinculum "${@:2}" ;;
     checkpoint-name)
         # Prints the filename stem a new checkpoint should use. Exists so that

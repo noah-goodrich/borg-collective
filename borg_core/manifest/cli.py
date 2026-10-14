@@ -2,8 +2,8 @@
 
 Three verbs, one per moment in a row's life:
 
-    scaffold   `/borg-plan` -- create `<name>.json` with an apex and no rows, in `.stacks/` or
-               `.borg/chains/` (derived, or `--root`). Idempotent and NEVER clobbering.
+    scaffold   `/borg-plan` -- create `<name>.json` with an apex and no rows, in `.stacks/` (or
+               `.borg/chains/` with `--root borg`). Idempotent and NEVER clobbering.
     add-row    `/borg-link-up` -- append a row for a ref, or update the one already carrying it.
     close      `/borg-assimilate` -- set a row's status, by ref.
 
@@ -241,9 +241,10 @@ def _cmd_scaffold(args: argparse.Namespace) -> int:
     re-plan, so an existing file is reported and left exactly as it is -- at exit 0, since "already
     scaffolded" is the desired end state and not a failure.
 
-    A NEW manifest goes where `shell.scaffold_root` says -- `--root`, else an existing root, else
-    `.stacks/` when git ignores `.borg/`, else borg's own. The second stdout line names the folder
-    and the reason; the first token of the first line (`scaffolded:` / `exists:`) is unchanged.
+    A NEW manifest goes where `shell.scaffold_root` says -- `.stacks/` unless `--root borg` asks for
+    borg's own, and never into a `.stacks/` that git ignores (that refuses, naming `--root borg`). The
+    second stdout line names the folder and the reason; the first token of the first line
+    (`scaffolded:` / `exists:`) is unchanged.
     """
     existing, problem = shell.locate_manifest(args.repository, args.name)
     if problem:
@@ -281,7 +282,11 @@ def _cmd_scaffold(args: argparse.Namespace) -> int:
         if args.title:
             apex["title"] = args.title
         manifest["apex"] = apex
-    directory, reason = shell.scaffold_root(args.repository, args.root)
+    try:
+        directory, reason = shell.scaffold_root(args.repository, args.root)
+    except placement.StacksIgnored as refusal:
+        print(f"{args.name}: refusing to scaffold, {refusal}", file=sys.stderr)
+        return 1
     if os.path.lexists(directory) and not os.path.isdir(directory):
         print(f"{args.name}: cannot scaffold, {directory} exists and is not a directory", file=sys.stderr)
         return 1

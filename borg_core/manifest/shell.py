@@ -572,17 +572,16 @@ def _write_refusal(name: str, errors: list[str], slug: str) -> InvalidManifest:
     return InvalidManifest(_invalid_manifest(name, detailed), detailed)
 
 
-def _borg_dir_is_ignored(repository_dir: str) -> bool:
-    """True when git says `.borg/chains/` is ignored in this repository. Any doubt is "not ignored".
+def _path_is_ignored(repository_dir: str, probe: str) -> bool:
+    """True when git says the repository-relative file `probe` is ignored. Any doubt is "not ignored".
 
     `git check-ignore -q` exits 0 for an ignored path, 1 for a not-ignored one and 128 on error, so
-    ONLY exit 0 counts: a non-git directory, a missing git, a timeout and a git error all answer False
-    and scaffold keeps borg's own root. The probe names a file UNDER `.borg/chains/`, not the directory,
-    because a `.gitignore` of `.borg/` and one of `.borg/chains/*` both match the file but only the
-    first matches the bare directory name.
+    ONLY exit 0 counts: a non-git directory, a missing git, a timeout and a git error all answer False.
+    The probe names a FILE under the directory, not the directory, because a `.gitignore` of `.borg/`
+    and one of `.borg/chains/*` both match the file but only the first matches the bare directory name.
     """
     captured = proc.run_capture(
-        ["git", "-C", repository_dir, "check-ignore", "-q", "--", ".borg/chains/.scaffold-probe.json"],
+        ["git", "-C", repository_dir, "check-ignore", "-q", "--", probe],
         timeout=GIT_TIMEOUT_SECONDS,
     )
     return captured is not None and captured[0] == 0
@@ -590,16 +589,26 @@ def _borg_dir_is_ignored(repository_dir: str) -> bool:
 
 def scaffold_root(repository_dir: str, override: str = "") -> tuple[str, str]:
     """`(directory, reason)` where `scaffold` should create a new manifest: gathers the facts, then
-    hands them to the pure `placement.choose_scaffold_root`. The git probe is skipped when the answer
-    cannot depend on it (an override, or either root already present)."""
+    hands them to the pure `placement.choose_scaffold_root`, which raises `placement.StacksIgnored`
+    when the answer is `.stacks/` and git would ignore it.
+
+    The `.stacks/` probe runs unless `--root borg` was asked for, since every other answer is
+    `.stacks/`. The `.borg/` probe only feeds the reason text, so it runs only when neither root exists.
+    """
     stacks = os.path.join(repository_dir, STACKS_DIRNAME)
     borg = manifest_dir(repository_dir)
     stacks_exists = os.path.isdir(stacks)
     borg_exists = os.path.isdir(borg)
-    needs_probe = override not in placement.ROOT_CHOICES and not stacks_exists and not borg_exists
+    wants_stacks = override != placement.ROOT_BORG
+    borg_ignored = (
+        wants_stacks
+        and not stacks_exists
+        and not borg_exists
+        and _path_is_ignored(repository_dir, ".borg/chains/.scaffold-probe.json")
+    )
+    stacks_ignored = wants_stacks and _path_is_ignored(repository_dir, f"{STACKS_DIRNAME}/.scaffold-probe.json")
     return placement.choose_scaffold_root(
-        override, stacks_exists, borg_exists, needs_probe and _borg_dir_is_ignored(repository_dir),
-        (stacks, borg),
+        override, stacks_exists, borg_exists, borg_ignored, (stacks, borg), stacks_ignored
     )
 
 
