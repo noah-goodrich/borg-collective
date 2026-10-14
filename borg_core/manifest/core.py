@@ -236,7 +236,7 @@ def declared_body(manifest: dict[str, Any]) -> dict[str, Any]:
 
     A NAME LIST, NOT A PREFIX RULE. This stripped every `_`-prefixed key until PR #341's review: an
     author's own `_comment` or `_note` (JSON has no comments, so people reach for exactly that) was
-    deleted by any `add-row`, `close` or `borg chain sync`, a loss origin/main's sync did not have.
+    deleted by any `add-row`, `close` or `borg stack sync`, a loss origin/main's sync did not have.
     The prefix rule guarded against a future stamp being persisted, but the price was paid today, in
     data the author wrote. The loader stamps two keys and `LOADER_STAMPED_KEYS` names them; a loader
     that learns a third must add it there, and `test_the_writer_persists_no_derived_key` feeds the

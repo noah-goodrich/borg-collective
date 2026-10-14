@@ -66,6 +66,7 @@ ROUTING_CARD="AGENT ROUTING — this session runs Opus (xhigh); every subagent i
   Workflow agent(): EVERY call sets an allowlisted agentType, or model sonnet/haiku AND effort
     low/medium/high, as string literals in an inline options object. Variables, spreads, unparseable
     scripts and unresolvable saved workflows are denied; there is no inherit escape hatch.
+  Read-only Workflow lenses (forensics, log reads, no-write reviews): borg-researcher or borg-scout, never borg-nanoprobe.
   Only exception: research-tools:* agents (any model/effort), after a research-tools skill/command ran.
   Kill switches: BORG_AGENT_MODEL_GUARD=0, BORG_WORKFLOW_MODEL_GUARD=0.
 Full guide: docs/agent-routing.md in the borg-collective repo."
@@ -121,7 +122,7 @@ if [[ "$MODE" == "orchestrator" ]]; then
     if [[ -f "$BORG_REGISTRY" ]]; then
         # Read registry for identity fields, then overlay state.json for each repository.
         # Build TSV: name, status, last_activity, path — sorted by last_activity desc.
-        _raw_tsv=$(jq -r '
+        _raw_tsv=$(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | "'
             .projects // {} | to_entries
             | map(select(.value.archived // false | not))
             | .[]
@@ -315,7 +316,7 @@ if [[ -f "$BORG_REGISTRY" ]]; then
         fi
         _borg_should_reap "$_s" "$_last" "$_live" && continue
         _active_count=$(( _active_count + 1 ))
-    done < <(jq -r '.projects | to_entries[]
+    done < <(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects | to_entries[]
         | [.key,
            (if (.value.path // "") == "" then "-" else .value.path end),
            (if (.value.tmux_window // "") == "" then "-" else .value.tmux_window end),

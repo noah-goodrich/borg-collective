@@ -39,7 +39,7 @@ _borg_registry_write() {
 
 borg_registry_read() {
     borg_registry_init
-    /bin/cat "$BORG_REGISTRY"
+    borg_registry_normalized "$BORG_REGISTRY"
 }
 
 borg_registry_list() {
@@ -341,6 +341,6 @@ borg_scan_path_should_skip() {
     while IFS= read -r rp; do
         [[ -z "$rp" ]] && continue
         [[ "$ppath" == "$rp"/* ]] && return 0
-    done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY" 2>/dev/null)
+    done < <(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | .projects[].path // empty" "$BORG_REGISTRY" 2>/dev/null)
     return 1
 }

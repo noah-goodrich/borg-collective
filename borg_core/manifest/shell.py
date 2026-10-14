@@ -45,7 +45,7 @@ import stat
 import tempfile
 from typing import Any
 
-from borg_core import proc
+from borg_core import paths as borg_paths, proc
 from borg_core.manifest import core, placement
 
 # `git remote get-url` on a healthy checkout is instant, but a repository whose object store sits on
@@ -56,30 +56,33 @@ from borg_core.manifest import core, placement
 GIT_TIMEOUT_SECONDS = 5
 
 
-CHAINS_DIRNAME = "chains"
+# The directory under `.borg/` that holds borg's own stacks. The VALUE stays "chains" because it is an on-disk
+# path that step (c) of the chain -> stack rename retires; only the identifier says stack.
+OWN_STACKS_DIRNAME = "chains"
 LEGACY_DIRNAME = "programs"
 
-# The second, tool-neutral root: `<repository>/.stacks/`, for a repository shared with people who do
-# not run borg and so should not have to carry a `.borg/` directory. It is READ alongside borg's own
-# root (see `manifest_roots`); it is CREATED into only when `scaffold_root` picks it, and an in-place
-# edit writes back to whichever file it found.
+# The tool-neutral root: `<repository>/.stacks/`, for a repository shared with people who do not run
+# borg and so should not have to carry a `.borg/` directory. It is the root `scaffold` creates into
+# (every placement rule resolves to it unless `--root borg` is given) and the target of `borg stack
+# migrate`; it is READ alongside borg's own root (see `manifest_roots`), and an in-place edit writes back
+# to whichever file it found.
 STACKS_DIRNAME = ".stacks"
 
 
 def manifest_dir(repository_dir: str) -> str:
-    """borg's own manifest root: `<repository>/.borg/chains`, or the legacy name.
+    """borg's own (retiring) manifest root: `<repository>/.borg/chains`, or the legacy name.
 
-    scaffold creates here unless `scaffold_root` picks `.stacks/`, and this is one of the two roots
-    manifests are READ from -- the other is `<repository>/.stacks/`, see `manifest_roots`. Nothing outside
+    scaffold creates here only on `--root borg`; by default it creates in `.stacks/`. This is one of the two
+    roots manifests are READ from -- the other is `<repository>/.stacks/`, see `manifest_roots`. Nothing outside
     those two directories is ever opened -- not `<repository>/.borg/anything.json`, not a manifest-shaped
     file in the repository root. What CHANGED with the hardened spec's B6 is not this rule but the sweep:
     every registered repository's copy of these directories is globbed, not just the one in scope.
 
     THE RENAME IS THE EXPAND PHASE, AND BOTH NAMES RESOLVE ON PURPOSE. AC7's verify greps the
     COMMANDS section of `borg help` for the retired word and gets two hits that are NOT the retired
-    verb -- `.borg/chains/*.json` in `chain`'s help line, and `--programs-dir`. Renaming the verb
-    (decision 2) could not reach either, because they are a filesystem path and a flag. `chains`
-    matches the verb `borg chain` and the `▸ CHAINS` section it already prints.
+    verb -- `.borg/chains/*.json` in the manifest verb's help line, and `--programs-dir`. Renaming the verb
+    (decision 2) could not reach either, because they are a filesystem path and a flag. The `chains` directory
+    is the name step (c) of the chain -> stack rename retires; until then it is read beside `.stacks/`.
 
     PRECEDENCE IS "WHICHEVER EXISTS", LEGACY LAST, and never both: a repository mid-migration must
     not have its manifests split across two directories, which would make `discover` emit each
@@ -91,7 +94,7 @@ def manifest_dir(repository_dir: str) -> str:
     to a follow-up, because no artifact may be read by rules it was not written to satisfy.
     """
     borg = os.path.join(repository_dir, ".borg")
-    new_dir = os.path.join(borg, CHAINS_DIRNAME)
+    new_dir = os.path.join(borg, OWN_STACKS_DIRNAME)
     if os.path.isdir(new_dir):
         return new_dir
     legacy = os.path.join(borg, LEGACY_DIRNAME)
@@ -190,7 +193,7 @@ def _reconcile(listed: list[tuple[str, list[str]]]) -> tuple[list[tuple[str, str
     """Flatten per-root listings, refusing any filename that appears in more than one root.
 
     One warning PER refused file, led by its path and built by `_invalid_manifest`, so
-    `refused_manifest_paths` counts both copies under their repository and CHAINS says a manifest
+    `refused_manifest_paths` counts both copies under their repository and STACKS says a manifest
     could not be read rather than that none exists.
     """
     owners: dict[str, list[str]] = {}
@@ -313,7 +316,7 @@ def _invalid_manifest(where: str, reasons: list[str]) -> str:
 
     There were four hand-written copies of this f-string and a fifth literal in the marker tuple, in
     one file, while `refused_manifest_paths`'s docstring claimed "exactly one producer". Reword any
-    copy and the CHAINS placeholder silently reverts to the false "no chain manifests in the
+    copy and the STACKS placeholder silently reverts to the false "no stack manifests in the
     registry yet", with nothing red -- the tests build their warnings through `discover`, so both
     sides move together.
     """
@@ -443,6 +446,7 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     """
     if not isinstance(registry, dict):
         return [], [f"registry: not an object ({type(registry).__name__}) -- no repositories swept"]
+    registry = borg_paths.normalize_registry(registry)
     repositories = registry.get("projects")
     if not repositories:
         return [], []
