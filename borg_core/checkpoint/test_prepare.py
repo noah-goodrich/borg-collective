@@ -62,13 +62,14 @@ def test_first_line_names_the_command_and_version():
     assert prepare.render(_facts()).splitlines()[0] == "borg checkpoint-prepare v1"
 
 
-def test_the_ten_fields_appear_in_the_documented_order():
+def test_the_ten_fields_and_the_source_dir_line_appear_in_the_documented_order():
     headers = _headers(prepare.render(_facts(extensions=_all_hooks())))
     expected = [
         "borg checkpoint-prepare v1",
         "PROJECT_ROOT",
         "CHECKPOINT_PATH",
         "PLAN",
+        "BORG_SOURCE_DIR",
         "GIT_STATUS",
         "MANIFEST_RESOLVE",
         "PR_REF",
@@ -83,6 +84,11 @@ def test_the_ten_fields_appear_in_the_documented_order():
 def test_plan_is_none_when_absent_and_a_path_when_present():
     assert "PLAN: none" in prepare.render(_facts()).splitlines()
     assert "PLAN: /work/repo/PROJECT_PLAN.md" in prepare.render(_facts(plan="/work/repo/PROJECT_PLAN.md")).splitlines()
+
+
+def test_borg_source_dir_is_a_path_line_and_unknown_by_default():
+    assert "BORG_SOURCE_DIR: unknown" in prepare.render(_facts()).splitlines()
+    assert "BORG_SOURCE_DIR: /opt/borg" in prepare.render(_facts(source_dir="/opt/borg")).splitlines()
 
 
 def test_manifest_stem_and_refusal_forms():
@@ -232,6 +238,7 @@ def test_skeleton_prints_every_header_even_with_no_facts_at_all():
         "PROJECT_ROOT",
         "CHECKPOINT_PATH",
         "PLAN",
+        "BORG_SOURCE_DIR",
         "GIT_STATUS",
         "MANIFEST_RESOLVE",
         "PR_REF",

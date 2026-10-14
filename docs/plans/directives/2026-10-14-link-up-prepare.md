@@ -46,6 +46,7 @@ Fields appear in this order. The header names are fixed and pinned by `tests/che
 - PREFER_TOOL is the resolved prefer-tool precedence for the `borg-link-up` subject from `borg_core.extensions` (the machine layer wins for prefer-tool, the repository layer wins for prose). Each line reads `PREFER_TOOL: hook=<hook> layer=<layer> status=<status> prefer="<value>" instead_of="<value>"`.
 - Extension headers are `EXTENSION_01_CONTEXT`, `EXTENSION_02_OUTPUT`, `EXTENSION_03_FOLLOWUP`, each with three lines: `<header>_MACHINE:`, `<header>_REPOSITORY:` (each `<path>` followed by a fenced body, or `not present`) and `<header>_PRECEDENCE:` (a one-line note from the existing extensions code).
 - STATUS is `ok`, or `fallback: <reason>` when an internal step failed and was caught; the reason is one line.
+- BORG_SOURCE_DIR (an eleventh line, added by S2 directly after `PLAN:`; the format name stays v1 because no consumer existed yet) is the absolute directory holding `borg_core`, which the skill copies into `PYTHONPATH` for the manifest and planstate commands. `borg.zsh` has no verb wrapping those two, so the skill cannot rely on `borg` to find the source tree.
 
 ### Fence delimiters
 

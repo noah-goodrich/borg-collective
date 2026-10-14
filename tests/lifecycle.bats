@@ -704,6 +704,7 @@ _fresh_checkpoint() {
     _run_stop_split
     [ "$STOP_RC" -eq 0 ]
     _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "No checkpoint in the last hour for myrepo"
+    _has "$(printf "%s" "$STOP_OUT" | jq -r .systemMessage)" "checkpoint before the session goes idle, while its cache is still warm"
     [ ! -s "${BATS_TEST_TMPDIR}/stop.err" ]
 }
 
