@@ -143,16 +143,17 @@ def execute(plan: migrate.RepositoryPlan) -> str:
     for move in plan.moves:
         problem, landed = _move_one(plan.path, move)
         if problem:
-            parts = [problem]
-            if done:
-                parts.append(f"already moved: {', '.join(done)}")
-            if landed:
-                parts.append(f"moved but NOT staged, run git add {move.dest}: {move.source} -> {move.dest}")
-            elif not done:
-                parts.append("nothing was moved")
-            return "; ".join(parts)
+            return _failure_report(problem, move, landed, done)
         done.append(move.source)
     return ""
+
+
+def _failure_report(problem: str, move: migrate.Move, landed: bool, done: list[str]) -> str:
+    """The failure line: the problem, what moved before it, and the failing file itself if it did move."""
+    moved = [f"already moved: {', '.join(done)}"] * bool(done)
+    unstaged = [f"moved but NOT staged, run git add {move.dest}: {move.source} -> {move.dest}"] * landed
+    nothing = ["nothing was moved"] * (not done and not landed)
+    return "; ".join([problem, *moved, *unstaged, *nothing])
 
 
 def registered_directories(registry: Any) -> tuple[list[str], list[str]]:
