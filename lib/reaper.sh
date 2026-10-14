@@ -224,3 +224,25 @@ _borg_reap_worktrees() {
         [ -e "$1" ] || rmdir "$wt_base" 2>/dev/null || true
     fi
 }
+
+# ── Registry top-level key (projects -> repositories, EXPAND phase) ───────────
+#
+# The registry file's entry map is mid-rename from `projects` to `repositories`. Readers accept either
+# and writers still write `projects`. THE shell-side decision lives here (the Python side's is
+# borg_core.paths.normalize_registry): this jq filter maps a document that has `repositories` onto
+# `.projects`, so every downstream filter keeps reading `.projects` and every writer round-trips to the
+# old key. `repositories` wins when both are present. It lives in this file only because this is the one
+# file already sourced by the zsh CLI, the bash hooks and (inlined) the plugin build.
+#
+# Direct-file readers prefix their filter:  jq "$BORG_REGISTRY_NORM_JQ | .projects[...]" "$file"
+BORG_REGISTRY_NORM_JQ='if type == "object" and has("repositories") then (.projects = .repositories | del(.repositories)) else . end'
+
+# Print <file> (default $BORG_REGISTRY) as JSON with the entry map under `.projects`. Byte-identical to
+# `cat` unless the file mentions "repositories", so the common (old-key) path forks nothing extra.
+borg_registry_normalized() {
+    local _f="${1:-$BORG_REGISTRY}"
+    case "$(< "$_f")" in
+        *'"repositories"'*) jq "$BORG_REGISTRY_NORM_JQ" "$_f" ;;
+        *) /bin/cat "$_f" ;;
+    esac
+}
