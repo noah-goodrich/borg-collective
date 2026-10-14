@@ -520,7 +520,7 @@ HOOKS_JSON='{
         ]
       },
       {
-        "matcher": "Skill|Write|Edit|MultiEdit|NotebookEdit",
+        "matcher": "Skill|Write|Edit|MultiEdit|NotebookEdit|Bash",
         "hooks": [
           {
             "type": "command",

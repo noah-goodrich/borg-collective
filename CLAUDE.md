@@ -42,7 +42,7 @@ Two independent tools that compose:
   `drone.zsh` and no `status)` arm in its case dispatch; `./drone.zsh status` exits 1 with "unknown
   command 'status'". Removed 2026-08-28, same reason as `borg watch` above. The drone table below is
   the surface of record.
-- Hooks (17): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
+- Hooks (18, incl. borg-nanoprobe-guard): borg-link-down.sh (status=active + latest-checkpoint injection), borg-link-up.sh
   (status=idle + uncommitted-changes tracking + no-checkpoint nudge), borg-notify.sh, plus
   bash-guard, borg-dispatch-guard, borg-agent-model-guard, borg-workflow-model-guard, borg-memory-read-log, borg-plan-promote, borg-supabase-guard, borg-verifier-guard, borg-resume-hook,
   notify, pre-commit-remind, tool-count-nudge (full list under Files below)
@@ -195,6 +195,7 @@ hooks/
     borg-prefer-tool-log.sh PostToolUse (Bash) → logs bypasses of a live prefer-tool preference
     borg-supabase-guard.sh  PreToolUse (Bash) → blocks non-stillpoint supabase start/stop/db reset
     borg-verifier-guard.sh  PreToolUse (Bash) → verifier: git/gh reads
+    borg-nanoprobe-guard.sh PreToolUse (Skill/Write/Edit/Bash) → nanoprobe: skill grant + no borg/extensions access
     borg-resume-hook.sh     Events → borg-resume ledger (append-only)
     notify.sh               Host-side macOS notification on turn completion (skipped in-container)
     pre-commit-remind.sh    PreToolUse (Bash) → nudge to run /simplify + /borg-assimilate on commit

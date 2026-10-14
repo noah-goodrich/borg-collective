@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# borg-nanoprobe-guard.sh — PreToolUse hook (matcher: Skill|Write|Edit|MultiEdit|NotebookEdit): make the
+# borg-nanoprobe-guard.sh — PreToolUse hook (matcher: Skill|Write|Edit|MultiEdit|NotebookEdit|Bash): make the
 # borg-nanoprobe fence a gate instead of prose.
 #
 # Two rules, both scoped to the nanoprobe by the payload's `agent_type` exactly the way
@@ -13,6 +13,9 @@
 #      Every other Skill call is denied.
 #   2. Write|Edit|MultiEdit|NotebookEdit: denied for any path under ${XDG_CONFIG_HOME:-$HOME/.config}/borg/
 #      extensions/, so a nanoprobe cannot author its own permission.
+#   3. Bash: denied for any command whose text references the extensions directory in any spelling (resolved
+#      path, $XDG_CONFIG_HOME form, ~/.config form, bare .config/borg/extensions, agent-extensions), so a shell
+#      redirect cannot bypass rule 2. Reads need no Bash (the agent uses the Read tool), so any reference is denied.
 #
 # Contract: a deny exits 2 with the reason on stderr (same as borg-verifier-guard.sh). Errors in the hook fail
 # OPEN (exit 0). The fast path is pure bash builtins: a payload that never mentions borg-nanoprobe exits 0
@@ -78,6 +81,13 @@ def under_extensions(p, cwd):
     return any(c == r or c.startswith(r + os.sep) for c in cands for r in roots)
 
 
+def mentions_extensions(cmd):
+    root = os.path.join(config_home(), "borg", "extensions")
+    needles = (root, os.path.realpath(root), "borg/extensions", ".config/borg/extensions",
+               "agent-extensions")
+    return any(n in cmd for n in needles)
+
+
 def deny(reason):
     sys.stderr.write("borg nanoprobe guard: denied for borg-nanoprobe.\n  - %s\nKill switch: "
                      "BORG_NANOPROBE_GUARD=0.\n" % reason)
@@ -107,6 +117,10 @@ def main():
         p = ti.get("file_path") or ti.get("notebook_path") or ti.get("path")
         if isinstance(p, str) and p and under_extensions(p, data.get("cwd")):
             return deny("%s under borg/extensions/ is not allowed; extensions are user-authored" % tool)
+    if tool == "Bash":
+        cmd = ti.get("command")
+        if isinstance(cmd, str) and mentions_extensions(cmd):
+            return deny("Bash command referencing borg/extensions/ is not allowed; extensions are user-authored")
     return 0
 
 

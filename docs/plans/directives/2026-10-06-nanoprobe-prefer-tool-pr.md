@@ -59,7 +59,7 @@ The work happens in a worktree off borg-collective's main, since the main checko
 
 - **A wider background agent.** Skill on an `acceptEdits` agent can invoke any installed skill, including ones that post to Slack. The fence is the scope gate, which extensions can't relax; enforcement beyond prose would be a PreToolUse warning.
 - **Undocumented mechanics.** Whether a background subagent can call a plugin skill isn't documented. The live run is the gate, and if it fails, the fallback keeps today's behavior.
-- **The sync carries more than this change.** The claude-plugins copy holds about 20 refreshed files nobody committed, the latest batch at 13:58 on 2026-10-06, and `sync-plugin.sh` still defaults to `/Users/noah/`. Review the copy's whole diff before committing it.
+- **The sync carries more than this change.** The claude-plugins copy holds about 20 refreshed files nobody committed, the latest batch at 13:58 on 2026-10-06, and `sync-plugin.sh` still defaults to a personal absolute path. Review the copy's whole diff before committing it.
 - **Facts go only as far as the preferred tool reads them.** The team's PR skill has no caller contract, so nanoprobe's facts arrive as prose the skill may or may not use.
 
 ## Scope changes

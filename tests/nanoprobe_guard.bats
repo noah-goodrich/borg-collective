@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
-# Tests for hooks/borg-nanoprobe-guard.sh — PreToolUse (Skill|Write|Edit|MultiEdit|NotebookEdit): a nanoprobe
-# may call only the skill its machine-layer brief grants, and may not write under borg/extensions/.
+# Tests for hooks/borg-nanoprobe-guard.sh — PreToolUse (Skill|Write|Edit|MultiEdit|NotebookEdit|Bash): a
+# nanoprobe may call only the skill its machine-layer brief grants, and may not write to or name borg/extensions/.
 
 load test_helper/setup
 
@@ -101,5 +101,32 @@ _deny() {
 @test "the hook is built and registered with the Skill matcher" {
     grep -qE '_build_self_contained_hook .*borg-nanoprobe-guard\.sh' "$BUILD_PLUGIN"
     run grep -B6 'borg-nanoprobe-guard.sh"' "$BUILD_PLUGIN"
-    [[ "$output" == *"Skill|Write|Edit|MultiEdit|NotebookEdit"* ]]
+    [[ "$output" == *"Skill|Write|Edit|MultiEdit|NotebookEdit|Bash"* ]]
+}
+
+@test "a nanoprobe Bash redirect into the brief path is denied" {
+    _call Bash command "echo x > $XDG_CONFIG_HOME/borg/extensions/agent-extensions/borg-nanoprobe/brief.md"
+    _deny
+}
+
+@test "a nanoprobe Bash tee via the tilde form is denied" {
+    _call Bash command 'echo x | tee ~/.config/borg/extensions/agent-extensions/borg-nanoprobe/brief.md'
+    _deny
+}
+
+@test "a nanoprobe Bash command via the XDG variable form is denied" {
+    _call Bash command 'echo x >> "$XDG_CONFIG_HOME/borg/extensions/y"'
+    _deny
+}
+
+@test "a nanoprobe Bash command not mentioning the directory passes" {
+    _call Bash command 'git status --short'
+    [ "$status" -eq 0 ]
+}
+
+@test "a non-nanoprobe Bash command mentioning the directory passes" {
+    _call Bash command "echo x > $XDG_CONFIG_HOME/borg/extensions/x.md" borg-collective:borg-grunt
+    [ "$status" -eq 0 ]
+    _call Bash command "ls $XDG_CONFIG_HOME/borg/extensions" -
+    [ "$status" -eq 0 ]
 }
