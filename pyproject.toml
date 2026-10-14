@@ -140,12 +140,17 @@ allowed_prefixes = ["borg_core", "__future__"]
 # `migrate.py` (`borg stack migrate`'s planner) is here on the same terms: pure by construction, and unlisted
 # it would be unclassified and unenforced while `make lint` stayed green. Its imports are pinned to the exact
 # roots `{"__future__", "dataclasses", "typing"}` by borg_core/manifest/test_migrate.py's AST walk.
+#
+# `prepare.py` (`borg checkpoint-prepare`'s assembler) is here on the same terms as `picture.py`: pure by
+# construction, and unlisted it would be unclassified and unenforced while `make lint` stayed green.
+# borg_core/checkpoint/test_prepare.py pins its imports to an exact root set by AST walk.
+#
 # `borg_core/compass/core.py` (the compass reader's pure half) needed no new entry for the reason the planstate
 # paragraph gives: classification is by BASENAME and `core.py` is already listed. Its AST import-walk test
 # (borg_core/compass/test_core.py) pins the exact roots `{"__future__", "datetime", "re"}`; `shell.py`, which
 # reads the files, is unclassified on purpose, like every other package's.
 [tool.clean-arch.module_map]
-Domain = ["across.py", "core.py", "errors.py", "grid.py", "migrate.py", "picture.py", "refs.py", "render.py", "placement.py", "worktree.py"]
+Domain = ["across.py", "core.py", "errors.py", "grid.py", "migrate.py", "picture.py", "prepare.py", "refs.py", "render.py", "placement.py", "worktree.py"]
 
 [tool.coverage.run]
 source = ["borg_core"]

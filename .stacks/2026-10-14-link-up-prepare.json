@@ -1,0 +1,12 @@
+{
+  "desc": "Cut the link-up turn from eight API requests to three with one host command that prints every mechanical input",
+  "program": "2026-10-14-link-up-prepare",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#401",
+      "why": "S1: the checkpoint-prepare host command and the plan of record"
+    }
+  ]
+}

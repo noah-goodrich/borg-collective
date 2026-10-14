@@ -94,8 +94,11 @@ class Running(NamedTuple):
     sink: IO[bytes]
 
 
-def run_background(argv: list[str]) -> Running | None:
-    """Start `argv` and return its handle WITHOUT waiting, or None when it could not be started.
+def run_background(argv: list[str], cwd: str | None = None) -> Running | None:
+    """Start `argv` (in `cwd`, when given) and return its handle WITHOUT waiting, or None when it could not start.
+
+    `cwd` exists for the one caller whose tool has no `-C` flag: `gh pr view` answers for the repository it is run
+    inside. A `cwd` that does not exist is an OSError at spawn, so it degrades to None like a missing binary.
 
     THE HANDLE MUST BE PASSED TO `collect`, exactly once. Nothing else closes the sink or reaps the
     child. This exists so a caller can overlap one subprocess with other work -- `borg link` starts
@@ -128,6 +131,7 @@ def run_background(argv: list[str]) -> Running | None:
             stderr=subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
             start_new_session=True,
+            cwd=cwd,
         )
     except (OSError, subprocess.SubprocessError):
         sink.close()
@@ -194,7 +198,7 @@ def collect(handle: Running | None, timeout: float | None = None) -> tuple[int, 
         sink.close()
 
 
-def run_capture(argv: list[str], timeout: float | None = None) -> tuple[int, str] | None:
+def run_capture(argv: list[str], timeout: float | None = None, cwd: str | None = None) -> tuple[int, str] | None:
     """Run `argv` to completion and return `(returncode, stdout)`, or None. See `collect`.
 
     ONE IMPLEMENTATION, NOT TWO. This is literally `collect(run_background(argv), timeout)` so the
@@ -203,4 +207,7 @@ def run_capture(argv: list[str], timeout: float | None = None) -> tuple[int, str
     borg_core where a subprocess is constructed at all, which is what makes test_grid.py's
     `record_forks` probe able to see every fork by wrapping one name.
     """
-    return collect(run_background(argv), timeout)
+    # `cwd` is passed only when given: the existing callers (and the spies that pin this composition) call
+    # `run_background(argv)` with one argument, and that contract does not change for them.
+    handle = run_background(argv) if cwd is None else run_background(argv, cwd)
+    return collect(handle, timeout)

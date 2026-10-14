@@ -37,3 +37,14 @@ def test_suffix_length_is_the_module_constant(monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "abcdefghijklmnop")
     assert shell.checkpoint_stem().split("-")[-1] == "abcdef"
     assert core.SUFFIX_LENGTH == 6
+
+
+def test_stem_takes_a_handed_session_and_a_pinned_moment(monkeypatch):
+    from datetime import datetime
+
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "envenv")
+    moment = datetime(2026, 10, 14, 10, 10, 10)
+    assert shell.checkpoint_stem("3b0f70ca-74cd", moment) == "2026-10-14-101010-3b0f70"
+    assert shell.checkpoint_stem("", moment) == "2026-10-14-101010-envenv"
+    monkeypatch.delenv("CLAUDE_CODE_SESSION_ID")
+    assert shell.checkpoint_stem("", moment) == "2026-10-14-101010"
