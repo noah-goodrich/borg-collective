@@ -7,6 +7,12 @@
       "order": "1",
       "ref": "noah-goodrich/borg-collective#401",
       "why": "S1: the checkpoint-prepare host command and the plan of record"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#402",
+      "why": "S2: the link-up skill loads every input through checkpoint-prepare and writes in three requests"
     }
   ]
 }
