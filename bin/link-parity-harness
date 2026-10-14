@@ -138,7 +138,10 @@ def _py_core(repo_root: Path, func: str, *args: str) -> str:
 def _collect_sample_files(registry_path: Path, limit: int = 40) -> dict:
     """Real markdown files reachable from the registry: PROJECT_PLAN.md and assimilated plans.
     Read-only -- never written to. Bounded to `limit` per category so this stays fast."""
-    registry = json.loads(registry_path.read_text())
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from borg_core import paths as borg_paths
+
+    registry = borg_paths.normalize_registry(json.loads(registry_path.read_text()))
     plans: list[Path] = []
     assimilated: list[Path] = []
     for entry in (registry.get("projects") or {}).values():

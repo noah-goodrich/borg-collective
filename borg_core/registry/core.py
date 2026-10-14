@@ -130,3 +130,23 @@ def needs_derivation(entry: dict | None, repository: str) -> bool:
     """True when `tmux_window` was never customized: absent, or still equal to the repository name."""
     current = (entry or {}).get("tmux_window")
     return not current or current == repository
+
+
+def plan_key_migration(doc: object) -> tuple[str, dict | None]:
+    """`(verdict, renamed)` for the registry's `projects` -> `repositories` key rename.
+
+    Verdicts: `migrate` (has `projects`, no `repositories`; `renamed` is the document with the key
+    renamed IN PLACE so entry order and every other key survive), `both` (conflict, left alone),
+    `already` (only `repositories`), `neither` (nothing to rename), `invalid` (not an object).
+    Anything but `migrate` returns `renamed=None`: the verb writes nothing.
+    """
+    if not isinstance(doc, dict):
+        return "invalid", None
+    has_old, has_new = "projects" in doc, "repositories" in doc
+    if has_old and has_new:
+        return "both", None
+    if has_new:
+        return "already", None
+    if not has_old:
+        return "neither", None
+    return "migrate", {("repositories" if key == "projects" else key): value for key, value in doc.items()}
