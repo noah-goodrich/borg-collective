@@ -45,7 +45,7 @@ import stat
 import tempfile
 from typing import Any
 
-from borg_core import proc
+from borg_core import paths as borg_paths, proc
 from borg_core.manifest import core, migrate, placement
 
 # `git remote get-url` on a healthy checkout is instant, but a repository whose object store sits on
@@ -440,6 +440,7 @@ def _registered_paths(registry: Any) -> tuple[list[str], list[str]]:
     """
     if not isinstance(registry, dict):
         return [], [f"registry: not an object ({type(registry).__name__}) -- no repositories swept"]
+    registry = borg_paths.normalize_registry(registry)
     repositories = registry.get("projects")
     if not repositories:
         return [], []

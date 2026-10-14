@@ -859,7 +859,9 @@ def test_a_refused_manifest_returns_none_and_a_warning_never_both(tmp_path):
 
     MUTATION: restore row salvage and `manifest` comes back non-None next to its warning.
     """
-    repo = _write_manifest(tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", gate=_BAD_GATE)]))
+    repo = _write_manifest(
+        tmp_path, "repo", "a.json", _manifest([_row("1", "o/r#1"), _row("2", "o/r#2", gate=_BAD_GATE)])
+    )
     p = os.path.join(shell.manifest_dir(repo), "a.json")
     manifest, warning = shell._load_manifest(p, "a.json")
     assert manifest is None
@@ -1891,6 +1893,41 @@ def test_retired_and_stacks_manifests_together_load_only_the_stacks_one_and_stil
     manifests, warnings = shell.discover([str(repository)])
     assert [m["_path"] for m in manifests] == [stacks]
     assert len(warnings) == 1 and "borg stack migrate" in warnings[0]
+
+
+def _repositories_registry(*paths):
+    """A registry in the expand-phase `repositories` shape: the same entries, the other top-level key."""
+    return {"repositories": {f"r{i}": {"path": p} for i, p in enumerate(paths)}}
+
+
+def test_a_repository_registered_under_the_repositories_key_is_swept_for_its_stacks_manifest(tmp_path):
+    """The registry key is mid-rename (`projects` -> `repositories`); the sweep must list every registered path
+    whichever key the file uses, or a migrated registry renders an empty grid.
+
+    MUTATION: drop the `normalize_registry` call in `_registered_paths` and `manifests` is empty, no warning.
+    """
+    first = tmp_path / "alpha"
+    second = tmp_path / "bravo"
+    stacks = _stacks_manifest(first, "alpha")
+    second.mkdir()
+    registry = _repositories_registry(str(first), str(second))
+    assert shell.registered_paths(registry) == ([str(first), str(second)], [])
+    manifests, warnings = shell.discover_registered(registry)
+    assert warnings == []
+    assert [m["_path"] for m in manifests] == [stacks]
+
+
+def test_the_unmigrated_warning_fires_for_a_repository_registered_under_the_repositories_key(tmp_path):
+    """A repository holding only `.borg/chains/x.json` is no longer read; under the `repositories` key it must
+    still be named, not silently missing from the sweep."""
+    repository = tmp_path / "alpha"
+    _retired_manifest(repository, "x")
+    manifests, warnings = shell.discover_registered(_repositories_registry(str(repository)))
+    assert manifests == []
+    assert len(warnings) == 1
+    assert warnings[0].startswith(f"{repository}: ") and ".borg/chains" in warnings[0]
+    assert "borg stack migrate" in warnings[0]
+    assert shell.unmigrated_repositories(warnings) == [str(repository)]
 
 
 def test_the_same_stem_in_both_roots_is_no_longer_refused_only_the_stacks_copy_is_read(tmp_path):

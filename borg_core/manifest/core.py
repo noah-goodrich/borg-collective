@@ -60,14 +60,15 @@ is that a non-conforming ref is a manifest defect to SURFACE, not a string to re
 surfacing point, and a validate error is fatal at load in shell._load_manifest.
 
 VOCABULARY. A *repository* is a git repo; a *project* is work spanning one or more repositories.
-"Program" is retired and names nothing here. The manifest FILES still live under `.borg/chains/` (or `.stacks/`)
-and still carry a top-level `program` key; those two literals are read verbatim because they are what
-is on disk, and nothing new is named after them.
+"Program" is retired and names nothing here. The manifest FILES live in `<repository>/.stacks/*.json`
+and still carry a top-level `program` key; that literal is read verbatim because it is what
+is on disk, and nothing new is named after it.
 
-WHERE MANIFESTS COME FROM. Files are read only from two roots under a repository -- borg's own
-`<repository>/.borg/chains/` and the tool-neutral `<repository>/.stacks/`, for a repository shared
-with people who do not run borg. Nothing outside them is opened: never `<repository>/.borg/` itself
-and never the repository root. A stem declared in both roots is refused by name. But the sweep spans EVERY registered
+WHERE MANIFESTS COME FROM. Files are read only from ONE root under a repository -- the tool-neutral
+`<repository>/.stacks/`, so a repository shared with people who do not run borg need carry no `.borg/`.
+Nothing outside it is opened: never `<repository>/.borg/` itself and never the repository root.
+`.borg/chains` and `.borg/programs` are no longer read; a repository still holding one gets a named warning
+pointing at `borg stack migrate`. But the sweep spans EVERY registered
 repository, not just the one in scope: a manifest declaring refs across four repositories lives under
 exactly one of them, so repository-scoped discovery renders an empty grid for the other three (the
 hardened spec's B6). Discovery is GLOBAL (shell.discover_registered); *selection* is scoped
