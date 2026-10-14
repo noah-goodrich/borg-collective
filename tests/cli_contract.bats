@@ -4789,13 +4789,23 @@ EOF
     # MUTATION-VERIFIED, not assumed: restoring `echo` on cmd_status's own `| jq` lines turns this
     # red with exit 5 and `jq: parse error: Invalid string: control characters from U+0000 through
     # U+001F must be escaped`. Measured before and after on this fixture.
+    #
+    # RE-POINTED when cmd_status stopped printing the registry's stored summary (it prints the newest
+    # checkpoint's tl;dr, see tests/checkpoint_summary_readers.bats). The registry row KEEPS the newline
+    # summary, so the entry cmd_status pipes through jq is exactly as hostile as before and the mutation
+    # still bites; what it must render is now the checkpoint's line, and the stored one must not appear.
     _link_mock_tmux ""
     _printf_jq_registry ""
+    mkdir -p "${BATS_TEST_TMPDIR}/alpha-ws/.borg/checkpoints"
+    printf '**tl;dr** -- checkpoint line one\n' > "${BATS_TEST_TMPDIR}/alpha-ws/.borg/checkpoints/2026-10-01-0900.md"
+    jq --arg p "${BATS_TEST_TMPDIR}/alpha-ws" '.projects.alpha.path = $p' "$BORG_REGISTRY" > "${BORG_REGISTRY}.new"
+    mv "${BORG_REGISTRY}.new" "$BORG_REGISTRY"
 
     run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; cmd_status alpha\" 2>&1"
     [ "$status" -eq 0 ] || { printf 'cmd_status exited %s\n%s\n' "$status" "$output" >&2; false; }
     [[ "$output" != *"parse error"* ]] || { printf 'jq still parsing echo output:\n%s\n' "$output" >&2; false; }
-    [[ "$output" == *"first line"* ]] || { printf 'no repository detail rendered:\n%s\n' "$output" >&2; false; }
+    [[ "$output" == *"checkpoint line one"* ]] || { printf 'no repository detail rendered:\n%s\n' "$output" >&2; false; }
+    [[ "$output" != *"first line"* ]] || { printf 'stored summary rendered:\n%s\n' "$output" >&2; false; }
 }
 
 @test "contract: _borg_do_switch survives a newline summary on the NO-tmux_window fallback arm" {

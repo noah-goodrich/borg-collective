@@ -17,6 +17,9 @@ setup_temp_dirs() {
     # value EXPORTED by the invoking shell beats that default and points every case at a directory
     # outside the sandbox, so drop it here; a case that needs a custom root sets it inline.
     unset BORG_ORCHESTRATOR_ROOT
+    # NO_COLOR is ambient state borg reads (borg.zsh's palette, link/cli.py). A developer who exports it would
+    # turn every coloured golden and ESC assertion red, so drop it; tests/no_color.bats sets it inline.
+    unset NO_COLOR
 
     # GIVE THE SANDBOX A GIT IDENTITY. HOME is redirected on the line above, so `~/.gitconfig` is
     # gone by construction -- and recon_adapter_github.bats's case "adapter: a linked worktree is

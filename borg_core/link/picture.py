@@ -160,7 +160,25 @@ def visible_len(text: str) -> int:
     parse_ref's character class, and the one place a double-width character could enter -- a PR title
     off the wire -- lands in a detail block, which is never column-aligned against anything.
     """
-    return len(_OSC8_RE.sub("", _SGR_RE.sub("", text)))
+    return len(plain(text))
+
+
+def plain(text: str) -> str:
+    """`text` with every SGR colour sequence and every OSC-8 hyperlink removed, glyphs and padding intact.
+
+    THE ONE PLACE THE PAGE BECOMES COLOURLESS, and it is a pure transform rather than a flag threaded
+    through the renderer. The page is built from f-strings that splice the module-level palette
+    (GREEN, DIM, NC ...) and `osc8` at well over a hundred sites across this file and render.py; a
+    `color` parameter would have to reach every one, and a missed site would leak an ESC byte under
+    NO_COLOR with no test noticing. Stripping the finished string cannot miss a site, and it cannot
+    misalign a column either, because every pad in the page is computed on VISIBLE text (`visible_len`
+    is this function's length) and the escapes are zero-width by construction.
+
+    PURE, so the decision stays at the boundary: nothing here reads the environment. `link/cli.py`
+    reads NO_COLOR once and chooses whether to call this. Only the two sequence families this module
+    emits are removed; any other byte is the document's own text and passes through.
+    """
+    return _OSC8_RE.sub("", _SGR_RE.sub("", text))
 
 
 def max_row_width(manifest_grids: list[dict]) -> int:

@@ -717,7 +717,11 @@ _cycle_repository() {
 _restart_repository() { _cycle_repository "$1" "$2" "restart"; }
 _rebuild_repository() { _cycle_repository "$1" "$2" "rebuild"; }
 
+# The Queen's window is "queen" since the rename; sessions started before it keep "orchestrator".
+_is_non_repository_window() { [[ "$1" == "queen" || "$1" == "orchestrator" || "$1" == "host" ]]; }
+
 # Shared --all iterator: walks every repository window (not host, queen or orchestrator) and calls op_func.
+# Pinned, with `fix --all`, by tests/drone_all_skips_queen.bats.
 _foreach_repository_window() {
     local op_func="$1" past_tense="$2"
     tmux has-session -t "$SESSION" 2>/dev/null || die "No $SESSION tmux session running."
@@ -727,8 +731,7 @@ _foreach_repository_window() {
 
     local count=0
     for wname in $windows; do
-        # The Queen's window is "queen" since the rename; sessions started before it keep "orchestrator".
-        [[ "$wname" == "queen" || "$wname" == "orchestrator" || "$wname" == "host" ]] && continue
+        _is_non_repository_window "$wname" && continue
         local pdir
         pdir=$(tmux show-option -t "$SESSION:$wname" -v @project_dir 2>/dev/null) || true
         if [[ -z "$pdir" ]]; then
@@ -963,7 +966,11 @@ cmd_fix() {
 
     local targets=()
     if [[ "${1:-}" == "--all" ]]; then
-        targets=(${(f)"$(tmux list-windows -t "$SESSION" -F '#W')"})
+        local -a all_windows=(${(f)"$(tmux list-windows -t "$SESSION" -F '#W')"})
+        local w
+        for w in $all_windows; do
+            _is_non_repository_window "$w" || targets+=("$w")
+        done
     elif [[ -n "${1:-}" ]]; then
         targets=("$(_drone_arg_window "$1")")
     else
@@ -1509,7 +1516,7 @@ cmd_help() {
     rebuild [repository] Rebuild images (--no-cache) + restart + re-exec panes
     rebuild --all        Rebuild all repository containers
     fix [repository]     Restore standard 2-pane layout for repository window
-    fix --all            Restore layout for all windows
+    fix --all            Restore layout for all repository windows
     toggle [repository]  Add/remove side pane (2-pane ↔ 3-pane)
     pane <direction>     Split the calling pane top|bottom|left|right (devcontainer-aware); a window holds
                          two panes, so with a side pane open it reuses that pane (unzooming the window if

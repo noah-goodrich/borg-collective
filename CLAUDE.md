@@ -185,7 +185,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
 hooks/
     borg-link-down.sh       SessionStart → status=active + latest-checkpoint injection
     borg-link-up.sh         Stop → status=idle + uncommitted warning + checkpoint nudge
-    borg-notify.sh          Notification → status=waiting + waiting_reason
+    borg-notify.sh          permission/elicitation Notification → status=waiting + waiting_reason
     borg-plan-promote.sh    PreToolUse (Edit/Write/NotebookEdit) → auto-promote ExitPlanMode plan
     bash-guard.sh           PreToolUse (Bash) → destructive-pattern hard-block + RO pre-approval
     borg-memory-read-log.sh PostToolUse (Read) → logs project-memory reads to memory-hits.log

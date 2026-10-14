@@ -14,6 +14,7 @@ setup() {
     [ -x /bin/bash ] || skip "no /bin/bash"
     export BORG_DIR="${BATS_TEST_TMPDIR}/borg"
     mkdir -p "$HOME/.claude"
+    HOOK_DIR="$REPO_ROOT/hooks"
     # setup_temp_dirs pre-populates ~/.claude/lib; _prepare_lib resets it per case
 }
 
@@ -25,24 +26,32 @@ _require_bash3() {
 }
 
 # <mode> where mode is nolib or noreaper
+# The hooks resolve the lib script-relative first, so the repo's own lib/ would be found and neither mode would be
+# exercised. Both modes therefore run COPIES of the hooks from a tree whose lib/ is in the same state as ~/.claude/lib.
 _prepare_lib() {
     rm -f "$BORG_TEST_HOME"/.claude/lib/*
     rmdir "$BORG_TEST_HOME/.claude/lib"
+    HOOK_DIR="${BATS_TEST_TMPDIR}/tree/hooks"
+    mkdir -p "$HOOK_DIR" "${BATS_TEST_TMPDIR}/tree/lib"
+    cp "$REPO_ROOT"/hooks/borg-nanoprobe-log.sh "$REPO_ROOT"/hooks/borg-memory-read-log.sh \
+        "$REPO_ROOT"/hooks/borg-prefer-tool-log.sh "$HOOK_DIR/"
+    ln -s "$REPO_ROOT/borg_core" "${BATS_TEST_TMPDIR}/tree/borg_core"
     if [ "$1" = noreaper ]; then
         mkdir -p "$HOME/.claude/lib"
         cp "$REPO_ROOT/lib/borg-hooks.sh" "$HOME/.claude/lib/borg-hooks.sh"
+        cp "$REPO_ROOT/lib/borg-hooks.sh" "${BATS_TEST_TMPDIR}/tree/lib/borg-hooks.sh"
     fi
 }
 
 _run_nanoprobe() {
-    run /bin/bash -c "printf '%s' '{\"agent_id\":\"a1\",\"agent_type\":\"borg-nanoprobe\",\"last_assistant_message\":\"done\",\"cwd\":\"$BATS_TEST_TMPDIR\"}' | /bin/bash '$REPO_ROOT/hooks/borg-nanoprobe-log.sh'"
+    run /bin/bash -c "printf '%s' '{\"agent_id\":\"a1\",\"agent_type\":\"borg-nanoprobe\",\"last_assistant_message\":\"done\",\"cwd\":\"$BATS_TEST_TMPDIR\"}' | /bin/bash '$HOOK_DIR/borg-nanoprobe-log.sh'"
 }
 
 _run_memory() {
     local d="$HOME/.claude/projects/-proj/memory"
     mkdir -p "$d"
     printf 'x' > "$d/m.md"
-    run /bin/bash -c "printf '%s' '{\"session_id\":\"s1\",\"tool_input\":{\"file_path\":\"$d/m.md\"}}' | /bin/bash '$REPO_ROOT/hooks/borg-memory-read-log.sh'"
+    run /bin/bash -c "printf '%s' '{\"session_id\":\"s1\",\"tool_input\":{\"file_path\":\"$d/m.md\"}}' | /bin/bash '$HOOK_DIR/borg-memory-read-log.sh'"
 }
 
 _run_prefer() {
@@ -50,7 +59,7 @@ _run_prefer() {
     mkdir -p "$d" "$BATS_TEST_TMPDIR/repo"
     git -C "$BATS_TEST_TMPDIR/repo" init --quiet
     printf -- '- Prefer-tool: `dev-workflow:create-pr`\n- Instead-of: `gh pr create`\n- Requires: command:sh\n\nDelegate.\n' > "$d/02-output.md"
-    run /bin/bash -c "printf '%s' '{\"tool_input\":{\"command\":\"gh pr create --title x\"},\"cwd\":\"$BATS_TEST_TMPDIR/repo\"}' | /bin/bash '$REPO_ROOT/hooks/borg-prefer-tool-log.sh'"
+    run /bin/bash -c "printf '%s' '{\"tool_input\":{\"command\":\"gh pr create --title x\"},\"cwd\":\"$BATS_TEST_TMPDIR/repo\"}' | /bin/bash '$HOOK_DIR/borg-prefer-tool-log.sh'"
 }
 
 @test "nanoprobe-log under /bin/bash: no ~/.claude/lib still appends the row" {
