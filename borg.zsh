@@ -3248,7 +3248,7 @@ cmd_stack() {
         local _proj_path
         while IFS= read -r _proj_path; do
             [[ -n "$_proj_path" ]] && _stack_args+=(--stacks-dir "$_proj_path")
-        done < <(jq -r '.projects[].path // empty' "$BORG_REGISTRY")
+        done < <(jq -r "${BORG_REGISTRY_NORM_JQ:-.} | .projects[].path // empty" "$BORG_REGISTRY")
         (( ${#_stack_args[@]} )) || die "registry has no repository paths — run 'borg add <path>' first"
     fi
 

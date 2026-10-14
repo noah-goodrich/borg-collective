@@ -1,0 +1,5 @@
+{
+  "desc": "Cut CLAUDE.md to 8 KB or less with nothing dropped, and the borg-link skill to at most 9 KB per run in repository scope and 42 KB in the Queen view, behind a size guard",
+  "program": "2026-10-14-context-diet",
+  "rows": []
+}

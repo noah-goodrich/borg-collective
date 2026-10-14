@@ -1,5 +1,6 @@
 # Project Plan: `borg next` as a chooser
 *Established: 2026-10-06*
+*Shipped: 2026-10-14 — borg-collective PRs [#274](https://github.com/noah-goodrich/borg-collective/pull/274) and [#275](https://github.com/noah-goodrich/borg-collective/pull/275), plus [#277](https://github.com/noah-goodrich/borg-collective/pull/277), [#283](https://github.com/noah-goodrich/borg-collective/pull/283) and [#286](https://github.com/noah-goodrich/borg-collective/pull/286) for the 2026-10-08 scope change, all merged to main. Archived by `/borg-assimilate`. No `/borg-verify` verdict was recorded on #274 or #275; a borg-verifier PASS on AC7 at 7b935d0 (2026-10-14) and green suites for AC1-AC6 stand in for them. Noah confirmed the manual tmux smoke run on 2026-10-14.*
 
 - Plan-slug: `2026-10-06-borg-next-chooser`
 
@@ -53,8 +54,11 @@ In a smoke test, the shipped chooser listed one row per project, with next step,
   - Verify: pytest for every rule, including a project with several items and a quiet project.
   - Evidence: `pytest:borg_core/nextpick/test_core.py`
   - Shipped: Shipped in https://github.com/noah-goodrich/borg-collective/pull/277 (rules) and https://github.com/noah-goodrich/borg-collective/pull/283 (YOU cap). Proof: `test_work_items_pr_rule_precedence`, `test_work_items_ignores_closed_prs_and_author`, `test_work_items_several_prs_order_you_first_then_agent_by_number`, `test_work_items_waiting_session_first`, `test_work_items_plan_row_and_suppression`, `test_work_items_checkpoint_fallback_and_quiet_and_order`.
-- [ ] **AC7 — The skill and the terminal view both show item rows.** `borg next --rows --json` emits item rows; `/borg-next` and the TTY chooser render them in the mock's columns (project · item, next step, owner, ready) with quiet projects collapsed; `--open` opens the item's project.
+- [x] **AC7 — The skill and the terminal view both show item rows.** `borg next --rows --json` emits item rows; `/borg-next` and the TTY chooser render them in the mock's columns (project · item, next step, owner, ready) with quiet projects collapsed; `--open` opens the item's project. *(verified 2026-10-14 by borg-verifier at 7b935d0: bats:tests/next_chooser.bats 31/31, pytest:borg_core/nextpick 82 passed)*
   - Verify: bats on `--rows --json` against fixtures; a smoke run of `/borg-next-preview` on the real registry shows at least one YOU row and one AGENT row.
+  - Evidence: `bats:tests/next_chooser.bats`
+  - Proof: `chooser (forced tty): the screen shows item rows in the mock columns, a quiet line, and keys select a row`; `next --open p --chosen: switches and logs an unscripted chooser row`. Smoke: `/borg-next-preview` became `/borg-next` in https://github.com/noah-goodrich/borg-collective/pull/277; `borg next --rows --json --all` on the real registry 2026-10-14 returned YOU rows (noah-goodrich/borg-collective#262, noah-goodrich/snowfort#22) and AGENT rows (noah-goodrich/borg-collective#278, stillpoint-labs/reveal#7).
+  - Notes: the header reads `repository · item`, not the mock's `project · item`, because of the project-to-repository rename (R1-R5). That rename is intended. The skill's rendering is prose with no test of its own; only the JSON it reads is pinned.
 
 ## Scope Boundaries
 
@@ -80,3 +84,14 @@ Two sessions of about two hours, one per PR.
 - **Chooser latency.** The columns come from the `borg link --json` sweep, which takes about 1 to 3 s on the network. Mitigation: only the interactive chooser pays for it, never `--switch` or a non-TTY run; `--local` skips the network.
 - **Moving ranking into Python could reorder ties.** Mitigation: the characterisation case pins the `--switch` target, and a pytest pins the core's order against the existing jq on a tie-heavy fixture.
 - **Log growth.** Every `borg next` run, including Ctrl+Space >, appends a row. Mitigation: rotation at the 1 MiB cap.
+
+## Additional Work Shipped
+
+- [#283](https://github.com/noah-goodrich/borg-collective/pull/283) caps the chooser at 5 YOU rows, with `+N more decisions`, `+N agent tasks` and `+N stale drafts` summaries for the rest.
+- [#286](https://github.com/noah-goodrich/borg-collective/pull/286) makes `borg next` read the registry through the one Python state overlay.
+
+## Found at Ship, Not Fixed Here
+
+- **A review left as a PR comment is invisible to the router.** Noah's 2026-10-07 review of noah-goodrich/borg-collective#278 ("Not stamping #278 @ `f21da67`: the fence is prose, so make it a gate") is a plain comment, so `reviewDecision` reads `""` and AC6's "changes requested" rule never fires. The PR was shown as "merge #278 ✔ now". Candidate directive: the PR rule reads the latest review-shaped comment, or reviews are posted with `gh pr review --request-changes`.
+- **Usage is low so far.** `next-recs.jsonl` holds 4 unscripted chooser runs between 2026-10-06 and 2026-10-14. AC3's gate needs 20, so no suggestion will be drawn for weeks at this rate. Re-check the count before building on the follow-rate premise (viz-3).
+- **Local `make test-bats` is not clean on a busy host.** 7 failures at ship, none in chooser code: 6 eval-floor cases need a `.venv` (see AC4), and the `tests/resume_hook.bats` latency case read StopFailure 121ms against a 100ms budget at load average 24.5. CI on main is green.
