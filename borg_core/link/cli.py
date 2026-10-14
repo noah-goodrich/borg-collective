@@ -15,9 +15,11 @@ already been built off stdin and prints it through the same `render.document`. S
 from __future__ import annotations
 
 import argparse
+import functools
 import json as jsonlib
 import os
 import sys
+from collections.abc import Mapping
 from typing import NoReturn
 
 from borg_core.compass import shell as compass_shell
@@ -48,11 +50,24 @@ def _die_json(message: str) -> NoReturn:
     raise SystemExit(1)
 
 
-def _die_human(message: str) -> NoReturn:
+def _color_enabled(environ: Mapping[str, str]) -> bool:
+    """Whether human output may carry ANSI: False when NO_COLOR is set to a NON-EMPTY value.
+
+    https://no-color.org: "when present and not an empty string". An unset or empty NO_COLOR keeps
+    colour, and its VALUE is irrelevant (`NO_COLOR=0` still turns colour off). THE ONLY PLACE THE
+    FLAG IS READ on the Python side: `main` calls this once and hands the answer down, so `picture.py`
+    and `render.py` stay free of the environment. `--json` and `--porcelain` never consult it.
+    """
+    return not environ.get("NO_COLOR")
+
+
+def _die_human(message: str, color: bool = True) -> NoReturn:
     """The three human modes' failure shape, reproducing zsh's `die` helper byte for byte
     (borg.zsh:31): `\\033[0;31m▸ ERROR:\\033[0m {message}` on stderr, exit 1, zero bytes on stdout.
+    With `color` off (NO_COLOR) the same line without the two SGR sequences, exactly as zsh's `die` prints it.
     """
-    print(f"\033[0;31m▸ ERROR:\033[0m {message}", file=sys.stderr)
+    line = f"\033[0;31m▸ ERROR:\033[0m {message}"
+    print(line if color else picture.plain(line), file=sys.stderr)
     raise SystemExit(1)
 
 
@@ -448,7 +463,19 @@ def _emit(text: str) -> int:
     return 0
 
 
-def _run(repository: str, show_all: bool, mode: str, local: bool = False, overview: bool = False) -> int:
+def _page(text: str, color: bool) -> str:
+    """The human page as it is printed: unchanged, or with every SGR and OSC-8 sequence stripped.
+
+    THE ONE SWITCH for the page (`picture.plain` is the transform). Both human arms route their finished
+    string through it, so no call site inside the renderer has to know about colour.
+    """
+    return text if color else picture.plain(text)
+
+
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+def _run(
+    repository: str, show_all: bool, mode: str, local: bool = False, overview: bool = False, color: bool = True
+) -> int:
     """Dispatch one `borg link` invocation; returns the process exit code.
 
     Mode precedence, strictly: json > porcelain > human. Renders to a SINGLE string and prints it
@@ -468,10 +495,10 @@ def _run(repository: str, show_all: bool, mode: str, local: bool = False, overvi
         return _emit(jsonlib.dumps(doc) + "\n")
     if mode == "porcelain":
         return _emit(render.porcelain(doc))
-    return _emit(render.document(doc))
+    return _emit(_page(render.document(doc), color))
 
 
-def _render_document_from_stdin(stream) -> int:
+def _render_document_from_stdin(stream, color: bool = True) -> int:
     """Render an ALREADY-BUILT document, read as JSON from `stream`, through the one human renderer.
 
     THIS IS NOT A FOURTH MODE, AND `_mode` DELIBERATELY DOES NOT KNOW ABOUT IT. The three modes each
@@ -495,7 +522,7 @@ def _render_document_from_stdin(stream) -> int:
     boundary formats it with `_die_human`, and the caller sees `▸ ERROR:` on stderr with zero bytes
     on stdout -- which is what every other malformed-input path in this module already does.
     """
-    return _emit(render.document(jsonlib.load(stream)))
+    return _emit(_page(render.document(jsonlib.load(stream)), color))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -630,12 +657,13 @@ def main(argv: list[str] | None = None) -> None:
     if args.render_document and (args.json_only or args.porcelain):
         parser.error("--render-document is not a mode; it cannot be combined with --json or --porcelain")
     mode = _mode(args)
-    die = _die_json if mode == "json" else _die_human
+    color = _color_enabled(os.environ)
+    die = _die_json if mode == "json" else functools.partial(_die_human, color=color)
     try:
         if args.render_document:
-            exit_code = _render_document_from_stdin(sys.stdin)
+            exit_code = _render_document_from_stdin(sys.stdin, color)
         else:
-            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview)
+            exit_code = _run(args.repository, args.show_all, mode, args.local, args.overview, color)
     except RepositoryNotFound as exc:
         die(_not_found_message(exc))
     # JUSTIFICATION: entry-shape violations raise AttributeError, not ValueError/OSError; must die clean.

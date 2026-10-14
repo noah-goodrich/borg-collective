@@ -115,8 +115,12 @@ _memory_payload() {
 @test "memory-read-log: with the lib absent the write still lands (rotation is fail-open)" {
     _memory_payload
     rm -f "$HOME/.claude/lib/borg-hooks.sh"
+    # The hook resolves the lib script-relative first, so the repo's own lib/ would be found: run a copy that
+    # sits beside no lib at all, with the installed copy removed above.
+    mkdir -p "${BATS_TEST_TMPDIR}/nolib/hooks"
+    cp "$HOOKS/borg-memory-read-log.sh" "${BATS_TEST_TMPDIR}/nolib/hooks/"
     printf 'old1\told\n' > "$NEW/memory-hits.log"
-    run env BORG_LOG_CAP_BYTES=5 bash "$HOOKS/borg-memory-read-log.sh" < "${BATS_TEST_TMPDIR}/p.json"
+    run env BORG_LOG_CAP_BYTES=5 bash "${BATS_TEST_TMPDIR}/nolib/hooks/borg-memory-read-log.sh" < "${BATS_TEST_TMPDIR}/p.json"
     [ "$status" -eq 0 ] && [ -z "$output" ]
     [ "$(wc -l < "$NEW/memory-hits.log" | tr -d ' ')" -eq 2 ]
     [ ! -e "$NEW/memory-hits.log.1" ]

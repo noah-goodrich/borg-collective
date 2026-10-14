@@ -41,6 +41,16 @@ def _git_identity(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _ambient_no_color(monkeypatch):
+    """Drop NO_COLOR so a developer who exports it still gets the coloured pages the goldens pin.
+
+    The variable is ambient state `borg link` now reads (link/cli.py `_color_enabled`). Tests that exercise it
+    set it themselves, through `monkeypatch.setenv`, which runs after this fixture.
+    """
+    monkeypatch.delenv("NO_COLOR", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _sandbox_map_dir(monkeypatch, tmp_path_factory):
     """Point BORG_MAP_DIR at a directory that does not exist for every test.
 

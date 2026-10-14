@@ -276,7 +276,14 @@ LINE=$(jq -nc \
 
 # Retention: cap at 1 MiB, one previous generation; `borg nanoprobes` reads the live file then .1.
 # bash 3.2: a failed `source` is fatal under set -e even inside `{ }`/`|| true`; a subshell contains it.
-( source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "$LOG_FILE" ) >/dev/null 2>&1 || true
+# The lib is resolved script-relative first, the installed copy second (same order as the lifecycle hooks).
+(
+    _borg_lib_dir="${BASH_SOURCE[0]%/*}"
+    [[ "$_borg_lib_dir" == "${BASH_SOURCE[0]}" ]] && _borg_lib_dir=.
+    _borg_lib="$_borg_lib_dir/../lib/borg-hooks.sh"
+    [[ -f "$_borg_lib" ]] || _borg_lib="${HOME}/.claude/lib/borg-hooks.sh"
+    source "$_borg_lib" && _borg_rotate_log "$LOG_FILE"
+) >/dev/null 2>&1 || true
 
 printf '%s\n' "$LINE" >> "$LOG_FILE" 2>/dev/null || true
 
