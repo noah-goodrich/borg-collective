@@ -702,7 +702,7 @@ def test_short_refs_fall_back_to_full_refs_when_two_owners_share_a_repo_name():
 
 # ── the surfaces AC2/S3 renders into the page ─────────────────────────────────────────────────────
 #
-# Everything below covers what the CHAINS section actually prints. It is here rather than deferred to
+# Everything below covers what the STACKS section actually prints. It is here rather than deferred to
 # S3 because S3 regenerates every golden in one commit: a broken gate line or a mis-ordered glance
 # strip discovered THEN arrives as a golden diff among hundreds of other changed bytes, which is the
 # worst possible place to notice it.

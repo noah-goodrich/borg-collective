@@ -200,7 +200,7 @@ def test_the_printed_commit_command_commits_exactly_the_moves(tmp_path, registry
 # ── (7) a git-ignored .borg/ ends tracked in .stacks/ ───────────────────────────────────────────
 
 
-def test_a_repository_whose_chains_dir_is_ignored_ends_with_its_manifests_staged_in_stacks(tmp_path, registry, capsys):
+def test_a_repository_whose_stacks_dir_is_ignored_ends_with_its_manifests_staged_in_stacks(tmp_path, registry, capsys):
     repo = _repo(tmp_path, gitignore=".borg/\n")
     for name in ("alpha.json", "beta.json"):
         _write(repo, f".borg/chains/{name}")

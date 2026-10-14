@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""coordinator.py — `borg chain`: supervisor between borg's own chain manifests and any
-external system tracking the same chains. PM6/PM7.
+"""coordinator.py — `borg stack`: supervisor between borg's own stack manifests and any
+external system tracking the same stacks. PM6/PM7.
 
 WHAT THIS IS NOT. This module writes nothing on GitHub, renders no PR body, and knows no field
 name from any external schema. It resolves intent, dispatches each write to its OWN native writer,
@@ -360,7 +360,7 @@ def sync_borg(manifests: list[dict[str, Any]]) -> tuple[list[str], list[str]]:
             # repository declaring one id is just as real a contention as two repositories — and the
             # in-place rewrite below is what stops the second one silently overwriting the first.
             warnings.append(
-                f"chain {chain!r} is declared twice ({seen[chain]} and {source_path}) — "
+                f"stack {chain!r} is declared twice ({seen[chain]} and {source_path}) — "
                 f"each file rewritten in place, but they will contend downstream"
             )
         seen.setdefault(chain, source_path)
@@ -426,7 +426,7 @@ def _repository_dir_of(manifest: dict[str, Any]) -> str:
     # a repository root and write outside the tree. That fails silently: the caller only checks
     # `if not repository_dir`, and a non-empty wrong answer passes.
     for name in (
-        os.path.join(".borg", shell.CHAINS_DIRNAME),
+        os.path.join(".borg", shell.OWN_STACKS_DIRNAME),
         os.path.join(".borg", shell.LEGACY_DIRNAME),
         shell.STACKS_DIRNAME,
     ):
@@ -437,17 +437,17 @@ def _repository_dir_of(manifest: dict[str, Any]) -> str:
 
 
 def cmd_list(args: argparse.Namespace) -> int:
-    manifests, warnings = shell.discover(args.chains_dir)
+    manifests, warnings = shell.discover(args.stacks_dir)
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
     for m in sorted(manifests, key=_id_of):
         print(f"{_id_of(m)}: {len(core.manifest_rows(m))} row(s)")
-    print(f"{len(manifests)} chain(s), {len(warnings)} skipped")
+    print(f"{len(manifests)} stack(s), {len(warnings)} skipped")
     return 0
 
 
 def cmd_plan(args: argparse.Namespace) -> int:
-    manifests, warnings = shell.discover(args.chains_dir)
+    manifests, warnings = shell.discover(args.stacks_dir)
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
     # PM6: plan exits non-zero only on malformed input — a refused MANIFEST is malformed input, a
@@ -474,7 +474,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
     recon_states = recon_states_from(load_recon_items(args.recon))
     findings = three_way_audit(borg_rows, target_report, recon_states)
 
-    print(f"plan: {len(manifests)} chain(s), {len(borg_rows)} row(s), {len(findings)} finding(s)")
+    print(f"plan: {len(manifests)} stack(s), {len(borg_rows)} row(s), {len(findings)} finding(s)")
     if fatal:
         # On STDOUT, beside the findings it taints (opus round 3, finding 2): a malformed manifest's
         # rows never entered borg_rows, so any absent-from-borg finding may be a parse artifact, not
@@ -489,7 +489,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
-    manifests, warnings = shell.discover(args.chains_dir)
+    manifests, warnings = shell.discover(args.stacks_dir)
     for w in warnings:
         print(f"  MANIFEST SKIPPED {w}", file=sys.stderr)
     # Refuse only on FILE-level refusals (a malformed manifest must never half-sync). Directory-level
@@ -527,9 +527,10 @@ def main() -> int:
     for name, fn in (("list", cmd_list), ("plan", cmd_plan), ("sync", cmd_sync)):
         sp = sub.add_parser(name)
         sp.add_argument(
-            "--chains-dir",
-            "--programs-dir",  # legacy spelling; accepted until the contract phase drops it
-            dest="chains_dir",
+            "--stacks-dir",
+            "--chains-dir",  # older spellings; accepted until the contract phase drops them
+            "--programs-dir",
+            dest="stacks_dir",
             action="append",
             default=[],
             metavar="REPOSITORY_DIR",
