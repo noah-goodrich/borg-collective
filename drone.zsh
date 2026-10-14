@@ -40,6 +40,8 @@ DRONE_SCRIPT_DIR="${0:A:h}"
 # Host-side lifecycle hooks (.devcontainer/borg-hooks/{pre-up,post-down}.sh).
 source "$DRONE_SCRIPT_DIR/lib/drone-hooks.zsh"
 source "$DRONE_SCRIPT_DIR/lib/state-root.zsh"
+# Shared registry-key helper (BORG_REGISTRY_NORM_JQ): readers accept `projects` or `repositories`.
+source "$DRONE_SCRIPT_DIR/lib/reaper.sh"
 # borg-resume ledger layout (borg_resume_dir, borg_resume_valid_sid): the same definitions the hooks use.
 source "$DRONE_SCRIPT_DIR/lib/borg/resume-paths.sh"
 
@@ -105,7 +107,7 @@ _drone_resolve() {
     local registry="$BORG_DIR/registry.json"
     if [[ -f "$registry" ]]; then
         local reg_path
-        reg_path=$(jq -r --arg p "$arg" '.projects[$p].path // empty' "$registry" 2>/dev/null) || true
+        reg_path=$(jq -r --arg p "$arg" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p].path // empty' "$registry" 2>/dev/null) || true
         if [[ -n "$reg_path" && -d "$reg_path" ]]; then
             _proj_dir="$reg_path"
             _proj_name="$arg"
@@ -115,7 +117,7 @@ _drone_resolve() {
         local reg_repository
         reg_repository=$(_drone_repository_for_window "$arg")
         reg_path=""
-        [[ -n "$reg_repository" ]] && reg_path=$(jq -r --arg p "$reg_repository" '.projects[$p].path // empty' "$registry" 2>/dev/null) || true
+        [[ -n "$reg_repository" ]] && reg_path=$(jq -r --arg p "$reg_repository" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p].path // empty' "$registry" 2>/dev/null) || true
         if [[ -n "$reg_path" && -d "$reg_path" ]]; then
             _proj_dir="$reg_path"
             _proj_name="$reg_repository"
@@ -168,7 +170,7 @@ _drone_window_name() {
 _drone_repository_for_window() {
     local registry="${BORG_REGISTRY:-$BORG_DIR/registry.json}"
     [[ -f "$registry" ]] || return 0
-    jq -r --arg w "$1" '[.projects // {} | to_entries[] | select(.value.tmux_window == $w) | .key][0] // empty' \
+    jq -r --arg w "$1" "${BORG_REGISTRY_NORM_JQ:-.} | "'[.projects // {} | to_entries[] | select(.value.tmux_window == $w) | .key][0] // empty' \
         "$registry" 2>/dev/null || true
 }
 
@@ -176,7 +178,7 @@ _drone_repository_for_window() {
 _drone_registered() {
     local registry="${BORG_REGISTRY:-$BORG_DIR/registry.json}"
     [[ -f "$registry" ]] || return 1
-    jq -e --arg p "$1" '.projects[$p] != null' "$registry" >/dev/null 2>&1
+    jq -e --arg p "$1" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p] != null' "$registry" >/dev/null 2>&1
 }
 
 # Registry key for $1, which may be a repository name or a short window name; $1 itself if unknown.
@@ -223,7 +225,7 @@ _drone_register() {
 # Return the tmux color for a repository (registry → hash fallback).
 _drone_repository_color() {
     local repository="$1" color
-    color=$(jq -r --arg p "$repository" '.projects[$p].color // empty' "$BORG_DIR/registry.json" 2>/dev/null)
+    color=$(jq -r --arg p "$repository" "${BORG_REGISTRY_NORM_JQ:-.} | "'.projects[$p].color // empty' "$BORG_DIR/registry.json" 2>/dev/null)
     if [[ -z "$color" ]]; then
         local -a palette=(cyan green yellow magenta blue red white)
         local hash=0 c

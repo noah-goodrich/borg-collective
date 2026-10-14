@@ -23,8 +23,8 @@
  foxtrot                     [C]  [2midle        [0m 30m ago          –    –      – Foxtrot ties alpha's bucket.
  india                       [C]  [0marchived    [0m 2d ago           –    –      – India is archived.
 
-[1m▸ CHAINS[0m  [2m0 chains · 0 refs · 0 unresolved · not swept[0m
-  [2m— no chain manifests in the registry yet. Run /borg-plan in any repository.[0m
+[1m▸ STACKS[0m  [2m0 stacks · 0 refs · 0 unresolved · not swept[0m
+  [2m— no stack manifests in the registry yet. Run /borg-plan in any repository.[0m
 
 [1m▸ QUEUED[0m  [2m3 directives[0m
     [2m- [alpha] Alpha directive one[0m

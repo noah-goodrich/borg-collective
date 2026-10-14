@@ -104,6 +104,57 @@ _pending() {
     [ "$(jq -r .zero_commit "$LOG_FILE")" = "true" ]
 }
 
+@test "Bash file writes count: redirect, append, tee, sed -i, heredoc to a file" {
+    local c
+    local -a cmds=(
+        "echo hi > out.txt"
+        "echo hi >> out.txt"
+        "ls 2>/dev/null > list.txt"
+        "echo hi | tee out.txt"
+        "sed -i '' 's/a/b/' f.txt"
+        "sed -n -i.bak 's/a/b/' f.txt"
+        "cat > f.txt << 'EOF'
+body
+EOF"
+    )
+    for c in "${cmds[@]}"; do
+        rm -f "$TX"
+        _tx Bash tu1 false "$c"
+        _run
+        [ -z "$HOOK_OUT" ] || { echo "not counted: $c"; return 1; }
+        [ "$(jq -r .zero_commit "$LOG_FILE")" = "false" ]
+    done
+}
+
+@test "Bash non-writes do not count: /dev/null, fd dup, pipe after 2>&1, plain sed" {
+    local c
+    local -a cmds=(
+        "ls 2>/dev/null"
+        "make test >/dev/null 2>&1"
+        "make test 2>&1 | grep FAIL"
+        "echo hi >&2"
+        "echo hi > /dev/stderr"
+        "sed -n '1,5p' f.txt"
+        "cat f.txt << EOF | wc -l
+x
+EOF"
+    )
+    for c in "${cmds[@]}"; do
+        rm -f "$TX"
+        _tx Bash tu1 false "$c"
+        _run
+        _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "ZERO-WRITE" || { echo "counted: $c"; return 1; }
+        [ "$(jq -r .zero_commit "$LOG_FILE")" = "true" ]
+    done
+}
+
+@test "a transcript with only Read calls keeps zero_commit true" {
+    _tx Read tu1 false
+    _run
+    _has "$(printf '%s' "$HOOK_OUT" | jq -r .systemMessage)" "ZERO-WRITE"
+    [ "$(jq -r .zero_commit "$LOG_FILE")" = "true" ]
+}
+
 _lacks() { [[ "$1" != *"$2"* ]] || { echo "unexpected: $2"; return 1; }; }
 
 # _run_as <type> [msg] [id] [transcript]: like _run, but with a chosen agent type.

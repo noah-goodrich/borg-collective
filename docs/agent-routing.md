@@ -90,8 +90,23 @@ Stage guidance:
 - Claude Code questions: `agentType: "claude-code-guide", effort: "low"` (effort is required; it pins none and would inherit xhigh)
 - Ad hoc, no specialist fits: `model: 'sonnet', effort: 'medium'`
 
+- **Read-only lenses use borg-researcher or borg-scout, never borg-nanoprobe.** A lens is a Workflow agent that writes nothing (transcript forensics, log reads, reviews that produce no commits). Use `agentType: 'borg-collective:borg-researcher'` or `'borg-collective:borg-scout'` for it. The nanoprobe type is for agents that write: the SubagentStop hook (`hooks/borg-nanoprobe-log.sh`) marks a nanoprobe that wrote nothing with `zero_commit: true`, and `borg nanoprobes` then shows a ZERO-WRITE flag that means nothing for a lens.
 - **Compose with the specialists.** A specialist brings both its cheap model and its system prompt; prefer it over a bare `model` pin.
 - **The gate stage is worth Sonnet-high, not Opus.** Independence and rigor come from the blind setup and the high effort, not from the top tier.
+
+### Verification of the agent-type checks (2026-10-14)
+
+Evidence gathered on 2026-10-14 with `jq -c -s` over the local SubagentStop log (`agents.jsonl`), counting rows whose `finished_at` is after 2026-10-12T22:24:00Z:
+
+- 328 rows finished in that window; all 328 (100%) carry a non-empty `agent_type`.
+- Distinct values: `borg-collective:borg-verifier` 131, `borg-collective:borg-nanoprobe` 119, `borg-collective:borg-researcher` 39, `borg-collective:borg-reviewer` 28, `borg-collective:borg-grunt` 8, `claude-code-guide` 2, `borg-collective:borg-scout` 1. Every value is on the allowlist; no empty, `general-purpose` or untyped row appears.
+
+What the two guard hooks do, read from the files:
+
+- `hooks/borg-agent-model-guard.sh` is a PreToolUse hook whose logic returns early unless `tool_name` is `Agent` or `Task`. It judges `tool_input.subagent_type`, `model` and `effort` directly: deny-by-default allowlist, model absent or sonnet/haiku, effort absent or low/medium/high.
+- `hooks/borg-workflow-model-guard.sh` is a PreToolUse hook that returns early unless `tool_name` is `Workflow`. It carries the same policy block (byte-identical, diffed by a bats test), but its input is the script text (`script`, `scriptPath`, saved `name`). It tokenizes the script and checks the options of every `agent()` call, because there is no per-call tool input to inspect.
+- Consequence: the Agent-tool guard only sees calls made through the Agent or Task tool. A workflow-internal `agent()` is not such a call, so the policy is enforced by reading the script before it runs. This design is consistent with the files; the logs here cannot prove that no PreToolUse event fires for an individual `agent()` spawn, since they record only SubagentStop.
+- The data confirms the other half: SubagentStop rows for agents spawned from Workflow scripts do carry `agent_type`, so the type is observable after the fact for both spawn routes. The log does not record which route spawned a row, so the 328 are not split by route.
 
 ## Practical tips
 

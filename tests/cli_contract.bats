@@ -2333,7 +2333,7 @@ EOF
 # (ledger) is the modal case — 13 of ~14 registered repositories.
 #
 # `infra` deliberately has NO git repository, so `borg link infra` exercises the first of the three
-# CHAINS diagnoses (no origin -> nothing to scope a chain to) without a fixture of its own.
+# STACKS diagnoses (no origin -> nothing to scope a stack to) without a fixture of its own.
 _link_build_grid_ws() {
     local root="${BATS_TEST_TMPDIR}/ws" p
     export BORG_ORCHESTRATOR_ROOT="$root"
@@ -3350,14 +3350,14 @@ _link_spine_matches() {
 # B5/B6. THE `Status:` INVARIANT, AND IT IS STRUCTURAL RATHER THAN LEXICAL. `sweep-acme.json`
 # deliberately carries a pull request titled `chore(auth): Status: normalise the rollout report`,
 # which is what a real sweep can hand the renderer at any moment. IN FOCUS being SECTION 2 — above
-# REPOSITORIES and above CHAINS — is what keeps `grep -m1` landing on the session status instead of
-# on a stranger's PR title. Move IN FOCUS below CHAINS and both halves go red.
+# REPOSITORIES and above STACKS — is what keeps `grep -m1` landing on the session status instead of
+# on a stranger's PR title. Move IN FOCUS below STACKS and both halves go red.
 @test "contract: exactly one Status: line in repository context and none in orchestrator context" {
     _link_setup_grid
     _link_grid_seams
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/repo.txt" link platform
-    # A DIRECTORY'S PAGE CARRIES NO WIRE TEXT AT ALL since 2026-10-13: CHAINS and the repository PR rows are
+    # A DIRECTORY'S PAGE CARRIES NO WIRE TEXT AT ALL since 2026-10-13: STACKS and the repository PR rows are
     # repository-level, so the poisoned title is simply not on it, and the card's line is the ONLY `Status:`.
     run bash -c "grep -c 'Status: normalise the rollout report' '${BATS_TEST_TMPDIR}/repo.txt' || true"
     [ "$output" = "0" ]
@@ -3493,7 +3493,7 @@ _link_spine_matches() {
     run bash -c "ls -A '$BORG_RECON_ADAPTER_PATH' | wc -l | tr -d ' '"
     [ "$output" = "0" ]
     # ...and the render really did happen, so this is not passing on an empty run.
-    run grep -c '▸ CHAINS' "${BATS_TEST_TMPDIR}/traced.txt"
+    run grep -c '▸ STACKS' "${BATS_TEST_TMPDIR}/traced.txt"
     [ "$output" = "1" ]
 }
 
@@ -3522,7 +3522,7 @@ _link_spine_matches() {
 # B14. Node ids are a JUMP TARGET: each appears exactly twice on the page — once in a picture cell,
 # once as a detail heading — so `*` in vim toggles between them with no plugin. Numbering per manifest
 # instead of globally puts four `n1`s on the orchestrator page and breaks the jump for both repositories.
-# Only the Queen's page draws a picture now (CHAINS is repository-level), so the directory goldens are
+# Only the Queen's page draws a picture now (STACKS is repository-level), so the directory goldens are
 # asserted to carry NONE: a node id on a directory's page means a repository-level section came back.
 @test "contract: every node id appears exactly twice in each Queen golden, and never on a directory's page" {
     local g
@@ -3550,7 +3550,7 @@ _link_spine_matches() {
     done
 }
 
-# The widest `▸ CHAINS` picture row on a rendered page, in VISIBLE columns, printed to stdout.
+# The widest `▸ STACKS` picture row on a rendered page, in VISIBLE columns, printed to stdout.
 #
 # ONE COPY, TWO CALLERS (B15 and B15b), because the two cases must be measuring the same thing: B15
 # compares the measurement to `PICTURE_BUDGET` and B15b compares it to the number the `--json` side
@@ -3567,7 +3567,7 @@ from borg_core.link import picture
 # that blows the budget by 22 columns while every picture row fits.
 frame = set("✔✗○●◌│├┤┬┴┼┌┐└┘─")
 rows = []
-# SCOPED TO THE CHAINS SECTION, and that scoping arrived with AC4 rather than being belt-and-braces.
+# SCOPED TO THE STACKS SECTION, and that scoping arrived with AC4 rather than being belt-and-braces.
 # `▸ NEXT` renders indented rows whose first visible character is a state glyph -- the exact
 # heuristic below -- but they carry FULL refs, not the picture`s short ones, so measuring them
 # reported the page as blowing PICTURE_BUDGET while every actual picture row fit. The old scan
@@ -3577,7 +3577,7 @@ inside = False
 for line in open(sys.argv[1], encoding="utf-8").read().split("\n"):
     plain = picture._SGR_RE.sub("", picture._OSC8_RE.sub("", line))
     if plain.startswith("▸ "):
-        inside = plain.startswith("▸ CHAINS")
+        inside = plain.startswith("▸ STACKS")
         continue
     if inside and plain.startswith(" " * picture.INDENT) and plain.strip()[:1] in frame:
         rows.append(line)
@@ -3644,7 +3644,7 @@ _link_picture_budget() {
     # The page must actually HAVE a picture, or both sides agree on nothing and the case is decoration.
     [ "$measured" -gt 0 ] || { echo "the rendered page carried no picture rows" >&2; false; }
     [ "$published" = "$measured" ] || {
-        echo "grid.picture_width=${published} but the rendered page's widest CHAINS row is ${measured}" >&2
+        echo "grid.picture_width=${published} but the rendered page's widest STACKS row is ${measured}" >&2
         false
     }
     [ "$published" -le "$(_link_picture_budget)" ]
@@ -3686,7 +3686,7 @@ _link_picture_budget() {
     _link_setup_grid
     _link_grid_seams
 
-    # THE QUEEN'S PAGE, not `link --local platform`: CHAINS is a repository-level section and a directory's
+    # THE QUEEN'S PAGE, not `link --local platform`: STACKS is a repository-level section and a directory's
     # page no longer prints it (2026-10-13). The Queen selects both manifests, so the count is every ref across
     # them that declared no state of its own (12 of the 13; `acme/warehouse#75` declares `merged`), not
     # `platform`'s seven.
@@ -3728,12 +3728,12 @@ _link_picture_budget() {
 
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.txt" link ledger
     # TWO `▸` HEADERS SINCE 2026-10-13 (IN FOCUS, WAITING ON YOU): a directory's page is strictly the
-    # directory, so CHAINS and its three diagnoses left it. They were EIGHT before. The diagnosis inputs are
+    # directory, so STACKS and its three diagnoses left it. They were EIGHT before. The diagnosis inputs are
     # still on the wire, which is where this pins them: `grid.slug` and `grid.manifests` are what
     # `render._grid_placeholder` reads on the Queen's page, and what a `--json` consumer reads anywhere.
     run grep -c '▸ ' "${BATS_TEST_TMPDIR}/ledger.txt"
     [ "$output" = "2" ]
-    run bash -c "grep -c 'no chain manifest declares work' '${BATS_TEST_TMPDIR}/ledger.txt' || true"
+    run bash -c "grep -c 'no stack manifest declares work' '${BATS_TEST_TMPDIR}/ledger.txt' || true"
     [ "$output" = "0" ]
     _link_grid_run "${BATS_TEST_TMPDIR}/ws" "${BATS_TEST_TMPDIR}/ledger.json" link ledger --json
     run jq -c '[.grid.slug, (.grid.manifests | length), .grid.scope_kind]' "${BATS_TEST_TMPDIR}/ledger.json"
@@ -3759,7 +3759,7 @@ _link_picture_budget() {
         "$root/solo" > "$BORG_REGISTRY"
 
     _link_grid_run "$root" "${BATS_TEST_TMPDIR}/orch-empty.txt" link
-    run grep -c 'no chain manifests in the registry yet' "${BATS_TEST_TMPDIR}/orch-empty.txt"
+    run grep -c 'no stack manifests in the registry yet' "${BATS_TEST_TMPDIR}/orch-empty.txt"
     [ "$output" = "1" ]
     run bash -c "grep -c 'no GitHub origin' '${BATS_TEST_TMPDIR}/orch-empty.txt' || true"
     [ "$output" = "0" ]
@@ -4429,7 +4429,7 @@ _repo_norm() {
     mkdir -p "$BATS_TEST_TMPDIR/proj"
     run zsh -c "'$BORG' chain"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"0 chain(s)"* ]] || false
+    [[ "$output" == *"0 stack(s)"* ]] || false
 }
 
 @test "contract: 'borg chain list' sweeps a registry manifest end to end" {
@@ -4472,7 +4472,7 @@ _repo_norm() {
     mkdir -p "$BATS_TEST_TMPDIR/proj"
     run zsh -c "'$BORG' stack"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"0 chain(s)"* ]] || false
+    [[ "$output" == *"0 stack(s)"* ]] || false
 }
 
 @test "contract: 'borg stack list' sweeps a registry manifest end to end" {
