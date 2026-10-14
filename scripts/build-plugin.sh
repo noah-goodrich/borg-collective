@@ -13,7 +13,8 @@
 #   marketplace.json — ensure borg-collective entry is present (idempotent)
 #
 # Self-containment contract for hooks that reference borg state/registry:
-#   1. All helpers from lib/borg-hooks.sh are INLINED — no source path references.
+#   1. All helpers from lib/borg-hooks.sh are INLINED — no source path references. A hook marks the
+#      lib-resolution lines it wants replaced with '# >>> borg-hooks.sh' ... '# <<< borg-hooks.sh'.
 #   2. CLI-calling hooks (those that depend on the borg CLI being present) begin with:
 #        command -v borg >/dev/null 2>&1 || exit 0
 #      The lifecycle hooks (borg-link-down/up, borg-notify, borg-nanoprobe-log)
@@ -224,8 +225,22 @@ _build_self_contained_hook() {
     } >> "$tmp"
 
     # ── Rest of the original hook (skip shebang; replace source line with lib) ──
-    local in_comment_block=1
+    local in_comment_block=1 skipping_lib_block=0
     while IFS= read -r line; do
+        # A hook that sources the lib carries a marked resolution block (script-relative first, installed
+        # copy second, guarded). The inlined helpers replace the WHOLE block, so the plugin copy keeps no
+        # path resolution and no reference to ~/.claude/lib. Whatever follows the closing marker (the
+        # fail-open `declare -F` checks) stays, and is satisfied by the inlined functions.
+        if [[ "$skipping_lib_block" -eq 1 ]]; then
+            [[ "$line" == "# <<< borg-hooks.sh"* ]] && skipping_lib_block=0
+            continue
+        fi
+        if [[ "$needs_lib" -eq 1 && "$line" == "# >>> borg-hooks.sh"* ]]; then
+            _embedded_lib >> "$tmp"
+            skipping_lib_block=1
+            continue
+        fi
+
         # Track when we leave the leading comment block (first non-blank, non-# line)
         if [[ "$in_comment_block" -eq 1 ]]; then
             if [[ "$line" != "#"* && -n "$line" ]]; then
@@ -250,6 +265,13 @@ _build_self_contained_hook() {
 
         printf '%s\n' "$line" >> "$tmp"
     done < <(tail -n +2 "$src")
+
+    # An opening marker with no closing one would silently drop the rest of the hook: refuse to build.
+    if [[ "$skipping_lib_block" -eq 1 ]]; then
+        rm -f "$tmp"
+        _warn "$label: '# >>> borg-hooks.sh' has no '# <<< borg-hooks.sh' — refusing to build a truncated hook"
+        exit 1
+    fi
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         if ! diff -q "$tmp" "$dst" >/dev/null 2>&1; then

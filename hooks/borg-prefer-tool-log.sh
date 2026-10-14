@@ -87,7 +87,12 @@ matched=$(PYTHONSAFEPATH=1 PYTHONPATH="$_core_root${PYTHONPATH:+:$PYTHONPATH}" p
     mkdir -p "${LOG%/*}" 2>/dev/null
     # Retention: cap at 1 MiB, one previous generation (nothing reads this log back).
     # bash 3.2: a failed `source` can be fatal under set -e; keep it in a subshell.
-    ( source "${HOME}/.claude/lib/borg-hooks.sh" && _borg_rotate_log "$LOG" ) >/dev/null 2>&1 || true
+    # The lib is resolved script-relative first (_hook_dir, set above), the installed copy second.
+    (
+        _borg_lib="$_hook_dir/../lib/borg-hooks.sh"
+        [[ -f "$_borg_lib" ]] || _borg_lib="${HOME}/.claude/lib/borg-hooks.sh"
+        source "$_borg_lib" && _borg_rotate_log "$LOG"
+    ) >/dev/null 2>&1 || true
     printf '%s\n' "$(printf '%s' "$matched" | jq -c --arg cmd "$cmd" --arg cwd "$cwd" \
         '{event:"bypass", prefer:.prefer, instead_of:.instead_of, layer:.layer, command:$cmd, cwd:$cwd}' 2>/dev/null)" >> "$LOG"
 } 2>/dev/null

@@ -1338,3 +1338,94 @@ def test_json_keeps_every_key_the_directory_page_stopped_rendering(isolated_env,
         "directives",
         "assimilated",
     }
+
+
+# ── NO_COLOR (https://no-color.org) ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("environ", "expected"),
+    [
+        ({}, True),
+        ({"NO_COLOR": ""}, True),
+        ({"NO_COLOR": "1"}, False),
+        ({"NO_COLOR": "0"}, False),
+        ({"NO_COLOR": "anything"}, False),
+        ({"TERM": "xterm"}, True),
+    ],
+)
+def test_color_is_off_only_for_a_non_empty_no_color(environ, expected):
+    assert cli._color_enabled(environ) is expected  # pylint: disable=protected-access
+
+
+def _page_with_a_picture(isolated_env, monkeypatch):
+    """A registered repository holding the shipped manifest, so the page carries SGR AND OSC-8 bytes."""
+    directory = _manifest_workspace(isolated_env)
+    _write_registry(isolated_env, {"warehouse": {"path": directory, "status": "idle"}})
+    monkeypatch.chdir(isolated_env)
+    monkeypatch.setattr(shell, "now_epoch", lambda: 1_800_000_000)
+
+
+def _main_stdout(argv, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main(argv)
+    assert exc_info.value.code == 0
+    return capsys.readouterr().out
+
+
+def test_no_color_strips_every_escape_from_the_human_page_and_empty_keeps_colour(isolated_env, capsys, monkeypatch):
+    """The page is built coloured and stripped once at the boundary; the strip must find every site.
+
+    THE CONTROL IS THE FIRST HALF. With NO_COLOR unset the same invocation must contain both an SGR and an
+    OSC-8 sequence, or "no ESC byte" below would hold of a page that never had one. MUTATION: make `_page`
+    return its text unchanged and the NO_COLOR=1 half goes red. The stripped page is also asserted to be the
+    coloured page minus its escapes, so a column that shifted (padding computed on the wrong length) fails.
+    """
+    _page_with_a_picture(isolated_env, monkeypatch)
+    argv = ["--local", "--overview"]
+
+    coloured = _main_stdout(argv, capsys)
+    assert "\033[" in coloured and "\033]8;;" in coloured, "the control page carries no colour to remove"
+
+    monkeypatch.setenv("NO_COLOR", "")
+    assert _main_stdout(argv, capsys) == coloured, "an EMPTY NO_COLOR is unset, per no-color.org"
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    plain = _main_stdout(argv, capsys)
+    assert "\033" not in plain
+    assert plain == picture.plain(coloured)
+    assert "warehouse" in plain and "REPOSITORIES" in plain, "stripping must not eat the page"
+
+
+def test_no_color_leaves_json_and_porcelain_byte_identical(isolated_env, capsys, monkeypatch):
+    _page_with_a_picture(isolated_env, monkeypatch)
+    for flag in ("--json", "--porcelain"):
+        argv = [flag, "--local", "--overview"]
+        unset = _main_stdout(argv, capsys)
+        monkeypatch.setenv("NO_COLOR", "1")
+        assert _main_stdout(argv, capsys) == unset, f"NO_COLOR changed {flag}"
+        monkeypatch.delenv("NO_COLOR")
+        assert unset, f"{flag} printed nothing; the comparison above is vacuous"
+
+
+def test_no_color_applies_to_the_render_document_fallback_too(isolated_env, capsys, monkeypatch):
+    """`--render-document` (the `--brief` fallback) is the second human arm; it must honour the flag."""
+    _page_with_a_picture(isolated_env, monkeypatch)
+    document = _main_stdout(["--json", "--local", "--overview"], capsys)
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document))
+    assert "\033[" in _main_stdout(["--render-document"], capsys)
+
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(document))
+    assert "\033" not in _main_stdout(["--render-document"], capsys)
+
+
+def test_no_color_strips_the_error_line_but_json_errors_never_had_colour(isolated_env, capsys, monkeypatch):
+    _write_registry(isolated_env, {})
+    monkeypatch.setenv("NO_COLOR", "1")
+
+    with pytest.raises(SystemExit):
+        cli.main(["--deep", "--", "nope"])
+    err = capsys.readouterr().err
+    assert err == "▸ ERROR: repository 'nope' not in registry. Run: borg add [path]\n"
+    assert "\033" not in err
