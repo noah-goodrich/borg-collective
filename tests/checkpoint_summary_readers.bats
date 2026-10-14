@@ -262,3 +262,95 @@ EOF
     [[ "$output" != *"$STALE"* ]] || false
     printf '%s' "$output" | jq -e '.projects.alpha.summary == null and .projects.beta.summary == null'
 }
+
+# ── The 80-character cap on the human-facing one-line summary ─────────────────
+
+# alpha's newest checkpoint states a 200-word tl;dr paragraph (a real one often runs this long).
+_long_tldr() {
+    local words="" i
+    for i in $(seq 1 200); do words+="word${i} "; done
+    LONG_TLDR="${words% }"
+    printf '**tl;dr** -- %s\n\n## Accomplished\n\n- Newer bullet.\n' "$LONG_TLDR" \
+        > "${BATS_TEST_TMPDIR}/ws/alpha/.borg/checkpoints/2026-10-02-0900.md"
+}
+
+@test "next: a 200-word tl;dr prints as ONE line of at most 80 characters ending in an ellipsis" {
+    _write_registry
+    _long_tldr
+    run bash -c "zsh \"$BORG\" next 2>/dev/null"
+    [ "$status" -eq 0 ]
+    local line
+    line=$(printf '%s\n' "$output" | grep -F "  word1 ")
+    [ "$(printf '%s\n' "$output" | grep -c 'word')" = "1" ]
+    [ "${#line}" -le 82 ]
+    [[ "$line" == *"…" ]] || false
+    [[ "$output" != *"word200"* ]] || false
+}
+
+@test "next: a short tl;dr prints unchanged, with no ellipsis" {
+    _write_registry
+    run bash -c "zsh \"$BORG\" next 2>/dev/null"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"  $FRESH"* ]] || false
+    [[ "$output" != *"…"* ]] || false
+}
+
+@test "_borg_do_switch: a 200-word tl;dr prints one bounded line in the interactive brief" {
+    _write_registry
+    _long_tldr
+    run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; _borg_do_switch alpha\" 2>&1"
+    [ "$status" -eq 0 ]
+    local line
+    line=$(printf '%s\n' "$output" | grep -F "  word1 ")
+    [ "$(printf '%s\n' "$output" | grep -c 'word')" = "1" ]
+    [ "${#line}" -le 82 ]
+    [[ "$line" == *"…" ]] || false
+    [[ "$output" != *"word200"* ]] || false
+}
+
+@test "_borg_do_switch: a short tl;dr prints unchanged in the interactive brief" {
+    _write_registry
+    run bash -c "zsh -c \"set -- help; source '$BORG' >/dev/null 2>&1; _borg_do_switch alpha\" 2>&1"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"  $FRESH"* ]] || false
+    [[ "$output" != *"…"* ]] || false
+}
+
+# ── One Python call per pick: the registry in hand already carries the summary ─
+
+_count_summary_calls() {
+    grep -c "py -m borg_core.link.overlay --summary" "$TRACE" || true
+}
+
+@test "chooser (forced tty): a pick costs the one registry overlay call and no overlay --summary call" {
+    _write_registry
+    _trace_python
+    run bash -c 'printf "\n" | BORG_NEXT_FORCE_TTY=1 zsh "$1" next --local 2>/dev/null' _ "$BORG"
+    [ "$status" -eq 0 ]
+    run grep "tmux display-message alpha |" "$TRACE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"${FRESH:0:40}"* ]] || false
+    [ "$(_count_overlay_calls)" = "1" ]
+    [ "$(_count_summary_calls)" = "0" ]
+}
+
+@test "next --open --chosen: costs the one registry overlay call and no overlay --summary call" {
+    _write_registry
+    _trace_python
+    run bash -c "zsh \"$BORG\" next --open alpha --chosen 2>/dev/null"
+    [ "$status" -eq 0 ]
+    run grep "tmux display-message alpha |" "$TRACE"
+    [ "$status" -eq 0 ]
+    [[ "$output" == *"${FRESH:0:40}"* ]] || false
+    [ "$(_count_overlay_calls)" = "1" ]
+    [ "$(_count_summary_calls)" = "0" ]
+}
+
+@test "next --open --chosen: a repository with no checkpoint still gets no stored summary" {
+    _write_registry
+    run bash -c "zsh \"$BORG\" next --open beta --chosen 2>/dev/null"
+    [ "$status" -eq 0 ]
+    run grep "tmux display-message beta" "$TRACE"
+    [ "$status" -eq 0 ]
+    [[ "$output" != *"Stale registry"* ]] || false
+}

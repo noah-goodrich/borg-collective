@@ -448,7 +448,7 @@ _borg_do_switch() {
                 rel_time=$(_borg_relative_time "$last")
                 echo -e "  ${DIM}Last active:${NC} $rel_time"
                 [[ -z "$waiting_reason" ]] || echo -e "  ${YELLOW}Needs:${NC} $waiting_reason"
-                [[ -z "$summary" ]] || echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
+                [[ -z "$summary" ]] || echo -e "  $(_borg_clip_summary "$summary")"
                 echo
             fi
             info "Switching to $repository ($tmux_window)"
@@ -764,6 +764,24 @@ _borg_checkpoint_summary() {
     _borg_py borg_core.link.overlay --summary "$1" 2>/dev/null || true
 }
 
+# `_borg_clip_summary <text>`: the text as ONE line of at most 80 visible characters (the picker's budget), with the
+# three storable control characters flattened first (the picker's own flatten) and a trailing `…` standing in as the
+# 80th character when it is cut. A tl;dr is a whole paragraph; the picker, the Queen context and the tmux message
+# already cut it, and `borg next` and the interactive switch brief must not print it unbounded (so neither folds it:
+# clipped to 80 it is one line). Short text is unchanged.
+_borg_clip_summary() {
+    local text="${1//[$'\t\n\r']/ }"
+    if (( ${#text} > 80 )); then text="${text:0:79}…"; fi
+    printf '%s' "$text"
+}
+
+# `_borg_registry_summary <registry-json> <repository>`: the summary already derived into an overlaid registry (the
+# `_borg_next_registry` output), "" when null. Lets a caller holding that registry hand it to `_borg_do_switch
+# --summary` instead of paying a second `overlay --summary` Python call.
+_borg_registry_summary() {
+    printf '%s' "$1" | jq -r --arg p "$2" '.projects[$p].summary // ""' 2>/dev/null || true
+}
+
 # One fail-open log row per `borg next` run (borg_core.nextpick.cli never writes stdout, exits 0).
 # Called BEFORE the --pick range check so the row exists even for a bad pick; a die after it is fine.
 # `_borg_py` (not bare python3) so the child inherits the config surface; XDG_STATE_HOME is read from
@@ -831,7 +849,7 @@ _borg_next_chooser() {
         return 0
     fi
     _borg_next_log "$registry" 0 "" "${base[@]}" --opened "${names[idx]}" --opened-after "$(( SECONDS - start ))"
-    _borg_do_switch "${names[idx]}" --silent
+    _borg_do_switch "${names[idx]}" --silent --summary "$(_borg_registry_summary "$registry" "${names[idx]}")"
 }
 
 # Non-interactive surfaces for skills (no TTY): `--rows --json` (logs nothing), `--open <p> --chosen [--shown]`
@@ -870,7 +888,7 @@ _borg_next_surface() {
             printf '%s' "$registry" | jq -e --arg p "$repository" '.projects[$p] != null' >/dev/null 2>&1 ||
                 die "next --open: unknown repository '$repository'"
             _borg_next_log "$registry" 0 "" "${base[@]}" --opened "$repository" --unmeasured
-            _borg_do_switch "$repository" --silent
+            _borg_do_switch "$repository" --silent --summary "$(_borg_registry_summary "$registry" "$repository")"
             ;;
         declined)
             _borg_next_log "$registry" 0 "" "${base[@]}"
@@ -990,7 +1008,7 @@ cmd_next() {
         echo -e "  ${YELLOW}Needs:${NC} $waiting_reason"
     fi
     if [[ -n "$summary" && "$summary" != "null" ]]; then
-        echo -e "  $summary" | fold -s -w 70 | sed '1!s/^/  /'
+        echo -e "  $(_borg_clip_summary "$summary")"
     fi
 
     # Directives for recommended repository (from its own docs/plans/directives/)
