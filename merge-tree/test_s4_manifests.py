@@ -22,9 +22,14 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # verb rename could not reach a filesystem path). Resolved here the same way
 # borg_core.manifest.shell.manifest_dir resolves it -- new name first, legacy second -- so this
 # suite passes on a migrated tree AND on an un-migrated checkout during the expand phase.
+#
+# This repository's own manifests moved into `.stacks/` (the chain -> stack rename's MIGRATE step, run on
+# this branch by `borg stack migrate`), so `.stacks/` is tried first; the older two stay for an
+# un-migrated checkout.
+_STACKS_DIR = os.path.join(REPO_ROOT, ".stacks")
 _CHAINS_DIR = os.path.join(REPO_ROOT, ".borg", "chains")
 _LEGACY_DIR = os.path.join(REPO_ROOT, ".borg", "programs")
-PROGRAMS_DIR = _CHAINS_DIR if os.path.isdir(_CHAINS_DIR) else _LEGACY_DIR
+PROGRAMS_DIR = next((d for d in (_STACKS_DIR, _CHAINS_DIR) if os.path.isdir(d)), _LEGACY_DIR)
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 

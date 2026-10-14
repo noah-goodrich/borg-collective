@@ -2134,6 +2134,7 @@ def _corpus_paths():
     paths = [_THREE_REPO_FIXTURE]
     for relative in (
         os.path.join("evals", "s4-k3", "fixtures", "programs"),
+        ".stacks",
         os.path.join(".borg", "chains"),
         os.path.join("tests", "fixtures", "link", "manifests"),
     ):
@@ -2176,7 +2177,7 @@ def test_a_manifest_holding_en_dashes_round_trips_byte_identical(tmp_path):
     # viz-program.json is tracked with literal U+2013 order values. The old writer escaped them to
     # `–`, so a sync that changed nothing dirtied a tracked file; `ensure_ascii=False` is the fix
     # and this is the only test holding it to byte equality rather than to parsed equality.
-    path = os.path.join(_REPO_ROOT, ".borg", "chains", "viz-program.json")
+    path = os.path.join(_REPO_ROOT, ".stacks", "viz-program.json")
     with open(path, "rb") as fh:
         original = fh.read()
     assert "–".encode() in original, "the fixture no longer carries an en-dash; pick another"
