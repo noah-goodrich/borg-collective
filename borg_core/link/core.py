@@ -412,10 +412,24 @@ def heading_title(text: str) -> str:
     returns ZERO files, so the "fidelity" has no consumer today. Preserving the CR end to end would
     buy a port-era parity claim whose port is finished, at the price of newly injecting a trailing
     CR into every rendered heading the day someone commits a CRLF file -- a real rendering bug
-    traded for a dead one.
+    traded for a dead one. FRONTMATTER (#383): a leading `---` fence is skipped (_frontmatter_title).
     """
-    first = text.split("\n", 1)[0]
-    return _HEADING_PREFIX.sub("", first)
+    lines = text.split("\n")
+    if lines[0].rstrip() != "---":
+        return _HEADING_PREFIX.sub("", lines[0])
+    return _frontmatter_title(lines[1:])
+
+
+def _frontmatter_title(rest: list[str]) -> str:
+    """Title of a file opening with a `---` fence; `rest` is every line after it. Frontmatter ends at the first
+    `---` or `...`; unclosed, everything is body (never "---"). Then: first `#` line, else `title:`, else first
+    non-blank body line, else ""."""
+    end = next((i for i, ln in enumerate(rest) if ln.rstrip() in ("---", "...")), None)
+    front, body = ([], rest) if end is None else (rest[:end], rest[end + 1:])
+    heads = [ln for ln in body if ln.startswith("#")]
+    titles = [ln[len("title:"):].strip().strip("\"'").strip() for ln in front if ln.startswith("title:")]
+    prose = [ln.strip() for ln in body if ln.strip()]
+    return _HEADING_PREFIX.sub("", heads[0]) if heads else (titles + prose + [""])[0]
 
 
 def ship_date(text: str) -> str:

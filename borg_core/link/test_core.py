@@ -352,6 +352,27 @@ def test_heading_title(text, expected):
     assert core.heading_title(text) == expected
 
 
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("---\ntitle: T\n---\n# Heading\nbody", "Heading"),
+        ("---\ntitle: T\n---\n\n## Sub heading", "Sub heading"),
+        ("---\ntitle: \"Quoted T\"\nx: 1\n...\nbody", "Quoted T"),
+        ("---  \ntitle: 'Single'\n---\nbody", "Single"),
+        ("---\nx: 1\n---\n\nfirst prose line\nmore", "first prose line"),
+        ("---\ntitle: Lost\n# Not closed\nbody", "Not closed"),
+        ("---\ntitle: Lost\nbody", "title: Lost"),
+        ("---", ""),
+        ("---\n---", ""),
+        ("> quote\nbody", "> quote"),
+        ("----\nbody", "----\nbody".split("\n")[0]),
+    ],
+)
+def test_heading_title_skips_frontmatter(text, expected):
+    assert core.heading_title(text) == expected
+    assert core.heading_title(text) != "---"
+
+
 def test_heading_title_ignores_unicode_line_separators():
     # `head -1` breaks on \n only; str.splitlines() would also break on \x0b, \x0c and U+2028.
     assert core.heading_title("# A B") == "A B"
