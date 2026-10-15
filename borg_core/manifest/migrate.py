@@ -1,6 +1,6 @@
 """`borg stack migrate`: the PURE planning core. Git facts in as data, a plan out, no I/O.
 
-Step (b1) of `docs/plans/directives/2026-10-13-chain-to-stack-rename.md`. Every manifest under a
+Step (b1) of `docs/plans/assimilated/2026-10-13-chain-to-stack-rename.md`. Every manifest under a
 repository's `.borg/chains/` (and the legacy `.borg/programs/`) moves to `.stacks/`, and the `.stacks/`
 folder is ALWAYS version-controlled (Noah, 2026-10-13). So a tracked manifest moves with `git mv`, and a
 manifest git ignores is moved and then staged, which is the one place the move changes what a repository

@@ -3349,7 +3349,7 @@ _borg_version_ge() {
 
 # ── stack manifests (PM6) ──────────────────────────────────────────────────────
 # borg stack list|plan|sync|migrate — the sync coordinator (migrate: see cmd_stack) over <repository>/.stacks/*.json.
-# `borg stack` is the verb (docs/plans/directives/2026-10-13-chain-to-stack-rename.md); `borg chain` and `borg program`
+# `borg stack` is the verb (docs/plans/assimilated/2026-10-13-chain-to-stack-rename.md); `borg chain` and `borg program`
 # are dispatch arms that die pointing here (step (c), the contract), and `.borg/chains/` is no longer read.
 # The Python side (merge-tree/coordinator.py) is registry-free by design (Architecture Rules:
 # testable core, shell wrapper) — THIS is the registry-resolving caller. Every registered repository

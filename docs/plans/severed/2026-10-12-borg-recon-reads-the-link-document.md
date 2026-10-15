@@ -1,3 +1,5 @@
+> Dropped 2026-10-12: `borg link` folds the same fan-out into its own document, so recon phase 5b and this directive were not built.
+
 # Directive: /borg-recon synthesizes the borg link document instead of running its own sweep
 
 *Filed: 2026-10-12 · Status: Proposed, NOT BUILT (Noah decided 2026-10-12 to defer) · Owner: Noah*

@@ -535,7 +535,7 @@ _names_foreign_skill() {
 }
 
 @test "directives: the chain-to-stack evidence does not claim link_sweep.bats passed unmodified" {
-    local f="${REPO_ROOT}/docs/plans/directives/2026-10-13-chain-to-stack-rename.md"
+    local f="${REPO_ROOT}/docs/plans/assimilated/2026-10-13-chain-to-stack-rename.md"
     run grep -F "link_sweep.bats\` passes unmodified" "$f"
     [ "$status" -ne 0 ] || { echo "false evidence claim is back: $output"; false; }
     grep -qF "changed only in its fixture paths" "$f"

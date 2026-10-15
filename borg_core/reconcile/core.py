@@ -7,7 +7,7 @@ clean-architecture linter, whose W9004 allow-list already permits `pathlib`, `js
 
 THIS MODULE WRITES NOTHING, AND THAT IS THE DESIGN RATHER THAN A STAGE. A reconcile WRITER already
 exists -- `merge-tree/coordinator.py::sync_borg` -- and is owned by
-`docs/plans/directives/2026-08-31-retire-merge-tree-programs-into-borg-core.md`, whose recorded trap
+`docs/plans/assimilated/2026-08-31-retire-merge-tree-programs-into-borg-core.md`, whose recorded trap
 is that repointing `discover` without changing `sync_borg` "permanently delete[s] rows ... exit 0".
 So the writing half is AC7's work on a path with four known silent-dataloss routes, and the reporting
 half needs none of it: the derived-vs-declared join is already built and already pure in

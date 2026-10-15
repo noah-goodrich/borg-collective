@@ -97,9 +97,10 @@ each step is independently green:
 - [x] **The `.borg-project` decision is recorded** in CLAUDE.md with its reason, whichever way it goes.
   - Verify: the decision text exists and names the plugin-distribution constraint.
   - Done 2026-10-12 (rename PR R1): CLAUDE.md, Key Patterns, "Vocabulary: `repository` is the code word for a git repo". The filename is kept permanently, together with the `borg link --json` keys and `BORG_PROJECT_NAME`, and the entry names the plugin-distribution constraint.
-- [ ] **The plugin's MARKER-WALK block and the deployed skill agree with the repo**, since `borg setup` is not the
+- [x] **The plugin's MARKER-WALK block and the deployed skill agree with the repo**, since `borg setup` is not the
       only delivery path any more.
   - Verify: the deployed-artifact drift check, or a byte comparison of the two copies.
+  - Done 2026-10-15: `diff -r skills/borg-link` against the plugin mirror is clean, the mirror having been rebuilt from main at 6927b4df (claude-plugins PR #74, release 0.9.7).
 
 ## Notes
 

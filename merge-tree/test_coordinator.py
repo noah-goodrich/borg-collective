@@ -779,7 +779,7 @@ class TestWhatTheWriterPersists:
 
     def test_the_sync_target_payload_is_the_declared_body_only(self, tmp_path, monkeypatch):
         # DECISION 2 (Noah, 2026-10-12): `program` is dropped from the wire. A key appears only when the
-        # author wrote it, and no `_`-prefixed key ever does.
+        # author wrote it; an authored `_`-prefixed key is preserved on rewrite, and only the loader stamps are removed.
         capture = tmp_path / "stdin.json"
         target_dir = _make_target(
             tmp_path, "capture", "#!/bin/sh\ncat > '" + str(capture) + '\'\necho \'{"ok": true, "rows": []}\'\n'

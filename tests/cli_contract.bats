@@ -4460,7 +4460,7 @@ _repo_norm() {
 # `borg stack` is the verb. `borg chain` and `borg program` are dispatch arms that DIE pointing at it
 # (the CONTRACT step), and `<repository>/.borg/chains/` is no longer read. The first cases mirror what
 # the `borg chain` cases pinned before the contract, now on `borg stack`.
-# docs/plans/directives/2026-10-13-chain-to-stack-rename.md, sections (a) and (c).
+# docs/plans/assimilated/2026-10-13-chain-to-stack-rename.md, sections (a) and (c).
 
 @test "contract: argless 'borg stack' reaches the list default instead of a shift crash" {
     echo '{"projects": {"p": {"path": "'"$BATS_TEST_TMPDIR"'/proj"}}}' > "$BORG_REGISTRY"
