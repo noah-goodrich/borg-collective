@@ -30,7 +30,7 @@ WHAT THIS SCRIPT STILL DOES
 The `primitives` leg: differentials of the individual ported primitives against the exact shell
 one-liners they replace -- `core.heading_title`, `core.ship_date`, `core.plan_progress`,
 `core.plan_objective` -- over the real markdown reachable from the registry (PROJECT_PLAN.md and
-`docs/plans/assimilated/*.md` for every registered project). These primitives were ported from shell
+`docs/plans/assimilated/*.md` for every registered repository). These primitives were ported from shell
 and their shell originals still exist verbatim in this file, so the comparison remains live and
 reproducible. `render._fold_s` vs `fold -s` is already covered by `test_matches_real_fold_s_binary`
 in borg_core/link/test_render.py -- NOT duplicated here.

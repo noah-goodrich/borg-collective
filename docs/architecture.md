@@ -8,18 +8,18 @@ How every component of Borg fits together.
 
 Borg is an AI development orchestration framework with two layers:
 
-1. **`borg` (orchestration)** — Runs on the host. Manages a JSON registry of projects, scores
+1. **`borg` (orchestration)** — Runs on the host. Manages a JSON registry of repositories, scores
    priorities, enforces work/life boundaries, launches the Queen session for morning
    briefings, and provides the `borg next` / `Ctrl+Space >` hotkey for instant context switching.
 
-2. **`drone` (project lifecycle)** — Runs on the host. Manages Docker Compose containers, tmux
-   windows, and pane layouts. Launches Claude Code sessions inside project containers. Forked
+2. **`drone` (repository lifecycle)** — Runs on the host. Manages Docker Compose containers, tmux
+   windows, and pane layouts. Launches Claude Code sessions inside repository containers. Forked
    from `dev.sh`.
 
-Knowledge persistence is file-based: user-authored session checkpoints are stored per-project at
-`<project>/.borg/checkpoints/`. (Borg previously integrated with cairn, a separate
+Knowledge persistence is file-based: user-authored session checkpoints are stored per-repository at
+`<repository>/.borg/checkpoints/`. (Borg previously integrated with cairn, a separate
 PostgreSQL+pgvector knowledge graph service, for cross-project semantic recall; cairn was
-decommissioned 2026-08-08 and its corpus exported to per-project `.borg/knowledge/` markdown,
+decommissioned 2026-08-08 and its corpus exported to per-repository `.borg/knowledge/` markdown,
 which is grep-reachable directly — no service required.)
 
 ### Data Flow
@@ -27,8 +27,8 @@ which is grep-reachable directly — no service required.)
 ```
 Session lifecycle:
 
-  drone up project          → Container starts, tmux window created
-  drone claude project      → Claude Code session begins
+  drone up repository       → Container starts, tmux window created
+  drone claude repository   → Claude Code session begins
   borg-link-down.sh fires   → Registry: status=active
                             → Injects additionalContext: latest checkpoint
                             ↓
@@ -38,7 +38,7 @@ Session lifecycle:
                             ↓
   Developer runs /borg-link-up before stopping:
                             → Skill writes structured checkpoint to
-                              <project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md
+                              <repository>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md
                             ↓
   Session ends              → borg-link-up.sh fires:
                                1. Registry: status=idle
@@ -66,7 +66,7 @@ writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/a
 ```
 ~/dev/borg-collective/
     borg.zsh                    Main orchestration CLI
-    drone.zsh                   Project lifecycle CLI
+    drone.zsh                   Repository lifecycle CLI
     lib/
         registry.zsh            Registry CRUD
         tmux.zsh                tmux window listing + switching
@@ -76,14 +76,14 @@ writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/a
         recon/adapters/         Recon source adapters (recon-adapter-<source>)
         borg-hooks.sh           Shared bash helpers used by hooks (not sourced by borg.zsh)
         borg-sync.zsh           Skill/hook sync helpers
-        drone-hooks.zsh         Project-side pre-up/post-down hook runner
+        drone-hooks.zsh         Host-side pre-up/post-down hook runner
         reaper.sh               Stale-worktree reaping (portable sh core for `borg reap-worktrees`)
         colors.zsh, secrets.zsh Output styling + secret handling helpers
     borg_core/                  Python core; the zsh CLI dispatches into it via `_borg_py`
         paths.py                Config-path resolution + defaults
         registry/               Registry read/write core, shell adapter, CLI entry
         recon/                  Recon fan-out engine (ported from the deleted lib/recon.sh)
-        manifest/               Reader for <project>/.stacks/*.json stack manifests
+        manifest/               Reader for <repository>/.stacks/*.json stack manifests (the one root)
         link/                   `borg link` document build + renderer
     hooks/
         borg-link-down.sh       SessionStart → status=active + checkpoint injection
@@ -106,8 +106,8 @@ writing: **17 hooks**, **~14 lib files**, **17 skills**, **6 agents** (+ `docs/a
         borg-assimilate/        Shipping checklist + Collective review + execution
         borg-collective-review/ Adversarial multi-persona review (The Collective)
         borg-review/            Mid-session diagnostic + loop detection
-        borg-link/              Consolidated project intelligence (overview + deep dive)
-        borg-link-up/           Flush session state to a per-project checkpoint file
+        borg-link/              The front door: Queen overview, or this directory's page
+        borg-link-up/           Flush session state to a per-repository checkpoint file
         borg-recon/             Synthesize cross-source recon fan-out into an ELI10 briefing
         borg-next/, borg-resume/, borg-switch/, borg-verify/, break-glass/,
         simplify/, fable-reviewer/, no-unnecessary-read-perms/   Remaining user-invocable skills
@@ -161,7 +161,7 @@ mkdir -p ~/.config && printf 'com.stillpoint-labs\n' > ~/.config/launchd-prefix 
 #### Extension agents (drop-in socket)
 
 borg's installer is the only launchd installer on the machine. Anything else that needs a LaunchAgent
-(dotfiles, a project) drops `<name>.plist.tmpl` — a file or a symlink — into
+(dotfiles, a repository) drops `<name>.plist.tmpl` — a file or a symlink — into
 `${XDG_CONFIG_HOME:-~/.config}/borg/extensions/launchd/`. `install.sh` renders each one through the
 same placeholders the built-in plists use (`{{LABEL}}`, `{{HOME}}`, `{{USER}}`, `{{LOG_DIR}}`,
 `{{PATH_VALUE}}`), writes `~/Library/LaunchAgents/<label>.plist` as a regular file, then boots out any
@@ -177,9 +177,9 @@ extension labels; the operator retires any pre-borg labels by hand, once.
 ```
 ~/.config/borg/
     config.zsh                  User configuration (work hours, limits)
-    registry.json               Project registry (auto-managed by hooks)
+    registry.json               Repository registry (auto-managed by hooks)
 
-<project>/.borg/
+<repository>/.borg/
     checkpoints/                User-authored session checkpoints (written by /borg-link-up)
         2026-04-23-1114.md
         2026-04-22-1730.md
@@ -211,11 +211,11 @@ extension labels; the operator retires any pre-borg labels by hand, once.
 ```json
 {
   "projects": {
-    "project-name": {
-      "path": "/absolute/path/to/project",
+    "repo-name": {
+      "path": "/absolute/path/to/repository",
       "source": "cli",
       "tmux_session": "borg",
-      "tmux_window": "project-name",
+      "tmux_window": "repo-name",
       "claude_session_id": "uuid",
       "last_activity": "2026-03-30T14:30:00Z",
       "status": "active",
@@ -255,8 +255,8 @@ borg.zsh
   │   ├── cmd_next        Priority scoring → recommendation → switch
   │   ├── cmd_ls          Dashboard with sorting, markers, capacity warning
   │   ├── cmd_switch      fzf picker or direct switch
-  │   ├── cmd_status      Detailed single-project view
-  │   ├── cmd_hail        Full briefing (no arg) or project status (falls back to cmd_status)
+  │   ├── cmd_status      Detailed single-repository view
+  │   ├── cmd_hail        Full briefing (no arg) or repository status (falls back to cmd_status)
   │   ├── cmd_scan        Auto-discover from session history
   │   ├── cmd_add/rm      Manual registration
   │   └── cmd_help        Command reference
@@ -323,7 +323,7 @@ Hooks are registered in `~/.claude/settings.json`:
 session JSONL for an `ExitPlanMode` tool call since the most recent real user message. If found,
 and no `PROJECT_PLAN.md` already exists in the repo, it writes the plan to
 `docs/plans/PROJECT_PLAN.md` (creating the directory if needed) and emits a one-line note to
-stderr. Always exits 0 — it never blocks the edit. Project-mode only; Queen sessions are
+stderr. Always exits 0 — it never blocks the edit. Repository sessions only; Queen sessions are
 excluded via `_borg_session_mode`.
 
 ---
@@ -346,9 +346,9 @@ the codebase, form proposals, and present them for confirmation. This minimizes 
 | borg-assimilate | Manual | Shipping checklist + Collective review + execution |
 | borg-collective-review | Manual / invoked | Adversarial multi-persona review (The Collective) |
 | borg-review | Manual | Mid-session diagnostic, loop detection, one recommendation |
-| borg-link | Manual | Consolidated project intelligence (overview or per-project deep dive) |
-| borg-link-up | Manual | Flush session state to `<project>/.borg/checkpoints/<ts>.md` |
-| borg-recon | Manual | Synthesize `borg recon --json` output into a by-project, urgency-ranked briefing |
+| borg-link | Manual | The front door: Queen overview, or this directory's page |
+| borg-link-up | Manual | Flush session state to `<repository>/.borg/checkpoints/<ts>.md` |
+| borg-recon | Manual | Synthesize `borg recon --json` output into a by-repository, urgency-ranked briefing |
 | borg-next / borg-resume / borg-switch / borg-verify | Manual | Skill-form CLI wrappers |
 | break-glass | Manual | Explicit, logged override for a normally-blocked action |
 | simplify / fable-reviewer / no-unnecessary-read-perms | Manual / auto | Code + permission hygiene guardrails |
@@ -385,7 +385,7 @@ default constraint.
 ## Recon Fan-Out
 
 The recon fan-out is a source-agnostic sweep primitive that answers "what happened everywhere since
-I last looked?" across every registered project.
+I last looked?" across every registered repository.
 
 **`recon` is not a human-facing verb.** It retired 2026-08-26 (AC1 of the one-front-door plan):
 `borg link` folds the same fan-out into its own document, so a human never needs to run the sweep
@@ -415,19 +415,19 @@ the move.
   machine-specific injected layer, never hardcoded here.
 - **Normalization**: every finding becomes an Item —
   `{project, source, ref, title, state, changed, owner, action_needed, urgency, one_line}` — merged
-  by project across all adapters.
-- **Contradiction reconciliation**: recon cross-checks each project's latest checkpoint against
+  by repository across all adapters.
+- **Contradiction reconciliation**: recon cross-checks each repository's latest checkpoint against
   fresh source state and flags checkpoint-blocker-vs-resolved-source contradictions (e.g. a
   checkpoint says "blocked on review" but the PR merged since).
 - **Output**: `borg recon --json` emits the reconciled document; `/borg-recon` synthesizes it into
-  a by-project, most-urgent-first, ELI10 briefing plus Yours(human)-vs-Mine(agent) action lists and
+  a by-repository, most-urgent-first, ELI10 briefing plus Yours(human)-vs-Mine(agent) action lists and
   a bounded read-only kickoff batch.
 
 ---
 
 ## Agent Roster and Nanoprobe Delegation
 
-The Queen session never edits project files directly — it briefs, spawns, monitors, and
+The Queen session never edits repository files directly — it briefs, spawns, monitors, and
 synthesizes. Actual work is delegated to ephemeral subagents via the Agent tool, routed by model
 tier per `docs/agent-routing.md`:
 
@@ -457,9 +457,9 @@ Borg previously integrated with cairn, a separate PostgreSQL+pgvector knowledge 
 cross-project search, briefing enrichment, and cross-session presence tracking. Cairn was
 decommissioned 2026-08-08 (its differentiating cross-project recall measured indistinguishable from
 a null baseline), and every integration point — `borg search`, cairn-enriched briefings, and
-presence publish/close — was removed along with it. The corpus was exported to per-project
+presence publish/close — was removed along with it. The corpus was exported to per-repository
 `.borg/knowledge/*.md` markdown, which is grep-reachable directly and requires no service.
-Knowledge persistence today is purely file-based: checkpoints in `<project>/.borg/checkpoints/`,
+Knowledge persistence today is purely file-based: checkpoints in `<repository>/.borg/checkpoints/`,
 loaded on session start.
 
 ---
@@ -479,8 +479,8 @@ volumes:
 
 ### Path Resolution
 
-Inside containers, CWD is typically `/workspaces/<project>`, not the host path. Hooks use
-`basename($CWD)` to identify the project, which works when docker-compose project names match
+Inside containers, CWD is typically `/workspaces/<repository>`, not the host path. Hooks use
+`basename($CWD)` to identify the repository, which works when docker-compose project names match
 directory names.
 
 ---

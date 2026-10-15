@@ -25,12 +25,12 @@ impaired.*
 **fMRI shows ADHD brains work harder during decision tasks; all information weighed equally.**
 Relational Psychology Group. "ADHD and Decision Paralysis."
 https://www.relationalpsych.group/articles/adhd-and-decision-paralysis-why-small-choices-can-feel-overwhelming
-*Basis for: `borg next` single recommendation, flat project lists causing paralysis, `BORG_MAX_ACTIVE` limit.*
+*Basis for: `borg next` single recommendation, flat repository lists causing paralysis, `BORG_MAX_ACTIVE` limit.*
 
 **Limiting choices reduces cognitive load and prevents overanalysis.**
 Focus Bear. "Choice Paralysis ADHD Tips."
 https://www.focusbear.io/blog-post/choice-paralysis-adhd-tips-for-easier-decision-making
-*Basis for: binary pin flag (not priority numbers), archiving stale projects, capacity warnings.*
+*Basis for: binary pin flag (not priority numbers), archiving stale repositories, capacity warnings.*
 
 Psychology Today (2024). "Overcoming Decision Fatigue in ADHD."
 https://www.psychologytoday.com/us/blog/changing-the-narrative-on-adhd/202405/overcoming-decision-fatigue-in-adhd
@@ -94,7 +94,7 @@ https://www.interaction-design.org/master-classes/how-to-design-for-neurodiversi
 **Distraction-free modes are essential for ADHD users.**
 UXmatters (2024). "Embracing Neurodiversity in UX Design."
 https://www.uxmatters.com/mt/archives/2024/04/embracing-neurodiversity-in-ux-design-crafting-inclusive-digital-environments.php
-*Basis for: dimming out-of-context projects, clean `borg link` output, archiving stale items.*
+*Basis for: dimming out-of-context repositories, clean `borg link` output, archiving stale items.*
 
 **Adaptive UX frameworks for AI-driven interfaces should integrate cognitive load management.**
 ResearchGate (2025). "Adaptive UX Frameworks for Neurodivergent Users."
@@ -268,7 +268,7 @@ https://nakamasato.medium.com/using-claude-code-safely-with-dev-containers-b46b8
 
 **One Project, One Container pattern.**
 https://medium.com/rigel-computer-com/running-claude-code-in-docker-containers-one-project-one-container-1601042bf49c
-*Basis for: per-project container isolation model.*
+*Basis for: per-repository container isolation model.*
 
 **Sharing Claude memory across multiple devcontainers.**
 https://dev.classmethod.jp/en/articles/share-claude-mem-across-devcontainers/

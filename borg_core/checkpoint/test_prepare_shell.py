@@ -68,18 +68,18 @@ def test_now_honours_a_valid_override_and_ignores_garbage(monkeypatch):
 # ----------------------------------------------------------------------------------- root and plan
 
 
-def test_project_root_is_the_git_toplevel_from_a_subdirectory(tmp_path):
+def test_repository_root_is_the_git_toplevel_from_a_subdirectory(tmp_path):
     repo = _git_repo(tmp_path)
     sub = repo / "a" / "b"
     sub.mkdir(parents=True)
-    root = prepare_shell.project_root(str(sub), prepare_shell.Budget())
+    root = prepare_shell.repository_root(str(sub), prepare_shell.Budget())
     assert Path(root).resolve() == repo.resolve()
 
 
-def test_project_root_falls_back_to_the_cwd_outside_a_repository(tmp_path):
+def test_repository_root_falls_back_to_the_cwd_outside_a_repository(tmp_path):
     plain = tmp_path / "plain"
     plain.mkdir()
-    assert prepare_shell.project_root(str(plain), prepare_shell.Budget()) == str(plain)
+    assert prepare_shell.repository_root(str(plain), prepare_shell.Budget()) == str(plain)
 
 
 def test_plan_path_prefers_the_root_file_then_docs_plans(tmp_path):

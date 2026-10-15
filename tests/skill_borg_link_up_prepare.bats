@@ -48,7 +48,7 @@ _first_line() {
     [[ "$output" == *'allowed-tools: Bash(borg checkpoint-prepare *)'* ]] || false
     [[ "$output" == *'name: borg-link-up'* ]] || false
     [[ "$output" == *'description:'* ]] || false
-    [[ "$output" == *'<project>/.borg/checkpoints/<timestamp>.md'* ]] || false
+    [[ "$output" == *'<repository>/.borg/checkpoints/<timestamp>.md'* ]] || false
 }
 
 @test "AC4: a fallback paragraph exists, keyed on STATUS: fallback and on a missing block" {

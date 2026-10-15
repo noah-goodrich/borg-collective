@@ -22,5 +22,5 @@
 | Document | Location | Purpose |
 |----------|----------|---------|
 | [README](../README.md) | Repository root | Open source documentation for sharing |
-| [CLAUDE.md](../CLAUDE.md) | Repository root | Internal handoff for Claude Code sessions working on this project |
+| [CLAUDE.md](../CLAUDE.md) | Repository root | Internal handoff for Claude Code sessions working on this repository |
 | [Approved Plan](../../.claude/plans/spicy-kindling-lovelace.md) | `~/.claude/plans/` | The full gap analysis and phased implementation plan |

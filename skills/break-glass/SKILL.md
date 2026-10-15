@@ -1,8 +1,8 @@
 ---
 name: break-glass
 description: >
-  Add a local permission exception to a project's settings.local.json. Use when a project needs
-  to run a command that is too dangerous or project-specific for the global allowlist. This is
+  Add a local permission exception to a repository's settings.local.json. Use when a repository needs
+  to run a command that is too dangerous or repository-specific for the global allowlist. This is
   the formal escape hatch — global permission fixes are normal borg-collective work.
 user-invocable: true
 ---
@@ -16,15 +16,15 @@ You are adding a local permission exception. This is a controlled escape hatch, 
 - **Global settings are the default.** All broadly useful commands belong in
   `~/.claude/settings.json`, managed by borg-collective. Adding to global is normal work,
   not an exception.
-- **Local exceptions are rare.** A project's `settings.local.json` should almost always have
-  an empty allow list. Exceptions are for commands that are genuinely project-specific AND
+- **Local exceptions are rare.** A repository's `settings.local.json` should almost always have
+  an empty allow list. Exceptions are for commands that are genuinely repository-specific AND
   too dangerous to allow globally.
 - **The break-glass skill exists so exceptions are documented, not hidden.**
 
 ## Before You Proceed
 
 Ask yourself:
-1. **Is this command project-specific?** If it's useful across projects, add it to global
+1. **Is this command repository-specific?** If it's useful across repositories, add it to global
    instead (that's just regular borg-collective work — no skill needed).
 2. **Is this command dangerous enough to warrant isolation?** If it's safe to allow globally
    (like `make` or `pre-commit`), add it to global instead.
@@ -39,7 +39,7 @@ Ask yourself:
    `Bash(dangerous-tool --specific-flag --exact-args)`. Exact commands accumulate fast.
 3. **Add at most 1-3 rules.** If you need more, something is wrong — reassess whether these
    belong in global.
-4. **Write the rule** to the project's `.claude/settings.local.json`:
+4. **Write the rule** to the repository's `.claude/settings.local.json`:
    ```json
    {
      "permissions": {
@@ -54,7 +54,7 @@ Ask yourself:
 ## Examples of Legitimate Local Exceptions
 
 - A database migration tool that drops and recreates schemas (`Bash(alembic downgrade:*)`)
-- A project-specific deploy script that pushes to production
+- A repository-specific deploy script that pushes to production
 - A credential rotation tool that writes secrets
 
 ## Examples of Things That Are NOT Local Exceptions

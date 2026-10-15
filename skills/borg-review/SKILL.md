@@ -18,11 +18,11 @@ Before loading context, check for local extension files. Read each file below th
 extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-review/01-context.md` (per machine)
-2. `<project root>/.borg/skill-extensions/borg-review/01-context.md` (per project)
+2. `<repository root>/.borg/skill-extensions/borg-review/01-context.md` (per repository)
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
@@ -74,11 +74,11 @@ Before settling on the single recommendation, check for local extension files. R
 order; later files extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-review/02-output.md` (per machine)
-2. `<project root>/.borg/skill-extensions/borg-review/02-output.md` (per project)
+2. `<repository root>/.borg/skill-extensions/borg-review/02-output.md` (per repository)
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
@@ -95,7 +95,7 @@ End with exactly ONE action. Not options. One thing.
 - On track → "Next: [specific criterion]."
 - Scope crept → "Park [tangent]. Back to [criterion]."
 - Stuck in loop → "Stop. Try [specific alternative] instead."
-- Blocked → "Switch projects. Come back when [blocker] resolves."
+- Blocked → "Switch repositories. Come back when [blocker] resolves."
 - Done → "All criteria met. Run `/borg-assimilate`."
 - Fading → "Good stopping point. Run `/borg-link-up`, then break."
 

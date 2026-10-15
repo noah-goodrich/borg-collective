@@ -83,7 +83,7 @@ def now() -> datetime:
     return datetime.now()
 
 
-def project_root(cwd: str, budget: Budget) -> str:
+def repository_root(cwd: str, budget: Budget) -> str:
     """The git toplevel of `cwd`, else the directory holding PROJECT_PLAN.md, else `cwd` -- the skill's own rule."""
     if shutil.which("git"):
         answer = _run(["git", "-C", cwd, "rev-parse", "--show-toplevel"], budget, GIT_TIMEOUT_SECONDS)
@@ -276,7 +276,7 @@ def gather(cwd: str = "", session: str = "") -> prepare.Facts:
 def _read_all(reader: Reader, here: str, session: str) -> prepare.Facts:
     reader.note(_cwd_problem(here))
     budget = reader.budget
-    root = reader.step("project root", here, lambda: project_root(here, budget))
+    root = reader.step("repository root", here, lambda: repository_root(here, budget))
     path = reader.step(
         "checkpoint path",
         "unknown",

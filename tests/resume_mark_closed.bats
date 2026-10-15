@@ -1,5 +1,5 @@
 #!/usr/bin/env bats
-# S3b (borg-resume): `borg-resume mark-closed <project|sid>` and its callers (drone down, borg down).
+# S3b (borg-resume): `borg-resume mark-closed <repository|sid>` and its callers (drone down, borg down).
 # docker and tmux are stubs that log to $TRACE; repository names are invented.
 
 load test_helper/setup
@@ -40,7 +40,7 @@ evs() { printf '%s/events/%s.jsonl' "$BORG_RESUME_DIR" "$1"; }
     [ ! -e "$(evs "$SID3")" ]
 }
 
-@test "mark-closed <project> marks every registered session of that repository only" {
+@test "mark-closed <repository> marks every registered session of that repository only" {
     run "$BIN" mark-closed amber-fox-labs
     [ "$status" -eq 0 ]
     [ -s "$(evs "$SID1")" ]

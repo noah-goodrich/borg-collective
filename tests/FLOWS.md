@@ -7,7 +7,7 @@ Each row maps a major observable behaviour to the BATS suite(s) that exercise it
 |------|-------------------|
 | `borg next` / priority scoring | `cli_smoke.bats` (help smoke), `reap.bats` (session-reap predicate) |
 | `borg switch` / fzf picker dispatch | `cli_smoke.bats` (help/command-list smoke) |
-| Lifecycle hook link-down (`borg-link-down.sh`) | `lifecycle.bats` (sets active, injects context, resolves project) |
+| Lifecycle hook link-down (`borg-link-down.sh`) | `lifecycle.bats` (sets active, injects context, resolves repository) |
 | Lifecycle hook link-up (`borg-link-up.sh`) | `lifecycle.bats` (sets idle, uncommitted-change tracking) |
 | Session notify hook | `lifecycle.bats` (notify hook in orchestrator mode guard), `session_mode.bats` |
 | Orchestrator-mode separation | `session_mode.bats`, `lifecycle.bats` (orchestrator-mode tests) |

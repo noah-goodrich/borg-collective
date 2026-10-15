@@ -2,8 +2,8 @@
 
 > Your sessions will be assimilated.
 
-An AI development orchestration framework. Two commands — `borg` for orchestration, `drone` for project
-lifecycle — that coordinate parallel Claude Code sessions across projects and containers.
+An AI development orchestration framework. Two commands — `borg` for orchestration, `drone` for repository
+lifecycle — that coordinate parallel Claude Code sessions across repositories and containers.
 
 Built for sustainable AI-assisted development. Tracks sessions, enforces work/life boundaries, manages
 cognitive load, persists context across sessions, and answers the question that causes decision paralysis:
@@ -25,7 +25,7 @@ hooks, installs skills, and configures the tmux keybinding. Safe to re-run.
 ### First run
 
 ```bash
-borg scan   # auto-discover projects from Claude session history
+borg scan   # auto-discover repositories from Claude session history
 borg init   # launch the Queen: morning briefing + Claude session
 ```
 
@@ -34,7 +34,7 @@ borg init   # launch the Queen: morning briefing + Claude session
 - macOS (Apple Silicon or Intel)
 - zsh, tmux, jq, fzf
 - Claude Code CLI (`npm install -g @anthropic-ai/claude-code`)
-- Docker (optional, for devcontainer-based projects)
+- Docker (optional, for devcontainer-based repositories)
 
 ## Commands
 
@@ -45,39 +45,39 @@ borg init   # launch the Queen: morning briefing + Claude session
 | `borg init` | Launch the Queen: morning briefing + Claude session |
 | `borg` / `borg next` | What needs attention? Switch to it. |
 | `borg claude` | Resume the Queen session (continue most recent) |
-| `borg link [project]` | **Front door.** At the Queen's root (the workspace root) it is the cross-repository overview; anywhere else, or with a project, it is a page about that one directory (identity, session, its own checkpoints, what waits on it). `--overview` forces the overview from any directory |
-| `borg switch [query]` | fzf picker → jump to project tmux window |
+| `borg link [repository]` | **Front door.** At the Queen's root (the workspace root) it is the cross-repository overview; anywhere else, or with a repository, it is a page about that one directory (identity, session, its own checkpoints, what waits on it). `--overview` forces the overview from any directory |
+| `borg switch [query]` | fzf picker → jump to repository tmux window |
 | `borg recon --json` | Machine surface only: the reconciled sweep document. Human digest retired — use `borg link` |
 | `borg nanoprobes` (`np`) | List recent nanoprobe runs (subagents) |
 | `borg nanoprobe-log <id>` | Show transcript for a nanoprobe run |
-| `borg reap-worktrees [project]` | Remove stale borg-managed nanoprobe worktrees |
+| `borg reap-worktrees [repository]` | Remove stale borg-managed nanoprobe worktrees |
 | `borg spend` | Main-vs-subagent spend split + trend |
 | `borg doctor` | Verify the launchd agents (registered/exit status/fresh output) |
-| `borg scan` | Auto-discover projects from session history |
-| `borg add [path]` | Register a project (defaults to `$PWD`) |
-| `borg rm <name>` | Unregister a project |
+| `borg scan` | Auto-discover repositories from session history |
+| `borg add [path]` | Register a repository (defaults to `$PWD`) |
+| `borg rm <name>` | Unregister a repository |
 | `borg help` | Full command reference |
 
-### `drone` — Project Lifecycle
+### `drone` — Repository Lifecycle
 
 | Command | Description |
 |---------|-------------|
-| `drone feature <project> <branch>` | Create git worktree + branch, start window, launch Claude |
-| `drone up [project]` | Start container + create tmux window (resume existing work) |
-| `drone down [project]` | Stop container + remove tmux window |
-| `drone claude [project]` | Launch Claude Code session in project context |
-| `drone cortex [project]` | Launch Cortex Code (CoCo) session in project context |
-| `drone sh [project]` | Shell into project container |
-| `drone exec [project] -- <cmd>` | Run a command inside the project container |
-| `drone restart [project\|--all]` | Restart container(s) + re-exec all panes |
-| `drone rebuild [project\|--all]` | Rebuild image (no cache) + restart + re-exec panes |
-| `drone fix [project\|--all]` | Restore standard 2-pane layout |
-| `drone toggle [project]` | Add/remove top-right side pane (2-pane ↔ 3-pane) |
+| `drone feature <repository> <branch>` | Create git worktree + branch, start window, launch Claude |
+| `drone up [repository]` | Start container + create tmux window (resume existing work) |
+| `drone down [repository]` | Stop container + remove tmux window |
+| `drone claude [repository]` | Launch Claude Code session in repository window |
+| `drone cortex [repository]` | Launch Cortex Code (CoCo) session in repository window |
+| `drone sh [repository]` | Shell into repository container |
+| `drone exec [repository] -- <cmd>` | Run a command inside the repository container |
+| `drone restart [repository\|--all]` | Restart container(s) + re-exec all panes |
+| `drone rebuild [repository\|--all]` | Rebuild image (no cache) + restart + re-exec panes |
+| `drone fix [repository\|--all]` | Restore standard 2-pane layout |
+| `drone toggle [repository]` | Add/remove top-right side pane (2-pane ↔ 3-pane) |
 | `drone scaffold <dir>` | Generate `.devcontainer/` from templates |
 
 ### Hotkey
 
-`Ctrl+Space >` — Jump to the most pressing project (runs `borg next --switch`).
+`Ctrl+Space >` — Jump to the most pressing repository (runs `borg next --switch`).
 
 ## Drones vs Nanoprobes
 
@@ -85,10 +85,10 @@ Two assimilation units, two lifetimes. Don't blur them.
 
 | Unit | What it is | Lifetime | Scope | Spawned by |
 |------|------------|----------|-------|------------|
-| **Drone** | Persistent devcontainer (Docker Compose) | Long-lived; one per project | Whole project — toolchain, dependencies, runtime | `drone up <project>` |
-| **Nanoprobe** | Ephemeral Claude Code subagent (`borg-nanoprobe`) | Single task; exits on completion | One discrete unit of work in a git worktree | Orchestrator via the Agent tool |
+| **Drone** | Persistent devcontainer (Docker Compose) | Long-lived; one per repository | Whole repository — toolchain, dependencies, runtime | `drone up <repository>` |
+| **Nanoprobe** | Ephemeral Claude Code subagent (`borg-nanoprobe`) | Single task; exits on completion | One discrete unit of work in a git worktree | The Queen via the Agent tool |
 
-The Queen session never edits project files inline. It spawns nanoprobes (background, worktree-isolated)
+The Queen session never edits repository files inline. It spawns nanoprobes (background, worktree-isolated)
 that perform the work, commit, and exit. The `SubagentStop` hook (`borg-nanoprobe-log.sh`) appends a JSONL
 record to `~/.config/borg/agents.jsonl` so you can list recent runs with `borg nanoprobes` and pull
 transcripts with `borg nanoprobe-log <id>`.
@@ -113,7 +113,7 @@ Three hooks update the registry automatically:
 The session lifecycle uses a "link up / link down" metaphor — Claude links down from the collective
 when a session starts (SessionStart hook downloads the latest checkpoint), and you run
 `/borg-link-up` before stopping to flush the session state to a timestamped checkpoint at
-`<project>/.borg/checkpoints/<ts>.md`. The next session's SessionStart hook automatically loads it
+`<repository>/.borg/checkpoints/<ts>.md`. The next session's SessionStart hook automatically loads it
 back as context.
 
 Checkpoints are user-authored (you own the prose) and stored in-repo — no LLM spend, no hidden
@@ -159,7 +159,7 @@ what to do next.
 
 **`/borg-link-up`** — Flush session state to a checkpoint before stopping. Five-section structured
 summary (Goal, Accomplished, Ready to Commit, Blockers, Next Session). Writes to
-`<project>/.borg/checkpoints/<timestamp>.md`. The next SessionStart hook (`borg-link-down.sh`) loads
+`<repository>/.borg/checkpoints/<timestamp>.md`. The next SessionStart hook (`borg-link-down.sh`) loads
 the newest checkpoint as context.
 
 ### Community Skills
@@ -181,20 +181,20 @@ BORG_MAX_ACTIVE=3
 ```
 
 With boundaries enabled:
-- Switching to a work project after hours: `"It's 10:30 PM. api-service is work. Switch? [y/N]"`
+- Switching to a work repository after hours: `"It's 10:30 PM. api-service is work. Switch? [y/N]"`
 - Capacity warning when more than 3 sessions need attention
 - These are speed bumps (one keystroke), not walls
 
 ## Cross-Session Knowledge
 
-Checkpoints live in each project's `.borg/checkpoints/` (written via `/borg-link-up`) and are loaded
-on session start — that is the durable, per-project record. Cross-project recall comes from Claude
+Checkpoints live in each repository's `.borg/checkpoints/` (written via `/borg-link-up`) and are loaded
+on session start — that is the durable, per-repository record. Cross-repository recall comes from Claude
 Code's own project-memory system, instrumented by `borg-memory-read-log.sh` /
 `bin/memory-hits-report` so its actual usage is visible rather than assumed.
 
 ## Devcontainer Setup
 
-If you run projects in Docker Compose devcontainers, add these volume mounts so Claude Code skills,
+If you run repositories in Docker Compose devcontainers, add these volume mounts so Claude Code skills,
 hooks, and settings are available inside the container:
 
 ```yaml
@@ -212,7 +212,7 @@ And in `devcontainer.json`:
 ```
 
 The CLAUDE.md symlink must be recreated on each start because the host-absolute symlink path does not
-resolve inside the container. See `drone scaffold` to generate this automatically for new projects.
+resolve inside the container. See `drone scaffold` to generate this automatically for new repositories.
 
 ## Configuration
 
@@ -223,7 +223,7 @@ resolve inside the container. See `drone scaffold` to generate this automaticall
 | `BORG_MAX_ACTIVE` | `3` | Capacity warning threshold |
 | `BORG_WORK_HOURS` | (unset) | e.g. `09:00-18:00` |
 | `BORG_WORK_DAYS` | (unset) | e.g. `Mon,Tue,Wed,Thu,Fri` |
-| `BORG_WORK_PROJECTS` | (unset) | Comma-separated project names |
+| `BORG_WORK_PROJECTS` | (unset) | Comma-separated repository names |
 | `BORG_DEBUG` | (unset) | Enable debug output |
 
 ## Documentation

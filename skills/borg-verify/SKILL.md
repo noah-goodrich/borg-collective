@@ -37,8 +37,8 @@ Before spawning the reviewer, collect:
    section) or passed inline by the orchestrator. If neither exists, note "no ACs — scope+tests
    only".
 3. **Verification command** — from `PROJECT_PLAN.md` ("verification" line) or from `CLAUDE.md`
-   (devcontainer pattern: `drone exec <project> -- <cmd>`). If absent, note "unverifiable".
-4. **Project name** — registry name for `drone exec` calls.
+   (devcontainer pattern: `drone exec <repository> -- <cmd>`). If absent, note "unverifiable".
+4. **Repository name** — registry name for `drone exec` calls.
 
 ## Step 2: Spawn ONE Independent Reviewer
 
@@ -47,7 +47,7 @@ Spawn a single fresh subagent with `subagent_type: "borg-collective:borg-verifie
 - The full diff text (not the worker's transcript or reasoning).
 - The ACs list (or "none").
 - The verification command (or "none").
-- The project name (for `drone exec`).
+- The repository name (for `drone exec`).
 - The reviewer prompt below (inline).
 
 **Reviewer prompt (pass verbatim as the subagent's task):**
@@ -60,7 +60,7 @@ INPUTS supplied by the orchestrator:
   DIFF: <full diff text>
   ACCEPTANCE CRITERIA: <ACs or "none">
   VERIFICATION COMMAND: <cmd or "none">
-  PROJECT NAME: <name>
+  REPOSITORY NAME: <name>
 
 DO the following in order:
 

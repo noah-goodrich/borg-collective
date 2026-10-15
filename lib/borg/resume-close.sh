@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # resume-close.sh -- deliberate-close marking for borg-resume (slice S3b).
 #
-# Sourced by bin/borg-resume after resume-paths.sh. `borg-resume mark-closed <project|sid> [project_dir]`
+# Sourced by bin/borg-resume after resume-paths.sh. `borg-resume mark-closed <repository|sid> [project_dir]`
 # appends a session_end event with reason prompt_input_exit (plus via=mark_closed) to the events file of each
 # matching session, so the watcher treats a drone/borg teardown exactly like the user exiting the prompt.
 # Callers only APPEND; the watcher owns every state transition. Bash 3.2 safe, jq required, always returns 0.
@@ -13,7 +13,7 @@
 # session_start for the same sid clears it. Callers mark both before and after the kill; a mark is skipped
 # when the last event for that sid is already a mark_closed, so repeats do not pile up.
 
-# Print the session ids a target names, one per line. A registered session matches when its project equals the
+# Print the session ids a target names, one per line. A registered session matches when its repository equals the
 # target, or (when a repository directory is given) its cwd or tmux.project_dir equals or is under that dir. Falls back
 # to the target as a sid when it has a registry row or an events file. Unknown target prints nothing.
 borg_resume_close_targets() {

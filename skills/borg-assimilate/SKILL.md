@@ -16,14 +16,14 @@ Do not add new requirements. Check exactly what the plan says, nothing more.
 
 Before Step 0, check for local extension files. Read each file below that exists and treat its
 contents as additional instructions for this phase (e.g. fetching ticket state, running
-project-specific pre-ship checks). Read in order; later files extend or override earlier ones.
+repository-specific pre-ship checks). Read in order; later files extend or override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-assimilate/01-context.md`
-2. `<project root>/.borg/skill-extensions/borg-assimilate/01-context.md`
+2. `<repository root>/.borg/skill-extensions/borg-assimilate/01-context.md`
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently — do not mention extensions, do not warn, do not change behavior.
 
@@ -39,7 +39,7 @@ developer confirms `/simplify` has run.
 
 ## Step 0.5: Run Tests and Linting
 
-After `/simplify`, run the project's test suite and linters. Auto-detect what's available:
+After `/simplify`, run the repository's test suite and linters. Auto-detect what's available:
 
 1. Check `.github/workflows/*.yml` for test/lint commands (bats, shellcheck, pytest, npm test, etc.)
 2. Check for common test runners: `bats tests/*.bats`, `pytest`, `npm test`, `make test`
@@ -102,7 +102,7 @@ by everyone, and a missing declaration is a refusal rather than a silent pass.
 
 ## Step 1: Load the Plan
 
-Read `PROJECT_PLAN.md` from the project root.
+Read `PROJECT_PLAN.md` from the repository root.
 
 - If it doesn't exist: skip criteria evaluation. Still report test/lint results and present the
   diff summary so the developer can decide whether to ship the changes as-is.
@@ -162,11 +162,11 @@ include in the PR body, tickets to reference). Read in order; later files extend
 earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-assimilate/02-output.md`
-2. `<project root>/.borg/skill-extensions/borg-assimilate/02-output.md`
+2. `<repository root>/.borg/skill-extensions/borg-assimilate/02-output.md`
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently. Fold any extension instructions into the shipping action list
 below before presenting it for confirmation.
@@ -179,7 +179,7 @@ below before presenting it for confirmation.
    - Run 03-followup extensions (see below) — only after the merge has been confirmed
    - Archive PROJECT_PLAN.md → `docs/plans/assimilated/<date>-<slug>.md` with checkboxes marked
      + ship date
-   - Remove PROJECT_PLAN.md from project root
+   - Remove PROJECT_PLAN.md from repository root
 2. **Ask for confirmation**: "Ready to ship. These are the actions I'll take: [list]. Confirm?"
 3. Only execute after explicit confirmation. Execute each step, reporting results.
 4. After shipping, verify: PR merged, plan archived, working tree clean.
@@ -189,9 +189,9 @@ below before presenting it for confirmation.
 After the merge succeeds and before plan archival, close the row for the ref just merged:
 
 ```
-PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli resolve --repository <project root>
+PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli resolve --repository <repository root>
 PYTHONPATH=<borg source dir> python3 -m borg_core.manifest.cli close \
-    --repository <project root> --name <the stem resolve printed> \
+    --repository <repository root> --name <the stem resolve printed> \
     --ref <owner/repo#N> --status merged
 ```
 
@@ -216,11 +216,11 @@ actions (e.g. closing a ticket, posting to a channel). Read in order; later file
 override earlier ones.
 
 1. `~/.config/borg/extensions/skill-extensions/borg-assimilate/03-followup.md`
-2. `<project root>/.borg/skill-extensions/borg-assimilate/03-followup.md`
+2. `<repository root>/.borg/skill-extensions/borg-assimilate/03-followup.md`
 
 **Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:`
 asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins.
-Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`.
+Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`.
 
 If neither exists, skip silently. If a follow-up action fails (e.g. JIRA API down), report the
 failure but do not roll back the merge — proceed with archival and surface the failure to the
@@ -237,7 +237,7 @@ When archiving PROJECT_PLAN.md:
 - Add `*Shipped: <today's date> — PR #<number> merged to main*` below the established date
 - Mark all acceptance criteria checkboxes as `[x]`
 - Append an "Additional Work Shipped" section if significant work happened beyond the criteria
-- Delete PROJECT_PLAN.md from project root
+- Delete PROJECT_PLAN.md from repository root
 
 ### Step 4c: Chained Auto-Promotion
 

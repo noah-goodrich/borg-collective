@@ -159,9 +159,9 @@ and persistent context that survives across sessions.
 
 You open Ghostty. You type `borg init`.
 
-Borg starts the Queen — a Claude session that knows about all your projects. It reads the
-checkpoints you wrote at the end of your last sessions (stored per-project at
-`<project>/.borg/checkpoints/`) and presents a morning briefing:
+Borg starts the Queen — a Claude session that knows about all your repositories. It reads the
+checkpoints you wrote at the end of your last sessions (stored per-repository at
+`<repository>/.borg/checkpoints/`) and presents a morning briefing:
 
 ```
 Good morning. Here's where things stand:
@@ -181,7 +181,7 @@ Good morning. Here's where things stand:
     Status: Blocked — need to decide on backoff strategy.
     Next step: Resume and pick a strategy.
 
-  3 projects active. Capacity limit: 3. You're at capacity.
+  3 repositories active. Capacity limit: 3. You're at capacity.
 
   I'd recommend starting with api-service — the PR is ready to merge.
   That frees up a slot for new work.
@@ -192,25 +192,25 @@ You say: "Spin up api-service and web-dashboard."
 Borg runs `drone up api-service` and `drone up web-dashboard`. Containers start. tmux windows appear.
 You're ready to work.
 
-### Working on a project
+### Working in a repository
 
 You switch to the api-service window. You type `drone claude api-service` to start a Claude session
-inside the project's container. (For new feature work, `drone start <project> <feature>` creates a
+inside the repository's container. (For new feature work, `drone feature <repository> <branch>` creates a
 git worktree and isolated container in one step, so each feature gets its own window and branch.)
 
 Claude starts with context from your last session — the checkpoint you wrote with `/borg-link-up`
 before you stopped yesterday. The SessionStart hook (`borg-link-down.sh`) loaded the newest
-checkpoint from `<project>/.borg/checkpoints/` as `additionalContext`. Claude knows you were adding
+checkpoint from `<repository>/.borg/checkpoints/` as `additionalContext`. Claude knows you were adding
 rate limiting. It knows the tests pass. It knows the next step is to open a PR.
 
 You say: "Open the PR for rate limiting." Claude does it. You review. You merge. Done.
 
-One project shipped. Capacity freed.
+One PR shipped. Capacity freed.
 
 ### Switching context
 
 You press `Ctrl+Space >`. Borg's hotkey. It checks what needs attention next and switches your tmux
-window to that project. No decision required — borg already figured out the priority.
+window to that repository. No decision required — borg already figured out the priority.
 
 You land in the web-dashboard window. A brief status appears in the tmux status bar:
 "web-dashboard | Migrate charts — 3 of 5 done."
@@ -282,9 +282,9 @@ No scope creep. No "while we're here, let's also..." The criteria are locked.
 
 ### Session end
 
-When you're ready to stop working on a project, you run `/borg-link-up` inside the Claude session.
+When you're ready to stop working on a repository, you run `/borg-link-up` inside the Claude session.
 It uses the live conversation context to produce a structured checkpoint and writes it to
-`<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`:
+`<repository>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`:
 
 ```
 Checkpoint: web-dashboard (2026-03-30-1415.md)
@@ -311,16 +311,16 @@ Then you `/exit`. The Stop hook (`borg-link-up.sh`) fires, sets status to `idle`
 forgot to run the skill — prints a one-line nudge telling you no recent checkpoint exists. It also
 warns if you have uncommitted changes.
 
-The checkpoint file lives in your project (portable via git if you want it). Tomorrow's
-Queen will read it. The next Claude session in this project will have it as context. You
+The checkpoint file lives in your repository (portable via git if you want it). Tomorrow's
+Queen will read it. The next Claude session in this repository will have it as context. You
 don't have to remember anything.
 
 ### End of day
 
 You press `Ctrl+Space >` one more time. Borg says: "All clear. Take a break."
 
-If it's after your configured work hours and you try to switch to a work project, borg asks: "It's
-10:30 PM. api-service is a work project. Switch anyway? [y/N]". One keystroke of friction. Not a wall —
+If it's after your configured work hours and you try to switch to a work repository, borg asks: "It's
+10:30 PM. api-service is a work repository. Switch anyway? [y/N]". One keystroke of friction. Not a wall —
 a speed bump.
 
 ---
@@ -351,31 +351,31 @@ the plumbing — borg handles it.
 | Scope Guard | Same marketplace plugin | Prevents scope creep by cross-referencing against project scope |
 | Engineering bundle | Same marketplace plugin | 26+ skills for architecture, QA, DevOps |
 
-### Borg tools (this project)
+### Borg tools (this repository)
 
 | Command | What it does | What problem it solves |
 |---------|-------------|----------------------|
 | `borg init` | Launches the Queen with morning briefing | "What should I work on?" |
 | `borg claude` | Opens/resumes the Queen session | Re-enter the Queen after stepping away |
-| `borg next` / `Ctrl+Space >` | Switches to most pressing project | Decision paralysis elimination |
-| `borg link` | Dashboard of all projects | "What's the state of everything?" |
+| `borg next` / `Ctrl+Space >` | Switches to most pressing repository | Decision paralysis elimination |
+| `borg link` | Front door: Queen overview, or this directory's page | "What's the state of everything?" |
 | `/borg-plan` | Skill — Claude proposes, you validate | Establishes locked acceptance criteria |
 | `/borg-assimilate` | Skill — evaluates criteria with evidence + ships | "Am I done? Ship it." |
 
-> **Local extensions:** Both skills read per-machine and per-project markdown files at three load
+> **Local extensions:** Both skills read per-machine and per-repository markdown files at three load
 > points to absorb context-specific behavior (e.g. JIRA on the work machine). See the "Skill
 > extensions" entry under Key Patterns in [CLAUDE.md](../CLAUDE.md) for the protocol.
 
-| `drone start <project> <feature>` | Worktree + branch + Claude in one command | "Start new feature work" |
-| `drone up/down` | Start/stop project containers | Container lifecycle (resuming existing work) |
-| `drone claude` | Launch Claude in project window | "Resume work on this project" |
+| `drone feature <repository> <branch>` | Worktree + branch + Claude in one command | "Start new feature work" |
+| `drone up/down` | Start/stop repository containers | Container lifecycle (resuming existing work) |
+| `drone claude` | Launch Claude in repository window | "Resume work on this repository" |
 | `/adhd-guardrails` | Always-on skill | Scope discipline, break reminders, shame-free language |
-| `/borg-link` | Skill — overview or per-project deep dive | "What's the state of this project?" |
+| `/borg-link` | Skill — this directory's page (Queen: overview) | "What's the state of this repository?" |
 | `/borg-link-up` | Skill — flush session state to a checkpoint | Persist context before stopping |
-| `/borg-recon` | Skill — fan out across GitHub (and other adapters) per project | "What changed everywhere?" |
-| `/borg-next` | Skill — recommend + switch to the most pressing project | "What should I do right now?" |
+| `/borg-recon` | Skill — fan out across GitHub (and other adapters) per repository | "What changed everywhere?" |
+| `/borg-next` | Skill — recommend + switch to the most pressing repository | "What should I do right now?" |
 | `/borg-resume` | Skill — pick back up after a usage-window reset or Guardian veto | "Continue where I was blocked" |
-| `/borg-switch` | Skill — fzf-style project switch from inside a session | "Switch to a different project" |
+| `/borg-switch` | Skill — fzf-style repository switch from inside a session | "Switch to a different repository" |
 | `/borg-verify` | Skill — spawn an independent reviewer for a PASS/FAIL merge gate | "Is this ready to merge?" |
 | `/break-glass` | Skill — explicit, logged override for a normally-blocked action | "Bypass a guardrail, on purpose" |
 
@@ -392,15 +392,15 @@ the plumbing — borg handles it.
 │  You (developer)                                                │
 │                                                                 │
 │  "What should I work on?"  →  borg init / borg next             │
-│  "New feature"             →  drone start (worktree + branch)   │
-│  "Resume project"          →  drone up + drone claude           │
+│  "New feature"             →  drone feature (worktree + branch) │
+│  "Resume repository"       →  drone up + drone claude           │
 │  "What am I building?"     →  /borg-plan (sets criteria)        │
 │  "Am I done?"              →  /borg-assimilate (checks + ships) │
 │  "I'm done for now"        →  /borg-link-up + /exit             │
 │  "What's next?"            →  Ctrl+Space > (switches window)    │
 │                                                                 │
 ├─────────────────────────────────────────────────────────────────┤
-│  Borg (orchestrator)        Drone (project lifecycle)           │
+│  Borg (orchestrator)        Drone (repository lifecycle)        │
 │  - Morning briefing         - Container up/down                 │
 │  - Priority scoring         - tmux window management            │
 │  - Work/life boundaries     - Claude session launching          │
@@ -416,8 +416,8 @@ the plumbing — borg handles it.
 │                                                                 │
 ├─────────────────────────────────────────────────────────────────┤
 │  tmux (multiplexer)         Docker (isolation)                  │
-│  - Session: borg            - One container per project         │
-│  - Windows per project      - bind-mounted ~/.claude/ for hooks │
+│  - Session: borg            - One container per repository      │
+│  - Windows per repository   - bind-mounted ~/.claude/ for hooks │
 │  - 3-pane layout            - devnet shared network             │
 │  - Ctrl+Space prefix                                            │
 └─────────────────────────────────────────────────────────────────┘

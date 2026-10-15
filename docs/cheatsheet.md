@@ -5,12 +5,14 @@
 ```
 borg init                    First-time setup + launch the Queen
 borg                         What needs attention? Switch to it.
-borg claude                  Launch/resume the Queen session
+borg claude                  Resume the Queen session (most recent)
 
-borg link [project]          Front door: the Queen's overview at the workspace root, ONE directory's page elsewhere
+borg link [repository]       Front door: the Queen's overview at the
+                             workspace root; ONE directory's page
+                             anywhere else
 borg link --overview         Force the Queen's overview from any directory
 borg next                    Single recommendation: what to work on now
-borg next --switch           Recommend AND switch to that project
+borg next --switch           Recommend AND switch to that repository
 borg switch                  fzf picker → jump to tmux window
 borg switch <name>           Jump directly (skips fzf)
 
@@ -20,30 +22,33 @@ borg recon --adapters        List the source adapters discovered on this machine
 
 borg nanoprobes (np)         List recent nanoprobe (subagent) runs
 borg nanoprobe-log <id>      Show transcript for a nanoprobe run
-borg reap-worktrees [proj]   Remove stale borg-managed nanoprobe worktrees
+borg reap-worktrees [repository]  Remove stale nanoprobe worktrees
 borg spend                   Main-vs-subagent spend split + trend
 borg doctor                  Verify the launchd agents
 
-borg scan                    Auto-discover projects from session history
-borg add [path]              Register a project (defaults to $PWD)
-borg rm <name>               Unregister a project
+borg scan                    Discover repositories from session history
+borg add [path]              Register a repository (defaults to $PWD)
+borg rm <name>               Unregister a repository
 borg help                    Show help
 
 ```
 
-## Drone Commands (Project Lifecycle)
+## Drone Commands (Repository Lifecycle)
 
 ```
-drone feature <project> <branch>  Create worktree + branch, launch Claude (Boris workflow)
-drone up [project]           Start container + create tmux window (resume existing work)
-drone down [project]         Stop container + remove window
-drone claude [project]       Launch Claude Code in project context
-drone cortex [project]       Launch Cortex Code (CoCo) in project context
-drone sh [project]           Shell into container
-drone exec [project] -- <cmd>  Run a command inside the container
-drone restart [project]      Restart container + re-exec panes
-drone fix [project]          Restore standard 2-pane layout
-drone toggle [project]       Show/hide top-right side pane (2-pane ↔ 3-pane)
+drone feature <repository> <branch>
+                             Create worktree + branch, launch Claude
+                             (Boris workflow)
+drone up [repository]        Start container + create tmux window
+drone down [repository]      Stop container + remove window
+drone claude [repository]    Launch Claude Code in repository window
+drone cortex [repository]    Launch Cortex Code in repository window
+drone sh [repository]        Shell into container
+drone exec [repository] -- <cmd>
+                             Run a command inside the container
+drone restart [repository]   Restart container + re-exec panes
+drone fix [repository]       Restore standard 2-pane layout
+drone toggle [repository]    Show/hide side pane (2 ↔ 3 panes)
 ```
 
 ## Skills
@@ -53,10 +58,10 @@ drone toggle [project]       Show/hide top-right side pane (2-pane ↔ 3-pane)
 /borg-assimilate             Shipping checklist + Collective review + execution
 /borg-review                 Mid-session diagnostic + loop detection
 /borg-collective-review      Adversarial multi-persona review (The Collective)
-/borg-link                   Project intelligence (overview or per-project deep dive)
-/borg-link-up                Flush session state to <project>/.borg/checkpoints/<ts>.md
-/borg-next                   What project needs attention most urgently?
-/borg-switch                 Switch to a different project's tmux window
+/borg-link                   This directory's page (Queen: overview)
+/borg-link-up                Flush session state to a checkpoint
+/borg-next                   Which repository needs attention first?
+/borg-switch                 Switch to a repository's tmux window
 /borg-recon                  Cross-source synthesis over `borg recon --json` (`borg link` is the front door)
 /borg-verify                 Independent pre-merge evaluator gate (PASS/FAIL)
 /borg-resume                 Auto-resume a workflow paused by a session/usage limit
@@ -72,7 +77,8 @@ Full list (16 skills): docs/skills-guide.md or run /help in a session.
 ## Hotkey
 
 ```
-Ctrl+Space >                 Jump to most pressing project (borg next --switch)
+Ctrl+Space >                 Jump to most pressing repository
+                             (runs borg next --switch)
 ```
 
 ## Status Indicators
@@ -87,16 +93,18 @@ archived  Hidden from default ls                  (shown with --all)
 ## Boundary Behaviors
 
 ```
-After hours + work project    "It's 10:30 PM. api-service is work. Switch? [y/N]"
-Over capacity                 "4 sessions need attention (limit: 3)"
+After hours + work repository
+    "It's 10:30 PM. api-service is work. Switch? [y/N]"
+Over capacity
+    "4 sessions need attention (limit: 3)"
 ```
 
 ## Typical Daily Workflow
 
 ```
 borg init                         Morning: the Queen presents briefing
-Ctrl+Space >                      Switch to recommended project
-drone feature my-project my-feature  Create worktree + branch, launch Claude
+Ctrl+Space >                      Switch to recommended repository
+drone feature my-repo my-feature  Create worktree, launch Claude
 /borg-plan                        Lock objectives + acceptance criteria
 [work]                            Claude has last session's checkpoint as context
 /simplify                         Review changed code before committing
@@ -106,7 +114,7 @@ git commit                        Commit (pre-commit hook reminds /simplify if s
 /borg-assimilate                  Am I done? Ship it.
 /borg-link-up                     Flush session state to a checkpoint before stopping
 /exit                             Stop hook sets status=idle + nudges if no checkpoint
-Ctrl+Space >                      Next project
+Ctrl+Space >                      Next repository
 ```
 
 ## Configuration
@@ -114,7 +122,7 @@ Ctrl+Space >                      Next project
 ```
 ~/.config/borg/config.zsh            Work/life boundaries, limits
 ~/.config/borg/registry.json         Session registry (auto-managed)
-<project>/.borg/checkpoints/         User-authored checkpoints (via /borg-link-up)
+<repository>/.borg/checkpoints/   Checkpoints (via /borg-link-up)
 ```
 
 ### Config Variables
@@ -125,7 +133,7 @@ BORG_ORCHESTRATOR_ROOT=~/dev         Workspace root; the Queen runs here
 BORG_MAX_ACTIVE=3                    Capacity warning threshold
 BORG_WORK_HOURS=09:00-18:00          Work hours (empty to disable)
 BORG_WORK_DAYS=Mon,Tue,Wed,Thu,Fri   Work days
-BORG_WORK_PROJECTS=proj1,proj2       Comma-separated work project names
+BORG_WORK_PROJECTS=repo1,repo2       Work repository names (comma-sep)
 BORG_DEBUG=1                         Enable debug output
 ```
 
@@ -134,7 +142,7 @@ BORG_DEBUG=1                         Enable debug output
 ```
 ~/dev/borg-collective/
     borg.zsh                 Main orchestration CLI
-    drone.zsh                Project lifecycle CLI
+    drone.zsh                Repository lifecycle CLI
     lib/*.zsh                Library modules
     hooks/*.sh               Claude Code hooks
     skills/*/SKILL.md        Skill definitions
@@ -143,9 +151,9 @@ BORG_DEBUG=1                         Enable debug output
 
 ~/.config/borg/
     config.zsh               User configuration
-    registry.json            Project registry
+    registry.json            Repository registry
 
-<project>/.borg/
+<repository>/.borg/
     checkpoints/             User-authored session checkpoints
 
 ~/.claude/
