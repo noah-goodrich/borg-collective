@@ -1,13 +1,14 @@
 #!/usr/bin/env bats
-# EXPAND phase of the registry file's top-level key rename (projects -> repositories): every shell and
-# hook reader accepts either key, and the writers still write `projects`. The wire keys of
+# EXPAND and MIGRATE phases of the registry file's top-level key rename (projects -> repositories): every
+# shell and hook reader accepts either key, and every writer keeps the key the file already has (a new file
+# still starts with `projects`; the contract step flips that default). The wire keys of
 # `borg link --json` are a separate contract and are not touched here.
 
 load test_helper/setup
 
 setup() {
     setup_temp_dirs
-    mkdir -p "$BORG_TEST_HOME/real"
+    mkdir -p "$BORG_TEST_HOME/real" "$BORG_TEST_HOME/newrepo"
     OLD='{"projects":{"alpha":{"path":"'"$BORG_TEST_HOME"'/real","tmux_window":"w1"},"beta":{"path":"/nowhere"}}}'
     NEW='{"repositories":{"alpha":{"path":"'"$BORG_TEST_HOME"'/real","tmux_window":"w1"},"beta":{"path":"/nowhere"}}}'
 }
@@ -47,12 +48,69 @@ _use() {
     [ "$output" = "$OLD" ]
 }
 
-@test "zsh writer: a write against a new-shape file still writes projects" {
+@test "zsh writer: a write against a new-shape file keeps repositories" {
     _use "$NEW"
+    run run_zsh_fn registry borg_registry_merge gamma '{"path":"/g"}'
+    [ "$status" -eq 0 ]
+    run jq -r 'has("projects"), has("repositories"), (.repositories | keys | join(","))' "$BORG_REGISTRY"
+    [ "$output" = "$(printf 'false\ntrue\nalpha,beta,gamma')" ]
+    run run_zsh_fn registry borg_registry_set alpha color '"red"'
+    [ "$status" -eq 0 ]
+    run jq -r 'has("projects"), .repositories.alpha.color' "$BORG_REGISTRY"
+    [ "$output" = "$(printf 'false\nred')" ]
+    run run_zsh_fn registry borg_registry_remove gamma
+    run jq -r 'has("projects"), (.repositories | keys | join(","))' "$BORG_REGISTRY"
+    [ "$output" = "$(printf 'false\nalpha,beta')" ]
+}
+
+@test "zsh writer: a write against an old-shape file keeps projects" {
+    _use "$OLD"
     run run_zsh_fn registry borg_registry_merge gamma '{"path":"/g"}'
     [ "$status" -eq 0 ]
     run jq -r 'has("projects"), has("repositories"), (.projects | keys | join(","))' "$BORG_REGISTRY"
     [ "$output" = "$(printf 'true\nfalse\nalpha,beta,gamma')" ]
+}
+
+@test "zsh writer: a brand-new registry is still created with projects" {
+    /bin/rm -f "$BORG_REGISTRY"
+    run run_zsh_fn registry borg_registry_merge gamma '{"path":"/g"}'
+    [ "$status" -eq 0 ]
+    run jq -r 'has("projects"), has("repositories")' "$BORG_REGISTRY"
+    [ "$output" = "$(printf 'true\nfalse')" ]
+}
+
+@test "python writer: keeps the key the file has" {
+    _use "$NEW"
+    run env PYTHONPATH="$BORG_HOME" python3 -m borg_core.registry.cli add "$BORG_TEST_HOME/newrepo" --name gamma
+    [ "$status" -eq 0 ]
+    run jq -r 'has("projects"), has("repositories"), (.repositories | keys | join(","))' "$BORG_REGISTRY"
+    [ "$output" = "$(printf 'false\ntrue\nalpha,beta,gamma')" ]
+}
+
+@test "hooks: a status flip against a new-shape registry leaves repositories in place" {
+    export TEST_CWD="$BORG_TEST_HOME/real"
+    printf '{"repositories":{"alpha":{"path":"%s","status":"idle"}}}\n' "$TEST_CWD" > "$BORG_REGISTRY"
+    start_in="$(printf '{"session_id":"sess-abc","cwd":"%s"}' "$TEST_CWD")"
+    stop_in="$(printf '{"session_id":"sess-abc","cwd":"%s","transcript_path":"/nonexistent"}' "$TEST_CWD")"
+    run bash -c 'bash "$1" <<< "$2" >/dev/null; bash "$3" <<< "$4" >/dev/null; true' _ \
+        "$BORG_HOME/hooks/borg-link-down.sh" "$start_in" "$BORG_HOME/hooks/borg-link-up.sh" "$stop_in"
+    run jq -r 'has("projects"), has("repositories"), (.repositories | keys | join(","))' "$BORG_REGISTRY"
+    [ "$output" = "$(printf 'false\ntrue\nalpha')" ]
+}
+
+@test "migrate then write: migrate-key, borg add and a hook flip leave repositories with the same entries" {
+    export TEST_CWD="$BORG_TEST_HOME/real"
+    _use "$OLD"
+    run env PYTHONPATH="$BORG_HOME" python3 -m borg_core.registry.cli migrate-key
+    [ "$status" -eq 0 ]
+    run env PYTHONPATH="$BORG_HOME" python3 -m borg_core.registry.cli add "$BORG_TEST_HOME/newrepo" --name gamma
+    [ "$status" -eq 0 ]
+    run run_zsh_fn registry borg_registry_set beta color '"blue"'
+    [ "$status" -eq 0 ]
+    start_in="$(printf '{"session_id":"sess-abc","cwd":"%s"}' "$TEST_CWD")"
+    run bash -c 'bash "$1" <<< "$2" >/dev/null; true' _ "$BORG_HOME/hooks/borg-link-down.sh" "$start_in"
+    run jq -r 'has("projects"), has("repositories"), (.repositories | keys | join(",")), .repositories.alpha.tmux_window, .repositories.beta.color' "$BORG_REGISTRY"
+    [ "$output" = "$(printf 'false\ntrue\nalpha,beta,gamma\nw1\nblue')" ]
 }
 
 @test "zsh reader: the path-containment helper sees both shapes" {

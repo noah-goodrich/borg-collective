@@ -1,5 +1,5 @@
-"""The registry's `projects` -> `repositories` key rename, EXPAND phase: readers accept either key,
-writers keep writing `projects`, and `migrate-key` flips a file idempotently. Temp files only."""
+"""The registry's `projects` -> `repositories` key rename, EXPAND and MIGRATE phases: readers accept either
+key, writers keep the key the file has (a new file starts with `projects`), and `migrate-key` flips a file idempotently. Temp files only."""
 
 import json
 
@@ -72,15 +72,32 @@ def test_recon_loader_accepts_both_shapes(registry_file):
     assert old == new == ENTRIES
 
 
-# ── the writer stays on the old key ──────────────────────────────────────────
+# ── the writer keeps the key the file has ──────────────────────────────────────────
 
 
-def test_writers_still_write_projects_even_from_a_new_shape_file(registry_file):
-    _write(registry_file, {"repositories": ENTRIES})
+def test_writer_keeps_repositories_from_a_new_shape_file(registry_file):
+    _write(registry_file, {"repositories": ENTRIES, "extra": 1})
+    shell.registry_merge("gamma", {"path": "/g"})
+    on_disk = json.loads(registry_file.read_text(encoding="utf-8"))
+    assert "projects" not in on_disk
+    assert set(on_disk["repositories"]) == {"alpha", "beta", "gamma"}
+    assert on_disk["extra"] == 1
+    shell.registry_remove("gamma")
+    assert set(json.loads(registry_file.read_text(encoding="utf-8"))["repositories"]) == {"alpha", "beta"}
+
+
+def test_writer_keeps_projects_from_an_old_shape_file(registry_file):
+    _write(registry_file, {"projects": ENTRIES})
     shell.registry_merge("gamma", {"path": "/g"})
     on_disk = json.loads(registry_file.read_text(encoding="utf-8"))
     assert "repositories" not in on_disk
     assert set(on_disk["projects"]) == {"alpha", "beta", "gamma"}
+
+
+def test_a_new_registry_is_created_with_projects(registry_file):
+    shell.registry_merge("gamma", {"path": "/g"})
+    on_disk = json.loads(registry_file.read_text(encoding="utf-8"))
+    assert set(on_disk) == {"projects"}
 
 
 # ── migrate-key ──────────────────────────────────────────────────────────────
