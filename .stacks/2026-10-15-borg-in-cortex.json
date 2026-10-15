@@ -1,5 +1,12 @@
 {
   "desc": "Make borg work inside Cortex Code CLI: hooks registered where Cortex reads them, tool names, session discovery, collision-proof checkpoints",
   "program": "2026-10-15-borg-in-cortex",
-  "rows": []
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#413",
+      "why": "S1: register Cortex hooks in hooks.json, accept lowercase tool names, plan of record"
+    }
+  ]
 }
