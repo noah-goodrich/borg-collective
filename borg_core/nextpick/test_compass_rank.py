@@ -111,6 +111,36 @@ def test_log_rows_carry_the_compass_order():
     assert (row["rec"], row["opened"]) == ("on-leg", "on-leg")
 
 
+def _with_worktree() -> dict:
+    """`_repositories()` plus a worktree of `on-leg`, tied to it only by the registry's `repo` key."""
+    common = "/code/on-leg/.git"
+    repositories = _repositories()
+    repositories["on-leg"]["repo"] = common
+    repositories["on-leg-wt"] = _entry("idle", "2026-01-01", repo=common)
+    return repositories
+
+
+def test_a_worktree_ranks_with_its_repository_not_as_unmapped(monkeypatch, tmp_path):
+    repositories = _with_worktree()
+    unaware = compass_core.build_compass("/m", TODAY, LOG, DESTINATIONS, README, None, list(repositories))
+    assert _names(core.rank(repositories, unaware))[-1] == "on-leg-wt"
+    monkeypatch.setenv("BORG_MAP_DIR", str(_write_map(tmp_path / "map")))
+    monkeypatch.setattr(cli.compass_shell, "today_from_epoch", lambda _moment: TODAY)
+    ranked = _names(core.rank(repositories, cli.read_compass(repositories)))
+    assert ranked[:2] == ["on-leg", "on-leg-wt"]
+    assert ranked[2:] == ["late", "soon", "undated", "unmapped", "frozen"]
+
+
+def test_a_worktree_inherits_its_repositorys_destination_and_leg_flag_once_in_the_block():
+    repositories = _with_worktree()
+    block = compass_core.build_compass(
+        "/m", TODAY, LOG, DESTINATIONS, README, None, list(repositories), parents={"on-leg-wt": "on-leg"}
+    )
+    expected = {"destination": "alpha", "on_leg": True}
+    assert block["repositories"]["on-leg"] == expected
+    assert block["repositories"]["on-leg-wt"] == expected
+
+
 # -- the non-interactive choice: `--top` --------------------------------------------------------------------------
 
 

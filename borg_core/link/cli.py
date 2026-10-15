@@ -403,7 +403,11 @@ def _document(  # pylint: disable=too-many-locals
     # next`) and the page renders it. Not on `--porcelain` (byte-identical to before) and not on the hint page
     # (which reads nothing). `moment` is the document's one epoch and the reader forks nothing, so `--local`'s
     # subprocess contract is unchanged. Repository names come from the document already in hand.
-    compass = None if mode == "porcelain" or hint_only else compass_shell.read_compass(moment, list(repositories))
+    compass = (
+        None
+        if mode == "porcelain" or hint_only
+        else compass_shell.read_compass(moment, list(repositories), parents=worktree.repository_parents(repositories))
+    )
     block, waiting = (
         (None, None) if hint_only else _grid_and_waiting(overlaid, repositories, scope, local, moment, mode, compass)
     )

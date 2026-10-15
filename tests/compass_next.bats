@@ -166,6 +166,41 @@ _row_projects() {
     [ "$(printf '%s' "$output" | jq -c '[.waiting.rows[].project]')" = "$next_rows" ]
 }
 
+# A worktree registered under its own name, tied to `on-leg` only by the registry's `repo` key (the git common dir).
+# It is the NEWEST waiting entry, so without inheritance it ranks last of the unmapped (older first) and with it
+# right behind its repository.
+_write_registry_with_worktree() {
+    mkdir -p "${BATS_TEST_TMPDIR}/p/on-leg" "${BATS_TEST_TMPDIR}/p/on-leg-wt" "${BATS_TEST_TMPDIR}/p/unmapped"
+    cat > "$BORG_REGISTRY" <<JSON
+{"projects": {
+  "unmapped":  {"path":"${BATS_TEST_TMPDIR}/p/unmapped","status":"waiting","tmux_window":"w-unmapped","last_activity":"2026-01-01T10:00:00Z"},
+  "on-leg":    {"path":"${BATS_TEST_TMPDIR}/p/on-leg","repo":"${BATS_TEST_TMPDIR}/p/on-leg/.git","status":"waiting","tmux_window":"w-on-leg","last_activity":"2026-01-07T10:00:00Z"},
+  "on-leg-wt": {"path":"${BATS_TEST_TMPDIR}/p/on-leg-wt","repo":"${BATS_TEST_TMPDIR}/p/on-leg/.git","status":"waiting","tmux_window":"w-on-leg-wt","last_activity":"2026-01-08T10:00:00Z"}
+}}
+JSON
+}
+
+@test "next --pick N: a worktree ranks with its repository on today's leg, not as unmapped" {
+    _write_registry_with_worktree
+    _write_map
+    export TMUX_MOCK_WINDOWS="w-on-leg w-on-leg-wt w-unmapped"
+    BORG_MAP_DIR="$MAP" run zsh "$BORG" next --pick 2
+    [ "$status" -eq 0 ]
+    [ "$(_selected)" = "w-on-leg-wt" ]
+}
+
+@test "link --overview: a worktree's board row carries the suffix of the repository it belongs to" {
+    _write_registry_with_worktree
+    _write_map
+    BORG_MAP_DIR="$MAP" run zsh "$BORG" link --local --overview
+    [ "$status" -eq 0 ]
+    local plain
+    plain=$(printf '%s\n' "$output" | sed -e $'s/\033\\[[0-9;]*m//g')
+    printf '%s\n' "$plain" | grep -E '(^| )on-leg .*· on track$'
+    printf '%s\n' "$plain" | grep -E ' on-leg-wt .*· on track$'
+    printf '%s\n' "$plain" | grep -E ' unmapped ' | grep -v '·'
+}
+
 # -- borg link: IN FOCUS --------------------------------------------------------------------------------------------
 
 @test "link --overview: IN FOCUS carries the leg and the tally of active destinations by state" {

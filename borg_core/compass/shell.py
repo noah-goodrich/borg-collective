@@ -57,11 +57,15 @@ def _destination_files(directory: Path, warnings: list[str]) -> list[tuple[str, 
     return files
 
 
-def read_compass(moment: int, repository_names: list[str], directory: Path | None = None) -> dict:
+def read_compass(
+    moment: int, repository_names: list[str], directory: Path | None = None, parents: dict[str, str] | None = None
+) -> dict:
     """The `compass` block: found false when there is no map (see `MAP_ENTRIES`), else everything the map says.
 
     `directory` defaults to `paths.map_dir()`; the parameter exists so a caller holding a path need not touch
     the environment. `repository_names` are the registry's names, from the document the cli already holds.
+    `parents` is `{worktree: repository}` from the registry's `repo` key (`link.worktree.repository_parents`),
+    which the caller resolves because only it holds the registry; a worktree then ranks as its repository does.
     """
     root = directory if directory is not None else paths.map_dir()
     if not any((root / name).exists() for name in MAP_ENTRIES):
@@ -72,5 +76,5 @@ def read_compass(moment: int, repository_names: list[str], directory: Path | Non
     readme = _read(root / "README.md", "README.md", warnings)
     parking = _read(root / "parking-lot.md", "parking-lot.md", warnings)
     return core.build_compass(
-        str(root), today, log, _destination_files(root, warnings), readme, parking, repository_names, warnings
+        str(root), today, log, _destination_files(root, warnings), readme, parking, repository_names, warnings, parents
     )

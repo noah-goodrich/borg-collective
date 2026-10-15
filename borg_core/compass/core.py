@@ -317,12 +317,19 @@ def destination_state(destination: dict, today: datetime.date) -> str:
     return "on-track"
 
 
-def map_repositories(destinations: list[dict], names: list[str], leg: dict | None) -> dict[str, dict]:
+def map_repositories(
+    destinations: list[dict], names: list[str], leg: dict | None, parents: dict[str, str] | None = None
+) -> dict[str, dict]:
     """For each registry repository name: the destination that owns it and whether the leg names it.
 
     A repository belongs to the first destination listing it under `repositories`, else to the destination whose
     id equals its name, else to none. `on_leg` is true when the leg text contains the destination id or the
     repository name as a whole word.
+
+    `parents` is `{worktree: repository}` (`link.worktree.repository_parents`): a worktree INHERITS its repository's
+    entry whole, destination and `on_leg`, because it is that repository's checkout and not a repository of its
+    own. This is the one place the inheritance is applied, and every reader of the block (`borg next`'s ranking,
+    the Queen board's suffix) gets it from here. A parent that is not among `names` is ignored.
     """
     leg_text = leg["text"] if leg else ""
     mapped: dict[str, dict] = {}
@@ -332,6 +339,9 @@ def map_repositories(destinations: list[dict], names: list[str], leg: dict | Non
         )
         on_leg = _word_in(name, leg_text) or (owner is not None and _word_in(owner["id"], leg_text))
         mapped[name] = {"destination": owner["id"] if owner else None, "on_leg": on_leg}
+    for child, head in (parents or {}).items():
+        if child in mapped and head in mapped:
+            mapped[child] = dict(mapped[head])
     return mapped
 
 
@@ -371,8 +381,9 @@ def collect_destinations(destination_files: list[tuple[str, str]], warnings: lis
     return destinations
 
 
-# JUSTIFICATION: the one assembly step of the block; each argument is a distinct file's text or a caller fact.
-# pylint: disable-next=too-many-arguments,too-many-positional-arguments
+# JUSTIFICATION: the one assembly step of the block; each argument is a distinct file's text or a caller fact, and
+# each step of the assembly keeps its own intermediate.
+# pylint: disable-next=too-many-arguments,too-many-positional-arguments,too-many-locals
 def build_compass(
     map_dir: str,
     today: str,
@@ -382,11 +393,13 @@ def build_compass(
     parking_text: str | None,
     repository_names: list[str],
     read_warnings: list[str] | None = None,
+    parents: dict[str, str] | None = None,
 ) -> dict:
     """The `compass` block for a map directory that exists, from the text of its files.
 
     `destination_files` is `(filename, text)` in the order to report them; a later file reusing an earlier id
     is skipped with a warning. `read_warnings` are the shell's (a file it could not read) and lead the list.
+    `parents` is `{worktree: repository}`, see `map_repositories`.
     """
     moment = datetime.date.fromisoformat(today)
     warnings = list(read_warnings or [])
@@ -404,6 +417,6 @@ def build_compass(
         "leg": leg,
         "destinations": destinations,
         "parking": parse_parking(parking_text, moment),
-        "repositories": map_repositories(destinations, repository_names, leg),
+        "repositories": map_repositories(destinations, repository_names, leg, parents),
         "warnings": warnings,
     }

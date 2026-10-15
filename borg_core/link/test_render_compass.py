@@ -6,7 +6,7 @@ actually puts on the wire. The map is synthetic and invented; no real map is rea
 """
 
 from borg_core.compass import core as compass_core
-from borg_core.link import render
+from borg_core.link import render, worktree
 from borg_core.link.test_picture import plain
 from borg_core.link.test_render import _doc, _focus, _repository_doc
 
@@ -187,6 +187,30 @@ def test_a_late_repository_off_the_leg_still_reads_late():
     rows = _board(render.document(_queen(_compass(log=log, names=names), {n: _entry() for n in names})))
     assert rows["widgets"].endswith("· late")
     assert rows["gadgets"].endswith("· on track")
+
+
+def test_a_worktree_row_beneath_its_repository_carries_that_repositorys_suffix():
+    common = "/code/widgets/.git"
+    projects = {name: _entry() for name in ["widgets", "widgets-wt", "orphan"]}
+    for name in ("widgets", "widgets-wt"):
+        projects[name]["repo"] = common
+    block = compass_core.build_compass(
+        MAP_DIR,
+        TODAY,
+        LOG,
+        DESTINATIONS,
+        README,
+        None,
+        list(projects),
+        parents=worktree.repository_parents(projects),
+    )
+    rows = {
+        name: next(line for line in plain(render.document(_queen(block, projects))).split("\n") if f" {name} " in line)
+        for name in projects
+    }
+    assert rows["widgets"].endswith("· late")
+    assert rows["widgets-wt"].endswith("· late")
+    assert "·" not in rows["orphan"]
 
 
 def test_the_suffix_is_dropped_for_a_row_that_would_pass_the_boards_width_and_never_wraps():

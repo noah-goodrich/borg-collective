@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from borg_core.compass import shell as compass_shell
+from borg_core.link import worktree
 from borg_core.nextpick import core, shell
 
 
@@ -43,7 +44,11 @@ def read_compass(repositories: dict[str, Any]) -> dict[str, Any] | None:
     environment (an unreadable home, say), and the cost of None is only the order `borg next` always had.
     """
     try:
-        return compass_shell.read_compass(int(datetime.now(UTC).timestamp()), list(repositories))
+        return compass_shell.read_compass(
+            int(datetime.now(UTC).timestamp()),
+            list(repositories),
+            parents=worktree.repository_parents(repositories),
+        )
     # JUSTIFICATION: a map is an optional input to an ordering; any failure reading it degrades to no map.
     except Exception:  # pylint: disable=broad-exception-caught
         return None
