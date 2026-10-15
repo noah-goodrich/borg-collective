@@ -426,7 +426,7 @@ def _worktree_registry(isolated_env, directives=None, assimilated=None):
     wt_b = _repository(isolated_env, "main-b", **files)
     other = _repository(isolated_env, "other", directives=[("d1.md", "# Other\n")])
     return {
-        "projects": {
+        "repositories": {
             "main-a": {"path": wt_a, "repo": common},
             "main": {"path": main, "repo": common},
             "main-b": {"path": wt_b, "repo": common},

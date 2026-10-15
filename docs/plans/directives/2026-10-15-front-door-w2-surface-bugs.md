@@ -21,7 +21,7 @@ The front door tells the owner what to do next. Three surfaces mislead:
 
 ## Non-Goals
 
-- No change to how registry keys are read (another branch removes the old `projects` key).
+- No change to how registry keys are read (the registry contract step landed separately).
 - No change to the per-directory repository page.
 - No release in this PR.
 
@@ -32,7 +32,7 @@ The front door tells the owner what to do next. Three surfaces mislead:
 - [ ] **AC2: `.waiting.rows[]` carries each PR's URL and the borg-link skill renders it as a link.** The context-diet byte caps still hold. (Issue #377)
   - Verify: `bats tests/recon_adapter_github.bats tests/context_budget.bats` and the pytest cases for the row.
 - [ ] **AC3: `borg link` aggregates by repository, not by registered directory.** Three linked worktrees of one repository show each directive title once. (parking-lot item)
-  - Verify: `python3 -m pytest borg_core/link -k repository_groups` and `borg link --json` on a registry holding worktrees.
+  - Verify: `python3 -m pytest borg_core/link -k counts_a_repository_once` and `borg link --json` on a registry holding worktrees.
 - [ ] **AC4: 0.9.9 is cut with these fixes and the registry contract step, and the plugin mirror is rebuilt.** A separate release PR after this one merges.
   - Verify: the release and the mirror commit exist.
 

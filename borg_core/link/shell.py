@@ -365,7 +365,7 @@ def _repository_heads(registry: dict) -> list[tuple[str, str]]:
     directory printed one directive title once per worktree. The group's head (the main checkout, else the
     first member) stands for the repository; an entry with no `repo` is a group of one and is kept.
     """
-    entries = registry.get("projects") or {}
+    entries = registry.get("repositories") or {}
     heads = {head for head, _ in worktree.repository_groups(list(entries), entries)}
     return [(name, path) for name, path in core.repository_paths(registry) if name in heads]
 
