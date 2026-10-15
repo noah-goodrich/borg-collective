@@ -1,0 +1,31 @@
+{
+  "desc": "The context diet, the Cortex hook fix and the compass target date land, then VERSION 0.9.7 and the plugin mirror rebuild.",
+  "program": "2026-10-15-release-0-9-7",
+  "rows": [
+    {
+      "lane": "_default",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#411",
+      "why": "S5 of the context diet: CLAUDE.md to 8 KB"
+    },
+    {
+      "lane": "_default",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#413",
+      "why": "Cortex hooks registered where Cortex reads them"
+    },
+    {
+      "lane": "_default",
+      "order": "3",
+      "ref": "noah-goodrich/borg-collective#408",
+      "why": "compass counts the destination target date"
+    },
+    {
+      "lane": "_default",
+      "order": "4",
+      "ref": "noah-goodrich/borg-collective#415",
+      "status": "open",
+      "why": "VERSION 0.9.7, release notes, then tag and plugin mirror"
+    }
+  ]
+}
