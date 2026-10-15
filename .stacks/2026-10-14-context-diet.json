@@ -55,7 +55,7 @@
       "lane": "_default",
       "order": "8",
       "ref": "noah-goodrich/borg-collective#412",
-      "status": "open",
+      "status": "merged",
       "why": "S7: the borg-link Queen pipe collapses finished stacks to a one-line summary"
     }
   ]
