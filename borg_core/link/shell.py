@@ -623,7 +623,9 @@ unmigrated_repositories = manifest_shell.unmigrated_repositories
 # 30 -- correct for a morning link-up a human deliberately waits on, absurd for the front door AC1
 # budgets at 2.7s. 10 is chosen against measurement, not taste: the batched-GraphQL adapter sweeps
 # one repository in 0.69s and all 14 in 2.30s, so 10 is >4x the slowest observed real sweep and still
-# well inside the point where a user concludes the command is hung.
+# well inside the point where a user concludes the command is hung. The adapter now splits a large
+# registry into chunks of 5 repositories run 8 at a time, so about 30 repositories is one wave of
+# requests, each far under GitHub's server timeout (see the adapter's CHUNKED comment).
 DEFAULT_SWEEP_TIMEOUT_SECONDS = 10
 
 

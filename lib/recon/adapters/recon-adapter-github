@@ -33,11 +33,10 @@
 # ONE BATCHED GraphQL CALL, NOT N REST CALLS. This adapter previously issued `gh pr list` once per
 # repository inside a serial `while read` loop, plus a `gh auth status` and a `gh api user` prelude.
 # Measured on a 14-repository registry that cost 12.6s — and it was the single largest latency in
-# borg, not the targeted-fetch work it was assumed to be. The whole sweep is now one aliased GraphQL
-# query. Measured on the same registry: 2.3s for all 14 repositories, 0.69s for one, and the GraphQL
-# rate-limit cost is 1 point whether the query carries 14 nodes or 112 — the call is effectively
-# O(1) in repository count, so there is no reason to chunk or paginate at any registry size we will
-# ever see.
+# borg, not the targeted-fetch work it was assumed to be. The sweep became aliased GraphQL queries.
+# Measured on the same registry: 2.3s for all 14 repositories, 0.69s for one, and the GraphQL
+# rate-limit cost is 1 point whether a query carries 14 nodes or 112. Wall time is NOT O(1) in
+# repository count on a big registry, though: see CHUNKED below, a single query for 27 entries timed out.
 #
 # The two prelude calls are gone with it: `viewer { login }` rides along in the same query (replacing
 # `gh api user`, ~0.47s), and the `gh auth status` probe (~1.0s) is dropped because the one real call
@@ -165,8 +164,8 @@ fi
 # defaults come from measurement; the numbers are in the pull request that introduced them. A chunk
 # that fails costs only its own repositories: the other chunks' items are still returned and the
 # summary names the repositories the failed chunk covered and gh's own error text.
-DEFAULT_CHUNK=10
-DEFAULT_JOBS=4
+DEFAULT_CHUNK=5
+DEFAULT_JOBS=8
 CHUNK="${BORG_RECON_GITHUB_CHUNK:-$DEFAULT_CHUNK}"
 JOBS="${BORG_RECON_GITHUB_JOBS:-$DEFAULT_JOBS}"
 case "$CHUNK" in '' | *[!0-9]* | 0) CHUNK="$DEFAULT_CHUNK" ;; esac

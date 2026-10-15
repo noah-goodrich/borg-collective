@@ -469,8 +469,8 @@ _doc_of() {
         [ "$n" -gt "$biggest" ] && biggest="$n"
         calls=$((calls + 1))
     done
-    [ "$calls" -gt 1 ]
-    [ "$biggest" -le 10 ]
+    [ "$calls" -eq 6 ]
+    [ "$biggest" -le 5 ]
 }
 
 @test "adapter: a failed request surfaces gh's own error text, not a fixed guess" {
