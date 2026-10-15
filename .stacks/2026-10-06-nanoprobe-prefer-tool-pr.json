@@ -6,6 +6,7 @@
       "lane": "_default",
       "order": "1",
       "ref": "noah-goodrich/borg-collective#278",
+      "status": "merged",
       "why": "nanoprobe opens its PR through a live machine-layer prefer-tool, fenced by its scope gate"
     }
   ]
