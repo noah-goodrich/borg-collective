@@ -57,6 +57,13 @@
       "ref": "noah-goodrich/borg-collective#412",
       "status": "merged",
       "why": "S7: the borg-link Queen pipe collapses finished stacks to a one-line summary"
+    },
+    {
+      "lane": "_default",
+      "order": "9",
+      "ref": "noah-goodrich/borg-collective#416",
+      "status": "open",
+      "why": "S8: repository arm trims the compass leg text so AC4 holds on any day"
     }
   ]
 }
