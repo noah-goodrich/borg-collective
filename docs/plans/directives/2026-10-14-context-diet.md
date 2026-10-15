@@ -49,7 +49,7 @@ The issues were filed against older numbers; these are the ones the criteria are
 - [ ] **AC5: Directive and shipped-plan titles never read `---`.** `core.heading_title` skips a leading YAML frontmatter block, then returns the first `#` heading, else the frontmatter `title:` value, else the first non-blank line after the frontmatter.
   - Verify: pytest cases in `borg_core/link/test_core.py` for each branch, including the bare `---` file and today's no-frontmatter files (unchanged); `bin/link-parity-harness primitives` records the frontmatter case as an intended divergence rather than a failure.
 - [ ] **AC6: Nothing breaks.** `make test`, `make test-bats` and `make lint` are green. Every prose-contract test that grepped CLAUDE.md or SKILL.md greps the text's new home and none is deleted. `borg_core/census` scans every tracked CLAUDE.md, not only the top-level one. Code comments that cite "CLAUDE.md's Learned" or another moved section name the new file.
-  - Verify: the three make targets; `git grep -n "CLAUDE.md's \"Learned\"\|CLAUDE.md, \"Learned\"\|CLAUDE.md's Learned"` returns nothing; the census pytest covers a nested CLAUDE.md.
+  - Verify: the three make targets; `git grep -n "CLAUDE.md's \"Learned\"\|CLAUDE.md, \"Learned\"\|CLAUDE.md's Learned" -- ':!docs/plans' ':!.borg'` returns nothing (dated checkpoints and plans, this one included, are history and keep their wording); the census pytest covers a nested CLAUDE.md.
 
 ## Testability
 
