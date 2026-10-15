@@ -141,6 +141,37 @@ def test_a_worktree_inherits_its_repositorys_destination_and_leg_flag_once_in_th
     assert block["repositories"]["on-leg-wt"] == expected
 
 
+def test_a_worktree_the_map_names_keeps_its_own_destination_and_an_unmapped_head_never_erases_it():
+    repositories = _with_worktree()
+    repositories["frozen-wt"] = _entry("idle", "2026-01-01", repo="/code/unmapped/.git")
+    repositories["unmapped"]["repo"] = "/code/unmapped/.git"
+    # `on-leg-wt` is named by the late destination, so it is NOT on the leg its repository is on; `frozen-wt` is
+    # named by the leg's destination while its own head, `unmapped`, belongs to no destination at all.
+    destinations = [
+        _destination("alpha", "active", "on-leg"),
+        ("destinations/beta.md", "---\nid: beta\nstatus: active\nrepositories:\n  - late\n  - on-leg-wt\n---\n"),
+        ("destinations/gamma.md", "---\nid: gamma\nstatus: active\nrepositories:\n  - frozen-wt\n---\n"),
+    ]
+    block = compass_core.build_compass(
+        "/m",
+        TODAY,
+        "## Today's leg\n\n- Push alpha and gamma forward\n",
+        destinations,
+        README,
+        None,
+        list(repositories),
+        parents={"on-leg-wt": "on-leg", "frozen-wt": "unmapped"},
+    )
+    assert block["repositories"]["on-leg-wt"] == {"destination": "beta", "on_leg": False}
+    assert block["repositories"]["frozen-wt"] == {"destination": "gamma", "on_leg": True}
+    assert block["repositories"]["unmapped"] == {"destination": None, "on_leg": False}
+    assert compass_core.leg_priority(block, "on-leg-wt") == (1, "2026-03-01")
+    assert compass_core.leg_priority(block, "frozen-wt") == (0, "")
+    ranked = _names(core.rank(repositories, block))
+    assert ranked.index("on-leg") < ranked.index("on-leg-wt") < ranked.index("unmapped")
+    assert ranked.index("frozen-wt") < ranked.index("on-leg-wt")
+
+
 # -- the non-interactive choice: `--top` --------------------------------------------------------------------------
 
 

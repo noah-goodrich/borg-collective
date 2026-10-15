@@ -216,6 +216,36 @@ def test_a_worktree_row_beneath_its_repository_carries_that_repositorys_suffix()
     assert "·" not in rows["orphan"]
 
 
+def test_a_worktree_the_map_names_keeps_its_own_destination_on_the_board_whatever_its_repository_says():
+    destinations = [
+        DESTINATIONS[0],
+        ("destinations/beta.md", "---\nid: beta\nstatus: active\nrepositories:\n  - gadgets\n  - widgets-wt\n---\n"),
+        ("destinations/gamma.md", "---\nid: gamma\nstatus: active\nrepositories:\n  - orphan-wt\n---\n"),
+    ]
+    common = "/code/widgets/.git"
+    repositories = {name: _entry() for name in ["widgets", "widgets-wt", "orphan", "orphan-wt"]}
+    for name in ("widgets", "widgets-wt"):
+        repositories[name]["repo"] = common
+    for name in ("orphan", "orphan-wt"):
+        repositories[name]["repo"] = "/code/orphan/.git"
+    block = compass_core.build_compass(
+        MAP_DIR,
+        TODAY,
+        LOG,
+        destinations,
+        README,
+        None,
+        list(repositories),
+        parents=worktree.repository_parents(repositories),
+    )
+    page = plain(render.document(_queen(block, repositories))).split("\n")
+    rows = {name: next(line for line in page if f" {name} " in line) for name in repositories}
+    assert rows["widgets"].endswith("· late s")
+    assert rows["widgets-wt"].endswith("· off leg s")
+    assert "·" not in rows["orphan"]
+    assert rows["orphan-wt"].endswith("· off leg s")
+
+
 def test_every_mapped_row_keeps_its_suffix_when_every_summary_is_80_characters():
     repositories = {name: _entry("x" * 80) for name in NAMES}
     with_map = render.document(_queen(_compass(), repositories))

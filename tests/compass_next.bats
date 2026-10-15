@@ -239,6 +239,53 @@ JSON
     printf '%s\n' "$plain" | grep -E ' unmapped ' | grep -v '·'
 }
 
+# The same worktree, but the map NAMES it under a different destination than its repository's: `gamma` (the one
+# `soon` belongs to, off the leg and due after `late`). An explicit mapping wins, so it ranks BEHIND `late`; had it
+# inherited `on-leg`'s entry it would sit right behind its repository, ahead of `late`.
+_write_registry_with_named_worktree() {
+    local name
+    for name in unmapped on-leg on-leg-wt late; do
+        mkdir -p "${BATS_TEST_TMPDIR}/p/${name}"
+    done
+    cat > "$BORG_REGISTRY" <<JSON
+{"projects": {
+  "unmapped":  {"path":"${BATS_TEST_TMPDIR}/p/unmapped","status":"waiting","tmux_window":"w-unmapped","last_activity":"2026-01-01T10:00:00Z"},
+  "late":      {"path":"${BATS_TEST_TMPDIR}/p/late","status":"waiting","tmux_window":"w-late","last_activity":"2026-01-02T10:00:00Z"},
+  "on-leg":    {"path":"${BATS_TEST_TMPDIR}/p/on-leg","repo":"${BATS_TEST_TMPDIR}/p/on-leg/.git","status":"waiting","tmux_window":"w-on-leg","last_activity":"2026-01-07T10:00:00Z"},
+  "on-leg-wt": {"path":"${BATS_TEST_TMPDIR}/p/on-leg-wt","repo":"${BATS_TEST_TMPDIR}/p/on-leg/.git","status":"waiting","tmux_window":"w-on-leg-wt","last_activity":"2026-01-08T10:00:00Z"}
+}}
+JSON
+    _write_map
+    printf '%s\n' '---' 'id: gamma' 'status: active' 'repositories:' '  - soon' '  - on-leg-wt' '---' \
+        > "${MAP}/destinations/gamma.md"
+}
+
+@test "next --pick N: a worktree the map names keeps its own destination and ranks by it, not by its repository" {
+    _write_registry_with_named_worktree
+    export TMUX_MOCK_WINDOWS="w-on-leg w-on-leg-wt w-late w-unmapped"
+    BORG_MAP_DIR="$MAP" run zsh "$BORG" next --pick 1
+    [ "$status" -eq 0 ]
+    [ "$(_selected)" = "w-on-leg" ]
+    : > "$TRACE"
+    BORG_MAP_DIR="$MAP" run zsh "$BORG" next --pick 2
+    [ "$status" -eq 0 ]
+    [ "$(_selected)" = "w-late" ]
+    : > "$TRACE"
+    BORG_MAP_DIR="$MAP" run zsh "$BORG" next --pick 3
+    [ "$status" -eq 0 ]
+    [ "$(_selected)" = "w-on-leg-wt" ]
+}
+
+@test "link --overview: a worktree the map names carries its own destination's state, not its repository's" {
+    _write_registry_with_named_worktree
+    BORG_MAP_DIR="$MAP" run zsh "$BORG" link --local --overview
+    [ "$status" -eq 0 ]
+    local plain
+    plain=$(printf '%s\n' "$output" | sed -e $'s/\033\\[[0-9;]*m//g')
+    printf '%s\n' "$plain" | grep -E '(^| )on-leg .*· on track( |$)'
+    printf '%s\n' "$plain" | grep -E ' on-leg-wt .*· off leg( |$)'
+}
+
 # -- borg link: IN FOCUS --------------------------------------------------------------------------------------------
 
 @test "link --overview: IN FOCUS carries the leg and the tally of active destinations by state" {

@@ -326,21 +326,27 @@ def map_repositories(
     id equals its name, else to none. `on_leg` is true when the leg text contains the destination id or the
     repository name as a whole word.
 
-    `parents` is `{worktree: repository}` (`link.worktree.repository_parents`): a worktree INHERITS its repository's
-    entry whole, destination and `on_leg`, because it is that repository's checkout and not a repository of its
-    own. This is the one place the inheritance is applied, and every reader of the block (`borg next`'s ranking,
-    the Queen board's suffix) gets it from here. A parent that is not among `names` is ignored.
+    `parents` is `{worktree: repository}` (`link.worktree.repository_parents`): a worktree with no mapping of its own
+    INHERITS its repository's entry whole, destination and `on_leg`, because it is that repository's checkout and not
+    a repository of its own. AN EXPLICIT MAPPING ALWAYS WINS: a worktree the map itself names (listed under a
+    destination's `repositories`, or the name of a destination) keeps that entry, so inheritance only fills a hole.
+    A head with no mapping hands its unmapped entry only to an unmapped worktree and never erases a mapped one.
+    This is the one place the inheritance is applied, and every reader of the block (`borg next`'s ranking, the Queen
+    board's suffix) gets it from here. A parent that is not among `names` is ignored.
     """
     leg_text = leg["text"] if leg else ""
     mapped: dict[str, dict] = {}
+    explicit: set[str] = set()
     for name in names:
         owner = next((d for d in destinations if name in d["repositories"]), None) or next(
             (d for d in destinations if d["id"] == name), None
         )
         on_leg = _word_in(name, leg_text) or (owner is not None and _word_in(owner["id"], leg_text))
         mapped[name] = {"destination": owner["id"] if owner else None, "on_leg": on_leg}
+        if owner is not None:
+            explicit.add(name)
     for child, head in (parents or {}).items():
-        if child in mapped and head in mapped:
+        if child in mapped and head in mapped and child not in explicit:
             mapped[child] = dict(mapped[head])
     return mapped
 
