@@ -91,7 +91,7 @@ _write_map() {
         '| delta | 2999-01-01 |' '| eps | TBD |' '| zeta | TBD |' > "${MAP}/README.md"
 }
 
-_row_projects() {
+_row_repositories() {
     jq -r '[.rows[].project] | join(" ")'
 }
 
@@ -102,14 +102,14 @@ _row_projects() {
     _write_map
     BORG_MAP_DIR="$MAP" run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
     [ "$status" -eq 0 ]
-    [ "$(printf '%s' "$output" | _row_projects)" = "on-leg late soon far undated unmapped frozen" ]
+    [ "$(printf '%s' "$output" | _row_repositories)" = "on-leg late soon far undated unmapped frozen" ]
 }
 
 @test "next --rows --json: with no map the order is the one it always was (oldest waiting first)" {
     _write_registry
     BORG_MAP_DIR="${BATS_TEST_TMPDIR}/no-such-map" run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
     [ "$status" -eq 0 ]
-    [ "$(printf '%s' "$output" | _row_projects)" = "unmapped frozen undated far soon late on-leg" ]
+    [ "$(printf '%s' "$output" | _row_repositories)" = "unmapped frozen undated far soon late on-leg" ]
 }
 
 @test "next --rows --json: an empty map directory ranks as no map" {
@@ -117,7 +117,7 @@ _row_projects() {
     mkdir -p "$MAP"
     BORG_MAP_DIR="$MAP" run bash -c "zsh \"$BORG\" next --rows --json --local --all 2>/dev/null"
     [ "$status" -eq 0 ]
-    [ "$(printf '%s' "$output" | _row_projects)" = "unmapped frozen undated far soon late on-leg" ]
+    [ "$(printf '%s' "$output" | _row_repositories)" = "unmapped frozen undated far soon late on-leg" ]
 }
 
 @test "next --switch: the non-interactive choice is the compass's top, not the score's" {

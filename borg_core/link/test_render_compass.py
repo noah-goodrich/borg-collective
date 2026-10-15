@@ -43,8 +43,9 @@ def _entry(summary="s") -> dict:
     return {"source": "cli", "status": "idle", "relative_activity": "1d ago", "summary": summary}
 
 
-def _queen(compass, projects=None, **overrides) -> dict:
-    repositories = projects if projects is not None else {name: _entry() for name in NAMES}
+def _queen(compass, repositories=None, **overrides) -> dict:
+    if repositories is None:
+        repositories = {name: _entry() for name in NAMES}
     return _doc(
         total_projects=len(repositories),
         order=sorted(repositories),
@@ -191,9 +192,9 @@ def test_a_late_repository_off_the_leg_still_reads_late():
 
 def test_a_worktree_row_beneath_its_repository_carries_that_repositorys_suffix():
     common = "/code/widgets/.git"
-    projects = {name: _entry() for name in ["widgets", "widgets-wt", "orphan"]}
+    repositories = {name: _entry() for name in ["widgets", "widgets-wt", "orphan"]}
     for name in ("widgets", "widgets-wt"):
-        projects[name]["repo"] = common
+        repositories[name]["repo"] = common
     block = compass_core.build_compass(
         MAP_DIR,
         TODAY,
@@ -201,12 +202,14 @@ def test_a_worktree_row_beneath_its_repository_carries_that_repositorys_suffix()
         DESTINATIONS,
         README,
         None,
-        list(projects),
-        parents=worktree.repository_parents(projects),
+        list(repositories),
+        parents=worktree.repository_parents(repositories),
     )
     rows = {
-        name: next(line for line in plain(render.document(_queen(block, projects))).split("\n") if f" {name} " in line)
-        for name in projects
+        name: next(
+            line for line in plain(render.document(_queen(block, repositories))).split("\n") if f" {name} " in line
+        )
+        for name in repositories
     }
     assert rows["widgets"].endswith("· late s")
     assert rows["widgets-wt"].endswith("· late s")
@@ -214,9 +217,9 @@ def test_a_worktree_row_beneath_its_repository_carries_that_repositorys_suffix()
 
 
 def test_every_mapped_row_keeps_its_suffix_when_every_summary_is_80_characters():
-    projects = {name: _entry("x" * 80) for name in NAMES}
-    with_map = render.document(_queen(_compass(), projects))
-    without_map = render.document(_queen(None, projects))
+    repositories = {name: _entry("x" * 80) for name in NAMES}
+    with_map = render.document(_queen(_compass(), repositories))
+    without_map = render.document(_queen(None, repositories))
     widest = max(len(row) for row in _board(without_map).values())
     rows = _board(with_map)
     for name, state in (("widgets", "late"), ("gadgets", "off leg"), ("gizmos", "off leg"), ("doodads", "frozen")):
@@ -240,11 +243,10 @@ def test_a_suffix_that_cannot_fit_even_without_a_summary_is_not_printed():
 
 
 def test_a_board_without_a_map_is_the_board_there_always_was():
-    projects = {name: _entry() for name in NAMES}
-    plain_board = _section_lines(render.document(_queen(None, projects)), "REPOSITORIES")
-    assert (
-        _section_lines(render.document(_queen(compass_core.absent(MAP_DIR), projects)), "REPOSITORIES") == plain_board
-    )
+    repositories = {name: _entry() for name in NAMES}
+    plain_board = _section_lines(render.document(_queen(None, repositories)), "REPOSITORIES")
+    absent = _queen(compass_core.absent(MAP_DIR), repositories)
+    assert _section_lines(render.document(absent), "REPOSITORIES") == plain_board
 
 
 # -- WAITING ON YOU -------------------------------------------------------------------------------------------------
@@ -294,5 +296,5 @@ def test_a_parking_item_is_not_the_next_action_and_does_not_hide_it():
 
 
 def test_porcelain_ignores_the_compass():
-    projects = {name: _entry() for name in NAMES}
-    assert render.porcelain(_queen(_compass(), projects)) == render.porcelain(_queen(None, projects))
+    repositories = {name: _entry() for name in NAMES}
+    assert render.porcelain(_queen(_compass(), repositories)) == render.porcelain(_queen(None, repositories))
