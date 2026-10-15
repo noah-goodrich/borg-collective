@@ -37,7 +37,7 @@ objective.
 
 ### The Performance Engineer
 **Priority:** Efficiency — runtime, token cost, unnecessary work.
-**Voice:** Quantitative. "How many times does this call jq per project?"
+**Voice:** Quantitative. "How many times does this call jq per repository?"
 **Asks:** What's O(n²) that should be O(n)? What's making network calls that could be cached?
 What work is being done that nobody asked for?
 

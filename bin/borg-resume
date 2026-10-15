@@ -14,7 +14,7 @@
 #   watch --once     one watcher pass: fold, scan (S7), then pre-flight gate + confirmation (S9)
 #   inventory <sid>  print the in-flight inventory as JSON (slice S5; --json is accepted, JSON is the only format)
 #   prompt <rid>     render prompts/<rid>.md, or with --line / --compact-line the injection strings (slice S6)
-#   mark-closed <project|sid>  append a deliberate-close event (like SessionEnd prompt_input_exit); slice S3b
+#   mark-closed <repository|sid>  append a deliberate-close event (like SessionEnd prompt_input_exit); slice S3b
 #   ack <rid>        append an ack event for a record (the model runs it when done); slice S7b
 #   defer <rid> [<until>] [--reason <w>]  append a defer event; the watcher reschedules the record; slice S7b
 #   status [--json] [--all]   records by state, due time, kill-switch state; slice S14
@@ -240,7 +240,7 @@ _br_record() {
 
 _br_usage() {
     printf 'usage: borg-resume <record <event> | pause | unpause | probe | inventory <sid> [--json]' >&2
-    printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout] | mark-closed <project|sid> [dir]' >&2
+    printf ' | watch --once | prompt <rid> [--line|--compact-line|--stdout] | mark-closed <repository|sid> [dir]' >&2
     printf ' | ack <rid> | defer <rid> [<until>] [--reason <word>]' >&2
     printf ' | status [--json] [--all] | cancel <rid>|--session <sid>|--all | run <rid> [--force]>\n' >&2
 }

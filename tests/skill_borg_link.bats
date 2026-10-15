@@ -200,7 +200,7 @@ JSON
     _stub_borg "${BATS_TEST_TMPDIR}/unreg.json"
     local cmd
     cmd="$(_step1_command)"
-    cmd="${cmd/ \[<project>\]/}"
+    cmd="${cmd/ \[<repository>\]/}"
     PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
     [ "$status" -eq 0 ]
     run jq -c 'keys' <<<"$output"
@@ -224,7 +224,7 @@ JSON
     _stub_borg "${BATS_TEST_TMPDIR}/repo.json"
     local cmd
     cmd="$(_step1_command)"
-    cmd="${cmd/ \[<project>\]/}"
+    cmd="${cmd/ \[<repository>\]/}"
     [ -n "$cmd" ]
     PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
     [ "$status" -eq 0 ]
@@ -259,14 +259,14 @@ JSON
     _stub_borg "${BATS_TEST_TMPDIR}/queen.json"
     local cmd
     cmd="$(_step1_command)"
-    cmd="${cmd/ \[<project>\]/}"
+    cmd="${cmd/ \[<repository>\]/}"
     PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
     [ "$status" -eq 0 ]
     run jq -c '[.order, (.projects | keys), (.directives | map({project, n}))]' <<<"$output"
     [ "$output" = '[["p","q"],["p","q"],[{"project":"p","n":2},{"project":"q","n":1}]]' ]
 }
 
-@test "scope: Step 1 pipe is compact and its Queen arm deletes eight unread project fields, keeping the rest" {
+@test "scope: Step 1 pipe is compact and its Queen arm deletes eight unread repository fields, keeping the rest" {
     cat > "${BATS_TEST_TMPDIR}/queen2.json" <<'JSON'
 {"version": 2, "order": ["p"], "grid": {"warnings": []}, "focus": null,
  "scope": {"kind": "orchestrator", "repository": null, "local": false},
@@ -280,7 +280,7 @@ JSON
     local cmd
     cmd="$(_step1_command)"
     [[ "$cmd" == *"jq -c '"* ]] || false
-    cmd="${cmd/ \[<project>\]/}"
+    cmd="${cmd/ \[<repository>\]/}"
     PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
     [ "$status" -eq 0 ]
     [ "${#lines[@]}" -eq 1 ]

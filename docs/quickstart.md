@@ -7,7 +7,7 @@ read [How to Ship Like Boris](boris-workflow.md) first for context on why this e
 
 Borg is two command-line tools:
 - **`borg`** — Orchestrates your AI development sessions (recommendations, boundaries, planning)
-- **`drone`** — Manages project containers and tmux windows (start/stop, shell access, Claude launch)
+- **`drone`** — Manages repository containers and tmux windows (start/stop, shell access, Claude launch)
 
 Plus 17 Claude Code skills, four hooks, and a tmux keybinding.
 
@@ -17,7 +17,7 @@ Plus 17 Claude Code skills, four hooks, and a tmux keybinding.
 - [tmux](https://github.com/tmux/tmux), [jq](https://jqlang.github.io/jq/),
   [fzf](https://github.com/junegunn/fzf)
 - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (`npm install -g @anthropic-ai/claude-code`)
-- Docker (optional, for devcontainer-based projects)
+- Docker (optional, for devcontainer-based repositories)
 
 ## Step 1: Clone and Install
 
@@ -34,7 +34,7 @@ The installer:
 4. Registers hooks in `~/.claude/settings.json` (SessionStart, Stop, Notification, PreToolUse)
 5. Installs skills to `~/.claude/skills/`
 6. Adds tmux keybinding (`Ctrl+Space >`)
-7. Runs `borg scan` to discover existing projects
+7. Runs `borg scan` to discover existing repositories
 
 ## Step 2: Install Community Skills
 
@@ -52,7 +52,7 @@ This gives you Boris Cherny's 57-tip framework, Scope Guard, and 205+ engineerin
 borg init
 ```
 
-This launches the Queen — a Claude session that knows about all your projects. It opens with a
+This launches the Queen — a Claude session that knows about all your repositories. It opens with a
 morning briefing: what's waiting for input, what's in progress, and one recommendation for where to
 start. Resume any time with `borg claude`.
 
@@ -62,15 +62,15 @@ start. Resume any time with `borg claude`.
 # What needs attention?
 borg next
 
-# Overview of all projects
+# The front door (the Queen's overview at the workspace root)
 borg link
 
 # Start new feature work (creates git worktree + branch, launches Claude)
-drone feature my-project my-feature
+drone feature my-repo my-feature
 
 # Or resume existing work
-drone up my-project
-drone claude my-project
+drone up my-repo
+drone claude my-repo
 
 # Inside a Claude session — the Boris workflow
 /borg-plan          # Lock objectives + acceptance criteria
@@ -84,7 +84,7 @@ drone claude my-project
 # Mid-session sanity check
 /borg-review
 
-# Jump to most pressing project
+# Jump to most pressing repository
 # (or press Ctrl+Space >)
 borg next --switch
 ```
@@ -96,17 +96,17 @@ Create `~/.config/borg/config.zsh`:
 ```zsh
 BORG_WORK_HOURS="09:00-18:00"
 BORG_WORK_DAYS="Mon,Tue,Wed,Thu,Fri"
-BORG_WORK_PROJECTS="project-a,project-b"
+BORG_WORK_PROJECTS="repo-a,repo-b"
 BORG_MAX_ACTIVE=3
 ```
 
 This adds:
-- Confirmation prompt when switching to work projects after hours
+- Confirmation prompt when switching to work repositories after hours
 - Capacity warning when too many sessions need attention
 
 ## Step 6: Devcontainer Setup (Optional)
 
-If you run projects in Docker Compose devcontainers, add this volume mount to each project's
+If you run repositories in Docker Compose devcontainers, add this volume mount to each repository's
 `docker-compose.yml`:
 
 ```yaml
@@ -123,7 +123,7 @@ After installation, verify:
 
 - [ ] `which borg` → `~/.local/bin/borg`
 - [ ] `which drone` → `~/.local/bin/drone`
-- [ ] `borg link` → shows discovered projects (or "No projects registered")
+- [ ] `borg link` → prints a page (the Queen's overview at the workspace root)
 - [ ] `borg help` → shows full command reference
 - [ ] `ls ~/.claude/skills/` → includes borg-plan, borg-assimilate, borg-review, borg-link-up, etc.
 - [ ] In a Claude session: `/borg-plan` is recognized as a skill
@@ -142,5 +142,5 @@ Add the `~/.config/borg` volume mount to your container's docker-compose.yml.
 **Skills not available in Claude session**
 Run the installer again: `./install.sh`. It re-symlinks skills idempotently.
 
-**`borg next` recommends a project but doesn't switch**
-The project may not have a tmux window. Start it with `drone up <project>` first.
+**`borg next` recommends a repository but doesn't switch**
+The repository may not have a tmux window. Start it with `drone up <repository>` first.

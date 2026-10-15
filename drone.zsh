@@ -844,7 +844,7 @@ cmd_cortex() {
     tmux resize-pane -Z -t "$claude_pane"
 }
 
-# ── drone start ───────────────────────────────────────────────────────────────
+# ── drone feature ──────────────────────────────────────────────────────────────
 
 cmd_feature() {
     local feature="${2:-}"

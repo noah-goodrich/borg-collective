@@ -2,9 +2,9 @@
 name: borg-link-up
 description: >
   "Link up" to the collective — flush session state to a checkpoint.
-  Use when ending a session, before a break, or when switching projects.
+  Use when ending a session, before a break, or when switching repositories.
   Produces a structured checkpoint that eliminates context-rebuild time on
-  the next /borg-link-down. Saves to <project>/.borg/checkpoints/<timestamp>.md,
+  the next /borg-link-down. Saves to <repository>/.borg/checkpoints/<timestamp>.md,
   which is what the SessionStart hook (borg-link-down.sh) reads to restore context.
 allowed-tools: Bash(borg checkpoint-prepare *)
 ---
@@ -141,20 +141,20 @@ Proposal: `/borg-plan` scaffolds one, or `manifest.cli scaffold
 
 ## Local Extensions: 01-context, 02-output, 03-followup
 
-The prepared document carries the extension files, already read, per hook: `EXTENSION_<HOOK>_MACHINE` (`~/.config/borg/extensions/skill-extensions/borg-link-up/<hook>.md`) and `EXTENSION_<HOOK>_REPOSITORY` (`<project root>/.borg/skill-extensions/borg-link-up/<hook>.md`), each `not present` or a path with its fenced body, then a `_PRECEDENCE` note. Later files extend or override earlier ones.
+The prepared document carries the extension files, already read, per hook: `EXTENSION_<HOOK>_MACHINE` (`~/.config/borg/extensions/skill-extensions/borg-link-up/<hook>.md`) and `EXTENSION_<HOOK>_REPOSITORY` (`<repository root>/.borg/skill-extensions/borg-link-up/<hook>.md`), each `not present` or a path with its fenced body, then a `_PRECEDENCE` note. Later files extend or override earlier ones.
 
 - **01-context** (`EXTENSION_01_CONTEXT`): apply before composing the checkpoint.
 - **02-output** (`EXTENSION_02_OUTPUT`): fold its instructions into the checkpoint before the Write.
 - **03-followup** (`EXTENSION_03_FOLLOWUP`): apply after the checkpoint file lands, before the closing reply. If a follow-up action fails, report the failure but do not delete or rewrite the checkpoint — it is the session's record and a failed follow-up does not invalidate it.
 
-**Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:` asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins (the `PREFER_TOOL` lines already apply this). Everything else is project policy and the repository layer wins. Full rules: `docs/extensions.md`. If a hook's layers are both `not present`, skip silently — do not mention extensions, do not warn, do not change behavior.
+**Precedence has one exception, and it inverts the order:** a file declaring `- Prefer-tool:` asserts something about THIS MACHINE, so when both layers declare it the MACHINE layer wins (the `PREFER_TOOL` lines already apply this). Everything else is repository policy and the repository layer wins. Full rules: `docs/extensions.md`. If a hook's layers are both `not present`, skip silently — do not mention extensions, do not warn, do not change behavior.
 
 ## Fallback: the prepared block is missing or says `STATUS: fallback`
 
 If the `STATUS` line says `fallback: <reason>`, or the block is missing, use any field the block did print and gather the rest the legacy way, keeping every rule above:
 
 1. Read each extension file that exists (the six paths under "Local Extensions").
-2. Project root: `git rev-parse --show-toplevel`, else the directory holding `PROJECT_PLAN.md`, else the cwd.
+2. Repository root: `git rev-parse --show-toplevel`, else the directory holding `PROJECT_PLAN.md`, else the cwd.
 3. If `PROJECT_PLAN.md` or `docs/plans/PROJECT_PLAN.md` exists, find the borg source dir with `command -v borg | xargs readlink -f | xargs dirname` and run the engine once: `BORG_PLANSTATE_SUITE_TIMEOUT=120 PYTHONPATH=<that dir> python3 -m borg_core.planstate.cli <plan> --json --apply`.
 4. Manifest: `PYTHONPATH=<that dir> python3 -m borg_core.manifest.cli resolve --repository <root>` (any non-zero exit is a no-op), `gh pr view --json number,url --jq '"\(.url)"'` for the ref, then `add-row` as above.
 5. Run `borg checkpoint-name` via the Bash tool and use its literal stdout, unmodified, as the stem. Check `test -e <root>/.borg/checkpoints/<stem>.md`; if it exists, append -2, -3 and so on until it does not.

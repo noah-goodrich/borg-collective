@@ -12,7 +12,7 @@ See [Appendix E](#appendix-e-change-log) for revision history.
 
 Software development in 2026 has been transformed by AI coding agents. Tools like Claude Code, Cortex
 Code CLI, and their peers allow individual developers to run three, five, or even ten parallel coding
-sessions across projects. Boris Cherny, the creator of Claude Code, ships twenty to thirty pull requests
+sessions across repositories. Boris Cherny, the creator of Claude Code, ships twenty to thirty pull requests
 per day by running five simultaneous git worktrees. Teams at incident.io reduced a two-hour JavaScript
 editor upgrade to ten minutes using four parallel Claude agents. The productivity ceiling has never been
 higher.
@@ -31,7 +31,7 @@ cognitive overload from parallel session management — affects every developer.
 visible; for neurotypical developers, it manifests as gradual burnout over weeks and months.
 
 This document proposes The Borg Collective, an AI development orchestration framework that solves a
-specific problem: how does a developer manage parallel work streams across projects, tools, and contexts
+specific problem: how does a developer manage parallel work streams across repositories, tools, and contexts
 without burning out, losing track of progress, or failing to ship? The answer is that tools must enforce
 boundaries and persist context as aggressively as they remove friction.
 
@@ -42,7 +42,7 @@ boundaries and persist context as aggressively as they remove friction.
 Borg is measured against five objectives:
 
 - **Decision paralysis elimination.** `borg next` answers "what should I do?" with a single
-  recommendation and switches to that project. Target: context-switching decision time drops from
+  recommendation and switches to that repository. Target: context-switching decision time drops from
   minutes to zero (one hotkey). Research basis: accountability check-ins increase goal achievement from
   twenty-five to ninety-five percent (Edge Foundation).
 
@@ -51,8 +51,8 @@ Borg is measured against five objectives:
   available for engineering, not bookkeeping. Research basis: working memory limits (Miller's Law),
   decision fatigue (Baumeister).
 
-- **Work/life boundary enforcement.** Work projects gated after hours. Target: switching to a work
-  project at 10 PM requires one explicit keystroke. Research basis: sustained overwork without recovery
+- **Work/life boundary enforcement.** Work repositories gated after hours. Target: switching to a work
+  repository at 10 PM requires one explicit keystroke. Research basis: sustained overwork without recovery
   leads to burnout (Maslach Burnout Inventory); structured breaks prevent cognitive degradation.
 
 - **Shipping discipline.** Every project can define locked acceptance criteria via `/borg-plan`. Claude
@@ -78,7 +78,7 @@ documented across cognitive psychology.
 
 **Compose, do not rebuild.** Claude Code already provides worktrees, task tracking, skills, hooks,
 context management, and agent teams. Borg builds only what these native features do not provide: session
-orchestration, project lifecycle management, work/life boundaries, and cross-session knowledge
+orchestration, repository lifecycle management, work/life boundaries, and cross-session knowledge
 persistence. Anything Claude Code does natively, borg delegates to it.
 
 **Skills are the portable unit of discipline.** CLAUDE.md is tool-specific. Skills are portable across
@@ -103,28 +103,28 @@ ships is the single most likely failure mode of this project.
 Borg exists today as a working orchestration framework: approximately 765 lines of zsh, six custom
 skills, three hooks, an installer, and comprehensive documentation. The v1 CLI (`borg next`, `borg ls`,
 `borg switch`, etc.) is functional. Session lifecycle tracking via hooks works. Work/life boundaries are
-implemented. The tmux hotkey (`Ctrl+Space >`) switches to the most pressing project.
+implemented. The tmux hotkey (`Ctrl+Space >`) switches to the most pressing repository.
 
 ### What works
 
-- **Session tracking**: Hooks automatically update project status (active/waiting/idle) as Claude
+- **Session tracking**: Hooks automatically update repository status (active/waiting/idle) as Claude
   sessions start, wait, and stop.
 - **Priority scoring**: `borg next` uses a weighted scoring system (pinned +200, waiting +100, active
   +50) to recommend what to work on.
-- **Boundary enforcement**: Work projects gated after configured hours with one-keystroke confirmation.
+- **Boundary enforcement**: Work repositories gated after configured hours with one-keystroke confirmation.
 - **Capacity warnings**: Alert when active sessions exceed the configured limit.
 - **Skills**: Seven custom skills installed — cognitive load guardrails, project planning, shipping
-  (assimilate), Collective review, mid-session review, project intelligence (link), and session
+  (assimilate), Collective review, mid-session review, the front door (link), and session
   checkpointing (link-up).
 
 ### What's in v2 (complete)
 
 - **`drone` CLI**: Forked from `dev.sh` into the borg-collective repo. `drone up/down/claude/sh/restart/fix/status`
-  manages the full project lifecycle.
+  manages the full repository lifecycle.
 - **`borg init` orchestrator**: Launches a Claude session with a morning briefing built from the
   registry and recent session checkpoints. `borg claude` re-enters the session.
 - **User-authored checkpoints**: `/borg-link-up` writes a structured checkpoint from the live
-  session to `<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. The SessionStart hook
+  session to `<repository>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. The SessionStart hook
   (`borg-link-down.sh`) reads the newest checkpoint on the next start and injects it as
   `additionalContext`. No per-session LLM spend, no hidden global summaries — the prose is yours
   and lives in-repo.
@@ -167,12 +167,12 @@ with different conventions forces the developer to maintain a mental model of wh
 unified `borg` + `drone` model reduces this to two commands with consistent patterns.
 
 **Lesson 5: Cairn was tried and decommissioned.** Session context is ephemeral — it's lost on
-compaction, context overflow, or session end. Per-project checkpoints at
-`<project>/.borg/checkpoints/` handle the common case (pick up where you left off). Cairn, an
+compaction, context overflow, or session end. Per-repository checkpoints at
+`<repository>/.borg/checkpoints/` handle the common case (pick up where you left off). Cairn, an
 optional cross-project knowledge graph (PostgreSQL + pgvector), was built to extend that further —
 but measurement (2026-08-08) showed its differentiating claim, cross-project semantic recall, at
 0.4% restatement, indistinguishable from the null baseline. It was decommissioned and its corpus
-exported to per-project `.borg/knowledge/*.md` markdown, which the same checkpoint/auto-memory path
+exported to per-repository `.borg/knowledge/*.md` markdown, which the same checkpoint/auto-memory path
 already surfaces at zero marginal cost.
 
 ---
@@ -186,8 +186,8 @@ Seven skills installed and working:
 - `/borg-assimilate` — Shipping checklist + Collective review + execution
 - `/borg-collective-review` — Adversarial multi-persona review
 - `/borg-review` — Mid-session diagnostic with loop detection
-- `/borg-link` — Project intelligence (overview or per-project deep dive)
-- `/borg-link-up` — Flush session state to a per-project checkpoint
+- `/borg-link` — The front door (this directory's page; the overview at the Queen's root)
+- `/borg-link-up` — Flush session state to a per-repository checkpoint
 - Cognitive load guardrails (always-on)
 
 ### Phase 2: drone CLI ✓
@@ -198,7 +198,7 @@ Forked `dev.sh` into `drone.zsh`. Commands: `drone up`, `drone down`, `drone cla
 ### Phase 3: Hook integration ✓
 
 SessionStart hook (`borg-link-down.sh`) reads the newest checkpoint from
-`<project>/.borg/checkpoints/` and injects it as `additionalContext` via `hookSpecificOutput`. Stop
+`<repository>/.borg/checkpoints/` and injects it as `additionalContext` via `hookSpecificOutput`. Stop
 hook (`borg-link-up.sh`) sets status=idle, warns on uncommitted changes, and nudges the developer
 to run `/borg-link-up` if no recent checkpoint exists. `summarize.py` deprecated.
 
@@ -212,8 +212,8 @@ with `--continue`.
 
 Cairn (PostgreSQL + pgvector) was decommissioned 2026-08-08: its differentiating claim,
 cross-project semantic recall, measured at 0.4% restatement — indistinguishable from the null
-baseline. The corpus was exported to per-project `.borg/knowledge/*.md` markdown before the
-database was dropped; cross-session persistence is served by per-project checkpoints and Claude
+baseline. The corpus was exported to per-repository `.borg/knowledge/*.md` markdown before the
+database was dropped; cross-session persistence is served by per-repository checkpoints and Claude
 Code project auto-memory.
 
 ### Phase 6: Documentation ✓
@@ -249,4 +249,4 @@ See `docs/quickstart.md` for installation and first-run guide.
 | 2026-03-29 | Original proposal: ADHD-specific framing, three phases (make it work, boundaries, cognitive load management). v1 shell CLI with regex-based summarizer. |
 | 2026-03-30 | Major revision: reframed from ADHD-specific to universal cognitive load. Added v2 architecture (borg + drone + cairn). Added six skills (borg-plan, borg-ship, borg-review, borg-debrief, borg-checkpoint, cognitive guardrails). Added orchestrator concept (borg init). Added LLM debriefs replacing regex extraction. Cairn integration as optional knowledge persistence. Scope still WIP. |
 | 2026-03-31 | v2 complete: Implemented all six phases. Hook integration (Phase 3): async Sonnet debrief on stop, debrief + cairn context injection on start. Orchestrator (Phase 4): borg init + borg claude with --append-system-prompt. Cairn integration (Phase 5): session commits on stop, knowledge search on start, borg search command. Docs cleanup (Phase 6): all references updated to final state. |
-| 2026-04-23 | Lifecycle pivot: killed the automatic Sonnet session debrief. Replaced with user-invoked `/borg-link-up` skill that writes checkpoints to `<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. Folded `/borg-checkpoint` into `/borg-link-up`. Inverted hook names to match the drone metaphor: SessionStart is `borg-link-down.sh` (drone pulls state from host), Stop is `borg-link-up.sh` (drone flushes state back). Stop hook no longer calls an LLM — it sets status=idle, warns on uncommitted changes, and nudges if no recent checkpoint exists. Renamed `/borg-ship` → `/borg-assimilate` and added `/borg-collective-review` and `/borg-link`. |
+| 2026-04-23 | Lifecycle pivot: killed the automatic Sonnet session debrief. Replaced with user-invoked `/borg-link-up` skill that writes checkpoints to `<repository>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. Folded `/borg-checkpoint` into `/borg-link-up`. Inverted hook names to match the drone metaphor: SessionStart is `borg-link-down.sh` (drone pulls state from host), Stop is `borg-link-up.sh` (drone flushes state back). Stop hook no longer calls an LLM — it sets status=idle, warns on uncommitted changes, and nudges if no recent checkpoint exists. Renamed `/borg-ship` → `/borg-assimilate` and added `/borg-collective-review` and `/borg-link`. |

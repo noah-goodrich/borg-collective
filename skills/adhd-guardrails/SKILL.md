@@ -19,7 +19,7 @@ gradual burnout that comes from sustained multi-session AI-assisted development:
 - Prefer shipping something small over planning something large
 
 ## Plan Cross-Reference
-When PROJECT_PLAN.md exists in the project root, compare incoming requests against its acceptance
+When PROJECT_PLAN.md exists in the repository root, compare incoming requests against its acceptance
 criteria. If a request doesn't map to any criterion:
 - Name it: "This isn't in the current plan."
 - Offer the choice: "Add it (adjusts timeline) or note it for later?"
@@ -41,10 +41,10 @@ criteria. If a request doesn't map to any criterion:
 
 ## Capacity Management
 - If a `⚠ CAPACITY WARNING` appears in session context, surface it at the top of your first
-  response before anything else: state the count, the limit, and name the active/waiting projects
+  response before anything else: state the count, the limit, and name the active/waiting repositories
 - Actively discourage starting new work threads when at or above capacity
-- Suggest completing or pausing an existing project before taking on anything new
-- "More projects in flight = less done on each one" — enforce this framing
+- Suggest completing or pausing an existing repository before taking on anything new
+- "More repositories in flight = less done on each one" — enforce this framing
 
 ## Communication
 - No shame language. Never use "you should have", "obviously", or "simply"

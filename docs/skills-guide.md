@@ -43,7 +43,7 @@ git history, and existing docs, then proposes:
 6. **Timeline** — Estimated effort with reasoning
 7. **Risks** — What could go wrong, flagged by Claude based on code analysis
 
-Output: `PROJECT_PLAN.md` in the project root. Once written, criteria are **locked** — scope changes
+Output: `PROJECT_PLAN.md` in the repository root. Once written, criteria are **locked** — scope changes
 require explicit confirmation. This prevents infinite refinement and scope creep.
 
 **Why it exists**: Without explicit acceptance criteria, work expands to fill available time. The plan
@@ -106,7 +106,7 @@ is the outside perspective.
 **Activation**: Manual (`/borg-link-up`)
 
 Writes a structured checkpoint from the live session to
-`<project>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. Five sections:
+`<repository>/.borg/checkpoints/<YYYY-MM-DD-HHMM>.md`. Five sections:
 
 - **Goal**: What this session was trying to accomplish
 - **Accomplished**: Concrete outcomes (files, commits, decisions)
@@ -125,16 +125,13 @@ via git if you want. No hidden global summaries, no per-session LLM spend.
 **Why it exists**: Session context is ephemeral. A short, deliberate checkpoint at the end of a
 session is worth more than an auto-generated summary you don't read.
 
-### /borg-link — Project Intelligence
+### /borg-link — The Front Door
 
 **Activation**: Manual (`/borg-link`, or invoked from `borg link` / `drone link` on the CLI)
 
-Consolidated project intelligence. No arguments gives an overview across all registered projects
-(directives, recent ships, last checkpoint). With a project name, gives a deep dive: registry
-entry, latest checkpoint, active plan, directive backlog, and assimilated history. Works on the
-host and inside a drone container by reading the bind-mounted files directly.
+Scope decides the page. In the Queen session (the workspace root) it gives the overview across all registered repositories (directives, recent ships, last checkpoint). Anywhere else, or with a repository name, it gives a page about exactly that one directory: identity, live session and status, its own checkpoints and the next action, and nothing from any other repository or worktree. `--overview` forces the Queen's overview from any directory. Works on the host and inside a drone container by reading the bind-mounted files directly.
 
-**Why it exists**: You forget what every project is doing. This skill rebuilds the picture without
+**Why it exists**: You forget what every repository is doing. This skill rebuilds the picture without
 round-tripping through multiple commands.
 
 ### /simplify — Review and Fix Changed Code
@@ -152,14 +149,14 @@ without requiring a separate manual pass.
 
 **Activation**: Manual (`/borg-next`)
 
-Shows what project needs attention most urgently. Use when asking "what should I work on?" or
+Shows what repository needs attention most urgently. Use when asking "what should I work on?" or
 "what's next?".
 
-### /borg-switch — Jump to a Project
+### /borg-switch — Jump to a Repository
 
 **Activation**: Manual (`/borg-switch`)
 
-Switches to a different project's tmux window. Use when saying "switch to X", "go to X", or "jump
+Switches to a different repository's tmux window. Use when saying "switch to X", "go to X", or "jump
 to X".
 
 ### /borg-search — Search Project Knowledge
@@ -167,7 +164,7 @@ to X".
 **Activation**: Manual (`/borg-search`)
 
 Cairn (the Postgres+pgvector knowledge-graph service this skill used to query) was decommissioned
-on 2026-08-08 — its corpus was exported to per-project `.borg/knowledge/*.md` markdown, which is
+on 2026-08-08 — its corpus was exported to per-repository `.borg/knowledge/*.md` markdown, which is
 grep-reachable and needs no running service. Use when asking to search knowledge, find past
 decisions, or look something up.
 
@@ -180,8 +177,8 @@ source itself, so "what's in flight?" is answered there. What survives is the ma
 (`borg recon --json`, `borg recon --adapters`), and this skill is the synthesis layer on top of it.
 
 Runs `borg recon --json` (the `--json` is mandatory; a bare `borg recon` exits 1 pointing at
-`borg link`), reconciles findings against each project's local `.borg` checkpoints, and synthesizes
-a prioritized, by-project briefing with Yours-vs-Mine action lists and a recommended parallel
+`borg link`), reconciles findings against each repository's local `.borg` checkpoints, and synthesizes
+a prioritized, by-repository briefing with Yours-vs-Mine action lists and a recommended parallel
 kickoff batch. Source-agnostic — adapters are injected, never hardcoded.
 
 Caveat, filed not fixed (see `docs/plans/assimilated/2026-08-10-briefing-fallback-and-summary-provenance.md`,
@@ -217,8 +214,8 @@ vibe-coding.
 
 **Activation**: Manual (`/break-glass`)
 
-Adds a local permission exception to a project's `settings.local.json`. The formal escape hatch for
-commands too dangerous or project-specific for the global allowlist.
+Adds a local permission exception to a repository's `settings.local.json`. The formal escape hatch for
+commands too dangerous or repository-specific for the global allowlist.
 
 ### /no-unnecessary-read-perms — Suppress Redundant Read Prompts
 

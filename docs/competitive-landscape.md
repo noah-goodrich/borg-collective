@@ -12,7 +12,7 @@ absorbed by the platform* — Anthropic made the parallel-fan-out mechanism nati
 default subagents, depth-3 nesting, 200-cap, shipped Jun-Jul 2026), which is convergence on borg's
 nanoprobe approach, not a threat to it. Two pillars remain uncontested: the ADHD/boundary layer and
 recon's checkpoint-vs-source contradiction reconciliation. (cairn, formerly a third pillar via its
-local opt-in knowledge graph, was decommissioned 2026-08-08; its corpus now lives in per-project
+local opt-in knowledge graph, was decommissioned 2026-08-08; its corpus now lives in per-repository
 `.borg/knowledge/` markdown.)
 
 ---
@@ -36,7 +36,7 @@ local opt-in knowledge graph, was decommissioned 2026-08-08; its corpus now live
 | Feature | Borg | gstack | Citadel | Claude Code Native |
 |---------|------|--------|---------|-------------------|
 | Multi-session orchestration | Yes | Conductor (10 sessions) | Yes | Background subagents (depth-3, 200-cap) |
-| Session checkpoints | Yes (user-authored, per-project) | No | No | Beta agent-checkpointing (task-tree only) |
+| Session checkpoints | Yes (user-authored, per-repository) | No | No | Beta agent-checkpointing (task-tree only) |
 | Work/life boundaries | Yes | No | No | No |
 | Shipping discipline | Yes (locked criteria) | Think→Ship phases | No | No |
 | Cross-session persistence | Yes (checkpoints) | No | Campaign persistence (markdown) | No — Agent Teams persistence closed #33764 |

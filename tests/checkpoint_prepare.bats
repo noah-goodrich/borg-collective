@@ -78,7 +78,7 @@ _ext_dir_repo() { echo "$REPO/.borg/skill-extensions/borg-link-up"; }
     [ "$(_field STATUS)" = "ok" ]
 }
 
-@test "PROJECT_ROOT is the git toplevel of --cwd, even from a subdirectory" {
+@test "the repository root is the git toplevel of --cwd, even from a subdirectory" {
     mkdir -p "$REPO/sub/deeper"
     local top
     top="$(git -C "$REPO" rev-parse --show-toplevel)"
@@ -88,7 +88,7 @@ _ext_dir_repo() { echo "$REPO/.borg/skill-extensions/borg-link-up"; }
     [ "$(_field CHECKPOINT_PATH)" = "$top/.borg/checkpoints/2026-10-14-101010.md" ]
 }
 
-@test "PROJECT_ROOT falls back to the cwd outside a repository" {
+@test "the repository root falls back to the cwd outside a repository" {
     local plain="${BATS_TEST_TMPDIR}/plain"
     mkdir -p "$plain"
     _prepare --cwd "$plain"

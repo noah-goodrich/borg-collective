@@ -1,9 +1,9 @@
-# The Borg Collective — Project Handoff
+# The Borg Collective — Repository Handoff
 
 ## What This Is
 
-AI development orchestration framework. Two CLIs — `borg` (orchestration) and `drone` (project
-lifecycle) — that coordinate parallel Claude Code sessions across projects and containers.
+AI development orchestration framework. Two CLIs — `borg` (orchestration) and `drone` (repository
+lifecycle) — that coordinate parallel Claude Code sessions across repositories and containers.
 Cross-session knowledge persists via user-authored checkpoints (`.borg/checkpoints/`) and Claude
 Code's own project-memory system — see "Cairn decommission" under Learned for why a separate
 knowledge-graph service was retired.
@@ -11,7 +11,7 @@ knowledge-graph service was retired.
 ## Architecture
 
 ```
-borg (orchestrator)     drone (project lifecycle)
+borg (orchestrator)     drone (repository lifecycle)
   - Morning briefing      - Container up/down
   - Priority scoring      - tmux window management
   - Work/life boundaries  - Claude session launching
@@ -64,18 +64,18 @@ Two independent tools that compose:
 - Work/life boundary checks on switch
 - Capacity warnings
 - tmux hotkey (Ctrl+Space >)
-- Registry-based project tracking with atomic writes
-- User-authored session checkpoints at <project>/.borg/checkpoints/<ts>.md (via /borg-link-up)
+- Registry-based repository tracking with atomic writes
+- User-authored session checkpoints at <repository>/.borg/checkpoints/<ts>.md (via /borg-link-up)
 - Session context loaded at start from the latest checkpoint
 - `borg init` launches the Queen: morning briefing from registry + checkpoints
 
 ### Commands
 
 ```
-borg init  Launch the Queen: morning briefing + Claude session
+borg init                Launch the Queen: morning briefing + Claude session
 borg / borg next         What needs attention? Switch to it.
-borg claude  Resume the Queen session (continue most recent)
-borg link [project]      ONE renderer, TWO pages, chosen by scope.kind
+borg claude              Resume the Queen session (continue most recent)
+borg link [repository]   ONE renderer, TWO pages, chosen by scope.kind
                            Queen root: the cross-repository overview
                            Inside a registered path: strictly that ONE directory's page
                              (AC2's "same spine" was reversed 2026-10-13)
@@ -86,7 +86,7 @@ borg link [project]      ONE renderer, TWO pages, chosen by scope.kind
                            --brief   Same document, same sweep, PROSE not the seven
                                      sections (AC1). Falls back to the real page.
                            --refresh Regenerate summaries
-                           --all     Include archived projects
+                           --all     Include archived repositories
                            --local   Opt down from the NETWORK sweep — no adapter, no `gh`. NOT
                                      "no subprocess": repository scope still forks one
                                      `git remote get-url origin` for the slug, because manifest
@@ -105,12 +105,12 @@ borg link [project]      ONE renderer, TWO pages, chosen by scope.kind
                                      `link` arm, the one live caller (`_link_py_args=(--deep)`)
 borg switch [query]      fzf picker → tmux window switch
 borg scan                Auto-discover from session history
-borg add [path] [--name <n>]  Register a project (a re-add keeps an existing `tmux_window`; a path
+borg add [path] [--name <n>]  Register a repository (a re-add keeps an existing `tmux_window`; a path
                          already registered under another name is a no-op, or exit 1 with --name)
-borg rm <project>        Unregister
-borg focus               Zoom current pane / project window
-borg pin / unpin         Pin (or unpin) a project to the top of borg link
-borg window <p> [short]  Show or set a project's short tmux window name (registry `tmux_window`)
+borg rm <repository>     Unregister
+borg focus               Zoom current pane / repository window
+borg pin / unpin         Pin (or unpin) a repository to the top of borg link
+borg window <p> [short]  Show or set a repository's short tmux window name (registry `tmux_window`)
 borg reap / reap-worktrees  Reap stale active/waiting statuses; clean stale nanoprobe worktrees
 borg recon --json        Machine surface only: reconciled sweep JSON (bare `recon` retired; use link)
 borg recon --adapters    List the source adapters discovered on this machine
@@ -121,41 +121,50 @@ borg doctor              Environment/dependency health check
 borg setup               Install/refresh hooks, skills, agents, tmux keybinding
                            NOT launchd — plists are installed by install.sh only, which calls
                            `borg setup` at the end. A new launchd job needs an install.sh run.
-borg store-secret        Patch a project's secrets.zsh with a new keychain export
+borg store-secret        Patch a repository's secrets.zsh with a new keychain export
 borg down                Tear down everything: windows, containers, shared stacks (`sever` retired)
 borg tidy                Housekeeping pass over registry/checkpoints; `--cairn-leftovers [--dry-run]`
                            backs up then deletes cairn's machine-local files
-borg color / image       Cosmetic project registry fields (tmux color, session image)
+borg color / image       Cosmetic repository registry fields (tmux color, session image)
 borg version             Print BORG_VERSION
 borg help                Full command reference
 
-drone up [project]       Start container + tmux window
-drone down [project]     Stop container + remove window
-drone claude [project]   Launch Claude in project context
-drone cortex [project]   Launch Cortex Code (CoCo) in project context
-drone sh [project]       Shell into container
-drone exec [project] -- <cmd>  Run a command inside the devcontainer (never on host)
-drone restart [project]  Restart container
-drone rebuild [project]  Rebuild + restart container
-drone fix [project]      Repair a broken container/window state
-drone feature <project> <branch>  Create a git worktree on <branch> + open its dev window/container
-drone toggle [project]   Toggle the optional 3rd side pane (2 ↔ 3 panes)
-drone pane <direction>   Split the calling pane top|bottom|left|right (devcontainer-aware). Two panes
-                           per window: with a side pane open it reuses that pane, unzooms the window if
-                           it is zoomed (so the pane is visible), and prints its id
-drone scaffold --supabase|--supabase-shared <dir>  Generate a devcontainer + borg-hooks for Supabase
-drone link               Deep dive on current project (alias for borg link)
+drone up [repository]        Start container + tmux window
+drone down [repository]      Stop container + remove window
+drone claude [repository]    Launch Claude in repository window
+drone cortex [repository]    Launch Cortex Code in repository window
+drone sh [repository]        Shell into container
+drone exec [repository] -- <cmd>
+                             Run a command inside the devcontainer
+                             (never on host)
+drone restart [repository]   Restart container
+drone rebuild [repository]   Rebuild + restart container
+drone fix [repository]       Repair a broken container/window state
+drone feature <repository> <branch>
+                             Create a git worktree on <branch> + open
+                             its dev window/container
+drone toggle [repository]    Toggle the optional 3rd side pane (2 ↔ 3)
+drone pane <direction>       Split the calling pane
+                             top|bottom|left|right (devcontainer-aware).
+                             Two panes per window: with a side pane open
+                             it reuses that pane, unzooms the window if
+                             it is zoomed (so the pane is visible), and
+                             prints its id
+drone scaffold --supabase|--supabase-shared <dir>
+                             Generate a devcontainer + borg-hooks for
+                             Supabase
+drone link                   Alias for borg link (this directory's page)
 ```
 
 ### Hotkey
 
-`Ctrl+Space >` — jump to most pressing project (runs `borg next --switch`)
+`Ctrl+Space >` — jump to most pressing repository (runs `borg next --switch`)
 
 ### Files
 
 ```
 borg.zsh                    Main CLI (case dispatch over cmd_* functions)
-drone.zsh                   Project lifecycle (forked from dev.sh + drone claude)
+drone.zsh                   Repository lifecycle (forked from dev.sh + drone claude)
 lib/
     registry.zsh            Registry CRUD for ~/.config/borg/registry.json
     tmux.zsh                tmux window listing + switching
@@ -174,7 +183,7 @@ borg_core/                  Python core the CLI dispatches into (see Architectur
     registry/               Registry read/write core, shell adapter, CLI entry
     recon/                  Recon fan-out engine: since-mark, adapters, merge (was lib/recon.sh)
     extensions/             Local-extension resolution: layer precedence, prefer-tool, liveness
-    manifest/               Reader for <project>/.stacks/ manifests, one root
+    manifest/               Reader for <repository>/.stacks/ manifests, one root
     link/                   `borg link` document build + renderer
         core.py             Registry/plan/checkpoint reads, scope resolution, relative time
         grid.py             Manifests → the topology wire: levels, nodes, parents/children/seq
@@ -206,14 +215,14 @@ skills/ (17)
     borg-assimilate/        Shipping checklist + Collective review + execution
     borg-collective-review/ Adversarial multi-persona review (The Collective)
     borg-review/            Mid-session diagnostic + loop detection
-    borg-link/              Consolidated project intelligence (overview + deep dive)
-    borg-link-up/           Flush session state to <project>/.borg/checkpoints/<ts>.md
+    borg-link/              The front door: Queen overview, or this directory's page
+    borg-link-up/           Flush session state to <repository>/.borg/checkpoints/<ts>.md
     borg-verify/            Independent pre-merge evaluator gate (spawn reviewer, PASS/FAIL verdict)
     borg-next/              "What should I work on?" priority answer
     borg-recon/             Morning link-up: fan out adapters, reconcile against checkpoints
     borg-resume/            Auto-resume a workflow paused/killed by a session or usage limit
-    borg-switch/            Switch to a project's tmux window by name
-    break-glass/            Add a local permission exception to a project's settings.local.json
+    borg-switch/            Switch to a repository's tmux window by name
+    break-glass/            Add a local permission exception to a repository's settings.local.json
     fable-reviewer/         Fable's 5-gate discipline distilled into a skill (scope, evidence, review)
     no-unnecessary-read-perms/  Suppress redundant read-permission prompts (always active)
     simplify/               Review session-touched code for reuse/quality/efficiency, then fix
@@ -237,8 +246,8 @@ launchd/                    Templates; Label is `{{LABEL}}`, installed as <label
 docs/
     boris-workflow.md       ELI5 guide to the workflow (start here)
     extensions.md           Local extensions: layers, load points, the prefer-tool type
-    plans/assimilated/      Shipped plans for borg-collective itself (per-project convention)
-    plans/directives/       Backlog for borg-collective itself; every project owns its own
+    plans/assimilated/      Shipped plans for borg-collective itself (per-repository convention)
+    plans/directives/       Backlog for borg-collective itself; every repository owns its own
     ...
 ```
 
@@ -293,12 +302,13 @@ docs/
   is a hook that works. Do NOT read this as licence to port hooks wholesale — `bash-guard.sh` spawns two dozen
   subprocesses and qualifies, but porting it is worth doing when it next needs a substantive change, not as a
   migration.
-- **Queen vs project-mode sessions**: every Claude Code / Cortex Code SessionStart,
+- **Queen vs repository sessions**: every Claude Code / Cortex Code SessionStart,
   Stop, and Notification hook now classifies the session via `_borg_session_mode` (in
   `lib/borg-hooks.sh`). A session whose `$CWD` *exactly* equals `$BORG_ORCHESTRATOR_ROOT`
-  (default `$HOME/dev`) is the **Queen** session (`orchestrator`) — it renders a cross-project overview
+  (default `$HOME/dev`) is the **Queen** session (`orchestrator`) — it renders a cross-repository overview
   on start and writes **nothing** to `~/.config/borg/registry.json`. Every other CWD is a
-  **project** session and uses the existing per-project flow (status flips, checkpoint
+  **repository** session (the mode value stays `project`, a contract name) and uses the existing
+  per-repository flow (status flips, checkpoint
   injection, uncommitted-change tracking). Two-variable vocabulary: `BORG_ORCHESTRATOR_ROOT`
   is the workspace root; `BORG_ROOT` (exposed by `install.sh`) is the install path of the
   borg source tree.
@@ -306,8 +316,8 @@ docs/
 - **Registry writes are atomic**: write to tmp file, `mv` to final path
 - **Vocabulary: `repository` is the code word for a git repo; `project` means a cross-repo workstream (rename decided 2026-10-12)**: the code used `project` for both, and the rename (`docs/plans/directives/2026-08-31-project-to-repository-rename.md`, site inventory under `docs/plans/directives/assets/`) moves the repository sense to `repository` in five PRs by area (R1 `borg_core/link`, R2 the rest of `borg_core`, R3 `lib/` and `hooks/`, R4 `borg.zsh`, R5 `drone.zsh` plus `merge-tree/`, `evals/`, `templates/` and `install.sh`), with tests and goldens moving in the step whose output they pin. User-facing words change too (help text, messages, placeholders, column headers say "repository" where they mean one); command and flag names never change. Workstream-sense rows (a manifest or chain describes a project) are never renamed. **Kept permanently as contract names: the `.borg-project` marker filename, every `borg link --json` key (`projects`, `total_projects`, the `project` field on directive, assimilated and cortex_pending records) and `BORG_PROJECT_NAME`.** Why: they are on-disk and cross-repo wire names, so renaming them buys nothing a reader sees and breaks consumers outside this repo, including the distributed plugin (the `borg-link` skill's MARKER-WALK block reads the marker and its `--json` reader reads the keys). A Python variable or keyword argument may be renamed while the key string it reads stays, which is why `assemble(projects=...)` still mirrors the document. The registry key `projects` migrates LAST, in its own PRs: a reader that accepts both `projects` and `repositories`, then the file migration, then dropping the old key (expand, migrate, contract). Expand has shipped: every reader accepts either key (Python through `borg_core.paths.normalize_registry`, shell and hooks through `BORG_REGISTRY_NORM_JQ` and `borg_registry_normalized` in `lib/reaper.sh`), every writer still writes `projects`, and `python3 -m borg_core.registry.cli migrate-key [--dry-run]` renames the key in a registry file (timestamped backup first, a no-op when it already has `repositories`); it has not been run against any real registry.
 - **A worktree is a VIEW of a repo, and `repo` is the key that says so**: `borg add` used to identify
-  a project by directory basename and nothing else (`registry/cli.py`'s `name = _basename(ppath)`,
-  with no git call in the add path), so a git worktree was not a view of a project, it WAS one —
+  a repository by directory basename and nothing else (`registry/cli.py`'s `name = _basename(ppath)`,
+  with no git call in the add path), so a git worktree was not a view of a repository, it WAS one —
   its own `PROJECT_PLAN.md` slot, its own `.borg/checkpoints`, its own `state.json`, invisible to
   its parent. `build_add_entry` now emits a `repo` field: the absolute
   `git rev-parse --path-format=absolute --git-common-dir`, which is byte-identical from a main
@@ -340,7 +350,7 @@ docs/
   bounded** — charged only once a filename has already been kept, each row hashed at most once, the
   walk stopped at the cap — so a collision-free group pays nothing and the 115-collision group costs
   ~19ms, not 230 reads. The byline appears only when the rows actually being printed span more than
-  one project; an unreadable body yields no identity and its row is KEPT, because a permissions
+  one repository; an unreadable body yields no identity and its row is KEPT, because a permissions
   error must not render as an empty history.
 - **Log retention (AC4 part C)**: every unbounded append-only writer in the state root (plan-promote-debug.log,
   memory-hits.log, agents.jsonl, prefer-tool.jsonl, pr-watch.log, usage-watch.log, usage-samples.jsonl) calls
@@ -358,49 +368,49 @@ docs/
   `Write`, and `NotebookEdit`. When Claude exits plan mode (`ExitPlanMode`) and the user
   proceeds to the first file edit, the hook scans the session JSONL for the most recent
   `ExitPlanMode` call since the current user turn, extracts the plan, and writes it to
-  `<repo-root>/docs/plans/PROJECT_PLAN.md` — silently, without blocking. Gates: project-mode
+  `<repo-root>/docs/plans/PROJECT_PLAN.md` — silently, without blocking. Gates: repository-mode
   only, edit target inside repo, no existing `PROJECT_PLAN.md` at either canonical location,
   cwd is a git repo. Always exits 0 (never blocks on any failure). Idempotent: if
   `PROJECT_PLAN.md` already exists, the hook is a no-op.
 - **Window names**: the registry's `tmux_window` is the ONE window-name value; drone creates the window with
   it and borg looks it up by it. Valid means non-empty, no `.` or `:` (tmux target syntax), not the tmux
-  session name, and not another project's name or `tmux_window` (`validate_window_name`). Derivation
+  session name, and not another repository's name or `tmux_window` (`validate_window_name`). Derivation
   (`derive_window_name`, run by `drone up` when `needs_derivation` says the field was never customized) is
   deterministic: names up to 6 chars stay, 3+ segments on `-`/`_` become initials, otherwise the first 6 chars,
   lengthening on collision. `borg-collective` therefore becomes `borg-c`, because `borg` is the session name
-  and may not be a window. `borg window <project> [short]` reads or sets it; an explicit name survives
+  and may not be a window. `borg window <repository> [short]` reads or sets it; an explicit name survives
   re-derivation and survives `borg add`. **Lookups accept either form**: a live window under the registry
-  name OR the project name is the project's window, so windows opened before short names existed keep
+  name OR the repository name is the repository's window, so windows opened before short names existed keep
   working. That rule has three statements: `_drone_find_window` (drone.zsh), `borg_tmux_find_window`
   (lib/tmux.zsh, used by `borg switch`, `borg next --switch` and `borg color`) with the reap overlay in
   lib/registry.zsh, and `window_is_live` (borg_core/link/core.py). Change one, change all three.
-- **borg-hooks (host-side lifecycle)**: projects can ship executable `.devcontainer/borg-hooks/pre-up.sh`
+- **borg-hooks (host-side lifecycle)**: repositories can ship executable `.devcontainer/borg-hooks/pre-up.sh`
   and `.devcontainer/borg-hooks/post-down.sh` scripts. `pre-up.sh` runs on the host before
   `docker compose up -d` (strict: non-zero aborts `drone up`); `post-down.sh` runs after
   `docker compose down` in `drone down` only (lenient: non-zero warns, drone exits 0). Hooks
-  run with `cwd=$project_dir` and `BORG_PROJECT_NAME` exported. Transient downs during
+  run with `cwd=$repository_dir` and `BORG_PROJECT_NAME` exported. Transient downs during
   `drone restart`/`rebuild` do NOT fire `post-down.sh` — external stacks (e.g. Supabase)
-  must persist across cycles. New Supabase projects scaffold via `drone scaffold --supabase <dir>`.
+  must persist across cycles. New Supabase-backed repositories scaffold via `drone scaffold --supabase <dir>`.
 - **`drone scaffold --supabase <dir>`**: generate a devcontainer joined to the external
-  `supabase_network_<project>` network plus standard borg-hooks that call `supabase start`
+  `supabase_network_<repository>` network plus standard borg-hooks that call `supabase start`
   on up and `supabase stop` on down.
 - **`drone scaffold --supabase-shared <dir>` (opt-in, INERT until cutover)**: a second,
   separate scaffold path for the shared-local-Supabase consolidation. Instead of a
-  per-project Supabase instance, the generated devcontainer joins the fixed, always-on
+  per-repository Supabase instance, the generated devcontainer joins the fixed, always-on
   `supabase_network_stillpoint` Docker network (containers `supabase_*_stillpoint`, ports
   API 54321 / DB 54322 / Analytics 54327). Shared config lives in the `stillpoint` repo
   (`~/dev/stillpoint/supabase`, overridable via `BORG_STILLPOINT_SUPABASE_DIR`). Templates
   at `templates/supabase-shared/`. The shared stack is **ALWAYS-ON** — started once, never
   per-drone: `borg-hooks/pre-up.sh` checks `docker inspect -f '{{.State.Running}}'
   supabase_db_stillpoint` and only runs `supabase start` (from the stillpoint repo) if it
-  isn't already running; it never runs a per-project `supabase init`/`start`.
+  isn't already running; it never runs a per-repository `supabase init`/`start`.
   `borg-hooks/post-down.sh` is a hard no-op — an individual `drone down` must never stop
-  infra shared by other projects. Stop the shared stack explicitly and deliberately from
+  infra shared by other repositories. Stop the shared stack explicitly and deliberately from
   the stillpoint repo (`supabase stop`), never via a drone's lifecycle. Does not alter
   `--supabase` semantics; the two scaffold paths are independent. This mechanism is scaffolded
-  but not yet wired into any project — no per-project cutover has happened.
+  but not yet wired into any repository — no per-repository cutover has happened.
 - **Nanoprobe orchestrator (drones vs nanoprobes)**: drones are persistent devcontainers (long-lived,
-  one per project); nanoprobes are ephemeral Claude Code subagents (`agents/borg-nanoprobe.md`)
+  one per repository); nanoprobes are ephemeral Claude Code subagents (`agents/borg-nanoprobe.md`)
   spawned by the orchestrator via the Agent tool with subagent_type `borg-collective:borg-nanoprobe` (do not pass model, effort or background; the agent frontmatter sets them) (no harness worktree
   isolation — `isolation: worktree` caused hard failures when the orchestrator CWD is not a git
   repo). **Nanoprobes manage their own git worktrees** when the orchestrator supplies a branch name:
@@ -409,7 +419,7 @@ docs/
   repo stays clean. `borg reap-worktrees` auto-cleans stale borg worktrees (merged branch or older
   than `BORG_REAP_STALE_HOURS`). Worktrees live under `~/.local/state/borg/worktrees/` (NOT inside
   `.borg/`, which is reserved for user checkpoints).
-  The Queen session never edits project files — it briefs, spawns, monitors, and synthesizes.
+  The Queen session never edits repository files — it briefs, spawns, monitors, and synthesizes.
   Lifecycle is logged by `hooks/borg-nanoprobe-log.sh` (a `SubagentStop` hook) which appends one
   JSONL line per completion to `~/.config/borg/agents.jsonl` (`id`, `agent_type`, `transcript_path`,
   `summary` from `last_assistant_message`, hard-coded `status: "completed"`, `finished_at`, `cwd`).
@@ -424,7 +434,7 @@ docs/
 - **Local extensions — the canonical reference is `docs/extensions.md`**, which supersedes the
   summary that used to live here. Two layers, read in order, missing files skipped silently:
     1. `~/.config/borg/extensions/<kind>/<subject>/<hook>.md` (per machine)
-    2. `<project>/.borg/<kind>/<subject>/<hook>.md` (per project)
+    2. `<repository>/.borg/<kind>/<subject>/<hook>.md` (per repository)
   `<kind>` is `skill-extensions` or `agent-extensions`. Markdown only, no executable scripts. Keep
   them terse — they load on every invocation of their subject.
   **Skills get three hook points** (`01-context` before work, `02-output` before the artifact,
@@ -475,8 +485,8 @@ docs/
   prose, so every pre-existing extension parses unchanged. Keys are anchored on the leading `- `,
   because an extension file is prose that will often DISCUSS its own keys and an unanchored match
   returns the sentence doing the discussing — the same hazard as `- Plan-slug:`.
-  Precedence is ONE rule, not a per-type exception: **the layer that owns the fact wins.** Project
-  policy is the project's, so prose keeps the existing repo-wins behaviour; the environment is the
+  Precedence is ONE rule, not a per-type exception: **the layer that owns the fact wins.** Repository
+  policy is the repository's, so prose keeps the existing repo-wins behaviour; the environment is the
   machine's, so `prefer-tool` inverts it and the MACHINE layer wins. This repo is public and was
   history-scrubbed once for employer references, so a checked-in file must never override a personal
   machine's tool choice. A future type inherits the rule by answering: who owns the fact?
@@ -507,7 +517,7 @@ docs/
   reads history-then-future; adding it turned the spine test red on purpose, which AC2's directive
   chose over reserving an always-empty slot in advance.) `render.overview` and `render.deep` are
   deleted, and `--deep` is parsed and ignored (kept in the parser because borg.zsh's positional `link`
-  arm — grep `_link_py_args=(--deep)`, the one live caller, serving every `borg link <project>` and
+  arm — grep `_link_py_args=(--deep)`, the one live caller, serving every `borg link <repository>` and
   `drone link` — still passes it, and argparse exiting 2 there is a blank pane with nothing on stderr.
   Line pins are deliberately absent: four sites all said `borg.zsh:3111`, which matched neither main
   nor the branch that "corrected" it.) **AC2's rule — "scope changes which ROWS
@@ -542,7 +552,9 @@ docs/
   and offers `borg add` and `borg link --overview`, and exits 0. The wire keeps `scope.kind` `orchestrator` and
   adds `scope.unregistered: true` (present only when true); `--json` and `--porcelain` still carry the whole
   document from any cwd, and the human mode reads nothing (`cli._document`'s `hint_only` skips the sweep, the
-  manifest glob and the aggregates). `borg init` is the Queen launcher and always briefs with `--overview`.
+  manifest glob and the aggregates). `--porcelain` stays scope-blind BY DESIGN (its golden is pinned), so it prints the whole
+  registry table from any cwd and does not follow `scope.kind`: do not expect it to narrow in repository scope.
+  `borg init` is the Queen launcher and always briefs with `--overview`.
   `borg link --brief` follows the page's breadth: at the Queen root the prompt is the board, in repository scope
   it is built only from that directory's identity, own checkpoint, own session row and next action (no other
   registry entry), and in an unregistered cwd it skips `claude -p` and prints the hint page.
@@ -623,12 +635,12 @@ docs/
   newest checkpoint mtime > last-run marker > 24h), fans out concurrently+bounded over pluggable
   **adapters**, normalizes every finding to an Item
   `{project,source,ref,title,state,changed,owner,action_needed,urgency,one_line}`,
-  merges by project, and detects checkpoint-blocker-vs-resolved-source contradictions. An adapter is
+  merges by repository (the Item's `project` key), and detects checkpoint-blocker-vs-resolved-source contradictions. An adapter is
   ANY executable named `recon-adapter-<source>` on `BORG_RECON_ADAPTER_PATH` (config dir shadows the
   repo dir) — dropping a file registers a source, no code change. Sources are NEVER hardcoded: employer
   adapters (Slack/Jira/Notion) are a separate machine-injected layer; this repo ships ONE reference
   adapter (`lib/recon/adapters/recon-adapter-github`, via `gh`). `borg recon --json` emits the
-  reconciled doc the `/borg-recon` skill synthesizes into a by-project, most-urgent-first, ELI10
+  reconciled doc the `/borg-recon` skill synthesizes into a by-repository, most-urgent-first, ELI10
   briefing + Yours(human)-vs-Mine(agent) action lists + a bounded read-only kickoff batch. zsh gotchas
   baked in: never a `path` loop var (tied to `$PATH`); quoted `find`, not bare globs (zsh NOMATCH is
   fatal); jq `//` treats `false` as empty (use `if has("ok")`, not `.ok // true`).

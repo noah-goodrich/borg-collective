@@ -14,7 +14,7 @@
 ROOT="${BATS_TEST_DIRNAME}/.."
 
 _blocks_with_paths() {
-    grep -rlE '^2\. `<(project root|repo path)>/\.borg/(skill|agent)-extensions/' \
+    grep -rlE '^2\. `<(repository root|repo path)>/\.borg/(skill|agent)-extensions/' \
         "$ROOT/skills" "$ROOT/agents" 2>/dev/null | sort
 }
 
@@ -30,7 +30,7 @@ _blocks_with_paths() {
     local f paths excs
     while IFS= read -r f; do
         [ -n "$f" ] || continue
-        paths=$(grep -cE '^2\. `<(project root|repo path)>/\.borg/(skill|agent)-extensions/' "$f")
+        paths=$(grep -cE '^2\. `<(repository root|repo path)>/\.borg/(skill|agent)-extensions/' "$f")
         excs=$(grep -c 'Precedence has one exception' "$f" || true)
         [ "$paths" -eq "$excs" ] || {
             echo "$f: $paths extension block(s) but $excs precedence note(s)"; false; }
@@ -41,7 +41,7 @@ _blocks_with_paths() {
     local f paths refs
     while IFS= read -r f; do
         [ -n "$f" ] || continue
-        paths=$(grep -cE '^2\. `<(project root|repo path)>/\.borg/(skill|agent)-extensions/' "$f")
+        paths=$(grep -cE '^2\. `<(repository root|repo path)>/\.borg/(skill|agent)-extensions/' "$f")
         refs=$(grep -c 'docs/extensions.md' "$f" || true)
         [ "$refs" -ge "$paths" ] || {
             echo "$f: $paths block(s) but only $refs pointer(s) at docs/extensions.md"; false; }

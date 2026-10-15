@@ -29,7 +29,7 @@ For each changed file:
 Then do a fast scan of the broader codebase for shared utilities:
 - Look for `utils`, `helpers`, `common`, or similarly named modules in the same package
 - Check what's already imported at the top of each changed file — those are free to use
-- If the project has a clear domain layer (e.g. `domain/`, `lib/`, `core/`), skim its public
+- If the repository has a clear domain layer (e.g. `domain/`, `lib/`, `core/`), skim its public
   surface for functions the new code might be able to call instead of reimplementing
 
 The goal is to know what exists before deciding whether the new code reinvented it.

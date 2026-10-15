@@ -1,0 +1,30 @@
+{
+  "desc": "Everything in flight lands, then VERSION 0.9.6 and the plugin mirror rebuild.",
+  "program": "2026-10-14-release-0-9-6",
+  "rows": [
+    {
+      "lane": "rename",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#396",
+      "why": "chain-to-stack step (c), the contract"
+    },
+    {
+      "lane": "rename",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#386",
+      "why": "R6, skills and docs take the final vocabulary"
+    },
+    {
+      "lane": "compass",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#385",
+      "why": "compass reader on the --json wire"
+    },
+    {
+      "lane": "compass",
+      "order": "2",
+      "ref": "noah-goodrich/borg-collective#397",
+      "why": "compass render in borg link and borg next"
+    }
+  ]
+}
