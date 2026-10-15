@@ -37,7 +37,7 @@ borg link --json [<repository>] | jq -c 'if .scope.unregistered == true
   else (.scope.repository as $r | (.compass // {}) as $c
     | ($c.repositories[$r] // {}) as $m | {version, generated_at, scope,
     entry: (.focus.entry | del(.summary)),
-    compass: {found: $c.found, map_dir: $c.map_dir, leg: $c.leg,
+    compass: {found: $c.found, map_dir: $c.map_dir, leg: ($c.leg | if .text? then .text |= .[:200] else . end),
       repository: $m, destinations: [$c.destinations[]?
         | select(.id == $m.destination)]},
     waiting: {rows: [.waiting.rows[] | select(.project == $r and .item == "session")],
@@ -65,7 +65,7 @@ Scope is the engine's `scope.kind`, never the `.borg-project` marker or your gue
 
 This page is about exactly ONE directory: `.entry.path`, the directory the engine resolved. Say what is true of THIS directory and stop.
 
-**Never render:** the registry-wide board (`order`, `projects`, capacity), any other worktree or repository, and every repo-level section: plan, QUEUED/SHIPPED, stacks and `grid`, repository PRs. The pipe withheld them; ignore them anyway.
+**Never render:** the registry-wide board (`order`, `projects`, capacity), any other worktree or repository, and every repo-level section: plan, QUEUED/SHIPPED, stacks and `grid`, repository PRs.
 
 **Read in this order, then write the page.**
 

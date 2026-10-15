@@ -455,3 +455,41 @@ JSON
     run jq -c '.grid.manifests[3]' <<<"$out"
     [ "$output" = '{"id":"empty","desc":"d4","repos":[],"nodes":{}}' ]
 }
+
+@test "scope: Step 1 pipe, repository arm, cuts leg.text to 200 characters and leaves the Queen arm alone" {
+    local long short
+    long="$(printf 'x%.0s' {1..450})"
+    short="a short leg"
+    local cmd
+    cmd="$(_step1_command)"
+    cmd="${cmd/ \[<repository>\]/}"
+    [ -n "$cmd" ]
+    local kind text
+    for kind in repository orchestrator; do
+        for text in "$long" "$short" null; do
+            local leg
+            if [ "$text" = null ]; then leg=null; else leg="{\"text\": \"$text\"}"; fi
+            local repos='{}'
+            [ "$kind" = repository ] && repos='{"p": {"destination": "d", "on_leg": true}}'
+            cat > "${BATS_TEST_TMPDIR}/leg.json" <<JSON
+{"version": 2, "generated_at": "t", "projects": {}, "directives": [], "grid": {"manifests": []},
+ "scope": {"kind": "$kind", "repository": "p", "local": false},
+ "focus": {"entry": {"path": "/w/p"}},
+ "waiting": {"rows": [], "degraded": null},
+ "compass": {"found": true, "map_dir": "/m", "leg": $leg, "repositories": $repos, "destinations": []}}
+JSON
+            _stub_borg "${BATS_TEST_TMPDIR}/leg.json"
+            PATH="${BATS_TEST_TMPDIR}/stub:$PATH" run eval "$cmd"
+            [ "$status" -eq 0 ]
+            local got
+            got="$(jq -c '.compass.leg' <<<"$output")"
+            if [ "$text" = null ]; then
+                [ "$got" = null ]
+            elif [ "$kind" = repository ] && [ "$text" = "$long" ]; then
+                [ "$(jq -r '.text | length' <<<"$got")" -eq 200 ]
+            else
+                [ "$(jq -r '.text' <<<"$got")" = "$text" ]
+            fi
+        done
+    done
+}

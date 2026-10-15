@@ -70,12 +70,14 @@ The issues were filed against older numbers; these are the ones the criteria are
 | S5    | AC1, AC2, AC6 CLAUDE.md cut      | after the queue    |
 | S6    | AC4 Queen pipe trim              | after S4b          |
 | S7    | AC4 collapse finished stacks     | after S6           |
+| S8    | AC4 repository arm trims the leg text | now            |
 
 - S3 (drone start) folds into S4b as one SKILL.md line.
 - S4 split in two on 2026-10-14: S4a ships the build fix first, so S4b's `references/` files reach the installed plugin.
 - S5 waits for every open PR that edits CLAUDE.md to merge (#379, #381, #385, #278, and R6 from the front-door wave 2). The AC1 line check runs against the base after they land.
 - S6 was added 2026-10-15 on Noah's word. The Queen pipe output grew from 25,849 bytes after S2 to 38,655 bytes: `compass` (7,502 bytes) arrived with #385 and #397, and `grid` reached 18,658 bytes once every in-flight PR was stacked. So the split alone leaves a Queen run near 58 KB. S6 audits which `grid` and `compass` fields `references/queen-view.md` reads, drops the rest in the Queen arm, adds one bats case per dropped field, and keeps SKILL.md at 8,192 bytes or less.
 - S7 was added 2026-10-15 on Noah's word. After S6 (#409) a Queen run measured 49,483 bytes, still about 6.5 KB over. Of the 11 stacks on the board, 10 had every row merged, and their nodes were 11.8 KB of the 14.4 KB `grid`. Finished stacks are also what grows, one row per merged PR. S7 collapses a stack whose rows are all merged or closed to `{id, desc, repos, rows, done: true}` in the Queen arm, and `references/queen-view.md` mentions such a stack in one line at most. Open stacks pass through unchanged. Shipped work still reaches the Queen view through `assimilated`.
+- S8 was added 2026-10-15 on Noah's word. The repository arm passed the compass leg text through untrimmed, and the leg text is the owner's prose, so its length is not the skill's to control. After S7 a repository run measured 9,406 bytes against the 9,216 cap. The arm now cuts `leg.text` to 200 characters, so the cap holds on any day.
 - AC4's "after" is measured once S4b, S6 and S7 are merged and the plugin mirror is rebuilt.
 
 ## Scope Boundaries
