@@ -176,7 +176,7 @@ QUERY="$QUERY }"
 # overflowing repo for a case that does not exist, so open PRs beyond 100 are a known, accepted bound.
 # The 30-newest `pullRequests` list keeps its cap and the since-mark for merged/closed PRs; the two
 # lists are unioned and de-duplicated by number, and only non-open PRs are since-filtered. Items gain the additive
-# fields draft, checks, mergeable, review_decision (validate_item ignores extra keys).
+# fields url, draft, checks, mergeable, review_decision (validate_item ignores extra keys).
 #
 # `first: 30` mirrors the REST `--limit 30` bound, so a busy repo still cannot flood the sweep.
 #
@@ -226,6 +226,7 @@ ITEMS="$(printf '%s' "$RESPONSE" | jq -c \
                     else "this_week" end),
           one_line: ("#" + (.number|tostring) + " " + .title + " [" + (.state|ascii_downcase) + "]"),
           repo:     $m.repo,
+          url:      (.url // ""),
           head_ref: (.headRefName // ""),
           base_ref: (.baseRefName // ""),
           draft:    (.isDraft // false),

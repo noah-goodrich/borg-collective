@@ -352,6 +352,7 @@ def _pr_row(item: dict[str, Any]) -> dict[str, Any]:
         "owner": owner,
         "ready": ready,
         "ref": item.get("ref"),
+        "url": str(item.get("url") or ""),
         "draft": bool(item.get("draft")),
         "changed": str(item.get("changed") or ""),
     }
@@ -496,6 +497,7 @@ def numbered_rows(work: list[dict[str, Any]], ranked: list[dict[str, Any]]) -> l
             "owner": row.get("owner", ""),
             "ready": row.get("ready", ""),
             "ref": row.get("ref"),
+            "url": row.get("url", ""),
             "age": row.get("age", ""),
             "status": status.get(row["project"], ""),
             "waiting_reason": row.get("waiting_reason", ""),

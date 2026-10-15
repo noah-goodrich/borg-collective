@@ -430,6 +430,14 @@ def test_work_items_review_required_rows_do_not_fill_the_cap():
     assert hidden["overflow"] == 0
 
 
+def test_pr_url_rides_to_the_wire_row_and_session_rows_have_none():
+    url = "https://github.com/example-org/example-repo/pull/6"
+    ranked = [_rank("p", "waiting", "needs input")]
+    work, _ = core.work_items(ranked, {"p": [_pr(6, url=url)]}, {}, {})
+    rows = core.numbered_rows(work, ranked)
+    assert [(r["ref"], r["url"]) for r in rows] == [(None, ""), ("o/r#6", url)]
+
+
 def test_work_items_ignores_closed_prs_and_author():
     rows, quiet = core.work_items([_rank("p")], {"p": [_pr(1, state="merged")]}, {}, {})
     assert rows == [] and quiet == ["p"]
