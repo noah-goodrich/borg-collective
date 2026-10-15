@@ -540,13 +540,13 @@ def _build_parser() -> argparse.ArgumentParser:
     # `grep -n -- '_link_py_args=(--deep)' borg.zsh`, which returns exactly one line, the assignment
     # itself. SCOPE THE GREP TO THAT FILE. Run tree-wide the same pattern returns seven hits, because
     # the anchor conversion described below put the literal into six PROSE sites (this comment, its
-    # twin in test_cli.py, two lines of CLAUDE.md, and two directives under docs/plans/directives/);
+    # twin in test_cli.py, two lines of borg_core/link/CLAUDE.md, and two directives under docs/plans/directives/);
     # a reader who greps the tree and counts is reading commentary, not callers. That arm serves
     # every `borg link <repository>` a human types and every `drone link`, so deleting the argument
     # makes argparse exit 2 on the most-typed invocation of the command.
     #
     # ANCHORED BY THE CODE, NOT BY A LINE NUMBER (2026-08-28). This comment, its twin in
-    # test_cli.py's `test_deep_is_accepted_and_ignored`, and two lines of CLAUDE.md all read
+    # test_cli.py's `test_deep_is_accepted_and_ignored`, and two lines of borg_core/link/CLAUDE.md all read
     # `borg.zsh:3111`, a number that matched NEITHER main NOR the branch that last edited them -- and
     # any insertion above the arm invalidates it again with nothing failing. `grep` for the assignment
     # instead. The same edit dropped this comment's "which IS the fzf preview's path, re-executed on

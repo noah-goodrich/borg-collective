@@ -386,7 +386,7 @@ def test_local_forks_nothing_in_orchestrator_scope_and_only_the_slug_in_reposito
     whatsoever, which is what pins that nothing else crept into it.
 
     THE REPOSITORY LEG IS ASSERTED AND NOT MERELY NARRATED, which is a correction. Its sentence sat
-    in this docstring with no assertion under it while borg_core/link/CLAUDE.md cited the sentence as a gate --
+    in this docstring with no assertion under it while docs/agents/commands.md cited the sentence as a gate --
     deleting `manifest.shell.repository_slug`'s fork left the case green, because `record_forks == []`
     only ever ran in orchestrator scope. The exact-argv assertion is the gate: it names the one
     subprocess the opted-down repository path is allowed, so deleting the fork goes red (the slug
