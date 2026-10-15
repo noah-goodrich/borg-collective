@@ -50,6 +50,13 @@
       "ref": "noah-goodrich/borg-collective#403",
       "status": "merged",
       "why": "VERSION 0.9.6, release notes"
+    },
+    {
+      "lane": "close",
+      "order": "1",
+      "ref": "noah-goodrich/borg-collective#417",
+      "status": "open",
+      "why": "close out W1: assimilate the finished directives, add this stack"
     }
   ]
 }
